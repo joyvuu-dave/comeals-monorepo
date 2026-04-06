@@ -38,25 +38,38 @@ class Rotation < ApplicationRecord
   has_many :residents, -> { where(active: true, can_cook: true).where(multiplier: 2..) }, through: :community
 
   before_validation :set_color, on: :create
+  before_destroy :capture_meal_dates_for_cache
   after_save :set_description
   after_save :set_start_date
   after_commit :set_place_value, on: %i[create destroy]
   after_commit :invalidate_calendar_cache
+  after_commit :recolor_remaining_rotations, on: :destroy
   after_create_commit :notify_residents
   validates :color, presence: true
 
   accepts_nested_attributes_for :meals
 
   COLORS = ['#3DC656', '#009EDC', '#D9443F', '#FFC857', '#E9724C'].freeze
-  def set_color
-    used_colors = Rotation.where(community_id: community_id).pluck(:color).reverse
-    prev_colors = []
-    prev_colors.push(used_colors[0]) unless used_colors[0].nil?
-    prev_colors.push(used_colors[1]) unless used_colors[1].nil?
-    prev_colors.push(used_colors[2]) unless used_colors[2].nil?
-    prev_colors.push(used_colors[3]) unless used_colors[3].nil?
 
-    self.color = (COLORS - prev_colors)[0]
+  def set_color
+    last_color = Rotation.where(community_id: community_id).order(:id).pluck(:color).last
+    if last_color && COLORS.include?(last_color)
+      self.color = COLORS[(COLORS.index(last_color) + 1) % COLORS.length]
+    else
+      self.color = COLORS[0]
+    end
+  end
+
+  def self.recolor_community(community_id)
+    changed_rotation_ids = []
+    Rotation.where(community_id: community_id).order(:id).each_with_index do |rotation, index|
+      new_color = COLORS[index % COLORS.length]
+      next if rotation.color == new_color
+
+      rotation.update_column(:color, new_color)
+      changed_rotation_ids << rotation.id
+    end
+    changed_rotation_ids
   end
 
   def set_description
@@ -98,5 +111,22 @@ class Rotation < ApplicationRecord
     rescue *MAIL_DELIVERY_ERRORS => e
       Rails.logger.error("new_rotation_email failed for #{resident.email}: #{e.class} - #{e.message}")
     end
+  end
+
+  private
+
+  def capture_meal_dates_for_cache
+    @meal_dates_before_destroy = Meal.where(rotation_id: id).distinct.pluck(:date)
+  end
+
+  def recolor_remaining_rotations
+    changed_ids = self.class.recolor_community(community_id)
+
+    dates = @meal_dates_before_destroy || []
+    if changed_ids.any?
+      dates = dates | Meal.where(rotation_id: changed_ids).distinct.pluck(:date)
+    end
+
+    dates.each { |date| community.trigger_pusher(date) }
   end
 end

@@ -59,17 +59,79 @@ RSpec.describe Rotation do
   end
 
   describe '#set_color' do
-    it 'cycles through colors without repeating recent ones' do
+    it 'cycles through all five colors in order' do
       colors = []
       6.times do
         r = create(:rotation, community: community, no_email: true)
         colors << r.color
       end
 
-      # No two consecutive rotations should share a color (within 4-color window)
-      colors.each_cons(2) do |a, b|
-        expect(a).not_to eq(b), "Consecutive rotations had same color: #{a}"
-      end
+      expect(colors).to eq(Rotation::COLORS + [Rotation::COLORS[0]])
+    end
+
+    it 'picks the next color after the last rotation' do
+      create(:rotation, community: community, no_email: true) # green
+      create(:rotation, community: community, no_email: true) # blue
+      r3 = create(:rotation, community: community, no_email: true)
+
+      expect(r3.color).to eq(Rotation::COLORS[2])
+    end
+
+    it 'assigns the first color when no rotations exist' do
+      r = create(:rotation, community: community, no_email: true)
+      expect(r.color).to eq(Rotation::COLORS[0])
+    end
+  end
+
+  describe '.recolor_community' do
+    it 'reassigns colors in COLORS-cycle order by id' do
+      rotations = 6.times.map { create(:rotation, community: community, no_email: true) }
+
+      # Manually break the cycle
+      rotations[2].update_column(:color, rotations[1].reload.color)
+
+      Rotation.recolor_community(community.id)
+
+      reloaded_colors = rotations.map { |r| r.reload.color }
+      expected = 6.times.map { |i| Rotation::COLORS[i % Rotation::COLORS.length] }
+      expect(reloaded_colors).to eq(expected)
+    end
+
+    it 'returns ids of rotations whose colors changed' do
+      rotations = 3.times.map { create(:rotation, community: community, no_email: true) }
+
+      # Colors are already correct, so nothing should change
+      changed = Rotation.recolor_community(community.id)
+      expect(changed).to be_empty
+
+      # Break one color
+      rotations[1].update_column(:color, rotations[0].reload.color)
+      changed = Rotation.recolor_community(community.id)
+      expect(changed).to include(rotations[1].id)
+    end
+
+    it 'does not affect rotations in other communities' do
+      other_community = create(:community)
+      other_rotation = create(:rotation, community: other_community, no_email: true)
+      original_color = other_rotation.color
+
+      create(:rotation, community: community, no_email: true)
+      Rotation.recolor_community(community.id)
+
+      expect(other_rotation.reload.color).to eq(original_color)
+    end
+  end
+
+  describe 'recolor on destroy' do
+    it 'recolors remaining rotations after one is deleted' do
+      rotations = 5.times.map { create(:rotation, community: community, no_email: true) }
+
+      # Before: green, blue, red, yellow, orange
+      rotations[2].destroy!
+
+      # After: the remaining 4 should be green, blue, red, yellow
+      remaining = Rotation.where(community_id: community.id).order(:id)
+      expect(remaining.pluck(:color)).to eq(Rotation::COLORS[0..3])
     end
   end
 
