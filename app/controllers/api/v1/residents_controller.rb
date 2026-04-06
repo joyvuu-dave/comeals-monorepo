@@ -78,6 +78,7 @@ module Api
 
         render json: { message: 'Error.' }, status: :bad_request and return if resident.blank?
 
+        resident.reset_password_token = nil
         resident.password = params[:password]
 
         render json: { message: 'Password updated!' } and return if resident.save

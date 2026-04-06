@@ -131,6 +131,19 @@ RSpec.describe 'Events API' do
       expect(response).to have_http_status(:ok)
       expect(event.reload.title).to eq('Updated Title')
     end
+
+    it 'returns 400 for invalid date params' do
+      patch "/api/v1/events/#{event.id}/update", params: {
+        token: token, title: 'Updated Title',
+        all_day: false,
+        start_year: 0, start_month: 0, start_day: 0,
+        start_hours: 0, start_minutes: 0,
+        end_hours: 0, end_minutes: 0
+      }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Error: Invalid date')
+    end
   end
 
   describe 'DELETE /api/v1/events/:id/delete' do

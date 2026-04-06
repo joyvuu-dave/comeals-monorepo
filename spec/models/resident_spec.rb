@@ -326,14 +326,15 @@ RSpec.describe Resident do
       meal.reload
 
       # multiplier = 2, cap = 5.00, max_cost = 10.00
-      # total_cost = 20, exceeds cap
+      # total_cost = 20, exceeds cap → subsidized
       # effective_total_cost = 10.00
       # unit_cost = 10 / 2 = 5.00
       # eater charge = 5 * 2 = 10
-      # cook reimbursement = 20 (full bill amount, NOT capped — credits = actual amount spent)
-      # cook balance = 20 - 0 = 20
+      # cook credit = (20 / 20) * 10 = 10 (capped, not raw 20)
+      # cook balance = 10 - 0 = 10
       # eater balance = 0 - 10 = -10
-      expect(cook.calc_balance).to eq(BigDecimal('20'))
+      # books balance: 10 - 10 = 0 ✓
+      expect(cook.calc_balance).to eq(BigDecimal('10'))
       expect(eater.calc_balance).to eq(BigDecimal('-10'))
     end
 

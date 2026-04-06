@@ -149,6 +149,134 @@ RSpec.describe Reconciliation do
     end
   end
 
+  describe '#settlement_balances with capped meals' do
+    it 'caps cook credit for a subsidized meal (single cook)' do
+      capped_community = create(:community, cap: BigDecimal('5.00'))
+      capped_unit = create(:unit, community: capped_community)
+
+      cook = create(:resident, community: capped_community, unit: capped_unit, multiplier: 2)
+      eater = create(:resident, community: capped_community, unit: capped_unit, multiplier: 2)
+
+      meal = create(:meal, community: capped_community)
+      create(:meal_resident, meal: meal, resident: eater, community: capped_community)
+      create(:bill, meal: meal, resident: cook, community: capped_community, amount: BigDecimal('20'))
+      meal.reload
+
+      # multiplier = 2, cap = 5.00, max_cost = 10
+      # total_cost = 20 > max_cost → subsidized
+      # cook credit = (20/20) * 10 = 10
+      # eater debit = (10/2) * 2 = 10
+      reconciliation = described_class.create!(
+        community: capped_community, start_date: 2.years.ago.to_date, end_date: Time.zone.today
+      )
+      balances = reconciliation.settlement_balances
+
+      expect(balances[cook.id]).to eq(BigDecimal('10'))
+      expect(balances[eater.id]).to eq(BigDecimal('-10'))
+    end
+
+    it 'splits capped credit proportionally among multiple cooks' do
+      capped_community = create(:community, cap: BigDecimal('5.00'))
+      capped_unit = create(:unit, community: capped_community)
+
+      cook_a = create(:resident, community: capped_community, unit: capped_unit, multiplier: 2)
+      cook_b = create(:resident, community: capped_community, unit: capped_unit, multiplier: 2)
+      eater = create(:resident, community: capped_community, unit: capped_unit, multiplier: 2)
+
+      meal = create(:meal, community: capped_community)
+      create(:meal_resident, meal: meal, resident: eater, community: capped_community)
+      create(:bill, meal: meal, resident: cook_a, community: capped_community, amount: BigDecimal('15'))
+      create(:bill, meal: meal, resident: cook_b, community: capped_community, amount: BigDecimal('5'))
+      meal.reload
+
+      # multiplier = 2, cap = 5.00, max_cost = 10
+      # total_cost = 20 > max_cost → subsidized
+      # cook_a credit = (15/20) * 10 = 7.50
+      # cook_b credit = (5/20) * 10 = 2.50
+      # total credits = 10, total debits = 10
+      reconciliation = described_class.create!(
+        community: capped_community, start_date: 2.years.ago.to_date, end_date: Time.zone.today
+      )
+      balances = reconciliation.settlement_balances
+
+      expect(balances[cook_a.id]).to eq(BigDecimal('7.5'))
+      expect(balances[cook_b.id]).to eq(BigDecimal('2.5'))
+      expect(balances[eater.id]).to eq(BigDecimal('-10'))
+    end
+
+    it 'does not cap credits when meal is under cap' do
+      capped_community = create(:community, cap: BigDecimal('5.00'))
+      capped_unit = create(:unit, community: capped_community)
+
+      cook = create(:resident, community: capped_community, unit: capped_unit, multiplier: 2)
+      eater = create(:resident, community: capped_community, unit: capped_unit, multiplier: 2)
+
+      meal = create(:meal, community: capped_community)
+      create(:meal_resident, meal: meal, resident: eater, community: capped_community)
+      create(:bill, meal: meal, resident: cook, community: capped_community, amount: BigDecimal('8'))
+      meal.reload
+
+      # multiplier = 2, cap = 5.00, max_cost = 10
+      # total_cost = 8 < max_cost → not subsidized, no capping
+      reconciliation = described_class.create!(
+        community: capped_community, start_date: 2.years.ago.to_date, end_date: Time.zone.today
+      )
+      balances = reconciliation.settlement_balances
+
+      expect(balances[cook.id]).to eq(BigDecimal('8'))
+      expect(balances[eater.id]).to eq(BigDecimal('-8'))
+    end
+
+    it 'caps credits correctly when cook also attends the meal' do
+      capped_community = create(:community, cap: BigDecimal('5.00'))
+      capped_unit = create(:unit, community: capped_community)
+
+      cook = create(:resident, community: capped_community, unit: capped_unit, multiplier: 2)
+      eater = create(:resident, community: capped_community, unit: capped_unit, multiplier: 2)
+
+      meal = create(:meal, community: capped_community)
+      create(:meal_resident, meal: meal, resident: cook, community: capped_community)
+      create(:meal_resident, meal: meal, resident: eater, community: capped_community)
+      create(:bill, meal: meal, resident: cook, community: capped_community, amount: BigDecimal('30'))
+      meal.reload
+
+      # total_mult = 4, cap = 5.00, max_cost = 20
+      # total_cost = 30 > max_cost → subsidized
+      # cook credit = (30/30) * 20 = 20
+      # unit_cost = 20 / 4 = 5.00
+      # cook debit = 5 * 2 = 10, eater debit = 5 * 2 = 10
+      # cook balance = 20 - 10 = 10
+      # eater balance = 0 - 10 = -10
+      # books: 10 - 10 = 0 ✓
+      reconciliation = described_class.create!(
+        community: capped_community, start_date: 2.years.ago.to_date, end_date: Time.zone.today
+      )
+      balances = reconciliation.settlement_balances
+
+      expect(balances[cook.id]).to eq(BigDecimal('10'))
+      expect(balances[eater.id]).to eq(BigDecimal('-10'))
+    end
+
+    it 'does not cap credits for uncapped communities' do
+      # Default community has no cap
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      eater = create(:resident, community: community, unit: unit, multiplier: 2)
+
+      meal = create(:meal, community: community)
+      create(:meal_resident, meal: meal, resident: eater, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('100'))
+      meal.reload
+
+      reconciliation = described_class.create!(
+        community: community, start_date: 2.years.ago.to_date, end_date: Time.zone.today
+      )
+      balances = reconciliation.settlement_balances
+
+      expect(balances[cook.id]).to eq(BigDecimal('100'))
+      expect(balances[eater.id]).to eq(BigDecimal('-100'))
+    end
+  end
+
   describe '#assign_meals with date boundaries' do
     it 'only assigns meals within the date range' do
       cook = create(:resident, community: community, unit: unit, multiplier: 2)

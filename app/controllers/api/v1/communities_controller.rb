@@ -66,7 +66,7 @@ module Api
 
         start_date = date.beginning_of_month.beginning_of_week(:sunday)
         end_date = start_date + 41.days
-        month_int_array = (start_date.month..end_date.month).to_a
+        month_int_array = (start_date..end_date).map(&:month).uniq
 
         month = (start_date + 20.days).month
         year = (start_date + 20.days).year

@@ -59,6 +59,29 @@ RSpec.describe 'POST /api/v1/residents/password-reset' do
     end
   end
 
+  describe 'POST /api/v1/residents/password-reset/:token (password_new)' do
+    before do
+      resident.update!(reset_password_token: SecureRandom.urlsafe_base64)
+    end
+
+    it 'clears the reset_password_token after successful reset' do
+      token = resident.reset_password_token
+      post "/api/v1/residents/password-reset/#{token}", params: { password: 'newpassword123' }
+
+      expect(response).to have_http_status(:ok)
+      expect(resident.reload.reset_password_token).to be_nil
+    end
+
+    it 'prevents reuse of the same token' do
+      token = resident.reset_password_token
+      post "/api/v1/residents/password-reset/#{token}", params: { password: 'newpassword123' }
+      expect(response).to have_http_status(:ok)
+
+      post "/api/v1/residents/password-reset/#{token}", params: { password: 'anotherpassword' }
+      expect(response).to have_http_status(:bad_request)
+    end
+  end
+
   describe 'validation errors' do
     it 'returns 400 when email is missing' do
       post '/api/v1/residents/password-reset', params: {}

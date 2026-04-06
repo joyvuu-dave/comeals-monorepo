@@ -184,10 +184,7 @@ module Api
           end
         end
 
-        @meal.update(cook_ids: cook_ids)
-        @meal.reload
-
-        # Bill Cost --validate all amounts before persisting any changes
+        # Validate all amounts before any DB writes
         parsed_bills = []
         params[:bills].each do |bill|
           amount_str = bill['amount'].to_s
@@ -201,13 +198,25 @@ module Api
           parsed_bills << { resident_id: bill['resident_id'], amount: amount_value, no_cost: bill['no_cost'] }
         end
 
-        parsed_bills.each do |bill|
-          @meal.bills.find_by(resident_id: bill[:resident_id]).update(amount: bill[:amount], no_cost: bill[:no_cost])
+        # All DB writes in one atomic transaction
+        ActiveRecord::Base.transaction do
+          @meal.update!(cook_ids: cook_ids)
+          @meal.reload
+          parsed_bills.each do |bill|
+            @meal.bills.find_by!(resident_id: bill[:resident_id])
+                 .update!(amount: bill[:amount], no_cost: bill[:no_cost])
+          end
         end
 
         payload = { message: message }
         payload[:type] = message_type if message_type
         render json: payload, status: request_symbol
+      rescue ActiveRecord::RecordNotFound, ActiveRecord::RecordInvalid => e
+        @skip_pusher = true
+        render json: { message: e.message }, status: :bad_request
+      rescue ActiveRecord::InvalidForeignKey
+        @skip_pusher = true
+        render json: { message: 'Invalid cook assignment.' }, status: :bad_request
       end
 
       # PATCH /api/v1/meals/:meal_id/closed { closed }
@@ -246,6 +255,8 @@ module Api
       end
 
       def trigger_pusher
+        return if @skip_pusher
+
         @meal.trigger_pusher
       end
 

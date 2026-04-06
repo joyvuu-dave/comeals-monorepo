@@ -25,7 +25,7 @@ module Api
       end
 
       def show
-        bill = Bill.find_by(id: params[:id])
+        bill = Bill.where(community_id: current_resident_api.community_id).find_by(id: params[:id])
         return not_found_api if bill.blank?
 
         render json: bill

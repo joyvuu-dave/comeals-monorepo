@@ -72,15 +72,19 @@ module Api
                    @event.allday
                  end
 
-        if allday
-          start_date = Time.zone.local(params[:start_year].to_i, params[:start_month].to_i, params[:start_day].to_i, 0,
-                                       0)
-          end_date = nil
-        else
-          start_date = Time.zone.local(params[:start_year].to_i, params[:start_month].to_i, params[:start_day].to_i,
-                                       params[:start_hours].to_i, params[:start_minutes].to_i)
-          end_date = Time.zone.local(params[:start_year].to_i, params[:start_month].to_i, params[:start_day].to_i,
-                                     params[:end_hours].to_i, params[:end_minutes].to_i)
+        begin
+          if allday
+            start_date = Time.zone.local(params[:start_year].to_i, params[:start_month].to_i,
+                                         params[:start_day].to_i, 0, 0)
+            end_date = nil
+          else
+            start_date = Time.zone.local(params[:start_year].to_i, params[:start_month].to_i, params[:start_day].to_i,
+                                         params[:start_hours].to_i, params[:start_minutes].to_i)
+            end_date = Time.zone.local(params[:start_year].to_i, params[:start_month].to_i, params[:start_day].to_i,
+                                       params[:end_hours].to_i, params[:end_minutes].to_i)
+          end
+        rescue StandardError
+          render json: { message: 'Error: Invalid date' }, status: :bad_request and return
         end
 
         if @event.update(start_date: start_date, end_date: end_date, allday: allday, description: params[:description],

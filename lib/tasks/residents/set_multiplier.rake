@@ -8,8 +8,10 @@ namespace :residents do
     Resident.find_each do |resident|
       age = resident.age
 
-      resident.update_columns(multiplier: 0) if age < 5
-      resident.update_columns(multiplier: 1) if age >= 5 && age < 12
+      resident.update_columns(multiplier: 0) and next if age < 5
+
+      resident.update_columns(multiplier: 1) and next if age >= 5 && age < 12
+
       resident.update_columns(multiplier: 2) if age >= 12
     end
 

@@ -112,8 +112,8 @@ class Community < ApplicationRecord
   end
 
   def create_next_rotation # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity -- rotation scheduling with date arithmetic and alternating-day logic
-    if Meal.where(rotation_id: nil).any?
-      raise "Currently #{Meal.where(rotation_id: nil).count} Meals not assigned to Rotations"
+    if meals.where(rotation_id: nil).any?
+      raise "Currently #{meals.where(rotation_id: nil).count} Meals not assigned to Rotations"
     end
 
     day_after_last_meal = meals.order(:date).last&.date&.tomorrow

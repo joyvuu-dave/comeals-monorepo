@@ -86,5 +86,18 @@ RSpec.describe Guest do
 
       expect(guest.errors[:base]).to include('Meal has no open spots.')
     end
+
+    it 'allows updating an existing guest when meal is at capacity' do
+      other_unit = create(:unit, community: community)
+      filler = create(:resident, community: community, unit: other_unit, multiplier: 2)
+      create(:meal_resident, meal: meal, resident: filler, community: community)
+      guest = create(:guest, meal: meal, resident: resident, multiplier: 2, vegetarian: false)
+      meal.update_columns(max: 2)
+      meal.reload
+
+      guest.vegetarian = true
+      expect(guest).to be_valid
+      expect(guest.save).to be true
+    end
   end
 end

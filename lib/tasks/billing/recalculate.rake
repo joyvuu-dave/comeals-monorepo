@@ -14,15 +14,18 @@ namespace :billing do
                                     .joins(:bills).distinct
                                     .preload(:bills, :meal_residents, :guests).to_a
 
-      # Precompute unit_cost per meal from in-memory data (0 queries).
+      # Precompute per-meal financials from in-memory data (0 queries).
       # Uses block-form .sum(&:field) which invokes Enumerable#sum on the
       # loaded array. The column-form .sum(:field) always fires SQL.
-      unit_costs = {}
+      # Stores total_cost and effective_cost so the credit calculation can
+      # apply proportional capping for subsidized meals.
+      meal_financials = {}
       unreconciled_meals.each do |meal|
         total_mult = meal.meal_residents.sum(&:multiplier) + meal.guests.sum(&:multiplier)
 
         if total_mult.zero?
-          unit_costs[meal.id] = BigDecimal('0')
+          zero = BigDecimal('0')
+          meal_financials[meal.id] = { unit_cost: zero, total_cost: zero, effective_cost: zero }
           next
         end
 
@@ -33,19 +36,35 @@ namespace :billing do
           effective_cost = max_cost if total_cost > max_cost
         end
 
-        unit_costs[meal.id] = effective_cost / total_mult
+        meal_financials[meal.id] = {
+          unit_cost: effective_cost / total_mult, total_cost: total_cost, effective_cost: effective_cost
+        }
       end
 
       # Accumulate credits, debits, and guest debits from in-memory data (0 queries).
+      # Credits use the proportional capped amount for subsidized meals.
       credits = Hash.new(BigDecimal('0'))
       debits = Hash.new(BigDecimal('0'))
       guest_debits = Hash.new(BigDecimal('0'))
 
       unreconciled_meals.each do |meal|
-        uc = unit_costs[meal.id]
-        meal.bills.each { |b| credits[b.resident_id] += b.amount unless b.no_cost }
-        meal.meal_residents.each { |mr| debits[mr.resident_id] += uc * mr.multiplier }
-        meal.guests.each { |g| guest_debits[g.resident_id] += uc * g.multiplier }
+        mf = meal_financials[meal.id]
+
+        meal.bills.each do |b|
+          next if b.no_cost
+
+          credit = if mf[:total_cost].zero?
+                     BigDecimal('0')
+                   elsif mf[:effective_cost] < mf[:total_cost]
+                     (b.amount / mf[:total_cost]) * mf[:effective_cost]
+                   else
+                     b.amount
+                   end
+          credits[b.resident_id] += credit
+        end
+
+        meal.meal_residents.each { |mr| debits[mr.resident_id] += mf[:unit_cost] * mr.multiplier }
+        meal.guests.each { |g| guest_debits[g.resident_id] += mf[:unit_cost] * g.multiplier }
       end
 
       # Persist balances (1 query for residents, 1 write per changed balance).

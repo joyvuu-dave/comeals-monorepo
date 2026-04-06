@@ -21,8 +21,6 @@ class Key < ApplicationRecord
   has_secure_token
   belongs_to :identity, polymorphic: true
 
-  before_create :set_token
-
   def set_token
     self.token = self.class.generate_unique_secure_token
   end

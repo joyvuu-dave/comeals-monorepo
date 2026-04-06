@@ -32,7 +32,7 @@ class Guest < ApplicationRecord
   audited associated_with: :meal
 
   validates :multiplier, numericality: { only_integer: true }
-  validate :meal_has_open_spots
+  validate :meal_has_open_spots, on: :create
 
   def meal_has_open_spots
     errors.add(:base, 'Meal has no open spots.') unless meal.max.nil? || meal.attendees_count < meal.max

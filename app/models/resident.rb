@@ -102,7 +102,7 @@ class Resident < ApplicationRecord
   end
 
   def age
-    now = Time.now.utc.to_date
+    now = Time.zone.today
     had_birthday = now.month > birthday.month ||
                    (now.month == birthday.month && now.day >= birthday.day)
     now.year - birthday.year - (had_birthday ? 0 : 1)
@@ -117,7 +117,25 @@ class Resident < ApplicationRecord
   end
 
   def bill_reimbursements
-    bills.joins(:meal).merge(Meal.unreconciled.with_attendees).where(no_cost: false).sum(:amount)
+    relevant_bills = bills.joins(:meal).merge(Meal.unreconciled.with_attendees)
+                          .where(no_cost: false)
+                          .preload(meal: %i[bills meal_residents guests])
+
+    relevant_bills.sum(BigDecimal('0')) do |bill|
+      meal = bill.meal
+      total_cost = meal.bills.reject(&:no_cost).sum(BigDecimal('0'), &:amount)
+      next BigDecimal('0') if total_cost.zero?
+
+      next bill.amount unless meal.capped?
+
+      total_mult = meal.meal_residents.sum(&:multiplier) + meal.guests.sum(&:multiplier)
+      max_cost = meal.cap * total_mult
+      if total_cost > max_cost
+        (bill.amount / total_cost) * max_cost
+      else
+        bill.amount
+      end
+    end
   end
 
   def meal_resident_costs

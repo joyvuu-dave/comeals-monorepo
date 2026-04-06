@@ -81,6 +81,26 @@ RSpec.describe 'Communities API' do
       expect(body['month']).to eq(4)
       expect(body['year']).to eq(2026)
     end
+
+    it 'includes January birthdays when viewing January calendar (year boundary)' do
+      create(:resident, community: community, unit: unit, birthday: Date.new(1990, 1, 15))
+
+      get "/api/v1/communities/#{community.id}/calendar/2026-01-15", params: { token: token }
+
+      expect(response).to have_http_status(:ok)
+      body = response.parsed_body
+      expect(body['birthdays']).not_to be_empty
+    end
+
+    it 'includes December birthdays when viewing December calendar (year boundary)' do
+      create(:resident, community: community, unit: unit, birthday: Date.new(1990, 12, 20))
+
+      get "/api/v1/communities/#{community.id}/calendar/2025-12-15", params: { token: token }
+
+      expect(response).to have_http_status(:ok)
+      body = response.parsed_body
+      expect(body['birthdays']).not_to be_empty
+    end
   end
 
   describe 'GET /api/v1/communities/:id/ical' do
