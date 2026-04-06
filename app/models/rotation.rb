@@ -53,11 +53,11 @@ class Rotation < ApplicationRecord
 
   def set_color
     last_color = Rotation.where(community_id: community_id).order(:id).pluck(:color).last
-    if last_color && COLORS.include?(last_color)
-      self.color = COLORS[(COLORS.index(last_color) + 1) % COLORS.length]
-    else
-      self.color = COLORS[0]
-    end
+    self.color = if last_color && COLORS.include?(last_color)
+                   COLORS[(COLORS.index(last_color) + 1) % COLORS.length]
+                 else
+                   COLORS[0]
+                 end
   end
 
   def self.recolor_community(community_id)
@@ -123,9 +123,7 @@ class Rotation < ApplicationRecord
     changed_ids = self.class.recolor_community(community_id)
 
     dates = @meal_dates_before_destroy || []
-    if changed_ids.any?
-      dates = dates | Meal.where(rotation_id: changed_ids).distinct.pluck(:date)
-    end
+    dates |= Meal.where(rotation_id: changed_ids).distinct.pluck(:date) if changed_ids.any?
 
     dates.each { |date| community.trigger_pusher(date) }
   end

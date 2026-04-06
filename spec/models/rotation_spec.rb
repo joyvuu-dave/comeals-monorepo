@@ -85,28 +85,28 @@ RSpec.describe Rotation do
 
   describe '.recolor_community' do
     it 'reassigns colors in COLORS-cycle order by id' do
-      rotations = 6.times.map { create(:rotation, community: community, no_email: true) }
+      rotations = Array.new(6) { create(:rotation, community: community, no_email: true) }
 
       # Manually break the cycle
       rotations[2].update_column(:color, rotations[1].reload.color)
 
-      Rotation.recolor_community(community.id)
+      described_class.recolor_community(community.id)
 
       reloaded_colors = rotations.map { |r| r.reload.color }
-      expected = 6.times.map { |i| Rotation::COLORS[i % Rotation::COLORS.length] }
+      expected = Array.new(6) { |i| Rotation::COLORS[i % Rotation::COLORS.length] }
       expect(reloaded_colors).to eq(expected)
     end
 
     it 'returns ids of rotations whose colors changed' do
-      rotations = 3.times.map { create(:rotation, community: community, no_email: true) }
+      rotations = Array.new(3) { create(:rotation, community: community, no_email: true) }
 
       # Colors are already correct, so nothing should change
-      changed = Rotation.recolor_community(community.id)
+      changed = described_class.recolor_community(community.id)
       expect(changed).to be_empty
 
       # Break one color
       rotations[1].update_column(:color, rotations[0].reload.color)
-      changed = Rotation.recolor_community(community.id)
+      changed = described_class.recolor_community(community.id)
       expect(changed).to include(rotations[1].id)
     end
 
@@ -116,7 +116,7 @@ RSpec.describe Rotation do
       original_color = other_rotation.color
 
       create(:rotation, community: community, no_email: true)
-      Rotation.recolor_community(community.id)
+      described_class.recolor_community(community.id)
 
       expect(other_rotation.reload.color).to eq(original_color)
     end
@@ -124,13 +124,13 @@ RSpec.describe Rotation do
 
   describe 'recolor on destroy' do
     it 'recolors remaining rotations after one is deleted' do
-      rotations = 5.times.map { create(:rotation, community: community, no_email: true) }
+      rotations = Array.new(5) { create(:rotation, community: community, no_email: true) }
 
       # Before: green, blue, red, yellow, orange
       rotations[2].destroy!
 
       # After: the remaining 4 should be green, blue, red, yellow
-      remaining = Rotation.where(community_id: community.id).order(:id)
+      remaining = described_class.where(community_id: community.id).order(:id)
       expect(remaining.pluck(:color)).to eq(Rotation::COLORS[0..3])
     end
   end
