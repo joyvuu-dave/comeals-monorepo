@@ -206,7 +206,7 @@ class Community < ApplicationRecord
     keys << calendar_cache_key(date.end_of_week.year, date.end_of_week.month) if date.end_of_week.month != date.month
 
     # Previous month — if the date falls within the previous month's 42-day window
-    range_start = (date.beginning_of_month - 1.day).beginning_of_month.beginning_of_week
+    range_start = (date.beginning_of_month - 1.day).beginning_of_month.beginning_of_week(:sunday)
     if date.between?(range_start, range_start + 41.days)
       prev_month = date.beginning_of_month - 1.day
       keys << calendar_cache_key(prev_month.year, prev_month.month)

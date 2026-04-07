@@ -82,6 +82,32 @@ RSpec.describe 'Communities API' do
       expect(body['year']).to eq(2026)
     end
 
+    # Birthdays in the calendar response must appear on the actual birthday
+    # date, not shifted. This tests the full pipeline: controller → serializer.
+    it 'returns birthdays on the correct date (not shifted by a day)' do
+      create(:resident, community: community, unit: unit,
+                        birthday: Date.new(1990, 4, 20))
+
+      get "/api/v1/communities/#{community.id}/calendar/2026-04-15", params: { token: token }
+
+      expect(response).to have_http_status(:ok)
+      body = response.parsed_body
+      birthdays = body['birthdays']
+      expect(birthdays).not_to be_empty
+
+      bday_start = birthdays.first['start']
+      # The birthday should be April 20, not April 21
+      expect(bday_start).to include('2026-04-20')
+    end
+
+    # Regression: malformed date params must return 400, not crash with 500.
+    it 'returns 400 for a malformed date parameter' do
+      get "/api/v1/communities/#{community.id}/calendar/not-a-date", params: { token: token }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Invalid date')
+    end
+
     it 'includes January birthdays when viewing January calendar (year boundary)' do
       create(:resident, community: community, unit: unit, birthday: Date.new(1990, 1, 15))
 

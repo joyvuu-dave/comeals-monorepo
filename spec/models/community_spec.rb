@@ -174,6 +174,22 @@ RSpec.describe Community do
       expect(Rails.cache).to have_received(:delete).at_least(:once)
     end
 
+    # Documents a mismatch: affected_calendar_keys uses beginning_of_week
+    # (Monday default) but CommunitiesController#calendar uses
+    # beginning_of_week(:sunday). For dates near month boundaries, the
+    # invalidation range can differ from the actual calendar range.
+    it 'invalidates the previous month when a date falls in its Sunday-based calendar range' do
+      # April 2026: calendar starts March 29 (Sunday). A meal on March 30
+      # (Monday) is visible in the April calendar. The previous-month
+      # invalidation should cover March.
+      community.trigger_pusher(Date.new(2026, 3, 30))
+
+      # March cache key should be deleted since March 30 is visible in
+      # both the March and April calendar views.
+      march_key = community.calendar_cache_key(2026, 3)
+      expect(Rails.cache).to have_received(:delete).with(march_key)
+    end
+
     # Pusher channels and cache keys use the same format, which must match
     # the frontend subscription in data_store.js: "community-{id}-calendar-{year}-{month}".
     # If these ever diverge (e.g., someone adds a version prefix to cache keys),

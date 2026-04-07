@@ -54,7 +54,7 @@ class MealResident < ApplicationRecord
     errors.add(:base, 'Meal has been closed.') if meal.closed == true && meal.max.nil?
 
     # Scenario: Meal is closed, max has been set, there are NOT open spots
-    return unless meal.closed == true && meal.max.present? && meal.attendees_count == meal.max
+    return unless meal.closed == true && meal.max.present? && meal.attendees_count >= meal.max
 
     errors.add(:base,
                'Meal has no open spots.')
@@ -65,7 +65,7 @@ class MealResident < ApplicationRecord
     return true if meal.closed == false
 
     # Scenario: Meal is closed, resident signed up after meal was closed (there were extras)
-    return true if meal.closed == true && created_at > meal.closed_at
+    return true if meal.closed == true && meal.closed_at.present? && created_at > meal.closed_at
 
     # Scenario: Meal is closed, resident signed up before meal was closed
     errors.add(:base, 'Meal has been closed.')

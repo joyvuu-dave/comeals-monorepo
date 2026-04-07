@@ -63,6 +63,40 @@ RSpec.describe 'Meals API' do
   end
 
   # ---------------------------------------------------------------------------
+  # CSRF safety: API controllers inherit from ActionController::API, which does
+  # not include CSRF protection. These tests verify that write operations work
+  # with token auth alone — no CSRF token required. This is the safety net for
+  # removing `skip_before_action :verify_authenticity_token` from
+  # ApplicationController (which only needs to affect ActiveAdmin, not the API).
+  # ---------------------------------------------------------------------------
+  describe 'API write operations work without CSRF tokens' do
+    let(:meal) { create(:meal, community: community) }
+
+    it 'POST (create_meal_resident) succeeds with just an auth token' do
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}",
+           params: { token: token, late: false, vegetarian: false }
+
+      expect(response).to have_http_status(:ok)
+    end
+
+    it 'PATCH (update_description) succeeds with just an auth token' do
+      patch "/api/v1/meals/#{meal.id}/description",
+            params: { token: token, description: 'Test menu' }
+
+      expect(response).to have_http_status(:ok)
+    end
+
+    it 'DELETE (destroy_meal_resident) succeeds with just an auth token' do
+      create(:meal_resident, meal: meal, resident: resident, community: community)
+
+      delete "/api/v1/meals/#{meal.id}/residents/#{resident.id}",
+             params: { token: token }
+
+      expect(response).to have_http_status(:ok)
+    end
+  end
+
+  # ---------------------------------------------------------------------------
   # GET /api/v1/meals/next
   # ---------------------------------------------------------------------------
   describe 'GET /api/v1/meals/next' do

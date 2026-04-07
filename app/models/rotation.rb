@@ -4,15 +4,16 @@
 #
 # Table name: rotations
 #
-#  id                 :bigint           not null, primary key
-#  color              :string           not null
-#  description        :string           default(""), not null
-#  place_value        :integer
-#  residents_notified :boolean          default(FALSE), not null
-#  start_date         :date
-#  created_at         :datetime         not null
-#  updated_at         :datetime         not null
-#  community_id       :bigint           not null
+#  id                       :bigint           not null, primary key
+#  color                    :string           not null
+#  description              :string           default(""), not null
+#  new_rotation_notified_at :datetime
+#  place_value              :integer
+#  residents_notified       :boolean          default(FALSE), not null
+#  start_date               :date
+#  created_at               :datetime         not null
+#  updated_at               :datetime         not null
+#  community_id             :bigint           not null
 #
 # Indexes
 #
@@ -29,6 +30,10 @@ class Rotation < ApplicationRecord
     %w[id color community_id created_at description place_value residents_notified start_date updated_at]
   end
 
+  # no_email suppresses the new-rotation notification for auto-created
+  # rotations (see Community#auto_create_rotations). When set, the
+  # after_create callback marks the rotation as already notified so the
+  # rotations:notify_new rake task skips it.
   attr_accessor :no_email
 
   belongs_to :community
@@ -44,7 +49,7 @@ class Rotation < ApplicationRecord
   after_commit :set_place_value, on: %i[create destroy]
   after_commit :invalidate_calendar_cache
   after_commit :recolor_remaining_rotations, on: :destroy
-  after_create_commit :notify_residents
+  after_create_commit :suppress_notification_if_no_email
   validates :color, presence: true
 
   accepts_nested_attributes_for :meals
@@ -102,15 +107,10 @@ class Rotation < ApplicationRecord
     end
   end
 
-  def notify_residents
-    return if no_email
-
-    residents = community.residents.where(active: true).where.not(email: nil)
-    residents.each do |resident|
-      ResidentMailer.new_rotation_email(resident, self, community).deliver_now
-    rescue *MAIL_DELIVERY_ERRORS => e
-      Rails.logger.error("new_rotation_email failed for #{resident.email}: #{e.class} - #{e.message}")
-    end
+  # Mark auto-created rotations as already notified so the
+  # rotations:notify_new rake task skips them.
+  def suppress_notification_if_no_email
+    update_column(:new_rotation_notified_at, Time.current) if no_email
   end
 
   private

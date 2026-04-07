@@ -109,6 +109,19 @@ class Resident < ApplicationRecord
   end
 
   # DERIVED DATA
+  #
+  # calc_balance and its helpers (bill_reimbursements, meal_resident_costs,
+  # guest_costs) are the per-resident implementation of balance computation.
+  # They are NOT used in production — the billing:recalculate rake task has
+  # an equivalent batch-optimized implementation that avoids N+1 queries.
+  #
+  # These methods are kept as a correctness oracle:
+  #   - spec/tasks/billing_recalculate_correctness_spec.rb compares the rake
+  #     task output against calc_balance to verify both paths agree.
+  #   - spec/models/resident_spec.rb tests the individual calculation logic.
+  #
+  # If you change financial logic in the rake task, update these methods too
+  # (and vice versa) — they must stay in sync.
 
   def calc_balance
     return BigDecimal('0') unless Meal.where(community_id: community_id).unreconciled.exists?

@@ -62,7 +62,11 @@ module Api
 
       # GET /api/v1/communities/:id/calendar/:date
       def calendar
-        date = Date.parse(params[:date])
+        begin
+          date = Date.parse(params[:date])
+        rescue ArgumentError, TypeError
+          return render json: { message: 'Invalid date' }, status: :bad_request
+        end
 
         start_date = date.beginning_of_month.beginning_of_week(:sunday)
         end_date = start_date + 41.days

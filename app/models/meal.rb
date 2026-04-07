@@ -191,11 +191,6 @@ class Meal < ApplicationRecord
     effective_total_cost / multiplier
   end
 
-  # Total amount that would be collected from all attendees.
-  def collected
-    unit_cost * multiplier
-  end
-
   # Maximum total cost for this meal based on the community cap.
   # Returns nil if uncapped.
   def max_cost

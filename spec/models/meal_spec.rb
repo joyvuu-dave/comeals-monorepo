@@ -407,39 +407,6 @@ RSpec.describe Meal do
     end
   end
 
-  describe '#collected' do
-    it 'returns unit_cost * multiplier' do
-      meal = create(:meal, community: community)
-      resident_a = create(:resident, community: community, unit: unit, multiplier: 2)
-      resident_b = create(:resident, community: community, unit: unit, multiplier: 1)
-      create(:meal_resident, meal: meal, resident: resident_a, community: community)
-      create(:meal_resident, meal: meal, resident: resident_b, community: community)
-      meal.reload
-
-      resident_c = create(:resident, community: community, unit: unit, multiplier: 2)
-      create(:bill, meal: meal, resident: resident_c, community: community, amount: BigDecimal('30'))
-
-      # unit_cost = 30/3 = 10, collected = 10 * 3 = 30
-      expect(meal.collected).to eq(BigDecimal('30'))
-    end
-
-    it 'returns 0 when no one is attending' do
-      meal = create(:meal, community: community)
-      expect(meal.collected).to eq(BigDecimal('0'))
-    end
-
-    it 'equals effective_total_cost for uncapped meals' do
-      meal = create(:meal, community: community)
-      resident = create(:resident, community: community, unit: unit, multiplier: 2)
-      create(:meal_resident, meal: meal, resident: resident, community: community)
-      meal.reload
-
-      create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('50'))
-
-      expect(meal.collected).to eq(meal.effective_total_cost)
-    end
-  end
-
   describe '#capped?' do
     it 'returns true when cap is present' do
       capped_community = create(:community, cap: BigDecimal('3'))

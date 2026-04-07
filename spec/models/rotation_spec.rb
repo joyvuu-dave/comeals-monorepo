@@ -4,15 +4,16 @@
 #
 # Table name: rotations
 #
-#  id                 :bigint           not null, primary key
-#  color              :string           not null
-#  description        :string           default(""), not null
-#  place_value        :integer
-#  residents_notified :boolean          default(FALSE), not null
-#  start_date         :date
-#  created_at         :datetime         not null
-#  updated_at         :datetime         not null
-#  community_id       :bigint           not null
+#  id                       :bigint           not null, primary key
+#  color                    :string           not null
+#  description              :string           default(""), not null
+#  new_rotation_notified_at :datetime
+#  place_value              :integer
+#  residents_notified       :boolean          default(FALSE), not null
+#  start_date               :date
+#  created_at               :datetime         not null
+#  updated_at               :datetime         not null
+#  community_id             :bigint           not null
 #
 # Indexes
 #
@@ -181,23 +182,19 @@ RSpec.describe Rotation do
     end
   end
 
-  describe '#notify_residents' do
-    let(:unit) { create(:unit, community: community) }
-
-    it 'does not send emails when no_email is true' do
-      create(:resident, community: community, unit: unit, email: 'test@example.com')
-      expect do
-        create(:rotation, community: community, no_email: true)
-      end.not_to(change { ActionMailer::Base.deliveries.count })
+  describe '#suppress_notification_if_no_email' do
+    it 'marks rotation as notified when no_email is true (suppresses rake task notification)' do
+      rotation = create(:rotation, community: community, no_email: true)
+      rotation.reload
+      expect(rotation.new_rotation_notified_at).to be_present
     end
 
-    it 'skips inactive residents' do
-      create(:resident, community: community, unit: unit, active: false)
-      create(:resident, community: community, unit: unit, active: true)
-
-      expect do
-        create(:rotation, community: community, no_email: false)
-      end.to change { ActionMailer::Base.deliveries.count }.by(1)
+    it 'leaves new_rotation_notified_at nil when no_email is not set (rake task will send)' do
+      rotation = described_class.new(community: community)
+      expect(rotation.no_email).to be_nil
+      rotation.save!
+      db_val = described_class.where(id: rotation.id).pick(:new_rotation_notified_at)
+      expect(db_val).to be_nil
     end
   end
 end

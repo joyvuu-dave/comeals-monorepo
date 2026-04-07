@@ -36,11 +36,18 @@ class ResidentBirthdaySerializer < ActiveModel::Serializer
   end
 
   def start
-    Date.new(Time.zone.today.year, (object.birthday + 1.day).month, (object.birthday + 1.day).day)
+    year = Time.zone.today.year
+    Date.new(year, object.birthday.month, object.birthday.day)
+  rescue ArgumentError
+    # Feb 29 birthday in a non-leap year — display on Feb 28
+    Date.new(year, 2, 28)
   end
 
   def end
-    Date.new(Time.zone.today.year, (object.birthday + 1.day).month, (object.birthday + 1.day).day)
+    year = Time.zone.today.year
+    Date.new(year, object.birthday.month, object.birthday.day)
+  rescue ArgumentError
+    Date.new(year, 2, 28)
   end
 
   def color

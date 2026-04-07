@@ -204,6 +204,53 @@ RSpec.describe 'Serializers', type: :serializer do
       expect(result[:title]).to include('B-day!')
       expect(result[:title]).not_to match(/\d+\w+ B-day!/)
     end
+
+    # Birthday date must appear on the actual birthday, not shifted by a day.
+    # Regression: the old code used (birthday + 1.day), which shifted every
+    # birthday forward and moved Dec 31 birthdays into January.
+    it 'returns the birthday date in the current year (not shifted)' do
+      bday_resident = create(:resident, community: community, unit: unit,
+                                        birthday: Date.new(1990, 7, 15))
+
+      result = serialize(bday_resident, described_class)
+      expected = Date.new(Time.zone.today.year, 7, 15)
+      expect(result[:start]).to eq(expected)
+      expect(result[:end]).to eq(expected)
+    end
+
+    # Dec 31 birthday must not wrap to Jan 1 of the current year.
+    it 'handles December 31 birthdays correctly (no month wrap)' do
+      dec31 = create(:resident, community: community, unit: unit,
+                                birthday: Date.new(1985, 12, 31))
+
+      result = serialize(dec31, described_class)
+      expected = Date.new(Time.zone.today.year, 12, 31)
+      expect(result[:start]).to eq(expected)
+      expect(result[:start].month).to eq(12)
+    end
+
+    # Feb 29 birthday in a non-leap year should display on Feb 28, not crash.
+    it 'handles Feb 29 birthdays in non-leap years' do
+      leap_baby = create(:resident, community: community, unit: unit,
+                                    birthday: Date.new(2000, 2, 29))
+
+      # Force the "current year" to a non-leap year for this test
+      allow(Time.zone).to receive(:today).and_return(Date.new(2027, 6, 1))
+
+      result = serialize(leap_baby, described_class)
+      expect(result[:start]).to eq(Date.new(2027, 2, 28))
+    end
+
+    # Feb 29 birthday in a leap year should display on Feb 29.
+    it 'handles Feb 29 birthdays in leap years' do
+      leap_baby = create(:resident, community: community, unit: unit,
+                                    birthday: Date.new(2000, 2, 29))
+
+      allow(Time.zone).to receive(:today).and_return(Date.new(2028, 6, 1))
+
+      result = serialize(leap_baby, described_class)
+      expect(result[:start]).to eq(Date.new(2028, 2, 29))
+    end
   end
 
   describe RotationLogSerializer do

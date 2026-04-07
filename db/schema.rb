@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_06_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_07_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_stat_statements"
@@ -244,6 +244,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_06_000001) do
     t.bigint "community_id", null: false
     t.datetime "created_at", precision: nil, null: false
     t.string "description", default: "", null: false
+    t.datetime "new_rotation_notified_at"
     t.integer "place_value"
     t.boolean "residents_notified", default: false, null: false
     t.date "start_date"
