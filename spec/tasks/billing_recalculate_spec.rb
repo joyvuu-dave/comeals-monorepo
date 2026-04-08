@@ -67,4 +67,27 @@ RSpec.describe 'billing:recalculate' do
     expect(balance).to be_present
     expect(balance.amount).to eq(BigDecimal('0'))
   end
+
+  it 'is idempotent — running twice produces the same result' do
+    cook = create(:resident, community: community, unit: unit, multiplier: 2)
+    eater = create(:resident, community: community, unit: unit, multiplier: 2)
+    meal = create(:meal, community: community)
+
+    create(:meal_resident, meal: meal, resident: eater, community: community)
+    create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('60'))
+    meal.reload
+
+    Rake::Task['billing:recalculate'].invoke
+    first_run_cook = ResidentBalance.find_by(resident: cook).amount
+    first_run_eater = ResidentBalance.find_by(resident: eater).amount
+
+    Rake::Task['billing:recalculate'].reenable
+    Rake::Task['billing:recalculate'].invoke
+
+    expect(ResidentBalance.find_by(resident: cook).amount).to eq(first_run_cook)
+    expect(ResidentBalance.find_by(resident: eater).amount).to eq(first_run_eater)
+    # Still exactly one record per resident (upsert, not insert)
+    expect(ResidentBalance.where(resident: cook).count).to eq(1)
+    expect(ResidentBalance.where(resident: eater).count).to eq(1)
+  end
 end

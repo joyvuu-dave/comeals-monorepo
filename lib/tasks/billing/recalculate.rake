@@ -67,16 +67,16 @@ namespace :billing do
         meal.guests.each { |g| guest_debits[g.resident_id] += mf[:unit_cost] * g.multiplier }
       end
 
-      # Persist balances (1 query for residents, 1 write per changed balance).
-      community.residents.find_each do |resident|
-        balance = credits[resident.id] - debits[resident.id] - guest_debits[resident.id]
-
-        record = ResidentBalance.find_or_initialize_by(resident_id: resident.id)
-        if record.new_record? || record.amount != balance
-          record.amount = balance
-          record.save!
-        end
+      # Persist balances via upsert (idempotent — safe if two rake runs overlap,
+      # because both compute the same deterministic result from immutable source data).
+      # Batches all residents into a single INSERT ... ON CONFLICT UPDATE query.
+      now = Time.current
+      rows = community.residents.pluck(:id).map do |resident_id|
+        balance = credits[resident_id] - debits[resident_id] - guest_debits[resident_id]
+        { resident_id: resident_id, amount: balance, created_at: now, updated_at: now }
       end
+
+      ResidentBalance.upsert_all(rows, unique_by: :resident_id, update_only: %i[amount]) if rows.any?
     end
 
     total_time = Time.current - start_time

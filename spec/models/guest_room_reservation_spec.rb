@@ -13,8 +13,9 @@
 #
 # Indexes
 #
-#  index_guest_room_reservations_on_community_id  (community_id)
-#  index_guest_room_reservations_on_resident_id   (resident_id)
+#  index_guest_room_reservations_on_community_id           (community_id)
+#  index_guest_room_reservations_on_community_id_and_date  (community_id,date) UNIQUE
+#  index_guest_room_reservations_on_resident_id            (resident_id)
 #
 # Foreign Keys
 #
@@ -80,6 +81,25 @@ RSpec.describe GuestRoomReservation do
                           resident: resident2,
                           date: Date.new(2026, 4, 1))
       expect(reservation).to be_valid
+    end
+
+    # Regression test for BUG-3: uniqueness must be enforced at the database
+    # level, not just Rails validations, to prevent race-condition double bookings.
+    it 'enforces uniqueness at the database level' do
+      community = create(:community)
+      resident = create(:resident, community: community)
+      create(:guest_room_reservation,
+             community: community,
+             resident: resident,
+             date: Date.new(2026, 5, 1))
+
+      duplicate = build(:guest_room_reservation,
+                        community: community,
+                        resident: resident,
+                        date: Date.new(2026, 5, 1))
+      expect do
+        duplicate.save(validate: false)
+      end.to raise_error(ActiveRecord::RecordNotUnique)
     end
   end
 end

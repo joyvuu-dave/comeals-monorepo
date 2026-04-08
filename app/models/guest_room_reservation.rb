@@ -13,8 +13,9 @@
 #
 # Indexes
 #
-#  index_guest_room_reservations_on_community_id  (community_id)
-#  index_guest_room_reservations_on_resident_id   (resident_id)
+#  index_guest_room_reservations_on_community_id           (community_id)
+#  index_guest_room_reservations_on_community_id_and_date  (community_id,date) UNIQUE
+#  index_guest_room_reservations_on_resident_id            (resident_id)
 #
 # Foreign Keys
 #
@@ -32,7 +33,7 @@ class GuestRoomReservation < ApplicationRecord
   belongs_to :resident
 
   validates :date, presence: true
-  validates :date, uniqueness: { scope: :community_id } # rubocop:disable Rails/UniqueValidationWithoutIndex -- enforced at application level
+  validates :date, uniqueness: { scope: :community_id }
 
   after_commit :trigger_pusher
 

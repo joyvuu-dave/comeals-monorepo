@@ -60,7 +60,8 @@ class Reconciliation < ApplicationRecord
 
   # Compute final settlement balances for this reconciliation period.
   # Returns a hash of { resident_id => rounded_balance }.
-  # Uses banker's rounding (ROUND_HALF_EVEN) per financial standards.
+  # Uses largest-remainder method (Hamilton's method) to round to cents,
+  # guaranteeing the total sums to exactly zero.
   #
   # This method batch-loads all data upfront (5 queries total) to avoid the N+1
   # that would result from calling Meal#unit_cost per-record. The arithmetic is
@@ -133,28 +134,27 @@ class Reconciliation < ApplicationRecord
       meal.guests.each { |g| guest_debits_by_resident[g.resident_id] += mf[:unit_cost] * g.multiplier }
     end
 
-    # Step 4: Assemble per-resident balances (1 query for residents, zero inside loop).
-    balances = {}
+    # Step 4: Assemble per-resident raw balances (1 query for residents, zero inside loop).
+    raw_balances = {}
     community.residents.find_each do |resident|
       credits = credits_by_resident[resident.id]
       debits = debits_by_resident[resident.id]
       guest_debits = guest_debits_by_resident[resident.id]
-      raw_balance = credits - debits - guest_debits
-
-      # Round to cents using banker's rounding (ROUND_HALF_EVEN)
-      balances[resident.id] = raw_balance.round(2, BigDecimal::ROUND_HALF_EVEN)
+      raw_balances[resident.id] = credits - debits - guest_debits
     end
 
-    # Verify the books balance: total credits should equal total debits.
-    # Zero-attendee meals are already excluded (with_attendees scope), so the
-    # only source of imbalance is banker's rounding — at most 0.5 cents per
-    # resident. Anything beyond that is a calculation bug.
+    # Step 5: Round to cents using largest-remainder method (Hamilton's method).
+    # This guarantees rounded balances sum to exactly zero — the standard
+    # accounting approach for apportioning monetary amounts. Each value is
+    # within 1 cent of its exact full-precision amount.
+    balances = allocate_to_cents(raw_balances)
+
+    # Verify the books balance exactly. allocate_to_cents guarantees this;
+    # a non-zero sum indicates a bug in the allocation algorithm.
     total = balances.values.sum(BigDecimal('0'))
-    theoretical_max = BigDecimal('0.005') * balances.size
-    if total.abs > theoretical_max
+    unless total.zero?
       raise "settlement_balances: books do not balance for reconciliation #{id}. " \
-            "Discrepancy: #{total} exceeds theoretical rounding maximum of #{theoretical_max}. " \
-            'This indicates a bug in cost calculations.'
+            "Discrepancy: #{total}. This indicates a bug in allocate_to_cents."
     end
 
     balances
@@ -184,6 +184,43 @@ class Reconciliation < ApplicationRecord
 
   def set_date
     self.date ||= Time.zone.today
+  end
+
+  # Distributes full-precision balances (which sum to zero) into cent-rounded
+  # balances that also sum to exactly zero, using the largest-remainder method
+  # (Hamilton's method). Each rounded value is within 1 cent of its exact amount.
+  #
+  # Algorithm:
+  # 1. Truncate each balance toward zero (floor positives, ceil negatives).
+  # 2. Compute the residual = sum of truncated values (close to zero, off by a few cents).
+  # 3. Award residual pennies to entries whose truncation discarded the most,
+  #    tie-breaking by lowest resident_id for deterministic, auditable results.
+  def allocate_to_cents(raw_balances)
+    one_cent = BigDecimal('0.01')
+
+    truncated = {}
+    remainders = {}
+
+    raw_balances.each do |id, raw|
+      truncated[id] = raw >= 0 ? raw.floor(2) : raw.ceil(2)
+      remainders[id] = raw - truncated[id]
+    end
+
+    residual = truncated.values.sum(BigDecimal('0'))
+    pennies = (residual / one_cent).round.to_i
+
+    if pennies.positive?
+      # Sum too positive — subtract pennies from entries with most-negative remainders
+      # (those entries benefited most from truncation toward zero).
+      candidates = remainders.select { |_, r| r.negative? }.sort_by { |id, r| [r, id] }
+      pennies.times { |i| truncated[candidates[i][0]] -= one_cent }
+    elsif pennies.negative?
+      # Sum too negative — add pennies to entries with most-positive remainders.
+      candidates = remainders.select { |_, r| r.positive? }.sort_by { |id, r| [-r, id] }
+      pennies.abs.times { |i| truncated[candidates[i][0]] += one_cent }
+    end
+
+    truncated
   end
 
   def start_date_not_after_end_date

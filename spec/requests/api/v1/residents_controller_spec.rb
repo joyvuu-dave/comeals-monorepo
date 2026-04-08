@@ -89,7 +89,7 @@ RSpec.describe 'Residents API' do
   # ---------------------------------------------------------------------------
   describe 'GET /api/v1/residents/name/:token' do
     it 'returns the resident name for a valid reset token' do
-      resident.update!(reset_password_token: 'valid-token-123')
+      resident.update!(reset_password_token: 'valid-token-123', reset_password_sent_at: Time.current)
 
       get '/api/v1/residents/name/valid-token-123'
 
@@ -104,6 +104,34 @@ RSpec.describe 'Residents API' do
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body['message']).to include('incorrect or expired')
     end
+
+    it 'returns 400 for an expired reset token' do
+      resident.update!(reset_password_token: 'expired-token', reset_password_sent_at: 25.hours.ago)
+
+      get '/api/v1/residents/name/expired-token'
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to include('expired')
+    end
+
+    it 'does not clear the expired token (GET must be side-effect-free)' do
+      resident.update!(reset_password_token: 'stale-token', reset_password_sent_at: 25.hours.ago)
+
+      get '/api/v1/residents/name/stale-token'
+
+      resident.reload
+      expect(resident.reset_password_token).to eq('stale-token')
+      expect(resident.reset_password_sent_at).to be_present
+    end
+
+    it 'returns 400 when reset_password_sent_at is nil' do
+      resident.update_columns(reset_password_token: 'orphan-token', reset_password_sent_at: nil)
+
+      get '/api/v1/residents/name/orphan-token'
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to include('expired')
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -111,7 +139,7 @@ RSpec.describe 'Residents API' do
   # ---------------------------------------------------------------------------
   describe 'POST /api/v1/residents/password-reset/:token' do
     it 'sets a new password with a valid reset token' do
-      resident.update!(reset_password_token: 'reset-token-456')
+      resident.update!(reset_password_token: 'reset-token-456', reset_password_sent_at: Time.current)
 
       post '/api/v1/residents/password-reset/reset-token-456', params: {
         password: 'newpassword123'

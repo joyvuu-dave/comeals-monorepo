@@ -5,6 +5,8 @@ module Api
     class ResidentsController < ApiController
       include ApplicationHelper
 
+      RESET_TOKEN_LIFETIME = 24.hours
+
       before_action :authenticate, only: [:show_id]
 
       # GET /api/v1/residents/id
@@ -18,6 +20,11 @@ module Api
 
         if resident.blank?
           render json: { message: 'Password reset link is incorrect or expired.' }, status: :bad_request and return
+        end
+
+        if resident.reset_password_sent_at.blank? || resident.reset_password_sent_at < RESET_TOKEN_LIFETIME.ago
+          render json: { message: 'Password reset link has expired. Please request a new one.' },
+                 status: :bad_request and return
         end
 
         render json: { name: resident_name_helper(resident.name) }
@@ -55,6 +62,7 @@ module Api
         end
 
         resident.reset_password_token = SecureRandom.urlsafe_base64
+        resident.reset_password_sent_at = Time.current
         unless resident.save
           render json: { message: 'Error. Please try again.' }, status: :bad_request
           return
@@ -78,7 +86,14 @@ module Api
 
         render json: { message: 'Error.' }, status: :bad_request and return if resident.blank?
 
+        if resident.reset_password_sent_at.blank? || resident.reset_password_sent_at < RESET_TOKEN_LIFETIME.ago
+          resident.update_columns(reset_password_token: nil, reset_password_sent_at: nil)
+          render json: { message: 'Password reset link has expired. Please request a new one.' },
+                 status: :bad_request and return
+        end
+
         resident.reset_password_token = nil
+        resident.reset_password_sent_at = nil
         resident.password = params[:password]
 
         render json: { message: 'Password updated!' } and return if resident.save

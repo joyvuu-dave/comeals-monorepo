@@ -70,6 +70,31 @@ RSpec.describe MealResident do
 
       expect(mr.multiplier).to eq(1)
     end
+
+    # Regression test for BUG-1: set_multiplier must only run on create, not update.
+    # If it runs on update, toggling late/vegetarian silently overwrites the
+    # point-in-time multiplier when the resident's multiplier has since changed.
+    it 'preserves the original multiplier when the record is updated' do
+      child = create(:resident, community: community, unit: unit, multiplier: 1)
+      mr = create(:meal_resident, meal: meal, resident: child, community: community)
+      expect(mr.multiplier).to eq(1)
+
+      # Simulate the residents:set_multiplier rake task promoting child to adult
+      child.update_columns(multiplier: 2)
+      child.reload
+
+      # Now update late/vegetarian — the multiplier must NOT change
+      mr.update!(late: true)
+      expect(mr.reload.multiplier).to eq(1)
+    end
+
+    it 'captures the current resident multiplier at creation time' do
+      # A resident who was recently promoted from child (1) to adult (2)
+      # should get multiplier 2 on any NEW meal signups.
+      promoted = create(:resident, community: community, unit: unit, multiplier: 2)
+      mr = create(:meal_resident, meal: meal, resident: promoted, community: community)
+      expect(mr.multiplier).to eq(2)
+    end
   end
 
   describe '#set_community_id' do

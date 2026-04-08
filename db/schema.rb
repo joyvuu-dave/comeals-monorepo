@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_07_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_07_223500) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_stat_statements"
@@ -124,6 +124,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_07_000001) do
     t.date "date", null: false
     t.bigint "resident_id", null: false
     t.datetime "updated_at", precision: nil, null: false
+    t.index ["community_id", "date"], name: "index_guest_room_reservations_on_community_id_and_date", unique: true
     t.index ["community_id"], name: "index_guest_room_reservations_on_community_id"
     t.index ["resident_id"], name: "index_guest_room_reservations_on_resident_id"
   end
@@ -214,7 +215,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_07_000001) do
     t.datetime "created_at", precision: nil, null: false
     t.bigint "resident_id", null: false
     t.datetime "updated_at", precision: nil, null: false
-    t.index ["resident_id"], name: "index_resident_balances_on_resident_id"
+    t.index ["resident_id"], name: "index_resident_balances_on_resident_id", unique: true
+    t.check_constraint "amount = amount", name: "resident_balances_amount_not_nan"
   end
 
   create_table "residents", force: :cascade do |t|
@@ -227,6 +229,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_07_000001) do
     t.integer "multiplier", default: 2, null: false
     t.string "name", null: false
     t.string "password_digest", null: false
+    t.datetime "reset_password_sent_at"
     t.string "reset_password_token"
     t.bigint "unit_id", null: false
     t.datetime "updated_at", precision: nil, null: false

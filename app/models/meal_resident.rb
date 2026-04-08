@@ -35,7 +35,7 @@ class MealResident < ApplicationRecord
 
   audited associated_with: :meal
 
-  before_validation :set_multiplier
+  before_validation :set_multiplier, on: :create
   before_validation :set_community_id
 
   validates :meal_id, uniqueness: { scope: :resident_id }

@@ -35,7 +35,7 @@ RSpec.describe 'reconciliations:create' do
     expect(meal.reload.reconciliation).to eq(reconciliation)
   end
 
-  it 'persists settlement balances with banker rounding' do
+  it 'persists settlement balances' do
     cook = create(:resident, community: community, unit: unit, multiplier: 2)
     eater = create(:resident, community: community, unit: unit, multiplier: 2)
     meal = create(:meal, community: community, date: Date.yesterday)

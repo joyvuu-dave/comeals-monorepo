@@ -69,7 +69,7 @@ RSpec.describe Reconciliation do
   end
 
   describe '#settlement_balances' do
-    it 'computes per-resident balances rounded to cents with banker rounding' do
+    it 'computes per-resident balances rounded to cents' do
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
       eater = create(:resident, community: community, unit: unit, multiplier: 2)
 
@@ -88,7 +88,7 @@ RSpec.describe Reconciliation do
       expect(balances[eater.id]).to eq(BigDecimal('-50'))
     end
 
-    it 'applies banker rounding (round half to even) at settlement' do
+    it 'rounds repeating decimals to cents and sums to zero' do
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
       eater_1 = create(:resident, community: community, unit: unit, multiplier: 2)
       eater_2 = create(:resident, community: community, unit: unit, multiplier: 1)
@@ -101,51 +101,45 @@ RSpec.describe Reconciliation do
 
       # multiplier = 2 + 1 = 3
       # unit_cost = 10 / 3 = 3.33333...
-      # eater_1 cost = 3.33333... * 2 = 6.66666...
-      # eater_2 cost = 3.33333... * 1 = 3.33333...
+      # eater_1 debit = 3.33333... * 2 = 6.66666... → truncated to 6.66
+      # eater_2 debit = 3.33333... * 1 = 3.33333... → truncated to 3.33
+      # Residual = 10 - 6.66 - 3.33 = 0.01 → 1 penny to eater_1 (larger remainder)
 
       reconciliation = described_class.create!(community: community, date: Time.zone.today,
                                                start_date: 2.years.ago.to_date,
                                                end_date: Time.zone.today)
       balances = reconciliation.settlement_balances
 
-      # Banker's rounding: 6.66666... rounds to 6.67, 3.33333... rounds to 3.33
       expect(balances[eater_1.id]).to eq(BigDecimal('-6.67'))
       expect(balances[eater_2.id]).to eq(BigDecimal('-3.33'))
       expect(balances[cook.id]).to eq(BigDecimal('10'))
+      expect(balances.values.sum(BigDecimal('0'))).to eq(BigDecimal('0'))
     end
 
-    it 'uses round-half-to-even (not round-half-up) for .5 cent boundaries' do
-      # Banker's rounding: 0.025 rounds to 0.02 (even), 0.035 rounds to 0.04 (even)
-      # We need a scenario where the raw balance ends in exactly .005
-      create(:resident, community: community, unit: unit, multiplier: 2)
-      eater = create(:resident, community: community, unit: unit, multiplier: 2)
+    it 'produces exact zero sum even when all shares have the same fractional part' do
+      # Worst case for allocation: all participants have identical remainders,
+      # forcing the algorithm to tie-break. This also confirms the zero-sum
+      # guarantee holds when every entry needs rounding.
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      eaters = Array.new(3) { create(:resident, community: community, unit: unit, multiplier: 2) }
 
       meal = create(:meal, community: community)
-      create(:meal_resident, meal: meal, resident: eater, community: community)
-      # $0.05 / multiplier 2 = unit_cost 0.025, charge = 0.025 * 2 = 0.05
-      # This doesn't produce a .005 boundary on the charge itself.
-      # To get exactly .005: we need unit_cost * multiplier = X.XX5
-      # With multiplier 2 and 1 attendee (mult 2): charge = total_cost always. Not useful.
-      # Better: 2 attendees with different multipliers.
+      eaters.each { |e| create(:meal_resident, meal: meal, resident: e, community: community) }
+      # $1 / 6 total multiplier = 0.16666... per unit × 2 = 0.33333... per eater
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('1'))
+      meal.reload
 
-      # Actually, let's use a direct scenario:
-      # $1.00 bill, 3 multiplier units (2 adult + 1 child attending)
-      # unit_cost = 1.00 / 3 = 0.33333...
-      # child charge = 0.33333... * 1 = 0.33333... → rounds to 0.33
-      # adult charge = 0.33333... * 2 = 0.66666... → rounds to 0.67
-      # Cook credit = 1.00
-      # Sum: 1.00 - 0.33 - 0.67 = 0.00 ✓
+      reconciliation = described_class.create!(community: community, date: Time.zone.today,
+                                               start_date: 2.years.ago.to_date,
+                                               end_date: Time.zone.today)
+      balances = reconciliation.settlement_balances
 
-      # For a true .005 boundary: need charge = X.XX5 exactly
-      # $1 / 8 multiplier = 0.125 per unit. Adult (mult 2) = 0.25. No .005.
-      # $1 / 40 multiplier = 0.025 per unit. Adult (mult 2) = 0.05.
-      # We can't easily get exactly .005 from integer multipliers and simple amounts.
-      # Instead verify the rounding mode is set correctly:
-      expect(BigDecimal('0.025').round(2, BigDecimal::ROUND_HALF_EVEN)).to eq(BigDecimal('0.02'))
-      expect(BigDecimal('0.035').round(2, BigDecimal::ROUND_HALF_EVEN)).to eq(BigDecimal('0.04'))
-      expect(BigDecimal('0.045').round(2, BigDecimal::ROUND_HALF_EVEN)).to eq(BigDecimal('0.04'))
-      expect(BigDecimal('0.055').round(2, BigDecimal::ROUND_HALF_EVEN)).to eq(BigDecimal('0.06'))
+      expect(balances[cook.id]).to eq(BigDecimal('1'))
+      eater_amounts = eaters.map { |e| balances[e.id] }
+      # Two eaters get -0.34, one gets -0.33, totaling -1.00
+      expect(eater_amounts.count(BigDecimal('-0.34'))).to eq(1)
+      expect(eater_amounts.count(BigDecimal('-0.33'))).to eq(2)
+      expect(balances.values.sum(BigDecimal('0'))).to eq(BigDecimal('0'))
     end
   end
 
@@ -497,6 +491,187 @@ RSpec.describe Reconciliation do
         start_date: Time.zone.today, end_date: Time.zone.today
       )
       expect(recon).to be_persisted
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Hardening: boundary / edge-case tests for settlement_balances
+  # ---------------------------------------------------------------------------
+
+  describe 'settlement edge cases' do
+    it 'handles a meal where all bills are no_cost (zero cost meal)' do
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      eater = create(:resident, community: community, unit: unit, multiplier: 2)
+
+      meal = create(:meal, community: community)
+      create(:meal_resident, meal: meal, resident: eater, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('50'), no_cost: true)
+      meal.reload
+
+      reconciliation = described_class.create!(
+        community: community, start_date: 2.years.ago.to_date, end_date: Time.zone.today
+      )
+      balances = reconciliation.settlement_balances
+
+      # All bills are no_cost → total_cost = 0 → credits and debits both 0
+      expect(balances[cook.id]).to eq(BigDecimal('0'))
+      expect(balances[eater.id]).to eq(BigDecimal('0'))
+    end
+
+    it 'handles a guest-only meal (no meal_residents, only guests)' do
+      host = create(:resident, community: community, unit: unit, multiplier: 2)
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+
+      meal = create(:meal, community: community)
+      create(:guest, meal: meal, resident: host, multiplier: 2, name: 'Guest')
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
+      meal.reload
+
+      reconciliation = described_class.create!(
+        community: community, start_date: 2.years.ago.to_date, end_date: Time.zone.today
+      )
+      balances = reconciliation.settlement_balances
+
+      # unit_cost = 30 / 2 = 15, guest debit = 15 * 2 = 30 charged to host
+      expect(balances[cook.id]).to eq(BigDecimal('30'))
+      expect(balances[host.id]).to eq(BigDecimal('-30'))
+    end
+
+    it 'handles a single attendee who is also the cook' do
+      solo = create(:resident, community: community, unit: unit, multiplier: 2)
+
+      meal = create(:meal, community: community)
+      create(:meal_resident, meal: meal, resident: solo, community: community)
+      create(:bill, meal: meal, resident: solo, community: community, amount: BigDecimal('40'))
+      meal.reload
+
+      reconciliation = described_class.create!(
+        community: community, start_date: 2.years.ago.to_date, end_date: Time.zone.today
+      )
+      balances = reconciliation.settlement_balances
+
+      # credit = 40, debit = (40/2) * 2 = 40 → net 0
+      expect(balances[solo.id]).to eq(BigDecimal('0'))
+    end
+
+    it 'handles a child (multiplier 0) attending a meal' do
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      adult = create(:resident, community: community, unit: unit, multiplier: 2)
+      baby = create(:resident, community: community, unit: unit, multiplier: 0)
+
+      meal = create(:meal, community: community)
+      create(:meal_resident, meal: meal, resident: adult, community: community)
+      create(:meal_resident, meal: meal, resident: baby, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('20'))
+      meal.reload
+
+      reconciliation = described_class.create!(
+        community: community, start_date: 2.years.ago.to_date, end_date: Time.zone.today
+      )
+      balances = reconciliation.settlement_balances
+
+      # total_mult = 2 + 0 = 2, unit_cost = 20/2 = 10
+      # adult debit = 10 * 2 = 20, baby debit = 10 * 0 = 0
+      expect(balances[cook.id]).to eq(BigDecimal('20'))
+      expect(balances[adult.id]).to eq(BigDecimal('-20'))
+      expect(balances[baby.id]).to eq(BigDecimal('0'))
+    end
+
+    it 'handles a mix of no_cost and regular bills on the same meal' do
+      paid_cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      free_cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      eater = create(:resident, community: community, unit: unit, multiplier: 2)
+
+      meal = create(:meal, community: community)
+      create(:meal_resident, meal: meal, resident: eater, community: community)
+      create(:bill, meal: meal, resident: paid_cook, community: community, amount: BigDecimal('60'))
+      create(:bill, meal: meal, resident: free_cook, community: community, amount: BigDecimal('0'), no_cost: true)
+      meal.reload
+
+      reconciliation = described_class.create!(
+        community: community, start_date: 2.years.ago.to_date, end_date: Time.zone.today
+      )
+      balances = reconciliation.settlement_balances
+
+      # total_cost = 60 (only paid_cook's bill counts)
+      # unit_cost = 60 / 2 = 30, eater debit = 30 * 2 = 60
+      # paid_cook credit = 60, free_cook credit = 0
+      expect(balances[paid_cook.id]).to eq(BigDecimal('60'))
+      expect(balances[free_cook.id]).to eq(BigDecimal('0'))
+      expect(balances[eater.id]).to eq(BigDecimal('-60'))
+    end
+
+    it 'uses largest-remainder allocation so rounded balances sum to exactly zero' do
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      eater1 = create(:resident, community: community, unit: unit, multiplier: 2)
+      eater2 = create(:resident, community: community, unit: unit, multiplier: 2)
+
+      meal = create(:meal, community: community)
+      create(:meal_resident, meal: meal, resident: eater1, community: community)
+      create(:meal_resident, meal: meal, resident: eater2, community: community)
+      # $0.05 / 4 total multiplier = $0.0125 per unit × 2 multiplier = $0.025 per eater
+      # Each eater's exact share is -$0.025 (half-cent boundary).
+      # Largest-remainder allocates the extra penny to one eater, ensuring zero sum.
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('0.05'))
+      meal.reload
+
+      reconciliation = described_class.create!(
+        community: community, start_date: 2.years.ago.to_date, end_date: Time.zone.today
+      )
+      balances = reconciliation.settlement_balances
+
+      expect(balances[cook.id]).to eq(BigDecimal('0.05'))
+      # One eater absorbs the extra penny; the other does not.
+      eater_balances = [balances[eater1.id], balances[eater2.id]].sort
+      expect(eater_balances).to eq([BigDecimal('-0.03'), BigDecimal('-0.02')])
+      # Books balance exactly — no residual.
+      expect(balances.values.sum(BigDecimal('0'))).to eq(BigDecimal('0'))
+    end
+
+    it 'allocates residual pennies deterministically (lowest ID absorbs first)' do
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      eater1 = create(:resident, community: community, unit: unit, multiplier: 2)
+      eater2 = create(:resident, community: community, unit: unit, multiplier: 2)
+
+      meal = create(:meal, community: community)
+      create(:meal_resident, meal: meal, resident: eater1, community: community)
+      create(:meal_resident, meal: meal, resident: eater2, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('0.05'))
+      meal.reload
+
+      reconciliation = described_class.create!(
+        community: community, start_date: 2.years.ago.to_date, end_date: Time.zone.today
+      )
+      balances = reconciliation.settlement_balances
+
+      # Both eaters have identical fractional remainders. Tie-break: lowest ID absorbs.
+      lower_id_eater, higher_id_eater = [eater1, eater2].sort_by(&:id)
+      expect(balances[lower_id_eater.id]).to eq(BigDecimal('-0.03'))
+      expect(balances[higher_id_eater.id]).to eq(BigDecimal('-0.02'))
+    end
+
+    it 'distributes multiple residual pennies across different residents' do
+      cook = create(:resident, community: community, unit: unit, multiplier: 1)
+      eaters = Array.new(7) { create(:resident, community: community, unit: unit, multiplier: 1) }
+
+      meal = create(:meal, community: community)
+      eaters.each { |e| create(:meal_resident, meal: meal, resident: e, community: community) }
+      # $1.00 / 7 = $0.142857... per eater. Truncated = $0.14 each, sum = $0.98.
+      # Residual = $0.02 → 2 pennies to distribute.
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('1'))
+      meal.reload
+
+      reconciliation = described_class.create!(
+        community: community, start_date: 2.years.ago.to_date, end_date: Time.zone.today
+      )
+      balances = reconciliation.settlement_balances
+
+      expect(balances[cook.id]).to eq(BigDecimal('1'))
+      eater_amounts = eaters.map { |e| balances[e.id] }
+      # Exactly 2 eaters pay -0.15, the other 5 pay -0.14
+      expect(eater_amounts.count(BigDecimal('-0.15'))).to eq(2)
+      expect(eater_amounts.count(BigDecimal('-0.14'))).to eq(5)
+      expect(balances.values.sum(BigDecimal('0'))).to eq(BigDecimal('0'))
     end
   end
 end

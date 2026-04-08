@@ -44,7 +44,7 @@ This is the most critical section. Financial calculations in this codebase must 
 
 4. **Round to cents only at settlement/reconciliation time.** During the billing period, all intermediate values (per-unit costs, individual charges, running balances) remain at full precision. Only when generating the final "you owe $X.XX" do we round.
 
-5. **Use banker's rounding** (round half to even, `BigDecimal::ROUND_HALF_EVEN`) for the final cent rounding. This is the standard in finance and accounting (IEEE 754). It eliminates the bias of always rounding 0.5 up.
+5. **Use largest-remainder allocation** (Hamilton's method) for the final cent rounding at settlement. This is the standard accounting approach for apportioning monetary amounts among multiple parties. It guarantees that rounded balances sum to exactly zero — no residual pennies are silently dropped. Each value is within 1 cent of its exact full-precision amount. Ties are broken by lowest `resident_id` for deterministic, auditable results.
 
 6. **Balances are always derived, never stored as source of truth.** The source of truth is the set of bills + attendance records. Balances are materialized views — computed from source data by a daily rake task. If the balance table is wiped, it can be perfectly reconstructed.
 
@@ -68,8 +68,9 @@ INTERMEDIATE (per-unit):    Full precision DECIMAL
 STORED (charges/credits):   Full precision DECIMAL(12,8)
                             Each resident's charge for each meal stored at full precision
 
-SETTLEMENT (reconciliation): Rounded to cents using banker's rounding
+SETTLEMENT (reconciliation): Rounded to cents using largest-remainder allocation
                              The final "you owe $X.XX" or "you are owed $X.XX"
+                             Rounded balances guaranteed to sum to exactly zero
 ```
 
 ## Code Standards
@@ -94,7 +95,7 @@ The billing system remediation is complete and validated against production data
 - Fixed hardcoded `reconciliation_id == 3` → uses `Meal.unreconciled` scope
 - Migrated to `DECIMAL(12,8)` + `BigDecimal`, removed `money-rails`, removed reimbursement rounding
 - Removed `counter_culture` gem entirely — all derived values computed from source data
-- Automated reconciliation lifecycle with `assign_meals` + `settlement_balances` (banker's rounding)
+- Automated reconciliation lifecycle with `assign_meals` + `settlement_balances` (largest-remainder allocation)
 - Added input validation for malformed bill amounts in `update_bills` controller action
 - Fixed `set_meal` before_action to properly return on 404 instead of crashing
 

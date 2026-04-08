@@ -257,7 +257,7 @@ Reconciliation ----< Meal
 
 **Behavior:**
 - `assign_meals` (after_commit on create) -- assigns all unreconciled meals with bills
-- `settlement_balances` -- computes per-resident balances rounded to cents using banker's rounding (ROUND_HALF_EVEN)
+- `settlement_balances` -- computes per-resident balances rounded to cents using largest-remainder allocation (Hamilton's method), guaranteeing zero-sum
 - Once a meal is reconciled, its bills cannot be modified
 
 ---
@@ -380,7 +380,7 @@ adult charge = $8.57142857 * 2 = $17.14285714...
 child charge = $8.57142857 * 1 = $8.57142857...
 ```
 
-Full precision is maintained during the billing period. At reconciliation, balances are rounded to cents using banker's rounding.
+Full precision is maintained during the billing period. At reconciliation, balances are rounded to cents using largest-remainder allocation (Hamilton's method), guaranteeing the rounded balances sum to exactly zero.
 
 ---
 

@@ -4,20 +4,21 @@
 #
 # Table name: residents
 #
-#  id                   :bigint           not null, primary key
-#  active               :boolean          default(TRUE), not null
-#  birthday             :date             default(Mon, 01 Jan 1900), not null
-#  can_cook             :boolean          default(TRUE), not null
-#  email                :string
-#  multiplier           :integer          default(2), not null
-#  name                 :string           not null
-#  password_digest      :string           not null
-#  reset_password_token :string
-#  vegetarian           :boolean          default(FALSE), not null
-#  created_at           :datetime         not null
-#  updated_at           :datetime         not null
-#  community_id         :bigint           not null
-#  unit_id              :bigint           not null
+#  id                     :bigint           not null, primary key
+#  active                 :boolean          default(TRUE), not null
+#  birthday               :date             default(Mon, 01 Jan 1900), not null
+#  can_cook               :boolean          default(TRUE), not null
+#  email                  :string
+#  multiplier             :integer          default(2), not null
+#  name                   :string           not null
+#  password_digest        :string           not null
+#  reset_password_sent_at :datetime
+#  reset_password_token   :string
+#  vegetarian             :boolean          default(FALSE), not null
+#  created_at             :datetime         not null
+#  updated_at             :datetime         not null
+#  community_id           :bigint           not null
+#  unit_id                :bigint           not null
 #
 # Indexes
 #
@@ -357,7 +358,7 @@ RSpec.describe Resident do
 
       # Total credits must equal total debits within sub-micropenny precision.
       # BigDecimal repeating decimals (50/6) create negligible artifacts that
-      # banker's rounding absorbs at settlement time.
+      # largest-remainder allocation absorbs at settlement time.
       total = balance_a + balance_b + balance_eater
       expect(total.abs).to be < BigDecimal('0.00000001')
     end

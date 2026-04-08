@@ -67,7 +67,7 @@ where:
   guest_costs         = SUM of meal.unit_cost * guest.multiplier for unreconciled meals
 ```
 
-Balances are refreshed daily by `rake billing:recalculate` and stored in the `resident_balances` table (a materialized cache). Full precision is maintained throughout; rounding to cents occurs only at reconciliation time using banker's rounding (ROUND_HALF_EVEN).
+Balances are refreshed daily by `rake billing:recalculate` and stored in the `resident_balances` table (a materialized cache). Full precision is maintained throughout; rounding to cents occurs only at reconciliation time using largest-remainder allocation (Hamilton's method), guaranteeing zero-sum.
 
 ### 2.3 What Was Removed
 
@@ -119,7 +119,7 @@ Both `meals_attended` and balance methods now use the same `Meal.unreconciled` s
 
 ### BUG 9: Reconciliation Creation is Manual and Incomplete — RESOLVED
 
-`Reconciliation#assign_meals` (after_commit on create) assigns all unreconciled meals with bills. `Reconciliation#settlement_balances` computes final per-resident balances rounded to cents using banker's rounding. Reconciled meals are locked from further cost changes via the `update_bills` guard.
+`Reconciliation#assign_meals` (after_commit on create) assigns all unreconciled meals with bills. `Reconciliation#settlement_balances` computes final per-resident balances rounded to cents using largest-remainder allocation (Hamilton's method), guaranteeing zero-sum. Reconciled meals are locked from further cost changes via the `update_bills` guard.
 
 ### ISSUE 10: Integer Cents Loses Precision in Division — RESOLVED
 
@@ -138,13 +138,13 @@ Rationale: This is what banks and accounting systems do. PostgreSQL's `NUMERIC`/
 The model:
 - **Input** (cook's receipt): Always whole cents — you can't spend half a cent at a store. Stored as `DECIMAL(12, 8)` with zero fractional part for type consistency.
 - **Intermediate** (per-unit cost, individual charges): Full `DECIMAL(12, 8)` precision. No rounding.
-- **Settlement** (reconciliation): Rounded to whole cents using **banker's rounding** (`BigDecimal::ROUND_HALF_EVEN`), the standard in finance per IEEE 754.
+- **Settlement** (reconciliation): Rounded to whole cents using **largest-remainder allocation** (Hamilton's method). This guarantees rounded balances sum to exactly zero — no residual pennies are dropped. Each value is within 1 cent of its exact amount. Ties broken by lowest `resident_id`.
 
 Example: $50.00 meal, 7 multiplier units
 - `unit_cost = 50.00 / 7 = 7.14285714` (stored at full precision)
 - Adult (mult 2) charge: `7.14285714 * 2 = 14.28571428`
-- At reconciliation: rounded to `$14.29` (banker's rounding)
-- Total collected: varies by exact attendee mix, but tracks reality to sub-penny precision
+- At reconciliation: truncated to `$14.28`, residual pennies distributed to entries with largest remainders
+- Total collected: exactly equals total spent — books balance to the penny
 
 ### Decision 2: Balance scope = current (unreconciled) period
 
@@ -165,7 +165,7 @@ Source of truth: bills + meal_residents + guests records. The `resident_balances
 When triggered:
 1. Create a Reconciliation record
 2. Assign all unreconciled meals that have at least one bill
-3. Compute final balances, round to cents (banker's rounding)
+3. Compute final balances, round to cents (largest-remainder allocation)
 4. Lock those meals from further cost changes
 5. Send notification emails
 
@@ -186,7 +186,7 @@ All four phases have been implemented in the `billing-system-remediation` branch
 1. **Phase 1** — Fixed hardcoded `reconciliation_id == 3` to use `Meal.unreconciled` scope
 2. **Phase 2** — Migrated to `DECIMAL(12,8)` + `BigDecimal`, removed `money-rails`, removed reimbursement rounding
 3. **Phase 3** — Removed `counter_culture` gem entirely, added `billing:recalculate` daily rake task
-4. **Phase 4** — Automated reconciliation lifecycle with `assign_meals` + `settlement_balances` (banker's rounding)
+4. **Phase 4** — Automated reconciliation lifecycle with `assign_meals` + `settlement_balances` (largest-remainder allocation)
 
 **Frontend** (`comeals-ui`) updated in parallel: `amount_cents` (integer) replaced with `amount` (decimal dollars) in bill store, data store, and API calls.
 

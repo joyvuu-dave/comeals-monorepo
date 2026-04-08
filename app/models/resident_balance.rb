@@ -12,7 +12,7 @@
 #
 # Indexes
 #
-#  index_resident_balances_on_resident_id  (resident_id)
+#  index_resident_balances_on_resident_id  (resident_id) UNIQUE
 #
 # Foreign Keys
 #
@@ -22,4 +22,5 @@ class ResidentBalance < ApplicationRecord
   belongs_to :resident
 
   validates :amount, numericality: true
+  validates :resident_id, uniqueness: true
 end
