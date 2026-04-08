@@ -10,11 +10,11 @@ require 'benchmark'
 #
 # Run with: BENCHMARK=1 bundle exec rspec spec/benchmarks/settlement_balances_benchmark_spec.rb
 #
-# MAINTENANCE NOTE: The naive implementation below is a frozen snapshot of the
-# original algorithm (before optimization). If the cost calculation formula
-# changes, the correctness assertion (expect(optimized).to eq(naive)) will fail.
-# This is intentional — update the naive version to match. The authoritative
-# correctness tests live in spec/models/reconciliation_spec.rb.
+# MAINTENANCE NOTE: The naive implementation mirrors the current settlement
+# formula using N+1 queries instead of batch loading. If the formula changes,
+# the correctness assertion (expect(optimized).to eq(naive)) will fail. This is
+# intentional — update the naive version to match. The authoritative correctness
+# tests live in spec/models/reconciliation_spec.rb.
 
 RSpec.describe 'Reconciliation#settlement_balances performance', :benchmark, type: :model do
   include QueryCounter
@@ -48,15 +48,31 @@ RSpec.describe 'Reconciliation#settlement_balances performance', :benchmark, typ
     }
   end
 
-  # The original N+1 implementation, preserved verbatim for comparison.
-  # This is the SLOW version that triggers 6-8 SQL queries per MealResident/Guest
+  # The original N+1 implementation, updated to match the current formula.
+  # This is the SLOW version that triggers many SQL queries per resident
   # via Meal#unit_cost -> Meal#multiplier (not memoized) + Meal#total_cost + Meal#max_cost.
+  # It must produce identical results to the optimized batch version —
+  # same proportional credit capping and same largest-remainder rounding.
   def naive_settlement_balances(reconciliation)
-    balances = {}
+    raw_balances = {}
 
     reconciliation.community.residents.find_each do |resident|
-      credits = resident.bills.joins(:meal).where(meals: { reconciliation_id: reconciliation.id })
-                        .where(no_cost: false).sum(:amount)
+      # Credits: proportional capping per bill (N+1 queries per bill).
+      credits = BigDecimal('0')
+      resident.bills.joins(:meal).where(meals: { reconciliation_id: reconciliation.id })
+              .where(no_cost: false).find_each do |bill|
+        meal = bill.meal
+        total_cost = meal.total_cost
+        next if total_cost.zero?
+
+        effective_cost = meal.effective_total_cost
+        credit = if effective_cost < total_cost
+                   (bill.amount / total_cost) * effective_cost
+                 else
+                   bill.amount
+                 end
+        credits += credit
+      end
 
       debits = resident.meal_residents.joins(:meal).where(meals: { reconciliation_id: reconciliation.id })
                        .sum(&:cost)
@@ -64,11 +80,12 @@ RSpec.describe 'Reconciliation#settlement_balances performance', :benchmark, typ
       guest_debits = resident.guests.joins(:meal).where(meals: { reconciliation_id: reconciliation.id })
                              .sum(&:cost)
 
-      raw_balance = credits - debits - guest_debits
-      balances[resident.id] = raw_balance.round(2, BigDecimal::ROUND_HALF_EVEN)
+      raw_balances[resident.id] = credits - debits - guest_debits
     end
 
-    balances
+    # Apply largest-remainder allocation (same as optimized version).
+    # Uses send because allocate_to_cents is private on Reconciliation.
+    reconciliation.send(:allocate_to_cents, raw_balances)
   end
 
   # ---------------------------------------------------------------------------

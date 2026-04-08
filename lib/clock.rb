@@ -2,6 +2,8 @@
 
 # rubocop:disable Rails/Output -- standalone clock process; stdout IS the log
 
+$stdout.sync = true # Flush output immediately so foreman shows it in real time.
+
 #
 # Comeals Task Scheduler
 #

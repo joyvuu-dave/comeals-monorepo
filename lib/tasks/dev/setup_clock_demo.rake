@@ -30,18 +30,36 @@ namespace :dev do
                       .update_all(new_rotation_notified_at: Time.current)
     puts "   Marked #{updated} rotations. Only the newly created rotation will trigger notify_new."
 
-    # 4. Delete the most recent rotation and its meals so that meals no longer extend
-    #    6 months into the future. create_rotations will detect this and create a new one.
-    #    Meals must be destroyed explicitly because dependent: :nullify would orphan them,
-    #    and orphaned meals block create_rotations.
+    # 4. Delete the most recent rotation that has NO billed meals, so create_rotations
+    #    has work to do. We must not destroy rotations with billed meals — that would
+    #    cascade-delete financial data (Meal has_many :bills, dependent: :destroy).
     puts ''
-    puts '4. Deleting most recent rotation to trigger create_rotations...'
-    last_rotation = community.rotations.where.not(start_date: nil).order(start_date: :desc).first!
-    meal_count = last_rotation.meals.count
-    last_rotation.meals.destroy_all
-    last_rotation.destroy!
-    puts "   Deleted rotation #{last_rotation.id} (start=#{last_rotation.start_date}, #{meal_count} meals)."
-    puts '   create_rotations will recreate it. notify_new will announce it.'
+    puts '4. Deleting most recent bill-free rotation to trigger create_rotations...'
+
+    # Fix orphaned meals first (rotation_id = nil blocks create_rotations).
+    orphaned = community.meals.where(rotation_id: nil)
+    if orphaned.any?
+      nearest = community.rotations.where.not(start_date: nil).order(start_date: :desc).first!
+      count = orphaned.update_all(rotation_id: nearest.id)
+      puts "   Assigned #{count} orphaned meals to rotation #{nearest.id}."
+    end
+
+    # Walk backwards from the most recent rotation to find one safe to delete.
+    safe_rotation = community.rotations
+                             .where.not(start_date: nil)
+                             .order(start_date: :desc)
+                             .detect { |r| r.meals.joins(:bills).none? }
+
+    if safe_rotation
+      meal_count = safe_rotation.meals.count
+      safe_rotation.meals.destroy_all
+      safe_rotation.destroy!
+      puts "   Deleted rotation #{safe_rotation.id} (start=#{safe_rotation.start_date}, #{meal_count} meals)."
+      puts '   create_rotations will recreate it. notify_new will announce it.'
+    else
+      puts '   WARNING: All recent rotations have billed meals. Skipping deletion.'
+      puts '   create_rotations may be a no-op.'
+    end
 
     # Clean up any rotations with nil start_date (garbage records with no meals).
     community.rotations.where(start_date: nil).find_each do |r|
@@ -50,19 +68,32 @@ namespace :dev do
       puts "   Cleaned up empty rotation #{r.id} (nil start_date)."
     end
 
-    # 5. Verify residents:notify has an upcoming rotation to work with.
+    # 5. Ensure residents:notify has an upcoming rotation to work with.
+    #    It requires a rotation starting within 7 days with residents_notified=false.
     puts ''
-    puts '5. Checking residents:notify prerequisites...'
+    puts '5. Ensuring residents:notify has an upcoming rotation...'
     upcoming = Rotation.where('start_date > ?', Time.zone.today)
                        .where(start_date: ...(Time.zone.today + 1.week))
                        .where(residents_notified: false)
+
     if upcoming.any?
       upcoming.each do |r|
         open_count = r.meals.left_joins(:bills).group(:id).having('COUNT(bills.id) < 2').count.size
         puts "   Rotation #{r.id} (start=#{r.start_date}): #{open_count} meals need cooks."
       end
     else
-      puts '   No rotation starting within 7 days. residents:notify will be a no-op.'
+      # No rotation in the window — move the nearest future one into range.
+      future = community.rotations
+                        .where('start_date > ?', Time.zone.today + 1.week)
+                        .where(residents_notified: false)
+                        .order(:start_date).first
+      if future
+        original_date = future.start_date
+        future.update_columns(start_date: Time.zone.tomorrow)
+        puts "   Moved rotation #{future.id} start_date: #{original_date} -> #{Time.zone.tomorrow} (for demo)."
+      else
+        puts '   No eligible rotation found. residents:notify will be a no-op.'
+      end
     end
 
     puts ''
