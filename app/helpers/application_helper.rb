@@ -93,21 +93,38 @@ module ApplicationHelper
     "Meal, #{audit.action}" # Shouldn't happen?
   end
 
-  def parse_bill_audit(audit)
+  def parse_bill_audit(audit) # rubocop:disable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity, Metrics/MethodLength --audit change parsing with many attribute branches
     changes = audit.audited_changes
-    resident = Resident.find_by(id: changes['resident_id'])
-    name = resident.present? ? resident_name_helper(resident.name) : 'unknown'
     bill = Bill.find_by(id: audit.auditable_id)
     return 'unknown bill removed' if bill.nil?
 
-    return "#{name} added as cook" if audit.action == 'create'
-    return "#{name} removed as cook" if audit.action == 'destroy'
+    if %w[create destroy].include?(audit.action)
+      resident = Resident.find_by(id: changes['resident_id'])
+      name = resident.present? ? resident_name_helper(resident.name) : 'unknown'
+      return "#{name} added as cook" if audit.action == 'create'
 
-    return 'unknown bill changed' if changes['amount'].nil?
+      return "#{name} removed as cook"
+    end
+
+    cook_name = bill.resident.present? ? resident_name_helper(bill.resident.name) : 'unknown'
+
+    if changes['amount'].nil?
+      if changes['no_cost'].instance_of?(Array)
+        return "Bill for #{cook_name} no longer marked as no cost" unless changes['no_cost'][1] == true
+
+        return "Bill for #{cook_name} marked as no cost"
+      end
+      return 'unknown bill changed'
+    end
+
     if audit.action == 'update'
-      return "Bill for #{resident_name_helper(bill.resident.name)} " \
-             "changed from #{number_to_currency(changes['amount'][0])} " \
-             "to #{number_to_currency(changes['amount'][1])}"
+      msg = "Bill for #{cook_name} " \
+            "changed from #{number_to_currency(changes['amount'][0])} " \
+            "to #{number_to_currency(changes['amount'][1])}"
+      if changes['no_cost'].instance_of?(Array)
+        msg += changes['no_cost'][1] == true ? ' and marked as no cost' : ' and no longer marked as no cost'
+      end
+      return msg
     end
 
     "#{audit.auditable_type}, #{audit.action}"

@@ -82,18 +82,53 @@ RSpec.describe ApplicationHelper do
     it 'parses bill create audit' do
       bill = create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('30'))
       audit = bill.audits.first
-      result = helper.parse_audit(audit)
-      expect(result).to include('added as cook')
+      name = helper.resident_name_helper(resident.name)
+      expect(helper.parse_audit(audit)).to eq("#{name} added as cook")
     end
 
     it 'parses bill amount change audit' do
       bill = create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('30'))
       bill.update!(amount: BigDecimal('50'))
       audit = bill.audits.where(action: 'update').last
-      result = helper.parse_audit(audit)
-      expect(result).to include('changed from')
-      expect(result).to include('$30.00')
-      expect(result).to include('$50.00')
+      name = helper.resident_name_helper(resident.name)
+      expect(helper.parse_audit(audit)).to eq("Bill for #{name} changed from $30.00 to $50.00")
+    end
+
+    it 'parses bill no_cost toggled on audit' do
+      bill = create(:bill, meal: meal, resident: resident, community: community,
+                           amount: BigDecimal('0'), no_cost: false)
+      bill.update!(no_cost: true)
+      audit = bill.audits.where(action: 'update').last
+      name = helper.resident_name_helper(resident.name)
+      expect(helper.parse_audit(audit)).to eq("Bill for #{name} marked as no cost")
+    end
+
+    it 'parses bill no_cost toggled off audit' do
+      bill = create(:bill, meal: meal, resident: resident, community: community,
+                           amount: BigDecimal('0'), no_cost: true)
+      bill.update!(no_cost: false)
+      audit = bill.audits.where(action: 'update').last
+      name = helper.resident_name_helper(resident.name)
+      expect(helper.parse_audit(audit)).to eq("Bill for #{name} no longer marked as no cost")
+    end
+
+    it 'parses simultaneous amount and no_cost change audit' do
+      bill = create(:bill, meal: meal, resident: resident, community: community,
+                           amount: BigDecimal('30'), no_cost: false)
+      bill.update!(amount: BigDecimal('0'), no_cost: true)
+      audit = bill.audits.where(action: 'update').last
+      name = helper.resident_name_helper(resident.name)
+      expect(helper.parse_audit(audit)).to eq("Bill for #{name} changed from $30.00 to $0.00 and marked as no cost")
+    end
+
+    it 'parses bill audit when resident has been deleted' do
+      bill = create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('30'))
+      bill.update!(amount: BigDecimal('50'))
+      audit = bill.audits.where(action: 'update').last
+      stub_bill = Bill.find(bill.id)
+      allow(Bill).to receive(:find_by).with(id: audit.auditable_id).and_return(stub_bill)
+      allow(stub_bill).to receive(:resident).and_return(nil)
+      expect(helper.parse_audit(audit)).to eq('Bill for unknown changed from $30.00 to $50.00')
     end
 
     it 'parses meal_resident create audit' do
