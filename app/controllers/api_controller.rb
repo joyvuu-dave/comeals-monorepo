@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class ApiController < ActionController::API
+  around_action :set_community_timezone
+
   def root_url
     @root_url ||= Rails.env.production? ? 'https://comeals.com' : 'http://localhost:3001'
   end
@@ -30,5 +32,15 @@ class ApiController < ActionController::API
           'mistyped the address or the page may have moved.'
     render json: { message: msg },
            status: :not_found and return
+  end
+
+  private
+
+  def set_community_timezone(&)
+    if params[:token].present?
+      tz = current_resident_api&.community&.timezone.presence
+      return Time.use_zone(tz, &) if tz && ActiveSupport::TimeZone[tz]
+    end
+    yield
   end
 end

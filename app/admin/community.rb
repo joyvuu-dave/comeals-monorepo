@@ -5,7 +5,7 @@ ActiveAdmin.register Community do
   menu label: 'Community'
 
   # STRONG PARAMS
-  permit_params :name, :cap, :slug
+  permit_params :name, :cap, :slug, :timezone
 
   # CONFIG
   config.filters = false
@@ -29,6 +29,7 @@ ActiveAdmin.register Community do
       number_to_currency(community.cap) if community.capped?
     end
     column :slug
+    column :timezone
 
     actions
   end
@@ -42,6 +43,7 @@ ActiveAdmin.register Community do
         number_to_currency(community.cap) if community.capped?
       end
       row :slug
+      row :timezone
     end
   end
 
@@ -51,6 +53,9 @@ ActiveAdmin.register Community do
       f.input :name
       f.input :cap, label: 'Cap ($)'
       f.input :slug if f.object.persisted?
+      f.input :timezone,
+              as: :select,
+              collection: Community::SUPPORTED_TIMEZONES.map { |name, iana| [name, iana] }
     end
 
     f.actions

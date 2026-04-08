@@ -19,6 +19,24 @@
 #
 
 class Community < ApplicationRecord
+  SUPPORTED_TIMEZONES = {
+    'Hawaii' => 'Pacific/Honolulu',
+    'Alaska' => 'America/Juneau',
+    'Pacific Time (US & Canada)' => 'America/Los_Angeles',
+    'Mountain Time (US & Canada)' => 'America/Denver',
+    'Arizona' => 'America/Phoenix',
+    'Central Time (US & Canada)' => 'America/Chicago',
+    'Eastern Time (US & Canada)' => 'America/New_York',
+    'Atlantic Time (Canada)' => 'America/Halifax',
+    'London' => 'Europe/London',
+    'Paris' => 'Europe/Paris',
+    'Berlin' => 'Europe/Berlin',
+    'Helsinki' => 'Europe/Helsinki',
+    'Tokyo' => 'Asia/Tokyo',
+    'Sydney' => 'Australia/Sydney',
+    'Auckland' => 'Pacific/Auckland'
+  }.freeze
+
   # Ransack allowlists for ActiveAdmin sorting
   def self.ransackable_attributes(_auth_object = nil)
     %w[id cap name slug timezone created_at updated_at]
@@ -29,6 +47,7 @@ class Community < ApplicationRecord
   friendly_id :name, use: :slugged
   validates :name, uniqueness: { case_sensitive: false }
   validates :slug, length: { within: 3..40 }
+  validates :timezone, inclusion: { in: SUPPORTED_TIMEZONES.values }
 
   has_many :bills, dependent: :destroy
   has_many :meals, dependent: :destroy

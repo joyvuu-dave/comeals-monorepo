@@ -44,7 +44,8 @@ module Api
 
         if resident.authenticate(params[:password])
           render json: { token: resident.key.token, slug: resident.community.slug, community_id: resident.community.id,
-                         resident_id: resident.id, username: resident_name_helper(resident.name) }
+                         resident_id: resident.id, username: resident_name_helper(resident.name),
+                         timezone: resident.community.timezone }
         else
           render json: { message: 'Incorrect password' }, status: :bad_request
         end

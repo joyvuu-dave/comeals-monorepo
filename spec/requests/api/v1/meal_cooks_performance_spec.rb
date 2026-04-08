@@ -28,7 +28,7 @@ RSpec.describe 'Meal show_cooks endpoint performance' do
     end
 
     expect(response).to have_http_status(:ok)
-    expect(query_count).to be <= 10
+    expect(query_count).to be <= 11
   end
 
   it 'serves cached meal form with minimal queries' do
@@ -43,7 +43,7 @@ RSpec.describe 'Meal show_cooks endpoint performance' do
     end
 
     expect(response).to have_http_status(:ok)
-    expect(query_count).to be <= 6
+    expect(query_count).to be <= 7
   ensure
     Rails.cache = original_store
   end
