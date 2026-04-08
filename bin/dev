@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if ! command -v foreman &> /dev/null; then
+  echo "Installing foreman..."
+  gem install foreman
+fi
+
+# Pass CLOCK_FAST=1 to fire all tasks every 2 minutes for easy observation.
+# Example: CLOCK_FAST=1 bin/dev
+exec foreman start -f Procfile.dev "$@"

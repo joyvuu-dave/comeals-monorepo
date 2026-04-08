@@ -40,7 +40,7 @@ gem 'devise'
 gem 'friendly_id'
 gem 'goldiloader'
 gem 'icalendar'
-gem 'letter_opener', group: :development
+gem 'letter_opener_web', group: :development
 gem 'platform-api'
 gem 'pusher'
 gem 'scrypt'
@@ -77,6 +77,7 @@ group :development do
   gem 'binding_of_caller'
   gem 'bullet'
   gem 'rack-mini-profiler'
+  gem 'rufus-scheduler', '~> 3.9'
   gem 'stackprof' # flamegraph support for rack-mini-profiler
   gem 'web-console', '>= 3.3.0'
   gem 'xipio'
