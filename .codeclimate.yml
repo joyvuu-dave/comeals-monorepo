@@ -1,0 +1,47 @@
+version: "2"
+
+plugins:
+  rubocop:
+    enabled: true
+    channel: rubocop-1-75-6
+  duplication:
+    enabled: true
+    config:
+      languages:
+        ruby:
+          mass_threshold: 40
+  fixme:
+    enabled: true
+
+checks:
+  # Guard clauses (early returns) are idiomatic Ruby — not a smell
+  return-statements:
+    enabled: false
+  # Financial models and controllers have inherent complexity.
+  # RuboCop already enforces sane thresholds via .rubocop.yml.
+  method-lines:
+    config:
+      threshold: 40
+  method-complexity:
+    config:
+      threshold: 10
+  method-count:
+    config:
+      threshold: 30
+  file-lines:
+    config:
+      threshold: 400
+
+exclude_patterns:
+  - "db/schema.rb"
+  - "db/migrate/"
+  - "db/seeds.rb"
+  - "bin/"
+  - "vendor/"
+  - "node_modules/"
+  - "tmp/"
+  - "log/"
+  - "spec/"
+  - "coverage/"
+  # Documentation files contain keywords that trigger false positives
+  - "*.md"
