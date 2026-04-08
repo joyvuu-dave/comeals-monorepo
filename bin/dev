@@ -13,12 +13,4 @@ echo ""
 echo "  Mail inbox: http://localhost:3000/letter_opener"
 echo ""
 
-# Open mail inbox in the background once the server is up
-(
-  while ! curl -s -o /dev/null http://localhost:3000/letter_opener 2>/dev/null; do
-    sleep 1
-  done
-  open http://localhost:3000/letter_opener
-) &
-
 exec foreman start -f Procfile.dev "$@"
