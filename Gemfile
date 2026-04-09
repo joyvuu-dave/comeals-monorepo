@@ -19,7 +19,7 @@ gem 'sprockets-rails'
 # Use postgresql as the database for Active Record
 gem 'pg', '~> 1.5'
 # Use the Puma web server [https://github.com/puma/puma]
-gem 'puma', '~> 7.0'
+gem 'puma', '~> 8.0'
 gem 'sassc-rails'
 
 # Gems transitioning from stdlib to bundled gems in Ruby 3.4+
