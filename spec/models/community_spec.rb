@@ -159,6 +159,19 @@ RSpec.describe Community do
 
       expect { community.create_next_rotation }.to raise_error(RuntimeError, /not assigned to Rotations/)
     end
+
+    it 'sets start_date and description on the created rotation' do
+      4.times { create(:resident, community: community, unit: unit, multiplier: 2, can_cook: true) }
+
+      community.create_next_rotation
+
+      rotation = community.rotations.first
+      first_meal_date = rotation.meals.order(:date).first.date
+      last_meal_date = rotation.meals.order(:date).last.date
+
+      expect(rotation.start_date).to eq(first_meal_date)
+      expect(rotation.description).to eq("#{first_meal_date} to #{last_meal_date}")
+    end
   end
 
   describe '#trigger_pusher' do

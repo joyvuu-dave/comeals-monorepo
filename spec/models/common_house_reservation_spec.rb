@@ -114,6 +114,30 @@ RSpec.describe CommonHouseReservation do
     end
   end
 
+  # Regression test for BUG-4: trigger_pusher only used start_date.
+  describe '#trigger_pusher cache invalidation' do
+    let(:community) { create(:community) }
+    let(:resident) { create(:resident, community: community) }
+
+    before do
+      allow(Pusher).to receive(:trigger)
+      allow(Rails.cache).to receive(:delete)
+    end
+
+    it 'invalidates end_date month when it differs from start_date month' do
+      # March 1 start — end_of_week is still in March (March 1 is Sunday),
+      # so the week-spillover logic does NOT cover April. Only the fix
+      # (invalidating end_date's month) would make this pass.
+      create(:common_house_reservation,
+             community: community, resident: resident,
+             start_date: Time.zone.local(2026, 3, 1, 14, 0),
+             end_date: Time.zone.local(2026, 4, 30, 16, 0))
+
+      april_key = community.calendar_cache_key(2026, 4)
+      expect(Rails.cache).to have_received(:delete).with(april_key)
+    end
+  end
+
   describe '#start_date_is_before_end_date' do
     it 'is invalid when end_date is before start_date' do
       reservation = build(:common_house_reservation, start_date: 1.hour.ago, end_date: 2.hours.ago)

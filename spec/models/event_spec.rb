@@ -67,6 +67,42 @@ RSpec.describe Event do
     end
   end
 
+  # Regression test for BUG-4: trigger_pusher only used start_date, leaving
+  # the end_date month's calendar cache stale for multi-month events.
+  describe '#trigger_pusher cache invalidation' do
+    let(:community) { create(:community) }
+
+    before do
+      allow(Pusher).to receive(:trigger)
+      allow(Rails.cache).to receive(:delete)
+    end
+
+    it 'invalidates end_date month when it differs from start_date month' do
+      create(:event, community: community,
+                     start_date: Time.zone.local(2026, 3, 1, 14, 0),
+                     end_date: Time.zone.local(2026, 4, 30, 14, 0))
+
+      april_key = community.calendar_cache_key(2026, 4)
+      expect(Rails.cache).to have_received(:delete).with(april_key)
+    end
+
+    it 'invalidates old start_date month when start_date moves to a different month' do
+      event = create(:event, community: community,
+                             start_date: Time.zone.local(2026, 3, 15, 14, 0),
+                             end_date: Time.zone.local(2026, 3, 15, 16, 0))
+
+      # Track only the cache deletions from the update, not the create
+      deleted_keys = []
+      allow(Rails.cache).to receive(:delete) { |key| deleted_keys << key }
+
+      event.update!(start_date: Time.zone.local(2026, 5, 15, 14, 0),
+                    end_date: Time.zone.local(2026, 5, 15, 16, 0))
+
+      march_key = community.calendar_cache_key(2026, 3)
+      expect(deleted_keys).to include(march_key)
+    end
+  end
+
   describe '#start_date_is_before_end_date' do
     it 'is invalid when end_date is before start_date' do
       event = build(:event, start_date: 1.hour.ago, end_date: 2.hours.ago, allday: false)

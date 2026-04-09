@@ -56,8 +56,17 @@ class CommonHouseReservation < ApplicationRecord
   end
 
   # Reservations appear on the calendar. See CalendarSerializer for the full
-  # cache invalidation contract.
+  # cache invalidation contract. Overnight reservations that span a month
+  # boundary require invalidating both the start and end months.
   def trigger_pusher
     community.trigger_pusher(start_date)
+    ed = end_date.to_date
+    sd = start_date.to_date
+    community.trigger_pusher(end_date) if ed.month != sd.month || ed.year != sd.year
+
+    %w[start_date end_date].each do |attr|
+      old_val = saved_changes.dig(attr, 0)
+      community.trigger_pusher(old_val) if old_val.present?
+    end
   end
 end

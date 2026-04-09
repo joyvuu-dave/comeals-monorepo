@@ -54,11 +54,15 @@ module Api
       end
 
       # PATCH /api/v1/common-house-reservations/:id/update
-      def update
-        start_date = Time.zone.local(params[:start_year].to_i, params[:start_month].to_i, params[:start_day].to_i,
-                                     params[:start_hours].to_i, params[:start_minutes].to_i)
-        end_date = Time.zone.local(params[:start_year].to_i, params[:start_month].to_i, params[:start_day].to_i,
-                                   params[:end_hours].to_i, params[:end_minutes].to_i)
+      def update # rubocop:disable Metrics/AbcSize --date params require many attribute reads
+        begin
+          start_date = Time.zone.local(params[:start_year].to_i, params[:start_month].to_i, params[:start_day].to_i,
+                                       params[:start_hours].to_i, params[:start_minutes].to_i)
+          end_date = Time.zone.local(params[:start_year].to_i, params[:start_month].to_i, params[:start_day].to_i,
+                                     params[:end_hours].to_i, params[:end_minutes].to_i)
+        rescue StandardError
+          render json: { message: 'Error: Invalid date' }, status: :bad_request and return
+        end
 
         if @chr.update(start_date: start_date, end_date: end_date, resident_id: params[:resident_id],
                        title: params[:title])

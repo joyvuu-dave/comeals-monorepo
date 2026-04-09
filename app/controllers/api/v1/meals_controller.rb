@@ -7,6 +7,12 @@ module Api
       before_action :authorize, only: [:index]
       before_action :set_meal, except: %i[index next]
       before_action :authorize_one, except: %i[index next]
+      before_action :reject_if_reconciled, only: %i[
+        create_meal_resident destroy_meal_resident update_meal_resident
+        create_guest destroy_guest
+        update_description update_max update_bills update_closed
+      ]
+      before_action :verify_resident_community, only: %i[create_meal_resident create_guest]
       before_action :set_guest, only: [:destroy_guest]
       before_action :set_meal_resident, only: %i[destroy_meal_resident update_meal_resident]
       after_action :trigger_pusher, except: %i[index next show history show_cooks]
@@ -146,11 +152,6 @@ module Api
       #   no_cost: true}, {resident_id: "4", amount: "0.00",
       #   no_cost: true}]}
       def update_bills # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity, Metrics/MethodLength --multi-step bill validation + cook-scheduling guards
-        if @meal.reconciliation_id.present?
-          render json: { message: 'Cost change not permitted. Meal has already been reconciled.' },
-                 status: :bad_request and return
-        end
-
         message = 'Form submitted.'
         request_symbol = :ok
         message_type = nil
@@ -198,6 +199,14 @@ module Api
           parsed_bills << { resident_id: bill['resident_id'], amount: amount_value, no_cost: bill['no_cost'] }
         end
 
+        # Verify all cooks belong to this meal's community
+        community_resident_ids = Resident.where(community_id: @meal.community_id, id: cook_ids).pluck(:id)
+        foreign_ids = cook_ids.map(&:to_i) - community_resident_ids
+        if foreign_ids.any?
+          render json: { message: 'Resident does not belong to this community.' }, status: :bad_request
+          return
+        end
+
         # All DB writes in one atomic transaction
         ActiveRecord::Base.transaction do
           @meal.update!(cook_ids: cook_ids)
@@ -230,6 +239,22 @@ module Api
 
       def meal_resident_params
         params.permit(:late, :vegetarian)
+      end
+
+      def reject_if_reconciled
+        return unless @meal.reconciled?
+
+        @skip_pusher = true
+        render json: { message: 'Change not permitted. Meal has already been reconciled.' },
+               status: :bad_request
+      end
+
+      def verify_resident_community
+        target = Resident.find_by(id: params[:resident_id])
+        return if target&.community_id == @meal.community_id
+
+        render json: { message: 'Resident does not belong to this community.' },
+               status: :bad_request
       end
 
       def set_meal

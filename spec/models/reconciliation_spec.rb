@@ -650,6 +650,113 @@ RSpec.describe Reconciliation do
       expect(balances[higher_id_eater.id]).to eq(BigDecimal('-0.02'))
     end
 
+    it 'handles a child-only meal (all multiplier-0 attendees, zero total multiplier)' do
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      baby1 = create(:resident, community: community, unit: unit, multiplier: 0)
+      baby2 = create(:resident, community: community, unit: unit, multiplier: 0)
+
+      meal = create(:meal, community: community)
+      create(:meal_resident, meal: meal, resident: baby1, community: community)
+      create(:meal_resident, meal: meal, resident: baby2, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('25'))
+      meal.reload
+
+      reconciliation = described_class.create!(
+        community: community, start_date: 2.years.ago.to_date, end_date: Time.zone.today
+      )
+      balances = reconciliation.settlement_balances
+
+      # total_mult = 0 → unit_cost = 0 → no debits, but cook IS credited
+      # Wait — with_attendees includes this meal (babies are meal_residents).
+      # But total_mult = 0, so the code sets unit_cost: 0, total_cost: 0, effective_cost: 0.
+      # Credits loop: mf[:total_cost].zero? → credit = 0.
+      # So cook gets zero credit. Babies get zero debit. Cook absorbs the cost.
+      expect(balances[cook.id]).to eq(BigDecimal('0'))
+      expect(balances[baby1.id]).to eq(BigDecimal('0'))
+      expect(balances[baby2.id]).to eq(BigDecimal('0'))
+    end
+
+    it 'handles cap exactly equal to total cost (no capping applied)' do
+      capped_community = create(:community, cap: BigDecimal('10.00'))
+      capped_unit = create(:unit, community: capped_community)
+
+      cook = create(:resident, community: capped_community, unit: capped_unit, multiplier: 2)
+      eater = create(:resident, community: capped_community, unit: capped_unit, multiplier: 2)
+
+      meal = create(:meal, community: capped_community)
+      create(:meal_resident, meal: meal, resident: eater, community: capped_community)
+      # multiplier = 2, cap = 10, max_cost = 20, total_cost = 20 exactly
+      create(:bill, meal: meal, resident: cook, community: capped_community, amount: BigDecimal('20'))
+      meal.reload
+
+      reconciliation = described_class.create!(
+        community: capped_community, start_date: 2.years.ago.to_date, end_date: Time.zone.today
+      )
+      balances = reconciliation.settlement_balances
+
+      # total_cost == max_cost → not subsidized → full credit
+      expect(balances[cook.id]).to eq(BigDecimal('20'))
+      expect(balances[eater.id]).to eq(BigDecimal('-20'))
+    end
+
+    it 'handles an empty reconciliation period (no meals with bills)' do
+      bystander = create(:resident, community: community, unit: unit, multiplier: 2)
+
+      reconciliation = described_class.create!(
+        community: community, start_date: 2.years.ago.to_date, end_date: Time.zone.today
+      )
+      balances = reconciliation.settlement_balances
+
+      expect(balances[bystander.id]).to eq(BigDecimal('0'))
+      expect(balances.values.sum(BigDecimal('0'))).to eq(BigDecimal('0'))
+    end
+
+    it 'includes inactive residents who participated in meals' do
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      inactive_eater = create(:resident, community: community, unit: unit, multiplier: 2, active: false)
+
+      meal = create(:meal, community: community)
+      create(:meal_resident, meal: meal, resident: inactive_eater, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
+      meal.reload
+
+      reconciliation = described_class.create!(
+        community: community, start_date: 2.years.ago.to_date, end_date: Time.zone.today
+      )
+      balances = reconciliation.settlement_balances
+
+      expect(balances[cook.id]).to eq(BigDecimal('30'))
+      expect(balances[inactive_eater.id]).to eq(BigDecimal('-30'))
+      expect(balances.values.sum(BigDecimal('0'))).to eq(BigDecimal('0'))
+    end
+
+    it 'accumulates across multiple meals in the same reconciliation period' do
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      eater = create(:resident, community: community, unit: unit, multiplier: 2)
+
+      meal1 = create(:meal, community: community)
+      create(:meal_resident, meal: meal1, resident: eater, community: community)
+      create(:bill, meal: meal1, resident: cook, community: community, amount: BigDecimal('50'))
+
+      meal2 = create(:meal, community: community)
+      create(:meal_resident, meal: meal2, resident: cook, community: community)
+      create(:bill, meal: meal2, resident: eater, community: community, amount: BigDecimal('30'))
+
+      [meal1, meal2].each(&:reload)
+
+      reconciliation = described_class.create!(
+        community: community, start_date: 2.years.ago.to_date, end_date: Time.zone.today
+      )
+      balances = reconciliation.settlement_balances
+
+      # Meal 1: cook credit 50, eater debit 50
+      # Meal 2: eater credit 30, cook debit 30
+      # Net cook: 50 - 30 = 20, net eater: 30 - 50 = -20
+      expect(balances[cook.id]).to eq(BigDecimal('20'))
+      expect(balances[eater.id]).to eq(BigDecimal('-20'))
+      expect(balances.values.sum(BigDecimal('0'))).to eq(BigDecimal('0'))
+    end
+
     it 'distributes multiple residual pennies across different residents' do
       cook = create(:resident, community: community, unit: unit, multiplier: 1)
       eaters = Array.new(7) { create(:resident, community: community, unit: unit, multiplier: 1) }

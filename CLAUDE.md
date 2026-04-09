@@ -4,7 +4,7 @@
 
 Comeals is a meal management and cost-splitting application for a co-housing community. Residents sign up for communal dinners, volunteer to cook, and the cost is split proportionally among attendees. The system tracks attendance, cooking costs, and financial balances across billing periods (reconciliations).
 
-This is a Rails 7 API backend. The frontend lives at `../comeals-ui` (React/MobX).
+This is a Rails 8.1 API backend (Ruby 4.0). The frontend lives at `../comeals-ui` (React/MobX).
 
 ## Development Environment
 

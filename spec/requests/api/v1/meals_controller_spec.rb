@@ -371,6 +371,133 @@ RSpec.describe 'Meals API' do
   end
 
   # ---------------------------------------------------------------------------
+  # Reconciled meal immutability (Regression test for BUG-2)
+  # CLAUDE.md rule 7: "Once a meal is reconciled, its bills and attendance
+  # cannot change." update_bills already enforces this; these tests verify
+  # the same guard exists on attendance and metadata endpoints.
+  # ---------------------------------------------------------------------------
+  describe 'reconciled meal immutability' do
+    let(:reconciliation) { create(:reconciliation, community: community) }
+    let(:meal) { create(:meal, community: community) }
+
+    before { meal.update_columns(reconciliation_id: reconciliation.id) }
+
+    it 'blocks create_meal_resident on a reconciled meal' do
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}",
+           params: { token: token, late: false, vegetarian: false }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to include('reconciled')
+      expect(meal.meal_residents.count).to eq(0)
+    end
+
+    it 'blocks destroy_meal_resident on a reconciled meal' do
+      mr = MealResident.create!(meal: meal, resident: resident, community: community, multiplier: 2)
+
+      delete "/api/v1/meals/#{meal.id}/residents/#{resident.id}",
+             params: { token: token }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(MealResident.find_by(id: mr.id)).to be_present
+    end
+
+    it 'blocks update_meal_resident on a reconciled meal' do
+      MealResident.create!(meal: meal, resident: resident, community: community, multiplier: 2)
+
+      patch "/api/v1/meals/#{meal.id}/residents/#{resident.id}",
+            params: { token: token, late: true }
+
+      expect(response).to have_http_status(:bad_request)
+    end
+
+    it 'blocks create_guest on a reconciled meal' do
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests",
+           params: { token: token, vegetarian: false }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(meal.guests.count).to eq(0)
+    end
+
+    it 'blocks destroy_guest on a reconciled meal' do
+      guest = Guest.create!(meal: meal, resident: resident, multiplier: 2)
+
+      delete "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests/#{guest.id}",
+             params: { token: token }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(Guest.find_by(id: guest.id)).to be_present
+    end
+
+    it 'blocks update_description on a reconciled meal' do
+      patch "/api/v1/meals/#{meal.id}/description",
+            params: { token: token, description: 'Should not change' }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(meal.reload.description).not_to eq('Should not change')
+    end
+
+    it 'blocks update_max on a reconciled meal' do
+      patch "/api/v1/meals/#{meal.id}/max",
+            params: { token: token, max: 99 }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(meal.reload.max).not_to eq(99)
+    end
+
+    it 'blocks update_closed on a reconciled meal' do
+      patch "/api/v1/meals/#{meal.id}/closed",
+            params: { token: token, closed: true }
+
+      expect(response).to have_http_status(:bad_request)
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Cross-community resident_id validation (Regression test for BUG-5)
+  # Endpoints that accept resident_id from params must verify the target
+  # resident belongs to the meal's community.
+  # ---------------------------------------------------------------------------
+  describe 'cross-community resident_id rejection' do
+    let(:meal) { create(:meal, community: community) }
+    let(:other_community) { create(:community) }
+    let(:other_unit) { create(:unit, community: other_community) }
+    let(:foreign_resident) { create(:resident, community: other_community, unit: other_unit) }
+
+    it 'blocks signing up a resident from another community' do
+      post "/api/v1/meals/#{meal.id}/residents/#{foreign_resident.id}",
+           params: { token: token, late: false, vegetarian: false }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to include('community')
+      expect(meal.meal_residents.count).to eq(0)
+    end
+
+    it 'blocks adding a guest hosted by a resident from another community' do
+      post "/api/v1/meals/#{meal.id}/residents/#{foreign_resident.id}/guests",
+           params: { token: token, vegetarian: false }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(meal.guests.count).to eq(0)
+    end
+
+    it 'blocks assigning a cook from another community via update_bills' do
+      # Need an existing bill so the endpoint has something to work with
+      create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('0'))
+
+      patch "/api/v1/meals/#{meal.id}/bills", params: {
+        token: token,
+        bills: [
+          { resident_id: resident.id, amount: '10.00', no_cost: false },
+          { resident_id: foreign_resident.id, amount: '5.00', no_cost: false }
+        ]
+      }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to include('community')
+    end
+  end
+
+  # ---------------------------------------------------------------------------
   # GET /api/v1/meals/:meal_id/cooks
   # ---------------------------------------------------------------------------
   describe 'GET /api/v1/meals/:meal_id/cooks' do

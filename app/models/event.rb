@@ -52,8 +52,20 @@ class Event < ApplicationRecord
   end
 
   # Events appear on the calendar. See CalendarSerializer for the full
-  # cache invalidation contract.
+  # cache invalidation contract. Multi-month events and date changes require
+  # invalidating all affected months, not just the current start_date.
   def trigger_pusher
     community.trigger_pusher(start_date)
+    if end_date.present?
+      ed = end_date.to_date
+      sd = start_date.to_date
+      community.trigger_pusher(end_date) if ed.month != sd.month || ed.year != sd.year
+    end
+
+    # When dates change, also invalidate the old months
+    %w[start_date end_date].each do |attr|
+      old_val = saved_changes.dig(attr, 0)
+      community.trigger_pusher(old_val) if old_val.present?
+    end
   end
 end

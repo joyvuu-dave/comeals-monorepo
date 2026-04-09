@@ -120,6 +120,21 @@ RSpec.describe 'Common House Reservations API' do
       expect(response).to have_http_status(:ok)
       expect(chr.reload.title).to eq('Updated')
     end
+
+    # Regression test for BUG-3: update lacked the begin/rescue that create has.
+    it 'returns 400 for invalid date params instead of 500' do
+      chr = create(:common_house_reservation, community: community, resident: resident)
+
+      patch "/api/v1/common-house-reservations/#{chr.id}/update", params: {
+        token: token, resident_id: resident.id, title: 'Bad date',
+        start_year: 2026, start_month: 13, start_day: 1,
+        start_hours: 10, start_minutes: 0,
+        end_hours: 12, end_minutes: 0
+      }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to include('Invalid date')
+    end
   end
 
   describe 'DELETE /api/v1/common-house-reservations/:id/delete' do
