@@ -125,7 +125,7 @@ class Resident < ApplicationRecord
   # (and vice versa) — they must stay in sync.
 
   def calc_balance
-    return BigDecimal('0') unless Meal.where(community_id: community_id).unreconciled.exists?
+    return BigDecimal('0') unless Meal.unreconciled.exists?
 
     bill_reimbursements - meal_resident_costs - guest_costs
   end
@@ -172,7 +172,7 @@ class Resident < ApplicationRecord
   end
 
   def meals_attended
-    return 0 if Meal.where(community_id: community_id).unreconciled.none?
+    return 0 if Meal.unreconciled.none?
 
     meal_residents.joins(:meal).where({ meals: { reconciliation_id: nil } }).count
   end

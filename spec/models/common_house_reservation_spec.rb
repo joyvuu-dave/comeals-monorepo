@@ -93,25 +93,6 @@ RSpec.describe CommonHouseReservation do
                               end_date: 6.hours.ago)
       expect(non_overlapping).to be_valid
     end
-
-    it 'is valid when overlapping reservation is in a different community' do
-      community1 = create(:community)
-      community2 = create(:community)
-      resident1 = create(:resident, community: community1)
-      resident2 = create(:resident, community: community2)
-      create(:common_house_reservation,
-             community: community1,
-             resident: resident1,
-             start_date: 10.hours.ago,
-             end_date: 8.hours.ago)
-
-      reservation = build(:common_house_reservation,
-                          community: community2,
-                          resident: resident2,
-                          start_date: 9.hours.ago,
-                          end_date: 7.hours.ago)
-      expect(reservation).to be_valid
-    end
   end
 
   # Regression test for BUG-4: trigger_pusher only used start_date.

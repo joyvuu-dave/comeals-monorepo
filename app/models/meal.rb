@@ -227,9 +227,9 @@ class Meal < ApplicationRecord
 
   # *** This method only used during seed generation ***
   # Typical 3x a week schedule with alternating Mon / Tues
-  def self.create_templates(community_id, start_date, end_date, alternating_dinner_day)
+  def self.create_templates(start_date, end_date, alternating_dinner_day)
+    community = Community.instance
     count = 0
-    Community.find(community_id)
     dates = (start_date..end_date).to_a
 
     dates.each do |date|
@@ -247,7 +247,7 @@ class Meal < ApplicationRecord
       end
 
       # Create the meal
-      meal = Meal.new(date: date, community_id: community_id)
+      meal = Meal.new(date: date, community: community)
       if meal.save
         count += 1
       else
@@ -260,9 +260,9 @@ class Meal < ApplicationRecord
 
   # *** This method only used during seed generation ***
   # Modified twice a week schedule
-  def self.create_modified_templates(community_id, start_date, end_date)
+  def self.create_modified_templates(start_date, end_date)
+    community = Community.instance
     count = 0
-    Community.find(community_id)
     dates = (start_date..end_date).to_a
 
     dates.each do |date|
@@ -273,7 +273,7 @@ class Meal < ApplicationRecord
       next unless TEMPLATE_WDAYS.any?(date.wday)
 
       # Create the meal
-      meal = Meal.new(date: date, community_id: community_id)
+      meal = Meal.new(date: date, community: community)
       if meal.save
         count += 1
       else

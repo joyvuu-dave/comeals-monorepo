@@ -5,34 +5,34 @@ namespace :reconciliations do
   task create: :environment do
     start_time = Time.current
 
-    Community.find_each do |community|
-      unless community.meals.unreconciled.joins(:bills).exists?
-        Rails.logger.info("reconciliations:create skipping #{community.name} — no unreconciled meals with bills")
-        next
-      end
+    community = Community.instance
 
-      period_start = community.meals.unreconciled.joins(:bills).minimum(:date)
-      period_end = Time.zone.today
+    unless community.meals.unreconciled.joins(:bills).exists?
+      Rails.logger.info("reconciliations:create skipping #{community.name} — no unreconciled meals with bills")
+      next
+    end
 
-      reconciliation = Reconciliation.create!(
-        community: community,
-        date: Time.zone.today,
-        start_date: period_start,
-        end_date: period_end
-      )
+    period_start = community.meals.unreconciled.joins(:bills).minimum(:date)
+    period_end = Time.zone.today
 
-      Rails.logger.info(
-        "Reconciliation ##{reconciliation.id} created for #{community.name}: #{reconciliation.number_of_meals} meals"
-      )
+    reconciliation = Reconciliation.create!(
+      community: community,
+      date: Time.zone.today,
+      start_date: period_start,
+      end_date: period_end
+    )
 
-      Rake::Task['billing:recalculate'].invoke
-      Rake::Task['billing:recalculate'].reenable
+    Rails.logger.info(
+      "Reconciliation ##{reconciliation.id} created for #{community.name}: #{reconciliation.number_of_meals} meals"
+    )
 
-      reconciliation.unique_cooks.each do |cook|
-        ReconciliationMailer.reconciliation_notify_email(cook, reconciliation).deliver_now
-      rescue *MAIL_DELIVERY_ERRORS => e
-        Rails.logger.error("reconciliation_notify_email failed for #{cook.email}: #{e.class} - #{e.message}")
-      end
+    Rake::Task['billing:recalculate'].invoke
+    Rake::Task['billing:recalculate'].reenable
+
+    reconciliation.unique_cooks.each do |cook|
+      ReconciliationMailer.reconciliation_notify_email(cook, reconciliation).deliver_now
+    rescue *MAIL_DELIVERY_ERRORS => e
+      Rails.logger.error("reconciliation_notify_email failed for #{cook.email}: #{e.class} - #{e.message}")
     end
 
     total_time = Time.current - start_time

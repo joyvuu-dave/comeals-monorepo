@@ -5,23 +5,18 @@ module Api
     class EventsController < ApiController
       before_action :authenticate
       before_action :set_resource, only: %i[show update destroy]
-      before_action :authorize, only: %i[index create]
-      before_action :authorize_one, only: %i[show update destroy]
 
       # GET /api/v1/events
       def index
         events = if params[:start].present? && params[:end].present?
-                   Event.where(community_id: params[:community_id])
-                        .where(start_date: (params[:start])..)
+                   Event.where(start_date: (params[:start])..)
                         .where(start_date: ..(params[:end]))
-                        .or(Event.where(community_id: params[:community_id])
-                                          .where(end_date: (params[:start])..)
-                                          .where(end_date: ..(params[:end])))
-                        .or(Event.where(community_id: params[:community_id])
-                                          .where(start_date: ...(params[:start]))
-                                          .where('end_date > ?', params[:end]))
+                        .or(Event.where(end_date: (params[:start])..)
+                                 .where(end_date: ..(params[:end])))
+                        .or(Event.where(start_date: ...(params[:start]))
+                                 .where('end_date > ?', params[:end]))
                  else
-                   Event.where(community_id: params[:community_id]).all
+                   Event.all
                  end
 
         render json: events
@@ -56,7 +51,7 @@ module Api
         end
 
         event = Event.new(start_date: start_date, end_date: end_date, title: params[:title],
-                          description: params[:description] || '', community_id: params[:community_id], allday: allday)
+                          description: params[:description] || '', community: Community.instance, allday: allday)
         if event.save
           render json: { message: 'Event has been created' }
         else
@@ -112,14 +107,6 @@ module Api
         @event = Event.find_by(id: params[:id])
 
         not_found_api if @event.blank?
-      end
-
-      def authorize
-        not_authorized_api unless current_resident_api.community_id.to_s == params[:community_id]
-      end
-
-      def authorize_one
-        not_authorized_api unless current_resident_api.community_id == @event.community_id
       end
     end
   end

@@ -4,18 +4,20 @@
 #
 # Table name: communities
 #
-#  id         :bigint           not null, primary key
-#  cap        :decimal(12, 8)
-#  name       :string           not null
-#  slug       :string           not null
-#  timezone   :string           default("America/Los_Angeles"), not null
-#  created_at :datetime         not null
-#  updated_at :datetime         not null
+#  id              :bigint           not null, primary key
+#  cap             :decimal(12, 8)
+#  name            :string           not null
+#  singleton_guard :integer          default(0), not null
+#  slug            :string           not null
+#  timezone        :string           default("America/Los_Angeles"), not null
+#  created_at      :datetime         not null
+#  updated_at      :datetime         not null
 #
 # Indexes
 #
-#  index_communities_on_name  (name) UNIQUE
-#  index_communities_on_slug  (slug) UNIQUE
+#  index_communities_on_name             (name) UNIQUE
+#  index_communities_on_singleton_guard  (singleton_guard) UNIQUE
+#  index_communities_on_slug             (slug) UNIQUE
 #
 
 class Community < ApplicationRecord
@@ -37,9 +39,20 @@ class Community < ApplicationRecord
     'Auckland' => 'Pacific/Auckland'
   }.freeze
 
+  # --- Singleton Record ---
+  # The communities table always has exactly one row, enforced by a unique index
+  # on singleton_guard (which is always 0). This class method is the canonical
+  # way to access that record. Raises if no record exists — run db:seed to create one.
+  def self.instance
+    Current.community ||= first || raise('No Community record exists. Run `rails db:seed` to create one.')
+  end
+
+  validate :enforce_singleton, on: :create
+  before_destroy { throw :abort }
+
   # Ransack allowlists for ActiveAdmin sorting
   def self.ransackable_attributes(_auth_object = nil)
-    %w[id cap name slug timezone created_at updated_at]
+    %w[id cap name singleton_guard slug timezone created_at updated_at]
   end
 
   extend FriendlyId
@@ -115,12 +128,12 @@ class Community < ApplicationRecord
   end
 
   def auto_create_rotations
-    meals = Meal.where(community_id: id, rotation_id: nil).order(:date)
+    unassigned = meals.where(rotation_id: nil).order(:date)
     rotation = nil
-    meals.find_each do |meal|
+    unassigned.find_each do |meal|
       if rotation.nil?
-        rotation = Rotation.create!(community_id: id, description: "#{meal.date} to #{meal.date}",
-                                    no_email: true)
+        rotation = rotations.create!(description: "#{meal.date} to #{meal.date}",
+                                     no_email: true)
       end
       meal.update!(rotation_id: rotation.id)
       first_date = rotation.meals.order(:date).first.date
@@ -174,7 +187,7 @@ class Community < ApplicationRecord
       current_date = current_date.tomorrow
     end
 
-    Rotation.create!(community_id: id, meals_attributes: rotation_meals)
+    rotations.create!(meals_attributes: rotation_meals)
   end
 
   # Cache key for a specific calendar month. Same format as the Pusher channel
@@ -211,6 +224,10 @@ class Community < ApplicationRecord
   end
 
   private
+
+  def enforce_singleton
+    errors.add(:base, 'Only one Community record is allowed') if Community.exists?
+  end
 
   # The set of calendar keys affected when a meal on `date` changes.
   # A calendar view shows ~42 days (6 weeks), so a meal near a month boundary

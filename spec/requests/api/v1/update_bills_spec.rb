@@ -214,22 +214,6 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
     end
   end
 
-  describe 'authorization' do
-    it 'returns 403 when resident belongs to a different community' do
-      other_community = create(:community)
-      other_unit = create(:unit, community: other_community)
-      other_resident = create(:resident, community: other_community, unit: other_unit)
-
-      update_bills(
-        meal_id: meal.id,
-        bills: [{ resident_id: cook.id, amount: '50.00', no_cost: false }],
-        token: other_resident.key.token
-      )
-
-      expect(response).to have_http_status(:forbidden)
-    end
-  end
-
   describe 'third-cook warnings' do
     let(:rotation) { create(:rotation, community: community) }
     let(:future_meal) { create(:meal, community: community, date: 1.week.from_now, rotation: rotation) }

@@ -47,19 +47,6 @@ RSpec.describe 'Meals API' do
 
       expect(response).to have_http_status(:unauthorized)
     end
-
-    it 'returns 403 for a resident from another community' do
-      other_community = create(:community)
-      other_unit = create(:unit, community: other_community)
-      other_resident = create(:resident, community: other_community, unit: other_unit)
-
-      get '/api/v1/meals', params: {
-        community_id: community.id,
-        token: other_resident.key.token
-      }
-
-      expect(response).to have_http_status(:forbidden)
-    end
   end
 
   # ---------------------------------------------------------------------------
@@ -135,15 +122,6 @@ RSpec.describe 'Meals API' do
       get '/api/v1/meals/999999', params: { token: token }
 
       expect(response).to have_http_status(:not_found)
-    end
-
-    it 'returns 403 for a meal in another community' do
-      other_community = create(:community)
-      other_meal = create(:meal, community: other_community)
-
-      get "/api/v1/meals/#{other_meal.id}", params: { token: token }
-
-      expect(response).to have_http_status(:forbidden)
     end
   end
 
@@ -449,51 +427,6 @@ RSpec.describe 'Meals API' do
             params: { token: token, closed: true }
 
       expect(response).to have_http_status(:bad_request)
-    end
-  end
-
-  # ---------------------------------------------------------------------------
-  # Cross-community resident_id validation (Regression test for BUG-5)
-  # Endpoints that accept resident_id from params must verify the target
-  # resident belongs to the meal's community.
-  # ---------------------------------------------------------------------------
-  describe 'cross-community resident_id rejection' do
-    let(:meal) { create(:meal, community: community) }
-    let(:other_community) { create(:community) }
-    let(:other_unit) { create(:unit, community: other_community) }
-    let(:foreign_resident) { create(:resident, community: other_community, unit: other_unit) }
-
-    it 'blocks signing up a resident from another community' do
-      post "/api/v1/meals/#{meal.id}/residents/#{foreign_resident.id}",
-           params: { token: token, late: false, vegetarian: false }
-
-      expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body['message']).to include('community')
-      expect(meal.meal_residents.count).to eq(0)
-    end
-
-    it 'blocks adding a guest hosted by a resident from another community' do
-      post "/api/v1/meals/#{meal.id}/residents/#{foreign_resident.id}/guests",
-           params: { token: token, vegetarian: false }
-
-      expect(response).to have_http_status(:bad_request)
-      expect(meal.guests.count).to eq(0)
-    end
-
-    it 'blocks assigning a cook from another community via update_bills' do
-      # Need an existing bill so the endpoint has something to work with
-      create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('0'))
-
-      patch "/api/v1/meals/#{meal.id}/bills", params: {
-        token: token,
-        bills: [
-          { resident_id: resident.id, amount: '10.00', no_cost: false },
-          { resident_id: foreign_resident.id, amount: '5.00', no_cost: false }
-        ]
-      }
-
-      expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body['message']).to include('community')
     end
   end
 

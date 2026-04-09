@@ -41,17 +41,6 @@ RSpec.describe 'Guest Room Reservations API' do
       get '/api/v1/guest-room-reservations', params: { community_id: community.id }
       expect(response).to have_http_status(:unauthorized)
     end
-
-    it 'returns 403 for a resident from another community' do
-      other_community = create(:community)
-      other_unit = create(:unit, community: other_community)
-      other_resident = create(:resident, community: other_community, unit: other_unit)
-
-      get '/api/v1/guest-room-reservations', params: {
-        community_id: community.id, token: other_resident.key.token
-      }
-      expect(response).to have_http_status(:forbidden)
-    end
   end
 
   describe 'GET /api/v1/guest-room-reservations/:id' do

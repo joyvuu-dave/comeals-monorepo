@@ -5,9 +5,6 @@ ActiveAdmin.register Meal do
   permit_params :date, :subdomain, :closed, :max, :community_id,
                 guests_attributes: %i[id name multiplier resident_id meal_id _destroy], resident_ids: []
 
-  # SCOPE
-  scope_to :current_admin_user
-
   # CONFIG
   filter :reconciliation_id_null, as: :select, collection: [['Yes', false], ['No', true]], include_blank: false,
                                   default: false, label: 'Reconciled?'
@@ -78,10 +75,10 @@ ActiveAdmin.register Meal do
   form do |f|
     f.inputs do
       f.input :date, as: :datepicker
-      f.input :community_id, input_html: { value: current_admin_user.community_id }, as: :hidden
+      f.input :community_id, input_html: { value: Community.instance.id }, as: :hidden
       f.input :closed
       f.input :max if f.object.closed
-      f.input :attendees, as: :check_boxes, label: 'Attendees', collection: Resident.where(community_id: current_admin_user.community_id).includes(:unit).order('units.name ASC').map { |r|
+      f.input :attendees, as: :check_boxes, label: 'Attendees', collection: Resident.includes(:unit).order('units.name ASC').map { |r|
         ["#{r.name} - #{r.unit.name}", r.id]
       }
     end
@@ -92,7 +89,7 @@ ActiveAdmin.register Meal do
         g.input :multiplier, label: 'Price Category', as: :select, include_blank: false,
                              collection: [['Adult', 2], ['Child', 1]]
         g.input :resident, label: 'Host',
-                           collection: Resident.where(community_id: current_admin_user.community_id).order(:name)
+                           collection: Resident.order(:name)
         g.input :meal_id, as: :hidden, input_html: { value: meal.id }
       end
     end

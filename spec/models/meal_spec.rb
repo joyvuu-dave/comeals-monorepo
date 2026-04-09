@@ -69,15 +69,6 @@ RSpec.describe Meal do
       expect(duplicate.errors[:date]).to be_present
     end
 
-    it 'allows the same date in different communities' do
-      other_community = create(:community)
-      date = Date.new(2025, 6, 15)
-
-      create(:meal, community: community, date: date)
-      meal = build(:meal, community: other_community, date: date)
-      expect(meal).to be_valid
-    end
-
     it 'validates max >= attendees_count when max is set' do
       meal = create(:meal, community: community)
       resident = create(:resident, community: community, unit: unit, multiplier: 2)
@@ -665,12 +656,14 @@ RSpec.describe Meal do
   end
 
   describe '.create_templates' do
+    before { community } # Community.instance requires the record to exist
+
     it 'creates meals on Sun/Fri and alternating Mon/Tue' do
       # 2 weeks: enough to see the alternating pattern
       start_date = Date.new(2026, 6, 1) # Monday
       end_date = Date.new(2026, 6, 14) # Sunday
 
-      count = described_class.create_templates(community.id, start_date, end_date, 1)
+      count = described_class.create_templates(start_date, end_date, 1)
 
       expect(count).to be > 0
       dates = described_class.where(community: community).pluck(:date)
@@ -688,7 +681,7 @@ RSpec.describe Meal do
       start_date = Date.new(2026, 12, 20)
       end_date = Date.new(2027, 1, 5)
 
-      described_class.create_templates(community.id, start_date, end_date, 1)
+      described_class.create_templates(start_date, end_date, 1)
 
       dates = described_class.where(community: community).pluck(:date)
       dates.each do |d|
@@ -698,11 +691,13 @@ RSpec.describe Meal do
   end
 
   describe '.create_modified_templates' do
+    before { community } # Community.instance requires the record to exist
+
     it 'creates meals only on Sundays and Fridays' do
       start_date = Date.new(2026, 6, 1)
       end_date = Date.new(2026, 6, 30)
 
-      count = described_class.create_modified_templates(community.id, start_date, end_date)
+      count = described_class.create_modified_templates(start_date, end_date)
 
       expect(count).to be > 0
       wdays = described_class.where(community: community).pluck(:date).map(&:wday)
@@ -713,7 +708,7 @@ RSpec.describe Meal do
       start_date = Date.new(2026, 12, 20)
       end_date = Date.new(2027, 1, 5)
 
-      described_class.create_modified_templates(community.id, start_date, end_date)
+      described_class.create_modified_templates(start_date, end_date)
 
       dates = described_class.where(community: community).pluck(:date)
       dates.each do |d|

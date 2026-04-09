@@ -4,9 +4,7 @@ module Api
   module V1
     class MealsController < ApiController
       before_action :authenticate
-      before_action :authorize, only: [:index]
       before_action :set_meal, except: %i[index next]
-      before_action :authorize_one, except: %i[index next]
       before_action :reject_if_reconciled, only: %i[
         create_meal_resident destroy_meal_resident update_meal_resident
         create_guest destroy_guest
@@ -20,11 +18,10 @@ module Api
       # GET /api/v1/meals
       def index
         meals = if params[:start].present? && params[:end].present?
-                  Meal.where(community_id: params[:community_id])
-                      .where(date: (params[:start])..)
+                  Meal.where(date: (params[:start])..)
                       .where(date: ..(params[:end]))
                 else
-                  Meal.where(community_id: params[:community_id]).all
+                  Meal.all
                 end
 
         render json: meals
@@ -32,8 +29,7 @@ module Api
 
       # GET /api/v1/meals/next
       def next
-        next_meal = Meal.where(community_id: current_resident_api.community_id)
-                        .where(date: Time.zone.now.to_date..)
+        next_meal = Meal.where(date: Time.zone.now.to_date..)
                         .order(:date).first
 
         if next_meal.nil?
@@ -199,11 +195,11 @@ module Api
           parsed_bills << { resident_id: bill['resident_id'], amount: amount_value, no_cost: bill['no_cost'] }
         end
 
-        # Verify all cooks belong to this meal's community
-        community_resident_ids = Resident.where(community_id: @meal.community_id, id: cook_ids).pluck(:id)
-        foreign_ids = cook_ids.map(&:to_i) - community_resident_ids
-        if foreign_ids.any?
-          render json: { message: 'Resident does not belong to this community.' }, status: :bad_request
+        # Verify all cooks are valid residents
+        valid_ids = Resident.where(id: cook_ids).pluck(:id)
+        invalid_ids = cook_ids.map(&:to_i) - valid_ids
+        if invalid_ids.any?
+          render json: { message: 'Resident not found.' }, status: :bad_request
           return
         end
 
@@ -250,11 +246,9 @@ module Api
       end
 
       def verify_resident_community
-        target = Resident.find_by(id: params[:resident_id])
-        return if target&.community_id == @meal.community_id
+        return if Resident.exists?(id: params[:resident_id])
 
-        render json: { message: 'Resident does not belong to this community.' },
-               status: :bad_request
+        render json: { message: 'Resident not found.' }, status: :bad_request
       end
 
       def set_meal
@@ -287,14 +281,6 @@ module Api
 
       def authenticate
         not_authenticated_api unless signed_in_resident_api?
-      end
-
-      def authorize
-        not_authorized_api unless current_resident_api.community_id.to_s == params[:community_id]
-      end
-
-      def authorize_one
-        not_authorized_api unless current_resident_api.community_id == @meal.community_id
       end
     end
   end

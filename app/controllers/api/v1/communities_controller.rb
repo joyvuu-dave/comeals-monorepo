@@ -4,12 +4,10 @@ module Api
   module V1
     class CommunitiesController < ApiController
       before_action :authenticate, except: [:ical]
-      before_action :authorize, except: [:ical]
-      before_action :set_community, only: %i[birthdays calendar]
 
       # GET /api/v1/communities/:id/ical
       def ical
-        community = Community.find(params[:id])
+        community = Community.instance
 
         require 'icalendar/tzinfo'
         tzid = community.timezone
@@ -21,7 +19,7 @@ module Api
 
         cal.x_wr_calname = community.name
 
-        Meal.where(community_id: community.id).find_each do |meal|
+        community.meals.find_each do |meal|
           event = Icalendar::Event.new
 
           meal_date = meal.date
@@ -48,13 +46,13 @@ module Api
                       Time.zone.today.month
                     end
 
-        render json: @community.residents.active.where('extract(month from birthday) = ?', month_int),
+        render json: Community.instance.residents.active.where('extract(month from birthday) = ?', month_int),
                each_serializer: ResidentBirthdaySerializer
       end
 
       # GET /api/v1/communities/:id/hosts
       def hosts
-        hosts = Resident.adult.active.where(community_id: params[:id]).joins(:unit).order('units.name').pluck(
+        hosts = Resident.adult.active.joins(:unit).order('units.name').pluck(
           'residents.id', 'residents.name', 'units.name'
         )
         render json: hosts
@@ -78,11 +76,12 @@ module Api
         start_date = start_date.to_s
         end_date = end_date.to_s
 
-        key = @community.calendar_cache_key(year, month)
+        community = Community.instance
+        key = community.calendar_cache_key(year, month)
 
         result = Rails.cache.fetch(key, expires_in: 1.hour) do
           ActiveModelSerializers::SerializableResource.new(
-            @community,
+            community,
             month: month, year: year,
             start_date: start_date, end_date: end_date,
             month_int_array: month_int_array,
@@ -95,17 +94,8 @@ module Api
 
       private
 
-      def set_community
-        @community = Community.find_by(id: params[:id])
-        not_found_api if @community.blank?
-      end
-
       def authenticate
         not_authenticated_api unless signed_in_resident_api?
-      end
-
-      def authorize
-        not_authorized_api unless current_resident_api.community_id.to_s == params[:id]
       end
     end
   end

@@ -66,23 +66,6 @@ RSpec.describe GuestRoomReservation do
       expect(duplicate.errors[:date]).to include('has already been taken')
     end
 
-    it 'is valid when the same date is used in a different community' do
-      community1 = create(:community)
-      community2 = create(:community)
-      resident1 = create(:resident, community: community1)
-      resident2 = create(:resident, community: community2)
-      create(:guest_room_reservation,
-             community: community1,
-             resident: resident1,
-             date: Date.new(2026, 4, 1))
-
-      reservation = build(:guest_room_reservation,
-                          community: community2,
-                          resident: resident2,
-                          date: Date.new(2026, 4, 1))
-      expect(reservation).to be_valid
-    end
-
     # Regression test for BUG-3: uniqueness must be enforced at the database
     # level, not just Rails validations, to prevent race-condition double bookings.
     it 'enforces uniqueness at the database level' do

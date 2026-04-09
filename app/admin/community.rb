@@ -15,12 +15,9 @@ ActiveAdmin.register Community do
 
   controller do
     def find_resource
-      scoped_collection.friendly.find(params[:id])
+      Community.instance
     end
   end
-
-  # SCOPE
-  scope_to :current_admin_user
 
   # INDEX
   index do

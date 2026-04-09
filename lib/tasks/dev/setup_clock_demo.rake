@@ -5,7 +5,7 @@ namespace :dev do
   task setup_clock_demo: :environment do
     abort 'dev:setup_clock_demo is only for development!' unless Rails.env.development?
 
-    community = Community.first!
+    community = Community.instance
     puts ''
 
     # 1. Clear resident balances → billing:recalculate rebuilds them from source data.

@@ -7,9 +7,6 @@ ActiveAdmin.register AdminUser do
   # STRONG PARAMS
   permit_params :email, :password, :password_confirmation
 
-  # SCOPE
-  scope_to :current_admin_user
-
   # CONFIG
   config.filters = false
 

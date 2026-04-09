@@ -57,7 +57,7 @@ class Rotation < ApplicationRecord
   COLORS = ['#3DC656', '#009EDC', '#D9443F', '#FFC857', '#E9724C'].freeze
 
   def set_color
-    last_color = Rotation.where(community_id: community_id).order(:id).pluck(:color).last
+    last_color = Rotation.order(:id).pluck(:color).last
     self.color = if last_color && COLORS.include?(last_color)
                    COLORS[(COLORS.index(last_color) + 1) % COLORS.length]
                  else
@@ -65,9 +65,9 @@ class Rotation < ApplicationRecord
                  end
   end
 
-  def self.recolor_community(community_id)
+  def self.recolor_community
     changed_rotation_ids = []
-    Rotation.where(community_id: community_id).order(:id).each_with_index do |rotation, index|
+    Rotation.order(:id).each_with_index do |rotation, index|
       new_color = COLORS[index % COLORS.length]
       next if rotation.color == new_color
 
@@ -89,8 +89,7 @@ class Rotation < ApplicationRecord
   delegate :count, to: :meals, prefix: true
 
   def set_place_value
-    Rotation.where(community_id: community_id)
-            .order(:start_date, :id)
+    Rotation.order(:start_date, :id)
             .pluck(:id)
             .each_with_index do |rot_id, index|
       Rotation.where(id: rot_id).update_all(place_value: index + 1)
@@ -120,7 +119,7 @@ class Rotation < ApplicationRecord
   end
 
   def recolor_remaining_rotations
-    changed_ids = self.class.recolor_community(community_id)
+    changed_ids = self.class.recolor_community
 
     dates = @meal_dates_before_destroy || []
     dates |= Meal.where(rotation_id: changed_ids).distinct.pluck(:date) if changed_ids.any?

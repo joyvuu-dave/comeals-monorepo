@@ -58,11 +58,11 @@ class AdminUser < ApplicationRecord
   has_many :common_house_reservations, through: :community
 
   def admin_users
-    AdminUser.where(community_id: community_id)
+    AdminUser.all
   end
 
   def communities
-    Community.where(id: community_id)
+    Community.all
   end
 
   def superuser?

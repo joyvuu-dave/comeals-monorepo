@@ -4,9 +4,6 @@ ActiveAdmin.register Unit do
   # STRONG PARAMS
   permit_params :name, :community_id
 
-  # SCOPE
-  scope_to :current_admin_user
-
   # CONFIG
   config.filters = false
   config.sort_order = 'name_asc'
@@ -43,7 +40,7 @@ ActiveAdmin.register Unit do
   form do |f|
     f.inputs do
       f.input :name
-      f.input :community_id, input_html: { value: current_admin_user.community_id }, as: :hidden
+      f.input :community_id, input_html: { value: Community.instance.id }, as: :hidden
     end
 
     f.actions

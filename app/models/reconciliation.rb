@@ -49,8 +49,7 @@ class Reconciliation < ApplicationRecord
 
   # Assigns unreconciled meals (with at least one bill) within the date range.
   def assign_meals
-    meal_ids = Meal.where(community_id: community_id)
-                   .unreconciled
+    meal_ids = Meal.unreconciled
                    .joins(:bills)
                    .where(date: start_date..end_date)
                    .distinct

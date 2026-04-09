@@ -33,13 +33,13 @@ class Unit < ApplicationRecord
 
   # DERIVED DATA
   def balance
-    return BigDecimal('0') if Meal.where(community_id: community_id).unreconciled.none?
+    return BigDecimal('0') if Meal.unreconciled.none?
 
     residents.reduce(BigDecimal('0')) { |sum, resident| sum + resident.balance }
   end
 
   def meals_cooked
-    return 0 if Meal.where(community_id: community_id).unreconciled.none?
+    return 0 if Meal.unreconciled.none?
 
     residents.reduce(0) { |sum, resident| sum + resident.bills.joins(:meal).merge(Meal.unreconciled).count }
   end

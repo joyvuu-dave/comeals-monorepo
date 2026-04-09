@@ -41,15 +41,6 @@ RSpec.describe 'Events API' do
       get '/api/v1/events', params: { community_id: community.id }
       expect(response).to have_http_status(:unauthorized)
     end
-
-    it 'returns 403 for a resident from another community' do
-      other_community = create(:community)
-      other_unit = create(:unit, community: other_community)
-      other_resident = create(:resident, community: other_community, unit: other_unit)
-
-      get '/api/v1/events', params: { community_id: community.id, token: other_resident.key.token }
-      expect(response).to have_http_status(:forbidden)
-    end
   end
 
   describe 'GET /api/v1/events/:id' do
@@ -64,13 +55,6 @@ RSpec.describe 'Events API' do
     it 'returns 404 for nonexistent event' do
       get '/api/v1/events/999999', params: { token: token }
       expect(response).to have_http_status(:not_found)
-    end
-
-    it 'returns 403 for event in another community' do
-      other_event = create(:event, community: create(:community))
-
-      get "/api/v1/events/#{other_event.id}", params: { token: token }
-      expect(response).to have_http_status(:forbidden)
     end
   end
 

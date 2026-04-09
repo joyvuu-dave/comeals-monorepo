@@ -4,9 +4,6 @@ ActiveAdmin.register Bill do
   # STRONG PARAMS
   permit_params :date, :id, :meal_id, :name, :resident_id, :community_id, :amount, :subdomain
 
-  # SCOPE
-  scope_to :current_admin_user
-
   # CONFIG
   filter :resident, as: :select, collection: proc { Resident.order(:name).pluck('name', 'id') }, include_blank: true
   filter :meal_reconciliation_id, as: :select, collection: proc {
@@ -49,11 +46,11 @@ ActiveAdmin.register Bill do
   # FORM
   form do |f|
     f.inputs do
-      f.input :meal, label: 'Common Meal Date', collection: Meal.where(community_id: current_admin_user.community_id).order(date: :desc).map { |i|
+      f.input :meal, label: 'Common Meal Date', collection: Meal.order(date: :desc).map { |i|
         [i.date, i.id]
       }
-      f.input :community_id, input_html: { value: current_admin_user.community_id }, as: :hidden
-      f.input :resident_id, as: :select, include_blank: false, label: 'Cook', collection: Resident.where(community_id: current_admin_user.community_id).includes(:unit).adult.order('units.name ASC').map { |r|
+      f.input :community_id, input_html: { value: Community.instance.id }, as: :hidden
+      f.input :resident_id, as: :select, include_blank: false, label: 'Cook', collection: Resident.includes(:unit).adult.order('units.name ASC').map { |r|
         ["#{r.name} - #{r.unit.name}", r.id]
       }
       f.input :amount, label: '$'

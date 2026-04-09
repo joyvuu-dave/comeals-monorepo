@@ -37,17 +37,6 @@ RSpec.describe Rotation do
       expect(r2.reload.place_value).to eq(2)
     end
 
-    it 'does not renumber rotations in other communities' do
-      other_community = create(:community)
-      other_rotation = create(:rotation, community: other_community, no_email: true)
-      original_place = other_rotation.reload.place_value
-
-      # Creating a rotation in our community should not affect the other community
-      create(:rotation, community: community, no_email: true)
-
-      expect(other_rotation.reload.place_value).to eq(original_place)
-    end
-
     it 'reorders on destroy' do
       r1 = create(:rotation, community: community, no_email: true)
       r2 = create(:rotation, community: community, no_email: true)
@@ -91,7 +80,7 @@ RSpec.describe Rotation do
       # Manually break the cycle
       rotations[2].update_column(:color, rotations[1].reload.color)
 
-      described_class.recolor_community(community.id)
+      described_class.recolor_community
 
       reloaded_colors = rotations.map { |r| r.reload.color }
       expected = Array.new(6) { |i| Rotation::COLORS[i % Rotation::COLORS.length] }
@@ -102,24 +91,13 @@ RSpec.describe Rotation do
       rotations = Array.new(3) { create(:rotation, community: community, no_email: true) }
 
       # Colors are already correct, so nothing should change
-      changed = described_class.recolor_community(community.id)
+      changed = described_class.recolor_community
       expect(changed).to be_empty
 
       # Break one color
       rotations[1].update_column(:color, rotations[0].reload.color)
-      changed = described_class.recolor_community(community.id)
+      changed = described_class.recolor_community
       expect(changed).to include(rotations[1].id)
-    end
-
-    it 'does not affect rotations in other communities' do
-      other_community = create(:community)
-      other_rotation = create(:rotation, community: other_community, no_email: true)
-      original_color = other_rotation.color
-
-      create(:rotation, community: community, no_email: true)
-      described_class.recolor_community(community.id)
-
-      expect(other_rotation.reload.color).to eq(original_color)
     end
   end
 

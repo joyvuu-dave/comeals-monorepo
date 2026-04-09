@@ -48,22 +48,18 @@ RSpec.describe AdminUser do
   end
 
   describe '#admin_users' do
-    it 'returns admin users scoped to the same community' do
+    it 'returns all admin users' do
       admin1 = create(:admin_user, community: community)
       admin2 = create(:admin_user, community: community)
-      other_community = create(:community)
-      other_admin = create(:admin_user, community: other_community)
 
       result = admin1.admin_users
       expect(result).to include(admin1, admin2)
-      expect(result).not_to include(other_admin)
     end
   end
 
   describe '#communities' do
-    it 'returns only the admin user community' do
+    it 'returns the singleton community' do
       admin = create(:admin_user, community: community)
-      create(:community)
 
       expect(admin.communities).to eq([community])
     end

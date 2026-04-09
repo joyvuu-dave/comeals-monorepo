@@ -32,6 +32,10 @@ RSpec.configure do |config|
   config.include FactoryBot::Syntax::Methods
   config.include QueryCounter, type: :request
 
+  # Reset per-request caches (CurrentAttributes) between examples so
+  # Community.instance doesn't leak a stale reference across tests.
+  config.before { Current.reset }
+
   # Remove this line if you're not using ActiveRecord or ActiveRecord fixtures
   config.fixture_paths = [Rails.root.join('spec/fixtures').to_s]
 

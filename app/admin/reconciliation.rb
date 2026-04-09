@@ -3,9 +3,6 @@
 ActiveAdmin.register Reconciliation do
   menu label: 'Recon.'
 
-  # SCOPE
-  scope_to :current_admin_user
-
   # CONFIG
   config.filters = false
 
@@ -44,7 +41,7 @@ ActiveAdmin.register Reconciliation do
   # FORM
   form do |f|
     f.inputs do
-      f.input :community_id, input_html: { value: current_admin_user.community_id }, as: :hidden
+      f.input :community_id, input_html: { value: Community.instance.id }, as: :hidden
       f.input :start_date, as: :datepicker
       f.input :end_date, as: :datepicker
     end

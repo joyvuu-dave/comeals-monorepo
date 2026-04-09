@@ -34,15 +34,6 @@ RSpec.describe 'Communities API' do
       get "/api/v1/communities/#{community.id}/hosts"
       expect(response).to have_http_status(:unauthorized)
     end
-
-    it 'returns 403 for a resident from another community' do
-      other_community = create(:community)
-      other_unit = create(:unit, community: other_community)
-      other_resident = create(:resident, community: other_community, unit: other_unit)
-
-      get "/api/v1/communities/#{community.id}/hosts", params: { token: other_resident.key.token }
-      expect(response).to have_http_status(:forbidden)
-    end
   end
 
   describe 'GET /api/v1/communities/:id/birthdays' do
@@ -60,11 +51,6 @@ RSpec.describe 'Communities API' do
       body = response.parsed_body
       names = body.pluck('title')
       expect(names.join).to include(march_bday.name.split[0])
-    end
-
-    it "returns 403 when community ID does not match resident's community" do
-      get '/api/v1/communities/999999/birthdays', params: { token: token }
-      expect(response).to have_http_status(:forbidden)
     end
   end
 

@@ -4,9 +4,6 @@ ActiveAdmin.register Rotation do
   # STRONG PARAMS
   permit_params :description, :community_id, meal_ids: []
 
-  # SCOPE
-  scope_to :current_admin_user
-
   # CONFIG
   config.filters = false
 
@@ -45,9 +42,9 @@ ActiveAdmin.register Rotation do
   # FORM
   form do |f|
     f.inputs do
-      f.input :community_id, input_html: { value: current_admin_user.community_id }, as: :hidden
+      f.input :community_id, input_html: { value: Community.instance.id }, as: :hidden
       f.input :description, input_html: { value: '' }, as: :hidden
-      f.input :meals, as: :check_boxes, collection: Meal.where(rotation_id: nil, community_id: current_admin_user.community_id).order(:date).map { |m|
+      f.input :meals, as: :check_boxes, collection: Meal.where(rotation_id: nil).order(:date).map { |m|
         [m.date.to_s, m.id]
       }
     end

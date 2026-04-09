@@ -4,22 +4,36 @@
 #
 # Table name: communities
 #
-#  id         :bigint           not null, primary key
-#  cap        :decimal(12, 8)
-#  name       :string           not null
-#  slug       :string           not null
-#  timezone   :string           default("America/Los_Angeles"), not null
-#  created_at :datetime         not null
-#  updated_at :datetime         not null
+#  id              :bigint           not null, primary key
+#  cap             :decimal(12, 8)
+#  name            :string           not null
+#  singleton_guard :integer          default(0), not null
+#  slug            :string           not null
+#  timezone        :string           default("America/Los_Angeles"), not null
+#  created_at      :datetime         not null
+#  updated_at      :datetime         not null
 #
 # Indexes
 #
-#  index_communities_on_name  (name) UNIQUE
-#  index_communities_on_slug  (slug) UNIQUE
+#  index_communities_on_name             (name) UNIQUE
+#  index_communities_on_singleton_guard  (singleton_guard) UNIQUE
+#  index_communities_on_slug             (slug) UNIQUE
 #
 
 FactoryBot.define do
   factory :community do
-    sequence(:name) { |n| "Community #{n}" }
+    name { 'Test Community' }
+
+    # Singleton: reuse the existing record so associated factories (unit, resident,
+    # etc.) that call `association :community` don't violate the unique constraint.
+    # Applies factory attributes to the existing record so explicit overrides like
+    # `create(:community, cap: BigDecimal('4.50'))` are not silently swallowed.
+    initialize_with do
+      Community.first&.tap { |c| c.assign_attributes(attributes) } || new(**attributes)
+    end
+
+    to_create do |instance|
+      instance.save! if instance.new_record? || instance.changed?
+    end
   end
 end

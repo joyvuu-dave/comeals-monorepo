@@ -44,17 +44,6 @@ RSpec.describe 'Rotations API' do
       get '/api/v1/rotations', params: { community_id: community.id }
       expect(response).to have_http_status(:unauthorized)
     end
-
-    it 'returns 403 for a resident from another community' do
-      other_community = create(:community)
-      other_unit = create(:unit, community: other_community)
-      other_resident = create(:resident, community: other_community, unit: other_unit)
-
-      get '/api/v1/rotations', params: {
-        community_id: community.id, token: other_resident.key.token
-      }
-      expect(response).to have_http_status(:forbidden)
-    end
   end
 
   describe 'GET /api/v1/rotations/:id' do
@@ -75,14 +64,6 @@ RSpec.describe 'Rotations API' do
     it 'returns 404 for nonexistent rotation' do
       get '/api/v1/rotations/999999', params: { token: token }
       expect(response).to have_http_status(:not_found)
-    end
-
-    it 'returns 403 for rotation in another community' do
-      other_community = create(:community)
-      other_rotation = create(:rotation, community: other_community)
-
-      get "/api/v1/rotations/#{other_rotation.id}", params: { token: token }
-      expect(response).to have_http_status(:forbidden)
     end
   end
 end

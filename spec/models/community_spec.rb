@@ -4,18 +4,20 @@
 #
 # Table name: communities
 #
-#  id         :bigint           not null, primary key
-#  cap        :decimal(12, 8)
-#  name       :string           not null
-#  slug       :string           not null
-#  timezone   :string           default("America/Los_Angeles"), not null
-#  created_at :datetime         not null
-#  updated_at :datetime         not null
+#  id              :bigint           not null, primary key
+#  cap             :decimal(12, 8)
+#  name            :string           not null
+#  singleton_guard :integer          default(0), not null
+#  slug            :string           not null
+#  timezone        :string           default("America/Los_Angeles"), not null
+#  created_at      :datetime         not null
+#  updated_at      :datetime         not null
 #
 # Indexes
 #
-#  index_communities_on_name  (name) UNIQUE
-#  index_communities_on_slug  (slug) UNIQUE
+#  index_communities_on_name             (name) UNIQUE
+#  index_communities_on_singleton_guard  (singleton_guard) UNIQUE
+#  index_communities_on_slug             (slug) UNIQUE
 #
 require 'rails_helper'
 
@@ -23,13 +25,35 @@ RSpec.describe Community do
   let(:community) { create(:community, cap: BigDecimal('4.50')) }
   let(:unit) { create(:unit, community: community) }
 
-  describe 'validations' do
-    it 'enforces unique community names (case-insensitive)' do
-      create(:community, name: "Swan's Way")
-      duplicate = build(:community, name: "swan's way")
+  describe 'singleton enforcement' do
+    it 'prevents creating a second community' do
+      community # ensure the singleton exists
+      second = described_class.new(name: 'Another Community')
 
-      expect(duplicate).not_to be_valid
-      expect(duplicate.errors[:name]).to be_present
+      expect(second).not_to be_valid
+      expect(second.errors[:base]).to include('Only one Community record is allowed')
+    end
+
+    it 'prevents destruction' do
+      expect(community.destroy).to be false
+      expect(described_class.count).to eq(1)
+    end
+  end
+
+  describe '.instance' do
+    it 'returns the existing community' do
+      community # ensure the singleton exists
+      expect(described_class.instance).to eq(community)
+    end
+
+    it 'raises when no community exists' do
+      expect { described_class.instance }.to raise_error(RuntimeError, /No Community record exists/)
+    end
+
+    it 'caches the result per-request via Current' do
+      community # ensure the singleton exists
+      described_class.instance
+      expect(Current.community).to eq(community)
     end
   end
 
@@ -99,8 +123,8 @@ RSpec.describe Community do
     end
 
     it 'returns false when cap is nil' do
-      uncapped = create(:community, cap: nil)
-      expect(uncapped.capped?).to be false
+      community.update!(cap: nil)
+      expect(community.capped?).to be false
     end
   end
 

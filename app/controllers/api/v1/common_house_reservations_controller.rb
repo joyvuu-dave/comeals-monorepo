@@ -5,18 +5,15 @@ module Api
     class CommonHouseReservationsController < ApiController
       before_action :authenticate
       before_action :set_resource, only: %i[show update destroy]
-      before_action :authorize, only: %i[index create]
-      before_action :authorize_one, only: %i[show update destroy]
 
       # GET /api/v1/common-house-reservations?start_date=123
       def index
         chrs = if params[:start].present? && params[:end].present?
-                 CommonHouseReservation.includes({ resident: :unit }).where(community_id: params[:community_id])
+                 CommonHouseReservation.includes({ resident: :unit })
                                        .where(start_date: (params[:start])..)
                                        .where(start_date: ..(params[:end]))
-
                else
-                 CommonHouseReservation.includes({ resident: :unit }).where(community_id: params[:community_id]).all
+                 CommonHouseReservation.includes({ resident: :unit }).all
                end
 
         render json: chrs
@@ -24,9 +21,9 @@ module Api
 
       # GET /api/v1/common-house-reservations/:id
       def show
-        residents = @chr.community.residents.adult.active
-                        .joins(:unit).order('units.name')
-                        .pluck('residents.id', 'residents.name', 'units.name')
+        residents = Community.instance.residents.adult.active
+                             .joins(:unit).order('units.name')
+                             .pluck('residents.id', 'residents.name', 'units.name')
 
         render json: { event: @chr, residents: residents }
       end
@@ -45,7 +42,7 @@ module Api
         end
 
         chr = CommonHouseReservation.new(resident_id: params[:resident_id], start_date: start_date, end_date: end_date,
-                                         community_id: params[:community_id], title: params[:title])
+                                         community: Community.instance, title: params[:title])
         if chr.save
           render json: { message: 'Common House Reservation has been created' }
         else
@@ -89,14 +86,6 @@ module Api
         @chr = CommonHouseReservation.find_by(id: params[:id])
 
         not_found_api if @chr.blank?
-      end
-
-      def authorize
-        not_authorized_api unless current_resident_api.community_id.to_s == params[:community_id]
-      end
-
-      def authorize_one
-        not_authorized_api unless current_resident_api.community_id == @chr.community_id
       end
     end
   end

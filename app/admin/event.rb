@@ -4,9 +4,6 @@ ActiveAdmin.register Event do
   # STRONG PARAMS
   permit_params :title, :description, :start_date, :end_date, :allday, :community_id
 
-  # SCOPE
-  scope_to :current_admin_user
-
   # CONFIG
   config.filters = false
 
@@ -42,7 +39,7 @@ ActiveAdmin.register Event do
       f.input :start_date
       f.input :end_date
       f.input :allday
-      f.input :community_id, input_html: { value: current_admin_user.community_id }, as: :hidden
+      f.input :community_id, input_html: { value: Community.instance.id }, as: :hidden
     end
 
     f.actions

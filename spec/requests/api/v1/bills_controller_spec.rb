@@ -52,19 +52,6 @@ RSpec.describe 'Bills API' do
 
       expect(response).to have_http_status(:unauthorized)
     end
-
-    it 'returns 403 for a resident from another community' do
-      other_community = create(:community)
-      other_unit = create(:unit, community: other_community)
-      other_resident = create(:resident, community: other_community, unit: other_unit)
-
-      get '/api/v1/bills', params: {
-        community_id: community.id,
-        token: other_resident.key.token
-      }
-
-      expect(response).to have_http_status(:forbidden)
-    end
   end
 
   describe 'GET /api/v1/bills/:id' do
@@ -82,21 +69,6 @@ RSpec.describe 'Bills API' do
 
     it 'returns 404 for nonexistent bill' do
       get '/api/v1/bills/999999', params: {
-        community_id: community.id, token: token
-      }
-
-      expect(response).to have_http_status(:not_found)
-    end
-
-    it 'returns 404 for a bill from another community' do
-      other_community = create(:community)
-      other_unit = create(:unit, community: other_community)
-      other_cook = create(:resident, community: other_community, unit: other_unit)
-      other_meal = create(:meal, community: other_community)
-      other_bill = create(:bill, meal: other_meal, resident: other_cook,
-                                 community: other_community, amount: BigDecimal('50'))
-
-      get "/api/v1/bills/#{other_bill.id}", params: {
         community_id: community.id, token: token
       }
 

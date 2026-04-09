@@ -43,7 +43,6 @@ class CommonHouseReservation < ApplicationRecord
 
   def period_is_free
     errors.add(:base, 'Time period is already taken') if CommonHouseReservation
-                                                         .where(community_id: community_id)
                                                          .where.not(id: id)
                                                          .where(start_date: ...end_date)
                                                          .exists?(['end_date > ?', start_date])

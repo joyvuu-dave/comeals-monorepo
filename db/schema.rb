@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_07_223500) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_08_000002) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_stat_statements"
@@ -86,10 +86,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_07_223500) do
     t.decimal "cap", precision: 12, scale: 8
     t.datetime "created_at", precision: nil, null: false
     t.string "name", null: false
+    t.integer "singleton_guard", default: 0, null: false
     t.string "slug", null: false
     t.string "timezone", default: "America/Los_Angeles", null: false
     t.datetime "updated_at", precision: nil, null: false
     t.index ["name"], name: "index_communities_on_name", unique: true
+    t.index ["singleton_guard"], name: "index_communities_on_singleton_guard", unique: true
     t.index ["slug"], name: "index_communities_on_slug", unique: true
     t.check_constraint "cap IS NULL OR cap > 0::numeric", name: "communities_cap_positive_or_null"
   end

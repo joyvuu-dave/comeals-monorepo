@@ -5,9 +5,6 @@ ActiveAdmin.register Resident do
   permit_params :name, :multiplier, :unit_id, :community_id, :email, :password, :vegetarian, :can_cook, :active,
                 :birthday
 
-  # SCOPE
-  scope_to :current_admin_user
-
   # CONFIG
   filter :active
   config.sort_order = 'name_asc'
@@ -105,10 +102,10 @@ ActiveAdmin.register Resident do
       f.input :password if f.object.new_record?
       f.input :vegetarian
       f.input :multiplier, label: 'Price Category', as: :radio, collection: [['Adult', 2], ['Child', 1]]
-      f.input :unit, collection: Unit.where(community_id: current_admin_user.community_id).order(:name)
+      f.input :unit, collection: Unit.order(:name)
       f.input :can_cook
       f.input :active
-      f.input :community_id, input_html: { value: current_admin_user.community_id }, as: :hidden
+      f.input :community_id, input_html: { value: Community.instance.id }, as: :hidden
     end
     f.label 'Note: passwords can be reset through the resident login page'
     f.actions
