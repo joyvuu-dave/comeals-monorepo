@@ -2,9 +2,7 @@
 
 class RecolorRotations < ActiveRecord::Migration[7.0]
   def up
-    Community.find_each do |community|
-      Rotation.recolor_community(community.id)
-    end
+    Rotation.recolor_community
   end
 
   def down
