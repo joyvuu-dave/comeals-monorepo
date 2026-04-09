@@ -28,8 +28,8 @@ ActiveAdmin.register Unit do
       row :balance do |unit|
         number_to_currency(unit.balance) unless unit.balance.zero?
       end
-      table_for unit.residents.order(:name) do
-        column 'Residents' do |resident|
+      table_for unit.residents.active.order(:name) do
+        column 'Active Residents' do |resident|
           link_to resident.name, admin_resident_path(resident)
         end
       end
