@@ -181,7 +181,7 @@ When triggered:
 
 ## 5. Remediation — Completed
 
-All four phases have been implemented in the `billing-system-remediation` branch:
+All four phases have been implemented and merged to master:
 
 1. **Phase 1** — Fixed hardcoded `reconciliation_id == 3` to use `Meal.unreconciled` scope
 2. **Phase 2** — Migrated to `DECIMAL(12,8)` + `BigDecimal`, removed `money-rails`, removed reimbursement rounding
@@ -190,15 +190,13 @@ All four phases have been implemented in the `billing-system-remediation` branch
 
 **Frontend** (`comeals-ui`) updated in parallel: `amount_cents` (integer) replaced with `amount` (decimal dollars) in bill store, data store, and API calls.
 
-**Test coverage:** 124 model/unit tests + 14 request specs = 138 total tests, 0 failures.
-
 ---
 
 ## 6. Environment
 
 - **Ruby:** 3.2.10 (managed by rbenv)
-- **Database:** PostgreSQL (Heroku Postgres 16.10 in production)
-- **Tests:** `bundle exec rspec` — 138 tests (124 model + 14 request specs), 0 failures
+- **Database:** PostgreSQL
+- **Tests:** `bundle exec rspec`
 - **Rake tasks:** `rake billing:recalculate` (daily balance refresh), `rake reconciliations:create` (manual billing period close)
 
 ---
