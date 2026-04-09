@@ -47,7 +47,7 @@ ActiveAdmin.register Reconciliation do
     panel 'Unit Balances' do
       unit_bals = reconciliation.unit_balances
 
-      table_for unit_bals do
+      table_for unit_bals.to_a do
         column('Unit') { |(unit_id, unit_name), _| link_to unit_name, admin_unit_path(unit_id) }
         column('Balance') { |_, amount| number_to_currency(amount) }
       end
