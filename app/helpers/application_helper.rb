@@ -36,6 +36,15 @@ module ApplicationHelper
   # rubocop:enable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
   # rubocop:enable Rails/HelperInstanceVariable
 
+  def resident_from_audit_trail(auditable_type, auditable_id)
+    create_audit = Audited::Audit.find_by(
+      auditable_type: auditable_type,
+      auditable_id: auditable_id,
+      action: 'create'
+    )
+    Resident.find_by(id: create_audit&.audited_changes&.dig('resident_id'))
+  end
+
   def parse_audit(audit)
     return parse_meal_audit(audit) if audit.auditable_type == 'Meal'
     return parse_bill_audit(audit) if audit.auditable_type == 'Bill'
@@ -95,8 +104,6 @@ module ApplicationHelper
 
   def parse_bill_audit(audit) # rubocop:disable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity, Metrics/MethodLength --audit change parsing with many attribute branches
     changes = audit.audited_changes
-    bill = Bill.find_by(id: audit.auditable_id)
-    return 'unknown bill removed' if bill.nil?
 
     if %w[create destroy].include?(audit.action)
       resident = Resident.find_by(id: changes['resident_id'])
@@ -106,7 +113,13 @@ module ApplicationHelper
       return "#{name} removed as cook"
     end
 
-    cook_name = bill.resident.present? ? resident_name_helper(bill.resident.name) : 'unknown'
+    bill = Bill.find_by(id: audit.auditable_id)
+    cook_name = if bill&.resident.present?
+                  resident_name_helper(bill.resident.name)
+                else
+                  resident = resident_from_audit_trail('Bill', audit.auditable_id)
+                  resident.present? ? resident_name_helper(resident.name) : 'unknown'
+                end
 
     if changes['amount'].nil?
       if changes['no_cost'].instance_of?(Array)
@@ -133,7 +146,8 @@ module ApplicationHelper
   def parse_meal_resident_audit(audit) # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity --audit change parsing with many attribute branches
     changes = audit.audited_changes
     resident = if audit.action == 'update'
-                 MealResident.find_by(id: audit.auditable_id)&.resident
+                 MealResident.find_by(id: audit.auditable_id)&.resident ||
+                   resident_from_audit_trail('MealResident', audit.auditable_id)
                else
                  Resident.find_by(id: changes['resident_id'])
                end

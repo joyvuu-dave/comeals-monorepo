@@ -121,14 +121,40 @@ RSpec.describe ApplicationHelper do
       expect(helper.parse_audit(audit)).to eq("Bill for #{name} changed from $30.00 to $0.00 and marked as no cost")
     end
 
-    it 'parses bill audit when resident has been deleted' do
+    it 'resolves resident name from audit trail when bill resident association is nil' do
       bill = create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('30'))
       bill.update!(amount: BigDecimal('50'))
       audit = bill.audits.where(action: 'update').last
       stub_bill = Bill.find(bill.id)
       allow(Bill).to receive(:find_by).with(id: audit.auditable_id).and_return(stub_bill)
       allow(stub_bill).to receive(:resident).and_return(nil)
-      expect(helper.parse_audit(audit)).to eq('Bill for unknown changed from $30.00 to $50.00')
+      name = helper.resident_name_helper(resident.name)
+      expect(helper.parse_audit(audit)).to eq("Bill for #{name} changed from $30.00 to $50.00")
+    end
+
+    it 'resolves resident name for bill destroy audit after bill is deleted' do
+      bill = create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('30'))
+      bill.destroy!
+      destroy_audit = Audited::Audit.find_by(auditable_type: 'Bill', auditable_id: bill.id, action: 'destroy')
+      name = helper.resident_name_helper(resident.name)
+      expect(helper.parse_audit(destroy_audit)).to eq("#{name} removed as cook")
+    end
+
+    it 'resolves resident name for bill create audit after bill is later deleted' do
+      bill = create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('30'))
+      create_audit = bill.audits.where(action: 'create').first
+      bill.destroy!
+      name = helper.resident_name_helper(resident.name)
+      expect(helper.parse_audit(create_audit)).to eq("#{name} added as cook")
+    end
+
+    it 'resolves resident name for meal_resident update audit after record is deleted' do
+      mr = create(:meal_resident, meal: meal, resident: resident, community: community, late: false)
+      mr.update!(late: true)
+      update_audit = mr.audits.where(action: 'update').last
+      mr.destroy!
+      name = helper.resident_name_helper(resident.name)
+      expect(helper.parse_audit(update_audit)).to include("#{name} marked late")
     end
 
     it 'parses meal_resident create audit' do
