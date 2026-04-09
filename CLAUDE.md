@@ -80,6 +80,7 @@ SETTLEMENT (reconciliation): Rounded to cents using largest-remainder allocation
 - **Explicit over implicit.** Name things clearly. `bill.amount` is the cook's actual cost. `bill.effective_amount` accounts for `no_cost` flag.
 - **Test edge cases.** Zero multiplier, zero cost, single attendee, no attendees, meal with only children, meal with only guests, etc.
 - **Database constraints.** Use NOT NULL, CHECK constraints, and foreign keys. Don't rely on Rails validations alone — the database is the last line of defense.
+- **No Co-Authored-By trailers in commits.** Do not add `Co-Authored-By` lines or any other AI attribution metadata to git commit messages. Ever.
 
 ## Architecture Decisions
 
