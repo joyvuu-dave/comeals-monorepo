@@ -175,6 +175,20 @@ class Reconciliation < ApplicationRecord
     end
   end
 
+  # Settlement balances grouped by unit. Returns { [unit_id, unit_name] => BigDecimal }
+  # for every community unit, including units whose residents all have $0.00 balances.
+  def unit_balances
+    grouped = reconciliation_balances
+              .joins(resident: :unit)
+              .group('units.id', 'units.name')
+              .sum(:amount)
+
+    community.units.order(:name).each_with_object({}) do |unit, result|
+      key = [unit.id, unit.name]
+      result[key] = grouped[key] || BigDecimal('0')
+    end
+  end
+
   def balance_for(resident)
     reconciliation_balances.find_by(resident_id: resident.id)&.amount || BigDecimal('0')
   end

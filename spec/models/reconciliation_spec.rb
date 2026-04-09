@@ -781,4 +781,68 @@ RSpec.describe Reconciliation do
       expect(balances.values.sum(BigDecimal('0'))).to eq(BigDecimal('0'))
     end
   end
+
+  describe '#unit_balances' do
+    it 'groups settlement balances by unit and sums to exactly zero' do
+      unit_a = create(:unit, community: community, name: 'Unit A')
+      unit_b = create(:unit, community: community, name: 'Unit B')
+      cook = create(:resident, community: community, unit: unit_a, multiplier: 1)
+      eater1 = create(:resident, community: community, unit: unit_b, multiplier: 1)
+      eater2 = create(:resident, community: community, unit: unit_b, multiplier: 1)
+
+      meal = create(:meal, community: community)
+      create(:meal_resident, meal: meal, resident: eater1, community: community)
+      create(:meal_resident, meal: meal, resident: eater2, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('50'))
+      meal.reload
+
+      reconciliation = described_class.create!(
+        community: community, start_date: 2.years.ago.to_date, end_date: Time.zone.today
+      )
+
+      result = reconciliation.unit_balances
+
+      expect(result[[unit_a.id, 'Unit A']]).to eq(BigDecimal('50'))
+      expect(result[[unit_b.id, 'Unit B']]).to eq(BigDecimal('-50'))
+      expect(result.values.sum(BigDecimal('0'))).to eq(BigDecimal('0'))
+    end
+
+    it 'includes units whose residents all have zero balance' do
+      unit_a = create(:unit, community: community, name: 'Unit A')
+      unit_b = create(:unit, community: community, name: 'Unit B')
+      cook = create(:resident, community: community, unit: unit_a, multiplier: 1)
+      eater = create(:resident, community: community, unit: unit_a, multiplier: 1)
+      # unit_b resident does not participate in any meals
+      create(:resident, community: community, unit: unit_b, multiplier: 1)
+
+      meal = create(:meal, community: community)
+      create(:meal_resident, meal: meal, resident: eater, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
+      meal.reload
+
+      reconciliation = described_class.create!(
+        community: community, start_date: 2.years.ago.to_date, end_date: Time.zone.today
+      )
+
+      result = reconciliation.unit_balances
+
+      expect(result.keys.map(&:last)).to include('Unit B')
+      expect(result[[unit_b.id, 'Unit B']]).to eq(BigDecimal('0'))
+      expect(result.values.sum(BigDecimal('0'))).to eq(BigDecimal('0'))
+    end
+
+    it 'returns all community units with zero balances for empty reconciliation' do
+      create(:unit, community: community, name: 'Unit A')
+      create(:unit, community: community, name: 'Unit B')
+
+      reconciliation = described_class.create!(
+        community: community, start_date: 2.years.ago.to_date, end_date: Time.zone.today
+      )
+
+      result = reconciliation.unit_balances
+
+      expect(result.size).to eq(2)
+      expect(result.values).to all(eq(BigDecimal('0')))
+    end
+  end
 end

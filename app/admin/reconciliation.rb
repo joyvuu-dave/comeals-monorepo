@@ -43,6 +43,20 @@ ActiveAdmin.register Reconciliation do
         strong "Total: #{number_to_currency(total)}"
       end
     end
+
+    panel 'Unit Balances' do
+      unit_bals = reconciliation.unit_balances
+
+      table_for unit_bals do
+        column('Unit') { |(unit_id, unit_name), _| link_to unit_name, admin_unit_path(unit_id) }
+        column('Balance') { |_, amount| number_to_currency(amount) }
+      end
+
+      total = unit_bals.values.sum(BigDecimal('0'))
+      div class: 'settlement-total' do
+        strong "Total: #{number_to_currency(total)}"
+      end
+    end
   end
 
   # FORM
