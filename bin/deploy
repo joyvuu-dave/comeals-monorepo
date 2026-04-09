@@ -111,14 +111,14 @@ preflight_check() {
   step "Pre-flight: $name ($path)"
   cd "$path"
 
-  # (a) On master branch?
+  # (a) On main branch?
   local branch
   branch=$(git rev-parse --abbrev-ref HEAD)
-  if [ "$branch" != "master" ]; then
-    fail "On branch '$branch', expected 'master'"
+  if [ "$branch" != "main" ]; then
+    fail "On branch '$branch', expected 'main'"
     exit 1
   fi
-  ok "On master branch"
+  ok "On main branch"
 
   # (b) No uncommitted changes?
   if [ -n "$(git status --porcelain)" ]; then
@@ -135,21 +135,21 @@ preflight_check() {
   git fetch origin -p -P --quiet
 
   local ahead behind
-  ahead=$(git rev-list origin/master..HEAD --count)
-  behind=$(git rev-list HEAD..origin/master --count)
+  ahead=$(git rev-list origin/main..HEAD --count)
+  behind=$(git rev-list HEAD..origin/main --count)
 
   if [ "$ahead" -gt 0 ]; then
-    fail "$ahead unpushed commit(s) on master"
+    fail "$ahead unpushed commit(s) on main"
     exit 1
   fi
   ok "No unpushed commits"
 
   if [ "$behind" -gt 0 ]; then
-    info "Local is $behind commit(s) behind origin/master, pulling..."
+    info "Local is $behind commit(s) behind origin/main, pulling..."
     git pull --ff-only --quiet
     ok "Pulled $behind commit(s)"
   else
-    ok "Up to date with origin/master"
+    ok "Up to date with origin/main"
   fi
 }
 
@@ -296,8 +296,8 @@ deploy_backend() {
 
   # Push deploy: dyno restarts with brief downtime. The release phase
   # (db:migrate) runs but is a no-op since there are no pending migrations.
-  info "Pushing master:main to Heroku (no migrations)..."
-  git push heroku master:main --force
+  info "Pushing main to Heroku (no migrations)..."
+  git push heroku main --force
   ok "Code pushed — release phase complete"
 
   # Flush stale cached serializer data. Non-fatal — a transient MemCachier
@@ -330,8 +330,8 @@ deploy_backend_maintenance() {
   # git push is synchronous — it blocks until build AND release phase complete.
   # The release phase (Procfile: bin/rake db:migrate) runs migrations automatically.
   # If the release phase fails, git push exits non-zero and set -e aborts here.
-  info "Pushing master:main to Heroku (release phase runs migrations)..."
-  git push heroku master:main --force
+  info "Pushing main to Heroku (release phase runs migrations)..."
+  git push heroku main --force
   ok "Code pushed and migrations complete"
 
   # Flush stale cached serializer data. Non-fatal — a transient MemCachier
@@ -361,8 +361,8 @@ deploy_frontend() {
   step "Deploying frontend ($FRONTEND_APP)"
   cd "$FRONTEND_PATH"
 
-  info "Pushing master:main to Heroku..."
-  git push heroku master:main --force
+  info "Pushing main to Heroku..."
+  git push heroku main --force
   ok "Code pushed"
 }
 
@@ -374,8 +374,8 @@ deploy_frontend_maintenance() {
   heroku ps:scale web=0 -a "$FRONTEND_APP"
   ok "Web dynos scaled to 0"
 
-  info "Pushing master:main to Heroku..."
-  git push heroku master:main --force
+  info "Pushing main to Heroku..."
+  git push heroku main --force
   ok "Code pushed"
 
   info "Scaling web dyno back up..."
