@@ -27,13 +27,20 @@ ActiveAdmin.register Reconciliation do
     end
 
     panel 'Settlement Balances' do
-      table_for reconciliation.reconciliation_balances
-                              .includes(resident: :unit)
-                              .joins(resident: :unit)
-                              .order('units.name, residents.name') do
+      balances = reconciliation.reconciliation_balances
+                               .includes(resident: :unit)
+                               .joins(resident: :unit)
+                               .order('units.name, residents.name')
+
+      table_for balances do
         column('Resident') { |rb| link_to rb.resident.name, admin_resident_path(rb.resident) }
         column('Unit') { |rb| rb.resident.unit.name }
         column('Balance') { |rb| number_to_currency(rb.amount) }
+      end
+
+      total = balances.sum(:amount)
+      div class: 'settlement-total' do
+        strong "Total: #{number_to_currency(total)}"
       end
     end
   end

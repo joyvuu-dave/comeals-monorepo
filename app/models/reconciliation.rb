@@ -160,13 +160,18 @@ class Reconciliation < ApplicationRecord
   end
 
   # Persist settlement balances to reconciliation_balances table.
+  # Idempotent: clears existing balances first, then writes fresh values.
   # Only stores non-zero balances to keep the table lean.
   def persist_balances!
     balances = settlement_balances
-    balances.each do |resident_id, amount|
-      next if amount.zero?
 
-      reconciliation_balances.create!(resident_id: resident_id, amount: amount)
+    transaction do
+      reconciliation_balances.delete_all
+      balances.each do |resident_id, amount|
+        next if amount.zero?
+
+        reconciliation_balances.create!(resident_id: resident_id, amount: amount)
+      end
     end
   end
 
