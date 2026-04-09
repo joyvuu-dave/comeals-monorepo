@@ -83,7 +83,6 @@ RSpec.describe 'billing:recalculate correctness', :benchmark, type: :task do
           meal_id: meal.id,
           resident_id: host.id,
           multiplier: 2,
-          name: 'Guest',
           vegetarian: false,
           late: false,
           created_at: now,

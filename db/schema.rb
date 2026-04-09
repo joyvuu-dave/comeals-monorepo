@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_08_000002) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_09_152612) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_stat_statements"
@@ -136,7 +136,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_08_000002) do
     t.boolean "late", default: false, null: false
     t.bigint "meal_id", null: false
     t.integer "multiplier", default: 2, null: false
-    t.string "name", default: "", null: false
     t.bigint "resident_id", null: false
     t.datetime "updated_at", precision: nil, null: false
     t.boolean "vegetarian", default: false, null: false

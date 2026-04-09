@@ -206,7 +206,7 @@ RSpec.describe Meal do
       meal = create(:meal, community: community)
       resident = create(:resident, community: community, unit: unit, multiplier: 2)
       create(:meal_resident, meal: meal, resident: resident, community: community)
-      create(:guest, meal: meal, resident: resident, multiplier: 1, name: 'Guest')
+      create(:guest, meal: meal, resident: resident, multiplier: 1)
       meal.reload
 
       expect(meal.multiplier).to eq(3)
@@ -221,7 +221,7 @@ RSpec.describe Meal do
       meal = create(:meal, community: community)
       resident = create(:resident, community: community, unit: unit, multiplier: 2)
       create(:meal_resident, meal: meal, resident: resident, community: community)
-      create(:guest, meal: meal, resident: resident, multiplier: 1, name: 'Guest')
+      create(:guest, meal: meal, resident: resident, multiplier: 1)
 
       # Unloaded path (SQL SUM)
       unloaded = described_class.find(meal.id)
@@ -241,7 +241,7 @@ RSpec.describe Meal do
       meal = create(:meal, community: community)
       resident = create(:resident, community: community, unit: unit, multiplier: 2)
       create(:meal_resident, meal: meal, resident: resident, community: community)
-      create(:guest, meal: meal, resident: resident, multiplier: 1, name: 'A Guest')
+      create(:guest, meal: meal, resident: resident, multiplier: 1)
       meal.reload
 
       expect(meal.attendees_count).to eq(2)
@@ -256,7 +256,7 @@ RSpec.describe Meal do
       meal = create(:meal, community: community)
       resident = create(:resident, community: community, unit: unit, multiplier: 2)
       create(:meal_resident, meal: meal, resident: resident, community: community)
-      create(:guest, meal: meal, resident: resident, multiplier: 1, name: 'A Guest')
+      create(:guest, meal: meal, resident: resident, multiplier: 1)
 
       # Unloaded path (SQL COUNT)
       unloaded = described_class.find(meal.id)

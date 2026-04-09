@@ -184,7 +184,6 @@ RSpec.describe 'Reconciliation#settlement_balances performance', :benchmark, typ
           meal_id: meal.id,
           resident_id: host.id,
           multiplier: 2,
-          name: "Guest of #{host.name}",
           vegetarian: false,
           late: false,
           created_at: now,

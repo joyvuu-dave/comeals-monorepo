@@ -523,7 +523,7 @@ RSpec.describe Reconciliation do
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
 
       meal = create(:meal, community: community)
-      create(:guest, meal: meal, resident: host, multiplier: 2, name: 'Guest')
+      create(:guest, meal: meal, resident: host, multiplier: 2)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
       meal.reload
 

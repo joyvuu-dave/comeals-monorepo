@@ -90,7 +90,9 @@ class Meal < ApplicationRecord
   before_save :conditionally_set_closed_at
   before_create :set_cap
 
-  accepts_nested_attributes_for :guests, allow_destroy: true, reject_if: proc { |attributes| attributes['name'].blank? }
+  accepts_nested_attributes_for :guests, allow_destroy: true, reject_if: proc { |attributes|
+    attributes['resident_id'].blank?
+  }
   accepts_nested_attributes_for :bills, allow_destroy: true, reject_if: proc { |attributes|
     attributes['resident_id'].blank?
   }

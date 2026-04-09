@@ -65,8 +65,8 @@ ActiveAdmin.register Resident do
         end
       end
       table_for resident.guests.all do
-        column 'Guest Name' do |guest|
-          li guest.name
+        column 'Meal' do |guest|
+          link_to guest.meal.date, admin_meal_path(guest.meal)
         end
         column 'Price Category', :multiplier do |guest|
           if guest.multiplier == 2

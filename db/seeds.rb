@@ -76,14 +76,12 @@ Meal.find_each do |meal|
     if (index % 10).zero?
       num = Random.rand(1..3)
       if num == 1
-        Guest.create!(name: "Guest #{resident.id}",
-                      multiplier: 2,
+        Guest.create!(multiplier: 2,
                       vegetarian: true,
                       resident_id: resident.id,
                       meal_id: meal.id)
       else
-        Guest.create!(name: "Guest #{resident.id}",
-                      multiplier: 2,
+        Guest.create!(multiplier: 2,
                       vegetarian: false,
                       resident_id: resident.id,
                       meal_id: meal.id)
@@ -146,14 +144,12 @@ Meal.find_each do |meal|
     if (index % 10).zero?
       num = Random.rand(1..3)
       if num == 1
-        Guest.create!(name: "Guest #{resident.id}",
-                      multiplier: 2,
+        Guest.create!(multiplier: 2,
                       vegetarian: true,
                       resident_id: resident.id,
                       meal_id: meal.id)
       else
-        Guest.create!(name: "Guest #{resident.id}",
-                      multiplier: 2,
+        Guest.create!(multiplier: 2,
                       vegetarian: false,
                       resident_id: resident.id,
                       meal_id: meal.id)

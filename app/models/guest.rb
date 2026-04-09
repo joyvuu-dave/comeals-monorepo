@@ -7,7 +7,6 @@
 #  id          :bigint           not null, primary key
 #  late        :boolean          default(FALSE), not null
 #  multiplier  :integer          default(2), not null
-#  name        :string           default(""), not null
 #  vegetarian  :boolean          default(FALSE), not null
 #  created_at  :datetime         not null
 #  updated_at  :datetime         not null

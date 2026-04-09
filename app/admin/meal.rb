@@ -3,7 +3,7 @@
 ActiveAdmin.register Meal do
   # STRONG PARAMS
   permit_params :date, :subdomain, :closed, :max, :community_id,
-                guests_attributes: %i[id name multiplier resident_id meal_id _destroy], resident_ids: []
+                guests_attributes: %i[id multiplier resident_id meal_id _destroy], resident_ids: []
 
   # CONFIG
   filter :reconciliation_id_null, as: :select, collection: [['Yes', false], ['No', true]], include_blank: false,
@@ -58,9 +58,9 @@ ActiveAdmin.register Meal do
           link_to resident.name, admin_resident_path(resident)
         end
       end
-      table_for meal.guests.order(:name) do
+      table_for meal.guests.order(:created_at) do
         column 'Guests in Attendance' do |guest|
-          li "#{guest.name} (host: #{guest.resident.name})"
+          li "Guest of #{guest.resident.name}"
         end
       end
       table_for meal.bills.all do
@@ -85,7 +85,6 @@ ActiveAdmin.register Meal do
     f.inputs do
       f.has_many :guests, allow_destroy: true, heading: 'Guests', new_record: true do |g|
         g.input :_destroy, as: :hidden
-        g.input :name
         g.input :multiplier, label: 'Price Category', as: :select, include_blank: false,
                              collection: [['Adult', 2], ['Child', 1]]
         g.input :resident, label: 'Host',
