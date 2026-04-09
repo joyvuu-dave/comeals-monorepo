@@ -55,7 +55,7 @@ module Api
         hosts = Resident.adult.active.joins(:unit).order('units.name').pluck(
           'residents.id', 'residents.name', 'units.name'
         )
-        render json: hosts
+        render json: hosts, adapter: nil
       end
 
       # GET /api/v1/communities/:id/calendar/:date

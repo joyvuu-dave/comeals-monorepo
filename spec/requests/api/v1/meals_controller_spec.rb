@@ -154,6 +154,17 @@ RSpec.describe 'Meals API' do
 
       expect(response).to have_http_status(:ok)
       expect(meal.meal_residents.find_by(resident: resident)).to be_present
+
+      body = response.parsed_body
+      expect(body).to have_key('id')
+      expect(body).to have_key('meal_id')
+      expect(body).to have_key('resident_id')
+      expect(body).to have_key('late')
+      expect(body).to have_key('vegetarian')
+      expect(body).to have_key('created_at')
+      expect(body).not_to have_key('multiplier')
+      expect(body).not_to have_key('community_id')
+      expect(body).not_to have_key('updated_at')
     end
 
     it 'copies the resident multiplier to the meal_resident' do
@@ -296,6 +307,19 @@ RSpec.describe 'Meals API' do
       expect(response).to have_http_status(:ok)
       expect(meal.guests.count).to eq(1)
       expect(meal.guests.first.resident).to eq(resident)
+
+      body = response.parsed_body
+      expect(body).to have_key('id')
+      expect(body).to have_key('meal_id')
+      expect(body).to have_key('resident_id')
+      expect(body).to have_key('name')
+      expect(body).to have_key('vegetarian')
+      expect(body).to have_key('created_at')
+      expect(body['meal_id']).to eq(meal.id)
+      expect(body['resident_id']).to eq(resident.id)
+      expect(body).not_to have_key('multiplier')
+      expect(body).not_to have_key('late')
+      expect(body).not_to have_key('updated_at')
     end
 
     it 'sets the vegetarian flag on the guest' do

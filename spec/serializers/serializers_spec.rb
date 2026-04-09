@@ -253,6 +253,56 @@ RSpec.describe 'Serializers', type: :serializer do
     end
   end
 
+  describe GuestSerializer do
+    it 'includes all expected attributes' do
+      meal = create(:meal, community: community)
+      guest = create(:guest, meal: meal, resident: resident, vegetarian: true)
+
+      result = serialize(guest, described_class)
+      expect(result).to have_key(:id)
+      expect(result).to have_key(:meal_id)
+      expect(result).to have_key(:resident_id)
+      expect(result).to have_key(:name)
+      expect(result).to have_key(:vegetarian)
+      expect(result).to have_key(:created_at)
+    end
+
+    it 'does not expose multiplier, late, or updated_at' do
+      meal = create(:meal, community: community)
+      guest = create(:guest, meal: meal, resident: resident)
+
+      result = serialize(guest, described_class)
+      expect(result).not_to have_key(:multiplier)
+      expect(result).not_to have_key(:late)
+      expect(result).not_to have_key(:updated_at)
+    end
+  end
+
+  describe MealResidentSerializer do
+    it 'includes all expected attributes' do
+      meal = create(:meal, community: community)
+      mr = create(:meal_resident, meal: meal, resident: resident, community: community)
+
+      result = serialize(mr, described_class)
+      expect(result).to have_key(:id)
+      expect(result).to have_key(:meal_id)
+      expect(result).to have_key(:resident_id)
+      expect(result).to have_key(:late)
+      expect(result).to have_key(:vegetarian)
+      expect(result).to have_key(:created_at)
+    end
+
+    it 'does not expose multiplier, community_id, or updated_at' do
+      meal = create(:meal, community: community)
+      mr = create(:meal_resident, meal: meal, resident: resident, community: community)
+
+      result = serialize(mr, described_class)
+      expect(result).not_to have_key(:multiplier)
+      expect(result).not_to have_key(:community_id)
+      expect(result).not_to have_key(:updated_at)
+    end
+  end
+
   describe RotationLogSerializer do
     it 'includes residents with signed_up status' do
       rotation = create(:rotation, community: community)

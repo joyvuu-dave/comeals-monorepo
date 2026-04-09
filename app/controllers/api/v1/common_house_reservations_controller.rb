@@ -25,7 +25,7 @@ module Api
                              .joins(:unit).order('units.name')
                              .pluck('residents.id', 'residents.name', 'units.name')
 
-        render json: { event: @chr, residents: residents }
+        render json: { event: @chr, residents: residents }, adapter: nil
       end
 
       # POST /api/v1/common-house-reservations

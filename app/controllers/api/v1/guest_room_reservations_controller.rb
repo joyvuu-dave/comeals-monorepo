@@ -24,7 +24,7 @@ module Api
         active_residents = Community.instance.residents.adult.active
         hosts = active_residents.joins(:unit).order('units.name')
                                 .pluck('residents.id', 'residents.name', 'units.name')
-        render json: { event: @grr, hosts: hosts }
+        render json: { event: @grr, hosts: hosts }, adapter: nil
       end
 
       # POST /api/v1/guest-room-reservations/create
