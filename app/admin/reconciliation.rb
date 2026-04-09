@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 ActiveAdmin.register Reconciliation do
-  menu label: 'Recon.'
+  menu label: 'Reconciliations'
 
   # CONFIG
   config.filters = false
