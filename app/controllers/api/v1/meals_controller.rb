@@ -203,8 +203,9 @@ module Api
           return
         end
 
-        # All DB writes in one atomic transaction
-        ActiveRecord::Base.transaction do
+        # Pessimistic lock on the meal row prevents concurrent update_bills
+        # calls from interleaving (same pattern as create_meal_resident).
+        @meal.with_lock do
           @meal.update!(cook_ids: cook_ids)
           @meal.reload
           parsed_bills.each do |bill|
