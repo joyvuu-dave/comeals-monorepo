@@ -51,7 +51,7 @@
 | `COMEALS_DATABASE_PASSWORD` | Heroku config | Not needed if using `DATABASE_URL` |
 | `GMAIL_USERNAME` | Heroku config | Copy as-is |
 | `GMAIL_APP_PASSWORD` | Heroku config | Copy as-is |
-| `HEROKU_OAUTH_TOKEN` | Heroku config | **Remove** — replace version endpoint |
+| `HEROKU_OAUTH_TOKEN` | Heroku config | **Already removed** — no longer used in code (see Step 2.5) |
 | `READ_ONLY_ADMIN_TOKEN` | Heroku config | Copy as-is |
 | `MAILER_FROM_ADDRESS` | Heroku config (or defaults to `admin@comeals.com`) | Copy as-is |
 
@@ -129,21 +129,14 @@ production:
   pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 1 } %>
 ```
 
-### Step 2.5: Replace Heroku Version Endpoint
-The `GET /api/v1/version` endpoint in `app/controllers/api/v1/site_controller.rb` uses the Heroku API (`platform-api` gem + `HEROKU_OAUTH_TOKEN`). This must be replaced.
+### Step 2.5: Version Endpoint
+The `GET /api/v1/version` endpoint in `app/controllers/api/v1/site_controller.rb` currently reads `ENV['HEROKU_RELEASE_VERSION']` (set per-dyno by Heroku's Dyno Metadata feature) and returns `{ version: <integer> }`. **No frontend code consumes this endpoint** — `comeals-ui`'s `VersionBanner` polls `/.vite/manifest.json` directly to detect new builds. Unless something external (uptime check, monitoring probe) relies on it, the endpoint is dead code.
 
 **Options (pick one):**
-- **A) Git SHA:** Set `RAILWAY_GIT_COMMIT_SHA` (Railway provides this automatically) and return it as the version.
-- **B) Release timestamp:** Return `ENV['RAILWAY_DEPLOYMENT_ID']` or a build-time value.
-- **C) Remove entirely:** If the frontend only uses this for display, consider removing it.
+- **A) Delete it.** Remove the controller action, the route in `config/routes.rb`, and the spec. Simplest — no Railway env var work needed, and removes a stale endpoint.
+- **B) Swap to a Railway env var.** Replace `ENV['HEROKU_RELEASE_VERSION']&.delete_prefix('v')&.to_i` with `ENV.fetch('RAILWAY_GIT_COMMIT_SHA', 'unknown')[0..7]`. Note this changes the response shape from `{ version: <integer> }` to `{ version: "<7-char sha>" }` — verify no external caller parses the field as an integer first.
 
-**Recommended:** Option A. Replace the Heroku API call with:
-```ruby
-def version
-  render json: { version: ENV.fetch('RAILWAY_GIT_COMMIT_SHA', 'unknown')[0..7] }
-end
-```
-Then remove the `platform-api` gem from the Gemfile.
+**Recommended:** Option A. The frontend doesn't use the endpoint, and keeping it around just to return a build identifier nothing reads is pure cruft.
 
 ### Step 2.6: Decide on Memcached {#memcached-decision}
 Railway doesn't have a native MemCachier add-on. Options:
@@ -490,7 +483,6 @@ curl -s -H "Authorization: Bearer $DNSIMPLE_TOKEN" \
 - Check that no requests are still hitting Heroku (Heroku logs)
 
 ### Step 6.3: Code Cleanup
-- Remove `platform-api` gem from Gemfile (Heroku API client)
 - Update `bin/deploy` script for Railway (or replace entirely)
 - Update `DEPLOY_CHECKLIST.md` for Railway
 - Remove Heroku git remotes:
@@ -568,7 +560,7 @@ If Railway has critical issues during or after cutover:
 - [ ] Create DNSimple API token
 - [ ] Save current DNS records snapshot
 - [ ] Update `database.yml` to use `DATABASE_URL`
-- [ ] Replace Heroku version endpoint
+- [ ] Decide on version endpoint (delete or swap to Railway env var — see Step 2.5)
 - [ ] Decide on Memcached replacement (Redis recommended)
 - [ ] Test full flow on spare domain
 

@@ -4,26 +4,23 @@ module Api
   module V1
     class SiteController < ApiController
       # GET /api/v1/version
-      # Cached in process memory — clears on dyno restart (every deploy).
-      # Returns nil on API failure so ||= retries on the next request.
+      # Returns the current Heroku release number so you can hit a URL and see
+      # what's deployed. HEROKU_RELEASE_VERSION is set per-dyno by Heroku's
+      # Dyno Metadata feature (e.g. "v42"); it's fixed for the life of the
+      # dyno and changes only on the next release. Returns 0 outside
+      # production and 1 when we can't parse a real release in production
+      # (missing or malformed env var) — sentinel values, not real releases.
       def version
-        if Rails.env.production?
-          @@cached_version ||= fetch_heroku_version # rubocop:disable Style/ClassVars -- intentional process-memory cache, cleared on dyno restart
-          render json: { version: @@cached_version || 1 }
-        else
-          render json: { version: 0 }
-        end
+        render json: { version: heroku_release_number }
       end
 
       private
 
-      def fetch_heroku_version
-        require 'platform-api'
-        heroku = PlatformAPI.connect_oauth(ENV.fetch('HEROKU_OAUTH_TOKEN', nil))
-        heroku.release.list('comeals').to_a.last['version']
-      rescue StandardError => e
-        Rails.logger.info e
-        nil # Don't cache failures — ||= will retry on next request
+      def heroku_release_number
+        return 0 unless Rails.env.production?
+
+        parsed = ENV['HEROKU_RELEASE_VERSION'].to_s.delete_prefix('v').to_i
+        parsed.positive? ? parsed : 1
       end
     end
   end

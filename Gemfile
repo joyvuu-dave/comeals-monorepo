@@ -41,7 +41,6 @@ gem 'friendly_id'
 gem 'goldiloader'
 gem 'icalendar'
 gem 'letter_opener_web', group: :development
-gem 'platform-api', require: false
 gem 'pusher'
 gem 'scrypt'
 gem 'skylight', group: :production
