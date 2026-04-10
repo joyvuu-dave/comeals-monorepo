@@ -1,25 +1,33 @@
 //= require active_admin/base
-//= require moment/moment
 
 $(function() {
+  // Equivalent of moment's 'ddd, MMM D YYYY' — produces e.g. "Wed, Mar 5 2025".
+  function formatMealDate(d) {
+    var weekday = d.toLocaleDateString('en-US', { weekday: 'short' });
+    var month   = d.toLocaleDateString('en-US', { month: 'short' });
+    return weekday + ', ' + month + ' ' + d.getDate() + ' ' + d.getFullYear();
+  }
+
   // Format day of week on Meal index page
   $('td.col-date').each(function() {
     if ($(this).text()) {
-      $(this).text(moment(new Date($(this).text())).format('ddd, MMM D YYYY'));
+      $(this).text(formatMealDate(new Date($(this).text())));
     }
   });
 
   // Format day of week on Bill index page
   $('td.col-meal').each(function() {
     if ($(this).text()) {
-      $(this).text(moment(new Date($(this).text())).format('ddd, MMM D YYYY'));
+      $(this).text(formatMealDate(new Date($(this).text())));
     }
   });
 
   // Add day of week to options on Bill edit page
   $('#bill_meal_id option').each(function() {
     if ($(this).text()) {
-      $(this).text(moment(new Date($(this).text())).add(1, 'days').format('ddd, MMM D YYYY'));
+      var d = new Date($(this).text());
+      d.setDate(d.getDate() + 1);
+      $(this).text(formatMealDate(d));
     }
   });
 
