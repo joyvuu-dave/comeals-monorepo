@@ -41,7 +41,7 @@
 |----------|--------|----------------|
 | `RAILS_ENV` | Heroku default | Set to `production` |
 | `RAILS_MAX_THREADS` | Heroku config | Set to `1` |
-| `WEB_CONCURRENCY` | Heroku config | Set to `2` |
+| `WEB_CONCURRENCY` | Heroku config | Set to `1` |
 | `RAILS_LOG_TO_STDOUT` | Heroku config | Set to `true` |
 | `SECRET_KEY_BASE` | Heroku config | Copy from Heroku or generate new |
 | `DATABASE_URL` | Heroku Postgres | Use `${{Postgres.DATABASE_URL}}` reference |
@@ -189,7 +189,7 @@ Set environment variables in Railway dashboard (or via CLI):
 ```
 RAILS_ENV=production
 RAILS_MAX_THREADS=1
-WEB_CONCURRENCY=2
+WEB_CONCURRENCY=1
 RAILS_LOG_TO_STDOUT=true
 SECRET_KEY_BASE=<generate with `rails secret`>
 DATABASE_URL=${{Postgres.DATABASE_URL}}
