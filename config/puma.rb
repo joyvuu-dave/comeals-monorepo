@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
-# Single thread per worker to eliminate thread-safety concerns in financial
-# code. All concurrency comes from worker processes (see WEB_CONCURRENCY).
+# Single thread to eliminate thread-safety concerns in financial code.
 # The database connection pool in database.yml tracks this value.
 #
 max_threads_count = ENV.fetch('RAILS_MAX_THREADS', 1)
@@ -24,20 +23,12 @@ environment ENV.fetch('RAILS_ENV', 'development')
 # Specifies the `pidfile` that Puma will use.
 pidfile ENV.fetch('PIDFILE', 'tmp/pids/server.pid')
 
-# Specifies the number of `workers` to boot in clustered mode.
-# Workers are forked web server processes. If using threads and workers together
-# the concurrency of the application would be max `threads` * `workers`.
-# Workers do not work on JRuby or Windows (both of which do not support
-# processes).
+# Run in single mode (no cluster). With one thread, cluster mode's master
+# process would be pure overhead — no parallelism, no copy-on-write sharing.
+# If you ever want to scale up, set WEB_CONCURRENCY to 2+ and add back
+# `preload_app!` for copy-on-write memory savings across workers.
 #
-workers ENV.fetch('WEB_CONCURRENCY', 1)
-
-# Use the `preload_app!` method when specifying a `workers` number.
-# This directive tells Puma to first boot the application and load code
-# before forking the application. This takes advantage of Copy On Write
-# process behavior so workers use less memory.
-#
-preload_app!
+workers ENV.fetch('WEB_CONCURRENCY', 0).to_i
 
 # Allow puma to be restarted by `bin/rails restart` command.
 plugin :tmp_restart
