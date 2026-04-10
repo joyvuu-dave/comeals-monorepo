@@ -196,13 +196,12 @@ RSpec.describe 'Reconciliation#settlement_balances performance', :benchmark, typ
     # -- Create reconciliation (bypass callbacks via insert_all) --
     Reconciliation.insert_all([{
                                 community_id: community.id,
-                                start_date: start_date,
                                 end_date: end_date,
                                 date: end_date,
                                 created_at: now,
                                 updated_at: now
                               }])
-    reconciliation = Reconciliation.find_by!(community_id: community.id, start_date: start_date, end_date: end_date)
+    reconciliation = Reconciliation.find_by!(community_id: community.id, end_date: end_date)
     reconciliation.assign_meals
 
     # Report dataset size

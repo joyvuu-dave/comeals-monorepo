@@ -7,7 +7,6 @@
 #  id           :bigint           not null, primary key
 #  date         :date             not null
 #  end_date     :date             not null
-#  start_date   :date             not null
 #  created_at   :datetime         not null
 #  updated_at   :datetime         not null
 #  community_id :bigint           not null
@@ -23,7 +22,7 @@
 class Reconciliation < ApplicationRecord
   # Ransack allowlists for ActiveAdmin sorting
   def self.ransackable_attributes(_auth_object = nil)
-    %w[id community_id date end_date start_date created_at updated_at]
+    %w[id community_id date end_date created_at updated_at]
   end
 
   has_many :meals, dependent: :nullify
@@ -32,9 +31,7 @@ class Reconciliation < ApplicationRecord
   has_many :reconciliation_balances, dependent: :destroy
   belongs_to :community
 
-  validates :start_date, presence: true
   validates :end_date, presence: true
-  validate :start_date_not_after_end_date
 
   before_validation :set_date
   after_create :finalize
@@ -47,11 +44,11 @@ class Reconciliation < ApplicationRecord
     cooks.uniq
   end
 
-  # Assigns unreconciled meals (with at least one bill) within the date range.
+  # Assigns all unreconciled meals (with at least one bill) on or before the cutoff date.
   def assign_meals
     meal_ids = Meal.unreconciled
                    .joins(:bills)
-                   .where(date: start_date..end_date)
+                   .where(date: ..end_date)
                    .distinct
                    .pluck(:id)
     Meal.where(id: meal_ids).update_all(reconciliation_id: id)
@@ -239,11 +236,5 @@ class Reconciliation < ApplicationRecord
     end
 
     truncated
-  end
-
-  def start_date_not_after_end_date
-    return unless start_date.present? && end_date.present?
-
-    errors.add(:start_date, 'must be on or before end date') if start_date > end_date
   end
 end

@@ -43,9 +43,7 @@ RSpec.describe Unit do
     end
 
     it 'returns 0 when all meals are reconciled' do
-      reconciliation = Reconciliation.create!(community: community, date: Time.zone.today,
-                                              start_date: 2.years.ago.to_date,
-                                              end_date: Time.zone.today)
+      reconciliation = Reconciliation.create!(community: community, end_date: Time.zone.today)
       meal = create(:meal, community: community)
       resident = create(:resident, community: community, unit: unit)
       create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('50'))
@@ -75,9 +73,7 @@ RSpec.describe Unit do
     end
 
     it 'does not count bills for reconciled meals' do
-      reconciliation = Reconciliation.create!(community: community, date: Time.zone.today,
-                                              start_date: 2.years.ago.to_date,
-                                              end_date: Time.zone.today)
+      reconciliation = Reconciliation.create!(community: community, end_date: Time.zone.today)
       reconciled_meal = create(:meal, community: community)
       unreconciled_meal = create(:meal, community: community)
       resident = create(:resident, community: community, unit: unit)

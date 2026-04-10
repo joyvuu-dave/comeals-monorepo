@@ -31,6 +31,7 @@ ActiveRecord::Migration.maintain_test_schema!
 RSpec.configure do |config|
   config.include FactoryBot::Syntax::Methods
   config.include QueryCounter, type: :request
+  config.include Devise::Test::IntegrationHelpers, type: :request
 
   # Reset per-request caches (CurrentAttributes) between examples so
   # Community.instance doesn't leak a stale reference across tests.

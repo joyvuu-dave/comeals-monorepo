@@ -6,6 +6,7 @@ class SuperuserAdapter < ActiveAdmin::AuthorizationAdapter
     return true if %i[create new].include?(action) && user.superuser?
     return true if %i[update edit].include?(action) && user.superuser?
     return true if action == :destroy && user.superuser?
+    return true if action == :update_meals && user.superuser?
 
     false
   end

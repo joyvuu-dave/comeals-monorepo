@@ -7,7 +7,6 @@
 #  id           :bigint           not null, primary key
 #  date         :date             not null
 #  end_date     :date             not null
-#  start_date   :date             not null
 #  created_at   :datetime         not null
 #  updated_at   :datetime         not null
 #  community_id :bigint           not null
@@ -24,7 +23,6 @@ FactoryBot.define do
   factory :reconciliation do
     community
     date { Time.zone.today }
-    start_date { Time.zone.today - 1.year }
     end_date { Time.zone.today }
   end
 end

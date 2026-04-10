@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_09_152612) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_10_032155) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_stat_statements"
@@ -205,10 +205,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_09_152612) do
     t.datetime "created_at", precision: nil, null: false
     t.date "date", null: false
     t.date "end_date", null: false
-    t.date "start_date", null: false
     t.datetime "updated_at", precision: nil, null: false
     t.index ["community_id"], name: "index_reconciliations_on_community_id"
-    t.check_constraint "start_date <= end_date", name: "reconciliations_date_range_valid"
   end
 
   create_table "resident_balances", force: :cascade do |t|

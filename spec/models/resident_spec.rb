@@ -251,9 +251,7 @@ RSpec.describe Resident do
     end
 
     it 'excludes reconciled meals from balance' do
-      reconciliation = Reconciliation.create!(community: community, date: Time.zone.today,
-                                              start_date: 2.years.ago.to_date,
-                                              end_date: Time.zone.today)
+      reconciliation = Reconciliation.create!(community: community, end_date: Time.zone.today)
       resident = create(:resident, community: community, unit: unit, multiplier: 2)
 
       # Reconciled meal — should be excluded
@@ -384,9 +382,7 @@ RSpec.describe Resident do
   describe '#meals_attended' do
     it 'counts only unreconciled meals' do
       resident = create(:resident, community: community, unit: unit, multiplier: 2)
-      reconciliation = Reconciliation.create!(community: community, date: Time.zone.today,
-                                              start_date: 2.years.ago.to_date,
-                                              end_date: Time.zone.today)
+      reconciliation = Reconciliation.create!(community: community, end_date: Time.zone.today)
 
       reconciled_meal = create(:meal, community: community, reconciliation: reconciliation)
       create(:meal_resident, meal: reconciled_meal, resident: resident, community: community)
@@ -408,9 +404,7 @@ RSpec.describe Resident do
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('100'))
       meal.reload
 
-      reconciliation = Reconciliation.create!(
-        community: community, start_date: 2.years.ago.to_date, end_date: Time.zone.today
-      )
+      reconciliation = Reconciliation.create!(community: community, end_date: Time.zone.today)
 
       expect(cook.balance_for_reconciliation(reconciliation)).to eq(BigDecimal('100'))
       expect(eater.balance_for_reconciliation(reconciliation)).to eq(BigDecimal('-100'))

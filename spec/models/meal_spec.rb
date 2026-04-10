@@ -467,9 +467,7 @@ RSpec.describe Meal do
       resident = create(:resident, community: community, unit: unit, multiplier: 2)
       create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('10'))
 
-      reconciliation = Reconciliation.create!(community: community, date: Time.zone.today,
-                                              start_date: 2.years.ago.to_date,
-                                              end_date: Time.zone.today)
+      reconciliation = Reconciliation.create!(community: community, end_date: Time.zone.today)
       meal.reload
 
       expect(meal.reconciliation_id).to eq(reconciliation.id)
@@ -494,8 +492,7 @@ RSpec.describe Meal do
       create(:bill, meal: reconciled_meal, resident: resident, community: community,
                     amount: BigDecimal('10'))
 
-      Reconciliation.create!(community: community, date: Time.zone.today, start_date: 2.years.ago.to_date,
-                             end_date: Time.zone.today)
+      Reconciliation.create!(community: community, end_date: Time.zone.today)
       reconciled_meal.reload
 
       results = community.meals.unreconciled

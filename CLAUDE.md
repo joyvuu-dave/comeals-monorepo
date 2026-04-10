@@ -84,7 +84,7 @@ SETTLEMENT (reconciliation): Rounded to cents using largest-remainder allocation
 
 ## Architecture Decisions
 
-- **Reconciliations are billing periods, Rotations are cooking schedules.** These are fully decoupled. A reconciliation can span multiple rotations.
+- **Reconciliations are settlement events (with a cutoff date), Rotations are cooking schedules.** These are fully decoupled. A reconciliation sweeps all unreconciled meals up to its cutoff date and can span multiple rotations.
 - **Balances computed daily via rake task.** Not real-time. This eliminates drift and race conditions.
 - **The `resident_balances` table is a cache.** It can be rebuilt from source data at any time.
 - **Frontend compatibility is required.** Every backend change must consider impact on `../comeals-ui`. API response shapes should not change without updating the frontend.
@@ -102,6 +102,6 @@ The billing system remediation is complete and validated against production data
 
 **Rake tasks:**
 - `rake billing:recalculate` — run daily to refresh resident balances from source data
-- `rake reconciliations:create` — manual trigger to close a billing period
+- `rake reconciliations:create` — manual trigger to settle all unreconciled meals
 
 **Test coverage:** 138 tests (124 model + 14 request specs), 0 failures.

@@ -6,12 +6,47 @@ ActiveAdmin.register Reconciliation do
   # CONFIG
   config.filters = false
 
-  permit_params :community_id, :start_date, :end_date
+  permit_params :community_id, :end_date
+
+  # Update which meals are in this reconciliation. Receives a list of meal IDs
+  # that should be in the reconciliation; diffs against current state and
+  # adds/removes accordingly. Balances are recomputed once at the end.
+  #
+  # Eligible meals to add: unreconciled meals with date <= end_date.
+  # Meals from other reconciliations cannot be moved here directly — they must
+  # be removed from their current reconciliation first.
+  member_action :update_meals, method: :patch do
+    desired_ids = Array(params[:meal_ids]).to_set(&:to_i)
+    current_ids = resource.meals.pluck(:id).to_set
+
+    to_add = desired_ids - current_ids
+    to_remove = current_ids - desired_ids
+
+    ActiveRecord::Base.transaction do
+      if to_add.any?
+        eligible = Meal.where(id: to_add, reconciliation_id: nil)
+                       .where(date: ..resource.end_date)
+        if eligible.count != to_add.size
+          redirect_to resource_path, alert: 'One or more selected meals are not eligible to be added.'
+          raise ActiveRecord::Rollback
+        end
+        Meal.where(id: to_add).update_all(reconciliation_id: resource.id)
+      end
+
+      Meal.where(id: to_remove).update_all(reconciliation_id: nil) if to_remove.any?
+
+      resource.persist_balances!
+    end
+
+    return if performed?
+
+    redirect_to resource_path,
+                notice: "Updated meals in reconciliation: #{to_add.size} added, #{to_remove.size} removed. Balances recomputed."
+  end
 
   # INDEX
   index do
     column :date
-    column :start_date
     column :end_date
     column :number_of_meals, sortable: false
     actions
@@ -21,7 +56,6 @@ ActiveAdmin.register Reconciliation do
   show do
     attributes_table do
       row :date
-      row :start_date
       row :end_date
       row :number_of_meals
     end
@@ -57,14 +91,26 @@ ActiveAdmin.register Reconciliation do
         strong "Total: #{number_to_currency(total)}"
       end
     end
+
+    panel 'Meals' do
+      # Eligible meals: currently in this reconciliation OR unreconciled with
+      # date on or before the cutoff. Check to include, uncheck to exclude.
+      eligible_meals = Meal.where(community_id: reconciliation.community_id)
+                           .where('reconciliation_id = :id OR (reconciliation_id IS NULL AND date <= :end_date)',
+                                  id: reconciliation.id, end_date: reconciliation.end_date)
+                           .includes(bills: :resident)
+                           .order(:date)
+
+      render partial: 'admin/reconciliations/meals_form',
+             locals: { reconciliation: reconciliation, eligible_meals: eligible_meals }
+    end
   end
 
   # FORM
   form do |f|
     f.inputs do
       f.input :community_id, input_html: { value: Community.instance.id }, as: :hidden
-      f.input :start_date, as: :datepicker
-      f.input :end_date, as: :datepicker
+      f.input :end_date, as: :datepicker, hint: 'Settle all unreconciled meals on or before this date'
     end
     f.actions
     f.semantic_errors
