@@ -24,16 +24,10 @@ require 'rufus-scheduler'
 scheduler = Rufus::Scheduler.new
 
 def run_task(name)
-  started = Time.current
-  puts "[clock] #{started.strftime('%H:%M:%S')} Starting: #{name}"
-
   Rake::Task[name].invoke
   Rake::Task[name].reenable
-
-  elapsed = (Time.current - started).round(1)
-  puts "[clock] #{Time.current.strftime('%H:%M:%S')} Finished: #{name} (#{elapsed}s)"
 rescue StandardError => e
-  puts "[clock] #{Time.current.strftime('%H:%M:%S')} FAILED:   #{name} -- #{e.message}"
+  puts "[clock] #{Time.current.strftime('%H:%M:%S')} FAILED: #{name} -- #{e.message}"
   Rails.logger.error("[clock] #{name} failed: #{e.class}: #{e.message}\n#{e.backtrace.first(5).join("\n")}")
 end
 
