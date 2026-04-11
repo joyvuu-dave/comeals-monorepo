@@ -90,6 +90,9 @@ GEM
     bullet (8.1.0)
       activesupport (>= 3.0.0)
       uniform_notifier (~> 1.11)
+    bundler-audit (0.9.3)
+      bundler (>= 1.2.0)
+      thor (~> 1.0)
     byebug (13.0.0)
       reline (>= 0.6.0)
     case_transform (0.2)
@@ -466,6 +469,7 @@ DEPENDENCIES
   binding_of_caller
   bootsnap
   bullet
+  bundler-audit
   byebug
   csv
   dalli (~> 3.2)
@@ -529,6 +533,7 @@ CHECKSUMS
   bootsnap (1.23.0) sha256=c1254f458d58558b58be0f8eb8f6eec2821456785b7cdd1e16248e2020d3f214
   builder (3.3.0) sha256=497918d2f9dca528fdca4b88d84e4ef4387256d984b8154e9d5d3fe5a9c8835f
   bullet (8.1.0) sha256=604b7e2636ec2137dcab3ba61a56248c39a0004a0c9405d58bad0686d23b98ff
+  bundler-audit (0.9.3) sha256=81c8766c71e47d0d28a0f98c7eed028539f21a6ea3cd8f685eb6f42333c9b4e9
   byebug (13.0.0) sha256=d2263efe751941ca520fa29744b71972d39cbc41839496706f5d9b22e92ae05d
   case_transform (0.2) sha256=e2ad4418dceeb227cf474cc332cd5004c95c136c04186c1cceaad8ab8de6fe3b
   childprocess (5.1.0) sha256=9a8d484be2fd4096a0e90a0cd3e449a05bc3aa33f8ac9e4d6dcef6ac1455b6ec

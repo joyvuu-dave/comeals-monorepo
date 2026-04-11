@@ -56,9 +56,6 @@ module Comeals
     # so it compresses the final response after all other middleware are done.
     config.middleware.insert_before Rack::Sendfile, Rack::Deflater
 
-    # Disable Strong Params
-    config.action_controller.permit_all_parameters = true
-
     # Set Time Zone
     config.time_zone = 'America/Los_Angeles'
   end

@@ -53,6 +53,7 @@ gem 'bootsnap', require: false
 
 group :development, :test do
   gem 'benchmark'
+  gem 'bundler-audit', require: false
   gem 'byebug', platforms: %i[ruby mri windows]
   gem 'dotenv-rails'
   gem 'factory_bot_rails'

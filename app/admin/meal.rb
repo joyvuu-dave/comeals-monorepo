@@ -2,8 +2,8 @@
 
 ActiveAdmin.register Meal do
   # STRONG PARAMS
-  permit_params :date, :subdomain, :closed, :max, :community_id,
-                guests_attributes: %i[id multiplier resident_id meal_id _destroy], resident_ids: []
+  permit_params :date, :closed, :max, :community_id,
+                guests_attributes: %i[id multiplier resident_id meal_id _destroy], attendee_ids: []
 
   # CONFIG
   filter :reconciliation_id_null, as: :select, collection: [['Yes', false], ['No', true]], include_blank: false,
