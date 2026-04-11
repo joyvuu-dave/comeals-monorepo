@@ -65,7 +65,7 @@ Algorithm:
 Notes:
 - **Use unit cost** (`total_cost / total_multiplier`), not total cost. Total cost without per-person normalization is meaningless.
 - **Include capped meals** in the historical sample. A capped meal hitting its cap is itself a signal worth surfacing.
-- **Cold-start problem:** A brand-new community has no history, so IQR isn't meaningful. Don't flag anything until ~20 reconciled meals exist.
+- **Cold-start problem:** A brand-new community has no history, so IQR isn't meaningful. But "no flagging until 20 meals" gives zero protection during exactly the period where mistakes are most likely — new community, unfamiliar process, everyone still learning. Use a **conservative hardcoded fallback band** (e.g., $1–$50 per person-equivalent unit cost) as a crude safety net until ~20 reconciled meals exist, then switch to IQR. The fallback doesn't need to be smart — it just needs to catch obvious typos ($400 for a $40 meal) during the period where statistical methods can't.
 - **Inflation drift:** Costs change over time. We could weight recent meals more heavily, or use only the last N months. Start with all-time and refine if it becomes a problem.
 
 **Priority:** Highest-value statistical feature. Solid second after mismatch warnings.
@@ -105,14 +105,16 @@ Why timestamp over boolean:
 - `update_meals` action refuses if `finalized_at` is set
 - Editing `end_date` refuses if `finalized_at` is set
 - Read actions are unaffected
-- A "Finalize" / "Unfinalize" toggle on the show page (toggleable, but with friction — confirm dialog)
 - Visual indicator (banner, padlock icon) when finalized
+- **Unfinalize is deliberately high-friction.** Not just a confirm dialog — that's cosmetic friction and recreates the exact problem finalization is supposed to solve. Minimum bar: admin-only, audit-logged (who unlocked, when, why), and unfinalization **forces a re-derivation of the balances** on re-finalization so any drift in the underlying meal data is surfaced rather than hidden. If nothing changed underneath, the re-derivation is a no-op; if something did change, the reconciler is forced to confront it before re-locking.
 
-**Open question: should the lock also block editing the underlying meal data (bills, attendance)?**
+**Bill immutability must land *with* `finalized_at`, not as a follow-up.**
 
-CLAUDE.md states the *principle* that reconciled meals should be immutable, but that principle isn't actually enforced in code today. If we're going to take the lock seriously, we should enforce immutability of bills/attendance for meals in a finalized reconciliation. Otherwise, an admin could "lock" the reconciliation and someone could still edit a bill on one of its meals.
+CLAUDE.md already commits to the principle ("financial records are append-only / immutable where possible"); finalization is the moment we finally enforce it in code. If an admin can still edit a bill on a reconciled meal after the reconciliation is "locked," the lock is theater. Worse, this becomes actively dangerous once the collection workflow lands: once money has actually moved (see `COLLECTION_WORKFLOW.md`), silent drift in the underlying ledger means the published balances no longer match the numbers on file. `settled_at` is built on the assumption that `finalized_at` means something.
 
-This is a bigger change (validation hooks on Bill, MealResident, Guest) and could be a follow-up. The MVP is just blocking `update_meals`.
+Concretely: Bill, MealResident, and Guest all need validation hooks that refuse writes (create/update/destroy) when their parent meal belongs to a reconciliation with `finalized_at` set. Yes, this is a bigger change than just blocking `update_meals`. Ship them together anyway — a finalization feature that doesn't actually finalize is worse than no feature at all, because it invites false confidence.
+
+The intentional exception: unfinalization (see above) temporarily re-enables edits, but forces a balance re-derivation on re-finalization so nothing slips through silently.
 
 **Priority:** Simple to ship the basic version, but the bill-immutability question deserves its own discussion before we commit to a full implementation.
 
@@ -124,7 +126,9 @@ A **preview page** would change this. Pick a cutoff date, click "Preview," and s
 
 This turns reconciliation from "do it then fix problems" to "verify it then commit." It's the highest-leverage change in this whole list.
 
-**Priority:** Most ambitious of the five, but the most rewarding. Save for last so it can build on the outlier and warning work.
+**Priority:** Most ambitious of the five, but the most rewarding.
+
+**A thin preview is worth shipping much earlier.** The full vision — preview page with outlier flags, mismatch warnings, comparison to history — naturally comes last because it builds on items 1–3. But a *thin* preview (just "here are the meals that would be swept, here are the balances that would be generated, no warnings yet") is really just a read-only version of the show page driven by a dry-run calculation. It has almost no dependencies. It's also the only item in this list that *prevents* errors instead of flagging them after the fact — everything else is catching mistakes in a committed reconciliation. The thin preview should ship alongside the mismatch warnings (item 1), with outlier flags and historical comparisons layered in as they land. The "full preview" then becomes less a new feature and more the natural endpoint of accreting items 2–3 onto the thin one.
 
 ### Other ideas worth considering (lower priority)
 
@@ -135,15 +139,15 @@ This turns reconciliation from "do it then fix problems" to "verify it then comm
 
 ## Recommended sequence
 
-1. **Mismatch warnings** — easiest, deterministic, immediate value
-2. **Cost outlier detection** — IQR-based, most valuable statistical feature
-3. **Date outlier detection** — same UI as cost outliers, build together
-4. **Finalized state** — simple basic version, defer bill-immutability discussion
-5. **Pre-flight preview** — biggest workflow win, build on the foundation of items 1-3
+1. **Mismatch warnings + thin pre-flight preview** — ship together. Deterministic checks surfaced on a read-only dry-run page. This is the first item that *prevents* errors instead of just flagging them after the fact.
+2. **Cost outlier detection** — IQR-based, with a conservative hardcoded fallback band for the cold-start period. Layered into the preview from item 1.
+3. **Date outlier detection** — same UI surface as cost outliers, build together.
+4. **Finalized state (with full bill/attendance immutability)** — ships as one unit. Not a "basic version first, immutability later" split — the two are inseparable, and finalization without enforcement is worse than no feature at all. Includes the hardened unfinalize flow (admin-only, audit-logged, forces balance re-derivation on re-lock).
+5. **Full preview polish** — by this point the preview from item 1 has accreted all the warnings and outlier work; the remaining work is comparison-to-history and the UX for committing.
 
 ## Open questions
 
-- **Cold-start handling for cost outliers:** hardcoded fallback bounds, or no flagging until enough history?
+- **Fallback band tuning:** $1–$50 per person-equivalent is a guess for the cold-start safety net. What's the right floor and ceiling, and should it be a per-community configurable range rather than a hardcode?
 - **Inflation drift:** window the historical sample, or weight recent meals more heavily?
-- **Finalized lock and bill immutability:** enforce or defer to a follow-up?
 - **Currency support:** explicitly out of scope here, but tied to the cost outlier statistical work for international communities.
+- **Unfinalize audit log:** where does it live? A dedicated `reconciliation_audit_events` table, or a generic audit trail that covers other finance-sensitive actions too?

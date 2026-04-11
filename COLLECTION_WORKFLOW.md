@@ -62,10 +62,12 @@ Once we have per-balance `paid_at`, the natural derived state for the reconcilia
 
 Optionally store this as a `settled_at` timestamp on the reconciliation (set automatically when the last balance is marked paid). This gives us two distinct lifecycle states:
 
-- **`finalized_at`:** Calculations are locked. No more meal additions/removals. (From the reconciliation workflow doc.)
+- **`finalized_at`:** Calculations are locked. No more meal additions/removals, **and no edits to the underlying bills/attendance either** (see `RECONCILIATION_WORKFLOW.md` section 4). This is load-bearing for everything below.
 - **`settled_at`:** All balances have been paid out. Money is fully settled.
 
 A reconciliation goes: created → finalized → settled → done. The settled state is rarely reversed (you don't "un-pay" someone), but it's not strictly immutable either.
+
+**Dependency on bill immutability:** `settled_at` is only meaningful if the underlying ledger can't drift after `finalized_at`. If someone edits a bill on a reconciled meal after payouts have been disbursed, the published balances no longer match the source data, and we're silently lying to residents about what they were paid. The reconciliation workflow's bill-immutability enforcement is a hard prerequisite for this entire document — nothing here works without it.
 
 **Priority:** Tightly coupled with the MVP. Probably implement together.
 
