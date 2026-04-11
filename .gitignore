@@ -43,3 +43,11 @@ latest.dump
 
 # SimpleCov coverage reports
 /coverage/
+
+# AI tooling (Claude Code, AIWG)
+# Framework-installed content is ignored; project-specific intake docs
+# live in .aiwg/intake/ and are explicitly tracked.
+.claude/
+AIWG.md
+.aiwg/*
+!.aiwg/intake/
