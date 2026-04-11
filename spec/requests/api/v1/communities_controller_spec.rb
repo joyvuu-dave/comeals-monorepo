@@ -8,10 +8,6 @@ RSpec.describe 'Communities API' do
   let(:resident) { create(:resident, community: community, unit: unit) }
   let(:token) { resident.key.token }
 
-  before do
-    allow(Pusher).to receive(:trigger)
-  end
-
   describe 'GET /api/v1/communities/:id/hosts' do
     it 'returns active adult residents ordered by unit' do
       adult = create(:resident, community: community, unit: unit, multiplier: 2, active: true)

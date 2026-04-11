@@ -27,10 +27,6 @@
 require 'rails_helper'
 
 RSpec.describe CommonHouseReservation do
-  before do
-    allow(Pusher).to receive(:trigger)
-  end
-
   describe 'validations' do
     it 'is valid with valid attributes' do
       reservation = build(:common_house_reservation)
@@ -101,7 +97,6 @@ RSpec.describe CommonHouseReservation do
     let(:resident) { create(:resident, community: community) }
 
     before do
-      allow(Pusher).to receive(:trigger)
       allow(Rails.cache).to receive(:delete)
     end
 

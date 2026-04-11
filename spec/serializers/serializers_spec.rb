@@ -7,10 +7,6 @@ RSpec.describe 'Serializers', type: :serializer do
   let(:unit) { create(:unit, community: community) }
   let(:resident) { create(:resident, community: community, unit: unit) }
 
-  before do
-    allow(Pusher).to receive(:trigger)
-  end
-
   def serialize(object, serializer, options = {})
     ActiveModelSerializers::SerializableResource.new(object, { serializer: serializer }.merge(options)).as_json
   end

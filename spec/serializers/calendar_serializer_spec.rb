@@ -18,10 +18,6 @@ RSpec.describe CalendarSerializer, type: :serializer do
     }
   end
 
-  before do
-    allow(Pusher).to receive(:trigger)
-  end
-
   def serialize
     ActiveModelSerializers::SerializableResource.new(community, options).as_json
   end

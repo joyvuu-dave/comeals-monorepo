@@ -37,6 +37,14 @@ RSpec.configure do |config|
   # Community.instance doesn't leak a stale reference across tests.
   config.before { Current.reset }
 
+  # Stub Pusher globally so no test can hit the network. Models like Event,
+  # GuestRoomReservation, CommonHouseReservation, and Meal call
+  # Pusher.trigger via after_commit callbacks — indirect enough that spec
+  # authors routinely forget to stub it. Per-spec `allow(Pusher).to
+  # receive(:trigger)` is still compatible with this (they compose), and
+  # `expect(Pusher).to have_received(:trigger)` continues to work.
+  config.before { allow(Pusher).to receive(:trigger) }
+
   # Remove this line if you're not using ActiveRecord or ActiveRecord fixtures
   config.fixture_paths = [Rails.root.join('spec/fixtures').to_s]
 

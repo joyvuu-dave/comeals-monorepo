@@ -11,10 +11,6 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
   let(:cook) { create(:resident, community: community, unit: unit) }
   let!(:bill) { create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('0')) }
 
-  before do
-    allow(Pusher).to receive(:trigger)
-  end
-
   def update_bills(meal_id:, bills:, token: self.token)
     patch "/api/v1/meals/#{meal_id}/bills", params: {
       meal_id: meal_id,

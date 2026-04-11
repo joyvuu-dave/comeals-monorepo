@@ -26,10 +26,6 @@
 require 'rails_helper'
 
 RSpec.describe GuestRoomReservation do
-  before do
-    allow(Pusher).to receive(:trigger)
-  end
-
   describe 'validations' do
     it 'is valid with valid attributes' do
       reservation = build(:guest_room_reservation)

@@ -15,10 +15,6 @@ RSpec.describe 'rotations:notify_new', type: :task do
     Rake::Task['rotations:notify_new'].reenable
   end
 
-  before do
-    allow(Pusher).to receive(:trigger)
-  end
-
   it 'sends new-rotation emails for rotations not yet notified' do
     create(:resident, community: community, unit: unit, active: true)
     meal = create(:meal, community: community)

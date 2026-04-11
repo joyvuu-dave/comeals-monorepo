@@ -147,7 +147,6 @@ RSpec.describe Community do
       create(:meal, community: community, date: Date.new(2026, 5, 3))
       create(:meal, community: community, date: Date.new(2026, 5, 5))
 
-      allow(Pusher).to receive(:trigger)
       community.auto_create_rotations
 
       # 3 meals with rotation_length 2 = 2 rotations (2 + 1)
@@ -157,8 +156,6 @@ RSpec.describe Community do
   end
 
   describe '#create_next_rotation' do
-    before { allow(Pusher).to receive(:trigger) }
-
     it 'creates a rotation with meals_per_rotation meals' do
       # Need cookable adults
       4.times { create(:resident, community: community, unit: unit, multiplier: 2, can_cook: true) }
@@ -200,7 +197,6 @@ RSpec.describe Community do
 
   describe '#trigger_pusher' do
     before do
-      allow(Pusher).to receive(:trigger)
       allow(Rails.cache).to receive(:delete)
     end
 

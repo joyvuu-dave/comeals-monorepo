@@ -9,8 +9,6 @@ RSpec.describe 'Calendar endpoint performance' do
   let(:token) { resident.key.token }
 
   before do
-    allow(Pusher).to receive(:trigger)
-
     # Build a realistic month: 12 meals with bills, attendees, and a rotation
     rotation = create(:rotation, community: community)
     12.times do |i|

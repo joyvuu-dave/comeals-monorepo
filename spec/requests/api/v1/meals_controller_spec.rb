@@ -8,10 +8,6 @@ RSpec.describe 'Meals API' do
   let(:resident) { create(:resident, community: community, unit: unit) }
   let(:token) { resident.key.token }
 
-  before do
-    allow(Pusher).to receive(:trigger)
-  end
-
   # ---------------------------------------------------------------------------
   # GET /api/v1/meals
   # ---------------------------------------------------------------------------

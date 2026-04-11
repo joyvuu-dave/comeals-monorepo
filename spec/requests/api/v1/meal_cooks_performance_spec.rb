@@ -10,8 +10,6 @@ RSpec.describe 'Meal show_cooks endpoint performance' do
   let(:meal) { create(:meal, community: community) }
 
   before do
-    allow(Pusher).to receive(:trigger)
-
     # Create a bill and some attendees to exercise the serializer
     create(:bill, meal: meal, resident: resident, community: community)
     5.times do

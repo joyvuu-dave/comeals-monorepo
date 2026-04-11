@@ -8,10 +8,6 @@ RSpec.describe 'Common House Reservations API' do
   let(:resident) { create(:resident, community: community, unit: unit) }
   let(:token) { resident.key.token }
 
-  before do
-    allow(Pusher).to receive(:trigger)
-  end
-
   describe 'GET /api/v1/common-house-reservations' do
     it 'returns reservations for the community' do
       create(:common_house_reservation, community: community, resident: resident)

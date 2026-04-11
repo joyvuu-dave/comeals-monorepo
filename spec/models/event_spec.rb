@@ -26,10 +26,6 @@
 require 'rails_helper'
 
 RSpec.describe Event do
-  before do
-    allow(Pusher).to receive(:trigger)
-  end
-
   describe 'validations' do
     it 'is valid with valid attributes' do
       event = build(:event)
@@ -73,7 +69,6 @@ RSpec.describe Event do
     let(:community) { create(:community) }
 
     before do
-      allow(Pusher).to receive(:trigger)
       allow(Rails.cache).to receive(:delete)
     end
 
