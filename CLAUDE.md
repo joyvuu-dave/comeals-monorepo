@@ -1,26 +1,69 @@
-# CLAUDE.md - Comeals Backend
+# CLAUDE.md - Comeals Monorepo
 
 ## Project Overview
 
 Comeals is a meal management and cost-splitting application for a co-housing community. Residents sign up for communal dinners, volunteer to cook, and the cost is split proportionally among attendees. The system tracks attendance, cooking costs, and financial balances across billing periods (reconciliations).
 
-This is a Rails 8.1 API backend (Ruby 4.0). The frontend lives at `../comeals-ui` (React/MobX).
+This is a monorepo containing a Rails 8.1 API backend (Ruby 4.0) and a React 19 + MobX SPA frontend. In production, Rails serves the SPA from `public/` and the API from `/api/v1/`. No Express, no CORS, one Heroku dyno.
+
+## Project Structure
+
+```
+├── app/
+│   ├── admin/            # ActiveAdmin resource definitions
+│   ├── controllers/      # Rails API controllers + FallbackController (SPA serving)
+│   ├── frontend/         # React SPA source (Vite root)
+│   │   ├── src/          # Components, stores, helpers, styles
+│   │   └── index.html    # SPA entry point
+│   ├── mailers/
+│   ├── models/
+│   ├── serializers/
+│   └── views/
+├── config/               # Rails configuration
+├── db/                   # Migrations, schema, seeds
+├── lib/                  # Clock process, rake tasks
+├── public/               # Static assets + Vite build output (index.html, assets/)
+├── spec/                 # RSpec tests (Ruby)
+├── tests/                # Frontend tests
+│   ├── e2e/              # Playwright E2E tests
+│   ├── unit/             # Vitest unit tests
+│   ├── fixtures/         # Test data
+│   └── helpers/          # Test utilities
+├── package.json          # Node dependencies and scripts
+├── vite.config.js        # Vite: root=app/frontend, build to public/
+├── vitest.config.js      # Vitest: jsdom, tests/unit/**
+├── eslint.config.js      # ESLint for frontend source
+├── playwright.config.js  # Playwright E2E config
+├── Gemfile               # Ruby dependencies
+└── bin/deploy            # Single-app Heroku deploy script
+```
 
 ## Development Environment
 
 ```bash
-# Ruby version managed by rbenv (see .ruby-version)
-# PostgreSQL database
-# Run tests: bundle exec rspec
-# Run server: bundle exec rails s
-# Rails console: bundle exec rails c
+bin/dev                    # Starts Rails (3000) + Vite (3036) + clock via foreman
+bundle exec rspec          # Run Ruby tests
+npm test                   # Run frontend unit tests (Vitest)
+npm run lint               # Run ESLint on frontend source
+npm run test:e2e           # Run Playwright E2E tests
+npm run build              # Vite build -> public/
+bundle exec rails c        # Rails console
 ```
 
 ### Local URLs
 
-- **Rails API**: `http://localhost:3000`
-- **Admin console**: `http://admin.lvh.me:3000/login` (ActiveAdmin, uses subdomain routing via `lvh.me` which resolves to 127.0.0.1)
-- **Frontend (comeals-ui)**: `http://localhost:3001` (dev: `npm start` from `../comeals-ui`; production-like: `npm run build && node server.js`; requires Node 22+)
+- **App (via Vite proxy)**: `http://localhost:3036` — SPA with HMR, API requests proxy to Rails
+- **Rails direct**: `http://localhost:3000` — API endpoints, ActiveAdmin
+- **ActiveAdmin**: `http://localhost:3036/admin/login` (via Vite proxy) or `http://localhost:3000/admin/login` (direct)
+- **Mail inbox**: `http://localhost:3000/letter_opener`
+
+### Key Routes
+
+- `/` — SPA (FallbackController)
+- `/api/v1/*` — API endpoints
+- `/admin/*` — ActiveAdmin (Devise auth)
+- `/.vite/manifest.json` — Vite manifest (FallbackController, for deploy detection)
+- `/*` — SPA catch-all (excludes `/api/`, `/admin`, `/letter_opener`)
 
 ## Collaboration Style
 
@@ -87,21 +130,16 @@ SETTLEMENT (reconciliation): Rounded to cents using largest-remainder allocation
 - **Reconciliations are settlement events (with a cutoff date), Rotations are cooking schedules.** These are fully decoupled. A reconciliation sweeps all unreconciled meals up to its cutoff date and can span multiple rotations.
 - **Balances computed daily via rake task.** Not real-time. This eliminates drift and race conditions.
 - **The `resident_balances` table is a cache.** It can be rebuilt from source data at any time.
-- **Frontend compatibility is required.** Every backend change must consider impact on `../comeals-ui`. API response shapes should not change without updating the frontend.
+- **Vite builds to `public/` with `emptyOutDir: false`.** Critical: Vite must not wipe Rails error pages.
+- **FallbackController serves the SPA.** Rails static file middleware doesn't serve dotfile directories, so `.vite/manifest.json` needs a controller action.
+- **ActiveAdmin uses path-based routing (`/admin/*`), not subdomains.** Simplifies DNS and eliminates the need for xipio/lvh.me in development.
 
-## Current State
+## Heroku Deployment
 
-The billing system remediation is complete and validated against production data. See `BILLING_ANALYSIS.md` for the full bug list and history. What was done:
-
-- Fixed hardcoded `reconciliation_id == 3` → uses `Meal.unreconciled` scope
-- Migrated to `DECIMAL(12,8)` + `BigDecimal`, removed `money-rails`, removed reimbursement rounding
-- Removed `counter_culture` gem entirely — all derived values computed from source data
-- Automated reconciliation lifecycle with `assign_meals` + `settlement_balances` (largest-remainder allocation)
-- Added input validation for malformed bill amounts in `update_bills` controller action
-- Fixed `set_meal` before_action to properly return on 404 instead of crashing
-
-**Rake tasks:**
-- `rake billing:recalculate` — run daily to refresh resident balances from source data
-- `rake reconciliations:create` — manual trigger to settle all unreconciled meals
-
-**Test coverage:** 138 tests (124 model + 14 request specs), 0 failures.
+- **Single app** (`comeals-backend`) with two buildpacks: Node (index 1) → Ruby (index 2)
+- Node buildpack: `npm install` → `npm run build` (Vite output to `public/`)
+- Ruby buildpack: `bundle install` → `rake assets:precompile` (Sprockets for ActiveAdmin)
+- Deploy: `bin/deploy` handles migration detection, backup, health checks
+- **Rake tasks:**
+  - `rake billing:recalculate` — run daily to refresh resident balances from source data
+  - `rake reconciliations:create` — manual trigger to settle all unreconciled meals
