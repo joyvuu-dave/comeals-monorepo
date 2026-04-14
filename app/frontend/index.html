@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, shrink-to-fit=no"
+    />
+    <meta name="theme-color" content="#CCDEEA" />
+    <meta
+      name="description"
+      content="Post your common meal. Sign up for others. Reconcile the costs."
+    />
+    <!--
+      manifest.json provides metadata used when your web app is added to the
+      homescreen on Android. See https://developers.google.com/web/fundamentals/engage-and-retain/web-app-manifest/
+    -->
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <link
+      rel="apple-touch-icon"
+      sizes="180x180"
+      href="/letter-j-icon-11-ffa500-180.png"
+    />
+    <link rel="preconnect" href="https://stats.pusher.com" />
+    <title>Comeals</title>
+  </head>
+  <body style="background-color: #ccdeea">
+    <noscript> You need to enable JavaScript to run this app. </noscript>
+    <div id="root"></div>
+    <script type="module" src="/src/index.jsx"></script>
+    <script>
+      function idleTimer() {
+        if (window._idleTimerInitialized) return;
+        window._idleTimerInitialized = true;
+        var t;
+        window.onmousemove = resetTimer;
+        window.onmousedown = resetTimer;
+        window.onclick = resetTimer;
+        window.onscroll = resetTimer;
+        window.onkeydown = function (e) {
+          if (["Shift", "Control", "Alt", "Meta"].includes(e.key)) return;
+          resetTimer();
+        };
+        window.addEventListener("touchstart", resetTimer, { passive: true });
+
+        function navHome() {
+          window.location.href =
+            window.location.host === "localhost:3001"
+              ? "http://localhost:3001"
+              : "https://comeals.com";
+        }
+
+        function resetTimer() {
+          clearTimeout(t);
+          t = setTimeout(navHome, 1000 * 60 * 5);
+        }
+      }
+
+      idleTimer();
+    </script>
+  </body>
+</html>
