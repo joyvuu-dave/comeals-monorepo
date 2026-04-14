@@ -1,0 +1,32 @@
+<%= form_tag update_meals_admin_reconciliation_path(reconciliation), method: :patch do %>
+  <table border="0" cellspacing="0" cellpadding="0">
+    <thead>
+      <tr>
+        <th>Include</th>
+        <th>Date</th>
+        <th>Cooks</th>
+        <th>Total Cost</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% eligible_meals.each do |m| %>
+        <tr>
+          <td><%= check_box_tag 'meal_ids[]', m.id, m.reconciliation_id == reconciliation.id, id: "meal_#{m.id}" %></td>
+          <td><%= link_to m.date.to_s, admin_meal_path(m) %></td>
+          <td>
+            <% cooks = m.bills.map(&:resident).uniq.sort_by(&:name) %>
+            <% if cooks.empty? %>
+              —
+            <% else %>
+              <%= safe_join(cooks.map { |c| link_to(c.name, admin_resident_path(c)) }, ', ') %>
+            <% end %>
+          </td>
+          <td><%= number_to_currency(m.total_cost) %></td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+  <div class="meals-form-actions">
+    <%= submit_tag 'Update Meals' %>
+  </div>
+<% end %>

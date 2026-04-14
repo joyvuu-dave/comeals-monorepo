@@ -1,0 +1,104 @@
+# frozen_string_literal: true
+
+class MealFormSerializer < ActiveModel::Serializer
+  attributes :id,
+             :description,
+             :max,
+             :closed,
+             :closed_at,
+             :date,
+             :reconciled,
+             :next_id,
+             :prev_id
+
+  def reconciled
+    scope.reconciliation_id.present?
+  end
+
+  def next_id
+    # Next meal by date, or self if this is the last meal
+    Meal.where('date > ? OR (date = ? AND id > ?)', scope.date, scope.date, scope.id)
+        .order(:date, :id).limit(1).pick(:id) || scope.id
+  end
+
+  def prev_id
+    # Previous meal by date, or self if this is the first meal
+    Meal.where('date < ? OR (date = ? AND id < ?)', scope.date, scope.date, scope.id)
+        .order(date: :desc, id: :desc).limit(1).pick(:id) || scope.id
+  end
+
+  has_many :bills
+  has_many :residents
+  has_many :guests
+
+  # Override residents to include inactive residents who attended this meal.
+  # Without this, deactivated residents (moved/deceased) vanish from old meals
+  # they actually attended. The union: all active community residents (for the
+  # signup dropdown) + any inactive residents with a meal_resident record.
+  def residents
+    Resident.where(active: true)
+            .or(Resident.where(id: object.meal_residents.select(:resident_id)))
+            .includes(:unit)
+  end
+
+  class BillSerializer < ActiveModel::Serializer
+    attributes :resident_id,
+               :amount,
+               :no_cost
+  end
+
+  class ResidentSerializer < ActiveModel::Serializer
+    attributes :id,
+               :meal_id,
+               :name,
+               :attending,
+               :attending_at,
+               :late,
+               :vegetarian,
+               :can_cook,
+               :active
+
+    def meal_id
+      scope.id
+    end
+
+    def attending
+      meal_resident.present?
+    end
+
+    def attending_at
+      meal_resident.presence&.created_at
+    end
+
+    def name
+      "#{object.unit.name} - #{object.name}"
+    end
+
+    def late
+      meal_resident.present? ? meal_resident.late : false
+    end
+
+    def vegetarian
+      meal_resident.present? ? meal_resident.vegetarian : object.vegetarian
+    end
+
+    private
+
+    def meal_resident
+      @meal_resident ||= meal_residents_lookup[object.id]
+    end
+
+    def meal_residents_lookup
+      instance_options[:meal_residents_lookup] ||
+        instance_options[:meal_residents_lookup] = MealResident.where(meal_id: scope.id).index_by(&:resident_id)
+    end
+  end
+
+  class GuestSerializer < ActiveModel::Serializer
+    attributes :id,
+               :meal_id,
+               :resident_id,
+               :vegetarian,
+               :created_at
+  end
+end

@@ -1,0 +1,50 @@
+# frozen_string_literal: true
+
+# == Schema Information
+#
+# Table name: units
+#
+#  id           :bigint           not null, primary key
+#  name         :string           not null
+#  created_at   :datetime         not null
+#  updated_at   :datetime         not null
+#  community_id :bigint           not null
+#
+# Indexes
+#
+#  index_units_on_community_id           (community_id)
+#  index_units_on_community_id_and_name  (community_id,name) UNIQUE
+#
+# Foreign Keys
+#
+#  fk_rails_...  (community_id => communities.id)
+#
+
+class Unit < ApplicationRecord
+  # Ransack allowlists for ActiveAdmin sorting
+  def self.ransackable_attributes(_auth_object = nil)
+    %w[id community_id created_at name updated_at]
+  end
+
+  has_many :residents, dependent: :destroy
+  belongs_to :community
+
+  validates :name, uniqueness: { scope: :community_id }
+
+  # DERIVED DATA
+  def balance
+    return BigDecimal('0') if Meal.unreconciled.none?
+
+    residents.reduce(BigDecimal('0')) { |sum, resident| sum + resident.balance }
+  end
+
+  def meals_cooked
+    return 0 if Meal.unreconciled.none?
+
+    residents.reduce(0) { |sum, resident| sum + resident.bills.joins(:meal).merge(Meal.unreconciled).count }
+  end
+
+  def number_of_occupants
+    residents.count
+  end
+end

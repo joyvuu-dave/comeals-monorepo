@@ -1,0 +1,114 @@
+# frozen_string_literal: true
+
+ActiveAdmin.register Resident do
+  # STRONG PARAMS
+  permit_params :name, :multiplier, :unit_id, :community_id, :email, :password, :vegetarian, :can_cook, :active,
+                :birthday
+
+  # CONFIG
+  filter :active
+  config.sort_order = 'name_asc'
+
+  # ACTIONS
+  actions :all, except: [:destroy]
+
+  # INDEX
+  index do
+    column :name
+    column :birthday
+    column 'Price Category', :multiplier, sortable: :multiplier do |resident|
+      if resident.multiplier == 2
+        'Adult'
+      elsif resident.multiplier == 1
+        'Child'
+      else
+        "Adult x #{number_with_precision(resident.multiplier.to_f / 2, precision: 1,
+                                                                       strip_insignificant_zeros: true)}"
+      end
+    end
+    column :unit
+    column :can_cook
+    column :active
+    column 'Balance', :balance do |resident|
+      number_to_currency(resident.balance) unless resident.balance.zero?
+    end
+
+    actions
+  end
+
+  # SHOW
+  show do
+    attributes_table do
+      row :id
+      row :name
+      row :birthday
+      row('Category') { |r| r.multiplier < 2 ? 'Child' : 'Adult' }
+      row :unit
+      row :can_cook
+      row :active
+      row :email
+      row :vegetarian
+      table_for resident.meals.order(:date) do
+        column 'Meals Attended' do |meal|
+          link_to meal.date, admin_meal_path(meal)
+        end
+        column 'Unit Cost' do |meal|
+          number_to_currency(meal.unit_cost) unless meal.unit_cost.zero?
+        end
+      end
+      table_for resident.bills.all do
+        column 'Bills' do |bill|
+          link_to bill.meal.date, admin_bill_path(bill)
+        end
+        column 'Amount' do |bill|
+          number_to_currency(bill.amount) unless bill.amount.zero?
+        end
+      end
+      table_for resident.guests.all do
+        column 'Meal' do |guest|
+          link_to guest.meal.date, admin_meal_path(guest.meal)
+        end
+        column 'Price Category', :multiplier do |guest|
+          if guest.multiplier == 2
+            'Adult'
+          elsif guest.multiplier == 1
+            'Child'
+          else
+            "Adult x #{number_with_precision(guest.multiplier.to_f / 2, precision: 1,
+                                                                        strip_insignificant_zeros: true)}"
+          end
+        end
+        column 'Meal Date' do |guest|
+          link_to guest.meal.date, admin_meal_path(guest.meal)
+        end
+        column 'Unit Cost' do |guest|
+          number_to_currency(guest.meal.unit_cost) unless guest.meal.unit_cost.zero?
+        end
+      end
+    end
+  end
+
+  # FORM
+  form do |f|
+    f.inputs do
+      f.input :name
+      f.input :birthday, as: :datepicker,
+                         datepicker_options: {
+                           change_month: true,
+                           change_year: true,
+                           year_range: "1900:#{Time.zone.now.year}"
+                         }
+      f.input :email
+      f.input :password if f.object.new_record?
+      f.input :vegetarian
+      f.input :multiplier, label: 'Price Category', as: :radio, collection: [['Adult', 2], ['Child', 1]]
+      f.input :unit, collection: Unit.order(:name)
+      f.input :can_cook
+      f.input :active
+      f.input :community_id, input_html: { value: Community.instance.id }, as: :hidden
+    end
+    f.label 'Note: passwords can be reset through the resident login page'
+    f.actions
+    f.semantic_errors
+  end
+end

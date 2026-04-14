@@ -1,0 +1,71 @@
+# frozen_string_literal: true
+
+# == Schema Information
+#
+# Table name: events
+#
+#  id           :bigint           not null, primary key
+#  allday       :boolean          default(FALSE), not null
+#  description  :string           default(""), not null
+#  end_date     :datetime
+#  start_date   :datetime         not null
+#  title        :string           not null
+#  created_at   :datetime         not null
+#  updated_at   :datetime         not null
+#  community_id :bigint           not null
+#
+# Indexes
+#
+#  index_events_on_community_id  (community_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (community_id => communities.id)
+#
+
+class Event < ApplicationRecord
+  # Ransack allowlists for ActiveAdmin sorting
+  def self.ransackable_attributes(_auth_object = nil)
+    %w[id allday community_id created_at description end_date start_date title updated_at]
+  end
+
+  belongs_to :community
+
+  validates :title, presence: true
+  validates :start_date, presence: true
+
+  validate :end_date_or_allday
+  validate :start_date_is_before_end_date
+
+  after_commit :trigger_pusher
+
+  def end_date_or_allday
+    return if end_date.present? || allday
+
+    errors.add(:base, 'Event must end or be all day')
+  end
+
+  def start_date_is_before_end_date
+    return if allday || end_date.blank?
+
+    errors.add(:base, 'Start time must occur before end time') if end_date < start_date
+  end
+
+  # Events appear on the calendar. See CalendarSerializer for the full
+  # cache invalidation contract. Multi-month events and date changes require
+  # invalidating all affected months, not just the current start_date.
+  def trigger_pusher
+    community.trigger_pusher(start_date)
+    if end_date.present?
+      ed = end_date.to_date
+      sd = start_date.to_date
+      community.trigger_pusher(end_date) if ed.month != sd.month || ed.year != sd.year
+    end
+
+    # When dates change, also invalidate the old months
+    %w[start_date end_date].each do |attr|
+      old_val = saved_changes.dig(attr, 0)
+      community.trigger_pusher(old_val) if old_val.present?
+    end
+  end
+end
