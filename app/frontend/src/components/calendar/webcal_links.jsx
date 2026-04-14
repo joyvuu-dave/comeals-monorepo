@@ -41,10 +41,7 @@ class WebcalLinks extends Component {
   }
 
   render() {
-    var apiHost =
-      window.location.hostname === "localhost"
-        ? "localhost:3000"
-        : "api.comeals.com";
+    var apiHost = window.location.host;
 
     return (
       <div className="flex space-between w-100">

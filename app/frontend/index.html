@@ -45,10 +45,7 @@
         window.addEventListener("touchstart", resetTimer, { passive: true });
 
         function navHome() {
-          window.location.href =
-            window.location.host === "localhost:3001"
-              ? "http://localhost:3001"
-              : "https://comeals.com";
+          window.location.href = "/";
         }
 
         function resetTimer() {

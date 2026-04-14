@@ -64,10 +64,8 @@ Rails.application.configure do
   # Uncomment if you wish to allow Action Cable access from any origin.
   # config.action_cable.disable_request_forgery_protection = true
 
-  config.hosts << 'admin.lvh.me'
-
-  # Devise (AdminUser password reset emails need admin subdomain host)
-  config.action_mailer.default_url_options = { host: 'admin.lvh.me:3000' }
+  # Devise (AdminUser password reset emails)
+  config.action_mailer.default_url_options = { host: 'localhost', port: 3000 }
 
   # Email: letter_opener_web collects emails at http://localhost:3000/letter_opener
   config.action_mailer.perform_caching = false

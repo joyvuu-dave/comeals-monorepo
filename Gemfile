@@ -30,8 +30,6 @@ gem 'csv'
 gem 'drb'
 gem 'mutex_m'
 
-gem 'rack-cors', require: 'rack/cors'
-
 gem 'activeadmin', '~> 3.0'
 gem 'active_model_serializers', '~> 0.10'
 gem 'audited'
@@ -80,7 +78,6 @@ group :development do
   gem 'rufus-scheduler', '~> 3.9'
   gem 'stackprof' # flamegraph support for rack-mini-profiler
   gem 'web-console', '>= 3.3.0'
-  gem 'xipio'
 end
 
 gem 'oj'

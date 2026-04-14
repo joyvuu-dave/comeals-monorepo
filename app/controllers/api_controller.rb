@@ -4,7 +4,7 @@ class ApiController < ActionController::API
   around_action :set_community_timezone
 
   def root_url
-    @root_url ||= Rails.env.production? ? 'https://comeals.com' : 'http://localhost:3001'
+    @root_url ||= Rails.env.production? ? 'https://comeals.com' : 'http://localhost:3036'
   end
 
   def current_resident_api

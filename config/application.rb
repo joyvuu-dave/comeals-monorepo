@@ -40,18 +40,6 @@ module Comeals
     config.middleware.use ActionDispatch::Cookies
     config.middleware.use ActionDispatch::Session::CookieStore
 
-    # CORS
-    config.middleware.insert_before 0, Rack::Cors do
-      allow do
-        origins(
-          %r{\Ahttps?://([\w-]+\.)*comeals\.com\z}, # comeals.com and any subdomain(s)
-          %r{\Ahttps?://localhost(:\d+)?\z}, # localhost (any port, for development)
-          %r{\Ahttps?://([\w-]+\.)?lvh\.me(:\d+)?\z} # lvh.me and subdomains (for development)
-        )
-        resource '*', headers: :any, methods: %i[get post put patch delete options], credentials: true
-      end
-    end
-
     # Gzip response compression — must be early in the stack (outer middleware)
     # so it compresses the final response after all other middleware are done.
     config.middleware.insert_before Rack::Sendfile, Rack::Deflater
