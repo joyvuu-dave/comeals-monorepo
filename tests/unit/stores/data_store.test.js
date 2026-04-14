@@ -54,10 +54,10 @@ vi.mock("uuid", () => {
 
 import { unprotect, isAlive } from "mobx-state-tree";
 import { runInAction } from "mobx";
-import { DataStore } from "../../../src/stores/data_store.js";
+import { DataStore } from "../../../app/frontend/src/stores/data_store.js";
 import localforage from "localforage";
 import axios from "axios";
-import toastStore from "../../../src/stores/toast_store.js";
+import toastStore from "../../../app/frontend/src/stores/toast_store.js";
 
 function createDataStore(opts = {}) {
   const { mealProps = {}, residents = [], guests = [], bills = [] } = opts;

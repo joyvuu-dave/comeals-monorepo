@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { generateTimes, toPacificDayjs } from "../../../src/helpers/helpers.js";
+import { generateTimes, toPacificDayjs } from "../../../app/frontend/src/helpers/helpers.js";
 
 describe("generateTimes", () => {
   // generateTimes produces time picker options for reservation/event forms

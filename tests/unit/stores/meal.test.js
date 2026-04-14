@@ -33,10 +33,10 @@ vi.mock("localforage", () => ({
 }));
 
 import { types } from "mobx-state-tree";
-import Meal from "../../../src/stores/meal.js";
-import ResidentStore from "../../../src/stores/resident_store.js";
-import BillStore from "../../../src/stores/bill_store.js";
-import GuestStore from "../../../src/stores/guest_store.js";
+import Meal from "../../../app/frontend/src/stores/meal.js";
+import ResidentStore from "../../../app/frontend/src/stores/resident_store.js";
+import BillStore from "../../../app/frontend/src/stores/bill_store.js";
+import GuestStore from "../../../app/frontend/src/stores/guest_store.js";
 
 // Build a minimal DataStore-like parent so Meal.form (getParent(self, 2)) resolves.
 // The real DataStore uses afterCreate to set up Pusher, so we create a slimmed-down
