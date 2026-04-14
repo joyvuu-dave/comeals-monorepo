@@ -17,6 +17,8 @@
 /storage/*
 
 /public/assets
+/public/index.html
+/public/.vite/
 .byebug_history
 
 # dotenv
@@ -43,6 +45,9 @@ latest.dump
 
 # SimpleCov coverage reports
 /coverage/
+
+# Playwright test results
+/tests/test-results/
 
 # AI tooling (Claude Code, AIWG)
 # Framework-installed content is ignored; project-specific intake docs
