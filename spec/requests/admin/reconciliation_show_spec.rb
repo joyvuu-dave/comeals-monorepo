@@ -24,9 +24,8 @@ RSpec.describe 'Admin Reconciliation Show' do
            resident: resident,
            amount: BigDecimal('42.50'))
 
-    get "/reconciliations/#{reconciliation.id}",
-        params: { token: token },
-        headers: { 'Host' => 'admin.example.com' }
+    get "/admin/reconciliations/#{reconciliation.id}",
+        params: { token: token }
 
     expect(response).to have_http_status(:ok)
     expect(response.body).to include('Unit Balances')
@@ -47,16 +46,15 @@ RSpec.describe 'Admin Reconciliation Show' do
 
     reconciliation = Reconciliation.create!(community: community, end_date: Date.new(2025, 3, 31))
 
-    get "/reconciliations/#{reconciliation.id}",
-        params: { token: token },
-        headers: { 'Host' => 'admin.example.com' }
+    get "/admin/reconciliations/#{reconciliation.id}",
+        params: { token: token }
 
     expect(response).to have_http_status(:ok)
 
     # Extract the <form> element targeting update_meals and verify the
     # checkbox input is inside it (not orphaned in the surrounding markup).
     form_match = response.body.match(
-      %r{<form[^>]+action="/reconciliations/#{reconciliation.id}/update_meals"[^>]*>(.*?)</form>}m
+      %r{<form[^>]+action="/admin/reconciliations/#{reconciliation.id}/update_meals"[^>]*>(.*?)</form>}m
     )
     expect(form_match).not_to be_nil, 'expected an update_meals <form> tag in the rendered HTML'
     expect(form_match[1]).to include(%(name="meal_ids[]"))

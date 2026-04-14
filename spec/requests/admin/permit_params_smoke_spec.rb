@@ -20,14 +20,13 @@ RSpec.describe 'Admin permit_params smoke tests' do
   let(:admin_user) { create(:admin_user, community: community, superuser: true) }
 
   before do
-    host! 'admin.example.com'
     sign_in admin_user
   end
 
   describe 'POST /residents (admin)' do
     it 'persists every form field' do
       expect do
-        post '/residents', params: {
+        post '/admin/residents', params: {
           resident: {
             name: 'Smoke Test Resident',
             birthday: '1990-04-15',
@@ -59,7 +58,7 @@ RSpec.describe 'Admin permit_params smoke tests' do
   describe 'POST /events (admin)' do
     it 'persists every form field' do
       expect do
-        post '/events', params: {
+        post '/admin/events', params: {
           event: {
             title: 'Smoke Event',
             description: 'A smoke test event',
@@ -82,7 +81,7 @@ RSpec.describe 'Admin permit_params smoke tests' do
   describe 'POST /units (admin)' do
     it 'persists every form field' do
       expect do
-        post '/units', params: {
+        post '/admin/units', params: {
           unit: { name: 'Smoke Unit', community_id: community.id }
         }
       end.to change(Unit, :count).by(1)
@@ -98,7 +97,7 @@ RSpec.describe 'Admin permit_params smoke tests' do
       resident = create(:resident, community: community, unit: unit, multiplier: 2)
 
       expect do
-        post '/guest_room_reservations', params: {
+        post '/admin/guest_room_reservations', params: {
           guest_room_reservation: {
             resident_id: resident.id,
             date: '2026-05-15',
@@ -119,7 +118,7 @@ RSpec.describe 'Admin permit_params smoke tests' do
       resident = create(:resident, community: community, unit: unit, multiplier: 2)
 
       expect do
-        post '/common_house_reservations', params: {
+        post '/admin/common_house_reservations', params: {
           common_house_reservation: {
             resident_id: resident.id,
             title: 'Smoke Booking',
@@ -143,7 +142,7 @@ RSpec.describe 'Admin permit_params smoke tests' do
       host = create(:resident, community: community, unit: unit, multiplier: 2)
 
       expect do
-        post '/meals', params: {
+        post '/admin/meals', params: {
           meal: {
             date: '2026-06-01',
             community_id: community.id,
@@ -168,7 +167,7 @@ RSpec.describe 'Admin permit_params smoke tests' do
   describe 'POST /admin_users (admin)' do
     it 'persists every form field' do
       expect do
-        post '/admin_users', params: {
+        post '/admin/admin_users', params: {
           admin_user: {
             email: 'smoke-admin@example.com',
             password: 'newpassword123',
