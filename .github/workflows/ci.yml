@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  lint:
+  ruby-lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -16,7 +16,7 @@ jobs:
           bundler-cache: true
       - run: bundle exec rubocop
 
-  test:
+  ruby-test:
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -42,3 +42,43 @@ jobs:
           bundler-cache: true
       - run: bin/rails db:schema:load
       - run: bundle exec rake
+
+  node-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+
+  node-unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  node-e2e-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: tests/test-results/
+          retention-days: 7
