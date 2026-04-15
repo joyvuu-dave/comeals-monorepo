@@ -64,6 +64,11 @@ Rails.application.configure do
   # Uncomment if you wish to allow Action Cable access from any origin.
   # config.action_cable.disable_request_forgery_protection = true
 
+  # Vite dev server (port 3036) proxies /admin to Rails (port 3000).
+  # The Origin header says 3036 but request.base_url says 3000, which
+  # trips the CSRF origin check. No proxy in production, so not needed there.
+  config.action_controller.forgery_protection_origin_check = false
+
   # Devise (AdminUser password reset emails)
   config.action_mailer.default_url_options = { host: 'localhost', port: 3000 }
 
