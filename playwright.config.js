@@ -25,7 +25,7 @@ module.exports = defineConfig({
     },
   ],
   webServer: {
-    command: "npm run build && npx vite preview --port 3036",
+    command: "npx vite build && npx vite preview --port 3036",
     port: 3036,
     timeout: 60000,
     reuseExistingServer: true,
