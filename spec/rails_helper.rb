@@ -28,6 +28,14 @@ Rails.root.glob('spec/support/**/*.rb').each { |f| require f }
 # If you are not using ActiveRecord, you can remove this line.
 ActiveRecord::Migration.maintain_test_schema!
 
+# Remove stale Vite build artifact that breaks subdomain routing.
+# Vite builds index.html into public/, and ActionDispatch::Static serves it
+# for GET / before the router runs — bypassing subdomain constraints entirely.
+# The build script (npm run build) moves this file to app/frontend/dist/,
+# but running `vite build` directly or interrupting a build leaves it behind.
+stale_index = Rails.root.join('public/index.html')
+stale_index.delete if stale_index.exist?
+
 RSpec.configure do |config|
   config.include FactoryBot::Syntax::Methods
   config.include QueryCounter, type: :request
