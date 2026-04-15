@@ -1,6 +1,5 @@
 import { Component } from "react";
 import { inject, observer } from "mobx-react";
-import { toJS } from "mobx";
 import { withRouter } from "../../helpers/with_router";
 import { TIMEZONE } from "../../helpers/helpers";
 import SideBar from "./side_bar";
@@ -230,11 +229,8 @@ const MainCalendar = inject("store")(
         formatEvent(event) {
           var styles = { style: {} };
 
-          const startString = dayjs(event.start).format();
-          const todayString = dayjs(getPacificNow()).format("YYYY-MM-DD");
-
           if (
-            dayjs(startString).isBefore(todayString, "day") &&
+            event.start < this._todayStart &&
             typeof event.url !== "undefined"
           ) {
             styles.style["opacity"] = "0.6";
@@ -245,6 +241,13 @@ const MainCalendar = inject("store")(
         }
 
         render() {
+          // Compute "today" boundary once per render for formatEvent
+          var now = getPacificNow();
+          this._todayStart = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            now.getDate(),
+          );
           return (
             <div className="offwhite">
               <header className="header flex space-between">
@@ -305,11 +308,12 @@ const MainCalendar = inject("store")(
         }
 
         handleNavigate(event) {
-          this.props.history.push(
-            `/calendar/${this.props.match.params.type}/${dayjs(event).format(
-              "YYYY-MM-DD",
-            )}`,
-          );
+          var newDate = dayjs(event).format("YYYY-MM-DD");
+          if (newDate !== this.props.match.params.date) {
+            this.props.history.push(
+              `/calendar/${this.props.match.params.type}/${newDate}`,
+            );
+          }
         }
 
         handleSelectEvent(event) {
@@ -320,7 +324,9 @@ const MainCalendar = inject("store")(
         }
 
         filterEvents() {
-          var events = toJS(this.props.store.calendarEvents);
+          // calendarEvents contains frozen (plain JS) objects —
+          // slice() copies the array without deep-cloning items.
+          var events = this.props.store.calendarEvents.slice();
 
           switch (this.props.match.params.type) {
             case "all":

@@ -21,6 +21,69 @@ import toastStore from "./toast_store";
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
+// In-memory cache for calendar month data, keyed identically to localforage.
+// Provides synchronous access for instant month navigation.
+const monthCache = new Map();
+
+// Monotonic version per cache key. Incremented on Pusher invalidation.
+// Prefetch callbacks compare against the version captured at call-start;
+// if it changed, a real-time update arrived mid-flight and the stale
+// response is silently discarded.
+const invalidationVersion = new Map();
+
+// Pusher subscriptions for adjacent months (cache invalidation only).
+var adjacentChannels = [];
+
+function monthCacheKey(communityId, year, month) {
+  return `community-${communityId}-calendar-${year}-${month}`;
+}
+
+function invalidateMonth(communityId, year, month) {
+  var key = monthCacheKey(communityId, year, month);
+  monthCache.delete(key);
+  localforage.removeItem(key);
+  invalidationVersion.set(key, (invalidationVersion.get(key) || 0) + 1);
+}
+
+function prefetchMonthData(date) {
+  var myDate = dayjs(date);
+  var key = monthCacheKey(
+    Cookie.get("community_id"),
+    myDate.format("YYYY"),
+    myDate.format("M"),
+  );
+
+  if (monthCache.has(key)) return;
+
+  var versionAtStart = invalidationVersion.get(key) || 0;
+
+  localforage.getItem(key).then(function (value) {
+    // Discard if a Pusher invalidation arrived since we started
+    if ((invalidationVersion.get(key) || 0) !== versionAtStart) return;
+
+    if (value !== null && typeof value !== "undefined") {
+      monthCache.set(key, value);
+      return;
+    }
+
+    axios
+      .get(
+        `/api/v1/communities/${Cookie.get("community_id")}/calendar/${date}?token=${Cookie.get("token")}`,
+      )
+      .then(function (response) {
+        if (response.status === 200) {
+          // Discard if a Pusher invalidation arrived since we started
+          if ((invalidationVersion.get(key) || 0) !== versionAtStart) return;
+          monthCache.set(key, response.data);
+          localforage.setItem(key, response.data);
+        }
+      })
+      .catch(function () {
+        // Prefetch failure is non-critical
+      });
+  });
+}
+
 export const DataStore = types
   .model("DataStore", {
     isLoading: true,
@@ -347,14 +410,12 @@ export const DataStore = types
         )
         .then(function (response) {
           if (response.status === 200) {
-            localforage
-              .setItem(
-                `community-${response.data.id}-calendar-${response.data.year}-${response.data.month}`,
-                response.data,
-              )
-              .then(function () {
-                self.loadMonth(response.data);
-              });
+            var respData = response.data;
+            var key = monthCacheKey(respData.id, respData.year, respData.month);
+            monthCache.set(key, respData);
+            localforage.setItem(key, respData).then(function () {
+              self.loadMonth(respData);
+            });
           }
         })
         .catch(function (error) {
@@ -519,14 +580,14 @@ export const DataStore = types
         return true;
       }
 
-      if (self.calendarEvents) {
-        self.clearCalendarEvents();
-      }
+      // Build the full events array as plain JS, then replace the
+      // observable in one shot for a single MobX notification.
+      var allEvents = [];
 
       // Convert event start/end strings to native Date objects.
       // react-big-calendar requires native Dates for its date arithmetic.
       // toPacificDayjs handles both offset and naive strings correctly.
-      function pushEvents(events) {
+      function convertEvents(events) {
         events.forEach(function (event) {
           var converted = Object.assign({}, event);
           if (converted.start) {
@@ -549,7 +610,7 @@ export const DataStore = types
               e.minute(),
             );
           }
-          self.calendarEvents.push(converted);
+          allEvents.push(converted);
         });
       }
 
@@ -572,15 +633,16 @@ export const DataStore = types
         );
       }
 
-      pushEvents(data.meals || []); // #1 Meals
-      pushEvents(data.bills || []); // #2 Bills
-      pushEvents(data.rotations || []); // #3 Rotations
-      pushEvents(data.birthdays || []); // #4 Birthdays
-      pushEvents(data.common_house_reservations || []); // #5 Common House Reservations
-      pushEvents(data.guest_room_reservations || []); // #6 Guest Room Reservations
-      pushEvents(data.events || []); // #7 Events
+      convertEvents(data.meals || []);
+      convertEvents(data.bills || []);
+      convertEvents(data.rotations || []);
+      convertEvents(data.birthdays || []);
+      convertEvents(data.common_house_reservations || []);
+      convertEvents(data.guest_room_reservations || []);
+      convertEvents(data.events || []);
 
-      // Change loading state
+      self.calendarEvents.replace(allEvents);
+
       self.isLoading = false;
 
       // Unsubscribe from previous month
@@ -600,6 +662,44 @@ export const DataStore = types
       window.Comeals.calendarChannel.bind("update", function () {
         self.loadMonthAsync();
       });
+
+      // Clean up previous adjacent month subscriptions
+      adjacentChannels.forEach(function (ch) {
+        window.Comeals.pusher.unsubscribe(ch.name);
+      });
+      adjacentChannels = [];
+
+      // Subscribe to adjacent months for real-time cache invalidation.
+      // When data changes in a neighboring month, evict it from both
+      // caches so the next navigation fetches fresh data from the API.
+      var communityId = Cookie.get("community_id");
+      var current = dayjs(self.currentDate);
+      [current.subtract(1, "month"), current.add(1, "month")].forEach(
+        function (adj) {
+          var adjYear = adj.format("YYYY");
+          var adjMonth = adj.format("M");
+          var channelName =
+            "community-" +
+            communityId +
+            "-calendar-" +
+            adjYear +
+            "-" +
+            adjMonth;
+
+          // Don't duplicate the current month's subscription
+          if (channelName === subscribeString) return;
+
+          var channel = window.Comeals.pusher.subscribe(channelName);
+          channel.bind("update", function () {
+            invalidateMonth(communityId, adjYear, adjMonth);
+          });
+          adjacentChannels.push(channel);
+        },
+      );
+
+      // Prefetch adjacent months for instant navigation
+      prefetchMonthData(current.subtract(1, "month").format("YYYY-MM-DD"));
+      prefetchMonthData(current.add(1, "month").format("YYYY-MM-DD"));
     },
     clearResidents() {
       self.residentStore.residents.clear();
@@ -652,14 +752,25 @@ export const DataStore = types
       self.currentDate = date;
 
       var myDate = dayjs(date);
-      const key = `community-${Cookie.get(
-        "community_id",
-      )}-calendar-${myDate.format("YYYY")}-${myDate.format("M")}`;
+      var key = monthCacheKey(
+        Cookie.get("community_id"),
+        myDate.format("YYYY"),
+        myDate.format("M"),
+      );
 
+      // Synchronous in-memory cache: instant render, no blank flash
+      if (monthCache.has(key)) {
+        self.loadMonth(monthCache.get(key));
+        self.loadMonthAsync();
+        return;
+      }
+
+      // Async IndexedDB fallback
       localforage.getItem(key).then(function (value) {
         if (value === null || typeof value === "undefined") {
           self.loadMonthAsync();
         } else {
+          monthCache.set(key, value);
           self.loadMonth(value);
           self.loadMonthAsync();
         }
