@@ -1,0 +1,416 @@
+#!/usr/bin/env bash
+# bin/check — comprehensive project health check
+#
+# Runs every test, linter, security scanner, and freshness check.
+# Exit 0 = all checks passed. Exit 1 = at least one check failed.
+
+set -uo pipefail
+
+cd "$(dirname "$0")/.."
+
+# --- Output helpers (matches bin/deploy style) --------------------------------
+
+red()    { printf "\033[0;31m%s\033[0m\n" "$*"; }
+green()  { printf "\033[0;32m%s\033[0m\n" "$*"; }
+yellow() { printf "\033[0;33m%s\033[0m\n" "$*"; }
+bold()   { printf "\033[1m%s\033[0m\n" "$*"; }
+
+step()  { printf "\n"; bold "==> $*"; }
+info()  { echo "    $*"; }
+pass()  { green "    ✓ $*"; }
+warn()  { yellow "    ⚠ $*"; }
+fail()  { red "    ✗ $*"; }
+
+# --- Result tracking ----------------------------------------------------------
+
+CHECKS=()
+FAILURES=0
+WARNINGS=0
+
+record() {
+  local name="$1" result="$2" detail="${3:-}"
+  CHECKS+=("${name}|${result}|${detail}")
+  case "$result" in
+    FAIL) FAILURES=$((FAILURES + 1)) ;;
+    WARN) WARNINGS=$((WARNINGS + 1)) ;;
+  esac
+}
+
+# --- Helpers ------------------------------------------------------------------
+
+# Fetch latest patch version for a language from endoflife.date API.
+# Usage: latest_patch ruby 4.0   OR   latest_patch nodejs 24
+latest_patch() {
+  local product="$1" cycle="$2"
+  curl -sf "https://endoflife.date/api/${product}/${cycle}.json" 2>/dev/null \
+    | python3 -c "import json,sys; print(json.load(sys.stdin)['latest'])" 2>/dev/null || true
+}
+
+# --- Section 1: Environment ---------------------------------------------------
+
+check_ruby_version() {
+  step "Ruby version"
+
+  local current
+  current=$(ruby -e 'print RUBY_VERSION')
+  local gemfile_version
+  gemfile_version=$(sed -n "s/^ruby '\(.*\)'/\1/p" Gemfile)
+
+  if [ "$current" != "$gemfile_version" ]; then
+    fail "Running $current but Gemfile specifies $gemfile_version"
+    record "Ruby version" "FAIL" "$current (Gemfile wants $gemfile_version)"
+    return
+  fi
+  info "Installed: $current (matches Gemfile)"
+
+  local minor="${current%.*}"
+  local latest
+  latest=$(latest_patch ruby "$minor")
+
+  if [ -z "$latest" ]; then
+    info "Could not check latest patch (network unavailable)"
+    record "Ruby version" "PASS" "$current"
+  elif [ "$current" = "$latest" ]; then
+    pass "$current is the latest ${minor}.x release"
+    record "Ruby version" "PASS" "$current (latest)"
+  else
+    warn "$current installed — $latest available"
+    record "Ruby version" "WARN" "$current (latest: $latest)"
+  fi
+}
+
+check_node_version() {
+  step "Node.js version"
+
+  local current
+  current=$(node -v | sed 's/^v//')
+  info "Installed: $current"
+
+  local major="${current%%.*}"
+  local latest
+  latest=$(latest_patch nodejs "$major")
+
+  if [ -z "$latest" ]; then
+    info "Could not check latest patch (network unavailable)"
+    record "Node version" "PASS" "$current"
+  elif [ "$current" = "$latest" ]; then
+    pass "$current is the latest v${major}.x release"
+    record "Node version" "PASS" "$current (latest)"
+  else
+    warn "$current installed — $latest available"
+    record "Node version" "WARN" "$current (latest: $latest)"
+  fi
+}
+
+check_pending_migrations() {
+  step "Database migrations"
+
+  local output
+  output=$(bundle exec rails db:migrate:status 2>&1)
+  if echo "$output" | grep -q '^ *down'; then
+    fail "Pending migrations detected"
+    echo "$output" | grep '^ *down' | while IFS= read -r line; do
+      info "  $line"
+    done
+    record "Migrations" "FAIL" "pending"
+  else
+    pass "All migrations up"
+    record "Migrations" "PASS" "up to date"
+  fi
+}
+
+# --- Section 2: Static analysis -----------------------------------------------
+
+check_rubocop() {
+  step "RuboCop"
+
+  local output exit_code=0
+  output=$(bundle exec rubocop --parallel 2>&1) || exit_code=$?
+
+  local summary
+  summary=$(echo "$output" | tail -1)
+
+  if [ "$exit_code" -eq 0 ]; then
+    pass "$summary"
+    record "RuboCop" "PASS" "$summary"
+  else
+    fail "$summary"
+    echo "$output" | grep -E '^[A-Z/].*:[0-9]' | head -20
+    record "RuboCop" "FAIL" "$summary"
+  fi
+}
+
+check_brakeman() {
+  step "Brakeman"
+
+  local output exit_code=0
+  output=$(bundle exec brakeman --no-pager -q 2>&1) || exit_code=$?
+
+  local warnings
+  warnings=$(echo "$output" | grep -oE 'Security Warnings: [0-9]+' | grep -oE '[0-9]+')
+  warnings="${warnings:-?}"
+
+  if [ "$exit_code" -eq 0 ]; then
+    pass "No security warnings"
+    record "Brakeman" "PASS" "0 warnings"
+  else
+    fail "$warnings security warning(s)"
+    echo "$output" | sed -n '/^+---/,$ p' | head -30
+    record "Brakeman" "FAIL" "$warnings warnings"
+  fi
+}
+
+check_eslint() {
+  step "ESLint"
+
+  local output exit_code=0
+  output=$(npm run lint 2>&1) || exit_code=$?
+
+  if [ "$exit_code" -eq 0 ]; then
+    pass "Clean"
+    record "ESLint" "PASS" "clean"
+  else
+    fail "Issues found"
+    echo "$output" | grep -v '^$\|^>' | tail -20
+    record "ESLint" "FAIL" "issues found"
+  fi
+}
+
+check_prettier() {
+  step "Prettier"
+
+  local output exit_code=0
+  output=$(npx prettier --check "app/frontend/src/**/*.{js,jsx,css}" 2>&1) || exit_code=$?
+
+  if [ "$exit_code" -eq 0 ]; then
+    pass "All files formatted"
+    record "Prettier" "PASS" "all formatted"
+  else
+    fail "Formatting issues"
+    echo "$output" | grep -v '^Checking\|^$' | head -20
+    record "Prettier" "FAIL" "formatting issues"
+  fi
+}
+
+# --- Section 3: Security -----------------------------------------------------
+
+check_bundle_audit() {
+  step "bundle audit"
+
+  local output exit_code=0
+  output=$(bundle audit check --update 2>&1) || exit_code=$?
+
+  if [ "$exit_code" -eq 0 ]; then
+    pass "No vulnerable gems"
+    record "bundle audit" "PASS" "no vulnerabilities"
+  else
+    fail "Vulnerable gems found"
+    echo "$output" | grep -v '^Updating\|^$' | head -30
+    record "bundle audit" "FAIL" "vulnerabilities found"
+  fi
+}
+
+check_npm_audit() {
+  step "npm audit"
+
+  local output exit_code=0
+  output=$(npm audit 2>&1) || exit_code=$?
+
+  if [ "$exit_code" -eq 0 ]; then
+    pass "No vulnerable packages"
+    record "npm audit" "PASS" "no vulnerabilities"
+  else
+    fail "Vulnerable packages found"
+    echo "$output"
+    record "npm audit" "FAIL" "vulnerabilities found"
+  fi
+}
+
+# --- Section 4: Tests ---------------------------------------------------------
+
+check_rspec() {
+  step "RSpec"
+
+  local output exit_code=0
+  output=$(bundle exec rspec 2>&1) || exit_code=$?
+
+  local summary
+  summary=$(echo "$output" | grep -E '^[0-9]+ examples')
+
+  if [ "$exit_code" -eq 0 ]; then
+    pass "$summary"
+    record "RSpec" "PASS" "$summary"
+  else
+    fail "$summary"
+    echo "$output" | sed -n '/^Failures:/,/^Finished/ p' | head -30
+    record "RSpec" "FAIL" "$summary"
+  fi
+}
+
+check_vitest() {
+  step "Vitest"
+
+  local output exit_code=0
+  output=$(npm test 2>&1) || exit_code=$?
+
+  local files tests
+  files=$(echo "$output" | grep -oE 'Test Files  [0-9]+ passed' || true)
+  tests=$(echo "$output" | grep -oE 'Tests  [0-9]+ passed' || true)
+  local summary="${files:+$files, }${tests:-unknown}"
+
+  if [ "$exit_code" -eq 0 ]; then
+    pass "$summary"
+    record "Vitest" "PASS" "$summary"
+  else
+    fail "Failures detected"
+    echo "$output" | tail -20
+    record "Vitest" "FAIL" "failures"
+  fi
+}
+
+check_playwright() {
+  step "Playwright"
+
+  local output exit_code=0
+  output=$(npm run test:e2e 2>&1) || exit_code=$?
+
+  local summary
+  summary=$(echo "$output" | grep -oE '[0-9]+ passed' || echo "unknown")
+
+  if [ "$exit_code" -eq 0 ]; then
+    pass "$summary"
+    record "Playwright" "PASS" "$summary"
+  else
+    local failed
+    failed=$(echo "$output" | grep -oE '[0-9]+ failed' || echo "failures")
+    fail "$failed"
+    echo "$output" | grep -E '^\s+[0-9]+\)' | head -10
+    record "Playwright" "FAIL" "$failed"
+  fi
+}
+
+# --- Section 5: Dependency freshness ------------------------------------------
+
+check_bundle_outdated() {
+  step "Ruby gems (outdated)"
+
+  local output exit_code=0
+  output=$(bundle outdated 2>&1) || exit_code=$?
+
+  if [ "$exit_code" -eq 0 ]; then
+    pass "All gems at latest version"
+    record "Gem freshness" "PASS" "all current"
+  else
+    local gems
+    gems=$(echo "$output" | sed -n '/^Gem /,$ p' | tail -n +2)
+    local count
+    count=$(echo "$gems" | grep -c . 2>/dev/null || echo "0")
+    warn "$count gem(s) have newer versions available"
+    echo "$gems" | while IFS= read -r line; do
+      [ -n "$line" ] && info "  $line"
+    done
+    record "Gem freshness" "INFO" "$count outdated"
+  fi
+}
+
+check_npm_outdated() {
+  step "npm packages (outdated)"
+
+  local output exit_code=0
+  output=$(npm outdated 2>&1) || exit_code=$?
+
+  if [ "$exit_code" -eq 0 ]; then
+    pass "All packages at latest version"
+    record "npm freshness" "PASS" "all current"
+  else
+    local packages
+    packages=$(echo "$output" | tail -n +2)
+    local count
+    count=$(echo "$packages" | grep -c . 2>/dev/null || echo "0")
+    warn "$count package(s) have newer versions available"
+    echo "$output" | while IFS= read -r line; do
+      [ -n "$line" ] && info "  $line"
+    done
+    record "npm freshness" "INFO" "$count outdated"
+  fi
+}
+
+# --- Summary ------------------------------------------------------------------
+
+summary() {
+  echo
+  bold "============================================"
+  bold "  Summary"
+  bold "============================================"
+  echo
+
+  for entry in "${CHECKS[@]}"; do
+    IFS='|' read -r name result detail <<< "$entry"
+    case "$result" in
+      PASS) printf "    \033[0;32m✓\033[0m  %-20s %s\n" "$name" "$detail" ;;
+      FAIL) printf "    \033[0;31m✗\033[0m  %-20s %s\n" "$name" "$detail" ;;
+      WARN) printf "    \033[0;33m⚠\033[0m  %-20s %s\n" "$name" "$detail" ;;
+      INFO) printf "    \033[0;34mℹ\033[0m  %-20s %s\n" "$name" "$detail" ;;
+    esac
+  done
+
+  echo
+  if [ "$FAILURES" -gt 0 ]; then
+    red "  $FAILURES check(s) failed."
+    [ "$WARNINGS" -gt 0 ] && yellow "  $WARNINGS warning(s)."
+    return 1
+  elif [ "$WARNINGS" -gt 0 ]; then
+    yellow "  All checks passed with $WARNINGS warning(s)."
+    return 0
+  else
+    green "  All checks passed."
+    return 0
+  fi
+}
+
+# --- Main ---------------------------------------------------------------------
+
+main() {
+  local start_time
+  start_time=$(date +%s)
+
+  bold "============================================"
+  bold "  Comeals — Full Project Health Check"
+  bold "============================================"
+
+  # Environment
+  check_ruby_version
+  check_node_version
+  check_pending_migrations
+
+  # Static analysis
+  check_rubocop
+  check_brakeman
+  check_eslint
+  check_prettier
+
+  # Security
+  check_bundle_audit
+  check_npm_audit
+
+  # Tests
+  check_rspec
+  check_vitest
+  check_playwright
+
+  # Dependency freshness
+  check_bundle_outdated
+  check_npm_outdated
+
+  summary
+
+  local end_time elapsed
+  end_time=$(date +%s)
+  elapsed=$((end_time - start_time))
+  local minutes=$((elapsed / 60))
+  local seconds=$((elapsed % 60))
+  echo
+  info "Completed in ${minutes}m ${seconds}s"
+}
+
+main "$@"

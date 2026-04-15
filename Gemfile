@@ -51,6 +51,7 @@ gem 'bootsnap', require: false
 
 group :development, :test do
   gem 'benchmark'
+  gem 'brakeman', require: false
   gem 'bundler-audit', require: false
   gem 'byebug', platforms: %i[ruby mri windows]
   gem 'dotenv-rails'

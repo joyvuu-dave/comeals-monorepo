@@ -35,6 +35,7 @@ This is a monorepo containing a Rails 8.1 API backend (Ruby 4.0) and a React 19 
 ├── eslint.config.js      # ESLint for frontend source
 ├── playwright.config.js  # Playwright E2E config
 ├── Gemfile               # Ruby dependencies
+├── bin/check             # Comprehensive project health check
 └── bin/deploy            # Single-app Heroku deploy script
 ```
 
@@ -42,6 +43,7 @@ This is a monorepo containing a Rails 8.1 API backend (Ruby 4.0) and a React 19 
 
 ```bash
 bin/dev                    # Starts Rails (3000) + Vite (3036) + clock via foreman
+bin/check                  # Full health check: tests, linters, security, freshness
 bundle exec rspec          # Run Ruby tests
 npm test                   # Run frontend unit tests (Vitest)
 npm run lint               # Run ESLint on frontend source
