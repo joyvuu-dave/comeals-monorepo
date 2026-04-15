@@ -7,8 +7,10 @@ export default defineConfig({
   server: {
     port: 3036,
     proxy: {
-      "/api": { target: "http://localhost:3000", changeOrigin: true },
-      "/admin": { target: "http://localhost:3000", changeOrigin: true },
+      "/api": "http://localhost:3000",
+      "/admin": "http://localhost:3000",
+      "/assets": "http://localhost:3000",
+      "/letter_opener": "http://localhost:3000",
     },
   },
   build: {
