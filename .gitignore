@@ -18,6 +18,7 @@
 
 /public/assets
 /public/.vite/
+/public/index.html
 /app/frontend/dist/
 .byebug_history
 
@@ -47,6 +48,7 @@ latest.dump
 /coverage/
 
 # Playwright test results
+/test-results/
 /tests/test-results/
 
 # AI tooling (Claude Code, AIWG)
