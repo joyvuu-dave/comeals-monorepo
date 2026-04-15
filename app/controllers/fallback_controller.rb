@@ -2,12 +2,12 @@
 
 class FallbackController < ActionController::API
   def index
-    send_file Rails.root.join('public', 'index.html'),
+    send_file Rails.public_path.join('index.html'),
               type: 'text/html', disposition: 'inline'
   end
 
   def vite_manifest
-    path = Rails.root.join('public', '.vite', 'manifest.json')
+    path = Rails.public_path.join('.vite/manifest.json')
     if path.exist?
       response.headers['Cache-Control'] = 'no-cache'
       send_file path, type: 'application/json', disposition: 'inline'

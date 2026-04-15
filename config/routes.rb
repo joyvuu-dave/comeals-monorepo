@@ -64,5 +64,5 @@ Rails.application.routes.draw do
   # SPA catch-all (must be last)
   root to: 'fallback#index'
   get '*path', to: 'fallback#index',
-      constraints: ->(req) { !req.path.start_with?('/api/', '/admin', '/letter_opener') }
+               constraints: ->(req) { !req.path.start_with?('/api/', '/admin', '/letter_opener') }
 end
