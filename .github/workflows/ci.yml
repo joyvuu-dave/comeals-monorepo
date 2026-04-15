@@ -73,6 +73,9 @@ jobs:
 
   node-e2e-tests:
     runs-on: ubuntu-latest
+    env:
+      VITE_PUSHER_KEY: "test-key-for-ci"
+      VITE_PUSHER_CLUSTER: "us2"
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6

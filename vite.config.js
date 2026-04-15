@@ -1,9 +1,11 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   root: "app/frontend",
-  publicDir: "../../public",
+  envDir: "../..",
+  // Only serve public/ files during dev; in build/preview, outDir IS public/
+  publicDir: command === "serve" ? "../../public" : false,
   plugins: [react()],
   server: {
     port: 3036,
@@ -17,4 +19,4 @@ export default defineConfig({
     manifest: true,
     chunkSizeWarningLimit: 700,
   },
-});
+}));
