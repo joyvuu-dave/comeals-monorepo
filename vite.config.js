@@ -8,9 +8,6 @@ export default defineConfig({
     port: 3036,
     proxy: {
       "/api": "http://localhost:3000",
-      "/admin": "http://localhost:3000",
-      "/assets": "http://localhost:3000",
-      "/letter_opener": "http://localhost:3000",
     },
   },
   build: {

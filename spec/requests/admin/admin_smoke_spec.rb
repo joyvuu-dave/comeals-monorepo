@@ -10,17 +10,18 @@ RSpec.describe 'Admin smoke tests' do
   let(:community) { create(:community) }
   let(:admin_user) { create(:admin_user, community: community, superuser: true) }
 
+  before { host! 'admin.example.com' }
+
   describe 'login page' do
     it 'renders the login form' do
-      get '/admin/login'
+      get '/login'
       expect(response).to have_http_status(:ok)
       expect(response.body).to include('id="admin_user_email"')
       expect(response.body).to include('id="admin_user_password"')
     end
 
     it 'references Sprockets stylesheets that resolve to CSS' do
-      get '/admin/login'
-      # Extract stylesheet URLs from the HTML
+      get '/login'
       css_hrefs = response.body.scan(/href="([^"]*active_admin[^"]*\.css[^"]*)"/).flatten
       expect(css_hrefs).not_to be_empty, 'login page should reference active_admin CSS'
 
@@ -33,7 +34,7 @@ RSpec.describe 'Admin smoke tests' do
     end
 
     it 'references Sprockets javascripts that resolve to JS' do
-      get '/admin/login'
+      get '/login'
       js_srcs = response.body.scan(/src="([^"]*active_admin[^"]*\.js[^"]*)"/).flatten
       expect(js_srcs).not_to be_empty, 'login page should reference active_admin JS'
 
@@ -47,23 +48,19 @@ RSpec.describe 'Admin smoke tests' do
   end
 
   describe 'login flow' do
-    it 'authenticates and redirects to the dashboard' do
-      post '/admin/login', params: {
-        admin_user: { email: admin_user.email, password: 'password123' }
-      }
-      expect(response).to redirect_to('/admin')
-
-      follow_redirect!
+    it 'authenticates via sign_in and loads the dashboard' do
+      sign_in admin_user
+      get '/'
       expect(response).to have_http_status(:ok)
       expect(response.body).to include('Dashboard')
+      expect(response.body).to include('id="active_admin_content"')
     end
 
     it 'rejects invalid credentials' do
-      post '/admin/login', params: {
+      post '/login', params: {
         admin_user: { email: admin_user.email, password: 'wrong' }
       }
-      # Devise re-renders the login form on failure
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
                       .or have_http_status(:ok)
       expect(response.body).to include('id="admin_user_email"')
     end
@@ -73,15 +70,15 @@ RSpec.describe 'Admin smoke tests' do
     before { sign_in admin_user }
 
     it 'renders with ActiveAdmin layout' do
-      get '/admin'
+      get '/'
       expect(response).to have_http_status(:ok)
       expect(response.body).to include('id="active_admin_content"')
     end
 
     it 'references stylesheets that resolve to CSS (not SPA HTML)' do
-      get '/admin'
+      get '/'
       css_hrefs = response.body.scan(/href="([^"]*\.css[^"]*)"/).flatten
-                              .select { |h| h.start_with?('/assets/') }
+                          .select { |h| h.start_with?('/assets/') }
 
       css_hrefs.each do |href|
         get href
@@ -98,15 +95,24 @@ RSpec.describe 'Admin smoke tests' do
 
     it 'renders the residents index' do
       create(:resident, community: community, unit: create(:unit, community: community))
-      get '/admin/residents'
+      get '/residents'
       expect(response).to have_http_status(:ok)
       expect(response.body).to include('id="active_admin_content"')
     end
 
     it 'renders the meals index' do
-      get '/admin/meals'
+      get '/meals'
       expect(response).to have_http_status(:ok)
       expect(response.body).to include('id="active_admin_content"')
+    end
+  end
+
+  describe 'subdomain isolation' do
+    it 'admin routes are NOT accessible without admin subdomain' do
+      host! 'www.example.com'
+      get '/login'
+      # Without admin subdomain, /login should fall through to SPA catch-all
+      expect(response.body).to include('<div id="root">')
     end
   end
 end

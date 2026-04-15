@@ -8,11 +8,12 @@ RSpec.describe 'Admin Reconciliation Update Meals' do
   let(:admin_user) { create(:admin_user, community: community, superuser: true) }
 
   before do
+    host! 'admin.example.com'
     sign_in admin_user
   end
 
   def update_meals(reconciliation, meal_ids:)
-    patch "/admin/reconciliations/#{reconciliation.id}/update_meals",
+    patch "/reconciliations/#{reconciliation.id}/update_meals",
           params: { meal_ids: meal_ids }
   end
 
@@ -35,7 +36,7 @@ RSpec.describe 'Admin Reconciliation Update Meals' do
     # Submit list excluding meal_to_remove
     update_meals(reconciliation, meal_ids: [meal_to_keep.id])
 
-    expect(response).to redirect_to("/admin/reconciliations/#{reconciliation.id}")
+    expect(response).to redirect_to("/reconciliations/#{reconciliation.id}")
     expect(meal_to_remove.reload.reconciliation_id).to be_nil
     expect(meal_to_keep.reload.reconciliation_id).to eq(reconciliation.id)
     expect(reconciliation.balance_for(cook)).to eq(BigDecimal('60'))
@@ -61,7 +62,7 @@ RSpec.describe 'Admin Reconciliation Update Meals' do
 
     update_meals(reconciliation, meal_ids: [in_meal.id, out_meal.id])
 
-    expect(response).to redirect_to("/admin/reconciliations/#{reconciliation.id}")
+    expect(response).to redirect_to("/reconciliations/#{reconciliation.id}")
     expect(out_meal.reload.reconciliation_id).to eq(reconciliation.id)
     expect(reconciliation.balance_for(cook)).to eq(BigDecimal('60'))
   end
@@ -104,7 +105,7 @@ RSpec.describe 'Admin Reconciliation Update Meals' do
     # Attempt to claim a meal that's already in another reconciliation
     update_meals(target, meal_ids: [meal_in_other.id])
 
-    expect(response).to redirect_to("/admin/reconciliations/#{target.id}")
+    expect(response).to redirect_to("/reconciliations/#{target.id}")
     expect(flash[:alert]).to match(/not eligible/)
     expect(meal_in_other.reload.reconciliation_id).to eq(other_recon.id)
   end
@@ -134,7 +135,7 @@ RSpec.describe 'Admin Reconciliation Update Meals' do
     reconciliation = Reconciliation.create!(community: community, end_date: Date.new(2025, 3, 31))
     expect(reconciliation.meals.count).to eq(1)
 
-    patch "/admin/reconciliations/#{reconciliation.id}/update_meals" # no params
+    patch "/reconciliations/#{reconciliation.id}/update_meals" # no params
 
     expect(meal.reload.reconciliation_id).to be_nil
     expect(reconciliation.reload.meals.count).to eq(0)

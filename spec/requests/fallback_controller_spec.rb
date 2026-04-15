@@ -25,8 +25,9 @@ RSpec.describe 'FallbackController' do
       expect(response.content_type).to start_with('application/json')
     end
 
-    it 'does not catch /admin routes' do
-      get '/admin/login'
+    it 'does not catch /admin routes on admin subdomain' do
+      host! 'admin.example.com'
+      get '/login'
       expect(response).to have_http_status(:ok)
       expect(response.body).not_to include('<div id="root">')
     end
@@ -37,7 +38,7 @@ RSpec.describe 'FallbackController' do
       get '/.vite/manifest.json'
       expect(response).to have_http_status(:ok)
       expect(response.content_type).to start_with('application/json')
-      expect { JSON.parse(response.body) }.not_to raise_error
+      expect { response.parsed_body }.not_to raise_error
     end
   end
 end

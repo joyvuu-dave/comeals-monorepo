@@ -2,7 +2,7 @@
 
 class FallbackController < ActionController::API
   def index
-    send_file Rails.public_path.join('index.html'),
+    send_file Rails.root.join('app/frontend/dist/index.html'),
               type: 'text/html', disposition: 'inline'
   end
 

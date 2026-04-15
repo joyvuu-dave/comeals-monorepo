@@ -46,7 +46,7 @@
     "vitest": "^4.1.2"
   },
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && mkdir -p app/frontend/dist && mv public/index.html app/frontend/dist/index.html",
     "dev": "vite",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",

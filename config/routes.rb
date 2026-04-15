@@ -3,10 +3,12 @@
 Rails.application.routes.draw do
   mount LetterOpenerWeb::Engine, at: '/letter_opener' if Rails.env.development?
 
-  # ActiveAdmin (path-based, no subdomain)
-  devise_for :admin_users, ActiveAdmin::Devise.config
-  ActiveAdmin.routes(self)
-  get '/admin-logout', to: 'application#admin_logout'
+  # ActiveAdmin (subdomain-based: admin.comeals.com / admin.lvh.me)
+  constraints subdomain: 'admin' do
+    devise_for :admin_users, ActiveAdmin::Devise.config.merge(path: '')
+    ActiveAdmin.routes(self)
+    get '/admin-logout', to: 'application#admin_logout'
+  end
 
   # API
   namespace :api do
@@ -61,8 +63,10 @@ Rails.application.routes.draw do
   # Vite manifest (dotfile directory, not served by static file middleware)
   get '.vite/manifest.json', to: 'fallback#vite_manifest'
 
-  # SPA catch-all (must be last)
-  root to: 'fallback#index'
-  get '*path', to: 'fallback#index',
-               constraints: ->(req) { !req.path.start_with?('/api/', '/admin', '/letter_opener') }
+  # SPA catch-all (must be last; only on non-admin subdomain)
+  constraints(->(req) { req.subdomain != 'admin' }) do
+    root to: 'fallback#index'
+    get '*path', to: 'fallback#index',
+                 constraints: ->(req) { !req.path.start_with?('/api/', '/letter_opener') }
+  end
 end

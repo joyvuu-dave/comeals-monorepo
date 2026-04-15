@@ -9,6 +9,6 @@ class ApplicationMailer < ActionMailer::Base
   end
 
   def root_admin_url
-    @root_admin_url ||= Rails.env.production? ? 'https://comeals.com/admin' : 'http://localhost:3000/admin'
+    @root_admin_url ||= Rails.env.production? ? 'https://admin.comeals.com' : 'http://admin.lvh.me:3000'
   end
 end

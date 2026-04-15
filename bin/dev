@@ -11,7 +11,7 @@ fi
 
 echo ""
 echo "  Comeals:       http://localhost:3036"
-echo "  ActiveAdmin:   http://localhost:3036/admin/login"
+echo "  ActiveAdmin:   http://admin.lvh.me:3000/login"
 echo "  Mail inbox:    http://localhost:3000/letter_opener"
 echo ""
 

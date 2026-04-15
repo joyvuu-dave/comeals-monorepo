@@ -17,8 +17,8 @@
 /storage/*
 
 /public/assets
-/public/index.html
 /public/.vite/
+/app/frontend/dist/
 .byebug_history
 
 # dotenv
