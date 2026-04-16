@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Integration test orchestrator
+#
+# Seeds the test database with deterministic data, builds the frontend,
+# boots a Rails test server, runs Playwright integration tests against
+# the real backend, and cleans up on exit.
+#
+# Usage:
+#   bin/test-integration              # run all integration tests
+#   bin/test-integration auth.spec.js # run a specific test file
+# ---------------------------------------------------------------------------
+
+RAILS_PORT=3001
+RAILS_PID=""
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT_DIR"
+
+cleanup() {
+  if [ -n "$RAILS_PID" ]; then
+    echo ""
+    echo "Stopping Rails test server (PID $RAILS_PID)..."
+    kill "$RAILS_PID" 2>/dev/null || true
+    wait "$RAILS_PID" 2>/dev/null || true
+  fi
+  # Wipe integration seed data so RSpec finds a clean database.
+  echo "Resetting test database..."
+  psql -q -d comeals_test -c "TRUNCATE communities CASCADE" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+# ------------------------------------------------------------------
+# 1. Prepare test database
+# ------------------------------------------------------------------
+echo "==> Preparing test database..."
+RAILS_ENV=test bundle exec rails db:prepare 2>&1 | tail -1
+
+echo "==> Seeding integration test data..."
+RAILS_ENV=test bundle exec rails test:seed_integration
+
+# ------------------------------------------------------------------
+# 2. Build frontend
+# ------------------------------------------------------------------
+echo ""
+echo "==> Building frontend..."
+npm run build 2>&1 | tail -3
+
+# ------------------------------------------------------------------
+# 3. Start Rails test server
+# ------------------------------------------------------------------
+echo ""
+echo "==> Starting Rails test server on port $RAILS_PORT..."
+RAILS_ENV=test INTEGRATION_SERVER=1 bundle exec rails server -p "$RAILS_PORT" &>/dev/null &
+RAILS_PID=$!
+
+# Wait for server to be ready
+echo -n "    Waiting for server"
+for i in $(seq 1 30); do
+  if curl -sf "http://localhost:$RAILS_PORT/api/v1/version" &>/dev/null; then
+    echo " ready!"
+    break
+  fi
+  if [ "$i" -eq 30 ]; then
+    echo " TIMEOUT"
+    echo "ERROR: Rails server failed to start within 30 seconds."
+    exit 1
+  fi
+  echo -n "."
+  sleep 1
+done
+
+# ------------------------------------------------------------------
+# 4. Run Playwright integration tests
+# ------------------------------------------------------------------
+echo ""
+echo "==> Running integration tests..."
+echo ""
+
+PLAYWRIGHT_ARGS=(--config playwright.integration.config.js)
+
+# Pass through any extra arguments (e.g., specific test file)
+if [ $# -gt 0 ]; then
+  PLAYWRIGHT_ARGS+=("$@")
+fi
+
+npx playwright test "${PLAYWRIGHT_ARGS[@]}"

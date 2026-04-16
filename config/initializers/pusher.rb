@@ -18,3 +18,8 @@ else
 end
 Pusher.logger = Rails.logger
 Pusher.encrypted = true
+
+# Integration test server: suppress Pusher to avoid network calls.
+# RSpec already stubs Pusher per-test via rails_helper; this handles the
+# non-RSpec case (running `rails server` for Playwright integration tests).
+Pusher.define_singleton_method(:trigger) { |*_args| true } if ENV['INTEGRATION_SERVER'].present?

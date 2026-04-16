@@ -52,6 +52,7 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "npx playwright test",
     "test:e2e:update": "npx playwright test --update-snapshots",
+    "test:integration": "bin/test-integration",
     "lint": "eslint app/frontend/src/",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
