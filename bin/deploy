@@ -16,7 +16,7 @@ set -euo pipefail
 # Heroku buildpack order: Node (Vite build) → Ruby (bundle + Sprockets).
 # ==============================================================================
 
-APP="comeals-backend"
+APP="comeals-monorepo"
 APP_URL="https://comeals.com"
 MAINTENANCE_ENABLED=false
 DEPLOY_TIMESTAMP=""
