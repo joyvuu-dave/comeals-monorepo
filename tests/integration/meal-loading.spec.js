@@ -153,9 +153,9 @@ test.describe("Meal loading (real backend)", () => {
     await page.waitForLoadState("networkidle");
 
     // Reconciled meals show "RECONCILED" (separate h1 path in date_box.jsx)
-    await expect(
-      page.locator("h1", { hasText: "RECONCILED" }),
-    ).toBeVisible({ timeout: 10000 });
+    await expect(page.locator("h1", { hasText: "RECONCILED" })).toBeVisible({
+      timeout: 10000,
+    });
 
     // Description still populated
     const textarea = page.locator('[aria-label="Enter meal description"]');

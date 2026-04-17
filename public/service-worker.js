@@ -18,11 +18,11 @@ self.addEventListener("activate", function (event) {
         return Promise.all(
           names.map(function (name) {
             return caches.delete(name);
-          })
+          }),
         );
       })
       .then(function () {
         return self.clients.claim();
-      })
+      }),
   );
 });

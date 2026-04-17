@@ -6,23 +6,23 @@ Comeals is a meal management system for co-housing communities. Residents sign u
 
 ### Core Domain Concepts
 
-| Concept | Description |
-|---------|-------------|
-| **Meal** | A dinner event on a specific date. Has attendees (residents + guests) and cooks (who submit bills). |
-| **Bill** | A cook's expense for a meal. One bill per cook per meal. Stores `amount` in dollars as DECIMAL(12,8). |
-| **MealResident** | A resident's attendance at a meal. Captures the resident's `multiplier` at time of signup. |
-| **Guest** | A non-resident brought by a resident. Has a `multiplier` (2=adult, 1=child). The hosting resident is charged for their guest. |
-| **Multiplier** | A pricing weight. Adults=2, children=1. Used to split costs proportionally (adults pay 2x what children pay). |
-| **Reconciliation** | A billing period. Meals are assigned to a reconciliation. Balances are calculated per-reconciliation. |
-| **Rotation** | A scheduling group of ~12 meals used to organize cooking assignments. Distinct from reconciliation. |
-| **Unit** | A household/apartment. Contains one or more residents. |
-| **Community** | The co-housing community. Has a cost `cap` (max per-multiplier-unit cost). |
+| Concept            | Description                                                                                                                   |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| **Meal**           | A dinner event on a specific date. Has attendees (residents + guests) and cooks (who submit bills).                           |
+| **Bill**           | A cook's expense for a meal. One bill per cook per meal. Stores `amount` in dollars as DECIMAL(12,8).                         |
+| **MealResident**   | A resident's attendance at a meal. Captures the resident's `multiplier` at time of signup.                                    |
+| **Guest**          | A non-resident brought by a resident. Has a `multiplier` (2=adult, 1=child). The hosting resident is charged for their guest. |
+| **Multiplier**     | A pricing weight. Adults=2, children=1. Used to split costs proportionally (adults pay 2x what children pay).                 |
+| **Reconciliation** | A billing period. Meals are assigned to a reconciliation. Balances are calculated per-reconciliation.                         |
+| **Rotation**       | A scheduling group of ~12 meals used to organize cooking assignments. Distinct from reconciliation.                           |
+| **Unit**           | A household/apartment. Contains one or more residents.                                                                        |
+| **Community**      | The co-housing community. Has a cost `cap` (max per-multiplier-unit cost).                                                    |
 
 ### How Cost Splitting Should Work (Conceptually)
 
 1. Cook(s) buy groceries and submit their actual cost as a bill
 2. The total meal cost is the sum of all bills
-3. Each attendee's share = (total cost / total multiplier units) * their multiplier
+3. Each attendee's share = (total cost / total multiplier units) \* their multiplier
 4. Cooks get credited (reimbursed) and attendees get debited (charged)
 5. A cook who also attends has both a credit and a debit, which partially cancel out
 6. Periodically, balances are tallied and residents settle up (those with negative balances pay, those with positive balances receive)
@@ -136,11 +136,13 @@ All financial columns use `DECIMAL(12,8)`. All Ruby arithmetic uses `BigDecimal`
 Rationale: This is what banks and accounting systems do. PostgreSQL's `NUMERIC`/`DECIMAL` type performs exact arithmetic — no IEEE 754 floating-point errors. 8 decimal places gives sub-micro-cent precision, which makes division remainders negligible.
 
 The model:
+
 - **Input** (cook's receipt): Always whole cents — you can't spend half a cent at a store. Stored as `DECIMAL(12, 8)` with zero fractional part for type consistency.
 - **Intermediate** (per-unit cost, individual charges): Full `DECIMAL(12, 8)` precision. No rounding.
 - **Settlement** (reconciliation): Rounded to whole cents using **largest-remainder allocation** (Hamilton's method). This guarantees rounded balances sum to exactly zero — no residual pennies are dropped. Each value is within 1 cent of its exact amount. Ties broken by lowest `resident_id`.
 
 Example: $50.00 meal, 7 multiplier units
+
 - `unit_cost = 50.00 / 7 = 7.14285714` (stored at full precision)
 - Adult (mult 2) charge: `7.14285714 * 2 = 14.28571428`
 - At reconciliation: truncated to `$14.28`, residual pennies distributed to entries with largest remainders
@@ -163,6 +165,7 @@ Source of truth: bills + meal_residents + guests records. The `resident_balances
 **DECIDED: Admin manually triggers reconciliation. System auto-assigns eligible meals.**
 
 When triggered:
+
 1. Create a Reconciliation record
 2. Assign all unreconciled meals that have at least one bill
 3. Compute final balances, round to cents (largest-remainder allocation)
@@ -212,6 +215,7 @@ All four phases have been implemented and merged to master:
 ## 8. Key Files Reference
 
 ### Financial Logic
+
 - `app/models/bill.rb` — effective_amount, unit_cost, capped_amount
 - `app/models/meal.rb` — multiplier, total_cost, effective_total_cost, unit_cost, max_cost
 - `app/models/resident.rb` — calc_balance, bill_reimbursements, meal_resident_costs, guest_costs
@@ -221,6 +225,7 @@ All four phases have been implemented and merged to master:
 - `app/controllers/api/v1/meals_controller.rb` — update_bills
 
 ### Tests
+
 - `spec/models/bill_spec.rb` — unit_cost, effective_amount, capped_amount
 - `spec/models/meal_spec.rb` — total_cost, unit_cost, multiplier, capped meals
 - `spec/models/resident_spec.rb` — calc_balance, bill_reimbursements, meal_resident_costs, guest_costs
@@ -228,9 +233,11 @@ All four phases have been implemented and merged to master:
 - `spec/requests/api/v1/update_bills_spec.rb` — auth, authorization, reconciled guard, malformed input, bill updates
 
 ### Admin
+
 - `app/admin/bill.rb`, `app/admin/meal.rb`, `app/admin/resident.rb`
 
 ### Frontend (../comeals-ui)
+
 - `src/stores/bill.js` — bill model, amount validation
 - `src/stores/data_store.js` — submitBills, loadDataAsync
 - `src/components/meal/cooks_box.jsx` — bill entry UI

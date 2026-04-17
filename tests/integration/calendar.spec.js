@@ -12,9 +12,7 @@ test.describe("Calendar (real backend)", () => {
     await setupAuthenticatedPage(page, context);
   });
 
-  test("current month calendar loads with real meal data", async ({
-    page,
-  }) => {
+  test("current month calendar loads with real meal data", async ({ page }) => {
     const today = new Date().toISOString().split("T")[0];
     await page.goto(`/calendar/all/${today}/`);
     await page.waitForLoadState("networkidle");

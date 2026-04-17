@@ -44,12 +44,14 @@ Community
 ```
 
 **Key fields:**
+
 - `name` (unique) -- "Patches Way"
 - `slug` (unique, via FriendlyId) -- "patches"
 - `cap` DECIMAL(12,8) -- per-multiplier-unit cost cap. NULL = no cap.
 - `timezone` -- "America/Los_Angeles"
 
 **Behavior:**
+
 - `capped?` -- true when cap is set
 - `unreconciled_ave_cost` -- average cost per adult across unreconciled meals
 - `create_next_rotation` -- generates the next rotation of 12 meals
@@ -66,9 +68,11 @@ Unit ---< Resident
 ```
 
 **Key fields:**
+
 - `name` (unique per community) -- "A", "B", etc.
 
 **Behavior:**
+
 - `balance` -- sum of all residents' cached balances
 - `meals_cooked` -- count of cooking slots across all residents for unreconciled meals
 
@@ -92,21 +96,23 @@ Resident
 ```
 
 **Key fields:**
+
 - `name` (unique per community)
 - `email` (unique, required for active adult cooks)
 - `multiplier` -- pricing weight: 2=adult, 1=child
 - `active` -- false for residents who moved/died
 - `can_cook` -- eligible for cooking rotation
 - `birthday` -- used for age-based multiplier auto-setting
-**Scopes:**
+  **Scopes:**
 - `adult` -- multiplier >= 2
 - `active` -- active = true
 
 **Financial methods:**
+
 - `calc_balance` -- bill_reimbursements - meal_resident_costs - guest_costs (unreconciled meals only)
 - `balance` -- reads from ResidentBalance cache (refreshed daily by rake task)
 - `bill_reimbursements` -- SQL SUM of bill amounts for unreconciled meals
-- `meal_resident_costs` -- sum of (meal.unit_cost * multiplier) for attended meals
+- `meal_resident_costs` -- sum of (meal.unit_cost \* multiplier) for attended meals
 - `guest_costs` -- sum of guest costs charged to this resident
 
 ---
@@ -149,11 +155,13 @@ Bill ----> Community
 ```
 
 **Key fields:**
+
 - `amount` DECIMAL(12,8) -- what the cook spent, in dollars
 - `no_cost` -- true if this cook volunteered without cost (effective_amount = 0)
 - DB constraint: `CHECK (amount >= 0)`
 
 **Financial methods:**
+
 - `effective_amount` -- 0 if no_cost, else amount
 - `unit_cost` -- capped_amount / meal.multiplier
 - `capped_amount` -- proportionally reduced when meal exceeds community cap
@@ -174,6 +182,7 @@ Meal ----< Guest (0-5 visitors typically)
 ```
 
 **Key fields:**
+
 - `date` (unique per community)
 - `description` -- menu text
 - `cap` DECIMAL(12,8) -- cost cap, copied from community at creation. NULL = no cap.
@@ -182,16 +191,18 @@ Meal ----< Guest (0-5 visitors typically)
 - `start_time` -- 6pm Sundays, 7pm other days
 
 **Financial methods (all computed from source data, no cached columns):**
+
 - `multiplier` -- SUM of meal_residents.multiplier + guests.multiplier
 - `total_cost` -- SQL SUM of bill amounts (excludes no_cost bills)
 - `effective_total_cost` -- min(total_cost, max_cost) when capped
 - `unit_cost` -- effective_total_cost / multiplier
-- `max_cost` -- cap * multiplier (nil if uncapped)
-- `collected` -- unit_cost * multiplier
+- `max_cost` -- cap \* multiplier (nil if uncapped)
+- `collected` -- unit_cost \* multiplier
 - `subsidized?` -- true when total_cost exceeds max_cost
 - `capped?` / `reconciled?`
 
 **Scopes:**
+
 - `unreconciled` -- reconciliation_id IS NULL
 
 ---
@@ -207,14 +218,17 @@ MealResident ----> Community
 ```
 
 **Key fields:**
+
 - `multiplier` -- copied from resident at signup time (snapshot)
 - `late` -- arrived late
 - `vegetarian`
 
 **Financial methods:**
-- `cost` -- meal.unit_cost * multiplier
+
+- `cost` -- meal.unit_cost \* multiplier
 
 **Attendance rules:**
+
 - Can join open meals freely
 - Can join closed meals if max is set and spots remain
 - Cannot join closed meals if max is not set or is full
@@ -232,12 +246,14 @@ Guest ----> Resident (the host)
 ```
 
 **Key fields:**
+
 - `name`
 - `multiplier` -- 2=adult, 1=child
 - `late` / `vegetarian`
 
 **Financial methods:**
-- `cost` -- meal.unit_cost * multiplier (charged to the hosting resident)
+
+- `cost` -- meal.unit_cost \* multiplier (charged to the hosting resident)
 
 ---
 
@@ -253,9 +269,11 @@ Reconciliation ----< Meal
 ```
 
 **Key fields:**
+
 - `date` -- when the reconciliation was created
 
 **Behavior:**
+
 - `assign_meals` (after_commit on create) -- assigns all unreconciled meals with bills
 - `settlement_balances` -- computes per-resident balances rounded to cents using largest-remainder allocation (Hamilton's method), guaranteeing zero-sum
 - Once a meal is reconciled, its bills cannot be modified
@@ -271,6 +289,7 @@ ResidentBalance ----> Resident (one-to-one)
 ```
 
 **Key fields:**
+
 - `amount` DECIMAL(12,8) -- the resident's current balance
 
 This is a **materialized cache**, not a source of truth. It can be rebuilt at any time from bills + meal_residents + guests records.
@@ -289,6 +308,7 @@ Rotation ----< Meal
 ```
 
 **Key fields:**
+
 - `description` -- auto-generated date range ("2026-01-05 to 2026-02-16")
 - `color` -- one of 5 colors, cycling
 - `start_date` -- date of first meal
@@ -373,6 +393,7 @@ Child guest:     multiplier = 1
 A meal's total multiplier is the sum across all attendees and guests. Cost per multiplier unit = total_cost / total_multiplier. An adult pays 2x what a child pays.
 
 Example: $60 meal, 3 adults + 1 child attending:
+
 ```
 total_multiplier = 2 + 2 + 2 + 1 = 7
 unit_cost = $60 / 7 = $8.57142857...

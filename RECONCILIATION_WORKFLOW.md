@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document captures the desired workflow for performing a reconciliation, the pain points in the current process, and ideas for improvements. It preserves the *thinking* behind each idea so we can come back later and start implementation without re-deriving the rationale.
+This document captures the desired workflow for performing a reconciliation, the pain points in the current process, and ideas for improvements. It preserves the _thinking_ behind each idea so we can come back later and start implementation without re-deriving the rationale.
 
 ## Background
 
@@ -23,7 +23,7 @@ When the person responsible for reconciliations runs one, their mental flow is:
 - **No outlier detection.** Errors only get caught if someone manually notices them.
 - **No data quality warnings.** Bills with no attendees, attendees with no bills, $0 bills not flagged as `no_cost` — all silently slip through.
 - **No way to lock a finalized reconciliation.** Anyone can change the underlying data after the fact and silently invalidate the published balances.
-- **No preview / dry run.** The reconciler can only see what a reconciliation looks like *after* creating it. If something's wrong, they have to delete or fix in place.
+- **No preview / dry run.** The reconciler can only see what a reconciliation looks like _after_ creating it. If something's wrong, they have to delete or fix in place.
 - **No comparison to history.** A 4× cost jump from the previous reconciliation should jump out, but currently you'd have to manually compare.
 
 ## Improvement ideas
@@ -50,12 +50,14 @@ These are deterministic, cheap to compute, easy to act on. They should appear as
 **Method: IQR (interquartile range), not standard deviation.**
 
 Why IQR over stddev:
+
 - Standard deviation assumes a bell curve, but meal costs are right-skewed (cluster around a typical value, long tail of expensive ones). Stddev gets distorted by the tail and produces nonsensical bounds.
 - IQR is robust — outliers in the source data don't poison the bounds (which is exactly what we're trying to detect).
 - It's the textbook approach for skewed data (Tukey's fences).
 - Easy to explain to non-engineers: "this meal is unusually expensive compared to your community's typical range."
 
 Algorithm:
+
 1. Compute Q1 (25th percentile) and Q3 (75th percentile) of unit cost across all historical reconciled meals for this community
 2. IQR = Q3 - Q1
 3. Lower bound = Q1 - 1.5 × IQR
@@ -63,6 +65,7 @@ Algorithm:
 5. Flag any meal whose unit cost falls outside
 
 Notes:
+
 - **Use unit cost** (`total_cost / total_multiplier`), not total cost. Total cost without per-person normalization is meaningless.
 - **Include capped meals** in the historical sample. A capped meal hitting its cap is itself a signal worth surfacing.
 - **Cold-start problem:** A brand-new community has no history, so IQR isn't meaningful. But "no flagging until 20 meals" gives zero protection during exactly the period where mistakes are most likely — new community, unfamiliar process, everyone still learning. Use a **conservative hardcoded fallback band** (e.g., $1–$50 per person-equivalent unit cost) as a crude safety net until ~20 reconciled meals exist, then switch to IQR. The fallback doesn't need to be smart — it just needs to catch obvious typos ($400 for a $40 meal) during the period where statistical methods can't.
@@ -76,7 +79,7 @@ The challenge: "outlier" depends on context. A meal from 3 years ago is suspicio
 
 **Approach: relative outliers, not absolute.**
 
-Detect dates that are outliers *relative to the other meals in the same reconciliation*. Possible methods:
+Detect dates that are outliers _relative to the other meals in the same reconciliation_. Possible methods:
 
 - **Gap detection:** Sort meals by date. If there's a large gap between the oldest meal and the next-oldest meal, the oldest is suspect. (50 meals from Feb–March + 1 from 3 years ago = 2.5-year gap = obvious outlier.)
 - **Median + spread:** Compute the median date. Flag any meal more than N times the typical spread before the median.
@@ -92,23 +95,26 @@ Add a way to mark a reconciliation as locked, preventing accidental changes afte
 **Schema: `finalized_at` timestamp** (nullable; null = not finalized, set = finalized at this time).
 
 Why timestamp over boolean:
-- Captures *when* it was locked, which is real information ("we locked this 3 days ago, before the bug was found")
+
+- Captures _when_ it was locked, which is real information ("we locked this 3 days ago, before the bug was found")
 - Standard Rails idiom (`published_at`, `archived_at`, `deleted_at`)
 - A boolean answers yes/no; a timestamp answers yes/no AND when
 
 **Why "finalized" works as a name:**
+
 - Past tense, implies done
 - Reads naturally for both fresh and ancient reconciliations: "finalized on April 5, 2025"
 - Better than "closed" (sounds like you can't read it) or "locked" (implies you'll unlock)
 
 **Behavior:**
+
 - `update_meals` action refuses if `finalized_at` is set
 - Editing `end_date` refuses if `finalized_at` is set
 - Read actions are unaffected
 - Visual indicator (banner, padlock icon) when finalized
 - **Unfinalize is deliberately high-friction.** Not just a confirm dialog — that's cosmetic friction and recreates the exact problem finalization is supposed to solve. Minimum bar: admin-only, audit-logged (who unlocked, when, why), and unfinalization **forces a re-derivation of the balances** on re-finalization so any drift in the underlying meal data is surfaced rather than hidden. If nothing changed underneath, the re-derivation is a no-op; if something did change, the reconciler is forced to confront it before re-locking.
 
-**Bill immutability must land *with* `finalized_at`, not as a follow-up.**
+**Bill immutability must land _with_ `finalized_at`, not as a follow-up.**
 
 CLAUDE.md already commits to the principle ("financial records are append-only / immutable where possible"); finalization is the moment we finally enforce it in code. If an admin can still edit a bill on a reconciled meal after the reconciliation is "locked," the lock is theater. Worse, this becomes actively dangerous once the collection workflow lands: once money has actually moved (see `COLLECTION_WORKFLOW.md`), silent drift in the underlying ledger means the published balances no longer match the numbers on file. `settled_at` is built on the assumption that `finalized_at` means something.
 
@@ -120,15 +126,15 @@ The intentional exception: unfinalization (see above) temporarily re-enables edi
 
 ### 5. Pre-flight preview ("dry run")
 
-The biggest workflow improvement of all. The reconciler's MO is "double-check dates, double-check costs, then lock." Currently they can only check *after* creating the reconciliation. If they find a problem, they have to delete or fix in place — risky and disruptive.
+The biggest workflow improvement of all. The reconciler's MO is "double-check dates, double-check costs, then lock." Currently they can only check _after_ creating the reconciliation. If they find a problem, they have to delete or fix in place — risky and disruptive.
 
-A **preview page** would change this. Pick a cutoff date, click "Preview," and see exactly what *would* happen — meal list, balances, outlier flags, mismatch warnings — without creating anything. Once satisfied, click "Create" to commit.
+A **preview page** would change this. Pick a cutoff date, click "Preview," and see exactly what _would_ happen — meal list, balances, outlier flags, mismatch warnings — without creating anything. Once satisfied, click "Create" to commit.
 
 This turns reconciliation from "do it then fix problems" to "verify it then commit." It's the highest-leverage change in this whole list.
 
 **Priority:** Most ambitious of the five, but the most rewarding.
 
-**A thin preview is worth shipping much earlier.** The full vision — preview page with outlier flags, mismatch warnings, comparison to history — naturally comes last because it builds on items 1–3. But a *thin* preview (just "here are the meals that would be swept, here are the balances that would be generated, no warnings yet") is really just a read-only version of the show page driven by a dry-run calculation. It has almost no dependencies. It's also the only item in this list that *prevents* errors instead of flagging them after the fact — everything else is catching mistakes in a committed reconciliation. The thin preview should ship alongside the mismatch warnings (item 1), with outlier flags and historical comparisons layered in as they land. The "full preview" then becomes less a new feature and more the natural endpoint of accreting items 2–3 onto the thin one.
+**A thin preview is worth shipping much earlier.** The full vision — preview page with outlier flags, mismatch warnings, comparison to history — naturally comes last because it builds on items 1–3. But a _thin_ preview (just "here are the meals that would be swept, here are the balances that would be generated, no warnings yet") is really just a read-only version of the show page driven by a dry-run calculation. It has almost no dependencies. It's also the only item in this list that _prevents_ errors instead of flagging them after the fact — everything else is catching mistakes in a committed reconciliation. The thin preview should ship alongside the mismatch warnings (item 1), with outlier flags and historical comparisons layered in as they land. The "full preview" then becomes less a new feature and more the natural endpoint of accreting items 2–3 onto the thin one.
 
 ### Other ideas worth considering (lower priority)
 
@@ -139,7 +145,7 @@ This turns reconciliation from "do it then fix problems" to "verify it then comm
 
 ## Recommended sequence
 
-1. **Mismatch warnings + thin pre-flight preview** — ship together. Deterministic checks surfaced on a read-only dry-run page. This is the first item that *prevents* errors instead of just flagging them after the fact.
+1. **Mismatch warnings + thin pre-flight preview** — ship together. Deterministic checks surfaced on a read-only dry-run page. This is the first item that _prevents_ errors instead of just flagging them after the fact.
 2. **Cost outlier detection** — IQR-based, with a conservative hardcoded fallback band for the cold-start period. Layered into the preview from item 1.
 3. **Date outlier detection** — same UI surface as cost outliers, build together.
 4. **Finalized state (with full bill/attendance immutability)** — ships as one unit. Not a "basic version first, immutability later" split — the two are inseparable, and finalization without enforcement is worse than no feature at all. Includes the hardened unfinalize flow (admin-only, audit-logged, forces balance re-derivation on re-lock).

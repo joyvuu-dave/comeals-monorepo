@@ -4,7 +4,7 @@
 
 This document is the design home for **Collect**, a dedicated iPhone app for performing reconciliations in Comeals. It captures the rationale for going native, the API contracts the iOS client will consume, the backend refactor work that unblocks those contracts, the iOS-side implementation approach, and the order we plan to build things in.
 
-See `RECONCILIATION_WORKFLOW.md` and `COLLECTION_WORKFLOW.md` for the workflow ideas Collect is expressing. Those docs are the *product* layer; this doc is the *implementation* layer.
+See `RECONCILIATION_WORKFLOW.md` and `COLLECTION_WORKFLOW.md` for the workflow ideas Collect is expressing. Those docs are the _product_ layer; this doc is the _implementation_ layer.
 
 ## Why a dedicated native app?
 
@@ -14,11 +14,11 @@ The alternative was to bolt reconciliation tooling onto the existing ActiveAdmin
 
 - **Native polish matters for infrequent, high-stakes workflows.** Reconciliation happens every few weeks. When it does, it needs to feel good and be error-resistant. SwiftUI gives us haptics on "mark paid," swipe-to-complete, fluid navigation, pull-to-refresh — all painful to replicate in ActiveAdmin or in a responsive mobile web view.
 
-- **The API decoupling is independently valuable.** Outlier detection, mismatch warnings, and paid-tracking logic should live as clean JSON endpoints on the Rails backend regardless — not tangled into ActiveAdmin view code. Building Collect *forces* that discipline. Even if the Swift app stalls halfway through, the Rails work is a strict improvement.
+- **The API decoupling is independently valuable.** Outlier detection, mismatch warnings, and paid-tracking logic should live as clean JSON endpoints on the Rails backend regardless — not tangled into ActiveAdmin view code. Building Collect _forces_ that discipline. Even if the Swift app stalls halfway through, the Rails work is a strict improvement.
 
 - **Scope is contained enough to actually finish.** "Perform a reconciliation end-to-end" is one well-defined workflow — maybe 6–10 screens, no sprawling feature set. That's exactly the right size for a first iPhone app. Compare to trying to port `comeals-ui` wholesale, which would be a nightmare first project.
 
-- **ActiveAdmin stays.** Collect is *additive* — the reconciler's workflow-specific view. ActiveAdmin remains the general-purpose admin tool for residents, units, meal debugging, and everything else. The two coexist.
+- **ActiveAdmin stays.** Collect is _additive_ — the reconciler's workflow-specific view. ActiveAdmin remains the general-purpose admin tool for residents, units, meal debugging, and everything else. The two coexist.
 
 ## Scope
 
@@ -105,9 +105,7 @@ On the iOS side, all money is `Decimal`. A thin `Money` wrapper type may be just
       "unit_cost": "7.08",
       "attendee_count": 15,
       "guest_count": 3,
-      "cooks": [
-        { "resident_id": 42, "name": "Alice", "bill_amount": "127.50" }
-      ]
+      "cooks": [{ "resident_id": 42, "name": "Alice", "bill_amount": "127.50" }]
     }
   ],
   "balances": {
@@ -160,7 +158,7 @@ On the iOS side, all money is `Decimal`. A thin `Money` wrapper type may be just
 
 #### Design decisions worth preserving
 
-**Warnings at the top level, not inlined per meal.** Cross-referenced by `meal_id`. This lets the iOS app render them in a dedicated "Issues to Review" screen *and* render inline badges on the meal list using the same data. Strictly more flexible than either alternative on its own.
+**Warnings at the top level, not inlined per meal.** Cross-referenced by `meal_id`. This lets the iOS app render them in a dedicated "Issues to Review" screen _and_ render inline badges on the meal list using the same data. Strictly more flexible than either alternative on its own.
 
 **`warning.id` is deterministic, not a UUID.** Format: `kind:meal=N:bill=N`. Critical for SwiftUI `List`/`ForEach` diffing — the same warning on a re-fetch gets the same identifier, so the list animates smoothly instead of rebuilding.
 
@@ -196,7 +194,7 @@ Contracts below are placeholders — each gets its own sketch when we get to it.
 
 ### The blocker: `Reconciliation#after_create :finalize`
 
-The existing `Reconciliation` model couples creation and finalization atomically via an `after_create` callback that calls `assign_meals` + `persist_balances!`. That means today you cannot compute a reconciliation's balances *without* persisting records.
+The existing `Reconciliation` model couples creation and finalization atomically via an `after_create` callback that calls `assign_meals` + `persist_balances!`. That means today you cannot compute a reconciliation's balances _without_ persisting records.
 
 For the preview endpoint to work, we need a way to run the calculation **without side effects**. This also aligns with where we eventually want to land for the finalization workflow: `create → review → finalize` should be three distinct steps, not one atomic act.
 
