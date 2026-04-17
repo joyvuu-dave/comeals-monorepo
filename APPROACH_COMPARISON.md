@@ -2,14 +2,14 @@
 
 ## Approaches
 
-| # | Name | Summary |
-|---|------|---------|
-| A | **Two-folder + CI** | `backend/` and `frontend/` side by side. CI runs `npm run build`, copies output to `backend/public/`. Ruby-only Heroku. |
-| B | **Integrated + Vite standalone + CI** | React source inside Rails (`app/frontend/`). Vite runs as standalone CLI in CI. Output goes to `public/`. No gem. |
-| C | **Integrated + `vite_rails` gem** | React source inside Rails. `vite_rails` gem wires Vite into `rake assets:precompile`, provides tag helpers and dev HMR proxy. |
-| D | **Integrated + `jsbundling-rails` + esbuild** | Replace Vite with esbuild via Rails-native `jsbundling-rails`. Faster builds, no HMR. |
-| E | **Docker (Heroku container stack)** | Multi-stage Dockerfile: Node stage builds frontend, Ruby stage runs Rails. No buildpacks. |
-| F | **Full Hotwire rewrite** | Drop React/MobX entirely. Server-rendered views + Turbo + Stimulus + ActionCable. |
+| #   | Name                                          | Summary                                                                                                                       |
+| --- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| A   | **Two-folder + CI**                           | `backend/` and `frontend/` side by side. CI runs `npm run build`, copies output to `backend/public/`. Ruby-only Heroku.       |
+| B   | **Integrated + Vite standalone + CI**         | React source inside Rails (`app/frontend/`). Vite runs as standalone CLI in CI. Output goes to `public/`. No gem.             |
+| C   | **Integrated + `vite_rails` gem**             | React source inside Rails. `vite_rails` gem wires Vite into `rake assets:precompile`, provides tag helpers and dev HMR proxy. |
+| D   | **Integrated + `jsbundling-rails` + esbuild** | Replace Vite with esbuild via Rails-native `jsbundling-rails`. Faster builds, no HMR.                                         |
+| E   | **Docker (Heroku container stack)**           | Multi-stage Dockerfile: Node stage builds frontend, Ruby stage runs Rails. No buildpacks.                                     |
+| F   | **Full Hotwire rewrite**                      | Drop React/MobX entirely. Server-rendered views + Turbo + Stimulus + ActionCable.                                             |
 
 ### Shared wins (all approaches)
 
@@ -19,26 +19,26 @@ runtime, consolidates to 1 Heroku app / 1 dyno, and runs local dev with a single
 
 ## Comparison Matrix
 
-| Dimension                  | A: Two-folder + CI    | B: Integrated Vite + CI | C: `vite_rails` gem        | D: `jsbundling` esbuild    | E: Docker              | F: Full Hotwire          |
-|----------------------------|:---------------------:|:-----------------------:|:--------------------------:|:---------------------------:|:----------------------:|:------------------------:|
-| **React code changes**     | None                  | None                    | Minimal (~3 lines)         | Minimal (config only)       | None                   | Full rewrite             |
-| **Node.js needed in CI**   | Yes                   | Yes                     | Yes                        | Yes                         | No (in Docker)         | No                       |
-| **Third-party gem risk**   | None                  | None                    | `vite_rails` (1 maintainer)| `jsbundling-rails` (Rails-core) | None              | None                     |
-| **Pusher still needed**    | Yes                   | Yes                     | Yes                        | Yes                         | Yes                    | No (ActionCable)         |
-| **npm / package.json**     | Yes                   | Yes                     | Yes                        | Yes                         | Yes                    | No                       |
-| **Dev: HMR**               | Yes (two ports)       | Yes (two ports)         | Yes (single port)          | No (full reload, ~50ms)     | N/A                    | Turbo (instant)          |
-| **Dev: single port**       | No (3000 + 3001)      | No (3000 + 3036)        | Yes (3000 only)            | Yes (3000 only)             | Yes                    | Yes (3000 only)          |
-| **Build tool lock-in**     | Vite (swappable)      | Vite (swappable)        | Vite (coupled to gem)      | esbuild (swappable)         | Vite (swappable)       | None                     |
-| **Safe `git push heroku`** | No -- broken deploy** | No -- broken deploy**   | No -- broken deploy**      | No -- broken deploy**       | Yes (Dockerfile builds)| Yes (no build step)      |
-| **Migration effort**       | Small                 | Small                   | Small-Medium               | Medium                      | Medium                 | Large                    |
-| **Project structure**      | Two folders           | Single Rails app        | Single Rails app           | Single Rails app            | Either                 | Single Rails app          |
-| **Path to Hotwire later**  | Possible              | Easy (source in Rails)  | Easy                       | Easy                        | Easy                   | Done                     |
-| **Risk if dependency dies**| Low (Vite is huge)    | Low                     | Medium (`vite_rails`)      | Very low (Rails-core)       | Low                    | Very low                 |
-| **Conceptual simplicity**  | Simple                | Simple                  | Medium                     | Simple                      | Medium                 | Simplest (once done)     |
-| **Perf++**                 | Moderate              | Moderate                | Moderate                   | Moderate                    | Moderate               | Significant              |
-| **Prod JS/CSS in GH**     | No*                   | No*                     | No*                        | No*                         | No                     | N/A (no build)           |
-| **Mobile app path***      | Native or Capacitor   | Native or Capacitor     | Native or Capacitor        | Native or Capacitor         | Native or Capacitor    | Native or Turbo Native   |
-| **Host portability†**     | Moderate              | Moderate                | Moderate                   | Moderate                    | Maximum                | High                     |
+| Dimension                   |   A: Two-folder + CI    | B: Integrated Vite + CI |     C: `vite_rails` gem     |     D: `jsbundling` esbuild     |        E: Docker        |    F: Full Hotwire     |
+| --------------------------- | :---------------------: | :---------------------: | :-------------------------: | :-----------------------------: | :---------------------: | :--------------------: |
+| **React code changes**      |          None           |          None           |     Minimal (~3 lines)      |      Minimal (config only)      |          None           |      Full rewrite      |
+| **Node.js needed in CI**    |           Yes           |           Yes           |             Yes             |               Yes               |     No (in Docker)      |           No           |
+| **Third-party gem risk**    |          None           |          None           | `vite_rails` (1 maintainer) | `jsbundling-rails` (Rails-core) |          None           |          None          |
+| **Pusher still needed**     |           Yes           |           Yes           |             Yes             |               Yes               |           Yes           |    No (ActionCable)    |
+| **npm / package.json**      |           Yes           |           Yes           |             Yes             |               Yes               |           Yes           |           No           |
+| **Dev: HMR**                |     Yes (two ports)     |     Yes (two ports)     |      Yes (single port)      |     No (full reload, ~50ms)     |           N/A           |    Turbo (instant)     |
+| **Dev: single port**        |    No (3000 + 3001)     |    No (3000 + 3036)     |       Yes (3000 only)       |         Yes (3000 only)         |           Yes           |    Yes (3000 only)     |
+| **Build tool lock-in**      |    Vite (swappable)     |    Vite (swappable)     |    Vite (coupled to gem)    |       esbuild (swappable)       |    Vite (swappable)     |          None          |
+| **Safe `git push heroku`**  | No -- broken deploy\*\* | No -- broken deploy\*\* |   No -- broken deploy\*\*   |     No -- broken deploy\*\*     | Yes (Dockerfile builds) |  Yes (no build step)   |
+| **Migration effort**        |          Small          |          Small          |        Small-Medium         |             Medium              |         Medium          |         Large          |
+| **Project structure**       |       Two folders       |    Single Rails app     |      Single Rails app       |        Single Rails app         |         Either          |    Single Rails app    |
+| **Path to Hotwire later**   |        Possible         | Easy (source in Rails)  |            Easy             |              Easy               |          Easy           |          Done          |
+| **Risk if dependency dies** |   Low (Vite is huge)    |           Low           |    Medium (`vite_rails`)    |      Very low (Rails-core)      |           Low           |        Very low        |
+| **Conceptual simplicity**   |         Simple          |         Simple          |           Medium            |             Simple              |         Medium          |  Simplest (once done)  |
+| **Perf++**                  |        Moderate         |        Moderate         |          Moderate           |            Moderate             |        Moderate         |      Significant       |
+| **Prod JS/CSS in GH**       |          No\*           |          No\*           |            No\*             |              No\*               |           No            |     N/A (no build)     |
+| **Mobile app path\***       |   Native or Capacitor   |   Native or Capacitor   |     Native or Capacitor     |       Native or Capacitor       |   Native or Capacitor   | Native or Turbo Native |
+| **Host portability†**       |        Moderate         |        Moderate         |          Moderate           |            Moderate             |         Maximum         |          High          |
 
 ### Host portability detail
 
@@ -48,24 +48,24 @@ is toward Docker as the universal unit — most new platforms are Docker-first.
 
 **Platform compatibility by approach:**
 
-| Platform                   | Buildpacks? | Docker? | A-D (no Dockerfile) | E (has Dockerfile)  | F (simple Rails)    |
-|----------------------------|:-----------:|:-------:|:-------------------:|:-------------------:|:-------------------:|
-| **Heroku**                 | Yes         | Yes     | Works today         | Works today         | Works today         |
-| **Railway**                | Yes (Nixpacks) | Yes | Easy                | Easy                | Easy                |
-| **Render**                 | Yes         | Yes     | Easy                | Easy                | Easy                |
-| **DO App Platform**        | Yes         | Yes     | Easy                | Easy                | Easy                |
-| **DO Droplet (VPS)**       | No          | Via Kamal | Need Dockerfile first | Ready            | Trivial Dockerfile  |
-| **Coolify (self-hosted)**  | No          | Yes     | Need Dockerfile first | Ready              | Trivial Dockerfile  |
-| **Fly.io**                 | No          | Yes     | Need Dockerfile first | Ready              | Trivial Dockerfile  |
-| **GCP Cloud Run**          | No          | Yes     | Need Dockerfile first | Ready              | Trivial Dockerfile  |
-| **GCP App Engine**         | Yes         | Yes     | Easy                | Easy                | Easy                |
-| **AWS ECS / Fargate**      | No          | Yes     | Need Dockerfile first | Ready              | Trivial Dockerfile  |
-| **AWS App Runner**         | No          | Yes     | Need Dockerfile first | Ready              | Trivial Dockerfile  |
-| **Tanzu (Cloud Foundry)**  | Yes (CF)    | Yes     | Needs adaptation‡   | Easy                | Easy                |
-| **Kamal (any VPS)**        | No          | Yes     | Need Dockerfile first | Ready              | Trivial Dockerfile  |
+| Platform                  |  Buildpacks?   |  Docker?  |  A-D (no Dockerfile)  | E (has Dockerfile) |  F (simple Rails)  |
+| ------------------------- | :------------: | :-------: | :-------------------: | :----------------: | :----------------: |
+| **Heroku**                |      Yes       |    Yes    |      Works today      |    Works today     |    Works today     |
+| **Railway**               | Yes (Nixpacks) |    Yes    |         Easy          |        Easy        |        Easy        |
+| **Render**                |      Yes       |    Yes    |         Easy          |        Easy        |        Easy        |
+| **DO App Platform**       |      Yes       |    Yes    |         Easy          |        Easy        |        Easy        |
+| **DO Droplet (VPS)**      |       No       | Via Kamal | Need Dockerfile first |       Ready        | Trivial Dockerfile |
+| **Coolify (self-hosted)** |       No       |    Yes    | Need Dockerfile first |       Ready        | Trivial Dockerfile |
+| **Fly.io**                |       No       |    Yes    | Need Dockerfile first |       Ready        | Trivial Dockerfile |
+| **GCP Cloud Run**         |       No       |    Yes    | Need Dockerfile first |       Ready        | Trivial Dockerfile |
+| **GCP App Engine**        |      Yes       |    Yes    |         Easy          |        Easy        |        Easy        |
+| **AWS ECS / Fargate**     |       No       |    Yes    | Need Dockerfile first |       Ready        | Trivial Dockerfile |
+| **AWS App Runner**        |       No       |    Yes    | Need Dockerfile first |       Ready        | Trivial Dockerfile |
+| **Tanzu (Cloud Foundry)** |    Yes (CF)    |    Yes    |   Needs adaptation‡   |        Easy        |        Easy        |
+| **Kamal (any VPS)**       |       No       |    Yes    | Need Dockerfile first |       Ready        | Trivial Dockerfile |
 
 ‡ Tanzu uses Cloud Foundry buildpacks, not Heroku buildpacks. Same concept,
-  different implementation. The Procfile and build hooks may need adjustment.
+different implementation. The Procfile and build hooks may need adjustment.
 
 **Summary:**
 
@@ -107,7 +107,7 @@ connectivity, but for a co-housing dinner signup app that's likely fine.
 
 ### Safe `git push heroku` detail
 
-** For A-D: if you forget CI and do a raw `git push heroku main`, Heroku's Ruby
+\*\* For A-D: if you forget CI and do a raw `git push heroku main`, Heroku's Ruby
 buildpack will deploy the Rails app WITHOUT built frontend assets. The site will
 serve a blank page (no JS/CSS). This is the biggest operational footgun of
 approaches A-D.
@@ -123,10 +123,12 @@ approaches A-D.
        File.exist?(Rails.root.join("public", "assets", ".manifest.json"))
    end
    ```
+
    ```
    # Procfile
    release: bin/rake verify_assets db:migrate
    ```
+
    Deploy fails fast with a clear error instead of silently serving a broken site.
 
 2. **Remove the heroku git remote** — if there's no remote, you can't accidentally

@@ -9,11 +9,11 @@ AllCops:
   NewCops: enable
   SuggestExtensions: false
   Exclude:
-    - 'db/schema.rb'
-    - 'bin/**/*'
-    - 'vendor/**/*'
-    - 'node_modules/**/*'
-    - 'tmp/**/*'
+    - "db/schema.rb"
+    - "bin/**/*"
+    - "vendor/**/*"
+    - "node_modules/**/*"
+    - "tmp/**/*"
 
 # --- RSpec ---
 # Financial tests need thorough, multi-assertion examples that validate
@@ -38,8 +38,8 @@ RSpec/IndexedLet:
 # Some specs describe rake tasks or request paths, not classes.
 RSpec/DescribeClass:
   Exclude:
-    - 'spec/tasks/**/*'
-    - 'spec/requests/**/*'
+    - "spec/tasks/**/*"
+    - "spec/requests/**/*"
 
 # before(:all) is used for expensive test setup (e.g., seeding shared
 # records). Acceptable when tests are wrapped in transactions.
@@ -72,11 +72,11 @@ Rails/BulkChangeTable:
 # and migrations all have legitimately large blocks.
 Metrics/BlockLength:
   Exclude:
-    - 'app/admin/**/*'
-    - 'config/**/*'
-    - 'db/**/*'
-    - 'lib/tasks/**/*'
-    - 'spec/**/*'
+    - "app/admin/**/*"
+    - "config/**/*"
+    - "db/**/*"
+    - "lib/tasks/**/*"
+    - "spec/**/*"
 
 # Defaults (AbcSize 17, MethodLength 10) are too aggressive for real-world
 # Rails controllers and financial models. These thresholds catch genuinely
@@ -84,7 +84,7 @@ Metrics/BlockLength:
 # Admin DSL forms have unavoidably long collection queries.
 Layout/LineLength:
   Exclude:
-    - 'app/admin/**/*'
+    - "app/admin/**/*"
 
 Metrics/AbcSize:
   Max: 45
@@ -92,7 +92,7 @@ Metrics/AbcSize:
 Metrics/MethodLength:
   Max: 25
   Exclude:
-    - 'db/migrate/**/*'
+    - "db/migrate/**/*"
 
 Metrics/CyclomaticComplexity:
   Max: 10

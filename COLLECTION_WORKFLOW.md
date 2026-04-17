@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document captures the workflow for actually moving money once a reconciliation has been calculated. Reconciliation tells us *who* owes *whom* and *how much*. Collection is the follow-up: physically (or digitally) transferring the money to settle the balances.
+This document captures the workflow for actually moving money once a reconciliation has been calculated. Reconciliation tells us _who_ owes _whom_ and _how much_. Collection is the follow-up: physically (or digitally) transferring the money to settle the balances.
 
 This is a separate workflow from reconciliation calculation. They share state (the reconciliation balances), but the activities are distinct: one happens at a moment in time (compute the numbers), the other unfolds over days or weeks (collect from each person, pay out to each person).
 
@@ -47,6 +47,7 @@ The simplest valuable thing: add a checkbox or "Mark Paid" button next to each r
 **Why "paid" works for both directions:** Whether the resident is owed or owes, the action from the collector's perspective is the same — "this balance has been settled." The label "Paid" is overloaded but readable in both contexts.
 
 **Limitations of the MVP:**
+
 - Manual click per row, no automation
 - Doesn't help residents directly — only helps the collector
 - No reminder system
@@ -87,7 +88,7 @@ Collection and payout are different problems with different difficulty levels.
 
 **Collection is easy.** Anyone can pay you money. They don't need an account with you. They click a link, type a card or bank info, money arrives. Stripe has multiple products that support this (Invoicing, Payment Links, Checkout). No setup required for the payer.
 
-**Payout is hard.** To send money to someone, you need to know *where* to send it AND that person needs *some kind of relationship* with the payment processor (so they can be held accountable, comply with anti-money-laundering rules, etc.). There's no Stripe product that lets you say "send $30 to alice@example.com" with no further setup. *Someone* needs to register *somewhere*.
+**Payout is hard.** To send money to someone, you need to know _where_ to send it AND that person needs _some kind of relationship_ with the payment processor (so they can be held accountable, comply with anti-money-laundering rules, etc.). There's no Stripe product that lets you say "send $30 to alice@example.com" with no further setup. _Someone_ needs to register _somewhere_.
 
 This asymmetry forces a decision: how much onboarding are we willing to require from residents in exchange for how much automation?
 
@@ -140,7 +141,7 @@ This is the cheapest possible improvement and requires no Stripe relationship at
 
 #### Approach C: Stripe Connect Express with 100% adoption (the full automation dream)
 
-The end-state vision: every unit has a designated payment representative with a Stripe Connect Express account. Once that's in place, reconciliations become almost trivially easy — the collection workflow effectively *disappears*.
+The end-state vision: every unit has a designated payment representative with a Stripe Connect Express account. Once that's in place, reconciliations become almost trivially easy — the collection workflow effectively _disappears_.
 
 **The architecture:**
 
@@ -154,7 +155,7 @@ This onboarding is a one-time, ~5-10 minute thing per unit. Once it's done, the 
 2. **Day 0:** Review the auto-generated balances, mismatch warnings, and statistical outliers (the stuff in `RECONCILIATION_WORKFLOW.md`). Catch any errors. Iterate if needed.
 3. **Day 0:** Click "Finalize." Calculations are now locked.
 4. **Day 0:** Click "Settle Reconciliation." Big red button. Confirm dialog.
-5. **Days 1-4:** *Nothing happens at the reconciler's level.* The system processes in the background.
+5. **Days 1-4:** _Nothing happens at the reconciler's level._ The system processes in the background.
 6. **Day 5-ish:** Email arrives: "Reconciliation #6 fully settled."
 
 That's the reconciler's entire job. ~15 minutes of attention on Day 0, then nothing.
@@ -209,13 +210,13 @@ The "happy path" is short. The failure paths are where the real work lives. Each
 
 Approach C works cleanly for **new** communities adopting Comeals from scratch: "Welcome. To participate in the meal program, your unit needs to set up payment receiving. Here's the link." Five minutes per unit. Done. The requirement is enforced as part of joining the community.
 
-For an **existing** community migrating from a paper-and-Venmo system, it's harder. You'd need to: announce the change with lots of lead time, get every unit onboarded *before* the first new-system reconciliation, have a manual fallback for units that drag their feet, and probably do at least one reconciliation in "hybrid mode" (some Express, some manual).
+For an **existing** community migrating from a paper-and-Venmo system, it's harder. You'd need to: announce the change with lots of lead time, get every unit onboarded _before_ the first new-system reconciliation, have a manual fallback for units that drag their feet, and probably do at least one reconciliation in "hybrid mode" (some Express, some manual).
 
 This is a change-management problem, not a technical one. The tech is the easy part.
 
 #### Approach D: Hybrid (opt-in Express, manual fallback)
 
-Same as Approach B (Stripe Invoicing for collection), plus: any cook who *wants* automated payouts can opt in by doing the Express onboarding. Cooks who don't sign up still get paid manually.
+Same as Approach B (Stripe Invoicing for collection), plus: any cook who _wants_ automated payouts can opt in by doing the Express onboarding. Cooks who don't sign up still get paid manually.
 
 This is the path of least resistance for an existing community. The benefits of Approach C accumulate gradually as more cooks opt in, and there's no flag day where everyone has to be onboarded at once.
 

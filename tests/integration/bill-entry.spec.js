@@ -39,9 +39,7 @@ test.describe("Bill entry (real backend)", () => {
     await page.waitForLoadState("networkidle");
     await expect(page.locator("h1")).toBeVisible({ timeout: 10000 });
 
-    const costInputAfter = page
-      .locator('[aria-label="Set meal cost"]')
-      .first();
+    const costInputAfter = page.locator('[aria-label="Set meal cost"]').first();
     await expect(costInputAfter).toHaveValue("65.00", { timeout: 10000 });
 
     // Restore: clear the bill by setting amount to 0
@@ -79,9 +77,7 @@ test.describe("Bill entry (real backend)", () => {
     await page.reload();
     await page.waitForLoadState("networkidle");
 
-    const costInputAfter = page
-      .locator('[aria-label="Set meal cost"]')
-      .first();
+    const costInputAfter = page.locator('[aria-label="Set meal cost"]').first();
     await expect(costInputAfter).toHaveValue("55.00", { timeout: 10000 });
 
     // Restore: put it back to $50.00
