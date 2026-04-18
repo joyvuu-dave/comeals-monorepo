@@ -214,7 +214,7 @@ class Resident < ApplicationRecord
     # at minimum), so the column intersection already covers the create path —
     # no need for a separate previously_new_record? branch. Destroy leaves
     # saved_changes empty, so gate it explicitly.
-    return unless destroyed? || (saved_changes.keys & HOSTS_QUERY_COLUMNS).any?
+    return unless destroyed? || saved_changes.keys.intersect?(HOSTS_QUERY_COLUMNS)
 
     Pusher.trigger(
       "community-#{community_id}-residents",

@@ -101,4 +101,55 @@ RSpec.describe Unit do
       expect(unit.number_of_occupants).to eq(0)
     end
   end
+
+  # ---------------------------------------------------------------------------
+  # Real-time notifications
+  # ---------------------------------------------------------------------------
+  describe 'after_commit :notify_residents_update' do
+    # CommunitiesController#hosts plucks `units.name` for both the dropdown
+    # label and the ordering, so a Unit rename must invalidate the frontend
+    # host cache. Resident callbacks do not cover this — a rename touches
+    # zero Resident rows.
+    let(:expected_channel) { "community-#{community.id}-residents" }
+
+    before { allow(Pusher).to receive(:trigger) }
+
+    it 'triggers on create' do
+      create(:unit, community: community)
+      expect(Pusher).to have_received(:trigger).with(
+        expected_channel, 'update', hash_including(message: 'unit updated')
+      ).at_least(:once)
+    end
+
+    it 'triggers on name change' do
+      target = create(:unit, community: community)
+      target.update!(name: "#{target.name}-renamed")
+      expect(Pusher).to have_received(:trigger).with(
+        expected_channel, any_args
+      ).twice
+    end
+
+    it 'triggers on destroy' do
+      target = create(:unit, community: community)
+      target.destroy!
+      expect(Pusher).to have_received(:trigger).with(
+        expected_channel, any_args
+      ).twice
+    end
+
+    it 'does not trigger on no-op save' do
+      target = create(:unit, community: community)
+      target.save!
+      expect(Pusher).to have_received(:trigger).with(
+        expected_channel, any_args
+      ).exactly(:once)
+    end
+
+    it 'does not raise if Pusher is unavailable' do
+      allow(Pusher).to receive(:trigger).and_raise(StandardError, 'pusher down')
+      expect do
+        create(:unit, community: community)
+      end.not_to raise_error
+    end
+  end
 end
