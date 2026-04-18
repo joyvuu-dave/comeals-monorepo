@@ -165,49 +165,43 @@ RSpec.describe Resident do
     # further trigger from the mutation under test.
     let(:expected_channel) { "community-#{community.id}-residents" }
 
-    def expect_pusher_triggered
+    # Filter by the `residents updated` message so this spec is decoupled
+    # from Unit#notify_residents_update (which emits `unit updated` on the
+    # same channel and runs when a `let(:unit)` is lazily created).
+    def expect_resident_triggers(count)
       expect(Pusher).to have_received(:trigger).with(
         expected_channel,
         'update',
         hash_including(message: 'residents updated')
-      ).at_least(:once)
-    end
-
-    def expect_only_create_trigger
-      expect(Pusher).to have_received(:trigger).with(
-        expected_channel, any_args
-      ).exactly(:once)
+      ).exactly(count).times
     end
 
     before { allow(Pusher).to receive(:trigger) }
 
     it 'triggers on create' do
       create(:resident, community: community, unit: unit)
-      expect_pusher_triggered
+      expect_resident_triggers(1)
     end
 
     it 'triggers on destroy' do
       resident = create(:resident, community: community, unit: unit)
       resident.destroy!
-      expect(Pusher).to have_received(:trigger).with(
-        expected_channel, any_args
-      ).twice
+      expect_resident_triggers(2)
     end
 
     # One example per column the hosts query depends on. If any of these
     # stop firing, a real-time host-list change will be missed.
     {
-      name: ->(r) { r.update!(name: 'Renamed') },
-      active: ->(r) { r.update!(active: false) },
-      multiplier: ->(r) { r.update!(multiplier: r.multiplier + 1) },
-      unit_id: ->(r) { r.update!(unit: FactoryBot.create(:unit, community: r.community)) }
+      name: ->(r, _) { r.update!(name: 'Renamed') },
+      active: ->(r, _) { r.update!(active: false) },
+      multiplier: ->(r, _) { r.update!(multiplier: r.multiplier + 1) },
+      unit_id: ->(r, other_unit) { r.update!(unit: other_unit) }
     }.each do |column, mutation|
       it "triggers on #{column} change" do
+        other_unit = create(:unit, community: community)
         resident = create(:resident, community: community, unit: unit)
-        mutation.call(resident)
-        expect(Pusher).to have_received(:trigger).with(
-          expected_channel, any_args
-        ).twice
+        mutation.call(resident, other_unit)
+        expect_resident_triggers(2)
       end
     end
 
@@ -218,38 +212,38 @@ RSpec.describe Resident do
     it 'does not trigger on password-only change' do
       resident = create(:resident, community: community, unit: unit, password: 'secret123')
       resident.update!(password: 'newsecret456')
-      expect_only_create_trigger
+      expect_resident_triggers(1)
     end
 
     it 'does not trigger on birthday-only change' do
       resident = create(:resident, community: community, unit: unit)
       resident.update!(birthday: Date.new(1990, 6, 15))
-      expect_only_create_trigger
+      expect_resident_triggers(1)
     end
 
     it 'does not trigger on vegetarian-only change' do
       resident = create(:resident, community: community, unit: unit)
       resident.update!(vegetarian: !resident.vegetarian)
-      expect_only_create_trigger
+      expect_resident_triggers(1)
     end
 
     it 'does not trigger on email-only change' do
       resident = create(:resident, community: community, unit: unit)
       resident.update!(email: 'new@example.com')
-      expect_only_create_trigger
+      expect_resident_triggers(1)
     end
 
     it 'does not trigger on can_cook-only change' do
       resident = create(:resident, community: community, unit: unit)
       resident.update!(can_cook: !resident.can_cook)
-      expect_only_create_trigger
+      expect_resident_triggers(1)
     end
 
     it 'does not raise if Pusher is unavailable' do
       allow(Pusher).to receive(:trigger).and_raise(StandardError, 'pusher down')
-      expect {
+      expect do
         create(:resident, community: community, unit: unit)
-      }.not_to raise_error
+      end.not_to raise_error
     end
   end
 

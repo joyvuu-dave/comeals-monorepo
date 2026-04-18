@@ -145,7 +145,7 @@ const GuestRoomReservationsNew = inject("store")(
                       ? "button-dark button-loader"
                       : "button-dark"
                   }
-                  disabled={this.state.loading}
+                  disabled={this.state.loading || !store.hostsLoaded}
                 >
                   Create
                 </button>
