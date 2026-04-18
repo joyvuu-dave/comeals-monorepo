@@ -69,6 +69,9 @@ const styles = {
     width: "4rem",
     marginTop: "1rem",
   },
+  month: {
+    paddingTop: "1rem",
+  },
 };
 
 // Rendered as a sibling of Calendar — NOT via react-big-calendar's
@@ -92,7 +95,7 @@ const MonthNavHeader = memo(function MonthNavHeader({
 }) {
   return (
     <div style={styles.main}>
-      <h2>{dayjs(dateStr).format("MMMM YYYY")}</h2>
+      <h2 style={styles.month}>{dayjs(dateStr).format("MMMM YYYY")}</h2>
       <span style={styles.main}>
         <button className="mar-sm press" onClick={onToday}>
           today
