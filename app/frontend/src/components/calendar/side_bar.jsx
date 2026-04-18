@@ -58,14 +58,14 @@ const SideBar = inject("store")(
           <h3 className="mar-sm">Reserve</h3>
           <button
             onClick={this.openNewGuestRoomReservation.bind(this)}
-            className="mar-sm"
+            className="mar-sm press"
             style={styles.button}
           >
             Guest Room
           </button>
           <button
             onClick={this.openNewCommonHouseReservation.bind(this)}
-            className="mar-sm"
+            className="mar-sm press"
             style={styles.button}
           >
             Common House
@@ -74,7 +74,7 @@ const SideBar = inject("store")(
           <h3 className="mar-sm">Add</h3>
           <button
             onClick={this.openNewEvent.bind(this)}
-            className="mar-sm button-secondary"
+            className="mar-sm button-secondary press"
             style={styles.button}
           >
             Event
@@ -83,7 +83,7 @@ const SideBar = inject("store")(
           <h3 className="mar-sm">Goto</h3>
           <button
             onClick={this.openNextMeal.bind(this)}
-            className="button-info mar-sm"
+            className="button-info mar-sm press"
             style={styles.button}
           >
             Next Meal

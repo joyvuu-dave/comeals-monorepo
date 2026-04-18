@@ -19,7 +19,15 @@ export function toPacificDayjs(dateString) {
   return dayjs.tz(dateString, TIMEZONE);
 }
 
+// The value space is a compile-time constant (~56 15-minute slots, 8am–10pm),
+// so we build the array once and freeze it. Callers map over it to render
+// <option> elements on every modal render; returning the same frozen
+// reference lets React skip reconciliation work for the options list and
+// makes accidental mutation a hard error instead of a silent one.
+// See tests/e2e/perf-modals.spec.js for the benchmark harness.
+let CACHED_TIMES = null;
 export function generateTimes() {
+  if (CACHED_TIMES) return CACHED_TIMES;
   var times = [];
   var ending = "AM";
 
@@ -33,13 +41,9 @@ export function generateTimes() {
 
         // End at 10pm
         if (half === 1 && hour === 10 && min === 1) {
-          return times;
+          CACHED_TIMES = Object.freeze(times);
+          return CACHED_TIMES;
         }
-
-        var time = {
-          display: null,
-          value: null,
-        };
 
         var valueHour = hour;
 
@@ -49,19 +53,17 @@ export function generateTimes() {
         }
 
         var minutes = `${(min * 15).toString().padStart(2, "0")}`;
+        var display =
+          hour === 0
+            ? `12:${minutes} ${ending}`
+            : `${hour}:${minutes} ${ending}`;
+        var value = `${valueHour.toString().padStart(2, "0")}:${minutes}`;
 
-        if (hour === 0) {
-          time.display = `12:${minutes} ${ending}`;
-        } else {
-          time.display = `${hour}:${minutes} ${ending}`;
-        }
-
-        time.value = `${valueHour.toString().padStart(2, "0")}:${minutes}`;
-
-        times.push(time);
+        times.push(Object.freeze({ display, value }));
       }
     }
   }
 
-  return times;
+  CACHED_TIMES = Object.freeze(times);
+  return CACHED_TIMES;
 }

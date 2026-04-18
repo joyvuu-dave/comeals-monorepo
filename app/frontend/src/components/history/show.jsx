@@ -16,12 +16,14 @@ class MealHistoryShow extends Component {
   }
 
   componentDidMount() {
+    this._isMounted = true;
     var self = this;
     axios
       .get(
         `/api/v1/meals/${self.props.id}/history?token=${Cookie.get("token")}`,
       )
       .then(function (response) {
+        if (!self._isMounted) return;
         if (response.status === 200) {
           self.setState({
             items: response.data.items,
@@ -33,6 +35,10 @@ class MealHistoryShow extends Component {
       .catch(function (error) {
         handleAxiosError(error, { silent: true });
       });
+  }
+
+  componentWillUnmount() {
+    this._isMounted = false;
   }
 
   render() {

@@ -16,10 +16,12 @@ class ResidentsPasswordNew extends Component {
   }
 
   componentDidMount() {
+    this._isMounted = true;
     var self = this;
     axios
       .get(`/api/v1/residents/name/${self.props.match.params.token}`)
       .then(function (response) {
+        if (!self._isMounted) return;
         if (response.status === 200) {
           self.setState({
             name: response.data.name,
@@ -29,10 +31,15 @@ class ResidentsPasswordNew extends Component {
       })
       .catch(function (error) {
         handleAxiosError(error, { silent: true });
+        if (!self._isMounted) return;
         if (error.response) {
           self.props.history.push("/");
         }
       });
+  }
+
+  componentWillUnmount() {
+    this._isMounted = false;
   }
 
   handleSubmit(e) {
@@ -48,6 +55,7 @@ class ResidentsPasswordNew extends Component {
         },
       )
       .then(function (response) {
+        if (!self._isMounted) return;
         self.setState({ loading: false });
         if (response.status === 200) {
           if (response.data.message) {
@@ -57,6 +65,7 @@ class ResidentsPasswordNew extends Component {
         }
       })
       .catch(function (error) {
+        if (!self._isMounted) return;
         self.setState({ loading: false });
         handleAxiosError(error);
       });

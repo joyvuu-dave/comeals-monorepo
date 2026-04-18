@@ -40,7 +40,7 @@ RSpec.describe 'Guest Room Reservations API' do
   end
 
   describe 'GET /api/v1/guest-room-reservations/:id' do
-    it 'returns the reservation with host list' do
+    it 'returns the reservation event' do
       grr = create(:guest_room_reservation, community: community, resident: resident)
 
       get "/api/v1/guest-room-reservations/#{grr.id}", params: { token: token }
@@ -48,7 +48,8 @@ RSpec.describe 'Guest Room Reservations API' do
       expect(response).to have_http_status(:ok)
       body = response.parsed_body
       expect(body).to have_key('event')
-      expect(body).to have_key('hosts')
+      # Hosts are served by CommunitiesController#hosts, not inlined here.
+      expect(body).not_to have_key('hosts')
     end
 
     it 'returns 404 for nonexistent reservation' do

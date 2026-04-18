@@ -19,12 +19,12 @@ module Api
         render json: grrs
       end
 
-      # GET /api/v1/guest-room-reservations
+      # GET /api/v1/guest-room-reservations/:id
+      # Hosts are served separately by CommunitiesController#hosts and cached
+      # in the frontend store (DataStore.hosts) so open modals stay in sync
+      # via Pusher without per-modal refetches. Don't inline the list here.
       def show
-        active_residents = Community.instance.residents.adult.active
-        hosts = active_residents.joins(:unit).order('units.name')
-                                .pluck('residents.id', 'residents.name', 'units.name')
-        render json: { event: @grr, hosts: hosts }, adapter: nil
+        render json: { event: @grr }, adapter: nil
       end
 
       # POST /api/v1/guest-room-reservations/create

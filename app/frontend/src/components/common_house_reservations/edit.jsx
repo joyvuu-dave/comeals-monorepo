@@ -7,7 +7,7 @@ import axios from "axios";
 import Cookie from "js-cookie";
 import { generateTimes, toPacificDayjs } from "../../helpers/helpers";
 import handleAxiosError from "../../helpers/handle_axios_error";
-import { inject } from "mobx-react";
+import { inject, observer } from "mobx-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faTimes } from "@fortawesome/free-solid-svg-icons";
 import ConfirmModal from "../app/confirm_modal";
@@ -15,281 +15,304 @@ import ConfirmModal from "../app/confirm_modal";
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
+// Render the full form from the first frame; the per-event fetch hydrates
+// the inputs when it returns. The resident select is reactively bound to
+// the shared `store.hosts` cache — see guest_room_reservations/edit.jsx
+// for the full pattern.
 const CommonHouseReservationsEdit = inject("store")(
-  class CommonHouseReservationsEdit extends Component {
-    constructor(props) {
-      super(props);
-      this.handleDayChange = this.handleDayChange.bind(this);
+  observer(
+    class CommonHouseReservationsEdit extends Component {
+      constructor(props) {
+        super(props);
+        this.handleDayChange = this.handleDayChange.bind(this);
 
-      this.state = {
-        ready: false,
-        event: {},
-        residents: [],
-        resident_id: "",
-        title: "",
-        day: "",
-        start_time: "",
-        end_time: "",
-        loadingAction: null,
-        confirmDeleteOpen: false,
-      };
-    }
+        this.state = {
+          loaded: false,
+          event: {},
+          resident_id: "",
+          title: "",
+          day: "",
+          start_time: "",
+          end_time: "",
+          loadingAction: null,
+          confirmDeleteOpen: false,
+        };
+      }
 
-    componentDidMount() {
-      var self = this;
-      axios
-        .get(
-          `/api/v1/common-house-reservations/${
-            self.props.eventId
-          }?token=${Cookie.get("token")}`,
-        )
-        .then(function (response) {
-          if (response.status === 200) {
-            var evt = response.data.event;
-            var sd = toPacificDayjs(evt.start_date);
-            self.setState({
-              event: evt,
-              residents: response.data.residents,
-              ready: true,
-              resident_id: evt.resident_id,
-              title: evt.title,
-              day: new Date(sd.year(), sd.month(), sd.date()),
-              start_time: `${toPacificDayjs(evt.start_date)
-                .hour()
-                .toString()
-                .padStart(2, "0")}:${toPacificDayjs(evt.start_date)
-                .minute()
-                .toString()
-                .padStart(2, "0")}`,
-              end_time: `${toPacificDayjs(evt.end_date)
-                .hour()
-                .toString()
-                .padStart(2, "0")}:${toPacificDayjs(evt.end_date)
-                .minute()
-                .toString()
-                .padStart(2, "0")}`,
-            });
-          }
-        })
-        .catch(function (error) {
-          handleAxiosError(error, { silent: true });
-        });
-    }
+      componentDidMount() {
+        this._isMounted = true;
+        var self = this;
+        // Hosts cache: kick off fetch if empty; no-op if already loaded.
+        self.props.store.ensureHosts();
 
-    handleSubmit(e) {
-      e.preventDefault();
-      this.setState({ loadingAction: "submit" });
-      var self = this;
-      var s = self.state;
-      axios
-        .patch(
-          `/api/v1/common-house-reservations/${
-            this.props.eventId
-          }/update?token=${Cookie.get("token")}`,
-          {
-            resident_id: s.resident_id,
-            start_year: s.day && new Date(s.day).getFullYear(),
-            start_month: s.day && new Date(s.day).getMonth() + 1,
-            start_day: s.day && new Date(s.day).getDate(),
-            start_hours: s.start_time && s.start_time.split(":")[0],
-            start_minutes: s.start_time && s.start_time.split(":")[1],
-            end_hours: s.end_time && s.end_time.split(":")[0],
-            end_minutes: s.end_time && s.end_time.split(":")[1],
-            title: s.title,
-          },
-        )
-        .then(function (response) {
-          self.setState({ loadingAction: null });
-          if (response.status === 200) {
-            self.props.handleCloseModal();
-          }
-        })
-        .catch(function (error) {
-          self.setState({ loadingAction: null });
-          handleAxiosError(error);
-        });
-    }
+        axios
+          .get(
+            `/api/v1/common-house-reservations/${
+              self.props.eventId
+            }?token=${Cookie.get("token")}`,
+          )
+          .then(function (response) {
+            if (!self._isMounted) return;
+            if (response.status === 200) {
+              var evt = response.data.event;
+              var sd = toPacificDayjs(evt.start_date);
+              self.setState({
+                event: evt,
+                loaded: true,
+                resident_id: evt.resident_id,
+                title: evt.title,
+                day: new Date(sd.year(), sd.month(), sd.date()),
+                start_time: `${toPacificDayjs(evt.start_date)
+                  .hour()
+                  .toString()
+                  .padStart(2, "0")}:${toPacificDayjs(evt.start_date)
+                  .minute()
+                  .toString()
+                  .padStart(2, "0")}`,
+                end_time: `${toPacificDayjs(evt.end_date)
+                  .hour()
+                  .toString()
+                  .padStart(2, "0")}:${toPacificDayjs(evt.end_date)
+                  .minute()
+                  .toString()
+                  .padStart(2, "0")}`,
+              });
+            }
+          })
+          .catch(function (error) {
+            handleAxiosError(error, { silent: true });
+          });
+      }
 
-    handleDeleteClick() {
-      if (this.state.loadingAction) return;
-      this.setState({ confirmDeleteOpen: true });
-    }
+      componentWillUnmount() {
+        this._isMounted = false;
+      }
 
-    handleDeleteConfirm() {
-      this.setState({ confirmDeleteOpen: false, loadingAction: "delete" });
-      var self = this;
-      axios
-        .delete(
-          `/api/v1/common-house-reservations/${
-            self.props.eventId
-          }/delete?token=${Cookie.get("token")}`,
-        )
-        .then(function (response) {
-          self.setState({ loadingAction: null });
-          if (response.status === 200) {
-            self.props.handleCloseModal();
-          }
-        })
-        .catch(function (error) {
-          self.setState({ loadingAction: null });
-          handleAxiosError(error);
-        });
-    }
+      handleSubmit(e) {
+        e.preventDefault();
+        this.setState({ loadingAction: "submit" });
+        var self = this;
+        var s = self.state;
+        axios
+          .patch(
+            `/api/v1/common-house-reservations/${
+              this.props.eventId
+            }/update?token=${Cookie.get("token")}`,
+            {
+              resident_id: s.resident_id,
+              start_year: s.day && new Date(s.day).getFullYear(),
+              start_month: s.day && new Date(s.day).getMonth() + 1,
+              start_day: s.day && new Date(s.day).getDate(),
+              start_hours: s.start_time && s.start_time.split(":")[0],
+              start_minutes: s.start_time && s.start_time.split(":")[1],
+              end_hours: s.end_time && s.end_time.split(":")[0],
+              end_minutes: s.end_time && s.end_time.split(":")[1],
+              title: s.title,
+            },
+          )
+          .then(function (response) {
+            if (!self._isMounted) return;
+            self.setState({ loadingAction: null });
+            if (response.status === 200) {
+              self.props.handleCloseModal();
+            }
+          })
+          .catch(function (error) {
+            if (!self._isMounted) return;
+            self.setState({ loadingAction: null });
+            handleAxiosError(error);
+          });
+      }
 
-    handleDeleteCancel() {
-      this.setState({ confirmDeleteOpen: false });
-    }
+      handleDeleteClick() {
+        if (this.state.loadingAction) return;
+        this.setState({ confirmDeleteOpen: true });
+      }
 
-    handleDayChange(val) {
-      this.setState({ day: val });
-    }
+      handleDeleteConfirm() {
+        this.setState({ confirmDeleteOpen: false, loadingAction: "delete" });
+        var self = this;
+        axios
+          .delete(
+            `/api/v1/common-house-reservations/${
+              self.props.eventId
+            }/delete?token=${Cookie.get("token")}`,
+          )
+          .then(function (response) {
+            if (!self._isMounted) return;
+            self.setState({ loadingAction: null });
+            if (response.status === 200) {
+              self.props.handleCloseModal();
+            }
+          })
+          .catch(function (error) {
+            if (!self._isMounted) return;
+            self.setState({ loadingAction: null });
+            handleAxiosError(error);
+          });
+      }
 
-    render() {
-      return (
-        <div>
-          {this.state.ready && (
-            <div>
-              <div className="flex">
-                <h2>Common House</h2>
-                <button
-                  onClick={this.handleDeleteClick.bind(this)}
-                  type="button"
-                  className={
-                    this.state.loadingAction === "delete"
-                      ? "mar-l-md button-warning button-loader"
-                      : "mar-l-md button-warning"
-                  }
-                  disabled={this.state.loadingAction !== null}
-                >
-                  Delete
-                </button>
-                <FontAwesomeIcon
-                  icon={faTimes}
-                  size="2x"
-                  className="close-button"
-                  onClick={this.props.handleCloseModal}
-                />
-              </div>
-              <fieldset>
-                <legend>Edit</legend>
-                <form onSubmit={(e) => this.handleSubmit(e)}>
-                  <label>Resident</label>
-                  <select
-                    id="local.resident_id"
-                    value={this.state.resident_id}
-                    onChange={(e) =>
-                      this.setState({ resident_id: e.target.value })
-                    }
-                    disabled={this.state.loadingAction !== null}
-                  >
-                    {this.state.residents.map((resident) => (
-                      <option key={resident[0]} value={resident[0]}>
-                        {resident[2]} - {resident[1]}
-                      </option>
-                    ))}
-                  </select>
-                  <br />
+      handleDeleteCancel() {
+        this.setState({ confirmDeleteOpen: false });
+      }
 
-                  <label>Title</label>
-                  <br />
-                  <input
-                    type="text"
-                    id="local.title"
-                    placeholder="optional"
-                    value={this.state.title}
-                    onChange={(e) => this.setState({ title: e.target.value })}
-                    disabled={this.state.loadingAction !== null}
-                  />
-                  <br />
-                  <br />
+      handleDayChange(val) {
+        this.setState({ day: val });
+      }
 
-                  <label>Day</label>
-                  <br />
-                  <div
-                    style={
-                      this.state.loadingAction !== null
-                        ? { pointerEvents: "none", opacity: 0.5 }
-                        : undefined
-                    }
-                  >
-                    <DayPickerInputWrapper
-                      value={this.state.day}
-                      onDayChange={this.handleDayChange}
-                      inputDisabled={this.state.loadingAction !== null}
-                      disabledDays={[
-                        {
-                          after: dayjs(this.state.event.start_date)
-                            .add(6, "month")
-                            .toDate(),
-                        },
-                      ]}
-                    />
-                  </div>
-                  <br />
-                  <br />
-
-                  <label>Start Time</label>
-                  <select
-                    id="local.start_time"
-                    value={this.state.start_time}
-                    onChange={(e) =>
-                      this.setState({ start_time: e.target.value })
-                    }
-                    disabled={this.state.loadingAction !== null}
-                  >
-                    <option />
-                    {generateTimes().map((time) => (
-                      <option key={time.value} value={time.value}>
-                        {time.display}
-                      </option>
-                    ))}
-                  </select>
-                  <br />
-
-                  <label>End Time</label>
-                  <select
-                    id="local.end_time"
-                    value={this.state.end_time}
-                    onChange={(e) =>
-                      this.setState({ end_time: e.target.value })
-                    }
-                    disabled={this.state.loadingAction !== null}
-                  >
-                    <option />
-                    {generateTimes().map((time) => (
-                      <option key={time.value} value={time.value}>
-                        {time.display}
-                      </option>
-                    ))}
-                  </select>
-                  <br />
-
-                  <button
-                    type="submit"
-                    className={
-                      this.state.loadingAction === "submit"
-                        ? "button-dark button-loader"
-                        : "button-dark"
-                    }
-                    disabled={this.state.loadingAction !== null}
-                  >
-                    Update
-                  </button>
-                </form>
-              </fieldset>
-              <ConfirmModal
-                isOpen={this.state.confirmDeleteOpen}
-                message="Do you really want to delete this reservation?"
-                onConfirm={this.handleDeleteConfirm.bind(this)}
-                onCancel={this.handleDeleteCancel.bind(this)}
+      render() {
+        const residents = this.props.store.hosts;
+        const disabled =
+          this.state.loadingAction !== null || !this.state.loaded;
+        const populated = this.state.loaded && this.props.store.hostsLoaded;
+        return (
+          <div>
+            <div className="flex">
+              <h2>Common House</h2>
+              <button
+                onClick={this.handleDeleteClick.bind(this)}
+                type="button"
+                className={
+                  this.state.loadingAction === "delete"
+                    ? "mar-l-md button-warning button-loader"
+                    : "mar-l-md button-warning"
+                }
+                disabled={disabled}
+              >
+                Delete
+              </button>
+              <FontAwesomeIcon
+                icon={faTimes}
+                size="2x"
+                className="close-button"
+                onClick={this.props.handleCloseModal}
               />
             </div>
-          )}
-          {!this.state.ready && <h3>Loading...</h3>}
-        </div>
-      );
-    }
-  },
+            <fieldset data-populated={populated ? "true" : undefined}>
+              <legend>Edit</legend>
+              <form onSubmit={(e) => this.handleSubmit(e)}>
+                <label>Resident</label>
+                <select
+                  id="local.resident_id"
+                  value={this.state.resident_id}
+                  onChange={(e) =>
+                    this.setState({ resident_id: e.target.value })
+                  }
+                  disabled={disabled}
+                >
+                  {/* Empty placeholder so the controlled value="" (pre-fetch
+                      or if the selected resident disappears from a mid-edit
+                      Pusher refresh) always matches an option — silences
+                      React's "value does not match any option" warning. */}
+                  <option />
+                  {residents.map((resident) => (
+                    <option key={resident.id} value={resident.id}>
+                      {resident.unitName} - {resident.name}
+                    </option>
+                  ))}
+                </select>
+                <br />
+
+                <label>Title</label>
+                <br />
+                <input
+                  type="text"
+                  id="local.title"
+                  placeholder="optional"
+                  value={this.state.title}
+                  onChange={(e) => this.setState({ title: e.target.value })}
+                  disabled={disabled}
+                />
+                <br />
+                <br />
+
+                <label>Day</label>
+                <br />
+                <div
+                  style={
+                    disabled
+                      ? { pointerEvents: "none", opacity: 0.5 }
+                      : undefined
+                  }
+                >
+                  <DayPickerInputWrapper
+                    value={this.state.day}
+                    onDayChange={this.handleDayChange}
+                    inputDisabled={disabled}
+                    disabledDays={
+                      this.state.event.start_date
+                        ? [
+                            {
+                              after: dayjs(this.state.event.start_date)
+                                .add(6, "month")
+                                .toDate(),
+                            },
+                          ]
+                        : []
+                    }
+                  />
+                </div>
+                <br />
+                <br />
+
+                <label>Start Time</label>
+                <select
+                  id="local.start_time"
+                  value={this.state.start_time}
+                  onChange={(e) =>
+                    this.setState({ start_time: e.target.value })
+                  }
+                  disabled={disabled}
+                >
+                  <option />
+                  {generateTimes().map((time) => (
+                    <option key={time.value} value={time.value}>
+                      {time.display}
+                    </option>
+                  ))}
+                </select>
+                <br />
+
+                <label>End Time</label>
+                <select
+                  id="local.end_time"
+                  value={this.state.end_time}
+                  onChange={(e) => this.setState({ end_time: e.target.value })}
+                  disabled={disabled}
+                >
+                  <option />
+                  {generateTimes().map((time) => (
+                    <option key={time.value} value={time.value}>
+                      {time.display}
+                    </option>
+                  ))}
+                </select>
+                <br />
+
+                <button
+                  type="submit"
+                  className={
+                    this.state.loadingAction === "submit"
+                      ? "button-dark button-loader"
+                      : "button-dark"
+                  }
+                  disabled={disabled}
+                >
+                  Update
+                </button>
+              </form>
+            </fieldset>
+            <ConfirmModal
+              isOpen={this.state.confirmDeleteOpen}
+              message="Do you really want to delete this reservation?"
+              onConfirm={this.handleDeleteConfirm.bind(this)}
+              onCancel={this.handleDeleteCancel.bind(this)}
+            />
+          </div>
+        );
+      }
+    },
+  ),
 );
 
 export default CommonHouseReservationsEdit;
