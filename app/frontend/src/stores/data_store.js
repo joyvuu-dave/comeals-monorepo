@@ -16,6 +16,7 @@ import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import handleAxiosError from "../helpers/handle_axios_error";
 import { TIMEZONE, toPacificDayjs } from "../helpers/helpers";
+import { mark, logEvent } from "../helpers/nav_trace";
 import toastStore from "./toast_store";
 
 dayjs.extend(utc);
@@ -33,6 +34,23 @@ const invalidationVersion = new Map();
 
 // Pusher subscriptions for adjacent months (cache invalidation only).
 var adjacentChannels = [];
+
+// In-flight promise for the hosts fetch, so concurrent callers
+// (two modals opened in quick succession) don't trigger duplicate
+// network requests. Cleared when the fetch settles.
+var hostsInFlight = null;
+
+// Monotonic counter for hosts fetches. Bumped every time a new fetch
+// starts; the resolve path compares against the captured `versionAtStart`
+// and discards a response whose version was superseded by a later fetch
+// (Pusher invalidation + refetch while an older fetch is still in flight).
+// Same pattern as `invalidationVersion` above for the month cache.
+var hostsVersion = 0;
+
+// Single Pusher subscription for hosts updates. Assigned the first
+// time ensureHosts() succeeds; never resubscribed for the lifetime
+// of the store because the channel name only depends on community_id.
+var hostsChannel = null;
 
 function monthCacheKey(communityId, year, month) {
   return `community-${communityId}-calendar-${year}-${month}`;
@@ -55,6 +73,7 @@ function prefetchMonthData(date) {
 
   if (monthCache.has(key)) return;
 
+  logEvent("prefetch-start", { date });
   var versionAtStart = invalidationVersion.get(key) || 0;
 
   localforage.getItem(key).then(function (value) {
@@ -104,13 +123,32 @@ export const DataStore = types
     userName: types.optional(types.string, ""),
     eventSources: types.optional(types.array(EventSource), []),
     calendarEvents: types.optional(types.array(types.frozen()), []),
+    // Monotonic counter bumped whenever calendarEvents changes (replace or
+    // clear). The Calendar component is wrapped in React.memo and diffs a
+    // cached snapshot of events keyed off this version — this gives us a
+    // cheap way to skip the ~3.5ms/event render cost when a parent re-render
+    // (e.g. modal open/close) didn't actually change the event set.
+    calendarEventsVersion: types.optional(types.number, 0),
     currentDate: types.optional(types.string, function () {
       return dayjs().tz(TIMEZONE).format("YYYY-MM-DD");
     }),
     isOnline: false,
     authExpired: false,
+    // Cached community hosts (adult + active residents with units), used by
+    // the Guest Room and Common House reservation New/Edit modals.
+    // Shape: [{ id, name, unitName }, ...] — transformed from the API's
+    // tuple shape ([residents.id, residents.name, units.name]) at the store
+    // boundary in setHosts.
+    // Kept fresh by Pusher `community-<id>-residents` real-time refetch
+    // and silent refetch on reconnect. See ensureHosts.
+    hosts: types.optional(types.array(types.frozen()), []),
+    // Non-null timestamp means the hosts array reflects a completed fetch.
+    hostsLoadedAt: types.maybeNull(types.number),
   })
   .views((self) => ({
+    get hostsLoaded() {
+      return self.hostsLoadedAt !== null;
+    },
     get description() {
       if (!self.meal) return "";
       return self.meal.description;
@@ -204,6 +242,12 @@ export const DataStore = types
             self.loadDataAsync();
           }
           self.loadMonthAsync();
+          // If we had a cached hosts list, any invalidation pushed while
+          // offline was missed — silently refresh it now so the next modal
+          // to open shows current data.
+          if (self.hostsLoaded) {
+            self.refetchHostsSilently();
+          }
         }
       });
 
@@ -402,6 +446,7 @@ export const DataStore = types
         });
     },
     loadMonthAsync() {
+      logEvent("loadMonthAsync-start", { date: self.currentDate });
       axios
         .get(
           `/api/v1/communities/${Cookie.get("community_id")}/calendar/${
@@ -414,6 +459,7 @@ export const DataStore = types
             var key = monthCacheKey(respData.id, respData.year, respData.month);
             monthCache.set(key, respData);
             localforage.setItem(key, respData).then(function () {
+              logEvent("loadMonthAsync-resolved", { date: self.currentDate });
               self.loadMonth(respData);
             });
           }
@@ -421,6 +467,90 @@ export const DataStore = types
         .catch(function (error) {
           handleAxiosError(error, { silent: true });
         });
+    },
+    // Guarantee the hosts list is loaded. Resolves immediately if the
+    // cache is warm; otherwise kicks off a fetch (deduped against any
+    // concurrent ensureHosts caller) and resolves when it lands.
+    ensureHosts() {
+      if (self.hostsLoaded) return Promise.resolve(self.hosts);
+      return self._fetchHosts({ supersede: false });
+    },
+    // Refresh the hosts cache without clearing it first — the existing
+    // array keeps rendering in any open modal until the new data arrives,
+    // avoiding a flicker-to-empty. Used on Pusher update (residents changed
+    // server-side) and Pusher reconnect (may have missed an update while
+    // offline). Supersedes any in-flight ensureHosts fetch so we don't
+    // serve a potentially-stale response.
+    //
+    // On failure: silently keeps the previously-loaded list visible. The
+    // next Pusher `update` event (or reconnect) will re-trigger this path,
+    // so transient network blips self-heal without user-visible errors.
+    refetchHostsSilently() {
+      return self._fetchHosts({ supersede: true });
+    },
+    // Internal: shared fetch implementation for ensureHosts and
+    // refetchHostsSilently. Every call bumps `hostsVersion`; the resolve
+    // path compares against the captured version and discards stale
+    // responses (same pattern as the month cache).
+    //
+    //   supersede: false — dedupe onto any in-flight fetch
+    //   supersede: true  — start a fresh fetch even if one is in flight;
+    //                      the in-flight response will be version-skipped
+    _fetchHosts(options = {}) {
+      if (hostsInFlight && !options.supersede) return hostsInFlight;
+
+      hostsVersion += 1;
+      var versionAtStart = hostsVersion;
+      var communityId = Cookie.get("community_id");
+
+      var promise = axios
+        .get(
+          `/api/v1/communities/${communityId}/hosts?token=${Cookie.get(
+            "token",
+          )}`,
+        )
+        .then(function (response) {
+          // Superseded by a later fetch: let the winner's response win.
+          if (versionAtStart !== hostsVersion) return self.hosts;
+          if (response.status === 200) {
+            self.setHosts(response.data);
+            self.subscribeHostsChannel(communityId);
+          }
+          return self.hosts;
+        })
+        .catch(function (error) {
+          handleAxiosError(error, { silent: true });
+          return self.hosts;
+        })
+        .finally(function () {
+          // Only clear the in-flight ref if we're still the reigning fetch.
+          // A superseding fetch has already replaced `hostsInFlight` with
+          // its own promise; don't trample it.
+          if (versionAtStart === hostsVersion) hostsInFlight = null;
+        });
+      hostsInFlight = promise;
+      return promise;
+    },
+    // Transform the API's tuple shape ([residents.id, residents.name,
+    // units.name]) into named-field objects at the store boundary so every
+    // consumer reads host.id / host.name / host.unitName instead of cryptic
+    // [0]/[1]/[2] indexing. The backend pluck order is set in
+    // CommunitiesController#hosts — keep these in sync.
+    setHosts(data) {
+      var transformed = data.map(function (row) {
+        return { id: row[0], name: row[1], unitName: row[2] };
+      });
+      self.hosts.replace(transformed);
+      self.hostsLoadedAt = Date.now();
+    },
+    subscribeHostsChannel(communityId) {
+      if (hostsChannel) return;
+      hostsChannel = window.Comeals.pusher.subscribe(
+        `community-${communityId}-residents`,
+      );
+      hostsChannel.bind("update", function () {
+        self.refetchHostsSilently();
+      });
     },
     loadNext() {
       axios
@@ -580,6 +710,9 @@ export const DataStore = types
         return true;
       }
 
+      logEvent("loadMonth", { currentDate: self.currentDate });
+      mark("loadMonth-start");
+
       // Build the full events array as plain JS, then replace the
       // observable in one shot for a single MobX notification.
       var allEvents = [];
@@ -641,7 +774,12 @@ export const DataStore = types
       convertEvents(data.guest_room_reservations || []);
       convertEvents(data.events || []);
 
+      mark("events-converted");
+
       self.calendarEvents.replace(allEvents);
+      self.calendarEventsVersion += 1;
+
+      mark("events-replaced", { count: allEvents.length });
 
       self.isLoading = false;
 
@@ -660,6 +798,7 @@ export const DataStore = types
         window.Comeals.pusher.subscribe(subscribeString);
 
       window.Comeals.calendarChannel.bind("update", function () {
+        logEvent("pusher-calendar-update", { date: self.currentDate });
         self.loadMonthAsync();
       });
 
@@ -712,6 +851,7 @@ export const DataStore = types
     },
     clearCalendarEvents() {
       self.calendarEvents.clear();
+      self.calendarEventsVersion += 1;
     },
     appendGuest(obj) {
       self.guestStore.guests.put(obj);

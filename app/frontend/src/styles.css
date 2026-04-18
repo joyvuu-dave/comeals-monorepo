@@ -52,6 +52,15 @@
   cursor: pointer;
 }
 
+/* Tactile press feedback for navigation buttons. The scale-down happens
+   instantly on mousedown and is released on mouseup, giving the brain an
+   immediate physical cue that the click landed — even before routing or
+   re-render begins. Disabled buttons don't respond. */
+.press:active:not(:disabled) {
+  transform: scale(0.94);
+  transition: transform 80ms ease-out;
+}
+
 .button-border-radius {
   border-radius: 0.25rem;
 }

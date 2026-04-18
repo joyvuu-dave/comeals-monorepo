@@ -13,6 +13,14 @@ class ResidentsPasswordReset extends Component {
     };
   }
 
+  componentDidMount() {
+    this._isMounted = true;
+  }
+
+  componentWillUnmount() {
+    this._isMounted = false;
+  }
+
   handleSubmit(e) {
     e.preventDefault();
     this.setState({ loading: true });
@@ -23,6 +31,7 @@ class ResidentsPasswordReset extends Component {
         email: self.state.email,
       })
       .then(function (response) {
+        if (!self._isMounted) return;
         self.setState({ loading: false });
         if (response.status === 200) {
           if (response.data.message) {
@@ -32,6 +41,7 @@ class ResidentsPasswordReset extends Component {
         }
       })
       .catch(function (error) {
+        if (!self._isMounted) return;
         self.setState({ loading: false });
         handleAxiosError(error);
       });

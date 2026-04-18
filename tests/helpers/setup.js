@@ -282,7 +282,6 @@ async function mockApi(page, options = {}) {
             start_date: "2026-01-22T19:00:00",
             end_date: "2026-01-22T21:00:00",
           },
-          residents: hosts,
         }),
       });
     } else {
@@ -308,7 +307,6 @@ async function mockApi(page, options = {}) {
             resident_id: 1,
             date: "2026-01-25T00:00:00",
           },
-          hosts: hosts,
         }),
       });
     } else {

@@ -1,21 +1,14 @@
 const { test, expect } = require("@playwright/test");
-const {
-  setupAuthenticatedPage,
-  authenticateContext,
-  stubPusher,
-  disableIdleTimer,
-} = require("../helpers/setup");
+const { setupAuthenticatedPage } = require("../helpers/setup");
 
 test.describe("Session Expiry", () => {
   test("shows session-expired banner when API returns 401", async ({
     page,
     context,
   }) => {
-    await authenticateContext(context);
-    await stubPusher(page);
-    await disableIdleTimer(page);
+    await setupAuthenticatedPage(page, context);
 
-    // Mock calendar endpoint to return 401 (expired token)
+    // Override calendar endpoint to return 401 (expired token)
     await page.route("**/api/v1/communities/*/calendar/*", (route) => {
       route.fulfill({
         status: 401,
@@ -24,15 +17,6 @@ test.describe("Session Expiry", () => {
           message:
             "You are not authenticated. Please try signing in and then try again.",
         }),
-      });
-    });
-
-    // Mock other endpoints normally so the page renders
-    await page.route("**/api/v1/residents/id*", (route) => {
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify(1),
       });
     });
 
@@ -69,11 +53,9 @@ test.describe("Session Expiry", () => {
     page,
     context,
   }) => {
-    await authenticateContext(context);
-    await stubPusher(page);
-    await disableIdleTimer(page);
+    await setupAuthenticatedPage(page, context);
 
-    // Mock calendar to abort (simulates network failure, not 401)
+    // Override calendar + resident-id to abort (simulates network failure, not 401)
     await page.route("**/api/v1/communities/*/calendar/*", (route) => {
       route.abort("connectionfailed");
     });
@@ -97,11 +79,9 @@ test.describe("Session Expiry", () => {
     page,
     context,
   }) => {
-    await authenticateContext(context);
-    await stubPusher(page);
-    await disableIdleTimer(page);
+    await setupAuthenticatedPage(page, context);
 
-    // Mock calendar endpoint to return 401
+    // Override calendar endpoint to return 401
     await page.route("**/api/v1/communities/*/calendar/*", (route) => {
       route.fulfill({
         status: 401,
@@ -109,14 +89,6 @@ test.describe("Session Expiry", () => {
         body: JSON.stringify({
           message: "You are not authenticated.",
         }),
-      });
-    });
-
-    await page.route("**/api/v1/residents/id*", (route) => {
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify(1),
       });
     });
 
@@ -139,11 +111,9 @@ test.describe("Session Expiry", () => {
     page,
     context,
   }) => {
-    await authenticateContext(context);
-    await stubPusher(page);
-    await disableIdleTimer(page);
+    await setupAuthenticatedPage(page, context);
 
-    // Mock meal endpoint to return 401
+    // Override meal endpoint to return 401
     await page.route("**/api/v1/meals/*/cooks*", (route) => {
       route.fulfill({
         status: 401,

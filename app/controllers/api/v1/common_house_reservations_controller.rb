@@ -20,12 +20,11 @@ module Api
       end
 
       # GET /api/v1/common-house-reservations/:id
+      # Residents are served separately by CommunitiesController#hosts and
+      # cached in the frontend store (DataStore.hosts) so open modals stay
+      # in sync via Pusher without per-modal refetches.
       def show
-        residents = Community.instance.residents.adult.active
-                             .joins(:unit).order('units.name')
-                             .pluck('residents.id', 'residents.name', 'units.name')
-
-        render json: { event: @chr, residents: residents }, adapter: nil
+        render json: { event: @chr }, adapter: nil
       end
 
       # POST /api/v1/common-house-reservations

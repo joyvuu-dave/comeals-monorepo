@@ -72,6 +72,7 @@ class Resident < ApplicationRecord
   before_save { self.email = email.downcase unless email.nil? }
   before_save :update_token
   after_commit :invalidate_calendar_cache_if_birthday_changed
+  after_commit :notify_residents_update
 
   # PASSWORD STUFF
   def authenticate(unencrypted_password)
@@ -194,5 +195,36 @@ class Resident < ApplicationRecord
     # Invalidate the new month
     new_date = Date.new(Time.zone.today.year, birthday.month, 1)
     community.invalidate_calendar_cache(new_date)
+  end
+
+  # Columns that the /api/v1/communities/:id/hosts query depends on. A change
+  # to any of these can alter whether a resident appears in the list or how
+  # they render. The query filters by `active` + `multiplier >= 2` and plucks
+  # `residents.name` and `units.name` (via `unit_id` join). Keep in sync with
+  # CommunitiesController#hosts.
+  HOSTS_QUERY_COLUMNS = %w[active multiplier name unit_id].freeze
+  private_constant :HOSTS_QUERY_COLUMNS
+
+  # Notify connected clients that the community hosts list may have changed.
+  # The frontend caches the hosts list in its MobX store for use by the
+  # reservation New/Edit modals; this push lets it refresh the cache in real
+  # time so no modal ever shows stale host data.
+  def notify_residents_update
+    # On create, saved_changes includes every column we set (name/email/unit_id
+    # at minimum), so the column intersection already covers the create path —
+    # no need for a separate previously_new_record? branch. Destroy leaves
+    # saved_changes empty, so gate it explicitly.
+    return unless destroyed? || (saved_changes.keys & HOSTS_QUERY_COLUMNS).any?
+
+    Pusher.trigger(
+      "community-#{community_id}-residents",
+      'update',
+      { message: 'residents updated' }
+    )
+  rescue StandardError => e
+    # Never let a Pusher outage break a resident save. Frontend falls back
+    # to silent refetch on reconnect (see DataStore#refetchHostsSilently).
+    Rails.logger.warn("Pusher.trigger failed in notify_residents_update: #{e.class}: #{e.message}")
+    nil
   end
 end

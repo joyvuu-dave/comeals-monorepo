@@ -42,6 +42,7 @@ class VersionBanner extends Component {
   }
 
   componentDidMount() {
+    this._isMounted = true;
     // Derive the running app's entry filename from the DOM rather than
     // a network fetch. This avoids a race condition: if a deploy finishes
     // between when the browser loaded index.html and when this component
@@ -63,6 +64,7 @@ class VersionBanner extends Component {
   }
 
   componentWillUnmount() {
+    this._isMounted = false;
     if (this._intervalId) {
       clearInterval(this._intervalId);
     }
@@ -82,6 +84,7 @@ class VersionBanner extends Component {
         return response.json();
       })
       .then(function (manifest) {
+        if (!self._isMounted) return;
         var keys = Object.keys(manifest);
         for (var i = 0; i < keys.length; i++) {
           var entry = manifest[keys[i]];

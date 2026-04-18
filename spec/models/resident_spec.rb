@@ -156,6 +156,104 @@ RSpec.describe Resident do
   end
 
   # ---------------------------------------------------------------------------
+  # Real-time notifications
+  # ---------------------------------------------------------------------------
+  describe 'after_commit :notify_residents_update' do
+    # Pusher is stubbed silently across all examples. Positive assertions use
+    # `.at_least(:once)`; negative assertions use `.exactly(:once)` to allow
+    # the single trigger from the initial `create` while forbidding any
+    # further trigger from the mutation under test.
+    let(:expected_channel) { "community-#{community.id}-residents" }
+
+    def expect_pusher_triggered
+      expect(Pusher).to have_received(:trigger).with(
+        expected_channel,
+        'update',
+        hash_including(message: 'residents updated')
+      ).at_least(:once)
+    end
+
+    def expect_only_create_trigger
+      expect(Pusher).to have_received(:trigger).with(
+        expected_channel, any_args
+      ).exactly(:once)
+    end
+
+    before { allow(Pusher).to receive(:trigger) }
+
+    it 'triggers on create' do
+      create(:resident, community: community, unit: unit)
+      expect_pusher_triggered
+    end
+
+    it 'triggers on destroy' do
+      resident = create(:resident, community: community, unit: unit)
+      resident.destroy!
+      expect(Pusher).to have_received(:trigger).with(
+        expected_channel, any_args
+      ).twice
+    end
+
+    # One example per column the hosts query depends on. If any of these
+    # stop firing, a real-time host-list change will be missed.
+    {
+      name: ->(r) { r.update!(name: 'Renamed') },
+      active: ->(r) { r.update!(active: false) },
+      multiplier: ->(r) { r.update!(multiplier: r.multiplier + 1) },
+      unit_id: ->(r) { r.update!(unit: FactoryBot.create(:unit, community: r.community)) }
+    }.each do |column, mutation|
+      it "triggers on #{column} change" do
+        resident = create(:resident, community: community, unit: unit)
+        mutation.call(resident)
+        expect(Pusher).to have_received(:trigger).with(
+          expected_channel, any_args
+        ).twice
+      end
+    end
+
+    # Non-hosts-relevant columns must NOT produce a Pusher round-trip on
+    # every save (prevents broadcast storms on password rotations, token
+    # refreshes, birthday edits, email changes, and can_cook toggles —
+    # none of those affect the hosts endpoint's output).
+    it 'does not trigger on password-only change' do
+      resident = create(:resident, community: community, unit: unit, password: 'secret123')
+      resident.update!(password: 'newsecret456')
+      expect_only_create_trigger
+    end
+
+    it 'does not trigger on birthday-only change' do
+      resident = create(:resident, community: community, unit: unit)
+      resident.update!(birthday: Date.new(1990, 6, 15))
+      expect_only_create_trigger
+    end
+
+    it 'does not trigger on vegetarian-only change' do
+      resident = create(:resident, community: community, unit: unit)
+      resident.update!(vegetarian: !resident.vegetarian)
+      expect_only_create_trigger
+    end
+
+    it 'does not trigger on email-only change' do
+      resident = create(:resident, community: community, unit: unit)
+      resident.update!(email: 'new@example.com')
+      expect_only_create_trigger
+    end
+
+    it 'does not trigger on can_cook-only change' do
+      resident = create(:resident, community: community, unit: unit)
+      resident.update!(can_cook: !resident.can_cook)
+      expect_only_create_trigger
+    end
+
+    it 'does not raise if Pusher is unavailable' do
+      allow(Pusher).to receive(:trigger).and_raise(StandardError, 'pusher down')
+      expect {
+        create(:resident, community: community, unit: unit)
+      }.not_to raise_error
+    end
+  end
+
+  # ---------------------------------------------------------------------------
   # Scopes
   # ---------------------------------------------------------------------------
   describe 'scopes' do

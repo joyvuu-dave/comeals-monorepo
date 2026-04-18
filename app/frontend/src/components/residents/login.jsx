@@ -41,6 +41,14 @@ const ResidentsLogin = inject("store")(
           this.handleCloseModal = this.handleCloseModal.bind(this);
         }
 
+        componentDidMount() {
+          this._isMounted = true;
+        }
+
+        componentWillUnmount() {
+          this._isMounted = false;
+        }
+
         renderModal() {
           if (typeof this.props.match.params.modal === "undefined") {
             return null;
@@ -85,6 +93,7 @@ const ResidentsLogin = inject("store")(
               password: self.state.password,
             })
             .then(function (response) {
+              if (!self._isMounted) return;
               self.setState({ loading: false });
 
               if (response.status === 200) {
@@ -117,6 +126,7 @@ const ResidentsLogin = inject("store")(
               }
             })
             .catch(function (error) {
+              if (!self._isMounted) return;
               self.setState({ loading: false });
               handleAxiosError(error);
             });

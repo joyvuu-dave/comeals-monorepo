@@ -14,11 +14,13 @@ class WebcalLinks extends Component {
   }
 
   componentDidMount() {
+    this._isMounted = true;
     if (typeof this.state.resident_id === "undefined") {
       var self = this;
       axios
         .get(`/api/v1/residents/id?token=${Cookie.get("token")}`)
         .then(function (response) {
+          if (!self._isMounted) return;
           if (response.status === 200) {
             Cookie.set("resident_id", response.data, {
               expires: 7300,
@@ -38,6 +40,10 @@ class WebcalLinks extends Component {
         ready: true,
       });
     }
+  }
+
+  componentWillUnmount() {
+    this._isMounted = false;
   }
 
   render() {

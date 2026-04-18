@@ -53,6 +53,7 @@
     "test:e2e": "npx playwright test",
     "test:e2e:update": "npx playwright test --update-snapshots",
     "test:integration": "bin/test-integration",
+    "bench:modals": "npx playwright test tests/e2e/perf-modals.spec.js",
     "lint": "eslint app/frontend/src/",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
