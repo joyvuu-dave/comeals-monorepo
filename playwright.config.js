@@ -1,11 +1,17 @@
 const { defineConfig } = require("@playwright/test");
 
+// perf-modals and pwa-screenshots are on-demand tooling, not correctness
+// tests. They're excluded from the default run (`npm run test:e2e`) but must
+// still be runnable when explicitly invoked. The env var gate lets the npm
+// scripts (`bench:modals`, `pwa:screenshots`) opt back in.
+const DEFAULT_IGNORE = [
+  "**/perf-modals.spec.js",
+  "**/pwa-screenshots.spec.js",
+];
+
 module.exports = defineConfig({
   testDir: "./tests/e2e",
-  // perf-modals is a one-off benchmark invoked via `npm run bench:modals`,
-  // not a correctness test. Keep it on disk as tooling but out of the
-  // default CI run so it doesn't balloon e2e wall time.
-  testIgnore: ["**/perf-modals.spec.js"],
+  testIgnore: process.env.PLAYWRIGHT_INCLUDE_ALL ? [] : DEFAULT_IGNORE,
   timeout: 30000,
   expect: {
     timeout: 5000,

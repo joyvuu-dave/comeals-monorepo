@@ -1,0 +1,11 @@
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- Steam dots -->
+  <circle cx="22" cy="16" r="2.5" fill="#F39422"/>
+  <circle cx="32" cy="12" r="2.5" fill="#F39422"/>
+  <circle cx="42" cy="16" r="2.5" fill="#F39422"/>
+  <!-- Bowl rim accent -->
+  <path d="M 10 30 Q 32 38 54 30"
+        stroke="#F39422" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <!-- Bowl body -->
+  <path d="M 10 30 A 22 20 0 0 0 54 30" fill="#F39422"/>
+</svg>
