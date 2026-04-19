@@ -167,16 +167,10 @@ ActiveAdmin.setup do |config|
 
   # == Meta Tags
   #
-  # Add additional meta tags to the head element of active admin pages.
-  #
-  # Add tags to all pages logged in users see:
-  #   config.meta_tags = { author: 'My Company' }
-
-  # By default, sign up/sign in/recover password pages are excluded
-  # from showing up in search engine results by adding a robots meta
-  # tag. You can reset the hash of meta tags included in logged out
-  # pages:
-  #   config.meta_tags_for_logged_out_pages = {}
+  # The admin portal is a private internal tool — keep it out of search
+  # indexes. ActiveAdmin already adds noindex on logged-out pages; this
+  # extends the same policy to authenticated pages.
+  config.meta_tags = { robots: 'noindex, nofollow' }
 
   # == Removing Breadcrumbs
   #
