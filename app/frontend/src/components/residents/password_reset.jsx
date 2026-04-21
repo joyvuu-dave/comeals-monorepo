@@ -52,11 +52,14 @@ class ResidentsPasswordReset extends Component {
       <form onSubmit={(e) => this.handleSubmit(e)}>
         <fieldset>
           <legend>Password Reset</legend>
-          <label className="w-100">
+          <label className="w-100" htmlFor="reset-email">
             <input
-              type="text"
+              id="reset-email"
+              name="email"
+              type="email"
               placeholder="Email"
               autoCapitalize="none"
+              autoComplete="username"
               disabled={this.state.loading}
               value={this.state.email}
               onChange={(e) => this.setState({ email: e.target.value })}

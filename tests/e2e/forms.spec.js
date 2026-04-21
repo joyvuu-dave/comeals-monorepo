@@ -177,7 +177,7 @@ test.describe("Form CRUD", () => {
       await expect(modal).toBeVisible({ timeout: 5000 });
 
       // Select a resident from dropdown
-      const residentSelect = modal.locator("#local\\.resident_id");
+      const residentSelect = modal.locator("#ch-new-resident");
       await expect(residentSelect).toBeVisible({ timeout: 3000 });
       await residentSelect.selectOption({ index: 1 });
 
@@ -221,7 +221,7 @@ test.describe("Form CRUD", () => {
       await expect(modal).toBeVisible({ timeout: 5000 });
 
       // Select a host from dropdown
-      const hostSelect = modal.locator("#local\\.resident_id");
+      const hostSelect = modal.locator("#guest-room-new-host");
       await expect(hostSelect).toBeVisible({ timeout: 3000 });
       await hostSelect.selectOption({ index: 1 });
 

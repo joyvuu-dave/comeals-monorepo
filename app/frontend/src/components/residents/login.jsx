@@ -164,11 +164,14 @@ const ResidentsLogin = inject("store")(
                   <form onSubmit={(e) => this.handleSubmit(e)}>
                     <fieldset className="login-box">
                       <legend>Resident Login</legend>
-                      <label className="w-80">
+                      <label className="w-80" htmlFor="login-email">
                         <input
-                          type="text"
+                          id="login-email"
+                          name="email"
+                          type="email"
                           placeholder="Email"
                           autoCapitalize="none"
+                          autoComplete="username"
                           disabled={this.state.loading}
                           aria-label="email"
                           value={this.state.email}
@@ -178,10 +181,13 @@ const ResidentsLogin = inject("store")(
                         />
                       </label>
                       <br />
-                      <label className="w-80">
+                      <label className="w-80" htmlFor="login-password">
                         <input
+                          id="login-password"
+                          name="password"
                           type="password"
                           placeholder="Password"
+                          autoComplete="current-password"
                           disabled={this.state.loading}
                           aria-label="password"
                           value={this.state.password}

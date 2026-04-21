@@ -138,10 +138,7 @@ document.addEventListener("DOMContentLoaded", () => {
                       </PrivateRoute>
                     }
                   />
-                  <Route
-                    path="/:modal?/:token?"
-                    element={<ResidentsLogin />}
-                  />
+                  <Route path="/:modal?/:token?" element={<ResidentsLogin />} />
                 </Routes>
               </ErrorBoundary>
             </Suspense>

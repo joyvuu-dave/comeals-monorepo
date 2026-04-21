@@ -78,10 +78,13 @@ class ResidentsPasswordNew extends Component {
           <form onSubmit={(e) => this.handleSubmit(e)}>
             <fieldset className="w-100">
               <legend>Reset Password for {this.state.name}</legend>
-              <label className="w-75">
+              <label className="w-75" htmlFor="new-password">
                 <input
+                  id="new-password"
+                  name="password"
                   type="password"
                   placeholder="New Password"
+                  autoComplete="new-password"
                   value={this.state.password}
                   onChange={(e) => this.setState({ password: e.target.value })}
                   disabled={this.state.loading}

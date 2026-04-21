@@ -200,9 +200,9 @@ const CommonHouseReservationsEdit = inject("store")(
             <fieldset data-populated={populated ? "true" : undefined}>
               <legend>Edit</legend>
               <form onSubmit={(e) => this.handleSubmit(e)}>
-                <label>Resident</label>
+                <label htmlFor="ch-edit-resident">Resident</label>
                 <select
-                  id="local.resident_id"
+                  id="ch-edit-resident"
                   value={this.state.resident_id}
                   onChange={(e) =>
                     this.setState({ resident_id: e.target.value })
@@ -222,11 +222,11 @@ const CommonHouseReservationsEdit = inject("store")(
                 </select>
                 <br />
 
-                <label>Title</label>
+                <label htmlFor="ch-edit-title">Title</label>
                 <br />
                 <input
                   type="text"
-                  id="local.title"
+                  id="ch-edit-title"
                   placeholder="optional"
                   value={this.state.title}
                   onChange={(e) => this.setState({ title: e.target.value })}
@@ -235,7 +235,7 @@ const CommonHouseReservationsEdit = inject("store")(
                 <br />
                 <br />
 
-                <label>Day</label>
+                <label htmlFor="ch-edit-day">Day</label>
                 <br />
                 <div
                   style={
@@ -245,6 +245,7 @@ const CommonHouseReservationsEdit = inject("store")(
                   }
                 >
                   <DayPickerInputWrapper
+                    id="ch-edit-day"
                     value={this.state.day}
                     onDayChange={this.handleDayChange}
                     inputDisabled={disabled}
@@ -264,9 +265,9 @@ const CommonHouseReservationsEdit = inject("store")(
                 <br />
                 <br />
 
-                <label>Start Time</label>
+                <label htmlFor="ch-edit-start-time">Start Time</label>
                 <select
-                  id="local.start_time"
+                  id="ch-edit-start-time"
                   value={this.state.start_time}
                   onChange={(e) =>
                     this.setState({ start_time: e.target.value })
@@ -282,9 +283,9 @@ const CommonHouseReservationsEdit = inject("store")(
                 </select>
                 <br />
 
-                <label>End Time</label>
+                <label htmlFor="ch-edit-end-time">End Time</label>
                 <select
-                  id="local.end_time"
+                  id="ch-edit-end-time"
                   value={this.state.end_time}
                   onChange={(e) => this.setState({ end_time: e.target.value })}
                   disabled={disabled}

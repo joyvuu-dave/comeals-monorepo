@@ -177,9 +177,9 @@ const GuestRoomReservationsEdit = inject("store")(
             <fieldset data-populated={populated ? "true" : undefined}>
               <legend>Edit</legend>
               <form onSubmit={(e) => this.handleSubmit(e)}>
-                <label>Host</label>
+                <label htmlFor="guest-room-edit-host">Host</label>
                 <select
-                  id="local.resident_id"
+                  id="guest-room-edit-host"
                   value={this.state.resident_id}
                   onChange={(e) =>
                     this.setState({ resident_id: e.target.value })
@@ -199,7 +199,7 @@ const GuestRoomReservationsEdit = inject("store")(
                 </select>
                 <br />
 
-                <label>Day</label>
+                <label htmlFor="guest-room-edit-day">Day</label>
                 <br />
                 <div
                   style={
@@ -209,6 +209,7 @@ const GuestRoomReservationsEdit = inject("store")(
                   }
                 >
                   <DayPickerInputWrapper
+                    id="guest-room-edit-day"
                     value={this.state.day}
                     onDayChange={this.handleDayChange}
                     inputDisabled={disabled}

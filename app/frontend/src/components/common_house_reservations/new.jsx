@@ -111,9 +111,9 @@ const CommonHouseReservationsNew = inject("store")(
             <fieldset data-populated={store.hostsLoaded ? "true" : undefined}>
               <legend>New</legend>
               <form onSubmit={(e) => this.handleSubmit(e)}>
-                <label>Resident</label>
+                <label htmlFor="ch-new-resident">Resident</label>
                 <select
-                  id="local.resident_id"
+                  id="ch-new-resident"
                   value={this.state.resident_id}
                   disabled={this.state.loading}
                   onChange={(e) =>
@@ -128,11 +128,11 @@ const CommonHouseReservationsNew = inject("store")(
                   ))}
                 </select>
                 <br />
-                <label>Title</label>
+                <label htmlFor="ch-new-title">Title</label>
                 <br />
                 <input
                   type="text"
-                  id="local.title"
+                  id="ch-new-title"
                   placeholder="optional"
                   disabled={this.state.loading}
                   value={this.state.title}
@@ -140,7 +140,7 @@ const CommonHouseReservationsNew = inject("store")(
                 />
                 <br />
 
-                <label>Day</label>
+                <label htmlFor="ch-new-day">Day</label>
                 <br />
                 <div
                   style={
@@ -150,6 +150,7 @@ const CommonHouseReservationsNew = inject("store")(
                   }
                 >
                   <DayPickerInputWrapper
+                    id="ch-new-day"
                     value={this.state.day}
                     placeholder=""
                     onDayChange={this.handleDayChange}
@@ -167,9 +168,9 @@ const CommonHouseReservationsNew = inject("store")(
                 <br />
                 <br />
 
-                <label>Start Time</label>
+                <label htmlFor="ch-new-start-time">Start Time</label>
                 <select
-                  id="local.start_time"
+                  id="ch-new-start-time"
                   value={this.state.start_time}
                   disabled={this.state.loading}
                   onChange={(e) =>
@@ -185,9 +186,9 @@ const CommonHouseReservationsNew = inject("store")(
                 </select>
                 <br />
 
-                <label>End Time</label>
+                <label htmlFor="ch-new-end-time">End Time</label>
                 <select
-                  id="local.end_time"
+                  id="ch-new-end-time"
                   value={this.state.end_time}
                   disabled={this.state.loading}
                   onChange={(e) => this.setState({ end_time: e.target.value })}

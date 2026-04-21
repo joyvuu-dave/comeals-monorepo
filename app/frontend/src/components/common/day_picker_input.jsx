@@ -56,6 +56,7 @@ class DayPickerInputWrapper extends Component {
         style={{ display: "inline-block", position: "relative" }}
       >
         <input
+          id={this.props.id}
           type="text"
           readOnly
           disabled={this.props.inputDisabled}

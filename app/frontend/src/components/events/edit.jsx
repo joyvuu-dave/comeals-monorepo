@@ -192,23 +192,25 @@ class EventsEdit extends Component {
         <fieldset data-populated={this.state.loaded ? "true" : undefined}>
           <legend>Edit</legend>
           <form onSubmit={(e) => this.handleSubmit(e)}>
-            <label>Title</label>
+            <label htmlFor="event-edit-title">Title</label>
             <input
+              id="event-edit-title"
               type="text"
               value={this.state.title}
               onChange={(e) => this.setState({ title: e.target.value })}
               disabled={disabled}
             />
             <br />
-            <label>Description</label>
+            <label htmlFor="event-edit-description">Description</label>
             <textarea
+              id="event-edit-description"
               placeholder="optional"
               value={this.state.description}
               onChange={(e) => this.setState({ description: e.target.value })}
               disabled={disabled}
             />
             <br />
-            <label>Day</label>
+            <label htmlFor="event-edit-day">Day</label>
             <br />
             <div
               style={
@@ -216,6 +218,7 @@ class EventsEdit extends Component {
               }
             >
               <DayPickerInputWrapper
+                id="event-edit-day"
                 value={this.state.day}
                 onDayChange={this.handleDayChange}
                 inputDisabled={disabled}
@@ -234,9 +237,9 @@ class EventsEdit extends Component {
             </div>
             <br />
             <br />
-            <label>Start Time</label>
+            <label htmlFor="event-edit-start-time">Start Time</label>
             <select
-              id="local.start_time"
+              id="event-edit-start-time"
               value={this.state.start_time}
               onChange={(e) => this.setState({ start_time: e.target.value })}
               disabled={disabled}
@@ -249,9 +252,9 @@ class EventsEdit extends Component {
               ))}
             </select>
             <br />
-            <label>End Time</label>
+            <label htmlFor="event-edit-end-time">End Time</label>
             <select
-              id="local.end_time"
+              id="event-edit-end-time"
               value={this.state.end_time}
               onChange={(e) => this.setState({ end_time: e.target.value })}
               disabled={disabled}
@@ -264,11 +267,11 @@ class EventsEdit extends Component {
               ))}
             </select>
             <br />
-            <label>All Day</label>
+            <label htmlFor="event-edit-all-day">All Day</label>
             {"  "}
             <input
+              id="event-edit-all-day"
               type="checkbox"
-              id="local.all_day"
               checked={this.state.all_day}
               onChange={(e) => this.setState({ all_day: e.target.checked })}
               disabled={disabled}
