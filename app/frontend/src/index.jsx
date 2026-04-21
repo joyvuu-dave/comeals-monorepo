@@ -118,29 +118,34 @@ document.addEventListener("DOMContentLoaded", () => {
         <VersionBanner />
         <TrailingSlash />
         <ScrollToTop>
-          <Suspense fallback={<h3>Loading...</h3>}>
-            <ErrorBoundary>
-              <Routes>
-                <Route
-                  path="/calendar/:type/:date/:modal?/:view?/:id?"
-                  element={
-                    <PrivateRoute>
-                      <Calendar />
-                    </PrivateRoute>
-                  }
-                />
-                <Route
-                  path="/meals/:id/edit/*"
-                  element={
-                    <PrivateRoute>
-                      <MealsEdit />
-                    </PrivateRoute>
-                  }
-                />
-                <Route path="/:modal?/:token?" element={<ResidentsLogin />} />
-              </Routes>
-            </ErrorBoundary>
-          </Suspense>
+          <main>
+            <Suspense fallback={<h3>Loading...</h3>}>
+              <ErrorBoundary>
+                <Routes>
+                  <Route
+                    path="/calendar/:type/:date/:modal?/:view?/:id?"
+                    element={
+                      <PrivateRoute>
+                        <Calendar />
+                      </PrivateRoute>
+                    }
+                  />
+                  <Route
+                    path="/meals/:id/edit/*"
+                    element={
+                      <PrivateRoute>
+                        <MealsEdit />
+                      </PrivateRoute>
+                    }
+                  />
+                  <Route
+                    path="/:modal?/:token?"
+                    element={<ResidentsLogin />}
+                  />
+                </Routes>
+              </ErrorBoundary>
+            </Suspense>
+          </main>
         </ScrollToTop>
       </Router>
     </Provider>,
