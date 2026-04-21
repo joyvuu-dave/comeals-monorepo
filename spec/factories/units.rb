@@ -12,8 +12,7 @@
 #
 # Indexes
 #
-#  index_units_on_community_id           (community_id)
-#  index_units_on_community_id_and_name  (community_id,name) UNIQUE
+#  index_units_on_name  (name) UNIQUE
 #
 # Foreign Keys
 #

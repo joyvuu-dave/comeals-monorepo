@@ -16,7 +16,7 @@
 #
 # Indexes
 #
-#  index_events_on_community_id  (community_id)
+#  index_events_on_start_date  (start_date)
 #
 # Foreign Keys
 #

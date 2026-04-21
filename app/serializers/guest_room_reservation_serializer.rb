@@ -13,9 +13,8 @@
 #
 # Indexes
 #
-#  index_guest_room_reservations_on_community_id           (community_id)
-#  index_guest_room_reservations_on_community_id_and_date  (community_id,date) UNIQUE
-#  index_guest_room_reservations_on_resident_id            (resident_id)
+#  index_guest_room_reservations_on_date         (date) UNIQUE
+#  index_guest_room_reservations_on_resident_id  (resident_id)
 #
 # Foreign Keys
 #

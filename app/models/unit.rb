@@ -12,8 +12,7 @@
 #
 # Indexes
 #
-#  index_units_on_community_id           (community_id)
-#  index_units_on_community_id_and_name  (community_id,name) UNIQUE
+#  index_units_on_name  (name) UNIQUE
 #
 # Foreign Keys
 #
@@ -29,7 +28,7 @@ class Unit < ApplicationRecord
   has_many :residents, dependent: :destroy
   belongs_to :community
 
-  validates :name, uniqueness: { scope: :community_id }
+  validates :name, uniqueness: true
 
   after_commit :notify_residents_update
 

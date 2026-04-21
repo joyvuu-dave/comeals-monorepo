@@ -20,9 +20,9 @@
 #
 # Indexes
 #
-#  index_meals_on_community_id_and_date  (community_id,date) UNIQUE
-#  index_meals_on_reconciliation_id      (reconciliation_id)
-#  index_meals_on_rotation_id            (rotation_id)
+#  index_meals_on_date               (date) UNIQUE
+#  index_meals_on_reconciliation_id  (reconciliation_id)
+#  index_meals_on_rotation_id        (rotation_id)
 #
 # Foreign Keys
 #

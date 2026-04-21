@@ -22,11 +22,10 @@
 #
 # Indexes
 #
-#  index_residents_on_community_id           (community_id)
-#  index_residents_on_email                  (email) UNIQUE
-#  index_residents_on_name_and_community_id  (name,community_id) UNIQUE
-#  index_residents_on_reset_password_token   (reset_password_token) UNIQUE
-#  index_residents_on_unit_id                (unit_id)
+#  index_residents_on_email                 (email) UNIQUE
+#  index_residents_on_name                  (name) UNIQUE
+#  index_residents_on_reset_password_token  (reset_password_token) UNIQUE
+#  index_residents_on_unit_id               (unit_id)
 #
 # Foreign Keys
 #

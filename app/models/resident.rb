@@ -22,11 +22,10 @@
 #
 # Indexes
 #
-#  index_residents_on_community_id           (community_id)
-#  index_residents_on_email                  (email) UNIQUE
-#  index_residents_on_name_and_community_id  (name,community_id) UNIQUE
-#  index_residents_on_reset_password_token   (reset_password_token) UNIQUE
-#  index_residents_on_unit_id                (unit_id)
+#  index_residents_on_email                 (email) UNIQUE
+#  index_residents_on_name                  (name) UNIQUE
+#  index_residents_on_reset_password_token  (reset_password_token) UNIQUE
+#  index_residents_on_unit_id               (unit_id)
 #
 # Foreign Keys
 #
@@ -60,7 +59,7 @@ class Resident < ApplicationRecord
   has_many :common_house_reservations, dependent: :destroy
 
   validates :multiplier, numericality: { only_integer: true }
-  validates :name, presence: true, uniqueness: { case_sensitive: false, scope: :community_id }
+  validates :name, presence: true, uniqueness: { case_sensitive: false }
 
   VALID_EMAIL_REGEX = /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i
   validates :email, presence: true, length: { maximum: 255 },

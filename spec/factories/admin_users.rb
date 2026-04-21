@@ -22,7 +22,6 @@
 #
 # Indexes
 #
-#  index_admin_users_on_community_id          (community_id)
 #  index_admin_users_on_email                 (email) UNIQUE
 #  index_admin_users_on_reset_password_token  (reset_password_token) UNIQUE
 #

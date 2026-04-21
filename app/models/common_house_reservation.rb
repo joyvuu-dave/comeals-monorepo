@@ -15,8 +15,8 @@
 #
 # Indexes
 #
-#  index_common_house_reservations_on_community_id  (community_id)
-#  index_common_house_reservations_on_resident_id   (resident_id)
+#  index_common_house_reservations_on_resident_id  (resident_id)
+#  index_common_house_reservations_on_start_date   (start_date)
 #
 # Foreign Keys
 #

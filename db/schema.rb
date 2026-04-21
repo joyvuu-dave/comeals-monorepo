@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_10_032155) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_21_131127) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_stat_statements"
@@ -31,7 +31,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_10_032155) do
     t.integer "sign_in_count", default: 0, null: false
     t.boolean "superuser", default: false, null: false
     t.datetime "updated_at", precision: nil, null: false
-    t.index ["community_id"], name: "index_admin_users_on_community_id"
     t.index ["email"], name: "index_admin_users_on_email", unique: true
     t.index ["reset_password_token"], name: "index_admin_users_on_reset_password_token", unique: true
   end
@@ -63,7 +62,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_10_032155) do
     t.boolean "no_cost", default: false, null: false
     t.bigint "resident_id", null: false
     t.datetime "updated_at", precision: nil, null: false
-    t.index ["community_id"], name: "index_bills_on_community_id"
     t.index ["meal_id", "resident_id"], name: "index_bills_on_meal_id_and_resident_id", unique: true
     t.index ["meal_id"], name: "index_bills_on_meal_id"
     t.index ["resident_id"], name: "index_bills_on_resident_id"
@@ -78,8 +76,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_10_032155) do
     t.datetime "start_date", precision: nil, null: false
     t.string "title"
     t.datetime "updated_at", precision: nil, null: false
-    t.index ["community_id"], name: "index_common_house_reservations_on_community_id"
     t.index ["resident_id"], name: "index_common_house_reservations_on_resident_id"
+    t.index ["start_date"], name: "index_common_house_reservations_on_start_date"
   end
 
   create_table "communities", force: :cascade do |t|
@@ -105,7 +103,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_10_032155) do
     t.datetime "start_date", precision: nil, null: false
     t.string "title", null: false
     t.datetime "updated_at", precision: nil, null: false
-    t.index ["community_id"], name: "index_events_on_community_id"
+    t.index ["start_date"], name: "index_events_on_start_date"
   end
 
   create_table "friendly_id_slugs", force: :cascade do |t|
@@ -126,8 +124,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_10_032155) do
     t.date "date", null: false
     t.bigint "resident_id", null: false
     t.datetime "updated_at", precision: nil, null: false
-    t.index ["community_id", "date"], name: "index_guest_room_reservations_on_community_id_and_date", unique: true
-    t.index ["community_id"], name: "index_guest_room_reservations_on_community_id"
+    t.index ["date"], name: "index_guest_room_reservations_on_date", unique: true
     t.index ["resident_id"], name: "index_guest_room_reservations_on_resident_id"
   end
 
@@ -163,7 +160,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_10_032155) do
     t.bigint "resident_id", null: false
     t.datetime "updated_at", precision: nil, null: false
     t.boolean "vegetarian", default: false, null: false
-    t.index ["community_id"], name: "index_meal_residents_on_community_id"
     t.index ["meal_id", "resident_id"], name: "index_meal_residents_on_meal_id_and_resident_id", unique: true
     t.index ["meal_id"], name: "index_meal_residents_on_meal_id"
     t.index ["resident_id"], name: "index_meal_residents_on_resident_id"
@@ -183,7 +179,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_10_032155) do
     t.bigint "rotation_id"
     t.datetime "start_time", precision: nil, null: false
     t.datetime "updated_at", precision: nil, null: false
-    t.index ["community_id", "date"], name: "index_meals_on_community_id_and_date", unique: true
+    t.index ["date"], name: "index_meals_on_date", unique: true
     t.index ["reconciliation_id"], name: "index_meals_on_reconciliation_id"
     t.index ["rotation_id"], name: "index_meals_on_rotation_id"
     t.check_constraint "cap IS NULL OR cap > 0::numeric", name: "meals_cap_positive_or_null"
@@ -206,7 +202,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_10_032155) do
     t.date "date", null: false
     t.date "end_date", null: false
     t.datetime "updated_at", precision: nil, null: false
-    t.index ["community_id"], name: "index_reconciliations_on_community_id"
   end
 
   create_table "resident_balances", force: :cascade do |t|
@@ -233,9 +228,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_10_032155) do
     t.bigint "unit_id", null: false
     t.datetime "updated_at", precision: nil, null: false
     t.boolean "vegetarian", default: false, null: false
-    t.index ["community_id"], name: "index_residents_on_community_id"
     t.index ["email"], name: "index_residents_on_email", unique: true
-    t.index ["name", "community_id"], name: "index_residents_on_name_and_community_id", unique: true
+    t.index ["name"], name: "index_residents_on_name", unique: true
     t.index ["reset_password_token"], name: "index_residents_on_reset_password_token", unique: true
     t.index ["unit_id"], name: "index_residents_on_unit_id"
     t.check_constraint "multiplier >= 0", name: "residents_multiplier_non_negative"
@@ -251,7 +245,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_10_032155) do
     t.boolean "residents_notified", default: false, null: false
     t.date "start_date"
     t.datetime "updated_at", precision: nil, null: false
-    t.index ["community_id"], name: "index_rotations_on_community_id"
   end
 
   create_table "units", force: :cascade do |t|
@@ -259,8 +252,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_10_032155) do
     t.datetime "created_at", precision: nil, null: false
     t.string "name", null: false
     t.datetime "updated_at", precision: nil, null: false
-    t.index ["community_id", "name"], name: "index_units_on_community_id_and_name", unique: true
-    t.index ["community_id"], name: "index_units_on_community_id"
+    t.index ["name"], name: "index_units_on_name", unique: true
   end
 
   add_foreign_key "admin_users", "communities"

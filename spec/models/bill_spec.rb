@@ -15,7 +15,6 @@
 #
 # Indexes
 #
-#  index_bills_on_community_id             (community_id)
 #  index_bills_on_meal_id                  (meal_id)
 #  index_bills_on_meal_id_and_resident_id  (meal_id,resident_id) UNIQUE
 #  index_bills_on_resident_id              (resident_id)
