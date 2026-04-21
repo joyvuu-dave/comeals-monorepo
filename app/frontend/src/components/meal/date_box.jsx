@@ -133,7 +133,17 @@ const DateBox = inject("store")(
                   className="arrow"
                   style={styles.arrow}
                   onClick={this.handlePrevClick}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      this.handlePrevClick();
+                    }
+                  }}
                   disabled={this.props.store.isLoading}
+                  aria-disabled={this.props.store.isLoading}
+                  role="button"
+                  aria-label="Previous meal"
+                  tabIndex={0}
                 >
                   <FontAwesomeIcon icon={faChevronLeft} size="3x" />
                 </div>
@@ -142,7 +152,17 @@ const DateBox = inject("store")(
                   className="arrow"
                   style={styles.arrow}
                   onClick={this.handleNextClick}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      this.handleNextClick();
+                    }
+                  }}
                   disabled={this.props.store.isLoading}
+                  aria-disabled={this.props.store.isLoading}
+                  role="button"
+                  aria-label="Next meal"
+                  tabIndex={0}
                 >
                   <FontAwesomeIcon icon={faChevronRight} size="3x" />
                 </div>

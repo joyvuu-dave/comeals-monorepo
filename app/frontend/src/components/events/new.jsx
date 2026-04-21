@@ -84,6 +84,15 @@ class EventsNew extends Component {
             size="2x"
             className="close-button"
             onClick={this.props.handleCloseModal}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                this.props.handleCloseModal();
+              }
+            }}
+            role="button"
+            aria-label="Close"
+            tabIndex={0}
           />
         </div>
         <fieldset>
