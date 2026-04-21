@@ -164,6 +164,36 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
     end
   end
 
+  describe 'duplicate cook rejection' do
+    it 'returns 400 with the cook id in the message' do
+      update_bills(
+        meal_id: meal.id,
+        bills: [
+          { resident_id: cook.id, amount: '30.00', no_cost: false },
+          { resident_id: cook.id, amount: '40.00', no_cost: false }
+        ]
+      )
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq("Duplicate cook in bills: resident ##{cook.id}.")
+    end
+
+    it 'does not modify the bill' do
+      original_amount = bill.amount
+
+      update_bills(
+        meal_id: meal.id,
+        bills: [
+          { resident_id: cook.id, amount: '999.00', no_cost: false },
+          { resident_id: cook.id, amount: '888.00', no_cost: false }
+        ]
+      )
+
+      bill.reload
+      expect(bill.amount).to eq(original_amount)
+    end
+  end
+
   describe 'malformed amount' do
     it 'returns 400 for non-numeric strings' do
       update_bills(

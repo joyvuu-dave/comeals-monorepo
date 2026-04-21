@@ -461,6 +461,17 @@ RSpec.describe Reconciliation do
       expect(recon).not_to be_valid
       expect(recon.errors[:end_date]).to include("can't be blank")
     end
+
+    it 'rejects end_date in the future' do
+      recon = build(:reconciliation, community: community, end_date: Date.tomorrow)
+      expect(recon).not_to be_valid
+      expect(recon.errors[:end_date]).to include('cannot be in the future')
+    end
+
+    it 'accepts end_date of today' do
+      recon = build(:reconciliation, community: community, end_date: Time.zone.today)
+      expect(recon).to be_valid
+    end
   end
 
   # ---------------------------------------------------------------------------

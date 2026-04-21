@@ -206,5 +206,13 @@ RSpec.describe MealResident do
       expect { mr.destroy }.not_to change(described_class, :count)
       expect(mr.errors[:base]).to include('Meal has been closed.')
     end
+
+    it 'blocks removal when meal is reconciled' do
+      mr = create(:meal_resident, meal: meal, resident: resident, community: community)
+      meal.update!(reconciliation: create(:reconciliation, community: community))
+
+      expect { mr.destroy }.not_to change(described_class, :count)
+      expect(mr.errors[:base]).to include('Meal has been reconciled.')
+    end
   end
 end

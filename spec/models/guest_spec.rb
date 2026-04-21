@@ -99,4 +99,20 @@ RSpec.describe Guest do
       expect(guest.save).to be true
     end
   end
+
+  describe '#destroy' do
+    it 'blocks destruction when meal is reconciled' do
+      guest = create(:guest, meal: meal, resident: resident)
+      meal.update!(reconciliation: create(:reconciliation, community: community))
+
+      expect { guest.destroy }.not_to change(described_class, :count)
+      expect(guest.errors[:base]).to include('Meal has been reconciled.')
+    end
+
+    it 'allows destruction when meal is not reconciled' do
+      guest = create(:guest, meal: meal, resident: resident)
+
+      expect { guest.destroy }.to change(described_class, :count).by(-1)
+    end
+  end
 end

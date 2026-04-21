@@ -47,9 +47,17 @@ class Bill < ApplicationRecord
   delegate :attendees_count, to: :meal
 
   before_validation :set_community_id
+  before_destroy :record_can_be_removed
 
   validates :amount, numericality: { greater_than_or_equal_to: 0 }
   validates :resident_id, uniqueness: { scope: :meal_id }
+
+  def record_can_be_removed
+    return unless reconciled?
+
+    errors.add(:base, 'Meal has been reconciled.')
+    throw(:abort)
+  end
 
   def set_community_id
     self.community_id = meal&.community_id

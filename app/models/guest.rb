@@ -32,9 +32,17 @@ class Guest < ApplicationRecord
 
   validates :multiplier, numericality: { only_integer: true }
   validate :meal_has_open_spots, on: :create
+  before_destroy :record_can_be_removed
 
   def meal_has_open_spots
     errors.add(:base, 'Meal has no open spots.') unless meal.max.nil? || meal.attendees_count < meal.max
+  end
+
+  def record_can_be_removed
+    return unless meal.reconciled?
+
+    errors.add(:base, 'Meal has been reconciled.')
+    throw(:abort)
   end
 
   def cost

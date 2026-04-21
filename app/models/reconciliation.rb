@@ -32,6 +32,7 @@ class Reconciliation < ApplicationRecord
   belongs_to :community
 
   validates :end_date, presence: true
+  validate :end_date_not_in_future
 
   before_validation :set_date
   after_create :finalize
@@ -199,6 +200,13 @@ class Reconciliation < ApplicationRecord
 
   def set_date
     self.date ||= Time.zone.today
+  end
+
+  def end_date_not_in_future
+    return if end_date.blank?
+    return unless end_date > Time.zone.today
+
+    errors.add(:end_date, 'cannot be in the future')
   end
 
   # Distributes full-precision balances (which sum to zero) into cent-rounded

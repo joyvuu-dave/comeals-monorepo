@@ -129,6 +129,26 @@ RSpec.describe Bill do
     end
   end
 
+  describe '#destroy' do
+    it 'blocks destruction when meal is reconciled' do
+      meal = create(:meal, community: community)
+      resident = create(:resident, community: community, unit: unit)
+      bill = create(:bill, meal: meal, resident: resident, community: community)
+      meal.update!(reconciliation: create(:reconciliation, community: community))
+
+      expect { bill.destroy }.not_to change(described_class, :count)
+      expect(bill.errors[:base]).to include('Meal has been reconciled.')
+    end
+
+    it 'allows destruction when meal is not reconciled' do
+      meal = create(:meal, community: community)
+      resident = create(:resident, community: community, unit: unit)
+      bill = create(:bill, meal: meal, resident: resident, community: community)
+
+      expect { bill.destroy }.to change(described_class, :count).by(-1)
+    end
+  end
+
   describe '#capped_amount' do
     it 'returns full amount when community has no cap' do
       meal = create(:meal, community: community)

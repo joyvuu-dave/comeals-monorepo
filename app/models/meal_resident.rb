@@ -61,6 +61,12 @@ class MealResident < ApplicationRecord
   end
 
   def record_can_be_removed
+    # Reconciled meals are immutable (accounting principle: no edits to a closed ledger).
+    if meal.reconciled?
+      errors.add(:base, 'Meal has been reconciled.')
+      throw(:abort)
+    end
+
     # Scenario: Meal is open
     return true if meal.closed == false
 

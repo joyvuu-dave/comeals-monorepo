@@ -93,6 +93,7 @@ module Api
       # exceeding meal.max.
       def create_guest
         @meal.with_lock do
+          # multiplier omitted intentionally — DB default of 2 applies (adult guest).
           guest = Guest.new(meal_id: @meal.id, resident_id: params[:resident_id], vegetarian: params[:vegetarian])
           if guest.save
             render json: guest
@@ -154,6 +155,12 @@ module Api
 
         # Cooks
         cook_ids = params[:bills].pluck('resident_id')
+
+        duplicate = cook_ids.map(&:to_i).tally.find { |_, count| count > 1 }&.first
+        if duplicate
+          render json: { message: "Duplicate cook in bills: resident ##{duplicate}." }, status: :bad_request
+          return
+        end
 
         # Future meal
         # More than two cooks
