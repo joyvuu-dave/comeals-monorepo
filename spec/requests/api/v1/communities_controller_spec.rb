@@ -109,6 +109,40 @@ RSpec.describe 'Communities API' do
       body = response.parsed_body
       expect(body['birthdays']).not_to be_empty
     end
+
+    it 'sets an ETag and returns 304 when If-None-Match matches' do
+      create(:meal, community: community, date: Date.new(2026, 4, 10))
+
+      get "/api/v1/communities/#{community.id}/calendar/2026-04-15", params: { token: token }
+
+      expect(response).to have_http_status(:ok)
+      etag = response.headers['ETag']
+      expect(etag).to be_present
+      expect(response.headers['Cache-Control']).to include('private')
+
+      get "/api/v1/communities/#{community.id}/calendar/2026-04-15",
+          params: { token: token }, headers: { 'If-None-Match' => etag }
+
+      expect(response).to have_http_status(:not_modified)
+      expect(response.body).to be_empty
+    end
+
+    it 'returns a fresh 200 with new ETag after invalidation' do
+      create(:meal, community: community, date: Date.new(2026, 4, 10))
+
+      get "/api/v1/communities/#{community.id}/calendar/2026-04-15", params: { token: token }
+      first_etag = response.headers['ETag']
+
+      # Simulate a mutation that would invalidate the calendar cache
+      community.invalidate_calendar_cache(Date.new(2026, 4, 10))
+      create(:meal, community: community, date: Date.new(2026, 4, 17))
+
+      get "/api/v1/communities/#{community.id}/calendar/2026-04-15",
+          params: { token: token }, headers: { 'If-None-Match' => first_etag }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.headers['ETag']).not_to eq(first_etag)
+    end
   end
 
   describe 'GET /api/v1/communities/:id/ical' do

@@ -89,7 +89,13 @@ module Api
           ).as_json
         end
 
-        render json: result
+        # stale? digests `result` into an ETag. When the client sends a matching
+        # If-None-Match, Rails auto-renders 304 Not Modified with an empty body.
+        # Cache-Control defaults to private, no-cache, must-revalidate — browsers
+        # revalidate on every request, so freshness semantics are identical to
+        # the pre-ETag behavior. The win is bandwidth: a 304 is ~200 bytes vs.
+        # a full calendar JSON payload.
+        render json: result if stale?(etag: result, public: false)
       end
 
       private

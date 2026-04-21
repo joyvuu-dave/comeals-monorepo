@@ -44,10 +44,18 @@ class CalendarSerializer < ActiveModel::Serializer
     instance_options[:year]
   end
 
+  # Every collection here is ordered deterministically. Without explicit ORDER
+  # BY, Postgres may return rows in arbitrary order (especially after updates
+  # that reshuffle heap tuples), which would change the ETag digest of the
+  # cached result even when the underlying data is identical. Ordering by :id
+  # is cheap (PK B-tree) and gives the cache-miss recompute path a stable
+  # fingerprint.
+
   def meals
     object.meals
           .where(date: (instance_options[:start_date])..)
           .where(date: ..(instance_options[:end_date]))
+          .order(:id)
           .preload(:meal_residents, :guests)
   end
 
@@ -57,16 +65,19 @@ class CalendarSerializer < ActiveModel::Serializer
           .joins(:meal)
           .where(meals: { date: (instance_options[:start_date]).. })
           .where(meals: { date: ..(instance_options[:end_date]) })
+          .order('bills.id')
   end
 
   def rotations
     rotation_ids = meals.where.not(rotation_id: nil)
                         .pluck(:rotation_id).uniq
-    Rotation.where(id: rotation_ids).preload(:meals).to_a
+    Rotation.where(id: rotation_ids).order(:id).preload(:meals).to_a
   end
 
   def birthdays
-    object.residents.active.where('extract(month from birthday) in (?)', instance_options[:month_int_array])
+    object.residents.active
+          .where('extract(month from birthday) in (?)', instance_options[:month_int_array])
+          .order(:id)
   end
 
   def common_house_reservations
@@ -74,6 +85,7 @@ class CalendarSerializer < ActiveModel::Serializer
           .includes({ resident: :unit })
           .where(start_date: (instance_options[:start_date])..)
           .where(start_date: ..(instance_options[:end_date]))
+          .order(:id)
   end
 
   def guest_room_reservations
@@ -81,6 +93,7 @@ class CalendarSerializer < ActiveModel::Serializer
           .includes({ resident: :unit })
           .where(date: (instance_options[:start_date])..)
           .where(date: ..(instance_options[:end_date]))
+          .order(:id)
   end
 
   def events
@@ -93,5 +106,6 @@ class CalendarSerializer < ActiveModel::Serializer
           .or(object.events
                     .where(start_date: ...(instance_options[:start_date]))
                     .where('end_date > ?', instance_options[:end_date]))
+          .order(:id)
   end
 end
