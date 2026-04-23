@@ -170,9 +170,10 @@ describe("toCommunityDayjs", () => {
     expect(d.date()).toBe(11);
   });
 
-  it("honors a Southern Hemisphere community tz across the DST flip", () => {
-    // Sydney is UTC+11 during southern-summer AEDT (observed in May 2026).
-    // Wait — Sydney is UTC+10 (AEST) in May. Ensure we pick up AEST not PDT.
+  it("honors a Southern Hemisphere community tz", () => {
+    // May is southern-hemisphere winter, so Sydney is on AEST (UTC+10), not
+    // AEDT. The point of the test is that we resolve to Sydney local time,
+    // not a hardcoded Pacific offset.
     setCommunityTimezone("Australia/Sydney");
     const d = toCommunityDayjs("2026-05-11T00:00:00Z");
     expect(d.hour()).toBe(10); // AEST = UTC+10

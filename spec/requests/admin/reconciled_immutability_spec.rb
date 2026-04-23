@@ -80,15 +80,21 @@ RSpec.describe 'Admin reconciled immutability' do
   end
 
   describe 'reconciliation destroy action' do
-    it 'has no route — the destroy action is disabled entirely at the resource level' do
+    it 'is unreachable and leaves the record intact' do
       build_reconciled_meal
       recon_id = Reconciliation.last.id
 
-      # actions :all, except: [:destroy] removes the route. A DELETE request
-      # produces a RoutingError — which is the correct failure mode for an
-      # action that should not exist.
-      expect { delete "/reconciliations/#{recon_id}" }
-        .to raise_error(ActionController::RoutingError)
+      # actions :all, except: [:destroy] removes the route entirely. The
+      # behavior we care about is that DELETE cannot reach a destroy
+      # handler and the record survives — not the specific failure mode
+      # (RoutingError today, could be a 404 render tomorrow).
+      begin
+        delete "/reconciliations/#{recon_id}"
+        expect(response).not_to have_http_status(:ok)
+        expect(response).not_to have_http_status(:redirect)
+      rescue ActionController::RoutingError
+        # Also acceptable — there's simply no route.
+      end
 
       expect(Reconciliation.exists?(recon_id)).to be true
     end
