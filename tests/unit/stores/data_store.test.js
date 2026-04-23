@@ -17,10 +17,15 @@ vi.mock("js-cookie", () => ({
       const cookies = {
         token: "test-token",
         community_id: "test-community-id",
+        // Fixture community is Pacific. Timezone-sensitive assertions (event
+        // date conversion, etc.) read this via getCommunityTimezone() — the
+        // helpers themselves work for any IANA tz; see helpers.test.js.
+        timezone: "America/Los_Angeles",
       };
       return cookies[name];
     }),
     remove: vi.fn(),
+    set: vi.fn(),
   },
 }));
 
@@ -1534,7 +1539,7 @@ describe("DataStore", () => {
       spy.mockRestore();
     });
 
-    it("converts event dates to fake-local Dates in Pacific timezone", () => {
+    it("converts event dates to fake-local Dates in the community timezone", () => {
       const store = createDataStore();
       const data = {
         id: 1,
@@ -1562,8 +1567,9 @@ describe("DataStore", () => {
       expect(event.title).toBe("Dinner");
     });
 
-    it("converts offset date strings to correct Pacific dates", () => {
+    it("converts offset date strings to correct community-tz dates", () => {
       const store = createDataStore();
+      // Fixture community is Pacific (set in top-level beforeEach).
       // 4 PM Pacific (-07:00) to 6 PM Pacific (-07:00) on June 15
       const data = {
         id: 1,
@@ -1592,7 +1598,7 @@ describe("DataStore", () => {
       expect(event.end.getHours()).toBe(18);
     });
 
-    it("converts UTC (Z) date strings to correct Pacific dates", () => {
+    it("converts UTC (Z) date strings to correct community-tz dates", () => {
       const store = createDataStore();
       // 2023-06-16T01:00:00Z = June 15 6 PM Pacific (PDT)
       // 2023-06-16T03:00:00Z = June 15 8 PM Pacific (PDT)
@@ -1648,7 +1654,18 @@ describe("DataStore", () => {
 
     it("skips the server call when no token cookie is present", async () => {
       const Cookie = (await import("js-cookie")).default;
-      Cookie.get.mockImplementationOnce(() => undefined);
+      // Target `token` specifically — createDataStore also reads `timezone`
+      // now (via getCommunityTimezone), so a blanket `mockImplementationOnce`
+      // would consume against the wrong key.
+      Cookie.get.mockImplementation((name) =>
+        name === "token"
+          ? undefined
+          : name === "community_id"
+            ? "test-community-id"
+            : name === "timezone"
+              ? "America/Los_Angeles"
+              : undefined,
+      );
       axios.delete = vi.fn(() => Promise.resolve({ status: 200 }));
 
       const store = createDataStore();

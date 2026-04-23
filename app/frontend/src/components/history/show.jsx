@@ -1,7 +1,7 @@
 import { Component } from "react";
 import axios from "axios";
 import handleAxiosError from "../../helpers/handle_axios_error";
-import dayjs from "dayjs";
+import { toCommunityDayjs } from "../../helpers/helpers";
 
 class MealHistoryShow extends Component {
   constructor(props) {
@@ -24,7 +24,7 @@ class MealHistoryShow extends Component {
         if (response.status === 200) {
           self.setState({
             items: response.data.items,
-            date: dayjs(response.data.date).format("ddd, MMM Do"),
+            date: toCommunityDayjs(response.data.date).format("ddd, MMM Do"),
             ready: true,
           });
         }
@@ -63,7 +63,9 @@ class MealHistoryShow extends Component {
                       <td>{audit.user_name}</td>
                       <td>{audit.description}</td>
                       <td>
-                        {dayjs(audit.display_time).format("ddd MMM D, h:mm a")}
+                        {toCommunityDayjs(audit.display_time).format(
+                          "ddd MMM D, h:mm a",
+                        )}
                       </td>
                     </tr>
                   );

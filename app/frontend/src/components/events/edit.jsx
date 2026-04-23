@@ -4,7 +4,7 @@ import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import DayPickerInputWrapper from "../common/day_picker_input";
-import { generateTimes, toPacificDayjs } from "../../helpers/helpers";
+import { generateTimes, toCommunityDayjs } from "../../helpers/helpers";
 import handleAxiosError from "../../helpers/handle_axios_error";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faTimes } from "@fortawesome/free-solid-svg-icons";
@@ -45,25 +45,25 @@ class EventsEdit extends Component {
         if (!self._isMounted) return;
         if (response.status === 200) {
           var evt = response.data;
-          var sd = toPacificDayjs(evt.start_date);
+          var sd = toCommunityDayjs(evt.start_date);
           self.setState({
             event: evt,
             loaded: true,
             title: evt.title,
             description: evt.description,
             day: new Date(sd.year(), sd.month(), sd.date()),
-            start_time: `${toPacificDayjs(evt.start_date)
+            start_time: `${toCommunityDayjs(evt.start_date)
               .hour()
               .toString()
-              .padStart(2, "0")}:${toPacificDayjs(evt.start_date)
+              .padStart(2, "0")}:${toCommunityDayjs(evt.start_date)
               .minute()
               .toString()
               .padStart(2, "0")}`,
             end_time: evt.end_date
-              ? `${toPacificDayjs(evt.end_date)
+              ? `${toCommunityDayjs(evt.end_date)
                   .hour()
                   .toString()
-                  .padStart(2, "0")}:${toPacificDayjs(evt.end_date)
+                  .padStart(2, "0")}:${toCommunityDayjs(evt.end_date)
                   .minute()
                   .toString()
                   .padStart(2, "0")}`

@@ -1,7 +1,7 @@
 import { Component, Profiler, memo } from "react";
 import { inject, observer } from "mobx-react";
 import { withRouter } from "../../helpers/with_router";
-import { TIMEZONE } from "../../helpers/helpers";
+import { communityNow } from "../../helpers/helpers";
 import {
   mark,
   reportAfterPaint,
@@ -45,8 +45,8 @@ const VIEWS = ["month"];
 // actually bites.
 const MemoCalendar = memo(Calendar);
 
-function getPacificNow() {
-  var now = dayjs().tz(TIMEZONE);
+function getCommunityNow() {
+  var now = communityNow();
   return new Date(
     now.year(),
     now.month(),
@@ -314,7 +314,7 @@ const MainCalendar = inject("store")(
 
         render() {
           // Compute "today" boundary once per render for formatEvent
-          var now = getPacificNow();
+          var now = getCommunityNow();
           this._todayStart = new Date(
             now.getFullYear(),
             now.getMonth(),
@@ -329,7 +329,7 @@ const MainCalendar = inject("store")(
             <div className="offwhite">
               <header className="header flex space-between">
                 <h5 className="pad-xs">
-                  {dayjs(getPacificNow()).format("ddd MMM Do")}
+                  {dayjs(getCommunityNow()).format("ddd MMM Do")}
                 </h5>
                 {this.props.store.isOnline ? (
                   <span className="online">ONLINE</span>
@@ -369,7 +369,7 @@ const MainCalendar = inject("store")(
                       onNavigate={this.handleNavigate}
                       onSelectEvent={this.handleSelectEvent}
                       views={VIEWS}
-                      getNow={getPacificNow}
+                      getNow={getCommunityNow}
                       toolbar={false}
                     />
                   </Profiler>
@@ -428,7 +428,7 @@ const MainCalendar = inject("store")(
 
         handleToday() {
           mark("click");
-          var newDate = dayjs(getPacificNow()).format("YYYY-MM-DD");
+          var newDate = dayjs(getCommunityNow()).format("YYYY-MM-DD");
           if (newDate !== this.props.match.params.date) {
             this.props.history.push(
               `/calendar/${this.props.match.params.type}/${newDate}`,
