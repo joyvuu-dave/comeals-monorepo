@@ -10,8 +10,12 @@
 
 start = Time.zone.now
 
-# Community (singleton)
-community = Community.first || Community.create!(name: 'Patches Way', cap: BigDecimal('2.50'))
+# Community (singleton). timezone is explicit because the DB column has no
+# default — operators on a real deploy pick one via the ActiveAdmin form.
+# Dev seed pins Pacific so fixture timestamps render consistently.
+community = Community.first || Community.create!(name: 'Patches Way',
+                                                 cap: BigDecimal('2.50'),
+                                                 timezone: 'America/Los_Angeles')
 community.update!(slug: 'patches')
 
 Rails.logger.debug '1 Community created'
@@ -129,15 +133,20 @@ end
 
 Rails.logger.debug { "#{community.bills.count} Bills created" }
 
-# Reconciliation
-Reconciliation.create!(community: community, date: Time.zone.today + 1.day)
+# Reconciliation — sweeps the first batch of meals (26..8 weeks ago). end_date
+# is required and can't be in the future; `date` and `end_date` both default
+# to today here, matching lib/tasks/reconciliations/create.rake.
+Reconciliation.create!(community: community, date: Time.zone.today, end_date: Time.zone.today)
 Rails.logger.debug { "#{community.reconciliations.count} Reconciliation created" }
 
 # Meals (will not be reconciled)
 Meal.create_templates(7.weeks.ago.to_date, 26.weeks.from_now.to_date, 0)
 
-# MealResidents & Guests
-Meal.find_each do |meal|
+# MealResidents & Guests for the unreconciled batch. Skip reconciled meals
+# because MealResident/Guest enforce immutability via before_save callbacks
+# (see app/models/meal_resident.rb, guest.rb) — writing to a reconciled meal
+# raises RecordNotSaved.
+Meal.unreconciled.find_each do |meal|
   next if meal.date > Time.zone.today + 7
 
   Resident.all.shuffle[0..(Random.rand(8..21))].each_with_index do |resident, index|
@@ -172,8 +181,9 @@ end
 Rails.logger.debug { "#{community.guests.count} Guests created" }
 Rails.logger.debug { "#{community.meal_residents.count} MealResidents created" }
 
-# Bills
-Meal.all.each_with_index do |meal, index|
+# Bills on the unreconciled batch — Bill also enforces reconciled-meal
+# immutability (see app/models/bill.rb).
+Meal.unreconciled.each_with_index do |meal, index|
   next if meal.date > Time.zone.today + 14
 
   ids = Resident.pluck(:id).sample(2)
