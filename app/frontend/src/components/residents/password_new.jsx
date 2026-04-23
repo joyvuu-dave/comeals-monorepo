@@ -59,7 +59,7 @@ class ResidentsPasswordNew extends Component {
         self.setState({ loading: false });
         if (response.status === 200) {
           if (response.data.message) {
-            toastStore.addToast(response.data.message, "success");
+            toastStore.replaceAll(response.data.message, "success");
           }
           self.props.history.push("/");
         }
