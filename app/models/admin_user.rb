@@ -18,7 +18,7 @@
 #  superuser              :boolean          default(FALSE), not null
 #  created_at             :datetime         not null
 #  updated_at             :datetime         not null
-#  community_id           :bigint           not null
+#  community_id           :bigint
 #
 # Indexes
 #
@@ -44,7 +44,11 @@ class AdminUser < ApplicationRecord
   devise :database_authenticatable,
          :recoverable, :rememberable, :trackable, :validatable
 
-  belongs_to :community
+  # community_id is nullable so an operator can create the bootstrap admin in
+  # `rails c` on an empty database, then create the singleton Community via
+  # ActiveAdmin. Community#after_create backfills orphan admins, so post-setup
+  # every AdminUser points at the one community.
+  belongs_to :community, optional: true
 
   has_many :bills, through: :community
   has_many :units, through: :community

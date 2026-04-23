@@ -18,7 +18,7 @@
 #  superuser              :boolean          default(FALSE), not null
 #  created_at             :datetime         not null
 #  updated_at             :datetime         not null
-#  community_id           :bigint           not null
+#  community_id           :bigint
 #
 # Indexes
 #
@@ -61,6 +61,33 @@ RSpec.describe AdminUser do
       admin = create(:admin_user, community: community)
 
       expect(admin.communities).to eq([community])
+    end
+  end
+
+  describe 'bootstrap flow' do
+    # These tests document the fresh-deploy setup flow: operator creates the
+    # first admin in `rails c` on an empty DB, then creates the singleton
+    # Community via ActiveAdmin. community_id is nullable during that window
+    # and the Community after_create hook backfills orphan admins.
+
+    it 'allows creating an admin without a community during bootstrap' do
+      admin = described_class.new(email: 'bootstrap@example.com',
+                                  password: 'password',
+                                  password_confirmation: 'password')
+
+      expect(admin.save).to be true
+      expect(admin.community_id).to be_nil
+    end
+
+    it 'backfills orphan admins when the singleton Community is created' do
+      orphan = described_class.create!(email: 'bootstrap@example.com',
+                                       password: 'password',
+                                       password_confirmation: 'password')
+      expect(orphan.community_id).to be_nil
+
+      singleton = create(:community)
+
+      expect(orphan.reload.community_id).to eq(singleton.id)
     end
   end
 end

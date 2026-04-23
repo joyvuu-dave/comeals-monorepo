@@ -11,9 +11,15 @@ ActiveAdmin.register Community do
   config.filters = false
 
   # ACTIONS
-  actions :all, except: %i[destroy new]
+  # `new` is enabled so the very first Community can be created via the UI on
+  # a fresh deployment. The model's enforce_singleton validation blocks a
+  # second creation attempt, so we don't need to hide the button — an operator
+  # who clicks "New" post-setup just gets a validation error.
+  actions :all, except: %i[destroy]
 
   controller do
+    # For show/edit/update, coerce any ID param back to the singleton record.
+    # Skipped for new/create (find_resource isn't called for those actions).
     def find_resource
       Community.instance
     end

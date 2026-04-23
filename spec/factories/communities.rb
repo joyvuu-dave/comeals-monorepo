@@ -9,7 +9,7 @@
 #  name            :string           not null
 #  singleton_guard :integer          default(0), not null
 #  slug            :string           not null
-#  timezone        :string           default("America/Los_Angeles"), not null
+#  timezone        :string           not null
 #  created_at      :datetime         not null
 #  updated_at      :datetime         not null
 #
@@ -23,6 +23,9 @@
 FactoryBot.define do
   factory :community do
     name { 'Test Community' }
+    # Explicit because the DB no longer defaults timezone — operators must
+    # pick one at create time. Tests pin Pacific as a known fixture.
+    timezone { 'America/Los_Angeles' }
 
     # Singleton: reuse the existing record so associated factories (unit, resident,
     # etc.) that call `association :community` don't violate the unique constraint.

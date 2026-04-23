@@ -10,14 +10,51 @@ the SPA from `public/` and the API from `/api/v1/` on one Heroku dyno.
 
 ## Getting Started
 
+### Local development (with fake data)
+
+Use the dev seed — it creates "Patches Way", an admin, 24 fake residents, and
+26 weeks of backdated meals so you have something to click around.
+
 ```bash
 git clone https://github.com/joyvuu-dave/comeals-monorepo.git
 cd comeals-monorepo
 bundle install
 npm install
-bundle exec rake db:setup
+bundle exec rake db:setup   # creates DB + runs db/seeds.rb (dev fixtures)
 bin/dev
 ```
+
+Log in at `http://localhost:3036/admin/login` as `joslyn@email.com` /
+`password`. Resident app lives at `http://localhost:3036`.
+
+### Fresh deployment (real community, no fake data)
+
+On a new install, the database starts empty. Create the first admin user
+from a Rails console, then finish setup through the ActiveAdmin UI — no seed
+data, no silent defaults.
+
+```bash
+bundle install
+npm install
+bundle exec rails db:create db:migrate
+bundle exec rails console
+```
+
+In the console:
+
+```ruby
+AdminUser.create!(email: 'you@example.com',
+                  password: 'pick-something-strong',
+                  password_confirmation: 'pick-something-strong')
+```
+
+(Leave `community:` off — it's nullable during bootstrap and will be backfilled
+the moment you create the Community below.)
+
+Then start the server and visit `/admin/login`. On first sign-in the dashboard
+redirects you to the Community new form — pick a name, slug, and **timezone**
+(the dropdown covers Pacific through Auckland; pick yours). Saving that
+form completes bootstrap and links your admin to the new community.
 
 `bin/dev` boots Rails (3000), Vite (3036), and the clock process via foreman.
 
