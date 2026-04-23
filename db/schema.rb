@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_21_131127) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_23_160000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_stat_statements"
@@ -147,7 +147,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_21_131127) do
     t.string "identity_type", null: false
     t.string "token", null: false
     t.datetime "updated_at", precision: nil, null: false
-    t.index ["identity_type", "identity_id"], name: "index_keys_on_identity_type_and_identity_id", unique: true
+    t.index ["identity_type", "identity_id"], name: "index_keys_on_identity_type_and_identity_id"
     t.index ["token"], name: "index_keys_on_token", unique: true
   end
 
@@ -220,6 +220,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_21_131127) do
     t.bigint "community_id", null: false
     t.datetime "created_at", precision: nil, null: false
     t.string "email"
+    t.datetime "keys_valid_since", default: -> { "CURRENT_TIMESTAMP" }, null: false
     t.integer "multiplier", default: 2, null: false
     t.string "name", null: false
     t.string "password_digest", null: false

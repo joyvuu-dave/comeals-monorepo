@@ -1,6 +1,5 @@
 import { types, getParent } from "mobx-state-tree";
 import axios from "axios";
-import Cookie from "js-cookie";
 import handleAxiosError from "../helpers/handle_axios_error";
 
 const Meal = types
@@ -57,7 +56,7 @@ const Meal = types
 
         axios({
           method: "patch",
-          url: `/api/v1/meals/${self.id}/max?token=${Cookie.get("token")}`,
+          url: `/api/v1/meals/${self.id}/max`,
           data: {
             max: null,
             socket_id: window.Comeals.socketId,
@@ -79,7 +78,7 @@ const Meal = types
 
         axios({
           method: "patch",
-          url: `/api/v1/meals/${self.id}/max?token=${Cookie.get("token")}`,
+          url: `/api/v1/meals/${self.id}/max`,
           data: {
             max: self.max,
             socket_id: window.Comeals.socketId,

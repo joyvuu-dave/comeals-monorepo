@@ -22,6 +22,8 @@ if (import.meta.env.DEV) {
   setLivelinessChecking("ignore");
 }
 import Cookie from "js-cookie";
+import { installAuthInterceptor } from "./helpers/axios_auth";
+installAuthInterceptor();
 import VersionBanner from "./components/app/version_banner";
 import ToastContainer from "./components/app/toast_container";
 import SessionExpiredBanner from "./components/app/session_expired_banner";

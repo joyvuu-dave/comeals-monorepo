@@ -6,7 +6,7 @@ RSpec.describe 'Guest Room Reservations API' do
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
   let(:resident) { create(:resident, community: community, unit: unit) }
-  let(:token) { resident.key.token }
+  let(:token) { resident.keys.first.token }
 
   describe 'GET /api/v1/guest-room-reservations' do
     it 'returns reservations for the community' do

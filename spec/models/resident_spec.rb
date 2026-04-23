@@ -9,6 +9,7 @@
 #  birthday               :date             default(Mon, 01 Jan 1900), not null
 #  can_cook               :boolean          default(TRUE), not null
 #  email                  :string
+#  keys_valid_since       :datetime         not null
 #  multiplier             :integer          default(2), not null
 #  name                   :string           not null
 #  password_digest        :string           not null
@@ -64,21 +65,38 @@ RSpec.describe Resident do
     end
   end
 
-  describe '#update_token' do
-    it 'creates a key for a new resident' do
+  describe '#revoke_all_sessions_if_password_changed' do
+    it 'destroys every outstanding Key row on password change' do
       resident = create(:resident, community: community, unit: unit, password: 'initial')
-      expect(resident.key).to be_present
-      expect(resident.key.token).to be_present
-    end
-
-    it 'regenerates the key token when password changes (forces re-login)' do
-      resident = create(:resident, community: community, unit: unit, password: 'initial')
-      original_token = resident.key.token
+      resident.keys.create!
+      resident.keys.create!
+      expect(resident.keys.count).to eq(3)
 
       resident.password = 'changed'
       resident.save!
 
-      expect(resident.key.reload.token).not_to eq(original_token)
+      expect(resident.reload.keys).to be_empty
+    end
+
+    it 'advances keys_valid_since past any previously-issued JWT' do
+      resident = create(:resident, community: community, unit: unit, password: 'initial')
+      before = resident.keys_valid_since
+
+      resident.password = 'changed'
+      resident.save!
+
+      expect(resident.reload.keys_valid_since).to be > before
+    end
+
+    it 'leaves sessions alone when other attributes change' do
+      resident = create(:resident, community: community, unit: unit, password: 'initial')
+      original_ids = resident.keys.pluck(:id).sort
+      original_valid_since = resident.keys_valid_since
+
+      resident.update!(name: "Renamed #{SecureRandom.hex(3)}")
+
+      expect(resident.reload.keys.pluck(:id).sort).to eq(original_ids)
+      expect(resident.keys_valid_since).to eq(original_valid_since)
     end
   end
 
@@ -345,11 +363,14 @@ RSpec.describe Resident do
       reconciliation = Reconciliation.create!(community: community, end_date: Time.zone.today)
       resident = create(:resident, community: community, unit: unit, multiplier: 2)
 
-      # Reconciled meal — should be excluded
-      reconciled_meal = create(:meal, community: community, reconciliation: reconciliation)
+      # Reconciled meal — should be excluded. Build children first, then flip
+      # reconciliation_id via update_columns (bypasses callbacks); models now
+      # reject saves when meal.reconciled?.
+      reconciled_meal = create(:meal, community: community)
       create(:meal_resident, meal: reconciled_meal, resident: resident, community: community)
       create(:bill, meal: reconciled_meal, resident: resident, community: community,
                     amount: BigDecimal('99'))
+      reconciled_meal.update_columns(reconciliation_id: reconciliation.id)
 
       # Unreconciled meal — should be included
       unreconciled_meal = create(:meal, community: community)
@@ -475,8 +496,11 @@ RSpec.describe Resident do
       resident = create(:resident, community: community, unit: unit, multiplier: 2)
       reconciliation = Reconciliation.create!(community: community, end_date: Time.zone.today)
 
-      reconciled_meal = create(:meal, community: community, reconciliation: reconciliation)
+      # Build the meal_resident first, then reconcile the meal — MealResident's
+      # before_save now rejects any save when meal.reconciled?.
+      reconciled_meal = create(:meal, community: community)
       create(:meal_resident, meal: reconciled_meal, resident: resident, community: community)
+      reconciled_meal.update_columns(reconciliation_id: reconciliation.id)
 
       unreconciled_meal = create(:meal, community: community)
       create(:meal_resident, meal: unreconciled_meal, resident: resident, community: community)

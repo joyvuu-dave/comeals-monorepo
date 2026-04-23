@@ -6,7 +6,7 @@ RSpec.describe 'Calendar endpoint performance' do
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
   let(:resident) { create(:resident, community: community, unit: unit) }
-  let(:token) { resident.key.token }
+  let(:token) { resident.keys.first.token }
 
   before do
     # Build a realistic month: 12 meals with bills, attendees, and a rotation

@@ -6,7 +6,7 @@ RSpec.describe 'Bills API' do
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
   let(:resident) { create(:resident, community: community, unit: unit) }
-  let(:token) { resident.key.token }
+  let(:token) { resident.keys.first.token }
 
   # ---------------------------------------------------------------------------
   # GET /api/v1/bills

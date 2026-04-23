@@ -9,6 +9,7 @@
 #  birthday               :date             default(Mon, 01 Jan 1900), not null
 #  can_cook               :boolean          default(TRUE), not null
 #  email                  :string
+#  keys_valid_since       :datetime         not null
 #  multiplier             :integer          default(2), not null
 #  name                   :string           not null
 #  password_digest        :string           not null
@@ -48,7 +49,7 @@ class Resident < ApplicationRecord
   belongs_to :community
   belongs_to :unit
 
-  has_one :key, as: :identity, autosave: true, dependent: :destroy
+  has_many :keys, as: :identity, dependent: :destroy
   has_one :resident_balance, dependent: :destroy
   has_many :bills, dependent: :destroy
   has_many :meal_residents, dependent: :destroy
@@ -69,7 +70,7 @@ class Resident < ApplicationRecord
 
   before_validation :set_email
   before_save { self.email = email.downcase unless email.nil? }
-  before_save :update_token
+  after_save :revoke_all_sessions_if_password_changed
   after_commit :invalidate_calendar_cache_if_birthday_changed
   after_commit :notify_residents_update
 
@@ -83,14 +84,15 @@ class Resident < ApplicationRecord
     self.password_digest = SCrypt::Password.create(unencrypted_password)
   end
 
-  def update_token
-    return unless password_digest_changed?
+  # Invalidate every outstanding session on password change. We hit both auth
+  # paths because a user might have sessions of either kind — a legacy
+  # opaque Key cookie from before the JWT deploy, a JWT issued after, or
+  # both simultaneously (different devices in different eras).
+  def revoke_all_sessions_if_password_changed
+    return unless saved_change_to_password_digest?
 
-    if persisted?
-      key.set_token
-    else
-      build_key
-    end
+    keys.destroy_all                                      # legacy Key sessions
+    update_column(:keys_valid_since, Time.current)        # JWT sessions
   end
 
   # HELPERS

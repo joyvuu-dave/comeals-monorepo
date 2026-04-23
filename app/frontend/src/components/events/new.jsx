@@ -42,7 +42,7 @@ class EventsNew extends Component {
       .post(
         `/api/v1/events?community_id=${
           s.communityId
-        }&token=${Cookie.get("token")}`,
+        }`,
         {
           title: s.title,
           description: s.description,

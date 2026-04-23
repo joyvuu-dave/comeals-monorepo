@@ -1,6 +1,5 @@
 import { types, getParent, isAlive } from "mobx-state-tree";
 import axios from "axios";
-import Cookie from "js-cookie";
 import handleAxiosError from "../helpers/handle_axios_error";
 
 const Resident = types
@@ -155,7 +154,7 @@ const Resident = types
           method: "post",
           url: `/api/v1/meals/${self.meal_id}/residents/${
             self.id
-          }?token=${Cookie.get("token")}`,
+          }`,
           data: {
             socket_id: window.Comeals.socketId,
             late: currentLate,
@@ -195,7 +194,7 @@ const Resident = types
           method: "delete",
           url: `/api/v1/meals/${self.meal_id}/residents/${
             self.id
-          }?token=${Cookie.get("token")}`,
+          }`,
           data: {
             socket_id: window.Comeals.socketId,
           },
@@ -230,7 +229,7 @@ const Resident = types
         method: "patch",
         url: `/api/v1/meals/${self.meal_id}/residents/${
           self.id
-        }?token=${Cookie.get("token")}`,
+        }`,
         data: {
           late: val,
           socket_id: window.Comeals.socketId,
@@ -256,7 +255,7 @@ const Resident = types
         method: "patch",
         url: `/api/v1/meals/${self.meal_id}/residents/${
           self.id
-        }?token=${Cookie.get("token")}`,
+        }`,
         data: {
           vegetarian: val,
           socket_id: window.Comeals.socketId,
@@ -276,7 +275,7 @@ const Resident = types
         method: "post",
         url: `/api/v1/meals/${self.meal_id}/residents/${
           self.id
-        }/guests?token=${Cookie.get("token")}`,
+        }/guests`,
         data: {
           socket_id: window.Comeals.socketId,
           vegetarian: options.vegetarian,
@@ -319,7 +318,7 @@ const Resident = types
         method: "delete",
         url: `/api/v1/meals/${self.meal_id}/residents/${
           self.id
-        }/guests/${guestId}?token=${Cookie.get("token")}`,
+        }/guests/${guestId}`,
         data: {
           socket_id: window.Comeals.socketId,
         },

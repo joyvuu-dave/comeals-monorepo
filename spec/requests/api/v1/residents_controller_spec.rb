@@ -9,13 +9,13 @@ RSpec.describe 'Residents API' do
     create(:resident, community: community, unit: unit, email: 'alice@example.com',
                       password: 'correctpassword')
   end
-  let(:token) { resident.key.token }
+  let(:token) { resident.keys.first.token }
 
   # ---------------------------------------------------------------------------
   # POST /api/v1/residents/token (login)
   # ---------------------------------------------------------------------------
   describe 'POST /api/v1/residents/token' do
-    it 'returns token and community info on valid credentials' do
+    it 'returns a JWT and community info on valid credentials' do
       post '/api/v1/residents/token', params: {
         email: 'alice@example.com',
         password: 'correctpassword'
@@ -23,7 +23,8 @@ RSpec.describe 'Residents API' do
 
       expect(response).to have_http_status(:ok)
       body = response.parsed_body
-      expect(body['token']).to eq(resident.key.token)
+      # The returned token is a JWT that authenticates as this resident.
+      expect(JwtAuth.authenticate(body['token'])).to eq(resident)
       expect(body['community_id']).to eq(community.id)
       expect(body['resident_id']).to eq(resident.id)
       expect(body['slug']).to eq('testcom')

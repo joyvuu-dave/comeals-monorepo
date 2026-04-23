@@ -1,6 +1,5 @@
 import { Component } from "react";
 import { inject } from "mobx-react";
-import Cookie from "js-cookie";
 import axios from "axios";
 import handleAxiosError from "../../helpers/handle_axios_error";
 
@@ -41,7 +40,7 @@ const SideBar = inject("store")(
       const myHistory = this.props.history;
 
       axios
-        .get(`/api/v1/meals/next?token=${Cookie.get("token")}`)
+        .get(`/api/v1/meals/next`)
         .then(function (response) {
           if (response.status === 200) {
             myHistory.push(`/meals/${response.data.meal_id}/edit`);

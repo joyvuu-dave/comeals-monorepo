@@ -87,7 +87,7 @@ function prefetchMonthData(date) {
 
     axios
       .get(
-        `/api/v1/communities/${Cookie.get("community_id")}/calendar/${date}?token=${Cookie.get("token")}`,
+        `/api/v1/communities/${Cookie.get("community_id")}/calendar/${date}`,
       )
       .then(function (response) {
         if (response.status === 200) {
@@ -319,9 +319,7 @@ export const DataStore = types
 
       axios({
         method: "patch",
-        url: `/api/v1/meals/${self.meal.id}/closed?token=${Cookie.get(
-          "token",
-        )}`,
+        url: `/api/v1/meals/${self.meal.id}/closed`,
         withCredentials: true,
         data: {
           closed: val,
@@ -345,6 +343,13 @@ export const DataStore = types
         });
     },
     logout() {
+      // Best-effort server-side revocation. Fire-and-forget: even if the
+      // request fails (offline, expired token) we still clear local state —
+      // the user tapped "log out" and should see themselves logged out.
+      axios
+        .delete("/api/v1/sessions/current")
+        .catch(() => {});
+
       Cookie.remove("token", { path: "/" });
       Cookie.remove("community_id", { path: "/" });
       Cookie.remove("resident_id", { path: "/" });
@@ -360,9 +365,7 @@ export const DataStore = types
 
       axios({
         method: "patch",
-        url: `/api/v1/meals/${self.meal.id}/description?token=${Cookie.get(
-          "token",
-        )}`,
+        url: `/api/v1/meals/${self.meal.id}/description`,
         data: obj,
         withCredentials: true,
       }).catch(function (error) {
@@ -405,7 +408,7 @@ export const DataStore = types
 
       axios({
         method: "patch",
-        url: `/api/v1/meals/${self.meal.id}/bills?token=${Cookie.get("token")}`,
+        url: `/api/v1/meals/${self.meal.id}/bills`,
         data: obj,
         withCredentials: true,
       }).catch(function (error) {
@@ -428,7 +431,7 @@ export const DataStore = types
     },
     loadDataAsync() {
       axios
-        .get(`/api/v1/meals/${self.meal.id}/cooks?token=${Cookie.get("token")}`)
+        .get(`/api/v1/meals/${self.meal.id}/cooks`)
         .then(function (response) {
           if (response.status === 200) {
             localforage
@@ -451,7 +454,7 @@ export const DataStore = types
         .get(
           `/api/v1/communities/${Cookie.get("community_id")}/calendar/${
             self.currentDate
-          }?token=${Cookie.get("token")}`,
+          }`,
         )
         .then(function (response) {
           if (response.status === 200) {
@@ -505,9 +508,7 @@ export const DataStore = types
 
       var promise = axios
         .get(
-          `/api/v1/communities/${communityId}/hosts?token=${Cookie.get(
-            "token",
-          )}`,
+          `/api/v1/communities/${communityId}/hosts`,
         )
         .then(function (response) {
           // Superseded by a later fetch: let the winner's response win.
@@ -555,7 +556,7 @@ export const DataStore = types
     loadNext() {
       axios
         .get(
-          `/api/v1/meals/${self.meal.nextId}/cooks?token=${Cookie.get("token")}`,
+          `/api/v1/meals/${self.meal.nextId}/cooks`,
         )
         .then(function (response) {
           if (response.status === 200) {
@@ -569,7 +570,7 @@ export const DataStore = types
     loadPrev() {
       axios
         .get(
-          `/api/v1/meals/${self.meal.prevId}/cooks?token=${Cookie.get("token")}`,
+          `/api/v1/meals/${self.meal.prevId}/cooks`,
         )
         .then(function (response) {
           if (response.status === 200) {

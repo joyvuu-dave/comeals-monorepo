@@ -1,6 +1,5 @@
 import { Component } from "react";
 import axios from "axios";
-import Cookie from "js-cookie";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -41,7 +40,7 @@ class EventsEdit extends Component {
     this._isMounted = true;
     var self = this;
     axios
-      .get(`/api/v1/events/${self.props.eventId}?token=${Cookie.get("token")}`)
+      .get(`/api/v1/events/${self.props.eventId}`)
       .then(function (response) {
         if (!self._isMounted) return;
         if (response.status === 200) {
@@ -89,9 +88,7 @@ class EventsEdit extends Component {
     var s = self.state;
     axios
       .patch(
-        `/api/v1/events/${self.props.eventId}/update?token=${Cookie.get(
-          "token",
-        )}`,
+        `/api/v1/events/${self.props.eventId}/update`,
         {
           title: s.title,
           description: s.description,
@@ -129,9 +126,7 @@ class EventsEdit extends Component {
     var self = this;
     axios
       .delete(
-        `/api/v1/events/${self.props.eventId}/delete?token=${Cookie.get(
-          "token",
-        )}`,
+        `/api/v1/events/${self.props.eventId}/delete`,
       )
       .then(function (response) {
         if (!self._isMounted) return;

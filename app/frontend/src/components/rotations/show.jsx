@@ -1,6 +1,5 @@
 import { Component } from "react";
 import axios from "axios";
-import Cookie from "js-cookie";
 import handleAxiosError from "../../helpers/handle_axios_error";
 
 const styles = {
@@ -27,7 +26,7 @@ class RotationsShow extends Component {
     this._isMounted = true;
     var self = this;
     axios
-      .get(`/api/v1/rotations/${this.props.id}?token=${Cookie.get("token")}`)
+      .get(`/api/v1/rotations/${this.props.id}`)
       .then(function (response) {
         if (!self._isMounted) return;
         if (response.status === 200) {

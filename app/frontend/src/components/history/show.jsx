@@ -1,7 +1,6 @@
 import { Component } from "react";
 import axios from "axios";
 import handleAxiosError from "../../helpers/handle_axios_error";
-import Cookie from "js-cookie";
 import dayjs from "dayjs";
 
 class MealHistoryShow extends Component {
@@ -20,7 +19,7 @@ class MealHistoryShow extends Component {
     var self = this;
     axios
       .get(
-        `/api/v1/meals/${self.props.id}/history?token=${Cookie.get("token")}`,
+        `/api/v1/meals/${self.props.id}/history`,
       )
       .then(function (response) {
         if (!self._isMounted) return;
