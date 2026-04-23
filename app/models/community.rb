@@ -9,7 +9,7 @@
 #  name            :string           not null
 #  singleton_guard :integer          default(0), not null
 #  slug            :string           not null
-#  timezone        :string           default("America/Los_Angeles"), not null
+#  timezone        :string           not null
 #  created_at      :datetime         not null
 #  updated_at      :datetime         not null
 #
@@ -40,15 +40,28 @@ class Community < ApplicationRecord
   }.freeze
 
   # --- Singleton Record ---
-  # The communities table always has exactly one row, enforced by a unique index
-  # on singleton_guard (which is always 0). This class method is the canonical
-  # way to access that record. Raises if no record exists — run db:seed to create one.
+  # The communities table has at most one row, enforced by a unique index on
+  # singleton_guard (which is always 0). Fresh deployments start with zero
+  # rows; the operator creates the singleton via ActiveAdmin (see
+  # app/admin/community.rb). This class method is the canonical way to access
+  # the record post-setup and raises if it's called before bootstrap completes.
   def self.instance
-    Current.community ||= first || raise('No Community record exists. Run `rails db:seed` to create one.')
+    Current.community ||= first ||
+                          raise('No Community record exists. Create one at /admin/communities/new.')
   end
 
   validate :enforce_singleton, on: :create
   before_destroy { throw :abort }
+
+  # When the singleton is first created, link any orphan admin users (those
+  # created in `rails c` during bootstrap before a community existed) to this
+  # community. Post-bootstrap the ActiveAdmin form always sets community_id
+  # explicitly, so this hook is effectively a one-time bootstrap step.
+  after_create :backfill_orphan_admin_users
+
+  def backfill_orphan_admin_users
+    AdminUser.where(community_id: nil).update_all(community_id: id)
+  end
 
   # Ransack allowlists for ActiveAdmin sorting
   def self.ransackable_attributes(_auth_object = nil)

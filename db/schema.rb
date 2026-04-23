@@ -10,14 +10,14 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_23_160000) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_23_170000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_stat_statements"
   enable_extension "pgcrypto"
 
   create_table "admin_users", force: :cascade do |t|
-    t.bigint "community_id", null: false
+    t.bigint "community_id"
     t.datetime "created_at", precision: nil, null: false
     t.datetime "current_sign_in_at", precision: nil
     t.inet "current_sign_in_ip"
@@ -86,7 +86,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_23_160000) do
     t.string "name", null: false
     t.integer "singleton_guard", default: 0, null: false
     t.string "slug", null: false
-    t.string "timezone", default: "America/Los_Angeles", null: false
+    t.string "timezone", null: false
     t.datetime "updated_at", precision: nil, null: false
     t.index ["name"], name: "index_communities_on_name", unique: true
     t.index ["singleton_guard"], name: "index_communities_on_singleton_guard", unique: true

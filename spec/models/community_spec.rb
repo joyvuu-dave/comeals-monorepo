@@ -9,7 +9,7 @@
 #  name            :string           not null
 #  singleton_guard :integer          default(0), not null
 #  slug            :string           not null
-#  timezone        :string           default("America/Los_Angeles"), not null
+#  timezone        :string           not null
 #  created_at      :datetime         not null
 #  updated_at      :datetime         not null
 #
@@ -37,6 +37,26 @@ RSpec.describe Community do
     it 'prevents destruction' do
       expect(community.destroy).to be false
       expect(described_class.count).to eq(1)
+    end
+  end
+
+  describe 'timezone' do
+    # The DB column default was dropped (see 20260423170000 migration) so
+    # operators must explicitly pick a tz at create time. This prevents
+    # silently deploying a Berlin community on Pacific time.
+    it 'requires a timezone at creation' do
+      community_without_tz = described_class.new(name: 'No TZ', slug: 'no-tz', timezone: nil)
+
+      expect(community_without_tz).not_to be_valid
+      expect(community_without_tz.errors[:timezone]).to be_present
+    end
+
+    it 'accepts any timezone from SUPPORTED_TIMEZONES' do
+      Community::SUPPORTED_TIMEZONES.each_value do |iana|
+        c = described_class.new(name: 'Fixture', slug: 'fixture', timezone: iana)
+        c.valid?
+        expect(c.errors[:timezone]).to be_empty, "expected #{iana} to be accepted"
+      end
     end
   end
 
