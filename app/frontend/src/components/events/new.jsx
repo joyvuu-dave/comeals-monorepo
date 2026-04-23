@@ -143,7 +143,7 @@ class EventsNew extends Component {
               id="event-new-start-time"
               value={this.state.start_time}
               onChange={(e) => this.setState({ start_time: e.target.value })}
-              disabled={this.state.loading}
+              disabled={this.state.loading || this.state.all_day}
             >
               <option />
               {generateTimes().map((time) => (
@@ -158,7 +158,7 @@ class EventsNew extends Component {
               id="event-new-end-time"
               value={this.state.end_time}
               onChange={(e) => this.setState({ end_time: e.target.value })}
-              disabled={this.state.loading}
+              disabled={this.state.loading || this.state.all_day}
             >
               <option />
               {generateTimes().map((time) => (
@@ -174,7 +174,13 @@ class EventsNew extends Component {
               id="event-new-all-day"
               type="checkbox"
               checked={this.state.all_day}
-              onChange={(e) => this.setState({ all_day: e.target.checked })}
+              onChange={(e) =>
+                this.setState(
+                  e.target.checked
+                    ? { all_day: true, start_time: "", end_time: "" }
+                    : { all_day: false },
+                )
+              }
               disabled={this.state.loading}
             />
             <br />
