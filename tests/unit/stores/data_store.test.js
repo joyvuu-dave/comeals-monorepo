@@ -1623,4 +1623,39 @@ describe("DataStore", () => {
       expect(event.end.getHours()).toBe(20);
     });
   });
+
+  describe("logout", () => {
+    // Regression: logout() used to rely on the global axios interceptor to
+    // attach the bearer token, but cookies were cleared synchronously before
+    // the interceptor's microtask ran. The DELETE dispatched with no auth,
+    // the server 401'd, and legacy Key rows were never destroyed. The fix
+    // reads the cookie synchronously and passes the header explicitly.
+    it("sends DELETE /api/v1/sessions/current with an Authorization header before clearing cookies", async () => {
+      const Cookie = (await import("js-cookie")).default;
+      axios.delete = vi.fn(() => Promise.resolve({ status: 200 }));
+
+      const store = createDataStore();
+      store.logout();
+
+      expect(axios.delete).toHaveBeenCalledTimes(1);
+      const [url, config] = axios.delete.mock.calls[0];
+      expect(url).toBe("/api/v1/sessions/current");
+      expect(config).toEqual({
+        headers: { Authorization: "Bearer test-token" },
+      });
+      expect(Cookie.remove).toHaveBeenCalledWith("token", { path: "/" });
+    });
+
+    it("skips the server call when no token cookie is present", async () => {
+      const Cookie = (await import("js-cookie")).default;
+      Cookie.get.mockImplementationOnce(() => undefined);
+      axios.delete = vi.fn(() => Promise.resolve({ status: 200 }));
+
+      const store = createDataStore();
+      store.logout();
+
+      expect(axios.delete).not.toHaveBeenCalled();
+      expect(Cookie.remove).toHaveBeenCalledWith("token", { path: "/" });
+    });
+  });
 });
