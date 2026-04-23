@@ -232,7 +232,7 @@ class EventsEdit extends Component {
               id="event-edit-start-time"
               value={this.state.start_time}
               onChange={(e) => this.setState({ start_time: e.target.value })}
-              disabled={disabled}
+              disabled={disabled || this.state.all_day}
             >
               <option />
               {generateTimes().map((time) => (
@@ -247,7 +247,7 @@ class EventsEdit extends Component {
               id="event-edit-end-time"
               value={this.state.end_time}
               onChange={(e) => this.setState({ end_time: e.target.value })}
-              disabled={disabled}
+              disabled={disabled || this.state.all_day}
             >
               <option />
               {generateTimes().map((time) => (
@@ -263,7 +263,13 @@ class EventsEdit extends Component {
               id="event-edit-all-day"
               type="checkbox"
               checked={this.state.all_day}
-              onChange={(e) => this.setState({ all_day: e.target.checked })}
+              onChange={(e) =>
+                this.setState(
+                  e.target.checked
+                    ? { all_day: true, start_time: "", end_time: "" }
+                    : { all_day: false },
+                )
+              }
               disabled={disabled}
             />
             <br />
