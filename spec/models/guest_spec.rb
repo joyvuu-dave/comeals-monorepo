@@ -115,4 +115,32 @@ RSpec.describe Guest do
       expect { guest.destroy }.to change(described_class, :count).by(-1)
     end
   end
+
+  describe '#save (reconciled immutability)' do
+    it 'blocks creating a new guest on a reconciled meal' do
+      reconciliation = create(:reconciliation, community: community)
+      meal.update!(reconciliation: reconciliation)
+
+      guest = build(:guest, meal: meal, resident: resident)
+      expect(guest.save).to be false
+      expect(guest.errors[:base]).to include('Meal has been reconciled.')
+    end
+
+    it 'blocks updating multiplier when meal is reconciled' do
+      guest = create(:guest, meal: meal, resident: resident, multiplier: 2)
+      meal.update!(reconciliation: create(:reconciliation, community: community))
+
+      guest.multiplier = 1
+      expect(guest.save).to be false
+      expect(guest.reload.multiplier).to eq(2)
+    end
+
+    it 'allows updates when meal is not reconciled' do
+      guest = create(:guest, meal: meal, resident: resident, vegetarian: false)
+
+      guest.vegetarian = true
+      expect(guest.save).to be true
+      expect(guest.reload.vegetarian).to be true
+    end
+  end
 end

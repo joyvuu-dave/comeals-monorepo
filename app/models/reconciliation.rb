@@ -27,11 +27,22 @@ class Reconciliation < ApplicationRecord
   has_many :reconciliation_balances, dependent: :destroy
   belongs_to :community
 
+  audited
+
   validates :end_date, presence: true
   validate :end_date_not_in_future
 
   before_validation :set_date
   after_create :finalize
+  # Reconciliations are settlement events and must not be destroyed through
+  # normal application paths. If un-settlement is ever required, write a
+  # deliberate rake task that calls `delete` to bypass this guard.
+  before_destroy :reject_destroy
+
+  def reject_destroy
+    errors.add(:base, 'Reconciliations are settlement events and cannot be destroyed.')
+    throw(:abort)
+  end
 
   def number_of_meals
     meals.count

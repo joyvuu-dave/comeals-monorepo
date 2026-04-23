@@ -64,12 +64,14 @@ RSpec.describe Bill do
 
   describe '#reconciled?' do
     it 'returns true when the meal is reconciled' do
-      reconciliation = create(:reconciliation, community: community)
-      meal = create(:meal, community: community, reconciliation: reconciliation)
+      meal = create(:meal, community: community)
       resident = create(:resident, community: community, unit: unit)
       bill = create(:bill, meal: meal, resident: resident, community: community)
+      # Reconciliation must happen AFTER bill creation — before_save :reject_if_reconciled
+      # blocks creating bills on an already-reconciled meal.
+      meal.update!(reconciliation: create(:reconciliation, community: community))
 
-      expect(bill.reconciled?).to be true
+      expect(bill.reload.reconciled?).to be true
     end
 
     it 'returns false when the meal is not reconciled' do
@@ -145,6 +147,51 @@ RSpec.describe Bill do
       bill = create(:bill, meal: meal, resident: resident, community: community)
 
       expect { bill.destroy }.to change(described_class, :count).by(-1)
+    end
+  end
+
+  describe '#save (reconciled immutability)' do
+    it 'blocks updating amount when meal is reconciled' do
+      meal = create(:meal, community: community)
+      resident = create(:resident, community: community, unit: unit)
+      bill = create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('50'))
+      meal.update!(reconciliation: create(:reconciliation, community: community))
+
+      bill.amount = BigDecimal('999')
+      expect(bill.save).to be false
+      expect(bill.errors[:base]).to include('Meal has been reconciled.')
+      expect(bill.reload.amount).to eq(BigDecimal('50'))
+    end
+
+    it 'blocks toggling no_cost when meal is reconciled' do
+      meal = create(:meal, community: community)
+      resident = create(:resident, community: community, unit: unit)
+      bill = create(:bill, meal: meal, resident: resident, community: community, no_cost: false)
+      meal.update!(reconciliation: create(:reconciliation, community: community))
+
+      bill.no_cost = true
+      expect(bill.save).to be false
+      expect(bill.reload.no_cost).to be false
+    end
+
+    it 'blocks creating a new bill on a reconciled meal' do
+      reconciliation = create(:reconciliation, community: community)
+      meal = create(:meal, community: community, reconciliation: reconciliation)
+      resident = create(:resident, community: community, unit: unit)
+
+      bill = build(:bill, meal: meal, resident: resident, community: community)
+      expect(bill.save).to be false
+      expect(bill.errors[:base]).to include('Meal has been reconciled.')
+    end
+
+    it 'allows updates when meal is not reconciled' do
+      meal = create(:meal, community: community)
+      resident = create(:resident, community: community, unit: unit)
+      bill = create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('50'))
+
+      bill.amount = BigDecimal('75')
+      expect(bill.save).to be true
+      expect(bill.reload.amount).to eq(BigDecimal('75'))
     end
   end
 

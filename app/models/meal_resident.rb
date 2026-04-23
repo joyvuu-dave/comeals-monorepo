@@ -40,6 +40,11 @@ class MealResident < ApplicationRecord
   validates :meal_id, uniqueness: { scope: :resident_id }
   validates :multiplier, numericality: { only_integer: true }
   validate :meal_has_open_spots, on: :create
+  # Reconciled meals are immutable. Blocks create (no new attendees), update
+  # (no toggling late/vegetarian), and destroy — applies across API, ActiveAdmin,
+  # and console paths.
+  before_save :reject_if_reconciled
+  before_destroy :reject_if_reconciled
   before_destroy :record_can_be_removed
 
   def meal_has_open_spots
@@ -59,13 +64,15 @@ class MealResident < ApplicationRecord
                'Meal has no open spots.')
   end
 
-  def record_can_be_removed
-    # Reconciled meals are immutable (accounting principle: no edits to a closed ledger).
-    if meal.reconciled?
-      errors.add(:base, 'Meal has been reconciled.')
-      throw(:abort)
-    end
+  def reject_if_reconciled
+    return unless meal&.reconciled?
 
+    errors.add(:base, 'Meal has been reconciled.')
+    throw(:abort)
+  end
+
+  def record_can_be_removed
+    # Reconciled check is handled by reject_if_reconciled (runs first).
     # Scenario: Meal is open
     return true if meal.closed == false
 

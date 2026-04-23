@@ -44,8 +44,11 @@ RSpec.describe Reconciliation do
       old_reconciliation = described_class.create!(community: community, date: Time.zone.today - 30,
                                                    end_date: 2.years.ago.to_date)
 
-      old_meal = create(:meal, community: community, reconciliation: old_reconciliation)
+      old_meal = create(:meal, community: community)
       create(:bill, meal: old_meal, resident: cook, community: community, amount: BigDecimal('40'))
+      # Assign to the old reconciliation after bill creation —
+      # before_save :reject_if_reconciled blocks bill creation on reconciled meals.
+      old_meal.update_column(:reconciliation_id, old_reconciliation.id)
 
       new_meal = create(:meal, community: community)
       create(:bill, meal: new_meal, resident: cook, community: community, amount: BigDecimal('60'))
@@ -819,6 +822,42 @@ RSpec.describe Reconciliation do
 
       expect(result.size).to eq(2)
       expect(result.values).to all(eq(BigDecimal('0')))
+    end
+  end
+
+  describe '#destroy' do
+    it 'is blocked — reconciliations are immutable settlement events' do
+      reconciliation = described_class.create!(community: community, end_date: Time.zone.today)
+
+      expect { reconciliation.destroy }.not_to change(described_class, :count)
+      expect(reconciliation.errors[:base])
+        .to include('Reconciliations are settlement events and cannot be destroyed.')
+    end
+
+    it 'preserves reconciliation_balances when destroy is attempted' do
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      eater = create(:resident, community: community, unit: unit, multiplier: 2)
+
+      meal = create(:meal, community: community)
+      create(:meal_resident, meal: meal, resident: eater, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('50'))
+
+      reconciliation = described_class.create!(community: community, end_date: Time.zone.today)
+      expect(reconciliation.reconciliation_balances.count).to eq(2)
+
+      reconciliation.destroy
+      expect(reconciliation.reconciliation_balances.reload.count).to eq(2)
+    end
+  end
+
+  describe 'auditing' do
+    it 'records an audit when end_date changes' do
+      reconciliation = described_class.create!(community: community, end_date: Date.new(2025, 3, 31))
+      expect { reconciliation.update!(end_date: Date.new(2025, 4, 30)) }
+        .to change { reconciliation.audits.count }.by(1)
+
+      audit = reconciliation.audits.last
+      expect(audit.audited_changes).to have_key('end_date')
     end
   end
 end

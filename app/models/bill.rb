@@ -46,12 +46,16 @@ class Bill < ApplicationRecord
   delegate :attendees_count, to: :meal
 
   before_validation :set_community_id
-  before_destroy :record_can_be_removed
+  # Reconciled meals are immutable (accounting principle: no edits to a closed ledger).
+  # Blocks both save (create/update) and destroy — ActiveAdmin's Bill form would
+  # otherwise allow a superuser to quietly rewrite a reconciled bill's amount.
+  before_save :reject_if_reconciled
+  before_destroy :reject_if_reconciled
 
   validates :amount, numericality: { greater_than_or_equal_to: 0 }
   validates :resident_id, uniqueness: { scope: :meal_id }
 
-  def record_can_be_removed
+  def reject_if_reconciled
     return unless reconciled?
 
     errors.add(:base, 'Meal has been reconciled.')

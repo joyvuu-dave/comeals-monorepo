@@ -14,6 +14,9 @@ ActiveAdmin.register Bill do
 
   controller do
     before_action { @page_title = 'Cooking Slots' }
+    # Reconciled meals are immutable. Redirect rather than relying on the
+    # model-layer abort, which would render a confusing form error.
+    before_action :block_if_reconciled, only: %i[edit update destroy]
 
     def scoped_collection
       # eager_load (not includes) guarantees LEFT OUTER JOINs, which is required
@@ -25,6 +28,13 @@ ActiveAdmin.register Bill do
       end_of_association_chain
         .eager_load(:meal, :resident, resident: :unit)
         .preload(meal: %i[meal_residents guests])
+    end
+
+    def block_if_reconciled
+      return unless resource.reconciled?
+
+      redirect_to admin_bill_path(resource),
+                  alert: 'This bill belongs to a reconciled meal and cannot be modified.'
     end
   end
 
