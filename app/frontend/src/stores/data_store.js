@@ -15,7 +15,7 @@ import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import handleAxiosError from "../helpers/handle_axios_error";
-import { TIMEZONE, toPacificDayjs } from "../helpers/helpers";
+import { communityNow, toCommunityDayjs } from "../helpers/helpers";
 import { mark, logEvent } from "../helpers/nav_trace";
 import toastStore from "./toast_store";
 
@@ -128,7 +128,7 @@ export const DataStore = types
     // (e.g. modal open/close) didn't actually change the event set.
     calendarEventsVersion: types.optional(types.number, 0),
     currentDate: types.optional(types.string, function () {
-      return dayjs().tz(TIMEZONE).format("YYYY-MM-DD");
+      return communityNow().format("YYYY-MM-DD");
     }),
     isOnline: false,
     authExpired: false,
@@ -598,10 +598,11 @@ export const DataStore = types
     loadData(data) {
       self.preLoadData();
 
-      // Assign Meal Data — construct a "fake local" Date with Pacific
-      // date components so that dayjs(meal.date) always reflects Pacific,
-      // consistent with getPacificNow() in calendar/show.jsx.
-      var d = toPacificDayjs(data.date);
+      // Assign Meal Data — construct a "fake local" Date whose year/month/day
+      // components come from the community's timezone so that dayjs(meal.date)
+      // always reflects the community day, consistent with getCommunityNow()
+      // in calendar/show.jsx.
+      var d = toCommunityDayjs(data.date);
       self.meal.date = new Date(d.year(), d.month(), d.date());
       self.meal.description = data.description;
       self.meal.closed = data.closed;
@@ -723,12 +724,12 @@ export const DataStore = types
 
       // Convert event start/end strings to native Date objects.
       // react-big-calendar requires native Dates for its date arithmetic.
-      // toPacificDayjs handles both offset and naive strings correctly.
+      // toCommunityDayjs handles both offset and naive strings correctly.
       function convertEvents(events) {
         events.forEach(function (event) {
           var converted = Object.assign({}, event);
           if (converted.start) {
-            var s = toPacificDayjs(converted.start);
+            var s = toCommunityDayjs(converted.start);
             converted.start = new Date(
               s.year(),
               s.month(),
@@ -738,7 +739,7 @@ export const DataStore = types
             );
           }
           if (converted.end) {
-            var e = toPacificDayjs(converted.end);
+            var e = toCommunityDayjs(converted.end);
             converted.end = new Date(
               e.year(),
               e.month(),

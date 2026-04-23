@@ -6,17 +6,34 @@ import Cookie from "js-cookie";
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-export const TIMEZONE = Cookie.get("timezone") || "America/Los_Angeles";
+// The community's IANA timezone (e.g. "America/Los_Angeles", "Europe/Berlin")
+// is written to a cookie at login from community.timezone on the backend. Read
+// it lazily on every call so that a login within the same SPA session picks
+// up the new tz without a reload. If the cookie is missing (pre-login pages,
+// cookies disabled), fall back to the browser's tz — never a hardcoded region.
+export function getCommunityTimezone() {
+  var tz = Cookie.get("timezone");
+  if (tz) return tz;
+  return dayjs.tz.guess();
+}
 
 // dayjs.tz(string, tz) interprets naive strings (no offset) as the
 // target timezone — correct.  But for strings with offset info it
 // stamps the UTC value as the target timezone instead of converting.
 // For those we need dayjs(string).tz(tz).
-export function toPacificDayjs(dateString) {
+export function toCommunityDayjs(dateString) {
+  var tz = getCommunityTimezone();
   if (/Z|[+-]\d{2}:?\d{2}\s*$/.test(dateString)) {
-    return dayjs(dateString).tz(TIMEZONE);
+    return dayjs(dateString).tz(tz);
   }
-  return dayjs.tz(dateString, TIMEZONE);
+  return dayjs.tz(dateString, tz);
+}
+
+// "Now" in the community's timezone. Prefer this over dayjs() whenever the
+// value is user-visible — a resident travelling out of tz must see the same
+// meal-day rollover as anyone at home.
+export function communityNow() {
+  return dayjs().tz(getCommunityTimezone());
 }
 
 // The value space is a compile-time constant (~56 15-minute slots, 8am–10pm),

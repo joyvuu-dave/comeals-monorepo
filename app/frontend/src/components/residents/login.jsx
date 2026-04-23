@@ -8,7 +8,7 @@ import dayjs from "dayjs";
 import Modal from "react-modal";
 
 import handleAxiosError from "../../helpers/handle_axios_error";
-import { TIMEZONE } from "../../helpers/helpers";
+import { communityNow, getCommunityTimezone } from "../../helpers/helpers";
 import ResidentsPasswordReset from "./password_reset";
 import ResidentsPasswordNew from "./password_new";
 
@@ -115,7 +115,9 @@ const ResidentsLogin = inject("store")(
                   });
                 }
 
-                var tz = response.data.timezone || "America/Los_Angeles";
+                // Cookie was just written (if present in the response), so
+                // getCommunityTimezone() picks up the fresh value here.
+                var tz = getCommunityTimezone();
                 var { from } = self.props.location.state || {
                   from: {
                     pathname:
@@ -135,7 +137,7 @@ const ResidentsLogin = inject("store")(
         render() {
           const { from } = this.props.location.state || {
             from: {
-              pathname: `/calendar/all/${dayjs().tz(TIMEZONE).format("YYYY-MM-DD")}`,
+              pathname: `/calendar/all/${communityNow().format("YYYY-MM-DD")}`,
             },
           };
           const { redirectToReferrer } = this.state;

@@ -4,7 +4,7 @@ import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import axios from "axios";
-import { generateTimes, toPacificDayjs } from "../../helpers/helpers";
+import { generateTimes, toCommunityDayjs } from "../../helpers/helpers";
 import handleAxiosError from "../../helpers/handle_axios_error";
 import { inject, observer } from "mobx-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -50,24 +50,24 @@ const CommonHouseReservationsEdit = inject("store")(
             if (!self._isMounted) return;
             if (response.status === 200) {
               var evt = response.data.event;
-              var sd = toPacificDayjs(evt.start_date);
+              var sd = toCommunityDayjs(evt.start_date);
               self.setState({
                 event: evt,
                 loaded: true,
                 resident_id: evt.resident_id,
                 title: evt.title,
                 day: new Date(sd.year(), sd.month(), sd.date()),
-                start_time: `${toPacificDayjs(evt.start_date)
+                start_time: `${toCommunityDayjs(evt.start_date)
                   .hour()
                   .toString()
-                  .padStart(2, "0")}:${toPacificDayjs(evt.start_date)
+                  .padStart(2, "0")}:${toCommunityDayjs(evt.start_date)
                   .minute()
                   .toString()
                   .padStart(2, "0")}`,
-                end_time: `${toPacificDayjs(evt.end_date)
+                end_time: `${toCommunityDayjs(evt.end_date)
                   .hour()
                   .toString()
-                  .padStart(2, "0")}:${toPacificDayjs(evt.end_date)
+                  .padStart(2, "0")}:${toCommunityDayjs(evt.end_date)
                   .minute()
                   .toString()
                   .padStart(2, "0")}`,
