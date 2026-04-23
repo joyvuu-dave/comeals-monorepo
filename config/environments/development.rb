@@ -66,6 +66,14 @@ Rails.application.configure do
 
   config.hosts << 'admin.lvh.me'
 
+  # Allow requests from any private LAN IP so a physical iPhone on the same
+  # Wi-Fi can reach the Rails dev server (needed for Expo Go + mobile testing).
+  # Matches 10.x.x.x, 172.16-31.x.x, 192.168.x.x, and link-local 169.254.x.x.
+  config.hosts << /\A10(\.\d{1,3}){3}\z/
+  config.hosts << /\A172\.(1[6-9]|2[0-9]|3[0-1])(\.\d{1,3}){2}\z/
+  config.hosts << /\A192\.168(\.\d{1,3}){2}\z/
+  config.hosts << /\A169\.254(\.\d{1,3}){2}\z/
+
   # Devise (AdminUser password reset emails need admin subdomain host)
   config.action_mailer.default_url_options = { host: 'admin.lvh.me:3000' }
 
