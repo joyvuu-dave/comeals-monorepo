@@ -1,6 +1,6 @@
 import { Component } from "react";
 import { inject, observer } from "mobx-react";
-import { Navigate, Link } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 import { withRouter } from "../../helpers/with_router";
 import axios from "axios";
 import Cookie from "js-cookie";
@@ -8,8 +8,8 @@ import dayjs from "dayjs";
 import Modal from "react-modal";
 
 import handleAxiosError from "../../helpers/handle_axios_error";
+import toastStore from "../../stores/toast_store";
 import { communityNow, getCommunityTimezone } from "../../helpers/helpers";
-import ResidentsPasswordReset from "./password_reset";
 import ResidentsPasswordNew from "./password_new";
 
 const styles = {
@@ -50,36 +50,55 @@ const ResidentsLogin = inject("store")(
         }
 
         renderModal() {
-          if (typeof this.props.match.params.modal === "undefined") {
-            return null;
+          if (
+            this.props.match.params.modal === "reset-password" &&
+            typeof this.props.match.params.token !== "undefined"
+          ) {
+            return (
+              <ResidentsPasswordNew
+                handleCloseModal={this.handleCloseModal}
+                history={this.props.history}
+                match={this.props.match}
+              />
+            );
           }
+          return null;
+        }
 
-          switch (this.props.match.params.modal) {
-            case "reset-password":
-              if (typeof this.props.match.params.token === "undefined") {
-                return (
-                  <ResidentsPasswordReset
-                    handleCloseModal={this.handleCloseModal}
-                    history={this.props.history}
-                  />
-                );
-              } else {
-                return (
-                  <ResidentsPasswordNew
-                    handleCloseModal={this.handleCloseModal}
-                    history={this.props.history}
-                    match={this.props.match}
-                  />
-                );
-              }
-
-            default:
-              return null;
-          }
+        isModalOpen() {
+          return (
+            this.props.match.params.modal === "reset-password" &&
+            typeof this.props.match.params.token !== "undefined"
+          );
         }
 
         handleCloseModal() {
           this.props.history.push("/");
+        }
+
+        handleResetPassword() {
+          const email = (this.state.email || "").trim();
+          if (!email) {
+            toastStore.replaceAll("Email required.", "error");
+            return;
+          }
+
+          this.setState({ loading: true });
+          const self = this;
+          axios
+            .post(`/api/v1/residents/password-reset`, { email: email })
+            .then(function (response) {
+              if (!self._isMounted) return;
+              self.setState({ loading: false });
+              if (response.status === 200 && response.data.message) {
+                toastStore.replaceAll(response.data.message, "success");
+              }
+            })
+            .catch(function (error) {
+              if (!self._isMounted) return;
+              self.setState({ loading: false });
+              handleAxiosError(error);
+            });
         }
 
         handleSubmit(e) {
@@ -209,17 +228,18 @@ const ResidentsLogin = inject("store")(
                     </button>
                   </form>
                   <br />
-                  <Link
-                    to="/reset-password"
-                    className="text-black"
+                  <button
+                    type="button"
+                    className="text-black button-link"
                     disabled={this.state.loading}
+                    onClick={() => this.handleResetPassword()}
                   >
                     Reset your password
-                  </Link>
+                  </button>
                 </div>
               </div>
               <Modal
-                isOpen={typeof this.props.match.params.modal !== "undefined"}
+                isOpen={this.isModalOpen()}
                 contentLabel="Login Modal"
                 onRequestClose={this.handleCloseModal}
                 style={{

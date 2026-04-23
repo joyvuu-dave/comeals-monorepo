@@ -8,7 +8,9 @@ test.describe("Password Reset", () => {
     await mockApi(page);
   });
 
-  test("request password reset sends POST with email", async ({ page }) => {
+  test("request password reset sends POST with email from login form", async ({
+    page,
+  }) => {
     let resetPayload = null;
     let resetMethod = null;
     await page.route("**/api/v1/residents/password-reset", (route) => {
@@ -23,21 +25,12 @@ test.describe("Password Reset", () => {
       });
     });
 
-    await page.goto("/reset-password/");
+    await page.goto("/");
     await page.waitForLoadState("networkidle");
 
-    // Should show the password reset form in a modal
-    const modal = page.locator(".ReactModal__Content--after-open");
-    await expect(modal).toBeVisible({ timeout: 10000 });
-    await expect(modal.locator("text=Password Reset")).toBeVisible();
-
-    // Fill in email
-    const emailInput = modal.locator('input[placeholder="Email"]');
-    await expect(emailInput).toBeVisible();
-    await emailInput.fill("jane@example.com");
-
-    // Submit via the Reset button
-    await modal.getByRole("button", { name: "Reset" }).click();
+    // Fill in the email on the login form, then click Reset your password
+    await page.locator("#login-email").fill("jane@example.com");
+    await page.getByRole("button", { name: "Reset your password" }).click();
 
     // API: POST with email
     await expect.poll(() => resetPayload, { timeout: 5000 }).toBeTruthy();
@@ -50,6 +43,34 @@ test.describe("Password Reset", () => {
     await expect(toast.locator(".toast__message")).toContainText(
       "Password reset email sent",
     );
+  });
+
+  test("reset button with empty email shows error toast and does not POST", async ({
+    page,
+  }) => {
+    let resetRequested = false;
+    await page.route("**/api/v1/residents/password-reset", (route) => {
+      if (route.request().method() === "POST") {
+        resetRequested = true;
+      }
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ message: "Password reset email sent." }),
+      });
+    });
+
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    await page.getByRole("button", { name: "Reset your password" }).click();
+
+    const toast = page.locator(".toast--error");
+    await expect(toast).toBeVisible({ timeout: 5000 });
+    await expect(toast.locator(".toast__message")).toContainText(
+      "Email required",
+    );
+    expect(resetRequested).toBe(false);
   });
 
   test("set new password sends POST with password", async ({ page }) => {
