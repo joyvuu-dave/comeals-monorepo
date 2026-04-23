@@ -214,4 +214,41 @@ RSpec.describe MealResident do
       expect(mr.errors[:base]).to include('Meal has been reconciled.')
     end
   end
+
+  describe '#save (reconciled immutability)' do
+    it 'blocks creating a new meal_resident on a reconciled meal' do
+      reconciliation = create(:reconciliation, community: community)
+      meal.update!(reconciliation: reconciliation)
+
+      mr = build(:meal_resident, meal: meal, resident: resident, community: community)
+      expect(mr.save).to be false
+      expect(mr.errors[:base]).to include('Meal has been reconciled.')
+    end
+
+    it 'blocks toggling late when meal is reconciled' do
+      mr = create(:meal_resident, meal: meal, resident: resident, community: community, late: false)
+      meal.update!(reconciliation: create(:reconciliation, community: community))
+
+      mr.late = true
+      expect(mr.save).to be false
+      expect(mr.reload.late).to be false
+    end
+
+    it 'blocks toggling vegetarian when meal is reconciled' do
+      mr = create(:meal_resident, meal: meal, resident: resident, community: community, vegetarian: false)
+      meal.update!(reconciliation: create(:reconciliation, community: community))
+
+      mr.vegetarian = true
+      expect(mr.save).to be false
+      expect(mr.reload.vegetarian).to be false
+    end
+
+    it 'allows updates when meal is not reconciled' do
+      mr = create(:meal_resident, meal: meal, resident: resident, community: community, late: false)
+
+      mr.late = true
+      expect(mr.save).to be true
+      expect(mr.reload.late).to be true
+    end
+  end
 end

@@ -6,6 +6,11 @@ ActiveAdmin.register Reconciliation do
   # CONFIG
   config.filters = false
 
+  # Reconciliations are immutable settlement events. Destroying one silently
+  # wipes its reconciliation_balances and un-assigns its meals, with no audit
+  # trail. If un-settlement is ever needed it should be a deliberate rake task.
+  actions :all, except: [:destroy]
+
   permit_params :community_id, :end_date
 
   # Update which meals are in this reconciliation. Receives a list of meal IDs

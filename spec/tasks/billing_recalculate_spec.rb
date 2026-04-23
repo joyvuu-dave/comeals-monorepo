@@ -40,9 +40,12 @@ RSpec.describe 'billing:recalculate' do
     reconciliation = Reconciliation.create!(community: community, end_date: Time.zone.today)
     resident = create(:resident, community: community, unit: unit, multiplier: 2)
 
-    # Reconciled meal with big bill — should NOT affect balance
-    reconciled_meal = create(:meal, community: community, reconciliation: reconciliation)
+    # Reconciled meal with big bill — should NOT affect balance. Build the
+    # bill first, then set reconciliation_id via update_columns; Bill's
+    # before_save now rejects any save when meal.reconciled?.
+    reconciled_meal = create(:meal, community: community)
     create(:bill, meal: reconciled_meal, resident: resident, community: community, amount: BigDecimal('500'))
+    reconciled_meal.update_columns(reconciliation_id: reconciliation.id)
 
     # Unreconciled meal — cook and attend = 0 balance
     unreconciled_meal = create(:meal, community: community)
