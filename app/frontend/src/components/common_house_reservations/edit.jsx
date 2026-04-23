@@ -4,7 +4,6 @@ import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import axios from "axios";
-import Cookie from "js-cookie";
 import { generateTimes, toPacificDayjs } from "../../helpers/helpers";
 import handleAxiosError from "../../helpers/handle_axios_error";
 import { inject, observer } from "mobx-react";
@@ -49,7 +48,7 @@ const CommonHouseReservationsEdit = inject("store")(
           .get(
             `/api/v1/common-house-reservations/${
               self.props.eventId
-            }?token=${Cookie.get("token")}`,
+            }`,
           )
           .then(function (response) {
             if (!self._isMounted) return;
@@ -97,7 +96,7 @@ const CommonHouseReservationsEdit = inject("store")(
           .patch(
             `/api/v1/common-house-reservations/${
               this.props.eventId
-            }/update?token=${Cookie.get("token")}`,
+            }/update`,
             {
               resident_id: s.resident_id,
               start_year: s.day && new Date(s.day).getFullYear(),
@@ -136,7 +135,7 @@ const CommonHouseReservationsEdit = inject("store")(
           .delete(
             `/api/v1/common-house-reservations/${
               self.props.eventId
-            }/delete?token=${Cookie.get("token")}`,
+            }/delete`,
           )
           .then(function (response) {
             if (!self._isMounted) return;

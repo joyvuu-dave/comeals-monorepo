@@ -6,7 +6,7 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
   let(:resident) { create(:resident, community: community, unit: unit) }
-  let(:token) { resident.key.token }
+  let(:token) { resident.keys.first.token }
   let(:meal) { create(:meal, community: community, date: Date.yesterday) }
   let(:cook) { create(:resident, community: community, unit: unit) }
   let!(:bill) { create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('0')) }

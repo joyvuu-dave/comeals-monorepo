@@ -43,7 +43,8 @@ module Api
         end
 
         if resident.authenticate(params[:password])
-          render json: { token: resident.key.token, slug: resident.community.slug, community_id: resident.community.id,
+          render json: { token: JwtAuth.encode(resident), slug: resident.community.slug,
+                         community_id: resident.community.id,
                          resident_id: resident.id, username: resident_name_helper(resident.name),
                          timezone: resident.community.timezone }
         else

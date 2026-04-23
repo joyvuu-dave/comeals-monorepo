@@ -2,7 +2,6 @@ import { Component } from "react";
 import DayPickerInputWrapper from "../common/day_picker_input";
 import dayjs from "dayjs";
 import axios from "axios";
-import Cookie from "js-cookie";
 import { inject, observer } from "mobx-react";
 import handleAxiosError from "../../helpers/handle_axios_error";
 import ConfirmModal from "../app/confirm_modal";
@@ -45,7 +44,7 @@ const GuestRoomReservationsEdit = inject("store")(
           .get(
             `/api/v1/guest-room-reservations/${
               self.props.eventId
-            }?token=${Cookie.get("token")}`,
+            }`,
           )
           .then(function (response) {
             if (!self._isMounted) return;
@@ -75,7 +74,7 @@ const GuestRoomReservationsEdit = inject("store")(
           .patch(
             `/api/v1/guest-room-reservations/${
               self.props.eventId
-            }/update?token=${Cookie.get("token")}`,
+            }/update`,
             {
               resident_id: self.state.resident_id,
               date: self.state.day
@@ -109,7 +108,7 @@ const GuestRoomReservationsEdit = inject("store")(
           .delete(
             `/api/v1/guest-room-reservations/${
               self.props.eventId
-            }/delete?token=${Cookie.get("token")}`,
+            }/delete`,
           )
           .then(function (response) {
             if (!self._isMounted) return;

@@ -50,7 +50,7 @@ const CommonHouseReservationsNew = inject("store")(
           .post(
             `/api/v1/common-house-reservations?community_id=${
               s.communityId
-            }&token=${Cookie.get("token")}`,
+            }`,
             {
               resident_id: s.resident_id,
               start_year: s.day && s.day.getFullYear(),

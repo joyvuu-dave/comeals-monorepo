@@ -6,7 +6,7 @@ RSpec.describe 'Communities API' do
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
   let(:resident) { create(:resident, community: community, unit: unit) }
-  let(:token) { resident.key.token }
+  let(:token) { resident.keys.first.token }
 
   describe 'GET /api/v1/communities/:id/hosts' do
     it 'returns active adult residents ordered by unit' do

@@ -6,7 +6,7 @@ RSpec.describe 'Meals API' do
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
   let(:resident) { create(:resident, community: community, unit: unit) }
-  let(:token) { resident.key.token }
+  let(:token) { resident.keys.first.token }
 
   # ---------------------------------------------------------------------------
   # GET /api/v1/meals
@@ -378,9 +378,15 @@ RSpec.describe 'Meals API' do
     let(:reconciliation) { create(:reconciliation, community: community) }
     let(:meal) { create(:meal, community: community) }
 
-    before { meal.update_columns(reconciliation_id: reconciliation.id) }
+    # Bypasses callbacks — Meal itself has no before_save guard, and children
+    # (MealResident, Guest, Bill) now reject any save when meal.reconciled?,
+    # so once this runs no new children can be created via normal model paths.
+    def reconcile!
+      meal.update_columns(reconciliation_id: reconciliation.id)
+    end
 
     it 'blocks create_meal_resident on a reconciled meal' do
+      reconcile!
       post "/api/v1/meals/#{meal.id}/residents/#{resident.id}",
            params: { token: token, late: false, vegetarian: false }
 
@@ -391,6 +397,7 @@ RSpec.describe 'Meals API' do
 
     it 'blocks destroy_meal_resident on a reconciled meal' do
       mr = MealResident.create!(meal: meal, resident: resident, community: community, multiplier: 2)
+      reconcile!
 
       delete "/api/v1/meals/#{meal.id}/residents/#{resident.id}",
              params: { token: token }
@@ -401,6 +408,7 @@ RSpec.describe 'Meals API' do
 
     it 'blocks update_meal_resident on a reconciled meal' do
       MealResident.create!(meal: meal, resident: resident, community: community, multiplier: 2)
+      reconcile!
 
       patch "/api/v1/meals/#{meal.id}/residents/#{resident.id}",
             params: { token: token, late: true }
@@ -409,6 +417,7 @@ RSpec.describe 'Meals API' do
     end
 
     it 'blocks create_guest on a reconciled meal' do
+      reconcile!
       post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests",
            params: { token: token, vegetarian: false }
 
@@ -418,6 +427,7 @@ RSpec.describe 'Meals API' do
 
     it 'blocks destroy_guest on a reconciled meal' do
       guest = Guest.create!(meal: meal, resident: resident, multiplier: 2)
+      reconcile!
 
       delete "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests/#{guest.id}",
              params: { token: token }
@@ -427,6 +437,7 @@ RSpec.describe 'Meals API' do
     end
 
     it 'blocks update_description on a reconciled meal' do
+      reconcile!
       patch "/api/v1/meals/#{meal.id}/description",
             params: { token: token, description: 'Should not change' }
 
@@ -435,6 +446,7 @@ RSpec.describe 'Meals API' do
     end
 
     it 'blocks update_max on a reconciled meal' do
+      reconcile!
       patch "/api/v1/meals/#{meal.id}/max",
             params: { token: token, max: 99 }
 
@@ -443,6 +455,7 @@ RSpec.describe 'Meals API' do
     end
 
     it 'blocks update_closed on a reconciled meal' do
+      reconcile!
       patch "/api/v1/meals/#{meal.id}/closed",
             params: { token: token, closed: true }
 

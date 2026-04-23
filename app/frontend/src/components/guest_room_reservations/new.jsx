@@ -45,7 +45,7 @@ const GuestRoomReservationsNew = inject("store")(
           .post(
             `/api/v1/guest-room-reservations?community_id=${
               self.state.communityId
-            }&token=${Cookie.get("token")}`,
+            }`,
             {
               resident_id: self.state.resident_id,
               date: self.state.day

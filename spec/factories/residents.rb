@@ -9,6 +9,7 @@
 #  birthday               :date             default(Mon, 01 Jan 1900), not null
 #  can_cook               :boolean          default(TRUE), not null
 #  email                  :string
+#  keys_valid_since       :datetime         not null
 #  multiplier             :integer          default(2), not null
 #  name                   :string           not null
 #  password_digest        :string           not null
@@ -40,5 +41,12 @@ FactoryBot.define do
     sequence(:name) { |n| "#{Faker::Name.first_name} #{Faker::Name.last_name} #{n}" }
     email { Faker::Internet.email }
     password { Faker::Internet.password }
+
+    # Production creates a Key only at login. Tests treat a just-created
+    # resident as already logged in for convenience — most request specs
+    # reach for `resident.keys.first.token`.
+    after(:create) do |resident, _evaluator|
+      resident.keys.create! if resident.keys.empty?
+    end
   end
 end
