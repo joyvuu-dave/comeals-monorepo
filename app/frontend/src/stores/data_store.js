@@ -346,9 +346,20 @@ export const DataStore = types
       // Best-effort server-side revocation. Fire-and-forget: even if the
       // request fails (offline, expired token) we still clear local state —
       // the user tapped "log out" and should see themselves logged out.
-      axios
-        .delete("/api/v1/sessions/current")
-        .catch(() => {});
+      //
+      // Attach the bearer header explicitly before clearing the cookie. The
+      // global request interceptor runs as a microtask, so if we relied on
+      // it the cookie would already be gone by the time it read `token` —
+      // the DELETE would dispatch unauthenticated and the server would 401
+      // before destroying the legacy Key row.
+      const token = Cookie.get("token");
+      if (token) {
+        axios
+          .delete("/api/v1/sessions/current", {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+          .catch(() => {});
+      }
 
       Cookie.remove("token", { path: "/" });
       Cookie.remove("community_id", { path: "/" });
