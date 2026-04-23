@@ -65,7 +65,7 @@ class MealResident < ApplicationRecord
   end
 
   def reject_if_reconciled
-    return unless meal&.reconciled?
+    return unless meal.reconciled?
 
     errors.add(:base, 'Meal has been reconciled.')
     throw(:abort)

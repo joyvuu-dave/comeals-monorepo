@@ -69,11 +69,14 @@ class ApiController < ActionController::API
 
   # Extract a token from "Authorization: Bearer <token>". Returns nil for any
   # other scheme (Basic, no header, malformed) so we fall through to the
-  # query-param fallback cleanly.
+  # query-param fallback cleanly. Memoized because both resolve_current_session!
+  # and set_community_timezone read it on every request.
   def bearer_token_from_header
+    return @bearer_token_from_header if defined?(@bearer_token_from_header)
+
     header = request.headers['Authorization'].to_s
     match = header.match(/\ABearer\s+(?<token>\S+)\z/i)
-    match && match[:token]
+    @bearer_token_from_header = match && match[:token]
   end
 
   def set_community_timezone(&)

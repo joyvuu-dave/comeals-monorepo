@@ -3,19 +3,9 @@
 ActiveAdmin.register_page 'Dashboard' do
   menu priority: 1, label: proc { I18n.t('active_admin.dashboard') }
 
-  # Redirect to the Community new form on fresh deployments. The bootstrap
-  # admin (created in `rails c`) has no community_id until they save the
-  # singleton, and the dashboard panels below all dereference it.
-  controller do
-    before_action :require_community
-
-    def require_community
-      return if Community.exists?
-
-      redirect_to(new_admin_community_path,
-                  notice: 'Create your community to finish setup.')
-    end
-  end
+  # Bootstrap redirect (no Community yet → /admin/communities/new) is handled
+  # globally in config/initializers/active_admin_bootstrap_guard.rb so it also
+  # covers /admin/residents, /admin/bills, etc.
 
   content title: 'Meal Reconciliation' do
     # Here is an example of a simple dashboard with columns and panels.

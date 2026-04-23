@@ -20,7 +20,10 @@ module Api
       # cookie; the JWT remains cryptographically valid if copied elsewhere.
       # That's the documented trade-off of stateless auth.
       def destroy_current
-        current_api_key&.destroy!
+        # Best-effort revocation. If destroy fails (DB hiccup, etc) the client
+        # has still cleared its cookie — surfacing a 500 here would be worse
+        # than the token lingering server-side until the next password change.
+        current_api_key&.destroy
         render json: { message: 'Signed out.' }
       end
 
