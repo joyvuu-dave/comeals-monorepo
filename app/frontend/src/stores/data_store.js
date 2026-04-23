@@ -86,9 +86,7 @@ function prefetchMonthData(date) {
     }
 
     axios
-      .get(
-        `/api/v1/communities/${Cookie.get("community_id")}/calendar/${date}`,
-      )
+      .get(`/api/v1/communities/${Cookie.get("community_id")}/calendar/${date}`)
       .then(function (response) {
         if (response.status === 200) {
           // Discard if a Pusher invalidation arrived since we started
@@ -518,9 +516,7 @@ export const DataStore = types
       var communityId = Cookie.get("community_id");
 
       var promise = axios
-        .get(
-          `/api/v1/communities/${communityId}/hosts`,
-        )
+        .get(`/api/v1/communities/${communityId}/hosts`)
         .then(function (response) {
           // Superseded by a later fetch: let the winner's response win.
           if (versionAtStart !== hostsVersion) return self.hosts;
@@ -566,9 +562,7 @@ export const DataStore = types
     },
     loadNext() {
       axios
-        .get(
-          `/api/v1/meals/${self.meal.nextId}/cooks`,
-        )
+        .get(`/api/v1/meals/${self.meal.nextId}/cooks`)
         .then(function (response) {
           if (response.status === 200) {
             localforage.setItem(response.data.id.toString(), response.data);
@@ -580,9 +574,7 @@ export const DataStore = types
     },
     loadPrev() {
       axios
-        .get(
-          `/api/v1/meals/${self.meal.prevId}/cooks`,
-        )
+        .get(`/api/v1/meals/${self.meal.prevId}/cooks`)
         .then(function (response) {
           if (response.status === 200) {
             localforage.setItem(response.data.id.toString(), response.data);

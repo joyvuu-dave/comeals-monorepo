@@ -48,9 +48,7 @@ const CommonHouseReservationsNew = inject("store")(
         var s = self.state;
         axios
           .post(
-            `/api/v1/common-house-reservations?community_id=${
-              s.communityId
-            }`,
+            `/api/v1/common-house-reservations?community_id=${s.communityId}`,
             {
               resident_id: s.resident_id,
               start_year: s.day && s.day.getFullYear(),

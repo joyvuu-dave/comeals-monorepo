@@ -18,9 +18,7 @@ class MealHistoryShow extends Component {
     this._isMounted = true;
     var self = this;
     axios
-      .get(
-        `/api/v1/meals/${self.props.id}/history`,
-      )
+      .get(`/api/v1/meals/${self.props.id}/history`)
       .then(function (response) {
         if (!self._isMounted) return;
         if (response.status === 200) {

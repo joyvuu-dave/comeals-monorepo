@@ -41,11 +41,7 @@ const GuestRoomReservationsEdit = inject("store")(
         self.props.store.ensureHosts();
 
         axios
-          .get(
-            `/api/v1/guest-room-reservations/${
-              self.props.eventId
-            }`,
-          )
+          .get(`/api/v1/guest-room-reservations/${self.props.eventId}`)
           .then(function (response) {
             if (!self._isMounted) return;
             if (response.status === 200) {
@@ -72,9 +68,7 @@ const GuestRoomReservationsEdit = inject("store")(
         var self = this;
         axios
           .patch(
-            `/api/v1/guest-room-reservations/${
-              self.props.eventId
-            }/update`,
+            `/api/v1/guest-room-reservations/${self.props.eventId}/update`,
             {
               resident_id: self.state.resident_id,
               date: self.state.day
@@ -106,9 +100,7 @@ const GuestRoomReservationsEdit = inject("store")(
         var self = this;
         axios
           .delete(
-            `/api/v1/guest-room-reservations/${
-              self.props.eventId
-            }/delete`,
+            `/api/v1/guest-room-reservations/${self.props.eventId}/delete`,
           )
           .then(function (response) {
             if (!self._isMounted) return;

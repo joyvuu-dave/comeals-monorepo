@@ -4,10 +4,7 @@ const { defineConfig } = require("@playwright/test");
 // tests. They're excluded from the default run (`npm run test:e2e`) but must
 // still be runnable when explicitly invoked. The env var gate lets the npm
 // scripts (`bench:modals`, `pwa:screenshots`) opt back in.
-const DEFAULT_IGNORE = [
-  "**/perf-modals.spec.js",
-  "**/pwa-screenshots.spec.js",
-];
+const DEFAULT_IGNORE = ["**/perf-modals.spec.js", "**/pwa-screenshots.spec.js"];
 
 module.exports = defineConfig({
   testDir: "./tests/e2e",

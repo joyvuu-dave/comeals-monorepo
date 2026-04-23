@@ -17,9 +17,9 @@ RSpec.describe 'Rack::Attack throttles' do
 
   # Simulate a specific client IP. Use 10.x addresses so we're not fighting
   # any other throttle bucket across examples.
-  def from_ip(ip, &block)
+  def from_ip(_ip, &)
     yield
-  ensure
+
     # no-op; IP set via env in each request below
   end
 
