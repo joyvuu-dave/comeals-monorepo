@@ -37,14 +37,17 @@ gem 'audited'
 # web clients. The web SPA is same-origin (served by Rails) so it doesn't
 # use CORS — this is for React Native / Expo web / localhost dev tools.
 gem 'rack-cors'
+
+# Stateless authentication tokens (see app/services/jwt_auth.rb).
+gem 'jwt'
+
 # Request throttling. Thresholds in config/initializers/rack_attack.rb are
 # deliberately loose — only genuinely abusive traffic should trip them.
 gem 'rack-attack'
+
 gem 'dalli', '~> 3.2'
 gem 'devise'
 gem 'friendly_id'
-# Stateless authentication tokens (see app/services/jwt_auth.rb).
-gem 'jwt'
 gem 'goldiloader'
 gem 'icalendar'
 gem 'letter_opener_web', group: :development

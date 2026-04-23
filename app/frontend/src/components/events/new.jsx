@@ -39,23 +39,18 @@ class EventsNew extends Component {
     var self = this;
     var s = self.state;
     axios
-      .post(
-        `/api/v1/events?community_id=${
-          s.communityId
-        }`,
-        {
-          title: s.title,
-          description: s.description,
-          start_year: s.day && s.day.getFullYear(),
-          start_month: s.day && s.day.getMonth() + 1,
-          start_day: s.day && s.day.getDate(),
-          start_hours: s.start_time && s.start_time.split(":")[0],
-          start_minutes: s.start_time && s.start_time.split(":")[1],
-          end_hours: s.end_time && s.end_time.split(":")[0],
-          end_minutes: s.end_time && s.end_time.split(":")[1],
-          all_day: s.all_day,
-        },
-      )
+      .post(`/api/v1/events?community_id=${s.communityId}`, {
+        title: s.title,
+        description: s.description,
+        start_year: s.day && s.day.getFullYear(),
+        start_month: s.day && s.day.getMonth() + 1,
+        start_day: s.day && s.day.getDate(),
+        start_hours: s.start_time && s.start_time.split(":")[0],
+        start_minutes: s.start_time && s.start_time.split(":")[1],
+        end_hours: s.end_time && s.end_time.split(":")[0],
+        end_minutes: s.end_time && s.end_time.split(":")[1],
+        all_day: s.all_day,
+      })
       .then(function (response) {
         if (!self._isMounted) return;
         self.setState({ loading: false });

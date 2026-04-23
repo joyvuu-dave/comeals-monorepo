@@ -152,9 +152,7 @@ const Resident = types
         self.form.form.meal.decrementExtras();
         axios({
           method: "post",
-          url: `/api/v1/meals/${self.meal_id}/residents/${
-            self.id
-          }`,
+          url: `/api/v1/meals/${self.meal_id}/residents/${self.id}`,
           data: {
             socket_id: window.Comeals.socketId,
             late: currentLate,
@@ -192,9 +190,7 @@ const Resident = types
         self.form.form.meal.incrementExtras();
         axios({
           method: "delete",
-          url: `/api/v1/meals/${self.meal_id}/residents/${
-            self.id
-          }`,
+          url: `/api/v1/meals/${self.meal_id}/residents/${self.id}`,
           data: {
             socket_id: window.Comeals.socketId,
           },
@@ -227,9 +223,7 @@ const Resident = types
 
       axios({
         method: "patch",
-        url: `/api/v1/meals/${self.meal_id}/residents/${
-          self.id
-        }`,
+        url: `/api/v1/meals/${self.meal_id}/residents/${self.id}`,
         data: {
           late: val,
           socket_id: window.Comeals.socketId,
@@ -253,9 +247,7 @@ const Resident = types
 
       axios({
         method: "patch",
-        url: `/api/v1/meals/${self.meal_id}/residents/${
-          self.id
-        }`,
+        url: `/api/v1/meals/${self.meal_id}/residents/${self.id}`,
         data: {
           vegetarian: val,
           socket_id: window.Comeals.socketId,
@@ -273,9 +265,7 @@ const Resident = types
 
       axios({
         method: "post",
-        url: `/api/v1/meals/${self.meal_id}/residents/${
-          self.id
-        }/guests`,
+        url: `/api/v1/meals/${self.meal_id}/residents/${self.id}/guests`,
         data: {
           socket_id: window.Comeals.socketId,
           vegetarian: options.vegetarian,

@@ -15,6 +15,12 @@ AllCops:
     - "node_modules/**/*"
     - "tmp/**/*"
 
+# --- Bundler ---
+# Gems are grouped with explanatory comments (e.g. above rack-attack, jwt).
+# Respect those groupings so autocorrect doesn't orphan the comments.
+Bundler/OrderedGems:
+  TreatCommentsAsGroupSeparators: true
+
 # --- RSpec ---
 # Financial tests need thorough, multi-assertion examples that validate
 # complete calculation chains. Artificially splitting them makes tests
