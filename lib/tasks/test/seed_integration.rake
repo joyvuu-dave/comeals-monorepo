@@ -194,7 +194,7 @@ namespace :test do
     # ------------------------------------------------------------------
     # OUTPUT
     # ------------------------------------------------------------------
-    token = jane.key.token
+    token = JwtAuth.encode(jane)
 
     puts ''
     puts 'Integration seed complete:'

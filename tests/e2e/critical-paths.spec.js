@@ -217,7 +217,7 @@ test.describe("Critical Paths", () => {
     await setupAuthenticatedPage(page, context);
 
     // Intercept Jane's resident endpoint (id=1) to capture the DELETE
-    await page.route("**/api/v1/meals/*/residents/1?*", (route) => {
+    await page.route("**/api/v1/meals/*/residents/1", (route) => {
       apiMethod = route.request().method();
       apiUrl = route.request().url();
       route.fulfill({ status: 200, body: "{}" });
