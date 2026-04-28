@@ -4,6 +4,8 @@ require 'rails_helper'
 require 'rake'
 
 RSpec.describe 'community:create_rotations' do
+  include ActiveSupport::Testing::TimeHelpers
+
   before(:all) do
     Rails.application.load_tasks
   end
@@ -51,20 +53,26 @@ RSpec.describe 'community:create_rotations' do
   end
 
   it 'creates meals that skip holidays' do
-    create(:resident, community: community, unit: unit)
+    # Pin "today" to a date that puts both holidays comfortably inside the
+    # 6-month window with adjacent meal-day Sundays still in the future.
+    # Without this, the test breaks once the calendar passes the last April
+    # Sunday (and again in any year where Easter falls on a different date).
+    travel_to(Date.new(2026, 1, 15)) do
+      create(:resident, community: community, unit: unit)
 
-    Rake::Task['community:create_rotations'].invoke
+      Rake::Task['community:create_rotations'].invoke
 
-    meal_dates = community.meals.pluck(:date)
-    # Easter 2026 is April 5 (Sunday) and Mother's Day 2026 is May 10 (Sunday).
-    # Both are permanent meal days (Sunday = day 0) and within the 6-month window.
-    # If the holiday check is removed, meals WOULD be created on these dates.
-    easter = Date.new(2026, 4, 5)
-    mothers_day = Date.new(2026, 5, 10)
-    expect(meal_dates).not_to include(easter)
-    expect(meal_dates).not_to include(mothers_day)
-    # Verify meals exist on adjacent Sundays so the check isn't vacuous
-    expect(meal_dates.any? { |d| d.sunday? && d.month == 4 }).to be true
-    expect(meal_dates.any? { |d| d.sunday? && d.month == 5 }).to be true
+      meal_dates = community.meals.pluck(:date)
+      # Easter 2026 is April 5 (Sunday) and Mother's Day 2026 is May 10 (Sunday).
+      # Both are permanent meal days (Sunday = day 0) and within the 6-month window.
+      # If the holiday check is removed, meals WOULD be created on these dates.
+      easter = Date.new(2026, 4, 5)
+      mothers_day = Date.new(2026, 5, 10)
+      expect(meal_dates).not_to include(easter)
+      expect(meal_dates).not_to include(mothers_day)
+      # Verify meals exist on adjacent Sundays so the check isn't vacuous
+      expect(meal_dates.any? { |d| d.sunday? && d.month == 4 }).to be true
+      expect(meal_dates.any? { |d| d.sunday? && d.month == 5 }).to be true
+    end
   end
 end
