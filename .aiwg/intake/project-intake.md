@@ -4,6 +4,8 @@
 **Generated**: 2026-04-11
 **Source**: Codebase analysis of `/Users/tejo/workspace/comeals-backend`
 
+> **Status update (2026-04-28)**: Since this intake was taken, the `comeals-backend` and `comeals-ui` repos have been consolidated into a single monorepo at `/Users/tejo/workspace/comeals-monorepo` (GitHub: `joyvuu-dave/comeals-monorepo`), deployed as one Heroku app (`comeals-monorepo`). References below to the two-repo / two-app layout describe the system at intake time and are preserved for the historical record. Current architecture is documented in `CLAUDE.md`.
+
 ---
 
 ## Metadata

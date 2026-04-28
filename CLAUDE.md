@@ -138,7 +138,7 @@ SETTLEMENT (reconciliation): Rounded to cents using largest-remainder allocation
 
 ## Heroku Deployment
 
-- **Single app** (`comeals-backend`) with two buildpacks: Node (index 1) → Ruby (index 2)
+- **Single app** (`comeals-monorepo`) with two buildpacks: Node (index 1) → Ruby (index 2)
 - Node buildpack: `npm install` → `npm run build` (Vite output to `public/`)
 - Ruby buildpack: `bundle install` → `rake assets:precompile` (Sprockets for ActiveAdmin)
 - Deploy: `bin/deploy` handles migration detection, backup, health checks
