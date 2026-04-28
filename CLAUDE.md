@@ -145,3 +145,17 @@ SETTLEMENT (reconciliation): Rounded to cents using largest-remainder allocation
 - **Rake tasks:**
   - `rake billing:recalculate` — run daily to refresh resident balances from source data
   - `rake reconciliations:create` — manual trigger to settle all unreconciled meals
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues at `joyvuu-dave/comeals-monorepo`, accessed via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Five canonical labels (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`) — defaults, no aliases. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` and `docs/adr/` at the repo root (created lazily by skills). See `docs/agents/domain.md`.
