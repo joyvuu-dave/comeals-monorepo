@@ -1,5 +1,5 @@
 import { types, getParent } from "mobx-state-tree";
-import axios from "axios";
+import { api } from "../helpers/api";
 import handleAxiosError from "../helpers/handle_axios_error";
 
 const Meal = types
@@ -54,19 +54,16 @@ const Meal = types
       if (val === null) {
         self.extras = null;
 
-        axios({
-          method: "patch",
-          url: `/api/v1/meals/${self.id}/max`,
-          data: {
+        api.meals
+          .updateMax(self.id, {
             max: null,
-            socket_id: window.Comeals.socketId,
-          },
-          withCredentials: true,
-        }).catch(function (error) {
-          self.extras = previousExtras;
-          handleAxiosError(error);
-          return previousExtras;
-        });
+            socketId: window.Comeals.socketId,
+          })
+          .catch(function (error) {
+            self.extras = previousExtras;
+            handleAxiosError(error);
+            return previousExtras;
+          });
 
         return;
       }
@@ -76,19 +73,16 @@ const Meal = types
       if (Number.isInteger(num) && num >= 0) {
         self.extras = num;
 
-        axios({
-          method: "patch",
-          url: `/api/v1/meals/${self.id}/max`,
-          data: {
+        api.meals
+          .updateMax(self.id, {
             max: self.max,
-            socket_id: window.Comeals.socketId,
-          },
-          withCredentials: true,
-        }).catch(function (error) {
-          self.extras = previousExtras;
-          handleAxiosError(error);
-          return previousExtras;
-        });
+            socketId: window.Comeals.socketId,
+          })
+          .catch(function (error) {
+            self.extras = previousExtras;
+            handleAxiosError(error);
+            return previousExtras;
+          });
       }
     },
     incrementExtras() {

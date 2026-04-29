@@ -58,3 +58,9 @@ latest.dump
 AIWG.md
 .aiwg/*
 !.aiwg/intake/
+
+# Working memory from the planning-with-files skill. Decisions worth keeping
+# live in docs/adr/; these files are local scratch only.
+/task_plan.md
+/findings.md
+/progress.md

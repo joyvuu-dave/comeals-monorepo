@@ -1,5 +1,5 @@
 import { types, getParent, isAlive } from "mobx-state-tree";
-import axios from "axios";
+import { api } from "../helpers/api";
 import handleAxiosError from "../helpers/handle_axios_error";
 
 const Resident = types
@@ -150,16 +150,12 @@ const Resident = types
 
       if (val) {
         self.form.form.meal.decrementExtras();
-        axios({
-          method: "post",
-          url: `/api/v1/meals/${self.meal_id}/residents/${self.id}`,
-          data: {
-            socket_id: window.Comeals.socketId,
+        api.meals.residents
+          .add(self.meal_id, self.id, {
             late: currentLate,
             vegetarian: currentVeg,
-          },
-          withCredentials: true,
-        })
+            socketId: window.Comeals.socketId,
+          })
           .then(function (response) {
             if (!isAlive(self)) return;
             if (response.status === 200) {
@@ -188,14 +184,10 @@ const Resident = types
         var previousLate = self.late;
         self.late = false;
         self.form.form.meal.incrementExtras();
-        axios({
-          method: "delete",
-          url: `/api/v1/meals/${self.meal_id}/residents/${self.id}`,
-          data: {
-            socket_id: window.Comeals.socketId,
-          },
-          withCredentials: true,
-        })
+        api.meals.residents
+          .remove(self.meal_id, self.id, {
+            socketId: window.Comeals.socketId,
+          })
           .then(function (response) {
             if (!isAlive(self)) return;
             if (response.status === 200) {
@@ -221,20 +213,17 @@ const Resident = types
       const val = !self.late;
       self.late = val;
 
-      axios({
-        method: "patch",
-        url: `/api/v1/meals/${self.meal_id}/residents/${self.id}`,
-        data: {
+      api.meals.residents
+        .update(self.meal_id, self.id, {
           late: val,
-          socket_id: window.Comeals.socketId,
-        },
-        withCredentials: true,
-      }).catch(function (error) {
-        if (!isAlive(self)) return;
-        self.setLate(!val);
+          socketId: window.Comeals.socketId,
+        })
+        .catch(function (error) {
+          if (!isAlive(self)) return;
+          self.setLate(!val);
 
-        handleAxiosError(error);
-      });
+          handleAxiosError(error);
+        });
     },
     toggleVeg() {
       if (self.attending === false) {
@@ -245,33 +234,26 @@ const Resident = types
       const val = !self.vegetarian;
       self.vegetarian = val;
 
-      axios({
-        method: "patch",
-        url: `/api/v1/meals/${self.meal_id}/residents/${self.id}`,
-        data: {
+      api.meals.residents
+        .update(self.meal_id, self.id, {
           vegetarian: val,
-          socket_id: window.Comeals.socketId,
-        },
-        withCredentials: true,
-      }).catch(function (error) {
-        if (!isAlive(self)) return;
-        self.setVeg(!val);
+          socketId: window.Comeals.socketId,
+        })
+        .catch(function (error) {
+          if (!isAlive(self)) return;
+          self.setVeg(!val);
 
-        handleAxiosError(error);
-      });
+          handleAxiosError(error);
+        });
     },
     addGuest(options = { vegetarian: false }) {
       self.form.form.meal.decrementExtras();
 
-      axios({
-        method: "post",
-        url: `/api/v1/meals/${self.meal_id}/residents/${self.id}/guests`,
-        data: {
-          socket_id: window.Comeals.socketId,
+      api.meals.residents.guests
+        .add(self.meal_id, self.id, {
           vegetarian: options.vegetarian,
-        },
-        withCredentials: true,
-      })
+          socketId: window.Comeals.socketId,
+        })
         .then(function (response) {
           if (!isAlive(self)) return;
           if (response.status === 200) {
@@ -304,16 +286,10 @@ const Resident = types
       // Grab Id of newest guest
       const guestId = sortedGuests[0].id;
 
-      axios({
-        method: "delete",
-        url: `/api/v1/meals/${self.meal_id}/residents/${
-          self.id
-        }/guests/${guestId}`,
-        data: {
-          socket_id: window.Comeals.socketId,
-        },
-        withCredentials: true,
-      })
+      api.meals.residents.guests
+        .remove(self.meal_id, self.id, guestId, {
+          socketId: window.Comeals.socketId,
+        })
         .then(function (response) {
           if (!isAlive(self)) return;
           if (response.status === 200) {

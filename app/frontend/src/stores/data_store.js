@@ -15,6 +15,7 @@ import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import handleAxiosError from "../helpers/handle_axios_error";
+import { api } from "../helpers/api";
 import { communityNow, toCommunityDayjs } from "../helpers/helpers";
 import { mark, logEvent } from "../helpers/nav_trace";
 import toastStore from "./toast_store";
@@ -315,15 +316,11 @@ export const DataStore = types
       const val = !self.meal.closed;
       self.meal.closed = val;
 
-      axios({
-        method: "patch",
-        url: `/api/v1/meals/${self.meal.id}/closed`,
-        withCredentials: true,
-        data: {
+      api.meals
+        .updateClosed(self.meal.id, {
           closed: val,
-          socket_id: window.Comeals.socketId,
-        },
-      })
+          socketId: window.Comeals.socketId,
+        })
         .then(function (response) {
           if (response.status === 200) {
             // If meal has been opened, re-set extras value
@@ -366,20 +363,14 @@ export const DataStore = types
       Cookie.remove("timezone", { path: "/" });
     },
     submitDescription() {
-      let obj = {
-        id: self.meal.id,
-        description: self.meal.description,
-        socket_id: window.Comeals.socketId,
-      };
-
-      axios({
-        method: "patch",
-        url: `/api/v1/meals/${self.meal.id}/description`,
-        data: obj,
-        withCredentials: true,
-      }).catch(function (error) {
-        handleAxiosError(error);
-      });
+      api.meals
+        .updateDescription(self.meal.id, {
+          description: self.meal.description,
+          socketId: window.Comeals.socketId,
+        })
+        .catch(function (error) {
+          handleAxiosError(error);
+        });
     },
     submitBills() {
       // Check for errors with bills
@@ -409,38 +400,32 @@ export const DataStore = types
         })
         .filter((bill) => bill.resident_id !== null);
 
-      let obj = {
-        id: self.meal.id,
-        bills: bills,
-        socket_id: window.Comeals.socketId,
-      };
+      api.meals
+        .updateBills(self.meal.id, {
+          bills,
+          socketId: window.Comeals.socketId,
+        })
+        .catch(function (error) {
+          var isWarning =
+            error.response &&
+            error.response.data &&
+            error.response.data.type === "warning";
+          if (isWarning) {
+            var msg = error.response.data.message || "";
+            toastStore.replaceAll(
+              "Cooks saved." + (msg ? " " + msg : ""),
+              "info",
+            );
+          } else {
+            handleAxiosError(error);
+          }
 
-      axios({
-        method: "patch",
-        url: `/api/v1/meals/${self.meal.id}/bills`,
-        data: obj,
-        withCredentials: true,
-      }).catch(function (error) {
-        var isWarning =
-          error.response &&
-          error.response.data &&
-          error.response.data.type === "warning";
-        if (isWarning) {
-          var msg = error.response.data.message || "";
-          toastStore.replaceAll(
-            "Cooks saved." + (msg ? " " + msg : ""),
-            "info",
-          );
-        } else {
-          handleAxiosError(error);
-        }
-
-        self.loadDataAsync();
-      });
+          self.loadDataAsync();
+        });
     },
     loadDataAsync() {
-      axios
-        .get(`/api/v1/meals/${self.meal.id}/cooks`)
+      api.meals
+        .getCooks(self.meal.id)
         .then(function (response) {
           if (response.status === 200) {
             localforage
@@ -561,8 +546,8 @@ export const DataStore = types
       });
     },
     loadNext() {
-      axios
-        .get(`/api/v1/meals/${self.meal.nextId}/cooks`)
+      api.meals
+        .getCooks(self.meal.nextId)
         .then(function (response) {
           if (response.status === 200) {
             localforage.setItem(response.data.id.toString(), response.data);
@@ -573,8 +558,8 @@ export const DataStore = types
         });
     },
     loadPrev() {
-      axios
-        .get(`/api/v1/meals/${self.meal.prevId}/cooks`)
+      api.meals
+        .getCooks(self.meal.prevId)
         .then(function (response) {
           if (response.status === 200) {
             localforage.setItem(response.data.id.toString(), response.data);
