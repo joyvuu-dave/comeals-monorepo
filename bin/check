@@ -180,15 +180,33 @@ check_prettier() {
   step "Prettier"
 
   local output exit_code=0
-  output=$(npx prettier --check "app/frontend/src/**/*.{js,jsx,css}" 2>&1) || exit_code=$?
+  output=$(npm run format:check 2>&1) || exit_code=$?
 
   if [ "$exit_code" -eq 0 ]; then
     pass "All files formatted"
     record "Prettier" "PASS" "all formatted"
   else
     fail "Formatting issues"
-    echo "$output" | grep -v '^Checking\|^$' | head -20
+    echo "$output" | grep '^\[warn\]' | grep -v 'Code style issues' | head -20
     record "Prettier" "FAIL" "formatting issues"
+  fi
+}
+
+check_typecheck() {
+  step "TypeScript"
+
+  local output exit_code=0
+  output=$(npm run typecheck 2>&1) || exit_code=$?
+
+  if [ "$exit_code" -eq 0 ]; then
+    pass "No type errors"
+    record "TypeScript" "PASS" "no type errors"
+  else
+    local count
+    count=$(echo "$output" | grep -cE 'error TS[0-9]+' || true)
+    fail "${count} type error(s)"
+    echo "$output" | grep -E 'error TS[0-9]+' | head -20
+    record "TypeScript" "FAIL" "${count} type error(s)"
   fi
 }
 
@@ -408,6 +426,7 @@ main() {
   check_rubocop
   check_brakeman
   check_eslint
+  check_typecheck
   check_prettier
 
   # Security

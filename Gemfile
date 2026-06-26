@@ -3,7 +3,7 @@
 source 'https://rubygems.org'
 git_source(:github) { |repo| "https://github.com/#{repo}.git" }
 
-ruby '4.0.3'
+ruby '4.0.5'
 
 # Individual Rails frameworks (instead of the `rails` meta-gem)
 # to avoid installing unused gems (actionmailbox, actioncable, activestorage, actiontext)

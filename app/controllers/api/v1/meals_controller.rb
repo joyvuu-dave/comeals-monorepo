@@ -154,7 +154,7 @@ module Api
         message_type = nil
 
         # Cooks
-        cook_ids = params[:bills].pluck('resident_id')
+        cook_ids = params[:bills].pluck('resident_id') # rubocop:disable Rails/StrongParametersExpect --:bills is an array param; params.expect(:bills) raises ParameterMissing on arrays
 
         duplicate = cook_ids.map(&:to_i).tally.find { |_, count| count > 1 }&.first
         if duplicate

@@ -105,7 +105,7 @@ module Api
 
       # GET api/v1/residents/:id/ical
       def ical # rubocop:disable Metrics/AbcSize, Metrics/MethodLength --iCal feed builds two event types from bills and meal_residents
-        resident = Resident.find(params[:id])
+        resident = Resident.find(params[:id]) # rubocop:disable Rails/StrongParametersExpect --routed :id is read directly, matching this codebase's bare params[] convention
 
         require 'icalendar/tzinfo'
         tzid = resident.community.timezone

@@ -34,7 +34,7 @@ RSpec.describe 'Admin reconciled immutability' do
       get "/bills/#{bill.id}/edit"
 
       expect(response).to redirect_to(admin_bill_path(bill))
-      expect(flash[:alert]).to match(/reconciled/)
+      expect(flash[:alert]).to include('reconciled')
     end
 
     it 'redirects update with an alert and does not change the amount' do
@@ -44,7 +44,7 @@ RSpec.describe 'Admin reconciled immutability' do
       patch "/bills/#{bill.id}", params: { bill: { amount: '999.99' } }
 
       expect(response).to redirect_to(admin_bill_path(bill))
-      expect(flash[:alert]).to match(/reconciled/)
+      expect(flash[:alert]).to include('reconciled')
       expect(bill.reload.amount).to eq(original_amount)
     end
 
@@ -53,7 +53,7 @@ RSpec.describe 'Admin reconciled immutability' do
 
       expect { delete "/bills/#{bill.id}" }.not_to change(Bill, :count)
       expect(response).to redirect_to(admin_bill_path(bill))
-      expect(flash[:alert]).to match(/reconciled/)
+      expect(flash[:alert]).to include('reconciled')
     end
   end
 
@@ -64,7 +64,7 @@ RSpec.describe 'Admin reconciled immutability' do
       get "/meals/#{meal.id}/edit"
 
       expect(response).to redirect_to(admin_meal_path(meal))
-      expect(flash[:alert]).to match(/reconciled/)
+      expect(flash[:alert]).to include('reconciled')
     end
 
     it 'redirects update with an alert and does not mutate the meal' do
@@ -73,7 +73,7 @@ RSpec.describe 'Admin reconciled immutability' do
       patch "/meals/#{meal.id}", params: { meal: { closed: '1', max: '99' } }
 
       expect(response).to redirect_to(admin_meal_path(meal))
-      expect(flash[:alert]).to match(/reconciled/)
+      expect(flash[:alert]).to include('reconciled')
       expect(meal.reload.max).to be_nil
       expect(meal.closed).to be false
     end

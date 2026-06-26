@@ -106,7 +106,7 @@ RSpec.describe 'Admin Reconciliation Update Meals' do
     update_meals(target, meal_ids: [meal_in_other.id])
 
     expect(response).to redirect_to("/reconciliations/#{target.id}")
-    expect(flash[:alert]).to match(/not eligible/)
+    expect(flash[:alert]).to include('not eligible')
     expect(meal_in_other.reload.reconciliation_id).to eq(other_recon.id)
   end
 
@@ -120,7 +120,7 @@ RSpec.describe 'Admin Reconciliation Update Meals' do
 
     update_meals(reconciliation, meal_ids: [too_late.id])
 
-    expect(flash[:alert]).to match(/not eligible/)
+    expect(flash[:alert]).to include('not eligible')
     expect(too_late.reload.reconciliation_id).to be_nil
   end
 
