@@ -100,10 +100,18 @@ every later session; they go first.
       still filter on `date <= end_date` only — safe for new rows (validation),
       but a legacy row with `end_date >= today` could still add tonight's meal
       there; fold the backstop in when reshaping those paths.
-- [ ] **Session 4 — #4: settled reconciliations are immutable in ActiveAdmin.**
+- [x] **Session 4 — #4: settled reconciliations are immutable in ActiveAdmin.**
       Freeze `end_date` after create; remove or replace `update_meals` with an
       append-only correction flow. Runs before Session 5 because it decides the
       fate of `update_meals`, which #8 would otherwise also patch.
+      Done 2026-07-06: `update_meals` removed entirely (corrections settle as
+      new entries via the next reconciliation); model-level `reject_update`
+      guard freezes the row; admin actions now index/show/new/create only, show
+      Meals panel is read-only (Session 3's eligible-meals backstop concern is
+      moot — the predicate is gone). Note for Session 5: `assign_meals` is the
+      only surviving assignment path. Adjacent finds filed as #18 (SPA GET
+      catch-all swallows unknown admin-subdomain paths) and #19 (admin request
+      specs only support one authenticated request per example).
 - [ ] **Session 5 — #8: assignment TOCTOU.** Re-assert
       `reconciliation_id: nil` in the `update_all` WHERE clause and raise on
       row-count mismatch, in every assignment path that survived Session 4.

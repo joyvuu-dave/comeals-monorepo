@@ -993,13 +993,39 @@ RSpec.describe Reconciliation do
     end
   end
 
-  describe 'auditing' do
-    it 'records an audit when end_date changes' do
+  describe '#update' do
+    it 'is blocked — settled reconciliations are immutable' do
       reconciliation = described_class.create!(community: community, end_date: Date.new(2025, 3, 31))
-      expect { reconciliation.update!(end_date: Date.new(2025, 4, 30)) }
-        .to change { reconciliation.audits.count }.by(1)
+
+      expect(reconciliation.update(end_date: Date.new(2025, 4, 30))).to be(false)
+      expect(reconciliation.errors[:base])
+        .to include('Reconciliations are settlement events and cannot be modified. ' \
+                    'Corrections settle as new entries in the next reconciliation.')
+      expect(reconciliation.reload.end_date).to eq(Date.new(2025, 3, 31))
+    end
+
+    it 'blocks update! with an exception and persists nothing' do
+      reconciliation = described_class.create!(community: community, end_date: Date.new(2025, 3, 31))
+
+      expect { reconciliation.update!(date: Date.new(2025, 4, 1)) }
+        .to raise_error(ActiveRecord::RecordNotSaved)
+      expect(reconciliation.reload.date).to eq(Time.zone.today)
+    end
+
+    it 'does not record an update audit for the blocked write' do
+      reconciliation = described_class.create!(community: community, end_date: Date.new(2025, 3, 31))
+
+      expect { reconciliation.update(end_date: Date.new(2025, 4, 30)) }
+        .not_to change(reconciliation.audits, :count)
+    end
+  end
+
+  describe 'auditing' do
+    it 'records an audit on create' do
+      reconciliation = described_class.create!(community: community, end_date: Date.new(2025, 3, 31))
 
       audit = reconciliation.audits.last
+      expect(audit.action).to eq('create')
       expect(audit.audited_changes).to have_key('end_date')
     end
   end

@@ -40,10 +40,22 @@ class Reconciliation < ApplicationRecord
 
   before_validation :set_date
   after_create :finalize
-  # Reconciliations are settlement events and must not be destroyed through
-  # normal application paths. If un-settlement is ever required, write a
-  # deliberate rake task that calls `delete` to bypass this guard.
+  # Reconciliations are append-only settlement events: once created (and cooks
+  # notified of their amounts), the row must never change or disappear through
+  # normal application paths. end_date is the invariant defining which meals
+  # were swept — editing it after the fact would make the stored cutoff
+  # contradict the meals actually settled. Corrections settle as new entries
+  # in the next reconciliation. If un-settlement is ever required, write a
+  # deliberate rake task that uses `delete` / `update_columns` to bypass
+  # these guards.
+  before_update :reject_update
   before_destroy :reject_destroy
+
+  def reject_update
+    errors.add(:base, 'Reconciliations are settlement events and cannot be modified. ' \
+                      'Corrections settle as new entries in the next reconciliation.')
+    throw(:abort)
+  end
 
   def reject_destroy
     errors.add(:base, 'Reconciliations are settlement events and cannot be destroyed.')
