@@ -261,6 +261,129 @@ RSpec.describe Reconciliation do
     end
   end
 
+  describe '#settlement_balances with fractional-cent credits' do
+    # Every other settlement spec produces whole-cent credits, so truncation
+    # leaves a non-negative residual and only the positive-residual branch of
+    # allocate_to_cents runs. A subsidized capped meal split proportionally
+    # between cooks produces fractional-cent CREDITS, driving the truncated
+    # sum negative and exercising the negative-residual branch.
+    it 'awards the residual penny to the most-positive remainder' do
+      capped_community = create(:community, cap: BigDecimal('5.00'))
+      capped_unit = create(:unit, community: capped_community)
+
+      cook_a = create(:resident, community: capped_community, unit: capped_unit, multiplier: 2)
+      cook_b = create(:resident, community: capped_community, unit: capped_unit, multiplier: 2)
+      eater = create(:resident, community: capped_community, unit: capped_unit, multiplier: 2)
+
+      meal = create(:meal, community: capped_community)
+      create(:meal_resident, meal: meal, resident: eater, community: capped_community)
+      create(:bill, meal: meal, resident: cook_a, community: capped_community, amount: BigDecimal('10'))
+      create(:bill, meal: meal, resident: cook_b, community: capped_community, amount: BigDecimal('20'))
+      meal.reload
+
+      # total_mult = 2, cap = 5.00 → max_cost = 10.00; total_cost = 30 → subsidized
+      # cook_a credit = (10/30) × 10 = 3.3333... → truncates to 3.33 (remainder ≈ 0.0033)
+      # cook_b credit = (20/30) × 10 = 6.6666... → truncates to 6.66 (remainder ≈ 0.0067)
+      # eater debit = 10.00 exactly (remainder 0)
+      # Truncated sum = 3.33 + 6.66 − 10.00 = −0.01 → the penny must go to the
+      # MOST-POSITIVE remainder: cook_b.
+      reconciliation = described_class.create!(
+        community: capped_community, end_date: Time.zone.today
+      )
+      balances = reconciliation.settlement_balances
+
+      expect(balances[cook_a.id]).to eq(BigDecimal('3.33'))
+      expect(balances[cook_b.id]).to eq(BigDecimal('6.67'))
+      expect(balances[eater.id]).to eq(BigDecimal('-10'))
+      expect(balances.values.sum(BigDecimal('0'))).to eq(BigDecimal('0'))
+    end
+
+    it 'breaks remainder ties by lowest resident_id when awarding pennies to credits' do
+      capped_community = create(:community, cap: BigDecimal('6.67'))
+      capped_unit = create(:unit, community: capped_community)
+
+      cook_a = create(:resident, community: capped_community, unit: capped_unit, multiplier: 2)
+      cook_b = create(:resident, community: capped_community, unit: capped_unit, multiplier: 2)
+      eater = create(:resident, community: capped_community, unit: capped_unit, multiplier: 1)
+
+      # The tie-break assertion below assigns the penny to cook_a because it
+      # has the lower id; guard that assumption explicitly.
+      expect(cook_a.id).to be < cook_b.id
+
+      meal = create(:meal, community: capped_community)
+      create(:meal_resident, meal: meal, resident: eater, community: capped_community)
+      create(:bill, meal: meal, resident: cook_a, community: capped_community, amount: BigDecimal('10'))
+      create(:bill, meal: meal, resident: cook_b, community: capped_community, amount: BigDecimal('10'))
+      meal.reload
+
+      # total_mult = 1, cap = 6.67 → max_cost = 6.67; total_cost = 20 → subsidized
+      # each cook credit = (10/20) × 6.67 = 3.335 → truncates to 3.33 (remainder 0.005 each)
+      # eater debit = 6.67 exactly (remainder 0)
+      # Truncated sum = 3.33 + 3.33 − 6.67 = −0.01 → remainders tie at 0.005 →
+      # the penny goes to the LOWEST resident_id: cook_a.
+      reconciliation = described_class.create!(
+        community: capped_community, end_date: Time.zone.today
+      )
+      balances = reconciliation.settlement_balances
+
+      expect(balances[cook_a.id]).to eq(BigDecimal('3.34'))
+      expect(balances[cook_b.id]).to eq(BigDecimal('3.33'))
+      expect(balances[eater.id]).to eq(BigDecimal('-6.67'))
+      expect(balances.values.sum(BigDecimal('0'))).to eq(BigDecimal('0'))
+    end
+  end
+
+  describe '#allocate_to_cents input validation' do
+    # These specs invoke the private method directly: the guards are
+    # defense-in-depth against future upstream bugs, and no public path today
+    # can produce unbalanced raw balances (per-meal credits and debits are
+    # structurally symmetric). See issue #16.
+    let(:reconciliation) { described_class.create!(community: community, end_date: Time.zone.today) }
+
+    it 'raises when raw balances carry a sub-cent imbalance instead of silently absorbing it' do
+      unbalanced = { 1 => BigDecimal('0.004') }
+
+      expect { reconciliation.send(:allocate_to_cents, unbalanced) }
+        .to raise_error(/do not sum to zero/)
+    end
+
+    it 'raises when raw balances carry a material imbalance instead of crashing on nil' do
+      unbalanced = { 1 => BigDecimal('0.10') }
+
+      expect { reconciliation.send(:allocate_to_cents, unbalanced) }
+        .to raise_error(/do not sum to zero/)
+    end
+
+    it 'fails loudly when residual pennies exhaust the deduction candidates' do
+      # The input guard above makes this path unreachable; loosen it to prove
+      # the second defensive layer raises descriptively instead of crashing
+      # with NoMethodError on a nil candidate.
+      stub_const('Reconciliation::ZERO_SUM_EPSILON', BigDecimal('1'))
+      unbalanced = { 1 => BigDecimal('0.055') }
+
+      expect { reconciliation.send(:allocate_to_cents, unbalanced) }
+        .to raise_error(/books do not balance/)
+    end
+
+    it 'fails loudly when residual pennies exhaust the award candidates' do
+      stub_const('Reconciliation::ZERO_SUM_EPSILON', BigDecimal('1'))
+      unbalanced = { 1 => BigDecimal('-0.055') }
+
+      expect { reconciliation.send(:allocate_to_cents, unbalanced) }
+        .to raise_error(/books do not balance/)
+    end
+
+    it 'tolerates BigDecimal-division noise far below a cent' do
+      # 10/3 split three ways: raw values sum to ~1e-20, not exactly zero.
+      third = BigDecimal('10') / BigDecimal('3')
+      noisy = { 1 => third, 2 => third, 3 => BigDecimal('-10') + third }
+
+      balances = reconciliation.send(:allocate_to_cents, noisy)
+
+      expect(balances.values.sum(BigDecimal('0'))).to eq(BigDecimal('0'))
+    end
+  end
+
   describe '#assign_meals as settlement sweep' do
     it 'sweeps all unreconciled meals on or before end_date' do
       cook = create(:resident, community: community, unit: unit, multiplier: 2)

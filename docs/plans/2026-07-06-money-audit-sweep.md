@@ -73,12 +73,18 @@ every later session; they go first.
       resident_spec + rake-task spec (settlement was already pinned). Note for
       later sessions: the `expect_cached_balances_to_match_oracle` helper in the
       correctness spec is reusable for new dataset cases.
-- [ ] **Session 2 — #14 + #16: allocate_to_cents negative-residual coverage,
+- [x] **Session 2 — #14 + #16: allocate_to_cents negative-residual coverage,
       then hardening.** First pin the untested branch (fractional-cent credits →
       penny lands on most-positive remainder, ties by lowest resident_id), then add
       the input zero-sum assertion and a descriptive candidate-exhaustion error.
       Batched because both touch the same method, and #14's pinning tests must
       exist before #16 modifies it.
+      Done 2026-07-06: negative-residual branch pinned via subsidized multi-cook
+      capped meals (both pins verified against sort-direction/tie-break mutants);
+      `assert_balanced_input!` (epsilon `ZERO_SUM_EPSILON = 1e-6`) and
+      `assert_candidates_cover_pennies!` guards added. Note for later sessions:
+      exhaustion specs loosen the input guard via `stub_const` — provably
+      unreachable otherwise.
 
 ### Phase 2 — Reconciliation lifecycle
 

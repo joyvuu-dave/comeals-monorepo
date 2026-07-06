@@ -16,6 +16,12 @@
 #  fk_rails_...  (community_id => communities.id)
 #
 class Reconciliation < ApplicationRecord
+  # Raw balances are computed with BigDecimal division carrying ~20+
+  # significant digits, so a balanced input sums to within ~1e-15 of zero even
+  # across thousands of meals. Any genuine upstream imbalance manifests at a
+  # fraction of a cent or more — orders of magnitude above this epsilon.
+  ZERO_SUM_EPSILON = BigDecimal('0.000001')
+
   # Ransack allowlists for ActiveAdmin sorting
   def self.ransackable_attributes(_auth_object = nil)
     %w[id community_id date end_date created_at updated_at]
@@ -226,6 +232,8 @@ class Reconciliation < ApplicationRecord
   # 3. Award residual pennies to entries whose truncation discarded the most,
   #    tie-breaking by lowest resident_id for deterministic, auditable results.
   def allocate_to_cents(raw_balances)
+    assert_balanced_input!(raw_balances)
+
     one_cent = BigDecimal('0.01')
 
     truncated = {}
@@ -243,13 +251,41 @@ class Reconciliation < ApplicationRecord
       # Sum too positive — subtract pennies from entries with most-negative remainders
       # (those entries benefited most from truncation toward zero).
       candidates = remainders.select { |_, r| r.negative? }.sort_by { |id, r| [r, id] }
+      assert_candidates_cover_pennies!(candidates, pennies)
       pennies.times { |i| truncated[candidates[i][0]] -= one_cent }
     elsif pennies.negative?
       # Sum too negative — add pennies to entries with most-positive remainders.
       candidates = remainders.select { |_, r| r.positive? }.sort_by { |id, r| [-r, id] }
+      assert_candidates_cover_pennies!(candidates, pennies.abs)
       pennies.abs.times { |i| truncated[candidates[i][0]] += one_cent }
     end
 
     truncated
+  end
+
+  # First defensive layer: the largest-remainder allocation is only meaningful
+  # when the input already balances. A materially nonzero input sum means an
+  # upstream bug — allocating anyway would silently spread the imbalance
+  # across residents' settled amounts.
+  def assert_balanced_input!(raw_balances)
+    input_sum = raw_balances.values.sum(BigDecimal('0'))
+    return if input_sum.abs <= ZERO_SUM_EPSILON
+
+    raise "allocate_to_cents: raw balances do not sum to zero for reconciliation #{id}. " \
+          "Sum: #{input_sum.to_s('F')}. This indicates an upstream bug in balance computation; " \
+          'allocating pennies would silently redistribute the imbalance onto residents.'
+  end
+
+  # Second defensive layer behind the zero-sum input guard: if the residual
+  # ever needs more pennies than there are fractional remainders to absorb
+  # them, the books cannot balance — fail with a diagnostic instead of
+  # indexing past the end of the candidate list.
+  def assert_candidates_cover_pennies!(candidates, pennies_needed)
+    return if pennies_needed <= candidates.size
+
+    raise "allocate_to_cents: books do not balance for reconciliation #{id}. " \
+          "#{pennies_needed} residual #{'penny'.pluralize(pennies_needed)} to allocate " \
+          "but only #{candidates.size} fractional #{'remainder'.pluralize(candidates.size)} available. " \
+          'This indicates an upstream bug in balance computation.'
   end
 end
