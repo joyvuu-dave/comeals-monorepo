@@ -46,7 +46,7 @@ That's the deliberate trade — ~50% of TS's safety for ~10% of the cost.
 
 **Operational rules:**
 
-- When a Rails serializer changes, the matching interface in `types/api.ts` must change in the same PR. This is the discipline that makes the boundary worth typing.
+- When a Rails serializer changes, the matching interface in `types/api.ts` must change in the same PR. This is enforced mechanically, not by discipline: `spec/serializers/api_contract_spec.rb` (Rails side) and `tests/unit/api_contract.test.ts` (TS side, plus a compile-time manifest check) both assert against `tests/fixtures/api_contract.json`, so drift on either side fails `bin/check`. Changing a serializer's fields means updating the fixture, which forces the interface update — and vice versa.
 - `MoneyString` values are parsed (`new BigNumber(...)` or similar) at the point of use, never coerced with `+` or `Number(...)`.
 - Do not flip `checkJs` on globally. If a specific `.js` file is worth checking, opt it in with a `// @ts-check` header.
 

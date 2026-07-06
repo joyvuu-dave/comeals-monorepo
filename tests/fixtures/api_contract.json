@@ -1,0 +1,31 @@
+{
+  "Guest": ["created_at", "id", "meal_id", "resident_id", "vegetarian"],
+  "MealForm": [
+    "bills",
+    "closed",
+    "closed_at",
+    "date",
+    "description",
+    "guests",
+    "id",
+    "max",
+    "next_id",
+    "prev_id",
+    "reconciled",
+    "residents"
+  ],
+  "MealFormBill": ["amount", "no_cost", "resident_id"],
+  "MealFormGuest": ["created_at", "id", "meal_id", "resident_id", "vegetarian"],
+  "MealFormResident": [
+    "active",
+    "attending",
+    "attending_at",
+    "can_cook",
+    "id",
+    "late",
+    "meal_id",
+    "name",
+    "vegetarian"
+  ],
+  "MealResident": ["created_at", "id", "late", "meal_id", "resident_id", "vegetarian"]
+}
