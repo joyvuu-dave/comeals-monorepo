@@ -132,7 +132,7 @@ class Resident < ApplicationRecord
     bill_reimbursements - meal_resident_costs - guest_costs
   end
 
-  def bill_reimbursements
+  def bill_reimbursements # rubocop:disable Metrics/PerceivedComplexity -- mirrors the settlement credit calculation; intentionally kept as a single auditable method
     relevant_bills = bills.joins(:meal).merge(Meal.unreconciled.with_attendees)
                           .where(no_cost: false)
                           .preload(meal: %i[bills meal_residents guests])
@@ -142,9 +142,15 @@ class Resident < ApplicationRecord
       total_cost = meal.bills.reject(&:no_cost).sum(BigDecimal('0'), &:amount)
       next BigDecimal('0') if total_cost.zero?
 
+      total_mult = meal.meal_residents.sum(&:multiplier) + meal.guests.sum(&:multiplier)
+      # Zero total multiplier (child-only meal): nobody can be charged a
+      # share, so the cook absorbs the cost and gets no credit. Mirrors the
+      # total_mult.zero? branch in billing:recalculate and
+      # Reconciliation#settlement_balances.
+      next BigDecimal('0') if total_mult.zero?
+
       next bill.amount unless meal.capped?
 
-      total_mult = meal.meal_residents.sum(&:multiplier) + meal.guests.sum(&:multiplier)
       max_cost = meal.cap * total_mult
       if total_cost > max_cost
         (bill.amount / total_cost) * max_cost

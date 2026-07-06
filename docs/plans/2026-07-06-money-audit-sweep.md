@@ -60,13 +60,19 @@ Start each fresh session with exactly this, unchanged, until done:
 The correctness oracle and settlement-rounding tests are the safety net for
 every later session; they go first.
 
-- [ ] **Session 1 — #12 + #13: billing correctness spec into the default run;
+- [x] **Session 1 — #12 + #13: billing correctness spec into the default run;
       fix the zero-multiplier oracle divergence.** Split the `:benchmark`-tagged
       correctness spec so a small deterministic dataset (capped / multi-cook /
       no_cost / guests) runs in every `rspec` invocation; add the
       `total_mult.zero?` short-circuit to `Resident#bill_reimbursements`; pin
       child-only meals across oracle, rake task, and settlement. Batched because
       #13 adds cases to the exact spec #12 restructures.
+      Done 2026-07-06: oracle short-circuit added; deterministic oracle-vs-task
+      comparison (plus hand-computed balances) now runs in the default suite,
+      randomized dataset stays `:benchmark`; child-only case pinned in
+      resident_spec + rake-task spec (settlement was already pinned). Note for
+      later sessions: the `expect_cached_balances_to_match_oracle` helper in the
+      correctness spec is reusable for new dataset cases.
 - [ ] **Session 2 — #14 + #16: allocate_to_cents negative-residual coverage,
       then hardening.** First pin the untested branch (fractional-cent credits →
       penny lands on most-positive remainder, ties by lowest resident_id), then add

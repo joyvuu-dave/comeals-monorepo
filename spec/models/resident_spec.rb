@@ -449,6 +449,23 @@ RSpec.describe Resident do
       expect(eater.calc_balance).to eq(BigDecimal('-10'))
     end
 
+    it 'credits the cook nothing for a child-only meal (zero total multiplier)' do
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      baby = create(:resident, community: community, unit: unit, multiplier: 0)
+      meal = create(:meal, community: community)
+
+      create(:meal_resident, meal: meal, resident: baby, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('25'))
+      meal.reload
+
+      # total_mult = 0 → nobody can be charged a share, so the cook absorbs
+      # the cost and is not reimbursed. Must match billing:recalculate and
+      # Reconciliation#settlement_balances, which zero the meal on
+      # total_mult.zero?. Books balance: everyone at 0.
+      expect(cook.calc_balance).to eq(BigDecimal('0'))
+      expect(baby.calc_balance).to eq(BigDecimal('0'))
+    end
+
     it 'balances sum to zero with multiple cooks and attendees' do
       cook_a = create(:resident, community: community, unit: unit, multiplier: 2)
       cook_b = create(:resident, community: community, unit: unit, multiplier: 2)

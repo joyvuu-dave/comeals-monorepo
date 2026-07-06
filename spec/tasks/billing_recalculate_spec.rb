@@ -59,6 +59,24 @@ RSpec.describe 'billing:recalculate' do
     expect(balance.amount).to eq(BigDecimal('0'))
   end
 
+  it 'zeroes a child-only meal (zero total multiplier): cook absorbs the cost' do
+    cook = create(:resident, community: community, unit: unit, multiplier: 2)
+    baby = create(:resident, community: community, unit: unit, multiplier: 0)
+    meal = create(:meal, community: community)
+
+    create(:meal_resident, meal: meal, resident: baby, community: community)
+    create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('25'))
+    meal.reload
+
+    Rake::Task['billing:recalculate'].invoke
+
+    # Nobody has a chargeable share, so the cook is not reimbursed and the
+    # books stay balanced at zero. Must match Resident#calc_balance and
+    # Reconciliation#settlement_balances on the same data.
+    expect(ResidentBalance.find_by(resident: cook).amount).to eq(BigDecimal('0'))
+    expect(ResidentBalance.find_by(resident: baby).amount).to eq(BigDecimal('0'))
+  end
+
   it 'handles residents with no meals gracefully' do
     resident = create(:resident, community: community, unit: unit)
 
