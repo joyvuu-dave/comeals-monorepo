@@ -193,6 +193,34 @@ RSpec.describe Bill do
       expect(bill.save).to be true
       expect(bill.reload.amount).to eq(BigDecimal('75'))
     end
+
+    it 'blocks re-parenting a bill out of a reconciled meal' do
+      meal = create(:meal, community: community)
+      resident = create(:resident, community: community, unit: unit)
+      bill = create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('50'))
+      meal.update!(reconciliation: create(:reconciliation, community: community))
+      unreconciled_meal = create(:meal, community: community)
+
+      # The meal association now points at the NEW (unreconciled) meal — the
+      # guard must still see that the OLD meal's ledger is closed.
+      bill.meal = unreconciled_meal
+      expect(bill.save).to be false
+      expect(bill.errors[:base]).to include('Meal has been reconciled.')
+      expect(bill.reload.meal_id).to eq(meal.id)
+    end
+
+    it 'blocks re-parenting a bill onto a reconciled meal' do
+      meal = create(:meal, community: community)
+      resident = create(:resident, community: community, unit: unit)
+      bill = create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('50'))
+      reconciled_meal = create(:meal, community: community)
+      reconciled_meal.update!(reconciliation: create(:reconciliation, community: community))
+
+      bill.meal = reconciled_meal
+      expect(bill.save).to be false
+      expect(bill.errors[:base]).to include('Meal has been reconciled.')
+      expect(bill.reload.meal_id).to eq(meal.id)
+    end
   end
 
   describe '#capped_amount' do

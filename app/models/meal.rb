@@ -40,6 +40,16 @@ class Meal < ApplicationRecord
   ALTERNATING_DAYS = [1, 2].freeze
   TEMPLATE_WDAYS = [0, 4].freeze
 
+  # Attributes frozen once the meal is reconciled. Bills and attendance rows
+  # carry their own reconciled guards; this protects the meal row itself.
+  # cap feeds max_cost, so editing it would rewrite settled charges; date
+  # fixes which settlement period the meal belongs to; reconciliation_id is
+  # the pointer to the settlement itself (no re-pointing, no un-reconciling).
+  # community_id is deliberately absent: Community is a DB-enforced singleton
+  # (unique singleton_guard), so there is no other community to move to and
+  # belongs_to already rejects nonexistent ids before before_save runs.
+  FROZEN_WHEN_RECONCILED = %w[cap date reconciliation_id].freeze
+
   audited
   has_associated_audits
 
@@ -86,9 +96,14 @@ class Meal < ApplicationRecord
 
   validates :date, uniqueness: true
 
+  # Reconciled meals are immutable (accounting principle: no edits to a closed
+  # ledger). Settlement inputs are frozen; an unreconciled meal can still be
+  # reconciled (reconciliation_id nil -> id happens via update_all anyway).
+  before_save :reject_frozen_changes_if_reconciled
   before_save :conditionally_set_max
   before_save :conditionally_set_closed_at
   before_create :set_cap
+  before_destroy :reject_destroy_if_reconciled
 
   accepts_nested_attributes_for :guests, allow_destroy: true, reject_if: proc { |attributes|
     attributes['resident_id'].blank?
@@ -210,6 +225,28 @@ class Meal < ApplicationRecord
 
   def reconciled?
     reconciliation_id.present?
+  end
+
+  # Guards the meal row itself once settled. Checks the DATABASE value of
+  # reconciliation_id, not the in-memory one, so reconciling an unreconciled
+  # meal (nil -> id) stays legal at the model layer.
+  def reject_frozen_changes_if_reconciled
+    return if reconciliation_id_in_database.nil?
+
+    frozen = changes_to_save.keys & FROZEN_WHEN_RECONCILED
+    return if frozen.empty?
+
+    errors.add(:base, "Meal has been reconciled. #{frozen.to_sentence} cannot change.")
+    throw(:abort)
+  end
+
+  # Destroying a settled meal would erase settled source data (and cascade
+  # into its bills and attendance rows). Corrections happen as new entries.
+  def reject_destroy_if_reconciled
+    return unless reconciled?
+
+    errors.add(:base, 'Meal has been reconciled.')
+    throw(:abort)
   end
 
   def total_audits

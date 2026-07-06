@@ -250,5 +250,29 @@ RSpec.describe MealResident do
       expect(mr.save).to be true
       expect(mr.reload.late).to be true
     end
+
+    it 'blocks re-parenting an attendance row out of a reconciled meal' do
+      mr = create(:meal_resident, meal: meal, resident: resident, community: community)
+      meal.update!(reconciliation: create(:reconciliation, community: community))
+      unreconciled_meal = create(:meal, community: community)
+
+      # The meal association now points at the NEW (unreconciled) meal — the
+      # guard must still see that the OLD meal's ledger is closed.
+      mr.meal = unreconciled_meal
+      expect(mr.save).to be false
+      expect(mr.errors[:base]).to include('Meal has been reconciled.')
+      expect(mr.reload.meal_id).to eq(meal.id)
+    end
+
+    it 'blocks re-parenting an attendance row onto a reconciled meal' do
+      mr = create(:meal_resident, meal: meal, resident: resident, community: community)
+      reconciled_meal = create(:meal, community: community)
+      reconciled_meal.update!(reconciliation: create(:reconciliation, community: community))
+
+      mr.meal = reconciled_meal
+      expect(mr.save).to be false
+      expect(mr.errors[:base]).to include('Meal has been reconciled.')
+      expect(mr.reload.meal_id).to eq(meal.id)
+    end
   end
 end

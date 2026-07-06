@@ -30,22 +30,14 @@ class Guest < ApplicationRecord
 
   audited associated_with: :meal
 
+  # A guest can't be added, altered, or removed after settlement.
+  include ReconciledMealImmutability
+
   validates :multiplier, numericality: { only_integer: true }
   validate :meal_has_open_spots, on: :create
-  # Reconciled meals are immutable. Blocks create, update, and destroy —
-  # ensures a guest can't be added, altered, or removed after settlement.
-  before_save :reject_if_reconciled
-  before_destroy :reject_if_reconciled
 
   def meal_has_open_spots
     errors.add(:base, 'Meal has no open spots.') unless meal.max.nil? || meal.attendees_count < meal.max
-  end
-
-  def reject_if_reconciled
-    return unless meal.reconciled?
-
-    errors.add(:base, 'Meal has been reconciled.')
-    throw(:abort)
   end
 
   def cost

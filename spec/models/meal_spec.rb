@@ -480,6 +480,85 @@ RSpec.describe Meal do
     end
   end
 
+  describe 'reconciled immutability (settlement inputs frozen)' do
+    it 'blocks changing cap once reconciled' do
+      capped_community = create(:community, cap: BigDecimal('2.50'))
+      meal = create(:meal, community: capped_community)
+      meal.update!(reconciliation: create(:reconciliation, community: capped_community))
+
+      meal.cap = BigDecimal('1')
+      expect(meal.save).to be false
+      expect(meal.errors[:base]).to include('Meal has been reconciled. cap cannot change.')
+      expect(meal.reload.cap).to eq(BigDecimal('2.50'))
+    end
+
+    it 'blocks changing date once reconciled' do
+      meal = create(:meal, community: community)
+      original_date = meal.date
+      meal.update!(reconciliation: create(:reconciliation, community: community))
+
+      meal.date = original_date - 1.day
+      expect(meal.save).to be false
+      expect(meal.errors[:base]).to include('Meal has been reconciled. date cannot change.')
+      expect(meal.reload.date).to eq(original_date)
+    end
+
+    it 'blocks re-pointing a settled meal at a different reconciliation' do
+      meal = create(:meal, community: community)
+      reconciliation = create(:reconciliation, community: community)
+      meal.update!(reconciliation: reconciliation)
+      other = create(:reconciliation, community: community, end_date: Date.yesterday - 1.day)
+
+      meal.reconciliation = other
+      expect(meal.save).to be false
+      expect(meal.errors[:base]).to include('Meal has been reconciled. reconciliation_id cannot change.')
+      expect(meal.reload.reconciliation_id).to eq(reconciliation.id)
+    end
+
+    it 'blocks un-reconciling a settled meal' do
+      meal = create(:meal, community: community)
+      reconciliation = create(:reconciliation, community: community)
+      meal.update!(reconciliation: reconciliation)
+
+      meal.reconciliation = nil
+      expect(meal.save).to be false
+      expect(meal.reload.reconciliation_id).to eq(reconciliation.id)
+    end
+
+    it 'blocks destroying a reconciled meal' do
+      meal = create(:meal, community: community)
+      meal.update!(reconciliation: create(:reconciliation, community: community))
+
+      expect { meal.destroy }.not_to change(described_class, :count)
+      expect(meal.errors[:base]).to include('Meal has been reconciled.')
+    end
+
+    it 'still allows editing non-settlement fields once reconciled' do
+      meal = create(:meal, community: community)
+      meal.update!(reconciliation: create(:reconciliation, community: community))
+
+      meal.description = 'Corrected menu notes'
+      expect(meal.save).to be true
+      expect(meal.reload.description).to eq('Corrected menu notes')
+    end
+
+    it 'still allows reconciling an unreconciled meal (nil -> id)' do
+      meal = create(:meal, community: community)
+      reconciliation = create(:reconciliation, community: community)
+
+      expect(meal.update(reconciliation: reconciliation)).to be true
+      expect(meal.reload.reconciliation_id).to eq(reconciliation.id)
+    end
+
+    it 'still allows editing and destroying an unreconciled meal' do
+      meal = create(:meal, community: community)
+
+      meal.date = meal.date - 1.day
+      expect(meal.save).to be true
+      expect { meal.destroy }.to change(described_class, :count).by(-1)
+    end
+  end
+
   # ---------------------------------------------------------------------------
   # Scopes
   # ---------------------------------------------------------------------------

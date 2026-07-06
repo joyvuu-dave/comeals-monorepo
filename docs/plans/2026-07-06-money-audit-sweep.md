@@ -128,9 +128,19 @@ every later session; they go first.
 All four code sessions overlap in `meal.rb`, the guard models, and
 `meals_controller.rb` — order matters and each builds on the last.
 
-- [ ] **Session 6 — #9: model-layer immutability holes.** Re-parenting guard
+- [x] **Session 6 — #9: model-layer immutability holes.** Re-parenting guard
       must check the OLD meal (`meal_id_was`); add a Meal-level guard freezing
       settlement inputs (`cap`, `date`, …) once reconciled.
+      Done 2026-07-06: re-parenting now blocked in both directions via shared
+      `ReconciledMealImmutability` concern (Bill/MealResident/Guest — checks
+      `meal_id_in_database`'s meal too); Meal freezes `cap`, `date`,
+      `reconciliation_id` (`FROZEN_WHEN_RECONCILED`) and blocks destroy once
+      reconciled; non-settlement fields (description/closed/max) stay editable
+      and nil→id reconciling stays legal. `community_id` deliberately not
+      frozen — Community is a DB-enforced singleton, so no second community
+      can exist to move to. Note for Sessions 7–9: the concern is the single
+      guard source now; controller-level checks should mirror it, not
+      reimplement it.
 - [ ] **Session 7 — #5: guest writes on closed meals.** Give Guest the same
       closed-meal create/destroy guards as MealResident, mirrored in the
       controller.

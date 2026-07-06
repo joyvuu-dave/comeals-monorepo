@@ -142,5 +142,29 @@ RSpec.describe Guest do
       expect(guest.save).to be true
       expect(guest.reload.vegetarian).to be true
     end
+
+    it 'blocks re-parenting a guest out of a reconciled meal' do
+      guest = create(:guest, meal: meal, resident: resident)
+      meal.update!(reconciliation: create(:reconciliation, community: community))
+      unreconciled_meal = create(:meal, community: community)
+
+      # The meal association now points at the NEW (unreconciled) meal — the
+      # guard must still see that the OLD meal's ledger is closed.
+      guest.meal = unreconciled_meal
+      expect(guest.save).to be false
+      expect(guest.errors[:base]).to include('Meal has been reconciled.')
+      expect(guest.reload.meal_id).to eq(meal.id)
+    end
+
+    it 'blocks re-parenting a guest onto a reconciled meal' do
+      guest = create(:guest, meal: meal, resident: resident)
+      reconciled_meal = create(:meal, community: community)
+      reconciled_meal.update!(reconciliation: create(:reconciliation, community: community))
+
+      guest.meal = reconciled_meal
+      expect(guest.save).to be false
+      expect(guest.errors[:base]).to include('Meal has been reconciled.')
+      expect(guest.reload.meal_id).to eq(meal.id)
+    end
   end
 end
