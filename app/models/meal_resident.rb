@@ -36,44 +36,16 @@ class MealResident < ApplicationRecord
 
   # No new attendees, no toggling late/vegetarian, no removals once reconciled.
   include ReconciledMealImmutability
+  # Nor signups on or removals from a closed (but unsettled) meal, beyond the
+  # host's explicit extras. Included after ReconciledMealImmutability so the
+  # reconciled check runs first.
+  include ClosedMealAttendanceFreeze
 
   before_validation :set_multiplier, on: :create
   before_validation :set_community_id
 
   validates :meal_id, uniqueness: { scope: :resident_id }
   validates :multiplier, numericality: { only_integer: true }
-  validate :meal_has_open_spots, on: :create
-  before_destroy :record_can_be_removed
-
-  def meal_has_open_spots
-    # Scenario: Meal is open
-    return true if meal.closed == false
-
-    # Scenario: Meal is closed, max has been set, there are open spots
-    return true if meal.closed == true && meal.max.present? && meal.attendees_count < meal.max
-
-    # Scenario: Meal is closed and, max has NOT been set
-    errors.add(:base, 'Meal has been closed.') if meal.closed == true && meal.max.nil?
-
-    # Scenario: Meal is closed, max has been set, there are NOT open spots
-    return unless meal.closed == true && meal.max.present? && meal.attendees_count >= meal.max
-
-    errors.add(:base,
-               'Meal has no open spots.')
-  end
-
-  def record_can_be_removed
-    # Reconciled check is handled by reject_if_reconciled (runs first).
-    # Scenario: Meal is open
-    return true if meal.closed == false
-
-    # Scenario: Meal is closed, resident signed up after meal was closed (there were extras)
-    return true if meal.closed == true && meal.closed_at.present? && created_at > meal.closed_at
-
-    # Scenario: Meal is closed, resident signed up before meal was closed
-    errors.add(:base, 'Meal has been closed.')
-    throw(:abort)
-  end
 
   def set_multiplier
     self.multiplier = resident&.multiplier

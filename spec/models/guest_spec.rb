@@ -53,8 +53,8 @@ RSpec.describe Guest do
   end
 
   describe '#meal_has_open_spots' do
-    it 'allows guest when max is nil' do
-      meal.update_columns(max: nil)
+    it 'allows guest when meal is open' do
+      meal.update_columns(closed: false, max: nil)
 
       guest = described_class.new(meal: meal, resident: resident)
       guest.valid?
@@ -62,8 +62,17 @@ RSpec.describe Guest do
       expect(guest.errors[:base]).to be_empty
     end
 
-    it 'allows guest when max is set and spots are available' do
-      meal.update_columns(max: 10)
+    it 'rejects guest when meal is closed without max' do
+      meal.update_columns(closed: true, closed_at: 1.hour.ago, max: nil)
+
+      guest = described_class.new(meal: meal, resident: resident)
+      guest.valid?
+
+      expect(guest.errors[:base]).to include('Meal has been closed.')
+    end
+
+    it 'allows guest when meal is closed with max set and spots available' do
+      meal.update_columns(closed: true, closed_at: 1.hour.ago, max: 10)
 
       guest = described_class.new(meal: meal, resident: resident)
       guest.valid?
@@ -71,14 +80,14 @@ RSpec.describe Guest do
       expect(guest.errors[:base]).to be_empty
     end
 
-    it 'errors when max is set and no spots are available' do
+    it 'errors when meal is closed with max set and no spots available' do
       # Create 2 attendees to fill the meal
       other_unit = create(:unit, community: community)
       filler_1 = create(:resident, community: community, unit: other_unit, multiplier: 2)
       filler_2 = create(:resident, community: community, unit: other_unit, multiplier: 2)
       create(:meal_resident, meal: meal, resident: filler_1, community: community)
       create(:guest, meal: meal, resident: filler_2, multiplier: 2)
-      meal.update_columns(max: 2)
+      meal.update_columns(closed: true, closed_at: 1.hour.ago, max: 2)
 
       guest = described_class.new(meal: meal, resident: resident)
       guest.valid?
@@ -86,12 +95,12 @@ RSpec.describe Guest do
       expect(guest.errors[:base]).to include('Meal has no open spots.')
     end
 
-    it 'allows updating an existing guest when meal is at capacity' do
+    it 'allows updating an existing guest when meal is closed at capacity' do
       other_unit = create(:unit, community: community)
       filler = create(:resident, community: community, unit: other_unit, multiplier: 2)
       create(:meal_resident, meal: meal, resident: filler, community: community)
       guest = create(:guest, meal: meal, resident: resident, multiplier: 2, vegetarian: false)
-      meal.update_columns(max: 2)
+      meal.update_columns(closed: true, closed_at: 1.hour.ago, max: 2)
       meal.reload
 
       guest.vegetarian = true
@@ -101,6 +110,31 @@ RSpec.describe Guest do
   end
 
   describe '#destroy' do
+    it 'blocks removal when guest was added before meal was closed' do
+      guest = create(:guest, meal: meal, resident: resident)
+      meal.update_columns(closed: true, closed_at: DateTime.now + 1.hour)
+
+      expect { guest.destroy }.not_to change(described_class, :count)
+      expect(guest.errors[:base]).to include('Meal has been closed.')
+    end
+
+    it 'allows removal when guest was added after meal was closed' do
+      meal.update_columns(closed: true, closed_at: 1.hour.ago, max: 5)
+      guest = create(:guest, meal: meal, resident: resident)
+
+      expect { guest.destroy }.to change(described_class, :count).by(-1)
+    end
+
+    # Regression guard: closed meal with nil closed_at (possible via direct DB
+    # writes) must fail closed, not open.
+    it 'blocks removal gracefully when closed_at is nil on a closed meal' do
+      guest = create(:guest, meal: meal, resident: resident)
+      meal.update_columns(closed: true, closed_at: nil)
+
+      expect { guest.destroy }.not_to change(described_class, :count)
+      expect(guest.errors[:base]).to include('Meal has been closed.')
+    end
+
     it 'blocks destruction when meal is reconciled' do
       guest = create(:guest, meal: meal, resident: resident)
       meal.update!(reconciliation: create(:reconciliation, community: community))

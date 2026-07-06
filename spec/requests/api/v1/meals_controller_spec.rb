@@ -327,6 +327,19 @@ RSpec.describe 'Meals API' do
       expect(meal.guests.first.vegetarian).to be(true)
     end
 
+    it 'rejects guest when meal is closed without max' do
+      meal.update!(closed: true)
+
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests", params: {
+        token: token,
+        vegetarian: false
+      }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to include('Meal has been closed.')
+      expect(meal.guests.count).to eq(0)
+    end
+
     it 'rejects guest when meal is at max capacity' do
       other = create(:resident, community: community, unit: unit, multiplier: 2)
       create(:meal_resident, meal: meal, resident: other, community: community)
@@ -365,6 +378,33 @@ RSpec.describe 'Meals API' do
       }
 
       expect(response).to have_http_status(:not_found)
+    end
+
+    # Issue #5 failure scenario: removing a guest after the meal closed
+    # shifts every other attendee's charge. The API must reject it.
+    it 'blocks removal from a closed meal when guest was added before closing' do
+      guest = create(:guest, meal: meal, resident: resident)
+      meal.update!(closed: true)
+
+      delete "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests/#{guest.id}", params: {
+        token: token
+      }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to include('Meal has been closed.')
+      expect(Guest.find_by(id: guest.id)).to be_present
+    end
+
+    it 'allows removal from a closed meal when guest was added after closing' do
+      meal.update_columns(closed: true, closed_at: 1.hour.ago, max: 5)
+      guest = create(:guest, meal: meal, resident: resident)
+
+      delete "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests/#{guest.id}", params: {
+        token: token
+      }
+
+      expect(response).to have_http_status(:ok)
+      expect(Guest.find_by(id: guest.id)).to be_nil
     end
   end
 

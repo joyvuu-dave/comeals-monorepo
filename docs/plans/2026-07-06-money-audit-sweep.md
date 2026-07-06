@@ -141,9 +141,16 @@ All four code sessions overlap in `meal.rb`, the guard models, and
       can exist to move to. Note for Sessions 7–9: the concern is the single
       guard source now; controller-level checks should mirror it, not
       reimplement it.
-- [ ] **Session 7 — #5: guest writes on closed meals.** Give Guest the same
+- [x] **Session 7 — #5: guest writes on closed meals.** Give Guest the same
       closed-meal create/destroy guards as MealResident, mirrored in the
       controller.
+      Done 2026-07-06: guards extracted into shared `ClosedMealAttendanceFreeze`
+      concern (create validation + destroy guard) included by both Guest and
+      MealResident, so they can't drift again; `destroy_guest` now surfaces a
+      blocked destroy as 400 via non-bang `destroy`. Note for Sessions 8–9:
+      `destroy_meal_resident` still 500s (`destroy!` + RecordNotDestroyed) when
+      the closed-meal guard blocks — filed as #22, suggested to fold into the
+      Session 9 locking pass.
 - [ ] **Session 8 — #7: no more delete_all through ids-assignment.** Diff and
       `destroy!` bills/attendance explicitly inside the meal lock so callbacks,
       guards, and audits run; drop `attendee_ids` from the ActiveAdmin permit list.

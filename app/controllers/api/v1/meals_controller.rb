@@ -104,10 +104,14 @@ module Api
       end
 
       # DELETE /api/v1/meals/:meal_id/residents/:resident_id/guests/:guest_id
+      # The model guards (ClosedMealAttendanceFreeze, ReconciledMealImmutability)
+      # are the source of truth; a blocked destroy surfaces here as a 400.
       def destroy_guest
-        @guest.destroy!
-
-        render json: { message: 'Guest was destroyed.' }
+        if @guest.destroy
+          render json: { message: 'Guest was destroyed.' }
+        else
+          render json: { message: @guest.errors.full_messages.join("\n") }, status: :bad_request
+        end
       end
 
       # GET /api/v1/meals/:meal_id/cooks
