@@ -438,6 +438,37 @@ RSpec.describe Reconciliation do
     end
   end
 
+  describe '#assign_meals under concurrent settlement' do
+    it 'raises and rolls back instead of stealing meals a concurrent reconciliation claimed after the pluck' do
+      # Rival is created before any meals exist, so its own sweep claims nothing.
+      rival = described_class.create!(community: community, end_date: Date.yesterday)
+
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      contested = create(:meal, community: community)
+      create(:bill, meal: contested, resident: cook, community: community, amount: BigDecimal('50'))
+      uncontested = create(:meal, community: community)
+      create(:bill, meal: uncontested, resident: cook, community: community, amount: BigDecimal('30'))
+
+      loser = build(:reconciliation, community: community, end_date: Date.yesterday)
+
+      # Simulate the READ COMMITTED race (issue #8): after `loser` plucks its
+      # eligible meal ids but before its UPDATE runs, a concurrent settlement
+      # claims one of those meals and commits. Without re-asserting
+      # reconciliation_id IS NULL, the UPDATE would silently overwrite the
+      # rival's assignment and both ledgers would charge for the same meal.
+      allow(loser).to receive(:eligible_meal_ids).and_wrap_original do |original|
+        original.call.tap { contested.update_column(:reconciliation_id, rival.id) }
+      end
+
+      expect { loser.save! }.to raise_error(/concurrent reconciliation/)
+
+      # The losing settlement must vanish entirely: no reconciliation row and
+      # no partial meal claims survive the rollback.
+      expect(described_class.where.not(id: rival.id)).to be_empty
+      expect(uncontested.reload.reconciliation_id).to be_nil
+    end
+  end
+
   describe '#persist_balances!' do
     it 'persists settlement balances to reconciliation_balances table' do
       cook = create(:resident, community: community, unit: unit, multiplier: 2)

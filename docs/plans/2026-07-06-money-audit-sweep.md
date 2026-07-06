@@ -112,9 +112,16 @@ every later session; they go first.
       only surviving assignment path. Adjacent finds filed as #18 (SPA GET
       catch-all swallows unknown admin-subdomain paths) and #19 (admin request
       specs only support one authenticated request per example).
-- [ ] **Session 5 — #8: assignment TOCTOU.** Re-assert
+- [x] **Session 5 — #8: assignment TOCTOU.** Re-assert
       `reconciliation_id: nil` in the `update_all` WHERE clause and raise on
       row-count mismatch, in every assignment path that survived Session 4.
+      Done 2026-07-06: `assign_meals` (the only surviving path) now claims via
+      `where(reconciliation_id: nil)` and raises on claimed-vs-plucked count
+      mismatch, rolling back the losing settlement; pluck extracted to private
+      `eligible_meal_ids` so the race is pinned deterministically in
+      reconciliation_spec. Adjacent find: pre-existing Playwright failure
+      (login loader class) fails on clean main too — filed as #20, not fixed
+      here.
 
 ### Phase 3 — Write-path integrity (model guards → endpoints → locking → pin)
 

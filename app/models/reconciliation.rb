@@ -74,14 +74,23 @@ class Reconciliation < ApplicationRecord
   # cutoff date. Meals from days that are not yet over are never swept,
   # regardless of end_date — their receipts and attendance are not final.
   # This backstops the end_date validation for rows that predate it.
+  #
+  # The UPDATE re-asserts reconciliation_id IS NULL: under READ COMMITTED a
+  # concurrent settlement can claim a plucked meal between the read and the
+  # write, and PostgreSQL re-evaluates the predicate on the committed row
+  # version after the lock wait, excluding claimed rows instead of silently
+  # overwriting the rival's assignment (which would double-charge every
+  # resident on those meals — both ledgers sum to zero, so no later check
+  # fires). Claiming fewer rows than were plucked means that race happened:
+  # raise so this settlement rolls back whole.
   def assign_meals
-    meal_ids = Meal.unreconciled
-                   .joins(:bills)
-                   .where(date: ..end_date)
-                   .where(date: ...Time.zone.today)
-                   .distinct
-                   .pluck(:id)
-    Meal.where(id: meal_ids).update_all(reconciliation_id: id)
+    meal_ids = eligible_meal_ids
+    claimed = Meal.where(id: meal_ids, reconciliation_id: nil).update_all(reconciliation_id: id)
+    return if claimed == meal_ids.size
+
+    raise "assign_meals: reconciliation #{id} plucked #{meal_ids.size} " \
+          "#{'meal'.pluralize(meal_ids.size)} but claimed #{claimed} — a concurrent reconciliation " \
+          'settled the rest first. Rolling back to avoid settling the same meals twice.'
   end
 
   # Compute final settlement balances for this reconciliation period.
@@ -221,6 +230,15 @@ class Reconciliation < ApplicationRecord
   end
 
   private
+
+  def eligible_meal_ids
+    Meal.unreconciled
+        .joins(:bills)
+        .where(date: ..end_date)
+        .where(date: ...Time.zone.today)
+        .distinct
+        .pluck(:id)
+  end
 
   def finalize
     assign_meals
