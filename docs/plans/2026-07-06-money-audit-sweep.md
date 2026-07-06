@@ -88,10 +88,18 @@ every later session; they go first.
 
 ### Phase 2 — Reconciliation lifecycle
 
-- [ ] **Session 3 — #3: stop sweeping meals that haven't happened.**
+- [x] **Session 3 — #3: stop sweeping meals that haven't happened.**
       `reconciliations:create` cutoff + `assign_meals` date predicate +
       `end_date_not_in_future` tightening, so neither the rake task nor the
       ActiveAdmin form can settle tonight's meal at $0.
+      Done 2026-07-06: rake cutoff now `Date.yesterday` (guard + `end_date`);
+      validation renamed `end_date_before_today`, rejects today and later;
+      `assign_meals` gained a `date < today` backstop for legacy rows. Factory
+      reconciliation `end_date` default is now `Date.yesterday`. Note for
+      Sessions 4–5: the admin `update_meals` / show eligible-meals predicates
+      still filter on `date <= end_date` only — safe for new rows (validation),
+      but a legacy row with `end_date >= today` could still add tonight's meal
+      there; fold the backstop in when reshaping those paths.
 - [ ] **Session 4 — #4: settled reconciliations are immutable in ActiveAdmin.**
       Freeze `end_date` after create; remove or replace `update_meals` with an
       append-only correction flow. Runs before Session 5 because it decides the

@@ -7,7 +7,11 @@ namespace :reconciliations do
 
     community = Community.instance
 
-    unless community.meals.unreconciled.joins(:bills).exists?
+    # Cutoff is yesterday: a meal from a day that is not yet over must not be
+    # settled — its receipt and attendance are not final (issue #3).
+    cutoff = Date.yesterday
+
+    unless community.meals.unreconciled.joins(:bills).exists?(date: ..cutoff)
       Rails.logger.info("reconciliations:create skipping #{community.name} — no unreconciled meals with bills")
       next
     end
@@ -15,7 +19,7 @@ namespace :reconciliations do
     reconciliation = Reconciliation.create!(
       community: community,
       date: Time.zone.today,
-      end_date: Time.zone.today
+      end_date: cutoff
     )
 
     Rails.logger.info(

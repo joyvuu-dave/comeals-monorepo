@@ -360,7 +360,7 @@ RSpec.describe Resident do
     end
 
     it 'excludes reconciled meals from balance' do
-      reconciliation = Reconciliation.create!(community: community, end_date: Time.zone.today)
+      reconciliation = Reconciliation.create!(community: community, end_date: Date.yesterday)
       resident = create(:resident, community: community, unit: unit, multiplier: 2)
 
       # Reconciled meal — should be excluded. Build children first, then flip
@@ -511,7 +511,7 @@ RSpec.describe Resident do
   describe '#meals_attended' do
     it 'counts only unreconciled meals' do
       resident = create(:resident, community: community, unit: unit, multiplier: 2)
-      reconciliation = Reconciliation.create!(community: community, end_date: Time.zone.today)
+      reconciliation = Reconciliation.create!(community: community, end_date: Date.yesterday)
 
       # Build the meal_resident first, then reconcile the meal — MealResident's
       # before_save now rejects any save when meal.reconciled?.
@@ -536,7 +536,7 @@ RSpec.describe Resident do
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('100'))
       meal.reload
 
-      reconciliation = Reconciliation.create!(community: community, end_date: Time.zone.today)
+      reconciliation = Reconciliation.create!(community: community, end_date: Date.yesterday)
 
       expect(cook.balance_for_reconciliation(reconciliation)).to eq(BigDecimal('100'))
       expect(eater.balance_for_reconciliation(reconciliation)).to eq(BigDecimal('-100'))

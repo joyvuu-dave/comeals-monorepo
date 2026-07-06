@@ -115,7 +115,9 @@ ActiveAdmin.register Reconciliation do
   form do |f|
     f.inputs do
       f.input :community_id, input_html: { value: Community.instance.id }, as: :hidden
-      f.input :end_date, as: :datepicker, hint: 'Settle all unreconciled meals on or before this date'
+      f.input :end_date, as: :datepicker,
+                         hint: 'Settle all unreconciled meals on or before this date. ' \
+                               'Must be before today — same-day meals may not have finished.'
     end
     f.actions
     f.semantic_errors

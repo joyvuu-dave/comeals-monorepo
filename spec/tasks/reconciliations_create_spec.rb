@@ -35,6 +35,16 @@ RSpec.describe 'reconciliations:create' do
     expect(meal.reload.reconciliation).to eq(reconciliation)
   end
 
+  it 'settles with a cutoff of yesterday, not today' do
+    cook = create(:resident, community: community, unit: unit, multiplier: 2)
+    meal = create(:meal, community: community, date: Date.yesterday)
+    create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('40'))
+
+    Rake::Task['reconciliations:create'].invoke
+
+    expect(Reconciliation.last.end_date).to eq(Date.yesterday)
+  end
+
   it 'persists settlement balances' do
     cook = create(:resident, community: community, unit: unit, multiplier: 2)
     eater = create(:resident, community: community, unit: unit, multiplier: 2)
@@ -57,6 +67,22 @@ RSpec.describe 'reconciliations:create' do
 
     expect(ReconciliationMailer).to have_received(:reconciliation_notify_email)
       .with(cook, instance_of(Reconciliation))
+  end
+
+  it 'does not sweep a meal scheduled for today — its receipt and attendance are not final' do
+    # Failure scenario from issue #3: cooks sign up days ahead, creating $0 bill
+    # rows. Running the task on the morning of a meal day must not settle
+    # tonight's meal at $0.
+    cook = create(:resident, community: community, unit: unit, multiplier: 2)
+    eater = create(:resident, community: community, unit: unit, multiplier: 2)
+    tonight = create(:meal, community: community, date: Time.zone.today)
+    create(:bill, meal: tonight, resident: cook, community: community, amount: BigDecimal('0'))
+    create(:meal_resident, meal: tonight, resident: eater, community: community)
+
+    expect { Rake::Task['reconciliations:create'].invoke }
+      .not_to change(Reconciliation, :count)
+
+    expect(tonight.reload.reconciliation_id).to be_nil
   end
 
   it 'skips communities with no unreconciled meals with bills' do

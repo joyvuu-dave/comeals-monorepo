@@ -36,7 +36,7 @@ class Reconciliation < ApplicationRecord
   audited
 
   validates :end_date, presence: true
-  validate :end_date_not_in_future
+  validate :end_date_before_today
 
   before_validation :set_date
   after_create :finalize
@@ -58,11 +58,15 @@ class Reconciliation < ApplicationRecord
     cooks.uniq
   end
 
-  # Assigns all unreconciled meals (with at least one bill) on or before the cutoff date.
+  # Assigns all unreconciled meals (with at least one bill) on or before the
+  # cutoff date. Meals from days that are not yet over are never swept,
+  # regardless of end_date — their receipts and attendance are not final.
+  # This backstops the end_date validation for rows that predate it.
   def assign_meals
     meal_ids = Meal.unreconciled
                    .joins(:bills)
                    .where(date: ..end_date)
+                   .where(date: ...Time.zone.today)
                    .distinct
                    .pluck(:id)
     Meal.where(id: meal_ids).update_all(reconciliation_id: id)
@@ -215,11 +219,14 @@ class Reconciliation < ApplicationRecord
     self.date ||= Time.zone.today
   end
 
-  def end_date_not_in_future
+  # A reconciliation may only settle days that are over. Meals on today's date
+  # (or later) may not have happened yet — cooks' receipts and attendance are
+  # not final — so the cutoff must be strictly in the past (issue #3).
+  def end_date_before_today
     return if end_date.blank?
-    return unless end_date > Time.zone.today
+    return if end_date < Time.zone.today
 
-    errors.add(:end_date, 'cannot be in the future')
+    errors.add(:end_date, 'must be before today — meals on that date may not have finished yet')
   end
 
   # Distributes full-precision balances (which sum to zero) into cent-rounded

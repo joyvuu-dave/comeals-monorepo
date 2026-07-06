@@ -19,6 +19,6 @@ FactoryBot.define do
   factory :reconciliation do
     community
     date { Time.zone.today }
-    end_date { Time.zone.today }
+    end_date { Date.yesterday }
   end
 end

@@ -23,7 +23,7 @@ RSpec.describe 'Admin reconciled immutability' do
     meal = create(:meal, community: community)
     create(:meal_resident, meal: meal, resident: eater, community: community)
     bill = create(:bill, meal: meal, resident: cook, community: community, amount: amount)
-    Reconciliation.create!(community: community, end_date: Time.zone.today)
+    Reconciliation.create!(community: community, end_date: Date.yesterday)
     { meal: meal.reload, bill: bill.reload, cook: cook, eater: eater }
   end
 
