@@ -27,5 +27,12 @@
     "name",
     "vegetarian"
   ],
-  "MealResident": ["created_at", "id", "late", "meal_id", "resident_id", "vegetarian"]
+  "MealResident": [
+    "created_at",
+    "id",
+    "late",
+    "meal_id",
+    "resident_id",
+    "vegetarian"
+  ]
 }
