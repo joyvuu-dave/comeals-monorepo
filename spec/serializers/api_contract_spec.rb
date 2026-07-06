@@ -15,11 +15,11 @@ require 'rails_helper'
 # These serialize real records (not serializer._attributes introspection) so
 # adapter behavior — key names as actually rendered — is what's asserted.
 RSpec.describe 'API contract (tests/fixtures/api_contract.json)', type: :serializer do
-  contract = JSON.parse(Rails.root.join('tests/fixtures/api_contract.json').read)
+  let(:contract) { JSON.parse(Rails.root.join('tests/fixtures/api_contract.json').read) }
 
   # Every fixture entry must be asserted below; a new entry without a matching
   # test here should fail loudly, not pass silently.
-  covered = %w[MealForm MealFormBill MealFormResident MealFormGuest MealResident Guest]
+  let(:covered) { %w[MealForm MealFormBill MealFormResident MealFormGuest MealResident Guest] }
 
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
