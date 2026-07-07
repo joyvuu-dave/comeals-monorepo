@@ -55,17 +55,17 @@ bundle exec rails c        # Rails console
 ### Local URLs
 
 - **App (via Vite proxy)**: `http://localhost:3036` — SPA with HMR, API requests proxy to Rails
-- **Rails direct**: `http://localhost:3000` — API endpoints, ActiveAdmin
-- **ActiveAdmin**: `http://localhost:3036/admin/login` (via Vite proxy) or `http://localhost:3000/admin/login` (direct)
+- **Rails direct**: `http://localhost:3000` — API endpoints
+- **ActiveAdmin**: `http://admin.lvh.me:3000/login` — admin subdomain, served by Rails directly (no Vite proxy)
 - **Mail inbox**: `http://localhost:3000/letter_opener`
 
 ### Key Routes
 
 - `/` — SPA (FallbackController)
 - `/api/v1/*` — API endpoints
-- `/admin/*` — ActiveAdmin (Devise auth)
+- `admin.*` subdomain — ActiveAdmin (Devise auth, login at `/login`, dashboard at `/`)
 - `/.vite/manifest.json` — Vite manifest (FallbackController, for deploy detection)
-- `/*` — SPA catch-all (excludes `/api/`, `/admin`, `/letter_opener`)
+- `/*` — SPA catch-all (skips `/api/`, `/letter_opener`, and the admin subdomain)
 
 ## Collaboration Style
 
@@ -134,7 +134,7 @@ SETTLEMENT (reconciliation): Rounded to cents using largest-remainder allocation
 - **The `resident_balances` table is a cache.** It can be rebuilt from source data at any time.
 - **Vite builds to `public/` with `emptyOutDir: false`.** Critical: Vite must not wipe Rails error pages.
 - **FallbackController serves the SPA.** Rails static file middleware doesn't serve dotfile directories, so `.vite/manifest.json` needs a controller action.
-- **ActiveAdmin uses path-based routing (`/admin/*`), not subdomains.** Simplifies DNS and eliminates the need for xipio/lvh.me in development.
+- **ActiveAdmin uses subdomain routing (`admin.comeals.com` in prod, `admin.lvh.me:3000` in dev), not paths.** Restored in 30e4a0e after a path-based experiment. Admin is served by Rails directly — the Vite proxy only handles `/api`. The SPA catch-all carries the subdomain check in its own route-level constraint because Rails replaces a scope's lambda constraint instead of merging it (#18).
 
 ## Heroku Deployment
 
