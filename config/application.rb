@@ -34,11 +34,17 @@ module Comeals
     config.api_only = true
     config.app_generators.scaffold_controller = :scaffold_controller
 
-    # Middleware for ActiveAdmin
-    config.middleware.use Rack::MethodOverride
-    config.middleware.use ActionDispatch::Flash
-    config.middleware.use ActionDispatch::Cookies
-    config.middleware.use ActionDispatch::Session::CookieStore
+    # Middleware for ActiveAdmin. Devise adds Warden::Manager through
+    # config.app_middleware, which lands in the default stack — before
+    # anything added here with plain `use`. Warden must run inside the
+    # session middleware, or a sign_in written to the session before
+    # Session::CookieStore runs is silently thrown away (issue #19). So
+    # insert each one before Warden::Manager, in the same order a non-API
+    # Rails app uses: Cookies, then Session, then Flash.
+    config.middleware.insert_before Warden::Manager, Rack::MethodOverride
+    config.middleware.insert_before Warden::Manager, ActionDispatch::Cookies
+    config.middleware.insert_before Warden::Manager, ActionDispatch::Session::CookieStore
+    config.middleware.insert_before Warden::Manager, ActionDispatch::Flash
 
     # Gzip response compression — must be early in the stack (outer middleware)
     # so it compresses the final response after all other middleware are done.

@@ -104,11 +104,19 @@ mean something.
       snapshot spec keeps its `clear` and calls the helper after);
       `spec/tasks/rake_tasks_loading_spec.rb` pins the one-action invariant
       and the reload-after-clear behavior. Clock-runner spec untouched.
-- [ ] **Session 5 — #19: admin request specs, multiple authenticated
+- [x] **Session 5 — #19: admin request specs, multiple authenticated
       requests.** Fix Warden test-mode session persistence under `api_only`,
       or (fallback) document and guard the one-request convention. Placed
       before Session 7 because the admin attendance page's specs will want
-      multi-request examples.
+      multi-request examples. Done: root cause was middleware order — Devise
+      adds `Warden::Manager` via `app_middleware`, so it sat before the
+      hand-added session middleware and a test-mode sign_in never reached
+      the cookie session; `application.rb` now inserts MethodOverride,
+      Cookies, Session, and Flash before `Warden::Manager` (canonical Rails
+      order — note this reorders production middleware too, verified by the
+      admin smoke specs); `spec/requests/admin/session_persistence_spec.rb`
+      pins two GETs after one sign_in and sign_out ending the session.
+      Session 7 can use multi-request examples freely.
 
 ### Phase 3 — Routing correctness
 
