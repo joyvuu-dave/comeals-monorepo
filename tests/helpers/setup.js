@@ -84,6 +84,23 @@ async function clearStorage(page) {
 }
 
 /**
+ * Slow the page's renderer via DevTools CPU throttling when
+ * E2E_CPU_THROTTLE is set (e.g. E2E_CPU_THROTTLE=4 npm run test:e2e).
+ * Used to hunt timing races (#21): OS-level CPU contention cannot slow
+ * Chromium reliably — macOS hands it the performance cores — but DevTools
+ * throttling slows the renderer itself. Off by default; no effect on
+ * normal runs.
+ */
+async function throttleCpu(page) {
+  const rate = Number(process.env.E2E_CPU_THROTTLE);
+  if (!rate || rate <= 1) {
+    return;
+  }
+  const session = await page.context().newCDPSession(page);
+  await session.send("Emulation.setCPUThrottlingRate", { rate });
+}
+
+/**
  * Mock all API routes with fixture data. Call after page is created but
  * before navigating to the app.
  *
@@ -100,6 +117,7 @@ async function clearStorage(page) {
  *   hosts       - hosts list for reservation forms
  */
 async function mockApi(page, options = {}) {
+  await throttleCpu(page);
   const meal = options.mealData || mealFixture;
   const calendar = options.calendarData || calendarFixture;
   const history = options.historyData || historyFixture;
@@ -381,6 +399,7 @@ module.exports = {
   stubPusher,
   disableIdleTimer,
   clearStorage,
+  throttleCpu,
   mockApi,
   setupAuthenticatedPage,
 };

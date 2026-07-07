@@ -83,10 +83,18 @@ mean something.
       (was racy, 1-in-10 fail; 10/10 after); audit found no other shadowed
       test — every other spec overrides after the helper; convention
       documented on `mockApi` in `tests/helpers/setup.js`.
-- [ ] **Session 3 — #21: flake diagnosability and measurement.** Retries with
+- [x] **Session 3 — #21: flake diagnosability and measurement.** Retries with
       trace capture, measured flake rate before/after, explicit waits where
       races are found. Runs after Session 2 so the one deterministic failure
-      doesn't pollute the measurements.
+      doesn't pollute the measurements. Done: `retries: 1` +
+      `trace: "retain-on-failure"` — a failing attempt now always leaves a
+      trace in `test-results/` and a flake shows as "flaky" (suite still
+      green) instead of a hard fail; E2E moved to its own port 3037 with
+      `reuseExistingServer: false` (before, bin/check silently tested the
+      dev server whenever bin/dev was up); `E2E_CPU_THROTTLE` knob added to
+      the mock helper for race hunting. No race found: 0 flakes in 13 full
+      runs across idle, CPU-stress, CPU-throttle, and dev-server
+      environments — all five flake-set tests stable; rates on #21.
 - [ ] **Session 4 — #27: load rake tasks once per process.** Shared guarded
       loader; drop the per-file `load_tasks` calls; keep the snapshot spec's
       and clock-runner spec's isolated-rake-state patterns working.
