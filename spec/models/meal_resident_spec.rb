@@ -215,6 +215,43 @@ RSpec.describe MealResident do
     end
   end
 
+  # The admin_correction flag (issue #25) is the one sanctioned bypass of the
+  # closed-meal freeze: an admin correcting the record to match reality. It
+  # must never weaken the reconciled freeze — the books are closed.
+  describe '#admin_correction' do
+    it 'allows creating a row on a closed meal with no max' do
+      meal.update_columns(closed: true, closed_at: 1.hour.ago, max: nil)
+
+      mr = described_class.new(meal: meal, resident: resident, admin_correction: true)
+      expect(mr.save).to be true
+    end
+
+    it 'allows removing an original-headcount row from a closed meal' do
+      mr = create(:meal_resident, meal: meal, resident: resident, community: community)
+      meal.update_columns(closed: true, closed_at: DateTime.now + 1.hour)
+
+      mr.admin_correction = true
+      expect { mr.destroy }.to change(described_class, :count).by(-1)
+    end
+
+    it 'still blocks creating a row on a reconciled meal' do
+      meal.update!(reconciliation: create(:reconciliation, community: community))
+
+      mr = described_class.new(meal: meal, resident: resident, admin_correction: true)
+      expect(mr.save).to be false
+      expect(mr.errors[:base]).to include('Meal has been reconciled.')
+    end
+
+    it 'still blocks removing a row from a reconciled meal' do
+      mr = create(:meal_resident, meal: meal, resident: resident, community: community)
+      meal.update!(reconciliation: create(:reconciliation, community: community))
+
+      mr.admin_correction = true
+      expect { mr.destroy }.not_to change(described_class, :count)
+      expect(mr.errors[:base]).to include('Meal has been reconciled.')
+    end
+  end
+
   describe '#save (reconciled immutability)' do
     it 'blocks creating a new meal_resident on a reconciled meal' do
       reconciliation = create(:reconciliation, community: community)

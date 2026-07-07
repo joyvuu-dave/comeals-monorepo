@@ -70,11 +70,6 @@ ActiveAdmin.register Meal do
       row :unit_cost do |meal|
         number_to_currency(meal.unit_cost) unless meal.unit_cost.zero?
       end
-      table_for meal.attendees.order(:name) do
-        column 'Residents Attendance' do |resident|
-          link_to resident.name, admin_resident_path(resident)
-        end
-      end
       table_for meal.guests.order(:created_at) do
         column 'Guests in Attendance' do |guest|
           li "Guest of #{guest.resident.name}"
@@ -83,6 +78,37 @@ ActiveAdmin.register Meal do
       table_for meal.bills.all do
         column 'Bills' do |bill|
           link_to "#{bill.resident.name} - #{number_to_currency(bill.amount)}", admin_bill_path(bill)
+        end
+      end
+    end
+
+    # Attendance corrections (issue #25): one row per change, per-row
+    # buttons — never a bulk grid. Controls disappear once the meal is
+    # reconciled; the model guards refuse regardless. Lives outside the
+    # attributes_table because forms may not nest inside a table body.
+    panel 'Residents Attendance' do
+      table_for(meal.meal_residents.includes(:resident).sort_by { |mr| mr.resident.name }) do
+        column 'Resident' do |mr|
+          link_to mr.resident.name, admin_resident_path(mr.resident)
+        end
+        unless meal.reconciled?
+          column '' do |mr|
+            button_to 'Remove', admin_meal_meal_resident_path(meal, mr),
+                      method: :delete,
+                      form: { data: { confirm: "Remove #{mr.resident.name} from this meal?" } }
+          end
+        end
+      end
+      unless meal.reconciled?
+        candidates = Resident.where(community_id: meal.community_id)
+                             .where.not(id: meal.meal_residents.select(:resident_id))
+                             .order(:name)
+        form action: admin_meal_meal_residents_path(meal), method: :post do
+          input type: :hidden, name: 'authenticity_token', value: form_authenticity_token
+          text_node select_tag('meal_resident[resident_id]',
+                               options_from_collection_for_select(candidates, :id, :name),
+                               include_blank: 'Select a resident', required: true)
+          input type: :submit, value: 'Add attendee'
         end
       end
     end

@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
 Audited.config do |config|
-  config.current_user_method = :current_resident_api
+  # One global method name, resolved per controller: API requests attribute
+  # audits to the resident, ActiveAdmin requests to the admin user. Defined
+  # on ApiController and ApplicationController respectively.
+  config.current_user_method = :audited_user
 end

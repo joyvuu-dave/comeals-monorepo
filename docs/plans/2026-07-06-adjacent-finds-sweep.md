@@ -138,11 +138,23 @@ mean something.
 Both sessions touch the meal write paths and guard concerns; #26's triggers
 must be designed against the write paths as #25 leaves them.
 
-- [ ] **Session 7 — #25: admin attendance-correction page.** Per-row
+- [x] **Session 7 — #25: admin attendance-correction page.** Per-row
       MealResident add/remove in ActiveAdmin, one audit row per change,
       explicit `ClosedMealAttendanceFreeze` admin exception, reconciled meals
       absolutely refused. The issue body is the spec (design agreed
-      2026-07-06); the triage comment lifts the old sequencing hold.
+      2026-07-06); the triage comment lifts the old sequencing hold. Done:
+      `admin_correction` attr_accessor on the freeze concern (never
+      persisted, never assignable via API — pinned); nested
+      `ActiveAdmin.register MealResident` under Meal with explicit
+      create/destroy that set the flag; meal show page grew a per-row
+      Remove/Add panel that hides on reconciled meals. Audited attribution
+      was broken for ALL admin edits (config named `current_resident_api`,
+      which admin controllers lack) — renamed to `audited_user`, defined on
+      both controller roots; `AdminUser#name` returns email so the history
+      serializer renders admin audits. Session 8 note: the admin write path
+      is plain per-row `MealResident` create/destroy with `admin_correction`
+      set — triggers must allow closed-meal attendance rows (app-layer flag
+      is invisible to the DB), while reconciled stays refused.
 - [ ] **Session 8 — #26: DB trigger backstop + structure.sql switch.**
       Maintainer approved the schema-format change. Triggers mirror
       `ReconciledMealImmutability` and the Meal frozen-column guard;

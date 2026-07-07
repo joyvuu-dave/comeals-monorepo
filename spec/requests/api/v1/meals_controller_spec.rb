@@ -135,6 +135,24 @@ RSpec.describe 'Meals API' do
       expect(body).to have_key('date')
       expect(body).to have_key('items')
     end
+
+    # Admin attendance corrections (issue #25) put AdminUser rows in the
+    # audit trail. The serializer renders the audit user's name, so an
+    # admin-made audit must not break the resident-facing history.
+    it 'renders audits made by an admin user' do
+      meal = create(:meal, community: community)
+      admin = create(:admin_user, community: community)
+      Audited.audit_class.as_user(admin) do
+        create(:meal_resident, meal: meal, resident: resident, community: community)
+      end
+
+      get "/api/v1/meals/#{meal.id}/history", params: { token: token }
+
+      expect(response).to have_http_status(:ok)
+      items = response.parsed_body['items']
+      expect(items).not_to be_empty
+      expect(items.first['user_name']).to eq(admin.email)
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -201,11 +219,36 @@ RSpec.describe 'Meals API' do
       expect(meal.meal_residents.find_by(resident: resident).late).to be(true)
     end
 
+    it 'attributes the audit row to the authenticated resident' do
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: {
+        token: token, late: false, vegetarian: false
+      }
+
+      expect(response).to have_http_status(:ok)
+      audit = Audited::Audit.where(auditable_type: 'MealResident').last
+      expect(audit.action).to eq('create')
+      expect(audit.user).to eq(resident)
+    end
+
     it 'rejects signup when meal is closed without max' do
       meal.update!(closed: true)
 
       post "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: {
         token: token, late: false, vegetarian: false
+      }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(meal.meal_residents.find_by(resident: resident)).to be_nil
+    end
+
+    # The admin_correction escape hatch (issue #25) belongs to the admin
+    # controller alone. A resident smuggling the flag as a param must still
+    # hit the closed-meal freeze.
+    it 'ignores an admin_correction param — the freeze still applies' do
+      meal.update!(closed: true)
+
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: {
+        token: token, late: false, vegetarian: false, admin_correction: true
       }
 
       expect(response).to have_http_status(:bad_request)

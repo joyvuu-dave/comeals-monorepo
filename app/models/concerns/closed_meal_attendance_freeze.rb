@@ -19,29 +19,39 @@ module ClosedMealAttendanceFreeze
   extend ActiveSupport::Concern
 
   included do
+    # The one sanctioned bypass (issue #25): an admin correcting the record
+    # to match reality. Set per row by the ActiveAdmin attendance controller,
+    # never persisted, never assignable through the API (its controllers
+    # assign only late/vegetarian). Reconciled meals still refuse —
+    # ReconciledMealImmutability runs first and has no bypass.
+    attr_accessor :admin_correction
+
     validate :meal_has_open_spots, on: :create
     before_destroy :record_can_be_removed
   end
 
   def meal_has_open_spots
+    # Scenario: Admin attendance correction — the freeze does not apply
+    return true if admin_correction
+
     # Scenario: Meal is open
     return true if meal.closed == false
 
-    # Scenario: Meal is closed, max has been set, there are open spots
-    return true if meal.closed == true && meal.max.present? && meal.attendees_count < meal.max
+    # Scenario: Meal is closed and max has NOT been set
+    return errors.add(:base, 'Meal has been closed.') if meal.max.nil?
 
-    # Scenario: Meal is closed and, max has NOT been set
-    errors.add(:base, 'Meal has been closed.') if meal.closed == true && meal.max.nil?
+    # Scenario: Meal is closed, max has been set, there are open spots
+    return true if meal.attendees_count < meal.max
 
     # Scenario: Meal is closed, max has been set, there are NOT open spots
-    return unless meal.closed == true && meal.max.present? && meal.attendees_count >= meal.max
-
-    errors.add(:base,
-               'Meal has no open spots.')
+    errors.add(:base, 'Meal has no open spots.')
   end
 
   def record_can_be_removed
     # Reconciled check is handled by reject_if_reconciled (runs first).
+    # Scenario: Admin attendance correction — the freeze does not apply
+    return true if admin_correction
+
     # Scenario: Meal is open
     return true if meal.closed == false
 

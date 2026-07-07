@@ -71,4 +71,10 @@ class AdminUser < ApplicationRecord
   def superuser?
     superuser
   end
+
+  # Admin users have no name column. Audit history displays the audit
+  # user's name (AuditSerializer), so show the email — it says who acted.
+  def name
+    email
+  end
 end

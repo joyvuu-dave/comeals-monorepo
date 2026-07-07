@@ -28,6 +28,13 @@ class ApiController < ActionController::API
     current_resident_api.present?
   end
 
+  # Who the audited gem records as the author of a change (see
+  # config/initializers/audited.rb). API changes are attributed to the
+  # authenticated resident.
+  def audited_user
+    current_resident_api
+  end
+
   def not_authenticated_api
     render json: { message: 'You are not authenticated. Please try signing in and then try again.' },
            status: :unauthorized and return

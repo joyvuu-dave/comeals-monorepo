@@ -30,6 +30,13 @@ class ApplicationController < ActionController::Base
     current_admin_user
   end
 
+  # Who the audited gem records as the author of a change (see
+  # config/initializers/audited.rb). ActiveAdmin controllers inherit from
+  # here, so admin edits are attributed to the signed-in admin.
+  def audited_user
+    current_admin_user_custom
+  end
+
   private
 
   def read_only_admin_token?
