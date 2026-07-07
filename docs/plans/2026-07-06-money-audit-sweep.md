@@ -164,11 +164,18 @@ All four code sessions overlap in `meal.rb`, the guard models, and
       only; the locking pass should still re-verify reconciled/closed state
       after each lock's reload. Adjacent find filed as #23 (`host_ids=` has
       the identical hole on Guest rows).
-- [ ] **Session 9 — #6: locking pass.** Wrap every meal-mutation endpoint in
+- [x] **Session 9 — #6: locking pass.** Wrap every meal-mutation endpoint in
       `@meal.with_lock` and re-verify reconciled/closed state after the lock's
       reload, exactly as the create paths do. Last in the cluster so it wraps the
       endpoints as reshaped by Sessions 7–8. Evaluate the issue's suggested
       DB-level backstop; if deferring it, file a follow-up issue.
+      Done 2026-07-06: new `with_meal_lock` helper (lock + reconciled? re-check
+      on the reload) now wraps every mutation endpoint, creates included; each
+      endpoint's race is pinned by sweeping inside a stubbed `with_lock`;
+      `update_bills` re-checks too and bails via `performed?`. Folded in #22:
+      `destroy_meal_resident` uses non-bang destroy, guard-blocked removals are
+      400s now. DB backstop deferred — needs structure.sql plus trigger design;
+      filed as #26. Note for Session 10: update_bills' endpoint shape is final.
 - [ ] **Session 10 — #15: pin update_bills rollback atomicity.** Request spec:
       later bill in a multi-bill payload fails → earlier writes rolled back;
       also pin negative-amount rejection. Test-only; runs after Sessions 8–9 so it

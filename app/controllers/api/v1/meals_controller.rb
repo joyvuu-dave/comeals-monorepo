@@ -63,7 +63,7 @@ module Api
       # re-signing up with different late/vegetarian values updates the
       # existing signup instead of erroring on the unique index.
       def create_meal_resident
-        @meal.with_lock do
+        with_meal_lock do
           meal_resident = @meal.meal_residents.find_or_initialize_by(resident_id: params[:resident_id])
           meal_resident.assign_attributes(late: params[:late], vegetarian: params[:vegetarian])
           if meal_resident.save
@@ -75,24 +75,34 @@ module Api
       end
 
       # DELETE /api/v1/meals/:meal_id/residents/:resident_id
+      # The model guards (ClosedMealAttendanceFreeze, ReconciledMealImmutability)
+      # are the source of truth; a blocked destroy surfaces here as a 400.
       def destroy_meal_resident
-        @meal_resident.destroy!
-
-        render json: { message: 'MealResident destroyed.' }
+        with_meal_lock do
+          if @meal_resident.destroy
+            render json: { message: 'MealResident destroyed.' }
+          else
+            render json: { message: @meal_resident.errors.full_messages.join("\n") }, status: :bad_request
+          end
+        end
       end
 
       # PATCH /api/v1/meals/:meal_id/residents/:resident_id { late, vegetarian }
       def update_meal_resident
-        render json: { message: 'MealResident updated.' } and return if @meal_resident.update(meal_resident_params)
-
-        render json: { message: @meal_resident.errors.full_messages.join("\n") }, status: :bad_request
+        with_meal_lock do
+          if @meal_resident.update(meal_resident_params)
+            render json: { message: 'MealResident updated.' }
+          else
+            render json: { message: @meal_resident.errors.full_messages.join("\n") }, status: :bad_request
+          end
+        end
       end
 
       # POST /api/v1/meals/:meal_id/residents/:resident_id/guests { vegetarian }
       # Uses pessimistic locking to prevent concurrent guest additions from
       # exceeding meal.max.
       def create_guest
-        @meal.with_lock do
+        with_meal_lock do
           # multiplier omitted intentionally — DB default of 2 applies (adult guest).
           guest = Guest.new(meal_id: @meal.id, resident_id: params[:resident_id], vegetarian: params[:vegetarian])
           if guest.save
@@ -107,10 +117,12 @@ module Api
       # The model guards (ClosedMealAttendanceFreeze, ReconciledMealImmutability)
       # are the source of truth; a blocked destroy surfaces here as a 400.
       def destroy_guest
-        if @guest.destroy
-          render json: { message: 'Guest was destroyed.' }
-        else
-          render json: { message: @guest.errors.full_messages.join("\n") }, status: :bad_request
+        with_meal_lock do
+          if @guest.destroy
+            render json: { message: 'Guest was destroyed.' }
+          else
+            render json: { message: @guest.errors.full_messages.join("\n") }, status: :bad_request
+          end
         end
       end
 
@@ -136,16 +148,26 @@ module Api
 
       # PATCH /api/v1/meals/:meal_id/description { description }
       def update_description
-        render json: { message: 'Description updated.' } and return if @meal.update(description: params[:description])
-
-        render json: { message: @meal.errors.full_messages.join("\n") }, status: :bad_request
+        with_meal_lock do
+          if @meal.update(description: params[:description])
+            render json: { message: 'Description updated.' }
+          else
+            render json: { message: @meal.errors.full_messages.join("\n") }, status: :bad_request
+          end
+        end
       end
 
       # PATCH /api/v1/meals/:meal_id/max { max }
+      # Locked so the max >= attendees_count validation reads the fresh
+      # attendance, not the request-start snapshot.
       def update_max
-        render json: { message: 'Meal max value updated.' } and return if @meal.update(max: params[:max])
-
-        render json: { message: @meal.errors.full_messages.join("\n") }, status: :bad_request
+        with_meal_lock do
+          if @meal.update(max: params[:max])
+            render json: { message: 'Meal max value updated.' }
+          else
+            render json: { message: @meal.errors.full_messages.join("\n") }, status: :bad_request
+          end
+        end
       end
 
       # PATCH /meals/:meal_id/bills
@@ -215,19 +237,21 @@ module Api
         end
 
         # Pessimistic lock on the meal row prevents concurrent update_bills
-        # calls from interleaving (same pattern as create_meal_resident).
-        # Bills are diffed and destroyed explicitly — never through cook_ids=,
-        # which would swallow a guard-blocked removal silently. destroy! runs
-        # the audited hooks and the reconciled guard, and raises (rolling back
-        # the whole diff) if a reconciliation claimed the meal after the
-        # reject_if_reconciled check above.
-        @meal.with_lock do
+        # calls from interleaving (same pattern as create_meal_resident), and
+        # with_meal_lock's reconciled? re-check rejects a sweep that committed
+        # after the reject_if_reconciled check above. Bills are diffed and
+        # destroyed explicitly — never through cook_ids=, which would swallow
+        # a guard-blocked removal silently. destroy! runs the audited hooks
+        # and the reconciled guard as a second line of defense.
+        with_meal_lock do
           @meal.bills.where.not(resident_id: cook_ids).find_each(&:destroy!)
           parsed_bills.each do |bill|
             @meal.bills.find_or_initialize_by(resident_id: bill[:resident_id])
                  .update!(amount: bill[:amount], no_cost: bill[:no_cost])
           end
         end
+        # with_meal_lock already rendered the rejection if the sweep won.
+        return if performed?
 
         payload = { message: message }
         payload[:type] = message_type if message_type
@@ -245,9 +269,13 @@ module Api
 
       # PATCH /api/v1/meals/:meal_id/closed { closed }
       def update_closed
-        render json: { message: 'Meal closed value updated.' } and return if @meal.update(closed: params[:closed])
-
-        render json: { message: @meal.errors.full_messages.join("\n") }, status: :bad_request
+        with_meal_lock do
+          if @meal.update(closed: params[:closed])
+            render json: { message: 'Meal closed value updated.' }
+          else
+            render json: { message: @meal.errors.full_messages.join("\n") }, status: :bad_request
+          end
+        end
       end
 
       private
@@ -259,9 +287,30 @@ module Api
       def reject_if_reconciled
         return unless @meal.reconciled?
 
+        render_reconciled_rejection
+      end
+
+      def render_reconciled_rejection
         @skip_pusher = true
         render json: { message: 'Change not permitted. Meal has already been reconciled.' },
                status: :bad_request
+      end
+
+      # Serializes the write against Reconciliation#assign_meals' update_all
+      # (row locks on the swept meals) and re-checks reconciled? on the lock's
+      # fresh reload. The reject_if_reconciled before_action reads the meal
+      # before the lock is taken, so a settlement committing mid-request slips
+      # past it — the rake task runs in a separate process, unprotected by
+      # single-threaded Puma. with_lock reloads @meal, so records pinned to it
+      # via inverse_of run their model guards against the fresh state too.
+      def with_meal_lock
+        @meal.with_lock do
+          if @meal.reconciled?
+            render_reconciled_rejection
+          else
+            yield
+          end
+        end
       end
 
       def verify_resident_community

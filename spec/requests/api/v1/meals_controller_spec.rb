@@ -251,13 +251,17 @@ RSpec.describe 'Meals API' do
       expect(MealResident.find_by(id: mr.id)).to be_nil
     end
 
+    # Issue #22: a guard-blocked destroy must surface as a 400 with the
+    # guard's message, not a 500 (mirrors destroy_guest).
     it 'blocks removal from a closed meal when resident signed up before closing' do
-      create(:meal_resident, meal: meal, resident: resident, community: community)
+      mr = create(:meal_resident, meal: meal, resident: resident, community: community)
       meal.update!(closed: true)
 
-      expect do
-        delete "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: { token: token }
-      end.to raise_error(ActiveRecord::RecordNotDestroyed)
+      delete "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: { token: token }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to include('Meal has been closed.')
+      expect(MealResident.exists?(mr.id)).to be true
     end
 
     it 'returns 404 when meal_resident does not exist' do
@@ -500,6 +504,93 @@ RSpec.describe 'Meals API' do
             params: { token: token, closed: true }
 
       expect(response).to have_http_status(:bad_request)
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Reconciliation racing the mutation endpoints (issue #6)
+  # The reject_if_reconciled before_action reads the meal before any lock is
+  # taken. `rake reconciliations:create` runs in a separate process, so its
+  # sweep can commit mid-request. Every mutation must take the meal row lock
+  # and re-check reconciled? on the lock's fresh reload — a write that slips
+  # through is excluded from the settlement yet frozen afterwards, so the
+  # ledger stops being reconstructible from source data.
+  # ---------------------------------------------------------------------------
+  describe 'reconciliation racing the mutation endpoints' do
+    let(:meal) { create(:meal, community: community) }
+
+    before do
+      # end_date predates the meal so creating the reconciliation does not
+      # sweep it; the with_lock wrapper below performs the sweep inside the
+      # race window instead (update_all, like the real assign_meals). An
+      # endpoint that never takes the lock never triggers the sweep and
+      # wrongly succeeds — that also fails the 400 expectation.
+      reconciliation = create(:reconciliation, community: community, end_date: meal.date - 30)
+
+      allow_any_instance_of(Meal).to receive(:with_lock) # rubocop:disable RSpec/AnyInstance -- the race window is inside one request
+        .and_wrap_original do |original, *args, &block|
+          Meal.where(id: original.receiver.id).update_all(reconciliation_id: reconciliation.id)
+          original.call(*args, &block)
+        end
+    end
+
+    it 'destroy_meal_resident returns 400 and keeps the row when the meal is swept mid-request' do
+      mr = create(:meal_resident, meal: meal, resident: resident, community: community)
+
+      delete "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: { token: token }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to include('reconciled')
+      expect(MealResident.exists?(mr.id)).to be true
+    end
+
+    it 'update_meal_resident returns 400 and keeps the flags when the meal is swept mid-request' do
+      mr = create(:meal_resident, meal: meal, resident: resident, community: community, late: false)
+
+      patch "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: { token: token, late: true }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to include('reconciled')
+      expect(mr.reload.late).to be(false)
+    end
+
+    # set_guest loads through @meal.guests, so inverse_of pins the guest's
+    # meal to the request-start snapshot — without the lock's reload the
+    # model guard structurally cannot see a mid-request sweep.
+    it 'destroy_guest returns 400 and keeps the guest when the meal is swept mid-request' do
+      guest = create(:guest, meal: meal, resident: resident)
+
+      delete "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests/#{guest.id}", params: { token: token }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to include('reconciled')
+      expect(Guest.exists?(guest.id)).to be true
+    end
+
+    it 'update_max returns 400 and keeps max when the meal is swept mid-request' do
+      meal.update!(closed: true)
+
+      patch "/api/v1/meals/#{meal.id}/max", params: { token: token, max: 10 }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to include('reconciled')
+      expect(meal.reload.max).to be_nil
+    end
+
+    it 'update_description returns 400 and keeps the description when the meal is swept mid-request' do
+      patch "/api/v1/meals/#{meal.id}/description", params: { token: token, description: 'Late edit' }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to include('reconciled')
+      expect(meal.reload.description).not_to eq('Late edit')
+    end
+
+    it 'update_closed returns 400 and keeps the meal open when the meal is swept mid-request' do
+      patch "/api/v1/meals/#{meal.id}/closed", params: { token: token, closed: true }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to include('reconciled')
+      expect(meal.reload.closed).to be(false)
     end
   end
 

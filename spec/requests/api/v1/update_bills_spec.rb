@@ -198,6 +198,28 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
       expect(response.parsed_body['message']).to include('reconciled')
       expect(Bill.exists?(bill.id)).to be true
     end
+
+    # The destroy-path pin above survives on the guard's raise alone; the
+    # upsert path (no bills removed) needs the post-lock reconciled? re-check
+    # to reject cleanly instead of erroring on the before_save guard.
+    it 'returns 400 and keeps the amounts when only upserts race the sweep' do
+      reconciliation = create(:reconciliation, community: community, end_date: meal.date - 30)
+
+      allow_any_instance_of(Meal).to receive(:with_lock) # rubocop:disable RSpec/AnyInstance -- the race window is inside one request
+        .and_wrap_original do |original, *args, &block|
+          Meal.where(id: original.receiver.id).update_all(reconciliation_id: reconciliation.id)
+          original.call(*args, &block)
+        end
+
+      update_bills(
+        meal_id: meal.id,
+        bills: [{ resident_id: cook.id, amount: '999.00', no_cost: false }]
+      )
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to include('reconciled')
+      expect(bill.reload.amount).to eq(BigDecimal('0'))
+    end
   end
 
   describe 'blank amount' do
