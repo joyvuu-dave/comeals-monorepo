@@ -155,12 +155,25 @@ must be designed against the write paths as #25 leaves them.
       is plain per-row `MealResident` create/destroy with `admin_correction`
       set — triggers must allow closed-meal attendance rows (app-layer flag
       is invisible to the DB), while reconciled stays refused.
-- [ ] **Session 8 — #26: DB trigger backstop + structure.sql switch.**
+- [x] **Session 8 — #26: DB trigger backstop + structure.sql switch.**
       Maintainer approved the schema-format change. Triggers mirror
       `ReconciledMealImmutability` and the Meal frozen-column guard;
       `assign_meals`' nil → id `update_all` stays legal. Last because it
       changes the migration workflow and must see the final shape of every
-      write path.
+      write path. Done: triggers on bills/meal_residents/guests (all writes,
+      both meals on re-parent) and meals (frozen cap/date/reconciliation_id,
+      no delete; nil → id stays legal, no bypass needed); repair bypass via
+      `SET LOCAL comeals.allow_settled_writes` with runbook at
+      `docs/runbooks/settled-data-repair.md`; 28 pins in
+      `spec/db/settled_meal_triggers_spec.rb`. Schema format is now :sql —
+      migrations regenerate `db/structure.sql`; `db/schema.rb` is gone. Two
+      finds while switching: the dev DB had drifted (three junk columns
+      dropped; `prevent_community_delete` from 20260408000002 was silently
+      lost to a schema.rb rebuild — restored, now pinned), and
+      `Reconciliation#reject_destroy` ran after the dependent callbacks, so
+      a destroy attempt un-reconciled meals inside the doomed transaction —
+      now prepended. Spec cleanup that wipes communities must TRUNCATE
+      (delete is trigger-refused).
 - [ ] **Session 9 — Final cleanup.** Verify #18–#27 are all closed
       (`gh issue list --state open`), reopen anything missed, then `git rm`
       this plan doc, commit, push. The closed issues and git history are the

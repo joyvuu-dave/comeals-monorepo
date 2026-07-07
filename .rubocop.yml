@@ -41,13 +41,15 @@ RSpec/MultipleMemoizedHelpers:
 RSpec/IndexedLet:
   Enabled: false
 
-# Some specs describe rake tasks or request paths, not classes. The API
-# contract spec describes a fixture shared with the frontend and spans
-# multiple serializers, so it has no single class to describe either.
+# Some specs describe rake tasks, request paths, or database triggers, not
+# classes. The API contract spec describes a fixture shared with the
+# frontend and spans multiple serializers, so it has no single class to
+# describe either.
 RSpec/DescribeClass:
   Exclude:
     - "spec/tasks/**/*"
     - "spec/requests/**/*"
+    - "spec/db/**/*"
     - "spec/serializers/api_contract_spec.rb"
 
 # before(:all) is used for expensive test setup (e.g., seeding shared

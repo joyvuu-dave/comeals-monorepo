@@ -50,6 +50,12 @@ module Comeals
     # so it compresses the final response after all other middleware are done.
     config.middleware.insert_before Rack::Sendfile, Rack::Deflater
 
+    # Dump the schema as SQL. The database is the last line of defense
+    # (CLAUDE.md): reconciled-meal immutability lives in triggers, and
+    # schema.rb cannot represent triggers, so a schema.rb-built database
+    # would silently lack them (issue #26).
+    config.active_record.schema_format = :sql
+
     # Set Time Zone
     config.time_zone = 'America/Los_Angeles'
   end

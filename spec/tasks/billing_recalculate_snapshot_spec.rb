@@ -36,7 +36,10 @@ RSpec.describe 'billing:recalculate snapshot isolation' do
     Key.delete_all
     Resident.delete_all
     Unit.delete_all
-    Community.delete_all
+    # DELETE on communities is refused by prevent_community_delete
+    # (20260408000002). TRUNCATE does not fire row-level triggers; every
+    # referencing table is already empty.
+    ActiveRecord::Base.connection.execute('TRUNCATE communities CASCADE')
   end
 
   it 'computes every balance from one snapshot when a meal edit commits mid-read' do
