@@ -87,6 +87,12 @@ async function clearStorage(page) {
  * Mock all API routes with fixture data. Call after page is created but
  * before navigating to the app.
  *
+ * Ordering convention: Playwright matches routes last-registered-first,
+ * so a test that wants to specialize an endpoint (error response, delay)
+ * must register its route AFTER calling this helper (or
+ * setupAuthenticatedPage). A route registered before is silently
+ * shadowed by the stubs here.
+ *
  * Options:
  *   mealData    - override meal fixture
  *   calendarData - override calendar fixture

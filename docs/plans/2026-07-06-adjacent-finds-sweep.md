@@ -75,11 +75,14 @@ Start each fresh session with exactly this, unchanged, until done:
 Every later session reads `bin/check` output; these four make that output
 mean something.
 
-- [ ] **Session 2 — #20: login loader E2E.** Root cause already diagnosed in
+- [x] **Session 2 — #20: login loader E2E.** Root cause already diagnosed in
       the brief: the test's delayed token route is shadowed by `mockApi`'s
       instant stub (Playwright matches routes last-registered-first). Fix the
       ordering, audit sibling tests for the same pattern, document the
-      convention on the helper.
+      convention on the helper. Done: moved the delayed route after `mockApi`
+      (was racy, 1-in-10 fail; 10/10 after); audit found no other shadowed
+      test — every other spec overrides after the helper; convention
+      documented on `mockApi` in `tests/helpers/setup.js`.
 - [ ] **Session 3 — #21: flake diagnosability and measurement.** Retries with
       trace capture, measured flake rate before/after, explicit waits where
       races are found. Runs after Session 2 so the one deterministic failure

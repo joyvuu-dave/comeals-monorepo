@@ -239,8 +239,12 @@ test.describe("Error Handling & Edge Cases", () => {
     }) => {
       await stubPusher(page);
       await disableIdleTimer(page);
+      await mockApi(page);
 
-      // Slow down the login response so we can observe the loading state
+      // Slow down the login response so we can observe the loading state.
+      // Registered after mockApi so it wins: Playwright matches routes
+      // last-registered-first, so a route registered before mockApi would
+      // be shadowed by its instant stub.
       await page.route("**/api/v1/residents/token", (route) => {
         setTimeout(() => {
           route.fulfill({
@@ -255,7 +259,6 @@ test.describe("Error Handling & Edge Cases", () => {
           });
         }, 1000);
       });
-      await mockApi(page);
 
       await page.goto("/");
       await page.locator('input[aria-label="email"]').fill("jane@example.com");
