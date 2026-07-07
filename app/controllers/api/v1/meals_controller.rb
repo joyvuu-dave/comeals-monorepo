@@ -216,11 +216,15 @@ module Api
 
         # Pessimistic lock on the meal row prevents concurrent update_bills
         # calls from interleaving (same pattern as create_meal_resident).
+        # Bills are diffed and destroyed explicitly — never through cook_ids=,
+        # which would swallow a guard-blocked removal silently. destroy! runs
+        # the audited hooks and the reconciled guard, and raises (rolling back
+        # the whole diff) if a reconciliation claimed the meal after the
+        # reject_if_reconciled check above.
         @meal.with_lock do
-          @meal.update!(cook_ids: cook_ids)
-          @meal.reload
+          @meal.bills.where.not(resident_id: cook_ids).find_each(&:destroy!)
           parsed_bills.each do |bill|
-            @meal.bills.find_by!(resident_id: bill[:resident_id])
+            @meal.bills.find_or_initialize_by(resident_id: bill[:resident_id])
                  .update!(amount: bill[:amount], no_cost: bill[:no_cost])
           end
         end
@@ -231,6 +235,9 @@ module Api
       rescue ActiveRecord::RecordNotFound, ActiveRecord::RecordInvalid => e
         @skip_pusher = true
         render json: { message: e.message }, status: :bad_request
+      rescue ActiveRecord::RecordNotDestroyed => e
+        @skip_pusher = true
+        render json: { message: e.record.errors.full_messages.join("\n") }, status: :bad_request
       rescue ActiveRecord::InvalidForeignKey
         @skip_pusher = true
         render json: { message: 'Invalid cook assignment.' }, status: :bad_request

@@ -2,8 +2,12 @@
 
 ActiveAdmin.register Meal do
   # STRONG PARAMS
+  # attendee_ids is deliberately absent: ids-assignment on the through
+  # association removes MealResident rows without their audit hooks or
+  # closed/reconciled guards running per row (issue #7). Attendance is
+  # managed through the API, which operates on individual rows.
   permit_params :date, :closed, :max, :community_id,
-                guests_attributes: %i[id multiplier resident_id meal_id _destroy], attendee_ids: []
+                guests_attributes: %i[id multiplier resident_id meal_id _destroy]
 
   # CONFIG
   filter :reconciliation_id_null, as: :select, collection: [['Yes', false], ['No', true]], include_blank: false,
@@ -91,9 +95,6 @@ ActiveAdmin.register Meal do
       f.input :community_id, input_html: { value: Community.instance.id }, as: :hidden
       f.input :closed
       f.input :max if f.object.closed
-      f.input :attendees, as: :check_boxes, label: 'Attendees', collection: Resident.includes(:unit).order('units.name ASC').map { |r|
-        ["#{r.name} - #{r.unit.name}", r.id]
-      }
     end
     f.inputs do
       f.has_many :guests, allow_destroy: true, heading: 'Guests', new_record: true do |g|

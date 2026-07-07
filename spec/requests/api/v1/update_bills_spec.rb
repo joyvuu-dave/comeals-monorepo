@@ -140,6 +140,66 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
     end
   end
 
+  describe 'removing a cook' do
+    it 'destroys the omitted cook’s bill and records the removal in the meal history' do
+      departing_cook = create(:resident, community: community, unit: unit)
+      departing_bill = create(:bill, meal: meal, resident: departing_cook, community: community,
+                                     amount: BigDecimal('80'))
+
+      update_bills(
+        meal_id: meal.id,
+        bills: [{ resident_id: cook.id, amount: '20.00', no_cost: false }]
+      )
+
+      expect(response).to have_http_status(:ok)
+      expect(meal.bills.pluck(:resident_id)).to contain_exactly(cook.id)
+
+      destroy_audit = meal.associated_audits.find_by(auditable_type: 'Bill', auditable_id: departing_bill.id,
+                                                     action: 'destroy')
+      expect(destroy_audit).not_to be_nil
+      expect(BigDecimal(destroy_audit.audited_changes['amount'].to_s)).to eq(BigDecimal('80'))
+    end
+
+    it 'destroys every bill when all cook slots are cleared' do
+      # as: :json — an empty array survives JSON parsing (the SPA sends JSON);
+      # form encoding would drop the bills key entirely.
+      patch "/api/v1/meals/#{meal.id}/bills",
+            params: { meal_id: meal.id, bills: [], token: token },
+            as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(meal.bills.count).to eq(0)
+      expect(meal.associated_audits.where(auditable_type: 'Bill', action: 'destroy').count).to eq(1)
+    end
+  end
+
+  describe 'reconciliation racing the locked write' do
+    # The reject_if_reconciled before_action reads the meal before the lock is
+    # taken, so a reconciliation sweep can commit in between. The locked write
+    # must then re-encounter the guards and roll back — a swept meal's bills
+    # may never be deleted.
+    it 'returns 400 and keeps the bills when the meal is swept after the stale check' do
+      # end_date predates the meal so creating the reconciliation does not
+      # sweep it; the with_lock wrapper below performs the sweep inside the
+      # race window instead (update_all, like the real assign_meals).
+      reconciliation = create(:reconciliation, community: community, end_date: meal.date - 30)
+
+      allow_any_instance_of(Meal).to receive(:with_lock) # rubocop:disable RSpec/AnyInstance -- the race window is inside one request
+        .and_wrap_original do |original, *args, &block|
+          Meal.where(id: original.receiver.id).update_all(reconciliation_id: reconciliation.id)
+          original.call(*args, &block)
+        end
+
+      patch "/api/v1/meals/#{meal.id}/bills",
+            params: { meal_id: meal.id, bills: [], token: token },
+            as: :json
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to include('reconciled')
+      expect(Bill.exists?(bill.id)).to be true
+    end
+  end
+
   describe 'blank amount' do
     it 'treats empty string amount as zero' do
       update_bills(

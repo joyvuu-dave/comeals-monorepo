@@ -560,6 +560,48 @@ RSpec.describe Meal do
   end
 
   # ---------------------------------------------------------------------------
+  # ids-assignment on financial through-associations (issue #7)
+  #
+  # cook_ids= / attendee_ids= must remove join rows via destroy, not
+  # delete_all: destroy runs the audited hooks and the reconciled guards.
+  # ---------------------------------------------------------------------------
+
+  describe 'ids-assignment on financial through-associations' do
+    it 'cannot strip attendance from a reconciled meal via attendee_ids=' do
+      meal = create(:meal, community: community)
+      resident = create(:resident, community: community, unit: unit, multiplier: 2)
+      create(:meal_resident, meal: meal, resident: resident, community: community)
+      meal.update!(reconciliation: create(:reconciliation, community: community))
+
+      expect { meal.attendee_ids = [] }.not_to change(MealResident, :count)
+      expect(meal.reload.attendees).to contain_exactly(resident)
+    end
+
+    it 'destroys bills removed via cook_ids= with an audit record of the amount' do
+      meal = create(:meal, community: community)
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      bill = create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('80'))
+
+      expect { meal.cook_ids = [] }.to change(Bill, :count).by(-1)
+
+      destroy_audit = meal.associated_audits.find_by(auditable_type: 'Bill', auditable_id: bill.id,
+                                                     action: 'destroy')
+      expect(destroy_audit).not_to be_nil
+      expect(BigDecimal(destroy_audit.audited_changes['amount'].to_s)).to eq(BigDecimal('80'))
+    end
+
+    it 'cannot strip bills from a reconciled meal via cook_ids=' do
+      meal = create(:meal, community: community)
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('80'))
+      meal.update!(reconciliation: create(:reconciliation, community: community))
+
+      expect { meal.cook_ids = [] }.not_to change(Bill, :count)
+      expect(meal.reload.cooks).to contain_exactly(cook)
+    end
+  end
+
+  # ---------------------------------------------------------------------------
   # Scopes
   # ---------------------------------------------------------------------------
 

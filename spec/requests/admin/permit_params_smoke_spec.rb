@@ -139,7 +139,6 @@ RSpec.describe 'Admin permit_params smoke tests' do
 
   describe 'POST /meals (admin)' do
     it 'persists every form field including nested associations' do
-      eater = create(:resident, community: community, unit: unit, multiplier: 2)
       host = create(:resident, community: community, unit: unit, multiplier: 2)
 
       expect do
@@ -148,7 +147,6 @@ RSpec.describe 'Admin permit_params smoke tests' do
             date: '2026-06-01',
             community_id: community.id,
             closed: false,
-            attendee_ids: [eater.id.to_s],
             guests_attributes: {
               '0' => { multiplier: 2, resident_id: host.id, _destroy: '0' }
             }
@@ -159,9 +157,29 @@ RSpec.describe 'Admin permit_params smoke tests' do
       meal = Meal.find_by(date: Date.new(2026, 6, 1))
       expect(meal).not_to be_nil
       expect(meal.community_id).to eq(community.id)
-      expect(meal.attendees).to include(eater)
       expect(meal.guests.count).to eq(1)
       expect(meal.guests.first.resident_id).to eq(host.id)
+    end
+
+    # attendee_ids assignment removes MealResident rows via the through
+    # association — never through a form param. It must not be permitted
+    # (issue #7); attendance changes go through the API, where the model
+    # guards and audit hooks run per row.
+    it 'ignores attendee_ids' do
+      eater = create(:resident, community: community, unit: unit, multiplier: 2)
+
+      post '/meals', params: {
+        meal: {
+          date: '2026-06-02',
+          community_id: community.id,
+          closed: false,
+          attendee_ids: [eater.id.to_s]
+        }
+      }
+
+      meal = Meal.find_by(date: Date.new(2026, 6, 2))
+      expect(meal).not_to be_nil
+      expect(meal.attendees).to be_empty
     end
   end
 

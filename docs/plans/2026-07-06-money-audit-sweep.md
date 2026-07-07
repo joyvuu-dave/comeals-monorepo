@@ -151,9 +151,19 @@ All four code sessions overlap in `meal.rb`, the guard models, and
       `destroy_meal_resident` still 500s (`destroy!` + RecordNotDestroyed) when
       the closed-meal guard blocks — filed as #22, suggested to fold into the
       Session 9 locking pass.
-- [ ] **Session 8 — #7: no more delete_all through ids-assignment.** Diff and
+- [x] **Session 8 — #7: no more delete_all through ids-assignment.** Diff and
       `destroy!` bills/attendance explicitly inside the meal lock so callbacks,
       guards, and audits run; drop `attendee_ids` from the ActiveAdmin permit list.
+      Done 2026-07-06: `:cooks`/`:attendees` through-associations now
+      `dependent: :destroy` (ids-assignment runs audits + reconciled guards);
+      `update_bills` diffs bills explicitly inside the lock and rescues
+      `RecordNotDestroyed` as 400 — the swept-between-check-and-lock race is
+      pinned in update_bills_spec via a `with_lock` wrap; `attendee_ids`
+      dropped from the admin permit list and form (attendance edits are
+      API-only now). Note for Session 9: the race pin covers the destroy path
+      only; the locking pass should still re-verify reconciled/closed state
+      after each lock's reload. Adjacent find filed as #23 (`host_ids=` has
+      the identical hole on Guest rows).
 - [ ] **Session 9 — #6: locking pass.** Wrap every meal-mutation endpoint in
       `@meal.with_lock` and re-verify reconciled/closed state after the lock's
       reload, exactly as the create paths do. Last in the cluster so it wraps the
