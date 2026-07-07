@@ -560,10 +560,10 @@ RSpec.describe Meal do
   end
 
   # ---------------------------------------------------------------------------
-  # ids-assignment on financial through-associations (issue #7)
+  # ids-assignment on financial through-associations (issues #7, #23)
   #
-  # cook_ids= / attendee_ids= must remove join rows via destroy, not
-  # delete_all: destroy runs the audited hooks and the reconciled guards.
+  # cook_ids= / attendee_ids= / host_ids= must remove join rows via destroy,
+  # not delete_all: destroy runs the audited hooks and the meal guards.
   # ---------------------------------------------------------------------------
 
   describe 'ids-assignment on financial through-associations' do
@@ -598,6 +598,60 @@ RSpec.describe Meal do
 
       expect { meal.cook_ids = [] }.not_to change(Bill, :count)
       expect(meal.reload.cooks).to contain_exactly(cook)
+    end
+
+    it 'destroys guests removed via host_ids= with an audit record of the multiplier' do
+      meal = create(:meal, community: community)
+      host = create(:resident, community: community, unit: unit, multiplier: 2)
+      guest = create(:guest, meal: meal, resident: host, multiplier: 3)
+
+      expect { meal.host_ids = [] }.to change(Guest, :count).by(-1)
+
+      destroy_audit = meal.associated_audits.find_by(auditable_type: 'Guest', auditable_id: guest.id,
+                                                     action: 'destroy')
+      expect(destroy_audit).not_to be_nil
+      expect(destroy_audit.audited_changes['multiplier']).to eq(3)
+    end
+
+    it 'cannot strip guests from a reconciled meal via host_ids=' do
+      meal = create(:meal, community: community)
+      host = create(:resident, community: community, unit: unit, multiplier: 2)
+      create(:guest, meal: meal, resident: host)
+      meal.update!(reconciliation: create(:reconciliation, community: community))
+
+      expect { meal.host_ids = [] }.not_to change(Guest, :count)
+      expect(meal.reload.hosts).to contain_exactly(host)
+    end
+
+    it 'cannot strip original guests from a closed meal via host_ids=' do
+      meal = create(:meal, community: community)
+      host = create(:resident, community: community, unit: unit, multiplier: 2)
+      create(:guest, meal: meal, resident: host)
+      meal.update!(closed: true, max: 1)
+
+      expect { meal.host_ids = [] }.not_to change(Guest, :count)
+      expect(meal.reload.hosts).to contain_exactly(host)
+    end
+
+    it 'still adds and removes hosts on an open, unreconciled meal via host_ids=' do
+      meal = create(:meal, community: community)
+      host = create(:resident, community: community, unit: unit, multiplier: 2)
+
+      expect { meal.host_ids = [host.id] }.to change(Guest, :count).by(1)
+      expect(meal.reload.hosts).to contain_exactly(host)
+
+      expect { meal.host_ids = [] }.to change(Guest, :count).by(-1)
+      expect(meal.reload.hosts).to be_empty
+    end
+
+    it 'still removes a guest added after the meal closed (an extra backing out) via host_ids=' do
+      meal = create(:meal, community: community)
+      host = create(:resident, community: community, unit: unit, multiplier: 2)
+      meal.update_columns(closed: true, closed_at: 1.hour.ago, max: 5)
+      create(:guest, meal: meal.reload, resident: host)
+
+      expect { meal.host_ids = [] }.to change(Guest, :count).by(-1)
+      expect(meal.reload.hosts).to be_empty
     end
   end
 

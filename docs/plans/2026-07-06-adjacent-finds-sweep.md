@@ -62,10 +62,13 @@ Start each fresh session with exactly this, unchanged, until done:
 
 ### Phase 1 — Close the live money hole
 
-- [ ] **Session 1 — #23: `host_ids=` destroys through callbacks.** One-line
+- [x] **Session 1 — #23: `host_ids=` destroys through callbacks.** One-line
       association change plus specs mirroring the #7 pins. Goes first because
       it is the only open issue where settled financial data can still be
-      silently corrupted.
+      silently corrupted. Done: added `dependent: :destroy` to `hosts` in
+      `meal.rb`; five pins in the meal spec's ids-assignment block (audit row,
+      reconciled block, closed block, open meal works, post-close extra can
+      back out).
 
 ### Phase 2 — Make the harness trustworthy
 
@@ -122,12 +125,12 @@ must be designed against the write paths as #25 leaves them.
 
 File-overlap map that produced the order above:
 
-| Contested code                                        | Issues        | Resolution                     |
-| ----------------------------------------------------- | ------------- | ------------------------------ |
-| `tests/e2e/*`, `tests/helpers/setup.js`, Playwright config | #20, #21 | sequential; #20 first          |
-| `meal.rb`, guard concerns, ActiveAdmin, DB schema     | #23, #25, #26 | sequential; #23 → #25 → #26    |
-| spec infrastructure (`spec/support`, rails_helper)    | #19, #27      | low overlap; harness phase     |
-| `config/routes.rb`                                    | #18           | isolated                       |
+| Contested code                                             | Issues        | Resolution                  |
+| ---------------------------------------------------------- | ------------- | --------------------------- |
+| `tests/e2e/*`, `tests/helpers/setup.js`, Playwright config | #20, #21      | sequential; #20 first       |
+| `meal.rb`, guard concerns, ActiveAdmin, DB schema          | #23, #25, #26 | sequential; #23 → #25 → #26 |
+| spec infrastructure (`spec/support`, rails_helper)         | #19, #27      | low overlap; harness phase  |
+| `config/routes.rb`                                         | #18           | isolated                    |
 
 Money first: #23 is the one remaining path that can corrupt settled data, and
 it is a one-line fix. Harness next, for the same reason the money sweep went
