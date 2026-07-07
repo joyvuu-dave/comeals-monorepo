@@ -51,16 +51,12 @@ RSpec.describe 'Admin Reconciliation Immutability' do
     expect(reconciliation.reload.end_date).to eq(Date.new(2025, 3, 31))
   end
 
-  it 'exposes no edit form' do
+  it 'exposes no edit route' do
     reconciliation = create_settled_reconciliation
 
-    # The admin edit route is gone. (The request does not 404 outright because
-    # the SPA GET catch-all swallows unknown admin-subdomain paths — issue #18
-    # — so pin that ActiveAdmin no longer serves an edit form.)
-    get "/reconciliations/#{reconciliation.id}/edit"
-
-    expect(request.params[:controller]).not_to eq('admin/reconciliations')
-    expect(response.body).not_to include('reconciliation[end_date]')
+    expect do
+      get "/reconciliations/#{reconciliation.id}/edit"
+    end.to raise_error(ActionController::RoutingError)
   end
 
   it 'still renders the new-reconciliation form' do

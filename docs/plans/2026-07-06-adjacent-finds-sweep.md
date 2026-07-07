@@ -120,10 +120,18 @@ mean something.
 
 ### Phase 3 — Routing correctness
 
-- [ ] **Session 6 — #18: unknown admin-subdomain GETs must 404.** Fold the
+- [x] **Session 6 — #18: unknown admin-subdomain GETs must 404.** Fold the
       subdomain check and the path-prefix check into one route-level
       constraint on the SPA catch-all; pin both the admin 404 and the
-      still-working resident SPA deep links.
+      still-working resident SPA deep links. Done: confirmed a route-level
+      lambda constraint replaces the scope's lambda (nothing raised before
+      the fix); root and glob now share one `spa_request` lambda checking
+      subdomain plus path prefixes; four pins in `routing_spec.rb` (admin
+      404, non-admin deep link, `/api/` and `/letter_opener` bypass); the
+      reconciliation-immutability "no edit form" workaround example is now a
+      direct no-edit-route RoutingError assertion. Session 7 note: unknown
+      admin-subdomain GETs now 404, so admin specs can assert RoutingError
+      for removed routes directly.
 
 ### Phase 4 — Build and harden (order matters)
 

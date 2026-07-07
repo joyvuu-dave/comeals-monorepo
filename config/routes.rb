@@ -64,10 +64,12 @@ Rails.application.routes.draw do
   # Vite manifest (dotfile directory, not served by static file middleware)
   get '.vite/manifest.json', to: 'fallback#vite_manifest'
 
-  # SPA catch-all (must be last; only on non-admin subdomain)
-  constraints(->(req) { req.subdomain != 'admin' }) do
-    root to: 'fallback#index'
-    get '*path', to: 'fallback#index',
-                 constraints: ->(req) { !req.path.start_with?('/api/', '/letter_opener') }
+  # SPA catch-all (must be last; only on non-admin subdomains). Rails replaces
+  # a scope's lambda constraint with a route-level one instead of merging them,
+  # so each route carries the whole check itself (issue #18).
+  spa_request = lambda do |req|
+    req.subdomain != 'admin' && !req.path.start_with?('/api/', '/letter_opener')
   end
+  root to: 'fallback#index', constraints: spa_request
+  get '*path', to: 'fallback#index', constraints: spa_request
 end

@@ -36,6 +36,32 @@ RSpec.describe 'Routing' do
     end
   end
 
+  describe 'SPA catch-all on the admin subdomain (issue #18)' do
+    it 'raises a routing error for unknown GET paths instead of serving the SPA' do
+      host! 'admin.example.com'
+      expect { get '/no-such-admin-page' }.to raise_error(ActionController::RoutingError)
+    end
+
+    it 'still serves the SPA for deep links on non-admin subdomains' do
+      host! 'www.example.com'
+      get '/calendar/meals/2026-04-14'
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('<div id="root">')
+    end
+
+    it 'still keeps unknown /api/ paths out of the catch-all' do
+      host! 'www.example.com'
+      expect { get '/api/v1/no-such-endpoint' }.to raise_error(ActionController::RoutingError)
+    end
+
+    it 'still keeps /letter_opener paths out of the catch-all' do
+      # The letter_opener engine is only mounted in development, so in test
+      # the path must fall through to a routing error, not the SPA.
+      host! 'www.example.com'
+      expect { get '/letter_opener' }.to raise_error(ActionController::RoutingError)
+    end
+  end
+
   describe 'API routes remain functional' do
     it 'routes /api/v1/version to site#version' do
       get '/api/v1/version'
