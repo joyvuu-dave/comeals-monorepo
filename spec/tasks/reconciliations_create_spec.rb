@@ -5,7 +5,7 @@ require 'rake'
 
 RSpec.describe 'reconciliations:create' do
   before(:all) do
-    Rails.application.load_tasks
+    RakeTasks.ensure_loaded
   end
 
   let(:community) { create(:community) }

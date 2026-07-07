@@ -16,12 +16,13 @@ RSpec.describe 'billing:recalculate snapshot isolation' do
   self.use_transactional_tests = false
 
   before(:all) do
-    # Every task spec file calls load_tasks, and each call stacks a duplicate
-    # action onto every task (issue #27). A duplicate action would re-run the
-    # task body after the concurrent edit commits and overwrite the snapshot
-    # result, so reset to exactly one action per task.
+    # This spec only works if the task body runs exactly once per invoke: a
+    # stacked duplicate action would re-run it after the concurrent edit
+    # commits and overwrite the snapshot result. RakeTasks.ensure_loaded
+    # already guarantees one action per task; the clear makes this spec
+    # hold that invariant on its own, whatever ran earlier in the process.
     Rake::Task.clear
-    Rails.application.load_tasks
+    RakeTasks.ensure_loaded
   end
 
   after do

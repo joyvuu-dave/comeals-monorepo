@@ -7,7 +7,7 @@ RSpec.describe 'community:create_rotations' do
   include ActiveSupport::Testing::TimeHelpers
 
   before(:all) do
-    Rails.application.load_tasks
+    RakeTasks.ensure_loaded
   end
 
   let(:community) { create(:community) }

@@ -95,9 +95,15 @@ mean something.
       the mock helper for race hunting. No race found: 0 flakes in 13 full
       runs across idle, CPU-stress, CPU-throttle, and dev-server
       environments — all five flake-set tests stable; rates on #21.
-- [ ] **Session 4 — #27: load rake tasks once per process.** Shared guarded
+- [x] **Session 4 — #27: load rake tasks once per process.** Shared guarded
       loader; drop the per-file `load_tasks` calls; keep the snapshot spec's
-      and clock-runner spec's isolated-rake-state patterns working.
+      and clock-runner spec's isolated-rake-state patterns working. Done:
+      `RakeTasks.ensure_loaded` in `spec/support/rake_tasks.rb`, guarded by
+      `task_defined?` on a sentinel task so it reloads after the snapshot
+      spec's `Rake::Task.clear`; all nine task specs go through it (the
+      snapshot spec keeps its `clear` and calls the helper after);
+      `spec/tasks/rake_tasks_loading_spec.rb` pins the one-action invariant
+      and the reload-after-clear behavior. Clock-runner spec untouched.
 - [ ] **Session 5 — #19: admin request specs, multiple authenticated
       requests.** Fix Warden test-mode session persistence under `api_only`,
       or (fallback) document and guard the one-request convention. Placed

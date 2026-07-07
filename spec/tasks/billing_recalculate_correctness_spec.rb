@@ -14,7 +14,7 @@ require 'rake'
 # runs (see rails_helper.rb); run it with BENCHMARK=1.
 RSpec.describe 'billing:recalculate correctness', type: :task do
   before(:all) do
-    Rails.application.load_tasks
+    RakeTasks.ensure_loaded
   end
 
   after do
