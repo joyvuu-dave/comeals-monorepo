@@ -176,10 +176,15 @@ All four code sessions overlap in `meal.rb`, the guard models, and
       `destroy_meal_resident` uses non-bang destroy, guard-blocked removals are
       400s now. DB backstop deferred — needs structure.sql plus trigger design;
       filed as #26. Note for Session 10: update_bills' endpoint shape is final.
-- [ ] **Session 10 — #15: pin update_bills rollback atomicity.** Request spec:
+- [x] **Session 10 — #15: pin update_bills rollback atomicity.** Request spec:
       later bill in a multi-bill payload fails → earlier writes rolled back;
       also pin negative-amount rejection. Test-only; runs after Sessions 8–9 so it
       pins the endpoint's final shape.
+      Done 2026-07-06: two pins added to update_bills_spec — negative amount
+      → 400 with bill unchanged, and multi-bill partial failure → earlier
+      write rolled back. Both verified red against the mutants the issue
+      names (`update!`→`update`, write loop hoisted out of `with_lock`).
+      Test-only; no production code changed.
 
 ### Phase 4 — Isolated cleanups (no file overlap with anything above)
 

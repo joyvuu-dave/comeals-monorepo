@@ -276,6 +276,43 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
     end
   end
 
+  describe 'negative amount' do
+    # A negative amount passes the BigDecimal parse in the controller; only
+    # Bill's amount >= 0 validation rejects it, inside the write loop.
+    it 'returns 400 and leaves the bill unchanged' do
+      update_bills(
+        meal_id: meal.id,
+        bills: [{ resident_id: cook.id, amount: '-5.00', no_cost: false }]
+      )
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to include('Amount must be greater than or equal to 0')
+      expect(bill.reload.amount).to eq(BigDecimal('0'))
+    end
+  end
+
+  describe 'partial failure in a multi-bill payload' do
+    # Atomicity rests on with_lock's implicit transaction. The bills are
+    # written in payload order, so the first bill has already been updated
+    # when the second one fails validation. The transaction must roll that
+    # write back — a 400 response must mean nothing was saved.
+    it 'rolls back the earlier bill write when a later bill fails' do
+      cook_2 = create(:resident, community: community, unit: unit)
+
+      update_bills(
+        meal_id: meal.id,
+        bills: [
+          { resident_id: cook.id, amount: '30.00', no_cost: false },
+          { resident_id: cook_2.id, amount: '-5.00', no_cost: false }
+        ]
+      )
+
+      expect(response).to have_http_status(:bad_request)
+      expect(bill.reload.amount).to eq(BigDecimal('0'))
+      expect(meal.bills.where(resident: cook_2)).not_to exist
+    end
+  end
+
   describe 'malformed amount' do
     it 'returns 400 for non-numeric strings' do
       update_bills(
