@@ -7,13 +7,24 @@ namespace :billing do
 
     community = Community.instance
 
-    # Batch-load all unreconciled meals with their financial associations (4 queries).
-    # Uses preload (not includes) to guarantee separate IN(?) queries.
-    # The joins(:bills).distinct excludes meals without bills — their unit_cost
-    # is 0, so they contribute nothing to any resident's balance.
-    unreconciled_meals = community.meals.unreconciled.with_attendees
-                                  .joins(:bills).distinct
-                                  .preload(:bills, :meal_residents, :guests).to_a
+    # Read every source record inside one REPEATABLE READ transaction so all
+    # five queries (meals, three preloads, residents) share a single database
+    # snapshot. Unreconciled meals are mutable: without this, a meal edit
+    # committing between two of the reads yields per-meal financials that
+    # match no real state of the ledger. Read-only, so it cannot hit a
+    # serialization failure and needs no retry.
+    unreconciled_meals = nil
+    resident_ids = nil
+    ActiveRecord::Base.transaction(isolation: :repeatable_read) do
+      # Batch-load all unreconciled meals with their financial associations (4 queries).
+      # Uses preload (not includes) to guarantee separate IN(?) queries.
+      # The joins(:bills).distinct excludes meals without bills — their unit_cost
+      # is 0, so they contribute nothing to any resident's balance.
+      unreconciled_meals = community.meals.unreconciled.with_attendees
+                                    .joins(:bills).distinct
+                                    .preload(:bills, :meal_residents, :guests).to_a
+      resident_ids = community.residents.pluck(:id)
+    end
 
     # Precompute per-meal financials from in-memory data (0 queries).
     # Uses block-form .sum(&:field) which invokes Enumerable#sum on the
@@ -68,11 +79,13 @@ namespace :billing do
       meal.guests.each { |g| guest_debits[g.resident_id] += mf[:unit_cost] * g.multiplier }
     end
 
-    # Persist balances via upsert (idempotent — safe if two rake runs overlap,
-    # because both compute the same deterministic result from immutable source data).
+    # Persist balances via upsert, outside the read transaction (safe if two
+    # rake runs overlap: each computes from its own consistent snapshot, the
+    # single INSERT ... ON CONFLICT UPDATE statement is atomic, and the next
+    # daily run corrects whichever result lost the last-writer race).
     # Batches all residents into a single INSERT ... ON CONFLICT UPDATE query.
     now = Time.current
-    rows = community.residents.pluck(:id).map do |resident_id|
+    rows = resident_ids.map do |resident_id|
       balance = credits[resident_id] - debits[resident_id] - guest_debits[resident_id]
       { resident_id: resident_id, amount: balance, created_at: now, updated_at: now }
     end

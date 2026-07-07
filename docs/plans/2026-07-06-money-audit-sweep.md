@@ -188,8 +188,16 @@ All four code sessions overlap in `meal.rb`, the guard models, and
 
 ### Phase 4 — Isolated cleanups (no file overlap with anything above)
 
-- [ ] **Session 11 — #10: consistent snapshot for billing:recalculate.** Wrap
+- [x] **Session 11 — #10: consistent snapshot for billing:recalculate.** Wrap
       the reads in one `isolation: :repeatable_read` transaction.
+      Done 2026-07-06: all five source reads (meals + three preloads +
+      residents pluck) now share one `repeatable_read` snapshot; upsert stays
+      outside it so overlapping runs stay safe. Race pinned in new
+      billing_recalculate_snapshot_spec via a raw-PG writer committing a meal
+      edit mid-read (non-transactional — Rails ignores isolation hints inside
+      the test transaction). Adjacent find filed as #27: every task spec's
+      `load_tasks` call stacks duplicate rake actions; the new spec resets via
+      `Rake::Task.clear` first.
 - [ ] **Session 12 — #11: dashboard 'Cost per adult' mirrors settlement math.**
       Filter `with_attendees`, use effective (capped) cost.
 - [ ] **Session 13 — #17: clock.rb reenable in ensure.** One transient failure
