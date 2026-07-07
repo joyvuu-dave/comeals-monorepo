@@ -19,17 +19,10 @@ $stdout.sync = true # Flush output immediately so foreman shows it in real time.
 require_relative '../config/environment'
 Rails.application.load_tasks
 
+require_relative 'clock_runner'
 require 'rufus-scheduler'
 
 scheduler = Rufus::Scheduler.new
-
-def run_task(name)
-  Rake::Task[name].invoke
-  Rake::Task[name].reenable
-rescue StandardError => e
-  puts "[clock] #{Time.current.strftime('%H:%M:%S')} FAILED: #{name} -- #{e.message}"
-  Rails.logger.error("[clock] #{name} failed: #{e.class}: #{e.message}\n#{e.backtrace.first(5).join("\n")}")
-end
 
 # --- Schedule Definition ---------------------------------------------------
 #
@@ -64,11 +57,11 @@ SCHEDULED_TASKS.each_with_index do |entry, i|
   if fast_mode
     # Stagger by 10s so tasks don't all fire simultaneously.
     scheduler.every '2m', first_in: "#{5 + (i * 10)}s" do
-      run_task(entry[:task])
+      ClockRunner.run_task(entry[:task])
     end
   else
     scheduler.cron entry[:cron] do
-      run_task(entry[:task])
+      ClockRunner.run_task(entry[:task])
     end
   end
 end

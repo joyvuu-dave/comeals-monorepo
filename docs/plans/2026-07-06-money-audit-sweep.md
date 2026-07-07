@@ -206,8 +206,14 @@ All four code sessions overlap in `meal.rb`, the guard models, and
       can't cover on uncapped meals). Existing basic spec re-pointed to an
       under-cap bill — its $40 meal was subsidized under the 4.50 test cap, so
       it had pinned the old wrong figure.
-- [ ] **Session 13 — #17: clock.rb reenable in ensure.** One transient failure
+- [x] **Session 13 — #17: clock.rb reenable in ensure.** One transient failure
       must not permanently disable a scheduled task.
+      Done 2026-07-06: `run_task` extracted to `lib/clock_runner.rb` (clock.rb
+      is a boot-and-join script, so the method had to move to be testable);
+      `reenable` now runs in an `ensure` block. Retry-after-failure,
+      rescue-and-log, and the happy path pinned in
+      spec/lib/clock_runner_spec.rb, each example on its own isolated
+      `Rake::Application` so the global rake state (#27) is untouched.
 - [ ] **Session 14 — Final cleanup.** Verify issues #3–#17 are all closed
       (`gh issue list --state open`), reopen anything missed, then `git rm` this
       plan doc, commit, push. The closed issues and git history are the durable
