@@ -83,13 +83,29 @@ RSpec.describe Community do
       diner = create(:resident, community: community, unit: unit, multiplier: 2)
 
       meal = create(:meal, community: community)
-      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('40'))
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('16'))
       create(:meal_resident, meal: meal, resident: cook, community: community)
       create(:meal_resident, meal: meal, resident: diner, community: community)
 
       result = community.unreconciled_ave_cost
-      # total_multiplier = 2 + 2 = 4, total_cost = 40, cost_per_unit = 10, per_adult = 20
-      expect(result).to eq('$20.00/adult')
+      # total_multiplier = 2 + 2 = 4, total_cost = 16 (under the 4.50/unit cap),
+      # cost_per_unit = 4, per_adult = 8
+      expect(result).to eq('$8.00/adult')
+    end
+
+    # Settlement rule: a subsidized meal charges only its effective (capped)
+    # cost — cap * multiplier — not the raw bill total.
+    it 'uses the effective capped cost for subsidized meals' do
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      diner = create(:resident, community: community, unit: unit, multiplier: 2)
+
+      meal = create(:meal, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('40'))
+      create(:meal_resident, meal: meal, resident: cook, community: community)
+      create(:meal_resident, meal: meal, resident: diner, community: community)
+
+      # cap 4.50 * multiplier 4 = 18 effective (raw 40); 2 * (18 / 4) = $9.00
+      expect(community.unreconciled_ave_cost).to eq('$9.00/adult')
     end
 
     it 'returns -- when no unreconciled meals exist' do
@@ -103,6 +119,46 @@ RSpec.describe Community do
       create(:meal_resident, meal: meal, resident: child, community: community, multiplier: 0)
 
       expect(community.unreconciled_ave_cost).to eq('--')
+    end
+
+    # Settlement rule: a bill on a meal nobody attended has zero financial
+    # impact (the cook absorbs it). The dashboard average must skip it too.
+    it 'excludes bills from meals with no attendees' do
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      diner = create(:resident, community: community, unit: unit, multiplier: 2)
+
+      attended = create(:meal, community: community)
+      create(:bill, meal: attended, resident: cook, community: community, amount: BigDecimal('16'))
+      create(:meal_resident, meal: attended, resident: cook, community: community)
+      create(:meal_resident, meal: attended, resident: diner, community: community)
+
+      empty = create(:meal, community: community)
+      create(:bill, meal: empty, resident: cook, community: community, amount: BigDecimal('60'))
+
+      # Only the attended meal counts: 2 * (16 / 4) = $8.00
+      expect(community.unreconciled_ave_cost).to eq('$8.00/adult')
+    end
+
+    # Settlement rule (the total_mult.zero? short-circuit in billing:recalculate):
+    # a meal whose attendees sum to zero multiplier charges nobody, so its
+    # bills add nothing — even when the meal is uncapped.
+    it 'excludes bills from zero-multiplier meals' do
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      diner = create(:resident, community: community, unit: unit, multiplier: 2)
+      child = create(:resident, community: community, unit: unit, multiplier: 0)
+
+      attended = create(:meal, community: community)
+      create(:bill, meal: attended, resident: cook, community: community, amount: BigDecimal('16'))
+      create(:meal_resident, meal: attended, resident: cook, community: community)
+      create(:meal_resident, meal: attended, resident: diner, community: community)
+
+      child_only = create(:meal, community: community)
+      child_only.update!(cap: nil) # uncapped, so the cap can't mask the rule
+      create(:bill, meal: child_only, resident: cook, community: community, amount: BigDecimal('10'))
+      create(:meal_resident, meal: child_only, resident: child, community: community, multiplier: 0)
+
+      # Only the attended meal contributes cost: 2 * (16 / 4) = $8.00
+      expect(community.unreconciled_ave_cost).to eq('$8.00/adult')
     end
   end
 

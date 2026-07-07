@@ -198,8 +198,14 @@ All four code sessions overlap in `meal.rb`, the guard models, and
       the test transaction). Adjacent find filed as #27: every task spec's
       `load_tasks` call stacks duplicate rake actions; the new spec resets via
       `Rake::Task.clear` first.
-- [ ] **Session 12 — #11: dashboard 'Cost per adult' mirrors settlement math.**
+- [x] **Session 12 — #11: dashboard 'Cost per adult' mirrors settlement math.**
       Filter `with_attendees`, use effective (capped) cost.
+      Done 2026-07-06: `unreconciled_ave_cost` now filters `with_attendees`,
+      reuses `Meal#effective_total_cost` for the cap, and skips zero-multiplier
+      meals (settlement's `total_mult.zero?` short-circuit, which the cap alone
+      can't cover on uncapped meals). Existing basic spec re-pointed to an
+      under-cap bill — its $40 meal was subsidized under the 4.50 test cap, so
+      it had pinned the old wrong figure.
 - [ ] **Session 13 — #17: clock.rb reenable in ensure.** One transient failure
       must not permanently disable a scheduled task.
 - [ ] **Session 14 — Final cleanup.** Verify issues #3–#17 are all closed

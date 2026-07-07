@@ -100,15 +100,18 @@ class Community < ApplicationRecord
   end
 
   # Report Methods
+
+  # Dashboard "Cost per adult". Must mirror settlement math (see
+  # billing:recalculate): meals nobody attended are skipped, capped meals
+  # count their effective cost, and a zero-multiplier meal charges nobody.
+  # An adult is 2 multiplier units, hence the 2x.
   def unreconciled_ave_cost
-    unreconciled = meals.unreconciled.preload(:bills, :meal_residents, :guests).to_a
-    total_multiplier = unreconciled.sum do |meal|
-      meal.meal_residents.sum(&:multiplier) + meal.guests.sum(&:multiplier)
-    end
+    unreconciled = meals.unreconciled.with_attendees.preload(:meal_residents, :guests).to_a
+    total_multiplier = unreconciled.sum(&:multiplier)
     return '--' if total_multiplier.zero?
 
-    total_cost = unreconciled.sum do |meal|
-      meal.bills.reject(&:no_cost).sum(BigDecimal('0'), &:amount)
+    total_cost = unreconciled.sum(BigDecimal('0')) do |meal|
+      meal.multiplier.zero? ? BigDecimal('0') : meal.effective_total_cost
     end
     val = 2 * (total_cost / total_multiplier)
     "$#{format('%0.02f', val)}/adult"
