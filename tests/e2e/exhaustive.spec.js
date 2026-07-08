@@ -134,7 +134,7 @@ test.describe("Exhaustive Coverage", () => {
       ).toBeTruthy();
     });
 
-    test("bill amount validation shows red border on invalid input", async ({
+    test("bill amount input refuses values that break the whole-cents grammar", async ({
       page,
     }) => {
       await page.goto("/meals/42/edit/");
@@ -142,21 +142,25 @@ test.describe("Exhaustive Coverage", () => {
 
       const costInput = page.locator('[aria-label="Set meal cost"]').first();
       await expect(costInput).toBeVisible({ timeout: 10000 });
+      await expect(costInput).toHaveValue("25.50");
 
-      // Valid amount: no input-invalid class
+      // A negative amount does not land: the field keeps its value
+      await costInput.fill("-5");
+      await expect(costInput).toHaveValue("25.50");
       await expect(costInput).not.toHaveClass(/input-invalid/);
 
-      // Enter invalid amount (negative)
-      await costInput.fill("-5");
+      // A sub-cent amount does not land either
+      await costInput.fill("12.345");
+      await expect(costInput).toHaveValue("25.50");
 
-      // Should show input-invalid class (red border)
-      await expect(costInput).toHaveClass(/input-invalid/, { timeout: 3000 });
+      // An amount over 9999.99 does not land
+      await costInput.fill("10000");
+      await expect(costInput).toHaveValue("25.50");
 
-      // Fix it with a valid amount
+      // A valid amount lands
       await costInput.fill("10.00");
-      await expect(costInput).not.toHaveClass(/input-invalid/, {
-        timeout: 3000,
-      });
+      await expect(costInput).toHaveValue("10.00");
+      await expect(costInput).not.toHaveClass(/input-invalid/);
     });
 
     test("guest dropdown closes when clicking outside", async ({ page }) => {

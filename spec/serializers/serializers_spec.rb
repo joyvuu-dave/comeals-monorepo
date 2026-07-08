@@ -67,10 +67,12 @@ RSpec.describe 'Serializers', type: :serializer do
     # Floats lose precision (0.1 + 0.2 != 0.3). This test ensures
     # Oj.optimize_rails preserves the string convention. If this test
     # fails, financial data is being silently corrupted in transit.
+    # (Bill amounts are whole cents since issue #29, so the fixture is a
+    # two-decimal value; the string-on-the-wire rule is what matters here.)
     it 'serializes BigDecimal amounts as strings, not floats' do
       meal = create(:meal, community: community)
       bill = create(:bill, meal: meal, resident: resident, community: community,
-                           amount: BigDecimal('50.12345678'))
+                           amount: BigDecimal('50.12'))
 
       json = ActiveModelSerializers::SerializableResource.new(
         bill, serializer: described_class
@@ -78,7 +80,7 @@ RSpec.describe 'Serializers', type: :serializer do
       parsed = JSON.parse(json)
 
       expect(parsed['amount']).to be_a(String)
-      expect(BigDecimal(parsed['amount'])).to eq(BigDecimal('50.12345678'))
+      expect(BigDecimal(parsed['amount'])).to eq(BigDecimal('50.12'))
     end
   end
 

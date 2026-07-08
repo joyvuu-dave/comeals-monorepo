@@ -38,10 +38,18 @@ const BillEdit = inject("store")(
         <input
           type="number"
           min="0"
-          max="999"
+          max="9999.99"
           step="0.01"
           value={bill.amount}
-          onChange={(e) => bill.setAmount(e.target.value)}
+          onChange={(e) => {
+            // setAmount refuses input that breaks the whole-cents grammar.
+            // On refusal the store is unchanged, so React skips the
+            // re-render — put the stored amount back in the DOM by hand.
+            const landed = bill.setAmount(e.target.value);
+            if (landed !== e.target.value) {
+              e.target.value = landed;
+            }
+          }}
           style={styles.select}
           className={bill.amountIsValid ? "" : "input-invalid"}
           disabled={store.meal.closed || store.meal.reconciled}

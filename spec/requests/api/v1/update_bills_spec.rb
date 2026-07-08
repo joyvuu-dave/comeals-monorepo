@@ -277,8 +277,8 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
   end
 
   describe 'negative amount' do
-    # A negative amount passes the BigDecimal parse in the controller; only
-    # Bill's amount >= 0 validation rejects it, inside the write loop.
+    # The whole-cents grammar has no minus sign, so the controller rejects
+    # a negative amount before any DB write.
     it 'returns 400 and leaves the bill unchanged' do
       update_bills(
         meal_id: meal.id,
@@ -286,8 +286,147 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
       )
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body['message']).to include('Amount must be greater than or equal to 0')
+      expect(response.parsed_body['message']).to include('Invalid amount')
       expect(bill.reload.amount).to eq(BigDecimal('0'))
+    end
+  end
+
+  describe 'whole-cents grammar' do
+    # Issue #29: amounts are whole cents, 0 to 9999.99. Reject, never round —
+    # a sub-cent amount must not enter the ledger, and the server must not
+    # invent a different value than the cook typed.
+    it 'returns 400 for a sub-cent amount and leaves the bill unchanged' do
+      update_bills(
+        meal_id: meal.id,
+        bills: [{ resident_id: cook.id, amount: '12.345', no_cost: false }]
+      )
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to include('Invalid amount')
+      expect(bill.reload.amount).to eq(BigDecimal('0'))
+    end
+
+    it 'returns 400 for an amount over 9999.99 instead of overflowing the column' do
+      update_bills(
+        meal_id: meal.id,
+        bills: [{ resident_id: cook.id, amount: '10000', no_cost: false }]
+      )
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to include('Invalid amount')
+      expect(bill.reload.amount).to eq(BigDecimal('0'))
+    end
+
+    it 'returns 400 for scientific notation' do
+      update_bills(
+        meal_id: meal.id,
+        bills: [{ resident_id: cook.id, amount: '1e3', no_cost: false }]
+      )
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to include('Invalid amount')
+    end
+
+    it 'returns 400 for a sub-cent fraction that would round to zero' do
+      update_bills(
+        meal_id: meal.id,
+        bills: [{ resident_id: cook.id, amount: '0.000000001', no_cost: false }]
+      )
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to include('Invalid amount')
+    end
+
+    it 'accepts the largest whole-cent amount the column can hold' do
+      update_bills(
+        meal_id: meal.id,
+        bills: [{ resident_id: cook.id, amount: '9999.99', no_cost: false }]
+      )
+
+      expect(response).to have_http_status(:ok)
+      expect(bill.reload.amount).to eq(BigDecimal('9999.99'))
+    end
+
+    it 'accepts a single decimal digit' do
+      update_bills(
+        meal_id: meal.id,
+        bills: [{ resident_id: cook.id, amount: '12.5', no_cost: false }]
+      )
+
+      expect(response).to have_http_status(:ok)
+      expect(bill.reload.amount).to eq(BigDecimal('12.5'))
+    end
+  end
+
+  describe 'untouched rows' do
+    # A row with only resident_id names a cook the user did not touch. It
+    # keeps the bill alive (a cook left out of the payload is removed) but
+    # must never rewrite the stored amount or no_cost — this is what stops
+    # a client display value from silently changing a financial record.
+    it 'keeps the stored amount and no_cost when only resident_id is sent' do
+      bill.update!(amount: BigDecimal('12.34'), no_cost: false)
+      untouched_at = bill.reload.updated_at
+      new_cook = create(:resident, community: community, unit: unit)
+
+      patch "/api/v1/meals/#{meal.id}/bills",
+            params: {
+              meal_id: meal.id,
+              bills: [
+                { resident_id: cook.id },
+                { resident_id: new_cook.id, amount: '5.00', no_cost: false }
+              ],
+              token: token
+            },
+            as: :json
+
+      expect(response).to have_http_status(:ok)
+      bill.reload
+      expect(bill.amount).to eq(BigDecimal('12.34'))
+      expect(bill.no_cost).to be(false)
+      expect(bill.updated_at).to eq(untouched_at)
+      expect(meal.bills.find_by(resident: new_cook).amount).to eq(BigDecimal('5'))
+    end
+
+    it 'creates a bill with column defaults for a new cook sent without values' do
+      new_cook = create(:resident, community: community, unit: unit)
+
+      patch "/api/v1/meals/#{meal.id}/bills",
+            params: {
+              meal_id: meal.id,
+              bills: [
+                { resident_id: cook.id },
+                { resident_id: new_cook.id }
+              ],
+              token: token
+            },
+            as: :json
+
+      expect(response).to have_http_status(:ok)
+      new_bill = meal.bills.find_by(resident: new_cook)
+      expect(new_bill.amount).to eq(BigDecimal('0'))
+      expect(new_bill.no_cost).to be(false)
+    end
+
+    it 'does not validate the stored value of an untouched row' do
+      # The stored amount is grammar-valid by construction (CHECK
+      # constraint), so an untouched row must save cleanly even while
+      # another row in the same payload changes.
+      bill.update!(amount: BigDecimal('9999.99'))
+      new_cook = create(:resident, community: community, unit: unit)
+
+      patch "/api/v1/meals/#{meal.id}/bills",
+            params: {
+              meal_id: meal.id,
+              bills: [
+                { resident_id: cook.id },
+                { resident_id: new_cook.id, amount: '1.00', no_cost: false }
+              ],
+              token: token
+            },
+            as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(bill.reload.amount).to eq(BigDecimal('9999.99'))
     end
   end
 

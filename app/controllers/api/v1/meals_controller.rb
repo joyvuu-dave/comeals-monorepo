@@ -3,6 +3,12 @@
 module Api
   module V1
     class MealsController < ApiController
+      # Whole cents, 0 to 9999.99. The SPA blocks input that breaks this
+      # grammar (app/frontend/src/helpers/money.ts holds the same pattern);
+      # here it is enforced, never rounded. Bill's model validation and the
+      # bills_amount_whole_cents CHECK constraint stand behind it.
+      WHOLE_CENTS_AMOUNT = /\A\d{1,4}(\.\d{1,2})?\z/
+
       before_action :authenticate
       before_action :set_meal, except: %i[index next]
       before_action :reject_if_reconciled, only: %i[
@@ -195,44 +201,34 @@ module Api
           return
         end
 
-        # Future meal
-        # More than two cooks
-        if (@meal.date > Time.zone.today) && (cook_ids.length > 2)
-          existing_cook_ids = @meal.bills.pluck(:resident_id).map(&:to_s).sort
-          new_cook_ids = cook_ids.map(&:to_s).sort
-          cooks_changed = new_cook_ids != existing_cook_ids
-
-          # Scenario #1: adding cooks
-          if (cook_ids.length > existing_cook_ids.length) &&
-             @meal.another_meal_in_this_rotation_has_less_than_two_cooks?
-            message = 'Warning: third cooks should not be added until all meals ' \
-                      'in the rotation have at least two cooks.'
-            request_symbol = :bad_request
-            message_type = 'warning'
-          end
-
-          # Scenario #2: switching cooks
-          if (cook_ids.length == existing_cook_ids.length) && cooks_changed &&
-             @meal.another_meal_in_this_rotation_has_less_than_two_cooks?
-            message = 'Warning: third cook should not be switched when there are ' \
-                      'other meals in the rotation without at least two cooks.'
-            request_symbol = :bad_request
-            message_type = 'warning'
-          end
+        warning = ThirdCookWarning.for(@meal, cook_ids)
+        if warning
+          message = warning
+          request_symbol = :bad_request
+          message_type = 'warning'
         end
 
-        # Validate all amounts before any DB writes
+        # Validate all amounts before any DB writes. A row without value
+        # keys names a cook the user did not touch: it keeps the bill alive
+        # (a cook left out of the payload is removed below) but its stored
+        # amount and no_cost are never rewritten.
         parsed_bills = []
         params[:bills].each do |bill|
+          unless bill.key?('amount') || bill.key?('no_cost')
+            parsed_bills << { resident_id: bill['resident_id'], touched: false }
+            next
+          end
           amount_str = bill['amount'].to_s
           amount_str = '0' if amount_str.blank?
-          begin
-            amount_value = BigDecimal(amount_str)
-          rescue ArgumentError
-            render json: { message: "Invalid amount: #{bill['amount']}" }, status: :bad_request
+          unless WHOLE_CENTS_AMOUNT.match?(amount_str)
+            render json: { message: "Invalid amount: #{bill['amount']}. Amounts are whole cents, 0 to 9999.99." },
+                   status: :bad_request
             return # rubocop:disable Lint/NonLocalExitFromIterator -- intentional: render error and exit action
           end
-          parsed_bills << { resident_id: bill['resident_id'], amount: amount_value, no_cost: bill['no_cost'] }
+          parsed_bills << {
+            resident_id: bill['resident_id'], amount: BigDecimal(amount_str), no_cost: bill['no_cost'],
+            touched: true
+          }
         end
 
         # Verify all cooks are valid residents
@@ -253,8 +249,14 @@ module Api
         with_meal_lock do
           @meal.bills.where.not(resident_id: cook_ids).find_each(&:destroy!)
           parsed_bills.each do |bill|
-            @meal.bills.find_or_initialize_by(resident_id: bill[:resident_id])
-                 .update!(amount: bill[:amount], no_cost: bill[:no_cost])
+            record = @meal.bills.find_or_initialize_by(resident_id: bill[:resident_id])
+            if bill[:touched]
+              record.update!(amount: bill[:amount], no_cost: bill[:no_cost])
+            elsif record.new_record?
+              # An untouched row for a cook with no bill yet: create it with
+              # the column defaults (amount 0, no_cost false).
+              record.save!
+            end
           end
         end
         # with_meal_lock already rendered the rejection if the sweep won.
@@ -272,6 +274,12 @@ module Api
       rescue ActiveRecord::InvalidForeignKey
         @skip_pusher = true
         render json: { message: 'Invalid cook assignment.' }, status: :bad_request
+      rescue ActiveRecord::RangeError
+        # Unreachable while the grammar check above holds (it caps amounts at
+        # 9999.99, which fits DECIMAL(12,8)) — kept so a value that would
+        # overflow the column can never surface as a 500.
+        @skip_pusher = true
+        render json: { message: 'Invalid amount. Amounts are whole cents, 0 to 9999.99.' }, status: :bad_request
       end
 
       # PATCH /api/v1/meals/:meal_id/closed { closed }

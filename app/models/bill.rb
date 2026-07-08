@@ -51,11 +51,23 @@ class Bill < ApplicationRecord
 
   before_validation :set_community_id
 
-  validates :amount, numericality: { greater_than_or_equal_to: 0 }
+  # A cook's cost is whole cents, 0 to 9999.99 (the largest whole-cent value
+  # DECIMAL(12,8) can hold). The API controller rejects amounts that break
+  # this before they reach the model; this validation covers every other
+  # write path (ActiveAdmin, console), and the bills_amount_whole_cents
+  # CHECK constraint is the last line of defense.
+  validates :amount, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: BigDecimal('9999.99') }
+  validate :amount_in_whole_cents
   validates :resident_id, uniqueness: { scope: :meal_id }
 
   def set_community_id
     self.community_id = meal&.community_id
+  end
+
+  def amount_in_whole_cents
+    return if amount.nil? || amount == amount.round(2)
+
+    errors.add(:amount, 'must be whole cents')
   end
 
   # The amount used for cost-splitting purposes.

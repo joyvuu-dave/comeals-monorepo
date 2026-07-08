@@ -41,6 +41,32 @@ RSpec.describe Bill do
       expect(bill.errors[:amount]).to be_present
     end
 
+    it 'rejects sub-cent amounts' do
+      meal = create(:meal, community: community)
+      resident = create(:resident, community: community, unit: unit)
+      bill = build(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('12.345'))
+
+      expect(bill).not_to be_valid
+      expect(bill.errors[:amount]).to include('must be whole cents')
+    end
+
+    it 'rejects amounts over 9999.99' do
+      meal = create(:meal, community: community)
+      resident = create(:resident, community: community, unit: unit)
+      bill = build(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('10000'))
+
+      expect(bill).not_to be_valid
+      expect(bill.errors[:amount]).to be_present
+    end
+
+    it 'accepts whole-cent amounts' do
+      meal = create(:meal, community: community)
+      resident = create(:resident, community: community, unit: unit)
+      bill = build(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('9999.99'))
+
+      expect(bill).to be_valid
+    end
+
     it 'enforces one bill per resident per meal' do
       meal = create(:meal, community: community)
       resident = create(:resident, community: community, unit: unit)

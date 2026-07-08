@@ -181,13 +181,20 @@ describe("Bill model", () => {
     });
   });
 
-  // ── amountIsValid boundary cases ──
+  // ── amountIsValid grammar boundaries (issue #29: whole cents, 0–9999.99) ──
 
   describe("amountIsValid boundary cases", () => {
-    it("accepts amounts exceeding the HTML max=999 attribute", () => {
-      // HTML input has max="999" but amountIsValid only checks >= 0
+    it("rejects amounts over 9999.99 (they would overflow the DB column)", () => {
       const store = createStore({
-        bills: [{ id: "bill-1", amount: "999999" }],
+        bills: [{ id: "bill-1", amount: "10000" }],
+      });
+      const bill = store.billStore.bills.get("bill-1");
+      expect(bill.amountIsValid).toBe(false);
+    });
+
+    it("accepts the largest whole-cent amount", () => {
+      const store = createStore({
+        bills: [{ id: "bill-1", amount: "9999.99" }],
       });
       const bill = store.billStore.bills.get("bill-1");
       expect(bill.amountIsValid).toBe(true);
@@ -199,15 +206,33 @@ describe("Bill model", () => {
       expect(bill.amountIsValid).toBe(true);
     });
 
-    it("treats whitespace-only string as valid (Number coerces to 0)", () => {
-      // Edge case: "   " → Number("   ") === 0, which is >= 0
-      const store = createStore({ bills: [{ id: "bill-1", amount: "   " }] });
+    it("accepts a single decimal digit", () => {
+      const store = createStore({ bills: [{ id: "bill-1", amount: "12.5" }] });
       const bill = store.billStore.bills.get("bill-1");
       expect(bill.amountIsValid).toBe(true);
     });
 
+    it("rejects sub-cent amounts", () => {
+      const store = createStore({
+        bills: [{ id: "bill-1", amount: "12.345" }],
+      });
+      const bill = store.billStore.bills.get("bill-1");
+      expect(bill.amountIsValid).toBe(false);
+    });
+
+    it("rejects scientific notation (the number input allows typing it)", () => {
+      const store = createStore({ bills: [{ id: "bill-1", amount: "1e3" }] });
+      const bill = store.billStore.bills.get("bill-1");
+      expect(bill.amountIsValid).toBe(false);
+    });
+
+    it("rejects whitespace-only strings", () => {
+      const store = createStore({ bills: [{ id: "bill-1", amount: "   " }] });
+      const bill = store.billStore.bills.get("bill-1");
+      expect(bill.amountIsValid).toBe(false);
+    });
+
     it("rejects amounts with non-numeric suffixes", () => {
-      // "25abc" → Number("25abc") = NaN
       const store = createStore({ bills: [{ id: "bill-1", amount: "25abc" }] });
       const bill = store.billStore.bills.get("bill-1");
       expect(bill.amountIsValid).toBe(false);
@@ -302,6 +327,97 @@ describe("Bill model", () => {
       const bill = store.billStore.bills.get("bill-1");
       bill.setAmount("10.00");
       expect(store.saveBillsCalled).toBe(1);
+    });
+
+    // Issue #29: input that breaks the whole-cents grammar does not land —
+    // the amount keeps its previous value and nothing is saved.
+    it("refuses a third decimal digit", () => {
+      const store = createStore({
+        bills: [{ id: "bill-1", amount: "12.34" }],
+      });
+
+      const bill = store.billStore.bills.get("bill-1");
+      const result = bill.setAmount("12.345");
+      expect(result).toBe("12.34");
+      expect(bill.amount).toBe("12.34");
+      expect(store.saveBillsCalled).toBe(0);
+    });
+
+    it("refuses an amount over 9999.99", () => {
+      const store = createStore({
+        bills: [{ id: "bill-1", amount: "9999" }],
+      });
+
+      const bill = store.billStore.bills.get("bill-1");
+      bill.setAmount("99990");
+      expect(bill.amount).toBe("9999");
+      expect(store.saveBillsCalled).toBe(0);
+    });
+
+    it("refuses scientific notation and non-numeric input", () => {
+      const store = createStore({
+        bills: [{ id: "bill-1", amount: "5" }],
+      });
+
+      const bill = store.billStore.bills.get("bill-1");
+      bill.setAmount("1e3");
+      bill.setAmount("abc");
+      bill.setAmount("-5");
+      expect(bill.amount).toBe("5");
+      expect(store.saveBillsCalled).toBe(0);
+    });
+  });
+
+  // ── touched flag (issue #29: only touched rows carry values on save) ──
+
+  describe("touched", () => {
+    it("starts false", () => {
+      const store = createStore({
+        bills: [{ id: "bill-1", amount: "25.00" }],
+      });
+
+      expect(store.billStore.bills.get("bill-1").touched).toBe(false);
+    });
+
+    it("is set by setAmount", () => {
+      const store = createStore({
+        bills: [{ id: "bill-1", amount: "" }],
+      });
+
+      const bill = store.billStore.bills.get("bill-1");
+      bill.setAmount("10.00");
+      expect(bill.touched).toBe(true);
+    });
+
+    it("is not set by a refused setAmount", () => {
+      const store = createStore({
+        bills: [{ id: "bill-1", amount: "" }],
+      });
+
+      const bill = store.billStore.bills.get("bill-1");
+      bill.setAmount("12.345");
+      expect(bill.touched).toBe(false);
+    });
+
+    it("is set by toggleNoCost", () => {
+      const store = createStore({
+        bills: [{ id: "bill-1", no_cost: false }],
+      });
+
+      const bill = store.billStore.bills.get("bill-1");
+      bill.toggleNoCost();
+      expect(bill.touched).toBe(true);
+    });
+
+    it("is set by setResident", () => {
+      const store = createStore({
+        residents: [{ id: 10, meal_id: 1, name: "Alice" }],
+        bills: [{ id: "bill-1" }],
+      });
+
+      const bill = store.billStore.bills.get("bill-1");
+      bill.setResident(10);
+      expect(bill.touched).toBe(true);
     });
   });
 

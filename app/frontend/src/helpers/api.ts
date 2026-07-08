@@ -14,10 +14,13 @@ import axios, { AxiosResponse } from "axios";
 
 import { Ack, BillsAck, Guest, MealForm, MealResident } from "../types/api";
 
+// One row of the bills payload. Every cook appears (the server deletes
+// bills for cooks left out), but amount/no_cost are only present for rows
+// the user touched — the server leaves the other rows' stored values alone.
 export interface BillInput {
   resident_id: number;
-  amount: string;
-  no_cost: boolean;
+  amount?: string;
+  no_cost?: boolean;
 }
 
 interface SocketBound {

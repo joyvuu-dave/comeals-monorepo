@@ -238,7 +238,8 @@ CREATE TABLE public.bills (
     no_cost boolean DEFAULT false NOT NULL,
     resident_id bigint NOT NULL,
     updated_at timestamp without time zone NOT NULL,
-    CONSTRAINT bills_amount_non_negative CHECK ((amount >= (0)::numeric))
+    CONSTRAINT bills_amount_non_negative CHECK ((amount >= (0)::numeric)),
+    CONSTRAINT bills_amount_whole_cents CHECK ((amount = round(amount, 2)))
 );
 
 
@@ -1596,6 +1597,7 @@ ALTER TABLE ONLY public.bills
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260708100000'),
 ('20260707100000'),
 ('20260423170000'),
 ('20260423160000'),

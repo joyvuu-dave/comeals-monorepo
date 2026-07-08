@@ -17,6 +17,7 @@ import timezone from "dayjs/plugin/timezone";
 import handleAxiosError from "../helpers/handle_axios_error";
 import { api } from "../helpers/api";
 import { communityNow, toCommunityDayjs } from "../helpers/helpers";
+import { isZeroAmountString, toDisplayAmountString } from "../helpers/money";
 import { mark, logEvent } from "../helpers/nav_trace";
 import toastStore from "./toast_store";
 
@@ -321,17 +322,20 @@ export const DataStore = types
       }
 
       if (!self.meal.closed) {
-        // There is a cook who hasn't filled in their cost
+        // A zero amount means "not filled in yet" — the same test loadData
+        // uses to display zero as blank, so the gate behaves the same
+        // before and after a reload. A cook who spent nothing must use the
+        // no-cost switch.
         const cookNeedsToFillInCost = Array.from(self.bills.values()).some(
           (bill) =>
             bill.resident_id !== "" &&
-            bill.amount === "" &&
+            isZeroAmountString(bill.amount) &&
             bill.no_cost === false,
         );
 
         if (cookNeedsToFillInCost) {
           toastStore.addToast(
-            "All cook costs must be set before closing.",
+            "All cook costs must be set before closing. Enter each cook's cost, or use the no-cost switch for a cook who spent nothing.",
             "warning",
           );
           return;
@@ -390,32 +394,32 @@ export const DataStore = types
         });
     },
     submitBills() {
-      // Check for errors with bills
+      // Only touched rows carry values to the server, so only they can
+      // block the save.
       if (
         Array.from(self.bills.values()).some(
-          (bill) => bill.amountIsValid === false,
+          (bill) => bill.touched && bill.amountIsValid === false,
         )
       ) {
         self.editBillsMode = true;
         return;
       }
 
-      // Format Bills
+      // The payload lists every cook (the server deletes bills for cooks
+      // left out), but only rows the user touched carry amount/no_cost.
+      // The server leaves the other rows' stored values alone, so a
+      // display value can never rewrite a bill nobody edited.
       let bills = Array.from(self.bills.values())
-        .map((bill) => bill.toJSON())
-        .map((bill) => {
-          let obj = Object.assign({}, bill);
-
-          // delete id
-          delete obj["id"];
-
-          // resident --> resident_id
-          obj["resident_id"] = obj["resident"];
-          delete obj["resident"];
-
-          return obj;
-        })
-        .filter((bill) => bill.resident_id !== null);
+        .filter((bill) => bill.resident_id !== "")
+        .map((bill) =>
+          bill.touched
+            ? {
+                resident_id: bill.resident_id,
+                amount: bill.amount,
+                no_cost: bill.no_cost,
+              }
+            : { resident_id: bill.resident_id },
+        );
 
       api.meals
         .updateBills(self.meal.id, {
@@ -662,13 +666,15 @@ export const DataStore = types
         return obj;
       });
 
-      // Format amount for display
-      bills = bills.map((bill) => {
-        const amt = Number(bill["amount"]);
-        return Object.assign({}, bill, {
-          amount: amt === 0 ? "" : amt.toFixed(2),
-        });
-      });
+      // Zero displays as blank ("not filled in yet"); any other amount
+      // keeps its exact wire value, zero-padded to two decimals by string
+      // edits. Never reformat money through a float — a rounded display
+      // value must not exist at all, so it can never reach the ledger.
+      bills = bills.map((bill) =>
+        Object.assign({}, bill, {
+          amount: toDisplayAmountString(bill["amount"]),
+        }),
+      );
 
       // Determine # of blank bills needed
       const extra = Math.max(3 - bills.length, 0);

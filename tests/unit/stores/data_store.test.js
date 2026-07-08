@@ -407,7 +407,7 @@ describe("DataStore", () => {
   // ── loadData transformation ──
 
   describe("loadData", () => {
-    it("formats bill amounts correctly (0 becomes empty string, others get 2 decimals)", () => {
+    it("displays wire amounts losslessly (0 becomes blank, others zero-pad to two decimals)", () => {
       const store = createDataStore({
         mealProps: { closed: false },
         residents: [{ id: 10, meal_id: 1, name: "Alice" }],
@@ -449,7 +449,8 @@ describe("DataStore", () => {
       // Should have at least 3 bills (2 from data + 1 blank to reach min of 3)
       expect(bills.length).toBeGreaterThanOrEqual(3);
 
-      // Find the bill with amount 25.50
+      // Rails drops trailing zeros ("25.5" for $25.50); the display pads
+      // them back with string edits — never through a float
       const billWithAmount = bills.find((b) => b.amount === "25.50");
       expect(billWithAmount).toBeTruthy();
 
@@ -1635,6 +1636,182 @@ describe("DataStore", () => {
       store.toggleClosed();
 
       expect(store.meal.closed).toBe(true);
+    });
+
+    // Issue #29 (Q1): zero means "not filled in yet". A typed "0" and a
+    // reloaded "0.00" must both block closing — before the fix the gate
+    // only checked for the empty string, so a typed "0" let the meal close
+    // until a reload turned it into "".
+    it("blocks closing when a cook's amount is a typed zero", () => {
+      const store = createDataStore({
+        mealProps: { closed: false },
+        residents: [{ id: 10, meal_id: 1, name: "Alice", can_cook: true }],
+        bills: [{ id: "bill-1", resident: 10, amount: "0", no_cost: false }],
+      });
+
+      toastStore.clearAll();
+      store.toggleClosed();
+
+      expect(store.meal.closed).toBe(false);
+      expect(toastStore.toasts.length).toBe(1);
+      expect(toastStore.toasts[0].type).toBe("warning");
+    });
+
+    it('blocks closing when a cook\'s amount is a zero string ("0.00")', () => {
+      const store = createDataStore({
+        mealProps: { closed: false },
+        residents: [{ id: 10, meal_id: 1, name: "Alice", can_cook: true }],
+        bills: [{ id: "bill-1", resident: 10, amount: "0.00", no_cost: false }],
+      });
+
+      toastStore.clearAll();
+      store.toggleClosed();
+
+      expect(store.meal.closed).toBe(false);
+      expect(toastStore.toasts.length).toBe(1);
+      expect(toastStore.toasts[0].type).toBe("warning");
+    });
+  });
+
+  // ── Issue #29: only touched rows carry values to the server ──
+
+  describe("submitBills only-edited-rows", () => {
+    function mealDataWithBills(bills) {
+      return {
+        id: 1,
+        date: "2023-06-15",
+        description: "",
+        closed: false,
+        closed_at: null,
+        reconciled: false,
+        max: null,
+        next_id: null,
+        prev_id: null,
+        residents: [
+          {
+            id: 10,
+            meal_id: 1,
+            name: "Alice",
+            attending: false,
+            attending_at: null,
+            late: false,
+            vegetarian: false,
+            can_cook: true,
+            active: true,
+          },
+          {
+            id: 11,
+            meal_id: 1,
+            name: "Bob",
+            attending: false,
+            attending_at: null,
+            late: false,
+            vegetarian: false,
+            can_cook: true,
+            active: true,
+          },
+        ],
+        guests: [],
+        bills,
+      };
+    }
+
+    function billsPatchCalls() {
+      return axios.mock.calls.filter(
+        ([config]) =>
+          config &&
+          config.method === "patch" &&
+          config.url === "/api/v1/meals/1/bills",
+      );
+    }
+
+    it("sends resident_id only for rows the user did not touch", () => {
+      const store = createDataStore({ mealProps: { closed: false } });
+      store.loadData(
+        mealDataWithBills([
+          { id: "b1", resident_id: 10, amount: "12.34", no_cost: false },
+          { id: "b2", resident_id: 11, amount: "", no_cost: false },
+        ]),
+      );
+
+      const bobsBill = Array.from(store.bills.values()).find(
+        (b) => b.resident && b.resident.id === 11,
+      );
+      bobsBill.setAmount("5.00"); // triggers saveBills
+
+      const calls = billsPatchCalls();
+      expect(calls.length).toBe(1);
+      const payload = calls[0][0].data;
+      expect(payload.bills).toContainEqual({ resident_id: 10 });
+      expect(payload.bills).toContainEqual({
+        resident_id: 11,
+        amount: "5.00",
+        no_cost: false,
+      });
+    });
+
+    it("never sends a stored amount the user did not type back to the server", () => {
+      // A legacy sub-cent amount (data older than the whole-cents CHECK)
+      // displays exactly as stored and must never leave the client — this
+      // is the write-back that used to silently rewrite the ledger.
+      const store = createDataStore({ mealProps: { closed: false } });
+      store.loadData(
+        mealDataWithBills([
+          { id: "b1", resident_id: 10, amount: "12.345", no_cost: false },
+          { id: "b2", resident_id: 11, amount: "", no_cost: false },
+        ]),
+      );
+
+      const alicesBill = Array.from(store.bills.values()).find(
+        (b) => b.resident && b.resident.id === 10,
+      );
+      expect(alicesBill.amount).toBe("12.345"); // exact wire string, no float
+
+      const bobsBill = Array.from(store.bills.values()).find(
+        (b) => b.resident && b.resident.id === 11,
+      );
+      bobsBill.setAmount("5.00");
+
+      const payload = billsPatchCalls()[0][0].data;
+      expect(payload.bills).toContainEqual({ resident_id: 10 });
+      expect(
+        payload.bills.find((b) => b.resident_id === 10),
+      ).not.toHaveProperty("amount");
+    });
+
+    it("blocks the save when a touched row is invalid", () => {
+      const store = createDataStore({
+        mealProps: { closed: false },
+        residents: [{ id: 10, meal_id: 1, name: "Alice", can_cook: true }],
+        bills: [{ id: "b1", resident: 10, amount: "", no_cost: false }],
+      });
+
+      // setAmount refuses invalid input, so force the state directly to
+      // exercise submitBills' second-layer gate (paste paths, refactors).
+      const bill = store.bills.get("b1");
+      runInAction(() => {
+        bill.amount = "1e3";
+        bill.touched = true;
+      });
+
+      store.submitBills();
+
+      expect(store.editBillsMode).toBe(true);
+      expect(billsPatchCalls().length).toBe(0);
+    });
+
+    it("does not let an untouched invalid legacy row block the save", () => {
+      const store = createDataStore({
+        mealProps: { closed: false },
+        residents: [{ id: 10, meal_id: 1, name: "Alice", can_cook: true }],
+        bills: [{ id: "b1", resident: 10, amount: "12.345", no_cost: false }],
+      });
+
+      store.submitBills();
+
+      const calls = billsPatchCalls();
+      expect(calls.length).toBe(1);
+      expect(calls[0][0].data.bills).toEqual([{ resident_id: 10 }]);
     });
   });
 
