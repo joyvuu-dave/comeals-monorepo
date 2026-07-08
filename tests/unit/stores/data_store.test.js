@@ -63,6 +63,7 @@ import { DataStore } from "../../../app/frontend/src/stores/data_store.js";
 import localforage from "localforage";
 import axios from "axios";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
+import { SAVE_DEBOUNCE_MS } from "../../../app/frontend/src/helpers/helpers.js";
 
 function createDataStore(opts = {}) {
   const { mealProps = {}, residents = [], guests = [], bills = [] } = opts;
@@ -1746,7 +1747,7 @@ describe("DataStore", () => {
         (b) => b.resident && b.resident.id === 11,
       );
       bobsBill.setAmount("5.00"); // triggers the debounced saveBills
-      vi.advanceTimersByTime(700);
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
 
       const calls = billsPatchCalls();
       expect(calls.length).toBe(1);
@@ -1780,7 +1781,7 @@ describe("DataStore", () => {
         (b) => b.resident && b.resident.id === 11,
       );
       bobsBill.setAmount("5.00");
-      vi.advanceTimersByTime(700);
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
 
       const payload = billsPatchCalls()[0][0].data;
       expect(payload.bills).toContainEqual({ resident_id: 10 });
@@ -1882,14 +1883,14 @@ describe("DataStore", () => {
       );
     }
 
-    it("waits 700ms after the last edit and sends one request with the final value", () => {
+    it("waits out the debounce after the last edit and sends one request with the final value", () => {
       const store = storeWithCookBill();
       const bill = bobsBill(store);
 
       bill.setAmount("5");
-      vi.advanceTimersByTime(300);
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS - 200);
       bill.setAmount("50");
-      vi.advanceTimersByTime(699);
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS - 1);
       expect(billsPatchCalls().length).toBe(0);
 
       vi.advanceTimersByTime(1);
@@ -1915,13 +1916,13 @@ describe("DataStore", () => {
       );
 
       bill.setAmount("5");
-      vi.advanceTimersByTime(700);
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
       expect(billsPatchCalls().length).toBe(1);
 
       // Edit while the first request is in flight: no second request yet,
       // so this client's writes can never arrive out of order.
       bill.setAmount("50");
-      vi.advanceTimersByTime(700);
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
       expect(billsPatchCalls().length).toBe(1);
 
       // The first request settles; the queued save sends the latest state.
@@ -1952,7 +1953,7 @@ describe("DataStore", () => {
       });
 
       bill.setAmount("5.50");
-      vi.advanceTimersByTime(700);
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
       await vi.advanceTimersByTimeAsync(0);
 
       expect(bill.amount).toBe("12.34");
@@ -1972,7 +1973,7 @@ describe("DataStore", () => {
       );
 
       bill.setAmount("5");
-      vi.advanceTimersByTime(700);
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
 
       // A newer keystroke while the request is in flight.
       bill.setAmount("50");
@@ -1991,7 +1992,7 @@ describe("DataStore", () => {
       expect(bill.touched).toBe(true);
 
       // The debounced save then sends the newer value.
-      await vi.advanceTimersByTimeAsync(700);
+      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
       const calls = billsPatchCalls();
       expect(calls.length).toBe(2);
       expect(calls[1][0].data.bills).toContainEqual({
@@ -2017,7 +2018,7 @@ describe("DataStore", () => {
       });
 
       // The flush consumed the timer — nothing more fires later.
-      vi.advanceTimersByTime(700);
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
       expect(billsPatchCalls().length).toBe(1);
     });
 
@@ -2047,7 +2048,7 @@ describe("DataStore", () => {
       });
 
       // The flush consumed the timer — nothing more fires later.
-      vi.advanceTimersByTime(700);
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
       expect(billsPatchCalls(1).length).toBe(1);
       expect(billsPatchCalls(2).length).toBe(0);
     });
@@ -2065,9 +2066,9 @@ describe("DataStore", () => {
       );
 
       bill.setAmount("5");
-      vi.advanceTimersByTime(700); // request 1 in flight
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS); // request 1 in flight
       bill.setAmount("50");
-      vi.advanceTimersByTime(700); // queued behind request 1
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS); // queued behind request 1
 
       store.switchMeals(2); // leave the meal
       resolveFirst({ status: 200, data: {} });

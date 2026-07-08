@@ -84,3 +84,9 @@ export function generateTimes() {
   CACHED_TIMES = Object.freeze(times);
   return CACHED_TIMES;
 }
+
+// How long a save waits after the last edit before firing, for every
+// debounced autosave field (bill amounts, meal description). Blur flushes
+// a pending bill save immediately, so this only spans pauses while the
+// field still has focus. One constant so the fields cannot drift apart.
+export const SAVE_DEBOUNCE_MS = 500;

@@ -16,7 +16,11 @@ import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import handleAxiosError from "../helpers/handle_axios_error";
 import { api } from "../helpers/api";
-import { communityNow, toCommunityDayjs } from "../helpers/helpers";
+import {
+  communityNow,
+  toCommunityDayjs,
+  SAVE_DEBOUNCE_MS,
+} from "../helpers/helpers";
 import { isZeroAmountString, toDisplayAmountString } from "../helpers/money";
 import { mark, logEvent } from "../helpers/nav_trace";
 import toastStore from "./toast_store";
@@ -315,7 +319,7 @@ export const DataStore = types
     saveDescription() {
       self.submitDescription();
     },
-    // Debounced, same 700ms as the description field: a save fires only
+    // Debounced, same delay as the description field: a save fires only
     // after the user stops editing, so half-typed amounts never hit the
     // wire and each pause produces one request instead of one per keystroke.
     saveBills() {
@@ -325,7 +329,7 @@ export const DataStore = types
       }
       self.billsSaveTimer = setTimeout(function () {
         self.flushBillsSave();
-      }, 700);
+      }, SAVE_DEBOUNCE_MS);
     },
     flushBillsSave() {
       self.billsSaveTimer = null;
@@ -334,8 +338,8 @@ export const DataStore = types
     // Send a pending debounced save right now. Blur and meal navigation
     // call this, so "type, then click away" saves immediately — the
     // debounce only spans pauses while the field still has focus. Without
-    // this, closing the tab within 700ms of the last keystroke would lose
-    // the edit.
+    // this, closing the tab inside the debounce window would lose the
+    // edit.
     flushPendingBillsSave() {
       if (self.billsSaveTimer !== null) {
         self.submitBills();

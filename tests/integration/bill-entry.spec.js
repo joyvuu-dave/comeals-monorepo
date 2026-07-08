@@ -13,8 +13,8 @@ test.describe("Bill entry (real backend)", () => {
     await setupAuthenticatedPage(page, context);
   });
 
-  // Bill saves are debounced 700ms, and picking a cook schedules a save of
-  // its own. Waiting on the PATCH response whose request carried the typed
+  // Bill saves are debounced, and picking a cook schedules a save of its
+  // own. Waiting on the PATCH response whose request carried the typed
   // amount is the deterministic way to know that value reached the server.
   function billSaved(page, mealId, amount) {
     return page.waitForResponse((r) => {

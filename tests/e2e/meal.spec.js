@@ -213,7 +213,7 @@ test.describe("Meal Editing", () => {
     await textarea.fill("Updated: Spaghetti and meatballs");
     await expect(textarea).toHaveValue("Updated: Spaghetti and meatballs");
 
-    // Wait for debounce (700ms) to trigger the API call
+    // Wait for the debounce to trigger the API call
     await expect.poll(() => descriptionPayload, { timeout: 3000 }).toBeTruthy();
     expect(descriptionPayload.description).toBe(
       "Updated: Spaghetti and meatballs",

@@ -1,6 +1,8 @@
 import { Component } from "react";
 import { inject, observer } from "mobx-react";
 
+import { SAVE_DEBOUNCE_MS } from "../../helpers/helpers";
+
 const styles = {
   main: {
     gridArea: "a3",
@@ -44,7 +46,7 @@ class DebouncedTextarea extends Component {
     clearTimeout(this.timeout);
     this.timeout = setTimeout(() => {
       this.props.onChange(val);
-    }, this.props.debounceTimeout || 700);
+    }, this.props.debounceTimeout || SAVE_DEBOUNCE_MS);
   };
 
   render() {
@@ -69,7 +71,6 @@ const MenuBox = inject("store")(
       </div>
       <div>
         <DebouncedTextarea
-          debounceTimeout={700}
           className={store.editDescriptionMode ? "" : "offwhite"}
           style={styles.text}
           value={store.meal && store.meal.description}
