@@ -33,10 +33,15 @@ vi.mock("localforage", () => ({
 }));
 
 import { types } from "mobx-state-tree";
+import axios from "axios";
 import Meal from "../../../app/frontend/src/stores/meal.js";
 import ResidentStore from "../../../app/frontend/src/stores/resident_store.js";
 import BillStore from "../../../app/frontend/src/stores/bill_store.js";
 import GuestStore from "../../../app/frontend/src/stores/guest_store.js";
+import toastStore from "../../../app/frontend/src/stores/toast_store.js";
+
+// Meal.settleExtras calls self.form.loadDataAsync(); this spy records it.
+const loadDataAsyncMock = vi.fn();
 
 // Build a minimal DataStore-like parent so Meal.form (getParent(self, 2)) resolves.
 // The real DataStore uses afterCreate to set up Pusher, so we create a slimmed-down
@@ -64,6 +69,9 @@ const TestDataStore = types
     addGuest(g) {
       self.guestStore.guests.put(g);
     },
+    loadDataAsync() {
+      loadDataAsyncMock();
+    },
   }));
 
 function createStore(mealProps = {}, residents = [], guests = []) {
@@ -83,6 +91,8 @@ function createStore(mealProps = {}, residents = [], guests = []) {
 
 describe("Meal model", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
+    toastStore.clearAll();
     window.Comeals = {
       socketId: "test",
       pusher: null,
@@ -222,55 +232,85 @@ describe("Meal model", () => {
     });
   });
 
-  // ── toggleClosed ──
+  // ── setExtras settle-refetch ──
 
-  describe("toggleClosed", () => {
-    it("toggles closed from false to true", () => {
-      const store = createStore({ closed: false });
-      const result = store.meal.toggleClosed();
-      expect(result).toBe(true);
-      expect(store.meal.closed).toBe(true);
+  describe("setExtras settle-refetch", () => {
+    it("refetches after a successful save and clears the pending flag", async () => {
+      const store = createStore({ extras: 5 });
+
+      store.meal.setExtras(3);
+      expect(store.meal.extras).toBe(3); // optimistic write
+      expect(store.meal.extrasPending).toBe(true);
+
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(store.meal.extrasPending).toBe(false);
+      expect(loadDataAsyncMock).toHaveBeenCalledTimes(1);
     });
 
-    it("toggles closed from true to false", () => {
-      const store = createStore({ closed: true });
-      const result = store.meal.toggleClosed();
-      expect(result).toBe(false);
-      expect(store.meal.closed).toBe(false);
+    it("keeps the optimistic value, shows the error, and refetches after a failed save", async () => {
+      const store = createStore({ extras: 5 });
+      axios.mockRejectedValueOnce({
+        response: {
+          data: {
+            message: "Meal is open. A cap can only be set on a closed meal.",
+          },
+        },
+      });
+
+      store.meal.setExtras(3);
+      expect(store.meal.extras).toBe(3); // optimistic write
+
+      await new Promise((r) => setTimeout(r, 0));
+
+      // No rollback: the refetch writes the server's truth instead.
+      expect(store.meal.extras).toBe(3);
+      expect(store.meal.extrasPending).toBe(false);
+      expect(loadDataAsyncMock).toHaveBeenCalledTimes(1);
+      expect(toastStore.toasts.length).toBe(1);
+      expect(toastStore.toasts[0].type).toBe("error");
     });
-  });
 
-  // ── resetExtras ──
+    it("refetches after a failed clear (null) as well", async () => {
+      const store = createStore({ extras: 5 });
+      axios.mockRejectedValueOnce({
+        response: { data: { message: "Nope." } },
+      });
 
-  describe("resetExtras", () => {
-    it("resets extras to null", () => {
-      const store = createStore({ extras: 10 });
-      const result = store.meal.resetExtras();
-      expect(result).toBeNull();
+      store.meal.setExtras(null);
+      expect(store.meal.extras).toBeNull(); // optimistic write
+
+      await new Promise((r) => setTimeout(r, 0));
+
       expect(store.meal.extras).toBeNull();
+      expect(store.meal.extrasPending).toBe(false);
+      expect(loadDataAsyncMock).toHaveBeenCalledTimes(1);
+      expect(toastStore.toasts.length).toBe(1);
     });
 
-    it("keeps null when already null", () => {
-      const store = createStore({ extras: null });
-      const result = store.meal.resetExtras();
-      expect(result).toBeNull();
-    });
-  });
+    it("ignores clicks while a save is in flight", async () => {
+      const store = createStore({ extras: 5 });
 
-  // ── resetClosedAt ──
+      store.meal.setExtras(3);
+      store.meal.setExtras(4); // ignored: request in flight
 
-  describe("resetClosedAt", () => {
-    it("resets closed_at to null", () => {
-      const store = createStore({ closed_at: Date.now() });
-      const result = store.meal.resetClosedAt();
-      expect(result).toBeNull();
-      expect(store.meal.closed_at).toBeNull();
+      expect(store.meal.extras).toBe(3);
+      expect(axios).toHaveBeenCalledTimes(1);
+
+      await new Promise((r) => setTimeout(r, 0));
+      expect(store.meal.extrasPending).toBe(false);
     });
 
-    it("keeps null when already null", () => {
-      const store = createStore({ closed_at: null });
-      const result = store.meal.resetClosedAt();
-      expect(result).toBeNull();
+    it("does not mark pending or refetch for invalid input", async () => {
+      const store = createStore({ extras: 5 });
+
+      store.meal.setExtras("abc");
+
+      expect(store.meal.extrasPending).toBe(false);
+      expect(axios).not.toHaveBeenCalled();
+
+      await new Promise((r) => setTimeout(r, 0));
+      expect(loadDataAsyncMock).not.toHaveBeenCalled();
     });
   });
 
@@ -320,29 +360,6 @@ describe("Meal model", () => {
       expect(store.meal.extras).toBe(-1);
       store.meal.decrementExtras();
       expect(store.meal.extras).toBe(-2);
-    });
-  });
-
-  // ── setClosedAt ──
-
-  describe("setClosedAt", () => {
-    it("sets closed_at to a Date instance", () => {
-      const store = createStore({ closed_at: null });
-      const before = Date.now();
-      const result = store.meal.setClosedAt();
-      const after = Date.now();
-
-      expect(result).toBeInstanceOf(Date);
-      expect(store.meal.closed_at).toBeInstanceOf(Date);
-      expect(store.meal.closed_at.getTime()).toBeGreaterThanOrEqual(before);
-      expect(store.meal.closed_at.getTime()).toBeLessThanOrEqual(after);
-    });
-
-    it("overwrites a previous closed_at value", () => {
-      const oldTime = new Date(2020, 0, 1);
-      const store = createStore({ closed_at: oldTime.getTime() });
-      store.meal.setClosedAt();
-      expect(store.meal.closed_at.getTime()).toBeGreaterThan(oldTime.getTime());
     });
   });
 });

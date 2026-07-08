@@ -117,6 +117,8 @@ export const DataStore = types
     isLoading: true,
     editDescriptionMode: true,
     editBillsMode: true,
+    // True while an open/close save is in flight; the button is disabled.
+    closedPending: false,
     meal: types.maybeNull(types.reference(Meal)),
     meals: types.optional(types.array(Meal), []),
     residentStore: types.optional(ResidentStore, {
@@ -304,7 +306,20 @@ export const DataStore = types
       self.saveDescription();
       return self.meal.description;
     },
+    // Runs when the open/close save settles — success or failure. The
+    // refetch lets loadData write the server's truth, including the
+    // server's closed_at (the client clock is never used). There is no
+    // rollback on purpose: the meal node is edited in place by refetches,
+    // so a blind flip could invert fresh data.
+    settleClosed() {
+      self.closedPending = false;
+      self.loadDataAsync();
+    },
     toggleClosed() {
+      if (self.closedPending) {
+        return;
+      }
+
       if (!self.meal.closed) {
         // There is a cook who hasn't filled in their cost
         const cookNeedsToFillInCost = Array.from(self.bills.values()).some(
@@ -325,26 +340,18 @@ export const DataStore = types
 
       const val = !self.meal.closed;
       self.meal.closed = val;
+      self.closedPending = true;
 
       api.meals
         .updateClosed(self.meal.id, {
           closed: val,
           socketId: window.Comeals.socketId,
         })
-        .then(function (response) {
-          if (response.status === 200) {
-            // If meal has been opened, re-set extras value
-            if (val === false) {
-              self.meal.resetExtras();
-              self.meal.resetClosedAt();
-            } else {
-              self.meal.setClosedAt();
-            }
-          }
-        })
         .catch(function (error) {
-          self.meal.toggleClosed();
           handleAxiosError(error);
+        })
+        .then(function () {
+          self.settleClosed();
         });
     },
     logout() {

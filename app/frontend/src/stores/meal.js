@@ -1,4 +1,4 @@
-import { types, getParent } from "mobx-state-tree";
+import { types, getParent, isAlive } from "mobx-state-tree";
 import { api } from "../helpers/api";
 import handleAxiosError from "../helpers/handle_axios_error";
 
@@ -7,6 +7,8 @@ const Meal = types
     id: types.identifierNumber,
     description: "",
     extras: types.maybeNull(types.number),
+    // True while an extras save is in flight; the checkboxes are disabled.
+    extrasPending: false,
     closed: false,
     closed_at: types.maybeNull(types.Date),
     date: types.maybeNull(types.Date),
@@ -27,32 +29,24 @@ const Meal = types
     },
   }))
   .actions((self) => ({
-    // This isn't the "real" toggleClosed. It's the backup
-    // for un-doing the UI change if the API request fails
-    toggleClosed() {
-      self.closed = !self.closed;
-      return self.closed;
-    },
-    resetExtras() {
-      self.extras = null;
-      return null;
-    },
-    resetClosedAt() {
-      self.closed_at = null;
-      return null;
-    },
-    setClosedAt() {
-      const time = new Date();
-      self.closed_at = time;
-      return time;
+    // Runs when the extras save settles — success or failure. The refetch
+    // lets loadData write the server's truth over the optimistic value.
+    // There is no rollback on purpose: this node is edited in place by
+    // refetches, so restoring a captured value could overwrite fresh data.
+    settleExtras() {
+      self.extrasPending = false;
+      self.form.loadDataAsync();
     },
     setExtras(val) {
-      const previousExtras = self.extras;
+      if (self.extrasPending) {
+        return;
+      }
 
       // Scenario #1: explicit null (clear extras)
       // Note: empty string falls to Scenario #2 and resolves to 0
       if (val === null) {
         self.extras = null;
+        self.extrasPending = true;
 
         api.meals
           .updateMax(self.id, {
@@ -60,9 +54,11 @@ const Meal = types
             socketId: window.Comeals.socketId,
           })
           .catch(function (error) {
-            self.extras = previousExtras;
             handleAxiosError(error);
-            return previousExtras;
+          })
+          .then(function () {
+            if (!isAlive(self)) return;
+            self.settleExtras();
           });
 
         return;
@@ -72,6 +68,7 @@ const Meal = types
       const num = parseInt(Number(val), 10);
       if (Number.isInteger(num) && num >= 0) {
         self.extras = num;
+        self.extrasPending = true;
 
         api.meals
           .updateMax(self.id, {
@@ -79,9 +76,11 @@ const Meal = types
             socketId: window.Comeals.socketId,
           })
           .catch(function (error) {
-            self.extras = previousExtras;
             handleAxiosError(error);
-            return previousExtras;
+          })
+          .then(function () {
+            if (!isAlive(self)) return;
+            self.settleExtras();
           });
       }
     },

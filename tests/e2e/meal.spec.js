@@ -226,7 +226,9 @@ test.describe("Meal Editing", () => {
     let closedPayload = null;
     await page.route("**/api/v1/meals/*/closed*", (route) => {
       closedPayload = route.request().postDataJSON();
-      route.fulfill({ status: 200, body: "{}" });
+      // Fall through to the setup.js handler so the mock's meal state
+      // records the close — the settle-refetch re-reads it from /cooks.
+      route.fallback();
     });
 
     await page.goto("/meals/42/edit/");

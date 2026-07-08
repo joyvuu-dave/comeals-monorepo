@@ -160,9 +160,16 @@ module Api
       # PATCH /api/v1/meals/:meal_id/max { max }
       # Locked so the max >= attendees_count validation reads the fresh
       # attendance, not the request-start snapshot.
+      #
+      # A cap on an open meal is an error, not a silent no-op. Without the
+      # guard, conditionally_set_max nils the value inside before_save and
+      # the client gets a 200 for a cap the server will never enforce.
       def update_max
         with_meal_lock do
-          if @meal.update(max: params[:max])
+          if !@meal.closed? && params[:max].present?
+            render json: { message: 'Meal is open. A cap can only be set on a closed meal.' },
+                   status: :bad_request
+          elsif @meal.update(max: params[:max])
             render json: { message: 'Meal max value updated.' }
           else
             render json: { message: @meal.errors.full_messages.join("\n") }, status: :bad_request

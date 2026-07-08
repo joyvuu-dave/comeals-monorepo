@@ -1,8 +1,15 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
 // Mock external modules before importing stores
+// The default response carries a created_at because toggleAttending's add
+// path reads the server's timestamp from the create response.
 vi.mock("axios", () => ({
-  default: vi.fn(() => Promise.resolve({ status: 200 })),
+  default: vi.fn(() =>
+    Promise.resolve({
+      status: 200,
+      data: { created_at: "2023-06-15T18:30:00.000Z" },
+    }),
+  ),
 }));
 
 vi.mock("js-cookie", () => ({
@@ -363,6 +370,26 @@ describe("Resident model", () => {
       const alice = store.residentStore.residents.get("10");
       alice.toggleAttending();
       expect(alice.attending).toBe(false);
+    });
+
+    it("stores the server's created_at as attending_at, not the client clock", async () => {
+      const serverTime = "2023-06-15T18:30:00.000Z";
+      axios.mockResolvedValueOnce({
+        status: 200,
+        data: { created_at: serverTime },
+      });
+
+      const store = createStore({
+        mealProps: { closed: false },
+        residents: [{ id: 10, meal_id: 1, name: "Alice", attending: false }],
+      });
+
+      const alice = store.residentStore.residents.get("10");
+      alice.toggleAttending();
+
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(alice.attending_at.getTime()).toBe(new Date(serverTime).getTime());
     });
 
     it("blocks adding when meal is closed and extras < 1 (null extras)", () => {

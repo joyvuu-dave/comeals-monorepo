@@ -159,7 +159,9 @@ const Resident = types
           .then(function (response) {
             if (!isAlive(self)) return;
             if (response.status === 200) {
-              self.setAttendingAt(new Date());
+              // The server's created_at is the signup time of record; the
+              // client clock can be skewed.
+              self.setAttendingAt(new Date(response.data.created_at));
             }
           })
           .catch(function (error) {

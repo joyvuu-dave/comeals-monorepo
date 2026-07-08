@@ -1638,6 +1638,74 @@ describe("DataStore", () => {
     });
   });
 
+  describe("toggleClosed settle-refetch", () => {
+    it("refetches on success instead of stamping closed_at from the client clock", async () => {
+      const store = createDataStore({
+        mealProps: { closed: false, closed_at: null },
+      });
+
+      store.toggleClosed();
+
+      expect(store.meal.closed).toBe(true); // optimistic write
+      expect(store.closedPending).toBe(true);
+
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(store.closedPending).toBe(false);
+      // closed_at stays null until loadData writes the server's value
+      expect(store.meal.closed_at).toBeNull();
+      expect(axios.get).toHaveBeenCalledWith("/api/v1/meals/1/cooks");
+    });
+
+    it("keeps the optimistic value, shows the error, and refetches after a failure", async () => {
+      const store = createDataStore({
+        mealProps: { closed: false },
+      });
+      axios.mockRejectedValueOnce({
+        response: { data: { message: "Server error." } },
+      });
+
+      toastStore.clearAll();
+      store.toggleClosed();
+
+      expect(store.meal.closed).toBe(true); // optimistic write
+
+      await new Promise((r) => setTimeout(r, 0));
+
+      // No blind flip back: the refetch writes the server's truth instead.
+      expect(store.meal.closed).toBe(true);
+      expect(store.closedPending).toBe(false);
+      expect(toastStore.toasts.length).toBe(1);
+      expect(toastStore.toasts[0].type).toBe("error");
+      expect(axios.get).toHaveBeenCalledWith("/api/v1/meals/1/cooks");
+    });
+
+    it("ignores a second click while the request is in flight", async () => {
+      const store = createDataStore({
+        mealProps: { closed: false },
+      });
+
+      let resolvePatch;
+      axios.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolvePatch = resolve;
+          }),
+      );
+
+      store.toggleClosed();
+      store.toggleClosed(); // ignored: request in flight
+
+      expect(axios).toHaveBeenCalledTimes(1);
+      expect(store.meal.closed).toBe(true);
+
+      resolvePatch({ status: 200 });
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(store.closedPending).toBe(false);
+    });
+  });
+
   describe("loadMonth edge cases", () => {
     it("handles empty arrays (valid but no events)", () => {
       const store = createDataStore();

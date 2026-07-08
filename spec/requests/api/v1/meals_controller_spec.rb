@@ -700,6 +700,30 @@ RSpec.describe 'Meals API' do
 
       expect(response).to have_http_status(:bad_request)
     end
+
+    # A close request that failed can leave the client sending a cap for a
+    # meal the server still sees as open. Before this guard, before_save
+    # nilled the cap and the client got a 200 for a cap that was never set.
+    it 'rejects a cap while the meal is open' do
+      patch "/api/v1/meals/#{meal.id}/max", params: {
+        token: token,
+        max: 10
+      }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to include('open')
+      expect(meal.reload.max).to be_nil
+    end
+
+    it 'allows clearing max while the meal is open' do
+      # JSON body so max arrives as a real null, exactly as the client sends it
+      patch "/api/v1/meals/#{meal.id}/max",
+            params: { token: token, max: nil }.to_json,
+            headers: { 'CONTENT_TYPE' => 'application/json' }
+
+      expect(response).to have_http_status(:ok)
+      expect(meal.reload.max).to be_nil
+    end
   end
 
   # ---------------------------------------------------------------------------

@@ -127,13 +127,24 @@ async function mockApi(page, options = {}) {
     [3, "alice@example.com", "Alice Williams"],
   ];
 
+  // The app refetches /cooks after a close or extras save settles, so the
+  // mock must serve the state those PATCHes wrote — a static fixture would
+  // revert the UI on refetch. Tests that override the closed/max routes to
+  // capture payloads should call route.fallback() so these handlers still
+  // record the state and fulfill.
+  const mealState = {
+    closed: meal.closed,
+    closed_at: meal.closed_at,
+    max: meal.max,
+  };
+
   // Meal data (GET /api/v1/meals/*/cooks*)
   await page.route("**/api/v1/meals/*/cooks*", (route) => {
     if (route.request().method() === "GET") {
       route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify(meal),
+        body: JSON.stringify({ ...meal, ...mealState }),
       });
     } else {
       route.fulfill({ status: 200, body: "{}" });
@@ -194,6 +205,12 @@ async function mockApi(page, options = {}) {
 
   // Meal closed toggle (PATCH /api/v1/meals/*/closed*)
   await page.route("**/api/v1/meals/*/closed*", (route) => {
+    const payload = route.request().postDataJSON();
+    mealState.closed = payload.closed;
+    mealState.closed_at = payload.closed ? new Date().toISOString() : null;
+    if (!payload.closed) {
+      mealState.max = null;
+    }
     route.fulfill({ status: 200, body: "{}" });
   });
 
@@ -209,6 +226,7 @@ async function mockApi(page, options = {}) {
 
   // Meal max/extras (PATCH /api/v1/meals/*/max*)
   await page.route("**/api/v1/meals/*/max*", (route) => {
+    mealState.max = route.request().postDataJSON().max;
     route.fulfill({ status: 200, body: "{}" });
   });
 
