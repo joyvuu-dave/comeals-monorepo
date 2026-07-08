@@ -1058,6 +1058,135 @@ describe("DataStore", () => {
       expect(store.meal.description).toBe("Meal 3");
       expect(store.residents.get("10").late).toBe(true);
     });
+
+    function makeCalendarData(month, events = [], year = 2023) {
+      return {
+        id: "test-community-id",
+        year,
+        month,
+        meals: [],
+        bills: [],
+        rotations: [],
+        birthdays: [],
+        common_house_reservations: [],
+        guest_room_reservations: [],
+        events,
+      };
+    }
+
+    it("loadMonthAsync drops a stale response from a previous month", async () => {
+      const store = createDataStore();
+
+      // July's fetch hangs; August's fetch resolves right away.
+      let resolveJuly;
+      const julyResponse = {
+        status: 200,
+        data: makeCalendarData(7, [{ id: 1, title: "July event" }]),
+      };
+      const augustResponse = {
+        status: 200,
+        data: makeCalendarData(8, [{ id: 2, title: "August event" }]),
+      };
+      axios.get
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolveJuly = resolve;
+            }),
+        )
+        .mockResolvedValueOnce(augustResponse);
+
+      // Navigate to July: the fetch starts but does not resolve
+      unprotect(store);
+      runInAction(() => {
+        store.currentDate = "2023-07-01";
+      });
+      store.loadMonthAsync();
+
+      // Navigate to August before July's response arrives
+      runInAction(() => {
+        store.currentDate = "2023-08-01";
+      });
+      store.loadMonthAsync();
+      await new Promise((r) => setTimeout(r, 0));
+
+      // August rendered
+      expect(store.calendarEvents.length).toBe(1);
+      expect(store.calendarEvents[0].title).toBe("August event");
+
+      // July's late response lands: dropped entirely — not rendered, not cached
+      resolveJuly(julyResponse);
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(store.calendarEvents.length).toBe(1);
+      expect(store.calendarEvents[0].title).toBe("August event");
+      expect(localforage.setItem).not.toHaveBeenCalledWith(
+        expect.anything(),
+        julyResponse.data,
+      );
+    });
+
+    it("switchMonths skips a stale IndexedDB read if user already navigated away", async () => {
+      const store = createDataStore();
+
+      // Year 2024 so the module-level monthCache, which survives across
+      // tests, holds no keys from the loadMonthAsync test above.
+      const julyKey = "community-test-community-id-calendar-2024-7";
+      const julyCached = makeCalendarData(
+        7,
+        [{ id: 1, title: "July event" }],
+        2024,
+      );
+      const augustResponse = {
+        status: 200,
+        data: makeCalendarData(8, [{ id: 2, title: "August event" }], 2024),
+      };
+
+      // The July IndexedDB read hangs until we resolve it by hand.
+      // (Adjacent-month prefetch also reads the July key; keep every
+      // resolver so we can pick the first — the switchMonths read.)
+      const julyReads = [];
+      localforage.getItem.mockImplementation((key) => {
+        if (key === julyKey) {
+          return new Promise((resolve) => {
+            julyReads.push(resolve);
+          });
+        }
+        return Promise.resolve(null);
+      });
+      axios.get.mockImplementation((url) => {
+        if (url.includes("/calendar/2024-08-01")) {
+          return Promise.resolve(augustResponse);
+        }
+        if (url.includes("/calendar/2024-07-01")) {
+          return Promise.resolve({ status: 200, data: julyCached });
+        }
+        return Promise.resolve({ status: 200, data: makeCalendarData(1) });
+      });
+
+      // Navigate to July: the IndexedDB read starts but does not resolve
+      store.switchMonths("2024-07-01");
+
+      // Navigate to August before the July read resolves
+      store.switchMonths("2024-08-01");
+      await new Promise((r) => setTimeout(r, 0));
+      expect(store.calendarEvents[0].title).toBe("August event");
+
+      const fetchCount = axios.get.mock.calls.length;
+
+      // The stale July read resolves: no render, no revalidation fetch
+      julyReads[0](julyCached);
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(store.calendarEvents.length).toBe(1);
+      expect(store.calendarEvents[0].title).toBe("August event");
+      expect(axios.get.mock.calls.length).toBe(fetchCount);
+
+      // But the read did warm the in-memory cache: navigating back to July
+      // renders synchronously from monthCache, no IndexedDB wait.
+      store.switchMonths("2024-07-01");
+      expect(store.calendarEvents[0].title).toBe("July event");
+    });
   });
 
   // ── extras view return types ──

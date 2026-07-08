@@ -48,6 +48,16 @@ var hostsInFlight = null;
 // Same pattern as `invalidationVersion` above for the month cache.
 var hostsVersion = 0;
 
+// Monotonic counter for month navigation, same pattern as `hostsVersion`.
+// Bumped at the start of every loadMonthAsync and switchMonths call; each
+// async continuation captures the value at start and checks it before
+// touching the screen, so the newest navigation always wins. A superseded
+// fetch response is dropped entirely — caching it could overwrite fresher
+// data for the same month. A superseded IndexedDB read may still warm
+// `monthCache` (its data is correct under its own key) but skips rendering
+// and skips its revalidation fetch.
+var monthFetchVersion = 0;
+
 // Single Pusher subscription for hosts updates. Assigned the first
 // time ensureHosts() succeeds; never resubscribed for the lifetime
 // of the store because the channel name only depends on community_id.
@@ -443,6 +453,8 @@ export const DataStore = types
         });
     },
     loadMonthAsync() {
+      monthFetchVersion += 1;
+      var versionAtStart = monthFetchVersion;
       logEvent("loadMonthAsync-start", { date: self.currentDate });
       axios
         .get(
@@ -452,10 +464,15 @@ export const DataStore = types
         )
         .then(function (response) {
           if (response.status === 200) {
+            // A newer navigation or refetch superseded this response:
+            // drop it entirely. Rendering it would show the wrong month;
+            // caching it could overwrite fresher same-month data.
+            if (versionAtStart !== monthFetchVersion) return;
             var respData = response.data;
             var key = monthCacheKey(respData.id, respData.year, respData.month);
             monthCache.set(key, respData);
             localforage.setItem(key, respData).then(function () {
+              if (versionAtStart !== monthFetchVersion) return;
               logEvent("loadMonthAsync-resolved", { date: self.currentDate });
               self.loadMonth(respData);
             });
@@ -879,6 +896,8 @@ export const DataStore = types
         });
     },
     switchMonths(date) {
+      monthFetchVersion += 1;
+      var versionAtStart = monthFetchVersion;
       self.currentDate = date;
 
       var myDate = dayjs(date);
@@ -898,9 +917,16 @@ export const DataStore = types
       // Async IndexedDB fallback
       localforage.getItem(key).then(function (value) {
         if (value === null || typeof value === "undefined") {
+          // User already navigated elsewhere: nothing to fetch here.
+          if (versionAtStart !== monthFetchVersion) return;
           self.loadMonthAsync();
         } else {
+          // Warming the in-memory cache is safe even when superseded —
+          // the data sits under its own key.
           monthCache.set(key, value);
+          // User already navigated elsewhere: skip the render and the
+          // revalidation fetch. Same guard as switchMeals above.
+          if (versionAtStart !== monthFetchVersion) return;
           self.loadMonth(value);
           self.loadMonthAsync();
         }
