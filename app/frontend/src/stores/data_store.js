@@ -157,6 +157,22 @@ export const DataStore = types
     // Non-null timestamp means the hosts array reflects a completed fetch.
     hostsLoadedAt: types.maybeNull(types.number),
   })
+  // Bill save pipeline state (issue #30). Volatile: per-session request
+  // bookkeeping, not data.
+  .volatile(() => ({
+    // Pending debounce timer for a bill save, or null.
+    billsSaveTimer: null,
+    // Bumped on every bill edit. A save captures the value at send time;
+    // the ack applies only if it has not moved since — so a response can
+    // never overwrite keystrokes newer than the request.
+    billsEditVersion: 0,
+    // True while a bills request is in flight. With one request at a time,
+    // this client's writes cannot arrive at the server out of order.
+    billsSaveInFlight: false,
+    // A save was requested while one was in flight; send one more request
+    // with the latest state when it settles.
+    billsSaveQueued: false,
+  }))
   .views((self) => ({
     get hostsLoaded() {
       return self.hostsLoadedAt !== null;
@@ -299,7 +315,20 @@ export const DataStore = types
     saveDescription() {
       self.submitDescription();
     },
+    // Debounced, same 700ms as the description field: a save fires only
+    // after the user stops editing, so half-typed amounts never hit the
+    // wire and each pause produces one request instead of one per keystroke.
     saveBills() {
+      self.billsEditVersion += 1;
+      if (self.billsSaveTimer !== null) {
+        clearTimeout(self.billsSaveTimer);
+      }
+      self.billsSaveTimer = setTimeout(function () {
+        self.flushBillsSave();
+      }, 700);
+    },
+    flushBillsSave() {
+      self.billsSaveTimer = null;
       self.submitBills();
     },
     setDescription(val) {
@@ -394,6 +423,13 @@ export const DataStore = types
         });
     },
     submitBills() {
+      // A direct submit (save button, meal switch) supersedes a pending
+      // debounced save — it sends the same latest state now.
+      if (self.billsSaveTimer !== null) {
+        clearTimeout(self.billsSaveTimer);
+        self.billsSaveTimer = null;
+      }
+
       // Only touched rows carry values to the server, so only they can
       // block the save.
       if (
@@ -402,6 +438,13 @@ export const DataStore = types
         )
       ) {
         self.editBillsMode = true;
+        return;
+      }
+
+      // Single-flight: one request at a time. The queued resend in
+      // settleBillsSave sends whatever was edited meanwhile.
+      if (self.billsSaveInFlight) {
+        self.billsSaveQueued = true;
         return;
       }
 
@@ -421,10 +464,17 @@ export const DataStore = types
             : { resident_id: bill.resident_id },
         );
 
+      const versionAtSend = self.billsEditVersion;
+      const mealIdAtSend = self.meal.id;
+      self.billsSaveInFlight = true;
+
       api.meals
-        .updateBills(self.meal.id, {
+        .updateBills(mealIdAtSend, {
           bills,
           socketId: window.Comeals.socketId,
+        })
+        .then(function (response) {
+          self.applyBillsAck(response.data, versionAtSend, mealIdAtSend);
         })
         .catch(function (error) {
           var isWarning =
@@ -442,7 +492,42 @@ export const DataStore = types
           }
 
           self.loadDataAsync();
+        })
+        .then(function () {
+          self.settleBillsSave(mealIdAtSend);
         });
+    },
+    // Display what the server stored, not what we sent — but only when the
+    // rows on screen are the rows this ack answers: same meal, and no edits
+    // since the request went out. Otherwise ignore it; the queued next save
+    // covers the newer edits and its own ack will reconcile.
+    applyBillsAck(data, versionAtSend, mealIdAtSend) {
+      if (versionAtSend !== self.billsEditVersion) return;
+      if (!self.meal || self.meal.id !== mealIdAtSend) return;
+      if (!data || !Array.isArray(data.bills)) return;
+
+      data.bills.forEach(function (row) {
+        const bill = Array.from(self.bills.values()).find(
+          (b) => b.resident && b.resident.id === row.resident_id,
+        );
+        if (!bill) return;
+        bill.amount = toDisplayAmountString(row.amount);
+        bill.no_cost = row.no_cost;
+        // The row now shows exactly what the server stored, so it no
+        // longer needs to assert values on the next save — and a stale
+        // resend can no longer overwrite another client's newer edit.
+        bill.touched = false;
+      });
+    },
+    settleBillsSave(mealIdAtSend) {
+      self.billsSaveInFlight = false;
+      if (!self.billsSaveQueued) return;
+      self.billsSaveQueued = false;
+      // The queued edit was typed on the meal the last save targeted. If
+      // the user switched meals while the request was in flight, the rows
+      // it came from are gone — there is nothing valid to resend.
+      if (!self.meal || self.meal.id !== mealIdAtSend) return;
+      self.submitBills();
     },
     loadDataAsync() {
       api.meals
@@ -880,6 +965,13 @@ export const DataStore = types
       self.meals.push(obj);
     },
     switchMeals(id) {
+      // A bill edit still sitting in the debounce window belongs to the
+      // meal we are leaving. Send it now, while the meal id and the bill
+      // rows it was typed on are still current.
+      if (self.billsSaveTimer !== null) {
+        self.submitBills();
+      }
+
       if (typeof self.meals.find((item) => item.id === id) === "undefined") {
         self.addMeal({ id: Number.parseInt(id, 10) });
       }

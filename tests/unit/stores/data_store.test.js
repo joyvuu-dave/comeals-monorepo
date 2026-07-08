@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 // Mock external modules before importing stores
 vi.mock("axios", () => {
@@ -1725,6 +1725,14 @@ describe("DataStore", () => {
       );
     }
 
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     it("sends resident_id only for rows the user did not touch", () => {
       const store = createDataStore({ mealProps: { closed: false } });
       store.loadData(
@@ -1737,7 +1745,8 @@ describe("DataStore", () => {
       const bobsBill = Array.from(store.bills.values()).find(
         (b) => b.resident && b.resident.id === 11,
       );
-      bobsBill.setAmount("5.00"); // triggers saveBills
+      bobsBill.setAmount("5.00"); // triggers the debounced saveBills
+      vi.advanceTimersByTime(700);
 
       const calls = billsPatchCalls();
       expect(calls.length).toBe(1);
@@ -1771,6 +1780,7 @@ describe("DataStore", () => {
         (b) => b.resident && b.resident.id === 11,
       );
       bobsBill.setAmount("5.00");
+      vi.advanceTimersByTime(700);
 
       const payload = billsPatchCalls()[0][0].data;
       expect(payload.bills).toContainEqual({ resident_id: 10 });
@@ -1812,6 +1822,233 @@ describe("DataStore", () => {
       const calls = billsPatchCalls();
       expect(calls.length).toBe(1);
       expect(calls[0][0].data.bills).toEqual([{ resident_id: 10 }]);
+    });
+  });
+
+  // ── Issue #30: debounce, single-flight, reconcile with the server ──
+
+  describe("bill save pipeline", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    function storeWithCookBill() {
+      const store = createDataStore({ mealProps: { closed: false } });
+      store.loadData({
+        id: 1,
+        date: "2023-06-15",
+        description: "",
+        closed: false,
+        closed_at: null,
+        reconciled: false,
+        max: null,
+        next_id: null,
+        prev_id: null,
+        residents: [
+          {
+            id: 11,
+            meal_id: 1,
+            name: "Bob",
+            attending: false,
+            attending_at: null,
+            late: false,
+            vegetarian: false,
+            can_cook: true,
+            active: true,
+          },
+        ],
+        guests: [],
+        bills: [{ id: "b1", resident_id: 11, amount: "", no_cost: false }],
+      });
+      return store;
+    }
+
+    function bobsBill(store) {
+      return Array.from(store.bills.values()).find(
+        (b) => b.resident && b.resident.id === 11,
+      );
+    }
+
+    function billsPatchCalls(mealId = 1) {
+      return axios.mock.calls.filter(
+        ([config]) =>
+          config &&
+          config.method === "patch" &&
+          config.url === `/api/v1/meals/${mealId}/bills`,
+      );
+    }
+
+    it("waits 700ms after the last edit and sends one request with the final value", () => {
+      const store = storeWithCookBill();
+      const bill = bobsBill(store);
+
+      bill.setAmount("5");
+      vi.advanceTimersByTime(300);
+      bill.setAmount("50");
+      vi.advanceTimersByTime(699);
+      expect(billsPatchCalls().length).toBe(0);
+
+      vi.advanceTimersByTime(1);
+      const calls = billsPatchCalls();
+      expect(calls.length).toBe(1);
+      expect(calls[0][0].data.bills).toContainEqual({
+        resident_id: 11,
+        amount: "50",
+        no_cost: false,
+      });
+    });
+
+    it("keeps one request in flight and resends the latest state when it settles", async () => {
+      const store = storeWithCookBill();
+      const bill = bobsBill(store);
+
+      let resolveFirst;
+      axios.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve;
+          }),
+      );
+
+      bill.setAmount("5");
+      vi.advanceTimersByTime(700);
+      expect(billsPatchCalls().length).toBe(1);
+
+      // Edit while the first request is in flight: no second request yet,
+      // so this client's writes can never arrive out of order.
+      bill.setAmount("50");
+      vi.advanceTimersByTime(700);
+      expect(billsPatchCalls().length).toBe(1);
+
+      // The first request settles; the queued save sends the latest state.
+      resolveFirst({ status: 200, data: {} });
+      await vi.advanceTimersByTimeAsync(0);
+
+      const calls = billsPatchCalls();
+      expect(calls.length).toBe(2);
+      expect(calls[1][0].data.bills).toContainEqual({
+        resident_id: 11,
+        amount: "50",
+        no_cost: false,
+      });
+    });
+
+    it("applies the persisted bills from the ack when the user has not typed since", async () => {
+      const store = storeWithCookBill();
+      const bill = bobsBill(store);
+
+      // The server answers with what it stored (here: a different value,
+      // as if another client's write won the lock first).
+      axios.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          message: "Form submitted.",
+          bills: [{ resident_id: 11, amount: "12.34", no_cost: false }],
+        },
+      });
+
+      bill.setAmount("5.50");
+      vi.advanceTimersByTime(700);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(bill.amount).toBe("12.34");
+      expect(bill.touched).toBe(false);
+    });
+
+    it("ignores the ack when the user typed after the request was sent", async () => {
+      const store = storeWithCookBill();
+      const bill = bobsBill(store);
+
+      let resolveFirst;
+      axios.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve;
+          }),
+      );
+
+      bill.setAmount("5");
+      vi.advanceTimersByTime(700);
+
+      // A newer keystroke while the request is in flight.
+      bill.setAmount("50");
+
+      resolveFirst({
+        status: 200,
+        data: {
+          message: "Form submitted.",
+          bills: [{ resident_id: 11, amount: "5.0", no_cost: false }],
+        },
+      });
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Applying the ack here would erase the newer keystroke.
+      expect(bill.amount).toBe("50");
+      expect(bill.touched).toBe(true);
+
+      // The debounced save then sends the newer value.
+      await vi.advanceTimersByTimeAsync(700);
+      const calls = billsPatchCalls();
+      expect(calls.length).toBe(2);
+      expect(calls[1][0].data.bills).toContainEqual({
+        resident_id: 11,
+        amount: "50",
+        no_cost: false,
+      });
+    });
+
+    it("flushes a pending debounced save before switching meals", () => {
+      const store = storeWithCookBill();
+      const bill = bobsBill(store);
+
+      bill.setAmount("5");
+      // Navigate away before the debounce fires. The save must go to the
+      // meal the edit was typed on.
+      store.switchMeals(2);
+
+      const calls = billsPatchCalls(1);
+      expect(calls.length).toBe(1);
+      expect(calls[0][0].data.bills).toContainEqual({
+        resident_id: 11,
+        amount: "5",
+        no_cost: false,
+      });
+
+      // The flush consumed the timer — nothing more fires later.
+      vi.advanceTimersByTime(700);
+      expect(billsPatchCalls(1).length).toBe(1);
+      expect(billsPatchCalls(2).length).toBe(0);
+    });
+
+    it("does not resend a queued save after the user switches meals", async () => {
+      const store = storeWithCookBill();
+      const bill = bobsBill(store);
+
+      let resolveFirst;
+      axios.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve;
+          }),
+      );
+
+      bill.setAmount("5");
+      vi.advanceTimersByTime(700); // request 1 in flight
+      bill.setAmount("50");
+      vi.advanceTimersByTime(700); // queued behind request 1
+
+      store.switchMeals(2); // leave the meal
+      resolveFirst({ status: 200, data: {} });
+      await vi.advanceTimersByTimeAsync(0);
+
+      // The queued edit's rows are gone — resending would write another
+      // meal's bill rows into meal 2.
+      expect(billsPatchCalls(1).length).toBe(1);
+      expect(billsPatchCalls(2).length).toBe(0);
     });
   });
 

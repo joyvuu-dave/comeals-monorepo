@@ -34,6 +34,19 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
       expect(bill.no_cost).to be(false)
     end
 
+    it 'returns the persisted bills so the client can display what was stored' do
+      update_bills(
+        meal_id: meal.id,
+        bills: [{ resident_id: cook.id, amount: '75.50', no_cost: false }]
+      )
+
+      expect(response).to have_http_status(:ok)
+      # Rails encodes BigDecimal as a string and drops trailing zeros.
+      expect(response.parsed_body['bills']).to contain_exactly(
+        { 'resident_id' => cook.id, 'amount' => '75.5', 'no_cost' => false }
+      )
+    end
+
     it 'stores amount as BigDecimal with full precision' do
       update_bills(
         meal_id: meal.id,
@@ -317,6 +330,16 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
       expect(bill.reload.amount).to eq(BigDecimal('0'))
     end
 
+    it 'does not include bills in a rejection — no rows were written' do
+      update_bills(
+        meal_id: meal.id,
+        bills: [{ resident_id: cook.id, amount: '12.345', no_cost: false }]
+      )
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).not_to have_key('bills')
+    end
+
     it 'returns 400 for scientific notation' do
       update_bills(
         meal_id: meal.id,
@@ -385,6 +408,29 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
       expect(bill.no_cost).to be(false)
       expect(bill.updated_at).to eq(untouched_at)
       expect(meal.bills.find_by(resident: new_cook).amount).to eq(BigDecimal('5'))
+    end
+
+    it 'returns the stored values for untouched rows, not what the client displayed' do
+      bill.update!(amount: BigDecimal('12.34'), no_cost: false)
+      new_cook = create(:resident, community: community, unit: unit)
+
+      patch "/api/v1/meals/#{meal.id}/bills",
+            params: {
+              meal_id: meal.id,
+              bills: [
+                { resident_id: cook.id },
+                { resident_id: new_cook.id, amount: '5.00', no_cost: false }
+              ],
+              token: token
+            },
+            as: :json
+
+      expect(response).to have_http_status(:ok)
+      rows = response.parsed_body['bills']
+      expect(rows).to contain_exactly(
+        { 'resident_id' => cook.id, 'amount' => '12.34', 'no_cost' => false },
+        { 'resident_id' => new_cook.id, 'amount' => '5.0', 'no_cost' => false }
+      )
     end
 
     it 'creates a bill with column defaults for a new cook sent without values' do
@@ -532,6 +578,25 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
       expect(response.parsed_body['type']).to eq('warning')
       # Bills are still saved despite the warning
       expect(future_meal.bills.count).to eq(3)
+    end
+
+    it 'includes the persisted bills alongside the warning — the write happened' do
+      update_bills(
+        meal_id: future_meal.id,
+        bills: [
+          { resident_id: cook_1.id, amount: '10.00', no_cost: false },
+          { resident_id: cook_2.id, amount: '10.00', no_cost: false },
+          { resident_id: cook_3.id, amount: '0', no_cost: false }
+        ]
+      )
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['type']).to eq('warning')
+      expect(response.parsed_body['bills']).to contain_exactly(
+        { 'resident_id' => cook_1.id, 'amount' => '10.0', 'no_cost' => false },
+        { 'resident_id' => cook_2.id, 'amount' => '10.0', 'no_cost' => false },
+        { 'resident_id' => cook_3.id, 'amount' => '0.0', 'no_cost' => false }
+      )
     end
 
     it 'warns when switching a 3rd cook' do

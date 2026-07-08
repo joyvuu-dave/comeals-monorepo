@@ -264,6 +264,11 @@ module Api
 
         payload = { message: message }
         payload[:type] = message_type if message_type
+        # The rows as stored (same shape as the meal form's bills), so the
+        # client can display what the server persisted instead of trusting
+        # what it sent. reload defeats the association cache — the rows were
+        # rewritten under the lock above.
+        payload[:bills] = @meal.bills.reload.map { |bill| bill.slice(:resident_id, :amount, :no_cost) }
         render json: payload, status: request_symbol
       rescue ActiveRecord::RecordNotFound, ActiveRecord::RecordInvalid => e
         @skip_pusher = true

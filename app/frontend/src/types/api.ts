@@ -93,7 +93,12 @@ export interface Ack {
 
 // update_bills returns `type: "warning"` on cook-scheduling guard violations
 // (alongside HTTP 400). Existing JS branches on this discriminator.
+// `bills` is present whenever the write happened — the 200, and the warning
+// 400 (which also persists) — and holds the rows as stored, so the client
+// can reconcile its display with the ledger. Plain-error 400s carry only
+// `message`.
 export interface BillsAck {
   message: string;
   type?: "warning";
+  bills?: MealFormBill[];
 }
