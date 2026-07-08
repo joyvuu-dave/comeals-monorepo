@@ -148,6 +148,12 @@ const Resident = types
       const currentVeg = self.vegetarian;
       const currentLate = self.late;
 
+      // A raced refetch can destroy this node while the request is in
+      // flight. Capture the root store now — a dead node cannot reach
+      // its parents — so the success callbacks below can repair by
+      // refetching instead of silently dropping the server's change.
+      const store = self.form.form;
+
       if (val) {
         self.form.form.meal.decrementExtras();
         api.meals.residents
@@ -157,7 +163,12 @@ const Resident = types
             socketId: window.Comeals.socketId,
           })
           .then(function (response) {
-            if (!isAlive(self)) return;
+            if (!isAlive(self)) {
+              // The node died but the server saved the change; fetch
+              // the confirmed state so the screen shows it.
+              store.loadDataAsync();
+              return;
+            }
             if (response.status === 200) {
               // The server's created_at is the signup time of record; the
               // client clock can be skewed.
@@ -191,7 +202,10 @@ const Resident = types
             socketId: window.Comeals.socketId,
           })
           .then(function (response) {
-            if (!isAlive(self)) return;
+            if (!isAlive(self)) {
+              store.loadDataAsync();
+              return;
+            }
             if (response.status === 200) {
               self.setAttendingAt(null);
             }
@@ -214,11 +228,15 @@ const Resident = types
 
       const val = !self.late;
       self.late = val;
+      const store = self.form.form; // captured while alive; see toggleAttending
 
       api.meals.residents
         .update(self.meal_id, self.id, {
           late: val,
           socketId: window.Comeals.socketId,
+        })
+        .then(function () {
+          if (!isAlive(self)) store.loadDataAsync();
         })
         .catch(function (error) {
           if (!isAlive(self)) return;
@@ -235,11 +253,15 @@ const Resident = types
 
       const val = !self.vegetarian;
       self.vegetarian = val;
+      const store = self.form.form; // captured while alive; see toggleAttending
 
       api.meals.residents
         .update(self.meal_id, self.id, {
           vegetarian: val,
           socketId: window.Comeals.socketId,
+        })
+        .then(function () {
+          if (!isAlive(self)) store.loadDataAsync();
         })
         .catch(function (error) {
           if (!isAlive(self)) return;
@@ -249,6 +271,7 @@ const Resident = types
         });
     },
     addGuest(options = { vegetarian: false }) {
+      const store = self.form.form; // captured while alive; see toggleAttending
       self.form.form.meal.decrementExtras();
 
       api.meals.residents.guests
@@ -257,7 +280,13 @@ const Resident = types
           socketId: window.Comeals.socketId,
         })
         .then(function (response) {
-          if (!isAlive(self)) return;
+          if (!isAlive(self)) {
+            // The guest row exists on the server; the refetch brings it
+            // back. Without this the user re-clicks and creates a
+            // second real guest — a double charge.
+            store.loadDataAsync();
+            return;
+          }
           if (response.status === 200) {
             const guest = response.data;
             guest.created_at = new Date(guest.created_at);
@@ -288,12 +317,17 @@ const Resident = types
       // Grab Id of newest guest
       const guestId = sortedGuests[0].id;
 
+      const store = self.form.form; // captured while alive; see toggleAttending
+
       api.meals.residents.guests
         .remove(self.meal_id, self.id, guestId, {
           socketId: window.Comeals.socketId,
         })
         .then(function (response) {
-          if (!isAlive(self)) return;
+          if (!isAlive(self)) {
+            store.loadDataAsync();
+            return;
+          }
           if (response.status === 200) {
             self.form.form.guestStore.removeGuest(guestId);
             self.form.form.meal.incrementExtras();

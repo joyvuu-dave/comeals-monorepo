@@ -63,15 +63,24 @@ const TestDataStore = types
       return self.guestStore.guests.size + residentsAttending;
     },
   }))
+  .volatile(() => ({
+    loadDataAsyncCalls: 0,
+  }))
   .actions((self) => ({
     addResident(r) {
       self.residentStore.residents.put(r);
+    },
+    removeResident(id) {
+      self.residentStore.residents.delete(String(id));
     },
     addGuest(g) {
       self.guestStore.guests.put(g);
     },
     appendGuest(obj) {
       self.guestStore.guests.put(obj);
+    },
+    loadDataAsync() {
+      self.loadDataAsyncCalls += 1;
     },
   }));
 
@@ -869,6 +878,152 @@ describe("Resident model", () => {
 
       const alice = store.residentStore.residents.get("10");
       expect(alice.canRemoveGuest).toBe(false);
+    });
+  });
+
+  // ── Dead-node repair (issue #34) ──
+  //
+  // A raced refetch can destroy a resident node while its mutation request
+  // is in flight. The server still saved the change. Every success callback
+  // must then refetch through the root store instead of returning silently.
+
+  describe("dead-node repair on mutation success", () => {
+    const flush = () => new Promise((r) => setTimeout(r, 0));
+
+    function killAlice(store) {
+      store.removeResident(10);
+    }
+
+    it("refetches when the node dies while an attendance add is in flight", async () => {
+      const store = createStore({
+        mealProps: { closed: false },
+        residents: [{ id: 10, meal_id: 1, name: "Alice", attending: false }],
+      });
+
+      const alice = store.residentStore.residents.get("10");
+      alice.toggleAttending();
+      killAlice(store); // the raced refetch lands before the 200
+
+      await flush();
+      expect(store.loadDataAsyncCalls).toBe(1);
+    });
+
+    it("refetches when the node dies while an attendance remove is in flight", async () => {
+      const store = createStore({
+        mealProps: { closed: false },
+        residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
+      });
+
+      const alice = store.residentStore.residents.get("10");
+      alice.toggleAttending();
+      killAlice(store);
+
+      await flush();
+      expect(store.loadDataAsyncCalls).toBe(1);
+    });
+
+    it("refetches when the node dies while a late update is in flight", async () => {
+      const store = createStore({
+        mealProps: { closed: false },
+        residents: [
+          { id: 10, meal_id: 1, name: "Alice", attending: true, late: false },
+        ],
+      });
+
+      const alice = store.residentStore.residents.get("10");
+      alice.toggleLate();
+      killAlice(store);
+
+      await flush();
+      expect(store.loadDataAsyncCalls).toBe(1);
+    });
+
+    it("refetches when the node dies while a veg update is in flight", async () => {
+      const store = createStore({
+        mealProps: { closed: false },
+        residents: [
+          {
+            id: 10,
+            meal_id: 1,
+            name: "Alice",
+            attending: true,
+            vegetarian: false,
+          },
+        ],
+      });
+
+      const alice = store.residentStore.residents.get("10");
+      alice.toggleVeg();
+      killAlice(store);
+
+      await flush();
+      expect(store.loadDataAsyncCalls).toBe(1);
+    });
+
+    it("refetches when the node dies while an add-guest is in flight", async () => {
+      const store = createStore({
+        mealProps: { closed: false },
+        residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
+      });
+
+      const alice = store.residentStore.residents.get("10");
+      alice.addGuest({ vegetarian: false });
+      killAlice(store);
+
+      await flush();
+      expect(store.loadDataAsyncCalls).toBe(1);
+      // The dropped guest must not be appended by hand — the refetch
+      // brings it back.
+      expect(store.guestStore.guests.size).toBe(0);
+    });
+
+    it("refetches when the node dies while a remove-guest is in flight", async () => {
+      const store = createStore({
+        mealProps: { closed: false },
+        residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
+        guests: [
+          { id: 100, meal_id: 1, resident_id: 10, created_at: Date.now() },
+        ],
+      });
+
+      const alice = store.residentStore.residents.get("10");
+      alice.removeGuest();
+      killAlice(store);
+
+      await flush();
+      expect(store.loadDataAsyncCalls).toBe(1);
+    });
+
+    it("does not refetch when the node stays alive", async () => {
+      const store = createStore({
+        mealProps: { closed: false },
+        residents: [{ id: 10, meal_id: 1, name: "Alice", attending: false }],
+      });
+
+      const alice = store.residentStore.residents.get("10");
+      alice.toggleAttending();
+
+      await flush();
+      expect(store.loadDataAsyncCalls).toBe(0);
+      expect(alice.attending).toBe(true);
+    });
+
+    it("does not refetch when a request fails on a dead node", async () => {
+      // On failure the server saved nothing; the raced snapshot already
+      // matches the server, so a repair fetch is not needed.
+      axios.mockRejectedValueOnce({ response: { status: 500 } });
+
+      const store = createStore({
+        mealProps: { closed: false },
+        residents: [{ id: 10, meal_id: 1, name: "Alice", attending: false }],
+      });
+
+      const alice = store.residentStore.residents.get("10");
+      alice.toggleAttending();
+      killAlice(store);
+
+      await flush();
+      expect(store.loadDataAsyncCalls).toBe(0);
     });
   });
 
