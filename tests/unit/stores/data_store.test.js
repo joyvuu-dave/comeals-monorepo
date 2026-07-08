@@ -2001,6 +2001,34 @@ describe("DataStore", () => {
       });
     });
 
+    it("flushes a pending save immediately on demand (blur) and consumes the timer", () => {
+      const store = storeWithCookBill();
+      const bill = bobsBill(store);
+
+      bill.setAmount("5");
+      store.flushPendingBillsSave(); // what the inputs' onBlur calls
+
+      const calls = billsPatchCalls();
+      expect(calls.length).toBe(1);
+      expect(calls[0][0].data.bills).toContainEqual({
+        resident_id: 11,
+        amount: "5",
+        no_cost: false,
+      });
+
+      // The flush consumed the timer — nothing more fires later.
+      vi.advanceTimersByTime(700);
+      expect(billsPatchCalls().length).toBe(1);
+    });
+
+    it("does nothing on flush when no save is pending", () => {
+      const store = storeWithCookBill();
+
+      store.flushPendingBillsSave();
+
+      expect(billsPatchCalls().length).toBe(0);
+    });
+
     it("flushes a pending debounced save before switching meals", () => {
       const store = storeWithCookBill();
       const bill = bobsBill(store);

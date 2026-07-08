@@ -18,6 +18,7 @@ const BillEdit = inject("store")(
         key={bill.id}
         value={bill.resident_id}
         onChange={(e) => bill.setResident(e.target.value)}
+        onBlur={() => store.flushPendingBillsSave()}
         style={styles.select}
         disabled={store.meal.closed || store.meal.reconciled}
         aria-label="Select meal cook"
@@ -50,6 +51,7 @@ const BillEdit = inject("store")(
               e.target.value = landed;
             }
           }}
+          onBlur={() => store.flushPendingBillsSave()}
           style={styles.select}
           className={bill.amountIsValid ? "" : "input-invalid"}
           disabled={store.meal.closed || store.meal.reconciled}
@@ -65,6 +67,7 @@ const BillEdit = inject("store")(
           key={`no_cost_switch_${bill.id}`}
           checked={bill ? bill.no_cost : false}
           onChange={() => bill.toggleNoCost()}
+          onBlur={() => store.flushPendingBillsSave()}
           disabled={
             store.meal.closed ||
             store.meal.reconciled ||

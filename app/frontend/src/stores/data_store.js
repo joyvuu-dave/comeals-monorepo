@@ -331,6 +331,16 @@ export const DataStore = types
       self.billsSaveTimer = null;
       self.submitBills();
     },
+    // Send a pending debounced save right now. Blur and meal navigation
+    // call this, so "type, then click away" saves immediately — the
+    // debounce only spans pauses while the field still has focus. Without
+    // this, closing the tab within 700ms of the last keystroke would lose
+    // the edit.
+    flushPendingBillsSave() {
+      if (self.billsSaveTimer !== null) {
+        self.submitBills();
+      }
+    },
     setDescription(val) {
       self.meal.description = val;
       self.saveDescription();
@@ -968,9 +978,7 @@ export const DataStore = types
       // A bill edit still sitting in the debounce window belongs to the
       // meal we are leaving. Send it now, while the meal id and the bill
       // rows it was typed on are still current.
-      if (self.billsSaveTimer !== null) {
-        self.submitBills();
-      }
+      self.flushPendingBillsSave();
 
       if (typeof self.meals.find((item) => item.id === id) === "undefined") {
         self.addMeal({ id: Number.parseInt(id, 10) });
