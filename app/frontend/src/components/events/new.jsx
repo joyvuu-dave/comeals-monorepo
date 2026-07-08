@@ -3,6 +3,7 @@ import DayPickerInputWrapper from "../common/day_picker_input";
 import dayjs from "dayjs";
 import axios from "axios";
 import Cookie from "js-cookie";
+import { inject } from "mobx-react";
 import { generateTimes } from "../../helpers/helpers";
 import handleAxiosError from "../../helpers/handle_axios_error";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -55,6 +56,9 @@ class EventsNew extends Component {
         if (!self._isMounted) return;
         self.setState({ loading: false });
         if (response.status === 200) {
+          // The client that knows, invalidates (issue #37): the new
+          // event's month may be too far out to have a Pusher channel.
+          self.props.store.invalidateMonthForDate(s.day);
           self.props.handleCloseModal();
         }
       })
@@ -201,4 +205,4 @@ class EventsNew extends Component {
   }
 }
 
-export default EventsNew;
+export default inject("store")(EventsNew);

@@ -1,6 +1,7 @@
 import { types, getParent, isAlive } from "mobx-state-tree";
 import { api } from "../helpers/api";
 import handleAxiosError from "../helpers/handle_axios_error";
+import { evictMealCache } from "../helpers/meal_cache";
 
 const Resident = types
   .model("Resident", {
@@ -149,10 +150,12 @@ const Resident = types
       const currentLate = self.late;
 
       // A raced refetch can destroy this node while the request is in
-      // flight. Capture the root store now — a dead node cannot reach
-      // its parents — so the success callbacks below can repair by
-      // refetching instead of silently dropping the server's change.
+      // flight. Capture the root store and the meal id now — a dead node
+      // cannot reach its parents or its fields — so the success callbacks
+      // below can repair by refetching instead of silently dropping the
+      // server's change.
       const store = self.form.form;
+      const mealId = self.meal_id;
 
       if (val) {
         self.form.form.meal.decrementExtras();
@@ -163,6 +166,9 @@ const Resident = types
             socketId: window.Comeals.socketId,
           })
           .then(function (response) {
+            // The server saved the change, so the cached meal payload is
+            // now stale — whether or not this node is still alive.
+            evictMealCache(mealId);
             if (!isAlive(self)) {
               // The node died but the server saved the change; fetch
               // the confirmed state so the screen shows it.
@@ -202,6 +208,7 @@ const Resident = types
             socketId: window.Comeals.socketId,
           })
           .then(function (response) {
+            evictMealCache(mealId);
             if (!isAlive(self)) {
               store.loadDataAsync();
               return;
@@ -228,7 +235,9 @@ const Resident = types
 
       const val = !self.late;
       self.late = val;
-      const store = self.form.form; // captured while alive; see toggleAttending
+      // Captured while alive; see toggleAttending.
+      const store = self.form.form;
+      const mealId = self.meal_id;
 
       api.meals.residents
         .update(self.meal_id, self.id, {
@@ -236,6 +245,7 @@ const Resident = types
           socketId: window.Comeals.socketId,
         })
         .then(function () {
+          evictMealCache(mealId);
           if (!isAlive(self)) store.loadDataAsync();
         })
         .catch(function (error) {
@@ -253,7 +263,9 @@ const Resident = types
 
       const val = !self.vegetarian;
       self.vegetarian = val;
-      const store = self.form.form; // captured while alive; see toggleAttending
+      // Captured while alive; see toggleAttending.
+      const store = self.form.form;
+      const mealId = self.meal_id;
 
       api.meals.residents
         .update(self.meal_id, self.id, {
@@ -261,6 +273,7 @@ const Resident = types
           socketId: window.Comeals.socketId,
         })
         .then(function () {
+          evictMealCache(mealId);
           if (!isAlive(self)) store.loadDataAsync();
         })
         .catch(function (error) {
@@ -271,7 +284,9 @@ const Resident = types
         });
     },
     addGuest(options = { vegetarian: false }) {
-      const store = self.form.form; // captured while alive; see toggleAttending
+      // Captured while alive; see toggleAttending.
+      const store = self.form.form;
+      const mealId = self.meal_id;
       self.form.form.meal.decrementExtras();
 
       api.meals.residents.guests
@@ -280,6 +295,7 @@ const Resident = types
           socketId: window.Comeals.socketId,
         })
         .then(function (response) {
+          evictMealCache(mealId);
           if (!isAlive(self)) {
             // The guest row exists on the server; the refetch brings it
             // back. Without this the user re-clicks and creates a
@@ -317,13 +333,16 @@ const Resident = types
       // Grab Id of newest guest
       const guestId = sortedGuests[0].id;
 
-      const store = self.form.form; // captured while alive; see toggleAttending
+      // Captured while alive; see toggleAttending.
+      const store = self.form.form;
+      const mealId = self.meal_id;
 
       api.meals.residents.guests
         .remove(self.meal_id, self.id, guestId, {
           socketId: window.Comeals.socketId,
         })
         .then(function (response) {
+          evictMealCache(mealId);
           if (!isAlive(self)) {
             store.loadDataAsync();
             return;

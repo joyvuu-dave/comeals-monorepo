@@ -36,11 +36,13 @@ vi.mock("localforage", () => ({
   default: {
     getItem: vi.fn(() => Promise.resolve(null)),
     setItem: vi.fn(() => Promise.resolve()),
+    removeItem: vi.fn(() => Promise.resolve()),
   },
 }));
 
 import { types } from "mobx-state-tree";
 import axios from "axios";
+import localforage from "localforage";
 import Meal from "../../../app/frontend/src/stores/meal.js";
 import ResidentStore from "../../../app/frontend/src/stores/resident_store.js";
 import BillStore from "../../../app/frontend/src/stores/bill_store.js";
@@ -1024,6 +1026,98 @@ describe("Resident model", () => {
 
       await flush();
       expect(store.loadDataAsyncCalls).toBe(0);
+    });
+  });
+
+  // The client that knows, invalidates (issue #37): mutations send
+  // socketId, so the sender gets no Pusher echo, and nothing else updates
+  // the cached meal payload. Every successful mutation must evict it.
+  describe("meal cache eviction on mutation success (issue #37)", () => {
+    const flush = () => new Promise((r) => setTimeout(r, 0));
+
+    function aliceStore(residentProps = {}, opts = {}) {
+      return createStore({
+        mealProps: { closed: false },
+        residents: [{ id: 10, meal_id: 1, name: "Alice", ...residentProps }],
+        ...opts,
+      });
+    }
+
+    it("evicts when adding attendance succeeds", async () => {
+      const store = aliceStore({ attending: false });
+      store.residentStore.residents.get("10").toggleAttending();
+
+      await flush();
+      expect(localforage.removeItem).toHaveBeenCalledWith("1");
+    });
+
+    it("evicts when removing attendance succeeds", async () => {
+      const store = aliceStore({ attending: true });
+      store.residentStore.residents.get("10").toggleAttending();
+
+      await flush();
+      expect(localforage.removeItem).toHaveBeenCalledWith("1");
+    });
+
+    it("evicts when a late update succeeds", async () => {
+      const store = aliceStore({ attending: true, late: false });
+      store.residentStore.residents.get("10").toggleLate();
+
+      await flush();
+      expect(localforage.removeItem).toHaveBeenCalledWith("1");
+    });
+
+    it("evicts when a veg update succeeds", async () => {
+      const store = aliceStore({ attending: true, vegetarian: false });
+      store.residentStore.residents.get("10").toggleVeg();
+
+      await flush();
+      expect(localforage.removeItem).toHaveBeenCalledWith("1");
+    });
+
+    it("evicts when adding a guest succeeds", async () => {
+      const store = aliceStore({ attending: true });
+      store.residentStore.residents.get("10").addGuest({ vegetarian: false });
+
+      await flush();
+      expect(localforage.removeItem).toHaveBeenCalledWith("1");
+    });
+
+    it("evicts when removing a guest succeeds", async () => {
+      const store = aliceStore(
+        { attending: true },
+        {
+          guests: [
+            { id: 100, meal_id: 1, resident_id: 10, created_at: Date.now() },
+          ],
+        },
+      );
+      store.residentStore.residents.get("10").removeGuest();
+
+      await flush();
+      expect(localforage.removeItem).toHaveBeenCalledWith("1");
+    });
+
+    it("evicts even when the node died before the response landed", async () => {
+      const store = aliceStore({ attending: false });
+      store.residentStore.residents.get("10").toggleAttending();
+      store.removeResident(10);
+
+      await flush();
+      expect(localforage.removeItem).toHaveBeenCalledWith("1");
+    });
+
+    it("does not evict when the request fails", async () => {
+      // The server saved nothing, so the cached payload still matches it.
+      axios.mockRejectedValueOnce({
+        response: { status: 500, data: { message: "Server error." } },
+      });
+
+      const store = aliceStore({ attending: false });
+      store.residentStore.residents.get("10").toggleAttending();
+
+      await flush();
+      expect(localforage.removeItem).not.toHaveBeenCalled();
     });
   });
 

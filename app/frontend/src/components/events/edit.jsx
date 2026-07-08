@@ -4,6 +4,7 @@ import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import DayPickerInputWrapper from "../common/day_picker_input";
+import { inject } from "mobx-react";
 import { generateTimes, toCommunityDayjs } from "../../helpers/helpers";
 import handleAxiosError from "../../helpers/handle_axios_error";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -103,6 +104,10 @@ class EventsEdit extends Component {
         if (!self._isMounted) return;
         self.setState({ loadingAction: null });
         if (response.status === 200) {
+          // The client that knows, invalidates (issue #37). Both months:
+          // the edit may have moved the event out of its old month.
+          self.props.store.invalidateMonthForDate(self.state.event.start_date);
+          self.props.store.invalidateMonthForDate(s.day);
           self.props.handleCloseModal();
         }
       })
@@ -127,6 +132,8 @@ class EventsEdit extends Component {
         if (!self._isMounted) return;
         self.setState({ loadingAction: null });
         if (response.status === 200) {
+          // The client that knows, invalidates (issue #37).
+          self.props.store.invalidateMonthForDate(self.state.event.start_date);
           self.props.handleCloseModal();
         }
       })
@@ -298,4 +305,4 @@ class EventsEdit extends Component {
   }
 }
 
-export default EventsEdit;
+export default inject("store")(EventsEdit);

@@ -22,6 +22,7 @@ import {
   SAVE_DEBOUNCE_MS,
 } from "../helpers/helpers";
 import { isZeroAmountString, toDisplayAmountString } from "../helpers/money";
+import { evictMealCache } from "../helpers/meal_cache";
 import { mark, logEvent } from "../helpers/nav_trace";
 import toastStore from "./toast_store";
 
@@ -488,6 +489,9 @@ export const DataStore = types
           socketId: window.Comeals.socketId,
         })
         .then(function (response) {
+          // The server saved the bills, so the cached meal payload is
+          // now stale (issue #37).
+          evictMealCache(mealIdAtSend);
           self.applyBillsAck(response.data, versionAtSend, mealIdAtSend);
         })
         .catch(function (error) {
@@ -496,6 +500,9 @@ export const DataStore = types
             error.response.data &&
             error.response.data.type === "warning";
           if (isWarning) {
+            // A warning response still persisted the bills — evict, same
+            // as the success path.
+            evictMealCache(mealIdAtSend);
             var msg = error.response.data.message || "";
             toastStore.replaceAll(
               "Cooks saved." + (msg ? " " + msg : ""),
@@ -1011,6 +1018,33 @@ export const DataStore = types
           localforage.removeItem(id.toString()).catch(function () {});
           self.loadDataAsync();
         });
+    },
+    // The client that knows, invalidates (issue #37): only the current
+    // month and its neighbors have Pusher channels, so a reservation or
+    // event saved onto a farther month would leave that month's cache
+    // stale — and the person who just made the booking would see it
+    // missing. The modal that made the change calls this with the
+    // affected date(s); an edit that moves a date calls it for both the
+    // old and the new month. Accepts what the modals hold: a picker Date
+    // (already a community-day "fake local" Date) or a wire date string
+    // (offset or naive), which resolves to the community month — the same
+    // month the cache key uses.
+    invalidateMonthForDate(date) {
+      if (!date) return;
+      var d;
+      try {
+        d = date instanceof Date ? dayjs(date) : toCommunityDayjs(date);
+      } catch {
+        // dayjs.tz throws a RangeError on unparseable strings. A date we
+        // cannot read names no month to evict.
+        return;
+      }
+      if (!d.isValid()) return;
+      invalidateMonth(
+        Cookie.get("community_id"),
+        d.format("YYYY"),
+        d.format("M"),
+      );
     },
     switchMonths(date) {
       monthFetchVersion += 1;

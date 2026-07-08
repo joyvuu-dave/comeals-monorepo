@@ -107,6 +107,13 @@ const CommonHouseReservationsEdit = inject("store")(
             if (!self._isMounted) return;
             self.setState({ loadingAction: null });
             if (response.status === 200) {
+              // The client that knows, invalidates (issue #37). Both
+              // months: the edit may have moved the reservation out of
+              // its old month.
+              self.props.store.invalidateMonthForDate(
+                self.state.event.start_date,
+              );
+              self.props.store.invalidateMonthForDate(s.day);
               self.props.handleCloseModal();
             }
           })
@@ -133,6 +140,10 @@ const CommonHouseReservationsEdit = inject("store")(
             if (!self._isMounted) return;
             self.setState({ loadingAction: null });
             if (response.status === 200) {
+              // The client that knows, invalidates (issue #37).
+              self.props.store.invalidateMonthForDate(
+                self.state.event.start_date,
+              );
               self.props.handleCloseModal();
             }
           })

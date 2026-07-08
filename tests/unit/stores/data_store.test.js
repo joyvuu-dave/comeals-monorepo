@@ -47,6 +47,7 @@ vi.mock("localforage", () => ({
   default: {
     getItem: vi.fn(() => Promise.resolve(null)),
     setItem: vi.fn(() => Promise.resolve()),
+    removeItem: vi.fn(() => Promise.resolve()),
   },
 }));
 
@@ -2053,6 +2054,52 @@ describe("DataStore", () => {
       expect(billsPatchCalls(2).length).toBe(0);
     });
 
+    // The client that knows, invalidates (issue #37): bill saves send
+    // socketId, so the sender gets no Pusher echo and the cached meal
+    // payload keeps the old bills until evicted.
+    it("evicts the meal's cached payload when the save succeeds", async () => {
+      const store = storeWithCookBill();
+      const bill = bobsBill(store);
+
+      bill.setAmount("5");
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(localforage.removeItem).toHaveBeenCalledWith("1");
+    });
+
+    it("evicts the meal's cached payload when the server saves with a warning", async () => {
+      const store = storeWithCookBill();
+      const bill = bobsBill(store);
+
+      // A warning response still persisted the bills (e.g. third cook).
+      axios.mockRejectedValueOnce({
+        response: { data: { type: "warning", message: "Third cook." } },
+      });
+
+      bill.setAmount("5");
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(localforage.removeItem).toHaveBeenCalledWith("1");
+    });
+
+    it("does not evict when the save fails outright", async () => {
+      const store = storeWithCookBill();
+      const bill = bobsBill(store);
+
+      // The server saved nothing, so the cached payload still matches it.
+      axios.mockRejectedValueOnce({
+        response: { data: { message: "Server error." } },
+      });
+
+      bill.setAmount("5");
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(localforage.removeItem).not.toHaveBeenCalled();
+    });
+
     it("does not resend a queued save after the user switches meals", async () => {
       const store = storeWithCookBill();
       const bill = bobsBill(store);
@@ -2267,6 +2314,52 @@ describe("DataStore", () => {
       expect(event.start.getHours()).toBe(18);
       expect(event.end.getDate()).toBe(15);
       expect(event.end.getHours()).toBe(20);
+    });
+  });
+
+  // The client that knows, invalidates (issue #37): the reservation and
+  // event modals call this for the affected month(s), because months
+  // beyond the current one and its neighbors have no Pusher channel to
+  // evict their cache.
+  describe("invalidateMonthForDate", () => {
+    it("evicts the month's cache entry for a picker Date", () => {
+      const store = createDataStore();
+
+      store.invalidateMonthForDate(new Date(2026, 8, 15)); // Sep 15, 2026
+
+      expect(localforage.removeItem).toHaveBeenCalledWith(
+        "community-test-community-id-calendar-2026-9",
+      );
+    });
+
+    it("resolves an offset wire string to the community month, not the UTC month", () => {
+      const store = createDataStore();
+
+      // 2026-10-01 02:00 UTC is 2026-09-30 19:00 in America/Los_Angeles.
+      store.invalidateMonthForDate("2026-10-01T02:00:00.000Z");
+
+      expect(localforage.removeItem).toHaveBeenCalledWith(
+        "community-test-community-id-calendar-2026-9",
+      );
+    });
+
+    it("reads a naive wire string as a community-timezone date", () => {
+      const store = createDataStore();
+
+      store.invalidateMonthForDate("2026-10-05");
+
+      expect(localforage.removeItem).toHaveBeenCalledWith(
+        "community-test-community-id-calendar-2026-10",
+      );
+    });
+
+    it("ignores null and unparseable dates", () => {
+      const store = createDataStore();
+
+      store.invalidateMonthForDate(null);
+      store.invalidateMonthForDate("not-a-date");
+
+      expect(localforage.removeItem).not.toHaveBeenCalled();
     });
   });
 

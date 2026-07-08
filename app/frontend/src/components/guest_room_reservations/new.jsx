@@ -57,6 +57,10 @@ const GuestRoomReservationsNew = inject("store")(
             if (!self._isMounted) return;
             self.setState({ loading: false });
             if (response.status === 200) {
+              // The client that knows, invalidates (issue #37): the new
+              // reservation's month may be too far out to have a Pusher
+              // channel.
+              self.props.store.invalidateMonthForDate(self.state.day);
               self.props.handleCloseModal();
             }
           })
