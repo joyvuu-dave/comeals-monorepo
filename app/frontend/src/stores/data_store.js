@@ -337,8 +337,8 @@ export const DataStore = types
       const isSaving = self.editDescriptionMode;
       self.editDescriptionMode = !self.editDescriptionMode;
 
-      if (isSaving) {
-        self.submitDescription();
+      if (isSaving && self.meal) {
+        self.meal.submitDescription();
       }
     },
     toggleEditBillsMode() {
@@ -348,9 +348,6 @@ export const DataStore = types
       if (isSaving) {
         self.submitBills();
       }
-    },
-    saveDescription() {
-      self.submitDescription();
     },
     // Debounced, same delay as the description field: a save fires only
     // after the user stops editing, so half-typed amounts never hit the
@@ -378,10 +375,23 @@ export const DataStore = types
         self.submitBills();
       }
     },
+    // The description save pipeline lives on the meal node (issue #35),
+    // so unsaved text stays protected even after the user navigates to
+    // another meal.
     setDescription(val) {
-      self.meal.description = val;
-      self.saveDescription();
+      self.meal.setDescription(val);
       return self.meal.description;
+    },
+    // Resend unsaved menu text (issue #35). The `online` handler calls
+    // this: most description save failures are network blips, so the
+    // retry usually clears the "not saved" marker without the user doing
+    // anything.
+    retryDirtyDescriptions() {
+      self.meals.forEach(function (meal) {
+        if (meal.descriptionDirty) {
+          meal.submitDescription();
+        }
+      });
     },
     // Runs when the open/close save settles — success or failure. The
     // refetch lets loadData write the server's truth, including the
@@ -458,16 +468,6 @@ export const DataStore = types
       Cookie.remove("resident_id", { path: "/" });
       Cookie.remove("username", { path: "/" });
       Cookie.remove("timezone", { path: "/" });
-    },
-    submitDescription() {
-      api.meals
-        .updateDescription(self.meal.id, {
-          description: self.meal.description,
-          socketId: window.Comeals.socketId,
-        })
-        .catch(function (error) {
-          handleAxiosError(error);
-        });
     },
     submitBills() {
       // A direct submit (save button, meal switch) supersedes a pending
@@ -755,7 +755,12 @@ export const DataStore = types
       // in calendar/show.jsx.
       var d = toCommunityDayjs(data.date);
       self.meal.date = new Date(d.year(), d.month(), d.date());
-      self.meal.description = data.description;
+      // While the menu has unsaved typing, a reload must not overwrite it
+      // (issue #35): your text wins on your own screen until it saves.
+      // After it saves, last-write-wins as usual.
+      if (!self.meal.descriptionDirty) {
+        self.meal.description = data.description;
+      }
       self.meal.closed = data.closed;
       self.meal.closed_at = data.closed_at ? new Date(data.closed_at) : null;
       self.meal.reconciled = data.reconciled;

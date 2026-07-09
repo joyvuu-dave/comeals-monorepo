@@ -100,6 +100,9 @@ document.addEventListener("DOMContentLoaded", () => {
         // may not have fired yet; coming back online is a reliable moment
         // to roll the observable "today" forward.
         store.recomputeCommunityToday();
+        // Unsaved menu text first: most save failures are network blips,
+        // and coming back online is the moment to resend (issue #35).
+        store.retryDirtyDescriptions();
         if (store.meal && store.meal.id) {
           store.loadDataAsync();
         }

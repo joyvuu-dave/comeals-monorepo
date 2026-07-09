@@ -2580,4 +2580,87 @@ describe("DataStore", () => {
       expect(Cookie.remove).toHaveBeenCalledWith("token", { path: "/" });
     });
   });
+
+  // ── description dirty state (issue #35) ──
+
+  describe("description dirty state", () => {
+    function mealPayload(overrides = {}) {
+      return Object.assign(
+        {
+          id: 1,
+          date: "2023-06-15",
+          description: "server text",
+          closed: false,
+          closed_at: null,
+          reconciled: false,
+          max: null,
+          next_id: null,
+          prev_id: null,
+          residents: [],
+          guests: [],
+          bills: [],
+        },
+        overrides,
+      );
+    }
+
+    it("loadData leaves the description alone while it has unsaved typing", async () => {
+      const store = createDataStore();
+      axios.mockRejectedValueOnce({ request: {} });
+
+      store.setDescription("typed text");
+      await new Promise((r) => setTimeout(r, 0));
+      expect(store.meal.descriptionDirty).toBe(true);
+
+      store.loadData(mealPayload());
+
+      expect(store.meal.description).toBe("typed text");
+    });
+
+    it("loadData writes the description again once the text is saved", async () => {
+      const store = createDataStore();
+
+      store.setDescription("typed text");
+      await new Promise((r) => setTimeout(r, 0));
+      expect(store.meal.descriptionDirty).toBe(false);
+
+      store.loadData(mealPayload());
+
+      expect(store.meal.description).toBe("server text");
+    });
+
+    it("retryDirtyDescriptions resends a dirty meal, even one no longer on screen", async () => {
+      const store = createDataStore();
+      axios.mockRejectedValueOnce({ request: {} });
+
+      store.setDescription("typed text");
+      await new Promise((r) => setTimeout(r, 0));
+
+      // The user moved on to another meal; the unsaved text stays behind
+      // on meal 1's node.
+      runInAction(() => {
+        store.addMeal({ id: 2 });
+        store.meal = 2;
+      });
+
+      axios.mockClear();
+      store.retryDirtyDescriptions();
+
+      expect(axios).toHaveBeenCalledTimes(1);
+      expect(axios.mock.calls[0][0].url).toBe("/api/v1/meals/1/description");
+      expect(axios.mock.calls[0][0].data.description).toBe("typed text");
+
+      await new Promise((r) => setTimeout(r, 0));
+      const mealOne = store.meals.find((m) => m.id === 1);
+      expect(mealOne.descriptionDirty).toBe(false);
+    });
+
+    it("retryDirtyDescriptions sends nothing when no text is unsaved", () => {
+      const store = createDataStore();
+
+      store.retryDirtyDescriptions();
+
+      expect(axios).not.toHaveBeenCalled();
+    });
+  });
 });

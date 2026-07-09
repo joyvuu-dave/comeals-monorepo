@@ -362,4 +362,90 @@ describe("Meal model", () => {
       expect(store.meal.extras).toBe(-2);
     });
   });
+
+  // ── description save pipeline (issue #35) ──
+
+  describe("description save pipeline", () => {
+    it("marks the text dirty on edit and clears the flag when the save returns 200", async () => {
+      const store = createStore({ description: "Old menu" });
+
+      store.meal.setDescription("Tacos");
+      expect(store.meal.description).toBe("Tacos");
+      expect(store.meal.descriptionDirty).toBe(true);
+
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(axios).toHaveBeenCalledTimes(1);
+      expect(store.meal.descriptionDirty).toBe(false);
+      expect(store.meal.descriptionNotSaved).toBe(false);
+    });
+
+    it("keeps the text, stays dirty, and shows the marker when the save fails", async () => {
+      const store = createStore({ description: "Old menu" });
+      axios.mockRejectedValueOnce({ request: {} });
+
+      store.meal.setDescription("Tacos");
+
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(store.meal.description).toBe("Tacos");
+      expect(store.meal.descriptionDirty).toBe(true);
+      expect(store.meal.descriptionNotSaved).toBe(true);
+      // The toast still explains what happened; the marker is what persists.
+      expect(toastStore.toasts.length).toBe(1);
+    });
+
+    it("clears the marker when a later save lands", async () => {
+      const store = createStore({});
+      axios.mockRejectedValueOnce({ request: {} });
+
+      store.meal.setDescription("Tacos");
+      await new Promise((r) => setTimeout(r, 0));
+      expect(store.meal.descriptionNotSaved).toBe(true);
+
+      // The next debounce tick resends; this time the network is back.
+      store.meal.setDescription("Tacos and rice");
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(store.meal.descriptionDirty).toBe(false);
+      expect(store.meal.descriptionNotSaved).toBe(false);
+    });
+
+    it("sends one request at a time and a stale 200 cannot mark newer text as saved", async () => {
+      const store = createStore({});
+      let resolveFirst;
+      let resolveSecond;
+      axios
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolveFirst = resolve;
+            }),
+        )
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolveSecond = resolve;
+            }),
+        );
+
+      store.meal.setDescription("Ta");
+      store.meal.setDescription("Tacos"); // first request still in flight
+      expect(axios).toHaveBeenCalledTimes(1);
+
+      resolveFirst({ status: 200 });
+      await new Promise((r) => setTimeout(r, 0));
+
+      // The 200 answered "Ta", not "Tacos": the flag must stay dirty and
+      // one resend must carry the newest text.
+      expect(store.meal.descriptionDirty).toBe(true);
+      expect(axios).toHaveBeenCalledTimes(2);
+      expect(axios.mock.calls[1][0].data.description).toBe("Tacos");
+
+      resolveSecond({ status: 200 });
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(store.meal.descriptionDirty).toBe(false);
+    });
+  });
 });

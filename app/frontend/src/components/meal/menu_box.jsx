@@ -18,6 +18,11 @@ const styles = {
     fontSize: "1.25rem",
     whiteSpace: "pre-wrap",
   },
+  notSaved: {
+    color: "#b00020",
+    fontWeight: "bold",
+    alignSelf: "center",
+  },
 };
 
 class DebouncedTextarea extends Component {
@@ -68,6 +73,11 @@ const MenuBox = inject("store")(
     <div style={styles.main} className="button-border-radius">
       <div className="flex space-between title">
         <h2 className="w-15">Menu</h2>
+        {store.meal && store.meal.descriptionNotSaved && (
+          <span style={styles.notSaved} role="status">
+            Not saved — will retry
+          </span>
+        )}
       </div>
       <div>
         <DebouncedTextarea
