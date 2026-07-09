@@ -2363,6 +2363,89 @@ describe("DataStore", () => {
     });
   });
 
+  describe("Pusher reconnect recovery", () => {
+    // The mock Pusher's connection.bind is a vi.fn(); pull out the
+    // state_change handler afterCreate registered so tests can drive
+    // connection transitions directly.
+    function stateChangeHandler() {
+      const call = window.Comeals.pusher.connection.bind.mock.calls.find(
+        ([event]) => event === "state_change",
+      );
+      return call[1];
+    }
+
+    afterEach(async () => {
+      // Restore the default cookie fixture for tests that override it.
+      const Cookie = (await import("js-cookie")).default;
+      Cookie.get.mockImplementation(
+        (name) =>
+          ({
+            token: "test-token",
+            community_id: "test-community-id",
+            timezone: "America/Los_Angeles",
+          })[name],
+      );
+    });
+
+    it("does not refetch on the first connection at page load", () => {
+      createDataStore();
+      const handler = stateChangeHandler();
+      axios.get.mockClear();
+
+      handler({ previous: "connecting", current: "connected" });
+
+      expect(axios.get).not.toHaveBeenCalled();
+    });
+
+    // Regression: the handler required previous === "unavailable", but
+    // pusher-js only reaches "unavailable" after ~10s. A shorter drop
+    // reconnects as connecting → connected, and events broadcast during
+    // the gap were silently lost (Pusher does not replay them).
+    it("refetches after a short blip that never reached unavailable", () => {
+      createDataStore();
+      const handler = stateChangeHandler();
+      handler({ previous: "connecting", current: "connected" }); // page load
+      axios.get.mockClear();
+
+      handler({ previous: "connected", current: "connecting" });
+      handler({ previous: "connecting", current: "connected" });
+
+      expect(axios.get).toHaveBeenCalledWith("/api/v1/meals/1/cooks");
+      expect(axios.get).toHaveBeenCalledWith(
+        expect.stringContaining("/calendar/"),
+      );
+    });
+
+    it("still refetches after a long gap through unavailable", () => {
+      createDataStore();
+      const handler = stateChangeHandler();
+      handler({ previous: "connecting", current: "connected" }); // page load
+      axios.get.mockClear();
+
+      handler({ previous: "unavailable", current: "connected" });
+
+      expect(axios.get).toHaveBeenCalledWith("/api/v1/meals/1/cooks");
+    });
+
+    // A blip on the login page must not fire an unauthenticated fetch —
+    // the 401 would raise the "you've been signed out" banner for a
+    // person who is not signed in. Same guard as the `online` handler.
+    it("skips the refetch when the community_id cookie is gone", async () => {
+      const Cookie = (await import("js-cookie")).default;
+      createDataStore();
+      const handler = stateChangeHandler();
+      handler({ previous: "connecting", current: "connected" }); // page load
+      Cookie.get.mockImplementation((name) =>
+        name === "timezone" ? "America/Los_Angeles" : undefined,
+      );
+      axios.get.mockClear();
+
+      handler({ previous: "unavailable", current: "connected" });
+
+      expect(axios.get).not.toHaveBeenCalled();
+    });
+  });
+
   describe("logout", () => {
     // Regression: logout() used to rely on the global axios interceptor to
     // attach the bearer token, but cookies were cleared synchronously before

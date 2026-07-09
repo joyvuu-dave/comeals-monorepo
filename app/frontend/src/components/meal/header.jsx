@@ -52,7 +52,10 @@ const Header = inject("store")(
                 className="button button-link text-secondary"
                 onClick={() => {
                   this.props.store.logout();
-                  this.props.history.push("/");
+                  // Hard reload, matching login: a client-side route change
+                  // would leave the store and the Pusher channels alive on
+                  // the login page. See handleClickLogout in calendar/show.
+                  window.location.href = "/";
                 }}
               >
                 logout {Cookie.get("username")}

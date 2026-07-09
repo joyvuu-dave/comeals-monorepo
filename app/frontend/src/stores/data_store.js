@@ -265,22 +265,34 @@ export const DataStore = types
         window.Comeals.socketId = window.Comeals.pusher.connection.socket_id;
       });
 
+      // Pusher does not replay events broadcast while the socket was down,
+      // so after ANY gap the data on screen can no longer be trusted.
+      // Refetch on every transition to "connected" except the first one at
+      // page load — the page-load fetch is already in flight then. Checking
+      // previous === "unavailable" is not enough: pusher-js only reaches
+      // "unavailable" after ~10s, so a shorter blip reconnects as
+      // connecting → connected and its dropped events would go unnoticed.
+      let hasConnectedBefore = false;
       window.Comeals.pusher.connection.bind("state_change", function (states) {
         // states = {previous: 'oldState', current: 'newState'}
-        if (
-          states.previous === "unavailable" &&
-          states.current === "connected"
-        ) {
-          if (self.meal && self.meal.id) {
-            self.loadDataAsync();
-          }
-          self.loadMonthAsync();
-          // If we had a cached hosts list, any invalidation pushed while
-          // offline was missed — silently refresh it now so the next modal
-          // to open shows current data.
-          if (self.hostsLoaded) {
-            self.refetchHostsSilently();
-          }
+        if (states.current !== "connected") return;
+        if (!hasConnectedBefore) {
+          hasConnectedBefore = true;
+          return;
+        }
+        // Logged out (or on the login page) there is nothing to refetch,
+        // and an unauthenticated fetch would 401 and raise the "signed
+        // out" banner. Same guard as the `online` handler in index.jsx.
+        if (typeof Cookie.get("community_id") === "undefined") return;
+        if (self.meal && self.meal.id) {
+          self.loadDataAsync();
+        }
+        self.loadMonthAsync();
+        // If we had a cached hosts list, any invalidation pushed while
+        // offline was missed — silently refresh it now so the next modal
+        // to open shows current data.
+        if (self.hostsLoaded) {
+          self.refetchHostsSilently();
         }
       });
 

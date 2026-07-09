@@ -295,7 +295,11 @@ const MainCalendar = inject("store")(
 
         handleClickLogout() {
           this.props.store.logout();
-          this.props.history.push("/");
+          // Hard reload, matching login. A client-side route change would
+          // leave the store and the Pusher channels alive on the login
+          // page; the next broadcast would fire an unauthenticated fetch
+          // and raise the "signed out" banner. A reload resets everything.
+          window.location.href = "/";
         }
 
         formatEvent(event) {
