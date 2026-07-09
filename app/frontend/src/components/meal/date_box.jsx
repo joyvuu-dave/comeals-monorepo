@@ -28,6 +28,7 @@ const styles = {
   },
   topDate: {
     width: "200px",
+    whiteSpace: "nowrap",
   },
 };
 
@@ -147,6 +148,7 @@ const DateBox = inject("store")(
                   className="arrow"
                   style={styles.arrow}
                   onClick={this.handlePrevClick}
+                  onMouseDown={(e) => e.preventDefault()}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
@@ -166,6 +168,7 @@ const DateBox = inject("store")(
                   className="arrow"
                   style={styles.arrow}
                   onClick={this.handleNextClick}
+                  onMouseDown={(e) => e.preventDefault()}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
