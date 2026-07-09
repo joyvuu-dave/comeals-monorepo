@@ -2485,6 +2485,34 @@ describe("DataStore", () => {
       expect(store.communityToday).toBe("2026-07-10");
     });
 
+    // DST: the night the clocks fall back is 25 hours long. The timer
+    // must target the next community midnight, not "now plus 24 hours" —
+    // a naive 24-hour timer would fire an hour early, write the same
+    // day, and then land a full day behind at the next midnight.
+    // America/Los_Angeles leaves DST on Nov 1, 2026 at 2am.
+    it("targets community midnight across the fall-back DST night", () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-10-31T23:59:00-07:00")); // PDT
+      const store = createDataStore();
+      expect(store.communityToday).toBe("2026-10-31");
+
+      // Midnight itself comes before the 2am transition, so the first
+      // rollover is a normal one.
+      vi.advanceTimersByTime(5 * 60 * 1000);
+      expect(store.communityToday).toBe("2026-11-01");
+
+      // Nov 1 lasts 25 hours: a full 24 hours later it is 11pm PST,
+      // still Nov 1.
+      vi.advanceTimersByTime(24 * 60 * 60 * 1000);
+      expect(store.communityToday).toBe("2026-11-01");
+
+      // The 25th hour crosses the real community midnight. A timer set
+      // for "+24 hours" would have fired at 11pm and rescheduled for
+      // 11pm the next day, leaving this assertion a day behind.
+      vi.advanceTimersByTime(60 * 60 * 1000);
+      expect(store.communityToday).toBe("2026-11-02");
+    });
+
     // Background tabs throttle timers, so a laptop asleep past midnight
     // can wake with the rollover timer unfired. The Pusher reconnect is
     // the wake-up signal: it recomputes "today" alongside its refetch.
