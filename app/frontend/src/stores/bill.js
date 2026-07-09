@@ -1,6 +1,10 @@
 import { types, getParent } from "mobx-state-tree";
 import Resident from "./resident";
-import { isValidAmountString, isZeroAmountString } from "../helpers/money";
+import {
+  isValidAmountString,
+  isZeroAmountString,
+  toDisplayAmountString,
+} from "../helpers/money";
 
 const Bill = types
   .model("Bill", {
@@ -53,6 +57,15 @@ const Bill = types
       }
       self.form.form.saveBills();
       return val;
+    },
+    // Pad the display when the user leaves the field: "1" shows as
+    // "1.00", and a typed zero shows as blank (zero means "not filled
+    // in yet"). The number does not change, so `touched` stays as it is
+    // and nothing needs to be saved.
+    normalizeAmountDisplay() {
+      if (isValidAmountString(self.amount)) {
+        self.amount = toDisplayAmountString(self.amount);
+      }
     },
     toggleNoCost() {
       const val = !self.no_cost;

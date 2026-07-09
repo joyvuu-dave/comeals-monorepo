@@ -51,7 +51,10 @@ const BillEdit = inject("store")(
               e.target.value = landed;
             }
           }}
-          onBlur={() => store.flushPendingBillsSave()}
+          onBlur={() => {
+            bill.normalizeAmountDisplay();
+            store.flushPendingBillsSave();
+          }}
           style={styles.select}
           className={bill.amountIsValid ? "" : "input-invalid"}
           disabled={store.meal.closed || store.meal.reconciled}

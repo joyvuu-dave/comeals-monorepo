@@ -2114,6 +2114,60 @@ describe("DataStore", () => {
       expect(bill.touched).toBe(false);
     });
 
+    // Regression from issue #30's fix. Typing "1", pausing past the
+    // debounce, then typing "0" used to fail: the ack rewrote the field
+    // to "1.00" under the cursor, so the next keystroke made "1.000" —
+    // three decimals, which the whole-cents grammar refuses. The "0" was
+    // swallowed. When the server agrees with the screen, the ack must
+    // not reformat what the user is still typing.
+    it("keeps the typed string when the ack differs only in formatting, so typing can continue", async () => {
+      const store = storeWithCookBill();
+      const bill = bobsBill(store);
+
+      // Rails drops trailing zeros: the server stored 1.00, echoes "1.0".
+      axios.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          message: "Form submitted.",
+          bills: [{ resident_id: 11, amount: "1.0", no_cost: false }],
+        },
+      });
+
+      bill.setAmount("1");
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Same number: keep the user's string. The row is still in sync
+      // with the server, so it needs no resend.
+      expect(bill.amount).toBe("1");
+      expect(bill.touched).toBe(false);
+
+      // The slow "0" keystroke lands: "1" then "0" makes "10".
+      expect(bill.setAmount("10")).toBe("10");
+      expect(bill.amount).toBe("10");
+    });
+
+    // The counterpart of the ack no-reformat rule: the field pads itself
+    // when the user leaves it, so "1" still ends up shown as "1.00".
+    it("pads the display on blur without marking the row for a resend", () => {
+      const store = storeWithCookBill();
+      const bill = bobsBill(store);
+
+      bill.setAmount("1");
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS); // save fires; row settles
+      bill.touched = false;
+
+      bill.normalizeAmountDisplay(); // what the input's onBlur calls
+      expect(bill.amount).toBe("1.00");
+      expect(bill.touched).toBe(false);
+
+      // A typed zero means "not filled in yet" and shows as blank — the
+      // same mapping loadData uses, so blur and reload agree.
+      bill.setAmount("0");
+      bill.normalizeAmountDisplay();
+      expect(bill.amount).toBe("");
+    });
+
     it("ignores the ack when the user typed after the request was sent", async () => {
       const store = storeWithCookBill();
       const bill = bobsBill(store);

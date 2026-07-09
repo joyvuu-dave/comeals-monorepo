@@ -568,7 +568,16 @@ export const DataStore = types
           (b) => b.resident && b.resident.id === row.resident_id,
         );
         if (!bill) return;
-        bill.amount = toDisplayAmountString(row.amount);
+        // Rewrite the amount only when the server disagrees with the
+        // screen. When the values match, a rewrite is pure reformatting
+        // ("1" becomes "1.00") and it lands under the cursor: the next
+        // keystroke makes "1.000", which the whole-cents grammar refuses,
+        // so the keystroke is swallowed. The field pads itself on blur
+        // instead.
+        const serverAmount = toDisplayAmountString(row.amount);
+        if (serverAmount !== toDisplayAmountString(bill.amount)) {
+          bill.amount = serverAmount;
+        }
         bill.no_cost = row.no_cost;
         // The row now shows exactly what the server stored, so it no
         // longer needs to assert values on the next save — and a stale

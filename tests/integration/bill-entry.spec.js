@@ -58,6 +58,51 @@ test.describe("Bill entry (real backend)", () => {
     await cleared;
   });
 
+  // Typing "1", pausing past the debounce, then typing "0" used to
+  // produce "1.00" with the "0" swallowed: the save's ack reformatted
+  // the field under the cursor, and "1.00" plus "0" breaks the
+  // whole-cents grammar. The ack must not touch a field it agrees with;
+  // padding happens on blur instead.
+  test("typing slowly across the save debounce keeps accepting keystrokes", async ({
+    page,
+  }) => {
+    const mealId = auth.meals.today.id;
+    await page.goto(`/meals/${mealId}/edit/`);
+    await page.waitForLoadState("networkidle");
+    await expect(page.locator("h1", { hasText: "OPEN" })).toBeVisible({
+      timeout: 10000,
+    });
+
+    const cookSelect = page.locator('[aria-label="Select meal cook"]').first();
+    await cookSelect.selectOption(String(auth.resident_id));
+
+    // Type "1", then pause: the debounce fires and the server answers.
+    const costInput = page.locator('[aria-label="Set meal cost"]').first();
+    const firstSave = billSaved(page, mealId, "1");
+    await costInput.press("1");
+    await firstSave;
+
+    // The ack has arrived. Give it time to hit the store, then confirm
+    // the field still shows exactly what was typed.
+    await page.waitForTimeout(300);
+    await expect(costInput).toHaveValue("1");
+
+    // The late "0" keystroke must land.
+    const secondSave = billSaved(page, mealId, "10");
+    await costInput.press("0");
+    await expect(costInput).toHaveValue("10");
+    await secondSave;
+
+    // Leaving the field pads the display.
+    await costInput.blur();
+    await expect(costInput).toHaveValue("10.00");
+
+    // Restore: clear the bill for the other tests.
+    const cleared = billSaved(page, mealId, "0");
+    await costInput.fill("0");
+    await cleared;
+  });
+
   test("existing bill on tomorrow's meal shows correct amount", async ({
     page,
   }) => {
