@@ -3,7 +3,6 @@ import { inject, observer } from "mobx-react";
 import { Routes, Route } from "react-router-dom";
 import { withRouter } from "../../helpers/with_router";
 import dayjs from "dayjs";
-import { communityNow } from "../../helpers/helpers";
 import Modal from "react-modal";
 
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -97,17 +96,16 @@ const DateBox = inject("store")(
             return "loading...";
           }
 
-          var now = communityNow();
-          var today = new Date(now.year(), now.month(), now.date());
-          var days = dayjs(this.props.store.meal.date).diff(
-            dayjs(today),
-            "day",
-          );
+          // Observable "today" from the store, not communityNow() — a
+          // direct clock read is not observable, so the label would keep
+          // saying "Today" after midnight on an idle tab (#36).
+          var today = dayjs(this.props.store.communityToday);
+          var days = dayjs(this.props.store.meal.date).diff(today, "day");
 
           if (days === 0) return "Today";
           if (days === -1) return "Yesterday";
           if (days === 1) return "Tomorrow";
-          return dayjs(this.props.store.meal.date).from(dayjs(today));
+          return dayjs(this.props.store.meal.date).from(today);
         }
 
         displayTopDate() {

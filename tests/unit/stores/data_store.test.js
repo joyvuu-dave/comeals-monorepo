@@ -64,7 +64,10 @@ import { DataStore } from "../../../app/frontend/src/stores/data_store.js";
 import localforage from "localforage";
 import axios from "axios";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
-import { SAVE_DEBOUNCE_MS } from "../../../app/frontend/src/helpers/helpers.js";
+import {
+  communityNow,
+  SAVE_DEBOUNCE_MS,
+} from "../../../app/frontend/src/helpers/helpers.js";
 
 function createDataStore(opts = {}) {
   const { mealProps = {}, residents = [], guests = [], bills = [] } = opts;
@@ -2443,6 +2446,64 @@ describe("DataStore", () => {
       handler({ previous: "unavailable", current: "connected" });
 
       expect(axios.get).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("communityToday", () => {
+    function stateChangeHandler() {
+      const call = window.Comeals.pusher.connection.bind.mock.calls.find(
+        ([event]) => event === "state_change",
+      );
+      return call[1];
+    }
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("initializes to today's date in the community timezone", () => {
+      const store = createDataStore();
+      expect(store.communityToday).toBe(communityNow().format("YYYY-MM-DD"));
+    });
+
+    // Regression (#36): "today" was read straight from the clock during
+    // render, which is not observable — an idle tab (a wall-mounted
+    // tablet) kept showing yesterday's date, highlight, and dimming after
+    // midnight. The store now owns "today" and rolls it over on a timer.
+    it("rolls over at community midnight and schedules the next rollover", () => {
+      vi.useFakeTimers();
+      // 23:59 Pacific daylight time — one minute before midnight.
+      vi.setSystemTime(new Date("2026-07-08T23:59:00-07:00"));
+      const store = createDataStore();
+      expect(store.communityToday).toBe("2026-07-08");
+
+      vi.advanceTimersByTime(5 * 60 * 1000);
+      expect(store.communityToday).toBe("2026-07-09");
+
+      // The timer reschedules itself, so the following midnight works too.
+      vi.advanceTimersByTime(24 * 60 * 60 * 1000);
+      expect(store.communityToday).toBe("2026-07-10");
+    });
+
+    // Background tabs throttle timers, so a laptop asleep past midnight
+    // can wake with the rollover timer unfired. The Pusher reconnect is
+    // the wake-up signal: it recomputes "today" alongside its refetch.
+    it("recomputes on Pusher reconnect when the timer never fired", () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-07-08T23:59:00-07:00"));
+      const store = createDataStore();
+      const handler = stateChangeHandler();
+      handler({ previous: "connecting", current: "connected" }); // page load
+
+      // Move the clock past midnight WITHOUT running timers — the
+      // throttled-tab case.
+      vi.setSystemTime(new Date("2026-07-09T07:30:00-07:00"));
+      expect(store.communityToday).toBe("2026-07-08");
+
+      handler({ previous: "connected", current: "connecting" });
+      handler({ previous: "connecting", current: "connected" });
+
+      expect(store.communityToday).toBe("2026-07-09");
     });
   });
 

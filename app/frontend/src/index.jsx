@@ -96,6 +96,10 @@ document.addEventListener("DOMContentLoaded", () => {
       if (navigator.onLine) {
         console.warn(`back online at ${new Date().toLocaleTimeString()}`);
         store.setIsOnline(true);
+        // Background tabs throttle timers, so the store's midnight timer
+        // may not have fired yet; coming back online is a reliable moment
+        // to roll the observable "today" forward.
+        store.recomputeCommunityToday();
         if (store.meal && store.meal.id) {
           store.loadDataAsync();
         }

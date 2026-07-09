@@ -45,6 +45,9 @@ const VIEWS = ["month"];
 // actually bites.
 const MemoCalendar = memo(Calendar);
 
+// Click-time and getNow-time reads only. Render-time "today" must come
+// from store.communityToday instead — this function is not observable,
+// so a render that reads it directly goes stale after midnight (#36).
 function getCommunityNow() {
   var now = communityNow();
   return new Date(
@@ -317,13 +320,12 @@ const MainCalendar = inject("store")(
         }
 
         render() {
-          // Compute "today" boundary once per render for formatEvent
-          var now = getCommunityNow();
-          this._todayStart = new Date(
-            now.getFullYear(),
-            now.getMonth(),
-            now.getDate(),
-          );
+          // The observable "today" (community timezone, "YYYY-MM-DD").
+          // Reading it here subscribes this render to the store's midnight
+          // rollover, so an idle tab repaints when the day changes. Also
+          // the "today" boundary for formatEvent's past-event dimming.
+          var communityToday = this.props.store.communityToday;
+          this._todayStart = dayjs(communityToday).toDate();
           logEvent("MainCalendar-render", {
             path: this.props.location.pathname,
             isOnline: this.props.store.isOnline,
@@ -333,7 +335,7 @@ const MainCalendar = inject("store")(
             <div className="offwhite">
               <header className="header flex space-between">
                 <h5 className="pad-xs">
-                  {dayjs(getCommunityNow()).format("ddd MMM Do")}
+                  {dayjs(communityToday).format("ddd MMM Do")}
                 </h5>
                 {this.props.store.isOnline ? (
                   <span className="online">ONLINE</span>
@@ -363,7 +365,14 @@ const MainCalendar = inject("store")(
                     onToday={this.handleToday}
                   />
                   <Profiler id="Calendar" onRender={profileRender}>
+                    {/* communityToday is not a react-big-calendar prop.
+                        Calendar ignores it; it exists to break the memo's
+                        shallow compare once at midnight, so getNow and
+                        eventPropGetter re-run with the new day. Without
+                        it the header would show the new date while the
+                        grid still highlighted yesterday. */}
                     <MemoCalendar
+                      communityToday={communityToday}
                       localizer={localizer}
                       date={this.getCalendarDate()}
                       defaultView="month"

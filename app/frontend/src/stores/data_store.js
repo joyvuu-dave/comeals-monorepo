@@ -149,6 +149,17 @@ export const DataStore = types
     currentDate: types.optional(types.string, function () {
       return communityNow().format("YYYY-MM-DD");
     }),
+    // "Today" in the community timezone, as observable state. Render-time
+    // reads (the calendar header, the today highlight, past-event dimming,
+    // the meal page's day label) use this so an idle tab re-renders when
+    // the day changes. A timer set for the next community midnight rolls
+    // it over; the `online` handler and the Pusher reconnect handler
+    // recompute it too, because background tabs throttle timers.
+    // Click-time reads keep calling communityNow() directly — a click
+    // always computes a fresh value, so those were never stale.
+    communityToday: types.optional(types.string, function () {
+      return communityNow().format("YYYY-MM-DD");
+    }),
     isOnline: false,
     authExpired: false,
     // Cached community hosts (adult + active residents with units), used by
@@ -177,6 +188,9 @@ export const DataStore = types
     // A save was requested while one was in flight; send one more request
     // with the latest state when it settles.
     billsSaveQueued: false,
+    // Pending timer for the next community-midnight rollover of
+    // communityToday, or null.
+    midnightTimer: null,
   }))
   .views((self) => ({
     get hostsLoaded() {
@@ -280,6 +294,10 @@ export const DataStore = types
           hasConnectedBefore = true;
           return;
         }
+        // A laptop asleep past midnight wakes with a stale "today" and a
+        // throttled timer; the reconnect is the reliable wake-up signal.
+        // Before the cookie guard on purpose — no auth needed.
+        self.recomputeCommunityToday();
         // Logged out (or on the login page) there is nothing to refetch,
         // and an unauthenticated fetch would 401 and raise the "signed
         // out" banner. Same guard as the `online` handler in index.jsx.
@@ -297,6 +315,8 @@ export const DataStore = types
       });
 
       self.setIsOnline(navigator.onLine);
+
+      self.scheduleMidnightRecompute();
 
       if (typeof window.__comealsInterceptor !== "undefined") {
         axios.interceptors.response.eject(window.__comealsInterceptor);
@@ -1105,6 +1125,32 @@ export const DataStore = types
     },
     setIsOnline(val) {
       self.isOnline = !!val;
+    },
+    // Roll the observable "today" forward. Called by the midnight timer,
+    // the `online` handler (index.jsx), and the Pusher reconnect handler.
+    recomputeCommunityToday() {
+      self.communityToday = communityNow().format("YYYY-MM-DD");
+    },
+    // Fire one second past the next community-timezone midnight (the
+    // buffer keeps an on-time firing from landing on the old day), roll
+    // communityToday over, and schedule the next one. If the tab was
+    // asleep and the timer fires late, recompute still lands on the
+    // right day — it always reads the clock fresh.
+    scheduleMidnightRecompute() {
+      if (self.midnightTimer !== null) {
+        clearTimeout(self.midnightTimer);
+      }
+      var msUntilMidnight =
+        communityNow().add(1, "day").startOf("day").diff(dayjs()) + 1000;
+      self.midnightTimer = setTimeout(function () {
+        self.recomputeCommunityToday();
+        self.scheduleMidnightRecompute();
+      }, msUntilMidnight);
+    },
+    beforeDestroy() {
+      if (self.midnightTimer !== null) {
+        clearTimeout(self.midnightTimer);
+      }
     },
     setAuthExpired(value) {
       self.authExpired = value;
