@@ -120,7 +120,11 @@ function prefetchMonthData(date) {
 
 export const DataStore = types
   .model("DataStore", {
-    isLoading: true,
+    // One loading flag per page (issue #38). They used to be a single
+    // shared flag, so a calendar event landing mid-meal-load could wake
+    // the prev/next arrows before nextId/prevId existed.
+    mealLoading: true,
+    monthLoading: true,
     editDescriptionMode: true,
     editBillsMode: true,
     // True while an open/close save is in flight; the button is disabled.
@@ -583,6 +587,9 @@ export const DataStore = types
       self.submitBills();
     },
     loadDataAsync() {
+      // Leaving the meal page nulls the meal (issue #38). A settle
+      // callback that lands after that has nothing to refetch.
+      if (!self.meal) return;
       api.meals
         .getCooks(self.meal.id)
         .then(function (response) {
@@ -711,30 +718,6 @@ export const DataStore = types
         self.refetchHostsSilently();
       });
     },
-    loadNext() {
-      api.meals
-        .getCooks(self.meal.nextId)
-        .then(function (response) {
-          if (response.status === 200) {
-            localforage.setItem(response.data.id.toString(), response.data);
-          }
-        })
-        .catch(function (error) {
-          handleAxiosError(error, { silent: true });
-        });
-    },
-    loadPrev() {
-      api.meals
-        .getCooks(self.meal.prevId)
-        .then(function (response) {
-          if (response.status === 200) {
-            localforage.setItem(response.data.id.toString(), response.data);
-          }
-        })
-        .catch(function (error) {
-          handleAxiosError(error, { silent: true });
-        });
-    },
     preLoadData() {
       if (self.billStore && self.billStore.bills) {
         self.clearBills();
@@ -851,7 +834,7 @@ export const DataStore = types
       });
 
       // Change loading state
-      self.isLoading = false;
+      self.mealLoading = false;
 
       // Unsubscribe from previous meal
       if (window.Comeals.mealChannel !== null) {
@@ -868,7 +851,7 @@ export const DataStore = types
     },
     loadMonth(data) {
       if (typeof data === "string") {
-        self.isLoading = false;
+        self.monthLoading = false;
         console.error("Error loading month data.", data);
         return true;
       }
@@ -944,7 +927,7 @@ export const DataStore = types
 
       mark("events-replaced", { count: allEvents.length });
 
-      self.isLoading = false;
+      self.monthLoading = false;
 
       // Unsubscribe from previous month
       if (window.Comeals.calendarChannel !== null) {
@@ -1034,6 +1017,16 @@ export const DataStore = types
 
       self.meal = id;
 
+      // Prune the nodes left by earlier meals (issue #38): nothing
+      // renders them, and they hold stale snapshots. Point self.meal at
+      // the new node FIRST — a reference to a destroyed node throws.
+      // A node with unsaved menu text stays alive: issue #35 keeps the
+      // text on the node until a save lands, and the retry loop reads
+      // these nodes.
+      self.meals
+        .filter((m) => m.id !== self.meal.id && !m.descriptionDirty)
+        .forEach((m) => self.meals.remove(m));
+
       localforage
         .getItem(id.toString())
         .then(function (value) {
@@ -1121,12 +1114,47 @@ export const DataStore = types
       });
     },
     goToMeal(mealId) {
-      self.isLoading = true;
+      self.mealLoading = true;
       self.switchMeals(Number.parseInt(mealId, 10));
     },
     goToMonth(date) {
-      self.isLoading = true;
+      self.monthLoading = true;
       self.switchMonths(date);
+    },
+    // The calendar page calls this on mount (issue #38). Without it the
+    // last meal's channel stayed live forever: every edit to that meal
+    // triggered a full background store rebuild from the calendar.
+    teardownMealPage() {
+      // A bill edit still in the debounce window belongs to the meal we
+      // are leaving. Send it while the meal and its bill rows are still
+      // current — the same flush switchMeals does.
+      self.flushPendingBillsSave();
+
+      if (window.Comeals.mealChannel !== null) {
+        window.Comeals.pusher.unsubscribe(window.Comeals.mealChannel.name);
+        window.Comeals.mealChannel = null;
+      }
+
+      // Null the reference FIRST, then destroy the nodes — a reference
+      // to a destroyed node throws. With meal null, a late meal response
+      // fails the same-meal guards and is dropped. Nodes with unsaved
+      // menu text stay alive, same as the pruning in switchMeals.
+      self.meal = null;
+      self.meals
+        .filter((m) => !m.descriptionDirty)
+        .forEach((m) => self.meals.remove(m));
+    },
+    // The meal page calls this on mount (issue #38): the calendar's
+    // channels must not keep firing month refetches from the meal page.
+    teardownCalendarPage() {
+      if (window.Comeals.calendarChannel !== null) {
+        window.Comeals.pusher.unsubscribe(window.Comeals.calendarChannel.name);
+        window.Comeals.calendarChannel = null;
+      }
+      adjacentChannels.forEach(function (ch) {
+        window.Comeals.pusher.unsubscribe(ch.name);
+      });
+      adjacentChannels = [];
     },
     setIsOnline(val) {
       self.isOnline = !!val;

@@ -746,7 +746,7 @@ describe("DataStore", () => {
       expect(store.meal.extras).toBeNull();
     });
 
-    it("sets isLoading to false after loading", () => {
+    it("sets mealLoading to false after loading", () => {
       const store = createDataStore();
 
       const data = {
@@ -765,7 +765,7 @@ describe("DataStore", () => {
       };
 
       store.loadData(data);
-      expect(store.isLoading).toBe(false);
+      expect(store.mealLoading).toBe(false);
     });
 
     it("renames resident_id to resident in bill data", () => {
@@ -1050,8 +1050,11 @@ describe("DataStore", () => {
       // switchMeals to meal 2 starts the async localforage lookup
       store.switchMeals(2);
 
-      // Before localforage resolves, user navigates to meal 3
+      // Before localforage resolves, user navigates to meal 3. switchMeals
+      // pruned the pre-pushed stub for meal 3 (issue #38), so recreate it
+      // the way switchMeals would.
       runInAction(() => {
+        store.meals.push({ id: 3 });
         store.meal = 3;
       });
       store.loadData(makeMealData(3, { late: true }));
@@ -1192,6 +1195,153 @@ describe("DataStore", () => {
       // renders synchronously from monthCache, no IndexedDB wait.
       store.switchMonths("2024-07-01");
       expect(store.calendarEvents[0].title).toBe("July event");
+    });
+  });
+
+  // ── Route teardown and loading flags (issue #38) ──
+
+  describe("route teardown (issue #38)", () => {
+    function mealData(id) {
+      return {
+        id,
+        date: "2023-06-15",
+        description: `Meal ${id}`,
+        closed: false,
+        closed_at: null,
+        reconciled: false,
+        max: null,
+        next_id: id + 1,
+        prev_id: id - 1,
+        residents: [],
+        guests: [],
+        bills: [],
+      };
+    }
+
+    function calendarData() {
+      return {
+        id: "test-community-id",
+        year: 2023,
+        month: 6,
+        meals: [],
+        bills: [],
+        rotations: [],
+        birthdays: [],
+        common_house_reservations: [],
+        guest_room_reservations: [],
+        events: [],
+      };
+    }
+
+    it("a month load cannot end the meal load", () => {
+      const store = createDataStore();
+
+      store.goToMeal(1);
+      expect(store.mealLoading).toBe(true);
+
+      // A stray calendar event lands mid-meal-load. With the old shared
+      // flag this woke the prev/next arrows while nextId/prevId were
+      // still null — one click away from /meals/null/edit.
+      store.loadMonth(calendarData());
+      expect(store.monthLoading).toBe(false);
+      expect(store.mealLoading).toBe(true);
+
+      store.loadData(mealData(1));
+      expect(store.mealLoading).toBe(false);
+    });
+
+    it("teardownMealPage unsubscribes the meal channel, nulls the meal, and prunes the nodes", () => {
+      const store = createDataStore();
+      window.Comeals.pusher.subscribe = vi.fn((name) => ({
+        bind: vi.fn(),
+        name,
+      }));
+      window.Comeals.pusher.unsubscribe = vi.fn();
+
+      store.loadData(mealData(1));
+      expect(window.Comeals.mealChannel.name).toBe("meal-1");
+      const oldNode = store.meals.find((m) => m.id === 1);
+
+      store.teardownMealPage();
+
+      expect(window.Comeals.pusher.unsubscribe).toHaveBeenCalledWith("meal-1");
+      expect(window.Comeals.mealChannel).toBeNull();
+      expect(store.meal).toBeNull();
+      expect(store.meals.length).toBe(0);
+      expect(isAlive(oldNode)).toBe(false);
+    });
+
+    it("teardownMealPage keeps a node holding unsaved menu text", () => {
+      const store = createDataStore();
+      const node = store.meals[0];
+      runInAction(() => {
+        node.descriptionDirty = true;
+      });
+
+      store.teardownMealPage();
+
+      expect(store.meal).toBeNull();
+      expect(isAlive(node)).toBe(true);
+      expect(store.meals.length).toBe(1);
+    });
+
+    it("loadDataAsync is a no-op after the meal page is torn down", () => {
+      const store = createDataStore();
+      store.teardownMealPage();
+      axios.get.mockClear();
+
+      expect(() => store.loadDataAsync()).not.toThrow();
+      expect(axios.get).not.toHaveBeenCalled();
+    });
+
+    it("teardownCalendarPage unsubscribes the calendar and adjacent-month channels", () => {
+      const store = createDataStore();
+      window.Comeals.pusher.subscribe = vi.fn((name) => ({
+        bind: vi.fn(),
+        name,
+      }));
+      window.Comeals.pusher.unsubscribe = vi.fn();
+
+      store.loadMonth(calendarData());
+      const subscribed = window.Comeals.pusher.subscribe.mock.calls.map(
+        (call) => call[0],
+      );
+      expect(window.Comeals.calendarChannel).not.toBeNull();
+      // One current-month channel plus two adjacent months
+      expect(subscribed.length).toBe(3);
+
+      store.teardownCalendarPage();
+
+      subscribed.forEach((name) => {
+        expect(window.Comeals.pusher.unsubscribe).toHaveBeenCalledWith(name);
+      });
+      expect(window.Comeals.calendarChannel).toBeNull();
+    });
+
+    it("switchMeals prunes the meal nodes it leaves behind", () => {
+      const store = createDataStore();
+      store.loadData(mealData(1));
+      const oldNode = store.meals.find((m) => m.id === 1);
+
+      store.switchMeals(2);
+
+      expect(store.meal.id).toBe(2);
+      expect(store.meals.length).toBe(1);
+      expect(isAlive(oldNode)).toBe(false);
+    });
+
+    it("switchMeals keeps a left-behind node with unsaved menu text", () => {
+      const store = createDataStore();
+      const node = store.meals[0];
+      runInAction(() => {
+        node.descriptionDirty = true;
+      });
+
+      store.switchMeals(2);
+
+      expect(store.meal.id).toBe(2);
+      expect(isAlive(node)).toBe(true);
+      expect(store.meals.map((m) => m.id).sort()).toEqual([1, 2]);
     });
   });
 
@@ -1406,7 +1556,7 @@ describe("DataStore", () => {
 
       expect(() => store.loadMonth(data)).not.toThrow();
       expect(store.calendarEvents.length).toBe(1);
-      expect(store.isLoading).toBe(false);
+      expect(store.monthLoading).toBe(false);
       spy.mockRestore();
     });
 
@@ -2217,7 +2367,7 @@ describe("DataStore", () => {
 
       store.loadMonth(data);
       expect(store.calendarEvents.length).toBe(0);
-      expect(store.isLoading).toBe(false);
+      expect(store.monthLoading).toBe(false);
     });
 
     it("rejects string data (error response from API)", () => {
@@ -2225,7 +2375,7 @@ describe("DataStore", () => {
       const store = createDataStore();
       var result = store.loadMonth("error: unauthorized");
       expect(result).toBe(true);
-      expect(store.isLoading).toBe(false);
+      expect(store.monthLoading).toBe(false);
       spy.mockRestore();
     });
 

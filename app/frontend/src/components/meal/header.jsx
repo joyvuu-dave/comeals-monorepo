@@ -25,7 +25,7 @@ const Header = inject("store")(
               onClick={() =>
                 this.props.history.push(
                   `/calendar/all/${dayjs(
-                    this.props.store.isLoading
+                    this.props.store.mealLoading || !this.props.store.meal
                       ? new Date()
                       : this.props.store.meal.date,
                   ).format("YYYY-MM-DD")}`,

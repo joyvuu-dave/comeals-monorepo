@@ -58,6 +58,9 @@ const DateBox = inject("store")(
         }
 
         componentDidMount() {
+          // Leaving the calendar: its channels must not stay live on the
+          // meal page (issue #38).
+          this.props.store.teardownCalendarPage();
           this.props.store.goToMeal(this.props.location.pathname.split("/")[2]);
         }
 
@@ -67,8 +70,11 @@ const DateBox = inject("store")(
           );
         }
 
+        // A null prevId/nextId never navigates: a half-loaded meal has
+        // no neighbors yet, and pushing /meals/null/edit is a stuck
+        // loading page that survives refresh (issue #38).
         handlePrevClick() {
-          if (this.props.store.isLoading) {
+          if (this.prevDisabled()) {
             return;
           }
 
@@ -78,13 +84,23 @@ const DateBox = inject("store")(
         }
 
         handleNextClick() {
-          if (this.props.store.isLoading) {
+          if (this.nextDisabled()) {
             return;
           }
 
           this.props.history.push(
             `/meals/${this.props.store.meal.nextId}/edit`,
           );
+        }
+
+        prevDisabled() {
+          const store = this.props.store;
+          return store.mealLoading || !store.meal || store.meal.prevId === null;
+        }
+
+        nextDisabled() {
+          const store = this.props.store;
+          return store.mealLoading || !store.meal || store.meal.nextId === null;
         }
 
         displayDate() {
@@ -137,8 +153,8 @@ const DateBox = inject("store")(
                       this.handlePrevClick();
                     }
                   }}
-                  disabled={this.props.store.isLoading}
-                  aria-disabled={this.props.store.isLoading}
+                  disabled={this.prevDisabled()}
+                  aria-disabled={this.prevDisabled()}
                   role="button"
                   aria-label="Previous meal"
                   tabIndex={0}
@@ -156,8 +172,8 @@ const DateBox = inject("store")(
                       this.handleNextClick();
                     }
                   }}
-                  disabled={this.props.store.isLoading}
-                  aria-disabled={this.props.store.isLoading}
+                  disabled={this.nextDisabled()}
+                  aria-disabled={this.nextDisabled()}
                   role="button"
                   aria-label="Next meal"
                   tabIndex={0}

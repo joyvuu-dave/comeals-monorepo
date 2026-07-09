@@ -5,7 +5,7 @@ const CloseButton = inject("store")(
   observer(
     class CloseButton extends Component {
       buttonClass() {
-        if (this.props.store.isLoading) {
+        if (this.props.store.mealLoading) {
           return "button-dark button-loader";
         }
 

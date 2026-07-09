@@ -154,6 +154,10 @@ const MainCalendar = inject("store")(
         }
 
         componentDidMount() {
+          // Leaving a meal: its channel must not stay live on the
+          // calendar, and a late meal response must find no meal to
+          // write to (issue #38).
+          this.props.store.teardownMealPage();
           this.props.store.goToMonth(this.props.match.params.date);
           // Prime the hosts cache while the month is loading. The user is
           // about to open a Guest Room or Common House modal; warming the
