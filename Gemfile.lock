@@ -143,6 +143,8 @@ GEM
     ffi-compiler (1.4.2)
       ffi (>= 1.15.5)
       rake
+    foreman (0.90.0)
+      thor (~> 1.4)
     formtastic (6.0.0)
       actionpack (>= 7.2.0)
     formtastic_i18n (0.7.0)
@@ -487,6 +489,7 @@ DEPENDENCIES
   drb
   factory_bot_rails
   faker
+  foreman
   friendly_id
   goldiloader
   icalendar
@@ -576,6 +579,7 @@ CHECKSUMS
   ffi (1.17.4-x86_64-linux-gnu) sha256=9d3db14c2eae074b382fa9c083fe95aec6e0a1451da249eab096c34002bc752d
   ffi (1.17.4-x86_64-linux-musl) sha256=3fdf9888483de005f8ef8d1cf2d3b20d86626af206cbf780f6a6a12439a9c49e
   ffi-compiler (1.4.2) sha256=a9d69d5d9ced6f64776ddafa535867ad90e5740ad37bed7afb4de6e450da126e
+  foreman (0.90.0) sha256=ff675e2d47b607ac58714a6d4ac3e1ee8f06f41d8db084531c31961e2c3f117c
   formtastic (6.0.0) sha256=c398906b65978fec3d045d6792f82cf9641f086ac9f17357b2b382f723126165
   formtastic_i18n (0.7.0) sha256=ecef51c9e9030c00f19e69d2483b77f4515c9587d74268b76cf4b6e7988c8e78
   friendly_id (5.7.0) sha256=b8994416ebaceebc7c60bc556e84ef32a3a663e2e582eb04c429216cc98de4c4

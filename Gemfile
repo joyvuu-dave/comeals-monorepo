@@ -87,6 +87,7 @@ group :development do
   gem 'better_errors'
   gem 'binding_of_caller'
   gem 'bullet'
+  gem 'foreman'
   gem 'rack-mini-profiler'
   gem 'rufus-scheduler', '~> 3.9'
   gem 'stackprof' # flamegraph support for rack-mini-profiler
