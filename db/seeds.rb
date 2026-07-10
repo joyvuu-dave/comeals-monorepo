@@ -108,35 +108,38 @@ end
 Rails.logger.debug { "#{community.guests.count} Guests created" }
 Rails.logger.debug { "#{community.meal_residents.count} MealResidents created" }
 
-# Bills
+# Bills — two cooks per meal, covering every shape a real meal takes:
+# both cooks entered a cost; one entered while the other declared no
+# cost (two cooks, one shopper); one entered while the other never put
+# anything in. In this batch that last shape settles at zero when the
+# reconciliation sweeps it — the outcome the close-time question now
+# exists to prevent.
 Meal.all.each_with_index do |meal, index|
   next if meal.date > Time.zone.today + 14
 
   ids = Resident.pluck(:id).sample(2)
-  if index.even? && (index % 3).zero?
-    Bill.create(meal_id: meal.id, resident_id: ids[0],
-                amount: BigDecimal((35..65).to_a.sample.to_s), community: community)
-    Bill.create(meal_id: meal.id, resident_id: ids[1],
-                amount: BigDecimal('0'), community: community)
-  elsif index.even?
-    Bill.create(meal_id: meal.id, resident_id: ids[0],
-                amount: BigDecimal((25..35).to_a.sample.to_s), community: community)
-    Bill.create(meal_id: meal.id, resident_id: ids[1],
-                amount: BigDecimal((35..45).to_a.sample.to_s), community: community)
+  Bill.create!(meal_id: meal.id, resident_id: ids[0],
+               amount: BigDecimal((25..65).to_a.sample.to_s), community: community)
+  case index % 3
+  when 0
+    Bill.create!(meal_id: meal.id, resident_id: ids[1],
+                 amount: BigDecimal('0'), no_cost: true, community: community)
+  when 1
+    Bill.create!(meal_id: meal.id, resident_id: ids[1],
+                 amount: BigDecimal('0'), community: community)
   else
-    Bill.create(meal_id: meal.id, resident_id: ids[0],
-                amount: BigDecimal((55..65).to_a.sample.to_s), community: community)
-    Bill.create(meal_id: meal.id, resident_id: ids[1],
-                amount: BigDecimal((65..75).to_a.sample.to_s), community: community)
+    Bill.create!(meal_id: meal.id, resident_id: ids[1],
+                 amount: BigDecimal((35..75).to_a.sample.to_s), community: community)
   end
 end
 
 Rails.logger.debug { "#{community.bills.count} Bills created" }
 
-# Reconciliation — sweeps the first batch of meals (26..8 weeks ago). end_date
-# is required and can't be in the future; `date` and `end_date` both default
-# to today here, matching lib/tasks/reconciliations/create.rake.
-Reconciliation.create!(community: community, date: Time.zone.today, end_date: Time.zone.today)
+# Reconciliation — sweeps the first batch of meals (26..8 weeks ago).
+# end_date must be strictly in the past (issue #3): a meal from a day that
+# is not over must not be settled. The cutoff sits on the first batch's
+# boundary so the sweep takes exactly that batch.
+Reconciliation.create!(community: community, date: Time.zone.today, end_date: 8.weeks.ago.to_date)
 Rails.logger.debug { "#{community.reconciliations.count} Reconciliation created" }
 
 # Meals (will not be reconciled)
@@ -182,27 +185,32 @@ Rails.logger.debug { "#{community.guests.count} Guests created" }
 Rails.logger.debug { "#{community.meal_residents.count} MealResidents created" }
 
 # Bills on the unreconciled batch — Bill also enforces reconciled-meal
-# immutability (see app/models/bill.rb).
+# immutability (see app/models/bill.rb). Same shapes as the reconciled
+# batch, plus meals where nobody has signed up to cook yet. A "never
+# entered" cook on a closed meal is the pending state the meal page
+# displays.
 Meal.unreconciled.each_with_index do |meal, index|
   next if meal.date > Time.zone.today + 14
 
   ids = Resident.pluck(:id).sample(2)
-  if (index % 3).zero? && (index % 4).zero?
-    Bill.create(meal_id: meal.id, resident_id: ids[0],
-                amount: BigDecimal((35..65).to_a.sample.to_s), community: community)
-    Bill.create(meal_id: meal.id, resident_id: ids[1],
-                amount: BigDecimal('0'), community: community)
-  elsif (index % 3).zero?
-    Bill.create(meal_id: meal.id, resident_id: ids[0],
-                amount: BigDecimal((25..35).to_a.sample.to_s), community: community)
-    Bill.create(meal_id: meal.id, resident_id: ids[1],
-                amount: BigDecimal((35..45).to_a.sample.to_s), community: community)
-  elsif (index % 4).zero?
-    Bill.create(meal_id: meal.id, resident_id: ids[0],
-                amount: BigDecimal((55..65).to_a.sample.to_s), community: community)
-    Bill.create(meal_id: meal.id, resident_id: ids[1],
-                amount: BigDecimal((65..75).to_a.sample.to_s), community: community)
+  case index % 4
+  when 0
+    Bill.create!(meal_id: meal.id, resident_id: ids[0],
+                 amount: BigDecimal((25..65).to_a.sample.to_s), community: community)
+    Bill.create!(meal_id: meal.id, resident_id: ids[1],
+                 amount: BigDecimal('0'), no_cost: true, community: community)
+  when 1
+    Bill.create!(meal_id: meal.id, resident_id: ids[0],
+                 amount: BigDecimal((25..65).to_a.sample.to_s), community: community)
+    Bill.create!(meal_id: meal.id, resident_id: ids[1],
+                 amount: BigDecimal('0'), community: community)
+  when 2
+    Bill.create!(meal_id: meal.id, resident_id: ids[0],
+                 amount: BigDecimal((25..65).to_a.sample.to_s), community: community)
+    Bill.create!(meal_id: meal.id, resident_id: ids[1],
+                 amount: BigDecimal((35..75).to_a.sample.to_s), community: community)
   end
+  # index % 4 == 3: no cooks yet.
 end
 
 Rails.logger.debug { "#{community.bills.count} Bills created" }
@@ -263,6 +271,13 @@ CommonHouseReservation.create!(
 Rails.logger.debug do
   "#{community.common_house_reservations.count} CommonHouseReservation#{'s' unless CommonHouseReservation.one?} created"
 end
+
+# Balances cache — in production the daily billing:recalculate task
+# refreshes it. A fresh dev database should not have to wait for 3am.
+Rails.application.load_tasks unless Rake::Task.task_defined?('billing:recalculate')
+Rake::Task['billing:recalculate'].invoke
+
+Rails.logger.debug { "#{ResidentBalance.count} ResidentBalances computed" }
 
 # Analytics
 Rails.logger.debug { "Seed records created in #{Time.zone.now - start}s" }
