@@ -240,6 +240,22 @@ export const DataStore = types
         (resident) => resident.attending && resident.late,
       ).length;
     },
+    // Assigned cooks whose cost is still blank: no amount and no
+    // no-cost flag. A zero amount means "not filled in yet" — the same
+    // test loadData uses to display zero as blank — so the list behaves
+    // the same before and after a reload. The close button asks about
+    // these names before closing; a later reminder task works off the
+    // same state.
+    get cooksMissingCost() {
+      return Array.from(self.bills.values())
+        .filter(
+          (bill) =>
+            bill.resident_id !== "" &&
+            isZeroAmountString(bill.amount) &&
+            bill.no_cost === false,
+        )
+        .map((bill) => bill.resident.plainName);
+    },
     get extras() {
       if (!self.meal) return "n/a";
       // Extras only show when the meal is closed
@@ -406,30 +422,14 @@ export const DataStore = types
       self.closedPending = false;
       self.loadDataAsync();
     },
+    // Closing no longer requires costs to be filled in. Forcing a
+    // number before the shopping happened bred fake $1 costs; the close
+    // button asks about blank costs (cooksMissingCost) and the cook
+    // closes with a deliberate Yes instead. Bills stay editable until
+    // reconciliation.
     toggleClosed() {
       if (self.closedPending) {
         return;
-      }
-
-      if (!self.meal.closed) {
-        // A zero amount means "not filled in yet" — the same test loadData
-        // uses to display zero as blank, so the gate behaves the same
-        // before and after a reload. A cook who spent nothing must use the
-        // no-cost switch.
-        const cookNeedsToFillInCost = Array.from(self.bills.values()).some(
-          (bill) =>
-            bill.resident_id !== "" &&
-            isZeroAmountString(bill.amount) &&
-            bill.no_cost === false,
-        );
-
-        if (cookNeedsToFillInCost) {
-          toastStore.addToast(
-            "All cook costs must be set before closing. Enter each cook's cost, or use the no-cost switch for a cook who spent nothing.",
-            "warning",
-          );
-          return;
-        }
       }
 
       const val = !self.meal.closed;

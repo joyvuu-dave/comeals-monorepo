@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { inject, observer } from "mobx-react";
+import ConfirmBar from "../confirm_bar";
 import { isZeroAmountString, toDisplayAmountString } from "../../helpers/money";
 
 const styles = {
@@ -13,58 +14,20 @@ const styles = {
   },
 };
 
-// The Yes button ignores clicks for its first moments on screen. The
-// second tap of an accidental double-tap on the switch lands right after
-// the bar appears — it must bounce off, not erase. A person who reads
-// the question never notices the delay.
-const ERASE_ARM_DELAY_MS = 400;
-
 const BillEdit = inject("store")(
   observer(({ store, bill }) => {
     // Turning on "no cost" erases a typed cost, and on a shared screen
-    // that click can come from anyone. So the switch asks first. Every
-    // exit except a deliberate click on Yes — the No button, Escape, a
-    // click anywhere else — leaves the cost alone.
+    // that click can come from anyone. So the switch asks first.
     const [confirmingNoCost, setConfirmingNoCost] = useState(false);
-    const openedAtRef = useRef(0);
-    const confirmRef = useRef(null);
-    const noButtonRef = useRef(null);
+    const confirmKeyRef = useRef(0);
 
-    // Focus lands on No, so Enter is a No too.
-    useEffect(() => {
-      if (confirmingNoCost && noButtonRef.current) {
-        noButtonRef.current.focus();
-      }
-    }, [confirmingNoCost]);
-
-    useEffect(() => {
-      if (!confirmingNoCost) return undefined;
-      const onMouseDown = (e) => {
-        if (confirmRef.current && !confirmRef.current.contains(e.target)) {
-          setConfirmingNoCost(false);
-        }
-      };
-      const onKeyDown = (e) => {
-        if (e.key === "Escape") {
-          setConfirmingNoCost(false);
-        }
-      };
-      document.addEventListener("mousedown", onMouseDown);
-      document.addEventListener("keydown", onKeyDown);
-      return () => {
-        document.removeEventListener("mousedown", onMouseDown);
-        document.removeEventListener("keydown", onKeyDown);
-      };
-    }, [confirmingNoCost]);
-
-    const confirmErase = () => {
-      if (Date.now() - openedAtRef.current < ERASE_ARM_DELAY_MS) return;
-      setConfirmingNoCost(false);
-      bill.toggleNoCost();
-    };
+    // Bills freeze at reconciliation, not at close — the server has
+    // always allowed bill edits on a closed meal. Costs are often not
+    // known until after the shopping, which is often after the close.
+    const frozen = store.meal.reconciled;
 
     return (
-      <>
+      <div className="confirm-bar-anchor">
         <div className="input-group">
           <select
             key={bill.id}
@@ -72,7 +35,7 @@ const BillEdit = inject("store")(
             onChange={(e) => bill.setResident(e.target.value)}
             onBlur={() => store.flushPendingBillsSave()}
             style={styles.select}
-            disabled={store.meal.closed || store.meal.reconciled}
+            disabled={frozen}
             aria-label="Select meal cook"
           >
             <option value={""} key={-1}>
@@ -108,8 +71,12 @@ const BillEdit = inject("store")(
                 store.flushPendingBillsSave();
               }}
               style={styles.select}
-              className={bill.amountIsValid ? "" : "input-invalid"}
-              disabled={store.meal.closed || store.meal.reconciled}
+              className={
+                (bill.amountIsValid ? "" : "input-invalid") +
+                (bill.costPending ? " cost-pending" : "")
+              }
+              disabled={frozen}
+              placeholder={bill.costPending ? "pending" : undefined}
               aria-label="Set meal cost"
             />
           </div>
@@ -126,59 +93,42 @@ const BillEdit = inject("store")(
                 // Yes first. Turning it off, or on with nothing typed,
                 // destroys nothing and flips right away.
                 if (!bill.no_cost && !isZeroAmountString(bill.amount)) {
-                  openedAtRef.current = Date.now();
+                  confirmKeyRef.current += 1;
                   setConfirmingNoCost(true);
                   return;
                 }
                 bill.toggleNoCost();
               }}
               onBlur={() => store.flushPendingBillsSave()}
-              disabled={
-                store.meal.closed ||
-                store.meal.reconciled ||
-                !bill.resident_id
-              }
+              disabled={frozen || !bill.resident_id}
               aria-label={`No cost button for ${bill.id}`}
             />
             <label htmlFor={`no_cost_switch-${bill.id}`} />
           </span>
         </div>
         {confirmingNoCost && !isZeroAmountString(bill.amount) && (
-          <div
-            className="no-cost-confirm"
-            ref={confirmRef}
-            role="alertdialog"
-            aria-label={`Erase ${bill.resident.name}'s $${toDisplayAmountString(bill.amount)}?`}
-          >
-            <span className="no-cost-confirm-question">
-              Erase{" "}
-              <strong>
-                {bill.resident.name}&rsquo;s ${toDisplayAmountString(bill.amount)}
-              </strong>
-              ?
-            </span>
-            {/* Yes sits away from the switch; No sits right under it, so
-                a stray second tap lands on No. */}
-            <span className="no-cost-confirm-buttons">
-              <button
-                type="button"
-                className="button button-danger"
-                onClick={confirmErase}
-              >
-                Yes
-              </button>
-              <button
-                type="button"
-                className="button"
-                ref={noButtonRef}
-                onClick={() => setConfirmingNoCost(false)}
-              >
-                No
-              </button>
-            </span>
-          </div>
+          <ConfirmBar
+            key={confirmKeyRef.current}
+            armMs={400}
+            ariaLabel={`Erase ${bill.resident.plainName}'s $${toDisplayAmountString(bill.amount)}?`}
+            question={
+              <>
+                Erase{" "}
+                <strong>
+                  {bill.resident.plainName}&rsquo;s $
+                  {toDisplayAmountString(bill.amount)}
+                </strong>
+                ?
+              </>
+            }
+            onYes={() => {
+              setConfirmingNoCost(false);
+              bill.toggleNoCost();
+            }}
+            onDismiss={() => setConfirmingNoCost(false)}
+          />
         )}
-      </>
+      </div>
     );
   }),
 );
@@ -187,7 +137,7 @@ const BillShow = inject("store")(
   observer(({ bill }) => (
     <tr key={bill.id} hidden={!bill.resident}>
       <td>{bill.resident && bill.resident.name}</td>
-      <td>${bill.amount}</td>
+      <td>{bill.costPending ? <em>pending</em> : `$${bill.amount}`}</td>
     </tr>
   )),
 );

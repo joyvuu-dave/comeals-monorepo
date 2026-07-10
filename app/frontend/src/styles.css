@@ -409,32 +409,56 @@ table td {
 }
 
 /*
-Confirm bar for the no-cost switch. Turning the switch on would erase a
-typed cost, so the switch asks first. The bar sits directly under the
-bill row. No is the filled default button at the far right, under the
-switch itself, so a stray second tap lands on No; Yes is the red one,
-set apart so a missed No cannot hit it.
+Yes/no confirm bar (see components/confirm_bar.jsx). No is the filled
+default button at the far right, under the control that was just
+tapped, so a stray second tap lands on No; Yes is the red one, set
+apart so a missed No cannot hit it.
+
+The bar is a popover: absolutely positioned under its anchor, floating
+over whatever is below. Nothing on the page moves when it opens — a
+question must never shift the content someone is about to click.
 */
-.no-cost-confirm {
+.confirm-bar-anchor {
+  position: relative;
+}
+.confirm-bar {
   align-items: center;
   background-color: #fff6e5;
   border: 1px solid #ff851b;
   border-radius: 0.25rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   display: flex;
   flex-wrap: wrap;
+  font-weight: normal;
   gap: 0.5rem 1rem;
   justify-content: space-between;
-  margin: -1rem 0 1.5rem;
+  left: 0;
   padding: 0.5rem 0.75rem;
+  position: absolute;
+  right: 0;
+  text-align: left;
+  top: calc(100% + 2px);
+  z-index: 30;
 }
-.no-cost-confirm-question {
+.confirm-bar-question {
   font-size: 1.125rem;
 }
-.no-cost-confirm-buttons {
+.confirm-bar-note {
+  display: block;
+  font-size: 0.875rem;
+  opacity: 0.75;
+}
+.confirm-bar-buttons {
   display: flex;
   gap: 1rem;
   margin-left: auto;
 }
-.no-cost-confirm-buttons .button {
+.confirm-bar-buttons .button {
   min-width: 4.5rem;
+}
+/* The word "pending" in an empty cost box: a status, not a number. */
+.cost-pending::placeholder {
+  color: #b45309;
+  font-style: italic;
+  opacity: 1;
 }

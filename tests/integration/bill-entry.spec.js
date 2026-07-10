@@ -130,7 +130,7 @@ test.describe("Bill entry (real backend)", () => {
 
     const switchLabel = page.locator('label[for^="no_cost_switch-"]').first();
     const noCostBox = page.locator('[aria-label^="No cost button"]').first();
-    const confirm = page.locator(".no-cost-confirm");
+    const confirm = page.locator(".confirm-bar");
 
     // The click alone changes nothing: the bar opens and asks.
     await switchLabel.click();
@@ -211,5 +211,102 @@ test.describe("Bill entry (real backend)", () => {
     const restored = billSaved(page, mealId, "50.00");
     await costInputAfter.fill("50.00");
     await restored;
+  });
+
+  // A meal can close with a cook's cost still blank — after a Yes that
+  // names the cook — and the cost can be entered on the closed meal.
+  // Bills freeze at reconciliation, not at close.
+  test("closing with a blank cost asks, and the cost can be entered after closing", async ({
+    page,
+  }) => {
+    const mealId = auth.meals.today.id;
+    await page.goto(`/meals/${mealId}/edit/`);
+    await page.waitForLoadState("networkidle");
+    await expect(page.locator("h1", { hasText: "OPEN" })).toBeVisible({
+      timeout: 10000,
+    });
+
+    // Make sure a cook is assigned with no cost entered.
+    const cookSelect = page.locator('[aria-label="Select meal cook"]').first();
+    if ((await cookSelect.inputValue()) !== String(auth.resident_id)) {
+      const assigned = page.waitForResponse(
+        (r) =>
+          r.request().method() === "PATCH" &&
+          r.url().includes(`/api/v1/meals/${mealId}/bills`),
+      );
+      await cookSelect.selectOption(String(auth.resident_id));
+      await assigned;
+    }
+    const costInput = page.locator('[aria-label="Set meal cost"]').first();
+    await expect(costInput).toHaveValue("");
+
+    // Closing asks and names the cook; No keeps the meal open.
+    const closeButton = page.locator("text=Open / Close Meal");
+    const confirm = page.locator(".confirm-bar");
+    await closeButton.click();
+    await expect(confirm).toBeVisible();
+    await expect(confirm).toContainText("entered a cost yet");
+    await expect(confirm).toContainText("Jane");
+    await expect(page.locator("h1", { hasText: "OPEN" })).toBeVisible();
+    await confirm.getByRole("button", { name: "No" }).click();
+    await expect(confirm).toBeHidden();
+    await expect(page.locator("h1", { hasText: "OPEN" })).toBeVisible();
+
+    // Yes closes the meal. Closing triggers a refetch that replaces the
+    // bill rows — wait it out before typing into them.
+    await closeButton.click();
+    await expect(confirm).toBeVisible();
+    const refetched = page.waitForResponse(
+      (r) =>
+        r.request().method() === "GET" &&
+        r.url().includes(`/api/v1/meals/${mealId}`),
+    );
+    await confirm.getByRole("button", { name: "Yes" }).click();
+    await expect(page.locator("h1", { hasText: "CLOSED" })).toBeVisible({
+      timeout: 5000,
+    });
+    await refetched;
+
+    // The blank cost now reads "pending": the cook had the chance and
+    // said later.
+    await expect(costInput).toHaveAttribute("placeholder", "pending");
+
+    // The cost field is still editable on the closed meal, and the
+    // save sticks across a reload.
+    await expect(costInput).toBeEnabled();
+    const saved = billSaved(page, mealId, "12.00");
+    await costInput.fill("12.00");
+    await saved;
+
+    await clearStorage(page);
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+    const costAfter = page.locator('[aria-label="Set meal cost"]').first();
+    await expect(costAfter).toBeEnabled({ timeout: 10000 });
+    await expect(costAfter).toHaveValue("12.00");
+
+    // Restore the seed: reopen the meal (no question in that
+    // direction), wait out its refetch, then unassign the cook — the
+    // server deletes a bill whose cook is left out of the payload.
+    const reopened = page.waitForResponse(
+      (r) =>
+        r.request().method() === "GET" &&
+        r.url().includes(`/api/v1/meals/${mealId}`),
+    );
+    await page.locator("text=Open / Close Meal").click();
+    await expect(page.locator("h1", { hasText: "OPEN" })).toBeVisible({
+      timeout: 5000,
+    });
+    await reopened;
+    const cleared = page.waitForResponse(
+      (r) =>
+        r.request().method() === "PATCH" &&
+        r.url().includes(`/api/v1/meals/${mealId}/bills`),
+    );
+    await page
+      .locator('[aria-label="Select meal cook"]')
+      .first()
+      .selectOption("");
+    await cleared;
   });
 });

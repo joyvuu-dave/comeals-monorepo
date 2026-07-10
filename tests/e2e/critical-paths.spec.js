@@ -133,7 +133,10 @@ test.describe("Critical Paths", () => {
     await expect(page.locator('[aria-label="Set Extras to 0"]')).toBeDisabled();
   });
 
-  test("close meal is prevented when cook has no cost set", async ({
+  // Closing with a blank cook cost asks instead of blocking: forcing a
+  // number before the shopping happened bred fake $1 costs. Yes closes;
+  // everything else keeps the meal open.
+  test("closing with a blank cook cost asks first", async ({
     page,
     context,
   }) => {
@@ -163,16 +166,25 @@ test.describe("Critical Paths", () => {
       timeout: 10000,
     });
 
-    // Try to close the meal
+    // The close click asks instead of closing.
     await page.locator("text=Open / Close Meal").click();
-
-    // Should show validation warning toast preventing close
-    const toast = page.locator(".toast--warning");
-    await expect(toast).toBeVisible({ timeout: 5000 });
-    await expect(toast.locator(".toast__message")).toContainText("cost");
-
-    // Meal should still be OPEN (close was prevented)
+    const confirm = page.locator(".confirm-bar");
+    await expect(confirm).toBeVisible();
+    await expect(confirm).toContainText("entered a cost yet");
     await expect(page.locator("h1", { hasText: "OPEN" })).toBeVisible();
+
+    // No keeps the meal open.
+    await confirm.getByRole("button", { name: "No" }).click();
+    await expect(confirm).toBeHidden();
+    await expect(page.locator("h1", { hasText: "OPEN" })).toBeVisible();
+
+    // Yes closes it.
+    await page.locator("text=Open / Close Meal").click();
+    await expect(confirm).toBeVisible();
+    await confirm.getByRole("button", { name: "Yes" }).click();
+    await expect(page.locator("h1", { hasText: "CLOSED" })).toBeVisible({
+      timeout: 5000,
+    });
   });
 
   test("online/offline indicator exists with correct state", async ({

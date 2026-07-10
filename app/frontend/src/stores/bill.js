@@ -27,6 +27,21 @@ const Bill = types
     get amountIsValid() {
       return isValidAmountString(self.amount);
     },
+    // The cook had the chance to enter a cost — the meal closed over a
+    // deliberate Yes — and hasn't yet. Shows as the word "pending" in
+    // the UI. Ends at reconciliation: a reconciled blank is settled
+    // history, not pending anything.
+    get costPending() {
+      const store = self.form.form;
+      return (
+        !!store.meal &&
+        store.meal.closed &&
+        !store.meal.reconciled &&
+        self.resident_id !== "" &&
+        self.no_cost === false &&
+        isZeroAmountString(self.amount)
+      );
+    },
     get form() {
       return getParent(self, 2);
     },

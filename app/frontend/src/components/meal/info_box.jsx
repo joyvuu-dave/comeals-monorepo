@@ -12,7 +12,9 @@ const styles = {
 const InfoBox = inject("store")(
   observer(({ store }) => (
     <div className="offwhite button-border-radius" style={styles.main}>
-      <div className="title flex space-between">
+      {/* the anchor lets the close button's confirm bar float under
+          the title row without moving anything */}
+      <div className="title flex space-between confirm-bar-anchor">
         <h2>Signed Up</h2>
         <CloseButton />
       </div>

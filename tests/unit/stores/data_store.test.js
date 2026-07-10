@@ -1735,8 +1735,11 @@ describe("DataStore", () => {
     });
   });
 
-  describe("toggleClosed validation", () => {
-    it("blocks closing when a cook has no cost and no no_cost flag", () => {
+  // The close gate is gone: forcing a number before the shopping
+  // happened bred fake $1 costs. The close button asks about blank
+  // costs (cooksMissingCost below) and closes on a deliberate Yes.
+  describe("toggleClosed with blank costs", () => {
+    it("closes even when a cook's cost is blank", () => {
       const store = createDataStore({
         mealProps: { closed: false },
         residents: [{ id: 10, meal_id: 1, name: "Alice", can_cook: true }],
@@ -1746,27 +1749,23 @@ describe("DataStore", () => {
       toastStore.clearAll();
       store.toggleClosed();
 
-      // Meal should stay open
-      expect(store.meal.closed).toBe(false);
-      expect(toastStore.toasts.length).toBe(1);
-      expect(toastStore.toasts[0].type).toBe("warning");
+      expect(store.meal.closed).toBe(true);
+      expect(toastStore.toasts.length).toBe(0);
     });
 
-    it("allows closing when cook has no_cost flag set", () => {
+    it("closes when cook has no_cost flag set", () => {
       const store = createDataStore({
         mealProps: { closed: false },
         residents: [{ id: 10, meal_id: 1, name: "Alice", can_cook: true }],
         bills: [{ id: "bill-1", resident: 10, amount: "", no_cost: true }],
       });
 
-      toastStore.clearAll();
       store.toggleClosed();
 
-      // Meal should close (optimistic update)
       expect(store.meal.closed).toBe(true);
     });
 
-    it("allows closing when cook has amount filled in", () => {
+    it("closes when cook has amount filled in", () => {
       const store = createDataStore({
         mealProps: { closed: false },
         residents: [{ id: 10, meal_id: 1, name: "Alice", can_cook: true }],
@@ -1775,56 +1774,165 @@ describe("DataStore", () => {
         ],
       });
 
-      toastStore.clearAll();
       store.toggleClosed();
 
       expect(store.meal.closed).toBe(true);
     });
+  });
 
-    it("allows closing when no cooks are assigned (blank bills)", () => {
+  // The close button's question works off this list: no names, no
+  // question; one name, call them out; more, stay generic.
+  describe("cooksMissingCost", () => {
+    it("is empty when every assigned cook entered a cost or no_cost", () => {
+      const store = createDataStore({
+        mealProps: { closed: false },
+        residents: [
+          { id: 10, meal_id: 1, name: "Alice", can_cook: true },
+          { id: 11, meal_id: 1, name: "Bob", can_cook: true },
+        ],
+        bills: [
+          { id: "bill-1", resident: 10, amount: "25.00", no_cost: false },
+          { id: "bill-2", resident: 11, amount: "", no_cost: true },
+        ],
+      });
+
+      expect(store.cooksMissingCost).toEqual([]);
+    });
+
+    it("names the one cook whose cost is blank", () => {
+      const store = createDataStore({
+        mealProps: { closed: false },
+        residents: [
+          { id: 10, meal_id: 1, name: "Alice", can_cook: true },
+          { id: 11, meal_id: 1, name: "Bob", can_cook: true },
+        ],
+        bills: [
+          { id: "bill-1", resident: 10, amount: "25.00", no_cost: false },
+          { id: "bill-2", resident: 11, amount: "", no_cost: false },
+        ],
+      });
+
+      expect(store.cooksMissingCost).toEqual(["Bob"]);
+    });
+
+    it("names every cook whose cost is blank", () => {
+      const store = createDataStore({
+        mealProps: { closed: false },
+        residents: [
+          { id: 10, meal_id: 1, name: "Alice", can_cook: true },
+          { id: 11, meal_id: 1, name: "Bob", can_cook: true },
+        ],
+        bills: [
+          { id: "bill-1", resident: 10, amount: "", no_cost: false },
+          { id: "bill-2", resident: 11, amount: "", no_cost: false },
+        ],
+      });
+
+      expect(store.cooksMissingCost).toEqual(["Alice", "Bob"]);
+    });
+
+    it("ignores rows with no cook assigned", () => {
       const store = createDataStore({
         mealProps: { closed: false },
         bills: [{ id: "bill-1", amount: "", no_cost: false }],
       });
 
-      toastStore.clearAll();
-      store.toggleClosed();
+      expect(store.cooksMissingCost).toEqual([]);
+    });
 
-      expect(store.meal.closed).toBe(true);
+    it("uses the plain resident name, not the unit-prefixed list name", () => {
+      const store = createDataStore({
+        mealProps: { closed: false },
+        residents: [
+          {
+            id: 10,
+            meal_id: 1,
+            name: "102 - Alice",
+            short_name: "Alice",
+            can_cook: true,
+          },
+        ],
+        bills: [{ id: "bill-1", resident: 10, amount: "", no_cost: false }],
+      });
+
+      expect(store.cooksMissingCost).toEqual(["Alice"]);
     });
 
     // Issue #29 (Q1): zero means "not filled in yet". A typed "0" and a
-    // reloaded "0.00" must both block closing — before the fix the gate
-    // only checked for the empty string, so a typed "0" let the meal close
-    // until a reload turned it into "".
-    it("blocks closing when a cook's amount is a typed zero", () => {
+    // reloaded "0.00" count as missing, the same as an empty string.
+    it('counts a typed "0" and a reloaded "0.00" as missing', () => {
       const store = createDataStore({
         mealProps: { closed: false },
-        residents: [{ id: 10, meal_id: 1, name: "Alice", can_cook: true }],
-        bills: [{ id: "bill-1", resident: 10, amount: "0", no_cost: false }],
+        residents: [
+          { id: 10, meal_id: 1, name: "Alice", can_cook: true },
+          { id: 11, meal_id: 1, name: "Bob", can_cook: true },
+        ],
+        bills: [
+          { id: "bill-1", resident: 10, amount: "0", no_cost: false },
+          { id: "bill-2", resident: 11, amount: "0.00", no_cost: false },
+        ],
       });
 
-      toastStore.clearAll();
-      store.toggleClosed();
+      expect(store.cooksMissingCost).toEqual(["Alice", "Bob"]);
+    });
+  });
 
-      expect(store.meal.closed).toBe(false);
-      expect(toastStore.toasts.length).toBe(1);
-      expect(toastStore.toasts[0].type).toBe("warning");
+  // "pending" = the cook had the chance to enter a cost (the meal
+  // closed) and hasn't yet. It ends at reconciliation.
+  describe("bill costPending", () => {
+    function storeWith({ mealProps, amount = "", no_cost = false }) {
+      return createDataStore({
+        mealProps,
+        residents: [{ id: 10, meal_id: 1, name: "Alice", can_cook: true }],
+        bills: [{ id: "bill-1", resident: 10, amount, no_cost }],
+      });
+    }
+
+    function bill(store) {
+      return Array.from(store.bills.values())[0];
+    }
+
+    it("is pending when the meal is closed and the cost is blank", () => {
+      const store = storeWith({ mealProps: { closed: true } });
+      expect(bill(store).costPending).toBe(true);
     });
 
-    it('blocks closing when a cook\'s amount is a zero string ("0.00")', () => {
-      const store = createDataStore({
-        mealProps: { closed: false },
-        residents: [{ id: 10, meal_id: 1, name: "Alice", can_cook: true }],
-        bills: [{ id: "bill-1", resident: 10, amount: "0.00", no_cost: false }],
+    it("is not pending while the meal is still open", () => {
+      const store = storeWith({ mealProps: { closed: false } });
+      expect(bill(store).costPending).toBe(false);
+    });
+
+    it("is not pending once the meal is reconciled", () => {
+      const store = storeWith({
+        mealProps: { closed: true, reconciled: true },
       });
+      expect(bill(store).costPending).toBe(false);
+    });
 
-      toastStore.clearAll();
-      store.toggleClosed();
+    it("is not pending when a cost is entered", () => {
+      const store = storeWith({
+        mealProps: { closed: true },
+        amount: "25.00",
+      });
+      expect(bill(store).costPending).toBe(false);
+    });
 
-      expect(store.meal.closed).toBe(false);
-      expect(toastStore.toasts.length).toBe(1);
-      expect(toastStore.toasts[0].type).toBe("warning");
+    it("is not pending when no_cost is set", () => {
+      const store = storeWith({ mealProps: { closed: true }, no_cost: true });
+      expect(bill(store).costPending).toBe(false);
+    });
+
+    it("is not pending on a blank row with no cook assigned", () => {
+      const store = createDataStore({
+        mealProps: { closed: true },
+        bills: [{ id: "bill-1", amount: "", no_cost: false }],
+      });
+      expect(bill(store).costPending).toBe(false);
+    });
+
+    it('treats a stored "0.00" the same as blank', () => {
+      const store = storeWith({ mealProps: { closed: true }, amount: "0.00" });
+      expect(bill(store).costPending).toBe(true);
     });
   });
 
