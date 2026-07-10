@@ -115,6 +115,78 @@ test.describe("Bill entry (real backend)", () => {
     await expect(costInput).toHaveValue("50.00", { timeout: 10000 });
   });
 
+  // Turning on "no cost" over a typed cost erases the cost, so the
+  // switch asks first. Every exit except a deliberate Yes — the No
+  // button, Escape, a click elsewhere — must leave the cost alone.
+  test("the no-cost switch asks before erasing a typed cost", async ({
+    page,
+  }) => {
+    const mealId = auth.meals.tomorrow.id;
+    await page.goto(`/meals/${mealId}/edit/`);
+    await page.waitForLoadState("networkidle");
+
+    const costInput = page.locator('[aria-label="Set meal cost"]').first();
+    await expect(costInput).toHaveValue("50.00", { timeout: 10000 });
+
+    const switchLabel = page.locator('label[for^="no_cost_switch-"]').first();
+    const noCostBox = page.locator('[aria-label^="No cost button"]').first();
+    const confirm = page.locator(".no-cost-confirm");
+
+    // The click alone changes nothing: the bar opens and asks.
+    await switchLabel.click();
+    await expect(confirm).toBeVisible();
+    await expect(confirm).toContainText("$50.00");
+    await expect(costInput).toHaveValue("50.00");
+    await expect(noCostBox).not.toBeChecked();
+
+    // No keeps everything.
+    await confirm.getByRole("button", { name: "No" }).click();
+    await expect(confirm).toBeHidden();
+    await expect(costInput).toHaveValue("50.00");
+    await expect(noCostBox).not.toBeChecked();
+
+    // Escape is a No too.
+    await switchLabel.click();
+    await expect(confirm).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(confirm).toBeHidden();
+    await expect(costInput).toHaveValue("50.00");
+
+    // A click anywhere else is also a No.
+    await switchLabel.click();
+    await expect(confirm).toBeVisible();
+    await page.locator("h2", { hasText: "Cooks" }).click();
+    await expect(confirm).toBeHidden();
+    await expect(costInput).toHaveValue("50.00");
+
+    // A deliberate Yes erases the cost and flips the switch. The Yes
+    // button ignores clicks while it arms, so wait that out.
+    await switchLabel.click();
+    await expect(confirm).toBeVisible();
+    await page.waitForTimeout(500);
+    const erased = page.waitForResponse((r) => {
+      if (r.request().method() !== "PATCH") return false;
+      if (!r.url().includes(`/api/v1/meals/${mealId}/bills`)) return false;
+      const body = r.request().postDataJSON();
+      return body.bills.some((b) => b.no_cost === true);
+    });
+    await confirm.getByRole("button", { name: "Yes" }).click();
+    await expect(confirm).toBeHidden();
+    await expect(costInput).toHaveValue("");
+    await expect(noCostBox).toBeChecked();
+    await erased;
+
+    // Turning the switch back off never asks — it destroys nothing.
+    await switchLabel.click();
+    await expect(confirm).toBeHidden();
+    await expect(noCostBox).not.toBeChecked();
+
+    // Restore the seed: put Jane's $50.00 back.
+    const restored = billSaved(page, mealId, "50.00");
+    await costInput.fill("50.00");
+    await restored;
+  });
+
   test("modifying an existing bill persists", async ({ page }) => {
     const mealId = auth.meals.tomorrow.id;
     await page.goto(`/meals/${mealId}/edit/`);

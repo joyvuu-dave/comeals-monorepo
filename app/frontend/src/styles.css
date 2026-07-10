@@ -407,3 +407,34 @@ table td {
   top: 0;
   z-index: 9999;
 }
+
+/*
+Confirm bar for the no-cost switch. Turning the switch on would erase a
+typed cost, so the switch asks first. The bar sits directly under the
+bill row. No is the filled default button at the far right, under the
+switch itself, so a stray second tap lands on No; Yes is the red one,
+set apart so a missed No cannot hit it.
+*/
+.no-cost-confirm {
+  align-items: center;
+  background-color: #fff6e5;
+  border: 1px solid #ff851b;
+  border-radius: 0.25rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  justify-content: space-between;
+  margin: -1rem 0 1.5rem;
+  padding: 0.5rem 0.75rem;
+}
+.no-cost-confirm-question {
+  font-size: 1.125rem;
+}
+.no-cost-confirm-buttons {
+  display: flex;
+  gap: 1rem;
+  margin-left: auto;
+}
+.no-cost-confirm-buttons .button {
+  min-width: 4.5rem;
+}
