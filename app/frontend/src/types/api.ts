@@ -26,7 +26,10 @@ export interface MealFormBill {
 export interface MealFormResident {
   id: number;
   meal_id: number;
+  // "102 - Jane": the unit prefix tells two Janes apart in lists.
   name: string;
+  // "Jane": for sentences (confirm questions).
+  short_name: string;
   attending: boolean;
   attending_at: string | null;
   late: boolean;

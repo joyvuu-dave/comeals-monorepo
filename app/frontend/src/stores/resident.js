@@ -7,7 +7,11 @@ const Resident = types
   .model("Resident", {
     id: types.identifierNumber,
     meal_id: types.number,
+    // "102 - Jane": the unit prefix tells two Janes apart in lists.
     name: types.string,
+    // "Jane": for sentences. Defaults to "" because cached meal
+    // payloads from before this field exist; plainName falls back.
+    short_name: "",
     attending: false,
     attending_at: types.maybeNull(types.Date),
     late: false,
@@ -16,6 +20,9 @@ const Resident = types
     active: true,
   })
   .views((self) => ({
+    get plainName() {
+      return self.short_name !== "" ? self.short_name : self.name;
+    },
     get guests() {
       return Array.from(self.form.form.guestStore.guests.values()).filter(
         (guest) => guest.resident_id === self.id,

@@ -67,6 +67,7 @@ const manifests: Record<string, string[]> = {
     id: true,
     meal_id: true,
     name: true,
+    short_name: true,
     attending: true,
     attending_at: true,
     late: true,

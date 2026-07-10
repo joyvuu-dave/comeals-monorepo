@@ -51,6 +51,7 @@ class MealFormSerializer < ActiveModel::Serializer
     attributes :id,
                :meal_id,
                :name,
+               :short_name,
                :attending,
                :attending_at,
                :late,
@@ -70,8 +71,16 @@ class MealFormSerializer < ActiveModel::Serializer
       meal_resident.presence&.created_at
     end
 
+    # The list form: the unit prefix tells two residents with the same
+    # name apart in dropdowns and tables.
     def name
       "#{object.unit.name} - #{object.name}"
+    end
+
+    # The sentence form: confirm questions say "Jane hasn't entered a
+    # cost yet", not "102 - Jane hasn't entered a cost yet".
+    def short_name
+      object.name
     end
 
     def late
