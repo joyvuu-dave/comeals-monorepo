@@ -16,13 +16,18 @@ RSpec.describe 'billing:recalculate snapshot isolation' do
   self.use_transactional_tests = false
 
   before(:all) do
+    RakeTasks.ensure_loaded
     # This spec only works if the task body runs exactly once per invoke: a
     # stacked duplicate action would re-run it after the concurrent edit
-    # commits and overwrite the snapshot result. RakeTasks.ensure_loaded
-    # already guarantees one action per task; the clear makes this spec
-    # hold that invariant on its own, whatever ran earlier in the process.
-    Rake::Task.clear
-    RakeTasks.ensure_loaded
+    # commits and overwrite the snapshot result. Assert that instead of
+    # clearing and re-loading rake state — re-loading a .rake file resets
+    # its Ruby coverage counters, so a mid-suite reload understates rake
+    # task coverage for the whole run.
+    actions = Rake::Task['billing:recalculate'].actions.size
+    unless actions == 1
+      raise "billing:recalculate has #{actions} actions, expected 1 — " \
+            'something loaded rake tasks outside RakeTasks.ensure_loaded'
+    end
   end
 
   after do

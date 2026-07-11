@@ -10,8 +10,9 @@ require 'rake'
 # (issue #27). Task specs must call ensure_loaded instead of load_tasks.
 #
 # The guard checks a sentinel task instead of memoizing a flag so the helper
-# still reloads after something wipes rake state (the billing snapshot spec
-# calls Rake::Task.clear to guarantee its own single-action invariant).
+# would still recover if something wiped rake state. Nothing should: a
+# re-load resets each .rake file's Ruby coverage counters, understating rake
+# task coverage for the whole run (see rake_tasks_loading_spec.rb).
 module RakeTasks
   SENTINEL_TASK = 'billing:recalculate'
 
