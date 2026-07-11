@@ -3,6 +3,12 @@
 namespace :residents do
   desc 'Notify residents they need to sign up for a meal.'
   task notify: :environment do
+    unless BROADCAST_EMAIL_ENABLED
+      Rails.logger.info('residents:notify skipped: broadcast email is off ' \
+                        '(set BROADCAST_EMAIL_ENABLED=true to enable)')
+      next
+    end
+
     start_time = Time.current
 
     # Find all the rotations that start within the next week where we haven't already notified the residents

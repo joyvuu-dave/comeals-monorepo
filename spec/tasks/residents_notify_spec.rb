@@ -11,6 +11,10 @@ RSpec.describe 'residents:notify' do
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
 
+  before do
+    stub_const('BROADCAST_EMAIL_ENABLED', true)
+  end
+
   after do
     Rake::Task['residents:notify'].reenable
   end
@@ -27,6 +31,20 @@ RSpec.describe 'residents:notify' do
     end
     rotation.update_columns(start_date: start_date, residents_notified: residents_notified)
     rotation
+  end
+
+  it 'sends nothing when broadcast email is disabled' do
+    stub_const('BROADCAST_EMAIL_ENABLED', false)
+    rotation = create_rotation_with_meals(community: community,
+                                          start_date: Time.zone.today + 3.days)
+    create(:resident, community: community, unit: unit,
+                      can_cook: true, active: true, multiplier: 2)
+
+    initial_count = ActionMailer::Base.deliveries.size
+    Rake::Task['residents:notify'].invoke
+
+    expect(ActionMailer::Base.deliveries.size).to eq(initial_count)
+    expect(rotation.reload.residents_notified).to be false
   end
 
   it 'sends signup emails to eligible cooks who have not signed up' do

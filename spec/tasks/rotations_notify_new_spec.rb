@@ -11,8 +11,40 @@ RSpec.describe 'rotations:notify_new', type: :task do
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
 
+  before do
+    stub_const('BROADCAST_EMAIL_ENABLED', true)
+  end
+
   after do
     Rake::Task['rotations:notify_new'].reenable
+  end
+
+  it 'sends nothing when broadcast email is disabled' do
+    stub_const('BROADCAST_EMAIL_ENABLED', false)
+    create(:resident, community: community, unit: unit, active: true)
+    meal = create(:meal, community: community)
+    attrs = [{ date: meal.date + 100.days, community_id: community.id }]
+    rotation = Rotation.create!(community_id: community.id, meals_attributes: attrs)
+
+    initial_count = ActionMailer::Base.deliveries.size
+    Rake::Task['rotations:notify_new'].invoke
+
+    expect(ActionMailer::Base.deliveries.size).to eq(initial_count)
+    expect(rotation.reload.new_rotation_notified_at).to be_nil
+  end
+
+  it 'skips rotations created more than 7 days ago, so re-enabling cannot flood' do
+    create(:resident, community: community, unit: unit, active: true)
+    meal = create(:meal, community: community)
+    attrs = [{ date: meal.date + 100.days, community_id: community.id }]
+    stale = Rotation.create!(community_id: community.id, meals_attributes: attrs)
+    stale.update_column(:created_at, 8.days.ago)
+
+    initial_count = ActionMailer::Base.deliveries.size
+    Rake::Task['rotations:notify_new'].invoke
+
+    expect(ActionMailer::Base.deliveries.size).to eq(initial_count)
+    expect(stale.reload.new_rotation_notified_at).to be_nil
   end
 
   it 'sends new-rotation emails for rotations not yet notified' do
