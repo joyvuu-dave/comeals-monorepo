@@ -124,6 +124,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+      # Load the schema the same way ruby-test does. On a fresh empty
+      # database, db:prepare inside bin/test-integration would instead
+      # replay every migration from zero and re-dump structure.sql.
+      - run: bin/rails db:schema:load
       - run: bin/test-integration
       - uses: actions/upload-artifact@v7
         if: failure()

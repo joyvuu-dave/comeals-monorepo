@@ -35,7 +35,9 @@ trap cleanup EXIT
 # 1. Prepare test database
 # ------------------------------------------------------------------
 echo "==> Preparing test database..."
-RAILS_ENV=test bundle exec rails db:prepare 2>&1 | tail -1
+# Full output on purpose: an up-to-date database prints almost nothing,
+# and when preparation fails the error must be readable in CI logs.
+RAILS_ENV=test bundle exec rails db:prepare
 
 echo "==> Seeding integration test data..."
 RAILS_ENV=test bundle exec rails test:seed_integration
