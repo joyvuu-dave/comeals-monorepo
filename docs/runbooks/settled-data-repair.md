@@ -53,7 +53,11 @@ After the repair:
    (`reconciliation_balances`) — they are append-only settlement records
    and will NOT be recomputed automatically. A repair that changes them
    means residents were told wrong numbers; handle that as a correcting
-   entry in the next period instead if at all possible.
+   entry in the next period instead if at all possible. If the stored
+   balances themselves are corrupted and must be rebuilt, recompute that
+   one reconciliation from a console:
+   `Reconciliation.find(id).persist_balances!`. Never rebuild them all
+   at once — settled books are history, not a cache.
 3. Note what you changed and why in the relevant GitHub issue.
 
 Do not use `ALTER TABLE ... DISABLE TRIGGER`. It takes a DDL lock and drops
