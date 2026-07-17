@@ -145,6 +145,7 @@ SETTLEMENT (reconciliation): Rounded to cents using largest-remainder allocation
 - **Rake tasks:**
   - `rake billing:recalculate` — run daily to refresh resident balances from source data
   - `rake reconciliations:create` — manual trigger to settle all unreconciled meals
+- **Job monitoring:** scheduled tasks wrap their body in `Healthcheck.monitor` (`app/services/healthcheck.rb`), which pings healthchecks.io on success or failure. Pings are off unless `HEALTHCHECKS_PING_KEY` is set (production only). A job that stops running entirely triggers a "check is late" email from healthchecks.io.
 
 ## Agent skills
 

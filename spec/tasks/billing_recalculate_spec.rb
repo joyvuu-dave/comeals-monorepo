@@ -15,6 +15,15 @@ RSpec.describe 'billing:recalculate' do
     Rake::Task['billing:recalculate'].reenable
   end
 
+  it 'reports a successful run to healthchecks' do
+    community
+    allow(Healthcheck).to receive(:ping)
+
+    Rake::Task['billing:recalculate'].invoke
+
+    expect(Healthcheck).to have_received(:ping).with('billing-recalculate')
+  end
+
   it 'computes and stores resident balances from source data' do
     cook = create(:resident, community: community, unit: unit, multiplier: 2)
     eater = create(:resident, community: community, unit: unit, multiplier: 2)

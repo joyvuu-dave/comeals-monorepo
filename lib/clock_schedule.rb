@@ -8,8 +8,11 @@
 # every task name still exists in Rake and every cron expression parses.
 #
 # Cron expressions use the system's local timezone.
-# Only billing:recalculate is currently active in Heroku Scheduler (daily 3am).
-# The rest are run manually today but are included here as their natural cadence.
+# Three tasks are active in Heroku Scheduler (which uses UTC):
+# billing:recalculate at 03:00, residents:set_multiplier at 11:00,
+# and community:create_rotations at 22:30. The two notify tasks are
+# gated off behind BROADCAST_EMAIL_ENABLED and have no Scheduler entry.
+# Scheduled tasks ping healthchecks.io — see app/services/healthcheck.rb.
 #
 # Manual tasks (not scheduled here -- run via `bundle exec rake <task>`):
 #   reconciliations:create

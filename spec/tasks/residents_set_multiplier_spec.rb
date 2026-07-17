@@ -15,6 +15,14 @@ RSpec.describe 'residents:set_multiplier' do
     Rake::Task['residents:set_multiplier'].reenable
   end
 
+  it 'reports a successful run to healthchecks' do
+    allow(Healthcheck).to receive(:ping)
+
+    Rake::Task['residents:set_multiplier'].invoke
+
+    expect(Healthcheck).to have_received(:ping).with('residents-set-multiplier')
+  end
+
   it 'sets multiplier to 0 for children under 5' do
     infant = create(:resident, community: community, unit: unit,
                                birthday: 2.years.ago.to_date, multiplier: 2)
