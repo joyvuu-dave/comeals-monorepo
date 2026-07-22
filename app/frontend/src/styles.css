@@ -8,10 +8,11 @@
 @import "react-big-calendar/lib/css/react-big-calendar.css";
 
 /* The 400 weight is used for body text and loaded on every page, so it's
-   preloaded from index.html with a stable /fonts/ path (not the Vite-hashed
-   path). This @font-face block must match that path so the browser reuses
-   the preloaded file instead of double-fetching. The other weights stay on
-   @fontsource imports and let Vite hash them; they're cheaper to defer.
+   preloaded from index.html. Both that preload link and this @font-face
+   point at the same source file, so Vite resolves them to the same URL
+   (hashed in build, /src/fonts/ in dev) and the browser reuses the
+   preloaded file instead of double-fetching. The other weights stay on
+   @fontsource imports; they're cheaper to defer.
    NOTE: @font-face must appear AFTER all @import statements — the CSS spec
    requires @import to be at the top of the stylesheet. */
 @font-face {
@@ -20,8 +21,8 @@
   font-display: swap;
   font-weight: 400;
   src:
-    url("/fonts/roboto-latin-400.woff2") format("woff2"),
-    url("/fonts/roboto-latin-400.woff") format("woff");
+    url("./fonts/roboto-latin-400.woff2") format("woff2"),
+    url("./fonts/roboto-latin-400.woff") format("woff");
 }
 
 :root {
