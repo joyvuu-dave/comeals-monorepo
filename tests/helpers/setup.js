@@ -248,6 +248,17 @@ async function mockApi(page, options = {}) {
     }
   });
 
+  // Logout (DELETE /api/v1/sessions/current). Without this stub the logout
+  // request falls through to the /api proxy and logs ECONNREFUSED, because
+  // no Rails server runs during E2E.
+  await page.route("**/api/v1/sessions/current", (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ message: "Signed out." }),
+    });
+  });
+
   // Password reset request (POST /api/v1/residents/password-reset)
   await page.route("**/api/v1/residents/password-reset", (route) => {
     if (route.request().method() === "POST") {
