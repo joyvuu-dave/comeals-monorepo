@@ -106,7 +106,7 @@ class Community < ApplicationRecord
   # count their effective cost, and a zero-multiplier meal charges nobody.
   # An adult is 2 multiplier units, hence the 2x.
   def unreconciled_ave_cost
-    unreconciled = meals.unreconciled.with_attendees.preload(:meal_residents, :guests).to_a
+    unreconciled = meals.unreconciled.with_attendees.preload(:meal_residents, :guests, :bills).to_a
     total_multiplier = unreconciled.sum(&:multiplier)
     return '--' if total_multiplier.zero?
 

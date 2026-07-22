@@ -299,6 +299,29 @@ RSpec.describe Meal do
       meal = create(:meal, community: community)
       expect(meal.total_cost).to eq(BigDecimal('0'))
     end
+
+    it 'gives the same answer from preloaded bills as from SQL' do
+      meal = create(:meal, community: community)
+      resident_a = create(:resident, community: community, unit: unit, multiplier: 2)
+      resident_b = create(:resident, community: community, unit: unit, multiplier: 2)
+
+      create(:bill, meal: meal, resident: resident_a, community: community, amount: BigDecimal('30'))
+      create(:bill, meal: meal, resident: resident_b, community: community, amount: BigDecimal('20'),
+                    no_cost: true)
+
+      # Unloaded path (SQL SUM)
+      unloaded = described_class.find(meal.id)
+      sql_sum = unloaded.total_cost
+
+      # Loaded path (in-memory sum)
+      loaded = described_class.preload(:bills).find(meal.id)
+      expect(loaded.bills).to be_loaded
+      mem_sum = loaded.total_cost
+
+      expect(mem_sum).to eq(sql_sum)
+      expect(mem_sum).to eq(BigDecimal('30'))
+      expect(mem_sum).to be_a(BigDecimal)
+    end
   end
 
   describe '#max_cost' do

@@ -8,12 +8,15 @@ ActiveAdmin.register_page 'Dashboard' do
   # covers /admin/residents, /admin/bills, etc.
 
   content title: 'Meal Reconciliation' do
-    # Here is an example of a simple dashboard with columns and panels.
+    # Each list is loaded once and the panel header counts the loaded rows.
+    # This keeps the header and the list in agreement and avoids a separate
+    # COUNT query per panel.
     columns do
       column do
-        panel "Units - #{current_admin_user.units.count(true)}" do
+        units = current_admin_user.units.order(:name).to_a
+        panel "Units - #{units.size}" do
           ul do
-            current_admin_user.units.order(:name).map do |unit|
+            units.map do |unit|
               li link_to(unit.name, admin_unit_path(unit))
             end
           end
@@ -21,9 +24,10 @@ ActiveAdmin.register_page 'Dashboard' do
       end
 
       column do
-        panel "Active Residents - #{current_admin_user.residents.active.count}" do
+        residents = current_admin_user.residents.active.order(:name).to_a
+        panel "Active Residents - #{residents.size}" do
           ul do
-            current_admin_user.residents.active.order(:name).map do |resident|
+            residents.map do |resident|
               li link_to(resident.name, admin_resident_path(resident))
             end
           end
@@ -31,17 +35,19 @@ ActiveAdmin.register_page 'Dashboard' do
       end
 
       column do
-        panel "Upcoming Meals - #{current_admin_user.meals.unreconciled.open.where(date: Time.zone.today..).count}" do
+        upcoming = current_admin_user.meals.unreconciled.open.where(date: Time.zone.today..).order(date: :desc).to_a
+        panel "Upcoming Meals - #{upcoming.size}" do
           ul do
-            current_admin_user.meals.unreconciled.open.where(date: Time.zone.today..).order(date: :desc).map do |meal|
+            upcoming.map do |meal|
               li link_to(meal.date, admin_meal_path(meal))
             end
           end
         end
 
-        panel "Closed Meals People Attended (unreconciled) - #{current_admin_user.meals.unreconciled.closed_with_bills.count}" do
+        closed = current_admin_user.meals.unreconciled.closed_with_bills.order(date: :desc).to_a
+        panel "Closed Meals People Attended (unreconciled) - #{closed.size}" do
           ul do
-            current_admin_user.meals.unreconciled.closed_with_bills.order(date: :desc).map do |meal|
+            closed.map do |meal|
               li link_to(meal.date, admin_meal_path(meal))
             end
           end

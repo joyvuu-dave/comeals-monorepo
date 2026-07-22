@@ -183,11 +183,18 @@ class Meal < ApplicationRecord
 
   delegate :count, to: :bills, prefix: true
 
-  # Total cost computed from source bills via SQL SUM.
-  # No memoization — bills can change within a request, and stale data
-  # in financial calculations is worse than one cheap indexed query.
+  # Total cost computed from source bills. Sums in memory when the caller
+  # preloaded bills (same contract as multiplier above — this is what lets
+  # the dashboard render many meals without one query per meal), otherwise
+  # one cheap indexed SQL SUM. No memoization — bills can change within a
+  # request, and stale data in financial calculations is worse than
+  # recomputing.
   def total_cost
-    bills.where(no_cost: false).sum(:amount)
+    if bills.loaded?
+      bills.reject(&:no_cost).sum(BigDecimal('0'), &:amount)
+    else
+      bills.where(no_cost: false).sum(:amount)
+    end
   end
 
   # The cost used for splitting after applying the cap.

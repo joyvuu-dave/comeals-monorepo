@@ -88,6 +88,36 @@ RSpec.describe 'Admin smoke tests' do
                                              'SPA catch-all is swallowing asset requests'
       end
     end
+
+    # The dashboard once ran one bills query per unreconciled meal (222
+    # queries in production). Guard the fix: the query count must not grow
+    # with the number of meals.
+    it 'runs the same number of queries no matter how many meals exist' do
+      resident = create(:resident, community: community, unit: create(:unit, community: community))
+      add_meals = lambda do |count|
+        count.times do
+          meal = create(:meal, community: community)
+          create(:meal_resident, meal: meal, resident: resident, community: community)
+          create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('30'))
+        end
+      end
+
+      add_meals.call(2)
+      get '/' # warm-up request: absorbs schema and other one-time queries
+      baseline = count_queries { get '/' }
+
+      add_meals.call(3)
+      expect(count_queries { get '/' }).to eq(baseline)
+    end
+
+    def count_queries(&)
+      count = 0
+      counter = lambda do |_name, _start, _finish, _id, payload|
+        count += 1 unless payload[:name] == 'SCHEMA' || payload[:cached]
+      end
+      ActiveSupport::Notifications.subscribed(counter, 'sql.active_record', &)
+      count
+    end
   end
 
   describe 'resource pages (authenticated)' do
