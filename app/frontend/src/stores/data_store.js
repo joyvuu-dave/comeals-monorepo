@@ -69,6 +69,12 @@ var monthFetchVersion = 0;
 // of the store because the channel name only depends on community_id.
 var hostsChannel = null;
 
+// Backoff for retrying a failed FIRST load of a meal: 2s, 4s, 8s,
+// 16s, then every 30s — forever. A shared screen must heal without a
+// human tap, and at 30s the retries cost the server nothing.
+const MEAL_RETRY_BASE_MS = 2000;
+const MEAL_RETRY_CAP_MS = 30000;
+
 function monthCacheKey(communityId, year, month) {
   return `community-${communityId}-calendar-${year}-${month}`;
 }
@@ -129,6 +135,12 @@ export const DataStore = types
     editBillsMode: true,
     // True while an open/close save is in flight; the button is disabled.
     closedPending: false,
+    // The first load of the meal on screen failed and automatic
+    // retries are running. Shows the "Trouble loading" notice.
+    mealLoadFailed: false,
+    // The server said 404: the meal does not exist. Retrying cannot
+    // fix that, so this shows a message and a way back instead.
+    mealLoadNotFound: false,
     meal: types.maybeNull(types.reference(Meal)),
     meals: types.optional(types.array(Meal), []),
     residentStore: types.optional(ResidentStore, {
@@ -195,6 +207,11 @@ export const DataStore = types
     // Pending timer for the next community-midnight rollover of
     // communityToday, or null.
     midnightTimer: null,
+    // Pending timer for the next automatic meal-load retry, or null.
+    mealRetryTimer: null,
+    // The wait used for the last scheduled retry, or null when the
+    // backoff is at its starting point.
+    mealRetryDelayMs: null,
   }))
   .views((self) => ({
     get hostsLoaded() {
@@ -615,23 +632,95 @@ export const DataStore = types
       // Leaving the meal page nulls the meal (issue #38). A settle
       // callback that lands after that has nothing to refetch.
       if (!self.meal) return;
+      const mealIdAtFetch = self.meal.id;
       api.meals
-        .getCooks(self.meal.id)
-        .then(function (response) {
-          if (response.status === 200) {
-            localforage
-              .setItem(response.data.id.toString(), response.data)
-              .then(function () {
-                // Skip stale responses from a previous meal
-                if (self.meal && self.meal.id === response.data.id) {
-                  self.loadData(response.data);
-                }
-              });
-          }
-        })
+        .getCooks(mealIdAtFetch)
+        .then(
+          function (response) {
+            if (response.status === 200) {
+              return localforage
+                .setItem(response.data.id.toString(), response.data)
+                .then(function () {
+                  // Skip stale responses from a previous meal
+                  if (self.meal && self.meal.id === response.data.id) {
+                    self.loadData(response.data);
+                  }
+                });
+            }
+          },
+          // Second then-handler on purpose: it fires only when the
+          // FETCH rejected. The retry treatment is for network
+          // failures — a bug while processing a good response must
+          // not loop retries forever. The state change comes first:
+          // the console logging must not be able to break it.
+          function (error) {
+            self.handleMealLoadError(error, mealIdAtFetch);
+            handleAxiosError(error, { silent: true });
+          },
+        )
         .catch(function (error) {
+          // A processing failure keeps its old silent behavior.
           handleAxiosError(error, { silent: true });
         });
+    },
+    // A meal fetch failed. Only the FIRST load of the meal on screen
+    // gets the retry treatment: with mealLoading false there is data
+    // on screen, and background refetch failures already heal through
+    // the reconnect and online handlers. A 404 means the meal does
+    // not exist — no retry can fix that.
+    handleMealLoadError(error, mealId) {
+      if (!self.meal || self.meal.id !== mealId) return;
+      if (!self.mealLoading) return;
+      const status = error && error.response && error.response.status;
+      if (status === 404) {
+        self.cancelMealRetry();
+        self.mealLoadNotFound = true;
+        return;
+      }
+      self.mealLoadFailed = true;
+      self.scheduleMealRetry(mealId);
+    },
+    scheduleMealRetry(mealId) {
+      if (self.mealRetryTimer !== null) {
+        clearTimeout(self.mealRetryTimer);
+      }
+      self.mealRetryDelayMs =
+        self.mealRetryDelayMs === null
+          ? MEAL_RETRY_BASE_MS
+          : Math.min(self.mealRetryDelayMs * 2, MEAL_RETRY_CAP_MS);
+      self.mealRetryTimer = setTimeout(function () {
+        self.onMealRetryTimer(mealId);
+      }, self.mealRetryDelayMs);
+    },
+    onMealRetryTimer(mealId) {
+      self.mealRetryTimer = null;
+      // The screen may have moved on while the timer waited.
+      if (!self.meal || self.meal.id !== mealId) return;
+      if (!self.mealLoading) return;
+      self.loadDataAsync();
+    },
+    // The "Retry now" button. Resets the backoff: a person is watching
+    // now, so if this try also fails the next automatic one should
+    // come quickly again.
+    retryMealLoadNow() {
+      if (!self.meal || !self.mealLoading) return;
+      if (self.mealRetryTimer !== null) {
+        clearTimeout(self.mealRetryTimer);
+        self.mealRetryTimer = null;
+      }
+      self.mealRetryDelayMs = null;
+      self.loadDataAsync();
+    },
+    // Cancels any pending retry and forgets the failure. Runs when the
+    // meal on screen changes (switch, teardown) and when a load lands.
+    cancelMealRetry() {
+      if (self.mealRetryTimer !== null) {
+        clearTimeout(self.mealRetryTimer);
+        self.mealRetryTimer = null;
+      }
+      self.mealRetryDelayMs = null;
+      self.mealLoadFailed = false;
+      self.mealLoadNotFound = false;
     },
     loadMonthAsync() {
       monthFetchVersion += 1;
@@ -858,8 +947,10 @@ export const DataStore = types
         self.billStore.bills.put(bill);
       });
 
-      // Change loading state
+      // Change loading state. A landed load also ends any retry state:
+      // the failure is over and the backoff starts fresh next time.
       self.mealLoading = false;
+      self.cancelMealRetry();
 
       // Unsubscribe from previous meal
       if (window.Comeals.mealChannel !== null) {
@@ -1064,6 +1155,10 @@ export const DataStore = types
       self.clearResidents();
       self.clearGuests();
 
+      // A retry belongs to the meal it was scheduled for; the new
+      // meal starts with a clean slate and a fresh backoff.
+      self.cancelMealRetry();
+
       localforage
         .getItem(id.toString())
         .then(function (value) {
@@ -1190,6 +1285,10 @@ export const DataStore = types
       self.clearBills();
       self.clearResidents();
       self.clearGuests();
+
+      // No meal page, no retry: the timer must not fire on the
+      // calendar.
+      self.cancelMealRetry();
     },
     // The meal page calls this on mount (issue #38): the calendar's
     // channels must not keep firing month refetches from the meal page.
@@ -1230,6 +1329,9 @@ export const DataStore = types
     beforeDestroy() {
       if (self.midnightTimer !== null) {
         clearTimeout(self.midnightTimer);
+      }
+      if (self.mealRetryTimer !== null) {
+        clearTimeout(self.mealRetryTimer);
       }
     },
     setAuthExpired(value) {

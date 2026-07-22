@@ -3,6 +3,7 @@ import { inject, observer } from "mobx-react";
 import { withRouter } from "../../helpers/with_router";
 
 import Header from "../meal/header";
+import LoadStatus from "../meal/load_status";
 import DateBox from "../meal/date_box";
 import MenuBox from "../meal/menu_box";
 import CooksBox from "../meal/cooks_box";
@@ -34,6 +35,7 @@ const MealsEdit = inject("store")(
                 location={this.props.location}
                 match={this.props.match}
               />
+              <LoadStatus />
               <div style={styles.container}>
                 <section style={styles.section}>
                   <div className="wrapper">

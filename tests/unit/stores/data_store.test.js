@@ -1431,6 +1431,205 @@ describe("DataStore", () => {
     });
   });
 
+  // ── meal load retry (stuck loading) ──
+  //
+  // A failed FIRST load of a meal used to stay silent: mealLoading
+  // never settled and the page said "loading..." forever. Now it
+  // retries with a capped growing wait and shows an honest notice.
+  // Background refetch failures (data already on screen) stay silent —
+  // the reconnect and online handlers already cover them.
+
+  describe("meal load retry (stuck loading)", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      // mockRejectedValue sets an implementation that clearAllMocks
+      // does not undo; put the default back for later tests.
+      axios.get.mockImplementation(() =>
+        Promise.resolve({ status: 200, data: {} }),
+      );
+    });
+
+    function cooksCallsFor(mealId) {
+      return axios.get.mock.calls.filter(
+        ([url]) => url === `/api/v1/meals/${mealId}/cooks`,
+      );
+    }
+
+    function mealPayload(id) {
+      return {
+        id,
+        date: "2023-06-15",
+        description: "",
+        closed: false,
+        closed_at: null,
+        reconciled: false,
+        max: null,
+        next_id: null,
+        prev_id: null,
+        residents: [],
+        guests: [],
+        bills: [],
+      };
+    }
+
+    it("a failed first load enters the retry state and retries with growing waits", async () => {
+      const store = createDataStore();
+      axios.get.mockRejectedValue({ request: {} });
+
+      expect(store.mealLoading).toBe(true);
+      store.loadDataAsync();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(store.mealLoadFailed).toBe(true);
+      expect(cooksCallsFor(1).length).toBe(1);
+
+      // First retry after 2s, second 4s later.
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(cooksCallsFor(1).length).toBe(2);
+      await vi.advanceTimersByTimeAsync(3999);
+      expect(cooksCallsFor(1).length).toBe(2);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(cooksCallsFor(1).length).toBe(3);
+    });
+
+    it("the wait doubles and caps at 30 seconds, and never stops", async () => {
+      const store = createDataStore();
+      axios.get.mockRejectedValue({ request: {} });
+
+      store.loadDataAsync();
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Waits: 2s, 4s, 8s, 16s, 30s (capped), 30s, ...
+      const waits = [2000, 4000, 8000, 16000, 30000, 30000, 30000];
+      let expected = 1;
+      for (const wait of waits) {
+        await vi.advanceTimersByTimeAsync(wait);
+        expected += 1;
+        expect(cooksCallsFor(1).length).toBe(expected);
+      }
+    });
+
+    it("a background refetch failure stays silent", async () => {
+      const store = createDataStore();
+      store.loadData(mealPayload(1));
+      expect(store.mealLoading).toBe(false);
+
+      axios.get.mockRejectedValue({ request: {} });
+      store.loadDataAsync();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(store.mealLoadFailed).toBe(false);
+      await vi.advanceTimersByTimeAsync(60000);
+      expect(cooksCallsFor(1).length).toBe(1);
+    });
+
+    it("a 404 shows not-found and never retries", async () => {
+      const store = createDataStore();
+      axios.get.mockRejectedValue({ response: { status: 404, data: {} } });
+
+      store.loadDataAsync();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(store.mealLoadNotFound).toBe(true);
+      expect(store.mealLoadFailed).toBe(false);
+      await vi.advanceTimersByTimeAsync(120000);
+      expect(cooksCallsFor(1).length).toBe(1);
+    });
+
+    it("switching meals cancels the retry and clears the failure", async () => {
+      const store = createDataStore();
+      axios.get.mockRejectedValue({ request: {} });
+
+      store.loadDataAsync();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.mealLoadFailed).toBe(true);
+
+      axios.get.mockImplementation(() =>
+        Promise.resolve({ status: 200, data: {} }),
+      );
+      store.switchMeals(2);
+      expect(store.mealLoadFailed).toBe(false);
+
+      // The old meal's pending retry never fires.
+      await vi.advanceTimersByTimeAsync(60000);
+      expect(cooksCallsFor(1).length).toBe(1);
+    });
+
+    it("teardownMealPage cancels the retry and clears the failure", async () => {
+      const store = createDataStore();
+      axios.get.mockRejectedValue({ request: {} });
+
+      store.loadDataAsync();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.mealLoadFailed).toBe(true);
+
+      store.teardownMealPage();
+      expect(store.mealLoadFailed).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(60000);
+      expect(cooksCallsFor(1).length).toBe(1);
+    });
+
+    it("a load that lands clears the failure and resets the backoff", async () => {
+      const store = createDataStore();
+      axios.get.mockRejectedValue({ request: {} });
+
+      store.loadDataAsync();
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(2000); // retry #1 fails; wait is now 4s
+      expect(cooksCallsFor(1).length).toBe(2);
+
+      store.loadData(mealPayload(1));
+      expect(store.mealLoadFailed).toBe(false);
+
+      // A later failure starts the backoff from the base again.
+      // goToMeal itself fires the load (cache miss → loadDataAsync).
+      store.goToMeal(1);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.mealLoadFailed).toBe(true);
+      const callsBefore = cooksCallsFor(1).length;
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(cooksCallsFor(1).length).toBe(callsBefore + 1);
+    });
+
+    it("retry-now fetches immediately and resets the backoff", async () => {
+      const store = createDataStore();
+      axios.get.mockRejectedValue({ request: {} });
+
+      store.loadDataAsync();
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(2000); // retry #1 fails; wait is now 4s
+      expect(cooksCallsFor(1).length).toBe(2);
+
+      store.retryMealLoadNow();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(cooksCallsFor(1).length).toBe(3);
+
+      // That manual try failed too; the next automatic one comes at
+      // the base wait, not the doubled one.
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(cooksCallsFor(1).length).toBe(4);
+    });
+
+    it("an error while processing a good response does not loop retries", async () => {
+      const store = createDataStore();
+      // The fetch succeeds but the payload is garbage: processing
+      // throws. That is a bug to fix, not a network state to retry.
+      axios.get.mockResolvedValue({ status: 200, data: {} });
+
+      store.loadDataAsync();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(store.mealLoadFailed).toBe(false);
+      await vi.advanceTimersByTimeAsync(60000);
+      expect(cooksCallsFor(1).length).toBe(1);
+    });
+  });
+
   // ── extras view return types ──
 
   describe("extras view type consistency", () => {

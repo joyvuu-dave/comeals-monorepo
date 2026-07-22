@@ -52,6 +52,118 @@ test.describe("Error Handling & Edge Cases", () => {
       });
     });
 
+    // A failed FIRST load of a meal used to stay silent forever: the
+    // page said "loading..." with nothing to tap and no retry. Now it
+    // shows a notice, retries on its own with a growing wait, and
+    // offers a retry button.
+
+    test("a failed meal load shows a retry notice and heals on its own", async ({
+      page,
+      context,
+    }) => {
+      await setupAuthenticatedPage(page, context);
+
+      let failuresLeft = 1;
+      await page.route("**/api/v1/meals/42/cooks*", (route) => {
+        if (route.request().method() !== "GET") return route.fallback();
+        if (failuresLeft > 0) {
+          failuresLeft -= 1;
+          return route.fulfill({
+            status: 500,
+            contentType: "application/json",
+            body: JSON.stringify({ message: "boom" }),
+          });
+        }
+        return route.fallback();
+      });
+
+      await page.goto("/meals/42/edit/");
+      await expect(page.getByText("Trouble loading this meal.")).toBeVisible({
+        timeout: 5000,
+      });
+
+      // The notice floats over the page, ConfirmBar-style: its box
+      // overlaps the content below it. An in-flow banner would push
+      // the content down instead and fail this.
+      const barBox = await page
+        .getByText("Trouble loading this meal.")
+        .boundingBox();
+      const wrapperBox = await page.locator(".wrapper").boundingBox();
+      expect(barBox.y + barBox.height).toBeGreaterThan(wrapperBox.y);
+
+      // The first automatic retry (2s) reaches a healthy server.
+      await expect(
+        page.getByRole("cell", { name: "Jane Smith", exact: true }),
+      ).toBeVisible({ timeout: 10000 });
+      await expect(page.getByText("Trouble loading this meal.")).toHaveCount(0);
+    });
+
+    test("the retry button reloads the meal right away", async ({
+      page,
+      context,
+    }) => {
+      await setupAuthenticatedPage(page, context);
+
+      let healthy = false;
+      let cooksRequests = 0;
+      await page.route("**/api/v1/meals/42/cooks*", (route) => {
+        if (route.request().method() !== "GET") return route.fallback();
+        cooksRequests += 1;
+        if (!healthy) {
+          return route.fulfill({
+            status: 500,
+            contentType: "application/json",
+            body: JSON.stringify({ message: "boom" }),
+          });
+        }
+        return route.fallback();
+      });
+
+      await page.goto("/meals/42/edit/");
+      await expect(page.getByText("Trouble loading this meal.")).toBeVisible({
+        timeout: 5000,
+      });
+
+      // Wait out the first automatic retry (2s), which also fails. The
+      // next automatic one comes 4s after that — a quiet window in
+      // which only the button can heal the page.
+      await expect
+        .poll(() => cooksRequests, { timeout: 5000 })
+        .toBeGreaterThanOrEqual(2);
+      healthy = true;
+      await page.getByRole("button", { name: "Retry now" }).click();
+      await expect(
+        page.getByRole("cell", { name: "Jane Smith", exact: true }),
+      ).toBeVisible({ timeout: 2500 });
+      await expect(page.getByText("Trouble loading this meal.")).toHaveCount(0);
+    });
+
+    test("a meal that does not exist shows a message and a way back", async ({
+      page,
+      context,
+    }) => {
+      await setupAuthenticatedPage(page, context);
+
+      await page.route("**/api/v1/meals/999/cooks*", (route) =>
+        route.fulfill({
+          status: 404,
+          contentType: "application/json",
+          body: JSON.stringify({ message: "not found" }),
+        }),
+      );
+
+      await page.goto("/meals/999/edit/");
+      await expect(page.getByText("This meal could not be found.")).toBeVisible(
+        { timeout: 5000 },
+      );
+
+      // No retry notice: retrying cannot fix a 404.
+      await expect(page.getByText("Trouble loading this meal.")).toHaveCount(0);
+
+      await page.getByRole("button", { name: "Back to calendar" }).click();
+      await expect(page).toHaveURL(/\/calendar\//, { timeout: 5000 });
+    });
+
     test("close meal API error reverts status and shows alert", async ({
       page,
       context,
