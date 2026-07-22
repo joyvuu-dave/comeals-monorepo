@@ -1,6 +1,8 @@
 ---
-# The authentication token for the application.
-authentication: 2Ftq2FqjF9y0vxO9YN1Pc8-p1c7IRKpnW2SVLS56Hu8
+# The authentication token is NOT set here. This repo is public, so the
+# token must stay out of version control. Production reads it from the
+# SKYLIGHT_AUTHENTICATION config var on Heroku:
+#   heroku config:get SKYLIGHT_AUTHENTICATION -a comeals-monorepo
 
 # Disable Skylight in development and test to suppress warnings
 development:
