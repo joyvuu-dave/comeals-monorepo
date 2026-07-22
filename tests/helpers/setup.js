@@ -399,6 +399,22 @@ async function mockApi(page, options = {}) {
   await page.route("**/version.txt*", (route) => {
     route.fulfill({ status: 200, contentType: "text/plain", body: "1.9.0" });
   });
+
+  // Slow-backend mode: E2E_API_DELAY=300 npm run test:e2e holds every
+  // mocked API response for that many milliseconds. The companion to
+  // E2E_CPU_THROTTLE (#21): latency opens the load windows where
+  // stale-state bugs live (rows editable against a meal that has not
+  // arrived, debounced saves outliving a navigation). Registered last,
+  // so it runs first (routes match newest-first) and falls through to
+  // the stubs above. Test-specific routes registered after this helper
+  // bypass the delay — they control their own timing.
+  const apiDelay = Number(process.env.E2E_API_DELAY);
+  if (apiDelay > 0) {
+    await page.route("**/api/**", async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, apiDelay));
+      await route.fallback();
+    });
+  }
 }
 
 /**

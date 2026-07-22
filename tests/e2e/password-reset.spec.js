@@ -1,4 +1,4 @@
-const { test, expect } = require("@playwright/test");
+const { test, expect } = require("../helpers/test");
 const { stubPusher, disableIdleTimer, mockApi } = require("../helpers/setup");
 
 test.describe("Password Reset", () => {

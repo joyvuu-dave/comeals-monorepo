@@ -1,5 +1,5 @@
 const path = require("path");
-const { test, expect } = require("@playwright/test");
+const { test, expect } = require("../helpers/test");
 const { setupAuthenticatedPage } = require("../helpers/setup");
 
 /**

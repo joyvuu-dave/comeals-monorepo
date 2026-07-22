@@ -44,7 +44,7 @@
  *   2. git checkout feature-branch; re-run; diff the JSON files
  */
 
-const { test } = require("@playwright/test");
+const { test } = require("../helpers/test");
 const fs = require("fs");
 const path = require("path");
 const { setupAuthenticatedPage } = require("../helpers/setup");
