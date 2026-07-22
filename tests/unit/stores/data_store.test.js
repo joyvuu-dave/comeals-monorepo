@@ -1375,6 +1375,47 @@ describe("DataStore", () => {
       expect(isAlive(oldNode)).toBe(false);
     });
 
+    it("switchMeals clears the rows of the meal it leaves", () => {
+      // Same rule as the teardownMealPage clear: rows belong to their
+      // meal. Stale rows shown while the next meal loads were editable,
+      // and a bill edit made in that window was sent to the NEW meal's
+      // bills endpoint carrying the OLD meal's cook list.
+      const store = createDataStore();
+      const data = mealData(1);
+      data.residents = [
+        {
+          id: 10,
+          meal_id: 1,
+          name: "Alice",
+          attending: true,
+          attending_at: null,
+          late: false,
+          vegetarian: false,
+          can_cook: true,
+          active: true,
+        },
+      ];
+      data.guests = [
+        {
+          id: 100,
+          meal_id: 1,
+          resident_id: 10,
+          created_at: "2023-06-15T10:00:00Z",
+        },
+      ];
+      data.bills = [
+        { id: "b1", resident_id: 10, amount: "25.50", no_cost: false },
+      ];
+      store.loadData(data);
+
+      store.switchMeals(2);
+
+      expect(store.meal.id).toBe(2);
+      expect(store.bills.size).toBe(0);
+      expect(store.residents.size).toBe(0);
+      expect(store.guests.size).toBe(0);
+    });
+
     it("switchMeals keeps a left-behind node with unsaved menu text", () => {
       const store = createDataStore();
       const node = store.meals[0];
@@ -2118,6 +2159,20 @@ describe("DataStore", () => {
       expect(billsPatchCalls().length).toBe(0);
     });
 
+    it("submitBills is a no-op when no meal is loaded", () => {
+      const store = createDataStore({
+        mealProps: { closed: false },
+        residents: [{ id: 10, meal_id: 1, name: "Alice", can_cook: true }],
+        bills: [{ id: "b1", resident: 10, amount: "5.00", no_cost: false }],
+      });
+      store.teardownMealPage();
+
+      expect(() => store.submitBills()).not.toThrow();
+      expect(
+        axios.mock.calls.filter(([c]) => c && c.method === "patch").length,
+      ).toBe(0);
+    });
+
     it("does not let an untouched invalid legacy row block the save", () => {
       const store = createDataStore({
         mealProps: { closed: false },
@@ -2189,6 +2244,33 @@ describe("DataStore", () => {
           config.url === `/api/v1/meals/${mealId}/bills`,
       );
     }
+
+    it("an edit's debounced save cannot follow a meal switch onto the new meal", () => {
+      const store = storeWithCookBill();
+      const bill = bobsBill(store);
+
+      // The user types, then switches meals before the debounce fires.
+      bill.setAmount("99.00");
+      store.switchMeals(2);
+
+      // The switch flushed the edit to the meal it was typed on.
+      const flushed = billsPatchCalls(1);
+      expect(flushed.length).toBe(1);
+      expect(flushed[0][0].data.bills).toContainEqual({
+        resident_id: 11,
+        amount: "99.00",
+        no_cost: false,
+      });
+
+      // The old rows left with meal 1, so nothing remains that could be
+      // edited — or sent — against meal 2 while it loads. A probe on
+      // 2026-07-22 showed a keystroke in this window sending meal 1's
+      // cook list to meal 2, which the server treats as the complete
+      // list for meal 2.
+      expect(store.bills.size).toBe(0);
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS * 2);
+      expect(billsPatchCalls(2).length).toBe(0);
+    });
 
     it("waits out the debounce after the last edit and sends one request with the final value", () => {
       const store = storeWithCookBill();
@@ -2965,7 +3047,7 @@ describe("DataStore", () => {
       const store = createDataStore();
       axios.mockRejectedValueOnce({ request: {} });
 
-      store.setDescription("typed text");
+      store.setDescriptionOn(store.meal, "typed text");
       await new Promise((r) => setTimeout(r, 0));
       expect(store.meal.descriptionDirty).toBe(true);
 
@@ -2977,7 +3059,7 @@ describe("DataStore", () => {
     it("loadData writes the description again once the text is saved", async () => {
       const store = createDataStore();
 
-      store.setDescription("typed text");
+      store.setDescriptionOn(store.meal, "typed text");
       await new Promise((r) => setTimeout(r, 0));
       expect(store.meal.descriptionDirty).toBe(false);
 
@@ -2990,7 +3072,7 @@ describe("DataStore", () => {
       const store = createDataStore();
       axios.mockRejectedValueOnce({ request: {} });
 
-      store.setDescription("typed text");
+      store.setDescriptionOn(store.meal, "typed text");
       await new Promise((r) => setTimeout(r, 0));
 
       // The user moved on to another meal; the unsaved text stays behind
@@ -3018,6 +3100,74 @@ describe("DataStore", () => {
       store.retryDirtyDescriptions();
 
       expect(axios).not.toHaveBeenCalled();
+    });
+
+    // The menu box binds its callbacks to the meal node it rendered.
+    // A debounced flush that fires after a meal switch must land on the
+    // meal the text was typed on — it used to land on store.meal, which
+    // silently replaced the NEW meal's menu (probe, 2026-07-22).
+
+    it("noteMenuTyping keeps the typed-on node alive across a meal switch", () => {
+      const store = createDataStore();
+      const node = store.meal;
+
+      store.noteMenuTyping(node);
+      store.switchMeals(2);
+
+      expect(isAlive(node)).toBe(true);
+      expect(node.descriptionDirty).toBe(true);
+    });
+
+    it("a late flush saves to the meal it was typed on, not the current one", () => {
+      const store = createDataStore();
+      const node = store.meal;
+
+      store.noteMenuTyping(node);
+      store.switchMeals(2);
+      store.setDescriptionOn(node, "Tacos");
+
+      expect(node.description).toBe("Tacos");
+      const descPatches = axios.mock.calls.filter(
+        ([c]) => c && c.method === "patch" && c.url.includes("/description"),
+      );
+      expect(descPatches.length).toBe(1);
+      expect(descPatches[0][0].url).toBe("/api/v1/meals/1/description");
+    });
+
+    it("a flush onto a dead node is a no-op", () => {
+      const store = createDataStore();
+      const node = store.meal;
+
+      // Not dirty, so the switch prunes the node.
+      store.switchMeals(2);
+      expect(isAlive(node)).toBe(false);
+
+      expect(() => store.setDescriptionOn(node, "Tacos")).not.toThrow();
+      expect(
+        axios.mock.calls.filter(
+          ([c]) => c && c.method === "patch" && c.url.includes("/description"),
+        ).length,
+      ).toBe(0);
+    });
+
+    it("an ack for older text cannot clear a keystroke's protection", async () => {
+      const store = createDataStore();
+      let resolveSave;
+      axios.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveSave = resolve;
+          }),
+      );
+
+      // A save is in flight; a newer keystroke arrives before its flush.
+      store.setDescriptionOn(store.meal, "first");
+      store.noteMenuTyping(store.meal);
+
+      resolveSave({ status: 200 });
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(store.meal.descriptionDirty).toBe(true);
     });
   });
 });

@@ -71,6 +71,15 @@ const Meal = types
       self.descriptionEditVersion += 1;
       self.submitDescription();
     },
+    // A keystroke's protection starts at the keystroke, not at the
+    // debounced flush. Dirty keeps this node alive across a meal
+    // switch, so the flush still has a live node to land on; the
+    // version bump stops an in-flight ack (for older text) from
+    // clearing that protection before the flush arrives.
+    markDescriptionEditing() {
+      self.descriptionDirty = true;
+      self.descriptionEditVersion += 1;
+    },
     submitDescription() {
       // Single-flight: one request at a time. The queued resend in
       // settleDescriptionSave sends whatever was typed meanwhile.

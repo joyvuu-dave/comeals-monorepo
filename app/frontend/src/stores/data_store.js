@@ -1,4 +1,4 @@
-import { types } from "mobx-state-tree";
+import { types, isAlive } from "mobx-state-tree";
 import { v4 } from "uuid";
 import axios from "axios";
 import Cookie from "js-cookie";
@@ -397,10 +397,20 @@ export const DataStore = types
     },
     // The description save pipeline lives on the meal node (issue #35),
     // so unsaved text stays protected even after the user navigates to
-    // another meal.
-    setDescription(val) {
-      self.meal.setDescription(val);
-      return self.meal.description;
+    // another meal. The menu box binds these two actions to the node it
+    // rendered: a debounced flush that fires after a meal switch must
+    // land on the meal the text was typed on — landing on store.meal
+    // silently replaced the NEW meal's menu.
+    setDescriptionOn(node, val) {
+      if (!node || !isAlive(node)) return;
+      node.setDescription(val);
+    },
+    // Called on every keystroke, before any flush: a dirty node
+    // survives the switchMeals prune, so its text still has a live
+    // node to land on.
+    noteMenuTyping(node) {
+      if (!node || !isAlive(node)) return;
+      node.markDescriptionEditing();
     },
     // Resend unsaved menu text (issue #35). The `online` handler calls
     // this: most description save failures are network blips, so the
@@ -479,6 +489,12 @@ export const DataStore = types
       if (self.billsSaveTimer !== null) {
         clearTimeout(self.billsSaveTimer);
         self.billsSaveTimer = null;
+      }
+
+      // No meal, nothing to save to. The timer above is already
+      // cancelled, so a save that outlived the meal page ends here.
+      if (!self.meal) {
+        return;
       }
 
       // Only touched rows carry values to the server, so only they can
@@ -1035,6 +1051,18 @@ export const DataStore = types
       self.meals
         .filter((m) => m.id !== self.meal.id && !m.descriptionDirty)
         .forEach((m) => self.meals.remove(m));
+
+      // The rows belong to the meal we are leaving, so they leave with
+      // it (same rule as teardownMealPage). They used to stay on screen
+      // until the new meal's data arrived, still editable — and a bill
+      // edit made in that window was sent to the NEW meal id with the
+      // OLD meal's cook list as the payload. The server deletes cooks
+      // left out of that list, so one keystroke during a slow load
+      // could rewrite the new meal's bills. The flush above already
+      // captured any pending edit, so clearing here cannot lose one.
+      self.clearBills();
+      self.clearResidents();
+      self.clearGuests();
 
       localforage
         .getItem(id.toString())
