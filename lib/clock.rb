@@ -14,8 +14,10 @@ $stdout.sync = true # Flush output immediately so foreman shows it in real time.
 # In development, start alongside the web server with: bin/dev
 #
 # Environment variables:
-#   CLOCK_FAST=1  Run all tasks every 2 minutes instead of their real schedule.
-#                 Useful for observing tasks fire during a dev session.
+#   CLOCK_FAST    '1' runs all tasks every 2 minutes instead of their real
+#                 schedule, so you can watch them fire during a dev session.
+#                 Defaults to '1' in development and '0' everywhere else.
+#                 Set CLOCK_FAST=0 to use the real schedules in development.
 #
 
 require_relative '../config/environment'

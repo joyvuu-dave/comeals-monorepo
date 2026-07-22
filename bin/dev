@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Pass CLOCK_FAST=1 to fire all tasks every 2 minutes for easy observation.
-# Example: CLOCK_FAST=1 bin/dev
+# In development the clock fires all tasks every 2 minutes (fast mode).
+# Pass CLOCK_FAST=0 to run the real schedules instead.
+# Example: CLOCK_FAST=0 bin/dev
 
 echo ""
 echo "  Comeals:       http://localhost:3036"
