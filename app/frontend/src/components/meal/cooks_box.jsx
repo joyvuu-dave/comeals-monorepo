@@ -24,7 +24,9 @@ const BillEdit = inject("store")(
     // Bills freeze at reconciliation, not at close — the server has
     // always allowed bill edits on a closed meal. Costs are often not
     // known until after the shopping, which is often after the close.
-    const frozen = store.meal.reconciled;
+    // No meal loaded also freezes: rows must never be editable while
+    // there is no meal to save them to.
+    const frozen = !store.meal || store.meal.reconciled;
 
     return (
       <div className="confirm-bar-anchor">

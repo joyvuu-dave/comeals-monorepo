@@ -27,6 +27,10 @@ const AttendeeComponent = inject("store")(
   observer(
     class AttendeeComponent extends Component {
       render() {
+        // A row only makes sense against a loaded meal — every column
+        // below reads meal state. No meal, no row.
+        const meal = this.props.store.meal;
+        if (!meal) return null;
         const resident = this.props.resident;
         if (!isAlive(resident)) return null;
         const guests = resident.guests;
@@ -49,7 +53,7 @@ const AttendeeComponent = inject("store")(
               style={Object.assign(
                 {},
                 resident.attending && !resident.canRemove && styles.disabled,
-                this.props.store.meal.reconciled && styles.disabled,
+                meal.reconciled && styles.disabled,
               )}
             >
               {resident.name}
@@ -78,10 +82,8 @@ const AttendeeComponent = inject("store")(
                   checked={resident ? resident.late : false}
                   onChange={() => resident.toggleLate()}
                   disabled={
-                    this.props.store.meal.reconciled ||
-                    (this.props.store.meal.closed &&
-                      !resident.attending &&
-                      this.props.store.meal.extras < 1)
+                    meal.reconciled ||
+                    (meal.closed && !resident.attending && meal.extras < 1)
                   }
                   aria-label={`Toggle Late for ${resident.name}`}
                 />
@@ -98,13 +100,11 @@ const AttendeeComponent = inject("store")(
                   checked={resident ? resident.vegetarian : false}
                   onChange={() => resident.toggleVeg()}
                   disabled={
-                    this.props.store.meal.reconciled ||
-                    (this.props.store.meal.closed &&
+                    meal.reconciled ||
+                    (meal.closed &&
                       resident.attending &&
                       !resident.canRemove) ||
-                    (this.props.store.meal.closed &&
-                      !resident.attending &&
-                      this.props.store.meal.extras < 1)
+                    (meal.closed && !resident.attending && meal.extras < 1)
                   }
                   aria-label={`Toggle Veg for ${resident.name}`}
                 />
@@ -114,7 +114,7 @@ const AttendeeComponent = inject("store")(
             <td>
               <GuestDropdown
                 resident={resident}
-                reconciled={this.props.store.meal.reconciled}
+                reconciled={meal.reconciled}
                 canAdd={this.props.store.canAdd}
               />
               <button
@@ -123,9 +123,7 @@ const AttendeeComponent = inject("store")(
                 aria-label={`Remove Guest of ${resident.name}`}
                 style={styles.monospace}
                 onClick={() => resident.removeGuest()}
-                disabled={
-                  this.props.store.meal.reconciled || !resident.canRemoveGuest
-                }
+                disabled={meal.reconciled || !resident.canRemoveGuest}
               />
             </td>
           </tr>

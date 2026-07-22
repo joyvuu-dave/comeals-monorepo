@@ -29,7 +29,9 @@ const Extras = inject("store")(
                 type="checkbox"
                 value={val}
                 checked={store.meal ? store.meal.extras === val : false}
-                onChange={(e) => store.meal.setExtras(e.target.value)}
+                onChange={(e) =>
+                  store.meal && store.meal.setExtras(e.target.value)
+                }
                 disabled={
                   store.meal
                     ? store.meal.reconciled || store.meal.extrasPending

@@ -1152,6 +1152,16 @@ export const DataStore = types
       self.meals
         .filter((m) => !m.descriptionDirty)
         .forEach((m) => self.meals.remove(m));
+
+      // The rows belong to the meal, so they leave with it. Rows left
+      // behind crashed the meal page on its next mount: the first render
+      // showed them before goToMeal ran, and a row read
+      // store.meal.reconciled on the null meal (production, 2026-07-22).
+      // The flush above already captured its payload, so clearing here
+      // cannot lose an edit.
+      self.clearBills();
+      self.clearResidents();
+      self.clearGuests();
     },
     // The meal page calls this on mount (issue #38): the calendar's
     // channels must not keep firing month refetches from the meal page.

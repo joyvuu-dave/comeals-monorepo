@@ -1271,6 +1271,51 @@ describe("DataStore", () => {
       expect(isAlive(oldNode)).toBe(false);
     });
 
+    it("teardownMealPage clears the meal-scoped collections", () => {
+      // Rows left behind after the meal is nulled crashed the meal page
+      // on re-entry (production, 2026-07-22): the first render showed the
+      // stale rows before goToMeal ran, and a row read
+      // store.meal.reconciled on the null meal.
+      const store = createDataStore();
+      const data = mealData(1);
+      data.residents = [
+        {
+          id: 10,
+          meal_id: 1,
+          name: "Alice",
+          attending: true,
+          attending_at: null,
+          late: false,
+          vegetarian: false,
+          can_cook: true,
+          active: true,
+        },
+      ];
+      data.guests = [
+        {
+          id: 100,
+          meal_id: 1,
+          resident_id: 10,
+          created_at: "2023-06-15T10:00:00Z",
+        },
+      ];
+      data.bills = [
+        { id: "b1", resident_id: 10, amount: "25.50", no_cost: false },
+      ];
+      store.loadData(data);
+
+      expect(store.residents.size).toBe(1);
+      expect(store.guests.size).toBe(1);
+      expect(store.bills.size).toBe(3); // 1 from data + 2 blank rows
+
+      store.teardownMealPage();
+
+      expect(store.meal).toBeNull();
+      expect(store.bills.size).toBe(0);
+      expect(store.residents.size).toBe(0);
+      expect(store.guests.size).toBe(0);
+    });
+
     it("teardownMealPage keeps a node holding unsaved menu text", () => {
       const store = createDataStore();
       const node = store.meals[0];
