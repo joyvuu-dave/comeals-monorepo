@@ -19,7 +19,19 @@ default: &default
   encoding: unicode
   # For details on connection pooling, see Rails configuration guide
   # http://guides.rubyonrails.org/configuring.html#database-pooling
-  pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 1 } %>
+  #
+  # Deliberately NOT tied to RAILS_MAX_THREADS. Those are two different
+  # things that used to share one env var: threads are how many requests
+  # run at once, the pool is how many database connections exist. The app
+  # still serves one request at a time (config/puma.rb, 1 thread, 0
+  # workers) — this is not a step toward concurrent requests.
+  #
+  # 2, not 1, because solid_cache trims old entries on a background thread
+  # that needs its own connection. With a pool of 1 that thread competes
+  # with the request thread for the only connection there is. Two is the
+  # smallest number that gives it one. If ConnectionTimeoutError ever shows
+  # up in the logs, raise RAILS_DB_POOL rather than editing this line.
+  pool: <%= ENV.fetch("RAILS_DB_POOL") { 2 } %>
 
 development:
   <<: *default
