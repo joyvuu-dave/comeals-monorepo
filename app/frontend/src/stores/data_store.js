@@ -7,7 +7,7 @@ import Meal from "./meal";
 import ResidentStore from "./resident_store";
 import BillStore from "./bill_store";
 import GuestStore from "./guest_store";
-import EventSource from "./event_source";
+import * as monthCache from "./month_cache";
 
 import Pusher from "pusher-js";
 import localforage from "localforage";
@@ -29,15 +29,10 @@ import toastStore from "./toast_store";
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-// In-memory cache for calendar month data, keyed identically to localforage.
-// Provides synchronous access for instant month navigation.
-const monthCache = new Map();
-
-// Monotonic version per cache key. Incremented on Pusher invalidation.
-// Prefetch callbacks compare against the version captured at call-start;
-// if it changed, a real-time update arrived mid-flight and the stale
-// response is silently discarded.
-const invalidationVersion = new Map();
+// The in-memory calendar month cache and its per-key invalidation
+// versions live in ./month_cache (imported above as `monthCache`).
+// It is a capped LRU; IndexedDB keeps the persistent copies under
+// the same keys.
 
 // Pusher subscriptions for adjacent months (cache invalidation only).
 var adjacentChannels = [];
@@ -51,7 +46,7 @@ var hostsInFlight = null;
 // starts; the resolve path compares against the captured `versionAtStart`
 // and discards a response whose version was superseded by a later fetch
 // (Pusher invalidation + refetch while an older fetch is still in flight).
-// Same pattern as `invalidationVersion` above for the month cache.
+// Same pattern as the month cache's invalidation versions.
 var hostsVersion = 0;
 
 // Monotonic counter for month navigation, same pattern as `hostsVersion`.
@@ -75,33 +70,31 @@ var hostsChannel = null;
 const MEAL_RETRY_BASE_MS = 2000;
 const MEAL_RETRY_CAP_MS = 30000;
 
-function monthCacheKey(communityId, year, month) {
-  return `community-${communityId}-calendar-${year}-${month}`;
-}
-
 function invalidateMonth(communityId, year, month) {
-  var key = monthCacheKey(communityId, year, month);
-  monthCache.delete(key);
+  var key = monthCache.keyFor(communityId, year, month);
+  monthCache.remove(key);
   localforage.removeItem(key);
-  invalidationVersion.set(key, (invalidationVersion.get(key) || 0) + 1);
+  monthCache.bumpVersion(key);
 }
 
 function prefetchMonthData(date) {
   var myDate = dayjs(date);
-  var key = monthCacheKey(
+  var key = monthCache.keyFor(
     Cookie.get("community_id"),
     myDate.format("YYYY"),
     myDate.format("M"),
   );
 
-  if (monthCache.has(key)) return;
+  // The read also marks the month as recently used, so an adjacent
+  // month that is already cached stays away from the eviction end.
+  if (monthCache.get(key) !== undefined) return;
 
   logEvent("prefetch-start", { date });
-  var versionAtStart = invalidationVersion.get(key) || 0;
+  var versionAtStart = monthCache.versionFor(key);
 
   localforage.getItem(key).then(function (value) {
     // Discard if a Pusher invalidation arrived since we started
-    if ((invalidationVersion.get(key) || 0) !== versionAtStart) return;
+    if (monthCache.versionFor(key) !== versionAtStart) return;
 
     if (value !== null && typeof value !== "undefined") {
       monthCache.set(key, value);
@@ -113,7 +106,7 @@ function prefetchMonthData(date) {
       .then(function (response) {
         if (response.status === 200) {
           // Discard if a Pusher invalidation arrived since we started
-          if ((invalidationVersion.get(key) || 0) !== versionAtStart) return;
+          if (monthCache.versionFor(key) !== versionAtStart) return;
           monthCache.set(key, response.data);
           localforage.setItem(key, response.data);
         }
@@ -154,7 +147,6 @@ export const DataStore = types
     }),
     calendarName: types.optional(types.string, ""),
     userName: types.optional(types.string, ""),
-    eventSources: types.optional(types.array(EventSource), []),
     calendarEvents: types.optional(types.array(types.frozen()), []),
     // Monotonic counter bumped whenever calendarEvents changes (replace or
     // clear). The Calendar component is wrapped in React.memo and diffs a
@@ -739,7 +731,11 @@ export const DataStore = types
             // caching it could overwrite fresher same-month data.
             if (versionAtStart !== monthFetchVersion) return;
             var respData = response.data;
-            var key = monthCacheKey(respData.id, respData.year, respData.month);
+            var key = monthCache.keyFor(
+              respData.id,
+              respData.year,
+              respData.month,
+            );
             monthCache.set(key, respData);
             localforage.setItem(key, respData).then(function () {
               if (versionAtStart !== monthFetchVersion) return;
@@ -1214,15 +1210,16 @@ export const DataStore = types
       self.currentDate = date;
 
       var myDate = dayjs(date);
-      var key = monthCacheKey(
+      var key = monthCache.keyFor(
         Cookie.get("community_id"),
         myDate.format("YYYY"),
         myDate.format("M"),
       );
 
       // Synchronous in-memory cache: instant render, no blank flash
-      if (monthCache.has(key)) {
-        self.loadMonth(monthCache.get(key));
+      var cached = monthCache.get(key);
+      if (cached !== undefined) {
+        self.loadMonth(cached);
         self.loadMonthAsync();
         return;
       }
