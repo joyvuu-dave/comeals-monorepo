@@ -4,52 +4,13 @@
 
 Comeals is a meal management and cost-splitting application for a co-housing community. Residents sign up for communal dinners, volunteer to cook, and the cost is split proportionally among attendees. The system tracks attendance, cooking costs, and financial balances across billing periods (reconciliations).
 
-This is a monorepo containing a Rails 8.1 API backend (Ruby 4.0) and a React 19 + MobX SPA frontend. In production, Rails serves the SPA from `public/` and the API from `/api/v1/`. No Express, no CORS, one Heroku dyno.
-
-## Project Structure
-
-```
-├── app/
-│   ├── admin/            # ActiveAdmin resource definitions
-│   ├── controllers/      # Rails API controllers + FallbackController (SPA serving)
-│   ├── frontend/         # React SPA source (Vite root)
-│   │   ├── src/          # Components, stores, helpers, styles
-│   │   └── index.html    # SPA entry point
-│   ├── mailers/
-│   ├── models/
-│   ├── serializers/
-│   └── views/
-├── config/               # Rails configuration
-├── db/                   # Migrations, schema, seeds
-├── lib/                  # Clock process, rake tasks
-├── public/               # Static assets + Vite build output (index.html, assets/)
-├── spec/                 # RSpec tests (Ruby)
-├── tests/                # Frontend tests
-│   ├── e2e/              # Playwright E2E tests
-│   ├── unit/             # Vitest unit tests
-│   ├── fixtures/         # Test data
-│   └── helpers/          # Test utilities
-├── package.json          # Node dependencies and scripts
-├── vite.config.js        # Vite: root=app/frontend, build to public/
-├── vitest.config.js      # Vitest: jsdom, tests/unit/**
-├── eslint.config.js      # ESLint for frontend source
-├── playwright.config.js  # Playwright E2E config
-├── Gemfile               # Ruby dependencies
-├── bin/check             # Comprehensive project health check
-└── bin/deploy            # Single-app Heroku deploy script
-```
+In production, Rails serves the SPA from `public/` and the API from `/api/v1/`. No Express, no CORS, one Heroku dyno.
 
 ## Development Environment
 
 ```bash
 bin/dev                    # Starts Rails (3000) + Vite (3036) + clock via foreman
 bin/check                  # Full health check: tests, linters, security, freshness
-bundle exec rspec          # Run Ruby tests
-npm test                   # Run frontend unit tests (Vitest)
-npm run lint               # Run ESLint on frontend source
-npm run test:e2e           # Run Playwright E2E tests
-npm run build              # Vite build -> public/
-bundle exec rails c        # Rails console
 ```
 
 ### Local URLs
