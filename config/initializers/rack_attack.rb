@@ -5,7 +5,7 @@
 # legitimate resident fumbling their password will never trip them. Anything
 # that does trip them is almost certainly a bot.
 #
-# Counters live in Rails.cache (dalli / memcached in production).
+# Counters live in Rails.cache (solid_cache, i.e. Postgres, in production).
 
 module Rack
   class Attack

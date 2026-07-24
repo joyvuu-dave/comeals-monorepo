@@ -1,0 +1,32 @@
+# Solid Cache stores cache entries in the solid_cache_entries table.
+#
+# There is deliberately no `database:` key here. That key is what makes
+# solid_cache open a second database connection; without it, it uses the
+# primary connection, which is what we want — see the comment in
+# db/migrate/20260724120000_create_solid_cache_entries.rb.
+#
+# max_size is the cap on total cache size. When writes push past it,
+# solid_cache trims the oldest entries. 64 MB is generous for this app:
+# the cache holds calendar JSON (a few KB per month, a handful of months
+# in play at a time), one meal-form blob per meal, and rack_attack
+# counters. The whole production database is about 33 MB, so this bounds
+# the cache at roughly twice the rest of the data even in the worst case.
+#
+# max_age is a hard expiry floor. Every entry we write either has its own
+# expires_in (the calendar's 1 hour) or is deleted explicitly on change
+# (show_cooks). A day is far past both, so this only catches entries that
+# somehow escape both paths.
+default: &default
+  store_options:
+    max_age: <%= 1.day.to_i %>
+    max_size: <%= 64.megabytes %>
+    namespace: <%= Rails.env %>
+
+development:
+  <<: *default
+
+test:
+  <<: *default
+
+production:
+  <<: *default

@@ -208,7 +208,7 @@ class Community < ApplicationRecord
 
   # Cache key for a specific calendar month. Same format as the Pusher channel
   # name in data_store.js — one key serves both cache and real-time notification.
-  # Stale cache across deploys is handled by bin/deploy flushing Memcachier.
+  # Stale cache across deploys is handled by bin/deploy clearing the cache.
   def calendar_cache_key(year, month)
     "community-#{id}-calendar-#{year}-#{month}"
   end

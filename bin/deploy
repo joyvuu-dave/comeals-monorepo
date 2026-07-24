@@ -257,7 +257,7 @@ deploy_maintenance() {
 }
 
 post_deploy_tasks() {
-  info "Flushing MemCachier..."
+  info "Clearing the cache..."
   if heroku run bin/rails runner 'Rails.cache.clear' -a "$APP"; then
     ok "Cache flushed"
   else

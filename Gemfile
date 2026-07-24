@@ -45,7 +45,6 @@ gem 'jwt'
 # deliberately loose — only genuinely abusive traffic should trip them.
 gem 'rack-attack'
 
-gem 'dalli', '~> 3.2'
 gem 'devise'
 gem 'friendly_id'
 gem 'goldiloader'
@@ -54,6 +53,11 @@ gem 'letter_opener_web', group: :development
 gem 'pusher'
 gem 'scrypt'
 gem 'skylight', group: :production
+
+# Production cache. The solid_cache_entries table lives in the primary
+# Postgres database — the whole database is tiny, so a second one would be
+# cost and moving parts for nothing. See config/solid_cache.yml.
+gem 'solid_cache'
 
 # Use ActiveStorage variant
 # gem 'mini_magick', '~> 4.8'

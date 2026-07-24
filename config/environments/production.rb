@@ -53,15 +53,10 @@ Rails.application.configure do
   # Prepend all log lines with the following tags.
   config.log_tags = [:request_id]
 
-  # Use a different cache store in production.
-  config.cache_store = :mem_cache_store,
-                       (ENV['MEMCACHIER_SERVERS'] || '').split(','),
-                       { username: ENV.fetch('MEMCACHIER_USERNAME', nil),
-                         password: ENV.fetch('MEMCACHIER_PASSWORD', nil),
-                         failover: true,
-                         socket_timeout: 1.5,
-                         socket_failure_delay: 0.2,
-                         down_retry_delay: 60 }
+  # Use a different cache store in production. Entries live in the
+  # solid_cache_entries table in the primary database — no separate cache
+  # database, no add-on. Sizes and expiry are in config/solid_cache.yml.
+  config.cache_store = :solid_cache_store
 
   config.action_mailer.perform_caching = false
 
