@@ -549,4 +549,100 @@ RSpec.describe Resident do
       expect(resident.balance_for_reconciliation(reconciliation)).to eq(BigDecimal('0'))
     end
   end
+
+  # ---------------------------------------------------------------------------
+  # Deletion safeguards
+  # ---------------------------------------------------------------------------
+  describe 'deletion' do
+    let(:resident) { create(:resident, community: community, unit: unit) }
+
+    # Ledger rows are permanent, so a resident who has any can never be
+    # deleted — only marked inactive. One example per ledger association.
+    it 'cannot be destroyed with a bill' do
+      meal = create(:meal, community: community)
+      bill = create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('50'))
+
+      expect(resident.destroy).to be false
+      expect(resident.errors[:base]).to include('Cannot delete record because dependent bills exist')
+      expect(described_class.exists?(resident.id)).to be true
+      expect(Bill.exists?(bill.id)).to be true
+    end
+
+    it 'cannot be destroyed with meal attendance' do
+      meal = create(:meal, community: community)
+      create(:meal_resident, meal: meal, resident: resident, community: community)
+
+      expect(resident.destroy).to be false
+      expect(resident.errors[:base]).to include('Cannot delete record because dependent meal residents exist')
+      expect(described_class.exists?(resident.id)).to be true
+    end
+
+    it 'cannot be destroyed while hosting guests' do
+      meal = create(:meal, community: community)
+      create(:guest, meal: meal, resident: resident)
+
+      expect(resident.destroy).to be false
+      expect(resident.errors[:base]).to include('Cannot delete record because dependent guests exist')
+      expect(described_class.exists?(resident.id)).to be true
+    end
+
+    it 'cannot be destroyed with a reconciliation balance' do
+      reconciliation = create(:reconciliation, community: community)
+      create(:reconciliation_balance, reconciliation: reconciliation, resident: resident)
+
+      expect(resident.destroy).to be false
+      expect(resident.errors[:base])
+        .to include('Cannot delete record because dependent reconciliation balances exist')
+      expect(described_class.exists?(resident.id)).to be true
+    end
+
+    it 'cannot be destroyed even after being marked inactive' do
+      meal = create(:meal, community: community)
+      create(:meal_resident, meal: meal, resident: resident, community: community)
+      resident.update!(active: false)
+
+      expect(resident.destroy).to be false
+      expect(described_class.exists?(resident.id)).to be true
+    end
+
+    it 'raises from destroy! when ledger rows exist' do
+      meal = create(:meal, community: community)
+      create(:meal_resident, meal: meal, resident: resident, community: community)
+
+      expect { resident.destroy! }.to raise_error(ActiveRecord::RecordNotDestroyed)
+      expect(described_class.exists?(resident.id)).to be true
+    end
+
+    # The model guard runs in callbacks, which delete/delete_all skip. The
+    # database foreign key is the last line of defense. The savepoint keeps
+    # the raised error from poisoning the spec's wrapping transaction.
+    it 'is protected by the database foreign key when callbacks are skipped' do
+      meal = create(:meal, community: community)
+      create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('50'))
+
+      expect do
+        ActiveRecord::Base.transaction(requires_new: true) { resident.delete }
+      end.to raise_error(ActiveRecord::InvalidForeignKey)
+      expect(described_class.exists?(resident.id)).to be true
+    end
+
+    # A resident with no ledger rows (one created by mistake) can still be
+    # destroyed. Sessions, the balance cache, and reservations go with them —
+    # none of that is ledger data.
+    it 'can be destroyed with no ledger rows, taking sessions, balance cache, and reservations along' do
+      ResidentBalance.create!(resident: resident, amount: BigDecimal('0'))
+      create(:guest_room_reservation, resident: resident, community: community)
+      create(:common_house_reservation, resident: resident, community: community)
+      key_ids = resident.keys.ids
+      expect(key_ids).not_to be_empty
+
+      resident_id = resident.id
+      expect { resident.destroy! }.to change(described_class, :count).by(-1)
+
+      expect(Key.where(id: key_ids)).to be_empty
+      expect(ResidentBalance.where(resident_id: resident_id)).to be_empty
+      expect(GuestRoomReservation.where(resident_id: resident_id)).to be_empty
+      expect(CommonHouseReservation.where(resident_id: resident_id)).to be_empty
+    end
+  end
 end

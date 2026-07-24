@@ -102,6 +102,55 @@ RSpec.describe Unit do
   end
 
   # ---------------------------------------------------------------------------
+  # Deletion safeguards
+  # ---------------------------------------------------------------------------
+  describe 'deletion' do
+    # Old bills and meals show the unit's name forever, so a unit with
+    # residents must never be deleted. The way to retire a unit is to mark
+    # its residents inactive.
+    it 'cannot be destroyed while it has residents' do
+      resident = create(:resident, community: community, unit: unit)
+
+      expect(unit.destroy).to be false
+      expect(unit.errors[:base]).to include('Cannot delete record because dependent residents exist')
+      expect(described_class.exists?(unit.id)).to be true
+      expect(Resident.exists?(resident.id)).to be true
+    end
+
+    it 'cannot be destroyed even when all of its residents are inactive' do
+      create(:resident, community: community, unit: unit, active: false)
+
+      expect(unit.destroy).to be false
+      expect(described_class.exists?(unit.id)).to be true
+    end
+
+    it 'raises from destroy! while it has residents' do
+      create(:resident, community: community, unit: unit)
+
+      expect { unit.destroy! }.to raise_error(ActiveRecord::RecordNotDestroyed)
+      expect(described_class.exists?(unit.id)).to be true
+    end
+
+    it 'can be destroyed when it has no residents' do
+      empty_unit = create(:unit, community: community)
+
+      expect { empty_unit.destroy! }.to change(described_class, :count).by(-1)
+    end
+
+    # The model guard runs in callbacks, which delete/delete_all skip. The
+    # database foreign key is the last line of defense. The savepoint keeps
+    # the raised error from poisoning the spec's wrapping transaction.
+    it 'is protected by the database foreign key when callbacks are skipped' do
+      create(:resident, community: community, unit: unit)
+
+      expect do
+        ActiveRecord::Base.transaction(requires_new: true) { unit.delete }
+      end.to raise_error(ActiveRecord::InvalidForeignKey)
+      expect(described_class.exists?(unit.id)).to be true
+    end
+  end
+
+  # ---------------------------------------------------------------------------
   # Real-time notifications
   # ---------------------------------------------------------------------------
   describe 'after_commit :notify_residents_update' do

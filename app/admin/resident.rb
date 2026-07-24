@@ -10,7 +10,25 @@ ActiveAdmin.register Resident do
   config.sort_order = 'name_asc'
 
   # ACTIONS
-  actions :all, except: [:destroy]
+  # Destroy is allowed. The model refuses to delete a resident who has ledger
+  # rows — bills, attendance, guests, or settled balances (restrict_with_error).
+  # Only a resident created by mistake, with no ledger history, can actually
+  # be removed. Everyone else is retired with the active flag.
+  actions :all
+
+  # On a refused delete, show the model's own error ("Cannot delete record
+  # because dependent bills exist") instead of the generic
+  # "could not be destroyed" flash.
+  controller do
+    def destroy
+      destroy! do |_success, failure|
+        failure.html do
+          flash[:alert] = resource.errors.full_messages.to_sentence
+          redirect_to collection_path
+        end
+      end
+    end
+  end
 
   # INDEX
   index do

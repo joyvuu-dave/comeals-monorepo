@@ -49,13 +49,23 @@ class Resident < ApplicationRecord
   belongs_to :community
   belongs_to :unit
 
+  # Ledger rows are permanent. A resident who has any of these can never be
+  # deleted — mark them inactive instead. restrict_with_error makes destroy
+  # fail with a clear error instead of silently deleting open-meal rows or
+  # hitting a raw foreign key error on reconciled ones. Declared before the
+  # destroy cascades below so these checks run first.
+  has_many :bills, dependent: :restrict_with_error
+  has_many :meal_residents, dependent: :restrict_with_error
+  has_many :meals, through: :meal_residents
+  has_many :guests, dependent: :restrict_with_error
+  has_many :reconciliation_balances, dependent: :restrict_with_error
+
+  # Not ledger data: login sessions, the rebuildable balance cache, and
+  # reservations (freely edited and deleted in the app). These go with the
+  # resident. Only a resident with no ledger rows — one created by mistake —
+  # can be destroyed at all.
   has_many :keys, as: :identity, dependent: :destroy
   has_one :resident_balance, dependent: :destroy
-  has_many :bills, dependent: :destroy
-  has_many :meal_residents, dependent: :destroy
-  has_many :meals, through: :meal_residents
-  has_many :guests, dependent: :destroy
-  has_many :reconciliation_balances, dependent: :destroy
   has_many :guest_room_reservations, dependent: :destroy
   has_many :common_house_reservations, dependent: :destroy
 

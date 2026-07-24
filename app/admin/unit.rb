@@ -9,7 +9,24 @@ ActiveAdmin.register Unit do
   config.sort_order = 'name_asc'
 
   # ACTIONS
-  actions :all, except: [:destroy]
+  # Destroy is allowed. The model refuses to delete a unit that still has
+  # residents (restrict_with_error), so only an empty unit — one created by
+  # mistake — can actually be removed.
+  actions :all
+
+  # On a refused delete, show the model's own error ("Cannot delete record
+  # because dependent residents exist") instead of the generic
+  # "could not be destroyed" flash.
+  controller do
+    def destroy
+      destroy! do |_success, failure|
+        failure.html do
+          flash[:alert] = resource.errors.full_messages.to_sentence
+          redirect_to collection_path
+        end
+      end
+    end
+  end
 
   # INDEX
   index do

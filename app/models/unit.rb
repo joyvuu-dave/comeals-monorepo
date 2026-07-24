@@ -25,7 +25,12 @@ class Unit < ApplicationRecord
     %w[id community_id created_at name updated_at]
   end
 
-  has_many :residents, dependent: :destroy
+  # A unit with residents can never be deleted. Old bills and meals show the
+  # unit's name forever, and every resident (active or not) must keep a unit.
+  # To retire a unit, mark its residents inactive — it then drops out of the
+  # hosts dropdown on its own. Only an empty unit, one created by mistake,
+  # can be destroyed.
+  has_many :residents, dependent: :restrict_with_error
   belongs_to :community
 
   validates :name, uniqueness: true
