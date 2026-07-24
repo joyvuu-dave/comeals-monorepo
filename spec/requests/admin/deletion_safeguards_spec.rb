@@ -81,6 +81,30 @@ RSpec.describe 'Admin deletion safeguards' do
     end
   end
 
+  describe 'DELETE /meals/:id' do
+    let(:resident) { create(:resident, community: community, unit: unit) }
+
+    it 'refuses while the meal is closed, says why, and leaves the ledger intact' do
+      meal = create(:meal, community: community)
+      create(:meal_resident, meal: meal, resident: resident, community: community)
+      bill = create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('50'))
+      meal.update!(closed: true)
+
+      expect { delete "/meals/#{meal.id}" }.not_to change(Meal, :count)
+      expect(response).to redirect_to(admin_meal_path(meal))
+      expect(flash[:alert]).to eq('Meal has been closed. Reopen it before deleting.')
+      expect(Bill.exists?(bill.id)).to be true
+    end
+
+    it 'deletes an open meal (a canceled dinner) along with its signups' do
+      meal = create(:meal, community: community)
+      create(:meal_resident, meal: meal, resident: resident, community: community)
+
+      expect { delete "/meals/#{meal.id}" }.to change(Meal, :count).by(-1)
+      expect(flash[:notice]).to include('destroyed')
+    end
+  end
+
   describe 'authorization' do
     it 'does not let a non-superuser delete even an empty unit' do
       sign_in create(:admin_user, community: community, superuser: false)

@@ -911,4 +911,68 @@ RSpec.describe Meal do
       end
     end
   end
+
+  # ---------------------------------------------------------------------------
+  # Deletion safeguards
+  # ---------------------------------------------------------------------------
+  describe 'deletion' do
+    let(:resident) { create(:resident, community: community, unit: unit) }
+
+    def build_meal_with_ledger
+      meal = create(:meal, community: community)
+      create(:meal_resident, meal: meal, resident: resident, community: community)
+      create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('50'))
+      meal
+    end
+
+    it 'can be destroyed while open, removing its signups and bills' do
+      meal = build_meal_with_ledger
+
+      expect { meal.reload.destroy! }.to change(described_class, :count).by(-1)
+      expect(MealResident.where(meal_id: meal.id)).to be_empty
+      expect(Bill.where(meal_id: meal.id)).to be_empty
+    end
+
+    it 'cannot be destroyed while closed' do
+      meal = build_meal_with_ledger
+      meal.update!(closed: true)
+
+      expect(meal.reload.destroy).to be false
+      expect(meal.errors[:base]).to include('Meal has been closed. Reopen it before deleting.')
+      expect(described_class.exists?(meal.id)).to be true
+    end
+
+    # Regression for the prepend on the destroy guards. Without prepend, the
+    # bills cascade runs before the guard aborts — and inside an enclosing
+    # transaction (like this spec's) the swallowed inner rollback never
+    # reaches the outer transaction, so the deleted bills stay deleted.
+    it 'leaves attendance and bills untouched when the destroy is refused' do
+      meal = build_meal_with_ledger
+      meal.update!(closed: true)
+
+      meal.reload.destroy
+
+      expect(MealResident.exists?(meal_id: meal.id)).to be true
+      expect(Bill.exists?(meal_id: meal.id)).to be true
+    end
+
+    it 'reports the reconciled message for a meal that is both closed and reconciled' do
+      meal = build_meal_with_ledger
+      meal.update!(closed: true)
+      Reconciliation.create!(community: community, end_date: Date.yesterday)
+      meal.reload
+
+      expect(meal.destroy).to be false
+      expect(meal.errors[:base]).to include('Meal has been reconciled.')
+      expect(Bill.exists?(meal_id: meal.id)).to be true
+    end
+
+    it 'can be destroyed after being reopened' do
+      meal = build_meal_with_ledger
+      meal.update!(closed: true)
+      meal.update!(closed: false)
+
+      expect { meal.reload.destroy! }.to change(described_class, :count).by(-1)
+    end
+  end
 end

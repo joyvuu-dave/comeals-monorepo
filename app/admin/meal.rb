@@ -31,6 +31,18 @@ ActiveAdmin.register Meal do
       redirect_to admin_meal_path(resource),
                   alert: 'This meal is reconciled and cannot be modified.'
     end
+
+    # On a refused delete (closed meal), show the model's own error instead
+    # of the generic "could not be destroyed" flash. Reconciled meals never
+    # reach this — block_if_reconciled redirects first.
+    def destroy
+      destroy! do |_success, failure|
+        failure.html do
+          flash[:alert] = resource.errors.full_messages.to_sentence
+          redirect_to admin_meal_path(resource)
+        end
+      end
+    end
   end
 
   # INDEX

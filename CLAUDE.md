@@ -135,6 +135,7 @@ SETTLEMENT (reconciliation): Rounded to cents using largest-remainder allocation
 - **Vite builds to `public/` with `emptyOutDir: false`.** Critical: Vite must not wipe Rails error pages.
 - **FallbackController serves the SPA.** Rails static file middleware doesn't serve dotfile directories, so `.vite/manifest.json` needs a controller action.
 - **ActiveAdmin uses subdomain routing (`admin.comeals.com` in prod, `admin.lvh.me:3000` in dev), not paths.** Restored in 30e4a0e after a path-based experiment. Admin is served by Rails directly — the Vite proxy only handles `/api`. The SPA catch-all carries the subdomain check in its own route-level constraint because Rails replaces a scope's lambda constraint instead of merging it (#18).
+- **Deletion policy: refuse harmful deletes, allow mistake cleanup.** Units with residents, residents with ledger rows (bills, attendance, guests, settled balances), and closed or reconciled meals all refuse destroy at the model level. Database foreign keys backstop paths that skip callbacks. Admin destroy is enabled and shows the refusal reason. Retire residents and units with the `active` flag; reopen a meal that never happened to delete it. Destroy guards on Meal and Reconciliation must stay `prepend: true` — the dependent cascades run first otherwise, and inside an enclosing transaction the swallowed inner rollback leaves partial deletes (#26).
 
 ## Heroku Deployment
 

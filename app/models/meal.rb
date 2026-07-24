@@ -103,7 +103,16 @@ class Meal < ApplicationRecord
   before_save :conditionally_set_max
   before_save :conditionally_set_closed_at
   before_create :set_cap
-  before_destroy :reject_destroy_if_reconciled
+  # Both destroy guards are prepended: the has_many declarations above
+  # register their dependent cascades first, so without prepend a destroy
+  # attempt deletes the meal's bills before the guard aborts. In a request
+  # that partial delete rolls back, but inside an enclosing transaction
+  # (console, rake task, test transaction) the swallowed inner rollback
+  # never reaches the outer transaction and the bills stay deleted.
+  # Reconciled is declared second so it runs first — its message wins for
+  # meals that are both reconciled and closed.
+  before_destroy :reject_destroy_if_closed, prepend: true
+  before_destroy :reject_destroy_if_reconciled, prepend: true
 
   accepts_nested_attributes_for :guests, allow_destroy: true, reject_if: proc { |attributes|
     attributes['resident_id'].blank?
@@ -253,6 +262,17 @@ class Meal < ApplicationRecord
     return unless reconciled?
 
     errors.add(:base, 'Meal has been reconciled.')
+    throw(:abort)
+  end
+
+  # A closed meal's attendance is frozen (ClosedMealAttendanceFreeze), so its
+  # destroy could never complete anyway — the cascade would abort on the
+  # first frozen row. Refuse up front with a clear reason instead. To delete
+  # a closed meal that never happened, reopen it first — two deliberate steps.
+  def reject_destroy_if_closed
+    return unless closed?
+
+    errors.add(:base, 'Meal has been closed. Reopen it before deleting.')
     throw(:abort)
   end
 
