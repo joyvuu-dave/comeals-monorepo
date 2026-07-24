@@ -2,6 +2,7 @@ import React, { Component, Suspense } from "react";
 import { inject, observer } from "mobx-react";
 import { Routes, Route } from "react-router";
 import { withRouter } from "../../helpers/with_router";
+import { MEAL_HISTORY_PATH } from "../../routes";
 import dayjs from "dayjs";
 import Modal from "react-modal";
 
@@ -203,7 +204,7 @@ const DateBox = inject("store")(
               <div>
                 <Routes>
                   <Route
-                    path="history/*"
+                    path={MEAL_HISTORY_PATH}
                     element={
                       <Modal
                         isOpen={true}

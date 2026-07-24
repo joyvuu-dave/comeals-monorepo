@@ -241,4 +241,35 @@ test.describe("Navigation", () => {
     expect(JSON.parse(to42[0].body).description).toBe("Tacos");
     expect(to43).toEqual([]);
   });
+
+  test("a URL without a trailing slash redirects to the slashed URL", async ({
+    page,
+  }) => {
+    // The TrailingSlash component adds the slash on every navigation.
+    // The calendar relies on it: opening a modal pushes a URL built by
+    // string concatenation, which has no trailing slash.
+    await page.goto("/meals/42/edit");
+    await expect(page).toHaveURL(/\/meals\/42\/edit\/$/, { timeout: 10000 });
+
+    // The meal page rendered after the redirect
+    await expect(page.locator("svg.fa-chevron-right").first()).toBeVisible({
+      timeout: 10000,
+    });
+  });
+
+  test("a history deep link opens the modal on a fresh page load", async ({
+    page,
+  }) => {
+    // Exercises the splat route plus the descendant history route from
+    // a cold load — not via in-app navigation like the test above.
+    await page.goto("/meals/42/edit/history/42/");
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.locator(".ReactModal__Content--after-open")).toBeVisible({
+      timeout: 10000,
+    });
+    await expect(
+      page.getByRole("cell", { name: "signed up", exact: true }),
+    ).toBeVisible({ timeout: 5000 });
+  });
 });

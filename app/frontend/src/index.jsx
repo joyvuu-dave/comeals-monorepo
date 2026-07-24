@@ -44,6 +44,7 @@ import PrivateRoute from "./components/app/private_route";
 
 import ScrollToTop from "./components/app/scroll_to_top";
 import ErrorBoundary from "./components/app/error_boundary";
+import { CALENDAR_PATH, MEAL_EDIT_PATH, LOGIN_PATH } from "./routes";
 
 function TrailingSlash() {
   var location = useLocation();
@@ -132,7 +133,7 @@ document.addEventListener("DOMContentLoaded", () => {
               <ErrorBoundary>
                 <Routes>
                   <Route
-                    path="/calendar/:type/:date/:modal?/:view?/:id?"
+                    path={CALENDAR_PATH}
                     element={
                       <PrivateRoute>
                         <Calendar />
@@ -140,14 +141,14 @@ document.addEventListener("DOMContentLoaded", () => {
                     }
                   />
                   <Route
-                    path="/meals/:id/edit/*"
+                    path={MEAL_EDIT_PATH}
                     element={
                       <PrivateRoute>
                         <MealsEdit />
                       </PrivateRoute>
                     }
                   />
-                  <Route path="/:modal?/:token?" element={<ResidentsLogin />} />
+                  <Route path={LOGIN_PATH} element={<ResidentsLogin />} />
                 </Routes>
               </ErrorBoundary>
             </Suspense>
