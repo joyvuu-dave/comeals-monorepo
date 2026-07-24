@@ -9,7 +9,6 @@
     "npm": "11"
   },
   "dependencies": {
-    "@babel/runtime": "^8.0.0",
     "@fontsource/roboto": "^5.2.10",
     "@fortawesome/fontawesome-svg-core": "^7.2.0",
     "@fortawesome/free-solid-svg-icons": "^7.2.0",
