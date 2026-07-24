@@ -1,6 +1,6 @@
 import { Component } from "react";
 import { inject, observer } from "mobx-react";
-import { Navigate } from "react-router-dom";
+import { Navigate } from "react-router";
 import { withRouter } from "../../helpers/with_router";
 import axios from "axios";
 import Cookie from "js-cookie";

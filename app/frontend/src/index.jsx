@@ -34,7 +34,7 @@ import {
   Route,
   Navigate,
   useLocation,
-} from "react-router-dom";
+} from "react-router";
 
 import { DataStore } from "./stores/data_store";
 import localforage from "localforage";

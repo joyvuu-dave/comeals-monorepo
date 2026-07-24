@@ -1,6 +1,6 @@
 import React, { Component, Suspense } from "react";
 import { inject, observer } from "mobx-react";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route } from "react-router";
 import { withRouter } from "../../helpers/with_router";
 import dayjs from "dayjs";
 import Modal from "react-modal";
