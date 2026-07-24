@@ -104,4 +104,40 @@ test.describe("Visual Baselines", () => {
       fullPage: true,
     });
   });
+
+  test("day picker overlay", async ({ page, context }) => {
+    await setupAuthenticatedPage(page, context);
+
+    // Freeze time for determinism
+    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+
+    await page.goto("/calendar/all/2026-01-15/");
+    await page.waitForLoadState("networkidle");
+    await expect(page.locator(".rbc-calendar")).toBeVisible({ timeout: 10000 });
+
+    // Open event creation modal
+    const eventButton = page.locator("text=Event").first();
+    await expect(eventButton).toBeVisible({ timeout: 5000 });
+    await eventButton.click();
+
+    const modal = page.locator(".ReactModal__Content--after-open");
+    await expect(modal).toBeVisible({ timeout: 5000 });
+
+    // Open the react-day-picker overlay. The library's own stylesheet
+    // drives how the picker looks, so a library upgrade can change the
+    // rendering without failing any functional test — this snapshot
+    // catches that. The modal's defaultMonth comes from the URL date and
+    // time is frozen to the same date, so the picker always shows
+    // January 2026 with the today ring on the 15th.
+    await modal.locator("input[readonly]").click();
+    const overlay = modal.locator(".rdp-root");
+    await expect(overlay).toBeVisible({ timeout: 3000 });
+
+    // Guard the pin before diffing pixels: a wrong month means the test
+    // is broken, not the styling.
+    await expect(overlay.getByText("January 2026")).toBeVisible();
+    await page.waitForTimeout(500);
+
+    await expect(overlay).toHaveScreenshot("day-picker.png");
+  });
 });
