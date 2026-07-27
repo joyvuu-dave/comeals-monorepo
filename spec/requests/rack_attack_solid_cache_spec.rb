@@ -19,7 +19,7 @@ RSpec.describe 'Rack::Attack throttles backed by SolidCache' do
   # A fresh namespace per example is how these specs isolate from each other.
   # The obvious alternative, Rack::Attack.reset!, does not work here — see the
   # delete_matched example at the bottom of this file.
-  let(:solid_cache) { SolidCache::Store.new(namespace: "rack-attack-spec-#{SecureRandom.hex(4)}") }
+  let(:solid_cache) { build_solid_cache_store(namespace: "rack-attack-spec-#{SecureRandom.hex(4)}") }
 
   around do |example|
     original = Rack::Attack.cache.store

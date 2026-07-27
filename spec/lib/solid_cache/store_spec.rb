@@ -15,7 +15,7 @@ require 'rails_helper'
 RSpec.describe SolidCache::Store do
   include ActiveSupport::Testing::TimeHelpers
 
-  subject(:cache) { described_class.new(namespace: "solid-cache-spec-#{SecureRandom.hex(4)}") }
+  subject(:cache) { build_solid_cache_store(namespace: "solid-cache-spec-#{SecureRandom.hex(4)}") }
 
   # Shaped like what ActiveModelSerializers hands back: string keys, nested
   # arrays and hashes, and a BigDecimal, since money in this app is never a
@@ -29,6 +29,14 @@ RSpec.describe SolidCache::Store do
         { 'id' => 8, 'cooks' => [], 'cost' => nil }
       ]
     }
+  end
+
+  # A store that trims old entries on its own thread deadlocks against the
+  # single connection RSpec pins to the running example, and hangs the whole
+  # suite. spec/support/solid_cache.rb explains it in full. Pinned here so
+  # nobody quietly goes back to plain SolidCache::Store.new in a spec.
+  it 'does not trim old entries on a background thread' do
+    expect(cache.expiry_method).to eq(:job)
   end
 
   it 'writes into the solid_cache_entries table' do
@@ -133,7 +141,7 @@ RSpec.describe SolidCache::Store do
     # config/solid_cache.yml namespaces by Rails.env, so a staging or console
     # session against the same database cannot read production's entries.
     it 'does not leak values between two stores with different namespaces' do
-      other = described_class.new(namespace: "solid-cache-spec-other-#{SecureRandom.hex(4)}")
+      other = build_solid_cache_store(namespace: "solid-cache-spec-other-#{SecureRandom.hex(4)}")
 
       cache.write('meal-7', 'mine')
 

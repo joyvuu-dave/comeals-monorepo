@@ -37,6 +37,13 @@ Rails.application.configure do
 
   config.action_mailer.perform_caching = false
 
+  # Queue jobs into an array instead of running them. Without this the
+  # adapter is :async, which runs jobs on background threads — and a
+  # background thread that touches the database fights the single
+  # connection RSpec pins to the running example. See
+  # spec/support/solid_cache.rb for the version of that fight that hung CI.
+  config.active_job.queue_adapter = :test
+
   # Tell Action Mailer not to deliver emails to the real world.
   # The :test delivery method accumulates sent emails in the
   # ActionMailer::Base.deliveries array.
