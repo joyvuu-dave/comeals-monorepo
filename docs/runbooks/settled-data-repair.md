@@ -6,6 +6,50 @@ attendance, guests, and the meal's own settlement inputs (`cap`, `date`,
 `update_all`, raw SQL, a psql session. The triggers live in
 `db/migrate/20260707100000_add_settled_meal_immutability_triggers.rb`.
 
+> **A gap that was open until 2026-07-27, and how to find what it left
+> behind.** The triggers used to decide by reading the meal without taking a
+> row lock. A write that started while a settlement was still running was
+> judged against pre-settlement state and allowed through, so it landed on a
+> meal that was reconciled by the time it committed. Two shapes of damage:
+> a row added that no reconciliation counts (a cook never reimbursed,
+> because `billing:recalculate` only sums unreconciled meals), and a row
+> deleted that a reconciliation already counted (a balance charged or
+> credited with no source row behind it).
+>
+> Both are closed now — the settlement holds `FOR UPDATE` on every meal it
+> claims, and both of the trigger's lookups are locking reads (migration
+> `20260727120000`). A racing write waits and is then refused. See
+> `docs/adr/0003-concurrency-on-the-money-path.md` (issue #43).
+>
+> Rows written before that date can still be wrong, and nothing raised at the
+> time. Do not go looking for them by `created_at` — the deleted-row shape
+> leaves nothing to select. Ask the ledger instead: recompute each
+> reconciliation from its source data and compare it to what was stored. They
+> must match exactly.
+>
+> ```ruby
+> # bin/rails runner — reports every reconciliation whose stored balances
+> # disagree with a fresh computation from its own meals.
+> Reconciliation.order(:date).each do |r|
+>   stored = r.reconciliation_balances.pluck(:resident_id, :amount).to_h
+>   fresh  = r.settlement_balances.reject { |_, amount| amount.zero? }
+>   next if stored == fresh
+>
+>   puts "reconciliation #{r.id} (#{r.date}) disagrees with its source data:"
+>   (stored.keys | fresh.keys).sort.each do |resident_id|
+>     next if stored[resident_id] == fresh[resident_id]
+>
+>     puts "  resident #{resident_id}: stored #{stored[resident_id] || 0}, source says #{fresh[resident_id] || 0}"
+>   end
+> end
+> ```
+>
+> This is the same check `spec/db/settlement_race_spec.rb` makes, and it
+> catches both shapes. A clean run means no reconciliation was hit. Repair
+> anything it finds with a correcting entry in the current period — first
+> choice, below — not with the trigger bypass. The stored balances are what
+> residents already paid; you correct forward, you do not rewrite them.
+
 ## First choice: correcting entries
 
 You don't edit the ledger. You add to it (CLAUDE.md money rule 7).
