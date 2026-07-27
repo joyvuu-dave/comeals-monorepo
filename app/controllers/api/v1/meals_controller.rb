@@ -320,9 +320,22 @@ module Api
       # (row locks on the swept meals) and re-checks reconciled? on the lock's
       # fresh reload. The reject_if_reconciled before_action reads the meal
       # before the lock is taken, so a settlement committing mid-request slips
-      # past it — the rake task runs in a separate process, unprotected by
-      # single-threaded Puma. with_lock reloads @meal, so records pinned to it
+      # past it — the rake task runs in its own dyno, and the Puma thread count
+      # is irrelevant to that. with_lock reloads @meal, so records pinned to it
       # via inverse_of run their model guards against the fresh state too.
+      #
+      # This lock is what makes the API path correct, and it works in both
+      # orders: with_lock takes FOR UPDATE, assign_meals' update_all takes
+      # FOR NO KEY UPDATE, and those two conflict. Whichever transaction is
+      # second waits and then sees the other's committed result.
+      #
+      # Every money-mutating path should go through here, because it is the
+      # only one that fails politely. Paths that skip it (ActiveAdmin's bill
+      # and attendance forms) are not unprotected — the immutability triggers
+      # take locking reads, so a racing write waits for the settlement and is
+      # then refused — but they are refused by a database exception, not a
+      # 400 with a readable message. See
+      # docs/adr/0003-concurrency-on-the-money-path.md.
       def with_meal_lock
         @meal.with_lock do
           if @meal.reconciled?

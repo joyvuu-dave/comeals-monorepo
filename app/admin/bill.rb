@@ -16,6 +16,23 @@ ActiveAdmin.register Bill do
     before_action { @page_title = 'Cooking Slots' }
     # Reconciled meals are immutable. Redirect rather than relying on the
     # model-layer abort, which would render a confusing form error.
+    #
+    # This check is a plain, non-locking read, and this resource never takes
+    # the meal row lock that the API's with_meal_lock takes. So it can be
+    # wrong: `reconciliations:create` may settle the meal between this read
+    # and the write. That used to lose money silently (issue #43) — the write
+    # landed on a meal that was reconciled by the time it finished, and
+    # billing:recalculate skipped it because that task only sums unreconciled
+    # meals.
+    #
+    # It no longer does. The database catches it now, from any path: the
+    # settlement holds FOR UPDATE on every meal it claims, and the child-write
+    # trigger's lookups are locking reads (20260727120000), so
+    # a racing write waits for the settlement and is then refused with an
+    # exception. What is left here is a cosmetic race — a user can see this
+    # redirect's friendly message or the trigger's blunt one, depending on
+    # timing. Both refuse. Read docs/adr/0003-concurrency-on-the-money-path.md
+    # before touching this.
     before_action :block_if_reconciled, only: %i[edit update destroy]
 
     def scoped_collection

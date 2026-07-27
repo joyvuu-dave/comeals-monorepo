@@ -307,6 +307,32 @@ RSpec.describe 'settled-meal database triggers' do
       expect(bill.reload.amount).to eq(BigDecimal('42'))
     end
 
+    # The INSERT branch now takes a FOR KEY SHARE lock on the parent meal
+    # before it decides (20260727120000, issue #43). The bypass has to short
+    # out that whole branch, lock included, not just the refusal.
+    it 'allows an insert onto a reconciled meal' do
+      meal = settled_meal
+      other_cook = create(:resident, community: community)
+
+      repair do
+        Bill.insert_all!([{ meal_id: meal.id, resident_id: other_cook.id, community_id: community.id,
+                            amount: 10, created_at: Time.current, updated_at: Time.current }])
+      end
+
+      expect(Bill.where(meal_id: meal.id, resident_id: other_cook.id).count).to eq(1)
+    end
+
+    # Same for the DELETE branch, which locks the same way. Deleting a stray
+    # row is the repair the runbook's "settled ledger disagrees with its source
+    # data" case needs, so the bypass has to reach it.
+    it 'allows a delete from a reconciled meal' do
+      bill = settled_meal.bills.first
+
+      repair { Bill.where(id: bill.id).delete_all }
+
+      expect(Bill.where(id: bill.id)).not_to exist
+    end
+
     it 'restores the guard once the repair transaction commits' do
       bill = settled_meal.bills.first
 

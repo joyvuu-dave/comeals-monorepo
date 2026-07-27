@@ -85,19 +85,35 @@ CREATE FUNCTION public.comeals_reject_settled_child_write() RETURNS trigger
     AS $$
 DECLARE
   settled_meal_id bigint;
+  meal_reconciliation_id bigint;
 BEGIN
   IF current_setting('comeals.allow_settled_writes', true) = 'on' THEN
     RETURN CASE TG_OP WHEN 'DELETE' THEN OLD ELSE NEW END;
   END IF;
 
   IF TG_OP IN ('UPDATE', 'DELETE') THEN
-    SELECT id INTO settled_meal_id FROM meals
-    WHERE id = OLD.meal_id AND reconciliation_id IS NOT NULL;
+    -- Unconditional, like the branch below. A DELETE takes no
+    -- foreign-key lock on the parent, so this SELECT is the only thing
+    -- that can make it wait for a settlement mid-flight on this meal.
+    SELECT reconciliation_id INTO meal_reconciliation_id FROM meals
+    WHERE id = OLD.meal_id FOR KEY SHARE;
+
+    IF meal_reconciliation_id IS NOT NULL THEN
+      settled_meal_id := OLD.meal_id;
+    END IF;
   END IF;
 
   IF settled_meal_id IS NULL AND TG_OP IN ('INSERT', 'UPDATE') THEN
-    SELECT id INTO settled_meal_id FROM meals
-    WHERE id = NEW.meal_id AND reconciliation_id IS NOT NULL;
+    -- Unconditional: the lock is the point. Testing reconciliation_id in
+    -- the WHERE clause would match no row on an unreconciled meal, take
+    -- no lock, and let this trigger decide before a running settlement
+    -- commits.
+    SELECT reconciliation_id INTO meal_reconciliation_id FROM meals
+    WHERE id = NEW.meal_id FOR KEY SHARE;
+
+    IF meal_reconciliation_id IS NOT NULL THEN
+      settled_meal_id := NEW.meal_id;
+    END IF;
   END IF;
 
   IF settled_meal_id IS NOT NULL THEN
@@ -1666,6 +1682,7 @@ ALTER TABLE ONLY public.bills
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260727120000'),
 ('20260724120000'),
 ('20260708100000'),
 ('20260707100000'),

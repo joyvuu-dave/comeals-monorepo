@@ -89,8 +89,33 @@ class Reconciliation < ApplicationRecord
   # resident on those meals — both ledgers sum to zero, so no later check
   # fires). Claiming fewer rows than were plucked means that race happened:
   # raise so this settlement rolls back whole.
+  #
+  # The FOR UPDATE lock before the UPDATE is not redundant, and removing it
+  # reopens silent corruption of the settled ledger (issue #43). The UPDATE
+  # alone takes only FOR NO KEY UPDATE on the meal row, and FOR KEY SHARE —
+  # what the immutability trigger's lookups take — does not conflict with
+  # that. So a write from a path that skips the meal lock (ActiveAdmin's
+  # forms) would have nothing to wait on, and could change a meal's ledger
+  # rows while this settlement was in the middle of claiming it. Added rows
+  # end up in no reconciliation's balances, and billing:recalculate skips
+  # them because that task only sums unreconciled meals; deleted rows leave
+  # balances behind that nothing justifies. FOR UPDATE does conflict with
+  # FOR KEY SHARE, so the rival write waits here and is then refused by the
+  # trigger.
+  #
+  # This works only together with the trigger's two unconditional locking
+  # lookups (20260727120000). Without the NEW.meal_id one, an insert decides
+  # too early — Postgres fires BEFORE INSERT triggers before the foreign-key
+  # check — and lands anyway once the FK wait ends. Without the OLD.meal_id
+  # one, a delete never waits at all, because a DELETE takes no foreign-key
+  # lock on the parent. Each piece alone was tested and does not close the
+  # hole. See docs/adr/0003-concurrency-on-the-money-path.md.
+  #
+  # ORDER BY id keeps the lock order deterministic so two concurrent
+  # settlements cannot deadlock against each other.
   def assign_meals
     meal_ids = eligible_meal_ids
+    Meal.where(id: meal_ids).order(:id).lock.pluck(:id)
     claimed = Meal.where(id: meal_ids, reconciliation_id: nil).update_all(reconciliation_id: id)
     return if claimed == meal_ids.size
 
