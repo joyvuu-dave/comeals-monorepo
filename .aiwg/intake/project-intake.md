@@ -123,7 +123,8 @@
 
 - Re-enabled Strong Parameters; fixed latent admin bugs
 - Added `COLLECT_APP.md` (in-app collection workflow)
-- Switched Puma to single-worker mode (no threading races)
+- Switched Puma to single-worker mode (recorded at the time as "no threading
+  races" — that reason was wrong; see `docs/adr/0003-concurrency-on-the-money-path.md`)
 - Removed moment.js and npm from backend
 - Added admin meal toggle UI
 - Added unit balances panel to Reconciliation show page
@@ -189,7 +190,7 @@
 
 ## Scale and Performance (Current)
 
-**Current Capacity**: Single-instance Puma (1 worker, 1 thread). Appropriate for one co-housing community (~30 residents).
+**Current Capacity**: Single-instance Puma (1 worker, 1 thread). Appropriate for one co-housing community (~30 residents). This bounds _request_ concurrency only — scheduled and manual rake tasks run in their own dynos at the same time.
 
 **Active Users**: ~30 residents; 1–2 admins. Not public-facing. Not multi-tenant in practice (one `Community` record).
 

@@ -52,7 +52,8 @@ Comeals is a production financial application for a single private co-housing co
 
 **Infrastructure Complexity**:
 
-- Deployment type: Single server (1 Puma worker/thread; appropriate for load)
+- Deployment type: Single server (1 Puma worker/thread; appropriate for load —
+  a throughput choice, not a concurrency-safety one)
 - Data persistence: Single database (PostgreSQL) + Memcached cache layer
 - External dependencies: 4 third-party services (Pusher, MemCachier, Skylight, Gmail SMTP)
 - Network topology: Client-server (React SPA → Rails API; ActiveAdmin → Rails app)
@@ -71,7 +72,9 @@ Comeals is a production financial application for a single private co-housing co
 - [x] Data integrity-critical — financial calculations (billing, reconciliation, settlement) must be exact
 - [x] Security-sensitive — resident PII (names, emails, birthdays), financial balances
 - [ ] Performance-sensitive (not a scale problem at this size)
-- [ ] High concurrency (single-threaded Puma by design)
+- [ ] High concurrency (single-threaded Puma by design — note: the thread count
+      is a throughput setting, not a safety one, and rake tasks run concurrently
+      with the web dyno regardless. See `docs/adr/0003-concurrency-on-the-money-path.md`)
 - [x] Complex business logic — multiplier-weighted cost splitting, capped meals, largest-remainder allocation
 - [ ] Integration-heavy (4 external services is manageable)
 

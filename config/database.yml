@@ -22,9 +22,13 @@ default: &default
   #
   # Deliberately NOT tied to RAILS_MAX_THREADS. Those are two different
   # things that used to share one env var: threads are how many requests
-  # run at once, the pool is how many database connections exist. The app
-  # still serves one request at a time (config/puma.rb, 1 thread, 0
+  # run at once, the pool is how many database connections exist. The web
+  # dyno still serves one request at a time (config/puma.rb, 1 thread, 0
   # workers) — this is not a step toward concurrent requests.
+  #
+  # Note that one request at a time is not the same as one database writer
+  # at a time: rake tasks run in their own dynos alongside the web dyno.
+  # See docs/adr/0003-concurrency-on-the-money-path.md.
   #
   # 2, not 1, because solid_cache trims old entries on a background thread
   # that needs its own connection. With a pool of 1 that thread competes
