@@ -45,10 +45,17 @@ as deliberate design, not defects:
 4. **The shared read-only admin token stays shared and read-only.** It unlocks
    reads across the admin panel. Writes still require a superuser admin. The
    token going into every reconciliation email is the intended distribution.
+   _Superseded by ADR 0004: the token is now read-only by construction rather
+   than because of which account it resolves to, and it reads an allowlist of
+   resources rather than the whole admin panel._
 
 5. **Admin writes are gated to superusers.** This is the one real authorization
    boundary in the system, and we keep it. Non-superuser admins can look but not
    touch.
+   _Superseded by ADR 0004: the boundary moved from read vs write to the money
+   path. Plain admins now write everything except the ledger. "Look but not
+   touch" left the tier too weak to use, and the flag itself turned out to be
+   unsettable from anywhere in the app._
 
 6. **Community scoping is the database's job, not the query's.** There is exactly
    one community row, pinned by a unique `singleton_guard` index, and a trigger

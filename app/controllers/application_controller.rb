@@ -3,6 +3,12 @@
 class ApplicationController < ActionController::Base
   skip_before_action :verify_authenticity_token, if: :read_only_admin_token?
 
+  # Publish the token flag for SuperuserAdapter, which cannot see the request.
+  # This runs before every action, including ActiveAdmin's, so the adapter
+  # never has to guess. Setting it to the boolean (not the token) keeps the
+  # secret out of anything that dumps Current.
+  before_action :expose_read_only_admin_token
+
   # GET /admin-logout (admin)
   def admin_logout
     cookies.delete(:remember_admin_user_token)
@@ -38,6 +44,10 @@ class ApplicationController < ActionController::Base
   end
 
   private
+
+  def expose_read_only_admin_token
+    Current.read_only_admin_token = read_only_admin_token?
+  end
 
   def read_only_admin_token?
     params[:token].present? && params[:token] == ENV['READ_ONLY_ADMIN_TOKEN']

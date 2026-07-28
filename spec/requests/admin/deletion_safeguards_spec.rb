@@ -105,12 +105,30 @@ RSpec.describe 'Admin deletion safeguards' do
     end
   end
 
+  # ADR 0004 moved the admin boundary from read-vs-write to the money path.
+  # A plain admin does the community housekeeping, including deleting an empty
+  # unit — the model already refuses any unit that residents depend on. What a
+  # plain admin still may not touch is the ledger.
   describe 'authorization' do
-    it 'does not let a non-superuser delete even an empty unit' do
-      sign_in create(:admin_user, community: community, superuser: false)
+    before { sign_in create(:admin_user, community: community, superuser: false) }
+
+    it 'lets a non-superuser delete an empty unit' do
       empty = create(:unit, community: community)
 
-      expect { delete "/units/#{empty.id}" }.not_to change(Unit, :count)
+      expect { delete "/units/#{empty.id}" }.to change(Unit, :count).by(-1)
+    end
+
+    it 'still refuses a non-superuser deleting a unit that residents depend on' do
+      occupied = create(:unit, community: community)
+      create(:resident, community: community, unit: occupied)
+
+      expect { delete "/units/#{occupied.id}" }.not_to change(Unit, :count)
+    end
+
+    it 'does not let a non-superuser delete a meal' do
+      meal = create(:meal, community: community)
+
+      expect { delete "/meals/#{meal.id}" }.not_to change(Meal, :count)
     end
   end
 end
