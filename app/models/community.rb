@@ -47,7 +47,7 @@ class Community < ApplicationRecord
   # the record post-setup and raises if it's called before bootstrap completes.
   def self.instance
     Current.community ||= first ||
-                          raise('No Community record exists. Create one at /admin/communities/new.')
+                          raise('No Community record exists. Create one at /communities/new on the admin subdomain.')
   end
 
   validate :enforce_singleton, on: :create

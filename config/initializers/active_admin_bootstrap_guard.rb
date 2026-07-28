@@ -2,9 +2,11 @@
 
 # During bootstrap (AdminUser exists but Community does not), redirect every
 # ActiveAdmin page to the Community new form. Without this guard a bootstrap
-# admin could navigate to /admin/residents or /admin/bills, where index
-# actions render empty lists and nav clicks would 500 once code dereferenced
-# Community.instance.
+# admin could navigate to /residents or /bills, where index actions render
+# empty lists and nav clicks would 500 once code dereferenced
+# Community.instance. (ActiveAdmin is mounted at the root of the admin
+# subdomain, so its paths carry no /admin prefix — the route helpers are
+# still named *_admin_* because default_namespace is :admin.)
 #
 # Applies to ActiveAdmin::BaseController so both resource controllers and
 # register_page controllers (e.g. Dashboard) inherit it. Devise's sign-in

@@ -3,9 +3,10 @@
 ActiveAdmin.register_page 'Dashboard' do
   menu priority: 1, label: proc { I18n.t('active_admin.dashboard') }
 
-  # Bootstrap redirect (no Community yet → /admin/communities/new) is handled
+  # Bootstrap redirect (no Community yet → /communities/new) is handled
   # globally in config/initializers/active_admin_bootstrap_guard.rb so it also
-  # covers /admin/residents, /admin/bills, etc.
+  # covers /residents, /bills, etc. ActiveAdmin is mounted at the root of the
+  # admin subdomain, so its paths carry no /admin prefix.
 
   content title: 'Meal Reconciliation' do
     # Each list is loaded once and the panel header counts the loaded rows.
