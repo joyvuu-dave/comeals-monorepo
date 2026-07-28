@@ -37,6 +37,7 @@ class Reconciliation < ApplicationRecord
 
   validates :end_date, presence: true
   validate :end_date_before_today
+  validate :must_settle_at_least_one_meal, on: :create
 
   before_validation :set_date
   after_create :finalize
@@ -262,13 +263,20 @@ class Reconciliation < ApplicationRecord
 
   private
 
-  def eligible_meal_ids
+  # The meals this reconciliation would sweep. Both the create validation and
+  # assign_meals read this one scope, so they cannot disagree about what
+  # "eligible" means. A second copy of the predicate could drift, and then a
+  # reconciliation would pass validation and go on to claim zero meals.
+  def eligible_meals
     Meal.unreconciled
         .joins(:bills)
         .where(date: ..end_date)
         .where(date: ...Time.zone.today)
         .distinct
-        .pluck(:id)
+  end
+
+  def eligible_meal_ids
+    eligible_meals.pluck(:id)
   end
 
   def finalize
@@ -288,6 +296,26 @@ class Reconciliation < ApplicationRecord
     return if end_date < Time.zone.today
 
     errors.add(:end_date, 'must be in the past')
+  end
+
+  # A reconciliation is a settlement event. One that settles nothing is a
+  # data-entry mistake, and the table is append-only, so there is no way to
+  # remove it afterwards: it stays in the admin list and in every resident's
+  # history as a settlement that settled no meals, and it becomes
+  # `Reconciliation.last`, which is the row `reconciliations:send_cooking_slot_email`
+  # emails cooks about. The nightly `reconciliations:create` task already
+  # refuses this case and logs a skip; this validation closes the same hole on
+  # the ActiveAdmin form, which is the only other way to create one.
+  #
+  # This reads the same eligible_meals scope that assign_meals sweeps, so the
+  # two cannot disagree about which meals count.
+  def must_settle_at_least_one_meal
+    return if end_date.blank?
+    return if errors[:end_date].any?
+    return if eligible_meals.exists?
+
+    errors.add(:base, 'No unreconciled meals with bills on or before this date. ' \
+                      'A reconciliation must settle at least one meal.')
   end
 
   # Distributes full-precision balances (which sum to zero) into cent-rounded

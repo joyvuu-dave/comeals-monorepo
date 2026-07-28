@@ -21,6 +21,20 @@ RSpec.describe Reconciliation do
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
 
+  # A reconciliation must settle at least one meal, so specs that only need a
+  # reconciliation row to exist call this first. It creates the minimum: a
+  # cook, a meal on a day that is over, and a bill on that meal. Pass a date
+  # when the reconciliation's end_date is older than the meal factory's
+  # default (which counts back from today).
+  def settleable_meal(date: nil)
+    cook = create(:resident, community: community, unit: unit, multiplier: 2)
+    attrs = { community: community }
+    attrs[:date] = date if date
+    meal = create(:meal, **attrs)
+    create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('10'))
+    meal
+  end
+
   describe '#assign_meals' do
     it 'assigns unreconciled meals with bills to the new reconciliation' do
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
@@ -41,6 +55,7 @@ RSpec.describe Reconciliation do
 
     it 'does not reassign already-reconciled meals' do
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      settleable_meal(date: 3.years.ago.to_date)
       old_reconciliation = described_class.create!(community: community, date: Time.zone.today - 30,
                                                    end_date: 2.years.ago.to_date)
 
@@ -338,7 +353,10 @@ RSpec.describe Reconciliation do
     # defense-in-depth against future upstream bugs, and no public path today
     # can produce unbalanced raw balances (per-meal credits and debits are
     # structurally symmetric). See issue #16.
-    let(:reconciliation) { described_class.create!(community: community, end_date: Date.yesterday) }
+    let(:reconciliation) do
+      settleable_meal
+      described_class.create!(community: community, end_date: Date.yesterday)
+    end
 
     it 'raises when raw balances carry a sub-cent imbalance instead of silently absorbing it' do
       unbalanced = { 1 => BigDecimal('0.004') }
@@ -440,7 +458,10 @@ RSpec.describe Reconciliation do
 
   describe '#assign_meals under concurrent settlement' do
     it 'raises and rolls back instead of stealing meals a concurrent reconciliation claimed after the pluck' do
-      # Rival is created before any meals exist, so its own sweep claims nothing.
+      # Rival settles a meal of its own, created before the contested ones, so
+      # its sweep never touches them. (It needs one: a reconciliation that
+      # would settle no meals is refused at create.)
+      settleable_meal
       rival = described_class.create!(community: community, end_date: Date.yesterday)
 
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
@@ -579,6 +600,7 @@ RSpec.describe Reconciliation do
 
     it 'returns 0 for residents not in the reconciliation' do
       uninvolved = create(:resident, community: community, unit: unit)
+      settleable_meal
 
       reconciliation = described_class.create!(
         community: community, date: Time.zone.today,
@@ -609,11 +631,13 @@ RSpec.describe Reconciliation do
 
   describe 'date default' do
     it 'defaults date to today when not provided' do
+      settleable_meal
       recon = described_class.create!(community: community, end_date: Date.yesterday)
       expect(recon.date).to eq(Time.zone.today)
     end
 
     it 'preserves an explicitly set date' do
+      settleable_meal
       explicit_date = Date.new(2025, 6, 15)
       recon = described_class.create!(
         community: community, date: explicit_date, end_date: Date.yesterday
@@ -642,8 +666,81 @@ RSpec.describe Reconciliation do
     end
 
     it 'accepts end_date of yesterday' do
+      settleable_meal
       recon = build(:reconciliation, community: community, end_date: Date.yesterday)
       expect(recon).to be_valid
+    end
+
+    # A reconciliation is a settlement event, and the table is append-only:
+    # an empty one can never be removed, sits in every resident's history as a
+    # settlement that settled nothing, and becomes the Reconciliation.last that
+    # reconciliations:send_cooking_slot_email mails cooks about.
+    it 'rejects a reconciliation that would settle no meals' do
+      recon = build(:reconciliation, community: community, end_date: Date.yesterday)
+
+      expect(recon).not_to be_valid
+      expect(recon.errors[:base])
+        .to include('No unreconciled meals with bills on or before this date. ' \
+                    'A reconciliation must settle at least one meal.')
+    end
+
+    it 'accepts a period holding exactly one settleable meal' do
+      settleable_meal(date: Date.new(2025, 3, 1))
+
+      recon = build(:reconciliation, community: community, end_date: Date.new(2025, 3, 31))
+
+      expect(recon).to be_valid
+    end
+
+    it 'rejects a period whose only meal falls after the cutoff' do
+      settleable_meal(date: Date.new(2025, 4, 1))
+
+      recon = build(:reconciliation, community: community, end_date: Date.new(2025, 3, 31))
+
+      expect(recon).not_to be_valid
+      expect(recon.errors[:base].first).to include('must settle at least one meal')
+    end
+
+    it 'rejects a period whose only meal has no bill' do
+      create(:meal, community: community, date: Date.yesterday)
+
+      recon = build(:reconciliation, community: community, end_date: Date.yesterday)
+
+      expect(recon).not_to be_valid
+      expect(recon.errors[:base].first).to include('must settle at least one meal')
+    end
+
+    it 'rejects a period whose only meal is already reconciled' do
+      meal = settleable_meal
+      described_class.create!(community: community, end_date: Date.yesterday)
+      expect(meal.reload.reconciliation_id).to be_present
+
+      second = build(:reconciliation, community: community, end_date: Date.yesterday)
+
+      expect(second).not_to be_valid
+      expect(second.errors[:base].first).to include('must settle at least one meal')
+    end
+
+    # end_date in the future is already wrong on its own. Reporting "no meals"
+    # alongside it would be noise — with no valid cutoff there is no period to
+    # judge emptiness against.
+    it 'reports only the cutoff error when end_date is not in the past' do
+      recon = build(:reconciliation, community: community, end_date: Date.tomorrow)
+
+      expect(recon).not_to be_valid
+      expect(recon.errors[:end_date]).to include('must be in the past')
+      expect(recon.errors[:base]).to be_empty
+    end
+
+    # The rule guards creation only. Existing rows — including empty ones
+    # written before this validation, or by a deliberate rake task using
+    # save(validate: false) — must still load and behave normally.
+    it 'does not re-run on an existing empty reconciliation' do
+      legacy = build(:reconciliation, community: community, end_date: Date.yesterday)
+      legacy.save!(validate: false)
+
+      expect(legacy.reload.number_of_meals).to eq(0)
+      expect(legacy.settlement_balances.values.sum(BigDecimal('0'))).to eq(BigDecimal('0'))
     end
   end
 
@@ -853,11 +950,13 @@ RSpec.describe Reconciliation do
     end
 
     it 'handles an empty reconciliation period (no meals with bills)' do
+      # Creating an empty reconciliation is refused now, so this builds the row
+      # the way a legacy record or a deliberate rake task would. The zero-meal
+      # path must still compute clean balances for any row that reaches it.
       bystander = create(:resident, community: community, unit: unit, multiplier: 2)
 
-      reconciliation = described_class.create!(
-        community: community, end_date: Date.yesterday
-      )
+      reconciliation = build(:reconciliation, community: community, end_date: Date.yesterday)
+      reconciliation.save!(validate: false)
       balances = reconciliation.settlement_balances
 
       expect(balances[bystander.id]).to eq(BigDecimal('0'))
@@ -985,12 +1084,14 @@ RSpec.describe Reconciliation do
     end
 
     it 'returns all community units with zero balances for empty reconciliation' do
+      # Built without validation for the same reason as the empty-period spec
+      # above: an empty reconciliation can no longer be created, but the code
+      # must still handle a row that has no meals.
       create(:unit, community: community, name: 'Unit A')
       create(:unit, community: community, name: 'Unit B')
 
-      reconciliation = described_class.create!(
-        community: community, end_date: Date.yesterday
-      )
+      reconciliation = build(:reconciliation, community: community, end_date: Date.yesterday)
+      reconciliation.save!(validate: false)
 
       result = reconciliation.unit_balances
 
@@ -1001,6 +1102,7 @@ RSpec.describe Reconciliation do
 
   describe '#destroy' do
     it 'is blocked — reconciliations are immutable settlement events' do
+      settleable_meal
       reconciliation = described_class.create!(community: community, end_date: Date.yesterday)
 
       expect { reconciliation.destroy }.not_to change(described_class, :count)
@@ -1026,6 +1128,7 @@ RSpec.describe Reconciliation do
 
   describe '#update' do
     it 'is blocked — settled reconciliations are immutable' do
+      settleable_meal(date: Date.new(2025, 3, 1))
       reconciliation = described_class.create!(community: community, end_date: Date.new(2025, 3, 31))
 
       expect(reconciliation.update(end_date: Date.new(2025, 4, 30))).to be(false)
@@ -1036,6 +1139,7 @@ RSpec.describe Reconciliation do
     end
 
     it 'blocks update! with an exception and persists nothing' do
+      settleable_meal(date: Date.new(2025, 3, 1))
       reconciliation = described_class.create!(community: community, end_date: Date.new(2025, 3, 31))
 
       expect { reconciliation.update!(date: Date.new(2025, 4, 1)) }
@@ -1044,6 +1148,7 @@ RSpec.describe Reconciliation do
     end
 
     it 'does not record an update audit for the blocked write' do
+      settleable_meal(date: Date.new(2025, 3, 1))
       reconciliation = described_class.create!(community: community, end_date: Date.new(2025, 3, 31))
 
       expect { reconciliation.update(end_date: Date.new(2025, 4, 30)) }
@@ -1053,6 +1158,7 @@ RSpec.describe Reconciliation do
 
   describe 'auditing' do
     it 'records an audit on create' do
+      settleable_meal(date: Date.new(2025, 3, 1))
       reconciliation = described_class.create!(community: community, end_date: Date.new(2025, 3, 31))
 
       audit = reconciliation.audits.last

@@ -46,7 +46,7 @@ RSpec.describe 'billing:recalculate' do
   end
 
   it 'excludes reconciled meals from balance calculations' do
-    reconciliation = Reconciliation.create!(community: community, end_date: Date.yesterday)
+    reconciliation = create(:reconciliation, community: community)
     resident = create(:resident, community: community, unit: unit, multiplier: 2)
 
     # Reconciled meal with big bill — should NOT affect balance. Build the

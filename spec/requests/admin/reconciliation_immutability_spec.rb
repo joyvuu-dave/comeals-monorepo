@@ -65,7 +65,28 @@ RSpec.describe 'Admin Reconciliation Immutability' do
     expect(response).to have_http_status(:ok)
   end
 
+  # The form is the only way left to create an empty reconciliation: the
+  # nightly reconciliations:create task already skips when nothing is eligible.
+  # Because the table is append-only, an empty one could never be removed —
+  # it would sit in the list and in every resident's history as a settlement
+  # that settled nothing, and it would become the Reconciliation.last that
+  # reconciliations:send_cooking_slot_email mails cooks about.
+  it 'refuses a reconciliation that would settle no meals' do
+    expect do
+      post '/reconciliations',
+           params: { reconciliation: { community_id: community.id, end_date: Date.yesterday } }
+    end.not_to change(Reconciliation, :count)
+
+    expect(response.body).to include('must settle at least one meal')
+  end
+
   it 'still allows creating the next reconciliation — corrections are new entries' do
+    # The form refuses a reconciliation that would settle nothing, so give the
+    # next period a meal to settle.
+    cook = create(:resident, community: community, unit: unit, multiplier: 2)
+    meal = create(:meal, community: community, date: Date.yesterday)
+    create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('25'))
+
     expect do
       post '/reconciliations',
            params: { reconciliation: { community_id: community.id, end_date: Date.yesterday } }
