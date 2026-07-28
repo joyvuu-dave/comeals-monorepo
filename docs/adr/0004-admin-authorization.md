@@ -38,8 +38,9 @@ into a write-capable, CSRF-exempt superuser session.
 
 **The plain-admin tier was too weak to use.** "Look but not touch" meant a
 plain admin could not add a resident, fix a typo in a reservation, or create an
-event. Production has five of them, with 2 to 6 sign-ins each and none since 2024. That is what a useless account looks like: people logged in, found every
-button missing, and stopped.
+event. Production has five of them, with 2 to 6 sign-ins each, and none has
+signed in since 2024. That is what a useless account looks like: people logged
+in, found every button missing, and stopped.
 
 ## Decision
 
@@ -121,14 +122,14 @@ Demoting or destroying the last superuser is refused at three layers:
   first otherwise, and a swallowed inner rollback leaves partial writes.
 - The `comeals_refuse_last_superuser_removal` trigger
   (`20260728120000`), which holds for paths that skip callbacks: `update_all`,
-  `delete_all`, `update_column`, psql. "At least one row has `superuser =
-true`" is a statement about the table, not a row, so no CHECK constraint or
-  partial unique index can express it. A trigger is the only database-level
-  way to say it.
+  `delete_all`, `update_column`, psql. "At least one row has `superuser` set"
+  is a statement about the table, not a row, so no CHECK constraint or partial
+  unique index can express it. A trigger is the only database-level way to say
+  it.
 - The admin controller additionally refuses **self-demotion** at any count.
-  The model rule protects the community; this one protects the person. With
-  seven superusers, demoting yourself is recoverable but still almost never
-  what you meant to click.
+  The model rule protects the community; this one protects the person. When
+  other superusers remain, demoting yourself is recoverable, but it is still
+  almost never what you meant to click.
 
 The trigger takes `PERFORM ... FOR UPDATE` on the other superuser rows before
 counting. Without the lock, two concurrent demotions each see the other as
@@ -180,9 +181,11 @@ how the flag came to be unmanageable in the first place.
   signed-in rules. That is the right default, but it means the token rule is
   only enforced where the `before_action` runs.
 - Adding a new ActiveAdmin resource now requires a decision: is it on the money
-  path? Forgetting leaves it open to plain admins. `LEDGER_MODELS` is the one
-  place to answer that, and `spec/models/superuser_adapter_spec.rb` iterates
-  the list so a new restricted model is covered automatically once added.
+  path? Forgetting leaves it open to plain admins. `LEDGER_MODELS` is where a
+  money-path resource goes, `GOVERNANCE_MODELS` is where a "decides who may
+  act" one goes, and `SUPERUSER_ONLY_MODELS` is the two of them joined.
+  `spec/models/superuser_adapter_spec.rb` iterates that list, so a new
+  restricted model is covered automatically once added.
 
 ## What is pinned
 
