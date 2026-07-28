@@ -77,6 +77,15 @@ $$;
 
 
 --
+-- Name: comeals_refuse_last_superuser_removal(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.comeals_refuse_last_superuser_removal() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$ BEGIN IF TG_OP = 'UPDATE' AND (NOT OLD.superuser OR NEW.superuser) THEN RETURN NEW; END IF; IF TG_OP = 'DELETE' AND NOT OLD.superuser THEN RETURN OLD; END IF; PERFORM 1 FROM admin_users WHERE superuser IS TRUE AND id <> OLD.id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'refusing to remove the last superuser (admin_users.id=%): the community would have no one able to settle reconciliations or grant admin access', OLD.id USING ERRCODE = 'raise_exception'; END IF; IF TG_OP = 'DELETE' THEN RETURN OLD; END IF; RETURN NEW; END; $$;
+
+
+--
 -- Name: comeals_reject_settled_child_write(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1448,6 +1457,13 @@ CREATE TRIGGER bills_reject_settled_write BEFORE INSERT OR DELETE OR UPDATE ON p
 
 
 --
+-- Name: admin_users comeals_refuse_last_superuser_removal; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER comeals_refuse_last_superuser_removal BEFORE DELETE OR UPDATE ON public.admin_users FOR EACH ROW EXECUTE FUNCTION public.comeals_refuse_last_superuser_removal();
+
+
+--
 -- Name: guests guests_reject_settled_write; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -1682,6 +1698,7 @@ ALTER TABLE ONLY public.bills
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260728120000'),
 ('20260727120000'),
 ('20260724120000'),
 ('20260708100000'),

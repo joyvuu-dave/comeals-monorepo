@@ -60,6 +60,20 @@ class AdminUser < ApplicationRecord
   has_many :guest_room_reservations, through: :community
   has_many :common_house_reservations, through: :community
 
+  # A community must always keep at least one superuser. Without one, nobody
+  # can settle a reconciliation, touch a bill, or promote anyone — and nobody
+  # can promote themselves out of it either, because promotion is itself a
+  # superuser action. The only way back would be shell access to the dyno,
+  # which for a community running its own copy means calling us.
+  #
+  # Both guards are prepended for the same reason Meal and Reconciliation
+  # prepend theirs (issue #26): dependent callbacks registered by associations
+  # run first otherwise, so a swallowed inner rollback can leave partial
+  # writes behind. A database trigger backstops both paths — see
+  # 20260728120000_refuse_removing_the_last_superuser.rb.
+  before_update :refuse_demoting_last_superuser, prepend: true
+  before_destroy :refuse_destroying_last_superuser, prepend: true
+
   def admin_users
     AdminUser.all
   end
@@ -76,5 +90,35 @@ class AdminUser < ApplicationRecord
   # user's name (AuditSerializer), so show the email — it says who acted.
   def name
     email
+  end
+
+  private
+
+  def refuse_demoting_last_superuser
+    return unless superuser_changed?(from: true, to: false)
+    return if other_superuser_exists?
+
+    errors.add(:superuser, 'cannot be removed from the last superuser — the community would ' \
+                           'have no one able to settle reconciliations or grant admin access.')
+    throw(:abort)
+  end
+
+  def refuse_destroying_last_superuser
+    return unless superuser?
+    return if other_superuser_exists?
+
+    errors.add(:base, 'This is the last superuser. Promote another admin first, otherwise the ' \
+                      'community would have no one able to settle reconciliations or grant ' \
+                      'admin access.')
+    throw(:abort)
+  end
+
+  def superuser_changed?(from:, to:)
+    superuser_previously_was = attribute_was(:superuser)
+    superuser_previously_was == from && superuser == to
+  end
+
+  def other_superuser_exists?
+    AdminUser.where(superuser: true).where.not(id: id).exists?
   end
 end

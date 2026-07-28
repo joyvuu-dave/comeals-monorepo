@@ -20,8 +20,13 @@ community.update!(slug: 'patches')
 
 Rails.logger.debug '1 Community created'
 
-# AdminUser
+# AdminUser. Two of them, because SuperuserAdapter has two admin tiers: a
+# superuser may do anything, and a plain admin may do everything except write
+# on the money path. Seeding one of each makes both sides of that boundary
+# something you can log in and look at.
 AdminUser.create!(email: 'joslyn@email.com', password: 'password', password_confirmation: 'password',
+                  community: community, superuser: true)
+AdminUser.create!(email: 'reader@email.com', password: 'password', password_confirmation: 'password',
                   community: community)
 
 Rails.logger.debug { "#{community.admin_users.count} AdminUser created" }

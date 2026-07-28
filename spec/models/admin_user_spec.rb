@@ -46,6 +46,95 @@ RSpec.describe AdminUser do
     end
   end
 
+  # A community with zero superusers cannot recover from inside the app:
+  # settling, ledger edits, and granting the flag are all superuser actions,
+  # so there is nobody left who can promote anybody.
+  describe 'keeping at least one superuser' do
+    it 'refuses to demote the last superuser' do
+      last = create(:admin_user, community: community, superuser: true)
+
+      expect(last.update(superuser: false)).to be false
+      expect(last.reload.superuser).to be true
+      expect(last.errors[:superuser].join).to include('last superuser')
+    end
+
+    it 'refuses to destroy the last superuser' do
+      last = create(:admin_user, community: community, superuser: true)
+
+      expect { last.destroy }.not_to change(described_class, :count)
+      expect(described_class.exists?(last.id)).to be true
+      expect(last.errors[:base].join).to include('last superuser')
+    end
+
+    it 'allows demoting a superuser while another remains' do
+      create(:admin_user, community: community, superuser: true)
+      other = create(:admin_user, community: community, superuser: true)
+
+      expect(other.update(superuser: false)).to be true
+      expect(other.reload.superuser).to be false
+    end
+
+    it 'allows destroying a superuser while another remains' do
+      create(:admin_user, community: community, superuser: true)
+      other = create(:admin_user, community: community, superuser: true)
+
+      expect { other.destroy }.to change(described_class, :count).by(-1)
+    end
+
+    it 'does not interfere with plain admins' do
+      create(:admin_user, community: community, superuser: true)
+      plain = create(:admin_user, community: community, superuser: false)
+
+      expect(plain.update(email: 'moved@example.com')).to be true
+      expect { plain.destroy }.to change(described_class, :count).by(-1)
+    end
+
+    it 'allows an unrelated update to the last superuser' do
+      last = create(:admin_user, community: community, superuser: true)
+
+      expect(last.update(email: 'still-here@example.com')).to be true
+    end
+  end
+
+  # The model guards give a readable error in the UI. The trigger is what
+  # holds when callbacks are skipped — update_all, delete_all, psql.
+  describe 'the database backstop' do
+    # The raise aborts the enclosing transaction, so the statement runs inside
+    # a savepoint. Without it the assertions after the raise hit
+    # PG::InFailedSqlTransaction rather than reading the row.
+    def in_savepoint(&)
+      described_class.transaction(requires_new: true, &)
+    end
+
+    it 'refuses an update_all that would demote the last superuser' do
+      last = create(:admin_user, community: community, superuser: true)
+
+      expect do
+        in_savepoint { described_class.where(id: last.id).update_all(superuser: false) }
+      end.to raise_error(ActiveRecord::StatementInvalid, /last superuser/)
+
+      expect(last.reload.superuser).to be true
+    end
+
+    it 'refuses a delete that would remove the last superuser' do
+      last = create(:admin_user, community: community, superuser: true)
+
+      expect do
+        in_savepoint { described_class.where(id: last.id).delete_all }
+      end.to raise_error(ActiveRecord::StatementInvalid, /last superuser/)
+
+      expect(described_class.exists?(last.id)).to be true
+    end
+
+    it 'allows the same writes while another superuser remains' do
+      create(:admin_user, community: community, superuser: true)
+      other = create(:admin_user, community: community, superuser: true)
+
+      expect { described_class.where(id: other.id).update_all(superuser: false) }.not_to raise_error
+      expect { described_class.where(id: other.id).delete_all }.not_to raise_error
+    end
+  end
+
   describe '#admin_users' do
     it 'returns all admin users' do
       admin1 = create(:admin_user, community: community)
