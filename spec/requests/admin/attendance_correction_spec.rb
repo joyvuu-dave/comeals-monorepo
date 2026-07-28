@@ -160,6 +160,41 @@ RSpec.describe 'Admin attendance correction' do
     end
   end
 
+  # ADR 0004: attendance drives the cost split, so correcting it is a money
+  # write and needs a superuser. These actions are custom controller methods
+  # rather than ActiveAdmin's generated ones, so this proves the authorization
+  # before_action still runs on them — overriding `create` and `destroy` does
+  # not remove it.
+  describe 'authorization' do
+    let(:plain_admin) { create(:admin_user, community: community, superuser: false) }
+
+    it 'refuses a plain admin adding attendance' do
+      meal = create(:meal, community: community)
+      meal.update!(closed: true)
+      sign_out admin_user
+      sign_in plain_admin
+
+      expect do
+        post "/meals/#{meal.id}/meal_residents",
+             params: { meal_resident: { resident_id: resident.id } }
+      end.not_to change(MealResident, :count)
+    end
+
+    it 'refuses a plain admin removing attendance' do
+      meal = create(:meal, community: community)
+      row = create(:meal_resident, meal: meal, resident: resident, community: community)
+      meal.update!(closed: true)
+      sign_out admin_user
+      sign_in plain_admin
+
+      expect do
+        delete "/meals/#{meal.id}/meal_residents/#{row.id}"
+      end.not_to change(MealResident, :count)
+
+      expect(MealResident.exists?(row.id)).to be true
+    end
+  end
+
   describe 'authentication' do
     it 'refuses unauthenticated requests' do
       sign_out admin_user
