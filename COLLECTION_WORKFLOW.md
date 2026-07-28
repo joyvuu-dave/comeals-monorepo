@@ -10,14 +10,21 @@ The word "collection" is used loosely here to cover both directions — collecti
 
 ## Background
 
-Right now the app has no support for collection at all. Once a reconciliation is finalized, the person responsible for collection (often an admin, but not necessarily) is on their own. They print out the balances, walk around with a notebook, collect checks/cash from people who owe, write checks to people who are owed, and check things off as they go.
+Right now the app has no support for collection at all. Once a reconciliation is created, the person responsible for collection (often an admin, but not necessarily) is on their own. They print out the balances, walk around with a notebook, collect checks/cash from people who owe, write checks to people who are owed, and check things off as they go.
+
+> **A note on "finalized."** This document was written expecting a separate
+> `finalized_at` step. That is not what shipped. A reconciliation is locked the
+> moment it is created, and its meals' bills, attendance, and guests are frozen
+> by database triggers. So wherever this document says "once finalized," read
+> "once created," and treat the bill-immutability prerequisite below as already
+> met. See `RECONCILIATION_WORKFLOW.md` item 4.
 
 Some collection cycles take days. Some never fully complete (someone forgets, moves out, or is just hard to reach). The current process has no way to track partial state, no way to remind people, and no way to confirm everyone's settled up.
 
 ## The workflow as practiced
 
-1. Reconciliation is run and finalized.
-2. Balances are published to residents (currently via email).
+1. Reconciliation is run. Creating it locks it.
+2. Balances are published to residents by email (`ReconciliationMailer`), with a read-only admin link to the itemized view.
 3. The collector walks the published list, contacts each person who owes, collects payment.
 4. The collector walks the published list of people owed, pays them out.
 5. Throughout the process, the collector mentally tracks who's been handled (or scribbles on paper).
@@ -27,7 +34,7 @@ Some collection cycles take days. Some never fully complete (someone forgets, mo
 ## Pain points
 
 - **No tracking state.** Everything is in the collector's head (or on a piece of paper).
-- **No partial completion.** A reconciliation is either "done" (calculations finalized) or "active" — no in-between for "calculations done, still collecting money."
+- **No partial completion.** A reconciliation is done the instant it is created — there is no state for "calculations done, still collecting money."
 - **No reminders.** People who haven't paid get no automated nudge.
 - **No payment automation.** Every payment is a manual cash/check/Venmo transaction handled out-of-band.
 - **No history of payments.** When and how each person paid isn't recorded.
@@ -42,7 +49,7 @@ The simplest valuable thing: add a checkbox or "Mark Paid" button next to each r
 
 **UI:** Each row in the Settlement Balances panel gets a "Mark Paid" button (or checkbox). Clicking sets `paid_at`. Once set, the row visually distinguishes itself (greyed out, checkmark, etc.).
 
-**Why a timestamp over a boolean:** Same reasoning as `finalized_at` for reconciliations. A timestamp gives you "yes/no AND when," supports audit trails, and matches Rails idioms.
+**Why a timestamp over a boolean:** A timestamp gives you "yes/no AND when," supports audit trails, and matches Rails idioms (`published_at`, `archived_at`).
 
 **Why "paid" works for both directions:** Whether the resident is owed or owes, the action from the collector's perspective is the same — "this balance has been settled." The label "Paid" is overloaded but readable in both contexts.
 
@@ -57,29 +64,31 @@ But it's the smallest change that captures the most basic state we need. It also
 
 **Priority:** Build this first.
 
-### 2. Two distinct lifecycle states: `finalized_at` vs `settled_at`
+### 2. A second lifecycle state: `settled_at`
 
 Once we have per-balance `paid_at`, the natural derived state for the reconciliation is "has every balance been paid?" When all `reconciliation_balances` for a reconciliation have `paid_at` set, the reconciliation is **fully settled**.
 
-Optionally store this as a `settled_at` timestamp on the reconciliation (set automatically when the last balance is marked paid). This gives us two distinct lifecycle states:
+Optionally store this as a `settled_at` timestamp on the reconciliation (set automatically when the last balance is marked paid). That gives the reconciliation two states rather than one:
 
-- **`finalized_at`:** Calculations are locked. No more meal additions/removals, **and no edits to the underlying bills/attendance either** (see `RECONCILIATION_WORKFLOW.md` section 4). This is load-bearing for everything below.
-- **`settled_at`:** All balances have been paid out. Money is fully settled.
+- **created:** calculations are locked, and so are the underlying bills and attendance. This already happens on create.
+- **`settled_at`:** all balances have been paid out. Money is fully settled.
 
-A reconciliation goes: created → finalized → settled → done. The settled state is rarely reversed (you don't "un-pay" someone), but it's not strictly immutable either.
+So a reconciliation goes: created → settled → done. The settled state is rarely reversed (you don't "un-pay" someone), but it's not strictly immutable either.
 
-**Dependency on bill immutability:** `settled_at` is only meaningful if the underlying ledger can't drift after `finalized_at`. If someone edits a bill on a reconciled meal after payouts have been disbursed, the published balances no longer match the source data, and we're silently lying to residents about what they were paid. The reconciliation workflow's bill-immutability enforcement is a hard prerequisite for this entire document — nothing here works without it.
+Note that adding `settled_at` means the reconciliation row gains a legal update, and today it refuses every update. That guard would have to learn about this one column.
+
+**Dependency on bill immutability — already satisfied.** `settled_at` is only meaningful if the underlying ledger can't drift. If someone edited a bill on a reconciled meal after payouts had been disbursed, the published balances would no longer match the source data, and we'd be silently lying to residents about what they were paid. That is exactly what `ReconciledMealImmutability` and the database triggers prevent, so this document's hard prerequisite is met.
 
 **Priority:** Tightly coupled with the MVP. Probably implement together.
 
 ### 3. Automated payment requests (the long-term vision)
 
-The aspiration: instead of the collector manually walking around, the system sends each person who owes a "please pay" request, and confirms the payment automatically when it arrives. The dream end-state goes further: once collection is complete, payouts to people who are owed happen automatically too.
+The aspiration: instead of the collector manually walking around, the system sends each person who owes a "please pay" request, and confirms the payment automatically when it arrives. The full version goes further: once collection is complete, payouts to people who are owed happen automatically too.
 
 **Constraints:**
 
 - **Minimize KYC burden.** We want to avoid Comeals being classified as a money services business with heavy compliance obligations. Some lightweight identity verification for participants is acceptable; full custodial money handling is not.
-- **Low cost.** Meals cost a few dollars; payment processing fees can't eat the balance. For reference: checkbook.io was evaluated and ruled out at $2000/month — that's a non-starter for a community app.
+- **Low cost.** Meals cost a few dollars; payment processing fees have to stay small next to the balance. For reference: checkbook.io was evaluated and ruled out at $2000/month, far more than a community app can spend.
 - **Social trust assumed.** This is a co-housing community. Residents know each other. Heavy fraud-prevention machinery is overkill.
 
 #### The fundamental asymmetry: collection vs payout
@@ -153,7 +162,7 @@ This onboarding is a one-time, ~5-10 minute thing per unit. Once it's done, the 
 
 1. **Day 0, morning:** Click "Create Reconciliation," set the cutoff date.
 2. **Day 0:** Review the auto-generated balances, mismatch warnings, and statistical outliers (the stuff in `RECONCILIATION_WORKFLOW.md`). Catch any errors. Iterate if needed.
-3. **Day 0:** Click "Finalize." Calculations are now locked.
+3. **Day 0:** Click "Create." Calculations are now locked.
 4. **Day 0:** Click "Settle Reconciliation." Big red button. Confirm dialog.
 5. **Days 1-4:** _Nothing happens at the reconciler's level._ The system processes in the background.
 6. **Day 5-ish:** Email arrives: "Reconciliation #6 fully settled."
@@ -192,7 +201,7 @@ The model gains a new concept: a **settlement intent** per unit per reconciliati
 The "happy path" is short. The failure paths are where the real work lives. Each of these is solvable but needs UI and process design:
 
 - **Failed charges.** ACH can fail (insufficient funds, account closed, dispute, etc.). The system has to: detect via webhook, halt disbursements (you can't pay out money you don't have), notify the reconciler, provide a UI to retry or fall back to manual collection for that unit.
-- **Disputes / reversed ACH.** ACH debits can be reversed by the customer for up to 60 days. If a charge clears, you disburse, and then 30 days later the charge is reversed — the platform is on the hook. Stripe handles the mechanics but the platform needs to either hold a small reserve, accept the exposure, or delay disbursements until a shorter "dispute cooling period" (e.g., 7 days) passes.
+- **Disputes / reversed ACH.** ACH debits can be reversed by the customer for up to 60 days. If a charge clears, you disburse, and then 30 days later the charge is reversed — the platform owes the money. Stripe handles the mechanics but the platform needs to either hold a small reserve, accept the exposure, or delay disbursements until a shorter "dispute cooling period" (e.g., 7 days) passes.
 - **A unit's Express account fails verification.** Stripe sometimes can't verify accounts (mismatched info, identity issues). That unit can't participate until it's resolved. UI to flag this and a fallback ("this unit pays manually this cycle").
 - **Someone moves out mid-cycle.** A resident leaves; their unit's Express account closes or stops responding. Their balance has to be paid by someone else in the unit, or written off. Process needed.
 - **Tax reporting.** Stripe issues 1099-K forms to connected accounts that hit IRS thresholds. For a cook who receives $200/reconciliation × 6 reconciliations = $1,200/year, they'll likely get a 1099-K. **Residents need to be told upfront** so they're not surprised. This might create a tax-filing burden some residents object to.
@@ -210,7 +219,7 @@ The "happy path" is short. The failure paths are where the real work lives. Each
 
 Approach C works cleanly for **new** communities adopting Comeals from scratch: "Welcome. To participate in the meal program, your unit needs to set up payment receiving. Here's the link." Five minutes per unit. Done. The requirement is enforced as part of joining the community.
 
-For an **existing** community migrating from a paper-and-Venmo system, it's harder. You'd need to: announce the change with lots of lead time, get every unit onboarded _before_ the first new-system reconciliation, have a manual fallback for units that drag their feet, and probably do at least one reconciliation in "hybrid mode" (some Express, some manual).
+For an **existing** community migrating from a paper-and-Venmo system, it's harder. You'd need to: announce the change with lots of lead time, get every unit onboarded _before_ the first new-system reconciliation, have a manual fallback for units that have not signed up yet, and probably do at least one reconciliation in "hybrid mode" (some Express, some manual).
 
 This is a change-management problem, not a technical one. The tech is the easy part.
 
@@ -218,7 +227,7 @@ This is a change-management problem, not a technical one. The tech is the easy p
 
 Same as Approach B (Stripe Invoicing for collection), plus: any cook who _wants_ automated payouts can opt in by doing the Express onboarding. Cooks who don't sign up still get paid manually.
 
-This is the path of least resistance for an existing community. The benefits of Approach C accumulate gradually as more cooks opt in, and there's no flag day where everyone has to be onboarded at once.
+This is the easiest change for an existing community. The benefits of Approach C accumulate gradually as more cooks opt in, and there is no single day on which everyone has to be signed up at once.
 
 **Effort to build:** Medium. You're building both flows, but you can ship them in stages.
 
@@ -230,13 +239,13 @@ This is the path of least resistance for an existing community. The benefits of 
 - Solves the biggest pain (collection) immediately
 - Free for the reconciler beyond payment fees
 - Validates whether residents will actually pay through the system before committing to Connect
-- The collection side is the harder behavior change anyway — once people are used to "pay your reconciliation invoice via the link in the email," the rest is gravy
+- The collection side is the harder behavior change anyway — once people are used to "pay your reconciliation invoice via the link in the email," the rest is easier
 - Doesn't require Comeals to become a Stripe platform, keeping compliance simple
 - The data model and webhook plumbing for B is reusable when graduating to C
 
 **Then evaluate Approach D (hybrid) or jump to Approach C (full automation) based on community appetite.** If cooks are enthusiastic about auto-payouts, build Express onboarding as an opt-in. If a new community is willing to mandate Express signup as part of joining, go straight to C.
 
-**Approach C is the dream end-state for steady-state operation**, especially for new communities where 100% adoption can be required from day one. The reconciler becomes purely a calculation reviewer; they never touch money.
+**Approach C is the best steady-state design**, especially for new communities where 100% adoption can be required from day one. The reconciler becomes purely a calculation reviewer; they never touch money.
 
 **Approach A (informal Venmo/Zelle links) remains a viable zero-cost starting point** for communities not ready for any Stripe relationship at all. Worth keeping as a fallback configuration even after B/C exist.
 
@@ -332,20 +341,20 @@ Doesn't change the data model much — it's a single reference column. But it fo
 7. **Reconciliation status dashboard** (item 9). Visual polish.
 8. **Bulk operations** (item 8). Helpful but not essential.
 9. **Collector as formal role** (item 11). Worth considering if multi-person collection becomes common.
-10. **Approach B: Stripe Invoicing** (item 3, Approach B). The first real Stripe integration. One signup (reconciler), automated collection, manual payout. Solid 80% solution.
-11. **Approach D: Stripe Invoicing + opt-in Express** (item 3, Approach D). Layer Connect Express on top of B as cooks opt in. Builds momentum toward full automation without a flag day.
-12. **Approach C: Full Stripe Connect Express with 100% adoption** (item 3, Approach C). The dream end-state. Best fit for new communities that can mandate Express signup as part of joining. Replaces nearly the entire collection workflow.
+10. **Approach B: Stripe Invoicing** (item 3, Approach B). The first real Stripe integration. One signup (reconciler), automated collection, manual payout. Solves most of the problem.
+11. **Approach D: Stripe Invoicing + opt-in Express** (item 3, Approach D). Layer Connect Express on top of B as cooks opt in. Moves toward full automation without a single cutover day.
+12. **Approach C: Full Stripe Connect Express with 100% adoption** (item 3, Approach C). The full version. Best fit for new communities that can mandate Express signup as part of joining. Replaces nearly the entire collection workflow.
 13. **Write-offs** (item 10). Defer until the accounting questions are clearer.
 
 ## Open questions
 
 - **Will the community actually use any of this, or will the collector keep using paper?** Worth a conversation before building beyond the MVP. The MVP is so cheap it's worth doing regardless.
-- **Who's "the collector"?** Currently no formal role exists. Should we add one (item 11), or just assume it's the admin who finalizes the reconciliation?
+- **Who's "the collector"?** Currently no formal role exists. Should we add one (item 11), or just assume it's the admin who creates the reconciliation?
 - **Privacy:** should one resident's "outstanding balance" be visible to other residents? In a small co-housing community, probably yes. In a larger community, maybe not.
 - **International expansion:** payment methods are heavily country-specific. The Stripe-based approaches assume US ACH rails. A European community might need SEPA. Likely a per-community configuration concern that affects which approach is even available.
 - **Trust level for self-service confirmation:** is "click to confirm I've paid" trustworthy enough, or do we want collector verification as a second step?
 - **For Approach C: does Comeals want to be a Stripe Connect platform?** This is a meaningful organizational decision, not just a technical one. Becoming a platform means signing Stripe's platform agreement, taking on some compliance obligations, and providing customer support for the connected accounts. Worth deciding deliberately before building.
-- **For Approach C: how does the platform handle the ACH dispute window?** ACH debits can be reversed for up to 60 days. If the platform disburses immediately after charges clear and a dispute happens later, the platform is on the hook. Hold a reserve? Delay disbursements 7 days? Accept the exposure and hope?
+- **For Approach C: how does the platform handle the ACH dispute window?** ACH debits can be reversed for up to 60 days. If the platform disburses immediately after charges clear and a dispute happens later, the platform owes the money. Hold a reserve? Delay disbursements 7 days? Accept the exposure and hope?
 - **For Approach C: who's the unit's "payment representative" when there are multiple residents?** Probably whoever volunteers, but this needs a UI for designation and a process for changing it.
 - **For Approach C: how do we handle the 1099-K tax reporting surprise for cooks?** Stripe will issue 1099-K forms to recipients above the threshold. Residents need to be told upfront so they can plan, and some may object on principle.
-- **For Approach C: chicken-and-egg for existing communities.** A new community can mandate Express signup as part of joining. An existing community has to migrate. What's the migration playbook? Probably a hybrid period (Approach D) before full cutover.
+- **For Approach C: existing communities have to start somewhere.** A new community can mandate Express signup as part of joining. An existing community has to migrate. What are the migration steps? Probably a hybrid period (Approach D) before full cutover.
