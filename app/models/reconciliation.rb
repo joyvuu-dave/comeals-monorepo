@@ -287,7 +287,7 @@ class Reconciliation < ApplicationRecord
     return if end_date.blank?
     return if end_date < Time.zone.today
 
-    errors.add(:end_date, 'must be before today — meals on that date may not have finished yet')
+    errors.add(:end_date, 'must be in the past')
   end
 
   # Distributes full-precision balances (which sum to zero) into cent-rounded

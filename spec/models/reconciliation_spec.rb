@@ -632,13 +632,13 @@ RSpec.describe Reconciliation do
     it 'rejects end_date in the future' do
       recon = build(:reconciliation, community: community, end_date: Date.tomorrow)
       expect(recon).not_to be_valid
-      expect(recon.errors[:end_date]).to include('must be before today — meals on that date may not have finished yet')
+      expect(recon.errors[:end_date]).to include('must be in the past')
     end
 
     it 'rejects end_date of today — same-day meals may not have finished' do
       recon = build(:reconciliation, community: community, end_date: Time.zone.today)
       expect(recon).not_to be_valid
-      expect(recon.errors[:end_date]).to include('must be before today — meals on that date may not have finished yet')
+      expect(recon.errors[:end_date]).to include('must be in the past')
     end
 
     it 'accepts end_date of yesterday' do
