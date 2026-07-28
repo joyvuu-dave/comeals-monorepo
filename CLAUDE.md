@@ -20,17 +20,9 @@ bin/check                  # Full health check: tests, linters, security, freshn
 - **ActiveAdmin**: `http://admin.lvh.me:3000/login` — admin subdomain, served by Rails directly (no Vite proxy)
 - **Mail inbox**: `http://localhost:3000/letter_opener`
 
-### Key Routes
-
-- `/` — SPA (FallbackController)
-- `/api/v1/*` — API endpoints
-- `admin.*` subdomain — ActiveAdmin (Devise auth, login at `/login`, dashboard at `/`)
-- `/.vite/manifest.json` — Vite manifest (FallbackController, for deploy detection)
-- `/*` — SPA catch-all (skips `/api/`, `/letter_opener`, and the admin subdomain)
-
 ## Collaboration Style
 
-**Be an opinionated pair programmer.** This is a personal project with one developer. There is no committee to appease. Push back on design choices that are wrong. Propose alternatives when something smells off. Don't hedge with "you could do X or Y" — say which one is right and why.
+**Be an opinionated pair programmer.** This is a personal project with one developer. There is no committee to appease. Push back on design choices that are wrong. Propose an alternative when something looks wrong, even if you cannot yet say exactly why. Don't hedge with "you could do X or Y" — say which one is right and why.
 
 **Be rigorous.** This codebase should be a textbook example of correct software. No shortcuts. No "good enough for now." If there's a standard way to do something (an RFC, a well-known pattern, a financial industry convention), follow it.
 
@@ -58,7 +50,7 @@ This is the most critical section. Financial calculations in this codebase must 
 
 8. **No denormalized counters or caches for financial data.** The `counter_culture` gem has been removed entirely. All derived values (costs, counts, multiplier sums) are computed from source data via SQL queries or Ruby enumeration. The only cache is `resident_balances`, refreshed daily by the rake task.
 
-9. **Prevent race conditions by design.** The daily balance computation is a batch job that reads immutable source data and writes results. For real-time operations (adding attendees, submitting bills), use database transactions **and take the meal row lock** — `with_meal_lock` in `MealsController`. The lock, not the Puma thread count, is what serializes a request against a running settlement. Any new path that writes bills, attendance, or guests must take it. See `docs/adr/0003-concurrency-on-the-money-path.md`.
+9. **Prevent race conditions by design.** The daily balance computation is a batch job that reads immutable source data and writes results. For real-time operations (adding attendees, submitting bills), use database transactions **and take the meal row lock** — `with_meal_lock` in `Api::V1::MealsController`. The lock, not the Puma thread count, is what serializes a request against a running settlement. Any new path that writes bills, attendance, or guests must take it. See `docs/adr/0003-concurrency-on-the-money-path.md`.
 
 10. **All money-related code must have tests.** Every calculation path, every edge case (zero attendees, single attendee, child-only meals, multi-cook meals, capped meals, etc.) must be covered.
 
@@ -85,7 +77,7 @@ SETTLEMENT (reconciliation): Rounded to cents using largest-remainder allocation
 - **No hardcoded IDs.** All queries must use proper scopes (e.g., `Meal.unreconciled`), never hardcoded record IDs.
 - **Explicit over implicit.** Name things clearly. `bill.amount` is the cook's actual cost. `bill.effective_amount` accounts for `no_cost` flag.
 - **Test edge cases.** Zero multiplier, zero cost, single attendee, no attendees, meal with only children, meal with only guests, etc.
-- **Database constraints.** Use NOT NULL, CHECK constraints, and foreign keys. Don't rely on Rails validations alone — the database is the last line of defense.
+- **Database constraints.** Use NOT NULL, CHECK constraints, and foreign keys. Don't rely on Rails validations alone. A validation only runs when the write goes through the model, so `update_all`, `delete_all`, a rake task, or psql all skip it. The constraint still holds.
 - **No Co-Authored-By trailers in commits.** Do not add `Co-Authored-By` lines or any other AI attribution metadata to git commit messages. Ever.
 
 ## Architecture Decisions
@@ -98,7 +90,8 @@ SETTLEMENT (reconciliation): Rounded to cents using largest-remainder allocation
 - **FallbackController serves the SPA.** Rails static file middleware doesn't serve dotfile directories, so `.vite/manifest.json` needs a controller action.
 - **ActiveAdmin uses subdomain routing (`admin.comeals.com` in prod, `admin.lvh.me:3000` in dev), not paths.** Restored in 30e4a0e after a path-based experiment. Admin is served by Rails directly — the Vite proxy only handles `/api`. The SPA catch-all carries the subdomain check in its own route-level constraint because Rails replaces a scope's lambda constraint instead of merging it (#18).
 - **Puma runs 1 thread and 0 workers for throughput reasons, not safety.** It does not protect the money code and never did — `reconciliations:create` is a manual rake task in its own dyno, so a settlement already commits mid-request today. The real protection is `SELECT ... FOR UPDATE` on the meal row, the compare-and-swap in `Reconciliation#assign_meals`, and the immutability triggers. ActiveAdmin still writes bills and attendance without the meal lock, but that no longer corrupts the ledger: `assign_meals` takes `FOR UPDATE` before claiming, and **both** of the child-write trigger's lookups — `OLD.meal_id` and `NEW.meal_id` — are unconditional `FOR KEY SHARE` reads (`20260727120000`), so an unlocked write waits for a running settlement and is then refused. **All three pieces are required.** The settlement lock and the trigger were each tested alone and neither works. Locking only `NEW.meal_id` leaves deletes and re-parenting free to run, which silently drops a row a reconciliation already counted — a DELETE takes no foreign-key lock on the parent, so nothing else makes it wait. Do not make either lookup conditional again; a `WHERE ... AND reconciliation_id IS NOT NULL` matches no row on an open meal and so takes no lock. Pinned by `spec/db/settlement_race_spec.rb`. Do not adopt `SERIALIZABLE`; Postgres SSI only detects conflicts between transactions that are all `SERIALIZABLE`. Full record and the verified experiments: `docs/adr/0003-concurrency-on-the-money-path.md` (#43).
-- **Deletion policy: refuse harmful deletes, allow mistake cleanup.** Units with residents, residents with ledger rows (bills, attendance, guests, settled balances), and closed or reconciled meals all refuse destroy at the model level. Database foreign keys backstop paths that skip callbacks. Admin destroy is enabled and shows the refusal reason. Retire residents and units with the `active` flag; reopen a meal that never happened to delete it. Destroy guards on Meal and Reconciliation must stay `prepend: true` — the dependent cascades run first otherwise, and inside an enclosing transaction the swallowed inner rollback leaves partial deletes (#26).
+- **Deletion policy: refuse harmful deletes, allow mistake cleanup.** Units with residents, residents with ledger rows (bills, attendance, guests, settled balances), and closed or reconciled meals all refuse destroy at the model level. Database foreign keys backstop paths that skip callbacks. Admin destroy is enabled and shows the refusal reason. Retire a resident with the `active` flag; reopen a meal that never happened to delete it. **Units have no `active` flag** — only `residents` has that column. A unit is either empty, and can be deleted, or it still has residents, and the way to retire it is to retire those residents. Destroy guards on Meal and Reconciliation must stay `prepend: true` — the dependent cascades run first otherwise, and inside an enclosing transaction the swallowed inner rollback leaves partial deletes (#26).
+- **Admin authorization has three levels, split at the money path.** A read-only token reads an allowlist and writes nothing; a plain admin reads everything and writes everything except the ledger; a superuser does anything. `SuperuserAdapter` holds both rules. Writing Bill, Guest, Meal, MealResident, Reconciliation, or either balance table needs a superuser, and so does AdminUser (it grants the flag) and Community (it holds `cap`). Residents, units, events, rotations and reservations are open to any admin — attendance snapshots its own `meal_residents.multiplier`, so editing a resident never reaches back into a settled meal. Two traps. **ActiveAdmin authorizes inside `resource` and `build_resource`, not in a `before_action`** — a hand-written action that loads its own records is unauthorized until it calls `authorize!` itself, which is how `meal_resident.rb` went unguarded. And **the read-only token is read-only by construction, not because of the account behind it**: the adapter refuses writes on any token request, so pointing `READ_ONLY_ADMIN_ID` at a superuser cannot widen the emailed links. A community must always keep one superuser — model guards, a database trigger (`20260728120000`), and a controller rule against self-demotion. Full record: `docs/adr/0004-admin-authorization.md`, which supersedes points 4 and 5 of ADR 0002.
 
 ## Heroku Deployment
 
@@ -123,4 +116,4 @@ Five canonical labels (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-f
 
 ### Domain docs
 
-Single-context: `CONTEXT.md` and `docs/adr/` at the repo root (created lazily by skills). See `docs/agents/domain.md`.
+Architecture decisions live in `docs/adr/`. Four so far: 0001 TypeScript at the API boundary, 0002 the high-trust authorization model, 0003 concurrency on the money path, 0004 admin authorization. `CONTEXT.md` at the repo root does not exist yet; a skill creates it when one is needed. See `docs/agents/domain.md`.
