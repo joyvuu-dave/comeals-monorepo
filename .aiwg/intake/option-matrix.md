@@ -5,6 +5,8 @@
 **Generated**: 2026-04-11 (from codebase analysis)
 
 > **Status update (2026-04-28)**: Since this matrix was generated, the `comeals-backend` and `comeals-ui` repos have been consolidated into a single monorepo (`comeals-monorepo`), deployed as one Heroku app. References below describe the system at the time of analysis and are preserved for the historical record. Current architecture is documented in `CLAUDE.md`.
+>
+> **Further, as of 2026-07-28**: the Railway migration was dropped. The app is still on Heroku.
 
 ---
 

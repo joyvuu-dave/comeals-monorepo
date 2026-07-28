@@ -3,6 +3,13 @@
 **Document Type**: Existing System Profile
 **Generated**: 2026-04-11
 
+> **Status update (2026-07-28)**: This profile describes the system as it was on
+> 2026-04-11 and is kept for the historical record, like its two companion
+> documents. Since then the `comeals-backend` and `comeals-ui` repos have become
+> one monorepo on one Heroku app, the Railway migration was dropped, memcached
+> was replaced by solid_cache, and admin authorization was rebuilt. Current
+> architecture is in `CLAUDE.md` and `docs/adr/`.
+
 ---
 
 ## Current Profile

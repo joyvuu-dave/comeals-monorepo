@@ -5,6 +5,8 @@
 **Source**: Codebase analysis of `/Users/tejo/workspace/comeals-backend`
 
 > **Status update (2026-04-28)**: Since this intake was taken, the `comeals-backend` and `comeals-ui` repos have been consolidated into a single monorepo at `/Users/tejo/workspace/comeals-monorepo` (GitHub: `joyvuu-dave/comeals-monorepo`), deployed as one Heroku app (`comeals-monorepo`). References below to the two-repo / two-app layout describe the system at intake time and are preserved for the historical record. Current architecture is documented in `CLAUDE.md`.
+>
+> **Further, as of 2026-07-28**: the Railway migration was dropped — the app is still on Heroku. Memcached / MemCachier was replaced by solid_cache in the primary database. Admin authorization was rebuilt (ADR 0004). The concurrency claims here are corrected in place below (ADR 0003). Several documents listed in "Attachments" have since been deleted: `BILLING_ANALYSIS.md`, `RAILWAY_MIGRATION_PLAN.md`, and `SETTLEMENT_PLAN.md` no longer exist.
 
 ---
 
