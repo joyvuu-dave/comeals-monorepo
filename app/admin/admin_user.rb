@@ -20,7 +20,8 @@ ActiveAdmin.register AdminUser do
     # This is the narrower rule it cannot express, because authorization there
     # is per resource and this is about one field and who is acting:
     #
-    #   - Only a superuser may set the flag. Belt and braces with the adapter.
+    #   - Only a superuser may set the flag. The adapter already refuses this,
+    #     so this check is a second one on the same rule.
     #   - Nobody may demote themselves. The model refuses this only when they
     #     are the LAST superuser, which is the rule that protects the
     #     community. This is the softer rule that protects the person: with
