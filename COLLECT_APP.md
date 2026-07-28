@@ -8,7 +8,7 @@ See `RECONCILIATION_WORKFLOW.md` and `COLLECTION_WORKFLOW.md` for the workflow i
 
 ## Why a dedicated native app?
 
-The alternative was to bolt reconciliation tooling onto the existing ActiveAdmin pages (or into the `comeals-monorepo` SPA). Going native is more work. Here's why it's worth it anyway:
+The alternative was to add reconciliation tooling to the existing ActiveAdmin pages (or into the `comeals-monorepo` SPA). Going native is more work. Here's why it's worth it anyway:
 
 - **The form factor matches the activity.** The reconciler is literally walking around the co-housing community — standing at doors, collecting cash and checks, marking things off. Desktop web is the wrong form factor. It's why the current process uses paper. A mobile app is ergonomically correct here, not just a "nice to have native feel" argument.
 
@@ -16,13 +16,13 @@ The alternative was to bolt reconciliation tooling onto the existing ActiveAdmin
 
 - **The API decoupling is independently valuable.** Outlier detection, mismatch warnings, and paid-tracking logic should live as clean JSON endpoints on the Rails backend regardless — not tangled into ActiveAdmin view code. Building Collect _forces_ that discipline. Even if the Swift app stalls halfway through, the Rails work is a strict improvement.
 
-- **Scope is contained enough to actually finish.** "Perform a reconciliation end-to-end" is one well-defined workflow — maybe 6–10 screens, no sprawling feature set. That's exactly the right size for a first iPhone app. Compare to trying to port the `comeals-monorepo` SPA wholesale, which would be a nightmare first project.
+- **Scope is contained enough to actually finish.** "Perform a reconciliation end-to-end" is one well-defined workflow — maybe 6–10 screens, no sprawling feature set. That's exactly the right size for a first iPhone app. Compare to trying to port the whole `comeals-monorepo` SPA, which is far too large for a first project.
 
 - **ActiveAdmin stays.** Collect is _additive_ — the reconciler's workflow-specific view. ActiveAdmin remains the general-purpose admin tool for residents, units, meal debugging, and everything else. The two coexist.
 
 ## Scope
 
-**Collect is:** the reconciler's end-to-end workflow tool. Preview a reconciliation, review mismatch warnings and outliers, finalize, then track collection/payout as balances get settled.
+**Collect is:** the reconciler's end-to-end workflow tool. Preview a reconciliation, review mismatch warnings and outliers, create it, then track collection/payout as balances get settled.
 
 **Collect is not:** a general-purpose admin app, a replacement for the `comeals-monorepo` SPA, or a place for residents to manage their own attendance. Those jobs belong to the existing surfaces.
 
@@ -33,8 +33,8 @@ Rough screen list (to be fleshed out as we design):
 - **Preview** — date picker for cutoff, then the big one: summary, meals, balances, warnings
 - **Meal detail** — drill-down from the meal list (who ate, bill breakdown)
 - **Warning detail** — drill-down for each warning with "jump to meal" action
-- **Finalize confirmation** — big button with confirm dialog
-- **Collection tracking** — post-finalization, list of balances with swipe-to-mark-paid
+- **Create confirmation** — big button with confirm dialog. This is the point of no return: creating the reconciliation locks it.
+- **Collection tracking** — after the reconciliation exists, a list of balances with swipe-to-mark-paid
 - **Settings** — logout and not much else
 
 ## Authentication
@@ -49,7 +49,7 @@ Rough screen list (to be fleshed out as we design):
 
 **No JWT, no OAuth, no separate mobile auth system.** One auth mechanism, two clients.
 
-**Permissioning for v1: any authenticated resident can preview/finalize.** Small trusted community, financial data is already visible in email reports, no need to gate further. If we later want to restrict, add a `residents.can_reconcile` boolean column — that's the seam to target.
+**Permissioning for v1: any authenticated resident can preview and create.** Small trusted community, financial data is already visible in email reports, no need to gate further. If we later want to restrict, add a `residents.can_reconcile` boolean column — that's the seam to target.
 
 ## Money representation
 
@@ -69,7 +69,7 @@ On the iOS side, all money is `Decimal`. A thin `Money` wrapper type may be just
 
 **Query parameters:**
 
-- `cutoff` (required, ISO date `YYYY-MM-DD`): meals on or before this date are included. Matches `Reconciliation#assign_meals` semantics exactly (`date <= cutoff`).
+- `cutoff` (required, ISO date `YYYY-MM-DD`): meals on or before this date are included. Must match `Reconciliation#assign_meals` semantics exactly, which are `date <= cutoff` **and** `date < today` — a meal on a day that is not yet over is never swept, whatever the cutoff says (issue #3). A cutoff of today or later is not a valid reconciliation, so the endpoint should reject it the same way the model does.
 - `token` (required): existing `Key`-based resident token.
 
 **Error responses** (following existing API conventions):
@@ -184,19 +184,17 @@ On the iOS side, all money is `Decimal`. A thin `Money` wrapper type may be just
 
 Contracts below are placeholders — each gets its own sketch when we get to it.
 
-- `POST /api/v1/reconciliations` — commit a previewed reconciliation at a given cutoff. Equivalent in spirit to today's `rake reconciliations:create`, but scoped and decoupled from finalization.
-- `POST /api/v1/reconciliations/:id/finalize` — set `finalized_at`, enforce bill/attendance immutability per `RECONCILIATION_WORKFLOW.md` §4.
-- `POST /api/v1/reconciliations/:id/unfinalize` — admin-only, audit-logged, forces re-derivation of balances on re-lock.
-- `POST /api/v1/reconciliations/:id/balances/:balance_id/mark_paid` — sets `paid_at` on a `reconciliation_balance`, automatically triggers derived `settled_at` on the reconciliation if all balances are now paid.
-- `GET /api/v1/reconciliations/:id` — historical view for a finalized reconciliation. What Collect's post-finalization collection screen will consume.
+- `POST /api/v1/reconciliations` — commit a previewed reconciliation at a given cutoff. Equivalent to today's `rake reconciliations:create`, but with the cutoff passed in instead of hardcoded to yesterday. Creating it is the lock: the row refuses update and destroy from that moment, and its meals' bills, attendance, and guests are frozen by database triggers. There is no separate finalize step and no unfinalize — see `RECONCILIATION_WORKFLOW.md` item 4.
+- `POST /api/v1/reconciliations/:id/balances/:balance_id/mark_paid` — sets `paid_at` on a `reconciliation_balance`, automatically triggers derived `settled_at` on the reconciliation if all balances are now paid. Both columns are still unbuilt; see `COLLECTION_WORKFLOW.md` items 1 and 2.
+- `GET /api/v1/reconciliations/:id` — historical view for a created reconciliation. What Collect's collection screen will consume.
 
 ## Backend implementation strategy
 
 ### The blocker: `Reconciliation#after_create :finalize`
 
-The existing `Reconciliation` model couples creation and finalization atomically via an `after_create` callback that calls `assign_meals` + `persist_balances!`. That means today you cannot compute a reconciliation's balances _without_ persisting records.
+The existing `Reconciliation` model computes and persists in one atomic act: an `after_create` callback runs `assign_meals` then `persist_balances!`. That means today you cannot compute a reconciliation's balances _without_ persisting records. (The callback is named `finalize`, which predates the decision not to have a separate finalize step. The name is about finishing the create, not about a lifecycle state.)
 
-For the preview endpoint to work, we need a way to run the calculation **without side effects**. This also aligns with where we eventually want to land for the finalization workflow: `create → review → finalize` should be three distinct steps, not one atomic act.
+For the preview endpoint to work, we need a way to run the calculation **without side effects**. That is the whole point of the preview: `review → create` as two steps, with the review carrying no commitment. Creating stays one atomic, locking act — we are not splitting it.
 
 ### Plan: extract `ReconciliationCalculator` PORO
 
@@ -210,7 +208,8 @@ ReconciliationCalculator.new(community:, cutoff_date:).call
   # }
 ```
 
-- Takes a community and cutoff date, queries the exact same meal scope as `assign_meals` (`Meal.unreconciled.joins(:bills).where(date: ..cutoff_date).distinct`)
+- Takes a community and cutoff date, queries the exact same meal scope as `assign_meals`:
+  `Meal.unreconciled.joins(:bills).where(date: ..cutoff_date).where(date: ...Time.zone.today).distinct`
 - Runs the existing settlement math including Hamilton's method
 - Returns a structured result — zero persistence, zero side effects
 - `Reconciliation#settlement_balances` becomes a thin wrapper delegating to the PORO
@@ -298,7 +297,7 @@ Before designing any real UI, the first iOS milestone is "hit the preview endpoi
 
 ## Sequencing
 
-Build the Rails work fully before opening Xcode. **This is the single most important decision in this document.** If we start writing Swift against a shifting API, we will spend half the iOS time reworking code every time a JSON shape changes. Worse, the shiny iOS work tends to pull attention away from the unglamorous backend work that delivers the actual value.
+Build the Rails work fully before opening Xcode. **This is the single most important decision in this document.** If we start writing Swift against a shifting API, we will spend half the iOS time reworking code every time a JSON shape changes. Worse, the iOS work is more fun than the backend work, and the backend work is where the value is.
 
 1. **Extract `ReconciliationCalculator` PORO** — near-pure refactor, existing specs as safety net
 2. **Write `ReconciliationWarnings` module** with the three v1 warning kinds + unit specs
@@ -307,13 +306,13 @@ Build the Rails work fully before opening Xcode. **This is the single most impor
 5. **Hand-test with `curl`** to verify the JSON actually matches the sketch above
 6. **Open Xcode.** New SwiftUI project, strict concurrency on, build the "render raw JSON" throwaway screen
 7. **Real iOS UI** for the preview screen
-8. **Loop back to backend** for the next endpoint (create/finalize), then alternate backend → iOS from there
+8. **Loop back to backend** for the create endpoint, then alternate backend → iOS from there
 
 ## Open questions
 
 - **Apple Developer Program ($99/year).** Needed for running on a physical device for more than 7 days, and for TestFlight distribution. Budget accordingly if the plan is real production use.
 - **Who is the collector?** Always one person, or does it rotate? Affects whether Collect needs a "handoff" story or can assume single-user. Tied to the "collector as formal role" idea in `COLLECTION_WORKFLOW.md` §11.
 - **Does Collect also support the resident view** (checking your own balance, seeing what you owe for the current cycle)? Or is that strictly the `comeals-monorepo` SPA's job? This is a scope decision that should be made before the login flow is built — it affects whether "who am I as a logged-in user" matters beyond auth.
-- **Offline support.** For walking-around-the-community use, partial connectivity is realistic. Should `paid_at` marks be queued locally and synced, or require live connection? Defer until the collection screens are being designed, but worth keeping in mind early so the data layer isn't painted into a corner.
+- **Offline support.** For walking-around-the-community use, partial connectivity is realistic. Should `paid_at` marks be queued locally and synced, or require live connection? Defer until the collection screens are being designed, but decide early enough that the data layer can still change.
 - **Push notifications.** "Reminder: reconciliation X has 3 unpaid balances" would be useful. Requires APNs setup, which is non-trivial. Not v1.
 - **Permissioning:** any authenticated resident can preview, or restricted? See auth section. Flagging for future discussion if the community grows or the role becomes more formal.
