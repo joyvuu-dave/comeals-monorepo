@@ -317,3 +317,9 @@ is needed by the specs before it is needed by the application.
   failure mode to every write path and a retry meant to hide it, and both were
   invisible before. `BugsnagErrorSubscriber` is what will carry the retry
   counts, via `Rails.error.report(handled: true)`.
+- **2026-07-29** — decisions 8 and 9, and `RetryOnConflict`. The test
+  environment runs at SERIALIZABLE; production does not yet. Suite green at
+  1112 examples.
+
+The remaining steps, in the order to do them, are in
+[docs/serializable-rollout.md](../serializable-rollout.md).
