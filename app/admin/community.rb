@@ -11,10 +11,9 @@ ActiveAdmin.register Community do
   config.filters = false
 
   # ACTIONS
-  # `new` is enabled so the very first Community can be created via the UI on
-  # a fresh deployment. The model's enforce_singleton validation blocks a
-  # second creation attempt, so we don't need to hide the button — an operator
-  # who clicks "New" post-setup just gets a validation error.
+  # `new` and `create` stay routed so the very first Community can be created
+  # through the UI on a fresh deployment. Once that row exists, SuperuserAdapter
+  # refuses both — the "New Community" button is gone and the URLs are denied.
   actions :all, except: %i[destroy]
 
   controller do

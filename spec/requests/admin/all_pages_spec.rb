@@ -18,6 +18,11 @@ ADMIN_PAGE_ACTIONS = %i[index show new edit].freeze
 # column blocks run against at least one row. MealResident serves no
 # pages: it allows only :create and :destroy (per-row attendance
 # corrections nested under Meal).
+#
+# `unrendered` lists pages a resource routes but that this spec cannot open,
+# because they are only reachable in a state this spec cannot be in. They
+# still belong in `pages` — the registry example below compares that list
+# against the routed actions.
 ADMIN_PAGE_RESOURCES = {
   'AdminUser' => {
     pages: %i[index show new edit],
@@ -31,8 +36,13 @@ ADMIN_PAGE_RESOURCES = {
     pages: %i[index show new edit],
     record: -> { create(:common_house_reservation, community: community, resident: resident) }
   },
+  # Community is a singleton. The new form is only reachable on a fresh
+  # deployment with no row yet, and this spec always has one, so opening it
+  # here is refused. spec/requests/admin/community_creation_spec.rb covers
+  # both the refusal and the bootstrap case.
   'Community' => {
     pages: %i[index show new edit],
+    unrendered: %i[new],
     record: -> { community }
   },
   'Event' => {
@@ -90,7 +100,7 @@ RSpec.describe 'Admin pages' do
   end
 
   ADMIN_PAGE_RESOURCES.each do |model, config|
-    config[:pages].each do |page|
+    (config[:pages] - config.fetch(:unrendered, [])).each do |page|
       it "renders #{model} #{page}" do
         record = instance_exec(&config[:record])
         base = "/#{model.underscore.pluralize}"

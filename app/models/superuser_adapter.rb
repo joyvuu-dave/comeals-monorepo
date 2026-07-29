@@ -53,9 +53,15 @@ class SuperuserAdapter < ActiveAdmin::AuthorizationAdapter
 
   READ_ACTIONS = %i[read].freeze
 
+  # The two actions that make a new record. ActiveAdmin asks about :new to
+  # decide whether to draw the "New" button and about :create to run the form
+  # submit, so a rule has to cover both.
+  CREATE_ACTIONS = %i[new create].freeze
+
   def authorized?(action, subject = nil)
     return token_authorized?(action, subject) if Current.read_only_admin_token
 
+    return false if creating_a_second_community?(action, subject)
     return true if READ_ACTIONS.include?(action)
     return true if user&.superuser?
 
@@ -67,6 +73,20 @@ class SuperuserAdapter < ActiveAdmin::AuthorizationAdapter
   end
 
   private
+
+  # The communities table holds exactly one row. Creating it is a bootstrap
+  # step on an empty database, and once the row exists there is nothing left
+  # to create, so both the button and the actions go away — for a superuser
+  # too. The model's enforce_singleton validation still refuses a second row
+  # if a write ever gets past this.
+  #
+  # This lives in the adapter rather than in app/admin/community.rb because
+  # ActiveAdmin asks the adapter the same question to draw the button and to
+  # run the action. One rule then covers both, and the button can never show
+  # up pointing at an action that refuses.
+  def creating_a_second_community?(action, subject)
+    CREATE_ACTIONS.include?(action) && model_name(subject) == 'Community' && Community.exists?
+  end
 
   # Token requests read, and only from the allowlist. Writes are refused here
   # rather than in the controller so the rule cannot be widened by pointing

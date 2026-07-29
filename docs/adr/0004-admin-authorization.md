@@ -79,6 +79,15 @@ Two membership decisions are worth writing down because they are not obvious:
 `Community` is restricted along with `AdminUser`: it holds `cap`, which
 rescales every subsidized meal's settlement.
 
+Creating a `Community` is a third case. The table holds exactly one row, and
+that row is made once, on a fresh deployment with an empty database. So the
+adapter refuses `new` and `create` on `Community` as soon as a row exists, for
+a superuser too. The check sits in the adapter rather than in
+`app/admin/community.rb` because ActiveAdmin asks the adapter the same question
+to draw the "New Community" button and to run the action, so one rule hides the
+button and denies the URL. The routes stay in place — they are how bootstrap
+works. The model's `enforce_singleton` validation is still the last line.
+
 ### 2. The token path is read-only by construction
 
 `SuperuserAdapter` refuses every write on a token request regardless of which

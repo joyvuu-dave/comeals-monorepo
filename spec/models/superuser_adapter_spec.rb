@@ -51,6 +51,33 @@ RSpec.describe SuperuserAdapter do
     end
   end
 
+  describe 'creating a Community' do
+    it 'is allowed while none exists, which is the bootstrap step' do
+      # `community` is a lazy let, so not referencing it leaves the table empty
+      # — the same state a fresh deployment starts in.
+      bootstrap_admin = create(:admin_user, community: nil, superuser: true)
+      expect(Community.exists?).to be false
+
+      expect(adapter_for(bootstrap_admin).authorized?(:new, Community)).to be true
+      expect(adapter_for(bootstrap_admin).authorized?(:create, Community)).to be true
+    end
+
+    it 'is refused once one exists, for a superuser too' do
+      community # create the singleton
+
+      expect(adapter_for(superuser).authorized?(:new, Community)).to be false
+      expect(adapter_for(superuser).authorized?(:create, Community)).to be false
+      expect(adapter_for(admin).authorized?(:new, Community)).to be false
+    end
+
+    it 'does not block editing the community that exists' do
+      community
+
+      expect(adapter_for(superuser).authorized?(:edit, Community)).to be true
+      expect(adapter_for(superuser).authorized?(:update, community)).to be true
+    end
+  end
+
   describe 'a plain admin' do
     it 'may not write on the money path' do
       expect_writes(admin, described_class::LEDGER_MODELS, allowed: false)

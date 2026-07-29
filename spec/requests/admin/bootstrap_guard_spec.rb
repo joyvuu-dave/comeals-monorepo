@@ -114,13 +114,9 @@ RSpec.describe 'Admin bootstrap guard' do
       expect(response).to have_http_status(:ok)
     end
 
-    it 'does not redirect /communities/new (second-community creation is blocked by the model validation instead)' do
-      get '/communities/new'
-
-      expect(response).to have_http_status(:ok)
-    end
-
-    it 'blocks a second Community via the enforce_singleton validation (not via the guard)' do
+    # /communities/new is refused post-bootstrap, but by the authorization
+    # adapter, not by this guard. See spec/requests/admin/community_creation_spec.rb.
+    it 'blocks a second Community' do
       expect do
         post '/communities', params: {
           community: {
