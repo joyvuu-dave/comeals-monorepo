@@ -61,8 +61,7 @@ something on the money path does not add up.
    heroku pg:psql -a comeals-monorepo -c "SHOW default_transaction_isolation"
    ```
 
-   Re-run this if anything unexplained shows up on the money path before step
-   5. If it ever says `serializable` before that step, production is running
+   Re-run this if anything unexplained shows up on the money path before step 5. If it ever says `serializable` before that step, production is running
    ahead of the retry work — reset it first.
 
 **Both checks are done. Start at step 1.**
