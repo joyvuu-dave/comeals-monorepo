@@ -8,15 +8,16 @@ namespace :billing do
 
       community = Community.instance
 
-      # Read every source record inside one REPEATABLE READ transaction so all
-      # five queries (meals, three preloads, residents) share a single database
-      # snapshot. Unreconciled meals are mutable: without this, a meal edit
-      # committing between two of the reads yields per-meal financials that
-      # match no real state of the ledger. Read-only, so it cannot hit a
-      # serialization failure and needs no retry.
+      # Read every source record inside one snapshot so all five queries
+      # (meals, three preloads, residents) see one instant. Unreconciled meals
+      # are mutable: without this, a meal edit committing between two of the
+      # reads yields per-meal financials that match no real state of the
+      # ledger. SnapshotRead opens the transaction SERIALIZABLE READ ONLY
+      # DEFERRABLE, which cannot abort with a serialization failure and so
+      # still needs no retry. See app/services/snapshot_read.rb.
       unreconciled_meals = nil
       resident_ids = nil
-      ActiveRecord::Base.transaction(isolation: :repeatable_read) do
+      SnapshotRead.call do
         # Batch-load all unreconciled meals with their financial associations (4 queries).
         # Uses preload (not includes) to guarantee separate IN(?) queries.
         # The joins(:bills).distinct excludes meals without bills — their unit_cost
