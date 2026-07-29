@@ -65,23 +65,32 @@ RSpec.describe 'settlement race against unlocked write paths' do
     other_meal
   end
 
+  # RetryOnConflict, because this cleanup is not exempt from the thing the
+  # file is about. These examples leave two sessions that have just been
+  # fighting over the same rows, and at SERIALIZABLE the delete_all below
+  # can be refused for a conflict like any other statement. When that
+  # happened the rows stayed, and since this file sorts first, every later
+  # example in the run saw data that should not exist — one failure became
+  # thirty-three, and the rows survived into the next run.
   after do
-    ActiveRecord::Base.transaction do
-      ActiveRecord::Base.connection.execute("SET LOCAL comeals.allow_settled_writes = 'on'")
-      Audited::Audit.delete_all
-      Bill.delete_all
-      MealResident.delete_all
-      Guest.delete_all
-      ReconciliationBalance.delete_all
-      Meal.delete_all
-      Reconciliation.delete_all
-      Key.delete_all
-      Resident.delete_all
-      Unit.delete_all
-      # DELETE on communities is refused by prevent_community_delete
-      # (20260408000002), which has no bypass. TRUNCATE does not fire
-      # row-level triggers; every referencing table is already empty.
-      ActiveRecord::Base.connection.execute('TRUNCATE communities CASCADE')
+    RetryOnConflict.call do
+      ActiveRecord::Base.transaction do
+        ActiveRecord::Base.connection.execute("SET LOCAL comeals.allow_settled_writes = 'on'")
+        Audited::Audit.delete_all
+        Bill.delete_all
+        MealResident.delete_all
+        Guest.delete_all
+        ReconciliationBalance.delete_all
+        Meal.delete_all
+        Reconciliation.delete_all
+        Key.delete_all
+        Resident.delete_all
+        Unit.delete_all
+        # DELETE on communities is refused by prevent_community_delete
+        # (20260408000002), which has no bypass. TRUNCATE does not fire
+        # row-level triggers; every referencing table is already empty.
+        ActiveRecord::Base.connection.execute('TRUNCATE communities CASCADE')
+      end
     end
   end
 
@@ -305,30 +314,128 @@ RSpec.describe 'settlement race against unlocked write paths' do
       false
     end
 
-    it 'blocks the rival on the row lock and then fails its compare-and-swap' do
+    # Only one of the two settlements may survive, and it must own every
+    # swept meal. That is the money-level guarantee, and it holds at both
+    # isolation levels — but which side dies, and how, does not:
+    #
+    #   READ COMMITTED  the rival blocks on FOR UPDATE, wakes once this
+    #                   settlement commits, plucks meals that are now
+    #                   claimed, and its compare-and-swap in assign_meals
+    #                   raises.
+    #   SERIALIZABLE    SSI cancels *this* settlement first, at the bills
+    #                   read inside persist_balances!, for a read/write
+    #                   dependency with the blocked rival ("canceled on
+    #                   identification as a pivot"). This settlement rolls
+    #                   back, the rival wakes to unclaimed meals, and the
+    #                   rival is the one that survives.
+    #
+    # So the roles swap. These assertions are on the outcome rather than on
+    # which side raises, because the outcome is what the ledger cares about
+    # and it is the same either way.
+    it 'lets exactly one of two racing settlements survive, owning every meal' do
       with_sessions do |_writer, observer|
         rival = nil
         blocked = false
 
-        settle_yielding_after('Meal Update All') do
-          rival = Thread.new do
-            # The rival is expected to raise; that is the assertion below.
-            # Without this Ruby also prints its backtrace to stderr.
-            Thread.current.report_on_exception = false
-            ActiveRecord::Base.connection_pool.with_connection { create(:reconciliation, community: community) }
+        main_error = begin
+          settle_yielding_after('Meal Update All') do
+            rival = Thread.new do
+              # One of the two is expected to raise. Without this Ruby also
+              # prints its backtrace to stderr.
+              Thread.current.report_on_exception = false
+              ActiveRecord::Base.connection_pool.with_connection { create(:reconciliation, community: community) }
+            end
+            # The rival plucks its eligible meals before it locks, so it must
+            # reach the lock while this settlement is still uncommitted —
+            # otherwise it would see the claim and pluck nothing, and there
+            # would be no race left to test.
+            blocked = wait_for_blocked_session(observer, 'FOR UPDATE')
           end
-          # The rival plucks its eligible meals before it locks, so it must
-          # reach the lock while this settlement is still uncommitted —
-          # otherwise it would see the claim and pluck nothing, and the
-          # compare-and-swap would have nothing to catch.
-          blocked = wait_for_blocked_session(observer, 'FOR UPDATE')
+          nil
+        rescue StandardError => e
+          e
+        end
+
+        rival_error = begin
+          rival.value
+          nil
+        rescue StandardError => e
+          e
         end
 
         expect(blocked).to be(true)
-        # Not a deadlock: the rival woke up, and lost cleanly.
-        expect { rival.value }.to raise_error(RuntimeError, /concurrent reconciliation/)
+        # Exactly one side lost. Not both, which would settle nothing, and
+        # not neither, which would settle the same meals twice.
+        expect([main_error, rival_error].compact.size).to eq(1)
+
+        survivor = Reconciliation.sole
+        expect(meal.reload.reconciliation_id).to eq(survivor.id)
+        # The ledger the survivor stored still matches its own source data.
+        expect(stored_balances(survivor)).to eq(balances_from_source(survivor))
+      end
+    end
+
+    # What re-running buys on the path that actually loses at SERIALIZABLE.
+    # A settlement cancelled as a pivot is not broken and nothing about it
+    # needs fixing; the documented response is to run it again.
+    #
+    # Note what does *not* happen here, because it is easy to write this
+    # test believing it does: RetryOnConflict never retries inside this
+    # example. The rival has committed by the time the settlement runs
+    # again, so `must_settle_at_least_one_meal` refuses the very first
+    # attempt and there is no conflict left to retry. Measured — the
+    # reported-error list came back empty every run. The retry loop itself
+    # is proved in spec/services/retry_on_conflict_spec.rb.
+    #
+    # What this example proves is the pairing: after a real SSI
+    # cancellation, running the settlement again is safe and lands on a
+    # refusal that names a domain rule. Without that second run the task
+    # dies on a raw PG::TRSerializationFailure, which tells a human nothing
+    # they can act on. With it the task says there was nothing left to
+    # settle, which is true and actionable.
+    #
+    # This uses Reconciliation.create! directly rather than the factory. The
+    # factory's before(:create) hook builds a unit, a cook, a meal and a bill
+    # for itself, so retrying it manufactures fresh work: the second attempt
+    # succeeds on a meal that did not exist when the race started, and two
+    # reconciliations result. A retried block has to be safe to run twice,
+    # and the factory is not. Measured, not reasoned about — that is exactly
+    # what happened on the first attempt at this test.
+    it 'can safely re-run a cancelled settlement, which is then refused for having nothing to settle' do
+      with_sessions do |_writer, observer|
+        rival = nil
+
+        main_error = begin
+          settle_yielding_after('Meal Update All') do
+            rival = Thread.new do
+              Thread.current.report_on_exception = false
+              ActiveRecord::Base.connection_pool.with_connection { create(:reconciliation, community: community) }
+            end
+            wait_for_blocked_session(observer, 'FOR UPDATE')
+          end
+          nil
+        rescue StandardError => e
+          e
+        end
+        rival.join
+
+        # At READ COMMITTED the rival is the side that loses, so there is no
+        # cancelled settlement to retry and nothing here to prove.
+        skip 'this run cancelled the rival, not the settlement' if main_error.nil?
+
+        retried = begin
+          RetryOnConflict.call do
+            Reconciliation.create!(community: community, date: Time.zone.today, end_date: Date.yesterday)
+          end
+        rescue ActiveRecord::RecordInvalid => e
+          e
+        end
+
+        expect(retried).to be_a(ActiveRecord::RecordInvalid)
+        expect(retried.message).to match(/must settle at least one meal/i)
+        # Still exactly one settlement, still owning the meals.
         expect(Reconciliation.count).to eq(1)
-        expect(meal.reload.reconciliation_id).to eq(Reconciliation.first.id)
+        expect(meal.reload.reconciliation_id).to eq(Reconciliation.sole.id)
       end
     end
   end

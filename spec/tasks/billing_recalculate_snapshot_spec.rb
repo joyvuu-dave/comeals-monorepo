@@ -30,21 +30,28 @@ RSpec.describe 'billing:recalculate snapshot isolation' do
     end
   end
 
+  # RetryOnConflict for the same reason as spec/db/settlement_race_spec.rb:
+  # this example leaves a second connection that has just written the same
+  # rows, so at SERIALIZABLE a delete here can be refused for a conflict.
+  # A cleanup that fails in a non-transactional group leaves rows behind for
+  # every later example in the run, and for the next run too.
   after do
     Rake::Task['billing:recalculate'].reenable
 
-    ResidentBalance.delete_all
-    Bill.delete_all
-    MealResident.delete_all
-    Guest.delete_all
-    Meal.delete_all
-    Key.delete_all
-    Resident.delete_all
-    Unit.delete_all
-    # DELETE on communities is refused by prevent_community_delete
-    # (20260408000002). TRUNCATE does not fire row-level triggers; every
-    # referencing table is already empty.
-    ActiveRecord::Base.connection.execute('TRUNCATE communities CASCADE')
+    RetryOnConflict.call do
+      ResidentBalance.delete_all
+      Bill.delete_all
+      MealResident.delete_all
+      Guest.delete_all
+      Meal.delete_all
+      Key.delete_all
+      Resident.delete_all
+      Unit.delete_all
+      # DELETE on communities is refused by prevent_community_delete
+      # (20260408000002). TRUNCATE does not fire row-level triggers; every
+      # referencing table is already empty.
+      ActiveRecord::Base.connection.execute('TRUNCATE communities CASCADE')
+    end
   end
 
   it 'computes every balance from one snapshot when a meal edit commits mid-read' do

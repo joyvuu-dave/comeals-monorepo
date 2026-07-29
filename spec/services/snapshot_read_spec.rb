@@ -11,6 +11,10 @@ RSpec.describe SnapshotRead do
     )
   end
 
+  def session_default_isolation
+    ActiveRecord::Base.connection.select_value('SHOW default_transaction_isolation')
+  end
+
   # The real path. Transactional fixtures would leave a transaction already
   # open, which is the case SnapshotRead deliberately skips, so this group
   # runs without them. It creates no rows, so there is nothing to clean up.
@@ -57,8 +61,16 @@ RSpec.describe SnapshotRead do
 
       modes = described_class.call { transaction_modes }
 
-      expect(modes['isolation']).to eq('read committed')
+      # READ ONLY is the mode that proves it: SnapshotRead always sets it,
+      # and nothing else in the app ever does, so finding it off means
+      # nothing was applied here.
       expect(modes['read_only']).to eq('off')
+      # The isolation level is compared against the session default rather
+      # than against a literal. The test environment's default moves — it
+      # runs at SERIALIZABLE ahead of production (config/database.yml, ADR
+      # 0005) — and this example is about SnapshotRead not changing the
+      # transaction, not about what the ambient level happens to be.
+      expect(modes['isolation']).to eq(session_default_isolation)
     end
 
     it 'returns the block value' do
