@@ -22,10 +22,11 @@ Shipped and deployed to production:
 (`config/database.yml`, the `test:` block). That gap is deliberate and closes
 at step 5 below.
 
-## Verify first — these are not confirmed
+## Pre-flight checks — both done
 
-Do these before writing any new code. Both are quick and both change what
-comes next if they come back wrong.
+Both were confirmed on 2026-07-29. Kept here with the commands, because they
+are worth re-running after a deploy, after a credential rotation, or whenever
+something on the money path does not add up.
 
 1. **Is Bugsnag actually receiving anything?**
 
@@ -60,7 +61,8 @@ comes next if they come back wrong.
    heroku pg:psql -a comeals-monorepo -c "SHOW default_transaction_isolation"
    ```
 
-   Re-run this if anything unexplained shows up on the money path before step 5. If it ever says `serializable` before that step, production is running
+   Re-run this if anything unexplained shows up on the money path before step
+   5. If it ever says `serializable` before that step, production is running
    ahead of the retry work — reset it first.
 
 **Both checks are done. Start at step 1.**
