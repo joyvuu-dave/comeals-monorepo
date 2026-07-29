@@ -27,21 +27,25 @@ at step 5 below.
 Do these before writing any new code. Both are quick and both change what
 comes next if they come back wrong.
 
-1. **Is Bugsnag actually receiving anything?** The code is deployed but the
-   config vars may not be set. The Rails half needs `BUGSNAG_API_KEY`; the
-   browser half needs `VITE_BUGSNAG_API_KEY` **set before the build**, because
-   Vite bakes it into the bundle — setting it after a deploy does nothing
-   until the next one.
+1. **Is Bugsnag actually receiving anything?**
+
+   Confirmed 2026-07-29: both `BUGSNAG_API_KEY` and `VITE_BUGSNAG_API_KEY` are
+   set on Heroku, and the browser half is live — the key and the SDK are both
+   in the deployed bundle. That last part is the one that is easy to get
+   wrong, because Vite bakes `VITE_*` vars in at build time: setting the var
+   after a deploy does nothing until the next build. To re-check it later,
+   fetch the script named in `https://comeals.com/` and grep it for the key.
+
+   Still to confirm: the Rails half.
 
    ```
-   heroku config -a comeals-monorepo | grep -i bugsnag
    heroku run rake bugsnag:verify -a comeals-monorepo
    ```
 
-   `bugsnag:verify` sends one error down each path and prints what it means if
-   only the first arrives. Two events should appear in the `comeals` project
-   within a minute. If only one does, `BugsnagErrorSubscriber` is not
-   subscribed, and that is the half that will carry the retry counts.
+   It sends one error down each path. Two events should appear in the
+   `comeals` project within a minute. **If only the first arrives,
+   `BugsnagErrorSubscriber` is not subscribed** — and that is the half that
+   carries the retry counts, so nothing else would reveal it was missing.
 
 2. **Is the production role back to READ COMMITTED?** On 2026-07-29 an
    `ALTER ROLE CURRENT_USER SET default_transaction_isolation = 'serializable'`
