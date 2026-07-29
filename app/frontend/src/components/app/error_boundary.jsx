@@ -1,4 +1,5 @@
 import { Component } from "react";
+import { notifyError } from "../../helpers/bugsnag";
 
 var styles = {
   container: {
@@ -35,6 +36,13 @@ class ErrorBoundary extends Component {
 
   componentDidCatch(error, errorInfo) {
     console.error("ErrorBoundary caught:", error, errorInfo);
+    // React catches a render error and hands it here rather than letting it
+    // reach window.onerror, so Bugsnag's automatic handlers never see it.
+    // Without this call, the one error that replaces the whole screen is
+    // the one error that gets reported nowhere.
+    notifyError(error, {
+      componentStack: errorInfo && errorInfo.componentStack,
+    });
   }
 
   render() {

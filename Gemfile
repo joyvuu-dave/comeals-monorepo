@@ -45,6 +45,11 @@ gem 'jwt'
 # deliberately loose — only genuinely abusive traffic should trip them.
 gem 'rack-attack'
 
+# Error tracking. Reports unhandled exceptions, and anything sent through
+# Rails.error, to the Bugsnag project. Silent unless BUGSNAG_API_KEY is set,
+# which is production only. See config/initializers/bugsnag.rb.
+gem 'bugsnag'
+
 gem 'devise'
 gem 'friendly_id'
 gem 'goldiloader'

@@ -1,4 +1,12 @@
 import "./styles.css";
+// Installs the window.onerror and unhandledrejection handlers. This runs
+// after every import in this file has been evaluated, because imports are
+// hoisted — so an error thrown while a module is still being evaluated is
+// not caught. Everything after startup is, which is where the errors we
+// care about happen.
+import { startBugsnag } from "./helpers/bugsnag";
+startBugsnag();
+
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
