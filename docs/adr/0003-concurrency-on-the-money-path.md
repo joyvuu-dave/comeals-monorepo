@@ -250,6 +250,10 @@ reads. They all block, and are all refused.)
    a retry wrapper on every request — a large change that buys what two lines
    already buy. Revisit only if a test finds a race the locks do not cover.
 
+   _Re-costed on 2026-07-29 in ADR 0005 (Proposed). No test has found such a
+   race; the reasoning above still holds. What changed is the estimate of what
+   the whole-application version would cost here._
+
 3. **Scope the concurrency tests to the unlocked paths.** Issue #43 asks for N
    threads against every endpoint. The API endpoints are already serialized by
    the row lock; testing them mostly tests Postgres. Test what skips the lock:
