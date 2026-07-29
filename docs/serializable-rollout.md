@@ -53,14 +53,17 @@ comes next if they come back wrong.
 
 2. **Is the production role back to READ COMMITTED?** On 2026-07-29 an
    `ALTER ROLE CURRENT_USER SET default_transaction_isolation = 'serializable'`
-   was run and then reset. Confirm the reset held:
+   was run against production and then reset. Confirmed the same day: it
+   reports `read committed`, so the reset held.
 
    ```
    heroku pg:psql -a comeals-monorepo -c "SHOW default_transaction_isolation"
    ```
 
-   Expect `read committed`. If it says `serializable`, production is running
-   ahead of the retry work — reset it and do the remaining steps first.
+   Re-run this if anything unexplained shows up on the money path before step 5. If it ever says `serializable` before that step, production is running
+   ahead of the retry work — reset it first.
+
+**Both checks are done. Start at step 1.**
 
 ## What is left, in order
 
