@@ -39,6 +39,29 @@ class Community < ApplicationRecord
     'Auckland' => 'Pacific/Auckland'
   }.freeze
 
+  # --- Cap Bounds ---
+  # A NULL cap means "no cap". A cap that is set is a dollar amount per
+  # multiplier unit, so the bounds are only there to reject values that are
+  # not real money.
+  #
+  # MIN_CAP: one cent is the smallest amount of money that exists. A cap of
+  # $0.01 is silly but coherent; anything below it cannot be charged to
+  # anyone. Zero and negative numbers also violate the database check
+  # constraint communities_cap_positive_or_null, which raised a 500 instead
+  # of showing the admin a form error.
+  #
+  # MAX_CAP: the column is DECIMAL(12, 8), which leaves four digits before the
+  # decimal point, so $9,999.99 is the largest whole-cent amount it can hold.
+  # Anything larger raised PG::NumericValueOutOfRange. This is a storage limit,
+  # not a judgment about what a meal should cost — no cap will ever come near
+  # it. It is written in whole cents rather than as the column's true maximum
+  # (9999.99999999) for two reasons. An admin who hits it reads a real amount
+  # of money instead of a database column definition. And a whole-cent ceiling
+  # cannot be rounded past: 9999.999999996 is under $10,000, but the column
+  # rounds it to 10000.00000000 and overflows.
+  MIN_CAP = BigDecimal('0.01')
+  MAX_CAP = BigDecimal('9999.99')
+
   # --- Singleton Record ---
   # The communities table has at most one row, enforced by a unique index on
   # singleton_guard (which is always 0). Fresh deployments start with zero
@@ -74,6 +97,18 @@ class Community < ApplicationRecord
   validates :name, uniqueness: { case_sensitive: false }
   validates :slug, length: { within: 3..40 }
   validates :timezone, inclusion: { in: SUPPORTED_TIMEZONES.values }
+  validates :cap,
+            numericality: {
+              greater_than_or_equal_to: MIN_CAP,
+              message: 'must be at least $0.01, or blank for no cap'
+            },
+            allow_nil: true
+  validates :cap,
+            numericality: {
+              less_than_or_equal_to: MAX_CAP,
+              message: 'must be $9,999.99 or less'
+            },
+            allow_nil: true
 
   has_many :bills, dependent: :destroy
   has_many :meals, dependent: :destroy

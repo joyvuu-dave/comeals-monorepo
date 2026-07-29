@@ -204,6 +204,76 @@ RSpec.describe Community do
     end
   end
 
+  # Both bounds exist because the database rejected these values with an
+  # exception, which reached the admin as a 500 page instead of a form error.
+  # Zero and negative hit the communities_cap_positive_or_null check
+  # constraint; anything over 9999.99999999 overflows the DECIMAL(12, 8)
+  # column. The model now refuses them first.
+  describe 'cap bounds' do
+    it 'allows a blank cap, which means no cap' do
+      community.cap = nil
+      expect(community).to be_valid
+    end
+
+    it 'allows one cent, the smallest amount of real money' do
+      community.cap = BigDecimal('0.01')
+      expect(community).to be_valid
+    end
+
+    it 'allows an ordinary cap' do
+      community.cap = BigDecimal('4.50')
+      expect(community).to be_valid
+    end
+
+    it 'allows the largest whole-cent amount the column can hold' do
+      community.cap = BigDecimal('9999.99')
+      expect(community).to be_valid
+    end
+
+    it 'refuses zero' do
+      community.cap = BigDecimal('0')
+      expect(community).not_to be_valid
+      expect(community.errors[:cap]).to include('must be at least $0.01, or blank for no cap')
+    end
+
+    it 'refuses a negative cap' do
+      community.cap = BigDecimal('-5')
+      expect(community).not_to be_valid
+      expect(community.errors[:cap]).to include('must be at least $0.01, or blank for no cap')
+    end
+
+    it 'refuses a fraction of a cent' do
+      community.cap = BigDecimal('0.001')
+      expect(community).not_to be_valid
+      expect(community.errors[:cap]).to include('must be at least $0.01, or blank for no cap')
+    end
+
+    it 'refuses a value too large for the column' do
+      community.cap = BigDecimal('10000')
+      expect(community).not_to be_valid
+      expect(community.errors[:cap]).to include('must be $9,999.99 or less')
+    end
+
+    # Under $10,000, so a "less than 10000" bound would have let this through.
+    # The column has 8 decimal places, so it rounds to 10000.00000000 and
+    # overflows. A whole-cent ceiling cannot be rounded past.
+    it 'refuses a value that rounds up past the column maximum' do
+      community.cap = BigDecimal('9999.999999996')
+      expect(community).not_to be_valid
+      expect(community.errors[:cap]).to include('must be $9,999.99 or less')
+    end
+
+    it 'saves without raising instead of hitting the database constraint' do
+      expect { community.update(cap: BigDecimal('0')) }.not_to raise_error
+      expect(community.reload.cap).to eq(BigDecimal('4.50'))
+    end
+
+    it 'saves without raising instead of overflowing the column' do
+      expect { community.update(cap: BigDecimal('10000')) }.not_to raise_error
+      expect(community.reload.cap).to eq(BigDecimal('4.50'))
+    end
+  end
+
   describe '#auto_rotation_length' do
     it 'calculates half the number of cookable adults' do
       4.times { create(:resident, community: community, unit: unit, multiplier: 2, can_cook: true) }
