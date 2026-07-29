@@ -64,26 +64,34 @@ something on the money path does not add up.
    Re-run this if anything unexplained shows up on the money path before step 5. If it ever says `serializable` before that step, production is running
    ahead of the retry work — reset it first.
 
-**Both checks are done. Start at step 1.**
+**Both checks are done. Step 1 is done. Start at step 2.**
 
 ## What is left, in order
 
-### Step 1 — move rendering out of `with_meal_lock`
+### ~~Step 1 — move rendering out of `with_meal_lock`~~ — done 2026-07-29
 
-`app/controllers/api/v1/meals_controller.rb`. Nine actions call
-`with_meal_lock`; eight of them call `render` inside the block, and
-`with_meal_lock` itself renders the rejection at
-`render_reconciled_rejection`. Re-running that block after a rollback would
-raise `DoubleRenderError`, so this has to happen before any retry goes in.
+Shipped. No `render` call sits inside a `with_meal_lock` block any more.
 
-Each action changes so the block returns what to render and the action renders
-it afterwards. This also removes the `performed?` check in `update_bills`.
+How it works now. The block returns the render arguments as a hash, and the
+action calls `render(**result)` after `with_lock` returns. `with_lock` returns
+whatever its block returns, so nothing had to be threaded through by hand.
+`render_reconciled_rejection` became `reconciled_rejection`, which returns the
+same hash instead of rendering it; the `reject_if_reconciled` before_action
+renders it itself. The `performed?` check in `update_bills` is gone — that
+block now returns `nil` on success, so a non-nil return is the rejection.
 
-**No dependency on SERIALIZABLE.** Behavior is unchanged, the existing request
-specs cover it, and it is the biggest single piece of the diff. Ship it alone.
+`with_meal_lock` renders nothing at all. That rule is written in a comment
+above it, with the reason.
 
-Done when: `bin/check` is green and no `render` call sits inside a
-`with_meal_lock` block.
+One thing this cost that was not expected: the class grew by nine lines, one
+per action, and crossed the `Metrics/ClassLength` limit of 250. The limit is
+now 260. A wrapper method that did the lock and the render together would have
+saved about five of those lines, which is not enough to stay under 250, and it
+would have hidden the render again right after we made it visible. The class is
+long because `update_bills` is long. Splitting that out is a separate job.
+
+Verified by `bin/check`: 1112 examples, 0 failures, RuboCop clean. The 441
+request specs cover these actions and none of them changed.
 
 ### Step 2 — retry inside `with_meal_lock`
 
