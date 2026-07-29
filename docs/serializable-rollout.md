@@ -36,16 +36,20 @@ comes next if they come back wrong.
    after a deploy does nothing until the next build. To re-check it later,
    fetch the script named in `https://comeals.com/` and grep it for the key.
 
-   Still to confirm: the Rails half.
+   The Rails half is confirmed too, by `rake bugsnag:verify` on 2026-07-29.
+   Both events arrived, so `BugsnagErrorSubscriber` is subscribed and the
+   channel that will carry retry counts works. Re-run that task after any
+   change to the initializer or the subscriber.
 
-   ```
-   heroku run rake bugsnag:verify -a comeals-monorepo
-   ```
+   Both verify events show in Bugsnag as **handled**, and that is correct
+   rather than a bug to chase. `Bugsnag.notify` always marks handled and
+   `Bugsnag::Report#unhandled` is read-only, which is why the subscriber puts
+   the real `handled:` value in the `rails_error` tab. A genuine uncaught
+   crash comes through the Rack middleware and shows as unhandled.
 
-   It sends one error down each path. Two events should appear in the
-   `comeals` project within a minute. **If only the first arrives,
-   `BugsnagErrorSubscriber` is not subscribed** — and that is the half that
-   carries the retry counts, so nothing else would reveal it was missing.
+   **So error tracking is fully live.** Retries logged by `RetryOnConflict`
+   will appear as handled `ActiveRecord::SerializationFailure` events with an
+   `attempt` number in the `rails_error` tab.
 
 2. **Is the production role back to READ COMMITTED?** On 2026-07-29 an
    `ALTER ROLE CURRENT_USER SET default_transaction_isolation = 'serializable'`
