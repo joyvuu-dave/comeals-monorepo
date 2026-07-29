@@ -78,6 +78,58 @@ same database as the ledger. The counters are a read-modify-write on a hot key,
 which makes them the likeliest source of aborts in the whole application — on
 requests that have nothing to do with money.
 
+**Measured 2026-07-29.** solid_cache's failsafe (`store/failsafe.rb`) swallows
+a fixed list of transient errors, and `ActiveRecord::SerializationFailure` is
+not on it — though its sibling `ActiveRecord::Deadlocked` is. So a `40001` on a
+cache write would be raised into the request. The list is a plain constant and
+is not frozen, so appending to it in an initializer is a one-line fix in the
+spirit of the gem's own design. solid_cache assumed `READ COMMITTED`, where
+serialization failures do not happen; it did not decide against handling them.
+
+### The suite at SERIALIZABLE: 2 real failures, not 35
+
+Measured 2026-07-29 by setting `default_transaction_isolation: serializable`
+for the test environment only and running the suite. This replaces the guesses
+in the rest of this ADR wherever the two disagree.
+
+| Run                   | Result                     |
+| --------------------- | -------------------------- |
+| Full suite            | 1101 examples, 35 failures |
+| Suite without spec/db | 1058 examples, 1 failure   |
+| spec/db alone         | 43 examples, 1 failure     |
+
+Thirty-three of the thirty-five were one failure amplified.
+`spec/db/settlement_race_spec.rb` runs non-transactionally and cleans up with
+`Meal.delete_all`. That cleanup **also** hit a serialization failure, so the
+rows stayed. `spec/db` sorts first, so the following thousand examples ran
+against a database that was supposed to be empty — and the rows persisted into
+later runs, which makes this easy to misread as many independent problems.
+
+The two real failures:
+
+1. `spec/services/snapshot_read_spec.rb:60` asserts the isolation level inside
+   the fixture transaction is `read committed`. Working as designed; update it
+   when the flip ships.
+2. `spec/db/settlement_race_spec.rb:308`, two settlements racing each other.
+   The losing settlement never reaches its compare-and-swap. SSI cancels it
+   earlier, where `settlement_balances` reads the bills
+   (`reconciliation.rb:146`): _"could not serialize access due to read/write
+   dependencies... Canceled on identification as a pivot."_ The money outcome is
+   unchanged — the loser rolls back whole — but the mechanism is different, so
+   the assertion no longer describes what happens.
+
+**What passed is the more important half.** The other nine examples in that
+file — inserts, deletes and re-parenting across all three child tables — pass
+unchanged, as do `settled_meal_triggers_spec.rb` and `whole_cents_check_spec.rb`.
+The pessimistic locks and the immutability triggers from ADR 0003 behave
+identically under SERIALIZABLE. That was the most likely thing to break.
+
+One limit on this evidence: 1058 of those examples run single-connection under
+transactional fixtures, where an abort essentially cannot happen. They show
+nothing broke structurally, and nothing more. Everything learned about real
+abort behavior came from the one file with real threads, because it is the only
+one that could show it.
+
 ## Decision
 
 ### 1. Set the isolation level per connection, not per transaction
@@ -93,11 +145,19 @@ connect time has no such problem.
 Heroku Postgres does not allow `ALTER SYSTEM`, and generally not `ALTER
 DATABASE` either, so "the whole instance" in the literal sense is not
 available. `ALTER ROLE <user> SET default_transaction_isolation = 'serializable'`
-covers `heroku pg:psql` and the Rails console as well. **This is unverified
-against the production credentials and must be checked before the change is
-planned around it.** Credential rotation is the specific risk: a rotated role
-would not carry the setting. `database.yml` is the mechanism we can rely on;
-the role setting is a convenience for humans at a prompt.
+covers `heroku pg:psql` and the Rails console as well. **Verified 2026-07-29:
+the production role can set it.** Credential rotation is still the open risk —
+a rotated role would not carry the setting — so `database.yml` remains the
+mechanism to rely on and the role setting is a convenience for humans at a
+prompt.
+
+One trap, learned by walking into it. `heroku pg:psql` connects with the
+`DATABASE_URL` credentials, which is the same role the app connects as, and
+`ALTER ROLE ... SET` applies to every new session for that role. So running it
+to "check whether it works" switches production, on the next dyno restart, with
+no retry anywhere in the app. It was reverted with `RESET` the same day.
+Anyone verifying this again should do it on a role the app does not use, or
+accept that they are making the change rather than testing it.
 
 ### 2. Keep the pessimistic locks
 
@@ -164,10 +224,13 @@ job that suddenly takes longer rather than as an error.
 ### 7. Decide the cache before switching, not after
 
 A 40001 on a rate-limit counter must not become a 500 on a request that has
-nothing to do with money. Wrap the cache store so its serialization failures
-are retried and then swallowed. "The volume is too low for the counters to
-contend" is probably true and is not a reason to leave it — a broken cache
-breaking a request is a stupid way to find out.
+nothing to do with money. Measured: solid_cache does not swallow
+`ActiveRecord::SerializationFailure` today, so this is real and not
+hypothetical. The fix is to append that class to its
+`TRANSIENT_ACTIVE_RECORD_ERRORS` constant in an initializer — a one-line change,
+not the store wrapper this decision originally called for. "The volume is too
+low for the counters to contend" is probably true and is not a reason to leave
+it; a broken cache breaking a request is a stupid way to find out.
 
 ### 8. Write the retry tests before the retry
 
@@ -176,20 +239,35 @@ the production abort rate will be near zero. That is the good news and the bad
 news: the retry path would be code that never runs until the day it matters.
 It needs deliberate fault injection, not "the suite still passes."
 
-`spec/db/settlement_race_spec.rb` is the harness to build on. It already runs
-non-transactionally with real threads, which is the hard part.
+**The fault injection already exists.** `spec/db/settlement_race_spec.rb` runs
+non-transactionally with real threads on real connections, and at SERIALIZABLE
+it produces genuine `40001`s on demand, reliably. The stopping rule below was
+written not knowing that. It is satisfied.
 
 **If the fault injection turns out to be hard to build, stop and keep the locks
 alone.** A retry we cannot test is worse than no retry.
 
+### 9. Make the non-transactional spec cleanup retry-safe first
+
+Found by measuring, and not anticipated anywhere above. A `delete_all` in a
+spec's `after` block can abort with a serialization failure like any other
+statement. When it does, the rows stay, every later example in the run sees
+data that should not exist, and the mess survives into the next run. One
+failing example became thirty-three.
+
+This is the same problem as production, showing up first in test support code,
+and it has to be fixed before anything else moves — otherwise every later
+measurement is read through a poisoned database. It also means the retry helper
+is needed by the specs before it is needed by the application.
+
 ## Consequences
 
-- `spec/db/settlement_race_spec.rb` will need real work. It asserts _blocking_
-  behavior — the racing write waits and is then refused by the trigger. Under
-  `SERIALIZABLE` some of those cases may abort with 40001 instead. The
-  assertions about the money staying correct should still hold; the assertions
-  about how it fails may not. This is the most valuable spec in the repo for
-  this question and also the one most likely to need rewriting.
+- `spec/db/settlement_race_spec.rb` needs one example rewritten, not the file.
+  Measured: nine of its ten examples pass unchanged. The one that fails asserts
+  the compare-and-swap fires, and under SERIALIZABLE the losing settlement is
+  cancelled before it gets there. The money assertion still holds either way.
+  (This bullet originally predicted "real work" for the whole file. That was
+  too pessimistic, and the correction is left visible on purpose.)
 - Every write path in the app gets a new failure mode that did not exist
   before. The locks mean it will almost never fire, which is precisely why it
   must be tested on purpose.
@@ -222,10 +300,20 @@ alone.** A retry we cannot test is worse than no retry.
 
 ## Open questions
 
-1. Can the production role actually set `default_transaction_isolation`, and
-   does it survive credential rotation? Decision 1 is written around not
-   knowing.
-2. Does solid_cache surface a serialization failure as a raised error or a
-   cache miss? Decision 7 assumes the worse case.
+1. ~~Can the production role set `default_transaction_isolation`?~~ Answered
+   2026-07-29: yes. Whether it survives credential rotation is still open, and
+   is the reason decision 1 relies on `database.yml` rather than the role.
+2. ~~Does solid_cache surface a serialization failure as a raised error or a
+   cache miss?~~ Answered 2026-07-29: it raises. See decision 7.
 3. What does the shared screen show when a signup runs out of retries? It
    should not be a raw error, and the safe action should stay under the tap.
+   Still open, and it is a UX decision rather than a technical one.
+
+## What has shipped so far
+
+- **2026-07-29** — decision 6, `SnapshotRead` and `billing:recalculate`.
+- **2026-07-29** — error tracking (Bugsnag, both halves of the app). Not a
+  decision in this ADR, but a prerequisite for all of it: this change adds a
+  failure mode to every write path and a retry meant to hide it, and both were
+  invisible before. `BugsnagErrorSubscriber` is what will carry the retry
+  counts, via `Rails.error.report(handled: true)`.
