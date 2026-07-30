@@ -217,8 +217,35 @@ the reason for having no retry is visible and worth revisiting.
 
 ### Step 5 — switch production to SERIALIZABLE
 
-Move the `variables:` block in `config/database.yml` from `test:` to
-`default:`. Deploy with `bin/deploy` (never push to Heroku directly).
+**The code change is committed. The deploy has not happened.** Until it does,
+production is still READ COMMITTED and nothing below has been seen for real.
+
+The `variables:` block moved from `test:` to `default:` in
+`config/database.yml`, so development, test and production all run the same
+way.
+
+One thing worth checking, because the whole step is a no-op if it is wrong:
+Heroku sets `DATABASE_URL`, and Rails merges that into the config from this
+file. Confirmed 2026-07-30 that the merge keeps `variables` — the URL replaces
+host, database and username, and everything set only in the file survives:
+
+```
+RAILS_ENV=production bundle exec ruby -e '
+require "active_record"
+require "active_record/database_configurations"
+require "erb"; require "yaml"
+ENV["DATABASE_URL"] = "postgres://u:p@example.com:5432/d"
+raw = YAML.safe_load(ERB.new(File.read("config/database.yml")).result, aliases: true)
+c = ActiveRecord::DatabaseConfigurations.new(raw).configs_for(env_name: "production").first.configuration_hash
+puts c[:variables].inspect'
+```
+
+Deploy with `bin/deploy` (never push to Heroku directly). Then confirm what
+production is actually running:
+
+```
+heroku pg:psql -a comeals-monorepo -c "SHOW default_transaction_isolation"
+```
 
 Then watch Bugsnag for handled `SerializationFailure` reports. Those are
 retries that worked. A few of them means the system is working as designed.

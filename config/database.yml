@@ -37,6 +37,25 @@ default: &default
   # up in the logs, raise RAILS_DB_POOL rather than editing this line.
   pool: <%= ENV.fetch("RAILS_DB_POOL") { 2 } %>
 
+  # Every environment runs at SERIALIZABLE (ADR 0005). This was in the test
+  # block alone while the retry work was built and proved; it is here now, so
+  # development and production run the same way.
+  #
+  # `variables` are issued as SET SESSION on each new connection, which is the
+  # only place this can go. SET TRANSACTION is refused once a transaction has
+  # run a query, and under transactional fixtures there is always one open.
+  #
+  # Here rather than ALTER ROLE, because it is unknown whether a role-level
+  # setting is still there after Heroku rotates credentials. This file is.
+  #
+  # What relies on this: RetryOnConflict on the API's meal writes, the rescue
+  # in config/initializers/active_admin_conflict_rescue.rb, and the added
+  # transient error in config/initializers/solid_cache.rb. Do not set this on
+  # a deploy that does not have all three. See app/services/snapshot_read.rb
+  # for the batch reads, which are stricter still.
+  variables:
+    default_transaction_isolation: serializable
+
 development:
   <<: *default
   database: comeals_development
@@ -74,15 +93,6 @@ development:
 test:
   <<: *default
   database: comeals_test
-
-  # The test environment runs at SERIALIZABLE ahead of production, on
-  # purpose. It is where the retry work is proved (ADR 0005). `variables`
-  # are issued as SET SESSION on each new connection, which is the only
-  # place this can go — SET TRANSACTION is refused once a transaction has
-  # run a query, and under transactional fixtures there is always one open.
-  # See app/services/snapshot_read.rb.
-  variables:
-    default_transaction_isolation: serializable
 
 # As with config/secrets.yml, you never want to store sensitive information,
 # like your database password, in your source code. If your source code is
