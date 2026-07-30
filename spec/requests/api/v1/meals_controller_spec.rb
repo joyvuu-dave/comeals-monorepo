@@ -759,4 +759,80 @@ RSpec.describe 'Meals API' do
       expect(meal.max).to be_nil
     end
   end
+
+  # ---------------------------------------------------------------------------
+  # A write PostgreSQL refuses for a conflict, after RetryOnConflict has run
+  # out of attempts. See docs/adr/0005-serializable-by-default.md.
+  #
+  # What these examples check is the answer the endpoint gives, not the
+  # retrying. They run under transactional fixtures, where a transaction is
+  # always open, so RetryOnConflict re-raises at once instead of retrying —
+  # that guard is deliberate and spec/services/retry_on_conflict_spec.rb
+  # counts the attempts. Here the point is that the refusal arrives as a 409
+  # with a message the shared screen can show, never as a 500.
+  # ---------------------------------------------------------------------------
+  describe 'a write refused for a conflict' do
+    let(:meal) { create(:meal, community: community) }
+
+    before do
+      allow_any_instance_of(Meal).to receive(:with_lock) # rubocop:disable RSpec/AnyInstance -- the refusal happens inside one request
+        .and_raise(ActiveRecord::SerializationFailure, 'could not serialize access due to read/write dependencies')
+    end
+
+    it 'answers create_meal_resident with 409 and writes nothing' do
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: {
+        token: token, late: false, vegetarian: false
+      }
+
+      expect(response).to have_http_status(:conflict)
+      expect(response.parsed_body['message']).to eq(
+        'Someone else was changing this meal at the same time. Nothing was saved. Try again.'
+      )
+      expect(MealResident.where(meal_id: meal.id, resident_id: resident.id)).not_to exist
+    end
+
+    it 'answers destroy_meal_resident with 409 and keeps the row' do
+      mr = create(:meal_resident, meal: meal, resident: resident, community: community)
+
+      delete "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: { token: token }
+
+      expect(response).to have_http_status(:conflict)
+      expect(MealResident.exists?(mr.id)).to be true
+    end
+
+    # update_bills reads with_meal_lock's return value itself rather than
+    # rendering it blindly, so the rejection has to travel that path too.
+    it 'answers update_bills with 409 and keeps the bills' do
+      patch "/api/v1/meals/#{meal.id}/bills", params: {
+        token: token, bills: [{ resident_id: resident.id, amount: '12.00' }]
+      }
+
+      expect(response).to have_http_status(:conflict)
+      expect(response.parsed_body['message']).to include('Nothing was saved')
+      expect(meal.bills.reload).to be_empty
+    end
+
+    # Without this, deleting the RetryOnConflict.call wrapper still passes
+    # every example above — the rescue alone produces the same 409.
+    it 'runs the write through RetryOnConflict' do
+      allow(RetryOnConflict).to receive(:call).and_call_original
+
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: {
+        token: token, late: false, vegetarian: false
+      }
+
+      expect(RetryOnConflict).to have_received(:call).once
+      expect(response).to have_http_status(:conflict)
+    end
+
+    it 'sends no Pusher event, because nothing changed' do
+      expect_any_instance_of(Meal).not_to receive(:trigger_pusher) # rubocop:disable RSpec/AnyInstance -- asserting the after_action does not fire
+
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: {
+        token: token, late: false, vegetarian: false
+      }
+
+      expect(response).to have_http_status(:conflict)
+    end
+  end
 end

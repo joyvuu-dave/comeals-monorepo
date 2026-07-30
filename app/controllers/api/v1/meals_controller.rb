@@ -353,14 +353,38 @@ module Api
       # transaction would raise DoubleRenderError the moment the block is run a
       # second time, which is what a retry on a serialization failure does. See
       # docs/adr/0005-serializable-by-default.md.
+      #
+      # RetryOnConflict goes outside with_lock, not inside. It refuses to
+      # retry when a transaction is already open, because every statement in
+      # a refused transaction fails too. Inside the lock it would do nothing.
+      #
+      # At SERIALIZABLE, PostgreSQL can refuse this transaction even though
+      # the lock was granted: the lock orders two writers on the same meal,
+      # and SSI can still find a cycle through rows the lock does not cover.
+      # Three attempts, then a 409. Nothing is written when it gives up, so
+      # the message can tell the user that plainly.
       def with_meal_lock
-        @meal.with_lock do
-          if @meal.reconciled?
-            reconciled_rejection
-          else
-            yield
+        RetryOnConflict.call do
+          @meal.with_lock do
+            if @meal.reconciled?
+              reconciled_rejection
+            else
+              yield
+            end
           end
         end
+      rescue ActiveRecord::TransactionRollbackError
+        conflict_rejection
+      end
+
+      # The render arguments, not the render — same as reconciled_rejection.
+      # 409 Conflict, because the request was fine and would work if sent
+      # again. Nothing was written, so there is no Pusher event to send.
+      def conflict_rejection
+        @skip_pusher = true
+        { json: { message: 'Someone else was changing this meal at the same time. ' \
+                           'Nothing was saved. Try again.' },
+          status: :conflict }
       end
 
       def verify_resident_community

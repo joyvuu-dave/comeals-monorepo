@@ -19,10 +19,10 @@ Shipped and deployed to production:
 | `bf4b21e` | `RetryOnConflict`; the test environment runs at SERIALIZABLE                    |
 
 **Production still runs at READ COMMITTED.** Only the test environment moved
-(`config/database.yml`, the `test:` block). That gap is deliberate and closes
-at step 5 below.
+(`config/database.yml`, the `test:` block). That difference is on purpose. Step
+5 below is where production moves too.
 
-## Pre-flight checks — both done
+## Checks to run first — both done
 
 Both were confirmed on 2026-07-29. Kept here with the commands, because they
 are worth re-running after a deploy, after a credential rotation, or whenever
@@ -33,17 +33,18 @@ something on the money path does not add up.
    Confirmed 2026-07-29: both `BUGSNAG_API_KEY` and `VITE_BUGSNAG_API_KEY` are
    set on Heroku, and the browser half is live — the key and the SDK are both
    in the deployed bundle. That last part is the one that is easy to get
-   wrong, because Vite bakes `VITE_*` vars in at build time: setting the var
-   after a deploy does nothing until the next build. To re-check it later,
+   wrong, because Vite writes `VITE_*` vars into the bundle at build time:
+   setting the var after a deploy does nothing until the next build. To
+   re-check it later,
    fetch the script named in `https://comeals.com/` and grep it for the key.
 
    The Rails half is confirmed too, by `rake bugsnag:verify` on 2026-07-29.
    Both events arrived, so `BugsnagErrorSubscriber` is subscribed and the
-   channel that will carry retry counts works. Re-run that task after any
+   path that will report retry counts works. Re-run that task after any
    change to the initializer or the subscriber.
 
    Both verify events show in Bugsnag as **handled**, and that is correct
-   rather than a bug to chase. `Bugsnag.notify` always marks handled and
+   rather than a bug to look into. `Bugsnag.notify` always marks handled and
    `Bugsnag::Report#unhandled` is read-only, which is why the subscriber puts
    the real `handled:` value in the `rails_error` tab. A genuine uncaught
    crash comes through the Rack middleware and shows as unhandled.
@@ -61,10 +62,11 @@ something on the money path does not add up.
    heroku pg:psql -a comeals-monorepo -c "SHOW default_transaction_isolation"
    ```
 
-   Re-run this if anything unexplained shows up on the money path before step 5. If it ever says `serializable` before that step, production is running
-   ahead of the retry work — reset it first.
+   Re-run this if anything unexplained shows up on the money path before
+   step 5. If it ever says `serializable` before that step, production is at
+   SERIALIZABLE without the retry code that it needs — reset it first.
 
-**Both checks are done. Step 1 is done. Start at step 2.**
+**Both checks are done. Steps 1 and 2 are done. Start at step 3.**
 
 ## What is left, in order
 
@@ -93,14 +95,52 @@ long because `update_bills` is long. Splitting that out is a separate job.
 Verified by `bin/check`: 1112 examples, 0 failures, RuboCop clean. The 441
 request specs cover these actions and none of them changed.
 
-### Step 2 — retry inside `with_meal_lock`
+### ~~Step 2 — retry inside `with_meal_lock`~~ — done 2026-07-29
 
-Wrap the lock's transaction in `RetryOnConflict`. Needs step 1 first.
+`with_meal_lock` now calls `RetryOnConflict.call` around `@meal.with_lock`, and
+rescues `ActiveRecord::TransactionRollbackError` into `conflict_rejection`.
 
-Out of retries should return a 409 with a message the shared screen can show.
-That wording is a UX decision — see the shared-screen principles before
-picking it. It must not be a raw error, and the safe action stays under the
-tap.
+`RetryOnConflict` goes outside `with_lock`, not inside. It refuses to retry
+when a transaction is already open, so inside the lock it would do nothing at
+all and the whole step would be a no-op that still passed its tests.
+
+`conflict_rejection` returns the render arguments, the same shape as
+`reconciled_rejection`, so every action picks it up through the `render(**result)`
+it already does. `update_bills` reads the return value itself instead of
+rendering it, and a non-nil return is already how it recognises a rejection, so
+it needed no change either. The status is 409 and the message is:
+
+> Someone else was changing this meal at the same time. Nothing was saved. Try
+> again.
+
+It sets `@skip_pusher`, because nothing was written and there is nothing to
+tell the other screens about.
+
+The SPA needed no change. Every one of these calls already has a `catch` that
+reverts the optimistic change and passes the error to `handleAxiosError`, which
+shows `data.message` as an error toast. So the checkbox goes back to where it
+was and the message appears under it.
+
+**Still not built: a "Try again" button.** The plan called for one. The screen
+already reverts the change, so tapping the same control again is the retry, and
+a button would mean a new popup pattern built for an error that has never
+happened in production. Decide this after step 5, when Bugsnag can say whether
+these conflicts happen at all.
+
+Verified by `bin/check`: 1117 examples, 0 failures, RuboCop clean. Five new
+examples in `spec/requests/api/v1/meals_controller_spec.rb` cover the 409, the
+message, that nothing is written, that no Pusher event is sent, and that the
+call really goes through `RetryOnConflict` — without that last one, deleting
+the wrapper still passes everything else.
+
+Those examples run under transactional fixtures, so they never see a real
+retry; `RetryOnConflict.call` re-raises at once when a transaction is open.
+They check the answer the endpoint gives, not the retrying. The attempt count
+is `spec/services/retry_on_conflict_spec.rb`'s job.
+
+`Metrics/ClassLength` went from 260 to 270. That is the second raise for this
+one class. `update_bills` should be extracted rather than raising it a third
+time; the reason is written next to the setting in `.rubocop.yml`.
 
 ### Step 3 — teach solid_cache about serialization failures
 
@@ -112,9 +152,9 @@ SolidCache::Store::Failsafe::TRANSIENT_ACTIVE_RECORD_ERRORS << ActiveRecord::Ser
 
 solid_cache shares the primary database, so every cache write and every
 Rack::Attack counter becomes a serializable transaction. Its failsafe already
-swallows `ActiveRecord::Deadlocked` — the sibling class — but not
-`SerializationFailure`, because it assumed READ COMMITTED. The constant is not
-frozen. Verified 2026-07-29.
+swallows `ActiveRecord::Deadlocked` — the class next to it — but not
+`SerializationFailure`, because it was written for READ COMMITTED. The constant
+is not frozen. Verified 2026-07-29.
 
 Without this, a conflict on a rate-limit counter becomes a 500 on a request
 that has nothing to do with money.
@@ -128,14 +168,15 @@ resets `response_body`. This is the request-wide boundary that decision 3
 rejects for the API; it is acceptable here because admin writes are rare, admin
 actions send no mail, and a re-run form submit is harmless.
 
-### Step 5 — flip production
+### Step 5 — switch production to SERIALIZABLE
 
 Move the `variables:` block in `config/database.yml` from `test:` to
 `default:`. Deploy with `bin/deploy` (never push to Heroku directly).
 
 Then watch Bugsnag for handled `SerializationFailure` reports. Those are
-retries that worked. A few is the system behaving; a steady stream means
-something is contending that should not be.
+retries that worked. A few of them means the system is working as designed.
+Many of them, again and again, means two things are conflicting that should
+not be.
 
 ## Things that cost time to learn
 
@@ -151,16 +192,16 @@ is not a check — it is the change, applied to production on the next dyno
 restart. Verify on a role the app does not use, or accept that you are making
 the change.
 
-**A failing cleanup in a non-transactional spec poisons everything after it.**
-`delete_all` in an `after` block can be refused for a conflict like any other
-statement. When that happened in `spec/db/settlement_race_spec.rb` the rows
-stayed, and because that file sorts first, a thousand later examples ran
+**A failing cleanup in a non-transactional spec breaks every example after
+it.** `delete_all` in an `after` block can be refused for a conflict like any
+other statement. When that happened in `spec/db/settlement_race_spec.rb` the
+rows stayed, and because that file sorts first, a thousand later examples ran
 against a database that should have been empty. One failure read as
-thirty-five. The rows also survived into the next run, which makes it look
-worse and more mysterious than it is.
+thirty-five. The rows are still there on the next run too, which makes the
+problem look bigger and harder to explain than it is.
 
-If a serializable run ever produces a pile of failures about data that should
-not exist, check for leftovers before believing any of it:
+If a serializable run ever produces many failures about data that should not
+exist, check for leftover rows before believing any of it:
 
 ```
 psql comeals_test -c "SELECT count(*) FROM communities"
@@ -168,13 +209,13 @@ psql comeals_test -c "SELECT count(*) FROM communities"
 
 **`create(:reconciliation)` is not safe to run twice.** The factory's
 `before(:create)` hook builds its own unit, cook, meal and bill. Wrapping it in
-`RetryOnConflict` makes a retry manufacture fresh work: the second attempt
-settles a meal that did not exist when the race started, and two reconciliations
-result. Retry production-shaped calls — `Reconciliation.create!` — not factory
-calls. This is `RetryOnConflict`'s own "safe to run twice" rule catching a real
-case in the first place it was used.
+`RetryOnConflict` makes a retry create new records: the second attempt settles
+a meal that did not exist when the race started, and you end up with two
+reconciliations. Retry the calls production makes — `Reconciliation.create!` —
+not factory calls. This is `RetryOnConflict`'s own "safe to run twice" rule
+finding a real case in the first place it was used.
 
-**At SERIALIZABLE the roles in a two-settlement race swap.** At READ COMMITTED
+**At SERIALIZABLE the two sides of a two-settlement race change places.** At READ COMMITTED
 the rival blocks on `FOR UPDATE`, wakes, and loses its compare-and-swap in
 `assign_meals`. At SERIALIZABLE, SSI cancels the _first_ settlement as a pivot
 where `settlement_balances` reads the bills, and the rival survives. Assert the
@@ -185,8 +226,9 @@ matching source — not which side raises.
 single-connection under transactional fixtures, where an abort essentially
 cannot happen. A green suite means nothing broke structurally. Everything we
 know about real abort behavior comes from `spec/db/settlement_race_spec.rb`,
-because it is the only file with real threads on real connections. Treat it as
-the load-bearing test for this whole change.
+because it is the only file with real threads on real connections. It is the
+only test that can catch a break in this change, so treat a failure there as
+serious even when the rest of the suite is green.
 
 **The locks and triggers from ADR 0003 are unaffected.** Nine of the ten
 original examples in that file, plus `settled_meal_triggers_spec.rb` and
@@ -197,9 +239,12 @@ know where the conflict is.
 
 ## Still open
 
-- Does the role-level isolation setting survive Heroku credential rotation?
-  Unknown. `database.yml` is the mechanism we rely on for this reason.
-- What the shared screen shows when a signup runs out of retries. A UX
-  decision, needed for step 2.
+- Is the role-level isolation setting still there after Heroku rotates
+  credentials? Unknown. This is why we set it in `database.yml` instead.
+- Whether the shared screen needs a "Try again" button when a signup runs out
+  of retries. It shows the message and reverts the change today. Decide after
+  step 5, from what Bugsnag reports.
+- Extract `update_bills` out of `MealsController`, so `Metrics/ClassLength`
+  stops being raised.
 - `CLAUDE.md` says "Four so far" about the ADRs. It is five once 0005 is
   accepted.
