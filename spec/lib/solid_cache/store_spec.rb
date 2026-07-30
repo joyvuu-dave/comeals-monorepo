@@ -137,6 +137,50 @@ RSpec.describe SolidCache::Store do
     end
   end
 
+  # solid_cache shares the primary database, so at SERIALIZABLE every cache
+  # write and every Rack::Attack counter can be refused for a conflict. The
+  # gem's failsafe treats ActiveRecord::Deadlocked as transient but not
+  # ActiveRecord::SerializationFailure, because it was written for READ
+  # COMMITTED. config/initializers/solid_cache.rb adds it. Without that, a
+  # conflict on a rate-limit counter is a 500 on a request that has nothing
+  # to do with money. See docs/adr/0005-serializable-by-default.md.
+  describe 'a database refusal for a conflict' do
+    it 'counts a serialization failure as transient' do
+      expect(SolidCache::Store::Failsafe::TRANSIENT_ACTIVE_RECORD_ERRORS)
+        .to include(ActiveRecord::SerializationFailure)
+    end
+
+    # The initializer appends to the constant, so it has to stay an array
+    # that can be appended to. A future version that freezes it would raise
+    # at boot instead, but this says why out loud.
+    it 'keeps that list appendable' do
+      expect(SolidCache::Store::Failsafe::TRANSIENT_ACTIVE_RECORD_ERRORS).not_to be_frozen
+    end
+
+    it 'answers a read with a miss instead of raising' do
+      allow(SolidCache::Entry).to receive(:read)
+        .and_raise(ActiveRecord::SerializationFailure, 'could not serialize access')
+
+      expect(cache.read('meal-7')).to be_nil
+    end
+
+    # Swallowed is not the same as unnoticed. A cache that quietly misses
+    # every read looks exactly like a cache that works, so the refusal has to
+    # reach Bugsnag through Rails.error like every other handled error.
+    # Stubbed rather than subscribed: Rails.error has no way to unsubscribe,
+    # so a real subscriber would stay for the rest of the run.
+    it 'reports the refusal so it can be counted' do
+      allow(SolidCache::Entry).to receive(:read)
+        .and_raise(ActiveRecord::SerializationFailure, 'could not serialize access')
+      allow(Rails.error).to receive(:report)
+
+      cache.read('meal-7')
+
+      expect(Rails.error).to have_received(:report)
+        .with(instance_of(ActiveRecord::SerializationFailure), hash_including(handled: true))
+    end
+  end
+
   describe 'namespacing' do
     # config/solid_cache.yml namespaces by Rails.env, so a staging or console
     # session against the same database cannot read production's entries.

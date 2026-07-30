@@ -66,7 +66,7 @@ something on the money path does not add up.
    step 5. If it ever says `serializable` before that step, production is at
    SERIALIZABLE without the retry code that it needs — reset it first.
 
-**Both checks are done. Steps 1 and 2 are done. Start at step 3.**
+**Both checks are done. Steps 1, 2 and 3 are done. Start at step 4.**
 
 ## What is left, in order
 
@@ -142,22 +142,39 @@ is `spec/services/retry_on_conflict_spec.rb`'s job.
 one class. `update_bills` should be extracted rather than raising it a third
 time; the reason is written next to the setting in `.rubocop.yml`.
 
-### Step 3 — teach solid_cache about serialization failures
+### ~~Step 3 — teach solid_cache about serialization failures~~ — done 2026-07-29
 
-One line in an initializer:
-
-```ruby
-SolidCache::Store::Failsafe::TRANSIENT_ACTIVE_RECORD_ERRORS << ActiveRecord::SerializationFailure
-```
+`config/initializers/solid_cache.rb` appends
+`ActiveRecord::SerializationFailure` to
+`SolidCache::Store::Failsafe::TRANSIENT_ACTIVE_RECORD_ERRORS`.
 
 solid_cache shares the primary database, so every cache write and every
 Rack::Attack counter becomes a serializable transaction. Its failsafe already
 swallows `ActiveRecord::Deadlocked` — the class next to it — but not
-`SerializationFailure`, because it was written for READ COMMITTED. The constant
-is not frozen. Verified 2026-07-29.
+`SerializationFailure`, because it was written for READ COMMITTED. Both are
+subclasses of `ActiveRecord::TransactionRollbackError`; PostgreSQL picks
+between them by which rule the transaction broke.
 
 Without this, a conflict on a rate-limit counter becomes a 500 on a request
-that has nothing to do with money.
+that has nothing to do with money. With it the answer is a cache miss, which
+is always correct — nothing was written, and reading through to the source
+works.
+
+Two things it depends on, both checked against solid_cache 1.0.10 and both
+pinned by `spec/lib/solid_cache/store_spec.rb`: the constant is a plain array
+and is not frozen, and the failsafe splats it at rescue time rather than
+holding a copy.
+
+The initializer is a plain top-level statement, not `to_prepare`. The constant
+belongs to the gem, so the app's reloader never unloads it.
+
+Four new examples: the constant holds the class, the list can still be
+appended to, a refused read answers with a miss instead of raising, and the
+refusal is reported through `Rails.error` so Bugsnag counts it. That last one
+matters — a cache that quietly misses every read looks exactly like a cache
+that works.
+
+Verified by `bin/check`: 1121 examples, 0 failures, RuboCop clean.
 
 ### Step 4 — ActiveAdmin `around_action`
 
