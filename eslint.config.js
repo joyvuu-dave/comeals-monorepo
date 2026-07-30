@@ -54,10 +54,10 @@ module.exports = [
   },
 
   // -----------------------------------------------------------
-  // Config files -- Node ESM (vite.config.js, vitest.config.js)
+  // Config files -- Node ESM (vite.config.mjs, vitest.config.mjs)
   // -----------------------------------------------------------
   {
-    files: ["vite.config.js", "vitest.config.js"],
+    files: ["vite.config.mjs", "vitest.config.mjs"],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "module",
