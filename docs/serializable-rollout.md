@@ -4,7 +4,7 @@ Working notes for [ADR 0005](adr/0005-serializable-by-default.md). The ADR
 holds the decisions and the reasoning; this file holds the running state, the
 order of the remaining work, and the things that cost time to learn.
 
-Last updated 2026-07-29.
+Last updated 2026-07-30.
 
 ## Where we are
 
@@ -66,7 +66,8 @@ something on the money path does not add up.
    step 5. If it ever says `serializable` before that step, production is at
    SERIALIZABLE without the retry code that it needs — reset it first.
 
-**Both checks are done. Steps 1, 2 and 3 are done. Start at step 4.**
+**Both checks are done. Steps 1 to 4 are done. Step 5 is the last one, and it
+is the one that changes production.**
 
 ## What is left, in order
 
@@ -176,14 +177,43 @@ that works.
 
 Verified by `bin/check`: 1121 examples, 0 failures, RuboCop clean.
 
-### Step 4 — ActiveAdmin `around_action`
+### ~~Step 4 — ActiveAdmin~~ — done 2026-07-30
 
-Twelve resources open their transactions inside `resource` and
-`build_resource`, where application code cannot reach them, so admin needs an
-`around_action` on `ActiveAdmin::BaseController` that re-runs the action and
-resets `response_body`. This is the request-wide boundary that decision 3
-rejects for the API; it is acceptable here because admin writes are rare, admin
-actions send no mail, and a re-run form submit is harmless.
+**The plan was an `around_action`. It cannot work, so admin got a rescue
+instead.** ADR 0005 decision 5 is rewritten with the full reasoning; the short
+version is that `resource` and `build_resource` memoize the row they read into
+`@meal`, `@bill` and so on, so a retry inside the same controller instance
+would write again from the read the database just refused.
+
+`config/initializers/active_admin_conflict_rescue.rb` rescues
+`ActiveRecord::TransactionRollbackError` on `ActiveAdmin::BaseController` and
+redirects back with the same message the API sends:
+
+> Someone else was changing this at the same time. Nothing was saved. Try
+> again.
+
+The person retries by submitting the form again. That is fine in admin, where
+one person is using it at a time, and it is what the shared screen already
+does.
+
+Two things were checked before trusting that message, and both hold. No admin
+path sends mail — every `deliver_now` is in a rake task, except the password
+reset in `Api::V1::ResidentsController`. And no Pusher event survives a
+rollback — meal, bill, attendance and guest events come from an `after_action`
+in `Api::V1::MealsController`, so admin sends none, and the calendar models use
+`after_commit`, which does not run on a rollback.
+
+The refusal is reported through `Rails.error`. Nothing retries here, so
+otherwise a conflict in admin would show up nowhere.
+
+Devise's sign-in controllers inherit from Devise, not ActiveAdmin, so a
+conflict while signing in is still a 500. Left alone: it is a trackable write
+on a table the money code never touches.
+
+Nine new examples in `spec/requests/admin/conflict_rescue_spec.rb`. Eight of
+them fail if the initializer is deleted — checked by deleting it. The ninth
+checks that ActiveAdmin still memoizes the row, so if a future version stops,
+the reason for having no retry is visible and worth revisiting.
 
 ### Step 5 — switch production to SERIALIZABLE
 

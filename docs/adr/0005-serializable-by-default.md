@@ -68,7 +68,9 @@ is the bulk of the diff.
 
 Its twelve resources open their transactions inside `resource` and
 `build_resource`, where application code cannot reach them. Admin needs a
-different retry boundary than the API does.
+different retry boundary than the API does. **It turned out to need no retry at
+all** — those same methods memoize the row they read, so any retry in the same
+controller instance would reuse it. Decision 5 has the full reasoning.
 
 ### solid_cache shares the primary database
 
@@ -192,13 +194,54 @@ than rendering it, which also removes the `performed?` check at
 `meals_controller.rb:262`. Mechanical, but it touches every mutating meal
 action, and it must be done before any retry is switched on.
 
-### 5. ActiveAdmin gets an `around_action`
+### 5. ActiveAdmin shows the message and does not retry
 
-An `around_action` on `ActiveAdmin::BaseController` that re-runs the action and
-resets `response_body`. This is the boundary rejected for the API in decision
-3, and it is acceptable here for reasons that do not apply there: admin writes
-are rare, admin actions do not send mail, and a re-run admin form submit is
-harmless.
+**Changed 2026-07-30. Shipped the same day.** This decision first said admin
+would get an `around_action` on `ActiveAdmin::BaseController` that re-runs the
+action and resets `response_body`. Reading the twelve resources before writing
+it showed that cannot work.
+
+ActiveAdmin memoizes the row it read into `@meal`, `@bill` and so on, inside
+`resource` and `build_resource`
+(`ActiveAdmin::ResourceController::DataAccess`, `data_access.rb:89`). Those run
+before any code we write. An `around_action` retries inside the same controller
+instance, so the second attempt reuses the row the first attempt read. It would
+write again from the read the database just refused, which is the opposite of
+retrying — a retry has to re-read. Clearing those instance variables by hand
+would work only while the gem keeps using the same names, and would fail
+quietly after an upgrade.
+
+So `config/initializers/active_admin_conflict_rescue.rb` rescues
+`ActiveRecord::TransactionRollbackError` on `ActiveAdmin::BaseController` and
+redirects back with the same message the API sends: nothing was saved, try
+again. The person retries by submitting the form again.
+
+That is acceptable in admin and not in the API. Admin has one person using it
+at a time, so the conflict is rare, and re-submitting is one click. It is also
+what the shared screen already does — it reverts the change, shows the message,
+and the person taps again.
+
+Two of the three original reasons for the `around_action` were checked and hold,
+and they are what makes the message truthful rather than what makes a retry
+safe. No admin path sends mail: every `deliver_now` in the app is in a rake
+task, except the password reset in `Api::V1::ResidentsController`. And no
+Pusher event survives a rollback: Meal, Bill, MealResident and Guest send
+theirs from an `after_action` in `Api::V1::MealsController`, so admin sends
+none at all, while Event, Rotation, CommonHouseReservation and
+GuestRoomReservation send theirs from `after_commit`, which does not run on a
+rollback. The third reason — that a re-run form submit is harmless — was never
+reached, because the re-run itself is what does not work.
+
+The refusal is reported through `Rails.error` with `handled: true`. Nothing
+retries here, so without that a conflict in admin would show up nowhere.
+
+Devise's sign-in controllers inherit from Devise, not ActiveAdmin, so a
+conflict while signing in is still a 500. That is a trackable write on a table
+the money code never touches.
+
+If a future ActiveAdmin stops memoizing the row, a retry becomes possible and
+this is worth revisiting. `spec/requests/admin/conflict_rescue_spec.rb` checks
+that it still memoizes, so that change is visible when it happens.
 
 ### 6. The batch reads are `READ ONLY DEFERRABLE`
 
