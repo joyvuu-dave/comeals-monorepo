@@ -38,4 +38,11 @@ if api_key.present?
   # Handled errors reported through Rails.error. See the subscriber for why
   # this is separate from the Rack middleware and why it matters here.
   Rails.error.subscribe(BugsnagErrorSubscriber.new)
+else
+  # Session tracking is the one thing the gem turns on by itself: the Rails
+  # railtie sets auto_capture_sessions, so every request starts a session and
+  # a timer thread wakes every 10 seconds. With no api_key it can only log
+  # "Not delivering sessions due to an invalid api_key" and give up. Turn it
+  # off so development and test really do run nothing.
+  Bugsnag.configure(&:disable_sessions)
 end
