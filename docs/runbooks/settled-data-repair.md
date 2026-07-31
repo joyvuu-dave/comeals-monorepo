@@ -101,11 +101,71 @@ After the repair:
    and will NOT be recomputed automatically. A repair that changes them
    means residents were told wrong numbers; handle that as a correcting
    entry in the next period instead if at all possible. If the stored
-   balances themselves are corrupted and must be rebuilt, recompute that
-   one reconciliation from a console:
-   `Reconciliation.find(id).persist_balances!`. Never rebuild them all
-   at once — settled books are history, not a cache.
+   balances themselves are corrupted and must be rebuilt, see "Rebuilding
+   one reconciliation's balances" below. Never rebuild them all at once —
+   settled books are history, not a cache.
 3. Note what you changed and why in the relevant GitHub issue.
 
 Do not use `ALTER TABLE ... DISABLE TRIGGER`. It takes a DDL lock and drops
 the guard for every session, not just yours.
+
+## The settled amounts themselves
+
+`reconciliation_balances` holds what each resident was actually billed. Since
+`20260731120000` it has two guards of its own.
+
+**Rewriting is refused.** No `UPDATE`, no `DELETE`, from any path — the same
+bypass above is the only way through, for the same narrow reason.
+
+**Every reconciliation must sum to exactly zero, and that rule has no
+bypass.** `comeals.allow_settled_writes` does not turn it off. A repair may
+change what a settled balance says; it may not leave the books not adding up.
+The check is a deferred constraint trigger, so it runs at `COMMIT` and judges
+only the state you are committing. Inside the transaction the ledger is
+allowed to be unbalanced while you work.
+
+In practice that means a repair here always moves money between residents,
+never into or out of the ledger:
+
+```sql
+BEGIN;
+SET LOCAL comeals.allow_settled_writes = 'on';
+
+UPDATE reconciliation_balances SET amount = amount + 1.00 WHERE id = 11;
+UPDATE reconciliation_balances SET amount = amount - 1.00 WHERE id = 22;
+
+COMMIT;   -- refused unless every reconciliation you touched still sums to zero
+```
+
+Two things that surprise people:
+
+- A `DELETE` on this table queues a deferred check per row, and PostgreSQL
+  refuses to `TRUNCATE` a table with pending trigger events. If you are
+  clearing data and hit that, run `SET CONSTRAINTS ALL IMMEDIATE` first.
+- When a deferred check fails, the error arrives at `COMMIT`, and PostgreSQL
+  ends the transaction itself. A client that then sends `ROLLBACK` gets
+  "WARNING: there is no transaction in progress". That warning is normal and
+  means nothing was written.
+
+### Rebuilding one reconciliation's balances
+
+`Reconciliation#persist_balances!` used to clear the table first and could be
+re-run on its own. It cannot any more, on purpose: re-running it would rewrite
+the ledger rather than correct it. Rebuilding is now a deliberate two-step
+repair, and it is a last resort — the stored balances are what residents were
+already told they owed.
+
+```ruby
+# bin/rails runner, against a reconciliation you have decided is corrupt.
+reconciliation = Reconciliation.find(ID)
+
+ActiveRecord::Base.transaction do
+  ActiveRecord::Base.connection.execute("SET LOCAL comeals.allow_settled_writes = 'on'")
+  reconciliation.reconciliation_balances.delete_all
+  reconciliation.persist_balances!
+end
+```
+
+Both steps must be in the one transaction. The delete alone leaves the
+reconciliation with no rows, which sums to zero and commits cleanly — and now
+you have a settlement with no balances at all.

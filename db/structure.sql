@@ -38,6 +38,26 @@ COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
 
 
 --
+-- Name: comeals_protect_settled_balance(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.comeals_protect_settled_balance() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF current_setting('comeals.allow_settled_writes', true) = 'on' THEN
+    RETURN CASE TG_OP WHEN 'DELETE' THEN OLD ELSE NEW END;
+  END IF;
+
+  RAISE EXCEPTION '% on reconciliation_balances refused: reconciliation % is settled and its '
+    'balances are what residents have already been billed. Corrections belong in the next '
+    'reconciliation. For genuine data corruption see docs/runbooks/settled-data-repair.md.',
+    TG_OP, OLD.reconciliation_id;
+END;
+$$;
+
+
+--
 -- Name: comeals_protect_settled_meal(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -72,6 +92,43 @@ BEGIN
   END IF;
 
   RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: comeals_reconciliation_balances_sum_zero(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.comeals_reconciliation_balances_sum_zero() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  affected bigint[] := '{}';
+  target_id bigint;
+  total numeric;
+BEGIN
+  IF TG_OP <> 'INSERT' THEN
+    affected := affected || OLD.reconciliation_id;
+  END IF;
+
+  IF TG_OP <> 'DELETE' THEN
+    affected := affected || NEW.reconciliation_id;
+  END IF;
+
+  FOREACH target_id IN ARRAY affected LOOP
+    SELECT COALESCE(SUM(amount), 0) INTO total
+    FROM reconciliation_balances WHERE reconciliation_id = target_id;
+
+    IF total <> 0 THEN
+      RAISE EXCEPTION 'reconciliation % refused: its stored balances sum to %, not zero. '
+        'Every settlement must balance — what one resident is owed, others owe. '
+        'See docs/runbooks/settled-data-repair.md.',
+        target_id, total;
+    END IF;
+  END LOOP;
+
+  RETURN NULL;
 END;
 $$;
 
@@ -1492,6 +1549,20 @@ CREATE TRIGGER prevent_community_delete BEFORE DELETE ON public.communities FOR 
 
 
 --
+-- Name: reconciliation_balances reconciliation_balances_protect_settled; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER reconciliation_balances_protect_settled BEFORE DELETE OR UPDATE ON public.reconciliation_balances FOR EACH ROW EXECUTE FUNCTION public.comeals_protect_settled_balance();
+
+
+--
+-- Name: reconciliation_balances reconciliation_balances_sum_zero; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER reconciliation_balances_sum_zero AFTER INSERT OR DELETE OR UPDATE ON public.reconciliation_balances DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.comeals_reconciliation_balances_sum_zero();
+
+
+--
 -- Name: meals fk_rails_0336f048cd; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1698,6 +1769,7 @@ ALTER TABLE ONLY public.bills
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260731120000'),
 ('20260728120000'),
 ('20260727120000'),
 ('20260724120000'),

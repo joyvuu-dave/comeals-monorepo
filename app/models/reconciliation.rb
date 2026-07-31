@@ -165,15 +165,20 @@ class Reconciliation < ApplicationRecord
     balances
   end
 
-  # Persist settlement balances to reconciliation_balances table.
-  # Idempotent: clears existing balances first, then writes fresh values.
-  # Only stores non-zero balances to keep the table lean.
+  # Write the settlement balances. Runs once, from finalize, inside the
+  # transaction that creates the reconciliation. Only non-zero balances are
+  # stored, which keeps the table lean and costs nothing: a resident with no
+  # row owes and is owed nothing.
+  #
+  # This used to clear the table first and call itself idempotent. It is not
+  # idempotent any more, and it should not be. A settled balance is what a
+  # resident has already been billed, so re-running this would rewrite the
+  # ledger rather than correct it. Both halves of that are now refused —
+  # the DELETE by the trigger in 20260731120000, and a second insert by the
+  # unique index on (reconciliation_id, resident_id).
   def persist_balances!
-    balances = settlement_balances
-
     transaction do
-      reconciliation_balances.delete_all
-      balances.each do |resident_id, amount|
+      settlement_balances.each do |resident_id, amount|
         next if amount.zero?
 
         reconciliation_balances.create!(resident_id: resident_id, amount: amount)

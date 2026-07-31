@@ -19,7 +19,17 @@ Worth writing down so nobody rebuilds it.
 - **Settled data cannot change through normal paths.** The three triggers, the
   model concerns, and `Reconciliation#reject_update` / `#reject_destroy`.
 - **Settled balances sum to zero.** `assert_balanced_input!` and
-  `assert_candidates_cover_pennies!` in `Reconciliation`.
+  `assert_candidates_cover_pennies!` in `Reconciliation`, and since
+  `20260731120000` a deferred constraint trigger that makes PostgreSQL check
+  it too, at every commit, for writes that never went through Ruby. That one
+  has no bypass: `comeals.allow_settled_writes` does not turn it off.
+- **Settled amounts cannot be rewritten.** `reconciliation_balances` refuses
+  `UPDATE` and `DELETE` at the database level, the same way the settled
+  meal's source rows do. This was a gap the list below did not name: the
+  source rows were immutable but the amounts they produced were an ordinary
+  table. Added 2026-07-31.
+- **One implementation of the arithmetic.** `MealLedger`. Settlement and the
+  running balance used to carry separate copies of the same rules.
 
 ## What is not solved
 
@@ -71,7 +81,7 @@ What it buys:
 Size: about 400 rows per settlement (30 residents, 13 meals), ~5,000 a year.
 
 **The objection, and the answer.** CLAUDE.md rule 8 bans denormalized caches for
-financial data. The target of that rule is a *mutable value that can drift* — a
+financial data. The target of that rule is a _mutable value that can drift_ — a
 counter, a running total, anything `counter_culture` used to do. `meal_charges`
 is the opposite: written once inside the settlement transaction, never updated,
 and protected by the same triggers as every other row on a settled meal. It is

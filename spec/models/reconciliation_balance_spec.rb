@@ -57,6 +57,36 @@ RSpec.describe ReconciliationBalance do
     end
   end
 
+  # A settled balance is what a resident has already been billed. These
+  # guards are the readable half; the database triggers behind them are
+  # covered in spec/db/settled_balance_triggers_spec.rb, which is where the
+  # writes that skip callbacks are tested.
+  describe 'immutability' do
+    let(:balance) do
+      resident = create(:resident, community: community, unit: unit)
+      reconciliation = create(:reconciliation, community: community)
+      described_class.create!(
+        reconciliation: reconciliation, resident: resident, amount: BigDecimal('42.50')
+      )
+    end
+
+    it 'refuses an update and keeps the stored amount' do
+      expect(balance.update(amount: BigDecimal('1'))).to be(false)
+      expect(balance.reload.amount).to eq(BigDecimal('42.50'))
+    end
+
+    it 'refuses a destroy and keeps the row' do
+      expect(balance.destroy).to be(false)
+      expect(described_class.exists?(balance.id)).to be(true)
+    end
+
+    it 'explains that corrections belong in the next reconciliation' do
+      balance.update(amount: BigDecimal('1'))
+
+      expect(balance.errors[:base].join).to include('next reconciliation')
+    end
+  end
+
   describe 'amount precision' do
     it 'stores DECIMAL(12,8) values' do
       resident = create(:resident, community: community, unit: unit)
