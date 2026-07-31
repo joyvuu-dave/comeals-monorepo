@@ -130,87 +130,25 @@ class Reconciliation < ApplicationRecord
   # Uses largest-remainder method (Hamilton's method) to round to cents,
   # guaranteeing the total sums to exactly zero.
   #
-  # This method batch-loads all data upfront (5 queries total) to avoid the N+1
-  # that would result from calling Meal#unit_cost per-record. The arithmetic is
-  # identical to the per-record path (Meal#unit_cost, MealResident#cost, etc.)
-  # but computed from in-memory data.
+  # The arithmetic itself is MealLedger's, which the running-balance rake task
+  # also uses. This method is only the settlement-specific part: which meals,
+  # which residents, and the rounding to cents.
   #
   # Memory: loads all reconciled meals + associations into RAM. For a co-housing
   # community (~500 meals max), this is ~18K AR objects (~36 MB). Bounded by the
   # physical size of the community.
-  def settlement_balances # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity -- financial settlement calculation, intentionally kept as single method for auditability
-    # Step 1: Eager-load all reconciled meals with their financial associations.
+  def settlement_balances
+    # Eager-load all reconciled meals with their financial associations.
     # Uses preload (not includes) to guarantee separate IN(?) queries — includes
     # can silently switch to LEFT JOIN if a .where is later chained on an
-    # included table, which would produce a cartesian product across 3 associations.
+    # included table, which would produce a cartesian product across 3
+    # associations. MealLedger runs no queries of its own, so these three
+    # associations must be loaded before it sees the meals.
     reconciled_meals = meals.with_attendees.preload(:bills, :meal_residents, :guests).to_a
 
-    # Step 2: Precompute per-meal financials from in-memory data.
-    # Uses block-form .sum(&:field) which invokes Enumerable#sum on the loaded
-    # array. The column-form .sum(:field) always fires SQL even when loaded.
-    # Stores total_cost and effective_cost alongside unit_cost so the credit
-    # calculation in Step 3 can apply proportional capping for subsidized meals.
-    meal_financials = {}
-    reconciled_meals.each do |meal|
-      total_mult = meal.meal_residents.sum(&:multiplier) + meal.guests.sum(&:multiplier)
+    raw_balances = MealLedger.new(reconciled_meals).balances(community.residents.pluck(:id))
 
-      if total_mult.zero?
-        zero = BigDecimal('0')
-        meal_financials[meal.id] = { unit_cost: zero, total_cost: zero, effective_cost: zero }
-        next
-      end
-
-      total_cost = meal.bills.reject(&:no_cost).sum(BigDecimal('0'), &:amount)
-      effective_cost = total_cost
-      if meal.capped?
-        max_cost = meal.cap * total_mult
-        effective_cost = max_cost if total_cost > max_cost
-      end
-
-      meal_financials[meal.id] = {
-        unit_cost: effective_cost / total_mult, total_cost: total_cost, effective_cost: effective_cost
-      }
-    end
-
-    # Step 3: Accumulate credits, debits, and guest debits from in-memory data.
-    # All three use the already-loaded associations — zero additional queries.
-    # Credits use the proportional capped amount: when a meal is subsidized
-    # (cook spent more than the cap), each cook's credit is their proportional
-    # share of the effective (capped) cost, not the raw bill amount.
-    credits_by_resident = Hash.new(BigDecimal('0'))
-    debits_by_resident = Hash.new(BigDecimal('0'))
-    guest_debits_by_resident = Hash.new(BigDecimal('0'))
-
-    reconciled_meals.each do |meal|
-      mf = meal_financials[meal.id]
-
-      meal.bills.each do |b|
-        next if b.no_cost
-
-        credit = if mf[:total_cost].zero?
-                   BigDecimal('0')
-                 elsif mf[:effective_cost] < mf[:total_cost]
-                   (b.amount / mf[:total_cost]) * mf[:effective_cost]
-                 else
-                   b.amount
-                 end
-        credits_by_resident[b.resident_id] += credit
-      end
-
-      meal.meal_residents.each { |mr| debits_by_resident[mr.resident_id] += mf[:unit_cost] * mr.multiplier }
-      meal.guests.each { |g| guest_debits_by_resident[g.resident_id] += mf[:unit_cost] * g.multiplier }
-    end
-
-    # Step 4: Assemble per-resident raw balances (1 query for residents, zero inside loop).
-    raw_balances = {}
-    community.residents.find_each do |resident|
-      credits = credits_by_resident[resident.id]
-      debits = debits_by_resident[resident.id]
-      guest_debits = guest_debits_by_resident[resident.id]
-      raw_balances[resident.id] = credits - debits - guest_debits
-    end
-
-    # Step 5: Round to cents using largest-remainder method (Hamilton's method).
+    # Round to cents using largest-remainder method (Hamilton's method).
     # This guarantees rounded balances sum to exactly zero — the standard
     # accounting approach for apportioning monetary amounts. Each value is
     # within 1 cent of its exact full-precision amount.

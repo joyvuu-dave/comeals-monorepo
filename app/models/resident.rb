@@ -125,15 +125,21 @@ class Resident < ApplicationRecord
   #
   # calc_balance and its helpers (bill_reimbursements, meal_resident_costs,
   # guest_costs) are the per-resident implementation of balance computation.
-  # They are NOT used in production — the billing:recalculate rake task has
-  # an equivalent batch-optimized implementation that avoids N+1 queries.
+  # They are NOT used in production. Production computes every balance in
+  # MealLedger, in one pass over preloaded meals.
   #
-  # These methods are kept as a correctness oracle:
-  #   - spec/tasks/billing_recalculate_correctness_spec.rb compares the rake
-  #     task output against calc_balance to verify both paths agree.
+  # These methods are kept as a correctness oracle. Being a second, separately
+  # written answer to the same question is the whole point of them: routing
+  # them through MealLedger would make the specs below agree with themselves
+  # and prove nothing.
+  #   - spec/tasks/billing_recalculate_correctness_spec.rb compares the
+  #     billing:recalculate output against calc_balance.
+  #   - spec/tasks/settlement_matches_running_balance_spec.rb compares
+  #     Reconciliation#settlement_balances against calc_balance too, so both
+  #     of MealLedger's callers are checked against this oracle.
   #   - spec/models/resident_spec.rb tests the individual calculation logic.
   #
-  # If you change financial logic in the rake task, update these methods too
+  # If you change financial logic in MealLedger, update these methods too
   # (and vice versa) — they must stay in sync.
 
   def calc_balance
