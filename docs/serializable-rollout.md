@@ -296,6 +296,26 @@ where `settlement_balances` reads the bills, and the rival survives. Assert the
 outcome — exactly one survivor, owning every meal, with stored balances
 matching source — not which side raises.
 
+**A whole-suite run can produce a serialization failure in a spec that has
+nothing to do with concurrency.** Seen once on 2026-08-01: five examples in
+`spec/models/bill_spec.rb` — plain model validations — failed with
+`could not serialize access due to read/write dependencies among transactions`,
+`Canceled on conflict out to pivot, during read`. They passed alone, and did
+not come back in two later whole-suite runs or in three runs of
+`spec/db spec/models/bill_spec.rb` together.
+
+Not chased further, and not explained. The likeliest source is the
+non-transactional files in `spec/db`, which run before `spec/models` and open
+real second sessions; SSI needs another concurrent SERIALIZABLE transaction to
+cancel anything, and those are the only ones in the suite. If this comes back,
+that is where to look first, and the useful next step is a run with `--seed`
+pinned rather than more re-runs.
+
+What to take from it: at SERIALIZABLE a single red example in an unrelated file
+is not automatically a real failure. Re-run before believing it. That is a bad
+property for a test suite to have, and if it happens often enough to be
+annoying it should be fixed rather than tolerated.
+
 **What the suite can and cannot tell you.** 1058 of the 1112 examples run
 single-connection under transactional fixtures, where an abort essentially
 cannot happen. A green suite means nothing broke structurally. Everything we

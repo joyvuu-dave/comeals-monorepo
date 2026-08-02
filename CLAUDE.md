@@ -101,6 +101,7 @@ SETTLEMENT (reconciliation): Rounded to cents using largest-remainder allocation
 - Deploy: `bin/deploy` handles migration detection, backup, health checks
 - **Rake tasks:**
   - `rake billing:recalculate` — run daily to refresh resident balances from source data
+  - `rake ledger:verify` — run daily to check every settled balance against its source data. Records every run, pass or fail, in `ledger_check_runs`. See `docs/money-path-observability.md`.
   - `rake reconciliations:create` — manual trigger to settle all unreconciled meals
 - **Job monitoring:** scheduled tasks wrap their body in `Healthcheck.monitor` (`app/services/healthcheck.rb`), which pings healthchecks.io on success or failure. Pings are off unless `HEALTHCHECKS_PING_KEY` is set (production only). A job that stops running entirely triggers a "check is late" email from healthchecks.io.
 

@@ -36,25 +36,49 @@ Worth writing down so nobody rebuilds it.
 Five questions we cannot answer today about a stored number. Ordered by what
 each teaches per unit of work.
 
-### A. Is any settled balance different today from what its source data says?
+### ~~A. Is any settled balance different today from what its source data says?~~ — built 2026-07-31
 
-A nightly rake task that, for every reconciliation, recomputes
-`settlement_balances` from source and compares it to the stored
-`reconciliation_balances` rows. Any difference raises, and `Healthcheck.monitor`
-turns that into an email.
+`LedgerVerification`, run nightly by `rake ledger:verify` at 05:00, after
+`billing:recalculate`. For every reconciliation it recomputes the settlement
+from that reconciliation's own meals, bills, attendance and guests, and
+compares the result to the amounts stored at settlement. Everything is read
+inside one `SnapshotRead`, so a settlement committing halfway through cannot
+produce a mismatch that never existed.
 
-**The code already exists**, in `spec/db/settlement_race_spec.rb` —
-`stored_balances(r)` against `balances_from_source(r)`. It only runs in a test.
-Promoting it to production is about thirty lines.
+A difference raises, and `Healthcheck.monitor` turns that into an email.
 
 This is what a bank calls a control: not a guard that prevents a bad write, but
 a check that proves the numbers still tie out. It would have caught issue #43 in
 production rather than only in a test.
 
-One design note: recomputing every reconciliation gets slower as history grows.
-The settlement benchmark runs 200 meals in 0.14s, so a decade of history is
-under a minute. Do not optimize this until it matters. If it ever does, check
-the most recent N plus a rotating sample of older ones.
+**Every run is recorded, pass or fail**, in `ledger_check_runs` — start, finish,
+how many reconciliations were checked, how many disagreed, and what disagreed.
+That table is the actual deliverable. A check that only speaks up on failure
+cannot answer the question an auditor asks, which is not "would you have
+noticed?" but "show me that you looked". A silent night and a night the job
+never ran look identical without it. The rows are append-only, guarded the same
+way the balances are, because a check record that can be edited afterwards is
+not evidence. `admin/ledger_check_runs` shows the history.
+
+There are three outcomes, not two. A run that could not finish is recorded with
+its error and is neither passed nor failed: it says nothing about the books,
+which is different from saying they are right.
+
+Two things this control does **not** prove, both worth keeping straight:
+
+- It recomputes with `MealLedger`, which is what wrote the stored values. So it
+  proves a stored balance still follows from its source rows; it cannot prove
+  the arithmetic is right, because the same mistake would be made twice and
+  agree with itself. The `Resident#calc_balance` oracle is what covers that.
+- If the settlement arithmetic is ever changed on purpose, this check will
+  disagree with every reconciliation settled before the change, every night,
+  forever. That alarm is correct — the past no longer reproduces — but it needs
+  a deliberate answer rather than being switched off. See "still open" below.
+
+One design note that has not bitten yet: recomputing every reconciliation gets
+slower as history grows. The settlement benchmark runs 200 meals in 0.14s, so a
+decade of history is under a minute. Do not optimize this until it matters. If
+it ever does, check the most recent N plus a rotating sample of older ones.
 
 ### B. What is this number made of?
 
@@ -141,11 +165,16 @@ Ranked last of the five. Line items (B) already explain the settled values, and
 the running balance is meant to move constantly as people sign up, so the signal
 to noise is poor. Worth building only for completeness of the pattern.
 
-## Suggested order, if we do this
+## Order
 
-1. Control A — the nightly recompute-and-diff. The code exists.
+1. ~~Control A — the nightly recompute-and-diff.~~ Built 2026-07-31.
 2. Line items (B) — the biggest gain in explainability, and it makes the test
-   harness able to localize failures.
+   harness able to localize failures. **Next.** Smaller now than when this was
+   written: `MealLedger` already computes the lines and returns them, so B is a
+   table plus a write inside the settlement transaction, not a rewrite. It also
+   upgrades control A — the nightly check becomes a SQL tie-out between two
+   tables written by different code, with no Ruby recomputation, which is the
+   version that closes the "same mistake twice" gap above.
 3. Digest chain (D) — closes the escape-hatch blind spot.
 4. Provenance stamps (C) — folds in with D.
 5. Snapshots (E) — only for completeness.
@@ -153,6 +182,19 @@ to noise is poor. Worth building only for completeness of the pattern.
 A and B together give a full tie-out chain: source rows, then line items, then
 the settled balance, then a recomputed check. Each link is verifiable on its
 own, and each is written by different code at a different time.
+
+## Still open
+
+- **What to do when the settlement arithmetic changes on purpose.** Control A
+  will then disagree with all of history, every night. The likely answer is to
+  stamp each reconciliation with a calculation version at settlement, and have
+  the check only recompute rows whose version matches the current code, falling
+  back to the SQL tie-out against line items (B) for older ones. Decide this
+  before the first deliberate change to the math, not after.
+- **Where the digest evidence lives (part of D).** A hash chain stored in the
+  database it protects is tamper-evident against accidents, not against the one
+  person who has superuser access. Putting the digest in the settlement email
+  that already goes out puts a copy in thirty mailboxes nobody can rewrite.
 
 ## Deliberately not proposed
 

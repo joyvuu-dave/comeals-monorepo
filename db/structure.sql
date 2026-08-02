@@ -38,6 +38,25 @@ COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
 
 
 --
+-- Name: comeals_protect_ledger_check_run(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.comeals_protect_ledger_check_run() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF current_setting('comeals.allow_settled_writes', true) = 'on' THEN
+    RETURN CASE TG_OP WHEN 'DELETE' THEN OLD ELSE NEW END;
+  END IF;
+
+  RAISE EXCEPTION '% on ledger_check_runs refused: a check run is a record of what was true '
+    'at a point in time and cannot be changed. See docs/runbooks/settled-data-repair.md.',
+    TG_OP;
+END;
+$$;
+
+
+--
 -- Name: comeals_protect_settled_balance(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -587,6 +606,45 @@ ALTER SEQUENCE public.keys_id_seq OWNED BY public.keys.id;
 
 
 --
+-- Name: ledger_check_runs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ledger_check_runs (
+    id bigint NOT NULL,
+    started_at timestamp(6) without time zone NOT NULL,
+    finished_at timestamp(6) without time zone NOT NULL,
+    reconciliations_checked integer DEFAULT 0 NOT NULL,
+    mismatch_count integer DEFAULT 0 NOT NULL,
+    details jsonb DEFAULT '[]'::jsonb NOT NULL,
+    error text,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT ledger_check_runs_checked_non_negative CHECK ((reconciliations_checked >= 0)),
+    CONSTRAINT ledger_check_runs_finished_after_started CHECK ((finished_at >= started_at)),
+    CONSTRAINT ledger_check_runs_mismatch_count_non_negative CHECK ((mismatch_count >= 0))
+);
+
+
+--
+-- Name: ledger_check_runs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.ledger_check_runs_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: ledger_check_runs_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.ledger_check_runs_id_seq OWNED BY public.ledger_check_runs.id;
+
+
+--
 -- Name: meal_residents; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -989,6 +1047,13 @@ ALTER TABLE ONLY public.keys ALTER COLUMN id SET DEFAULT nextval('public.keys_id
 
 
 --
+-- Name: ledger_check_runs id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ledger_check_runs ALTER COLUMN id SET DEFAULT nextval('public.ledger_check_runs_id_seq'::regclass);
+
+
+--
 -- Name: meal_residents id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1137,6 +1202,14 @@ ALTER TABLE ONLY public.guests
 
 ALTER TABLE ONLY public.keys
     ADD CONSTRAINT keys_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: ledger_check_runs ledger_check_runs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ledger_check_runs
+    ADD CONSTRAINT ledger_check_runs_pkey PRIMARY KEY (id);
 
 
 --
@@ -1381,6 +1454,13 @@ CREATE UNIQUE INDEX index_keys_on_token ON public.keys USING btree (token);
 
 
 --
+-- Name: index_ledger_check_runs_on_started_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_ledger_check_runs_on_started_at ON public.ledger_check_runs USING btree (started_at);
+
+
+--
 -- Name: index_meal_residents_on_meal_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1525,6 +1605,13 @@ CREATE TRIGGER comeals_refuse_last_superuser_removal BEFORE DELETE OR UPDATE ON 
 --
 
 CREATE TRIGGER guests_reject_settled_write BEFORE INSERT OR DELETE OR UPDATE ON public.guests FOR EACH ROW EXECUTE FUNCTION public.comeals_reject_settled_child_write();
+
+
+--
+-- Name: ledger_check_runs ledger_check_runs_protect; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER ledger_check_runs_protect BEFORE DELETE OR UPDATE ON public.ledger_check_runs FOR EACH ROW EXECUTE FUNCTION public.comeals_protect_ledger_check_run();
 
 
 --
@@ -1769,6 +1856,7 @@ ALTER TABLE ONLY public.bills
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260731130000'),
 ('20260731120000'),
 ('20260728120000'),
 ('20260727120000'),

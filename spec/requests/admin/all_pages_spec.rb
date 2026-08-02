@@ -53,6 +53,14 @@ ADMIN_PAGE_RESOURCES = {
     pages: %i[index show new edit],
     record: -> { create(:guest_room_reservation, community: community, resident: resident) }
   },
+  # Read-only: rows are written by ledger:verify and nothing else, and both
+  # the model and a database trigger refuse every update and delete. The
+  # record carries mismatches so the show page renders its "What disagreed"
+  # panel, which is the part with real logic in it.
+  'LedgerCheckRun' => {
+    pages: %i[index show],
+    record: -> { create(:ledger_check_run, :with_mismatches) }
+  },
   'Meal' => {
     pages: %i[index show new edit],
     record: -> { meal }
