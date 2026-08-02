@@ -80,7 +80,46 @@ slower as history grows. The settlement benchmark runs 200 meals in 0.14s, so a
 decade of history is under a minute. Do not optimize this until it matters. If
 it ever does, check the most recent N plus a rotating sample of older ones.
 
-### B. What is this number made of?
+### ~~B. What is this number made of?~~ — built 2026-08-02
+
+`meal_charges`, written once inside the settlement transaction from the same
+`MealLedger` pass that produces the balances. One row per source row: one
+credit per bill, one debit per attendance, one per guest. Each carries the
+meal, the resident, the kind, the signed full-precision amount, the multiplier
+(debits) and what the cook actually spent before any cap (credits).
+
+Immutable, guarded the same way the balances are. No `reconciliation_id` — the
+meal already says which settlement it belongs to, and two answers to one
+question can disagree.
+
+**The tie-out is not equality, and the original proposal here was wrong about
+that.** The lines are full precision and the balances are rounded to cents, so
+a resident's lines sum to within one cent of their balance, never to exactly
+it. One cent is precisely what largest-remainder allocation is allowed to
+move, so that is the whole tolerance. `LedgerVerification` runs this nightly as
+a second check alongside the recompute, and it is the stronger of the two:
+two tables, written by different code at settlement, compared with no Ruby
+arithmetic at all.
+
+A second thing the first draft got wrong: the lines cannot be required to sum
+to _exactly_ zero either. `BigDecimal` division carries finite precision, so
+$100 split three ways leaves a tail thirty digits down. The check uses
+`Reconciliation::ZERO_SUM_EPSILON`, which exists for this. Only the rounded
+balances can be held to exact zero, and the database already does that.
+
+Still to build on top of this, and the reason it was worth doing:
+
+- **A statement instead of a number.** The rows are there; no screen shows them
+  yet. That is the next piece of work — an endpoint and a page where a resident
+  can see "2026-07-03, you plus one child, $4.28" instead of a single total.
+- **Backfill, or not.** Reconciliations settled before 2026-08-02 have no
+  lines, and the nightly check skips the line-item half for them. Writing lines
+  for them now would record today's belief as though it were what happened
+  then. Left undone deliberately; it is a decision, not an oversight.
+
+The old proposal follows, for the reasoning about rule 8.
+
+### B (original proposal). What is this number made of?
 
 `Reconciliation#settlement_balances` computes every per-meal, per-resident debit
 and credit in memory and then discards the line items, keeping only the
@@ -168,14 +207,12 @@ to noise is poor. Worth building only for completeness of the pattern.
 ## Order
 
 1. ~~Control A — the nightly recompute-and-diff.~~ Built 2026-07-31.
-2. Line items (B) — the biggest gain in explainability, and it makes the test
-   harness able to localize failures. **Next.** Smaller now than when this was
-   written: `MealLedger` already computes the lines and returns them, so B is a
-   table plus a write inside the settlement transaction, not a rewrite. It also
-   upgrades control A — the nightly check becomes a SQL tie-out between two
-   tables written by different code, with no Ruby recomputation, which is the
-   version that closes the "same mistake twice" gap above.
-3. Digest chain (D) — closes the escape-hatch blind spot.
+2. ~~Line items (B).~~ Built 2026-08-02. The nightly check now includes the SQL
+   tie-out between two tables written by different code, which is the version
+   that closes the "same mistake twice" gap. The resident-facing statement is
+   not built.
+3. Digest chain (D) — closes the escape-hatch blind spot. **Next**, unless the
+   statement screen comes first.
 4. Provenance stamps (C) — folds in with D.
 5. Snapshots (E) — only for completeness.
 

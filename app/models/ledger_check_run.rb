@@ -1,5 +1,23 @@
 # frozen_string_literal: true
 
+# == Schema Information
+#
+# Table name: ledger_check_runs
+#
+#  id                      :bigint           not null, primary key
+#  details                 :jsonb            not null
+#  error                   :text
+#  finished_at             :datetime         not null
+#  mismatch_count          :integer          default(0), not null
+#  reconciliations_checked :integer          default(0), not null
+#  started_at              :datetime         not null
+#  created_at              :datetime         not null
+#  updated_at              :datetime         not null
+#
+# Indexes
+#
+#  index_ledger_check_runs_on_started_at  (started_at)
+#
 # One night's record of the ledger check. See LedgerVerification for the
 # check itself, and docs/money-path-observability.md for why the record
 # exists at all.

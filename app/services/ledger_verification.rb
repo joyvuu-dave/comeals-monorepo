@@ -14,15 +14,32 @@
 # every guard allowed, and this check would have found it in production
 # instead of only in a test.
 #
-# == What it can and cannot prove
+# == Two checks, which fail for different reasons
 #
-# It recomputes with MealLedger, which is also what wrote the stored values.
-# So it proves the stored balance still follows from the source rows, and it
-# cannot prove the arithmetic itself is right — the same mistake would be
-# made twice and agree with itself. What covers that is the Resident#calc_balance
-# oracle, which is written separately and compared in
+# 1. Recompute. Rebuild the settlement from source with MealLedger and compare
+#    it to the stored balances. Catches source rows that changed after
+#    settlement.
+#
+# 2. Line items against balances. The meal_charges rows written at settlement
+#    must add up, per resident, to the stored balance — within one cent, which
+#    is all largest-remainder allocation is allowed to move them — and must sum
+#    to exactly zero overall. No arithmetic happens in Ruby here: both sides
+#    are read and PostgreSQL does the sums.
+#
+# The second is the stronger one, and it is why line items exist. The
+# recompute check uses MealLedger, which is what wrote the stored values, so
+# the same mistake would be made twice and agree with itself. The line-item
+# check compares two tables written by different code at settlement time,
+# with nothing recomputed.
+#
+# Neither proves the arithmetic is right in the first place. That is the
+# Resident#calc_balance oracle's job, compared in
 # spec/tasks/billing_recalculate_correctness_spec.rb and
 # spec/tasks/settlement_matches_running_balance_spec.rb.
+#
+# Reconciliations settled before meal_charges existed have no lines and get
+# check 1 only. Inventing lines for them now would be recording today's
+# belief as though it were what happened then.
 #
 # One consequence worth expecting: if the settlement arithmetic is ever
 # changed on purpose, this check will disagree with every reconciliation
@@ -54,14 +71,24 @@ class LedgerVerification
     new.call
   end
 
+  # One reconciliation can fail both checks, so the count is of findings, not
+  # of reconciliations. Naming which reconciliations are involved matters more
+  # than the count anyway — that is what someone acts on.
   def self.summary_for(run)
-    reconciliation_ids = run.details.pluck('reconciliation_id').join(', ')
+    ids = run.details.pluck('reconciliation_id').uniq.sort
+    checks = run.details.pluck('check').uniq.sort.join(' and ')
 
-    "Ledger check failed: #{run.mismatch_count} of #{run.reconciliations_checked} " \
-      "#{'reconciliation'.pluralize(run.reconciliations_checked)} no longer match their source data " \
-      "(#{reconciliation_ids}). Settled balances were changed after settlement, or the source rows " \
-      'behind them were. See docs/runbooks/settled-data-repair.md.'
+    "Ledger check failed: #{run.mismatch_count} #{'finding'.pluralize(run.mismatch_count)} " \
+      "(#{checks}) across #{ids.size} of #{run.reconciliations_checked} " \
+      "#{'reconciliation'.pluralize(run.reconciliations_checked)} — #{ids.join(', ')}. " \
+      'Settled balances were changed after settlement, or the source rows behind them were. ' \
+      'See docs/runbooks/settled-data-repair.md.'
   end
+
+  # Largest-remainder allocation moves a balance by at most one cent away from
+  # its exact amount, so that is the whole tolerance the line-item tie-out is
+  # allowed. Anything further apart is a real disagreement.
+  ROUNDING_TOLERANCE = BigDecimal('0.01')
 
   def call
     started_at = Time.current
@@ -72,8 +99,7 @@ class LedgerVerification
       SnapshotRead.call do
         Reconciliation.order(:id).each do |reconciliation|
           checked += 1
-          difference = compare(reconciliation)
-          mismatches << difference if difference
+          mismatches.concat(checks_for(reconciliation))
         end
       end
     rescue StandardError => e
@@ -90,17 +116,94 @@ class LedgerVerification
 
   private
 
+  # Two independent checks per reconciliation, and they fail for different
+  # reasons, so both run and both are reported.
+  def checks_for(reconciliation)
+    [recompute_check(reconciliation), line_item_check(reconciliation)].compact
+  end
+
+  # Check one: recompute the settlement from source and compare. Catches
+  # source rows that changed after settlement.
+  #
   # Zero balances are not stored — a resident who owes and is owed nothing
   # gets no row — so the recomputed side drops them too before comparing.
-  def compare(reconciliation)
-    stored = reconciliation.reconciliation_balances.pluck(:resident_id, :amount).to_h
+  def recompute_check(reconciliation)
+    stored = stored_balances(reconciliation)
     source = reconciliation.settlement_balances.reject { |_, amount| amount.zero? }
     return nil if stored == source
 
+    detail(reconciliation, 'recompute', differences_between(stored, source))
+  end
+
+  # Check two: the line items must add up to the balances. No arithmetic
+  # happens here at all — both sides are read, and the sums are done by
+  # PostgreSQL. That is what makes this check independent of the code that
+  # wrote either table, and the reason it can catch a mistake the recompute
+  # check cannot: the recompute uses MealLedger, which is what produced the
+  # stored values in the first place.
+  #
+  # Skipped for reconciliations settled before meal_charges existed. They
+  # have no lines, and inventing some now would be recording today's belief
+  # as though it were what happened then. Those keep the recompute check.
+  def line_item_check(reconciliation)
+    charges = MealCharge.for_reconciliation(reconciliation)
+    return nil unless charges.exists?
+
+    stored = stored_balances(reconciliation)
+    summed = charges.group(:resident_id).sum(:amount)
+
+    differences = line_item_differences(stored, summed)
+    total = summed.values.sum(BigDecimal('0'))
+    differences << lines_do_not_balance(total) if total.abs > Reconciliation::ZERO_SUM_EPSILON
+    return nil if differences.empty?
+
+    detail(reconciliation, 'line_items', differences)
+  end
+
+  # The line items are full precision and the balances are rounded to cents,
+  # so these two can never be compared for equality — only for being within
+  # the one cent that largest-remainder allocation is allowed to move things.
+  def line_item_differences(stored, summed)
+    (stored.keys | summed.keys).sort.filter_map do |resident_id|
+      stored_amount = stored[resident_id] || BigDecimal('0')
+      summed_amount = summed[resident_id] || BigDecimal('0')
+      next if (stored_amount - summed_amount).abs <= ROUNDING_TOLERANCE
+
+      {
+        resident_id: resident_id,
+        stored: stored[resident_id]&.to_s('F'),
+        source: summed[resident_id]&.to_s('F')
+      }
+    end
+  end
+
+  # Every settlement's lines must sum to zero, the same rule the database
+  # already enforces on the balances — but to within Reconciliation's epsilon,
+  # not exactly.
+  #
+  # The balances can be held to exactly zero because they are whole cents that
+  # allocate_to_cents made add up. The lines cannot: they are full-precision
+  # BigDecimal, and BigDecimal division carries finite precision, so a meal
+  # split three ways leaves a tail thirty digits down. $100 across three
+  # people sums to -0.000000000000000000000000000002, not 0. Demanding exact
+  # zero here would report every ordinary meal as corrupt.
+  #
+  # Reported without a resident because it is a fact about the whole
+  # reconciliation, not about one person.
+  def lines_do_not_balance(total)
+    { resident_id: nil, stored: nil, source: total.to_s('F') }
+  end
+
+  def stored_balances(reconciliation)
+    reconciliation.reconciliation_balances.pluck(:resident_id, :amount).to_h
+  end
+
+  def detail(reconciliation, check, differences)
     {
       reconciliation_id: reconciliation.id,
       date: reconciliation.date.to_s,
-      differences: differences_between(stored, source)
+      check: check,
+      differences: differences
     }
   end
 

@@ -279,6 +279,7 @@ RSpec.describe 'settled-meal database triggers' do
         Bill.delete_all
         MealResident.delete_all
         Guest.delete_all
+        MealCharge.delete_all
         ReconciliationBalance.delete_all
         Meal.delete_all
         Reconciliation.delete_all

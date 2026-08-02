@@ -137,16 +137,8 @@ class Reconciliation < ApplicationRecord
   # Memory: loads all reconciled meals + associations into RAM. For a co-housing
   # community (~500 meals max), this is ~18K AR objects (~36 MB). Bounded by the
   # physical size of the community.
-  def settlement_balances
-    # Eager-load all reconciled meals with their financial associations.
-    # Uses preload (not includes) to guarantee separate IN(?) queries — includes
-    # can silently switch to LEFT JOIN if a .where is later chained on an
-    # included table, which would produce a cartesian product across 3
-    # associations. MealLedger runs no queries of its own, so these three
-    # associations must be loaded before it sees the meals.
-    reconciled_meals = meals.with_attendees.preload(:bills, :meal_residents, :guests).to_a
-
-    raw_balances = MealLedger.new(reconciled_meals).balances(community.residents.pluck(:id))
+  def settlement_balances(ledger = settlement_ledger)
+    raw_balances = ledger.balances(community.residents.pluck(:id))
 
     # Round to cents using largest-remainder method (Hamilton's method).
     # This guarantees rounded balances sum to exactly zero — the standard
@@ -165,24 +157,44 @@ class Reconciliation < ApplicationRecord
     balances
   end
 
-  # Write the settlement balances. Runs once, from finalize, inside the
-  # transaction that creates the reconciliation. Only non-zero balances are
-  # stored, which keeps the table lean and costs nothing: a resident with no
-  # row owes and is owed nothing.
+  # The meals this reconciliation settled, loaded once with everything the
+  # arithmetic needs.
   #
-  # This used to clear the table first and call itself idempotent. It is not
-  # idempotent any more, and it should not be. A settled balance is what a
-  # resident has already been billed, so re-running this would rewrite the
-  # ledger rather than correct it. Both halves of that are now refused —
-  # the DELETE by the trigger in 20260731120000, and a second insert by the
-  # unique index on (reconciliation_id, resident_id).
-  def persist_balances!
-    transaction do
-      settlement_balances.each do |resident_id, amount|
-        next if amount.zero?
+  # Uses preload (not includes) to guarantee separate IN(?) queries — includes
+  # can silently switch to LEFT JOIN if a .where is later chained on an
+  # included table, which would produce a cartesian product across 3
+  # associations. MealLedger runs no queries of its own, so these three
+  # associations must be loaded before it sees the meals.
+  def settlement_ledger
+    MealLedger.new(meals.with_attendees.preload(:bills, :meal_residents, :guests).to_a)
+  end
 
-        reconciliation_balances.create!(resident_id: resident_id, amount: amount)
-      end
+  # Write the settlement: the line items, then the balances they add up to.
+  # Runs once, from finalize, inside the transaction that creates the
+  # reconciliation.
+  #
+  # Both tables come from one MealLedger pass. Computing them separately would
+  # mean two reads of the same meals with a gap between them, and the whole
+  # point of storing the lines is that they explain the balances — which they
+  # cannot do if they were derived from a different read.
+  #
+  # Only non-zero balances are stored, which keeps that table lean and costs
+  # nothing: a resident with no row owes and is owed nothing. Every line is
+  # stored, including zero ones, because a zero line is still a fact about
+  # what happened — a resident who ate a meal that cost nothing.
+  #
+  # This is not idempotent, and should not be. A settled balance is what a
+  # resident has already been billed, so re-running it would rewrite the
+  # ledger rather than correct it. Re-running is refused twice over: the
+  # deletes by the triggers in 20260731120000 and 20260802120000, and the
+  # re-inserts by the unique indexes on both tables. To rebuild a
+  # reconciliation on purpose, see docs/runbooks/settled-data-repair.md.
+  def persist_settlement!
+    ledger = settlement_ledger
+
+    transaction do
+      persist_charges!(ledger)
+      persist_balances!(ledger)
     end
   end
 
@@ -224,7 +236,36 @@ class Reconciliation < ApplicationRecord
 
   def finalize
     assign_meals
-    persist_balances!
+    persist_settlement!
+  end
+
+  # One row per source row: one credit per bill, one debit per attendance,
+  # one per guest. insert_all rather than create! because these are written
+  # in a batch and there is nothing per-row to validate that the check
+  # constraints and MealLedger do not already guarantee — and a settlement
+  # writes a few hundred of them.
+  def persist_charges!(ledger)
+    lines = ledger.lines
+    return if lines.empty?
+
+    now = Time.current
+    MealCharge.insert_all(
+      lines.map do |line|
+        {
+          meal_id: line.meal_id, resident_id: line.resident_id, kind: line.kind.to_s,
+          amount: line.amount, multiplier: line.multiplier, unit_cost: line.unit_cost,
+          bill_amount: line.bill_amount, created_at: now, updated_at: now
+        }
+      end
+    )
+  end
+
+  def persist_balances!(ledger)
+    settlement_balances(ledger).each do |resident_id, amount|
+      next if amount.zero?
+
+      reconciliation_balances.create!(resident_id: resident_id, amount: amount)
+    end
   end
 
   def set_date

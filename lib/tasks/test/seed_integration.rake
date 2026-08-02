@@ -96,7 +96,7 @@ namespace :test do
 
     # Creating the reconciliation triggers after_create :finalize, which
     # calls assign_meals (sweeps unreconciled meals with bills on or before
-    # end_date) and persist_balances! (computes settlement).
+    # end_date) and persist_settlement! (computes settlement).
     Reconciliation.create!(
       community: community,
       end_date: 30.days.ago.to_date

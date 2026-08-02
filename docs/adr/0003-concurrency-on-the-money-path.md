@@ -221,7 +221,7 @@ either on `20260707100000`'s non-locking function or on this one.
 
 One detail the spec had to get right, because it is easy to write a test that
 passes for the wrong reason. The dangerous instant is not when `assign_meals`
-claims the meals. It is after `persist_balances!` has read the bills,
+claims the meals. It is after `persist_settlement!` has read the bills,
 attendance, and guests — the latest moment a racing write can start and still
 be missed by the balances. Firing the racing write there is the hardest
 version of the test; anything earlier only waits longer.

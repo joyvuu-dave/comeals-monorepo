@@ -87,9 +87,14 @@ RSpec.describe LedgerVerification do
 
       run = LedgerCheckRun.recent.first
       expect(run).to be_failed
-      expect(run.mismatch_count).to eq(1)
 
-      detail = run.details.first
+      # Both checks catch this one, for different reasons: the recompute says
+      # the balance no longer follows from the source rows, and the line items
+      # say it no longer matches what they add up to.
+      expect(run.details.pluck('check')).to contain_exactly('recompute', 'line_items')
+      expect(run.mismatch_count).to eq(2)
+
+      detail = run.details.find { |d| d['check'] == 'recompute' }
       expect(detail['reconciliation_id']).to eq(reconciliation.id)
       expect(detail['differences'].pluck('resident_id')).to contain_exactly(cook.id, eater.id)
     end
@@ -166,6 +171,68 @@ RSpec.describe LedgerVerification do
       expect(reconciliation.reconciliation_balances.find_by(resident: eater)).to be_present
       expect(eater_difference['stored']).to eq('-40.0')
       expect(eater_difference['source']).to be_nil
+    end
+  end
+
+  describe 'line items that no longer add up to the balances' do
+    # The case that only exists because line items exist. Nothing about the
+    # source rows or the balances changed, so the recompute check is happy —
+    # it never looks at meal_charges. Only comparing the two stored tables
+    # against each other can see this.
+    it 'is found when a line item is rewritten and nothing else is' do
+      settle
+      charge = MealCharge.credits.first
+
+      behind_the_guards do
+        MealCharge.where(id: charge.id).update_all(amount: charge.amount - BigDecimal('5'))
+      end
+
+      expect { described_class.call }.to raise_error(described_class::MismatchError)
+
+      details = LedgerCheckRun.recent.first.details
+      expect(details.pluck('check')).to eq(['line_items'])
+    end
+
+    it 'is found when a line item is deleted' do
+      settle
+      charge = MealCharge.debits.first
+
+      behind_the_guards { MealCharge.where(id: charge.id).delete_all }
+
+      expect { described_class.call }.to raise_error(described_class::MismatchError)
+      expect(LedgerCheckRun.recent.first.details.pluck('check')).to eq(['line_items'])
+    end
+
+    # A resident's stored balance is rounded to cents and their lines are not,
+    # so the two are never equal. The check has to allow exactly the one cent
+    # that largest-remainder allocation is allowed to move a balance, and no
+    # more — otherwise it would either cry wolf every night or miss real drift.
+    it 'does not complain about ordinary cent rounding' do
+      cook_c = create(:resident, community: community, unit: unit, multiplier: 2, name: 'Third')
+      meal = create(:meal, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('100'))
+      [cook, eater, cook_c].each do |person|
+        create(:meal_resident, meal: meal, resident: person, community: community, multiplier: 2)
+      end
+      Reconciliation.create!(community: community, end_date: Date.yesterday)
+
+      # 100 split three ways does not divide evenly, so allocation really did
+      # move pennies here — this example is worthless if it did not.
+      sums = MealCharge.group(:resident_id).sum(:amount)
+      stored = ReconciliationBalance.pluck(:resident_id, :amount).to_h
+      expect(stored.any? { |id, amount| amount != sums[id] }).to be(true)
+
+      expect(described_class.call).to be_passed
+    end
+
+    it 'skips reconciliations settled before line items existed' do
+      reconciliation = settle
+
+      behind_the_guards { MealCharge.for_reconciliation(reconciliation).delete_all }
+
+      # No lines at all is not a mismatch — it is a settlement from before
+      # this table existed, and the recompute check still covers it.
+      expect(described_class.call).to be_passed
     end
   end
 

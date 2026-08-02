@@ -490,7 +490,7 @@ RSpec.describe Reconciliation do
     end
   end
 
-  describe '#persist_balances!' do
+  describe '#persist_settlement!' do
     it 'persists settlement balances to reconciliation_balances table' do
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
       eater = create(:resident, community: community, unit: unit, multiplier: 2)
@@ -505,7 +505,7 @@ RSpec.describe Reconciliation do
         end_date: Date.yesterday
       )
 
-      # finalize callback runs assign_meals + persist_balances!
+      # finalize callback runs assign_meals + persist_settlement!
       expect(reconciliation.reconciliation_balances.count).to be > 0
 
       cook_balance = reconciliation.reconciliation_balances.find_by(resident: cook)
@@ -612,12 +612,15 @@ RSpec.describe Reconciliation do
   end
 
   describe 'transaction safety' do
-    it 'rolls back meal assignments if persist_balances! fails' do
+    it 'rolls back meal assignments if persist_settlement! fails' do
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('50'))
 
-      allow_any_instance_of(described_class).to receive(:persist_balances!).and_raise(RuntimeError, 'simulated failure') # rubocop:disable RSpec/AnyInstance -- testing rollback behavior requires stubbing any instance
+      # rubocop:disable RSpec/AnyInstance -- testing rollback behavior requires stubbing any instance
+      allow_any_instance_of(described_class).to receive(:persist_settlement!)
+        .and_raise(RuntimeError, 'simulated failure')
+      # rubocop:enable RSpec/AnyInstance
 
       expect do
         described_class.create!(community: community, end_date: Date.yesterday)

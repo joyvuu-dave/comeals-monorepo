@@ -57,6 +57,26 @@ $$;
 
 
 --
+-- Name: comeals_protect_meal_charge(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.comeals_protect_meal_charge() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF current_setting('comeals.allow_settled_writes', true) = 'on' THEN
+    RETURN CASE TG_OP WHEN 'DELETE' THEN OLD ELSE NEW END;
+  END IF;
+
+  RAISE EXCEPTION '% on meal_charges refused: settlement line items record what a meal cost '
+    'and who was charged for it, and cannot be changed. Corrections belong in the next '
+    'reconciliation. For genuine data corruption see docs/runbooks/settled-data-repair.md.',
+    TG_OP;
+END;
+$$;
+
+
+--
 -- Name: comeals_protect_settled_balance(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -645,6 +665,47 @@ ALTER SEQUENCE public.ledger_check_runs_id_seq OWNED BY public.ledger_check_runs
 
 
 --
+-- Name: meal_charges; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.meal_charges (
+    id bigint NOT NULL,
+    meal_id bigint NOT NULL,
+    resident_id bigint NOT NULL,
+    kind character varying NOT NULL,
+    amount numeric(12,8) NOT NULL,
+    multiplier integer,
+    unit_cost numeric(12,8) NOT NULL,
+    bill_amount numeric(12,8),
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT meal_charges_bill_amount_on_credits_only CHECK ((((kind)::text = 'credit'::text) = (bill_amount IS NOT NULL))),
+    CONSTRAINT meal_charges_kind_known CHECK (((kind)::text = ANY ((ARRAY['credit'::character varying, 'debit'::character varying, 'guest_debit'::character varying])::text[]))),
+    CONSTRAINT meal_charges_multiplier_non_negative CHECK (((multiplier IS NULL) OR (multiplier >= 0))),
+    CONSTRAINT meal_charges_multiplier_on_debits_only CHECK ((((kind)::text = 'credit'::text) = (multiplier IS NULL)))
+);
+
+
+--
+-- Name: meal_charges_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.meal_charges_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: meal_charges_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.meal_charges_id_seq OWNED BY public.meal_charges.id;
+
+
+--
 -- Name: meal_residents; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1054,6 +1115,13 @@ ALTER TABLE ONLY public.ledger_check_runs ALTER COLUMN id SET DEFAULT nextval('p
 
 
 --
+-- Name: meal_charges id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.meal_charges ALTER COLUMN id SET DEFAULT nextval('public.meal_charges_id_seq'::regclass);
+
+
+--
 -- Name: meal_residents id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1210,6 +1278,14 @@ ALTER TABLE ONLY public.keys
 
 ALTER TABLE ONLY public.ledger_check_runs
     ADD CONSTRAINT ledger_check_runs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: meal_charges meal_charges_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.meal_charges
+    ADD CONSTRAINT meal_charges_pkey PRIMARY KEY (id);
 
 
 --
@@ -1461,6 +1537,34 @@ CREATE INDEX index_ledger_check_runs_on_started_at ON public.ledger_check_runs U
 
 
 --
+-- Name: index_meal_charges_on_meal_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_meal_charges_on_meal_id ON public.meal_charges USING btree (meal_id);
+
+
+--
+-- Name: index_meal_charges_on_resident_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_meal_charges_on_resident_id ON public.meal_charges USING btree (resident_id);
+
+
+--
+-- Name: index_meal_charges_one_credit_per_cook; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_meal_charges_one_credit_per_cook ON public.meal_charges USING btree (meal_id, resident_id) WHERE ((kind)::text = 'credit'::text);
+
+
+--
+-- Name: index_meal_charges_one_debit_per_attendee; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_meal_charges_one_debit_per_attendee ON public.meal_charges USING btree (meal_id, resident_id) WHERE ((kind)::text = 'debit'::text);
+
+
+--
 -- Name: index_meal_residents_on_meal_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1615,6 +1719,13 @@ CREATE TRIGGER ledger_check_runs_protect BEFORE DELETE OR UPDATE ON public.ledge
 
 
 --
+-- Name: meal_charges meal_charges_protect; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER meal_charges_protect BEFORE DELETE OR UPDATE ON public.meal_charges FOR EACH ROW EXECUTE FUNCTION public.comeals_protect_meal_charge();
+
+
+--
 -- Name: meal_residents meal_residents_reject_settled_write; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -1703,6 +1814,14 @@ ALTER TABLE ONLY public.common_house_reservations
 
 ALTER TABLE ONLY public.guest_room_reservations
     ADD CONSTRAINT fk_rails_3a0c325b9d FOREIGN KEY (community_id) REFERENCES public.communities(id);
+
+
+--
+-- Name: meal_charges fk_rails_3aa1bcb769; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.meal_charges
+    ADD CONSTRAINT fk_rails_3aa1bcb769 FOREIGN KEY (meal_id) REFERENCES public.meals(id);
 
 
 --
@@ -1802,6 +1921,14 @@ ALTER TABLE ONLY public.meals
 
 
 --
+-- Name: meal_charges fk_rails_b08ec17f22; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.meal_charges
+    ADD CONSTRAINT fk_rails_b08ec17f22 FOREIGN KEY (resident_id) REFERENCES public.residents(id);
+
+
+--
 -- Name: resident_balances fk_rails_b4d137a40d; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1856,6 +1983,7 @@ ALTER TABLE ONLY public.bills
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260802120000'),
 ('20260731130000'),
 ('20260731120000'),
 ('20260728120000'),

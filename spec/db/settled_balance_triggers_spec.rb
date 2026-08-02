@@ -36,6 +36,7 @@ RSpec.describe 'settled balance triggers' do
       Bill.delete_all
       MealResident.delete_all
       Guest.delete_all
+      MealCharge.delete_all
       ReconciliationBalance.delete_all
       Meal.delete_all
       Reconciliation.delete_all
@@ -188,16 +189,19 @@ RSpec.describe 'settled balance triggers' do
     # The rebuild recipe in docs/runbooks/settled-data-repair.md, run exactly
     # as written. A runbook step nobody has run is a guess, and this one is
     # only ever reached during an incident, which is the worst moment to find
-    # out that persist_balances! no longer clears the table for you.
+    # out that persist_settlement! no longer clears the tables for you.
     it 'rebuilds one reconciliation the way the runbook says' do
       before_amounts = reconciliation.reconciliation_balances.order(:resident_id).pluck(:amount)
+      before_lines = MealCharge.for_reconciliation(reconciliation).count
 
       repair do
+        MealCharge.for_reconciliation(reconciliation).delete_all
         reconciliation.reconciliation_balances.delete_all
-        reconciliation.persist_balances!
+        reconciliation.persist_settlement!
       end
 
       expect(reconciliation.reconciliation_balances.order(:resident_id).pluck(:amount)).to eq(before_amounts)
+      expect(MealCharge.for_reconciliation(reconciliation).count).to eq(before_lines)
     end
 
     it 'keeps the original amounts when an unbalanced repair is refused' do

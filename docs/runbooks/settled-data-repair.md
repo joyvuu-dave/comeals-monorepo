@@ -149,11 +149,12 @@ Two things that surprise people:
 
 ### Rebuilding one reconciliation's balances
 
-`Reconciliation#persist_balances!` used to clear the table first and could be
-re-run on its own. It cannot any more, on purpose: re-running it would rewrite
-the ledger rather than correct it. Rebuilding is now a deliberate two-step
-repair, and it is a last resort — the stored balances are what residents were
-already told they owed.
+A settlement writes two tables: `meal_charges` (one line per bill, per
+attendance, per guest) and `reconciliation_balances` (the per-resident totals
+those lines add up to). `Reconciliation#persist_settlement!` writes both, and
+it is not re-runnable on its own — re-running it would rewrite the ledger
+rather than correct it. Rebuilding is a deliberate repair, and a last resort:
+the stored balances are what residents were already told they owed.
 
 ```ruby
 # bin/rails runner, against a reconciliation you have decided is corrupt.
@@ -161,11 +162,15 @@ reconciliation = Reconciliation.find(ID)
 
 ActiveRecord::Base.transaction do
   ActiveRecord::Base.connection.execute("SET LOCAL comeals.allow_settled_writes = 'on'")
+  MealCharge.for_reconciliation(reconciliation).delete_all
   reconciliation.reconciliation_balances.delete_all
-  reconciliation.persist_balances!
+  reconciliation.persist_settlement!
 end
 ```
 
-Both steps must be in the one transaction. The delete alone leaves the
-reconciliation with no rows, which sums to zero and commits cleanly — and now
-you have a settlement with no balances at all.
+All of it must be in the one transaction, and both tables must be cleared.
+The delete alone leaves the reconciliation with no rows, which sums to zero
+and commits cleanly — and now you have a settlement with no balances at all.
+Clearing only one of the two tables leaves the line items and the totals
+describing different things, which the nightly check will report the next
+morning.

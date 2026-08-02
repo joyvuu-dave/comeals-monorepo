@@ -80,6 +80,7 @@ RSpec.describe 'settlement race against unlocked write paths' do
         Bill.delete_all
         MealResident.delete_all
         Guest.delete_all
+        MealCharge.delete_all
         ReconciliationBalance.delete_all
         Meal.delete_all
         Reconciliation.delete_all
@@ -142,7 +143,7 @@ RSpec.describe 'settlement race against unlocked write paths' do
   #
   # Which query to wait for matters. 'Meal Update All' is the claim itself —
   # use it to start something that must see the meals as still unreconciled.
-  # 'Guest Load' is the last of persist_balances!' three child-row preloads
+  # 'Guest Load' is the last of settlement_ledger's three child-row preloads
   # (bills, then attendance, then guests). It is the latest point a racing
   # write can start and still be missed by the balances, so it is the hardest
   # version of the test: anything that starts earlier only has longer to wait.
@@ -328,7 +329,7 @@ RSpec.describe 'settlement race against unlocked write paths' do
     #                   claimed, and its compare-and-swap in assign_meals
     #                   raises.
     #   SERIALIZABLE    SSI cancels *this* settlement first, at the bills
-    #                   read inside persist_balances!, for a read/write
+    #                   read inside persist_settlement!, for a read/write
     #                   dependency with the blocked rival ("canceled on
     #                   identification as a pivot"). This settlement rolls
     #                   back, the rival wakes to unclaimed meals, and the
