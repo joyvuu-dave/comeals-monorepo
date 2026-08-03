@@ -1,6 +1,6 @@
 # ADR 0005: SERIALIZABLE by default, with retry
 
-- **Status:** Proposed
+- **Status:** Accepted (deployed to production 2026-08-02, confirmed 2026-08-03)
 - **Date:** 2026-07-29
 - **Amends:** decision 2 of ADR 0003
 - **Issue:** [#43](https://github.com/joyvuu-dave/comeals-monorepo/issues/43)
@@ -363,6 +363,19 @@ is needed by the specs before it is needed by the application.
 - **2026-07-29** — decisions 8 and 9, and `RetryOnConflict`. The test
   environment runs at SERIALIZABLE; production does not yet. Suite green at
   1112 examples.
+- **2026-07-29** — steps 1 and 2 of the rollout: no `render` inside
+  `with_meal_lock`, and the retry-plus-409 around it. Step 3 the same day:
+  solid_cache treats a serialization failure as transient.
+- **2026-07-30** — step 4: ActiveAdmin rescues the conflict and redirects
+  back with a message, instead of the planned `around_action` retry, which
+  cannot work (decision 5 has the reasoning).
+- **2026-08-02** — step 5 deployed (release v606). Every environment runs at
+  SERIALIZABLE.
+- **2026-08-03** — confirmed live: `SHOW default_transaction_isolation`
+  through `heroku run rails runner` says `serializable`. Note that checking
+  with `heroku pg:psql` says `read committed`, and that is expected: the
+  setting comes from the `variables:` block in `database.yml`, so only Rails
+  sessions get it. psql's own session never does.
 
-The remaining steps, in the order to do them, are in
+The full record of the rollout, step by step, is in
 [docs/serializable-rollout.md](../serializable-rollout.md).

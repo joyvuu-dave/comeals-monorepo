@@ -4,11 +4,23 @@ Working notes for [ADR 0005](adr/0005-serializable-by-default.md). The ADR
 holds the decisions and the reasoning; this file holds the running state, the
 order of the remaining work, and the things that cost time to learn.
 
-Last updated 2026-07-30.
+Last updated 2026-08-03.
 
 ## Where we are
 
-Shipped and deployed to production:
+**Done. All five steps are shipped, deployed, and confirmed.** Production has
+run at SERIALIZABLE since release v606 (commit `9bca631`, deployed
+2026-08-02), which includes `eedbdca` "Run every environment at SERIALIZABLE".
+Confirmed live on 2026-08-03 — see the note in step 5 about how to check,
+because the command originally written there cannot.
+
+What remains is watching, not building: Bugsnag will report each retry as a
+handled `SerializationFailure` event with an `attempt` number. A few of those
+means the system works as designed. Many, again and again, means two things
+are conflicting that should not be. The "Still open" list at the bottom is
+current.
+
+Shipped and deployed:
 
 | Commit    | What                                                                            |
 | --------- | ------------------------------------------------------------------------------- |
@@ -17,10 +29,7 @@ Shipped and deployed to production:
 | `d18dbb5` | Bugsnag error tracking, Rails and browser                                       |
 | `73d7b63` | ADR 0005, estimates replaced with measurements                                  |
 | `bf4b21e` | `RetryOnConflict`; the test environment runs at SERIALIZABLE                    |
-
-**Production still runs at READ COMMITTED.** Only the test environment moved
-(`config/database.yml`, the `test:` block). That difference is on purpose. Step
-5 below is where production moves too.
+| `eedbdca` | Every environment runs at SERIALIZABLE (step 5; deployed 2026-08-02 in v606)    |
 
 ## Checks to run first — both done
 
@@ -66,8 +75,7 @@ something on the money path does not add up.
    step 5. If it ever says `serializable` before that step, production is at
    SERIALIZABLE without the retry code that it needs — reset it first.
 
-**Both checks are done. Steps 1 to 4 are done. Step 5 is the last one, and it
-is the one that changes production.**
+**Both checks are done, and so are all five steps.**
 
 ## What is left, in order
 
@@ -215,10 +223,21 @@ them fail if the initializer is deleted — checked by deleting it. The ninth
 checks that ActiveAdmin still memoizes the row, so if a future version stops,
 the reason for having no retry is visible and worth revisiting.
 
-### Step 5 — switch production to SERIALIZABLE
+### ~~Step 5 — switch production to SERIALIZABLE~~ — deployed 2026-08-02, confirmed 2026-08-03
 
-**The code change is committed. The deploy has not happened.** Until it does,
-production is still READ COMMITTED and nothing below has been seen for real.
+Deployed in v606 (`9bca631`, which includes `eedbdca`). Production Rails
+sessions run at `serializable`, confirmed 2026-08-03 with:
+
+```
+heroku run -a comeals-monorepo -x "bin/rails runner 'puts ActiveRecord::Base.connection.select_value(\"SHOW default_transaction_isolation\")'"
+```
+
+**The `heroku pg:psql` check this step originally called for cannot confirm
+the change, and its answer of `read committed` is expected, not a failure.**
+The setting comes from the `variables:` block in `database.yml`, which issues
+`SET SESSION` when Rails connects — so only Rails sessions get it. psql opens
+its own session and sees the server default. Check from inside the app, as
+above.
 
 The `variables:` block moved from `test:` to `default:` in
 `config/database.yml`, so development, test and production all run the same
@@ -240,17 +259,10 @@ c = ActiveRecord::DatabaseConfigurations.new(raw).configs_for(env_name: "product
 puts c[:variables].inspect'
 ```
 
-Deploy with `bin/deploy` (never push to Heroku directly). Then confirm what
-production is actually running:
-
-```
-heroku pg:psql -a comeals-monorepo -c "SHOW default_transaction_isolation"
-```
-
-Then watch Bugsnag for handled `SerializationFailure` reports. Those are
-retries that worked. A few of them means the system is working as designed.
-Many of them, again and again, means two things are conflicting that should
-not be.
+What is left of this step is watching Bugsnag for handled
+`SerializationFailure` reports. Those are retries that worked. A few of them
+means the system is working as designed. Many of them, again and again, means
+two things are conflicting that should not be.
 
 ## Things that cost time to learn
 
@@ -336,9 +348,7 @@ know where the conflict is.
 - Is the role-level isolation setting still there after Heroku rotates
   credentials? Unknown. This is why we set it in `database.yml` instead.
 - Whether the shared screen needs a "Try again" button when a signup runs out
-  of retries. It shows the message and reverts the change today. Decide after
-  step 5, from what Bugsnag reports.
+  of retries. It shows the message and reverts the change today. Decide from
+  what Bugsnag reports now that production is at SERIALIZABLE.
 - Extract `update_bills` out of `MealsController`, so `Metrics/ClassLength`
   stops being raised.
-- `CLAUDE.md` says "Four so far" about the ADRs. It is five once 0005 is
-  accepted.

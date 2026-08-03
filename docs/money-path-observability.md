@@ -38,8 +38,11 @@ each teaches per unit of work.
 
 ### ~~A. Is any settled balance different today from what its source data says?~~ — built 2026-07-31
 
-`LedgerVerification`, run nightly by `rake ledger:verify` at 05:00, after
-`billing:recalculate`. For every reconciliation it recomputes the settlement
+`LedgerVerification`, run nightly by `rake ledger:verify` at 05:00 UTC, after
+`billing:recalculate`. The Heroku Scheduler entry was added 2026-08-03 — for
+the first day after the 2026-08-02 deploy the code was live but nothing ran
+it, and `ledger_check_runs` shows the gap: one manual run, then nothing until
+the schedule took over. For every reconciliation it recomputes the settlement
 from that reconciliation's own meals, bills, attendance and guests, and
 compares the result to the amounts stored at settlement. Everything is read
 inside one `SnapshotRead`, so a settlement committing halfway through cannot
