@@ -156,8 +156,13 @@ ActiveAdmin.register Resident do
                 end
               end
               column('Amount') { |charge| number_to_currency(charge.amount) }
-              column('Cook spent') do |charge|
-                number_to_currency(charge.bill_amount) if charge.subsidized?
+              # Only when this table has one: the column answers "why was the
+              # credit smaller than the receipt", and with no capped cook in
+              # the section it would be a blank column with no question.
+              if lines.any?(&:subsidized?)
+                column('Cook spent') do |charge|
+                  number_to_currency(charge.bill_amount) if charge.subsidized?
+                end
               end
             end
           end

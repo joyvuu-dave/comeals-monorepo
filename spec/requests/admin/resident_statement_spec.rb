@@ -40,6 +40,9 @@ RSpec.describe 'Admin settlement statement' do
       expect(response.body).to include('settled at -$8.00')
       expect(response.body).to include('Attended')
       expect(response.body).to include('-$8.00')
+      # No capped cook in this section, so the column that explains capping
+      # is absent rather than blank.
+      expect(response.body).not_to include('Cook spent')
     end
 
     it 'shows the cook a credit line' do

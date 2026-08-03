@@ -153,8 +153,12 @@ ActiveAdmin.register Meal do
               end
             end
             column('Amount') { |charge| number_to_currency(charge.amount) }
-            column('Cook spent') do |charge|
-              number_to_currency(charge.bill_amount) if charge.subsidized?
+            # Only when the meal has one — see the matching column on the
+            # resident statement.
+            if lines.any?(&:subsidized?)
+              column('Cook spent') do |charge|
+                number_to_currency(charge.bill_amount) if charge.subsidized?
+              end
             end
           end
         end
