@@ -110,11 +110,15 @@ $100 split three ways leaves a tail thirty digits down. The check uses
 `Reconciliation::ZERO_SUM_EPSILON`, which exists for this. Only the rounded
 balances can be held to exact zero, and the database already does that.
 
-Still to build on top of this, and the reason it was worth doing:
+Built on top of this, and the reason it was worth doing:
 
-- **A statement instead of a number.** The rows are there; no screen shows them
-  yet. That is the next piece of work — an endpoint and a page where a resident
-  can see "2026-07-03, you plus one child, $4.28" instead of a single total.
+- **A statement instead of a number.** Built 2026-08-03, in ActiveAdmin rather
+  than the SPA. The SPA is a no-auth shared screen; the read-only token links
+  (ADR 0004) are the channel that already mails settlement data to residents.
+  The resident admin page shows one section per settled balance with one line
+  per charge; the meal admin page shows the same lines from the meal's side. A
+  settlement with no recorded lines says so in words. Both panels ride on
+  pages the token already reads, so the allowlist did not change.
 - **Backfill, or not.** Reconciliations settled before 2026-08-02 have no
   lines, and the nightly check skips the line-item half for them. Writing lines
   for them now would record today's belief as though it were what happened
@@ -212,10 +216,9 @@ to noise is poor. Worth building only for completeness of the pattern.
 1. ~~Control A — the nightly recompute-and-diff.~~ Built 2026-07-31.
 2. ~~Line items (B).~~ Built 2026-08-02. The nightly check now includes the SQL
    tie-out between two tables written by different code, which is the version
-   that closes the "same mistake twice" gap. The resident-facing statement is
-   not built.
-3. Digest chain (D) — closes the escape-hatch blind spot. **Next**, unless the
-   statement screen comes first.
+   that closes the "same mistake twice" gap. The statement screens followed on
+   2026-08-03.
+3. Digest chain (D) — closes the escape-hatch blind spot. **Next.**
 4. Provenance stamps (C) — folds in with D.
 5. Snapshots (E) — only for completeness.
 
