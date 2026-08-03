@@ -573,6 +573,19 @@ RSpec.describe Meal do
       expect(meal.reload.reconciliation_id).to eq(reconciliation.id)
     end
 
+    it 'blocks destroying a meal with a settlement line item, even before the reconciled guard' do
+      # In practice a meal with charges is always reconciled, and the guard
+      # above refuses it first. This isolates the association's own guard by
+      # inserting a charge on an open meal directly.
+      meal = create(:meal, community: community)
+      resident = create(:resident, community: community, unit: unit, multiplier: 2)
+      MealCharge.create!(meal: meal, resident: resident, kind: 'debit',
+                         amount: BigDecimal('-8'), unit_cost: BigDecimal('4'), multiplier: 2)
+
+      expect { meal.destroy }.not_to change(described_class, :count)
+      expect(meal.errors[:base]).to include('Cannot delete record because dependent meal charges exist')
+    end
+
     it 'still allows editing and destroying an unreconciled meal' do
       meal = create(:meal, community: community)
 

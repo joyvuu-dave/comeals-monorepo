@@ -43,6 +43,24 @@ RSpec.describe 'Read-only admin token' do
     # already on the community calendar, and a balance is derived from exactly
     # that data. A recipient widening the filter to see everyone's balances is
     # working as intended, not a leak.
+    # The statement is the reason the resident page matters to a mailed link:
+    # the line items behind "you owe $X", not just the number.
+    it 'reads a resident\'s settlement statement' do
+      resident_unit = create(:unit, community: community)
+      cook = create(:resident, community: community, unit: resident_unit, multiplier: 2)
+      eater = create(:resident, community: community, unit: resident_unit, multiplier: 2)
+      meal = create(:meal, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('16'))
+      create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
+      Reconciliation.create!(community: community, end_date: Date.yesterday)
+
+      get "/residents/#{eater.id}", params: { token: token }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('Settlement statement')
+      expect(response.body).to include('Attended')
+    end
+
     it 'reads any resident\'s balances, not only the emailed one' do
       unit = create(:unit, community: community, name: 'Elm')
       other = create(:resident, community: community, unit: unit, name: 'Someone Else')

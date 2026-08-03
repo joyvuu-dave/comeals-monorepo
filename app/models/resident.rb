@@ -59,6 +59,7 @@ class Resident < ApplicationRecord
   has_many :meals, through: :meal_residents
   has_many :guests, dependent: :restrict_with_error
   has_many :reconciliation_balances, dependent: :restrict_with_error
+  has_many :meal_charges, dependent: :restrict_with_error
 
   # Not ledger data: login sessions, the rebuildable balance cache, and
   # reservations (freely edited and deleted in the app). These go with the

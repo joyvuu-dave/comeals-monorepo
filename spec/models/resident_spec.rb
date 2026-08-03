@@ -596,6 +596,19 @@ RSpec.describe Resident do
       expect(described_class.exists?(resident.id)).to be true
     end
 
+    it 'cannot be destroyed with a settlement line item' do
+      # A real charge always comes with a bill or attendance, which would
+      # trip their own guards first. Inserting one directly isolates this
+      # association's guard.
+      meal = create(:meal, community: community)
+      MealCharge.create!(meal: meal, resident: resident, kind: 'debit',
+                         amount: BigDecimal('-8'), unit_cost: BigDecimal('4'), multiplier: 2)
+
+      expect(resident.destroy).to be false
+      expect(resident.errors[:base]).to include('Cannot delete record because dependent meal charges exist')
+      expect(described_class.exists?(resident.id)).to be true
+    end
+
     it 'cannot be destroyed even after being marked inactive' do
       meal = create(:meal, community: community)
       create(:meal_resident, meal: meal, resident: resident, community: community)

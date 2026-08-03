@@ -104,6 +104,69 @@ ActiveAdmin.register Resident do
         end
       end
     end
+
+    # The statement: what each settled balance is made of, one section per
+    # reconciliation. Driven by reconciliation_balances rather than the
+    # charges, so a settlement with no line items still gets a section — a
+    # reconciliation settled before 2026-08-02 has no lines on purpose (the
+    # backfill decision in docs/money-path-observability.md), and that must
+    # read as "not recorded", not as zero charges.
+    #
+    # This panel sits outside the attributes_table above for the same reason
+    # as the attendance panel in app/admin/meal.rb: content like this cannot
+    # nest inside a table body.
+    panel 'Settlement statement' do
+      balances = resident.reconciliation_balances.includes(:reconciliation)
+                         .sort_by { |balance| balance.reconciliation.date }.reverse
+
+      if balances.empty?
+        para 'No settled balances yet.'
+      else
+        # One query for every line, grouped in Ruby, instead of one query per
+        # reconciliation.
+        lines_by_reconciliation = resident.meal_charges
+                                          .includes(meal: :reconciliation)
+                                          .group_by { |charge| charge.meal.reconciliation_id }
+
+        balances.each do |balance|
+          reconciliation = balance.reconciliation
+          h3 do
+            text_node link_to("#{reconciliation.date} to #{reconciliation.end_date}",
+                              admin_reconciliation_path(reconciliation))
+            text_node " — settled at #{number_to_currency(balance.amount)}"
+          end
+
+          lines = (lines_by_reconciliation[reconciliation.id] || []).sort_by { |charge| charge.meal.date }
+          if lines.empty?
+            para 'No line items were recorded for this settlement.'
+          else
+            table_for lines do
+              column('Meal') { |charge| link_to charge.meal.date, admin_meal_path(charge.meal) }
+              column('What') { |charge| MealCharge::KIND_LABELS.fetch(charge.kind) }
+              column('Category') do |charge|
+                next if charge.multiplier.nil?
+
+                if charge.multiplier == 1
+                  'Child'
+                elsif charge.multiplier == 2
+                  'Adult'
+                else
+                  "Adult x #{number_with_precision(charge.multiplier.to_f / 2, precision: 1,
+                                                                               strip_insignificant_zeros: true)}"
+                end
+              end
+              column('Amount') { |charge| number_to_currency(charge.amount) }
+              column('Cook spent') do |charge|
+                number_to_currency(charge.bill_amount) if charge.subsidized?
+              end
+            end
+          end
+        end
+
+        para 'Line amounts are stored at full precision, so they sum to within one cent ' \
+             'of the settled amount (largest-remainder rounding).'
+      end
+    end
   end
 
   # FORM

@@ -124,6 +124,42 @@ ActiveAdmin.register Meal do
         end
       end
     end
+
+    # What settlement recorded for this meal: one line per bill, attendance,
+    # and guest, written once inside the settlement transaction. Only a
+    # reconciled meal has lines, and a meal reconciled before 2026-08-02 has
+    # none on purpose (the backfill decision in
+    # docs/money-path-observability.md).
+    if meal.reconciled?
+      panel 'Settlement line items' do
+        lines = meal.meal_charges.includes(:resident)
+                    .sort_by { |charge| [charge.kind, charge.resident.name] }
+        if lines.empty?
+          para 'No line items were recorded for this settlement.'
+        else
+          table_for lines do
+            column('Resident') { |charge| link_to charge.resident.name, admin_resident_path(charge.resident) }
+            column('What') { |charge| MealCharge::KIND_LABELS.fetch(charge.kind) }
+            column('Category') do |charge|
+              next if charge.multiplier.nil?
+
+              if charge.multiplier == 1
+                'Child'
+              elsif charge.multiplier == 2
+                'Adult'
+              else
+                "Adult x #{number_with_precision(charge.multiplier.to_f / 2, precision: 1,
+                                                                             strip_insignificant_zeros: true)}"
+              end
+            end
+            column('Amount') { |charge| number_to_currency(charge.amount) }
+            column('Cook spent') do |charge|
+              number_to_currency(charge.bill_amount) if charge.subsidized?
+            end
+          end
+        end
+      end
+    end
   end
 
   # FORM

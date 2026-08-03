@@ -29,8 +29,13 @@ class SuperuserAdapter < ActiveAdmin::AuthorizationAdapter
   # meal_residents.multiplier when the row is created, so editing a resident
   # never reaches back into a settled meal. Adding and retiring residents is
   # exactly the day-to-day work a non-money admin is for.
+  # MealCharge and LedgerCheckRun are append-only records with no admin write
+  # route today, and their model guards and database triggers refuse writes
+  # anyway. They are listed so that if a write route ever appears, the adapter
+  # fails closed instead of authorizing a plain admin by omission.
   LEDGER_MODELS = %w[
-    Bill Guest Meal MealResident Reconciliation ReconciliationBalance ResidentBalance
+    Bill Guest LedgerCheckRun Meal MealCharge MealResident Reconciliation
+    ReconciliationBalance ResidentBalance
   ].freeze
 
   # Not money, but restricted for a related reason: these decide who may act.

@@ -33,6 +33,9 @@
 class MealCharge < ApplicationRecord
   KINDS = %w[credit debit guest_debit].freeze
 
+  # What each kind reads as on the statement pages.
+  KIND_LABELS = { 'credit' => 'Cooked', 'debit' => 'Attended', 'guest_debit' => 'Guest' }.freeze
+
   # Ransack allowlist for ActiveAdmin sorting
   def self.ransackable_attributes(_auth_object = nil)
     %w[id meal_id resident_id kind amount multiplier unit_cost bill_amount created_at updated_at]

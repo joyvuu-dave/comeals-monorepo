@@ -76,6 +76,12 @@ class Meal < ApplicationRecord
   belongs_to :reconciliation, optional: true
   belongs_to :rotation, optional: true
 
+  # Settlement line items exist only on reconciled meals, which already refuse
+  # destroy (the prepended guard below). restrict_with_error is the readable
+  # backstop for the same rule, declared before the destroy cascades so the
+  # check runs before anything is deleted.
+  has_many :meal_charges, dependent: :restrict_with_error
+
   has_many :bills, inverse_of: :meal, dependent: :destroy
   has_many :cooks, through: :bills, source: :resident, dependent: :destroy
   has_many :meal_residents, inverse_of: :meal, dependent: :destroy
