@@ -11,10 +11,11 @@ require Rails.root.join('lib/bugsnag_error_subscriber')
 # enabled_release_stages is set anyway, so a key that somehow appears in a
 # development shell still sends nothing.
 #
-# There is deliberately no ignore list for exception classes. This app had
-# no error tracking at all until now, so we do not yet know what is noise.
-# Watch it for a while, then filter what turns out to be noise — filtering
-# first would hide the thing we installed this to see.
+# The starting rule was: no ignore list until something proves itself
+# noise, because filtering first would hide the thing we installed this
+# to see. The discard list below is what has proved itself so far. Add to
+# it only after seeing the error in production and confirming the app
+# already handles it.
 api_key = ENV.fetch('BUGSNAG_API_KEY', nil)
 
 if api_key.present?
@@ -28,6 +29,19 @@ if api_key.present?
     # for the life of the dyno — the same source Api::V1::SiteController#version
     # reads. Left nil outside production, where it means nothing.
     config.app_version = ENV.fetch('HEROKU_RELEASE_VERSION', nil) if Rails.env.production?
+
+    # Requests the app already refuses with a 400 Bad Request. These are
+    # the client's fault — scanners sending malformed paths, bad
+    # encodings, or unparseable bodies — not ours. Rails maps each of
+    # these classes to :bad_request (see ActionDispatch::ExceptionWrapper
+    # .rescue_responses), so the client is answered correctly and there
+    # is nothing for us to fix. First seen: GET /%C0 on 2026-08-04.
+    config.discard_classes += [
+      'Rack::QueryParser::InvalidParameterError',
+      'Rack::QueryParser::ParameterTypeError',
+      'ActionDispatch::Http::Parameters::ParseError',
+      'ActionController::BadRequest'
+    ]
 
     # Never send anything Rails would keep out of its own logs. Bugsnag has
     # its own defaults; adding config.filter_parameters keeps the two lists
