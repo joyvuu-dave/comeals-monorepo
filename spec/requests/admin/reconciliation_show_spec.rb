@@ -31,7 +31,12 @@ RSpec.describe 'Admin Reconciliation Show' do
     expect(response).to have_http_status(:ok)
     expect(response.body).to include('Unit Balances')
     expect(response.body).to include('Elm')
-    expect(response.body).to include('$42.50')
+    # Balances read as direction words, never signed numbers
+    # (BalanceDisplayHelper).
+    expect(response.body).to include('is owed $42.50')
+    # The split totals under each table.
+    expect(response.body).to include('Owed to residents: $42.50')
+    expect(response.body).to include('Owed to units: $42.50')
   end
 
   it 'renders the settled meals as a read-only list with no mutation form' do

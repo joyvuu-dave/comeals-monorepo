@@ -22,6 +22,17 @@
 #  fk_rails_...  (reconciliation_id => reconciliations.id)
 #  fk_rails_...  (resident_id => residents.id)
 #
+# One resident's final settled amount for one reconciliation, rounded to
+# cents by largest-remainder allocation.
+#
+# SIGN CONVENTION — `amount` is signed the way MealLedger signs everything
+# (see its "Signs" section):
+#
+#   positive  =>  the community owes this resident money  ("is owed")
+#   negative  =>  this resident owes the community money   ("owes")
+#
+# Never show this sign to a person. Screens render balances through
+# BalanceDisplayHelper#balance_tag, which turns the sign into those words.
 class ReconciliationBalance < ApplicationRecord
   belongs_to :reconciliation
   belongs_to :resident

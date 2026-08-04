@@ -54,6 +54,8 @@ This is the most critical section. Financial calculations in this codebase must 
 
 10. **All money-related code must have tests.** Every calculation path, every edge case (zero attendees, single attendee, child-only meals, multi-cook meals, capped meals, etc.) must be covered.
 
+11. **The sign convention: positive means the community owes the person.** Set once in `MealLedger` (its "Signs" section); every stored balance and settlement line inherits it. A credit (cooking) is positive, a debit (eating) is negative. **No screen may show the sign to a person.** A minus sign has no fixed meaning for money — bank statements and credit card statements disagree about it — so readers get it backwards. Render every balance through `BalanceDisplayHelper#balance_tag` ("owes $8.00" / "is owed $8.00") and every settlement line through `#charge_amount_tag` ("charged" / "credited"). Never call `number_to_currency` directly on a signed amount in a view. Getting this backwards on screen — telling someone they owe money when they are owed it — is the worst display bug this app can have, so the direction words are pinned by tests (`spec/helpers/balance_display_helper_spec.rb`) that derive the expected words from `MealLedger` itself, not from a copied constant.
+
 ### The Money Model
 
 ```

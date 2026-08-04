@@ -36,10 +36,13 @@ RSpec.describe 'Admin settlement statement' do
       expect(response).to have_http_status(:ok)
       expect(response.body).to include('Settlement statement')
       expect(response.body).to include("#{reconciliation.date} to #{reconciliation.end_date}")
-      # The eater's settled balance and their one line.
-      expect(response.body).to include('settled at -$8.00')
+      # The eater's settled balance and their one line, in direction words —
+      # never a signed number (BalanceDisplayHelper).
+      expect(response.body).to include('settled:')
+      expect(response.body).to include('owes $8.00')
       expect(response.body).to include('Attended')
-      expect(response.body).to include('-$8.00')
+      expect(response.body).to include('charged $8.00')
+      expect(response.body).not_to include('-$8.00')
       # No capped cook in this section, so the column that explains capping
       # is absent rather than blank.
       expect(response.body).not_to include('Cook spent')
@@ -51,7 +54,9 @@ RSpec.describe 'Admin settlement statement' do
       get "/residents/#{cook.id}"
 
       expect(response.body).to include('Cooked')
-      expect(response.body).to include('$16.00')
+      expect(response.body).to include('credited $16.00')
+      # The cook also ate, so their settled balance is $16 minus their $8 share.
+      expect(response.body).to include('is owed $8.00')
     end
 
     it 'says when a settlement has no recorded line items, instead of showing zero charges' do

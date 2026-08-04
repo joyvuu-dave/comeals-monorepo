@@ -37,16 +37,14 @@ ActiveAdmin.register Reconciliation do
                                .joins(resident: :unit)
                                .order('units.name, residents.name')
 
+      # balance_tag turns the stored sign into words — see BalanceDisplayHelper.
       table_for balances do
         column('Resident') { |rb| link_to rb.resident.name, admin_resident_path(rb.resident) }
         column('Unit') { |rb| rb.resident.unit.name }
-        column('Balance') { |rb| number_to_currency(rb.amount) }
+        column('Balance') { |rb| balance_tag(rb.amount) }
       end
 
-      total = balances.sum(:amount)
-      div class: 'settlement-total' do
-        strong "Total: #{number_to_currency(total)}"
-      end
+      text_node settlement_totals_tag(balances.map(&:amount), 'residents')
     end
 
     panel 'Unit Balances' do
@@ -54,13 +52,10 @@ ActiveAdmin.register Reconciliation do
 
       table_for unit_bals.to_a do
         column('Unit') { |(unit_id, unit_name), _| link_to unit_name, admin_unit_path(unit_id) }
-        column('Balance') { |_, amount| number_to_currency(amount) }
+        column('Balance') { |_, amount| balance_tag(amount) }
       end
 
-      total = unit_bals.values.sum(BigDecimal('0'))
-      div class: 'settlement-total' do
-        strong "Total: #{number_to_currency(total)}"
-      end
+      text_node settlement_totals_tag(unit_bals.values, 'units')
     end
 
     panel 'Meals' do

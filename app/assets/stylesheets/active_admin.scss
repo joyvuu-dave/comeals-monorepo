@@ -58,3 +58,17 @@ body {
   padding: 8px 12px;
   border-top: 2px solid $primary-color;
 }
+
+// Balance direction words (BalanceDisplayHelper). The words carry the
+// meaning; the colors only reinforce them.
+.balance-owes {
+  color: $error-color;
+}
+
+.balance-is-owed {
+  color: #1e7d34;
+}
+
+.balance-zero {
+  color: $breadcrumbs-color;
+}

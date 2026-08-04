@@ -152,7 +152,7 @@ ActiveAdmin.register Meal do
                                                                              strip_insignificant_zeros: true)}"
               end
             end
-            column('Amount') { |charge| number_to_currency(charge.amount) }
+            column('Amount') { |charge| charge_amount_tag(charge) }
             # Only when the meal has one — see the matching column on the
             # resident statement.
             if lines.any?(&:subsidized?)

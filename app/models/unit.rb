@@ -38,6 +38,10 @@ class Unit < ApplicationRecord
   after_commit :notify_residents_update
 
   # DERIVED DATA
+  # Signed: positive means the community owes this unit, negative means the
+  # unit owes the community (the MealLedger sign convention). Show it to a
+  # person only through BalanceDisplayHelper#balance_tag, never as a raw
+  # signed number.
   def balance
     return BigDecimal('0') if Meal.unreconciled.none?
 

@@ -30,6 +30,11 @@
 # One line of a settlement: what one resident was charged or credited for one
 # meal, and why. Written once inside the settlement transaction, from
 # MealLedger. See the migration (20260802120000) for the reasoning.
+#
+# `amount` is signed the way MealLedger signs everything (see its "Signs"
+# section): a credit is positive (the community owes the cook), a debit is
+# negative (the eater owes the community). Show it to a person only through
+# BalanceDisplayHelper#charge_amount_tag, never as a raw signed number.
 class MealCharge < ApplicationRecord
   KINDS = %w[credit debit guest_debit].freeze
 

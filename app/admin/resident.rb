@@ -20,6 +20,15 @@ ActiveAdmin.register Resident do
   # because dependent bills exist") instead of the generic
   # "could not be destroyed" flash.
   controller do
+    # The index sorts by balance, and ORDER BY can only use a column that is
+    # in the query — the balance lives in resident_balances, so join it.
+    # left_joins, not joins: a resident created since the last daily
+    # billing:recalculate run has no balance row yet and must not drop off
+    # the page.
+    def scoped_collection
+      super.left_joins(:resident_balance)
+    end
+
     def destroy
       destroy! do |_success, failure|
         failure.html do
@@ -47,8 +56,12 @@ ActiveAdmin.register Resident do
     column :unit
     column :can_cook
     column :active
-    column 'Balance', :balance do |resident|
-      number_to_currency(resident.balance) unless resident.balance.zero?
+    # balance_tag turns the stored sign into words — see BalanceDisplayHelper.
+    # Sorting uses the joined resident_balances.amount (see scoped_collection
+    # above). Residents with no balance row yet sort as NULL, which Postgres
+    # puts last on ascending.
+    column 'Balance', sortable: 'resident_balances.amount' do |resident|
+      balance_tag(resident.balance)
     end
 
     actions
@@ -133,7 +146,8 @@ ActiveAdmin.register Resident do
           h3 do
             text_node link_to("#{reconciliation.date} to #{reconciliation.end_date}",
                               admin_reconciliation_path(reconciliation))
-            text_node " — settled at #{number_to_currency(balance.amount)}"
+            text_node ' — settled: '
+            text_node balance_tag(balance.amount)
           end
 
           lines = (lines_by_reconciliation[reconciliation.id] || []).sort_by { |charge| charge.meal.date }
@@ -155,7 +169,7 @@ ActiveAdmin.register Resident do
                                                                                strip_insignificant_zeros: true)}"
                 end
               end
-              column('Amount') { |charge| number_to_currency(charge.amount) }
+              column('Amount') { |charge| charge_amount_tag(charge) }
               # Only when this table has one: the column answers "why was the
               # credit smaller than the receipt", and with no capped cook in
               # the section it would be a blank column with no question.
@@ -168,8 +182,9 @@ ActiveAdmin.register Resident do
           end
         end
 
-        para 'Line amounts are stored at full precision, so they sum to within one cent ' \
-             'of the settled amount (largest-remainder rounding).'
+        para 'Credited amounts minus charged amounts come to within one cent of the settled ' \
+             'amount. Line amounts are stored at full precision; the settled amount is ' \
+             'rounded to cents by largest-remainder allocation.'
       end
     end
   end

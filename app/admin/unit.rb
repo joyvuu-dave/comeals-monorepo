@@ -31,8 +31,9 @@ ActiveAdmin.register Unit do
   # INDEX
   index do
     column 'Unit', :name
-    column :balance do |unit|
-      number_to_currency(unit.balance) unless unit.balance.zero?
+    # balance_tag turns the stored sign into words — see BalanceDisplayHelper.
+    column :balance, sortable: false do |unit|
+      balance_tag(unit.balance)
     end
 
     actions
@@ -43,7 +44,7 @@ ActiveAdmin.register Unit do
     attributes_table do
       row :name
       row :balance do |unit|
-        number_to_currency(unit.balance) unless unit.balance.zero?
+        balance_tag(unit.balance)
       end
       table_for unit.residents.active.order(:name) do
         column 'Active Residents' do |resident|

@@ -187,11 +187,16 @@ class Resident < ApplicationRecord
 
   # Balance is read from the cached resident_balances table (unreconciled preview).
   # The daily billing:recalculate rake task refreshes this value.
+  # Signed: positive means the community owes this resident, negative means
+  # they owe the community (the MealLedger sign convention). Show it to a
+  # person only through BalanceDisplayHelper#balance_tag, never as a raw
+  # signed number.
   def balance
     resident_balance&.amount || BigDecimal('0')
   end
 
-  # Historical balance for a specific reconciliation period.
+  # Historical balance for a specific reconciliation period. Signed the same
+  # way as #balance.
   def balance_for_reconciliation(reconciliation)
     reconciliation_balances.find_by(reconciliation_id: reconciliation.id)&.amount || BigDecimal('0')
   end
