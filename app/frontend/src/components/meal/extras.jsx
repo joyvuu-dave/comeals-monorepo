@@ -1,4 +1,5 @@
-import { inject, observer } from "mobx-react";
+import { observer } from "mobx-react";
+import { useStore } from "../../helpers/store_context";
 
 const styles = {
   main: {
@@ -14,8 +15,9 @@ const styles = {
   },
 };
 
-const Extras = inject("store")(
-  observer(({ store }) => (
+const Extras = observer(() => {
+  const store = useStore();
+  return (
     <div style={styles.main}>
       <h5 style={styles.title}>Extras</h5>
       <div
@@ -47,7 +49,7 @@ const Extras = inject("store")(
         })}
       </div>
     </div>
-  )),
-);
+  );
+});
 
 export default Extras;
