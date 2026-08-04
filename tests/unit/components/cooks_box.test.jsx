@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import { observable } from "mobx";
-import { Provider } from "mobx-react";
+import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
 import CooksBox from "../../../app/frontend/src/components/meal/cooks_box.jsx";
 
 // A stub of the one bill shape CooksBox reads. The real Bill is a
@@ -52,9 +52,9 @@ function makeStore(bills, overrides = {}) {
 
 function renderBox(store) {
   return render(
-    <Provider store={store}>
+    <StoreContext.Provider value={store}>
       <CooksBox />
-    </Provider>,
+    </StoreContext.Provider>,
   );
 }
 
