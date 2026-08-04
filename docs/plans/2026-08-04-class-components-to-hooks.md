@@ -1,6 +1,9 @@
 # Plan: class components to hooks, `inject()` to context
 
-Written 2026-08-04. Status: not started.
+Written 2026-08-04. Status: done (2026-08-04). Every "Done when" check
+passes. One note: mobx-react-lite is pinned to the 4.x line, not 5.0 —
+5.0 requires mobx 7 and this app is on mobx 6. mobx-react 9 wrapped
+mobx-react-lite 4, so the running code is unchanged.
 
 ## The issue
 
@@ -54,15 +57,15 @@ Router access migrates the same way: a function component calls `useNavigate`/`u
 
 ## Translation table
 
-| Class pattern | Hooks pattern |
-| --- | --- |
-| `this.state` / `this.setState` | `useState` |
-| `componentDidMount` + `componentWillUnmount` | one `useEffect` with a cleanup return |
-| `_isMounted` guard (see `history/show.jsx`) | the effect's cleanup cancels or flags; prefer an `AbortController` for fetches |
-| instance fields holding timers (see `toast_container.jsx` `_timers`) | `useRef` holding the same map |
-| `inject("store")(observer(...))` | `observer` + `useStore()` |
-| `withRouter(...)` + `this.props.history.push` | `useNavigate()` |
-| `constructor` binding | none needed |
+| Class pattern                                                        | Hooks pattern                                                                  |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `this.state` / `this.setState`                                       | `useState`                                                                     |
+| `componentDidMount` + `componentWillUnmount`                         | one `useEffect` with a cleanup return                                          |
+| `_isMounted` guard (see `history/show.jsx`)                          | the effect's cleanup cancels or flags; prefer an `AbortController` for fetches |
+| instance fields holding timers (see `toast_container.jsx` `_timers`) | `useRef` holding the same map                                                  |
+| `inject("store")(observer(...))`                                     | `observer` + `useStore()`                                                      |
+| `withRouter(...)` + `this.props.history.push`                        | `useNavigate()`                                                                |
+| `constructor` binding                                                | none needed                                                                    |
 
 Watch for two traps:
 
