@@ -124,8 +124,12 @@ describe("MealsEdit", () => {
     renderPage(store);
 
     // DateBox's mount fetches meal 42; the fixture then populates
-    // every box on the page.
-    expect(await screen.findByText("OPEN")).toBeInTheDocument();
+    // every box on the page. The long timeout covers a cold first run,
+    // where importing the whole store graph eats most of the default
+    // second.
+    expect(
+      await screen.findByText("OPEN", {}, { timeout: 5000 }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("cell", { name: "Jane Smith" }),
     ).toBeInTheDocument();
