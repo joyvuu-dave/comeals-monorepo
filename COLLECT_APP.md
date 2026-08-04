@@ -39,15 +39,21 @@ Rough screen list (to be fleshed out as we design):
 
 ## Authentication
 
-**Reuse the existing `Key`-based token auth.** The Rails backend already has this mechanism for the React frontend — `POST /api/v1/residents/token` exchanges email + password for a long-lived token, passed as `?token=<token>` on subsequent requests. The iOS app reuses this flow exactly:
+**Reuse the existing JWT auth.** The Rails backend already has this mechanism for the React frontend — `POST /api/v1/residents/token` exchanges email + password for a stateless JWT (`JwtAuth.encode`, signed HS256, embeds `resident_id` and `iat`). The iOS app reuses this flow exactly:
 
 1. First launch: login screen collects email + password
-2. App calls `POST /api/v1/residents/token`, receives the token
+2. App calls `POST /api/v1/residents/token`, receives `{ token, resident_id, ... }`
 3. Token is stored in the iOS Keychain (`kSecClassGenericPassword`, `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`)
-4. Every subsequent request includes `?token=<stored_token>`
+4. Every subsequent request sends `Authorization: Bearer <stored_token>`
 5. On `401`, drop the token and bounce back to login
 
-**No JWT, no OAuth, no separate mobile auth system.** One auth mechanism, two clients.
+Send the token in the `Authorization` header, not as a `?token=` query param. The backend accepts the query param as a fallback (`ApiController#resolve_current_session!`), but URLs end up in logs and history; a new client should use the header.
+
+The token has no expiry. Revocation happens when the resident's password changes, which bumps `residents.keys_valid_since` and invalidates every token issued before it (`app/services/jwt_auth.rb`).
+
+**Do not build on the legacy `Key` model.** `Key.find_by(token:)` still exists as a fallback for sessions issued before the JWT deploy, and issue #42 tracks removing it. A new client that used it would be building on the path scheduled for deletion.
+
+**No OAuth, no separate mobile auth system.** One auth mechanism, two clients.
 
 **Permissioning for v1: any authenticated resident can preview and create.** Small trusted community, financial data is already visible in email reports, no need to gate further. If we later want to restrict, add a `residents.can_reconcile` boolean column — that's the seam to target.
 
@@ -70,7 +76,8 @@ On the iOS side, all money is `Decimal`. A thin `Money` wrapper type may be just
 **Query parameters:**
 
 - `cutoff` (required, ISO date `YYYY-MM-DD`): meals on or before this date are included. Must match `Reconciliation#assign_meals` semantics exactly, which are `date <= cutoff` **and** `date < today` — a meal on a day that is not yet over is never swept, whatever the cutoff says (issue #3). A cutoff of today or later is not a valid reconciliation, so the endpoint should reject it the same way the model does.
-- `token` (required): existing `Key`-based resident token.
+
+**Auth:** `Authorization: Bearer <jwt>` header (see the Authentication section). No `token` query parameter.
 
 **Error responses** (following existing API conventions):
 
