@@ -1,0 +1,119 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
+import { observable } from "mobx";
+import { Provider } from "mobx-react";
+import { MemoryRouter, Routes, Route } from "react-router";
+
+vi.mock("axios", () => ({
+  default: {
+    get: vi.fn(),
+    post: vi.fn(),
+  },
+}));
+
+vi.mock("js-cookie", () => ({
+  default: {
+    get: vi.fn((name) => (name === "community_id" ? "7" : undefined)),
+    set: vi.fn(),
+  },
+}));
+
+import axios from "axios";
+import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
+import { CALENDAR_PATH } from "../../../app/frontend/src/routes.js";
+import EventsNew from "../../../app/frontend/src/components/events/new.jsx";
+
+function makeStore() {
+  return observable(
+    {
+      invalidateMonthForDate: vi.fn(),
+    },
+    { invalidateMonthForDate: false },
+  );
+}
+
+// The class version reads the calendar date from a match prop (passed
+// by calendar/show); the hooks version reads the router. The test
+// provides both, so it pins behavior across the conversion. Both store
+// providers for the same reason.
+function renderForm({ store = makeStore(), handleCloseModal = vi.fn() } = {}) {
+  const match = { params: { date: "2026-01-15", type: "all" } };
+  render(
+    <Provider store={store}>
+      <StoreContext.Provider value={store}>
+        <MemoryRouter initialEntries={["/calendar/all/2026-01-15/events/new"]}>
+          <Routes>
+            <Route
+              path={CALENDAR_PATH}
+              element={
+                <EventsNew handleCloseModal={handleCloseModal} match={match} />
+              }
+            />
+          </Routes>
+        </MemoryRouter>
+      </StoreContext.Provider>
+    </Provider>,
+  );
+  return { store, handleCloseModal };
+}
+
+describe("EventsNew", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("renders the empty form", () => {
+    renderForm();
+    expect(screen.getByLabelText("Title")).toHaveDisplayValue("");
+    expect(screen.getByLabelText("Description")).toHaveDisplayValue("");
+    expect(screen.getByLabelText("Start Time")).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
+  });
+
+  it("All Day clears and disables the time selects", () => {
+    renderForm();
+    fireEvent.change(screen.getByLabelText("Start Time"), {
+      target: { value: "18:00" },
+    });
+    fireEvent.click(screen.getByLabelText("All Day"));
+
+    expect(screen.getByLabelText("Start Time")).toBeDisabled();
+    expect(screen.getByLabelText("End Time")).toBeDisabled();
+    expect(screen.getByLabelText("Start Time")).toHaveDisplayValue("");
+  });
+
+  it("submitting posts the form to the community's events", async () => {
+    axios.post.mockResolvedValue({ status: 200, data: {} });
+    const { store, handleCloseModal } = renderForm();
+
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "Movie Night" },
+    });
+    fireEvent.change(screen.getByLabelText("Start Time"), {
+      target: { value: "18:00" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    expect(axios.post).toHaveBeenCalledWith(
+      "/api/v1/events?community_id=7",
+      expect.objectContaining({
+        title: "Movie Night",
+        start_hours: "18",
+        start_minutes: "00",
+        all_day: false,
+      }),
+    );
+
+    // Success invalidates the month cache and closes the modal.
+    await vi.waitFor(() => {
+      expect(handleCloseModal).toHaveBeenCalledTimes(1);
+    });
+    expect(store.invalidateMonthForDate).toHaveBeenCalled();
+  });
+
+  it("the close icon closes the modal", () => {
+    const { handleCloseModal } = renderForm();
+    fireEvent.click(screen.getByLabelText("Close"));
+    expect(handleCloseModal).toHaveBeenCalledTimes(1);
+  });
+});
