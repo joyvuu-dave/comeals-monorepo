@@ -1,4 +1,5 @@
-import { inject, observer } from "mobx-react";
+import { observer } from "mobx-react";
+import { useStore } from "../../helpers/store_context";
 import Extras from "./extras";
 import CloseButton from "./close_button";
 
@@ -9,8 +10,9 @@ const styles = {
   },
 };
 
-const InfoBox = inject("store")(
-  observer(({ store }) => (
+const InfoBox = observer(() => {
+  const store = useStore();
+  return (
     <div className="offwhite button-border-radius" style={styles.main}>
       {/* the anchor lets the close button's confirm bar float under
           the title row without moving anything */}
@@ -36,7 +38,7 @@ const InfoBox = inject("store")(
         <Extras />
       </div>
     </div>
-  )),
-);
+  );
+});
 
 export default InfoBox;
