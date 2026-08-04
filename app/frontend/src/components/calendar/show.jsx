@@ -1,6 +1,14 @@
-import { Component, Profiler, memo } from "react";
-import { inject, observer } from "mobx-react";
-import { withRouter } from "../../helpers/with_router";
+import {
+  Profiler,
+  memo,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { observer } from "mobx-react";
+import { useLocation, useNavigate, useParams } from "react-router";
+import { useStore } from "../../helpers/store_context";
 import { communityNow } from "../../helpers/helpers";
 import {
   mark,
@@ -79,13 +87,13 @@ const styles = {
 
 // Rendered as a sibling of Calendar — NOT via react-big-calendar's
 // `components.toolbar` slot. This lets us:
-//   1. Derive the month/year label from `match.params.date` directly,
-//      so it updates in the same commit as the URL change (no wait for
+//   1. Derive the month/year label from the URL date directly, so it
+//      updates in the same commit as the URL change (no wait for
 //      Calendar's ~30-40ms re-render with empty events).
-//   2. Wire prev/next/today buttons to history.push directly, bypassing
+//   2. Wire prev/next/today buttons to navigate() directly, bypassing
 //      Calendar's onNavigate roundtrip.
 //   3. Keep MemoCalendar skippable on click — Calendar's `date` prop
-//      comes from this.state.calendarDate, which is updated in a rAF one
+//      comes from the calendarDate state, which is updated in a rAF one
 //      frame later, so the first commit is toolbar-only.
 //
 // Wrapped in memo so unrelated MainCalendar re-renders (modal open/close)
@@ -125,376 +133,358 @@ const MonthNavHeader = memo(function MonthNavHeader({
 });
 
 Modal.setAppElement("#root");
-const MainCalendar = inject("store")(
-  withRouter(
-    observer(
-      class MainCalendar extends Component {
-        constructor(props) {
-          super(props);
 
-          // calendarDate is a DEFERRED copy of match.params.date. The
-          // toolbar renders from match.params.date directly (urgent — same
-          // commit as the URL change). Calendar renders from this state,
-          // updated one frame later in a nested rAF. Net effect: first
-          // paint after click is toolbar-only (MemoCalendar sees unchanged
-          // props and skips); Calendar repaints with the new month on the
-          // next frame, and events fill in a frame or two after that.
-          this.state = { calendarDate: props.match.params.date };
+const MainCalendar = observer(() => {
+  const store = useStore();
+  const params = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
 
-          this.handleCloseModal = this.handleCloseModal.bind(this);
+  // calendarDate is a DEFERRED copy of the URL date. The toolbar
+  // renders from the URL date directly (urgent — same commit as the
+  // URL change). Calendar renders from this state, updated one frame
+  // later in a nested rAF. Net effect: first paint after click is
+  // toolbar-only (MemoCalendar sees unchanged props and skips);
+  // Calendar repaints with the new month on the next frame, and events
+  // fill in a frame or two after that.
+  const [calendarDate, setCalendarDate] = useState(params.date);
 
-          this.handleNavigate = this.handleNavigate.bind(this);
-          this.handleSelectEvent = this.handleSelectEvent.bind(this);
-          this.filterEvents = this.filterEvents.bind(this);
-          this.formatEvent = this.formatEvent.bind(this);
-          this.handleClickLogout = this.handleClickLogout.bind(this);
-          this.handlePrev = this.handlePrev.bind(this);
-          this.handleNext = this.handleNext.bind(this);
-          this.handleToday = this.handleToday.bind(this);
-        }
+  // The handlers below are stable (empty useCallback deps) so
+  // MemoCalendar's and MonthNavHeader's shallow compares can skip
+  // renders — the class got the same stability from constructor
+  // binding. They read the CURRENT route and store through these refs,
+  // exactly as the class read this.props at call time.
+  const storeRef = useRef(store);
+  storeRef.current = store;
+  const paramsRef = useRef(params);
+  paramsRef.current = params;
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
 
-        componentDidMount() {
-          // Leaving a meal: its channel must not stay live on the
-          // calendar, and a late meal response must find no meal to
-          // write to (issue #38).
-          this.props.store.teardownMealPage();
-          this.props.store.goToMonth(this.props.match.params.date);
-          // Prime the hosts cache while the month is loading. The user is
-          // about to open a Guest Room or Common House modal; warming the
-          // cache now turns the *first* open into a cache hit too, not just
-          // the second+ open. Fire-and-forget: ensureHosts dedupes in-flight
-          // requests and swallows its own errors via handleAxiosError.
-          this.props.store.ensureHosts();
-        }
+  // Render-time "today" boundary for formatEvent's past-event dimming,
+  // assigned every render like the class's this._todayStart.
+  const todayStartRef = useRef(null);
 
-        componentDidUpdate(prevProps) {
-          if (
-            prevProps.match.params.type !== this.props.match.params.type ||
-            prevProps.match.params.date !== this.props.match.params.date
-          ) {
-            mark("componentDidUpdate");
-            // Measure the "toolbar paint" — the fast feedback frame where
-            // the new month/year label reaches the screen. reportAfterPaint
-            // lands `painted` via 2x rAF, which now reflects the
-            // toolbar-only first paint (MemoCalendar is skipped on this
-            // commit because state.calendarDate and events are unchanged).
-            reportAfterPaint("toolbar-" + this.props.match.params.date);
-            // Defer every state change that would cause a Calendar re-render
-            // to the SECOND frame after commit. Nested rAF is required:
-            // a single rAF fires in the same frame as reportAfterPaint's
-            // rAFs, which means the work we do in it lands before the first
-            // paint. Going two frames deep lets the browser paint the
-            // toolbar-only commit first, then we sync state.calendarDate
-            // (Calendar re-renders with new date) and load data.
-            var self = this;
-            requestAnimationFrame(function () {
-              requestAnimationFrame(function () {
-                // Read match.params.date at rAF time, not at cDU time —
-                // rapid clicks may have advanced the URL further since
-                // this cDU fired.
-                var latestDate = self.props.match.params.date;
-                self.props.store.clearCalendarEvents();
-                self.setState({ calendarDate: latestDate });
-                self.props.store.goToMonth(latestDate);
-              });
-            });
-          }
-        }
+  // Instance caches for referentially-stable Calendar props.
+  const eventsCacheRef = useRef({ version: null, type: null, events: null });
+  const dateCacheRef = useRef({ str: null, date: null });
 
-        renderModal() {
-          if (typeof this.props.match.params.modal === "undefined") {
-            return null;
-          }
+  // No dependency array: run after every render, splitting on a
+  // first-run flag — the exact componentDidMount/componentDidUpdate
+  // pair of the class.
+  const mountedRef = useRef(false);
+  const prevRouteRef = useRef({ type: params.type, date: params.date });
+  useEffect(function () {
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      // Leaving a meal: its channel must not stay live on the
+      // calendar, and a late meal response must find no meal to
+      // write to (issue #38).
+      storeRef.current.teardownMealPage();
+      storeRef.current.goToMonth(paramsRef.current.date);
+      // Prime the hosts cache while the month is loading. The user is
+      // about to open a Guest Room or Common House modal; warming the
+      // cache now turns the *first* open into a cache hit too, not just
+      // the second+ open. Fire-and-forget: ensureHosts dedupes in-flight
+      // requests and swallows its own errors via handleAxiosError.
+      storeRef.current.ensureHosts();
+      return;
+    }
 
-          // NEW RESOURCE
-          if (this.props.match.params.view === "new") {
-            switch (this.props.match.params.modal) {
-              case "guest_room_reservations":
-              case "guest-room-reservations":
-                return (
-                  <GuestRoomReservationsNew
-                    handleCloseModal={this.handleCloseModal}
-                    match={this.props.match}
-                  />
-                );
+    const prev = prevRouteRef.current;
+    const current = {
+      type: paramsRef.current.type,
+      date: paramsRef.current.date,
+    };
+    prevRouteRef.current = current;
+    if (prev.type !== current.type || prev.date !== current.date) {
+      mark("componentDidUpdate");
+      // Measure the "toolbar paint" — the fast feedback frame where
+      // the new month/year label reaches the screen. reportAfterPaint
+      // lands `painted` via 2x rAF, which now reflects the
+      // toolbar-only first paint (MemoCalendar is skipped on this
+      // commit because calendarDate and events are unchanged).
+      reportAfterPaint("toolbar-" + current.date);
+      // Defer every state change that would cause a Calendar re-render
+      // to the SECOND frame after commit. Nested rAF is required:
+      // a single rAF fires in the same frame as reportAfterPaint's
+      // rAFs, which means the work we do in it lands before the first
+      // paint. Going two frames deep lets the browser paint the
+      // toolbar-only commit first, then we sync calendarDate
+      // (Calendar re-renders with new date) and load data.
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          // Read the URL date at rAF time, not at effect time —
+          // rapid clicks may have advanced the URL further since
+          // this effect fired.
+          var latestDate = paramsRef.current.date;
+          storeRef.current.clearCalendarEvents();
+          setCalendarDate(latestDate);
+          storeRef.current.goToMonth(latestDate);
+        });
+      });
+    }
+  });
 
-              case "common_house_reservations":
-              case "common-house-reservations":
-                return (
-                  <CommonHouseReservationsNew
-                    handleCloseModal={this.handleCloseModal}
-                    match={this.props.match}
-                  />
-                );
+  const handleCloseModal = useCallback(function () {
+    toastStore.clearAll();
+    navigateRef.current(
+      `/calendar/${paramsRef.current.type}/${paramsRef.current.date}`,
+    );
+  }, []);
 
-              case "events":
-                return (
-                  <EventsNew
-                    handleCloseModal={this.handleCloseModal}
-                    match={this.props.match}
-                  />
-                );
+  const handleClickLogout = useCallback(function () {
+    storeRef.current.logout();
+    // Hard reload, matching login. A client-side route change would
+    // leave the store and the Pusher channels alive on the login
+    // page; the next broadcast would fire an unauthenticated fetch
+    // and raise the "signed out" banner. A reload resets everything.
+    window.location.href = "/";
+  }, []);
 
-              default:
-                return null;
-            }
-          }
+  const formatEvent = useCallback(function (event) {
+    var eventStyles = { style: {} };
 
-          // EDIT RESOURCE
-          if (this.props.match.params.view === "edit") {
-            switch (this.props.match.params.modal) {
-              case "guest_room_reservations":
-              case "guest-room-reservations":
-                return (
-                  <GuestRoomReservationsEdit
-                    eventId={this.props.match.params.id}
-                    handleCloseModal={this.handleCloseModal}
-                  />
-                );
+    if (
+      event.start < todayStartRef.current &&
+      typeof event.url !== "undefined"
+    ) {
+      eventStyles.style["opacity"] = "0.6";
+    }
 
-              case "common_house_reservations":
-              case "common-house-reservations":
-                return (
-                  <CommonHouseReservationsEdit
-                    eventId={this.props.match.params.id}
-                    handleCloseModal={this.handleCloseModal}
-                  />
-                );
+    eventStyles.style["backgroundColor"] = event.color;
+    return eventStyles;
+  }, []);
 
-              case "events":
-                return (
-                  <EventsEdit
-                    eventId={this.props.match.params.id}
-                    handleCloseModal={this.handleCloseModal}
-                  />
-                );
+  // Safety net for any Calendar-initiated navigation (e.g. keyboard).
+  // Primary nav is driven by handlePrev/handleNext/handleToday from
+  // the external toolbar. No clearCalendarEvents here — we want the
+  // first commit after a click to leave Calendar untouched so memo
+  // skips it; events clear is deferred to the nested rAF in the
+  // route-change effect.
+  const handleNavigate = useCallback(function (event) {
+    var newDate = dayjs(event).format("YYYY-MM-DD");
+    if (newDate !== paramsRef.current.date) {
+      navigateRef.current(`/calendar/${paramsRef.current.type}/${newDate}`);
+    }
+  }, []);
 
-              default:
-                return null;
-            }
-          }
+  const handlePrev = useCallback(function () {
+    mark("click");
+    var newDate = dayjs(paramsRef.current.date)
+      .subtract(1, "month")
+      .format("YYYY-MM-DD");
+    navigateRef.current(`/calendar/${paramsRef.current.type}/${newDate}`);
+  }, []);
 
-          // SHOW RESOURCE
-          if (this.props.match.params.view === "show") {
-            switch (this.props.match.params.modal) {
-              case "rotations":
-                return (
-                  <RotationsShow
-                    id={this.props.match.params.id}
-                    handleCloseModal={this.handleCloseModal}
-                  />
-                );
+  const handleNext = useCallback(function () {
+    mark("click");
+    var newDate = dayjs(paramsRef.current.date)
+      .add(1, "month")
+      .format("YYYY-MM-DD");
+    navigateRef.current(`/calendar/${paramsRef.current.type}/${newDate}`);
+  }, []);
 
-              default:
-                return null;
-            }
-          }
-        }
+  const handleToday = useCallback(function () {
+    mark("click");
+    var newDate = dayjs(getCommunityNow()).format("YYYY-MM-DD");
+    if (newDate !== paramsRef.current.date) {
+      navigateRef.current(`/calendar/${paramsRef.current.type}/${newDate}`);
+    }
+  }, []);
 
-        handleCloseModal() {
-          toastStore.clearAll();
-          this.props.history.push(
-            `/calendar/${this.props.match.params.type}/${
-              this.props.match.params.date
-            }`,
-          );
-        }
+  const handleSelectEvent = useCallback(function (event) {
+    if (event.url) {
+      navigateRef.current(event.url);
+      return false;
+    }
+  }, []);
 
-        handleClickLogout() {
-          this.props.store.logout();
-          // Hard reload, matching login. A client-side route change would
-          // leave the store and the Pusher channels alive on the login
-          // page; the next broadcast would fire an unauthenticated fetch
-          // and raise the "signed out" banner. A reload resets everything.
-          window.location.href = "/";
-        }
+  // Return a referentially-stable events array so MemoCalendar can
+  // skip re-rendering when the store hasn't actually changed. We cache
+  // a single slice() keyed on (version, type); the store bumps
+  // calendarEventsVersion whenever the underlying array mutates.
+  function filterEvents() {
+    var v = store.calendarEventsVersion;
+    var type = params.type;
+    var cache = eventsCacheRef.current;
+    if (cache.version !== v || cache.type !== type) {
+      cache.version = v;
+      cache.type = type;
+      // calendarEvents contains frozen (plain JS) objects —
+      // slice() copies the array without deep-cloning items.
+      cache.events = type === "all" ? store.calendarEvents.slice() : [];
+    }
+    return cache.events;
+  }
 
-        formatEvent(event) {
-          var styles = { style: {} };
+  // Same idea as filterEvents: cache the Date instance keyed on the
+  // date string so MemoCalendar's shallow prop compare doesn't see a
+  // fresh `new Date(...)` on every MainCalendar render. Sourced from
+  // calendarDate (deferred), NOT the URL date — so clicking prev/next
+  // doesn't invalidate Calendar's memo on the first commit.
+  function getCalendarDate() {
+    var cache = dateCacheRef.current;
+    if (cache.str !== calendarDate) {
+      cache.str = calendarDate;
+      cache.date = dayjs(calendarDate).toDate();
+    }
+    return cache.date;
+  }
 
-          if (
-            event.start < this._todayStart &&
-            typeof event.url !== "undefined"
-          ) {
-            styles.style["opacity"] = "0.6";
-          }
+  function renderModal() {
+    if (typeof params.modal === "undefined") {
+      return null;
+    }
 
-          styles.style["backgroundColor"] = event.color;
-          return styles;
-        }
-
-        render() {
-          // The observable "today" (community timezone, "YYYY-MM-DD").
-          // Reading it here subscribes this render to the store's midnight
-          // rollover, so an idle tab repaints when the day changes. Also
-          // the "today" boundary for formatEvent's past-event dimming.
-          var communityToday = this.props.store.communityToday;
-          this._todayStart = dayjs(communityToday).toDate();
-          logEvent("MainCalendar-render", {
-            path: this.props.location.pathname,
-            isOnline: this.props.store.isOnline,
-            eventsLen: this.props.store.calendarEvents.length,
-          });
+    // NEW RESOURCE
+    if (params.view === "new") {
+      switch (params.modal) {
+        case "guest_room_reservations":
+        case "guest-room-reservations":
           return (
-            <div className="offwhite">
-              <header className="header flex space-between">
-                <h5 className="pad-xs">
-                  {dayjs(communityToday).format("ddd MMM Do")}
-                </h5>
-                {this.props.store.isOnline ? (
-                  <span className="online">ONLINE</span>
-                ) : (
-                  <span className="offline">OFFLINE</span>
-                )}
-                <span>
-                  <button
-                    onClick={this.handleClickLogout}
-                    className="button-link text-secondary"
-                  >
-                    {`logout ${Cookie.get("username")}`}
-                  </button>
-                </span>
-              </header>
-              <div style={styles.main} className="responsive-calendar">
-                <SideBar
-                  match={this.props.match}
-                  history={this.props.history}
-                  location={this.props.location}
-                />
-                <div style={{ height: 2000, marginRight: 15 }}>
-                  <MonthNavHeader
-                    dateStr={this.props.match.params.date}
-                    onPrev={this.handlePrev}
-                    onNext={this.handleNext}
-                    onToday={this.handleToday}
-                  />
-                  <Profiler id="Calendar" onRender={profileRender}>
-                    {/* communityToday is not a react-big-calendar prop.
-                        Calendar ignores it; it exists to break the memo's
-                        shallow compare once at midnight, so getNow and
-                        eventPropGetter re-run with the new day. Without
-                        it the header would show the new date while the
-                        grid still highlighted yesterday. */}
-                    <MemoCalendar
-                      communityToday={communityToday}
-                      localizer={localizer}
-                      date={this.getCalendarDate()}
-                      defaultView="month"
-                      eventPropGetter={this.formatEvent}
-                      events={this.filterEvents()}
-                      className="calendar"
-                      onNavigate={this.handleNavigate}
-                      onSelectEvent={this.handleSelectEvent}
-                      views={VIEWS}
-                      getNow={getCommunityNow}
-                      toolbar={false}
-                    />
-                  </Profiler>
-                  <WebcalLinks />
-                </div>
-              </div>
-              <Modal
-                isOpen={typeof this.props.match.params.modal !== "undefined"}
-                contentLabel="Event Modal"
-                onRequestClose={this.handleCloseModal}
-                style={{
-                  content: {
-                    backgroundColor: "#CCDEEA",
-                  },
-                }}
-              >
-                {this.renderModal()}
-              </Modal>
-            </div>
+            <GuestRoomReservationsNew handleCloseModal={handleCloseModal} />
           );
-        }
 
-        // Safety net for any Calendar-initiated navigation (e.g. keyboard).
-        // Primary nav is driven by handlePrev/handleNext/handleToday from
-        // the external toolbar. No clearCalendarEvents here — we want the
-        // first commit after a click to leave Calendar untouched so memo
-        // skips it; events clear is deferred to the nested rAF in cDU.
-        handleNavigate(event) {
-          var newDate = dayjs(event).format("YYYY-MM-DD");
-          if (newDate !== this.props.match.params.date) {
-            this.props.history.push(
-              `/calendar/${this.props.match.params.type}/${newDate}`,
-            );
-          }
-        }
-
-        handlePrev() {
-          mark("click");
-          var newDate = dayjs(this.props.match.params.date)
-            .subtract(1, "month")
-            .format("YYYY-MM-DD");
-          this.props.history.push(
-            `/calendar/${this.props.match.params.type}/${newDate}`,
+        case "common_house_reservations":
+        case "common-house-reservations":
+          return (
+            <CommonHouseReservationsNew handleCloseModal={handleCloseModal} />
           );
-        }
 
-        handleNext() {
-          mark("click");
-          var newDate = dayjs(this.props.match.params.date)
-            .add(1, "month")
-            .format("YYYY-MM-DD");
-          this.props.history.push(
-            `/calendar/${this.props.match.params.type}/${newDate}`,
+        case "events":
+          return <EventsNew handleCloseModal={handleCloseModal} />;
+
+        default:
+          return null;
+      }
+    }
+
+    // EDIT RESOURCE
+    if (params.view === "edit") {
+      switch (params.modal) {
+        case "guest_room_reservations":
+        case "guest-room-reservations":
+          return (
+            <GuestRoomReservationsEdit
+              eventId={params.id}
+              handleCloseModal={handleCloseModal}
+            />
           );
-        }
 
-        handleToday() {
-          mark("click");
-          var newDate = dayjs(getCommunityNow()).format("YYYY-MM-DD");
-          if (newDate !== this.props.match.params.date) {
-            this.props.history.push(
-              `/calendar/${this.props.match.params.type}/${newDate}`,
-            );
-          }
-        }
+        case "common_house_reservations":
+        case "common-house-reservations":
+          return (
+            <CommonHouseReservationsEdit
+              eventId={params.id}
+              handleCloseModal={handleCloseModal}
+            />
+          );
 
-        handleSelectEvent(event) {
-          if (event.url) {
-            this.props.history.push(event.url);
-            return false;
-          }
-        }
+        case "events":
+          return (
+            <EventsEdit
+              eventId={params.id}
+              handleCloseModal={handleCloseModal}
+            />
+          );
 
-        // Return a referentially-stable events array so MemoCalendar can
-        // skip re-rendering when the store hasn't actually changed. We cache
-        // a single slice() keyed on (version, type); the store bumps
-        // calendarEventsVersion whenever the underlying array mutates.
-        filterEvents() {
-          var store = this.props.store;
-          var v = store.calendarEventsVersion;
-          var type = this.props.match.params.type;
-          if (this._eventsVersion !== v || this._eventsType !== type) {
-            this._eventsVersion = v;
-            this._eventsType = type;
-            // calendarEvents contains frozen (plain JS) objects —
-            // slice() copies the array without deep-cloning items.
-            this._filteredEvents =
-              type === "all" ? store.calendarEvents.slice() : [];
-          }
-          return this._filteredEvents;
-        }
+        default:
+          return null;
+      }
+    }
 
-        // Same idea as filterEvents: cache the Date instance keyed on the
-        // date string so MemoCalendar's shallow prop compare doesn't see a
-        // fresh `new Date(...)` on every MainCalendar render. Sourced from
-        // state.calendarDate (deferred), NOT match.params.date — so clicking
-        // prev/next doesn't invalidate Calendar's memo on the first commit.
-        getCalendarDate() {
-          var dateStr = this.state.calendarDate;
-          if (this._lastDateStr !== dateStr) {
-            this._lastDateStr = dateStr;
-            this._cachedDate = dayjs(dateStr).toDate();
-          }
-          return this._cachedDate;
-        }
-      },
-    ),
-  ),
-);
+    // SHOW RESOURCE
+    if (params.view === "show") {
+      switch (params.modal) {
+        case "rotations":
+          return (
+            <RotationsShow id={params.id} handleCloseModal={handleCloseModal} />
+          );
+
+        default:
+          return null;
+      }
+    }
+  }
+
+  // The observable "today" (community timezone, "YYYY-MM-DD").
+  // Reading it here subscribes this render to the store's midnight
+  // rollover, so an idle tab repaints when the day changes. Also
+  // the "today" boundary for formatEvent's past-event dimming.
+  var communityToday = store.communityToday;
+  todayStartRef.current = dayjs(communityToday).toDate();
+  logEvent("MainCalendar-render", {
+    path: location.pathname,
+    isOnline: store.isOnline,
+    eventsLen: store.calendarEvents.length,
+  });
+  return (
+    <div className="offwhite">
+      <header className="header flex space-between">
+        <h5 className="pad-xs">{dayjs(communityToday).format("ddd MMM Do")}</h5>
+        {store.isOnline ? (
+          <span className="online">ONLINE</span>
+        ) : (
+          <span className="offline">OFFLINE</span>
+        )}
+        <span>
+          <button
+            onClick={handleClickLogout}
+            className="button-link text-secondary"
+          >
+            {`logout ${Cookie.get("username")}`}
+          </button>
+        </span>
+      </header>
+      <div style={styles.main} className="responsive-calendar">
+        <SideBar />
+        <div style={{ height: 2000, marginRight: 15 }}>
+          <MonthNavHeader
+            dateStr={params.date}
+            onPrev={handlePrev}
+            onNext={handleNext}
+            onToday={handleToday}
+          />
+          <Profiler id="Calendar" onRender={profileRender}>
+            {/* communityToday is not a react-big-calendar prop.
+                Calendar ignores it; it exists to break the memo's
+                shallow compare once at midnight, so getNow and
+                eventPropGetter re-run with the new day. Without
+                it the header would show the new date while the
+                grid still highlighted yesterday. */}
+            <MemoCalendar
+              communityToday={communityToday}
+              localizer={localizer}
+              date={getCalendarDate()}
+              defaultView="month"
+              eventPropGetter={formatEvent}
+              events={filterEvents()}
+              className="calendar"
+              onNavigate={handleNavigate}
+              onSelectEvent={handleSelectEvent}
+              views={VIEWS}
+              getNow={getCommunityNow}
+              toolbar={false}
+            />
+          </Profiler>
+          <WebcalLinks />
+        </div>
+      </div>
+      <Modal
+        isOpen={typeof params.modal !== "undefined"}
+        contentLabel="Event Modal"
+        onRequestClose={handleCloseModal}
+        style={{
+          content: {
+            backgroundColor: "#CCDEEA",
+          },
+        }}
+      >
+        {renderModal()}
+      </Modal>
+    </div>
+  );
+});
 
 export default MainCalendar;
