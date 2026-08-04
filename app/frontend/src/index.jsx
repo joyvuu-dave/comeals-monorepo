@@ -20,6 +20,7 @@ dayjs.extend(relativeTime);
 import React, { Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { Provider } from "mobx-react";
+import { StoreContext } from "./helpers/store_context";
 import { setLivelinessChecking } from "mobx-state-tree";
 
 // React 19 dev mode iterates over all component props for DevTools diffing
@@ -129,40 +130,46 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   createRoot(document.getElementById("root")).render(
+    // Both store providers coexist during the hooks migration: inject()
+    // reads from the mobx-react Provider, useStore() reads from
+    // StoreContext. The mobx-react Provider goes away when the last
+    // inject() call does.
     <Provider store={store}>
-      <ToastContainer />
-      <SessionExpiredBanner store={store} />
-      <Router>
-        <VersionBanner />
-        <TrailingSlash />
-        <ScrollToTop>
-          <main>
-            <Suspense fallback={<h3>Loading...</h3>}>
-              <ErrorBoundary>
-                <Routes>
-                  <Route
-                    path={CALENDAR_PATH}
-                    element={
-                      <PrivateRoute>
-                        <Calendar />
-                      </PrivateRoute>
-                    }
-                  />
-                  <Route
-                    path={MEAL_EDIT_PATH}
-                    element={
-                      <PrivateRoute>
-                        <MealsEdit />
-                      </PrivateRoute>
-                    }
-                  />
-                  <Route path={LOGIN_PATH} element={<ResidentsLogin />} />
-                </Routes>
-              </ErrorBoundary>
-            </Suspense>
-          </main>
-        </ScrollToTop>
-      </Router>
+      <StoreContext.Provider value={store}>
+        <ToastContainer />
+        <SessionExpiredBanner store={store} />
+        <Router>
+          <VersionBanner />
+          <TrailingSlash />
+          <ScrollToTop>
+            <main>
+              <Suspense fallback={<h3>Loading...</h3>}>
+                <ErrorBoundary>
+                  <Routes>
+                    <Route
+                      path={CALENDAR_PATH}
+                      element={
+                        <PrivateRoute>
+                          <Calendar />
+                        </PrivateRoute>
+                      }
+                    />
+                    <Route
+                      path={MEAL_EDIT_PATH}
+                      element={
+                        <PrivateRoute>
+                          <MealsEdit />
+                        </PrivateRoute>
+                      }
+                    />
+                    <Route path={LOGIN_PATH} element={<ResidentsLogin />} />
+                  </Routes>
+                </ErrorBoundary>
+              </Suspense>
+            </main>
+          </ScrollToTop>
+        </Router>
+      </StoreContext.Provider>
     </Provider>,
   );
   // Unregister any leftover service worker from previous deploys.
