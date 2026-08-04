@@ -1,4 +1,5 @@
 import { observer } from "mobx-react";
+import { useStore } from "../../helpers/store_context";
 
 var styles = {
   banner: {
@@ -31,7 +32,8 @@ var styles = {
   },
 };
 
-function SessionExpiredBanner({ store }) {
+function SessionExpiredBanner() {
+  const store = useStore();
   if (!store.authExpired) {
     return null;
   }

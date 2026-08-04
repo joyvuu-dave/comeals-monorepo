@@ -137,7 +137,7 @@ document.addEventListener("DOMContentLoaded", () => {
     <Provider store={store}>
       <StoreContext.Provider value={store}>
         <ToastContainer />
-        <SessionExpiredBanner store={store} />
+        <SessionExpiredBanner />
         <Router>
           <VersionBanner />
           <TrailingSlash />
