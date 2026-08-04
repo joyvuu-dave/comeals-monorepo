@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { observable, runInAction } from "mobx";
-import { Provider } from "mobx-react";
 import { MemoryRouter, Routes, Route, useLocation } from "react-router";
+import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
 import LoadStatus from "../../../app/frontend/src/components/meal/load_status.jsx";
 
 // The `retryMealLoadNow: false` annotation stops MobX from wrapping the
@@ -26,14 +26,14 @@ function LocationEcho() {
 
 function renderStatus(store) {
   return render(
-    <Provider store={store}>
+    <StoreContext.Provider value={store}>
       <MemoryRouter initialEntries={["/meals/5/edit"]}>
         <LoadStatus />
         <Routes>
           <Route path="*" element={<LocationEcho />} />
         </Routes>
       </MemoryRouter>
-    </Provider>,
+    </StoreContext.Provider>,
   );
 }
 
