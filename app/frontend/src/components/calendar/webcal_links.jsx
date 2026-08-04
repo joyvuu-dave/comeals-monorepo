@@ -1,75 +1,57 @@
-import { Component } from "react";
+import { useEffect, useState } from "react";
 import Cookie from "js-cookie";
 import axios from "axios";
 import handleAxiosError from "../../helpers/handle_axios_error";
 
-class WebcalLinks extends Component {
-  constructor(props) {
-    super(props);
+function WebcalLinks() {
+  const [residentId, setResidentId] = useState(Cookie.get("resident_id"));
+  const [ready, setReady] = useState(false);
 
-    this.state = {
-      resident_id: Cookie.get("resident_id"),
-      ready: false,
-    };
-  }
-
-  componentDidMount() {
-    this._isMounted = true;
-    if (typeof this.state.resident_id === "undefined") {
-      var self = this;
+  useEffect(function () {
+    if (typeof Cookie.get("resident_id") === "undefined") {
+      let cancelled = false;
       axios
         .get(`/api/v1/residents/id`)
         .then(function (response) {
-          if (!self._isMounted) return;
+          if (cancelled) return;
           if (response.status === 200) {
             Cookie.set("resident_id", response.data, {
               expires: 7300,
             });
 
-            self.setState({
-              resident_id: response.data,
-              ready: true,
-            });
+            setResidentId(response.data);
+            setReady(true);
           }
         })
         .catch(function (error) {
           handleAxiosError(error, { silent: true });
         });
+      return function () {
+        cancelled = true;
+      };
     } else {
-      this.setState({
-        ready: true,
-      });
+      setReady(true);
     }
-  }
+  }, []);
 
-  componentWillUnmount() {
-    this._isMounted = false;
-  }
+  var apiHost = window.location.host;
 
-  render() {
-    var apiHost = window.location.host;
-
-    return (
-      <div className="flex space-between w-100">
-        <a
-          href={`webcal://${apiHost}/api/v1/communities/${Cookie.get(
-            "community_id",
-          )}/ical.ics`}
-        >
-          Subscribe to All Meals
+  return (
+    <div className="flex space-between w-100">
+      <a
+        href={`webcal://${apiHost}/api/v1/communities/${Cookie.get(
+          "community_id",
+        )}/ical.ics`}
+      >
+        Subscribe to All Meals
+      </a>
+      {ready && (
+        <a href={`webcal://${apiHost}/api/v1/residents/${residentId}/ical.ics`}>
+          Subscribe to My Meals
         </a>
-        {this.state.ready && (
-          <a
-            href={`webcal://${apiHost}/api/v1/residents/${
-              this.state.resident_id
-            }/ical.ics`}
-          >
-            Subscribe to My Meals
-          </a>
-        )}
-      </div>
-    );
-  }
+      )}
+    </div>
+  );
 }
 
 export default WebcalLinks;
