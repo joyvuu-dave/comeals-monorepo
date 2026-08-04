@@ -1,5 +1,4 @@
-import { Component } from "react";
-import { inject, observer } from "mobx-react";
+import { useLocation, useNavigate } from "react-router";
 
 const styles = {
   main: {
@@ -8,38 +7,25 @@ const styles = {
   },
 };
 
-const ButtonBar = inject("store")(
-  observer(
-    class ButtonBar extends Component {
-      constructor(props) {
-        super(props);
-        this.toggleHistory = this.toggleHistory.bind(this);
-      }
+function ButtonBar() {
+  const navigate = useNavigate();
+  const location = useLocation();
 
-      toggleHistory() {
-        if (this.props.location.pathname.includes("/history")) {
-          this.props.history.push(
-            this.props.location.pathname.split("/history")[0],
-          );
-        } else {
-          this.props.history.push(`${this.props.location.pathname}history/`);
-        }
-      }
+  function toggleHistory() {
+    if (location.pathname.includes("/history")) {
+      navigate(location.pathname.split("/history")[0]);
+    } else {
+      navigate(`${location.pathname}history/`);
+    }
+  }
 
-      render() {
-        return (
-          <div style={styles.main} className="button-border-radius">
-            <button
-              className="button-link text-secondary"
-              onClick={this.toggleHistory}
-            >
-              history
-            </button>
-          </div>
-        );
-      }
-    },
-  ),
-);
+  return (
+    <div style={styles.main} className="button-border-radius">
+      <button className="button-link text-secondary" onClick={toggleHistory}>
+        history
+      </button>
+    </div>
+  );
+}
 
 export default ButtonBar;
