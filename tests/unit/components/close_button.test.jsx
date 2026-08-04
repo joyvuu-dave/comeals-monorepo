@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { observable, runInAction } from "mobx";
-import { Provider } from "mobx-react";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
 import CloseButton from "../../../app/frontend/src/components/meal/close_button.jsx";
 
@@ -23,11 +22,9 @@ function makeStore(overrides = {}) {
 // conversion.
 function renderButton(store) {
   return render(
-    <Provider store={store}>
-      <StoreContext.Provider value={store}>
-        <CloseButton />
-      </StoreContext.Provider>
-    </Provider>,
+    <StoreContext.Provider value={store}>
+      <CloseButton />
+    </StoreContext.Provider>,
   );
 }
 

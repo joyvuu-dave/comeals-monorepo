@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { observable } from "mobx";
-import { Provider } from "mobx-react";
 import { MemoryRouter, Routes, Route, useLocation } from "react-router";
 
 // login.jsx calls Modal.setAppElement("#root") at import time.
@@ -48,17 +47,15 @@ function LocationEcho() {
 // conversion; the real router replaces the withRouter props.
 function renderLogin({ store = makeStore(), path = "/" } = {}) {
   render(
-    <Provider store={store}>
-      <StoreContext.Provider value={store}>
-        <MemoryRouter initialEntries={[path]}>
-          <Routes>
-            <Route path={LOGIN_PATH} element={<ResidentsLogin />} />
-            <Route path="/calendar/*" element={null} />
-          </Routes>
-          <LocationEcho />
-        </MemoryRouter>
-      </StoreContext.Provider>
-    </Provider>,
+    <StoreContext.Provider value={store}>
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path={LOGIN_PATH} element={<ResidentsLogin />} />
+          <Route path="/calendar/*" element={null} />
+        </Routes>
+        <LocationEcho />
+      </MemoryRouter>
+    </StoreContext.Provider>,
   );
   return { store };
 }

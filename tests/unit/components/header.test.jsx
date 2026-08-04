@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { observable, runInAction } from "mobx";
-import { Provider } from "mobx-react";
 import {
   MemoryRouter,
   Routes,
@@ -45,11 +44,9 @@ function Bridge({ store }) {
   const navigate = useNavigate();
   const location = useLocation();
   return (
-    <Provider store={store}>
-      <StoreContext.Provider value={store}>
-        <Header history={{ push: navigate }} location={location} />
-      </StoreContext.Provider>
-    </Provider>
+    <StoreContext.Provider value={store}>
+      <Header history={{ push: navigate }} location={location} />
+    </StoreContext.Provider>
   );
 }
 

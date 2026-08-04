@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { observable, runInAction } from "mobx";
-import { Provider } from "mobx-react";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
 import MenuBox from "../../../app/frontend/src/components/meal/menu_box.jsx";
 import { SAVE_DEBOUNCE_MS } from "../../../app/frontend/src/helpers/helpers.js";
@@ -30,11 +29,9 @@ function makeStore(overrides = {}, mealOverrides = {}) {
 // conversion.
 function renderBox(store) {
   return render(
-    <Provider store={store}>
-      <StoreContext.Provider value={store}>
-        <MenuBox />
-      </StoreContext.Provider>
-    </Provider>,
+    <StoreContext.Provider value={store}>
+      <MenuBox />
+    </StoreContext.Provider>,
   );
 }
 

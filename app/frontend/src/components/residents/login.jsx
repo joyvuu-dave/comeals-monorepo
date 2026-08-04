@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { observer } from "mobx-react";
+import { observer } from "mobx-react-lite";
 import { Navigate, useLocation, useNavigate, useParams } from "react-router";
 import axios from "axios";
 import Cookie from "js-cookie";

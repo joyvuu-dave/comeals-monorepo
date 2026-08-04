@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { observable } from "mobx";
-import { Provider } from "mobx-react";
 import { MemoryRouter, Routes, Route } from "react-router";
 
 vi.mock("axios", () => ({
@@ -39,20 +38,18 @@ function makeStore() {
 function renderForm({ store = makeStore(), handleCloseModal = vi.fn() } = {}) {
   const match = { params: { date: "2026-01-15", type: "all" } };
   render(
-    <Provider store={store}>
-      <StoreContext.Provider value={store}>
-        <MemoryRouter initialEntries={["/calendar/all/2026-01-15/events/new"]}>
-          <Routes>
-            <Route
-              path={CALENDAR_PATH}
-              element={
-                <EventsNew handleCloseModal={handleCloseModal} match={match} />
-              }
-            />
-          </Routes>
-        </MemoryRouter>
-      </StoreContext.Provider>
-    </Provider>,
+    <StoreContext.Provider value={store}>
+      <MemoryRouter initialEntries={["/calendar/all/2026-01-15/events/new"]}>
+        <Routes>
+          <Route
+            path={CALENDAR_PATH}
+            element={
+              <EventsNew handleCloseModal={handleCloseModal} match={match} />
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    </StoreContext.Provider>,
   );
   return { store, handleCloseModal };
 }

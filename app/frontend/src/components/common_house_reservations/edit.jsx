@@ -6,7 +6,7 @@ import timezone from "dayjs/plugin/timezone";
 import axios from "axios";
 import { generateTimes, toCommunityDayjs } from "../../helpers/helpers";
 import handleAxiosError from "../../helpers/handle_axios_error";
-import { observer } from "mobx-react";
+import { observer } from "mobx-react-lite";
 import { useStore } from "../../helpers/store_context";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faTimes } from "@fortawesome/free-solid-svg-icons";

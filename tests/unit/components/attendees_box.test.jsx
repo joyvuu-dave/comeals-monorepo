@@ -59,7 +59,6 @@ vi.mock("uuid", () => {
 
 import { unprotect } from "mobx-state-tree";
 import { runInAction } from "mobx";
-import { Provider } from "mobx-react";
 import { DataStore } from "../../../app/frontend/src/stores/data_store.js";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
 import AttendeesBox from "../../../app/frontend/src/components/meal/attendees_box.jsx";
@@ -92,11 +91,9 @@ function createDataStore(opts = {}) {
 // conversion.
 function renderBox(store) {
   return render(
-    <Provider store={store}>
-      <StoreContext.Provider value={store}>
-        <AttendeesBox />
-      </StoreContext.Provider>
-    </Provider>,
+    <StoreContext.Provider value={store}>
+      <AttendeesBox />
+    </StoreContext.Provider>,
   );
 }
 

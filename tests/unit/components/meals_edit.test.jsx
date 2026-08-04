@@ -67,7 +67,6 @@ vi.mock("uuid", () => {
 });
 
 import { MemoryRouter, Routes, Route } from "react-router";
-import { Provider } from "mobx-react";
 import axios from "axios";
 import dayjs from "dayjs";
 import advancedFormat from "dayjs/plugin/advancedFormat";
@@ -86,15 +85,13 @@ dayjs.extend(relativeTime);
 // conversion.
 function renderPage(store) {
   return render(
-    <Provider store={store}>
-      <StoreContext.Provider value={store}>
-        <MemoryRouter initialEntries={["/meals/42/edit/"]}>
-          <Routes>
-            <Route path={MEAL_EDIT_PATH} element={<MealsEdit />} />
-          </Routes>
-        </MemoryRouter>
-      </StoreContext.Provider>
-    </Provider>,
+    <StoreContext.Provider value={store}>
+      <MemoryRouter initialEntries={["/meals/42/edit/"]}>
+        <Routes>
+          <Route path={MEAL_EDIT_PATH} element={<MealsEdit />} />
+        </Routes>
+      </MemoryRouter>
+    </StoreContext.Provider>,
   );
 }
 

@@ -4,7 +4,7 @@ import DayPickerInputWrapper from "../common/day_picker_input";
 import dayjs from "dayjs";
 import axios from "axios";
 import Cookie from "js-cookie";
-import { observer } from "mobx-react";
+import { observer } from "mobx-react-lite";
 import { useStore } from "../../helpers/store_context";
 import { generateTimes } from "../../helpers/helpers";
 import handleAxiosError from "../../helpers/handle_axios_error";

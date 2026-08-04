@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { observer } from "mobx-react";
+import { observer } from "mobx-react-lite";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { useStore } from "../../helpers/store_context";
 import { communityNow } from "../../helpers/helpers";

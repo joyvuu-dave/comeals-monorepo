@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { observable } from "mobx";
-import { Provider } from "mobx-react";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
 import Extras from "../../../app/frontend/src/components/meal/extras.jsx";
 
@@ -26,11 +25,9 @@ function makeStore(mealOverrides = {}) {
 // conversion.
 function renderExtras(store) {
   return render(
-    <Provider store={store}>
-      <StoreContext.Provider value={store}>
-        <Extras />
-      </StoreContext.Provider>
-    </Provider>,
+    <StoreContext.Provider value={store}>
+      <Extras />
+    </StoreContext.Provider>,
   );
 }
 

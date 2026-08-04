@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { observable } from "mobx";
-import { Provider } from "mobx-react";
 import { MemoryRouter, Routes, Route, useLocation } from "react-router";
 
 // date_box.jsx calls Modal.setAppElement("#root") at import time.
@@ -53,16 +52,14 @@ function LocationEcho() {
 // conversion.
 function renderBox(store, path = "/meals/42/edit/") {
   return render(
-    <Provider store={store}>
-      <StoreContext.Provider value={store}>
-        <MemoryRouter initialEntries={[path]}>
-          <Routes>
-            <Route path={MEAL_EDIT_PATH} element={<DateBox />} />
-          </Routes>
-          <LocationEcho />
-        </MemoryRouter>
-      </StoreContext.Provider>
-    </Provider>,
+    <StoreContext.Provider value={store}>
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path={MEAL_EDIT_PATH} element={<DateBox />} />
+        </Routes>
+        <LocationEcho />
+      </MemoryRouter>
+    </StoreContext.Provider>,
   );
 }
 

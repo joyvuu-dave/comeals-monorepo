@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { observable } from "mobx";
-import { Provider } from "mobx-react";
 import {
   MemoryRouter,
   Routes,
@@ -25,11 +24,9 @@ function Bridge({ store }) {
   const navigate = useNavigate();
   const location = useLocation();
   return (
-    <Provider store={store}>
-      <StoreContext.Provider value={store}>
-        <ButtonBar history={{ push: navigate }} location={location} />
-      </StoreContext.Provider>
-    </Provider>
+    <StoreContext.Provider value={store}>
+      <ButtonBar history={{ push: navigate }} location={location} />
+    </StoreContext.Provider>
   );
 }
 

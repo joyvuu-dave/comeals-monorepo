@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, act } from "@testing-library/react";
 import { observable, runInAction } from "mobx";
-import { Provider } from "mobx-react";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
 import InfoBox from "../../../app/frontend/src/components/meal/info_box.jsx";
 
@@ -34,11 +33,9 @@ function makeStore(overrides = {}) {
 // conversion.
 function renderBox(store) {
   return render(
-    <Provider store={store}>
-      <StoreContext.Provider value={store}>
-        <InfoBox />
-      </StoreContext.Provider>
-    </Provider>,
+    <StoreContext.Provider value={store}>
+      <InfoBox />
+    </StoreContext.Provider>,
   );
 }
 

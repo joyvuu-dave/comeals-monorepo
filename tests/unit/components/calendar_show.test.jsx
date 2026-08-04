@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { observable } from "mobx";
-import { Provider } from "mobx-react";
 import { MemoryRouter, Routes, Route, useLocation } from "react-router";
 
 // calendar/show.jsx calls Modal.setAppElement("#root") at import time.
@@ -93,17 +92,15 @@ function renderCalendar({
   path = "/calendar/all/2026-01-15/",
 } = {}) {
   render(
-    <Provider store={store}>
-      <StoreContext.Provider value={store}>
-        <MemoryRouter initialEntries={[path]}>
-          <Routes>
-            <Route path={CALENDAR_PATH} element={<MainCalendar />} />
-            <Route path="/meals/*" element={null} />
-          </Routes>
-          <LocationEcho />
-        </MemoryRouter>
-      </StoreContext.Provider>
-    </Provider>,
+    <StoreContext.Provider value={store}>
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path={CALENDAR_PATH} element={<MainCalendar />} />
+          <Route path="/meals/*" element={null} />
+        </Routes>
+        <LocationEcho />
+      </MemoryRouter>
+    </StoreContext.Provider>,
   );
   return { store };
 }

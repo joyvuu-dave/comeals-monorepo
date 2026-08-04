@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { observable } from "mobx";
-import { Provider } from "mobx-react";
 
 // The edit form renders ConfirmModal, which needs #root at import time.
 vi.hoisted(() => {
@@ -58,14 +57,12 @@ function makeStore() {
 // conversion.
 function renderForm({ store = makeStore(), handleCloseModal = vi.fn() } = {}) {
   render(
-    <Provider store={store}>
-      <StoreContext.Provider value={store}>
-        <GuestRoomReservationsEdit
-          eventId={60}
-          handleCloseModal={handleCloseModal}
-        />
-      </StoreContext.Provider>
-    </Provider>,
+    <StoreContext.Provider value={store}>
+      <GuestRoomReservationsEdit
+        eventId={60}
+        handleCloseModal={handleCloseModal}
+      />
+    </StoreContext.Provider>,
   );
   return { store, handleCloseModal };
 }

@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { observer } from "mobx-react";
+import { observer } from "mobx-react-lite";
 import { useStore } from "../../helpers/store_context";
 import ConfirmBar from "../confirm_bar";
 import { isZeroAmountString, toDisplayAmountString } from "../../helpers/money";

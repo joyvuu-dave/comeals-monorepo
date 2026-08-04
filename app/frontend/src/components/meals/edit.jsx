@@ -1,4 +1,4 @@
-import { observer } from "mobx-react";
+import { observer } from "mobx-react-lite";
 
 import Header from "../meal/header";
 import LoadStatus from "../meal/load_status";

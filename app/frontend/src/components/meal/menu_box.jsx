@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { observer } from "mobx-react";
+import { observer } from "mobx-react-lite";
 import { useStore } from "../../helpers/store_context";
 
 import { SAVE_DEBOUNCE_MS } from "../../helpers/helpers";

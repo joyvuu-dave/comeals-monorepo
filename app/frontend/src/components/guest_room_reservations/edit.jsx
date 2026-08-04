@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import DayPickerInputWrapper from "../common/day_picker_input";
 import dayjs from "dayjs";
 import axios from "axios";
-import { observer } from "mobx-react";
+import { observer } from "mobx-react-lite";
 import { useStore } from "../../helpers/store_context";
 import handleAxiosError from "../../helpers/handle_axios_error";
 import ConfirmModal from "../app/confirm_modal";

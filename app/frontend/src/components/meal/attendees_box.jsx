@@ -1,4 +1,4 @@
-import { observer } from "mobx-react";
+import { observer } from "mobx-react-lite";
 import { isAlive } from "mobx-state-tree";
 import { useStore } from "../../helpers/store_context";
 import Cow from "../../images/cow.png";

@@ -1,7 +1,7 @@
 import { createContext, useContext } from "react";
 
-// The hooks-era replacement for mobx-react's inject("store"). index.jsx
-// provides the store; function components read it with useStore().
+// How components reach the store: index.jsx provides it here, and
+// function components read it with useStore().
 export const StoreContext = createContext(null);
 
 export function useStore() {
