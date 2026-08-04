@@ -9,7 +9,7 @@
 # a race the guards did not cover.
 #
 # This is a control, not a guard. A guard refuses a bad write; a control
-# proves afterwards that the numbers still tie out. Both are needed, because
+# proves afterwards that the numbers still match. Both are needed, because
 # a guard can only refuse what it knows to look at. Issue #43 was a race that
 # every guard allowed, and this check would have found it in production
 # instead of only in a test.
@@ -86,7 +86,7 @@ class LedgerVerification
   end
 
   # Largest-remainder allocation moves a balance by at most one cent away from
-  # its exact amount, so that is the whole tolerance the line-item tie-out is
+  # its exact amount, so that is the whole tolerance the line-item check is
   # allowed. Anything further apart is a real disagreement.
   ROUNDING_TOLERANCE = BigDecimal('0.01')
 
@@ -239,7 +239,7 @@ class LedgerVerification
     if run.passed?
       Rails.logger.info(
         "ledger:verify checked #{run.reconciliations_checked} " \
-        "#{'reconciliation'.pluralize(run.reconciliations_checked)} in #{run.duration.round(2)}s — all tie out"
+        "#{'reconciliation'.pluralize(run.reconciliations_checked)} in #{run.duration.round(2)}s — all match"
       )
     else
       Rails.logger.error(self.class.summary_for(run))

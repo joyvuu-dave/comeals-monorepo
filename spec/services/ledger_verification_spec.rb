@@ -29,7 +29,7 @@ RSpec.describe LedgerVerification do
     end
   end
 
-  describe 'a ledger that ties out' do
+  describe 'a ledger where everything matches' do
     it 'passes and records the run' do
       settle
 

@@ -18,6 +18,37 @@ ActiveAdmin.register LedgerCheckRun do
 
   scope('All', default: true, &:recent)
 
+  # The page must explain itself. This record answers "show me that you
+  # looked", and the person looking may be a future admin — or future us —
+  # who no longer remembers what the check does.
+  sidebar 'What this page shows', only: %i[index show] do
+    para 'Once settled, a reconciliation must never change. Every night, ' \
+         'the ledger:verify task proves it has not: for each settled ' \
+         'reconciliation, it rebuilds the balances from the source rows ' \
+         '(bills, attendance, guests) and compares them to the balances ' \
+         'stored at settlement time. It also adds up the per-meal charge ' \
+         'lines and compares those sums to the same stored balances. ' \
+         'Each run writes one row on this page, pass or fail.'
+    para do
+      status_tag 'all match', class: 'ok'
+      text_node ' — every stored balance is still exactly what the source ' \
+                'data produces. Nothing settled has changed.'
+    end
+    para do
+      status_tag 'mismatched', class: 'error'
+      text_node ' — a stored balance no longer agrees with its source ' \
+                'data. Something changed settled data after settlement. ' \
+                'The differences are listed on the run page. See ' \
+                'docs/runbooks/settled-data-repair.md.'
+    end
+    para do
+      status_tag 'did not finish', class: 'error'
+      text_node ' — the check itself crashed before it could compare ' \
+                'everything. The error is on the run page. This says ' \
+                'nothing about the ledger either way.'
+    end
+  end
+
   # INDEX
   index do
     column :started_at
@@ -28,7 +59,7 @@ ActiveAdmin.register LedgerCheckRun do
       elsif run.failed?
         status_tag "#{run.mismatch_count} mismatched", class: 'error'
       else
-        status_tag 'ties out', class: 'ok'
+        status_tag 'all match', class: 'ok'
       end
     end
     column('Took') { |run| "#{run.duration.round(2)}s" }

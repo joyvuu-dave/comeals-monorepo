@@ -284,5 +284,56 @@ Rake::Task['billing:recalculate'].invoke
 
 Rails.logger.debug { "#{ResidentBalance.count} ResidentBalances computed" }
 
+# Ledger check runs — the Ledger Checks admin page needs rows in every
+# shape it can show. Three nights of history:
+#
+#   two nights ago  the check crashed        (staged)
+#   last night      it found a mismatch      (staged)
+#   tonight         it passes                (real)
+#
+# The passing run is real: LedgerVerification runs here against the
+# reconciliation seeded above, exactly as it does nightly in production.
+# The other two cannot be produced honestly — settled data refuses the
+# writes that would cause a mismatch — so they are staged records of
+# nights that never happened, using the real reconciliation and real
+# resident ids so every link on the page goes somewhere. The story the
+# three rows tell is the runbook's: a mismatch was found, the data was
+# repaired, and the next run passed.
+two_nights_ago = 2.days.ago.change(hour: 3)
+LedgerCheckRun.create!(
+  started_at: two_nights_ago,
+  finished_at: two_nights_ago + 2.seconds,
+  reconciliations_checked: 0,
+  details: [],
+  error: 'PG::ConnectionBad: server closed the connection unexpectedly'
+)
+
+reconciliation = Reconciliation.first
+drifted = reconciliation.reconciliation_balances.order(:resident_id).limit(2)
+last_night = 1.day.ago.change(hour: 3)
+LedgerCheckRun.create!(
+  started_at: last_night,
+  finished_at: last_night + 3.seconds,
+  reconciliations_checked: 1,
+  mismatch_count: 1,
+  details: [
+    {
+      reconciliation_id: reconciliation.id,
+      date: reconciliation.date.to_s,
+      check: 'recompute',
+      # Amounts are strings, never JSON numbers — same rule as the verifier.
+      differences: drifted.map do |balance|
+        { resident_id: balance.resident_id,
+          stored: balance.amount.to_s('F'),
+          source: (balance.amount + BigDecimal('1.5')).to_s('F') }
+      end
+    }
+  ]
+)
+
+LedgerVerification.call
+
+Rails.logger.debug { "#{LedgerCheckRun.count} LedgerCheckRuns created (1 real, 2 staged)" }
+
 # Analytics
 Rails.logger.debug { "Seed records created in #{Time.zone.now - start}s" }

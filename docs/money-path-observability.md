@@ -51,7 +51,7 @@ produce a mismatch that never existed.
 A difference raises, and `Healthcheck.monitor` turns that into an email.
 
 This is what a bank calls a control: not a guard that prevents a bad write, but
-a check that proves the numbers still tie out. It would have caught issue #43 in
+a check that proves the numbers still match. It would have caught issue #43 in
 production rather than only in a test.
 
 **Every run is recorded, pass or fail**, in `ledger_check_runs` — start, finish,
@@ -95,7 +95,7 @@ Immutable, guarded the same way the balances are. No `reconciliation_id` — the
 meal already says which settlement it belongs to, and two answers to one
 question can disagree.
 
-**The tie-out is not equality, and the original proposal here was wrong about
+**The line-item check is not an equality check, and the original proposal here was wrong about
 that.** The lines are full precision and the balances are rounded to cents, so
 a resident's lines sum to within one cent of their balance, never to exactly
 it. One cent is precisely what largest-remainder allocation is allowed to
@@ -141,7 +141,7 @@ What it buys:
 
 - **A statement instead of a number.** "2026-07-03, you plus one child, $4.28.
   2026-07-05, you cooked, +$62.00."
-- **A tie-out in pure SQL.** `reconciliation_balances.amount` must equal the sum
+- **A cross-check in pure SQL.** `reconciliation_balances.amount` must equal the sum
   of that resident's charges across that reconciliation's meals. Two tables
   written by different code, checked against each other with no recomputation.
 - **Failures that point at one meal.** For the test harness this matters a lot.
@@ -215,14 +215,14 @@ to noise is poor. Worth building only for completeness of the pattern.
 
 1. ~~Control A — the nightly recompute-and-diff.~~ Built 2026-07-31.
 2. ~~Line items (B).~~ Built 2026-08-02. The nightly check now includes the SQL
-   tie-out between two tables written by different code, which is the version
+   cross-check between two tables written by different code, which is the version
    that closes the "same mistake twice" gap. The statement screens followed on
    2026-08-03.
 3. Digest chain (D) — closes the escape-hatch blind spot. **Next.**
 4. Provenance stamps (C) — folds in with D.
 5. Snapshots (E) — only for completeness.
 
-A and B together give a full tie-out chain: source rows, then line items, then
+A and B together give a full chain of checks: source rows, then line items, then
 the settled balance, then a recomputed check. Each link is verifiable on its
 own, and each is written by different code at a different time.
 
@@ -232,7 +232,7 @@ own, and each is written by different code at a different time.
   will then disagree with all of history, every night. The likely answer is to
   stamp each reconciliation with a calculation version at settlement, and have
   the check only recompute rows whose version matches the current code, falling
-  back to the SQL tie-out against line items (B) for older ones. Decide this
+  back to the SQL cross-check against line items (B) for older ones. Decide this
   before the first deliberate change to the math, not after.
 - **Where the digest evidence lives (part of D).** A hash chain stored in the
   database it protects is tamper-evident against accidents, not against the one
