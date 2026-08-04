@@ -1,6 +1,6 @@
-import { Component } from "react";
-import { inject, observer } from "mobx-react";
+import { observer } from "mobx-react";
 import { isAlive } from "mobx-state-tree";
+import { useStore } from "../../helpers/store_context";
 import Cow from "../../images/cow.png";
 import Carrot from "../../images/carrot.png";
 import GuestDropdown from "./guest_dropdown";
@@ -23,150 +23,135 @@ const styles = {
   },
 };
 
-const AttendeeComponent = inject("store")(
-  observer(
-    class AttendeeComponent extends Component {
-      render() {
-        // A row only makes sense against a loaded meal — every column
-        // below reads meal state. No meal, no row.
-        const meal = this.props.store.meal;
-        if (!meal) return null;
-        const resident = this.props.resident;
-        if (!isAlive(resident)) return null;
-        const guests = resident.guests;
-        const vegGuestsCount = guests.filter(
-          (guest) => guest.vegetarian === true,
-        ).length;
-        const meatGuestsCount = guests.filter(
-          (guest) => guest.vegetarian === false,
-        ).length;
+const AttendeeComponent = observer(({ resident }) => {
+  const store = useStore();
+  // A row only makes sense against a loaded meal — every column
+  // below reads meal state. No meal, no row.
+  const meal = store.meal;
+  if (!meal) return null;
+  if (!isAlive(resident)) return null;
+  const guests = resident.guests;
+  const vegGuestsCount = guests.filter(
+    (guest) => guest.vegetarian === true,
+  ).length;
+  const meatGuestsCount = guests.filter(
+    (guest) => guest.vegetarian === false,
+  ).length;
 
-        return (
+  return (
+    <tr>
+      <td
+        onClick={() => resident.toggleAttending()}
+        className={
+          resident.attending
+            ? "background-green text-white pointer background-transition"
+            : "pointer background-transition"
+        }
+        style={Object.assign(
+          {},
+          resident.attending && !resident.canRemove && styles.disabled,
+          meal.reconciled && styles.disabled,
+        )}
+      >
+        {resident.name}
+      </td>
+      <td>
+        {vegGuestsCount > 0 && (
+          <span className="badge badge-info mar-r-sm">
+            {vegGuestsCount}
+            <img src={Carrot} style={styles.icon} alt="carrot-icon" />
+          </span>
+        )}
+        {meatGuestsCount > 0 && (
+          <span className="badge badge-info">
+            {meatGuestsCount}
+            <img src={Cow} style={styles.icon} alt="cow-icon" />
+          </span>
+        )}
+      </td>
+      <td>
+        <span className="switch">
+          <input
+            id={`late_switch_${resident.id}`}
+            type="checkbox"
+            className="switch"
+            key={`late_switch_${resident.id}`}
+            checked={resident ? resident.late : false}
+            onChange={() => resident.toggleLate()}
+            disabled={
+              meal.reconciled ||
+              (meal.closed && !resident.attending && meal.extras < 1)
+            }
+            aria-label={`Toggle Late for ${resident.name}`}
+          />
+          <label htmlFor={`late_switch_${resident.id}`} />
+        </span>
+      </td>
+      <td>
+        <span className="switch">
+          <input
+            id={`veg_switch_${resident.id}`}
+            type="checkbox"
+            className="switch"
+            key={`veg_switch_${resident.id}`}
+            checked={resident ? resident.vegetarian : false}
+            onChange={() => resident.toggleVeg()}
+            disabled={
+              meal.reconciled ||
+              (meal.closed && resident.attending && !resident.canRemove) ||
+              (meal.closed && !resident.attending && meal.extras < 1)
+            }
+            aria-label={`Toggle Veg for ${resident.name}`}
+          />
+          <label htmlFor={`veg_switch_${resident.id}`} />
+        </span>
+      </td>
+      <td>
+        <GuestDropdown
+          resident={resident}
+          reconciled={meal.reconciled}
+          canAdd={store.canAdd}
+        />
+        <button
+          className="dropdown-remove"
+          key={`dropdown_remove_${resident.id}`}
+          aria-label={`Remove Guest of ${resident.name}`}
+          style={styles.monospace}
+          onClick={() => resident.removeGuest()}
+          disabled={meal.reconciled || !resident.canRemoveGuest}
+        />
+      </td>
+    </tr>
+  );
+});
+
+const AttendeesBox = observer(() => {
+  const store = useStore();
+  return (
+    <div style={styles.main}>
+      <table className="background-white">
+        <thead>
           <tr>
-            <td
-              onClick={() => resident.toggleAttending()}
-              className={
-                resident.attending
-                  ? "background-green text-white pointer background-transition"
-                  : "pointer background-transition"
-              }
-              style={Object.assign(
-                {},
-                resident.attending && !resident.canRemove && styles.disabled,
-                meal.reconciled && styles.disabled,
-              )}
-            >
-              {resident.name}
-            </td>
-            <td>
-              {vegGuestsCount > 0 && (
-                <span className="badge badge-info mar-r-sm">
-                  {vegGuestsCount}
-                  <img src={Carrot} style={styles.icon} alt="carrot-icon" />
-                </span>
-              )}
-              {meatGuestsCount > 0 && (
-                <span className="badge badge-info">
-                  {meatGuestsCount}
-                  <img src={Cow} style={styles.icon} alt="cow-icon" />
-                </span>
-              )}
-            </td>
-            <td>
-              <span className="switch">
-                <input
-                  id={`late_switch_${resident.id}`}
-                  type="checkbox"
-                  className="switch"
-                  key={`late_switch_${resident.id}`}
-                  checked={resident ? resident.late : false}
-                  onChange={() => resident.toggleLate()}
-                  disabled={
-                    meal.reconciled ||
-                    (meal.closed && !resident.attending && meal.extras < 1)
-                  }
-                  aria-label={`Toggle Late for ${resident.name}`}
-                />
-                <label htmlFor={`late_switch_${resident.id}`} />
+            <th className="background-white sticky-header">
+              Name{" "}
+              <span className="text-small text-italic text-secondary text-nowrap">
+                (click to add)
               </span>
-            </td>
-            <td>
-              <span className="switch">
-                <input
-                  id={`veg_switch_${resident.id}`}
-                  type="checkbox"
-                  className="switch"
-                  key={`veg_switch_${resident.id}`}
-                  checked={resident ? resident.vegetarian : false}
-                  onChange={() => resident.toggleVeg()}
-                  disabled={
-                    meal.reconciled ||
-                    (meal.closed &&
-                      resident.attending &&
-                      !resident.canRemove) ||
-                    (meal.closed && !resident.attending && meal.extras < 1)
-                  }
-                  aria-label={`Toggle Veg for ${resident.name}`}
-                />
-                <label htmlFor={`veg_switch_${resident.id}`} />
-              </span>
-            </td>
-            <td>
-              <GuestDropdown
-                resident={resident}
-                reconciled={meal.reconciled}
-                canAdd={this.props.store.canAdd}
-              />
-              <button
-                className="dropdown-remove"
-                key={`dropdown_remove_${resident.id}`}
-                aria-label={`Remove Guest of ${resident.name}`}
-                style={styles.monospace}
-                onClick={() => resident.removeGuest()}
-                disabled={meal.reconciled || !resident.canRemoveGuest}
-              />
-            </td>
+            </th>
+            <th className="background-white sticky-header">Guests</th>
+            <th className="background-white sticky-header">Late</th>
+            <th className="background-white sticky-header">Veg</th>
+            <th className="sticky-header" />
           </tr>
-        );
-      }
-    },
-  ),
-);
-
-const AttendeesBox = inject("store")(
-  observer(
-    class AttendeesBox extends Component {
-      render() {
-        return (
-          <div style={styles.main}>
-            <table className="background-white">
-              <thead>
-                <tr>
-                  <th className="background-white sticky-header">
-                    Name{" "}
-                    <span className="text-small text-italic text-secondary text-nowrap">
-                      (click to add)
-                    </span>
-                  </th>
-                  <th className="background-white sticky-header">Guests</th>
-                  <th className="background-white sticky-header">Late</th>
-                  <th className="background-white sticky-header">Veg</th>
-                  <th className="sticky-header" />
-                </tr>
-              </thead>
-              <tbody>
-                {Array.from(this.props.store.residents.values()).map(
-                  (resident) => (
-                    <AttendeeComponent key={resident.id} resident={resident} />
-                  ),
-                )}
-              </tbody>
-            </table>
-          </div>
-        );
-      }
-    },
-  ),
-);
+        </thead>
+        <tbody>
+          {Array.from(store.residents.values()).map((resident) => (
+            <AttendeeComponent key={resident.id} resident={resident} />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+});
 
 export default AttendeesBox;
