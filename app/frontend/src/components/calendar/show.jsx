@@ -29,6 +29,7 @@ import GuestRoomReservationsEdit from "../guest_room_reservations/edit";
 import CommonHouseReservationsEdit from "../common_house_reservations/edit";
 import EventsEdit from "../events/edit";
 import RotationsShow from "../rotations/show";
+import ConfirmModal from "../app/confirm_modal";
 
 import WebcalLinks from "./webcal_links";
 import toastStore from "../../stores/toast_store";
@@ -226,11 +227,51 @@ const MainCalendar = observer(() => {
     }
   });
 
-  const handleCloseModal = useCallback(function () {
+  // The discard gate (ADR 0006). Forms in the modal report unsaved
+  // changes through setModalDirty; every way out of the modal — a
+  // click outside it, Escape, the X — runs through handleCloseModal.
+  // A clean form closes at once. A dirty one gets one question:
+  // "Discard your changes?" Forms that just saved report themselves
+  // clean first, so Create/Update/Delete close without asking.
+  //
+  // A ref, not state: the flag is only read at close time, and a
+  // keystroke in a form must not re-render the calendar.
+  const modalDirtyRef = useRef(false);
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
+
+  const setModalDirty = useCallback(function (value) {
+    modalDirtyRef.current = value;
+  }, []);
+
+  const closeModal = useCallback(function () {
     toastStore.clearAll();
+    modalDirtyRef.current = false;
+    setDiscardConfirmOpen(false);
     navigateRef.current(
       `/calendar/${paramsRef.current.type}/${paramsRef.current.date}`,
     );
+  }, []);
+
+  const handleCloseModal = useCallback(
+    function () {
+      if (modalDirtyRef.current) {
+        setDiscardConfirmOpen(true);
+        return;
+      }
+      closeModal();
+    },
+    [closeModal],
+  );
+
+  const handleDiscardConfirm = useCallback(
+    function () {
+      closeModal();
+    },
+    [closeModal],
+  );
+
+  const handleDiscardCancel = useCallback(function () {
+    setDiscardConfirmOpen(false);
   }, []);
 
   const handleClickLogout = useCallback(function () {
@@ -343,17 +384,28 @@ const MainCalendar = observer(() => {
         case "guest_room_reservations":
         case "guest-room-reservations":
           return (
-            <GuestRoomReservationsNew handleCloseModal={handleCloseModal} />
+            <GuestRoomReservationsNew
+              handleCloseModal={handleCloseModal}
+              setDirty={setModalDirty}
+            />
           );
 
         case "common_house_reservations":
         case "common-house-reservations":
           return (
-            <CommonHouseReservationsNew handleCloseModal={handleCloseModal} />
+            <CommonHouseReservationsNew
+              handleCloseModal={handleCloseModal}
+              setDirty={setModalDirty}
+            />
           );
 
         case "events":
-          return <EventsNew handleCloseModal={handleCloseModal} />;
+          return (
+            <EventsNew
+              handleCloseModal={handleCloseModal}
+              setDirty={setModalDirty}
+            />
+          );
 
         default:
           return null;
@@ -369,6 +421,7 @@ const MainCalendar = observer(() => {
             <GuestRoomReservationsEdit
               eventId={params.id}
               handleCloseModal={handleCloseModal}
+              setDirty={setModalDirty}
             />
           );
 
@@ -378,6 +431,7 @@ const MainCalendar = observer(() => {
             <CommonHouseReservationsEdit
               eventId={params.id}
               handleCloseModal={handleCloseModal}
+              setDirty={setModalDirty}
             />
           );
 
@@ -386,6 +440,7 @@ const MainCalendar = observer(() => {
             <EventsEdit
               eventId={params.id}
               handleCloseModal={handleCloseModal}
+              setDirty={setModalDirty}
             />
           );
 
@@ -483,6 +538,15 @@ const MainCalendar = observer(() => {
       >
         {renderModal()}
       </Modal>
+      <ConfirmModal
+        isOpen={discardConfirmOpen}
+        message="Discard your changes?"
+        cancelLabel="Keep editing"
+        confirmLabel="Discard"
+        armMs={400}
+        onCancel={handleDiscardCancel}
+        onConfirm={handleDiscardConfirm}
+      />
     </div>
   );
 });

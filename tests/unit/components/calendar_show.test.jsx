@@ -190,4 +190,80 @@ describe("MainCalendar", () => {
     renderCalendar({ store: makeStore({ isOnline: false }) });
     expect(screen.getByText("OFFLINE")).toBeInTheDocument();
   });
+
+  // The discard gate (ADR 0006): a dirty form never closes silently.
+  // Every close path — the X, Escape, a click outside — runs through
+  // the same handleCloseModal, so the X stands in for all of them.
+  describe("the discard gate", () => {
+    function dirtyEventForm() {
+      renderCalendar({ path: "/calendar/all/2026-01-15/events/new" });
+      fireEvent.change(screen.getByLabelText("Title"), {
+        target: { value: "Movie Night" },
+      });
+    }
+
+    it("a dirty form asks instead of closing", () => {
+      dirtyEventForm();
+      fireEvent.click(screen.getByLabelText("Close"));
+
+      expect(screen.getByText("Discard your changes?")).toBeInTheDocument();
+      expect(screen.getByTestId("location")).toHaveTextContent("/events/new");
+    });
+
+    it("Keep editing returns to the form with the changes intact", () => {
+      dirtyEventForm();
+      fireEvent.click(screen.getByLabelText("Close"));
+      fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+
+      expect(
+        screen.queryByText("Discard your changes?"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByLabelText("Title")).toHaveValue("Movie Night");
+      expect(screen.getByTestId("location")).toHaveTextContent("/events/new");
+    });
+
+    it("Discard closes and drops the changes", () => {
+      dirtyEventForm();
+      fireEvent.click(screen.getByLabelText("Close"));
+
+      // The Discard button is armed only after armMs; jump the clock
+      // past the delay so the click goes through.
+      const nowSpy = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 1000);
+      fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+      nowSpy.mockRestore();
+
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        /^\/calendar\/all\/2026-01-15$/,
+      );
+    });
+
+    it("Escape on a dirty form also asks", () => {
+      dirtyEventForm();
+      fireEvent.keyDown(screen.getByRole("dialog"), {
+        key: "Escape",
+        keyCode: 27,
+      });
+
+      expect(screen.getByText("Discard your changes?")).toBeInTheDocument();
+      expect(screen.getByTestId("location")).toHaveTextContent("/events/new");
+    });
+
+    // The untouched case is the existing "closing the modal returns to
+    // the calendar path" test above; this pins the after-save case.
+    it("a successful Create closes without asking", async () => {
+      const axios = (await import("axios")).default;
+      axios.post.mockResolvedValue({ status: 200, data: {} });
+      dirtyEventForm();
+      fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+      await vi.waitFor(() => {
+        expect(screen.getByTestId("location")).toHaveTextContent(
+          /^\/calendar\/all\/2026-01-15$/,
+        );
+      });
+      expect(
+        screen.queryByText("Discard your changes?"),
+      ).not.toBeInTheDocument();
+    });
+  });
 });

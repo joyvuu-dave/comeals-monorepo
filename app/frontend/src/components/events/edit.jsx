@@ -10,6 +10,7 @@ import handleAxiosError from "../../helpers/handle_axios_error";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faTimes } from "@fortawesome/free-solid-svg-icons";
 import ConfirmModal from "../app/confirm_modal";
+import useDirtyReport from "../../helpers/use_dirty_report";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -18,7 +19,7 @@ dayjs.extend(timezone);
 // the inputs when it returns. There's no hosts dependency here (events
 // don't belong to a resident) so `data-populated` simply tracks the event
 // payload's arrival.
-function EventsEdit({ eventId, handleCloseModal }) {
+function EventsEdit({ eventId, handleCloseModal, setDirty }) {
   const store = useStore();
 
   const [loaded, setLoaded] = useState(false);
@@ -37,6 +38,10 @@ function EventsEdit({ eventId, handleCloseModal }) {
   // _isMounted.
   const mountedRef = useRef(true);
 
+  // The values the fetch hydrated, normalized for comparison. The
+  // form is dirty when any field differs from these (ADR 0006).
+  const initialRef = useRef(null);
+
   useEffect(
     function () {
       mountedRef.current = true;
@@ -47,31 +52,31 @@ function EventsEdit({ eventId, handleCloseModal }) {
           if (response.status === 200) {
             var evt = response.data;
             var sd = toCommunityDayjs(evt.start_date);
+            var ed = evt.end_date ? toCommunityDayjs(evt.end_date) : null;
+            var initial = {
+              title: evt.title || "",
+              description: evt.description || "",
+              day: sd.format("YYYY-MM-DD"),
+              startTime: `${sd.hour().toString().padStart(2, "0")}:${sd
+                .minute()
+                .toString()
+                .padStart(2, "0")}`,
+              endTime: ed
+                ? `${ed.hour().toString().padStart(2, "0")}:${ed
+                    .minute()
+                    .toString()
+                    .padStart(2, "0")}`
+                : "",
+              allDay: Boolean(evt.allday),
+            };
+            initialRef.current = initial;
             setEvent(evt);
             setLoaded(true);
             setTitle(evt.title);
             setDescription(evt.description);
             setDay(new Date(sd.year(), sd.month(), sd.date()));
-            setStartTime(
-              `${toCommunityDayjs(evt.start_date)
-                .hour()
-                .toString()
-                .padStart(2, "0")}:${toCommunityDayjs(evt.start_date)
-                .minute()
-                .toString()
-                .padStart(2, "0")}`,
-            );
-            setEndTime(
-              evt.end_date
-                ? `${toCommunityDayjs(evt.end_date)
-                    .hour()
-                    .toString()
-                    .padStart(2, "0")}:${toCommunityDayjs(evt.end_date)
-                    .minute()
-                    .toString()
-                    .padStart(2, "0")}`
-                : "",
-            );
+            setStartTime(initial.startTime);
+            setEndTime(initial.endTime);
             setAllDay(evt.allday);
           }
         })
@@ -110,6 +115,9 @@ function EventsEdit({ eventId, handleCloseModal }) {
           // the edit may have moved the event out of its old month.
           store.invalidateMonthForDate(event.start_date);
           store.invalidateMonthForDate(day);
+          // The changes are saved now; close without the discard
+          // question (ADR 0006).
+          setDirty(false);
           handleCloseModal();
         }
       })
@@ -136,6 +144,9 @@ function EventsEdit({ eventId, handleCloseModal }) {
         if (response.status === 200) {
           // The client that knows, invalidates (issue #37).
           store.invalidateMonthForDate(event.start_date);
+          // The record is gone; edited fields have nothing left to
+          // protect (ADR 0006).
+          setDirty(false);
           handleCloseModal();
         }
       })
@@ -155,6 +166,19 @@ function EventsEdit({ eventId, handleCloseModal }) {
   }
 
   const disabled = loadingAction !== null || !loaded;
+
+  const initial = initialRef.current;
+  useDirtyReport(
+    setDirty,
+    initial !== null &&
+      ((title || "") !== initial.title ||
+        (description || "") !== initial.description ||
+        (day ? dayjs(day).format("YYYY-MM-DD") : "") !== initial.day ||
+        startTime !== initial.startTime ||
+        endTime !== initial.endTime ||
+        Boolean(allDay) !== initial.allDay),
+  );
+
   return (
     <div>
       <div className="flex">
@@ -298,6 +322,9 @@ function EventsEdit({ eventId, handleCloseModal }) {
       <ConfirmModal
         isOpen={confirmDeleteOpen}
         message="Do you really want to delete this event?"
+        cancelLabel="Cancel"
+        confirmLabel="Delete"
+        armMs={400}
         onConfirm={handleDeleteConfirm}
         onCancel={handleDeleteCancel}
       />

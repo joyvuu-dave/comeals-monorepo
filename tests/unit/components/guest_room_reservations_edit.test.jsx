@@ -55,16 +55,29 @@ function makeStore() {
 
 // Both providers so the test holds across the inject() → useStore()
 // conversion.
-function renderForm({ store = makeStore(), handleCloseModal = vi.fn() } = {}) {
+function renderForm({
+  store = makeStore(),
+  handleCloseModal = vi.fn(),
+  setDirty = vi.fn(),
+} = {}) {
   render(
     <StoreContext.Provider value={store}>
       <GuestRoomReservationsEdit
         eventId={60}
         handleCloseModal={handleCloseModal}
+        setDirty={setDirty}
       />
     </StoreContext.Provider>,
   );
-  return { store, handleCloseModal };
+  return { store, handleCloseModal, setDirty };
+}
+
+// ConfirmModal's confirm button is armed only after armMs; jump the
+// clock past the delay so the click goes through.
+function armAndClick(button) {
+  const nowSpy = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 1000);
+  fireEvent.click(button);
+  nowSpy.mockRestore();
 }
 
 describe("GuestRoomReservationsEdit", () => {
@@ -118,7 +131,7 @@ describe("GuestRoomReservationsEdit", () => {
     ).toBeInTheDocument();
 
     const buttons = screen.getAllByRole("button", { name: "Delete" });
-    fireEvent.click(buttons[buttons.length - 1]);
+    armAndClick(buttons[buttons.length - 1]);
 
     expect(axios.delete).toHaveBeenCalledWith(
       "/api/v1/guest-room-reservations/60/delete",
@@ -126,5 +139,22 @@ describe("GuestRoomReservationsEdit", () => {
     await vi.waitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);
     });
+  });
+
+  // The discard gate (ADR 0006): the form compares its fields to the
+  // fetched values, so an edit reports dirty and undoing it reports
+  // clean again.
+  it("reports dirty on an edit and clean when the edit is undone", async () => {
+    const { setDirty } = renderForm();
+    await vi.waitFor(() => {
+      expect(screen.getByLabelText("Host")).toHaveValue("1");
+    });
+    expect(setDirty).toHaveBeenLastCalledWith(false);
+
+    fireEvent.change(screen.getByLabelText("Host"), { target: { value: "2" } });
+    expect(setDirty).toHaveBeenLastCalledWith(true);
+
+    fireEvent.change(screen.getByLabelText("Host"), { target: { value: "1" } });
+    expect(setDirty).toHaveBeenLastCalledWith(false);
   });
 });

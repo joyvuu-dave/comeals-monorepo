@@ -35,7 +35,11 @@ function makeStore() {
 // by calendar/show); the hooks version reads the router. The test
 // provides both, so it pins behavior across the conversion. Both store
 // providers for the same reason.
-function renderForm({ store = makeStore(), handleCloseModal = vi.fn() } = {}) {
+function renderForm({
+  store = makeStore(),
+  handleCloseModal = vi.fn(),
+  setDirty = vi.fn(),
+} = {}) {
   const match = { params: { date: "2026-01-15", type: "all" } };
   render(
     <StoreContext.Provider value={store}>
@@ -44,14 +48,18 @@ function renderForm({ store = makeStore(), handleCloseModal = vi.fn() } = {}) {
           <Route
             path={CALENDAR_PATH}
             element={
-              <EventsNew handleCloseModal={handleCloseModal} match={match} />
+              <EventsNew
+                handleCloseModal={handleCloseModal}
+                match={match}
+                setDirty={setDirty}
+              />
             }
           />
         </Routes>
       </MemoryRouter>
     </StoreContext.Provider>,
   );
-  return { store, handleCloseModal };
+  return { store, handleCloseModal, setDirty };
 }
 
 describe("EventsNew", () => {
@@ -112,5 +120,23 @@ describe("EventsNew", () => {
     const { handleCloseModal } = renderForm();
     fireEvent.click(screen.getByLabelText("Close"));
     expect(handleCloseModal).toHaveBeenCalledTimes(1);
+  });
+
+  // The discard gate (ADR 0006): an untouched New form is clean, so
+  // dismissing it stays free; typing makes it dirty, clearing the
+  // field makes it clean again.
+  it("reports clean while untouched and dirty once a field is filled", () => {
+    const { setDirty } = renderForm();
+    expect(setDirty).toHaveBeenLastCalledWith(false);
+
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "Movie Night" },
+    });
+    expect(setDirty).toHaveBeenLastCalledWith(true);
+
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "" },
+    });
+    expect(setDirty).toHaveBeenLastCalledWith(false);
   });
 });

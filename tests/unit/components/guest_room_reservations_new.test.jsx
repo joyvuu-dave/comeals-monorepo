@@ -40,7 +40,11 @@ function makeStore(overrides = {}) {
 
 // Both providers and both routing paths (match prop + real router) so
 // the test holds across the conversion.
-function renderForm({ store = makeStore(), handleCloseModal = vi.fn() } = {}) {
+function renderForm({
+  store = makeStore(),
+  handleCloseModal = vi.fn(),
+  setDirty = vi.fn(),
+} = {}) {
   const match = { params: { date: "2026-01-15", type: "all" } };
   render(
     <StoreContext.Provider value={store}>
@@ -56,6 +60,7 @@ function renderForm({ store = makeStore(), handleCloseModal = vi.fn() } = {}) {
               <GuestRoomReservationsNew
                 handleCloseModal={handleCloseModal}
                 match={match}
+                setDirty={setDirty}
               />
             }
           />
@@ -63,7 +68,7 @@ function renderForm({ store = makeStore(), handleCloseModal = vi.fn() } = {}) {
       </MemoryRouter>
     </StoreContext.Provider>,
   );
-  return { store, handleCloseModal };
+  return { store, handleCloseModal, setDirty };
 }
 
 describe("GuestRoomReservationsNew", () => {
@@ -101,5 +106,18 @@ describe("GuestRoomReservationsNew", () => {
     await vi.waitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);
     });
+  });
+
+  // The discard gate (ADR 0006): an untouched New form is clean, so
+  // dismissing it stays free; filling a field makes it dirty.
+  it("reports clean while untouched and dirty once a field is filled", () => {
+    const { setDirty } = renderForm();
+    expect(setDirty).toHaveBeenLastCalledWith(false);
+
+    fireEvent.change(screen.getByLabelText("Host"), { target: { value: "2" } });
+    expect(setDirty).toHaveBeenLastCalledWith(true);
+
+    fireEvent.change(screen.getByLabelText("Host"), { target: { value: "" } });
+    expect(setDirty).toHaveBeenLastCalledWith(false);
   });
 });

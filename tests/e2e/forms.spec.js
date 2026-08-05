@@ -44,6 +44,53 @@ test.describe("Form CRUD", () => {
       expect(eventPayload.title).toBe("Test Event");
     });
 
+    // The discard gate (ADR 0006): a dirty form never closes silently.
+    test("dismissing a dirty form asks, Keep editing keeps it, Discard closes it", async ({
+      page,
+    }) => {
+      await page.goto("/calendar/all/2026-01-15/");
+      await page.waitForLoadState("networkidle");
+      await expect(page.locator(".rbc-calendar")).toBeVisible({
+        timeout: 10000,
+      });
+
+      await page.locator("text=Event").first().click();
+      const modal = page.locator(".ReactModal__Content--after-open").first();
+      await expect(modal).toBeVisible({ timeout: 5000 });
+      await modal.locator("#event-new-title").fill("Movie Night");
+
+      // Escape on a dirty form asks instead of closing.
+      await page.keyboard.press("Escape");
+      const confirmOverlay = page.locator(".ReactModal__Overlay").last();
+      await expect(
+        confirmOverlay.locator("text=Discard your changes?"),
+      ).toBeVisible({ timeout: 5000 });
+
+      // Keep editing returns to the form with the changes intact.
+      await confirmOverlay.locator('button:has-text("Keep editing")').click();
+      await expect(modal.locator("#event-new-title")).toHaveValue(
+        "Movie Night",
+      );
+
+      // The X asks too; Discard (armed after 400ms) closes the modal.
+      await modal.locator(".close-button").click();
+      await expect(
+        page
+          .locator(".ReactModal__Overlay")
+          .last()
+          .locator("text=Discard your changes?"),
+      ).toBeVisible({ timeout: 5000 });
+      await page.waitForTimeout(450);
+      await page
+        .locator(".ReactModal__Overlay")
+        .last()
+        .locator('button:has-text("Discard")')
+        .click();
+      await page.waitForSelector(".ReactModal__Content--after-open", {
+        state: "detached",
+      });
+    });
+
     test("edit an existing event loads data via GET", async ({ page }) => {
       let eventGetUrl = null;
       await page.route("**/api/v1/events/**", (route) => {
@@ -136,7 +183,10 @@ test.describe("Form CRUD", () => {
       await expect(
         confirmOverlay.locator("text=Do you really want to delete this event?"),
       ).toBeVisible({ timeout: 5000 });
-      // Click Delete in the confirmation modal
+      // The confirm button is armed only after 400ms (ConfirmModal's
+      // armMs), so a click cannot land before a person could read the
+      // question. Wait past the delay, then click.
+      await page.waitForTimeout(450);
       await confirmOverlay
         .locator('.button-warning:has-text("Delete")')
         .click();

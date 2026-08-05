@@ -11,6 +11,7 @@ import { useStore } from "../../helpers/store_context";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faTimes } from "@fortawesome/free-solid-svg-icons";
 import ConfirmModal from "../app/confirm_modal";
+import useDirtyReport from "../../helpers/use_dirty_report";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -20,7 +21,7 @@ dayjs.extend(timezone);
 // the shared `store.hosts` cache — see guest_room_reservations/edit.jsx
 // for the full pattern.
 const CommonHouseReservationsEdit = observer(
-  ({ eventId, handleCloseModal }) => {
+  ({ eventId, handleCloseModal, setDirty }) => {
     const store = useStore();
 
     const [loaded, setLoaded] = useState(false);
@@ -38,6 +39,10 @@ const CommonHouseReservationsEdit = observer(
     // _isMounted.
     const mountedRef = useRef(true);
 
+    // The values the fetch hydrated, normalized for comparison. The
+    // form is dirty when any field differs from these (ADR 0006).
+    const initialRef = useRef(null);
+
     useEffect(
       function () {
         mountedRef.current = true;
@@ -51,29 +56,30 @@ const CommonHouseReservationsEdit = observer(
             if (response.status === 200) {
               var evt = response.data.event;
               var sd = toCommunityDayjs(evt.start_date);
+              var ed = toCommunityDayjs(evt.end_date);
+              // title is nullable in the database; a null value would make
+              // the controlled input uncontrolled.
+              var initial = {
+                residentId: String(evt.resident_id),
+                title: evt.title || "",
+                day: sd.format("YYYY-MM-DD"),
+                startTime: `${sd.hour().toString().padStart(2, "0")}:${sd
+                  .minute()
+                  .toString()
+                  .padStart(2, "0")}`,
+                endTime: `${ed.hour().toString().padStart(2, "0")}:${ed
+                  .minute()
+                  .toString()
+                  .padStart(2, "0")}`,
+              };
+              initialRef.current = initial;
               setEvent(evt);
               setLoaded(true);
               setResidentId(evt.resident_id);
-              setTitle(evt.title);
+              setTitle(initial.title);
               setDay(new Date(sd.year(), sd.month(), sd.date()));
-              setStartTime(
-                `${toCommunityDayjs(evt.start_date)
-                  .hour()
-                  .toString()
-                  .padStart(2, "0")}:${toCommunityDayjs(evt.start_date)
-                  .minute()
-                  .toString()
-                  .padStart(2, "0")}`,
-              );
-              setEndTime(
-                `${toCommunityDayjs(evt.end_date)
-                  .hour()
-                  .toString()
-                  .padStart(2, "0")}:${toCommunityDayjs(evt.end_date)
-                  .minute()
-                  .toString()
-                  .padStart(2, "0")}`,
-              );
+              setStartTime(initial.startTime);
+              setEndTime(initial.endTime);
             }
           })
           .catch(function (error) {
@@ -111,6 +117,9 @@ const CommonHouseReservationsEdit = observer(
             // its old month.
             store.invalidateMonthForDate(event.start_date);
             store.invalidateMonthForDate(day);
+            // The changes are saved now; close without the discard
+            // question (ADR 0006).
+            setDirty(false);
             handleCloseModal();
           }
         })
@@ -137,6 +146,9 @@ const CommonHouseReservationsEdit = observer(
           if (response.status === 200) {
             // The client that knows, invalidates (issue #37).
             store.invalidateMonthForDate(event.start_date);
+            // The record is gone; edited fields have nothing left to
+            // protect (ADR 0006).
+            setDirty(false);
             handleCloseModal();
           }
         })
@@ -158,6 +170,17 @@ const CommonHouseReservationsEdit = observer(
     const residents = store.hosts;
     const disabled = loadingAction !== null || !loaded;
     const populated = loaded && store.hostsLoaded;
+
+    const initial = initialRef.current;
+    useDirtyReport(
+      setDirty,
+      initial !== null &&
+        (String(residentId) !== initial.residentId ||
+          title !== initial.title ||
+          (day ? dayjs(day).format("YYYY-MM-DD") : "") !== initial.day ||
+          startTime !== initial.startTime ||
+          endTime !== initial.endTime),
+    );
     return (
       <div>
         <div className="flex">
@@ -302,6 +325,9 @@ const CommonHouseReservationsEdit = observer(
         <ConfirmModal
           isOpen={confirmDeleteOpen}
           message="Do you really want to delete this reservation?"
+          cancelLabel="Cancel"
+          confirmLabel="Delete"
+          armMs={400}
           onConfirm={handleDeleteConfirm}
           onCancel={handleDeleteCancel}
         />

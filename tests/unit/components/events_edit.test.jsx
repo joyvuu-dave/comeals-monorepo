@@ -50,13 +50,29 @@ function makeStore() {
 
 // Both providers so the test holds across the inject() → useStore()
 // conversion.
-function renderForm({ store = makeStore(), handleCloseModal = vi.fn() } = {}) {
+function renderForm({
+  store = makeStore(),
+  handleCloseModal = vi.fn(),
+  setDirty = vi.fn(),
+} = {}) {
   render(
     <StoreContext.Provider value={store}>
-      <EventsEdit eventId={70} handleCloseModal={handleCloseModal} />
+      <EventsEdit
+        eventId={70}
+        handleCloseModal={handleCloseModal}
+        setDirty={setDirty}
+      />
     </StoreContext.Provider>,
   );
-  return { store, handleCloseModal };
+  return { store, handleCloseModal, setDirty };
+}
+
+// ConfirmModal's confirm button is armed only after armMs; jump the
+// clock past the delay so the click goes through.
+function armAndClick(button) {
+  const nowSpy = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 1000);
+  fireEvent.click(button);
+  nowSpy.mockRestore();
 }
 
 describe("EventsEdit", () => {
@@ -110,7 +126,7 @@ describe("EventsEdit", () => {
     // ConfirmModal's confirm button says Delete; it is the one inside
     // the modal overlay.
     const buttons = screen.getAllByRole("button", { name: "Delete" });
-    fireEvent.click(buttons[buttons.length - 1]);
+    armAndClick(buttons[buttons.length - 1]);
 
     expect(axios.delete).toHaveBeenCalledWith("/api/v1/events/70/delete");
     await vi.waitFor(() => {
@@ -129,5 +145,57 @@ describe("EventsEdit", () => {
     expect(
       screen.queryByText("Do you really want to delete this event?"),
     ).not.toBeInTheDocument();
+  });
+
+  // Optional does not mean ignored: clearing a description the event
+  // had is a real change someone could lose, so it reports dirty.
+  it("clearing the optional description reports dirty", async () => {
+    const { setDirty } = renderForm();
+    await screen.findByDisplayValue("Community Meeting");
+    expect(setDirty).toHaveBeenLastCalledWith(false);
+
+    fireEvent.change(screen.getByLabelText("Description"), {
+      target: { value: "" },
+    });
+    expect(setDirty).toHaveBeenLastCalledWith(true);
+  });
+
+  // end_date is nullable and hydrates as an empty End Time. Setting a
+  // time is dirty; clearing it again leaves nothing that differs from
+  // the record, so it reports clean — null and "" must not read as a
+  // difference.
+  it("a null end time set and cleared again reports clean", async () => {
+    axios.get.mockResolvedValue({
+      status: 200,
+      data: { ...EVENT, end_date: null },
+    });
+    const { setDirty } = renderForm();
+    await screen.findByDisplayValue("Community Meeting");
+    expect(setDirty).toHaveBeenLastCalledWith(false);
+
+    fireEvent.change(screen.getByLabelText("End Time"), {
+      target: { value: "21:00" },
+    });
+    expect(setDirty).toHaveBeenLastCalledWith(true);
+
+    fireEvent.change(screen.getByLabelText("End Time"), {
+      target: { value: "" },
+    });
+    expect(setDirty).toHaveBeenLastCalledWith(false);
+  });
+
+  // The discard gate (ADR 0006): the form compares its fields to the
+  // fetched values, so an edit reports dirty and undoing it reports
+  // clean again.
+  it("reports dirty on an edit and clean when the edit is undone", async () => {
+    const { setDirty } = renderForm();
+    const title = await screen.findByDisplayValue("Community Meeting");
+    expect(setDirty).toHaveBeenLastCalledWith(false);
+
+    fireEvent.change(title, { target: { value: "Annual Meeting" } });
+    expect(setDirty).toHaveBeenLastCalledWith(true);
+
+    fireEvent.change(title, { target: { value: "Community Meeting" } });
+    expect(setDirty).toHaveBeenLastCalledWith(false);
   });
 });

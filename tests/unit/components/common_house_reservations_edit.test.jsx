@@ -57,16 +57,29 @@ function makeStore() {
 
 // Both providers so the test holds across the inject() → useStore()
 // conversion.
-function renderForm({ store = makeStore(), handleCloseModal = vi.fn() } = {}) {
+function renderForm({
+  store = makeStore(),
+  handleCloseModal = vi.fn(),
+  setDirty = vi.fn(),
+} = {}) {
   render(
     <StoreContext.Provider value={store}>
       <CommonHouseReservationsEdit
         eventId={50}
         handleCloseModal={handleCloseModal}
+        setDirty={setDirty}
       />
     </StoreContext.Provider>,
   );
-  return { store, handleCloseModal };
+  return { store, handleCloseModal, setDirty };
+}
+
+// ConfirmModal's confirm button is armed only after armMs; jump the
+// clock past the delay so the click goes through.
+function armAndClick(button) {
+  const nowSpy = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 1000);
+  fireEvent.click(button);
+  nowSpy.mockRestore();
 }
 
 describe("CommonHouseReservationsEdit", () => {
@@ -84,6 +97,25 @@ describe("CommonHouseReservationsEdit", () => {
       "/api/v1/common-house-reservations/50",
     );
     expect(screen.getByLabelText("Resident")).toHaveValue("1");
+  });
+
+  // The title column is nullable. A null title must hydrate the input
+  // as "", not null — a null value makes React drop the input to
+  // uncontrolled (the warning-on-error guard in render_setup.js also
+  // catches this, this test pins the fix itself).
+  it("hydrates a null title as an empty string", async () => {
+    axios.get.mockResolvedValue({
+      status: 200,
+      data: {
+        event: { ...RESERVATION.event, title: null },
+      },
+    });
+    renderForm();
+
+    await vi.waitFor(() => {
+      expect(screen.getByLabelText("Resident")).toHaveValue("1");
+    });
+    expect(screen.getByLabelText("Title")).toHaveValue("");
   });
 
   it("Update patches the edited reservation", async () => {
@@ -116,7 +148,7 @@ describe("CommonHouseReservationsEdit", () => {
     ).toBeInTheDocument();
 
     const buttons = screen.getAllByRole("button", { name: "Delete" });
-    fireEvent.click(buttons[buttons.length - 1]);
+    armAndClick(buttons[buttons.length - 1]);
 
     expect(axios.delete).toHaveBeenCalledWith(
       "/api/v1/common-house-reservations/50/delete",
@@ -124,5 +156,89 @@ describe("CommonHouseReservationsEdit", () => {
     await vi.waitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);
     });
+  });
+
+  // Optional does not mean ignored: clearing a title the reservation
+  // had is a real change someone could lose, so it reports dirty.
+  it("clearing the optional title reports dirty", async () => {
+    const { setDirty } = renderForm();
+    await screen.findByDisplayValue("Book Club");
+    expect(setDirty).toHaveBeenLastCalledWith(false);
+
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "" },
+    });
+    expect(setDirty).toHaveBeenLastCalledWith(true);
+  });
+
+  // The mirror case: the title column is nullable, and a null hydrates
+  // as "". Typing into it and deleting it again leaves nothing that
+  // differs from the record, so it reports clean — null and "" must
+  // not read as a difference.
+  it("a null title typed into and cleared again reports clean", async () => {
+    axios.get.mockResolvedValue({
+      status: 200,
+      data: { event: { ...RESERVATION.event, title: null } },
+    });
+    const { setDirty } = renderForm();
+    await vi.waitFor(() => {
+      expect(screen.getByLabelText("Resident")).toHaveValue("1");
+    });
+    expect(setDirty).toHaveBeenLastCalledWith(false);
+
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "Choir" },
+    });
+    expect(setDirty).toHaveBeenLastCalledWith(true);
+
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "" },
+    });
+    expect(setDirty).toHaveBeenLastCalledWith(false);
+  });
+
+  // The discard gate (ADR 0006): the form compares its fields to the
+  // fetched values, so an edit reports dirty and undoing it reports
+  // clean again.
+  it("reports dirty on an edit and clean when the edit is undone", async () => {
+    const { setDirty } = renderForm();
+    await screen.findByDisplayValue("Book Club");
+    expect(setDirty).toHaveBeenLastCalledWith(false);
+
+    fireEvent.change(screen.getByLabelText("Resident"), {
+      target: { value: "2" },
+    });
+    expect(setDirty).toHaveBeenLastCalledWith(true);
+
+    fireEvent.change(screen.getByLabelText("Resident"), {
+      target: { value: "1" },
+    });
+    expect(setDirty).toHaveBeenLastCalledWith(false);
+  });
+
+  // A successful Update must report clean before it asks to close, or
+  // the gate in calendar/show.jsx would raise the discard question on
+  // a save. Call order, not final state: the mocked handleCloseModal
+  // keeps the form mounted, so later renders report dirty again —
+  // in the app the form unmounts instead.
+  it("a successful Update reports clean before closing", async () => {
+    axios.patch.mockResolvedValue({ status: 200, data: {} });
+    const { handleCloseModal, setDirty } = renderForm();
+
+    await screen.findByDisplayValue("Book Club");
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "Choir" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    await vi.waitFor(() => {
+      expect(handleCloseModal).toHaveBeenCalledTimes(1);
+    });
+
+    const closeOrder = handleCloseModal.mock.invocationCallOrder[0];
+    const callsBeforeClose = setDirty.mock.calls.filter(
+      (args, i) => setDirty.mock.invocationCallOrder[i] < closeOrder,
+    );
+    expect(callsBeforeClose.length).toBeGreaterThan(0);
+    expect(callsBeforeClose[callsBeforeClose.length - 1]).toEqual([false]);
   });
 });

@@ -9,13 +9,14 @@ import { useStore } from "../../helpers/store_context";
 import handleAxiosError from "../../helpers/handle_axios_error";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faTimes } from "@fortawesome/free-solid-svg-icons";
+import useDirtyReport from "../../helpers/use_dirty_report";
 
 // No `ready` gate: render the full form from the first frame. The host
 // select is reactively bound to `store.hosts` (populated on mount via
 // store.ensureHosts()), so the dropdown lights up as soon as the cached
 // or freshly-fetched list is available — and stays in sync in real time
 // via the Pusher `community-<id>-residents` subscription.
-const GuestRoomReservationsNew = observer(({ handleCloseModal }) => {
+const GuestRoomReservationsNew = observer(({ handleCloseModal, setDirty }) => {
   const store = useStore();
   const params = useParams();
 
@@ -55,6 +56,9 @@ const GuestRoomReservationsNew = observer(({ handleCloseModal }) => {
           // reservation's month may be too far out to have a Pusher
           // channel.
           store.invalidateMonthForDate(day);
+          // The reservation is saved now; close without the discard
+          // question (ADR 0006).
+          setDirty(false);
           handleCloseModal();
         }
       })
@@ -68,6 +72,10 @@ const GuestRoomReservationsNew = observer(({ handleCloseModal }) => {
   function handleDayChange(val) {
     setDay(val);
   }
+
+  // Dirty means the user changed something; the empty defaults the
+  // form opens with do not count (ADR 0006).
+  useDirtyReport(setDirty, residentId !== "" || day !== null);
 
   const hosts = store.hosts;
   return (

@@ -9,8 +9,9 @@ import { generateTimes } from "../../helpers/helpers";
 import handleAxiosError from "../../helpers/handle_axios_error";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faTimes } from "@fortawesome/free-solid-svg-icons";
+import useDirtyReport from "../../helpers/use_dirty_report";
 
-function EventsNew({ handleCloseModal }) {
+function EventsNew({ handleCloseModal, setDirty }) {
   const store = useStore();
   const params = useParams();
 
@@ -57,6 +58,9 @@ function EventsNew({ handleCloseModal }) {
           // The client that knows, invalidates (issue #37): the new
           // event's month may be too far out to have a Pusher channel.
           store.invalidateMonthForDate(day);
+          // The event is saved now; close without the discard
+          // question (ADR 0006).
+          setDirty(false);
           handleCloseModal();
         }
       })
@@ -70,6 +74,18 @@ function EventsNew({ handleCloseModal }) {
   function handleDayChange(val) {
     setDay(val);
   }
+
+  // Dirty means the user changed something; the empty defaults the
+  // form opens with do not count (ADR 0006).
+  useDirtyReport(
+    setDirty,
+    title !== "" ||
+      description !== "" ||
+      day !== null ||
+      startTime !== "" ||
+      endTime !== "" ||
+      allDay,
+  );
 
   return (
     <div>
