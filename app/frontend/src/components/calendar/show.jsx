@@ -530,6 +530,32 @@ const MainCalendar = observer(() => {
         isOpen={typeof params.modal !== "undefined"}
         contentLabel="Event Modal"
         onRequestClose={handleCloseModal}
+        // react-modal's own overlay-click detection breaks after a day
+        // is picked: react-day-picker stops the click's propagation
+        // (its handleDayClick calls e.stopPropagation()), so the click
+        // never bubbles to the overlay — and the overlay's click
+        // handler is the only place react-modal resets its internal
+        // shouldClose flag. The flag sticks at false and the next
+        // click outside the form is silently eaten (one dead click,
+        // then the gate fires). So the built-in path is off, and the
+        // overlay closes on its own mousedown instead: a press that
+        // starts on the overlay itself is a close request, and no
+        // widget inside the form can stop a mousedown it never sees.
+        // Escape still arrives through onRequestClose.
+        shouldCloseOnOverlayClick={false}
+        overlayElement={(props, contentElement) => (
+          <div
+            {...props}
+            onMouseDown={(e) => {
+              if (props.onMouseDown) props.onMouseDown(e);
+              if (e.target === e.currentTarget) {
+                handleCloseModal();
+              }
+            }}
+          >
+            {contentElement}
+          </div>
+        )}
         style={{
           content: {
             backgroundColor: "#CCDEEA",

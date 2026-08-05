@@ -237,6 +237,44 @@ describe("MainCalendar", () => {
       );
     });
 
+    // The overlay closes on its own mousedown, not react-modal's
+    // click detection — a day-picker click never bubbles to the
+    // overlay (react-day-picker stops it), which stranded react-modal's
+    // internal flag and made the first outside click do nothing.
+    it("a mousedown on the overlay asks when the form is dirty", () => {
+      dirtyEventForm();
+      const overlay = document.querySelector(".ReactModal__Overlay");
+      fireEvent.mouseDown(overlay);
+
+      expect(screen.getByText("Discard your changes?")).toBeInTheDocument();
+      expect(screen.getByTestId("location")).toHaveTextContent("/events/new");
+    });
+
+    it("a mousedown on the overlay closes a clean form at once", () => {
+      renderCalendar({ path: "/calendar/all/2026-01-15/events/new" });
+      const overlay = document.querySelector(".ReactModal__Overlay");
+      fireEvent.mouseDown(overlay);
+
+      expect(
+        screen.queryByText("Discard your changes?"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        /^\/calendar\/all\/2026-01-15$/,
+      );
+    });
+
+    // A mousedown that starts inside the form and ends on the overlay
+    // (a text-selection drag) must not count as a close request.
+    it("a mousedown inside the form does not close it", () => {
+      dirtyEventForm();
+      fireEvent.mouseDown(screen.getByLabelText("Title"));
+
+      expect(
+        screen.queryByText("Discard your changes?"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("location")).toHaveTextContent("/events/new");
+    });
+
     it("Escape on a dirty form also asks", () => {
       dirtyEventForm();
       fireEvent.keyDown(screen.getByRole("dialog"), {

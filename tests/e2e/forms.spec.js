@@ -285,5 +285,37 @@ test.describe("Form CRUD", () => {
       expect(postMethod).toBe("POST");
       expect(postPayload.resident_id).toBeDefined();
     });
+
+    // Regression: react-day-picker stops its day click's propagation,
+    // which used to strand react-modal's shouldClose flag at false —
+    // after picking a day, the first click outside the form was
+    // silently eaten and only the second one raised the discard
+    // question. The overlay now closes on its own mousedown (see
+    // calendar/show.jsx), so ONE click must ask.
+    test("after picking a day, one click outside the form asks", async ({
+      page,
+    }) => {
+      await page.goto("/calendar/all/2026-01-15/guest_room_reservations/new/");
+      await page.waitForLoadState("networkidle");
+      const modal = page.locator(".ReactModal__Content--after-open").first();
+      await expect(modal.locator("#guest-room-new-day")).toBeVisible({
+        timeout: 5000,
+      });
+
+      await modal.locator("#guest-room-new-day").click();
+      await modal.getByRole("button", { name: /January 20/ }).click();
+
+      await page
+        .locator(".ReactModal__Overlay")
+        .first()
+        .click({ position: { x: 8, y: 8 } });
+
+      await expect(
+        page
+          .locator(".ReactModal__Overlay")
+          .last()
+          .locator("text=Discard your changes?"),
+      ).toBeVisible({ timeout: 3000 });
+    });
   });
 });
