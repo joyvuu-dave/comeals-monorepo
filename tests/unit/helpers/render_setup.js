@@ -25,17 +25,15 @@ let consoleErrorSpy = null;
 beforeEach(() => {
   controlledInputWarnings = [];
   const originalConsoleError = console.error;
-  consoleErrorSpy = vi
-    .spyOn(console, "error")
-    .mockImplementation((...args) => {
-      const message = args
-        .map((arg) => (typeof arg === "string" ? arg : String(arg)))
-        .join(" ");
-      if (CONTROLLED_INPUT_WARNINGS.some((pattern) => pattern.test(message))) {
-        controlledInputWarnings.push(message);
-      }
-      originalConsoleError(...args);
-    });
+  consoleErrorSpy = vi.spyOn(console, "error").mockImplementation((...args) => {
+    const message = args
+      .map((arg) => (typeof arg === "string" ? arg : String(arg)))
+      .join(" ");
+    if (CONTROLLED_INPUT_WARNINGS.some((pattern) => pattern.test(message))) {
+      controlledInputWarnings.push(message);
+    }
+    originalConsoleError(...args);
+  });
 });
 
 afterEach(() => {
