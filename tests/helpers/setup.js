@@ -75,10 +75,10 @@ async function disableIdleTimer(page) {
  */
 async function clearStorage(page) {
   await page.evaluate(async () => {
-    if (window.localforage) {
-      await window.localforage.clear();
-    }
-    // Also clear sessionStorage (chunk retry flag)
+    // The IndexedDB cache needs no clearing here: the window.localforage
+    // branch this used to have was dead (the bundle never put localforage
+    // on window), and the app switched to idb-keyval anyway.
+    // Clear sessionStorage (chunk retry flag)
     sessionStorage.clear();
   });
 }

@@ -38,17 +38,18 @@ vi.mock("pusher-js", () => {
       };
       this.subscribe = vi.fn(() => ({ bind: vi.fn(), name: "test-channel" }));
       this.unsubscribe = vi.fn();
+      MockPusher.instances.push(this);
     }
   }
+  MockPusher.instances = [];
   return { default: MockPusher };
 });
 
-vi.mock("localforage", () => ({
-  default: {
-    getItem: vi.fn(() => Promise.resolve(null)),
-    setItem: vi.fn(() => Promise.resolve()),
-    removeItem: vi.fn(() => Promise.resolve()),
-  },
+vi.mock("idb-keyval", () => ({
+  get: vi.fn(() => Promise.resolve(undefined)),
+  set: vi.fn(() => Promise.resolve()),
+  del: vi.fn(() => Promise.resolve()),
+  clear: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock("uuid", () => {
@@ -61,7 +62,7 @@ vi.mock("uuid", () => {
 import { unprotect, isAlive } from "mobx-state-tree";
 import { runInAction } from "mobx";
 import { DataStore } from "../../../app/frontend/src/stores/data_store.js";
-import localforage from "localforage";
+import * as idbKeyval from "idb-keyval";
 import axios from "axios";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
 import {
@@ -956,7 +957,7 @@ describe("DataStore", () => {
         data: makeMealData(1, { attending: false, late: true }),
       };
       axios.get.mockResolvedValueOnce(meal1Response);
-      localforage.setItem.mockResolvedValueOnce();
+      idbKeyval.set.mockResolvedValueOnce();
 
       // Switch to meal 2 and load its data
       runInAction(() => {
@@ -971,7 +972,7 @@ describe("DataStore", () => {
 
       // Wait for the axios + localforage promise chain to resolve
       await vi.waitFor(() => {
-        expect(localforage.setItem).toHaveBeenCalled();
+        expect(idbKeyval.set).toHaveBeenCalled();
       });
 
       // Flush microtasks
@@ -1028,7 +1029,7 @@ describe("DataStore", () => {
       expect(window.Comeals.calendarChannel.name).toMatch(/^community-/);
     });
 
-    it("switchMeals skips localforage callback if user already navigated away", async () => {
+    it("switchMeals skips the cache callback if user already navigated away", async () => {
       const store = createDataStore({
         mealProps: { id: 1 },
       });
@@ -1045,7 +1046,7 @@ describe("DataStore", () => {
 
       // Set up localforage to return cached data for meal 2
       const meal2Data = makeMealData(2, { attending: true });
-      localforage.getItem.mockResolvedValueOnce(meal2Data);
+      idbKeyval.get.mockResolvedValueOnce(meal2Data);
 
       // switchMeals to meal 2 starts the async localforage lookup
       store.switchMeals(2);
@@ -1129,7 +1130,7 @@ describe("DataStore", () => {
 
       expect(store.calendarEvents.length).toBe(1);
       expect(store.calendarEvents[0].title).toBe("August event");
-      expect(localforage.setItem).not.toHaveBeenCalledWith(
+      expect(idbKeyval.set).not.toHaveBeenCalledWith(
         expect.anything(),
         julyResponse.data,
       );
@@ -1155,7 +1156,7 @@ describe("DataStore", () => {
       // (Adjacent-month prefetch also reads the July key; keep every
       // resolver so we can pick the first — the switchMonths read.)
       const julyReads = [];
-      localforage.getItem.mockImplementation((key) => {
+      idbKeyval.get.mockImplementation((key) => {
         if (key === julyKey) {
           return new Promise((resolve) => {
             julyReads.push(resolve);
@@ -2706,7 +2707,7 @@ describe("DataStore", () => {
       vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
       await vi.advanceTimersByTimeAsync(0);
 
-      expect(localforage.removeItem).toHaveBeenCalledWith("1");
+      expect(idbKeyval.del).toHaveBeenCalledWith("1");
     });
 
     it("evicts the meal's cached payload when the server saves with a warning", async () => {
@@ -2722,7 +2723,7 @@ describe("DataStore", () => {
       vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
       await vi.advanceTimersByTimeAsync(0);
 
-      expect(localforage.removeItem).toHaveBeenCalledWith("1");
+      expect(idbKeyval.del).toHaveBeenCalledWith("1");
     });
 
     it("does not evict when the save fails outright", async () => {
@@ -2738,7 +2739,7 @@ describe("DataStore", () => {
       vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
       await vi.advanceTimersByTimeAsync(0);
 
-      expect(localforage.removeItem).not.toHaveBeenCalled();
+      expect(idbKeyval.del).not.toHaveBeenCalled();
     });
 
     it("does not resend a queued save after the user switches meals", async () => {
@@ -2968,7 +2969,7 @@ describe("DataStore", () => {
 
       store.invalidateMonthForDate(new Date(2026, 8, 15)); // Sep 15, 2026
 
-      expect(localforage.removeItem).toHaveBeenCalledWith(
+      expect(idbKeyval.del).toHaveBeenCalledWith(
         "community-test-community-id-calendar-2026-9",
       );
     });
@@ -2979,7 +2980,7 @@ describe("DataStore", () => {
       // 2026-10-01 02:00 UTC is 2026-09-30 19:00 in America/Los_Angeles.
       store.invalidateMonthForDate("2026-10-01T02:00:00.000Z");
 
-      expect(localforage.removeItem).toHaveBeenCalledWith(
+      expect(idbKeyval.del).toHaveBeenCalledWith(
         "community-test-community-id-calendar-2026-9",
       );
     });
@@ -2989,7 +2990,7 @@ describe("DataStore", () => {
 
       store.invalidateMonthForDate("2026-10-05");
 
-      expect(localforage.removeItem).toHaveBeenCalledWith(
+      expect(idbKeyval.del).toHaveBeenCalledWith(
         "community-test-community-id-calendar-2026-10",
       );
     });
@@ -3000,7 +3001,7 @@ describe("DataStore", () => {
       store.invalidateMonthForDate(null);
       store.invalidateMonthForDate("not-a-date");
 
-      expect(localforage.removeItem).not.toHaveBeenCalled();
+      expect(idbKeyval.del).not.toHaveBeenCalled();
     });
   });
 
@@ -3008,11 +3009,25 @@ describe("DataStore", () => {
     // The mock Pusher's connection.bind is a vi.fn(); pull out the
     // state_change handler afterCreate registered so tests can drive
     // connection transitions directly.
-    function stateChangeHandler() {
-      const call = window.Comeals.pusher.connection.bind.mock.calls.find(
-        ([event]) => event === "state_change",
-      );
-      return call[1];
+    async function stateChangeHandler() {
+      // The store talks to the pusherClient facade; the real (mock)
+      // Pusher arrives through a dynamic import a few microtasks after
+      // createDataStore, and the facade then replays the queued
+      // connection.bind calls onto it. Flush microtasks until the
+      // state_change handler from THIS test's store has been bound
+      // (clearAllMocks empties the calls list between tests).
+      const Pusher = (await import("pusher-js")).default;
+      function calls() {
+        const instance = Pusher.instances[Pusher.instances.length - 1];
+        if (!instance) return [];
+        return instance.connection.bind.mock.calls.filter(
+          ([event]) => event === "state_change",
+        );
+      }
+      for (let i = 0; i < 20 && calls().length === 0; i++) {
+        await Promise.resolve();
+      }
+      return calls()[calls().length - 1][1];
     }
 
     afterEach(async () => {
@@ -3028,9 +3043,9 @@ describe("DataStore", () => {
       );
     });
 
-    it("does not refetch on the first connection at page load", () => {
+    it("does not refetch on the first connection at page load", async () => {
       createDataStore();
-      const handler = stateChangeHandler();
+      const handler = await stateChangeHandler();
       axios.get.mockClear();
 
       handler({ previous: "connecting", current: "connected" });
@@ -3042,9 +3057,9 @@ describe("DataStore", () => {
     // pusher-js only reaches "unavailable" after ~10s. A shorter drop
     // reconnects as connecting → connected, and events broadcast during
     // the gap were silently lost (Pusher does not replay them).
-    it("refetches after a short blip that never reached unavailable", () => {
+    it("refetches after a short blip that never reached unavailable", async () => {
       createDataStore();
-      const handler = stateChangeHandler();
+      const handler = await stateChangeHandler();
       handler({ previous: "connecting", current: "connected" }); // page load
       axios.get.mockClear();
 
@@ -3057,9 +3072,9 @@ describe("DataStore", () => {
       );
     });
 
-    it("still refetches after a long gap through unavailable", () => {
+    it("still refetches after a long gap through unavailable", async () => {
       createDataStore();
-      const handler = stateChangeHandler();
+      const handler = await stateChangeHandler();
       handler({ previous: "connecting", current: "connected" }); // page load
       axios.get.mockClear();
 
@@ -3074,7 +3089,7 @@ describe("DataStore", () => {
     it("skips the refetch when the community_id cookie is gone", async () => {
       const Cookie = (await import("js-cookie")).default;
       createDataStore();
-      const handler = stateChangeHandler();
+      const handler = await stateChangeHandler();
       handler({ previous: "connecting", current: "connected" }); // page load
       Cookie.get.mockImplementation((name) =>
         name === "timezone" ? "America/Los_Angeles" : undefined,
@@ -3088,11 +3103,25 @@ describe("DataStore", () => {
   });
 
   describe("communityToday", () => {
-    function stateChangeHandler() {
-      const call = window.Comeals.pusher.connection.bind.mock.calls.find(
-        ([event]) => event === "state_change",
-      );
-      return call[1];
+    async function stateChangeHandler() {
+      // The store talks to the pusherClient facade; the real (mock)
+      // Pusher arrives through a dynamic import a few microtasks after
+      // createDataStore, and the facade then replays the queued
+      // connection.bind calls onto it. Flush microtasks until the
+      // state_change handler from THIS test's store has been bound
+      // (clearAllMocks empties the calls list between tests).
+      const Pusher = (await import("pusher-js")).default;
+      function calls() {
+        const instance = Pusher.instances[Pusher.instances.length - 1];
+        if (!instance) return [];
+        return instance.connection.bind.mock.calls.filter(
+          ([event]) => event === "state_change",
+        );
+      }
+      for (let i = 0; i < 20 && calls().length === 0; i++) {
+        await Promise.resolve();
+      }
+      return calls()[calls().length - 1][1];
     }
 
     afterEach(() => {
@@ -3154,11 +3183,11 @@ describe("DataStore", () => {
     // Background tabs throttle timers, so a laptop asleep past midnight
     // can wake with the rollover timer unfired. The Pusher reconnect is
     // the wake-up signal: it recomputes "today" alongside its refetch.
-    it("recomputes on Pusher reconnect when the timer never fired", () => {
+    it("recomputes on Pusher reconnect when the timer never fired", async () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date("2026-07-08T23:59:00-07:00"));
       const store = createDataStore();
-      const handler = stateChangeHandler();
+      const handler = await stateChangeHandler();
       handler({ previous: "connecting", current: "connected" }); // page load
 
       // Move the clock past midnight WITHOUT running timers — the

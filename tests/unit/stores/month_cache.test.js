@@ -18,7 +18,7 @@ function fill(count) {
 
 describe("month cache", () => {
   describe("keyFor", () => {
-    it("builds the same key format localforage uses", () => {
+    it("builds the same key format the IndexedDB tier uses", () => {
       expect(monthCache.keyFor(7, "2026", "3")).toBe(
         "community-7-calendar-2026-3",
       );

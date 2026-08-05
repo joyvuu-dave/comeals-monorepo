@@ -1,4 +1,4 @@
-import localforage from "localforage";
+import { del as kvDel } from "idb-keyval";
 
 // The client that knows, invalidates (issue #37). Meal mutations send
 // socketId, so the sender gets no Pusher echo — nothing else updates the
@@ -7,7 +7,7 @@ import localforage from "localforage";
 // the cached payload shape in each handler would rot, and loadDataAsync
 // stays the cache's only writer.
 export function evictMealCache(mealId) {
-  return localforage.removeItem(String(mealId)).catch(function () {
+  return kvDel(String(mealId)).catch(function () {
     // Best-effort: a failed eviction just leaves this meal on the old
     // stale-while-revalidate behavior for one visit.
   });

@@ -45,7 +45,7 @@ import {
 } from "react-router";
 
 import { DataStore } from "./stores/data_store";
-import localforage from "localforage";
+import { clear } from "idb-keyval";
 
 import ResidentsLogin from "./components/residents/login";
 import PrivateRoute from "./components/app/private_route";
@@ -90,11 +90,15 @@ const MealsEdit = React.lazy(
 
 document.addEventListener("DOMContentLoaded", () => {
   // Bump this version to force-clear all cached calendar/meal data on next visit.
-  // localforage.clear() is async but completes well before any user navigation
+  // clear() is async but completes well before any user navigation
   // triggers a data load, so no race condition in practice.
-  const CACHE_VERSION = "2";
+  const CACHE_VERSION = "3";
   if (localStorage.getItem("cacheVersion") !== CACHE_VERSION) {
-    localforage.clear();
+    clear();
+    // Version 3 switched the cache from localforage to idb-keyval, which
+    // uses its own IndexedDB database. Delete the old localforage one so
+    // it does not sit on disk forever. Safe if it never existed.
+    indexedDB.deleteDatabase("localforage");
     localStorage.setItem("cacheVersion", CACHE_VERSION);
   }
 

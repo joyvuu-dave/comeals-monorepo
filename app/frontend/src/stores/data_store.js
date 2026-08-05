@@ -9,8 +9,8 @@ import BillStore from "./bill_store";
 import GuestStore from "./guest_store";
 import * as monthCache from "./month_cache";
 
-import Pusher from "pusher-js";
-import localforage from "localforage";
+import { pusherClient, startPusher } from "../helpers/pusher_client";
+import { get as kvGet, set as kvSet, del as kvDel } from "idb-keyval";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -73,7 +73,7 @@ const MEAL_RETRY_CAP_MS = 30000;
 function invalidateMonth(communityId, year, month) {
   var key = monthCache.keyFor(communityId, year, month);
   monthCache.remove(key);
-  localforage.removeItem(key);
+  kvDel(key);
   monthCache.bumpVersion(key);
 }
 
@@ -92,7 +92,7 @@ function prefetchMonthData(date) {
   logEvent("prefetch-start", { date });
   var versionAtStart = monthCache.versionFor(key);
 
-  localforage.getItem(key).then(function (value) {
+  kvGet(key).then(function (value) {
     // Discard if a Pusher invalidation arrived since we started
     if (monthCache.versionFor(key) !== versionAtStart) return;
 
@@ -108,7 +108,7 @@ function prefetchMonthData(date) {
           // Discard if a Pusher invalidation arrived since we started
           if (monthCache.versionFor(key) !== versionAtStart) return;
           monthCache.set(key, response.data);
-          localforage.setItem(key, response.data);
+          kvSet(key, response.data);
         }
       })
       .catch(function () {
@@ -297,12 +297,12 @@ export const DataStore = types
         calendarChannel: null,
       };
 
-      // Pusher public key + cluster from env vars (VITE_PUSHER_KEY, VITE_PUSHER_CLUSTER).
-      // Local dev: .env file (committed defaults). Override via .env.local if needed.
-      window.Comeals.pusher = new Pusher(import.meta.env.VITE_PUSHER_KEY, {
-        cluster: import.meta.env.VITE_PUSHER_CLUSTER,
-        encrypted: true,
-      });
+      // pusherClient stands in for the real Pusher object, which loads
+      // outside the main bundle so first paint does not wait for it.
+      // Subscriptions made before it arrives are queued and replayed.
+      // See helpers/pusher_client.js.
+      window.Comeals.pusher = pusherClient;
+      startPusher();
 
       window.Comeals.pusher.connection.bind("connected", function () {
         window.Comeals.socketId = window.Comeals.pusher.connection.socket_id;
@@ -630,14 +630,14 @@ export const DataStore = types
         .then(
           function (response) {
             if (response.status === 200) {
-              return localforage
-                .setItem(response.data.id.toString(), response.data)
-                .then(function () {
+              return kvSet(response.data.id.toString(), response.data).then(
+                function () {
                   // Skip stale responses from a previous meal
                   if (self.meal && self.meal.id === response.data.id) {
                     self.loadData(response.data);
                   }
-                });
+                },
+              );
             }
           },
           // Second then-handler on purpose: it fires only when the
@@ -737,7 +737,7 @@ export const DataStore = types
               respData.month,
             );
             monthCache.set(key, respData);
-            localforage.setItem(key, respData).then(function () {
+            kvSet(key, respData).then(function () {
               if (versionAtStart !== monthFetchVersion) return;
               logEvent("loadMonthAsync-resolved", { date: self.currentDate });
               self.loadMonth(respData);
@@ -1155,13 +1155,14 @@ export const DataStore = types
       // meal starts with a clean slate and a fresh backoff.
       self.cancelMealRetry();
 
-      localforage
-        .getItem(id.toString())
+      kvGet(id.toString())
         .then(function (value) {
           // Skip if user already navigated to a different meal
           if (!self.meal || self.meal.id !== id) return;
 
-          if (value === null) {
+          // idb-keyval resolves undefined for a missing key (localforage
+          // used to resolve null).
+          if (value === null || typeof value === "undefined") {
             self.loadDataAsync();
           } else {
             self.loadData(value);
@@ -1173,7 +1174,7 @@ export const DataStore = types
             "Failed to load cached meal data, fetching from server:",
             error,
           );
-          localforage.removeItem(id.toString()).catch(function () {});
+          kvDel(id.toString()).catch(function () {});
           self.loadDataAsync();
         });
     },
@@ -1225,7 +1226,7 @@ export const DataStore = types
       }
 
       // Async IndexedDB fallback
-      localforage.getItem(key).then(function (value) {
+      kvGet(key).then(function (value) {
         if (value === null || typeof value === "undefined") {
           // User already navigated elsewhere: nothing to fetch here.
           if (versionAtStart !== monthFetchVersion) return;

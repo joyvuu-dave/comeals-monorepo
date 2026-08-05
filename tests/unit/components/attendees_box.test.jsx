@@ -42,12 +42,11 @@ vi.mock("pusher-js", () => {
   return { default: MockPusher };
 });
 
-vi.mock("localforage", () => ({
-  default: {
-    getItem: vi.fn(() => Promise.resolve(null)),
-    setItem: vi.fn(() => Promise.resolve()),
-    removeItem: vi.fn(() => Promise.resolve()),
-  },
+vi.mock("idb-keyval", () => ({
+  get: vi.fn(() => Promise.resolve(undefined)),
+  set: vi.fn(() => Promise.resolve()),
+  del: vi.fn(() => Promise.resolve()),
+  clear: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock("uuid", () => {

@@ -32,17 +32,16 @@ vi.mock("pusher-js", () => {
   };
 });
 
-vi.mock("localforage", () => ({
-  default: {
-    getItem: vi.fn(() => Promise.resolve(null)),
-    setItem: vi.fn(() => Promise.resolve()),
-    removeItem: vi.fn(() => Promise.resolve()),
-  },
+vi.mock("idb-keyval", () => ({
+  get: vi.fn(() => Promise.resolve(undefined)),
+  set: vi.fn(() => Promise.resolve()),
+  del: vi.fn(() => Promise.resolve()),
+  clear: vi.fn(() => Promise.resolve()),
 }));
 
 import { types } from "mobx-state-tree";
 import axios from "axios";
-import localforage from "localforage";
+import * as idbKeyval from "idb-keyval";
 import Meal from "../../../app/frontend/src/stores/meal.js";
 import ResidentStore from "../../../app/frontend/src/stores/resident_store.js";
 import BillStore from "../../../app/frontend/src/stores/bill_store.js";
@@ -1048,7 +1047,7 @@ describe("Resident model", () => {
       store.residentStore.residents.get("10").toggleAttending();
 
       await flush();
-      expect(localforage.removeItem).toHaveBeenCalledWith("1");
+      expect(idbKeyval.del).toHaveBeenCalledWith("1");
     });
 
     it("evicts when removing attendance succeeds", async () => {
@@ -1056,7 +1055,7 @@ describe("Resident model", () => {
       store.residentStore.residents.get("10").toggleAttending();
 
       await flush();
-      expect(localforage.removeItem).toHaveBeenCalledWith("1");
+      expect(idbKeyval.del).toHaveBeenCalledWith("1");
     });
 
     it("evicts when a late update succeeds", async () => {
@@ -1064,7 +1063,7 @@ describe("Resident model", () => {
       store.residentStore.residents.get("10").toggleLate();
 
       await flush();
-      expect(localforage.removeItem).toHaveBeenCalledWith("1");
+      expect(idbKeyval.del).toHaveBeenCalledWith("1");
     });
 
     it("evicts when a veg update succeeds", async () => {
@@ -1072,7 +1071,7 @@ describe("Resident model", () => {
       store.residentStore.residents.get("10").toggleVeg();
 
       await flush();
-      expect(localforage.removeItem).toHaveBeenCalledWith("1");
+      expect(idbKeyval.del).toHaveBeenCalledWith("1");
     });
 
     it("evicts when adding a guest succeeds", async () => {
@@ -1080,7 +1079,7 @@ describe("Resident model", () => {
       store.residentStore.residents.get("10").addGuest({ vegetarian: false });
 
       await flush();
-      expect(localforage.removeItem).toHaveBeenCalledWith("1");
+      expect(idbKeyval.del).toHaveBeenCalledWith("1");
     });
 
     it("evicts when removing a guest succeeds", async () => {
@@ -1095,7 +1094,7 @@ describe("Resident model", () => {
       store.residentStore.residents.get("10").removeGuest();
 
       await flush();
-      expect(localforage.removeItem).toHaveBeenCalledWith("1");
+      expect(idbKeyval.del).toHaveBeenCalledWith("1");
     });
 
     it("evicts even when the node died before the response landed", async () => {
@@ -1104,7 +1103,7 @@ describe("Resident model", () => {
       store.removeResident(10);
 
       await flush();
-      expect(localforage.removeItem).toHaveBeenCalledWith("1");
+      expect(idbKeyval.del).toHaveBeenCalledWith("1");
     });
 
     it("does not evict when the request fails", async () => {
@@ -1117,7 +1116,7 @@ describe("Resident model", () => {
       store.residentStore.residents.get("10").toggleAttending();
 
       await flush();
-      expect(localforage.removeItem).not.toHaveBeenCalled();
+      expect(idbKeyval.del).not.toHaveBeenCalled();
     });
   });
 

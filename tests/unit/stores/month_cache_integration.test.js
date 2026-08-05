@@ -45,24 +45,22 @@ vi.mock("pusher-js", () => {
 });
 
 // A real in-memory "disk" so the IndexedDB tier behaves like the real
-// one: what setItem stored, getItem returns later.
-vi.mock("localforage", () => {
+// one: what set stored, get returns later.
+vi.mock("idb-keyval", () => {
   const disk = new Map();
   return {
-    default: {
-      _disk: disk,
-      getItem: vi.fn((key) =>
-        Promise.resolve(disk.has(key) ? disk.get(key) : null),
-      ),
-      setItem: vi.fn((key, value) => {
-        disk.set(key, value);
-        return Promise.resolve(value);
-      }),
-      removeItem: vi.fn((key) => {
-        disk.delete(key);
-        return Promise.resolve();
-      }),
-    },
+    _disk: disk,
+    get: vi.fn((key) =>
+      Promise.resolve(disk.has(key) ? disk.get(key) : undefined),
+    ),
+    set: vi.fn((key, value) => {
+      disk.set(key, value);
+      return Promise.resolve();
+    }),
+    del: vi.fn((key) => {
+      disk.delete(key);
+      return Promise.resolve();
+    }),
   };
 });
 
@@ -74,7 +72,7 @@ vi.mock("uuid", () => {
 let DataStore;
 let monthCache;
 let axios;
-let localforage;
+let idbKeyval;
 
 // Calendar payloads the fake API serves. A test can replace a month's
 // payload to prove a fresh fetch happened after invalidation.
@@ -158,8 +156,8 @@ describe("month cache eviction through the store (cap = 2)", () => {
     monthCache =
       await import("../../../app/frontend/src/stores/month_cache.js");
     axios = (await import("axios")).default;
-    localforage = (await import("localforage")).default;
-    localforage._disk.clear();
+    idbKeyval = await import("idb-keyval");
+    idbKeyval._disk.clear();
 
     axios.get.mockImplementation((url) => {
       const match = url.match(/\/calendar\/(\d{4})-(\d{2})-\d{2}$/);
@@ -210,7 +208,7 @@ describe("month cache eviction through the store (cap = 2)", () => {
 
     // The disk tier kept every visited month (plus prefetched
     // neighbors); only the RAM tier is capped.
-    expect(localforage._disk.size).toBeGreaterThanOrEqual(4);
+    expect(idbKeyval._disk.size).toBeGreaterThanOrEqual(4);
     expect(monthCache.size()).toBe(2);
   });
 
@@ -225,7 +223,7 @@ describe("month cache eviction through the store (cap = 2)", () => {
     fireCalendarUpdate(2024, 8);
     const augustKey = monthCache.keyFor("test-community-id", "2024", "8");
     expect(monthCache.get(augustKey)).toBeUndefined();
-    expect(localforage._disk.has(augustKey)).toBe(false);
+    expect(idbKeyval._disk.has(augustKey)).toBe(false);
 
     // The server now has different data for August. The next visit
     // must show it — a stale copy anywhere would show the old title.
