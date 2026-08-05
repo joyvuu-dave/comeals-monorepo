@@ -50,6 +50,11 @@ module Comeals
     # so it compresses the final response after all other middleware are done.
     config.middleware.insert_before Rack::Sendfile, Rack::Deflater
 
+    # Year-long cache-control on fingerprinted assets. See the class comment
+    # for why this is safe and why it is scoped to /assets/ only.
+    require_relative '../lib/asset_cache_control'
+    config.middleware.insert_before Rack::Sendfile, AssetCacheControl
+
     # Dump the schema as SQL. The database is the last line of defense
     # (CLAUDE.md): reconciled-meal immutability lives in triggers, and
     # schema.rb cannot represent triggers, so a schema.rb-built database
