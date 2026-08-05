@@ -24,10 +24,23 @@ function ConfirmModal({
 }) {
   const openedAtRef = useRef(0);
 
+  // Who had focus when the dialog opened — restored on close so a
+  // keyboard user lands back where they were (react-modal's own
+  // focus return is coupled to shouldFocusAfterRender, which is off
+  // below). Restoring to an element the close just unmounted is a
+  // harmless no-op.
+  const restoreFocusRef = useRef(null);
+
   useEffect(
     function () {
       if (isOpen) {
         openedAtRef.current = Date.now();
+        restoreFocusRef.current = document.activeElement;
+      } else if (restoreFocusRef.current) {
+        if (typeof restoreFocusRef.current.focus === "function") {
+          restoreFocusRef.current.focus();
+        }
+        restoreFocusRef.current = null;
       }
     },
     [isOpen],

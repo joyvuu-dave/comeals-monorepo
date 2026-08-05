@@ -91,6 +91,42 @@ test.describe("Form CRUD", () => {
       });
     });
 
+    // The whole gate must work without a mouse: Escape asks, Enter is
+    // a no that puts focus back in the field, Tab + Enter is a
+    // deliberate yes.
+    test("keyboard only: Escape asks, Enter keeps editing with focus restored, Tab+Enter discards", async ({
+      page,
+    }) => {
+      await page.goto("/calendar/all/2026-01-15/events/new/");
+      await page.waitForLoadState("networkidle");
+      const modal = page.locator(".ReactModal__Content--after-open").first();
+      await expect(modal.locator("#event-new-title")).toBeVisible();
+
+      await modal.locator("#event-new-title").focus();
+      await page.keyboard.type("Movie Night");
+
+      await page.keyboard.press("Escape");
+      await expect(page.locator("text=Discard your changes?")).toBeVisible();
+
+      // Keep editing holds focus, so Enter is a no — and focus goes
+      // back to the field the user was typing in.
+      await page.keyboard.press("Enter");
+      await expect(
+        page.locator("text=Discard your changes?"),
+      ).not.toBeVisible();
+      await expect(modal.locator("#event-new-title")).toBeFocused();
+
+      // Escape again, Tab to Discard (armed after 400ms), Enter closes.
+      await page.keyboard.press("Escape");
+      await expect(page.locator("text=Discard your changes?")).toBeVisible();
+      await page.waitForTimeout(450);
+      await page.keyboard.press("Tab");
+      await page.keyboard.press("Enter");
+      await page.waitForSelector(".ReactModal__Content--after-open", {
+        state: "detached",
+      });
+    });
+
     test("edit an existing event loads data via GET", async ({ page }) => {
       let eventGetUrl = null;
       await page.route("**/api/v1/events/**", (route) => {

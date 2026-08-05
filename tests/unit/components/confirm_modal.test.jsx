@@ -61,6 +61,42 @@ describe("ConfirmModal", () => {
     expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
   });
 
+  // A keyboard user must land back where they were. react-modal's own
+  // focus return is off (coupled to shouldFocusAfterRender), so the
+  // dialog restores it itself.
+  it("returns focus to whoever had it when the dialog closes", () => {
+    const props = {
+      message: "Really delete?",
+      cancelLabel: "Cancel",
+      confirmLabel: "Delete",
+      onCancel: vi.fn(),
+      onConfirm: vi.fn(),
+    };
+    const { rerender } = render(
+      <div>
+        <input data-testid="field" />
+        <ConfirmModal isOpen={false} {...props} />
+      </div>,
+    );
+    screen.getByTestId("field").focus();
+
+    rerender(
+      <div>
+        <input data-testid="field" />
+        <ConfirmModal isOpen={true} {...props} />
+      </div>,
+    );
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+
+    rerender(
+      <div>
+        <input data-testid="field" />
+        <ConfirmModal isOpen={false} {...props} />
+      </div>,
+    );
+    expect(screen.getByTestId("field")).toHaveFocus();
+  });
+
   it("Escape is a no", () => {
     const { onCancel, onConfirm } = renderModal();
     fireEvent.keyDown(screen.getByRole("dialog"), {
