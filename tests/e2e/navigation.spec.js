@@ -15,7 +15,7 @@ test.describe("Navigation", () => {
     // The next arrow should be visible since next_id is 43
     const nextArrow = page
       .locator('[data-testid="next-meal"]')
-      .or(page.locator("svg.fa-chevron-right").first());
+      .or(page.locator("svg.icon-chevron-right").first());
 
     if (await nextArrow.isVisible({ timeout: 5000 })) {
       await nextArrow.click();
@@ -52,7 +52,7 @@ test.describe("Navigation", () => {
 
     // Find the back arrow / calendar link
     const backButton = page
-      .locator("svg.fa-arrow-left")
+      .locator("svg.icon-arrow-left")
       .or(page.locator('[aria-label="Back to calendar"]'))
       .first();
 
@@ -155,7 +155,7 @@ test.describe("Navigation", () => {
     await page.goto("/meals/42/edit/");
     await expect(page.getByLabel("Set meal cost").first()).toHaveValue("25.50");
 
-    await page.locator("svg.fa-chevron-right").first().click();
+    await page.locator("svg.icon-chevron-right").first().click();
     await expect(page).toHaveURL(/\/meals\/43\/edit/);
 
     // Inside the load window: the old meal's rows are gone and the menu
@@ -224,7 +224,7 @@ test.describe("Navigation", () => {
 
     // Type, then switch meals before the 500ms debounce fires.
     await menuBox.fill("Tacos");
-    await page.locator("svg.fa-chevron-right").first().click();
+    await page.locator("svg.icon-chevron-right").first().click();
     await expect(page).toHaveURL(/\/meals\/43\/edit/);
 
     // The slow load lands and meal 43 shows its own menu — not the text
@@ -252,7 +252,7 @@ test.describe("Navigation", () => {
     await expect(page).toHaveURL(/\/meals\/42\/edit\/$/, { timeout: 10000 });
 
     // The meal page rendered after the redirect
-    await expect(page.locator("svg.fa-chevron-right").first()).toBeVisible({
+    await expect(page.locator("svg.icon-chevron-right").first()).toBeVisible({
       timeout: 10000,
     });
   });

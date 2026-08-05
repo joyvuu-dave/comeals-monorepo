@@ -7,8 +7,7 @@ import DayPickerInputWrapper from "../common/day_picker_input";
 import { useStore } from "../../helpers/store_context";
 import { generateTimes, toCommunityDayjs } from "../../helpers/helpers";
 import handleAxiosError from "../../helpers/handle_axios_error";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faTimes } from "@fortawesome/free-solid-svg-icons";
+import Icon from "../icon";
 import ConfirmModal from "../app/confirm_modal";
 import useDirtyReport from "../../helpers/use_dirty_report";
 
@@ -195,8 +194,8 @@ function EventsEdit({ eventId, handleCloseModal, setDirty }) {
         >
           Delete
         </button>
-        <FontAwesomeIcon
-          icon={faTimes}
+        <Icon
+          name="xmark"
           size="2x"
           className="close-button"
           onClick={handleCloseModal}

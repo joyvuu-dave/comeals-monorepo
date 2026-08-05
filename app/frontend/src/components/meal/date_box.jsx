@@ -12,9 +12,7 @@ import { MEAL_HISTORY_PATH } from "../../routes";
 import dayjs from "dayjs";
 import Modal from "react-modal";
 
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faChevronLeft } from "@fortawesome/free-solid-svg-icons";
-import { faChevronRight } from "@fortawesome/free-solid-svg-icons";
+import Icon from "../icon";
 
 const styles = {
   main: {
@@ -157,7 +155,7 @@ const DateBox = observer(() => {
           aria-label="Previous meal"
           tabIndex={0}
         >
-          <FontAwesomeIcon icon={faChevronLeft} size="3x" />
+          <Icon name="chevron-left" size="3x" />
         </div>
         <h2 style={styles.topDate}>{displayTopDate()}</h2>
         <div
@@ -177,7 +175,7 @@ const DateBox = observer(() => {
           aria-label="Next meal"
           tabIndex={0}
         >
-          <FontAwesomeIcon icon={faChevronRight} size="3x" />
+          <Icon name="chevron-right" size="3x" />
         </div>
       </div>
       <h3 className="text-black">{displayDate()}</h3>

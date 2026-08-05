@@ -409,7 +409,7 @@ test.describe("Error Handling & Edge Cases", () => {
       ).toBeVisible({ timeout: 10000 });
 
       // Previous arrow should work (prev_id: 41)
-      const prevArrow = page.locator("svg.fa-chevron-left").first();
+      const prevArrow = page.locator("svg.icon-chevron-left").first();
       await prevArrow.click();
       await expect(page).toHaveURL(/\/meals\/41\/edit/, { timeout: 5000 });
     });
@@ -434,7 +434,7 @@ test.describe("Error Handling & Edge Cases", () => {
       ).toBeVisible({ timeout: 10000 });
 
       // Next arrow should work (next_id: 43)
-      const nextArrow = page.locator("svg.fa-chevron-right").first();
+      const nextArrow = page.locator("svg.icon-chevron-right").first();
       await nextArrow.click();
       await expect(page).toHaveURL(/\/meals\/43\/edit/, { timeout: 5000 });
     });

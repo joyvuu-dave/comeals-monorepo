@@ -7,8 +7,7 @@ import Cookie from "js-cookie";
 import { observer } from "mobx-react-lite";
 import { useStore } from "../../helpers/store_context";
 import handleAxiosError from "../../helpers/handle_axios_error";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faTimes } from "@fortawesome/free-solid-svg-icons";
+import Icon from "../icon";
 import useDirtyReport from "../../helpers/use_dirty_report";
 
 // No `ready` gate: render the full form from the first frame. The host
@@ -82,8 +81,8 @@ const GuestRoomReservationsNew = observer(({ handleCloseModal, setDirty }) => {
     <div>
       <div className="flex">
         <h2>Guest Room Reservation</h2>
-        <FontAwesomeIcon
-          icon={faTimes}
+        <Icon
+          name="xmark"
           size="2x"
           className="close-button"
           onClick={handleCloseModal}

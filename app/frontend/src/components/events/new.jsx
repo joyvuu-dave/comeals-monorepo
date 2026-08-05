@@ -7,8 +7,7 @@ import Cookie from "js-cookie";
 import { useStore } from "../../helpers/store_context";
 import { generateTimes } from "../../helpers/helpers";
 import handleAxiosError from "../../helpers/handle_axios_error";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faTimes } from "@fortawesome/free-solid-svg-icons";
+import Icon from "../icon";
 import useDirtyReport from "../../helpers/use_dirty_report";
 
 function EventsNew({ handleCloseModal, setDirty }) {
@@ -91,8 +90,8 @@ function EventsNew({ handleCloseModal, setDirty }) {
     <div>
       <div className="flex">
         <h2>Event</h2>
-        <FontAwesomeIcon
-          icon={faTimes}
+        <Icon
+          name="xmark"
           size="2x"
           className="close-button"
           onClick={handleCloseModal}

@@ -11,9 +11,6 @@
   "dependencies": {
     "@bugsnag/js": "^8.10.0",
     "@fontsource/roboto": "^5.2.10",
-    "@fortawesome/fontawesome-svg-core": "^7.2.0",
-    "@fortawesome/free-solid-svg-icons": "^7.2.0",
-    "@fortawesome/react-fontawesome": "^3.3.0",
     "axios": "^1.14.0",
     "dayjs": "^1.11.20",
     "js-cookie": "^3.0.5",

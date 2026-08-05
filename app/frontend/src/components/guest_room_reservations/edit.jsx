@@ -7,8 +7,7 @@ import { useStore } from "../../helpers/store_context";
 import handleAxiosError from "../../helpers/handle_axios_error";
 import ConfirmModal from "../app/confirm_modal";
 import useDirtyReport from "../../helpers/use_dirty_report";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faTimes } from "@fortawesome/free-solid-svg-icons";
+import Icon from "../icon";
 
 // Render the full form from the first frame; the per-event fetch hydrates
 // the inputs when it returns. The host select is reactively bound to the
@@ -171,8 +170,8 @@ const GuestRoomReservationsEdit = observer(
           >
             Delete
           </button>
-          <FontAwesomeIcon
-            icon={faTimes}
+          <Icon
+            name="xmark"
             size="2x"
             className="close-button"
             onClick={handleCloseModal}

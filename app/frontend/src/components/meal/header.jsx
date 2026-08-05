@@ -5,8 +5,7 @@ import { useStore } from "../../helpers/store_context";
 import ButtonBar from "./button_bar";
 import Cookie from "js-cookie";
 
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faArrowLeft } from "@fortawesome/free-solid-svg-icons";
+import Icon from "../icon";
 
 const styles = {
   header: {
@@ -33,7 +32,7 @@ const Header = observer(() => {
         className="text-black button-link"
       >
         <h5>
-          <FontAwesomeIcon icon={faArrowLeft} /> <strong>Calendar</strong>
+          <Icon name="arrow-left" /> <strong>Calendar</strong>
         </h5>
       </button>
       {store.isOnline ? (

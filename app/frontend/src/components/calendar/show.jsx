@@ -35,9 +35,7 @@ import WebcalLinks from "./webcal_links";
 import toastStore from "../../stores/toast_store";
 import { Calendar, dayjsLocalizer } from "react-big-calendar";
 
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faChevronLeft } from "@fortawesome/free-solid-svg-icons";
-import { faChevronRight } from "@fortawesome/free-solid-svg-icons";
+import Icon from "../icon";
 
 const localizer = dayjsLocalizer(dayjs);
 
@@ -118,7 +116,7 @@ const MonthNavHeader = memo(function MonthNavHeader({
           onClick={onPrev}
           aria-label="Goto Last Month"
         >
-          <FontAwesomeIcon icon={faChevronLeft} />
+          <Icon name="chevron-left" />
         </button>{" "}
         <button
           className="press"
@@ -126,7 +124,7 @@ const MonthNavHeader = memo(function MonthNavHeader({
           onClick={onNext}
           aria-label="Goto Next Month"
         >
-          <FontAwesomeIcon icon={faChevronRight} />
+          <Icon name="chevron-right" />
         </button>
       </span>
     </div>

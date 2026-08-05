@@ -502,13 +502,13 @@ test.describe("Meal Editing", () => {
 
     // Next arrow should be visible (fixture has next_id: 43)
     // Click next
-    const nextArrow = page.locator("svg.fa-chevron-right").first();
+    const nextArrow = page.locator("svg.icon-chevron-right").first();
     await nextArrow.click();
     await expect(page).toHaveURL(/\/meals\/43\/edit/, { timeout: 5000 });
 
     // Prev arrow should navigate back (fixture has prev_id: 41)
     await page.waitForLoadState("networkidle");
-    const prevArrow = page.locator("svg.fa-chevron-left").first();
+    const prevArrow = page.locator("svg.icon-chevron-left").first();
     await prevArrow.click();
     await expect(page).toHaveURL(/\/meals\/41\/edit/, { timeout: 5000 });
   });
