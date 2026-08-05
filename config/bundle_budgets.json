@@ -1,0 +1,5 @@
+{
+  "comment": "Gzipped JavaScript size budgets, in KB, checked by bin/bundle-budget (run by bin/check). firstLoadKB covers the entry chunk plus every chunk it imports statically — the JavaScript a browser must run before first paint. totalKB covers all JavaScript, lazy chunks included. If a change pushes past a budget on purpose, raise the budget in the same commit and say why in the commit message. Set 2026-08-05: first load measured 166, total measured 270 (#44).",
+  "firstLoadKB": 180,
+  "totalKB": 290
+}

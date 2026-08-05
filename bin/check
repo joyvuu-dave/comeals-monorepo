@@ -210,6 +210,27 @@ check_typecheck() {
   fi
 }
 
+check_bundle_budget() {
+  step "Bundle budget"
+
+  local output exit_code=0
+  output=$(npm run build 2>&1 && bin/bundle-budget 2>&1) || exit_code=$?
+
+  local summary
+  summary=$(echo "$output" | grep -oE 'first load: [0-9.]+ KB' || echo "unknown")
+
+  if [ "$exit_code" -eq 0 ]; then
+    pass "Within budget ($summary gzipped)"
+    record "Bundle budget" "PASS" "$summary gzipped"
+  else
+    fail "Over budget"
+    echo "$output" | grep -E '^(ok|OVER)' | while IFS= read -r line; do
+      info "  $line"
+    done
+    record "Bundle budget" "FAIL" "over budget"
+  fi
+}
+
 # --- Section 3: Security -----------------------------------------------------
 
 check_bundle_audit() {
@@ -428,6 +449,7 @@ main() {
   check_eslint
   check_typecheck
   check_prettier
+  check_bundle_budget
 
   # Security
   check_bundle_audit

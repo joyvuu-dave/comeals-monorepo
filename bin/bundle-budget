@@ -1,0 +1,76 @@
+#!/usr/bin/env node
+// Checks the built JavaScript against the size budgets in
+// config/bundle_budgets.json. Exit 0 = within budget, 1 = over.
+//
+// Two numbers, both gzipped:
+//   first load  the entry chunk plus every chunk it imports statically —
+//               what a browser must download and run before first paint
+//   total       all JavaScript, lazy chunks included
+//
+// Run `npm run build` first; this reads public/.vite/manifest.json and
+// the files it points to. bin/check does both.
+
+const fs = require("fs");
+const path = require("path");
+const zlib = require("zlib");
+
+const root = path.resolve(__dirname, "..");
+const budgets = JSON.parse(
+  fs.readFileSync(path.join(root, "config", "bundle_budgets.json"), "utf8"),
+);
+const manifestPath = path.join(root, "public", ".vite", "manifest.json");
+if (!fs.existsSync(manifestPath)) {
+  console.error("No build found. Run `npm run build` first.");
+  process.exit(1);
+}
+const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+
+function gzipKB(file) {
+  const raw = fs.readFileSync(path.join(root, "public", file));
+  return zlib.gzipSync(raw).length / 1024;
+}
+
+// First load: the entry plus its static imports, followed recursively.
+const entryKey = Object.keys(manifest).find((k) => manifest[k].isEntry);
+const firstLoadFiles = new Set();
+(function collect(key) {
+  const chunk = manifest[key];
+  if (!chunk || firstLoadFiles.has(chunk.file)) return;
+  firstLoadFiles.add(chunk.file);
+  (chunk.imports || []).forEach(collect);
+})(entryKey);
+
+// Total: every JavaScript chunk in the manifest.
+const allJsFiles = new Set(
+  Object.values(manifest)
+    .map((chunk) => chunk.file)
+    .filter((file) => file.endsWith(".js")),
+);
+
+const firstLoadKB = [...firstLoadFiles].reduce((sum, f) => sum + gzipKB(f), 0);
+const totalKB = [...allJsFiles].reduce((sum, f) => sum + gzipKB(f), 0);
+
+let failed = false;
+
+function report(name, actual, budget) {
+  const line = `${name}: ${actual.toFixed(1)} KB gzipped (budget ${budget} KB)`;
+  if (actual > budget) {
+    failed = true;
+    console.error(`OVER   ${line}`);
+  } else {
+    console.log(`ok     ${line}`);
+  }
+}
+
+report("first load", firstLoadKB, budgets.firstLoadKB);
+report("total     ", totalKB, budgets.totalKB);
+
+if (failed) {
+  console.error(
+    "\nThe build got bigger than the budget allows." +
+      "\nEither shrink the change, or — if the growth is on purpose —" +
+      "\nraise the budget in config/bundle_budgets.json in the same commit" +
+      "\nand say why in the commit message.",
+  );
+  process.exit(1);
+}
