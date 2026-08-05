@@ -14,6 +14,19 @@ set -euo pipefail
 # stay in public/ until the next build overwrites them; the dev SPA on
 # 3036 never reads them.
 
+# A clear message beats Puma's "A server is already running (pid ...)".
+# Port 3000 is usually busy because bin/dev is still running.
+if lsof -i :3000 -sTCP:LISTEN -t >/dev/null 2>&1; then
+  echo "Port 3000 is already in use (bin/dev still running?)."
+  echo "Stop it first, then run bin/prod again."
+  exit 1
+fi
+
+# A stale pid file from a crashed server would also make Puma refuse
+# to start. Nothing is listening on 3000 (checked above), so if the
+# file exists here it is stale.
+rm -f tmp/pids/server.pid
+
 npm run build
 
 echo ""
