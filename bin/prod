@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Build the production frontend bundle and serve it from Rails alone —
+# the same layout as Heroku: minified hashed assets in public/, the SPA
+# index served by FallbackController, no Vite process, no HMR.
+#
+# Use this to test frontend performance. One honest caveat: Rails still
+# runs in development mode (code reloading, verbose logging), so API
+# response times are slower than production. The JavaScript, CSS, and
+# bundle sizes are exactly what production ships.
+#
+# Going back to development: just run bin/dev again. The built assets
+# stay in public/ until the next build overwrites them; the dev SPA on
+# 3036 never reads them.
+
+npm run build
+
+echo ""
+echo "  Comeals (production bundle):  http://localhost:3000"
+echo "  ActiveAdmin:                  http://admin.lvh.me:3000/login"
+echo ""
+echo "  Note: the frontend is the exact production build; the Rails"
+echo "  API still runs in development mode, so API calls are slower"
+echo "  than production."
+echo ""
+
+exec bundle exec rails server -p 3000
