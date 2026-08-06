@@ -39,12 +39,49 @@ function perfLogPlugin() {
   };
 }
 
+// Adds <link rel="modulepreload"> for the calendar chunk to the built
+// index.html. The calendar is lazy-loaded (React.lazy), so without this
+// its download only starts after the main bundle has run — a serial
+// chain that delays the month heading, the page's largest paint. The
+// preload lets the browser fetch it in parallel with the main bundle.
+// Only the calendar chunk: it is the page almost every visit lands on.
+// Its own imports are chunks the entry already loads.
+function preloadCalendarPlugin() {
+  return {
+    name: "preload-calendar",
+    transformIndexHtml: {
+      order: "post",
+      handler(html, ctx) {
+        if (!ctx.bundle) return; // dev server: nothing to preload
+        const chunk = Object.values(ctx.bundle).find(
+          (c) =>
+            c.facadeModuleId && c.facadeModuleId.endsWith("calendar/show.jsx"),
+        );
+        if (!chunk) return;
+        // The chunk cannot execute until its static imports are also
+        // loaded, so preload those too — minus the ones the entry
+        // already loads (Vite emits its own modulepreloads for them).
+        const entry = Object.values(ctx.bundle).find((c) => c.isEntry);
+        const covered = new Set([entry.fileName, ...(entry.imports || [])]);
+        const files = [chunk.fileName, ...(chunk.imports || [])].filter(
+          (f) => !covered.has(f),
+        );
+        return files.map((f) => ({
+          tag: "link",
+          attrs: { rel: "modulepreload", href: "/" + f },
+          injectTo: "head",
+        }));
+      },
+    },
+  };
+}
+
 export default defineConfig(({ command }) => ({
   root: "app/frontend",
   envDir: "../..",
   // Only serve public/ files during dev; in build/preview, outDir IS public/
   publicDir: command === "serve" ? "../../public" : false,
-  plugins: [react(), perfLogPlugin()],
+  plugins: [react(), perfLogPlugin(), preloadCalendarPlugin()],
   server: {
     port: 3036,
     proxy: {
