@@ -28,10 +28,35 @@
       crossorigin
     />
     <title>Comeals</title>
+    <style>
+      /* Styles for the static shell inside #root only. Inline on
+         purpose: in dev, Vite injects the app stylesheet with
+         JavaScript, which is exactly what the shell must not wait
+         for. The colors and header height copy styles.css
+         (--hasana-yellow, .header). */
+      .shell-header {
+        height: 2rem;
+        background-color: #e9c46a;
+      }
+      .shell-loading {
+        margin: 1rem 0.5rem;
+        font-family: Roboto, sans-serif;
+        font-size: 1.17rem;
+        font-weight: bold;
+      }
+    </style>
   </head>
   <body style="background-color: #ccdeea">
     <noscript> You need to enable JavaScript to run this app. </noscript>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Static shell: paints while the JavaScript bundle is still
+           downloading and running (issue #44 item 1). It copies the
+           app's own first-paint look — the yellow header bar every
+           page starts with, and the Suspense "Loading..." fallback.
+           React replaces all of this on mount. -->
+      <header class="shell-header"></header>
+      <h3 class="shell-loading">Loading...</h3>
+    </div>
     <script type="module" src="/src/index.jsx"></script>
     <script>
       function idleTimer() {
