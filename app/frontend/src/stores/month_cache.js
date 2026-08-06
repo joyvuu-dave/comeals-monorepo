@@ -1,5 +1,5 @@
 // In-memory cache of calendar month payloads, keyed the same way as
-// the localforage (IndexedDB) copies. Reads are synchronous, so month
+// the idb-keyval (IndexedDB) copies. Reads are synchronous, so month
 // navigation renders instantly with no blank flash.
 //
 // The cache is an LRU: reads and writes move a key to the back, and

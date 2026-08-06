@@ -79,7 +79,7 @@ Two things this control does **not** prove, both worth keeping straight:
   a deliberate answer rather than being switched off. See "still open" below.
 
 One design note that has not bitten yet: recomputing every reconciliation gets
-slower as history grows. The settlement benchmark runs 200 meals in 0.14s, so a
+slower as history grows. A 2026-08 measurement ran 200 meals in 0.14s, so a
 decade of history is under a minute. Do not optimize this until it matters. If
 it ever does, check the most recent N plus a rotating sample of older ones.
 

@@ -33,10 +33,6 @@ gem 'mutex_m'
 gem 'activeadmin', '~> 3.0'
 gem 'active_model_serializers', '~> 0.10'
 gem 'audited'
-# Cross-origin requests from the mobile app and any future non-same-origin
-# web clients. The web SPA is same-origin (served by Rails) so it doesn't
-# use CORS — this is for React Native / Expo web / localhost dev tools.
-gem 'rack-cors'
 
 # Stateless authentication tokens (see app/services/jwt_auth.rb).
 gem 'jwt'

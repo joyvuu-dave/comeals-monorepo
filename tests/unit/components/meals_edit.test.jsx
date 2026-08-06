@@ -80,8 +80,6 @@ import mealFixture from "../../fixtures/meal.json";
 dayjs.extend(advancedFormat);
 dayjs.extend(relativeTime);
 
-// Both providers so the test holds across the inject() → useStore()
-// conversion.
 function renderPage(store) {
   return render(
     <StoreContext.Provider value={store}>

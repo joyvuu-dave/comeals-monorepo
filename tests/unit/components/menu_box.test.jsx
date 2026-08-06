@@ -25,8 +25,6 @@ function makeStore(overrides = {}, mealOverrides = {}) {
   );
 }
 
-// Both providers so the test holds across the inject() → useStore()
-// conversion.
 function renderBox(store) {
   return render(
     <StoreContext.Provider value={store}>

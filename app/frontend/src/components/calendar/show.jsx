@@ -7,14 +7,13 @@ import {
   useState,
 } from "react";
 import { observer } from "mobx-react-lite";
-import { useLocation, useNavigate, useParams } from "react-router";
+import { useNavigate, useParams } from "react-router";
 import { useStore } from "../../helpers/store_context";
 import { communityNow } from "../../helpers/helpers";
 import {
   mark,
   reportAfterPaint,
   profileRender,
-  logEvent,
 } from "../../helpers/nav_trace";
 import SideBar from "./side_bar";
 
@@ -144,7 +143,6 @@ Modal.setAppElement("#root");
 const MainCalendar = observer(() => {
   const store = useStore();
   const params = useParams();
-  const location = useLocation();
   const navigate = useNavigate();
 
   // calendarDate is a DEFERRED copy of the URL date. The toolbar
@@ -475,11 +473,6 @@ const MainCalendar = observer(() => {
   // the "today" boundary for formatEvent's past-event dimming.
   var communityToday = store.communityToday;
   todayStartRef.current = dayjs(communityToday).toDate();
-  logEvent("MainCalendar-render", {
-    path: location.pathname,
-    isOnline: store.isOnline,
-    eventsLen: store.calendarEvents.length,
-  });
   return (
     <div className="offwhite">
       <header className="header flex space-between">

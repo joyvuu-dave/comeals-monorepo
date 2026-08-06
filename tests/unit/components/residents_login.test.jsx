@@ -43,8 +43,6 @@ function LocationEcho() {
   return <span data-testid="location">{location.pathname}</span>;
 }
 
-// Both providers so the test holds across the inject() → useStore()
-// conversion; the real router replaces the withRouter props.
 function renderLogin({ store = makeStore(), path = "/" } = {}) {
   render(
     <StoreContext.Provider value={store}>

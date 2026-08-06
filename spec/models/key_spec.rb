@@ -22,7 +22,7 @@ RSpec.describe Key do
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
 
-  describe '#set_token' do
+  describe 'token generation (has_secure_token)' do
     it 'generates a unique token on creation' do
       resident = create(:resident, community: community, unit: unit)
       key = resident.keys.first

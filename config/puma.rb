@@ -10,9 +10,10 @@
 # triggers in the database.
 #
 # Read docs/adr/0003-concurrency-on-the-money-path.md before changing this.
-# There is one known open hole (ActiveAdmin writes bills without the meal
-# lock) that exists at any thread count — raising this number does not
-# create it, and leaving it at 1 does not prevent it.
+# ActiveAdmin still writes bills without the meal lock, but that path is
+# safe now: the child-write trigger (migration 20260727120000) makes an
+# unlocked write wait for a running settlement and then refuses it. None
+# of that depends on the thread count.
 #
 max_threads_count = ENV.fetch('RAILS_MAX_THREADS', 1)
 min_threads_count = ENV.fetch('RAILS_MIN_THREADS') { max_threads_count }

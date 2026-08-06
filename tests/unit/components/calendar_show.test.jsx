@@ -85,8 +85,6 @@ function LocationEcho() {
   return <span data-testid="location">{location.pathname}</span>;
 }
 
-// Both providers so the test holds across the inject() → useStore()
-// conversion; the real router replaces the withRouter props.
 function renderCalendar({
   store = makeStore(),
   path = "/calendar/all/2026-01-15/",

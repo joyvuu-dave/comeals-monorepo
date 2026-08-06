@@ -48,8 +48,6 @@ function LocationEcho() {
   return <span data-testid="location">{location.pathname}</span>;
 }
 
-// Both providers so the test holds across the inject() → useStore()
-// conversion.
 function renderBox(store, path = "/meals/42/edit/") {
   return render(
     <StoreContext.Provider value={store}>

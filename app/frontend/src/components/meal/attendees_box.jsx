@@ -75,8 +75,7 @@ const AttendeeComponent = observer(({ resident }) => {
             id={`late_switch_${resident.id}`}
             type="checkbox"
             className="switch"
-            key={`late_switch_${resident.id}`}
-            checked={resident ? resident.late : false}
+            checked={resident.late}
             onChange={() => resident.toggleLate()}
             disabled={
               meal.reconciled ||
@@ -93,8 +92,7 @@ const AttendeeComponent = observer(({ resident }) => {
             id={`veg_switch_${resident.id}`}
             type="checkbox"
             className="switch"
-            key={`veg_switch_${resident.id}`}
-            checked={resident ? resident.vegetarian : false}
+            checked={resident.vegetarian}
             onChange={() => resident.toggleVeg()}
             disabled={
               meal.reconciled ||
@@ -114,7 +112,6 @@ const AttendeeComponent = observer(({ resident }) => {
         />
         <button
           className="dropdown-remove"
-          key={`dropdown_remove_${resident.id}`}
           aria-label={`Remove Guest of ${resident.name}`}
           style={styles.monospace}
           onClick={() => resident.removeGuest()}

@@ -33,7 +33,6 @@ const BillEdit = observer(({ bill }) => {
     <div className="confirm-bar-anchor">
       <div className="input-group">
         <select
-          key={bill.id}
           value={bill.resident_id}
           onChange={(e) => bill.setResident(e.target.value)}
           onBlur={() => store.flushPendingBillsSave()}
@@ -89,8 +88,7 @@ const BillEdit = observer(({ bill }) => {
             id={`no_cost_switch-${bill.id}`}
             type="checkbox"
             className="switch"
-            key={`no_cost_switch_${bill.id}`}
-            checked={bill ? bill.no_cost : false}
+            checked={bill.no_cost}
             onChange={() => {
               // Turning no cost on erases a typed cost — that needs a
               // Yes first. Turning it off, or on with nothing typed,

@@ -31,16 +31,12 @@ function makeStore() {
   );
 }
 
-// The class version reads the calendar date from a match prop (passed
-// by calendar/show); the hooks version reads the router. The test
-// provides both, so it pins behavior across the conversion. Both store
-// providers for the same reason.
+// The component reads the calendar date from the router.
 function renderForm({
   store = makeStore(),
   handleCloseModal = vi.fn(),
   setDirty = vi.fn(),
 } = {}) {
-  const match = { params: { date: "2026-01-15", type: "all" } };
   render(
     <StoreContext.Provider value={store}>
       <MemoryRouter initialEntries={["/calendar/all/2026-01-15/events/new"]}>
@@ -50,7 +46,6 @@ function renderForm({
             element={
               <EventsNew
                 handleCloseModal={handleCloseModal}
-                match={match}
                 setDirty={setDirty}
               />
             }

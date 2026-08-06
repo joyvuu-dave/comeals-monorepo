@@ -526,30 +526,6 @@ RSpec.describe Resident do
     end
   end
 
-  describe '#balance_for_reconciliation' do
-    it 'returns the historical balance for a specific reconciliation' do
-      cook = create(:resident, community: community, unit: unit, multiplier: 2)
-      eater = create(:resident, community: community, unit: unit, multiplier: 2)
-
-      meal = create(:meal, community: community)
-      create(:meal_resident, meal: meal, resident: eater, community: community)
-      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('100'))
-      meal.reload
-
-      reconciliation = create(:reconciliation, community: community)
-
-      expect(cook.balance_for_reconciliation(reconciliation)).to eq(BigDecimal('100'))
-      expect(eater.balance_for_reconciliation(reconciliation)).to eq(BigDecimal('-100'))
-    end
-
-    it 'returns 0 for a reconciliation the resident was not involved in' do
-      resident = create(:resident, community: community, unit: unit)
-      reconciliation = create(:reconciliation, community: community)
-
-      expect(resident.balance_for_reconciliation(reconciliation)).to eq(BigDecimal('0'))
-    end
-  end
-
   # ---------------------------------------------------------------------------
   # Deletion safeguards
   # ---------------------------------------------------------------------------

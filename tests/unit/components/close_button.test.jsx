@@ -18,8 +18,6 @@ function makeStore(overrides = {}) {
   );
 }
 
-// Both providers so the test holds across the inject() → useStore()
-// conversion.
 function renderButton(store) {
   return render(
     <StoreContext.Provider value={store}>

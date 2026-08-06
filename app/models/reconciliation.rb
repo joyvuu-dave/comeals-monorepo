@@ -212,10 +212,6 @@ class Reconciliation < ApplicationRecord
     end
   end
 
-  def balance_for(resident)
-    reconciliation_balances.find_by(resident_id: resident.id)&.amount || BigDecimal('0')
-  end
-
   private
 
   # The meals this reconciliation would sweep. Both the create validation and

@@ -2,7 +2,7 @@
 
 ActiveAdmin.register Bill do
   # STRONG PARAMS
-  permit_params :date, :id, :meal_id, :name, :resident_id, :community_id, :amount, :subdomain
+  permit_params :meal_id, :resident_id, :community_id, :amount
 
   # CONFIG
   filter :resident, as: :select, collection: proc { Resident.order(:name).pluck('name', 'id') }, include_blank: true

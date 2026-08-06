@@ -13,39 +13,26 @@ function ScrollToTop({ children }) {
         return;
       }
 
-      // Always scroll up when changing
-      // between calendar and meal pages
-      var pages = [];
-      const currentPage = location.pathname.split("/");
-      const prevPage = prevPathname.split("/");
+      // Path shape: /calendar/:type/:date or /meals/:id/edit, so
+      // parts[1] is the page and parts[2] the calendar type.
+      const current = location.pathname.split("/");
+      const prev = prevPathname.split("/");
 
-      pages.push(currentPage[1]);
-      pages.push(prevPage[1]);
+      const crossedPages =
+        (current[1] === "calendar" && prev[1] === "meals") ||
+        (current[1] === "meals" && prev[1] === "calendar");
+      const sameCalendarType =
+        current[1] === "calendar" &&
+        prev[1] === "calendar" &&
+        current[2] === prev[2];
+      const desktop = window.innerWidth >= 825;
 
-      if (pages.indexOf("calendar") !== -1 && pages.indexOf("meals") !== -1) {
+      // Scroll to the top when moving between the calendar and a meal
+      // page (any screen size). On desktop, also scroll on any other
+      // change except month navigation within the same calendar type.
+      // On mobile, never scroll otherwise — the reader keeps their place.
+      if (crossedPages || (desktop && !sameCalendarType)) {
         window.scrollTo(0, 0);
-        return;
-      }
-
-      // DESKTOP
-      if (window.innerWidth >= 825) {
-        // don't scroll up when
-        // switching months
-        if (
-          currentPage[1] === "calendar" &&
-          prevPage[1] === "calendar" &&
-          currentPage[2] === prevPage[2]
-        ) {
-          return;
-        } else {
-          window.scrollTo(0, 0);
-          return;
-        }
-      }
-
-      // MOBILE
-      if (window.innerWidth < 825) {
-        return;
       }
     },
     [location.pathname],

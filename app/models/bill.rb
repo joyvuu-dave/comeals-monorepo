@@ -76,30 +76,5 @@ class Bill < ApplicationRecord
     no_cost? ? BigDecimal('0') : amount
   end
 
-  # Per-multiplier-unit cost for this bill.
-  # Uses effective_amount so no_cost bills contribute 0.
-  def unit_cost
-    return BigDecimal('0') if meal.multiplier.zero?
-
-    capped_amount / meal.multiplier
-  end
-
-  # The bill amount after applying the community cost cap.
-  # If the meal is uncapped, returns the full effective_amount.
-  # If capped, returns this bill's proportional share of the max cost.
-  def capped_amount
-    amt = effective_amount
-    return amt unless persisted?
-    return amt unless meal.capped?
-
-    total = meal.total_cost
-    return amt if total.zero?
-
-    max = meal.max_cost
-    return amt if total <= max
-
-    (amt / total) * max
-  end
-
   delegate :reconciled?, to: :meal
 end

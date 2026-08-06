@@ -59,7 +59,8 @@ class ApiController < ActionController::API
   # Resolve both @current_resident_api and @current_api_key in one pass.
   # JWT path is tried first (the post-migration default). If that fails we
   # fall back to a Key.find_by lookup so cookies issued before the JWT
-  # deploy keep working — see ADR / auth discussion.
+  # deploy keep working. The retirement condition for the fallback is
+  # written on the Key model.
   def resolve_current_session!
     token = bearer_token_from_header || params[:token].presence
 

@@ -38,14 +38,12 @@ function makeStore(overrides = {}) {
   );
 }
 
-// Both providers and both routing paths (match prop + real router) so
-// the test holds across the conversion.
+// The component reads the calendar date from the router.
 function renderForm({
   store = makeStore(),
   handleCloseModal = vi.fn(),
   setDirty = vi.fn(),
 } = {}) {
-  const match = { params: { date: "2026-01-15", type: "all" } };
   render(
     <StoreContext.Provider value={store}>
       <MemoryRouter
@@ -59,7 +57,6 @@ function renderForm({
             element={
               <GuestRoomReservationsNew
                 handleCloseModal={handleCloseModal}
-                match={match}
                 setDirty={setDirty}
               />
             }

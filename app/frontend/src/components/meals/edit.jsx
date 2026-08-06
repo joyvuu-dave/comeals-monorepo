@@ -1,5 +1,3 @@
-import { observer } from "mobx-react-lite";
-
 import Header from "../meal/header";
 import LoadStatus from "../meal/load_status";
 import DateBox from "../meal/date_box";
@@ -21,7 +19,9 @@ const styles = {
   },
 };
 
-const MealsEdit = observer(() => (
+// No observer() here: this component reads no observables itself; the
+// child boxes each observe the store on their own.
+const MealsEdit = () => (
   <div style={styles.container}>
     <Header />
     <LoadStatus />
@@ -37,6 +37,6 @@ const MealsEdit = observer(() => (
       </section>
     </div>
   </div>
-));
+);
 
 export default MealsEdit;

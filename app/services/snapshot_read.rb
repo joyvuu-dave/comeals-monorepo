@@ -34,12 +34,12 @@
 # DEFERRABLE only takes effect on a SERIALIZABLE READ ONLY transaction.
 # All three must be set together or the guarantee is not there.
 #
-# The wait is not free in general — it lasts until the read-write
-# SERIALIZABLE transactions that are already running finish. Today nothing
-# in this app runs at SERIALIZABLE, so there is nothing to wait for and
-# the snapshot is granted at once. If the app ever moves to a SERIALIZABLE
-# default, this block starts waiting for in-flight writers instead of
-# racing them, which is the behavior we want for a nightly batch job.
+# The wait is not free — it lasts until the read-write SERIALIZABLE
+# transactions that are already running finish. Since 2026-08-02 the whole
+# app runs at SERIALIZABLE (config/database.yml sets it per session; ADR
+# 0005), so this block waits for in-flight writers instead of racing them.
+# That is the behavior we want for a nightly batch job: a short wait at
+# the start buys a snapshot that can never abort.
 #
 # Rails has no API for READ ONLY or DEFERRABLE, only for the isolation
 # level, so the other two modes are set with a second SET TRANSACTION.

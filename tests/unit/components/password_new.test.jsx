@@ -12,24 +12,15 @@ vi.mock("axios", () => ({
 import axios from "axios";
 import ResidentsPasswordNew from "../../../app/frontend/src/components/residents/password_new.jsx";
 
-// The component gets the token from the route. The class version reads
-// it from match/history props (passed by login.jsx); the hooks version
-// reads the router directly. The test provides both, so it pins
-// behavior across the conversion.
+// The component reads the reset token from the route.
 function renderForm() {
-  const match = { params: { modal: "reset-password", token: "tok-1" } };
-  const history = { push: vi.fn() };
   render(
     <MemoryRouter initialEntries={["/reset-password/tok-1/"]}>
       <Routes>
-        <Route
-          path="/:modal/:token/*"
-          element={<ResidentsPasswordNew match={match} history={history} />}
-        />
+        <Route path="/:modal/:token/*" element={<ResidentsPasswordNew />} />
       </Routes>
     </MemoryRouter>,
   );
-  return { history };
 }
 
 describe("ResidentsPasswordNew", () => {

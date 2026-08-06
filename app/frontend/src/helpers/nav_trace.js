@@ -77,14 +77,6 @@ function printBreakdown(label, entries) {
   postLog({ kind: "nav", label, total, rows });
 }
 
-// Direct one-off event log, independent of the navigation trail. Use for
-// things like Pusher messages or store actions where we just want to know
-// "this fired at time X".
-export function logEvent(kind, extra) {
-  if (!ENABLED) return;
-  postLog({ kind, ...extra });
-}
-
 // Fire-and-forget POST to the Vite dev middleware. `keepalive` lets the
 // request survive a rapid navigation. Errors are swallowed so the logger
 // can never break the app.

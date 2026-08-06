@@ -55,8 +55,6 @@ function makeStore() {
   );
 }
 
-// Both providers so the test holds across the inject() → useStore()
-// conversion.
 function renderForm({
   store = makeStore(),
   handleCloseModal = vi.fn(),

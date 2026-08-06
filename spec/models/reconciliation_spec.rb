@@ -551,7 +551,8 @@ RSpec.describe Reconciliation do
       )
 
       # Cook is NOT reimbursed — zero-attendee meal has no financial impact
-      expect(reconciliation.balance_for(cook)).to eq(BigDecimal('0'))
+      expect(reconciliation.reconciliation_balances.find_by(resident: cook)&.amount.to_d)
+        .to eq(BigDecimal('0'))
     end
 
     it 'still assigns zero-attendee meals to the reconciliation' do
@@ -576,38 +577,6 @@ RSpec.describe Reconciliation do
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('50'))
 
       expect(cook.calc_balance).to eq(BigDecimal('0'))
-    end
-  end
-
-  describe '#balance_for' do
-    it 'returns the persisted balance for a resident' do
-      cook = create(:resident, community: community, unit: unit, multiplier: 2)
-      eater = create(:resident, community: community, unit: unit, multiplier: 2)
-
-      meal = create(:meal, community: community)
-      create(:meal_resident, meal: meal, resident: eater, community: community)
-      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('60'))
-      meal.reload
-
-      reconciliation = described_class.create!(
-        community: community, date: Time.zone.today,
-        end_date: Date.yesterday
-      )
-
-      expect(reconciliation.balance_for(cook)).to eq(BigDecimal('60'))
-      expect(reconciliation.balance_for(eater)).to eq(BigDecimal('-60'))
-    end
-
-    it 'returns 0 for residents not in the reconciliation' do
-      uninvolved = create(:resident, community: community, unit: unit)
-      settleable_meal
-
-      reconciliation = described_class.create!(
-        community: community, date: Time.zone.today,
-        end_date: Date.yesterday
-      )
-
-      expect(reconciliation.balance_for(uninvolved)).to eq(BigDecimal('0'))
     end
   end
 

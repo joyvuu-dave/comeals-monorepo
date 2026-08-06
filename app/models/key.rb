@@ -17,13 +17,16 @@
 #  index_keys_on_token                          (token) UNIQUE
 #
 
-# An API session. Each login creates a new Key; revocation is just destroying
-# the row. Identity is polymorphic so admin sessions could slot in later.
+# A legacy API session. Login stopped creating Key rows when JWT auth
+# shipped (app/services/jwt_auth.rb); no code writes this table anymore.
+# It exists only so cookies issued before the JWT deploy keep working —
+# ApiController#resolve_current_session! falls back to a Key lookup when
+# JWT decoding fails.
+#
+# Retirement condition: when `Key.count` is 0 in production (every pre-JWT
+# session has logged in again or expired), delete this model, the keys
+# table, the fallback in ApiController, and `current_api_key`.
 class Key < ApplicationRecord
   has_secure_token
   belongs_to :identity, polymorphic: true
-
-  def set_token
-    self.token = self.class.generate_unique_secure_token
-  end
 end

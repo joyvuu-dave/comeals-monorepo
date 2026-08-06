@@ -23,7 +23,7 @@ import {
 } from "../helpers/helpers";
 import { isZeroAmountString, toDisplayAmountString } from "../helpers/money";
 import { evictMealCache } from "../helpers/meal_cache";
-import { mark, logEvent } from "../helpers/nav_trace";
+import { mark } from "../helpers/nav_trace";
 import toastStore from "./toast_store";
 
 dayjs.extend(utc);
@@ -101,7 +101,6 @@ function prefetchMonthData(date) {
   // month that is already cached stays away from the eviction end.
   if (monthCache.get(key) !== undefined) return;
 
-  logEvent("prefetch-start", { date });
   var versionAtStart = monthCache.versionFor(key);
 
   kvGet(key).then(function (value) {
@@ -743,7 +742,6 @@ export const DataStore = types
     loadMonthAsync() {
       monthFetchVersion += 1;
       var versionAtStart = monthFetchVersion;
-      logEvent("loadMonthAsync-start", { date: self.currentDate });
 
       // A prefetch of this same month is still on the wire (the
       // boot-time prefetch, usually): wait for it and render its
@@ -761,9 +759,6 @@ export const DataStore = types
           if (versionAtStart !== monthFetchVersion) return;
           var cached = monthCache.get(key);
           if (cached !== undefined) {
-            logEvent("loadMonthAsync-adopted-prefetch", {
-              date: self.currentDate,
-            });
             self.loadMonth(cached);
           } else {
             self.fetchMonth(versionAtStart);
@@ -796,7 +791,6 @@ export const DataStore = types
             monthCache.markFresh(key);
             kvSet(key, respData).then(function () {
               if (versionAtStart !== monthFetchVersion) return;
-              logEvent("loadMonthAsync-resolved", { date: self.currentDate });
               self.loadMonth(respData);
             });
           }
@@ -1025,7 +1019,6 @@ export const DataStore = types
         return true;
       }
 
-      logEvent("loadMonth", { currentDate: self.currentDate });
       mark("loadMonth-start");
 
       // Build the full events array as plain JS, then replace the
@@ -1113,7 +1106,6 @@ export const DataStore = types
         window.Comeals.pusher.subscribe(subscribeString);
 
       window.Comeals.calendarChannel.bind("update", function () {
-        logEvent("pusher-calendar-update", { date: self.currentDate });
         self.loadMonthAsync();
       });
 

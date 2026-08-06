@@ -3,14 +3,19 @@ import { observer } from "mobx-react-lite";
 import { Navigate, useLocation, useNavigate, useParams } from "react-router";
 import axios from "axios";
 import Cookie from "js-cookie";
-import dayjs from "dayjs";
 import Modal from "react-modal";
 
 import { useStore } from "../../helpers/store_context";
 import handleAxiosError from "../../helpers/handle_axios_error";
 import toastStore from "../../stores/toast_store";
-import { communityNow, getCommunityTimezone } from "../../helpers/helpers";
+import { communityNow } from "../../helpers/helpers";
 import ResidentsPasswordNew from "./password_new";
+
+// Where to send a signed-in resident when no redirect target was saved:
+// today's calendar, in the community's timezone.
+function defaultFrom() {
+  return { pathname: `/calendar/all/${communityNow().format("YYYY-MM-DD")}` };
+}
 
 const styles = {
   box: {
@@ -32,7 +37,6 @@ const ResidentsLogin = observer(() => {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [redirectToReferrer] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // The requests outlive a navigation away; the flag keeps their
@@ -109,14 +113,9 @@ const ResidentsLogin = observer(() => {
             });
           }
 
-          // Cookie was just written (if present in the response), so
-          // getCommunityTimezone() picks up the fresh value here.
-          var tz = getCommunityTimezone();
-          var { from } = location.state || {
-            from: {
-              pathname: "/calendar/all/" + dayjs().tz(tz).format("YYYY-MM-DD"),
-            },
-          };
+          // The timezone cookie was just written (if present in the
+          // response), so defaultFrom() picks up the fresh value here.
+          var { from } = location.state || { from: defaultFrom() };
           window.location.href = from.pathname || from;
         }
       })
@@ -127,16 +126,11 @@ const ResidentsLogin = observer(() => {
       });
   }
 
-  const { from } = location.state || {
-    from: {
-      pathname: `/calendar/all/${communityNow().format("YYYY-MM-DD")}`,
-    },
-  };
+  const { from } = location.state || { from: defaultFrom() };
 
   if (
-    redirectToReferrer ||
-    (typeof Cookie.get("token") !== "undefined" &&
-      Cookie.get("token") !== "undefined")
+    typeof Cookie.get("token") !== "undefined" &&
+    Cookie.get("token") !== "undefined"
   ) {
     return <Navigate to={from} replace />;
   }
@@ -216,9 +210,7 @@ const ResidentsLogin = observer(() => {
           },
         }}
       >
-        {modalOpen && (
-          <ResidentsPasswordNew handleCloseModal={handleCloseModal} />
-        )}
+        {modalOpen && <ResidentsPasswordNew />}
       </Modal>
     </div>
   );
