@@ -19,6 +19,11 @@ const mealFixture = require("../fixtures/meal.json");
  *     with `npx playwright test --update-snapshots`
  *   - If the change is UNEXPECTED: you caught a regression!
  *
+ * Baselines exist per platform: -darwin for local runs, -linux for CI.
+ * `npm run test:e2e:update` refreshes the darwin set; run
+ * `bin/update-linux-snapshots` (Docker) to refresh the linux set in the
+ * same sitting — never by letting CI fail and downloading its artifact.
+ *
  * Time is frozen to 2026-01-15 12:00 for deterministic screenshots.
  */
 test.describe("Visual Baselines", () => {

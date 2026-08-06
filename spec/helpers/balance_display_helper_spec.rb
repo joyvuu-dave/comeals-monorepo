@@ -9,34 +9,45 @@ require 'rails_helper'
 # it does not trust the documented sign convention, it re-proves it.
 RSpec.describe BalanceDisplayHelper do
   describe '#balance_tag' do
+    # The words are asserted with `include`, not by matching the whole tag:
+    # a styling-class rename must not fail the money-direction spec. The
+    # classes get their own test at the end.
     it 'says "is owed" for a positive amount' do
       html = helper.balance_tag(BigDecimal('12.50'))
-      expect(html).to eq('<span class="balance-is-owed">is owed $12.50</span>')
+      expect(html).to include('is owed $12.50')
     end
 
     it 'says "owes" for a negative amount, without a minus sign' do
       html = helper.balance_tag(BigDecimal('-12.50'))
-      expect(html).to eq('<span class="balance-owes">owes $12.50</span>')
+      expect(html).to include('owes $12.50')
       expect(html).not_to include('-$')
     end
 
     it 'shows a plain $0.00 for zero — zero has no direction' do
-      expect(helper.balance_tag(BigDecimal('0'))).to eq('<span class="balance-zero">$0.00</span>')
+      html = helper.balance_tag(BigDecimal('0'))
+      expect(html).to include('$0.00')
+      expect(html).not_to include('owe')
     end
 
     it 'decides the direction from the rounded cents, so a sub-cent debt is not "owes $0.00"' do
-      expect(helper.balance_tag(BigDecimal('-0.004'))).to eq('<span class="balance-zero">$0.00</span>')
-      expect(helper.balance_tag(BigDecimal('0.004'))).to eq('<span class="balance-zero">$0.00</span>')
+      expect(helper.balance_tag(BigDecimal('-0.004'))).not_to include('owe')
+      expect(helper.balance_tag(BigDecimal('0.004'))).not_to include('owe')
     end
 
     it 'still shows a debt that rounds to a whole cent' do
-      expect(helper.balance_tag(BigDecimal('-0.006'))).to eq('<span class="balance-owes">owes $0.01</span>')
-      expect(helper.balance_tag(BigDecimal('0.006'))).to eq('<span class="balance-is-owed">is owed $0.01</span>')
+      expect(helper.balance_tag(BigDecimal('-0.006'))).to include('owes $0.01')
+      expect(helper.balance_tag(BigDecimal('0.006'))).to include('is owed $0.01')
     end
 
     it 'rounds a full-precision running balance to cents for display' do
       # 50 / 7, the repeating decimal from the money model in CLAUDE.md.
-      expect(helper.balance_tag(BigDecimal('-7.14285714'))).to eq('<span class="balance-owes">owes $7.14</span>')
+      expect(helper.balance_tag(BigDecimal('-7.14285714'))).to include('owes $7.14')
+    end
+
+    it 'carries one direction class per sign, for styling' do
+      expect(helper.balance_tag(BigDecimal('12.50'))).to include('balance-is-owed')
+      expect(helper.balance_tag(BigDecimal('-12.50'))).to include('balance-owes')
+      expect(helper.balance_tag(BigDecimal('0'))).to include('balance-zero')
     end
   end
 
@@ -86,8 +97,10 @@ RSpec.describe BalanceDisplayHelper do
       credit = MealCharge.credits.find_by(resident: cook)
       debit = MealCharge.debits.find_by(resident: eater)
 
-      expect(helper.charge_amount_tag(credit)).to eq('<span class="balance-is-owed">credited $16.00</span>')
-      expect(helper.charge_amount_tag(debit)).to eq('<span class="balance-owes">charged $8.00</span>')
+      expect(helper.charge_amount_tag(credit)).to include('credited $16.00')
+      expect(helper.charge_amount_tag(credit)).not_to include('charged')
+      expect(helper.charge_amount_tag(debit)).to include('charged $8.00')
+      expect(helper.charge_amount_tag(debit)).not_to include('credited')
     end
 
     it 'says "charged" for a guest debit too' do
@@ -99,7 +112,7 @@ RSpec.describe BalanceDisplayHelper do
 
       guest_debit = MealCharge.find_by(resident: eater, kind: 'guest_debit')
 
-      expect(helper.charge_amount_tag(guest_debit)).to eq('<span class="balance-owes">charged $8.00</span>')
+      expect(helper.charge_amount_tag(guest_debit)).to include('charged $8.00')
     end
   end
 

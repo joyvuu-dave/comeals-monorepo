@@ -1,0 +1,35 @@
+#!/bin/bash
+# Regenerate the Linux golden images for the visual suite, locally.
+#
+# CI compares screenshots on Linux, and a Mac cannot render those
+# pixels. The -linux baselines used to be updated by letting CI fail
+# and downloading its report artifact (#49). This script runs the
+# visual suite in the official Playwright Linux container instead and
+# writes the refreshed goldens straight into the working tree.
+#
+# The container gets its own node_modules (a named Docker volume)
+# because the host's are built for macOS — esbuild and friends ship
+# native binaries. The first run installs them; later runs reuse the
+# volume.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+VERSION=$(node -e "console.log(require('./node_modules/@playwright/test/package.json').version)")
+IMAGE="mcr.microsoft.com/playwright:v${VERSION}-noble"
+
+echo "Updating Linux visual baselines with ${IMAGE}..."
+docker run --rm \
+  --ipc=host \
+  -v "$PWD":/work \
+  -v comeals-playwright-modules:/work/node_modules \
+  -w /work \
+  "$IMAGE" \
+  bash -c "npm install --no-audit --no-fund && npx playwright test tests/e2e/visual.spec.js --update-snapshots"
+
+echo
+echo "Done. Review the changed PNGs, then commit them:"
+echo "  git status tests/e2e/visual.spec.js-snapshots/"
+echo
+echo "A PNG that changed by a few bytes with no visible difference is"
+echo "antialiasing inside the diff tolerance — discard it with git"
+echo "checkout and keep the committed golden."
