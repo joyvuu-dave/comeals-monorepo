@@ -5,11 +5,15 @@ import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import DayPickerInputWrapper from "../common/day_picker_input";
 import { useStore } from "../../helpers/store_context";
-import { generateTimes, toCommunityDayjs } from "../../helpers/helpers";
+import { toCommunityDayjs } from "../../helpers/helpers";
 import handleAxiosError from "../../helpers/handle_axios_error";
-import Icon from "../icon";
 import ConfirmModal from "../app/confirm_modal";
 import useDirtyReport from "../../helpers/use_dirty_report";
+import useMountedRef from "../../helpers/use_mounted_ref";
+import ModalFormHeader from "../modal_form/header";
+import TimeSelect from "../modal_form/time_select";
+import { buildStartEndPayload, toTimeString } from "../modal_form/payload";
+import useDeleteFlow from "../modal_form/use_delete_flow";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -25,25 +29,21 @@ function EventsEdit({ eventId, handleCloseModal, setDirty }) {
   const [event, setEvent] = useState({});
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [day, setDay] = useState("");
+  const [day, setDay] = useState(null);
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [allDay, setAllDay] = useState(false);
   const [loadingAction, setLoadingAction] = useState(null);
-  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
-  // The requests outlive a closed modal; the flag keeps their
-  // callbacks from setting state after unmount, like the class's
-  // _isMounted.
-  const mountedRef = useRef(true);
+  const mountedRef = useMountedRef();
 
-  // The values the fetch hydrated, normalized for comparison. The
-  // form is dirty when any field differs from these (ADR 0006).
+  // The values the fetch hydrated, normalized for comparison. The form
+  // fields are set FROM this object, so the dirty check below can
+  // compare against it directly (ADR 0006).
   const initialRef = useRef(null);
 
   useEffect(
     function () {
-      mountedRef.current = true;
       axios
         .get(`/api/v1/events/${eventId}`)
         .then(function (response) {
@@ -52,42 +52,32 @@ function EventsEdit({ eventId, handleCloseModal, setDirty }) {
             var evt = response.data;
             var sd = toCommunityDayjs(evt.start_date);
             var ed = evt.end_date ? toCommunityDayjs(evt.end_date) : null;
+            // title and description are nullable in the database; a null
+            // value would make the controlled inputs uncontrolled.
             var initial = {
               title: evt.title || "",
               description: evt.description || "",
               day: sd.format("YYYY-MM-DD"),
-              startTime: `${sd.hour().toString().padStart(2, "0")}:${sd
-                .minute()
-                .toString()
-                .padStart(2, "0")}`,
-              endTime: ed
-                ? `${ed.hour().toString().padStart(2, "0")}:${ed
-                    .minute()
-                    .toString()
-                    .padStart(2, "0")}`
-                : "",
+              startTime: toTimeString(sd),
+              endTime: ed ? toTimeString(ed) : "",
               allDay: Boolean(evt.allday),
             };
             initialRef.current = initial;
             setEvent(evt);
             setLoaded(true);
-            setTitle(evt.title);
-            setDescription(evt.description);
+            setTitle(initial.title);
+            setDescription(initial.description);
             setDay(new Date(sd.year(), sd.month(), sd.date()));
             setStartTime(initial.startTime);
             setEndTime(initial.endTime);
-            setAllDay(evt.allday);
+            setAllDay(initial.allDay);
           }
         })
         .catch(function (error) {
           handleAxiosError(error, { silent: true });
         });
-
-      return function () {
-        mountedRef.current = false;
-      };
     },
-    [eventId],
+    [eventId, mountedRef],
   );
 
   function handleSubmit(e) {
@@ -97,13 +87,7 @@ function EventsEdit({ eventId, handleCloseModal, setDirty }) {
       .patch(`/api/v1/events/${eventId}/update`, {
         title: title,
         description: description,
-        start_year: day && new Date(day).getFullYear(),
-        start_month: day && new Date(day).getMonth() + 1,
-        start_day: day && new Date(day).getDate(),
-        start_hours: startTime && startTime.split(":")[0],
-        start_minutes: startTime && startTime.split(":")[1],
-        end_hours: endTime && endTime.split(":")[0],
-        end_minutes: endTime && endTime.split(":")[1],
+        ...buildStartEndPayload(day, startTime, endTime),
         all_day: allDay,
       })
       .then(function (response) {
@@ -127,42 +111,21 @@ function EventsEdit({ eventId, handleCloseModal, setDirty }) {
       });
   }
 
-  function handleDeleteClick() {
-    if (loadingAction) return;
-    setConfirmDeleteOpen(true);
-  }
-
-  function handleDeleteConfirm() {
-    setConfirmDeleteOpen(false);
-    setLoadingAction("delete");
-    axios
-      .delete(`/api/v1/events/${eventId}/delete`)
-      .then(function (response) {
-        if (!mountedRef.current) return;
-        setLoadingAction(null);
-        if (response.status === 200) {
-          // The client that knows, invalidates (issue #37).
-          store.invalidateMonthForDate(event.start_date);
-          // The record is gone; edited fields have nothing left to
-          // protect (ADR 0006).
-          setDirty(false);
-          handleCloseModal();
-        }
-      })
-      .catch(function (error) {
-        if (!mountedRef.current) return;
-        setLoadingAction(null);
-        handleAxiosError(error);
-      });
-  }
-
-  function handleDeleteCancel() {
-    setConfirmDeleteOpen(false);
-  }
-
-  function handleDayChange(val) {
-    setDay(val);
-  }
+  const deleteFlow = useDeleteFlow({
+    url: `/api/v1/events/${eventId}/delete`,
+    message: "Do you really want to delete this event?",
+    loadingAction: loadingAction,
+    setLoadingAction: setLoadingAction,
+    mountedRef: mountedRef,
+    onDeleted: function () {
+      // The client that knows, invalidates (issue #37).
+      store.invalidateMonthForDate(event.start_date);
+      // The record is gone; edited fields have nothing left to
+      // protect (ADR 0006).
+      setDirty(false);
+      handleCloseModal();
+    },
+  });
 
   const disabled = loadingAction !== null || !loaded;
 
@@ -170,46 +133,23 @@ function EventsEdit({ eventId, handleCloseModal, setDirty }) {
   useDirtyReport(
     setDirty,
     initial !== null &&
-      ((title || "") !== initial.title ||
-        (description || "") !== initial.description ||
+      (title !== initial.title ||
+        description !== initial.description ||
         (day ? dayjs(day).format("YYYY-MM-DD") : "") !== initial.day ||
         startTime !== initial.startTime ||
         endTime !== initial.endTime ||
-        Boolean(allDay) !== initial.allDay),
+        allDay !== initial.allDay),
   );
 
   return (
     <div>
-      <div className="flex">
-        <h2>Event</h2>
-        <button
-          onClick={handleDeleteClick}
-          type="button"
-          className={
-            loadingAction === "delete"
-              ? "mar-l-md button-warning button-loader"
-              : "mar-l-md button-warning"
-          }
-          disabled={disabled}
-        >
-          Delete
-        </button>
-        <Icon
-          name="xmark"
-          size="2x"
-          className="close-button"
-          onClick={handleCloseModal}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              handleCloseModal();
-            }
-          }}
-          role="button"
-          aria-label="Close"
-          tabIndex={0}
-        />
-      </div>
+      <ModalFormHeader
+        title="Event"
+        onClose={handleCloseModal}
+        onDelete={deleteFlow.requestDelete}
+        deleting={loadingAction === "delete"}
+        disabled={disabled}
+      />
       <fieldset data-populated={loaded ? "true" : undefined}>
         <legend>Edit</legend>
         <form onSubmit={handleSubmit}>
@@ -241,7 +181,7 @@ function EventsEdit({ eventId, handleCloseModal, setDirty }) {
             <DayPickerInputWrapper
               id="event-edit-day"
               value={day}
-              onDayChange={handleDayChange}
+              onDayChange={setDay}
               inputDisabled={disabled}
               disabledDays={
                 event.start_date
@@ -256,35 +196,21 @@ function EventsEdit({ eventId, handleCloseModal, setDirty }) {
           </div>
           <br />
           <br />
-          <label htmlFor="event-edit-start-time">Start Time</label>
-          <select
+          <TimeSelect
             id="event-edit-start-time"
+            label="Start Time"
             value={startTime}
-            onChange={(e) => setStartTime(e.target.value)}
+            onChange={setStartTime}
             disabled={disabled || allDay}
-          >
-            <option />
-            {generateTimes().map((time) => (
-              <option key={time.value} value={time.value}>
-                {time.display}
-              </option>
-            ))}
-          </select>
+          />
           <br />
-          <label htmlFor="event-edit-end-time">End Time</label>
-          <select
+          <TimeSelect
             id="event-edit-end-time"
+            label="End Time"
             value={endTime}
-            onChange={(e) => setEndTime(e.target.value)}
+            onChange={setEndTime}
             disabled={disabled || allDay}
-          >
-            <option />
-            {generateTimes().map((time) => (
-              <option key={time.value} value={time.value}>
-                {time.display}
-              </option>
-            ))}
-          </select>
+          />
           <br />
           <label htmlFor="event-edit-all-day">All Day</label>
           {"  "}
@@ -318,15 +244,7 @@ function EventsEdit({ eventId, handleCloseModal, setDirty }) {
           </button>
         </form>
       </fieldset>
-      <ConfirmModal
-        isOpen={confirmDeleteOpen}
-        message="Do you really want to delete this event?"
-        cancelLabel="Cancel"
-        confirmLabel="Delete"
-        armMs={400}
-        onConfirm={handleDeleteConfirm}
-        onCancel={handleDeleteCancel}
-      />
+      <ConfirmModal {...deleteFlow.confirmProps} />
     </div>
   );
 }

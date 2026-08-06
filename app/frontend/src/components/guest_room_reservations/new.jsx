@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "react-router";
 import DayPickerInputWrapper from "../common/day_picker_input";
 import dayjs from "dayjs";
@@ -7,8 +7,9 @@ import Cookie from "js-cookie";
 import { observer } from "mobx-react-lite";
 import { useStore } from "../../helpers/store_context";
 import handleAxiosError from "../../helpers/handle_axios_error";
-import Icon from "../icon";
 import useDirtyReport from "../../helpers/use_dirty_report";
+import useMountedRef from "../../helpers/use_mounted_ref";
+import ModalFormHeader from "../modal_form/header";
 
 // No `ready` gate: render the full form from the first frame. The host
 // select is reactively bound to `store.hosts` (populated on mount via
@@ -23,18 +24,13 @@ const GuestRoomReservationsNew = observer(({ handleCloseModal, setDirty }) => {
   const [day, setDay] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const communityId = useRef(Cookie.get("community_id")).current;
+  const communityId = Cookie.get("community_id");
+  const mountedRef = useMountedRef();
 
-  // The POST outlives a closed modal; the flag keeps its callbacks
-  // from setting state after unmount, like the class's _isMounted.
-  const mountedRef = useRef(true);
+  // Hosts cache: kick off fetch if empty; no-op if already loaded.
   useEffect(
     function () {
-      mountedRef.current = true;
       store.ensureHosts();
-      return function () {
-        mountedRef.current = false;
-      };
     },
     [store],
   );
@@ -68,10 +64,6 @@ const GuestRoomReservationsNew = observer(({ handleCloseModal, setDirty }) => {
       });
   }
 
-  function handleDayChange(val) {
-    setDay(val);
-  }
-
   // Dirty means the user changed something; the empty defaults the
   // form opens with do not count (ADR 0006).
   useDirtyReport(setDirty, residentId !== "" || day !== null);
@@ -79,24 +71,10 @@ const GuestRoomReservationsNew = observer(({ handleCloseModal, setDirty }) => {
   const hosts = store.hosts;
   return (
     <div>
-      <div className="flex">
-        <h2>Guest Room Reservation</h2>
-        <Icon
-          name="xmark"
-          size="2x"
-          className="close-button"
-          onClick={handleCloseModal}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              handleCloseModal();
-            }
-          }}
-          role="button"
-          aria-label="Close"
-          tabIndex={0}
-        />
-      </div>
+      <ModalFormHeader
+        title="Guest Room Reservation"
+        onClose={handleCloseModal}
+      />
       {/* `data-populated` reflects whether the data needed to fully use
           the form (the host list) is available. Present at first paint
           when the cache is warm; absent only while a cold fetch is in
@@ -132,7 +110,7 @@ const GuestRoomReservationsNew = observer(({ handleCloseModal, setDirty }) => {
               id="guest-room-new-day"
               value={day}
               placeholder=""
-              onDayChange={handleDayChange}
+              onDayChange={setDay}
               inputDisabled={loading}
               defaultMonth={dayjs(params.date).toDate()}
               disabledDays={[

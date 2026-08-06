@@ -1,14 +1,16 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useParams } from "react-router";
 import DayPickerInputWrapper from "../common/day_picker_input";
 import dayjs from "dayjs";
 import axios from "axios";
 import Cookie from "js-cookie";
 import { useStore } from "../../helpers/store_context";
-import { generateTimes } from "../../helpers/helpers";
 import handleAxiosError from "../../helpers/handle_axios_error";
-import Icon from "../icon";
 import useDirtyReport from "../../helpers/use_dirty_report";
+import useMountedRef from "../../helpers/use_mounted_ref";
+import ModalFormHeader from "../modal_form/header";
+import TimeSelect from "../modal_form/time_select";
+import { buildStartEndPayload } from "../modal_form/payload";
 
 function EventsNew({ handleCloseModal, setDirty }) {
   const store = useStore();
@@ -22,17 +24,8 @@ function EventsNew({ handleCloseModal, setDirty }) {
   const [allDay, setAllDay] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const communityId = useRef(Cookie.get("community_id")).current;
-
-  // The POST outlives a closed modal; the flag keeps its callbacks
-  // from setting state after unmount, like the class's _isMounted.
-  const mountedRef = useRef(true);
-  useEffect(function () {
-    mountedRef.current = true;
-    return function () {
-      mountedRef.current = false;
-    };
-  }, []);
+  const communityId = Cookie.get("community_id");
+  const mountedRef = useMountedRef();
 
   function handleSubmit(e) {
     e.preventDefault();
@@ -41,13 +34,7 @@ function EventsNew({ handleCloseModal, setDirty }) {
       .post(`/api/v1/events?community_id=${communityId}`, {
         title: title,
         description: description,
-        start_year: day && day.getFullYear(),
-        start_month: day && day.getMonth() + 1,
-        start_day: day && day.getDate(),
-        start_hours: startTime && startTime.split(":")[0],
-        start_minutes: startTime && startTime.split(":")[1],
-        end_hours: endTime && endTime.split(":")[0],
-        end_minutes: endTime && endTime.split(":")[1],
+        ...buildStartEndPayload(day, startTime, endTime),
         all_day: allDay,
       })
       .then(function (response) {
@@ -70,10 +57,6 @@ function EventsNew({ handleCloseModal, setDirty }) {
       });
   }
 
-  function handleDayChange(val) {
-    setDay(val);
-  }
-
   // Dirty means the user changed something; the empty defaults the
   // form opens with do not count (ADR 0006).
   useDirtyReport(
@@ -88,24 +71,7 @@ function EventsNew({ handleCloseModal, setDirty }) {
 
   return (
     <div>
-      <div className="flex">
-        <h2>Event</h2>
-        <Icon
-          name="xmark"
-          size="2x"
-          className="close-button"
-          onClick={handleCloseModal}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              handleCloseModal();
-            }
-          }}
-          role="button"
-          aria-label="Close"
-          tabIndex={0}
-        />
-      </div>
+      <ModalFormHeader title="Event" onClose={handleCloseModal} />
       <fieldset>
         <legend>New</legend>
         <form onSubmit={handleSubmit}>
@@ -138,7 +104,7 @@ function EventsNew({ handleCloseModal, setDirty }) {
               id="event-new-day"
               value={day}
               placeholder=""
-              onDayChange={handleDayChange}
+              onDayChange={setDay}
               inputDisabled={loading}
               defaultMonth={dayjs(params.date).toDate()}
               disabledDays={[
@@ -150,35 +116,21 @@ function EventsNew({ handleCloseModal, setDirty }) {
           </div>
           <br />
           <br />
-          <label htmlFor="event-new-start-time">Start Time</label>
-          <select
+          <TimeSelect
             id="event-new-start-time"
+            label="Start Time"
             value={startTime}
-            onChange={(e) => setStartTime(e.target.value)}
+            onChange={setStartTime}
             disabled={loading || allDay}
-          >
-            <option />
-            {generateTimes().map((time) => (
-              <option key={time.value} value={time.value}>
-                {time.display}
-              </option>
-            ))}
-          </select>
+          />
           <br />
-          <label htmlFor="event-new-end-time">End Time</label>
-          <select
+          <TimeSelect
             id="event-new-end-time"
+            label="End Time"
             value={endTime}
-            onChange={(e) => setEndTime(e.target.value)}
+            onChange={setEndTime}
             disabled={loading || allDay}
-          >
-            <option />
-            {generateTimes().map((time) => (
-              <option key={time.value} value={time.value}>
-                {time.display}
-              </option>
-            ))}
-          </select>
+          />
           <br />
           <label htmlFor="event-new-all-day">All Day</label>
           {"  "}

@@ -337,6 +337,25 @@ Make modal showup on top of calendar
   cursor: pointer;
 }
 
+/* A button that is only its icon. Strips the native button chrome so
+   the SVG inside renders exactly as a bare SVG would: font is
+   inherited (the icon sizes itself in em), flex layout removes the
+   inline baseline gap. */
+.icon-button {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  font: inherit;
+  display: flex;
+  align-items: center;
+}
+
+.icon-button.close-button {
+  margin-left: auto;
+}
+
 /*
 Reduce default size of calendar content
 */

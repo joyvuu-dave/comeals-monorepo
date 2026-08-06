@@ -4,13 +4,17 @@ import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import axios from "axios";
-import { generateTimes, toCommunityDayjs } from "../../helpers/helpers";
+import { toCommunityDayjs } from "../../helpers/helpers";
 import handleAxiosError from "../../helpers/handle_axios_error";
 import { observer } from "mobx-react-lite";
 import { useStore } from "../../helpers/store_context";
-import Icon from "../icon";
 import ConfirmModal from "../app/confirm_modal";
 import useDirtyReport from "../../helpers/use_dirty_report";
+import useMountedRef from "../../helpers/use_mounted_ref";
+import ModalFormHeader from "../modal_form/header";
+import TimeSelect from "../modal_form/time_select";
+import { buildStartEndPayload, toTimeString } from "../modal_form/payload";
+import useDeleteFlow from "../modal_form/use_delete_flow";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -27,27 +31,28 @@ const CommonHouseReservationsEdit = observer(
     const [event, setEvent] = useState({});
     const [residentId, setResidentId] = useState("");
     const [title, setTitle] = useState("");
-    const [day, setDay] = useState("");
+    const [day, setDay] = useState(null);
     const [startTime, setStartTime] = useState("");
     const [endTime, setEndTime] = useState("");
     const [loadingAction, setLoadingAction] = useState(null);
-    const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
-    // The requests outlive a closed modal; the flag keeps their
-    // callbacks from setting state after unmount, like the class's
-    // _isMounted.
-    const mountedRef = useRef(true);
+    const mountedRef = useMountedRef();
 
-    // The values the fetch hydrated, normalized for comparison. The
-    // form is dirty when any field differs from these (ADR 0006).
+    // The values the fetch hydrated, normalized for comparison. The form
+    // fields are set FROM this object, so the dirty check below can
+    // compare against it directly (ADR 0006).
     const initialRef = useRef(null);
+
+    // Hosts cache: kick off fetch if empty; no-op if already loaded.
+    useEffect(
+      function () {
+        store.ensureHosts();
+      },
+      [store],
+    );
 
     useEffect(
       function () {
-        mountedRef.current = true;
-        // Hosts cache: kick off fetch if empty; no-op if already loaded.
-        store.ensureHosts();
-
         axios
           .get(`/api/v1/common-house-reservations/${eventId}`)
           .then(function (response) {
@@ -62,14 +67,8 @@ const CommonHouseReservationsEdit = observer(
                 residentId: String(evt.resident_id),
                 title: evt.title || "",
                 day: sd.format("YYYY-MM-DD"),
-                startTime: `${sd.hour().toString().padStart(2, "0")}:${sd
-                  .minute()
-                  .toString()
-                  .padStart(2, "0")}`,
-                endTime: `${ed.hour().toString().padStart(2, "0")}:${ed
-                  .minute()
-                  .toString()
-                  .padStart(2, "0")}`,
+                startTime: toTimeString(sd),
+                endTime: toTimeString(ed),
               };
               initialRef.current = initial;
               setEvent(evt);
@@ -84,12 +83,8 @@ const CommonHouseReservationsEdit = observer(
           .catch(function (error) {
             handleAxiosError(error, { silent: true });
           });
-
-        return function () {
-          mountedRef.current = false;
-        };
       },
-      [eventId, store],
+      [eventId, mountedRef],
     );
 
     function handleSubmit(e) {
@@ -98,13 +93,7 @@ const CommonHouseReservationsEdit = observer(
       axios
         .patch(`/api/v1/common-house-reservations/${eventId}/update`, {
           resident_id: residentId,
-          start_year: day && new Date(day).getFullYear(),
-          start_month: day && new Date(day).getMonth() + 1,
-          start_day: day && new Date(day).getDate(),
-          start_hours: startTime && startTime.split(":")[0],
-          start_minutes: startTime && startTime.split(":")[1],
-          end_hours: endTime && endTime.split(":")[0],
-          end_minutes: endTime && endTime.split(":")[1],
+          ...buildStartEndPayload(day, startTime, endTime),
           title: title,
         })
         .then(function (response) {
@@ -129,42 +118,21 @@ const CommonHouseReservationsEdit = observer(
         });
     }
 
-    function handleDeleteClick() {
-      if (loadingAction) return;
-      setConfirmDeleteOpen(true);
-    }
-
-    function handleDeleteConfirm() {
-      setConfirmDeleteOpen(false);
-      setLoadingAction("delete");
-      axios
-        .delete(`/api/v1/common-house-reservations/${eventId}/delete`)
-        .then(function (response) {
-          if (!mountedRef.current) return;
-          setLoadingAction(null);
-          if (response.status === 200) {
-            // The client that knows, invalidates (issue #37).
-            store.invalidateMonthForDate(event.start_date);
-            // The record is gone; edited fields have nothing left to
-            // protect (ADR 0006).
-            setDirty(false);
-            handleCloseModal();
-          }
-        })
-        .catch(function (error) {
-          if (!mountedRef.current) return;
-          setLoadingAction(null);
-          handleAxiosError(error);
-        });
-    }
-
-    function handleDeleteCancel() {
-      setConfirmDeleteOpen(false);
-    }
-
-    function handleDayChange(val) {
-      setDay(val);
-    }
+    const deleteFlow = useDeleteFlow({
+      url: `/api/v1/common-house-reservations/${eventId}/delete`,
+      message: "Do you really want to delete this reservation?",
+      loadingAction: loadingAction,
+      setLoadingAction: setLoadingAction,
+      mountedRef: mountedRef,
+      onDeleted: function () {
+        // The client that knows, invalidates (issue #37).
+        store.invalidateMonthForDate(event.start_date);
+        // The record is gone; edited fields have nothing left to
+        // protect (ADR 0006).
+        setDirty(false);
+        handleCloseModal();
+      },
+    });
 
     const residents = store.hosts;
     const disabled = loadingAction !== null || !loaded;
@@ -182,36 +150,13 @@ const CommonHouseReservationsEdit = observer(
     );
     return (
       <div>
-        <div className="flex">
-          <h2>Common House</h2>
-          <button
-            onClick={handleDeleteClick}
-            type="button"
-            className={
-              loadingAction === "delete"
-                ? "mar-l-md button-warning button-loader"
-                : "mar-l-md button-warning"
-            }
-            disabled={disabled}
-          >
-            Delete
-          </button>
-          <Icon
-            name="xmark"
-            size="2x"
-            className="close-button"
-            onClick={handleCloseModal}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                handleCloseModal();
-              }
-            }}
-            role="button"
-            aria-label="Close"
-            tabIndex={0}
-          />
-        </div>
+        <ModalFormHeader
+          title="Common House"
+          onClose={handleCloseModal}
+          onDelete={deleteFlow.requestDelete}
+          deleting={loadingAction === "delete"}
+          disabled={disabled}
+        />
         <fieldset data-populated={populated ? "true" : undefined}>
           <legend>Edit</legend>
           <form onSubmit={handleSubmit}>
@@ -258,7 +203,7 @@ const CommonHouseReservationsEdit = observer(
               <DayPickerInputWrapper
                 id="ch-edit-day"
                 value={day}
-                onDayChange={handleDayChange}
+                onDayChange={setDay}
                 inputDisabled={disabled}
                 disabledDays={
                   event.start_date
@@ -276,36 +221,22 @@ const CommonHouseReservationsEdit = observer(
             <br />
             <br />
 
-            <label htmlFor="ch-edit-start-time">Start Time</label>
-            <select
+            <TimeSelect
               id="ch-edit-start-time"
+              label="Start Time"
               value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
+              onChange={setStartTime}
               disabled={disabled}
-            >
-              <option />
-              {generateTimes().map((time) => (
-                <option key={time.value} value={time.value}>
-                  {time.display}
-                </option>
-              ))}
-            </select>
+            />
             <br />
 
-            <label htmlFor="ch-edit-end-time">End Time</label>
-            <select
+            <TimeSelect
               id="ch-edit-end-time"
+              label="End Time"
               value={endTime}
-              onChange={(e) => setEndTime(e.target.value)}
+              onChange={setEndTime}
               disabled={disabled}
-            >
-              <option />
-              {generateTimes().map((time) => (
-                <option key={time.value} value={time.value}>
-                  {time.display}
-                </option>
-              ))}
-            </select>
+            />
             <br />
 
             <button
@@ -321,15 +252,7 @@ const CommonHouseReservationsEdit = observer(
             </button>
           </form>
         </fieldset>
-        <ConfirmModal
-          isOpen={confirmDeleteOpen}
-          message="Do you really want to delete this reservation?"
-          cancelLabel="Cancel"
-          confirmLabel="Delete"
-          armMs={400}
-          onConfirm={handleDeleteConfirm}
-          onCancel={handleDeleteCancel}
-        />
+        <ConfirmModal {...deleteFlow.confirmProps} />
       </div>
     );
   },

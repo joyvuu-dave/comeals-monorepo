@@ -7,7 +7,9 @@ import { useStore } from "../../helpers/store_context";
 import handleAxiosError from "../../helpers/handle_axios_error";
 import ConfirmModal from "../app/confirm_modal";
 import useDirtyReport from "../../helpers/use_dirty_report";
-import Icon from "../icon";
+import useMountedRef from "../../helpers/use_mounted_ref";
+import ModalFormHeader from "../modal_form/header";
+import useDeleteFlow from "../modal_form/use_delete_flow";
 
 // Render the full form from the first frame; the per-event fetch hydrates
 // the inputs when it returns. The host select is reactively bound to the
@@ -25,50 +27,48 @@ const GuestRoomReservationsEdit = observer(
     const [loaded, setLoaded] = useState(false);
     const [event, setEvent] = useState({});
     const [residentId, setResidentId] = useState("");
-    const [day, setDay] = useState("");
+    const [day, setDay] = useState(null);
     const [loadingAction, setLoadingAction] = useState(null);
-    const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
-    // The requests outlive a closed modal; the flag keeps their
-    // callbacks from setting state after unmount, like the class's
-    // _isMounted.
-    const mountedRef = useRef(true);
+    const mountedRef = useMountedRef();
 
-    // The values the fetch hydrated, normalized for comparison. The
-    // form is dirty when any field differs from these (ADR 0006).
+    // The values the fetch hydrated, normalized for comparison. The form
+    // fields are set FROM this object, so the dirty check below can
+    // compare against it directly (ADR 0006).
     const initialRef = useRef(null);
+
+    // Hosts cache: kick off fetch if empty; no-op if already loaded.
+    useEffect(
+      function () {
+        store.ensureHosts();
+      },
+      [store],
+    );
 
     useEffect(
       function () {
-        mountedRef.current = true;
-        // Hosts cache: kick off fetch if empty; no-op if already loaded.
-        store.ensureHosts();
-
         axios
           .get(`/api/v1/guest-room-reservations/${eventId}`)
           .then(function (response) {
             if (!mountedRef.current) return;
             if (response.status === 200) {
               var evt = response.data.event;
+              var d = dayjs(evt.date);
               initialRef.current = {
                 residentId: String(evt.resident_id),
-                day: dayjs(evt.date).format("YYYY-MM-DD"),
+                day: d.format("YYYY-MM-DD"),
               };
               setEvent(evt);
               setLoaded(true);
               setResidentId(evt.resident_id);
-              setDay(evt.date);
+              setDay(new Date(d.year(), d.month(), d.date()));
             }
           })
           .catch(function (error) {
             handleAxiosError(error, { silent: true });
           });
-
-        return function () {
-          mountedRef.current = false;
-        };
       },
-      [eventId, store],
+      [eventId, mountedRef],
     );
 
     function handleSubmit(e) {
@@ -101,42 +101,21 @@ const GuestRoomReservationsEdit = observer(
         });
     }
 
-    function handleDeleteClick() {
-      if (loadingAction) return;
-      setConfirmDeleteOpen(true);
-    }
-
-    function handleDeleteConfirm() {
-      setConfirmDeleteOpen(false);
-      setLoadingAction("delete");
-      axios
-        .delete(`/api/v1/guest-room-reservations/${eventId}/delete`)
-        .then(function (response) {
-          if (!mountedRef.current) return;
-          setLoadingAction(null);
-          if (response.status === 200) {
-            // The client that knows, invalidates (issue #37).
-            store.invalidateMonthForDate(event.date);
-            // The record is gone; edited fields have nothing left to
-            // protect (ADR 0006).
-            setDirty(false);
-            handleCloseModal();
-          }
-        })
-        .catch(function (error) {
-          if (!mountedRef.current) return;
-          setLoadingAction(null);
-          handleAxiosError(error);
-        });
-    }
-
-    function handleDeleteCancel() {
-      setConfirmDeleteOpen(false);
-    }
-
-    function handleDayChange(val) {
-      setDay(val);
-    }
+    const deleteFlow = useDeleteFlow({
+      url: `/api/v1/guest-room-reservations/${eventId}/delete`,
+      message: "Do you really want to delete this reservation?",
+      loadingAction: loadingAction,
+      setLoadingAction: setLoadingAction,
+      mountedRef: mountedRef,
+      onDeleted: function () {
+        // The client that knows, invalidates (issue #37).
+        store.invalidateMonthForDate(event.date);
+        // The record is gone; edited fields have nothing left to
+        // protect (ADR 0006).
+        setDirty(false);
+        handleCloseModal();
+      },
+    });
 
     const hosts = store.hosts;
     const disabled = loadingAction !== null || !loaded;
@@ -156,36 +135,13 @@ const GuestRoomReservationsEdit = observer(
 
     return (
       <div>
-        <div className="flex">
-          <h2>Guest Room Reservation</h2>
-          <button
-            onClick={handleDeleteClick}
-            type="button"
-            className={
-              loadingAction === "delete"
-                ? "mar-l-md button-warning button-loader"
-                : "mar-l-md button-warning"
-            }
-            disabled={disabled}
-          >
-            Delete
-          </button>
-          <Icon
-            name="xmark"
-            size="2x"
-            className="close-button"
-            onClick={handleCloseModal}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                handleCloseModal();
-              }
-            }}
-            role="button"
-            aria-label="Close"
-            tabIndex={0}
-          />
-        </div>
+        <ModalFormHeader
+          title="Guest Room Reservation"
+          onClose={handleCloseModal}
+          onDelete={deleteFlow.requestDelete}
+          deleting={loadingAction === "delete"}
+          disabled={disabled}
+        />
         <fieldset data-populated={populated ? "true" : undefined}>
           <legend>Edit</legend>
           <form onSubmit={handleSubmit}>
@@ -219,7 +175,7 @@ const GuestRoomReservationsEdit = observer(
               <DayPickerInputWrapper
                 id="guest-room-edit-day"
                 value={day}
-                onDayChange={handleDayChange}
+                onDayChange={setDay}
                 inputDisabled={disabled}
                 disabledDays={
                   event.date
@@ -248,15 +204,7 @@ const GuestRoomReservationsEdit = observer(
             </button>
           </form>
         </fieldset>
-        <ConfirmModal
-          isOpen={confirmDeleteOpen}
-          message="Do you really want to delete this reservation?"
-          cancelLabel="Cancel"
-          confirmLabel="Delete"
-          armMs={400}
-          onConfirm={handleDeleteConfirm}
-          onCancel={handleDeleteCancel}
-        />
+        <ConfirmModal {...deleteFlow.confirmProps} />
       </div>
     );
   },

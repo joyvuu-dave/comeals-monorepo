@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "react-router";
 import DayPickerInputWrapper from "../common/day_picker_input";
 import dayjs from "dayjs";
@@ -6,10 +6,12 @@ import axios from "axios";
 import Cookie from "js-cookie";
 import { observer } from "mobx-react-lite";
 import { useStore } from "../../helpers/store_context";
-import { generateTimes } from "../../helpers/helpers";
 import handleAxiosError from "../../helpers/handle_axios_error";
-import Icon from "../icon";
 import useDirtyReport from "../../helpers/use_dirty_report";
+import useMountedRef from "../../helpers/use_mounted_ref";
+import ModalFormHeader from "../modal_form/header";
+import TimeSelect from "../modal_form/time_select";
+import { buildStartEndPayload } from "../modal_form/payload";
 
 // No `ready` gate: render the full form from the first frame. The resident
 // select is reactively bound to `store.hosts` (populated on mount via
@@ -28,19 +30,13 @@ const CommonHouseReservationsNew = observer(
     const [endTime, setEndTime] = useState("");
     const [loading, setLoading] = useState(false);
 
-    const communityId = useRef(Cookie.get("community_id")).current;
+    const communityId = Cookie.get("community_id");
+    const mountedRef = useMountedRef();
 
-    // The POST outlives a closed modal; the flag keeps its callbacks
-    // from setting state after unmount, like the class's _isMounted.
-    const mountedRef = useRef(true);
+    // Hosts cache: kick off fetch if empty; no-op if already loaded.
     useEffect(
       function () {
-        mountedRef.current = true;
-        // Hosts cache: kick off fetch if empty; no-op if already loaded.
         store.ensureHosts();
-        return function () {
-          mountedRef.current = false;
-        };
       },
       [store],
     );
@@ -51,13 +47,7 @@ const CommonHouseReservationsNew = observer(
       axios
         .post(`/api/v1/common-house-reservations?community_id=${communityId}`, {
           resident_id: residentId,
-          start_year: day && day.getFullYear(),
-          start_month: day && day.getMonth() + 1,
-          start_day: day && day.getDate(),
-          start_hours: startTime && startTime.split(":")[0],
-          start_minutes: startTime && startTime.split(":")[1],
-          end_hours: endTime && endTime.split(":")[0],
-          end_minutes: endTime && endTime.split(":")[1],
+          ...buildStartEndPayload(day, startTime, endTime),
           title: title,
         })
         .then(function (response) {
@@ -81,10 +71,6 @@ const CommonHouseReservationsNew = observer(
         });
     }
 
-    function handleDayChange(val) {
-      setDay(val);
-    }
-
     // Dirty means the user changed something; the empty defaults the
     // form opens with do not count (ADR 0006).
     useDirtyReport(
@@ -99,24 +85,7 @@ const CommonHouseReservationsNew = observer(
     const residents = store.hosts;
     return (
       <div>
-        <div className="flex">
-          <h2>Common House</h2>
-          <Icon
-            name="xmark"
-            size="2x"
-            className="close-button"
-            onClick={handleCloseModal}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                handleCloseModal();
-              }
-            }}
-            role="button"
-            aria-label="Close"
-            tabIndex={0}
-          />
-        </div>
+        <ModalFormHeader title="Common House" onClose={handleCloseModal} />
         {/* `data-populated` reflects whether the data needed to fully use
           the form (the residents list) is available. Present at first
           paint when the cache is warm; absent only while a cold fetch
@@ -162,7 +131,7 @@ const CommonHouseReservationsNew = observer(
                 id="ch-new-day"
                 value={day}
                 placeholder=""
-                onDayChange={handleDayChange}
+                onDayChange={setDay}
                 inputDisabled={loading}
                 defaultMonth={dayjs(params.date).toDate()}
                 disabledDays={[
@@ -175,36 +144,22 @@ const CommonHouseReservationsNew = observer(
             <br />
             <br />
 
-            <label htmlFor="ch-new-start-time">Start Time</label>
-            <select
+            <TimeSelect
               id="ch-new-start-time"
+              label="Start Time"
               value={startTime}
+              onChange={setStartTime}
               disabled={loading}
-              onChange={(e) => setStartTime(e.target.value)}
-            >
-              <option />
-              {generateTimes().map((time) => (
-                <option key={time.value} value={time.value}>
-                  {time.display}
-                </option>
-              ))}
-            </select>
+            />
             <br />
 
-            <label htmlFor="ch-new-end-time">End Time</label>
-            <select
+            <TimeSelect
               id="ch-new-end-time"
+              label="End Time"
               value={endTime}
+              onChange={setEndTime}
               disabled={loading}
-              onChange={(e) => setEndTime(e.target.value)}
-            >
-              <option />
-              {generateTimes().map((time) => (
-                <option key={time.value} value={time.value}>
-                  {time.display}
-                </option>
-              ))}
-            </select>
+            />
             <br />
 
             <button
