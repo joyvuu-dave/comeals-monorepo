@@ -163,4 +163,22 @@ describe("month cache", () => {
       expect(monthCache.versionFor("a")).toBe(1);
     });
   });
+
+  describe("freshness", () => {
+    it("a key is fresh only after markFresh and only within the window", () => {
+      monthCache.set("a", { month: 1 });
+      expect(monthCache.isFresh("a", 5000)).toBe(false);
+      monthCache.markFresh("a");
+      expect(monthCache.isFresh("a", 5000)).toBe(true);
+      // A window of 0 ms has always expired by the time we ask.
+      expect(monthCache.isFresh("a", -1)).toBe(false);
+    });
+
+    it("remove() clears freshness — an invalidated month must refetch", () => {
+      monthCache.set("a", { month: 1 });
+      monthCache.markFresh("a");
+      monthCache.remove("a");
+      expect(monthCache.isFresh("a", 5000)).toBe(false);
+    });
+  });
 });

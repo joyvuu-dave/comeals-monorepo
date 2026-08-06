@@ -44,7 +44,7 @@ import {
   useLocation,
 } from "react-router";
 
-import { DataStore } from "./stores/data_store";
+import { DataStore, prefetchMonth } from "./stores/data_store";
 import { clear } from "idb-keyval";
 
 import ResidentsLogin from "./components/residents/login";
@@ -103,6 +103,19 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   const store = DataStore.create();
+
+  // Landing on the calendar: start the month data download now, in
+  // parallel with the calendar chunk (preloaded from index.html).
+  // Without this the fetch only starts after the chunk loads and the
+  // calendar mounts. The mount's own goToMonth then finds the month
+  // cached, or adopts the still-in-flight request — see
+  // loadMonthAsync — instead of starting the download from zero.
+  const calendarBoot = window.location.pathname.match(
+    /^\/calendar\/[^/]+\/(\d{4}-\d{2}-\d{2})/,
+  );
+  if (calendarBoot && typeof Cookie.get("community_id") !== "undefined") {
+    prefetchMonth(calendarBoot[1]);
+  }
 
   window.addEventListener("load", function () {
     function updateOnlineStatus() {

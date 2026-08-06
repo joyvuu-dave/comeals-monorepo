@@ -60,6 +60,7 @@ export function set(key, value) {
     var oldest = cache.keys().next().value;
     cache.delete(oldest);
     versions.delete(oldest);
+    fetchedAt.delete(oldest);
   }
 }
 
@@ -69,11 +70,29 @@ export function size() {
   return cache.size;
 }
 
+// When a key was last filled from the NETWORK (never from IndexedDB —
+// that copy may be days old). switchMonths reads this to skip its
+// revalidation fetch when the data on hand arrived seconds ago, which
+// is the case when the boot-time prefetch or an adjacent-month
+// prefetch just downloaded the month. Refetching it would only repeat
+// the same request.
+const fetchedAt = new Map();
+
+export function markFresh(key) {
+  fetchedAt.set(key, Date.now());
+}
+
+export function isFresh(key, maxAgeMs) {
+  var t = fetchedAt.get(key);
+  return typeof t === "number" && Date.now() - t <= maxAgeMs;
+}
+
 // Drops the cache entry but keeps the version. Invalidation removes
 // the entry and then bumps the version; an in-flight prefetch needs
 // the bumped version to survive so it can see it was superseded.
 export function remove(key) {
   cache.delete(key);
+  fetchedAt.delete(key);
 }
 
 export function bumpVersion(key) {

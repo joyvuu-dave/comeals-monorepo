@@ -61,7 +61,10 @@ vi.mock("uuid", () => {
 
 import { unprotect, isAlive } from "mobx-state-tree";
 import { runInAction } from "mobx";
-import { DataStore } from "../../../app/frontend/src/stores/data_store.js";
+import {
+  DataStore,
+  prefetchMonth,
+} from "../../../app/frontend/src/stores/data_store.js";
 import * as idbKeyval from "idb-keyval";
 import axios from "axios";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
@@ -3396,6 +3399,109 @@ describe("DataStore", () => {
       await new Promise((r) => setTimeout(r, 0));
 
       expect(store.meal.descriptionDirty).toBe(true);
+    });
+  });
+
+  describe("boot-time month prefetch (issue #44)", () => {
+    // index.jsx calls prefetchMonth() before React mounts, so the
+    // month download runs in parallel with the calendar chunk. These
+    // tests pin the two dedupe rules that keep the mount-time load
+    // from repeating the request. Months are unique per test because
+    // the month cache is module state shared across this file.
+
+    function monthPayload(year, month, title) {
+      return {
+        id: "test-community-id",
+        year: year,
+        month: month,
+        meals: [],
+        bills: [],
+        rotations: [],
+        birthdays: [],
+        common_house_reservations: [],
+        guest_room_reservations: [],
+        events: [{ id: 1, title: title }],
+      };
+    }
+
+    function monthCalls(fragment) {
+      return axios.get.mock.calls.filter((c) => c[0].includes(fragment)).length;
+    }
+
+    it("loadMonthAsync adopts an in-flight prefetch instead of duplicating the request", async () => {
+      const store = createDataStore();
+
+      // A prefetch whose response we control: it stays on the wire
+      // until we resolve it, like a real slow network.
+      let resolveFetch;
+      axios.get.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFetch = resolve;
+          }),
+      );
+      prefetchMonth("2030-03-15");
+      await vi.waitFor(() => {
+        expect(resolveFetch).toBeDefined();
+      });
+      expect(monthCalls("/calendar/2030-03")).toBe(1);
+
+      // The calendar mounts while the prefetch is still in flight.
+      store.goToMonth("2030-03-15");
+      await new Promise((r) => setTimeout(r, 0));
+
+      // No second request — the mount adopted the pending one.
+      expect(monthCalls("/calendar/2030-03")).toBe(1);
+
+      // When the prefetch lands, its data reaches the screen.
+      resolveFetch({ status: 200, data: monthPayload(2030, 3, "adopted") });
+      await vi.waitFor(() => {
+        expect(store.calendarEvents.length).toBe(1);
+        expect(store.calendarEvents[0].title).toBe("adopted");
+      });
+      expect(monthCalls("/calendar/2030-03")).toBe(1);
+    });
+
+    it("switchMonths skips revalidation for a month the prefetch fetched seconds ago", async () => {
+      const store = createDataStore();
+
+      axios.get.mockResolvedValueOnce({
+        status: 200,
+        data: monthPayload(2030, 5, "fresh"),
+      });
+      prefetchMonth("2030-05-15");
+      await vi.waitFor(() => {
+        expect(monthCalls("/calendar/2030-05")).toBe(1);
+      });
+      // Let the prefetch finish writing the cache.
+      await new Promise((r) => setTimeout(r, 0));
+
+      // The calendar mounts: instant render from cache, and no
+      // revalidation fetch — the data is seconds old.
+      store.goToMonth("2030-05-15");
+      expect(store.calendarEvents.length).toBe(1);
+      expect(store.calendarEvents[0].title).toBe("fresh");
+      await new Promise((r) => setTimeout(r, 0));
+      expect(monthCalls("/calendar/2030-05")).toBe(1);
+    });
+
+    it("a month cached longer ago still revalidates on switchMonths", async () => {
+      const store = createDataStore();
+
+      // Warm the cache WITHOUT marking it fresh, the state of any
+      // month that was not just downloaded (e.g. warmed from
+      // IndexedDB on a repeat visit).
+      const monthCache =
+        await import("../../../app/frontend/src/stores/month_cache.js");
+      const key = monthCache.keyFor("test-community-id", "2030", "7");
+      monthCache.set(key, monthPayload(2030, 7, "stale"));
+
+      store.goToMonth("2030-07-15");
+      expect(store.calendarEvents[0].title).toBe("stale");
+      // The stale-while-revalidate fetch still fires.
+      await vi.waitFor(() => {
+        expect(monthCalls("/calendar/2030-07")).toBe(1);
+      });
     });
   });
 });

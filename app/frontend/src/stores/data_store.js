@@ -77,6 +77,18 @@ function invalidateMonth(communityId, year, month) {
   monthCache.bumpVersion(key);
 }
 
+// Network fetches started by a prefetch, keyed like monthCache. When
+// the calendar mounts while the boot-time prefetch of the same month
+// is still in flight, loadMonthAsync adopts the pending request
+// instead of racing it with a duplicate one.
+var monthNetworkInFlight = {};
+
+// How long a network-fetched month counts as fresh. Within this
+// window switchMonths renders it without a revalidation fetch —
+// the data just came from the server, so refetching it would repeat
+// the same request. Past the window, normal stale-while-revalidate.
+var MONTH_FRESH_MS = 5000;
+
 function prefetchMonthData(date) {
   var myDate = dayjs(date);
   var key = monthCache.keyFor(
@@ -101,20 +113,34 @@ function prefetchMonthData(date) {
       return;
     }
 
-    axios
+    var pending = axios
       .get(`/api/v1/communities/${Cookie.get("community_id")}/calendar/${date}`)
       .then(function (response) {
         if (response.status === 200) {
           // Discard if a Pusher invalidation arrived since we started
           if (monthCache.versionFor(key) !== versionAtStart) return;
           monthCache.set(key, response.data);
+          monthCache.markFresh(key);
           kvSet(key, response.data);
         }
       })
       .catch(function () {
         // Prefetch failure is non-critical
+      })
+      .finally(function () {
+        delete monthNetworkInFlight[key];
       });
+    monthNetworkInFlight[key] = pending;
   });
+}
+
+// Called from index.jsx at boot, before React mounts, when the URL is
+// a calendar route. It starts the month data download in parallel
+// with the calendar chunk; by the time the calendar mounts, its
+// goToMonth finds the month cached (or adopts the in-flight request)
+// instead of only then starting the fetch.
+export function prefetchMonth(date) {
+  prefetchMonthData(date);
 }
 
 export const DataStore = types
@@ -718,6 +744,36 @@ export const DataStore = types
       monthFetchVersion += 1;
       var versionAtStart = monthFetchVersion;
       logEvent("loadMonthAsync-start", { date: self.currentDate });
+
+      // A prefetch of this same month is still on the wire (the
+      // boot-time prefetch, usually): wait for it and render its
+      // result instead of issuing a duplicate request. If it failed
+      // or was invalidated mid-flight, fall through to a normal fetch.
+      var myDate = dayjs(self.currentDate);
+      var key = monthCache.keyFor(
+        Cookie.get("community_id"),
+        myDate.format("YYYY"),
+        myDate.format("M"),
+      );
+      var pending = monthNetworkInFlight[key];
+      if (pending) {
+        pending.then(function () {
+          if (versionAtStart !== monthFetchVersion) return;
+          var cached = monthCache.get(key);
+          if (cached !== undefined) {
+            logEvent("loadMonthAsync-adopted-prefetch", {
+              date: self.currentDate,
+            });
+            self.loadMonth(cached);
+          } else {
+            self.fetchMonth(versionAtStart);
+          }
+        });
+        return;
+      }
+      self.fetchMonth(versionAtStart);
+    },
+    fetchMonth(versionAtStart) {
       axios
         .get(
           `/api/v1/communities/${Cookie.get("community_id")}/calendar/${
@@ -737,6 +793,7 @@ export const DataStore = types
               respData.month,
             );
             monthCache.set(key, respData);
+            monthCache.markFresh(key);
             kvSet(key, respData).then(function () {
               if (versionAtStart !== monthFetchVersion) return;
               logEvent("loadMonthAsync-resolved", { date: self.currentDate });
@@ -1221,7 +1278,13 @@ export const DataStore = types
       var cached = monthCache.get(key);
       if (cached !== undefined) {
         self.loadMonth(cached);
-        self.loadMonthAsync();
+        // Data that came from the network seconds ago (a boot-time or
+        // adjacent-month prefetch, or a quick back-and-forth) needs no
+        // revalidation — the fetch would repeat the same request.
+        // Older entries revalidate as always.
+        if (!monthCache.isFresh(key, MONTH_FRESH_MS)) {
+          self.loadMonthAsync();
+        }
         return;
       }
 
