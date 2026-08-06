@@ -4,9 +4,9 @@ import axios from "axios";
 import Cookie from "js-cookie";
 
 import Meal from "./meal";
-import ResidentStore from "./resident_store";
-import BillStore from "./bill_store";
-import GuestStore from "./guest_store";
+import Resident from "./resident";
+import Bill from "./bill";
+import Guest from "./guest";
 import * as monthCache from "./month_cache";
 
 import { pusherClient, startPusher } from "../helpers/pusher_client";
@@ -161,17 +161,11 @@ export const DataStore = types
     mealLoadNotFound: false,
     meal: types.maybeNull(types.reference(Meal)),
     meals: types.optional(types.array(Meal), []),
-    residentStore: types.optional(ResidentStore, {
-      residents: {},
-    }),
-    billStore: types.optional(BillStore, {
-      bills: {},
-    }),
-    guestStore: types.optional(GuestStore, {
-      guests: {},
-    }),
-    calendarName: types.optional(types.string, ""),
-    userName: types.optional(types.string, ""),
+    // The current meal's rows. They live directly on the store; child
+    // nodes reach back up with getRoot (their `root` view).
+    residents: types.map(Resident),
+    bills: types.map(Bill),
+    guests: types.map(Guest),
     calendarEvents: types.optional(types.array(types.frozen()), []),
     // Monotonic counter bumped whenever calendarEvents changes (replace or
     // clear). The Calendar component is wrapped in React.memo and diffs a
@@ -238,17 +232,8 @@ export const DataStore = types
       if (!self.meal) return "";
       return self.meal.description;
     },
-    get residents() {
-      return self.residentStore.residents;
-    },
-    get bills() {
-      return self.billStore.bills;
-    },
-    get guests() {
-      return self.guestStore.guests;
-    },
     get guestsCount() {
-      return self.guestStore.guests.size;
+      return self.guests.size;
     },
     get mealResidentsCount() {
       return Array.from(self.residents.values()).filter(
@@ -880,15 +865,9 @@ export const DataStore = types
       });
     },
     preLoadData() {
-      if (self.billStore && self.billStore.bills) {
-        self.clearBills();
-      }
-      if (self.residentStore && self.residentStore.residents) {
-        self.clearResidents();
-      }
-      if (self.guestStore && self.guestStore.guests) {
-        self.clearGuests();
-      }
+      self.clearBills();
+      self.clearResidents();
+      self.clearGuests();
     },
     loadData(data) {
       self.preLoadData();
@@ -933,13 +912,13 @@ export const DataStore = types
         if (resident.attending_at !== null) {
           resident.attending_at = new Date(resident.attending_at);
         }
-        self.residentStore.residents.put(resident);
+        self.residents.put(resident);
       });
 
       // Assign Guests
       data.guests.forEach((guest) => {
         guest.created_at = new Date(guest.created_at);
-        self.guestStore.guests.put(guest);
+        self.guests.put(guest);
       });
 
       // Assign Bills
@@ -979,11 +958,11 @@ export const DataStore = types
         return bill;
       });
 
-      // Put bills into BillStore, skipping any with dangling resident references
+      // Put bills into the map, skipping any with dangling resident references
       bills.forEach((bill) => {
         if (
           bill.resident != null &&
-          !self.residentStore.residents.has(String(bill.resident))
+          !self.residents.has(String(bill.resident))
         ) {
           console.warn(
             "Skipping bill with unknown resident reference:",
@@ -991,7 +970,7 @@ export const DataStore = types
           );
           return;
         }
-        self.billStore.bills.put(bill);
+        self.bills.put(bill);
       });
 
       // Change loading state. A landed load also ends any retry state:
@@ -1148,20 +1127,23 @@ export const DataStore = types
       prefetchMonthData(current.add(1, "month").format("YYYY-MM-DD"));
     },
     clearResidents() {
-      self.residentStore.residents.clear();
+      self.residents.clear();
     },
     clearBills() {
-      self.billStore.bills.clear();
+      self.bills.clear();
     },
     clearGuests() {
-      self.guestStore.guests.clear();
+      self.guests.clear();
     },
     clearCalendarEvents() {
       self.calendarEvents.clear();
       self.calendarEventsVersion += 1;
     },
     appendGuest(obj) {
-      self.guestStore.guests.put(obj);
+      self.guests.put(obj);
+    },
+    removeGuest(id) {
+      self.guests.delete(id.toString());
     },
     addMeal(obj) {
       self.meals.push(obj);

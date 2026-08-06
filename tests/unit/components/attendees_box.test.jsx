@@ -72,15 +72,12 @@ function createDataStore(opts = {}) {
   const store = DataStore.create({
     meals: [mealDefaults],
     meal: mealDefaults.id,
-    residentStore: { residents: {} },
-    billStore: { bills: {} },
-    guestStore: { guests: {} },
   });
 
   unprotect(store);
   runInAction(() => {
-    residents.forEach((r) => store.residentStore.residents.put(r));
-    guests.forEach((g) => store.guestStore.guests.put(g));
+    residents.forEach((r) => store.residents.put(r));
+    guests.forEach((g) => store.guests.put(g));
   });
 
   return store;

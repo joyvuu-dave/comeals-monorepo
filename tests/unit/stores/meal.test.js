@@ -35,39 +35,39 @@ vi.mock("idb-keyval", () => ({
 import { types } from "mobx-state-tree";
 import axios from "axios";
 import Meal from "../../../app/frontend/src/stores/meal.js";
-import ResidentStore from "../../../app/frontend/src/stores/resident_store.js";
-import BillStore from "../../../app/frontend/src/stores/bill_store.js";
-import GuestStore from "../../../app/frontend/src/stores/guest_store.js";
+import Resident from "../../../app/frontend/src/stores/resident.js";
+import Bill from "../../../app/frontend/src/stores/bill.js";
+import Guest from "../../../app/frontend/src/stores/guest.js";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
 
-// Meal.settleExtras calls self.form.loadDataAsync(); this spy records it.
+// Meal.settleExtras calls self.root.loadDataAsync(); this spy records it.
 const loadDataAsyncMock = vi.fn();
 
-// Build a minimal DataStore-like parent so Meal.form (getParent(self, 2)) resolves.
+// Build a minimal DataStore-like root so Meal.root (getRoot) resolves.
 // The real DataStore uses afterCreate to set up Pusher, so we create a slimmed-down
 // wrapper that has the same shape the Meal model expects.
 const TestDataStore = types
   .model("TestDataStore", {
     meals: types.optional(types.array(Meal), []),
     meal: types.maybeNull(types.reference(Meal)),
-    residentStore: types.optional(ResidentStore, { residents: {} }),
-    billStore: types.optional(BillStore, { bills: {} }),
-    guestStore: types.optional(GuestStore, { guests: {} }),
+    residents: types.map(Resident),
+    bills: types.map(Bill),
+    guests: types.map(Guest),
   })
   .views((self) => ({
     get attendeesCount() {
       const residentsAttending = Array.from(
-        self.residentStore.residents.values(),
+        self.residents.values(),
       ).filter((r) => r.attending).length;
-      return self.guestStore.guests.size + residentsAttending;
+      return self.guests.size + residentsAttending;
     },
   }))
   .actions((self) => ({
     addResident(r) {
-      self.residentStore.residents.put(r);
+      self.residents.put(r);
     },
     addGuest(g) {
-      self.guestStore.guests.put(g);
+      self.guests.put(g);
     },
     loadDataAsync() {
       loadDataAsyncMock();
@@ -79,8 +79,6 @@ function createStore(mealProps = {}, residents = [], guests = []) {
   const store = TestDataStore.create({
     meals: [mealDefaults],
     meal: mealDefaults.id,
-    residentStore: { residents: {} },
-    guestStore: { guests: {} },
   });
 
   residents.forEach((r) => store.addResident(r));

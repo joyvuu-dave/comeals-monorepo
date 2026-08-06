@@ -82,17 +82,14 @@ function createDataStore(opts = {}) {
   const store = DataStore.create({
     meals: [mealDefaults],
     meal: mealDefaults.id,
-    residentStore: { residents: {} },
-    billStore: { bills: {} },
-    guestStore: { guests: {} },
   });
 
   // Temporarily unprotect the tree so we can populate sub-stores for testing
   unprotect(store);
   runInAction(() => {
-    residents.forEach((r) => store.residentStore.residents.put(r));
-    guests.forEach((g) => store.guestStore.guests.put(g));
-    bills.forEach((b) => store.billStore.bills.put(b));
+    residents.forEach((r) => store.residents.put(r));
+    guests.forEach((g) => store.guests.put(g));
+    bills.forEach((b) => store.bills.put(b));
   });
 
   return store;
@@ -1681,7 +1678,7 @@ describe("DataStore", () => {
       });
       expect(store.canAdd).toBe(true);
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.toggleAttending();
       expect(store.meal.extras).toBe(0);
       expect(store.canAdd).toBe(false);

@@ -1,4 +1,4 @@
-import { types, getParent, isAlive } from "mobx-state-tree";
+import { types, getRoot, isAlive } from "mobx-state-tree";
 import { api } from "../helpers/api";
 import handleAxiosError from "../helpers/handle_axios_error";
 
@@ -44,11 +44,12 @@ const Meal = types
       if (self.extras === null) {
         return null;
       } else {
-        return Number(self.extras) + self.form.attendeesCount;
+        return Number(self.extras) + self.root.attendeesCount;
       }
     },
-    get form() {
-      return getParent(self, 2);
+    // The DataStore at the root of the tree.
+    get root() {
+      return getRoot(self);
     },
     // The "not saved" marker: there is unsaved text AND a save has
     // failed. Plain dirty is not enough — every normal save round-trip
@@ -134,7 +135,7 @@ const Meal = types
     // refetches, so restoring a captured value could overwrite fresh data.
     settleExtras() {
       self.extrasPending = false;
-      self.form.loadDataAsync();
+      self.root.loadDataAsync();
     },
     setExtras(val) {
       if (self.extrasPending) {

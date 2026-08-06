@@ -1,17 +1,11 @@
-import { types, getParent } from "mobx-state-tree";
+import { types } from "mobx-state-tree";
 
-const Guest = types
-  .model("Guest", {
-    id: types.identifierNumber,
-    created_at: types.Date,
-    meal_id: types.number,
-    resident_id: types.number,
-    vegetarian: false,
-  })
-  .views((self) => ({
-    get form() {
-      return getParent(self, 2);
-    },
-  }));
+const Guest = types.model("Guest", {
+  id: types.identifierNumber,
+  created_at: types.Date,
+  meal_id: types.number,
+  resident_id: types.number,
+  vegetarian: false,
+});
 
 export default Guest;

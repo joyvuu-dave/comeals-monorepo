@@ -111,9 +111,6 @@ describe("MealsEdit", () => {
   it("mounting the page loads the meal from the URL and renders it", async () => {
     const store = DataStore.create({
       meals: [],
-      residentStore: { residents: {} },
-      billStore: { bills: {} },
-      guestStore: { guests: {} },
     });
     renderPage(store);
 

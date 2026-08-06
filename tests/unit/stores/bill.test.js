@@ -34,29 +34,27 @@ vi.mock("idb-keyval", () => ({
 
 import { types } from "mobx-state-tree";
 import Meal from "../../../app/frontend/src/stores/meal.js";
-import ResidentStore from "../../../app/frontend/src/stores/resident_store.js";
-import BillStore from "../../../app/frontend/src/stores/bill_store.js";
-import GuestStore from "../../../app/frontend/src/stores/guest_store.js";
+import Resident from "../../../app/frontend/src/stores/resident.js";
+import Bill from "../../../app/frontend/src/stores/bill.js";
+import Guest from "../../../app/frontend/src/stores/guest.js";
 
-// Build a minimal DataStore-like parent to satisfy the getParent chains.
-// Bill.form -> getParent(self, 2) = BillStore
-// Bill.form.form -> DataStore
-// Bill actions call self.form.form.saveBills()
+// Build a minimal DataStore-like root so Bill's `root` view (getRoot)
+// resolves; Bill actions call self.root.saveBills().
 const TestDataStore = types
   .model("TestDataStore", {
     meals: types.optional(types.array(Meal), []),
     meal: types.maybeNull(types.reference(Meal)),
-    residentStore: types.optional(ResidentStore, { residents: {} }),
-    billStore: types.optional(BillStore, { bills: {} }),
-    guestStore: types.optional(GuestStore, { guests: {} }),
+    residents: types.map(Resident),
+    bills: types.map(Bill),
+    guests: types.map(Guest),
     saveBillsCalled: types.optional(types.number, 0),
   })
   .views((self) => ({
     get attendeesCount() {
       const residentsAttending = Array.from(
-        self.residentStore.residents.values(),
+        self.residents.values(),
       ).filter((r) => r.attending).length;
-      return self.guestStore.guests.size + residentsAttending;
+      return self.guests.size + residentsAttending;
     },
   }))
   .actions((self) => ({
@@ -64,10 +62,10 @@ const TestDataStore = types
       self.saveBillsCalled += 1;
     },
     addResident(r) {
-      self.residentStore.residents.put(r);
+      self.residents.put(r);
     },
     addBill(b) {
-      self.billStore.bills.put(b);
+      self.bills.put(b);
     },
   }));
 
@@ -78,9 +76,6 @@ function createStore(opts = {}) {
   const store = TestDataStore.create({
     meals: [mealDefaults],
     meal: mealDefaults.id,
-    residentStore: { residents: {} },
-    billStore: { bills: {} },
-    guestStore: { guests: {} },
   });
 
   residents.forEach((r) => store.addResident(r));
@@ -109,7 +104,7 @@ describe("Bill model", () => {
         bills: [{ id: "bill-1", resident: 10, amount: "25.00" }],
       });
 
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       expect(bill.resident_id).toBe(10);
     });
 
@@ -118,7 +113,7 @@ describe("Bill model", () => {
         bills: [{ id: "bill-1", amount: "25.00" }],
       });
 
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       expect(bill.resident_id).toBe("");
     });
   });
@@ -131,7 +126,7 @@ describe("Bill model", () => {
         bills: [{ id: "bill-1", amount: "25.50" }],
       });
 
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       expect(bill.amountIsValid).toBe(true);
     });
 
@@ -140,7 +135,7 @@ describe("Bill model", () => {
         bills: [{ id: "bill-1", amount: "" }],
       });
 
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       expect(bill.amountIsValid).toBe(true);
     });
 
@@ -149,7 +144,7 @@ describe("Bill model", () => {
         bills: [{ id: "bill-1", amount: "0" }],
       });
 
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       expect(bill.amountIsValid).toBe(true);
     });
 
@@ -158,7 +153,7 @@ describe("Bill model", () => {
         bills: [{ id: "bill-1", amount: "-5" }],
       });
 
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       expect(bill.amountIsValid).toBe(false);
     });
 
@@ -167,7 +162,7 @@ describe("Bill model", () => {
         bills: [{ id: "bill-1", amount: "abc" }],
       });
 
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       expect(bill.amountIsValid).toBe(false);
     });
 
@@ -176,7 +171,7 @@ describe("Bill model", () => {
         bills: [{ id: "bill-1", amount: "12.99" }],
       });
 
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       expect(bill.amountIsValid).toBe(true);
     });
   });
@@ -188,7 +183,7 @@ describe("Bill model", () => {
       const store = createStore({
         bills: [{ id: "bill-1", amount: "10000" }],
       });
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       expect(bill.amountIsValid).toBe(false);
     });
 
@@ -196,19 +191,19 @@ describe("Bill model", () => {
       const store = createStore({
         bills: [{ id: "bill-1", amount: "9999.99" }],
       });
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       expect(bill.amountIsValid).toBe(true);
     });
 
     it("accepts very small positive decimals", () => {
       const store = createStore({ bills: [{ id: "bill-1", amount: "0.01" }] });
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       expect(bill.amountIsValid).toBe(true);
     });
 
     it("accepts a single decimal digit", () => {
       const store = createStore({ bills: [{ id: "bill-1", amount: "12.5" }] });
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       expect(bill.amountIsValid).toBe(true);
     });
 
@@ -216,25 +211,25 @@ describe("Bill model", () => {
       const store = createStore({
         bills: [{ id: "bill-1", amount: "12.345" }],
       });
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       expect(bill.amountIsValid).toBe(false);
     });
 
     it("rejects scientific notation (the number input allows typing it)", () => {
       const store = createStore({ bills: [{ id: "bill-1", amount: "1e3" }] });
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       expect(bill.amountIsValid).toBe(false);
     });
 
     it("rejects whitespace-only strings", () => {
       const store = createStore({ bills: [{ id: "bill-1", amount: "   " }] });
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       expect(bill.amountIsValid).toBe(false);
     });
 
     it("rejects amounts with non-numeric suffixes", () => {
       const store = createStore({ bills: [{ id: "bill-1", amount: "25abc" }] });
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       expect(bill.amountIsValid).toBe(false);
     });
   });
@@ -248,7 +243,7 @@ describe("Bill model", () => {
         bills: [{ id: "bill-1" }],
       });
 
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       bill.setResident(10);
       expect(bill.resident_id).toBe(10);
       expect(bill.resident.name).toBe("Alice");
@@ -260,7 +255,7 @@ describe("Bill model", () => {
         bills: [{ id: "bill-1", resident: 10 }],
       });
 
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       const result = bill.setResident("");
       expect(result).toBeNull();
       expect(bill.resident).toBeNull();
@@ -273,7 +268,7 @@ describe("Bill model", () => {
         bills: [{ id: "bill-1" }],
       });
 
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
 
       const setResult = bill.setResident(10);
       expect(setResult).toBeTruthy();
@@ -289,7 +284,7 @@ describe("Bill model", () => {
         bills: [{ id: "bill-1" }],
       });
 
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       bill.setResident(10);
       expect(store.saveBillsCalled).toBe(1);
     });
@@ -303,7 +298,7 @@ describe("Bill model", () => {
         bills: [{ id: "bill-1", amount: "" }],
       });
 
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       const result = bill.setAmount("42.50");
       expect(result).toBe("42.50");
       expect(bill.amount).toBe("42.50");
@@ -314,7 +309,7 @@ describe("Bill model", () => {
         bills: [{ id: "bill-1", amount: "25.00" }],
       });
 
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       bill.setAmount("");
       expect(bill.amount).toBe("");
     });
@@ -324,7 +319,7 @@ describe("Bill model", () => {
         bills: [{ id: "bill-1", amount: "" }],
       });
 
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       bill.setAmount("10.00");
       expect(store.saveBillsCalled).toBe(1);
     });
@@ -336,7 +331,7 @@ describe("Bill model", () => {
         bills: [{ id: "bill-1", amount: "12.34" }],
       });
 
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       const result = bill.setAmount("12.345");
       expect(result).toBe("12.34");
       expect(bill.amount).toBe("12.34");
@@ -348,7 +343,7 @@ describe("Bill model", () => {
         bills: [{ id: "bill-1", amount: "9999" }],
       });
 
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       bill.setAmount("99990");
       expect(bill.amount).toBe("9999");
       expect(store.saveBillsCalled).toBe(0);
@@ -359,7 +354,7 @@ describe("Bill model", () => {
         bills: [{ id: "bill-1", amount: "5" }],
       });
 
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       bill.setAmount("1e3");
       bill.setAmount("abc");
       bill.setAmount("-5");
@@ -376,7 +371,7 @@ describe("Bill model", () => {
         bills: [{ id: "bill-1", amount: "25.00" }],
       });
 
-      expect(store.billStore.bills.get("bill-1").touched).toBe(false);
+      expect(store.bills.get("bill-1").touched).toBe(false);
     });
 
     it("is set by setAmount", () => {
@@ -384,7 +379,7 @@ describe("Bill model", () => {
         bills: [{ id: "bill-1", amount: "" }],
       });
 
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       bill.setAmount("10.00");
       expect(bill.touched).toBe(true);
     });
@@ -394,7 +389,7 @@ describe("Bill model", () => {
         bills: [{ id: "bill-1", amount: "" }],
       });
 
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       bill.setAmount("12.345");
       expect(bill.touched).toBe(false);
     });
@@ -404,7 +399,7 @@ describe("Bill model", () => {
         bills: [{ id: "bill-1", no_cost: false }],
       });
 
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       bill.toggleNoCost();
       expect(bill.touched).toBe(true);
     });
@@ -415,7 +410,7 @@ describe("Bill model", () => {
         bills: [{ id: "bill-1" }],
       });
 
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       bill.setResident(10);
       expect(bill.touched).toBe(true);
     });
@@ -429,7 +424,7 @@ describe("Bill model", () => {
         bills: [{ id: "bill-1", no_cost: false }],
       });
 
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       const result = bill.toggleNoCost();
       expect(result).toBe(true);
       expect(bill.no_cost).toBe(true);
@@ -440,7 +435,7 @@ describe("Bill model", () => {
         bills: [{ id: "bill-1", no_cost: true }],
       });
 
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       const result = bill.toggleNoCost();
       expect(result).toBe(false);
       expect(bill.no_cost).toBe(false);
@@ -451,7 +446,7 @@ describe("Bill model", () => {
         bills: [{ id: "bill-1", no_cost: false }],
       });
 
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       bill.toggleNoCost();
       expect(store.saveBillsCalled).toBe(1);
     });
@@ -466,7 +461,7 @@ describe("Bill model", () => {
         bills: [{ id: "bill-1", resident: 10, no_cost: true, amount: "" }],
       });
 
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       expect(bill.no_cost).toBe(true);
 
       bill.setAmount("25.00");
@@ -478,7 +473,7 @@ describe("Bill model", () => {
         bills: [{ id: "bill-1", no_cost: true, amount: "" }],
       });
 
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       bill.setAmount("");
       expect(bill.no_cost).toBe(true);
     });
@@ -488,7 +483,7 @@ describe("Bill model", () => {
         bills: [{ id: "bill-1", no_cost: true, amount: "" }],
       });
 
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       bill.setAmount("0");
       expect(bill.no_cost).toBe(true);
     });
@@ -501,7 +496,7 @@ describe("Bill model", () => {
         ],
       });
 
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       expect(bill.amount).toBe("25.00");
 
       bill.toggleNoCost();
@@ -515,7 +510,7 @@ describe("Bill model", () => {
         bills: [{ id: "bill-1", resident: 10, no_cost: true, amount: "" }],
       });
 
-      const bill = store.billStore.bills.get("bill-1");
+      const bill = store.bills.get("bill-1");
       expect(bill.no_cost).toBe(true);
 
       // Toggle off: no_cost true -> false, should not touch amount

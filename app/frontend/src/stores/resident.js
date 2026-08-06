@@ -1,4 +1,4 @@
-import { types, getParent, isAlive } from "mobx-state-tree";
+import { types, getRoot, isAlive } from "mobx-state-tree";
 import { api } from "../helpers/api";
 import handleAxiosError from "../helpers/handle_axios_error";
 import { evictMealCache } from "../helpers/meal_cache";
@@ -24,7 +24,7 @@ const Resident = types
       return self.short_name !== "" ? self.short_name : self.name;
     },
     get guests() {
-      return Array.from(self.form.form.guestStore.guests.values()).filter(
+      return Array.from(self.root.guests.values()).filter(
         (guest) => guest.resident_id === self.id,
       );
     },
@@ -38,17 +38,17 @@ const Resident = types
       }
 
       // Scenario #2: guests, meal open
-      if (self.guestsCount > 0 && !self.form.form.meal.closed) {
+      if (self.guestsCount > 0 && !self.root.meal.closed) {
         return true;
       }
 
       // Scenario #3: guests, meal closed, guests added after meal closed
       if (
         self.guestsCount > 0 &&
-        self.form.form.meal.closed &&
-        self.form.form.meal.closed_at !== null &&
+        self.root.meal.closed &&
+        self.root.meal.closed_at !== null &&
         self.guests.filter(
-          (guest) => guest.created_at > self.form.form.meal.closed_at,
+          (guest) => guest.created_at > self.root.meal.closed_at,
         ).length > 0
       ) {
         return true;
@@ -57,10 +57,10 @@ const Resident = types
       // Scenario #4: guests, meal closed, guests added before meal closed
       if (
         self.guestsCount > 0 &&
-        self.form.form.meal.closed &&
-        self.form.form.meal.closed_at !== null &&
+        self.root.meal.closed &&
+        self.root.meal.closed_at !== null &&
         Array.from(self.guests).filter(
-          (guest) => guest.created_at <= self.form.form.meal.closed_at,
+          (guest) => guest.created_at <= self.root.meal.closed_at,
         ).length > 0
       ) {
         return false;
@@ -75,17 +75,17 @@ const Resident = types
       }
 
       // Scenario #2: attending, meal open
-      if (self.attending && !self.form.form.meal.closed) {
+      if (self.attending && !self.root.meal.closed) {
         return true;
       }
 
       // Scenario #3: attending, meal closed, added after meal closed
       if (
         self.attending &&
-        self.form.form.meal.closed &&
+        self.root.meal.closed &&
         self.attending_at !== null &&
-        self.form.form.meal.closed_at !== null &&
-        self.attending_at > self.form.form.meal.closed_at
+        self.root.meal.closed_at !== null &&
+        self.attending_at > self.root.meal.closed_at
       ) {
         return true;
       }
@@ -93,18 +93,19 @@ const Resident = types
       // Scenario #4: guests, meal closed, added before meal closed
       if (
         self.guestsCount > 0 &&
-        self.form.form.meal.closed &&
+        self.root.meal.closed &&
         self.attending_at !== null &&
-        self.form.form.meal.closed_at !== null &&
-        self.attending_at <= self.form.form.meal.closed_at
+        self.root.meal.closed_at !== null &&
+        self.attending_at <= self.root.meal.closed_at
       ) {
         return false;
       }
 
       return false;
     },
-    get form() {
-      return getParent(self, 2);
+    // The DataStore at the root of the tree.
+    get root() {
+      return getRoot(self);
     },
   }))
   .actions((self) => ({
@@ -128,15 +129,15 @@ const Resident = types
       // Scenario #1: Meal is closed, you're not attending
       //              there are no extras -- can't add yourself
       if (
-        self.form.form.meal.closed &&
+        self.root.meal.closed &&
         !self.attending &&
-        self.form.form.meal.extras < 1
+        self.root.meal.extras < 1
       ) {
         return;
       }
 
       // Scenario #2: Meal is closed, you are attending -- can't remove yourself
-      if (self.form.form.meal.closed && self.attending && !self.canRemove) {
+      if (self.root.meal.closed && self.attending && !self.canRemove) {
         return;
       }
 
@@ -161,11 +162,11 @@ const Resident = types
       // cannot reach its parents or its fields — so the success callbacks
       // below can repair by refetching instead of silently dropping the
       // server's change.
-      const store = self.form.form;
+      const store = getRoot(self);
       const mealId = self.meal_id;
 
       if (val) {
-        self.form.form.meal.decrementExtras();
+        self.root.meal.decrementExtras();
         api.meals.residents
           .add(self.meal_id, self.id, {
             late: currentLate,
@@ -192,7 +193,7 @@ const Resident = types
             if (!isAlive(self)) return;
             self.setAttending(false);
             self.setAttendingAt(null);
-            self.form.form.meal.incrementExtras();
+            self.root.meal.incrementExtras();
 
             // If they were clicking late to add, uncheck late
             if (options.late) {
@@ -209,7 +210,7 @@ const Resident = types
       } else {
         var previousLate = self.late;
         self.late = false;
-        self.form.form.meal.incrementExtras();
+        self.root.meal.incrementExtras();
         api.meals.residents
           .remove(self.meal_id, self.id, {
             socketId: window.Comeals.socketId,
@@ -228,7 +229,7 @@ const Resident = types
             if (!isAlive(self)) return;
             self.setAttending(true);
             self.setLate(previousLate);
-            self.form.form.meal.decrementExtras();
+            self.root.meal.decrementExtras();
 
             handleAxiosError(error);
           });
@@ -243,7 +244,7 @@ const Resident = types
       const val = !self.late;
       self.late = val;
       // Captured while alive; see toggleAttending.
-      const store = self.form.form;
+      const store = getRoot(self);
       const mealId = self.meal_id;
 
       api.meals.residents
@@ -271,7 +272,7 @@ const Resident = types
       const val = !self.vegetarian;
       self.vegetarian = val;
       // Captured while alive; see toggleAttending.
-      const store = self.form.form;
+      const store = getRoot(self);
       const mealId = self.meal_id;
 
       api.meals.residents
@@ -292,9 +293,9 @@ const Resident = types
     },
     addGuest(options = { vegetarian: false }) {
       // Captured while alive; see toggleAttending.
-      const store = self.form.form;
+      const store = getRoot(self);
       const mealId = self.meal_id;
-      self.form.form.meal.decrementExtras();
+      self.root.meal.decrementExtras();
 
       api.meals.residents.guests
         .add(self.meal_id, self.id, {
@@ -313,12 +314,12 @@ const Resident = types
           if (response.status === 200) {
             const guest = response.data;
             guest.created_at = new Date(guest.created_at);
-            self.form.form.appendGuest(guest);
+            self.root.appendGuest(guest);
           }
         })
         .catch(function (error) {
           if (!isAlive(self)) return;
-          self.form.form.meal.incrementExtras();
+          self.root.meal.incrementExtras();
 
           handleAxiosError(error);
         });
@@ -341,7 +342,7 @@ const Resident = types
       const guestId = sortedGuests[0].id;
 
       // Captured while alive; see toggleAttending.
-      const store = self.form.form;
+      const store = getRoot(self);
       const mealId = self.meal_id;
 
       api.meals.residents.guests
@@ -355,8 +356,8 @@ const Resident = types
             return;
           }
           if (response.status === 200) {
-            self.form.form.guestStore.removeGuest(guestId);
-            self.form.form.meal.incrementExtras();
+            self.root.removeGuest(guestId);
+            self.root.meal.incrementExtras();
           }
         })
         .catch(function (error) {

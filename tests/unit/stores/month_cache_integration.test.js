@@ -108,9 +108,6 @@ function createStore() {
   const store = DataStore.create({
     meals: [{ id: 1 }],
     meal: 1,
-    residentStore: { residents: {} },
-    billStore: { bills: {} },
-    guestStore: { guests: {} },
   });
   window.Comeals.pusher.subscribe = vi.fn((name) => {
     const channel = { name, bind: vi.fn() };

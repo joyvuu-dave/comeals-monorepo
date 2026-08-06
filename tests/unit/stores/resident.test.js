@@ -43,25 +43,25 @@ import { types } from "mobx-state-tree";
 import axios from "axios";
 import * as idbKeyval from "idb-keyval";
 import Meal from "../../../app/frontend/src/stores/meal.js";
-import ResidentStore from "../../../app/frontend/src/stores/resident_store.js";
-import BillStore from "../../../app/frontend/src/stores/bill_store.js";
-import GuestStore from "../../../app/frontend/src/stores/guest_store.js";
+import Resident from "../../../app/frontend/src/stores/resident.js";
+import Bill from "../../../app/frontend/src/stores/bill.js";
+import Guest from "../../../app/frontend/src/stores/guest.js";
 
-// Build a minimal DataStore-like parent that satisfies all getParent chains.
+// Build a minimal DataStore-like root so Resident.root (getRoot) resolves.
 const TestDataStore = types
   .model("TestDataStore", {
     meals: types.optional(types.array(Meal), []),
     meal: types.maybeNull(types.reference(Meal)),
-    residentStore: types.optional(ResidentStore, { residents: {} }),
-    billStore: types.optional(BillStore, { bills: {} }),
-    guestStore: types.optional(GuestStore, { guests: {} }),
+    residents: types.map(Resident),
+    bills: types.map(Bill),
+    guests: types.map(Guest),
   })
   .views((self) => ({
     get attendeesCount() {
       const residentsAttending = Array.from(
-        self.residentStore.residents.values(),
+        self.residents.values(),
       ).filter((r) => r.attending).length;
-      return self.guestStore.guests.size + residentsAttending;
+      return self.guests.size + residentsAttending;
     },
   }))
   .volatile(() => ({
@@ -69,16 +69,16 @@ const TestDataStore = types
   }))
   .actions((self) => ({
     addResident(r) {
-      self.residentStore.residents.put(r);
+      self.residents.put(r);
     },
     removeResident(id) {
-      self.residentStore.residents.delete(String(id));
+      self.residents.delete(String(id));
     },
     addGuest(g) {
-      self.guestStore.guests.put(g);
+      self.guests.put(g);
     },
     appendGuest(obj) {
-      self.guestStore.guests.put(obj);
+      self.guests.put(obj);
     },
     loadDataAsync() {
       self.loadDataAsyncCalls += 1;
@@ -92,8 +92,6 @@ function createStore(opts = {}) {
   const store = TestDataStore.create({
     meals: [mealDefaults],
     meal: mealDefaults.id,
-    residentStore: { residents: {} },
-    guestStore: { guests: {} },
   });
 
   residents.forEach((r) => store.addResident(r));
@@ -129,7 +127,7 @@ describe("Resident model", () => {
         ],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       expect(alice.guests).toHaveLength(2);
       expect(alice.guests.map((g) => g.id)).toEqual(
         expect.arrayContaining([100, 101]),
@@ -141,7 +139,7 @@ describe("Resident model", () => {
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       expect(alice.guests).toHaveLength(0);
     });
   });
@@ -158,7 +156,7 @@ describe("Resident model", () => {
         ],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       expect(alice.guestsCount).toBe(2);
     });
 
@@ -167,7 +165,7 @@ describe("Resident model", () => {
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       expect(alice.guestsCount).toBe(0);
     });
   });
@@ -180,7 +178,7 @@ describe("Resident model", () => {
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: false }],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       expect(alice.canRemove).toBe(false);
     });
 
@@ -190,7 +188,7 @@ describe("Resident model", () => {
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       expect(alice.canRemove).toBe(true);
     });
 
@@ -211,7 +209,7 @@ describe("Resident model", () => {
         ],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       expect(alice.canRemove).toBe(true);
     });
 
@@ -240,7 +238,7 @@ describe("Resident model", () => {
         ],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       expect(alice.canRemove).toBe(false);
     });
 
@@ -261,7 +259,7 @@ describe("Resident model", () => {
         ],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       // No guests so scenario 4 does not match, falls through to return false
       expect(alice.canRemove).toBe(false);
     });
@@ -275,7 +273,7 @@ describe("Resident model", () => {
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       expect(alice.canRemoveGuest).toBe(false);
     });
 
@@ -288,7 +286,7 @@ describe("Resident model", () => {
         ],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       expect(alice.canRemoveGuest).toBe(true);
     });
 
@@ -309,7 +307,7 @@ describe("Resident model", () => {
         ],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       expect(alice.canRemoveGuest).toBe(true);
     });
 
@@ -330,7 +328,7 @@ describe("Resident model", () => {
         ],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       expect(alice.canRemoveGuest).toBe(false);
     });
 
@@ -351,7 +349,7 @@ describe("Resident model", () => {
         ],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       // guest.created_at <= closed_at so scenario 4 matches -> false
       expect(alice.canRemoveGuest).toBe(false);
     });
@@ -366,7 +364,7 @@ describe("Resident model", () => {
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: false }],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.toggleAttending();
       expect(alice.attending).toBe(true);
     });
@@ -377,7 +375,7 @@ describe("Resident model", () => {
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.toggleAttending();
       expect(alice.attending).toBe(false);
     });
@@ -394,7 +392,7 @@ describe("Resident model", () => {
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: false }],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.toggleAttending();
 
       await new Promise((r) => setTimeout(r, 0));
@@ -408,7 +406,7 @@ describe("Resident model", () => {
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: false }],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.toggleAttending();
       // null < 1 is true, so should block
       expect(alice.attending).toBe(false);
@@ -420,7 +418,7 @@ describe("Resident model", () => {
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: false }],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.toggleAttending();
       expect(alice.attending).toBe(false);
     });
@@ -431,7 +429,7 @@ describe("Resident model", () => {
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: false }],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.toggleAttending();
       expect(alice.attending).toBe(true);
     });
@@ -466,7 +464,7 @@ describe("Resident model", () => {
         ],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       // canRemove is false (scenario 4: has guests, closed, attended before closed)
       expect(alice.canRemove).toBe(false);
       alice.toggleAttending();
@@ -479,7 +477,7 @@ describe("Resident model", () => {
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: false }],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.toggleAttending();
       expect(store.meal.extras).toBe(4);
     });
@@ -490,7 +488,7 @@ describe("Resident model", () => {
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.toggleAttending();
       expect(store.meal.extras).toBe(6);
     });
@@ -503,7 +501,7 @@ describe("Resident model", () => {
         ],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.toggleAttending({ late: true });
       expect(alice.attending).toBe(true);
       expect(alice.late).toBe(true);
@@ -523,7 +521,7 @@ describe("Resident model", () => {
         ],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.toggleAttending({ toggleVeg: true });
       expect(alice.attending).toBe(true);
       expect(alice.vegetarian).toBe(true);
@@ -535,7 +533,7 @@ describe("Resident model", () => {
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: false }],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.toggleAttending();
 
       expect(axios).toHaveBeenCalledWith(
@@ -552,7 +550,7 @@ describe("Resident model", () => {
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.toggleAttending();
 
       expect(axios).toHaveBeenCalledWith(
@@ -575,7 +573,7 @@ describe("Resident model", () => {
           { id: 10, meal_id: 1, name: "Alice", attending: true, late: true },
         ],
       });
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.toggleAttending();
       expect(alice.attending).toBe(false);
       expect(alice.late).toBe(false);
@@ -587,7 +585,7 @@ describe("Resident model", () => {
         mealProps: { closed: true, extras: 1 },
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: false }],
       });
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.toggleAttending();
       expect(alice.attending).toBe(true);
       expect(store.meal.extras).toBe(0);
@@ -599,7 +597,7 @@ describe("Resident model", () => {
         mealProps: { closed: false, extras: null },
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
       });
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.toggleAttending();
       expect(alice.attending).toBe(false);
       expect(store.meal.extras).toBeNull(); // increment was a no-op
@@ -615,7 +613,7 @@ describe("Resident model", () => {
         mealProps: { closed: true, extras: 1 },
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
       });
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.addGuest({ vegetarian: false });
       expect(store.meal.extras).toBe(0);
     });
@@ -632,7 +630,7 @@ describe("Resident model", () => {
         ],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.toggleLate();
       expect(alice.attending).toBe(true);
       expect(alice.late).toBe(true);
@@ -646,7 +644,7 @@ describe("Resident model", () => {
         ],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.toggleLate();
       expect(alice.late).toBe(true);
       expect(alice.attending).toBe(true); // stays attending
@@ -660,7 +658,7 @@ describe("Resident model", () => {
         ],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.toggleLate();
       expect(alice.late).toBe(false);
     });
@@ -673,7 +671,7 @@ describe("Resident model", () => {
         ],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.toggleLate();
 
       expect(axios).toHaveBeenCalledWith(
@@ -702,7 +700,7 @@ describe("Resident model", () => {
         ],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.toggleVeg();
       expect(alice.attending).toBe(true);
       expect(alice.vegetarian).toBe(true);
@@ -722,7 +720,7 @@ describe("Resident model", () => {
         ],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.toggleVeg();
       expect(alice.vegetarian).toBe(true);
       expect(alice.attending).toBe(true); // stays attending
@@ -742,7 +740,7 @@ describe("Resident model", () => {
         ],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.toggleVeg();
       expect(alice.vegetarian).toBe(false);
     });
@@ -761,7 +759,7 @@ describe("Resident model", () => {
         ],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.toggleVeg();
 
       expect(axios).toHaveBeenCalledWith(
@@ -791,7 +789,7 @@ describe("Resident model", () => {
         ],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       // attending_at === closed_at, not >, so scenario 3 doesn't match
       expect(alice.canRemove).toBe(false);
     });
@@ -822,7 +820,7 @@ describe("Resident model", () => {
         ],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       // Scenario 3: at least one guest after close
       expect(alice.canRemoveGuest).toBe(true);
     });
@@ -844,7 +842,7 @@ describe("Resident model", () => {
         ],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       expect(alice.canRemove).toBe(false);
     });
 
@@ -862,7 +860,7 @@ describe("Resident model", () => {
         ],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       expect(alice.canRemove).toBe(false);
     });
   });
@@ -877,7 +875,7 @@ describe("Resident model", () => {
         ],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       expect(alice.canRemoveGuest).toBe(false);
     });
   });
@@ -901,7 +899,7 @@ describe("Resident model", () => {
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: false }],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.toggleAttending();
       killAlice(store); // the raced refetch lands before the 200
 
@@ -915,7 +913,7 @@ describe("Resident model", () => {
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.toggleAttending();
       killAlice(store);
 
@@ -931,7 +929,7 @@ describe("Resident model", () => {
         ],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.toggleLate();
       killAlice(store);
 
@@ -953,7 +951,7 @@ describe("Resident model", () => {
         ],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.toggleVeg();
       killAlice(store);
 
@@ -967,7 +965,7 @@ describe("Resident model", () => {
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.addGuest({ vegetarian: false });
       killAlice(store);
 
@@ -975,7 +973,7 @@ describe("Resident model", () => {
       expect(store.loadDataAsyncCalls).toBe(1);
       // The dropped guest must not be appended by hand — the refetch
       // brings it back.
-      expect(store.guestStore.guests.size).toBe(0);
+      expect(store.guests.size).toBe(0);
     });
 
     it("refetches when the node dies while a remove-guest is in flight", async () => {
@@ -987,7 +985,7 @@ describe("Resident model", () => {
         ],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.removeGuest();
       killAlice(store);
 
@@ -1001,7 +999,7 @@ describe("Resident model", () => {
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: false }],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.toggleAttending();
 
       await flush();
@@ -1019,7 +1017,7 @@ describe("Resident model", () => {
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: false }],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       alice.toggleAttending();
       killAlice(store);
 
@@ -1044,7 +1042,7 @@ describe("Resident model", () => {
 
     it("evicts when adding attendance succeeds", async () => {
       const store = aliceStore({ attending: false });
-      store.residentStore.residents.get("10").toggleAttending();
+      store.residents.get("10").toggleAttending();
 
       await flush();
       expect(idbKeyval.del).toHaveBeenCalledWith("1");
@@ -1052,7 +1050,7 @@ describe("Resident model", () => {
 
     it("evicts when removing attendance succeeds", async () => {
       const store = aliceStore({ attending: true });
-      store.residentStore.residents.get("10").toggleAttending();
+      store.residents.get("10").toggleAttending();
 
       await flush();
       expect(idbKeyval.del).toHaveBeenCalledWith("1");
@@ -1060,7 +1058,7 @@ describe("Resident model", () => {
 
     it("evicts when a late update succeeds", async () => {
       const store = aliceStore({ attending: true, late: false });
-      store.residentStore.residents.get("10").toggleLate();
+      store.residents.get("10").toggleLate();
 
       await flush();
       expect(idbKeyval.del).toHaveBeenCalledWith("1");
@@ -1068,7 +1066,7 @@ describe("Resident model", () => {
 
     it("evicts when a veg update succeeds", async () => {
       const store = aliceStore({ attending: true, vegetarian: false });
-      store.residentStore.residents.get("10").toggleVeg();
+      store.residents.get("10").toggleVeg();
 
       await flush();
       expect(idbKeyval.del).toHaveBeenCalledWith("1");
@@ -1076,7 +1074,7 @@ describe("Resident model", () => {
 
     it("evicts when adding a guest succeeds", async () => {
       const store = aliceStore({ attending: true });
-      store.residentStore.residents.get("10").addGuest({ vegetarian: false });
+      store.residents.get("10").addGuest({ vegetarian: false });
 
       await flush();
       expect(idbKeyval.del).toHaveBeenCalledWith("1");
@@ -1091,7 +1089,7 @@ describe("Resident model", () => {
           ],
         },
       );
-      store.residentStore.residents.get("10").removeGuest();
+      store.residents.get("10").removeGuest();
 
       await flush();
       expect(idbKeyval.del).toHaveBeenCalledWith("1");
@@ -1099,7 +1097,7 @@ describe("Resident model", () => {
 
     it("evicts even when the node died before the response landed", async () => {
       const store = aliceStore({ attending: false });
-      store.residentStore.residents.get("10").toggleAttending();
+      store.residents.get("10").toggleAttending();
       store.removeResident(10);
 
       await flush();
@@ -1113,7 +1111,7 @@ describe("Resident model", () => {
       });
 
       const store = aliceStore({ attending: false });
-      store.residentStore.residents.get("10").toggleAttending();
+      store.residents.get("10").toggleAttending();
 
       await flush();
       expect(idbKeyval.del).not.toHaveBeenCalled();
@@ -1141,7 +1139,7 @@ describe("Resident model", () => {
         ],
       });
 
-      const alice = store.residentStore.residents.get("10");
+      const alice = store.residents.get("10");
       expect(alice.guestsCount).toBe(2);
 
       // removeGuest sends DELETE for the newest guest (id 101)

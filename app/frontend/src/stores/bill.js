@@ -1,4 +1,4 @@
-import { types, getParent } from "mobx-state-tree";
+import { types, getRoot } from "mobx-state-tree";
 import Resident from "./resident";
 import {
   isValidAmountString,
@@ -32,7 +32,7 @@ const Bill = types
     // the UI. Ends at reconciliation: a reconciled blank is settled
     // history, not pending anything.
     get costPending() {
-      const store = self.form.form;
+      const store = self.root;
       return (
         !!store.meal &&
         store.meal.closed &&
@@ -42,8 +42,9 @@ const Bill = types
         isZeroAmountString(self.amount)
       );
     },
-    get form() {
-      return getParent(self, 2);
+    // The DataStore at the root of the tree.
+    get root() {
+      return getRoot(self);
     },
   }))
   .actions((self) => ({
@@ -51,11 +52,11 @@ const Bill = types
       self.touched = true;
       if (val === "") {
         self.resident = null;
-        self.form.form.saveBills();
+        self.root.saveBills();
         return null;
       } else {
         self.resident = val;
-        self.form.form.saveBills();
+        self.root.saveBills();
         return self.resident;
       }
     },
@@ -70,7 +71,7 @@ const Bill = types
       if (!isZeroAmountString(val)) {
         self.no_cost = false;
       }
-      self.form.form.saveBills();
+      self.root.saveBills();
       return val;
     },
     // Pad the display when the user leaves the field: "1" shows as
@@ -89,7 +90,7 @@ const Bill = types
       if (val) {
         self.amount = "";
       }
-      self.form.form.saveBills();
+      self.root.saveBills();
       return val;
     },
   }));
