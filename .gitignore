@@ -19,7 +19,6 @@
 /public/assets
 /public/.vite/
 /public/index.html
-/app/frontend/dist/
 .byebug_history
 
 # dotenv

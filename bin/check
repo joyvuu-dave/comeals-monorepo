@@ -8,18 +8,9 @@ set -uo pipefail
 
 cd "$(dirname "$0")/.."
 
-# --- Output helpers (matches bin/deploy style) --------------------------------
+# --- Output helpers (shared with bin/deploy) ----------------------------------
 
-red()    { printf "\033[0;31m%s\033[0m\n" "$*"; }
-green()  { printf "\033[0;32m%s\033[0m\n" "$*"; }
-yellow() { printf "\033[0;33m%s\033[0m\n" "$*"; }
-bold()   { printf "\033[1m%s\033[0m\n" "$*"; }
-
-step()  { printf "\n"; bold "==> $*"; }
-info()  { echo "    $*"; }
-pass()  { green "    ✓ $*"; }
-warn()  { yellow "    ⚠ $*"; }
-fail()  { red "    ✗ $*"; }
+. bin/lib/output.sh
 
 # --- Result tracking ----------------------------------------------------------
 
@@ -310,8 +301,9 @@ check_vitest() {
 check_playwright() {
   step "Playwright"
 
+  # check_bundle_budget already built the frontend; serve that build.
   local output exit_code=0
-  output=$(npm run test:e2e 2>&1) || exit_code=$?
+  output=$(E2E_SKIP_BUILD=1 npm run test:e2e 2>&1) || exit_code=$?
 
   local summary
   summary=$(echo "$output" | grep -oE '[0-9]+ passed' || echo "unknown")
@@ -331,8 +323,9 @@ check_playwright() {
 check_integration() {
   step "Integration tests"
 
+  # check_bundle_budget already built the frontend; reuse that build.
   local output exit_code=0
-  output=$(bin/test-integration 2>&1) || exit_code=$?
+  output=$(SKIP_BUILD=1 bin/test-integration 2>&1) || exit_code=$?
 
   local summary
   summary=$(echo "$output" | grep -oE '[0-9]+ passed' || echo "unknown")

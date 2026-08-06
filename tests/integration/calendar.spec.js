@@ -1,14 +1,8 @@
 const { test, expect } = require("@playwright/test");
-const {
-  loadAuthInfo,
-  setupAuthenticatedPage,
-} = require("../helpers/integration_setup");
+const { setupAuthenticatedPage } = require("../helpers/integration_setup");
 
 test.describe("Calendar (real backend)", () => {
-  let auth;
-
   test.beforeEach(async ({ page, context }) => {
-    auth = loadAuthInfo();
     await setupAuthenticatedPage(page, context);
   });
 

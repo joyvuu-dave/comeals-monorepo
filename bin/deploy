@@ -23,18 +23,9 @@ DEPLOY_TIMESTAMP=""
 NEEDS_MAINTENANCE=false
 HEROKU_SHA=""
 
-# --- Output helpers -----------------------------------------------------------
+# --- Output helpers (shared with bin/check) -----------------------------------
 
-red()    { printf "\033[0;31m%s\033[0m\n" "$*"; }
-green()  { printf "\033[0;32m%s\033[0m\n" "$*"; }
-yellow() { printf "\033[0;33m%s\033[0m\n" "$*"; }
-bold()   { printf "\033[1m%s\033[0m\n" "$*"; }
-
-step() { printf "\n"; bold "==> $*"; }
-info() { echo "    $*"; }
-ok()   { green "    ✓ $*"; }
-warn() { yellow "    ⚠ $*"; }
-fail() { red "    ✗ $*"; }
+. "$(dirname "$0")/lib/output.sh"
 
 # --- Cleanup trap -------------------------------------------------------------
 

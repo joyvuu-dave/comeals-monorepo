@@ -42,8 +42,7 @@ jobs:
           bundler-cache: true
       - name: Create frontend build stubs
         run: |
-          mkdir -p app/frontend/dist
-          echo '<!DOCTYPE html><html><head></head><body><div id="root"></div></body></html>' > app/frontend/dist/index.html
+          echo '<!DOCTYPE html><html><head></head><body><div id="root"></div></body></html>' > public/index.html
           mkdir -p public/.vite
           echo '{}' > public/.vite/manifest.json
       - run: bin/rails db:schema:load

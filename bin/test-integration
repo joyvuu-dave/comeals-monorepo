@@ -46,8 +46,12 @@ RAILS_ENV=test bundle exec rails test:seed_integration
 # 2. Build frontend
 # ------------------------------------------------------------------
 echo ""
-echo "==> Building frontend..."
-npm run build 2>&1 | tail -3
+if [ "${SKIP_BUILD:-}" = "1" ]; then
+  echo "==> Reusing existing frontend build (SKIP_BUILD=1)"
+else
+  echo "==> Building frontend..."
+  npm run build 2>&1 | tail -3
+fi
 
 # ------------------------------------------------------------------
 # 3. Start Rails test server

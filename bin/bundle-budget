@@ -73,13 +73,8 @@ report("total     ", totalKB, budgets.totalKB);
 const calendarKey = Object.keys(manifest).find((k) =>
   k.endsWith("calendar/show.jsx"),
 );
-// npm run build moves index.html to app/frontend/dist; a bare
-// `vite build` (the Playwright webServer) leaves it in public.
-const htmlPath = [
-  path.join(root, "app", "frontend", "dist", "index.html"),
-  path.join(root, "public", "index.html"),
-].find(fs.existsSync);
-if (!calendarKey || !htmlPath) {
+const htmlPath = path.join(root, "public", "index.html");
+if (!calendarKey || !fs.existsSync(htmlPath)) {
   failed = true;
   console.error(
     "MISSING calendar preload check could not run: " +

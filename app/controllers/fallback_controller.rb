@@ -1,8 +1,11 @@
 # frozen_string_literal: true
 
 class FallbackController < ActionController::API
+  # public/index.html is where vite build writes it. The static file
+  # server never serves it on its own — see public_file_server.index_name
+  # in config/application.rb — so every request for it routes here.
   def index
-    send_file Rails.root.join('app/frontend/dist/index.html'),
+    send_file Rails.public_path.join('index.html'),
               type: 'text/html', disposition: 'inline'
   end
 

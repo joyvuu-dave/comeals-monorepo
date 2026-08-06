@@ -54,10 +54,14 @@ module.exports = [
   },
 
   // -----------------------------------------------------------
-  // Config files -- Node ESM (vite.config.mjs, vitest.config.mjs)
+  // Config files -- Node ESM
   // -----------------------------------------------------------
   {
-    files: ["vite.config.mjs", "vitest.config.mjs"],
+    files: [
+      "vite.config.mjs",
+      "vitest.config.mjs",
+      "playwright.integration.config.js",
+    ],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "module",
@@ -109,16 +113,54 @@ module.exports = [
   },
 
   // -----------------------------------------------------------
-  // Unit test files -- Node ESM (Vitest)
+  // Unit test files -- Node ESM (Vitest). The .jsx glob matters: with
+  // only *.js here, every component test was silently unlinted (#52).
   // -----------------------------------------------------------
   {
-    files: ["tests/unit/**/*.js"],
+    // .ts is absent on purpose: eslint has no TypeScript parser here,
+    // and `npm run typecheck` (tsc) is the gate for those files.
+    files: ["tests/unit/**/*.{js,jsx}"],
+    plugins: {
+      react,
+    },
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "module",
+      parserOptions: {
+        ecmaFeatures: { jsx: true },
+      },
       globals: {
+        // Vitest runs these in jsdom: browser globals are real, and
+        // Node globals cover the setup helpers.
+        ...globals.browser,
         ...globals.node,
         window: "writable",
+      },
+    },
+    settings: {
+      react: {
+        version: "detect",
+      },
+    },
+    rules: {
+      "no-unused-vars": "warn",
+      "no-console": "off",
+      "react/jsx-uses-vars": "error",
+      "react/jsx-no-undef": "error",
+    },
+  },
+
+  // -----------------------------------------------------------
+  // Integration test files -- Node CommonJS (Playwright, real backend)
+  // -----------------------------------------------------------
+  {
+    files: ["tests/integration/**/*.js"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "commonjs",
+      globals: {
+        ...globals.node,
+        window: "readonly",
       },
     },
     rules: {
@@ -128,9 +170,39 @@ module.exports = [
   },
 
   // -----------------------------------------------------------
+  // Hand-written browser scripts served from public/
+  // -----------------------------------------------------------
+  {
+    files: ["public/*.js"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "script",
+      globals: {
+        ...globals.browser,
+        ...globals.serviceworker,
+      },
+    },
+    rules: {
+      "no-console": "off",
+    },
+  },
+
+  // -----------------------------------------------------------
   // Ignore build output, dependencies, and this config file
   // -----------------------------------------------------------
   {
-    ignores: ["public/assets/**", "node_modules/**", "eslint.config.js"],
+    ignores: [
+      "public/assets/**",
+      "node_modules/**",
+      "eslint.config.js",
+      // Sprockets-era ActiveAdmin script; lives outside the Vite world.
+      "app/assets/**",
+      // Generated output and reports.
+      "coverage/**",
+      "playwright-report/**",
+      "test-results/**",
+      "log/**",
+      "tmp/**",
+    ],
   },
 ];

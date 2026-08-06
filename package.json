@@ -49,7 +49,7 @@
     "vitest": "^4.1.2"
   },
   "scripts": {
-    "build": "rm -rf public/assets && vite build && mkdir -p app/frontend/dist && mv public/index.html app/frontend/dist/index.html",
+    "build": "rm -rf public/assets && vite build",
     "dev": "vite",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
@@ -58,7 +58,7 @@
     "test:integration": "bin/test-integration",
     "bench:modals": "PLAYWRIGHT_INCLUDE_ALL=1 npx playwright test tests/e2e/perf-modals.spec.js",
     "pwa:screenshots": "PLAYWRIGHT_INCLUDE_ALL=1 npx playwright test tests/e2e/pwa-screenshots.spec.js",
-    "lint": "eslint app/frontend/src/",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

@@ -1,18 +1,24 @@
 # frozen_string_literal: true
 
-# The clock process's schedule: which rake tasks recur and when.
+# The DEVELOPMENT clock's schedule: which rake tasks recur and when,
+# for the clock process bin/dev runs via foreman.
 #
-# This table is the source of truth for all recurring tasks. lib/clock.rb
-# reads it to register jobs. It lives in its own file so tests can load it
-# without booting a scheduler: spec/lib/clock_schedule_spec.rb checks that
-# every task name still exists in Rake and every cron expression parses.
-#
-# Cron expressions use the system's local timezone.
-# Four tasks are active in Heroku Scheduler (which uses UTC):
-# billing:recalculate at 03:00, residents:set_multiplier at 11:00,
+# PRODUCTION DOES NOT READ THIS FILE. The Procfile runs no clock dyno;
+# production tasks run from Heroku Scheduler entries configured in the
+# Heroku dashboard, at UTC times that differ from the cron column below:
+# billing:recalculate at 03:00 UTC, residents:set_multiplier at 11:00,
 # community:create_rotations at 22:30, and ledger:verify. The two notify
-# tasks are gated off behind BROADCAST_EMAIL_ENABLED and have no Scheduler
-# entry. Scheduled tasks ping healthchecks.io — see app/services/healthcheck.rb.
+# tasks are gated off behind BROADCAST_EMAIL_ENABLED and have no
+# Scheduler entry. Changing a time here changes dev only; changing
+# production means editing the dashboard. (#52 — this header used to
+# call itself "the source of truth for all recurring tasks".)
+#
+# lib/clock.rb reads this table to register jobs. It lives in its own
+# file so tests can load it without booting a scheduler:
+# spec/lib/clock_schedule_spec.rb checks that every task name still
+# exists in Rake and every cron expression parses. Cron expressions use
+# the system's local timezone. Scheduled tasks ping healthchecks.io —
+# see app/services/healthcheck.rb.
 #
 # ledger:verify must run after billing:recalculate, not before: a run that
 # starts while balances are being rewritten is comparing against a moving

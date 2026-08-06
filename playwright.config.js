@@ -46,8 +46,14 @@ module.exports = defineConfig({
   // production build — nondeterministic and not what deploys ship (#21).
   // A dedicated port with reuse off means the suite always tests a fresh
   // production build, and a port collision fails loudly instead.
+  // The build is the same `npm run build` every other path runs — one
+  // layout everywhere. bin/check builds once for the whole run and sets
+  // E2E_SKIP_BUILD so this server just serves that build; a standalone
+  // `npm run test:e2e` still builds for itself.
   webServer: {
-    command: "npx vite build && npx vite preview --port 3037",
+    command: process.env.E2E_SKIP_BUILD
+      ? "npx vite preview --port 3037"
+      : "npm run build && npx vite preview --port 3037",
     port: 3037,
     timeout: 60000,
     reuseExistingServer: false,

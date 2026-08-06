@@ -20,6 +20,17 @@ module Comeals
     # Initialize configuration defaults for originally generated Rails version.
     config.load_defaults 8.1
 
+    # Vite builds index.html into public/, but the ROUTER must decide
+    # what "/" is — the SPA catch-all carries a subdomain constraint,
+    # and the static file server runs before routing. Pointing the
+    # directory-index name at a file that never exists stops
+    # ActionDispatch::Static from resolving "/" to index.html; explicit
+    # file requests (/assets/..., /icon.svg) are unaffected, and
+    # FallbackController serves index.html for the routes that want it.
+    # Before this, the build moved index.html out of public/ instead,
+    # which gave the repo two build layouts (#52).
+    config.public_file_server.index_name = 'router-owns-directory-requests'
+
     # Settings in config/environments/* take precedence over those specified here.
     # Application configuration can go into files in config/initializers
     # -- all .rb files in that directory are automatically loaded after loading
