@@ -1,5 +1,6 @@
 import { types, getRoot, isAlive } from "mobx-state-tree";
 import { api } from "../helpers/api";
+import createVersionGuard from "../helpers/version_guard";
 import handleAxiosError from "../helpers/handle_axios_error";
 
 const Meal = types
@@ -25,10 +26,10 @@ const Meal = types
     // While set, loadData leaves the description alone, so a reload
     // cannot silently replace unsaved typing.
     descriptionDirty: false,
-    // Bumped on every edit. A save captures the value at send time; the
-    // 200 clears the dirty flag only if it has not moved since — so an
+    // Stale-response guard: bumped on every edit, captured at send; the
+    // 200 clears the dirty flag only if nothing was typed since — so an
     // ack for older text can never mark newer keystrokes as saved.
-    descriptionEditVersion: 0,
+    descriptionEdits: createVersionGuard(),
     // True while a description request is in flight. With one request at
     // a time, this client's writes cannot reach the server out of order.
     descriptionSaveInFlight: false,
@@ -69,7 +70,7 @@ const Meal = types
     setDescription(val) {
       self.description = val;
       self.descriptionDirty = true;
-      self.descriptionEditVersion += 1;
+      self.descriptionEdits.bump();
       self.submitDescription();
     },
     // A keystroke's protection starts at the keystroke, not at the
@@ -79,7 +80,7 @@ const Meal = types
     // clearing that protection before the flush arrives.
     markDescriptionEditing() {
       self.descriptionDirty = true;
-      self.descriptionEditVersion += 1;
+      self.descriptionEdits.bump();
     },
     submitDescription() {
       // Single-flight: one request at a time. The queued resend in
@@ -89,7 +90,7 @@ const Meal = types
         return;
       }
 
-      const versionAtSend = self.descriptionEditVersion;
+      const versionAtSend = self.descriptionEdits.current();
       self.descriptionSaveInFlight = true;
 
       api.meals
@@ -117,7 +118,7 @@ const Meal = types
     // until its own resend is acked.
     applyDescriptionAck(versionAtSend) {
       self.descriptionSaveFailed = false;
-      if (versionAtSend !== self.descriptionEditVersion) return;
+      if (!self.descriptionEdits.isCurrent(versionAtSend)) return;
       self.descriptionDirty = false;
     },
     markDescriptionSaveFailed() {

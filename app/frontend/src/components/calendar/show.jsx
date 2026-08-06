@@ -10,11 +10,7 @@ import { observer } from "mobx-react-lite";
 import { useNavigate, useParams } from "react-router";
 import { useStore } from "../../helpers/store_context";
 import { communityNow } from "../../helpers/helpers";
-import {
-  mark,
-  reportAfterPaint,
-  profileRender,
-} from "../../helpers/nav_trace";
+import { mark, reportAfterPaint, profileRender } from "../../helpers/nav_trace";
 import SideBar from "./side_bar";
 
 import Cookie from "js-cookie";

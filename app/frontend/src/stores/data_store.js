@@ -24,6 +24,7 @@ import {
 import { isZeroAmountString, toDisplayAmountString } from "../helpers/money";
 import { evictMealCache } from "../helpers/meal_cache";
 import { mark } from "../helpers/nav_trace";
+import createVersionGuard from "../helpers/version_guard";
 import toastStore from "./toast_store";
 
 dayjs.extend(utc);
@@ -34,22 +35,7 @@ dayjs.extend(timezone);
 // It is a capped LRU; IndexedDB keeps the persistent copies under
 // the same keys.
 
-// Pusher subscriptions for adjacent months (cache invalidation only).
-var adjacentChannels = [];
-
-// In-flight promise for the hosts fetch, so concurrent callers
-// (two modals opened in quick succession) don't trigger duplicate
-// network requests. Cleared when the fetch settles.
-var hostsInFlight = null;
-
-// Monotonic counter for hosts fetches. Bumped every time a new fetch
-// starts; the resolve path compares against the captured `versionAtStart`
-// and discards a response whose version was superseded by a later fetch
-// (Pusher invalidation + refetch while an older fetch is still in flight).
-// Same pattern as the month cache's invalidation versions.
-var hostsVersion = 0;
-
-// Monotonic counter for month navigation, same pattern as `hostsVersion`.
+// Monotonic counter for month navigation.
 // Bumped at the start of every loadMonthAsync and switchMonths call; each
 // async continuation captures the value at start and checks it before
 // touching the screen, so the newest navigation always wins. A superseded
@@ -58,11 +44,6 @@ var hostsVersion = 0;
 // `monthCache` (its data is correct under its own key) but skips rendering
 // and skips its revalidation fetch.
 var monthFetchVersion = 0;
-
-// Single Pusher subscription for hosts updates. Assigned the first
-// time ensureHosts() succeeds; never resubscribed for the lifetime
-// of the store because the channel name only depends on community_id.
-var hostsChannel = null;
 
 // Backoff for retrying a failed FIRST load of a meal: 2s, 4s, 8s,
 // 16s, then every 30s — forever. A shared screen must heal without a
@@ -205,10 +186,6 @@ export const DataStore = types
   .volatile(() => ({
     // Pending debounce timer for a bill save, or null.
     billsSaveTimer: null,
-    // Bumped on every bill edit. A save captures the value at send time;
-    // the ack applies only if it has not moved since — so a response can
-    // never overwrite keystrokes newer than the request.
-    billsEditVersion: 0,
     // True while a bills request is in flight. With one request at a time,
     // this client's writes cannot arrive at the server out of order.
     billsSaveInFlight: false,
@@ -223,6 +200,22 @@ export const DataStore = types
     // The wait used for the last scheduled retry, or null when the
     // backoff is at its starting point.
     mealRetryDelayMs: null,
+    // Stale-response guard for bill saves: bumped on every bill edit,
+    // captured at send; an ack applies only if nothing was typed since.
+    billsEdits: createVersionGuard(),
+    // In-flight promise for the hosts fetch, so concurrent callers
+    // (two modals opened in quick succession) don't trigger duplicate
+    // network requests. Cleared when the fetch settles.
+    hostsInFlight: null,
+    // Stale-response guard for hosts fetches: a superseded fetch's
+    // response is discarded in favor of the newer fetch's.
+    hostsFetches: createVersionGuard(),
+    // Single Pusher subscription for hosts updates. Assigned the first
+    // time ensureHosts() succeeds; never resubscribed for the lifetime
+    // of the store because the channel name only depends on community_id.
+    hostsChannel: null,
+    // Pusher subscriptions for adjacent months (cache invalidation only).
+    adjacentChannels: [],
   }))
   .views((self) => ({
     get hostsLoaded() {
@@ -333,24 +326,7 @@ export const DataStore = types
           hasConnectedBefore = true;
           return;
         }
-        // A laptop asleep past midnight wakes with a stale "today" and a
-        // throttled timer; the reconnect is the reliable wake-up signal.
-        // Before the cookie guard on purpose — no auth needed.
-        self.recomputeCommunityToday();
-        // Logged out (or on the login page) there is nothing to refetch,
-        // and an unauthenticated fetch would 401 and raise the "signed
-        // out" banner. Same guard as the `online` handler in index.jsx.
-        if (typeof Cookie.get("community_id") === "undefined") return;
-        if (self.meal && self.meal.id) {
-          self.loadDataAsync();
-        }
-        self.loadMonthAsync();
-        // If we had a cached hosts list, any invalidation pushed while
-        // offline was missed — silently refresh it now so the next modal
-        // to open shows current data.
-        if (self.hostsLoaded) {
-          self.refetchHostsSilently();
-        }
+        self.handleReconnect();
       });
 
       self.setIsOnline(navigator.onLine);
@@ -392,7 +368,7 @@ export const DataStore = types
     // after the user stops editing, so half-typed amounts never hit the
     // wire and each pause produces one request instead of one per keystroke.
     saveBills() {
-      self.billsEditVersion += 1;
+      self.billsEdits.bump();
       if (self.billsSaveTimer !== null) {
         clearTimeout(self.billsSaveTimer);
       }
@@ -550,7 +526,7 @@ export const DataStore = types
             : { resident_id: bill.resident_id },
         );
 
-      const versionAtSend = self.billsEditVersion;
+      const versionAtSend = self.billsEdits.current();
       const mealIdAtSend = self.meal.id;
       self.billsSaveInFlight = true;
 
@@ -594,7 +570,7 @@ export const DataStore = types
     // since the request went out. Otherwise ignore it; the queued next save
     // covers the newer edits and its own ack will reconcile.
     applyBillsAck(data, versionAtSend, mealIdAtSend) {
-      if (versionAtSend !== self.billsEditVersion) return;
+      if (!self.billsEdits.isCurrent(versionAtSend)) return;
       if (!self.meal || self.meal.id !== mealIdAtSend) return;
       if (!data || !Array.isArray(data.bills)) return;
 
@@ -805,25 +781,23 @@ export const DataStore = types
       return self._fetchHosts({ supersede: true });
     },
     // Internal: shared fetch implementation for ensureHosts and
-    // refetchHostsSilently. Every call bumps `hostsVersion`; the resolve
-    // path compares against the captured version and discards stale
-    // responses (same pattern as the month cache).
+    // refetchHostsSilently. Every call bumps the hostsFetches guard;
+    // the resolve path discards a response whose token is stale.
     //
     //   supersede: false — dedupe onto any in-flight fetch
     //   supersede: true  — start a fresh fetch even if one is in flight;
     //                      the in-flight response will be version-skipped
     _fetchHosts(options = {}) {
-      if (hostsInFlight && !options.supersede) return hostsInFlight;
+      if (self.hostsInFlight && !options.supersede) return self.hostsInFlight;
 
-      hostsVersion += 1;
-      var versionAtStart = hostsVersion;
+      var versionAtStart = self.hostsFetches.bump();
       var communityId = Cookie.get("community_id");
 
       var promise = axios
         .get(`/api/v1/communities/${communityId}/hosts`)
         .then(function (response) {
           // Superseded by a later fetch: let the winner's response win.
-          if (versionAtStart !== hostsVersion) return self.hosts;
+          if (!self.hostsFetches.isCurrent(versionAtStart)) return self.hosts;
           if (response.status === 200) {
             self.setHosts(response.data);
             self.subscribeHostsChannel(communityId);
@@ -838,9 +812,11 @@ export const DataStore = types
           // Only clear the in-flight ref if we're still the reigning fetch.
           // A superseding fetch has already replaced `hostsInFlight` with
           // its own promise; don't trample it.
-          if (versionAtStart === hostsVersion) hostsInFlight = null;
+          if (self.hostsFetches.isCurrent(versionAtStart)) {
+            self.setHostsInFlight(null);
+          }
         });
-      hostsInFlight = promise;
+      self.setHostsInFlight(promise);
       return promise;
     },
     // Transform the API's tuple shape ([residents.id, residents.name,
@@ -855,12 +831,15 @@ export const DataStore = types
       self.hosts.replace(transformed);
       self.hostsLoadedAt = Date.now();
     },
+    setHostsInFlight(promise) {
+      self.hostsInFlight = promise;
+    },
     subscribeHostsChannel(communityId) {
-      if (hostsChannel) return;
-      hostsChannel = window.Comeals.pusher.subscribe(
+      if (self.hostsChannel) return;
+      self.hostsChannel = window.Comeals.pusher.subscribe(
         `community-${communityId}-residents`,
       );
-      hostsChannel.bind("update", function () {
+      self.hostsChannel.bind("update", function () {
         self.refetchHostsSilently();
       });
     },
@@ -1089,10 +1068,10 @@ export const DataStore = types
       });
 
       // Clean up previous adjacent month subscriptions
-      adjacentChannels.forEach(function (ch) {
+      self.adjacentChannels.forEach(function (ch) {
         window.Comeals.pusher.unsubscribe(ch.name);
       });
-      adjacentChannels = [];
+      self.adjacentChannels = [];
 
       // Subscribe to adjacent months for real-time cache invalidation.
       // When data changes in a neighboring month, evict it from both
@@ -1118,7 +1097,7 @@ export const DataStore = types
           channel.bind("update", function () {
             invalidateMonth(communityId, adjYear, adjMonth);
           });
-          adjacentChannels.push(channel);
+          self.adjacentChannels.push(channel);
         },
       );
 
@@ -1332,13 +1311,41 @@ export const DataStore = types
         window.Comeals.pusher.unsubscribe(window.Comeals.calendarChannel.name);
         window.Comeals.calendarChannel = null;
       }
-      adjacentChannels.forEach(function (ch) {
+      self.adjacentChannels.forEach(function (ch) {
         window.Comeals.pusher.unsubscribe(ch.name);
       });
-      adjacentChannels = [];
+      self.adjacentChannels = [];
     },
     setIsOnline(val) {
       self.isOnline = !!val;
+    },
+    // One recovery path for both wake-up signals: the Pusher reconnect
+    // (data_store) and the browser's `online` event (index.jsx). Any
+    // gap means the data on screen can no longer be trusted, so both
+    // signals do the same repairs.
+    handleReconnect() {
+      // A machine asleep past midnight wakes with a stale "today" and a
+      // throttled timer; the wake-up is the reliable recompute moment.
+      // Before the cookie guard on purpose — no auth needed.
+      self.recomputeCommunityToday();
+      // Unsaved menu text next: most description save failures are
+      // network blips, and this is the moment to resend (issue #35).
+      // A signed-out session has no dirty meals, so no guard needed.
+      self.retryDirtyDescriptions();
+      // Logged out (or on the login page) there is nothing to refetch,
+      // and an unauthenticated fetch would 401 and raise the "signed
+      // out" banner.
+      if (typeof Cookie.get("community_id") === "undefined") return;
+      if (self.meal && self.meal.id) {
+        self.loadDataAsync();
+      }
+      self.loadMonthAsync();
+      // A cached hosts list may have missed an invalidation pushed
+      // while offline — silently refresh it so the next modal to open
+      // shows current data.
+      if (self.hostsLoaded) {
+        self.refetchHostsSilently();
+      }
     },
     // Roll the observable "today" forward. Called by the midnight timer,
     // the `online` handler (index.jsx), and the Pusher reconnect handler.

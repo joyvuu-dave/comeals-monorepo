@@ -122,19 +122,9 @@ document.addEventListener("DOMContentLoaded", () => {
       if (navigator.onLine) {
         console.warn(`back online at ${new Date().toLocaleTimeString()}`);
         store.setIsOnline(true);
-        // Background tabs throttle timers, so the store's midnight timer
-        // may not have fired yet; coming back online is a reliable moment
-        // to roll the observable "today" forward.
-        store.recomputeCommunityToday();
-        // Unsaved menu text first: most save failures are network blips,
-        // and coming back online is the moment to resend (issue #35).
-        store.retryDirtyDescriptions();
-        if (store.meal && store.meal.id) {
-          store.loadDataAsync();
-        }
-        if (typeof Cookie.get("community_id") !== "undefined") {
-          store.loadMonthAsync();
-        }
+        // The same recovery the Pusher reconnect runs — one path for
+        // both wake-up signals.
+        store.handleReconnect();
       } else {
         console.warn(`offline at ${new Date().toLocaleTimeString()}`);
         store.setIsOnline(false);
