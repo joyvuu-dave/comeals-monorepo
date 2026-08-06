@@ -233,7 +233,6 @@ test.describe(`Modal open perf @ ${LATENCY_MS}ms injected latency`, () => {
     };
     fs.writeFileSync(outPath, JSON.stringify(payload, null, 2));
 
-    /* eslint-disable no-console */
     console.log(
       `\n=== Modal open perf @ ${LATENCY_MS}ms latency ` +
         `(${ITERATIONS} iter + ${WARMUP} warmup) ===`,
@@ -257,7 +256,6 @@ test.describe(`Modal open perf @ ${LATENCY_MS}ms injected latency`, () => {
     });
     console.table(rows);
     console.log(`\nWrote ${outPath}\n`);
-    /* eslint-enable no-console */
   });
 
   // --- Helpers shared by scenarios below ---
