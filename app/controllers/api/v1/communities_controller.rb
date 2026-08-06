@@ -8,34 +8,15 @@ module Api
       # GET /api/v1/communities/:id/ical
       def ical
         community = Community.instance
-
-        require 'icalendar/tzinfo'
-        tzid = community.timezone
-        tz = TZInfo::Timezone.get tzid
-        timezone = tz.ical_timezone DateTime.new 2017, 6, 1, 8, 0, 0
-
-        cal = Icalendar::Calendar.new
-        cal.add_timezone timezone
-
-        cal.x_wr_calname = community.name
+        feed = MealIcalFeed.new(community, calendar_name: community.name)
 
         community.meals.find_each do |meal|
-          event = Icalendar::Event.new
-
-          meal_date = meal.date
-          meal_date_time_start = DateTime.new(meal_date.year, meal_date.month, meal_date.day,
-                                              meal_date.sunday? ? 18 : 19, 0)
-          meal_date_time_end = DateTime.new(meal_date.year, meal_date.month, meal_date.day,
-                                            meal_date.sunday? ? 20 : 21, 0)
-
-          event.dtstart = Icalendar::Values::DateTime.new meal_date_time_start, 'tzid' => tzid
-          event.dtend = Icalendar::Values::DateTime.new meal_date_time_end, 'tzid' => tzid
-          event.summary = 'Common Dinner'
-          event.description = "#{meal.description}\n\n\n\nSign up here: #{root_url}/meals/#{meal.id}/edit"
-          cal.add_event(event)
+          feed.add_meal(meal,
+                        summary: 'Common Dinner',
+                        description: "#{meal.description}\n\n\n\nSign up here: #{root_url}/meals/#{meal.id}/edit")
         end
 
-        render plain: cal.to_ical, content_type: 'text/calendar'
+        render plain: feed.to_ical, content_type: 'text/calendar'
       end
 
       # GET /api/v1/communities/:id/birthdays
@@ -96,12 +77,6 @@ module Api
         # the pre-ETag behavior. The win is bandwidth: a 304 is ~200 bytes vs.
         # a full calendar JSON payload.
         render json: result if stale?(etag: result, public: false)
-      end
-
-      private
-
-      def authenticate
-        not_authenticated_api unless signed_in_resident_api?
       end
     end
   end

@@ -35,6 +35,14 @@ class ApiController < ActionController::API
     current_resident_api
   end
 
+  # The API auth check. Each controller wires it with its own
+  # before_action line — which actions are public (an iCal feed, a
+  # password reset) is per-controller knowledge, but the check itself
+  # lives once.
+  def authenticate
+    not_authenticated_api unless signed_in_resident_api?
+  end
+
   def not_authenticated_api
     render json: { message: 'You are not authenticated. Please try signing in and then try again.' },
            status: :unauthorized and return
@@ -55,6 +63,30 @@ class ApiController < ActionController::API
   end
 
   private
+
+  # The start/end wire shape the calendar modals send (the frontend's
+  # buildStartEndPayload): one day split into parts, plus start and end
+  # times. An all-day event starts at midnight and has no end. Returns
+  # { start_date:, end_date: }, or nil when the parts do not name a
+  # real date — the caller renders the 400.
+  def parse_start_end_params(allday: false)
+    year = params[:start_year].to_i
+    month = params[:start_month].to_i
+    day = params[:start_day].to_i
+
+    if allday
+      { start_date: Time.zone.local(year, month, day, 0, 0), end_date: nil }
+    else
+      { start_date: Time.zone.local(year, month, day, params[:start_hours].to_i, params[:start_minutes].to_i),
+        end_date: Time.zone.local(year, month, day, params[:end_hours].to_i, params[:end_minutes].to_i) }
+    end
+  rescue StandardError
+    nil
+  end
+
+  def render_invalid_date
+    render json: { message: 'Error: Invalid date' }, status: :bad_request
+  end
 
   # Resolve both @current_resident_api and @current_api_key in one pass.
   # JWT path is tried first (the post-migration default). If that fails we

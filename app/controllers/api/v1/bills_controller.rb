@@ -27,12 +27,6 @@ module Api
 
         render json: bill
       end
-
-      private
-
-      def authenticate
-        not_authenticated_api unless signed_in_resident_api?
-      end
     end
   end
 end

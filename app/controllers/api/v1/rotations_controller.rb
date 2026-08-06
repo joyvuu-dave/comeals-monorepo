@@ -28,10 +28,6 @@ module Api
 
       private
 
-      def authenticate
-        not_authenticated_api unless signed_in_resident_api?
-      end
-
       def set_resource
         @rotation = Rotation.includes({ residents: :unit }).find_by(id: params[:id])
 

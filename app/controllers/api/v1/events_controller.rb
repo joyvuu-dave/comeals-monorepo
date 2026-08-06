@@ -28,29 +28,16 @@ module Api
       end
 
       # POST /api/v1/events/create
-      def create # rubocop:disable Metrics/AbcSize, Metrics/MethodLength --builds event from many date params with allday branch
-        allday = if params.key?(:all_day)
-                   params[:all_day].to_s == 'true'
-                 else
-                   false
-                 end
+      #
+      # The one create/update difference in parsing: what a missing
+      # all_day param means. Create defaults it to false; update keeps
+      # the event's stored value.
+      def create
+        allday = params.key?(:all_day) ? params[:all_day].to_s == 'true' : false
+        times = parse_start_end_params(allday: allday)
+        return render_invalid_date unless times
 
-        begin
-          if allday
-            start_date = Time.zone.local(params[:start_year].to_i, params[:start_month].to_i, params[:start_day].to_i,
-                                         0, 0)
-            end_date = nil
-          else
-            start_date = Time.zone.local(params[:start_year].to_i, params[:start_month].to_i, params[:start_day].to_i,
-                                         params[:start_hours].to_i, params[:start_minutes].to_i)
-            end_date = Time.zone.local(params[:start_year].to_i, params[:start_month].to_i, params[:start_day].to_i,
-                                       params[:end_hours].to_i, params[:end_minutes].to_i)
-          end
-        rescue StandardError
-          render json: { message: 'Error: Invalid date' }, status: :bad_request and return
-        end
-
-        event = Event.new(start_date: start_date, end_date: end_date, title: params[:title],
+        event = Event.new(start_date: times[:start_date], end_date: times[:end_date], title: params[:title],
                           description: params[:description] || '', community: Community.instance, allday: allday)
         if event.save
           render json: { message: 'Event has been created' }
@@ -60,30 +47,13 @@ module Api
       end
 
       # PATCH /api/v1/events/:id/update
-      def update # rubocop:disable Metrics/AbcSize --builds event from many date params with allday branch
-        allday = if params.key?(:all_day)
-                   params[:all_day].to_s == 'true'
-                 else
-                   @event.allday
-                 end
+      def update
+        allday = params.key?(:all_day) ? params[:all_day].to_s == 'true' : @event.allday
+        times = parse_start_end_params(allday: allday)
+        return render_invalid_date unless times
 
-        begin
-          if allday
-            start_date = Time.zone.local(params[:start_year].to_i, params[:start_month].to_i,
-                                         params[:start_day].to_i, 0, 0)
-            end_date = nil
-          else
-            start_date = Time.zone.local(params[:start_year].to_i, params[:start_month].to_i, params[:start_day].to_i,
-                                         params[:start_hours].to_i, params[:start_minutes].to_i)
-            end_date = Time.zone.local(params[:start_year].to_i, params[:start_month].to_i, params[:start_day].to_i,
-                                       params[:end_hours].to_i, params[:end_minutes].to_i)
-          end
-        rescue StandardError
-          render json: { message: 'Error: Invalid date' }, status: :bad_request and return
-        end
-
-        if @event.update(start_date: start_date, end_date: end_date, allday: allday, description: params[:description],
-                         title: params[:title])
+        if @event.update(start_date: times[:start_date], end_date: times[:end_date], allday: allday,
+                         description: params[:description], title: params[:title])
           render json: { message: 'Event has been updated' }
         else
           render json: { message: @event.errors.full_messages.join("\n") }, status: :bad_request
@@ -98,10 +68,6 @@ module Api
       end
 
       private
-
-      def authenticate
-        not_authenticated_api unless signed_in_resident_api?
-      end
 
       def set_resource
         @event = Event.find_by(id: params[:id])

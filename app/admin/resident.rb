@@ -44,14 +44,7 @@ ActiveAdmin.register Resident do
     column :name
     column :birthday
     column 'Price Category', :multiplier, sortable: :multiplier do |resident|
-      if resident.multiplier == 2
-        'Adult'
-      elsif resident.multiplier == 1
-        'Child'
-      else
-        "Adult x #{number_with_precision(resident.multiplier.to_f / 2, precision: 1,
-                                                                       strip_insignificant_zeros: true)}"
-      end
+      price_category_label(resident.multiplier)
     end
     column :unit
     column :can_cook
@@ -73,7 +66,7 @@ ActiveAdmin.register Resident do
       row :id
       row :name
       row :birthday
-      row('Category') { |r| r.multiplier < 2 ? 'Child' : 'Adult' }
+      row('Category') { |r| price_category_label(r.multiplier) }
       row :unit
       row :can_cook
       row :active
@@ -101,14 +94,7 @@ ActiveAdmin.register Resident do
           link_to guest.meal.date, admin_meal_path(guest.meal)
         end
         column 'Price Category', :multiplier do |guest|
-          if guest.multiplier == 2
-            'Adult'
-          elsif guest.multiplier == 1
-            'Child'
-          else
-            "Adult x #{number_with_precision(guest.multiplier.to_f / 2, precision: 1,
-                                                                        strip_insignificant_zeros: true)}"
-          end
+          price_category_label(guest.multiplier)
         end
         column 'Meal Date' do |guest|
           link_to guest.meal.date, admin_meal_path(guest.meal)
@@ -160,16 +146,7 @@ ActiveAdmin.register Resident do
               column('Meal') { |charge| link_to charge.meal.date, admin_meal_path(charge.meal) }
               column('What') { |charge| MealCharge::KIND_LABELS.fetch(charge.kind) }
               column('Category') do |charge|
-                next if charge.multiplier.nil?
-
-                if charge.multiplier == 1
-                  'Child'
-                elsif charge.multiplier == 2
-                  'Adult'
-                else
-                  "Adult x #{number_with_precision(charge.multiplier.to_f / 2, precision: 1,
-                                                                               strip_insignificant_zeros: true)}"
-                end
+                price_category_label(charge.multiplier) unless charge.multiplier.nil?
               end
               column('Amount') { |charge| charge_amount_tag(charge) }
               # Only when this table has one: the column answers "why was the

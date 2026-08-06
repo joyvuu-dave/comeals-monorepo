@@ -13,4 +13,9 @@ class Current < ActiveSupport::CurrentAttributes
   # ApplicationController sets it on every request. See
   # docs/adr/0004-admin-authorization.md.
   attribute :read_only_admin_token
+
+  # The community's resident names, read once per request by
+  # ResidentNameShortener — a serializer collection shortens one name
+  # per row, and each row must not re-run the pluck.
+  attribute :resident_names
 end

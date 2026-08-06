@@ -26,7 +26,7 @@
 #  fk_rails_...  (resident_id => residents.id)
 #
 class BillSerializer < ActiveModel::Serializer
-  include ApplicationHelper
+  include ActiveSupport::NumberHelper
   include ActiveSupport::NumberHelper
 
   attributes :id,
@@ -47,11 +47,11 @@ class BillSerializer < ActiveModel::Serializer
 
   def title
     if object.amount.positive? && object.meal.date < Time.zone.today
-      name = resident_name_helper(object.resident.name)
+      name = ResidentNameShortener.short(object.resident.name)
       unit_name = object.resident.unit.name
       "Cook\n#{name} - Unit #{unit_name}\n#{number_to_currency(object.amount)}"
     else
-      "Cook\n#{resident_name_helper(object.resident.name)} - Unit #{object.resident.unit.name}"
+      "Cook\n#{ResidentNameShortener.short(object.resident.name)} - Unit #{object.resident.unit.name}"
     end
   end
 
@@ -69,11 +69,11 @@ class BillSerializer < ActiveModel::Serializer
 
   def description
     if object.amount.positive? && object.meal.date < Time.zone.today
-      name = resident_name_helper(object.resident.name)
+      name = ResidentNameShortener.short(object.resident.name)
       unit_name = object.resident.unit.name
       "Cook:  #{name} - Unit #{unit_name} - #{number_to_currency(object.amount)}"
     else
-      "Cook:  #{resident_name_helper(object.resident.name)} - Unit #{object.resident.unit.name}"
+      "Cook:  #{ResidentNameShortener.short(object.resident.name)} - Unit #{object.resident.unit.name}"
     end
   end
 end

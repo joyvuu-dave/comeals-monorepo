@@ -12,9 +12,15 @@ ActiveAdmin.register_page 'Dashboard' do
     # Each list is loaded once and the panel header counts the loaded rows.
     # This keeps the header and the list in agreement and avoids a separate
     # COUNT query per panel.
+    #
+    # Everything reads Community.instance directly: this is a
+    # single-community app, so the dashboard's data does not depend on
+    # which admin is looking at it — and the read-only token path has no
+    # current_admin_user to reach through (ADR 0004).
+    community = Community.instance
     columns do
       column do
-        units = current_admin_user.units.order(:name).to_a
+        units = community.units.order(:name).to_a
         panel "Units - #{units.size}" do
           ul do
             units.map do |unit|
@@ -25,7 +31,7 @@ ActiveAdmin.register_page 'Dashboard' do
       end
 
       column do
-        residents = current_admin_user.residents.active.order(:name).to_a
+        residents = community.residents.active.order(:name).to_a
         panel "Active Residents - #{residents.size}" do
           ul do
             residents.map do |resident|
@@ -36,7 +42,7 @@ ActiveAdmin.register_page 'Dashboard' do
       end
 
       column do
-        upcoming = current_admin_user.meals.unreconciled.open.where(date: Time.zone.today..).order(date: :desc).to_a
+        upcoming = community.meals.unreconciled.open.where(date: Time.zone.today..).order(date: :desc).to_a
         panel "Upcoming Meals - #{upcoming.size}" do
           ul do
             upcoming.map do |meal|
@@ -45,7 +51,7 @@ ActiveAdmin.register_page 'Dashboard' do
           end
         end
 
-        closed = current_admin_user.meals.unreconciled.closed_with_bills.order(date: :desc).to_a
+        closed = community.meals.unreconciled.closed_with_bills.order(date: :desc).to_a
         panel "Closed Meals People Attended (unreconciled) - #{closed.size}" do
           ul do
             closed.map do |meal|
@@ -58,8 +64,8 @@ ActiveAdmin.register_page 'Dashboard' do
       column do
         panel 'Averages' do
           ul do
-            li "Cost per adult: #{current_admin_user.community.unreconciled_ave_cost}"
-            li "Attendees per meal: #{current_admin_user.community.unreconciled_ave_number_of_attendees}"
+            li "Cost per adult: #{community.unreconciled_ave_cost}"
+            li "Attendees per meal: #{community.unreconciled_ave_number_of_attendees}"
           end
         end
       end

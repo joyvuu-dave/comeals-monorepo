@@ -3,8 +3,6 @@
 module Api
   module V1
     class ResidentsController < ApiController
-      include ApplicationHelper
-
       RESET_TOKEN_LIFETIME = 24.hours
 
       before_action :authenticate, only: [:show_id]
@@ -27,7 +25,7 @@ module Api
                  status: :bad_request and return
         end
 
-        render json: { name: resident_name_helper(resident.name) }
+        render json: { name: ResidentNameShortener.short(resident.name) }
       end
 
       # POST /api/v1/residents/token { email: 'email', password: 'password' }
@@ -45,7 +43,7 @@ module Api
         if resident.authenticate(params[:password])
           render json: { token: JwtAuth.encode(resident), slug: resident.community.slug,
                          community_id: resident.community.id,
-                         resident_id: resident.id, username: resident_name_helper(resident.name),
+                         resident_id: resident.id, username: ResidentNameShortener.short(resident.name),
                          timezone: resident.community.timezone }
         else
           render json: { message: 'Incorrect password' }, status: :bad_request
@@ -104,18 +102,9 @@ module Api
       end
 
       # GET api/v1/residents/:id/ical
-      def ical # rubocop:disable Metrics/AbcSize, Metrics/MethodLength --iCal feed builds two event types from bills and meal_residents
+      def ical
         resident = Resident.find(params[:id]) # rubocop:disable Rails/StrongParametersExpect --routed :id is read directly, matching this codebase's bare params[] convention
-
-        require 'icalendar/tzinfo'
-        tzid = resident.community.timezone
-        tz = TZInfo::Timezone.get tzid
-        timezone = tz.ical_timezone DateTime.new 2017, 6, 1, 8, 0, 0
-
-        cal = Icalendar::Calendar.new
-        cal.add_timezone timezone
-
-        cal.x_wr_calname = "My #{resident.community.name}"
+        feed = MealIcalFeed.new(resident.community, calendar_name: "My #{resident.community.name}")
 
         # Precompute cook dates to avoid a query per meal_resident in the loop below
         cook_dates = Bill.joins(:meal)
@@ -123,44 +112,22 @@ module Api
                          .pluck('meals.date').to_set
 
         Bill.where(resident_id: resident.id).includes(:meal).find_each do |bill|
-          event = Icalendar::Event.new
-
-          meal_date = bill.meal.date
-          meal_date_time_start = DateTime.new(meal_date.year, meal_date.month, meal_date.day,
-                                              meal_date.sunday? ? 18 : 19, 0)
-          meal_date_time_end = DateTime.new(meal_date.year, meal_date.month, meal_date.day,
-                                            meal_date.sunday? ? 20 : 21, 0)
-
-          event.dtstart = Icalendar::Values::DateTime.new meal_date_time_start, 'tzid' => tzid
-          event.dtend = Icalendar::Values::DateTime.new meal_date_time_end, 'tzid' => tzid
-          event.summary = 'Cook Common Dinner'
-          event.description = "#{bill.meal.description}\n\n\n\nView here: #{root_url}/meals/#{bill.meal.id}/edit"
-          cal.add_event(event)
+          meal = bill.meal
+          feed.add_meal(meal,
+                        summary: 'Cook Common Dinner',
+                        description: "#{meal.description}\n\n\n\nView here: #{root_url}/meals/#{meal.id}/edit")
         end
 
+        # A day they cook already has its Cook event; skip the Attend one.
         MealResident.where(resident_id: resident.id).includes(:meal).find_each do |mr|
-          event = Icalendar::Event.new
+          next if cook_dates.include?(mr.meal.date)
 
-          meal_date = mr.meal.date
-          meal_date_time_start = DateTime.new(meal_date.year, meal_date.month, meal_date.day,
-                                              meal_date.sunday? ? 18 : 19, 0)
-          meal_date_time_end = DateTime.new(meal_date.year, meal_date.month, meal_date.day,
-                                            meal_date.sunday? ? 20 : 21, 0)
-
-          event.dtstart = Icalendar::Values::DateTime.new meal_date_time_start, 'tzid' => tzid
-          event.dtend = Icalendar::Values::DateTime.new meal_date_time_end, 'tzid' => tzid
-          event.summary = 'Attend Common Dinner'
-          event.description = "#{mr.meal.description}\n\n\n\nView here: #{root_url}/meals/#{mr.meal.id}/edit"
-          cal.add_event(event) unless cook_dates.include?(mr.meal.date)
+          feed.add_meal(mr.meal,
+                        summary: 'Attend Common Dinner',
+                        description: "#{mr.meal.description}\n\n\n\nView here: #{root_url}/meals/#{mr.meal.id}/edit")
         end
 
-        render plain: cal.to_ical, content_type: 'text/calendar'
-      end
-
-      private
-
-      def authenticate
-        not_authenticated_api unless signed_in_resident_api?
+        render plain: feed.to_ical, content_type: 'text/calendar'
       end
     end
   end

@@ -1,19 +1,17 @@
 # frozen_string_literal: true
 
 class AuditSerializer < ActiveModel::Serializer
-  include ApplicationHelper
-
   attributes :id,
              :user_name,
              :description,
              :display_time
 
   def user_name
-    resident_name_helper(object.user&.name)
+    ResidentNameShortener.short(object.user&.name)
   end
 
   def description
-    parse_audit(object)
+    AuditDescription.describe(object)
   end
 
   def display_time

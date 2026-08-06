@@ -30,18 +30,13 @@ module Api
       # POST /api/v1/common-house-reservations
       # { resident_id, start_year, start_month, start_day,
       #   start_hours, start_minutes, end_hours, end_minutes, title }
-      def create # rubocop:disable Metrics/AbcSize --date params require many attribute reads
-        begin
-          start_date = Time.zone.local(params[:start_year].to_i, params[:start_month].to_i, params[:start_day].to_i,
-                                       params[:start_hours].to_i, params[:start_minutes].to_i)
-          end_date = Time.zone.local(params[:start_year].to_i, params[:start_month].to_i, params[:start_day].to_i,
-                                     params[:end_hours].to_i, params[:end_minutes].to_i)
-        rescue StandardError
-          render json: { message: 'Error: Invalid date' }, status: :bad_request and return
-        end
+      def create
+        times = parse_start_end_params
+        return render_invalid_date unless times
 
-        chr = CommonHouseReservation.new(resident_id: params[:resident_id], start_date: start_date, end_date: end_date,
-                                         community: Community.instance, title: params[:title])
+        chr = CommonHouseReservation.new(resident_id: params[:resident_id], start_date: times[:start_date],
+                                         end_date: times[:end_date], community: Community.instance,
+                                         title: params[:title])
         if chr.save
           render json: { message: 'Common House Reservation has been created' }
         else
@@ -50,17 +45,11 @@ module Api
       end
 
       # PATCH /api/v1/common-house-reservations/:id/update
-      def update # rubocop:disable Metrics/AbcSize --date params require many attribute reads
-        begin
-          start_date = Time.zone.local(params[:start_year].to_i, params[:start_month].to_i, params[:start_day].to_i,
-                                       params[:start_hours].to_i, params[:start_minutes].to_i)
-          end_date = Time.zone.local(params[:start_year].to_i, params[:start_month].to_i, params[:start_day].to_i,
-                                     params[:end_hours].to_i, params[:end_minutes].to_i)
-        rescue StandardError
-          render json: { message: 'Error: Invalid date' }, status: :bad_request and return
-        end
+      def update
+        times = parse_start_end_params
+        return render_invalid_date unless times
 
-        if @chr.update(start_date: start_date, end_date: end_date, resident_id: params[:resident_id],
+        if @chr.update(start_date: times[:start_date], end_date: times[:end_date], resident_id: params[:resident_id],
                        title: params[:title])
           render json: { message: 'Common House Reservation has been updated' }
         else
@@ -76,10 +65,6 @@ module Api
       end
 
       private
-
-      def authenticate
-        not_authenticated_api unless signed_in_resident_api?
-      end
 
       def set_resource
         @chr = CommonHouseReservation.find_by(id: params[:id])

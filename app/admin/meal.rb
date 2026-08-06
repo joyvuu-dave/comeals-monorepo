@@ -152,16 +152,7 @@ ActiveAdmin.register Meal do
             column('Resident') { |charge| link_to charge.resident.name, admin_resident_path(charge.resident) }
             column('What') { |charge| MealCharge::KIND_LABELS.fetch(charge.kind) }
             column('Category') do |charge|
-              next if charge.multiplier.nil?
-
-              if charge.multiplier == 1
-                'Child'
-              elsif charge.multiplier == 2
-                'Adult'
-              else
-                "Adult x #{number_with_precision(charge.multiplier.to_f / 2, precision: 1,
-                                                                             strip_insignificant_zeros: true)}"
-              end
+              price_category_label(charge.multiplier) unless charge.multiplier.nil?
             end
             column('Amount') { |charge| charge_amount_tag(charge) }
             # Only when the meal has one — see the matching column on the

@@ -1,18 +1,5 @@
 # frozen_string_literal: true
 
-require 'net/smtp'
-
-# Exceptions that indicate an email delivery infrastructure failure
-# (network, DNS, SMTP) rather than a bug in application code.
-# Used across controllers, models, and rake tasks to rescue delivery errors
-# without accidentally swallowing programming errors like NoMethodError.
-MAIL_DELIVERY_ERRORS = [
-  SocketError, IOError,
-  Errno::ECONNREFUSED, Errno::ECONNRESET, Errno::ETIMEDOUT,
-  Net::SMTPAuthenticationError, Net::SMTPServerBusy, Net::SMTPSyntaxError,
-  Net::SMTPFatalError, Net::SMTPUnknownError, Net::ReadTimeout, Net::OpenTimeout
-].freeze
-
 # Intercepts all outgoing emails and redirects them to a single address.
 # Activate by setting MAIL_INTERCEPT_TO in your environment:
 #

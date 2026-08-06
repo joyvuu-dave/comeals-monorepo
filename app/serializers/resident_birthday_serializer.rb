@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
 class ResidentBirthdaySerializer < ActiveModel::Serializer
-  include ApplicationHelper
-
   attributes :id,
              :type,
              :title,
@@ -21,17 +19,17 @@ class ResidentBirthdaySerializer < ActiveModel::Serializer
 
   def title
     if object.age < 22
-      "#{resident_name_helper(object.name)}'s #{object.age.ordinalize} B-day!"
+      "#{ResidentNameShortener.short(object.name)}'s #{object.age.ordinalize} B-day!"
     else
-      "#{resident_name_helper(object.name)}'s B-day!"
+      "#{ResidentNameShortener.short(object.name)}'s B-day!"
     end
   end
 
   def description
     if object.age < 22
-      "#{resident_name_helper(object.name)}'s #{object.age.ordinalize} Birthday!"
+      "#{ResidentNameShortener.short(object.name)}'s #{object.age.ordinalize} Birthday!"
     else
-      "#{resident_name_helper(object.name)}'s Birthday!"
+      "#{ResidentNameShortener.short(object.name)}'s Birthday!"
     end
   end
 

@@ -50,15 +50,10 @@ class AdminUser < ApplicationRecord
   # every AdminUser points at the one community.
   belongs_to :community, optional: true
 
-  has_many :bills, through: :community
-  has_many :units, through: :community
-  has_many :meals, through: :community
-  has_many :reconciliations, through: :community
-  has_many :residents, through: :community
-  has_many :rotations, through: :community
-  has_many :events, through: :community
-  has_many :guest_room_reservations, through: :community
-  has_many :common_house_reservations, through: :community
+  # No has_many :through sugar here on purpose. This is a
+  # single-community app: an admin's "units" are just
+  # Community.instance.units, and nine pass-through associations
+  # implied a per-admin scoping that has never existed (#51).
 
   # A community must always keep at least one superuser. Without one, nobody
   # can settle a reconciliation, touch a bill, or promote anyone — and nobody
@@ -73,14 +68,6 @@ class AdminUser < ApplicationRecord
   # 20260728120000_refuse_removing_the_last_superuser.rb.
   before_update :refuse_demoting_last_superuser, prepend: true
   before_destroy :refuse_destroying_last_superuser, prepend: true
-
-  def admin_users
-    AdminUser.all
-  end
-
-  def communities
-    Community.all
-  end
 
   def superuser?
     superuser

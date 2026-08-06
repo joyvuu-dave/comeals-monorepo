@@ -23,8 +23,6 @@
 #
 
 class GuestRoomReservationSerializer < ActiveModel::Serializer
-  include ApplicationHelper
-
   attributes :id,
              :type,
              :title,
@@ -43,11 +41,11 @@ class GuestRoomReservationSerializer < ActiveModel::Serializer
   end
 
   def title
-    "Guest Room\n#{resident_name_helper(object.resident.name)} - Unit #{object.resident.unit.name}"
+    "Guest Room\n#{ResidentNameShortener.short(object.resident.name)} - Unit #{object.resident.unit.name}"
   end
 
   def description
-    "Guest Room\n#{resident_name_helper(object.resident.name)} - Unit #{object.resident.unit.name}"
+    "Guest Room\n#{ResidentNameShortener.short(object.resident.name)} - Unit #{object.resident.unit.name}"
   end
 
   def start

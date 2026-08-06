@@ -26,12 +26,6 @@ module Api
         current_api_key&.destroy
         render json: { message: 'Signed out.' }
       end
-
-      private
-
-      def authenticate
-        not_authenticated_api unless signed_in_resident_api?
-      end
     end
   end
 end

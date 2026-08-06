@@ -135,24 +135,6 @@ RSpec.describe AdminUser do
     end
   end
 
-  describe '#admin_users' do
-    it 'returns all admin users' do
-      admin1 = create(:admin_user, community: community)
-      admin2 = create(:admin_user, community: community)
-
-      result = admin1.admin_users
-      expect(result).to include(admin1, admin2)
-    end
-  end
-
-  describe '#communities' do
-    it 'returns the singleton community' do
-      admin = create(:admin_user, community: community)
-
-      expect(admin.communities).to eq([community])
-    end
-  end
-
   describe 'bootstrap flow' do
     # These tests document the fresh-deploy setup flow: operator creates the
     # first admin in `rails c` on an empty DB, then creates the singleton

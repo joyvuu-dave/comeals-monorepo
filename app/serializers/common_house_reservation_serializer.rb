@@ -25,8 +25,6 @@
 #
 
 class CommonHouseReservationSerializer < ActiveModel::Serializer
-  include ApplicationHelper
-
   attributes :id,
              :type,
              :title,
@@ -48,13 +46,13 @@ class CommonHouseReservationSerializer < ActiveModel::Serializer
     time_range = "#{object.start_date.strftime('%l:%M%P')} - " \
                  "#{object.end_date.strftime('%l:%M%P')}"
     title_line = "#{object.title}\n" if object.title.present?
-    name = resident_name_helper(object.resident.name)
+    name = ResidentNameShortener.short(object.resident.name)
     unit_name = object.resident.unit.name
     "#{time_range}\nCommon House\n#{title_line}#{name} - Unit #{unit_name}"
   end
 
   def description
-    "Common House\n#{resident_name_helper(object.resident.name)} - Unit #{object.resident.unit.name}"
+    "Common House\n#{ResidentNameShortener.short(object.resident.name)} - Unit #{object.resident.unit.name}"
   end
 
   def start
