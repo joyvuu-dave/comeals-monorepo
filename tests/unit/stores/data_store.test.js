@@ -1,67 +1,19 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 // Mock external modules before importing stores
-vi.mock("axios", () => {
-  const mockAxios = vi.fn(() => Promise.resolve({ status: 200 }));
-  mockAxios.get = vi.fn(() => Promise.resolve({ status: 200, data: {} }));
-  mockAxios.interceptors = {
-    response: { use: vi.fn(), eject: vi.fn() },
-    request: { use: vi.fn() },
-  };
-  return { default: mockAxios };
-});
+vi.mock("axios", () => import("../mocks/axios.js"));
 
-vi.mock("js-cookie", () => ({
-  default: {
-    get: vi.fn((name) => {
-      const cookies = {
-        token: "test-token",
-        community_id: "test-community-id",
-        // Fixture community is Pacific. Timezone-sensitive assertions (event
-        // date conversion, etc.) read this via getCommunityTimezone() — the
-        // helpers themselves work for any IANA tz; see helpers.test.js.
-        timezone: "America/Los_Angeles",
-      };
-      return cookies[name];
-    }),
-    remove: vi.fn(),
-    set: vi.fn(),
-  },
-}));
+vi.mock("js-cookie", () => import("../mocks/js_cookie.js"));
 
-vi.mock("pusher-js", () => {
-  class MockPusher {
-    constructor() {
-      this.connection = {
-        bind: vi.fn(),
-        socket_id: "test-socket",
-      };
-      this.subscribe = vi.fn(() => ({ bind: vi.fn(), name: "test-channel" }));
-      this.unsubscribe = vi.fn();
-      MockPusher.instances.push(this);
-    }
-  }
-  MockPusher.instances = [];
-  return { default: MockPusher };
-});
+vi.mock("pusher-js", () => import("../mocks/pusher.js"));
 
-vi.mock("idb-keyval", () => ({
-  get: vi.fn(() => Promise.resolve(undefined)),
-  set: vi.fn(() => Promise.resolve()),
-  del: vi.fn(() => Promise.resolve()),
-  clear: vi.fn(() => Promise.resolve()),
-}));
+vi.mock("idb-keyval", () => import("../mocks/idb_keyval.js"));
 
-vi.mock("uuid", () => {
-  let counter = 0;
-  return {
-    v4: vi.fn(() => "test-uuid-" + ++counter),
-  };
-});
+vi.mock("uuid", () => import("../mocks/uuid.js"));
 
 import { unprotect, isAlive } from "mobx-state-tree";
+import { createDataStore } from "../helpers/create_data_store.js";
 import { runInAction } from "mobx";
-import { DataStore } from "../../../app/frontend/src/stores/data_store.js";
 import { prefetchMonth } from "../../../app/frontend/src/stores/month_data.js";
 import * as idbKeyval from "idb-keyval";
 import axios from "axios";
@@ -70,28 +22,6 @@ import {
   communityNow,
   SAVE_DEBOUNCE_MS,
 } from "../../../app/frontend/src/helpers/helpers.js";
-
-function createDataStore(opts = {}) {
-  const { mealProps = {}, residents = [], guests = [], bills = [] } = opts;
-
-  const mealDefaults = { id: 1, ...mealProps };
-
-  // DataStore.afterCreate sets up Pusher. We need navigator.onLine available.
-  const store = DataStore.create({
-    meals: [mealDefaults],
-    meal: mealDefaults.id,
-  });
-
-  // Temporarily unprotect the tree so we can populate sub-stores for testing
-  unprotect(store);
-  runInAction(() => {
-    residents.forEach((r) => store.residents.put(r));
-    guests.forEach((g) => store.guests.put(g));
-    bills.forEach((b) => store.bills.put(b));
-  });
-
-  return store;
-}
 
 describe("DataStore", () => {
   beforeEach(() => {

@@ -1,11 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 
-vi.mock("axios", () => ({
-  default: {
-    get: vi.fn(),
-  },
-}));
+vi.mock("axios", () => import("../mocks/axios.js"));
 
 import axios from "axios";
 import RotationsShow from "../../../app/frontend/src/components/rotations/show.jsx";

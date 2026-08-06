@@ -2,12 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router";
 
-vi.mock("axios", () => ({
-  default: {
-    get: vi.fn(),
-    post: vi.fn(),
-  },
-}));
+vi.mock("axios", () => import("../mocks/axios.js"));
 
 import axios from "axios";
 import ResidentsPasswordNew from "../../../app/frontend/src/components/residents/password_new.jsx";

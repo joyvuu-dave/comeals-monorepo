@@ -10,23 +10,15 @@ vi.hoisted(() => {
   document.body.appendChild(root);
 });
 
-vi.mock("axios", () => ({
-  default: {
-    get: vi.fn(),
-    post: vi.fn(),
-  },
-}));
+vi.mock("axios", () => import("../mocks/axios.js"));
 
 // A mutable cookie jar: with no token the login form shows; with one
 // the page redirects to the calendar.
-const cookies = { timezone: "America/Los_Angeles" };
-vi.mock("js-cookie", () => ({
-  default: {
-    get: vi.fn((name) => cookies[name]),
-    set: vi.fn(),
-    remove: vi.fn(),
-  },
-}));
+vi.mock("js-cookie", () => import("../mocks/js_cookie.js"));
+import { cookies } from "../mocks/js_cookie.js";
+
+// The login page renders only when there is no token cookie.
+cookies.current = { timezone: "America/Los_Angeles" };
 
 import axios from "axios";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
@@ -61,7 +53,7 @@ function renderLogin({ store = makeStore(), path = "/" } = {}) {
 describe("ResidentsLogin", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    delete cookies.token;
+    delete cookies.current.token;
     toastStore.clearAll();
   });
 
@@ -73,7 +65,7 @@ describe("ResidentsLogin", () => {
   });
 
   it("redirects to the calendar when a token cookie exists", () => {
-    cookies.token = "token-abc";
+    cookies.current.token = "token-abc";
     renderLogin();
     expect(screen.queryByLabelText("email")).not.toBeInTheDocument();
     expect(screen.getByTestId("location")).toHaveTextContent(/^\/calendar\//);

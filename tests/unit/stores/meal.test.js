@@ -1,89 +1,27 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
 // Mock external modules before importing stores
-vi.mock("axios", () => ({
-  default: vi.fn(() => Promise.resolve({ status: 200 })),
-}));
+vi.mock("axios", () => import("../mocks/axios.js"));
 
-vi.mock("js-cookie", () => ({
-  default: {
-    get: vi.fn(() => "test-token"),
-    remove: vi.fn(),
-  },
-}));
+vi.mock("js-cookie", () => import("../mocks/js_cookie.js"));
 
-vi.mock("pusher-js", () => {
-  return {
-    default: vi.fn().mockImplementation(() => ({
-      connection: {
-        bind: vi.fn(),
-        socket_id: "test-socket",
-      },
-      subscribe: vi.fn(() => ({ bind: vi.fn(), name: "test-channel" })),
-      unsubscribe: vi.fn(),
-    })),
-  };
-});
+vi.mock("pusher-js", () => import("../mocks/pusher.js"));
 
-vi.mock("idb-keyval", () => ({
-  get: vi.fn(() => Promise.resolve(undefined)),
-  set: vi.fn(() => Promise.resolve()),
-  del: vi.fn(() => Promise.resolve()),
-  clear: vi.fn(() => Promise.resolve()),
-}));
+vi.mock("idb-keyval", () => import("../mocks/idb_keyval.js"));
 
-import { types } from "mobx-state-tree";
 import axios from "axios";
-import Meal from "../../../app/frontend/src/stores/meal.js";
-import Resident from "../../../app/frontend/src/stores/resident.js";
-import Bill from "../../../app/frontend/src/stores/bill.js";
-import Guest from "../../../app/frontend/src/stores/guest.js";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
+import { createDataStore } from "../helpers/create_data_store.js";
 
-// Meal.settleExtras calls self.root.loadDataAsync(); this spy records it.
+// The real DataStore, with loadDataAsync stubbed onto the module-level
+// mock: Meal.settleExtras calls self.root.loadDataAsync(), and these
+// tests assert only that the refetch was requested.
 const loadDataAsyncMock = vi.fn();
 
-// Build a minimal DataStore-like root so Meal.root (getRoot) resolves.
-// The real DataStore uses afterCreate to set up Pusher, so we create a slimmed-down
-// wrapper that has the same shape the Meal model expects.
-const TestDataStore = types
-  .model("TestDataStore", {
-    meals: types.optional(types.array(Meal), []),
-    meal: types.maybeNull(types.reference(Meal)),
-    residents: types.map(Resident),
-    bills: types.map(Bill),
-    guests: types.map(Guest),
-  })
-  .views((self) => ({
-    get attendeesCount() {
-      const residentsAttending = Array.from(
-        self.residents.values(),
-      ).filter((r) => r.attending).length;
-      return self.guests.size + residentsAttending;
-    },
-  }))
-  .actions((self) => ({
-    addResident(r) {
-      self.residents.put(r);
-    },
-    addGuest(g) {
-      self.guests.put(g);
-    },
-    loadDataAsync() {
-      loadDataAsyncMock();
-    },
-  }));
-
 function createStore(mealProps = {}, residents = [], guests = []) {
-  const mealDefaults = { id: 1, ...mealProps };
-  const store = TestDataStore.create({
-    meals: [mealDefaults],
-    meal: mealDefaults.id,
-  });
-
-  residents.forEach((r) => store.addResident(r));
-  guests.forEach((g) => store.addGuest(g));
-
+  const store = createDataStore({ mealProps, residents, guests });
+  vi.spyOn(store, "loadDataAsync").mockImplementation(loadDataAsyncMock);
+  window.Comeals.socketId = "test";
   return store;
 }
 

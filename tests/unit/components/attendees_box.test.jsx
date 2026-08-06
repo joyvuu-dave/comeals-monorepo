@@ -3,58 +3,15 @@ import { render, screen, fireEvent } from "@testing-library/react";
 
 // Mock external modules before importing stores (same set as the
 // data_store tests — the real DataStore pulls all of these in).
-vi.mock("axios", () => {
-  const mockAxios = vi.fn(() => Promise.resolve({ status: 200 }));
-  mockAxios.get = vi.fn(() => Promise.resolve({ status: 200, data: {} }));
-  mockAxios.interceptors = {
-    response: { use: vi.fn(), eject: vi.fn() },
-    request: { use: vi.fn() },
-  };
-  return { default: mockAxios };
-});
+vi.mock("axios", () => import("../mocks/axios.js"));
 
-vi.mock("js-cookie", () => ({
-  default: {
-    get: vi.fn((name) => {
-      const cookies = {
-        token: "test-token",
-        community_id: "test-community-id",
-        timezone: "America/Los_Angeles",
-      };
-      return cookies[name];
-    }),
-    remove: vi.fn(),
-    set: vi.fn(),
-  },
-}));
+vi.mock("js-cookie", () => import("../mocks/js_cookie.js"));
 
-vi.mock("pusher-js", () => {
-  class MockPusher {
-    constructor() {
-      this.connection = {
-        bind: vi.fn(),
-        socket_id: "test-socket",
-      };
-      this.subscribe = vi.fn(() => ({ bind: vi.fn(), name: "test-channel" }));
-      this.unsubscribe = vi.fn();
-    }
-  }
-  return { default: MockPusher };
-});
+vi.mock("pusher-js", () => import("../mocks/pusher.js"));
 
-vi.mock("idb-keyval", () => ({
-  get: vi.fn(() => Promise.resolve(undefined)),
-  set: vi.fn(() => Promise.resolve()),
-  del: vi.fn(() => Promise.resolve()),
-  clear: vi.fn(() => Promise.resolve()),
-}));
+vi.mock("idb-keyval", () => import("../mocks/idb_keyval.js"));
 
-vi.mock("uuid", () => {
-  let counter = 0;
-  return {
-    v4: vi.fn(() => "test-uuid-" + ++counter),
-  };
-});
+vi.mock("uuid", () => import("../mocks/uuid.js"));
 
 import { unprotect } from "mobx-state-tree";
 import { runInAction } from "mobx";

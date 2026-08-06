@@ -3,101 +3,44 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 // Mock external modules before importing stores
 // The default response carries a created_at because toggleAttending's add
 // path reads the server's timestamp from the create response.
-vi.mock("axios", () => ({
-  default: vi.fn(() =>
-    Promise.resolve({
-      status: 200,
-      data: { created_at: "2023-06-15T18:30:00.000Z" },
-    }),
-  ),
-}));
+vi.mock("axios", () => import("../mocks/axios.js"));
 
-vi.mock("js-cookie", () => ({
-  default: {
-    get: vi.fn(() => "test-token"),
-    remove: vi.fn(),
-  },
-}));
+vi.mock("js-cookie", () => import("../mocks/js_cookie.js"));
 
-vi.mock("pusher-js", () => {
-  return {
-    default: vi.fn().mockImplementation(() => ({
-      connection: {
-        bind: vi.fn(),
-        socket_id: "test-socket",
-      },
-      subscribe: vi.fn(() => ({ bind: vi.fn(), name: "test-channel" })),
-      unsubscribe: vi.fn(),
-    })),
-  };
-});
+vi.mock("pusher-js", () => import("../mocks/pusher.js"));
 
-vi.mock("idb-keyval", () => ({
-  get: vi.fn(() => Promise.resolve(undefined)),
-  set: vi.fn(() => Promise.resolve()),
-  del: vi.fn(() => Promise.resolve()),
-  clear: vi.fn(() => Promise.resolve()),
-}));
+vi.mock("idb-keyval", () => import("../mocks/idb_keyval.js"));
 
-import { types } from "mobx-state-tree";
 import axios from "axios";
 import * as idbKeyval from "idb-keyval";
-import Meal from "../../../app/frontend/src/stores/meal.js";
-import Resident from "../../../app/frontend/src/stores/resident.js";
-import Bill from "../../../app/frontend/src/stores/bill.js";
-import Guest from "../../../app/frontend/src/stores/guest.js";
+import { runInAction } from "mobx";
+import { createDataStore } from "../helpers/create_data_store.js";
 
-// Build a minimal DataStore-like root so Resident.root (getRoot) resolves.
-const TestDataStore = types
-  .model("TestDataStore", {
-    meals: types.optional(types.array(Meal), []),
-    meal: types.maybeNull(types.reference(Meal)),
-    residents: types.map(Resident),
-    bills: types.map(Bill),
-    guests: types.map(Guest),
-  })
-  .views((self) => ({
-    get attendeesCount() {
-      const residentsAttending = Array.from(
-        self.residents.values(),
-      ).filter((r) => r.attending).length;
-      return self.guests.size + residentsAttending;
-    },
-  }))
-  .volatile(() => ({
-    loadDataAsyncCalls: 0,
-  }))
-  .actions((self) => ({
-    addResident(r) {
-      self.residents.put(r);
-    },
-    removeResident(id) {
-      self.residents.delete(String(id));
-    },
-    addGuest(g) {
-      self.guests.put(g);
-    },
-    appendGuest(obj) {
-      self.guests.put(obj);
-    },
-    loadDataAsync() {
-      self.loadDataAsyncCalls += 1;
-    },
-  }));
+// The attendance actions read created_at from the server's response;
+// give the callable mock that default for the whole file.
+axios.mockImplementation(() =>
+  Promise.resolve({
+    status: 200,
+    data: { created_at: "2023-06-15T18:30:00.000Z" },
+  }),
+);
 
+// The real DataStore, with loadDataAsync stubbed: these tests assert
+// that a dead node's ack triggers a refetch, not what the refetch does
+// (data_store.test.js covers that).
+let loadDataAsyncSpy;
 function createStore(opts = {}) {
-  const { mealProps = {}, residents = [], guests = [] } = opts;
-
-  const mealDefaults = { id: 1, ...mealProps };
-  const store = TestDataStore.create({
-    meals: [mealDefaults],
-    meal: mealDefaults.id,
-  });
-
-  residents.forEach((r) => store.addResident(r));
-  guests.forEach((g) => store.addGuest(g));
-
+  const store = createDataStore(opts);
+  loadDataAsyncSpy = vi
+    .spyOn(store, "loadDataAsync")
+    .mockImplementation(() => {});
+  window.Comeals.socketId = "test";
   return store;
+}
+
+// Stage a raced refetch: the node the action captured is destroyed.
+function removeResident(store, id) {
+  runInAction(() => store.residents.delete(String(id)));
 }
 
 describe("Resident model", () => {
@@ -890,7 +833,7 @@ describe("Resident model", () => {
     const flush = () => new Promise((r) => setTimeout(r, 0));
 
     function killAlice(store) {
-      store.removeResident(10);
+      removeResident(store, 10);
     }
 
     it("refetches when the node dies while an attendance add is in flight", async () => {
@@ -904,7 +847,7 @@ describe("Resident model", () => {
       killAlice(store); // the raced refetch lands before the 200
 
       await flush();
-      expect(store.loadDataAsyncCalls).toBe(1);
+      expect(loadDataAsyncSpy).toHaveBeenCalledTimes(1);
     });
 
     it("refetches when the node dies while an attendance remove is in flight", async () => {
@@ -918,7 +861,7 @@ describe("Resident model", () => {
       killAlice(store);
 
       await flush();
-      expect(store.loadDataAsyncCalls).toBe(1);
+      expect(loadDataAsyncSpy).toHaveBeenCalledTimes(1);
     });
 
     it("refetches when the node dies while a late update is in flight", async () => {
@@ -934,7 +877,7 @@ describe("Resident model", () => {
       killAlice(store);
 
       await flush();
-      expect(store.loadDataAsyncCalls).toBe(1);
+      expect(loadDataAsyncSpy).toHaveBeenCalledTimes(1);
     });
 
     it("refetches when the node dies while a veg update is in flight", async () => {
@@ -956,7 +899,7 @@ describe("Resident model", () => {
       killAlice(store);
 
       await flush();
-      expect(store.loadDataAsyncCalls).toBe(1);
+      expect(loadDataAsyncSpy).toHaveBeenCalledTimes(1);
     });
 
     it("refetches when the node dies while an add-guest is in flight", async () => {
@@ -970,7 +913,7 @@ describe("Resident model", () => {
       killAlice(store);
 
       await flush();
-      expect(store.loadDataAsyncCalls).toBe(1);
+      expect(loadDataAsyncSpy).toHaveBeenCalledTimes(1);
       // The dropped guest must not be appended by hand — the refetch
       // brings it back.
       expect(store.guests.size).toBe(0);
@@ -990,7 +933,7 @@ describe("Resident model", () => {
       killAlice(store);
 
       await flush();
-      expect(store.loadDataAsyncCalls).toBe(1);
+      expect(loadDataAsyncSpy).toHaveBeenCalledTimes(1);
     });
 
     it("does not refetch when the node stays alive", async () => {
@@ -1003,7 +946,7 @@ describe("Resident model", () => {
       alice.toggleAttending();
 
       await flush();
-      expect(store.loadDataAsyncCalls).toBe(0);
+      expect(loadDataAsyncSpy).not.toHaveBeenCalled();
       expect(alice.attending).toBe(true);
     });
 
@@ -1022,7 +965,7 @@ describe("Resident model", () => {
       killAlice(store);
 
       await flush();
-      expect(store.loadDataAsyncCalls).toBe(0);
+      expect(loadDataAsyncSpy).not.toHaveBeenCalled();
     });
   });
 
@@ -1098,7 +1041,7 @@ describe("Resident model", () => {
     it("evicts even when the node died before the response landed", async () => {
       const store = aliceStore({ attending: false });
       store.residents.get("10").toggleAttending();
-      store.removeResident(10);
+      removeResident(store, 10);
 
       await flush();
       expect(idbKeyval.del).toHaveBeenCalledWith("1");

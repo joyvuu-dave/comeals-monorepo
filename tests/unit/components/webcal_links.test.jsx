@@ -3,19 +3,12 @@ import { render, screen } from "@testing-library/react";
 
 // A mutable cookie jar so each test controls whether resident_id is
 // already known.
-const cookies = { community_id: "7" };
-vi.mock("js-cookie", () => ({
-  default: {
-    get: vi.fn((name) => cookies[name]),
-    set: vi.fn(),
-  },
-}));
+vi.mock("js-cookie", () => import("../mocks/js_cookie.js"));
+import { cookies } from "../mocks/js_cookie.js";
 
-vi.mock("axios", () => ({
-  default: {
-    get: vi.fn(),
-  },
-}));
+cookies.current = { community_id: "7" };
+
+vi.mock("axios", () => import("../mocks/axios.js"));
 
 import Cookie from "js-cookie";
 import axios from "axios";
@@ -24,11 +17,11 @@ import WebcalLinks from "../../../app/frontend/src/components/calendar/webcal_li
 describe("WebcalLinks", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    delete cookies.resident_id;
+    delete cookies.current.resident_id;
   });
 
   it("links both calendars when the resident is already known", () => {
-    cookies.resident_id = "3";
+    cookies.current.resident_id = "3";
     render(<WebcalLinks />);
 
     const all = screen.getByRole("link", { name: "Subscribe to All Meals" });

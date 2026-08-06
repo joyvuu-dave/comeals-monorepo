@@ -1,86 +1,25 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
 // Mock external modules before importing stores
-vi.mock("axios", () => ({
-  default: vi.fn(() => Promise.resolve({ status: 200 })),
-}));
+vi.mock("axios", () => import("../mocks/axios.js"));
 
-vi.mock("js-cookie", () => ({
-  default: {
-    get: vi.fn(() => "test-token"),
-    remove: vi.fn(),
-  },
-}));
+vi.mock("js-cookie", () => import("../mocks/js_cookie.js"));
 
-vi.mock("pusher-js", () => {
-  return {
-    default: vi.fn().mockImplementation(() => ({
-      connection: {
-        bind: vi.fn(),
-        socket_id: "test-socket",
-      },
-      subscribe: vi.fn(() => ({ bind: vi.fn(), name: "test-channel" })),
-      unsubscribe: vi.fn(),
-    })),
-  };
-});
+vi.mock("pusher-js", () => import("../mocks/pusher.js"));
 
-vi.mock("idb-keyval", () => ({
-  get: vi.fn(() => Promise.resolve(undefined)),
-  set: vi.fn(() => Promise.resolve()),
-  del: vi.fn(() => Promise.resolve()),
-  clear: vi.fn(() => Promise.resolve()),
-}));
+vi.mock("idb-keyval", () => import("../mocks/idb_keyval.js"));
 
-import { types } from "mobx-state-tree";
-import Meal from "../../../app/frontend/src/stores/meal.js";
-import Resident from "../../../app/frontend/src/stores/resident.js";
-import Bill from "../../../app/frontend/src/stores/bill.js";
-import Guest from "../../../app/frontend/src/stores/guest.js";
+import { createDataStore } from "../helpers/create_data_store.js";
 
-// Build a minimal DataStore-like root so Bill's `root` view (getRoot)
-// resolves; Bill actions call self.root.saveBills().
-const TestDataStore = types
-  .model("TestDataStore", {
-    meals: types.optional(types.array(Meal), []),
-    meal: types.maybeNull(types.reference(Meal)),
-    residents: types.map(Resident),
-    bills: types.map(Bill),
-    guests: types.map(Guest),
-    saveBillsCalled: types.optional(types.number, 0),
-  })
-  .views((self) => ({
-    get attendeesCount() {
-      const residentsAttending = Array.from(
-        self.residents.values(),
-      ).filter((r) => r.attending).length;
-      return self.guests.size + residentsAttending;
-    },
-  }))
-  .actions((self) => ({
-    saveBills() {
-      self.saveBillsCalled += 1;
-    },
-    addResident(r) {
-      self.residents.put(r);
-    },
-    addBill(b) {
-      self.bills.put(b);
-    },
-  }));
-
+// The real DataStore, with saveBills stubbed: these tests assert WHEN
+// the bill actions ask the store to save, not what the save pipeline
+// does with it (data_store.test.js covers that). The stub also keeps
+// the debounce timer out of these tests.
+let saveBillsSpy;
 function createStore(opts = {}) {
-  const { mealProps = {}, residents = [], bills = [] } = opts;
-
-  const mealDefaults = { id: 1, ...mealProps };
-  const store = TestDataStore.create({
-    meals: [mealDefaults],
-    meal: mealDefaults.id,
-  });
-
-  residents.forEach((r) => store.addResident(r));
-  bills.forEach((b) => store.addBill(b));
-
+  const store = createDataStore(opts);
+  saveBillsSpy = vi.spyOn(store, "saveBills").mockImplementation(() => {});
+  window.Comeals.socketId = "test";
   return store;
 }
 
@@ -286,7 +225,7 @@ describe("Bill model", () => {
 
       const bill = store.bills.get("bill-1");
       bill.setResident(10);
-      expect(store.saveBillsCalled).toBe(1);
+      expect(saveBillsSpy).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -321,7 +260,7 @@ describe("Bill model", () => {
 
       const bill = store.bills.get("bill-1");
       bill.setAmount("10.00");
-      expect(store.saveBillsCalled).toBe(1);
+      expect(saveBillsSpy).toHaveBeenCalledTimes(1);
     });
 
     // Issue #29: input that breaks the whole-cents grammar does not land —
@@ -335,7 +274,7 @@ describe("Bill model", () => {
       const result = bill.setAmount("12.345");
       expect(result).toBe("12.34");
       expect(bill.amount).toBe("12.34");
-      expect(store.saveBillsCalled).toBe(0);
+      expect(saveBillsSpy).not.toHaveBeenCalled();
     });
 
     it("refuses an amount over 9999.99", () => {
@@ -346,7 +285,7 @@ describe("Bill model", () => {
       const bill = store.bills.get("bill-1");
       bill.setAmount("99990");
       expect(bill.amount).toBe("9999");
-      expect(store.saveBillsCalled).toBe(0);
+      expect(saveBillsSpy).not.toHaveBeenCalled();
     });
 
     it("refuses scientific notation and non-numeric input", () => {
@@ -359,7 +298,7 @@ describe("Bill model", () => {
       bill.setAmount("abc");
       bill.setAmount("-5");
       expect(bill.amount).toBe("5");
-      expect(store.saveBillsCalled).toBe(0);
+      expect(saveBillsSpy).not.toHaveBeenCalled();
     });
   });
 
@@ -448,7 +387,7 @@ describe("Bill model", () => {
 
       const bill = store.bills.get("bill-1");
       bill.toggleNoCost();
-      expect(store.saveBillsCalled).toBe(1);
+      expect(saveBillsSpy).toHaveBeenCalledTimes(1);
     });
   });
 

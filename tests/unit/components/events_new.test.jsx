@@ -3,19 +3,11 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { observable } from "mobx";
 import { MemoryRouter, Routes, Route } from "react-router";
 
-vi.mock("axios", () => ({
-  default: {
-    get: vi.fn(),
-    post: vi.fn(),
-  },
-}));
+vi.mock("axios", () => import("../mocks/axios.js"));
 
-vi.mock("js-cookie", () => ({
-  default: {
-    get: vi.fn((name) => (name === "community_id" ? "7" : undefined)),
-    set: vi.fn(),
-  },
-}));
+vi.mock("js-cookie", () => import("../mocks/js_cookie.js"));
+import { cookies } from "../mocks/js_cookie.js";
+cookies.current = { community_id: "7" };
 
 import axios from "axios";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";

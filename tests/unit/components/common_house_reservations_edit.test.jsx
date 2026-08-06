@@ -9,22 +9,11 @@ vi.hoisted(() => {
   document.body.appendChild(root);
 });
 
-vi.mock("axios", () => ({
-  default: {
-    get: vi.fn(),
-    patch: vi.fn(),
-    delete: vi.fn(),
-  },
-}));
+vi.mock("axios", () => import("../mocks/axios.js"));
 
-vi.mock("js-cookie", () => ({
-  default: {
-    get: vi.fn((name) =>
-      name === "timezone" ? "America/Los_Angeles" : undefined,
-    ),
-    set: vi.fn(),
-  },
-}));
+vi.mock("js-cookie", () => import("../mocks/js_cookie.js"));
+import { cookies } from "../mocks/js_cookie.js";
+cookies.current = { timezone: "America/Los_Angeles" };
 
 import axios from "axios";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";

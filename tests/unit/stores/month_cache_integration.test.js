@@ -8,41 +8,11 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 // renders, Pusher invalidation still works, and RAM never holds more
 // than the cap.
 
-vi.mock("axios", () => {
-  const mockAxios = vi.fn(() => Promise.resolve({ status: 200 }));
-  mockAxios.get = vi.fn(() => Promise.resolve({ status: 200, data: {} }));
-  mockAxios.interceptors = {
-    response: { use: vi.fn(), eject: vi.fn() },
-    request: { use: vi.fn() },
-  };
-  return { default: mockAxios };
-});
+vi.mock("axios", () => import("../mocks/axios.js"));
 
-vi.mock("js-cookie", () => ({
-  default: {
-    get: vi.fn((name) => {
-      const cookies = {
-        token: "test-token",
-        community_id: "test-community-id",
-        timezone: "America/Los_Angeles",
-      };
-      return cookies[name];
-    }),
-    remove: vi.fn(),
-    set: vi.fn(),
-  },
-}));
+vi.mock("js-cookie", () => import("../mocks/js_cookie.js"));
 
-vi.mock("pusher-js", () => {
-  class MockPusher {
-    constructor() {
-      this.connection = { bind: vi.fn(), socket_id: "test-socket" };
-      this.subscribe = vi.fn(() => ({ bind: vi.fn(), name: "test-channel" }));
-      this.unsubscribe = vi.fn();
-    }
-  }
-  return { default: MockPusher };
-});
+vi.mock("pusher-js", () => import("../mocks/pusher.js"));
 
 // A real in-memory "disk" so the IndexedDB tier behaves like the real
 // one: what set stored, get returns later.
@@ -64,10 +34,7 @@ vi.mock("idb-keyval", () => {
   };
 });
 
-vi.mock("uuid", () => {
-  let counter = 0;
-  return { v4: vi.fn(() => "test-uuid-" + ++counter) };
-});
+vi.mock("uuid", () => import("../mocks/uuid.js"));
 
 let DataStore;
 let monthCache;

@@ -9,11 +9,9 @@ import {
   useNavigate,
 } from "react-router";
 
-vi.mock("js-cookie", () => ({
-  default: {
-    get: vi.fn((name) => (name === "username" ? "Jane Smith" : undefined)),
-  },
-}));
+vi.mock("js-cookie", () => import("../mocks/js_cookie.js"));
+import { cookies } from "../mocks/js_cookie.js";
+cookies.current = { username: "Jane Smith" };
 
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
 import Header from "../../../app/frontend/src/components/meal/header.jsx";

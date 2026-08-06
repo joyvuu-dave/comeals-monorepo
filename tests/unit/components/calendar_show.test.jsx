@@ -10,26 +10,15 @@ vi.hoisted(() => {
   document.body.appendChild(root);
 });
 
-vi.mock("axios", () => ({
-  default: {
-    get: vi.fn(() => Promise.resolve({ status: 200, data: {} })),
-    post: vi.fn(),
-  },
-}));
+vi.mock("axios", () => import("../mocks/axios.js"));
 
-vi.mock("js-cookie", () => ({
-  default: {
-    get: vi.fn((name) => {
-      const cookies = {
-        username: "Jane Smith",
-        community_id: "7",
-        timezone: "America/Los_Angeles",
-      };
-      return cookies[name];
-    }),
-    set: vi.fn(),
-  },
-}));
+vi.mock("js-cookie", () => import("../mocks/js_cookie.js"));
+import { cookies } from "../mocks/js_cookie.js";
+cookies.current = {
+  username: "Jane Smith",
+  community_id: "7",
+  timezone: "America/Los_Angeles",
+};
 
 import dayjs from "dayjs";
 import advancedFormat from "dayjs/plugin/advancedFormat";

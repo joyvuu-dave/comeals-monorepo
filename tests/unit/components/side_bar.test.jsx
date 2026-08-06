@@ -9,11 +9,7 @@ import {
   useNavigate,
 } from "react-router";
 
-vi.mock("axios", () => ({
-  default: {
-    get: vi.fn(),
-  },
-}));
+vi.mock("axios", () => import("../mocks/axios.js"));
 
 import axios from "axios";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";

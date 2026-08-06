@@ -1,20 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 
-vi.mock("axios", () => ({
-  default: {
-    get: vi.fn(),
-  },
-}));
+vi.mock("axios", () => import("../mocks/axios.js"));
 
 // toCommunityDayjs reads the community timezone from a cookie.
-vi.mock("js-cookie", () => ({
-  default: {
-    get: vi.fn((name) =>
-      name === "timezone" ? "America/Los_Angeles" : undefined,
-    ),
-  },
-}));
+vi.mock("js-cookie", () => import("../mocks/js_cookie.js"));
+import { cookies } from "../mocks/js_cookie.js";
+cookies.current = { timezone: "America/Los_Angeles" };
 
 import axios from "axios";
 import dayjs from "dayjs";
