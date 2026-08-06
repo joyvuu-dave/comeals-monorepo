@@ -62,7 +62,7 @@ ActiveAdmin.register Reconciliation do
       # Read-only record of the meals this settlement swept. Corrections are
       # never made by editing the set — they settle as new entries in the next
       # reconciliation.
-      settled_meals = reconciliation.meals.includes(bills: :resident).order(:date)
+      settled_meals = reconciliation.meals.includes(:meal_charges, bills: :resident).order(:date)
 
       table_for settled_meals do
         column('Date') { |m| link_to m.date.to_s, admin_meal_path(m) }
@@ -70,7 +70,12 @@ ActiveAdmin.register Reconciliation do
           cooks = m.bills.map(&:resident).uniq.sort_by(&:name)
           cooks.empty? ? '—' : safe_join(cooks.map { |c| link_to(c.name, admin_resident_path(c)) }, ', ')
         end
-        column('Total Cost') { |m| number_to_currency(m.total_cost) }
+        # From the stored charges — what this settlement actually used.
+        # Blank for a settlement from before line items existed.
+        column('Total Cost') do |m|
+          summary = MealCostSummary.for(m)
+          number_to_currency(summary.total_cost) if summary
+        end
       end
     end
   end

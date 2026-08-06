@@ -22,7 +22,9 @@ ActiveAdmin.register Meal do
     before_action :block_if_reconciled, only: %i[edit update destroy]
 
     def scoped_collection
-      end_of_association_chain.includes(:community, :bills)
+      # Everything MealCostSummary reads, so the index computes each
+      # row's numbers without per-row queries.
+      end_of_association_chain.includes(:community, :bills, :meal_residents, :guests, :meal_charges)
     end
 
     def block_if_reconciled
@@ -52,15 +54,20 @@ ActiveAdmin.register Meal do
     column :attendees_count, sortable: false
     column :closed
     column :max
-    column :subsidized?
-    column :max_cost do |meal|
-      number_to_currency(meal.max_cost) if meal.capped?
+    # Costs come from MealCostSummary: stored charges for settled meals,
+    # MealLedger for open ones. Blank for a meal settled before line
+    # items existed. (The old max_cost column is gone with the derived
+    # methods — it applied today's cap to yesterday's meals.)
+    column :subsidized? do |meal|
+      MealCostSummary.for(meal)&.subsidized
     end
     column :total_cost do |meal|
-      number_to_currency(meal.total_cost) unless meal.total_cost.zero?
+      summary = MealCostSummary.for(meal)
+      number_to_currency(summary.total_cost) if summary && !summary.total_cost.zero?
     end
     column :unit_cost do |meal|
-      number_to_currency(meal.unit_cost) unless meal.unit_cost.zero?
+      summary = MealCostSummary.for(meal)
+      number_to_currency(summary.unit_cost) if summary && !summary.unit_cost.zero?
     end
     column 'Number of Bills', :bills_count
     column :reconciled?, sortable: false
@@ -75,12 +82,16 @@ ActiveAdmin.register Meal do
       row :community
       row :closed
       row :max
-      row :subsidized?
+      row :subsidized? do |meal|
+        MealCostSummary.for(meal)&.subsidized
+      end
       row :total_cost do |meal|
-        number_to_currency(meal.total_cost) unless meal.total_cost.zero?
+        summary = MealCostSummary.for(meal)
+        number_to_currency(summary.total_cost) if summary && !summary.total_cost.zero?
       end
       row :unit_cost do |meal|
-        number_to_currency(meal.unit_cost) unless meal.unit_cost.zero?
+        summary = MealCostSummary.for(meal)
+        number_to_currency(summary.unit_cost) if summary && !summary.unit_cost.zero?
       end
       table_for meal.guests.order(:created_at) do
         column 'Guests in Attendance' do |guest|

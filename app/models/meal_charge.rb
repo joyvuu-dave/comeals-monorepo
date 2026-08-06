@@ -63,23 +63,14 @@ class MealCharge < ApplicationRecord
   validates :amount, :unit_cost, presence: true, numericality: true
 
   # Immutable once written, the same as the balances these add up to. The
-  # database trigger in 20260802120000 is the backstop; this is the readable
-  # half. reject_destroy is prepended for the reason spelled out on Meal and
-  # Reconciliation (issue #26).
-  before_update :reject_update
-  before_destroy :reject_destroy, prepend: true
+  # database trigger in 20260802120000 is the backstop; this is the
+  # readable half.
+  include AppendOnly
 
-  def reject_update
-    errors.add(:base, 'Settlement line items record what a meal cost and who was charged for it. ' \
-                      'They cannot be modified — corrections settle in the next reconciliation.')
-    throw(:abort)
-  end
-
-  def reject_destroy
-    errors.add(:base, 'Settlement line items record what a meal cost and who was charged for it. ' \
-                      'They cannot be destroyed.')
-    throw(:abort)
-  end
+  append_only update_message: 'Settlement line items record what a meal cost and who was charged for it. ' \
+                              'They cannot be modified — corrections settle in the next reconciliation.',
+              destroy_message: 'Settlement line items record what a meal cost and who was charged for it. ' \
+                               'They cannot be destroyed.'
 
   def credit?
     kind == 'credit'

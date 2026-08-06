@@ -11,16 +11,22 @@ namespace :reconciliations do
     # settled — its receipt and attendance are not final (issue #3).
     cutoff = Date.yesterday
 
-    unless community.meals.unreconciled.joins(:bills).exists?(date: ..cutoff)
-      Rails.logger.info("reconciliations:create skipping #{community.name} — no unreconciled meals with bills")
+    # No pre-check: Reconciliation#must_settle_at_least_one_meal already
+    # refuses an empty sweep, reading the same eligible_meals scope that
+    # assign_meals uses. A second copy of that predicate here could
+    # drift — and had (it lacked the distinct and the today exclusion).
+    begin
+      reconciliation = Reconciliation.create!(
+        community: community,
+        date: Time.zone.today,
+        end_date: cutoff
+      )
+    rescue ActiveRecord::RecordInvalid => e
+      Rails.logger.info(
+        "reconciliations:create skipping #{community.name} — #{e.record.errors.full_messages.to_sentence}"
+      )
       next
     end
-
-    reconciliation = Reconciliation.create!(
-      community: community,
-      date: Time.zone.today,
-      end_date: cutoff
-    )
 
     Rails.logger.info(
       "Reconciliation ##{reconciliation.id} created for #{community.name}: #{reconciliation.number_of_meals} meals"

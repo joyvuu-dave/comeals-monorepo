@@ -49,19 +49,9 @@ class ReconciliationBalance < ApplicationRecord
   # triggers, and the same reason: a validation only runs when the write goes
   # through the model.
   #
-  # reject_destroy is prepended so it aborts before any cascade can run, for
-  # the reason spelled out on Meal and Reconciliation (issue #26).
-  before_update :reject_update
-  before_destroy :reject_destroy, prepend: true
+  include AppendOnly
 
-  def reject_update
-    errors.add(:base, 'Settled balances are what residents have already been billed and cannot be ' \
-                      'modified. Corrections settle as new entries in the next reconciliation.')
-    throw(:abort)
-  end
-
-  def reject_destroy
-    errors.add(:base, 'Settled balances are what residents have already been billed and cannot be destroyed.')
-    throw(:abort)
-  end
+  append_only update_message: 'Settled balances are what residents have already been billed and cannot be ' \
+                              'modified. Corrections settle as new entries in the next reconciliation.',
+              destroy_message: 'Settled balances are what residents have already been billed and cannot be destroyed.'
 end

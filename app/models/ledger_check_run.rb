@@ -36,18 +36,10 @@ class LedgerCheckRun < ApplicationRecord
   # Append-only. The database trigger in 20260731130000 is the backstop; this
   # is the readable half, and the reason is the same as for a settled
   # balance — a record that can be edited afterwards is not evidence.
-  before_update :reject_update
-  before_destroy :reject_destroy, prepend: true
+  include AppendOnly
 
-  def reject_update
-    errors.add(:base, 'A ledger check run records what was true at a point in time and cannot be modified.')
-    throw(:abort)
-  end
-
-  def reject_destroy
-    errors.add(:base, 'A ledger check run records what was true at a point in time and cannot be destroyed.')
-    throw(:abort)
-  end
+  append_only update_message: 'A ledger check run records what was true at a point in time and cannot be modified.',
+              destroy_message: 'A ledger check run records what was true at a point in time and cannot be destroyed.'
 
   # There are three outcomes, not two. A run that could not finish tells you
   # nothing about the books, which is different from a run that finished and

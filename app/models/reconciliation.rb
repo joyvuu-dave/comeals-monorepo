@@ -50,24 +50,14 @@ class Reconciliation < ApplicationRecord
   # deliberate rake task that uses `delete` / `update_columns` to bypass
   # these guards.
   #
-  # reject_destroy is prepended: the has_many declarations above register
-  # their dependent callbacks (nullify meals, destroy balances) first, so
-  # without prepend a destroy attempt would un-reconcile every meal before
-  # the abort — a write the settled-meal DB triggers refuse (issue #26).
-  # Prepending aborts the destroy before any association write is attempted.
-  before_update :reject_update
-  before_destroy :reject_destroy, prepend: true
+  # The destroy guard aborts before the has_many dependent callbacks
+  # declared above (nullify meals, destroy balances) can un-reconcile
+  # anything — see AppendOnly for the prepend reasoning (issue #26).
+  include AppendOnly
 
-  def reject_update
-    errors.add(:base, 'Reconciliations are settlement events and cannot be modified. ' \
-                      'Corrections settle as new entries in the next reconciliation.')
-    throw(:abort)
-  end
-
-  def reject_destroy
-    errors.add(:base, 'Reconciliations are settlement events and cannot be destroyed.')
-    throw(:abort)
-  end
+  append_only update_message: 'Reconciliations are settlement events and cannot be modified. ' \
+                              'Corrections settle as new entries in the next reconciliation.',
+              destroy_message: 'Reconciliations are settlement events and cannot be destroyed.'
 
   def number_of_meals
     meals.count

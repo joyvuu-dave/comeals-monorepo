@@ -198,6 +198,18 @@ class LedgerVerification
     reconciliation.reconciliation_balances.pluck(:resident_id, :amount).to_h
   end
 
+  # One reported difference is { resident_id:, stored:, source: }, and
+  # `source` means a different number depending on the `check` label the
+  # surrounding detail carries:
+  #
+  #   recompute   the balance rebuilt from source rows via MealLedger
+  #   line_items  the sum of that resident's stored line items — or,
+  #               with resident_id nil, the whole settlement's line
+  #               total, which must be (near) zero
+  #
+  # The key names are pinned by stored history: every past run in
+  # ledger_check_runs.details already uses them, and the admin page
+  # reads them back. Renaming the keys would orphan every past run.
   def detail(reconciliation, check, differences)
     {
       reconciliation_id: reconciliation.id,

@@ -67,6 +67,24 @@ class MealLedger
     @lines ||= @meals.flat_map { |meal| lines_for(meal) }
   end
 
+  # The per-meal numbers a screen shows: what the cooks spent, what the
+  # eaters are charged for (lower on a subsidized meal), the cost per
+  # unit of multiplier, and whether the community subsidized it. This is
+  # the display face of the same financials_for pass the lines are built
+  # from — screens must read it (via MealCostSummary), never re-derive
+  # the arithmetic.
+  Summary = Data.define(:total_cost, :effective_cost, :unit_cost, :subsidized)
+
+  def summary_for(meal)
+    financials = financials_for(meal)
+    Summary.new(
+      total_cost: financials[:total_cost],
+      effective_cost: financials[:effective_cost],
+      unit_cost: financials[:unit_cost],
+      subsidized: financials[:effective_cost] < financials[:total_cost]
+    )
+  end
+
   # Per-resident totals, as { resident_id => BigDecimal }.
   #
   # The caller passes the residents it wants, and every one of them gets an

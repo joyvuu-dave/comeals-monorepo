@@ -35,25 +35,6 @@ RSpec.describe MealResident do
   let(:meal) { create(:meal, community: community) }
   let(:resident) { create(:resident, community: community, unit: unit, multiplier: 2) }
 
-  describe '#cost' do
-    it 'returns meal unit_cost multiplied by multiplier as BigDecimal' do
-      create(:meal_resident, meal: meal, resident: resident, community: community)
-      meal.reload
-
-      another_resident = create(:resident, community: community, unit: unit, multiplier: 1)
-      mr = create(:meal_resident, meal: meal, resident: another_resident, community: community)
-      meal.reload
-
-      # Total multiplier = 2 + 1 = 3
-      create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('90'))
-      meal.reload
-
-      # unit_cost = 90 / 3 = 30, mr.multiplier = 1, cost = 30 * 1 = 30
-      expect(mr.cost).to be_a(BigDecimal)
-      expect(mr.cost).to eq(BigDecimal('30'))
-    end
-  end
-
   describe '#set_multiplier' do
     it 'copies the resident multiplier before validation' do
       mr = described_class.new(meal: meal, resident: resident)

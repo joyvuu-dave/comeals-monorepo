@@ -38,8 +38,4 @@ class Guest < ApplicationRecord
   include ClosedMealAttendanceFreeze
 
   validates :multiplier, numericality: { only_integer: true }
-
-  def cost
-    meal.unit_cost * multiplier
-  end
 end

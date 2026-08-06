@@ -198,52 +198,10 @@ class Meal < ApplicationRecord
 
   delegate :count, to: :bills, prefix: true
 
-  # Total cost computed from source bills. Sums in memory when the caller
-  # preloaded bills (same contract as multiplier above — this is what lets
-  # the dashboard render many meals without one query per meal), otherwise
-  # one cheap indexed SQL SUM. No memoization — bills can change within a
-  # request, and stale data in financial calculations is worse than
-  # recomputing.
-  def total_cost
-    if bills.loaded?
-      bills.reject(&:no_cost).sum(BigDecimal('0'), &:amount)
-    else
-      bills.where(no_cost: false).sum(:amount)
-    end
-  end
-
-  # The cost used for splitting after applying the cap.
-  # If uncapped or under cap, this equals total_cost.
-  # If over cap, this equals max_cost.
-  def effective_total_cost
-    tc = total_cost
-    return tc unless capped?
-
-    mc = max_cost
-    [tc, mc].min
-  end
-
-  # Per-multiplier-unit cost. Single division, no per-bill iteration.
-  def unit_cost
-    return BigDecimal('0') if multiplier.zero?
-
-    effective_total_cost / multiplier
-  end
-
-  # Maximum total cost for this meal based on the community cap.
-  # Returns nil if uncapped.
-  def max_cost
-    return nil unless capped?
-
-    cap * multiplier
-  end
-
-  def subsidized?
-    return false if multiplier.zero?
-    return false unless capped?
-
-    total_cost > max_cost
-  end
+  # No cost methods here on purpose. What a meal costs is MealLedger's
+  # arithmetic; screens read it (or the stored meal_charges of a settled
+  # meal) through MealCostSummary. A convenience copy on this model is
+  # how the math ended up living in three places (#48).
 
   def reconciled?
     reconciliation_id.present?

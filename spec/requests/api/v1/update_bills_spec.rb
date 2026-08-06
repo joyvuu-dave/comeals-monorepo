@@ -119,7 +119,7 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
       )
 
       meal.reload
-      expect(meal.total_cost).to eq(BigDecimal('60'))
+      expect(MealCostSummary.for(meal).total_cost).to eq(BigDecimal('60'))
     end
   end
 

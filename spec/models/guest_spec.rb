@@ -32,26 +32,6 @@ RSpec.describe Guest do
   let(:meal) { create(:meal, community: community) }
   let(:resident) { create(:resident, community: community, unit: unit, multiplier: 2) }
 
-  describe '#cost' do
-    it 'returns meal unit_cost multiplied by guest multiplier as BigDecimal' do
-      create(:meal_resident, meal: meal, resident: resident, community: community)
-      meal.reload
-
-      # multiplier = 2 (from meal_resident)
-      create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('50'))
-      meal.reload
-
-      guest = create(:guest, meal: meal, resident: resident)
-      meal.reload
-
-      # Total multiplier = 2 (meal_resident) + 2 (guest default) = 4
-      # unit_cost = 50 / 4 = 12.5
-      # guest.cost = 12.5 * 2 = 25
-      expect(guest.cost).to be_a(BigDecimal)
-      expect(guest.cost).to eq(BigDecimal('25'))
-    end
-  end
-
   describe '#meal_has_open_spots' do
     it 'allows guest when meal is open' do
       meal.update_columns(closed: false, max: nil)

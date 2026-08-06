@@ -178,11 +178,30 @@ class Resident < ApplicationRecord
   end
 
   def meal_resident_costs
-    meal_residents.joins(:meal).merge(Meal.unreconciled).sum(&:cost)
+    meal_residents.joins(:meal).merge(Meal.unreconciled)
+                  .preload(meal: %i[bills meal_residents guests])
+                  .sum(BigDecimal('0')) { |attendance| oracle_unit_cost(attendance.meal) * attendance.multiplier }
   end
 
   def guest_costs
-    guests.joins(:meal).merge(Meal.unreconciled).sum(&:cost)
+    guests.joins(:meal).merge(Meal.unreconciled)
+          .preload(meal: %i[bills meal_residents guests])
+          .sum(BigDecimal('0')) { |guest| oracle_unit_cost(guest.meal) * guest.multiplier }
+  end
+
+  # The oracle's own per-unit cost, written out like bill_reimbursements
+  # above: the debit side must not read MealLedger or any display code,
+  # or the oracle would agree with the thing it exists to check.
+  def oracle_unit_cost(meal)
+    total_mult = meal.meal_residents.sum(&:multiplier) + meal.guests.sum(&:multiplier)
+    return BigDecimal('0') if total_mult.zero?
+
+    total_cost = meal.bills.reject(&:no_cost).sum(BigDecimal('0'), &:amount)
+    if meal.capped?
+      max_cost = meal.cap * total_mult
+      total_cost = max_cost if total_cost > max_cost
+    end
+    total_cost / total_mult
   end
 
   # Balance is read from the cached resident_balances table (unreconciled preview).

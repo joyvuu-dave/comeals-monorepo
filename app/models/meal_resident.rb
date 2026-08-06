@@ -54,8 +54,4 @@ class MealResident < ApplicationRecord
   def set_community_id
     self.community_id = meal&.community_id
   end
-
-  def cost
-    meal.unit_cost * multiplier
-  end
 end

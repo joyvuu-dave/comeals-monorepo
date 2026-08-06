@@ -79,12 +79,13 @@ ActiveAdmin.register Resident do
       row :active
       row :email
       row :vegetarian
-      table_for resident.meals.order(:date) do
+      table_for resident.meals.includes(:bills, :meal_residents, :guests, :meal_charges).order(:date) do
         column 'Meals Attended' do |meal|
           link_to meal.date, admin_meal_path(meal)
         end
         column 'Unit Cost' do |meal|
-          number_to_currency(meal.unit_cost) unless meal.unit_cost.zero?
+          summary = MealCostSummary.for(meal)
+          number_to_currency(summary.unit_cost) if summary && !summary.unit_cost.zero?
         end
       end
       table_for resident.bills.all do
@@ -113,7 +114,8 @@ ActiveAdmin.register Resident do
           link_to guest.meal.date, admin_meal_path(guest.meal)
         end
         column 'Unit Cost' do |guest|
-          number_to_currency(guest.meal.unit_cost) unless guest.meal.unit_cost.zero?
+          summary = MealCostSummary.for(guest.meal)
+          number_to_currency(summary.unit_cost) if summary && !summary.unit_cost.zero?
         end
       end
     end

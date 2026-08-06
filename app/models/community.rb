@@ -136,17 +136,19 @@ class Community < ApplicationRecord
 
   # Report Methods
 
-  # Dashboard "Cost per adult". Must mirror settlement math (see
-  # billing:recalculate): meals nobody attended are skipped, capped meals
-  # count their effective cost, and a zero-multiplier meal charges nobody.
+  # Dashboard "Cost per adult". Reads MealLedger's per-meal summaries,
+  # so it cannot drift from settlement math: meals nobody attended are
+  # skipped by the scope, capped meals count their effective cost, and a
+  # zero-multiplier meal charges nobody (its effective cost is zero).
   # An adult is 2 multiplier units, hence the 2x.
   def unreconciled_ave_cost
     unreconciled = meals.unreconciled.with_attendees.preload(:meal_residents, :guests, :bills).to_a
     total_multiplier = unreconciled.sum(&:multiplier)
     return '--' if total_multiplier.zero?
 
+    ledger = MealLedger.new(unreconciled)
     total_cost = unreconciled.sum(BigDecimal('0')) do |meal|
-      meal.multiplier.zero? ? BigDecimal('0') : meal.effective_total_cost
+      ledger.summary_for(meal).effective_cost
     end
     val = 2 * (total_cost / total_multiplier)
     "$#{format('%0.02f', val)}/adult"
