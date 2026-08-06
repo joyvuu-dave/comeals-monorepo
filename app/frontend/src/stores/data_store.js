@@ -7,7 +7,7 @@ import Meal from "./meal";
 import Resident from "./resident";
 import Bill from "./bill";
 import Guest from "./guest";
-import * as monthCache from "./month_cache";
+import * as monthData from "./month_data";
 
 import { pusherClient, startPusher } from "../helpers/pusher_client";
 import { get as kvGet, set as kvSet, del as kvDel } from "idb-keyval";
@@ -30,98 +30,11 @@ import toastStore from "./toast_store";
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-// The in-memory calendar month cache and its per-key invalidation
-// versions live in ./month_cache (imported above as `monthCache`).
-// It is a capped LRU; IndexedDB keeps the persistent copies under
-// the same keys.
-
-// Monotonic counter for month navigation.
-// Bumped at the start of every loadMonthAsync and switchMonths call; each
-// async continuation captures the value at start and checks it before
-// touching the screen, so the newest navigation always wins. A superseded
-// fetch response is dropped entirely — caching it could overwrite fresher
-// data for the same month. A superseded IndexedDB read may still warm
-// `monthCache` (its data is correct under its own key) but skips rendering
-// and skips its revalidation fetch.
-var monthFetchVersion = 0;
-
 // Backoff for retrying a failed FIRST load of a meal: 2s, 4s, 8s,
 // 16s, then every 30s — forever. A shared screen must heal without a
 // human tap, and at 30s the retries cost the server nothing.
 const MEAL_RETRY_BASE_MS = 2000;
 const MEAL_RETRY_CAP_MS = 30000;
-
-function invalidateMonth(communityId, year, month) {
-  var key = monthCache.keyFor(communityId, year, month);
-  monthCache.remove(key);
-  kvDel(key);
-  monthCache.bumpVersion(key);
-}
-
-// Network fetches started by a prefetch, keyed like monthCache. When
-// the calendar mounts while the boot-time prefetch of the same month
-// is still in flight, loadMonthAsync adopts the pending request
-// instead of racing it with a duplicate one.
-var monthNetworkInFlight = {};
-
-// How long a network-fetched month counts as fresh. Within this
-// window switchMonths renders it without a revalidation fetch —
-// the data just came from the server, so refetching it would repeat
-// the same request. Past the window, normal stale-while-revalidate.
-var MONTH_FRESH_MS = 5000;
-
-function prefetchMonthData(date) {
-  var myDate = dayjs(date);
-  var key = monthCache.keyFor(
-    Cookie.get("community_id"),
-    myDate.format("YYYY"),
-    myDate.format("M"),
-  );
-
-  // The read also marks the month as recently used, so an adjacent
-  // month that is already cached stays away from the eviction end.
-  if (monthCache.get(key) !== undefined) return;
-
-  var versionAtStart = monthCache.versionFor(key);
-
-  kvGet(key).then(function (value) {
-    // Discard if a Pusher invalidation arrived since we started
-    if (monthCache.versionFor(key) !== versionAtStart) return;
-
-    if (value !== null && typeof value !== "undefined") {
-      monthCache.set(key, value);
-      return;
-    }
-
-    var pending = axios
-      .get(`/api/v1/communities/${Cookie.get("community_id")}/calendar/${date}`)
-      .then(function (response) {
-        if (response.status === 200) {
-          // Discard if a Pusher invalidation arrived since we started
-          if (monthCache.versionFor(key) !== versionAtStart) return;
-          monthCache.set(key, response.data);
-          monthCache.markFresh(key);
-          kvSet(key, response.data);
-        }
-      })
-      .catch(function () {
-        // Prefetch failure is non-critical
-      })
-      .finally(function () {
-        delete monthNetworkInFlight[key];
-      });
-    monthNetworkInFlight[key] = pending;
-  });
-}
-
-// Called from index.jsx at boot, before React mounts, when the URL is
-// a calendar route. It starts the month data download in parallel
-// with the calendar chunk; by the time the calendar mounts, its
-// goToMonth finds the month cached (or adopts the in-flight request)
-// instead of only then starting the fetch.
-export function prefetchMonth(date) {
-  prefetchMonthData(date);
-}
 
 export const DataStore = types
   .model("DataStore", {
@@ -700,65 +613,11 @@ export const DataStore = types
       self.mealLoadFailed = false;
       self.mealLoadNotFound = false;
     },
+    // Refetch the month on screen (Pusher update, reconnect). The
+    // month module decides whether to adopt an in-flight prefetch or
+    // fetch, and drops superseded responses; loadMonth renders.
     loadMonthAsync() {
-      monthFetchVersion += 1;
-      var versionAtStart = monthFetchVersion;
-
-      // A prefetch of this same month is still on the wire (the
-      // boot-time prefetch, usually): wait for it and render its
-      // result instead of issuing a duplicate request. If it failed
-      // or was invalidated mid-flight, fall through to a normal fetch.
-      var myDate = dayjs(self.currentDate);
-      var key = monthCache.keyFor(
-        Cookie.get("community_id"),
-        myDate.format("YYYY"),
-        myDate.format("M"),
-      );
-      var pending = monthNetworkInFlight[key];
-      if (pending) {
-        pending.then(function () {
-          if (versionAtStart !== monthFetchVersion) return;
-          var cached = monthCache.get(key);
-          if (cached !== undefined) {
-            self.loadMonth(cached);
-          } else {
-            self.fetchMonth(versionAtStart);
-          }
-        });
-        return;
-      }
-      self.fetchMonth(versionAtStart);
-    },
-    fetchMonth(versionAtStart) {
-      axios
-        .get(
-          `/api/v1/communities/${Cookie.get("community_id")}/calendar/${
-            self.currentDate
-          }`,
-        )
-        .then(function (response) {
-          if (response.status === 200) {
-            // A newer navigation or refetch superseded this response:
-            // drop it entirely. Rendering it would show the wrong month;
-            // caching it could overwrite fresher same-month data.
-            if (versionAtStart !== monthFetchVersion) return;
-            var respData = response.data;
-            var key = monthCache.keyFor(
-              respData.id,
-              respData.year,
-              respData.month,
-            );
-            monthCache.set(key, respData);
-            monthCache.markFresh(key);
-            kvSet(key, respData).then(function () {
-              if (versionAtStart !== monthFetchVersion) return;
-              self.loadMonth(respData);
-            });
-          }
-        })
-        .catch(function (error) {
-          handleAxiosError(error, { silent: true });
-        });
+      monthData.revalidate(self.currentDate, self.loadMonth);
     },
     // Guarantee the hosts list is loaded. Resolves immediately if the
     // cache is warm; otherwise kicks off a fetch (deduped against any
@@ -1095,15 +954,17 @@ export const DataStore = types
 
           var channel = window.Comeals.pusher.subscribe(channelName);
           channel.bind("update", function () {
-            invalidateMonth(communityId, adjYear, adjMonth);
+            monthData.invalidateMonth(communityId, adjYear, adjMonth);
           });
           self.adjacentChannels.push(channel);
         },
       );
 
       // Prefetch adjacent months for instant navigation
-      prefetchMonthData(current.subtract(1, "month").format("YYYY-MM-DD"));
-      prefetchMonthData(current.add(1, "month").format("YYYY-MM-DD"));
+      monthData.prefetchMonth(
+        current.subtract(1, "month").format("YYYY-MM-DD"),
+      );
+      monthData.prefetchMonth(current.add(1, "month").format("YYYY-MM-DD"));
     },
     clearResidents() {
       self.residents.clear();
@@ -1188,76 +1049,14 @@ export const DataStore = types
           self.loadDataAsync();
         });
     },
-    // The client that knows, invalidates (issue #37): only the current
-    // month and its neighbors have Pusher channels, so a reservation or
-    // event saved onto a farther month would leave that month's cache
-    // stale — and the person who just made the booking would see it
-    // missing. The modal that made the change calls this with the
-    // affected date(s); an edit that moves a date calls it for both the
-    // old and the new month. Accepts what the modals hold: a picker Date
-    // (already a community-day "fake local" Date) or a wire date string
-    // (offset or naive), which resolves to the community month — the same
-    // month the cache key uses.
+    // The modal that changed a date calls this so the affected month
+    // is refetched even when it has no Pusher channel (issue #37).
     invalidateMonthForDate(date) {
-      if (!date) return;
-      var d;
-      try {
-        d = date instanceof Date ? dayjs(date) : toCommunityDayjs(date);
-      } catch {
-        // dayjs.tz throws a RangeError on unparseable strings. A date we
-        // cannot read names no month to evict.
-        return;
-      }
-      if (!d.isValid()) return;
-      invalidateMonth(
-        Cookie.get("community_id"),
-        d.format("YYYY"),
-        d.format("M"),
-      );
+      monthData.invalidateMonthForDate(date);
     },
     switchMonths(date) {
-      monthFetchVersion += 1;
-      var versionAtStart = monthFetchVersion;
       self.currentDate = date;
-
-      var myDate = dayjs(date);
-      var key = monthCache.keyFor(
-        Cookie.get("community_id"),
-        myDate.format("YYYY"),
-        myDate.format("M"),
-      );
-
-      // Synchronous in-memory cache: instant render, no blank flash
-      var cached = monthCache.get(key);
-      if (cached !== undefined) {
-        self.loadMonth(cached);
-        // Data that came from the network seconds ago (a boot-time or
-        // adjacent-month prefetch, or a quick back-and-forth) needs no
-        // revalidation — the fetch would repeat the same request.
-        // Older entries revalidate as always.
-        if (!monthCache.isFresh(key, MONTH_FRESH_MS)) {
-          self.loadMonthAsync();
-        }
-        return;
-      }
-
-      // Async IndexedDB fallback
-      kvGet(key).then(function (value) {
-        if (value === null || typeof value === "undefined") {
-          // User already navigated elsewhere: nothing to fetch here.
-          if (versionAtStart !== monthFetchVersion) return;
-          self.loadMonthAsync();
-        } else {
-          // Warming the in-memory cache is safe even when superseded —
-          // the data sits under its own key.
-          monthCache.set(key, value);
-          // User already navigated elsewhere: skip the render and the
-          // revalidation fetch. Same guard as switchMeals above.
-          if (versionAtStart !== monthFetchVersion) return;
-          self.loadMonth(value);
-          self.loadMonthAsync();
-        }
-      });
+      monthData.loadForNavigation(date, self.loadMonth);
     },
     goToMeal(mealId) {
       self.mealLoading = true;

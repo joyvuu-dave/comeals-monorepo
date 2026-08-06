@@ -61,10 +61,8 @@ vi.mock("uuid", () => {
 
 import { unprotect, isAlive } from "mobx-state-tree";
 import { runInAction } from "mobx";
-import {
-  DataStore,
-  prefetchMonth,
-} from "../../../app/frontend/src/stores/data_store.js";
+import { DataStore } from "../../../app/frontend/src/stores/data_store.js";
+import { prefetchMonth } from "../../../app/frontend/src/stores/month_data.js";
 import * as idbKeyval from "idb-keyval";
 import axios from "axios";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";

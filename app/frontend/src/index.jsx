@@ -44,7 +44,8 @@ import {
   useLocation,
 } from "react-router";
 
-import { DataStore, prefetchMonth } from "./stores/data_store";
+import { DataStore } from "./stores/data_store";
+import { prefetchMonth } from "./stores/month_data";
 import { clear } from "idb-keyval";
 
 import ResidentsLogin from "./components/residents/login";
