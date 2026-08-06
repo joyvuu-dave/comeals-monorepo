@@ -7,6 +7,11 @@ const Meal = types
   .model("Meal", {
     id: types.identifierNumber,
     description: "",
+    // CAREFUL: the wire field is `max` (the attendance cap); the store
+    // keeps `extras` (seats left = max - attendees) and derives `max`
+    // as a view, because extras is what every control renders and
+    // edits. loadData converts on the way in; updateMax converts on
+    // the way out. When reading, remember which side you are on.
     extras: types.maybeNull(types.number),
     // True while an extras save is in flight; the checkboxes are disabled.
     extrasPending: false,
