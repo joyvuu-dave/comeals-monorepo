@@ -33,11 +33,19 @@ import ConfirmModal from "../app/confirm_modal";
 
 import WebcalLinks from "./webcal_links";
 import toastStore from "../../stores/toast_store";
-import { Calendar, dayjsLocalizer } from "react-big-calendar";
+import { Calendar, dateFnsLocalizer } from "react-big-calendar";
+import { format, parse, startOfWeek, getDay } from "date-fns";
+import { enUS } from "date-fns/locale";
 
 import Icon from "../icon";
 
-const localizer = dayjsLocalizer(dayjs);
+const localizer = dateFnsLocalizer({
+  format,
+  parse,
+  startOfWeek,
+  getDay,
+  locales: { "en-US": enUS },
+});
 
 // Module-level constants so react-big-calendar's prop identity stays stable
 // across MainCalendar renders. An inline `views={["month"]}` literal would
