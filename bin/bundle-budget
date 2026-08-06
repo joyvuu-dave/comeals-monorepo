@@ -65,6 +65,41 @@ function report(name, actual, budget) {
 report("first load", firstLoadKB, budgets.firstLoadKB);
 report("total     ", totalKB, budgets.totalKB);
 
+// The calendar chunk must be preloaded from index.html (#44).
+// vite.config's preloadCalendarPlugin finds the chunk by the literal
+// file name calendar/show.jsx, so renaming or moving that file would
+// silently drop the preload and the boot-time download would start
+// late — no test would fail. Fail here instead.
+const calendarKey = Object.keys(manifest).find((k) =>
+  k.endsWith("calendar/show.jsx"),
+);
+// npm run build moves index.html to app/frontend/dist; a bare
+// `vite build` (the Playwright webServer) leaves it in public.
+const htmlPath = [
+  path.join(root, "app", "frontend", "dist", "index.html"),
+  path.join(root, "public", "index.html"),
+].find(fs.existsSync);
+if (!calendarKey || !htmlPath) {
+  failed = true;
+  console.error(
+    "MISSING calendar preload check could not run: " +
+      (calendarKey ? "no built index.html found" : "no calendar/show.jsx chunk in the manifest"),
+  );
+} else {
+  const html = fs.readFileSync(htmlPath, "utf8");
+  const preloadHref = "/" + manifest[calendarKey].file;
+  if (html.includes(`rel="modulepreload" href="${preloadHref}"`)) {
+    console.log(`ok     calendar preload: ${preloadHref}`);
+  } else {
+    failed = true;
+    console.error(
+      `MISSING calendar preload: index.html has no modulepreload for ${preloadHref}.` +
+        "\nDid calendar/show.jsx move? preloadCalendarPlugin in vite.config.mjs" +
+        "\nfinds the chunk by that file name and must move with it.",
+    );
+  }
+}
+
 if (failed) {
   console.error(
     "\nThe build got bigger than the budget allows." +

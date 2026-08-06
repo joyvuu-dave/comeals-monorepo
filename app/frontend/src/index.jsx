@@ -42,6 +42,7 @@ import {
   Route,
   Navigate,
   useLocation,
+  matchPath,
 } from "react-router";
 
 import { DataStore } from "./stores/data_store";
@@ -111,11 +112,11 @@ document.addEventListener("DOMContentLoaded", () => {
   // calendar mounts. The mount's own goToMonth then finds the month
   // cached, or adopts the still-in-flight request — see
   // loadMonthAsync — instead of starting the download from zero.
-  const calendarBoot = window.location.pathname.match(
-    /^\/calendar\/[^/]+\/(\d{4}-\d{2}-\d{2})/,
-  );
+  // Matched against CALENDAR_PATH itself, so a route change cannot
+  // silently strand this prefetch on a stale hand-written pattern.
+  const calendarBoot = matchPath(CALENDAR_PATH, window.location.pathname);
   if (calendarBoot && typeof Cookie.get("community_id") !== "undefined") {
-    prefetchMonth(calendarBoot[1]);
+    prefetchMonth(calendarBoot.params.date);
   }
 
   window.addEventListener("load", function () {
