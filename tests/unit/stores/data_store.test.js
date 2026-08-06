@@ -13,6 +13,27 @@ vi.mock("uuid", () => import("../mocks/uuid.js"));
 
 import { unprotect, isAlive } from "mobx-state-tree";
 import { createDataStore } from "../helpers/create_data_store.js";
+
+// The full wire shape /meals/:id/cooks returns, every field at its
+// blank default. Tests override only what they exercise, so a wire
+// format change is one edit here instead of two dozen literals.
+function mealPayload(overrides = {}) {
+  return {
+    id: 1,
+    date: "2023-06-15",
+    description: "",
+    closed: false,
+    closed_at: null,
+    reconciled: false,
+    max: null,
+    next_id: null,
+    prev_id: null,
+    residents: [],
+    guests: [],
+    bills: [],
+    ...overrides,
+  };
+}
 import { runInAction } from "mobx";
 import { prefetchMonth } from "../../../app/frontend/src/stores/month_data.js";
 import * as idbKeyval from "idb-keyval";
@@ -215,24 +236,6 @@ describe("DataStore", () => {
       });
       expect(store.lateCount).toBe(1);
     });
-
-    it("matches vegetarianCount pattern for non-attending residents", () => {
-      // Both views filter by attending before checking their respective flag
-      const store = createDataStore({
-        residents: [
-          {
-            id: 10,
-            meal_id: 1,
-            name: "Alice",
-            attending: false,
-            late: true,
-            vegetarian: true,
-          },
-        ],
-      });
-      expect(store.vegetarianCount).toBe(0);
-      expect(store.lateCount).toBe(0);
-    });
   });
 
   // ── extras ──
@@ -244,6 +247,7 @@ describe("DataStore", () => {
       });
 
       expect(store.extras).toBe("n/a");
+      expect(typeof store.extras).toBe("string");
     });
 
     it("returns numeric difference when meal is closed and max is a number", () => {
@@ -255,6 +259,7 @@ describe("DataStore", () => {
       // max = extras + attendeesCount = 5 + 1 = 6
       // extras view = max - attendeesCount = 6 - 1 = 5
       expect(store.extras).toBe(5);
+      expect(typeof store.extras).toBe("number");
     });
 
     it("returns empty string when meal is closed and max is null", () => {
@@ -263,6 +268,7 @@ describe("DataStore", () => {
       });
 
       expect(store.extras).toBe("");
+      expect(typeof store.extras).toBe("string");
     });
 
     it("returns 0 when closed and all spots taken", () => {
@@ -336,6 +342,25 @@ describe("DataStore", () => {
 
       expect(store.canAdd).toBe(false);
     });
+
+    it("returns true when closed and extras is exactly 1 (boundary)", () => {
+      // Boundary: extras=1 is the minimum value that allows adding
+      const store = createDataStore({ mealProps: { closed: true, extras: 1 } });
+      expect(store.canAdd).toBe(true);
+    });
+
+    it("flips from true to false when the last extra seat is taken", () => {
+      const store = createDataStore({
+        mealProps: { closed: true, extras: 1 },
+        residents: [{ id: 10, meal_id: 1, name: "Alice", attending: false }],
+      });
+      expect(store.canAdd).toBe(true);
+
+      const alice = store.residents.get("10");
+      alice.toggleAttending();
+      expect(store.meal.extras).toBe(0);
+      expect(store.canAdd).toBe(false);
+    });
   });
 
   // ── loadData transformation ──
@@ -347,16 +372,9 @@ describe("DataStore", () => {
         residents: [{ id: 10, meal_id: 1, name: "Alice" }],
       });
 
-      const data = {
-        id: 1,
-        date: "2023-06-15",
+      const data = mealPayload({
         description: "Pasta night",
-        closed: false,
-        closed_at: null,
-        reconciled: false,
-        max: null,
         next_id: 2,
-        prev_id: null,
         residents: [
           {
             id: 10,
@@ -370,12 +388,11 @@ describe("DataStore", () => {
             active: true,
           },
         ],
-        guests: [],
         bills: [
           { id: "b1", resident_id: 10, amount: "25.5", no_cost: false },
           { id: "b2", resident_id: null, amount: "0", no_cost: false },
         ],
-      };
+      });
 
       store.loadData(data);
 
@@ -398,16 +415,7 @@ describe("DataStore", () => {
     it("sorts residents alphabetically by name", () => {
       const store = createDataStore();
 
-      const data = {
-        id: 1,
-        date: "2023-06-15",
-        description: "",
-        closed: false,
-        closed_at: null,
-        reconciled: false,
-        max: null,
-        next_id: null,
-        prev_id: null,
+      const data = mealPayload({
         residents: [
           {
             id: 12,
@@ -443,9 +451,7 @@ describe("DataStore", () => {
             active: true,
           },
         ],
-        guests: [],
-        bills: [],
-      };
+      });
 
       store.loadData(data);
 
@@ -457,20 +463,9 @@ describe("DataStore", () => {
     it("creates blank bills to reach minimum of 3", () => {
       const store = createDataStore();
 
-      const data = {
-        id: 1,
-        date: "2023-06-15",
-        description: "",
-        closed: false,
-        closed_at: null,
-        reconciled: false,
-        max: null,
-        next_id: null,
-        prev_id: null,
-        residents: [],
-        guests: [],
+      const data = mealPayload({
         bills: [{ id: "b1", resident_id: null, amount: "10", no_cost: false }],
-      };
+      });
 
       store.loadData(data);
 
@@ -487,16 +482,7 @@ describe("DataStore", () => {
         ],
       });
 
-      const data = {
-        id: 1,
-        date: "2023-06-15",
-        description: "",
-        closed: false,
-        closed_at: null,
-        reconciled: false,
-        max: null,
-        next_id: null,
-        prev_id: null,
+      const data = mealPayload({
         residents: [
           {
             id: 10,
@@ -532,14 +518,13 @@ describe("DataStore", () => {
             active: true,
           },
         ],
-        guests: [],
         bills: [
           { id: "b1", resident_id: 10, amount: "10", no_cost: false },
           { id: "b2", resident_id: 11, amount: "20", no_cost: false },
           { id: "b3", resident_id: 12, amount: "30", no_cost: false },
           { id: "b4", resident_id: null, amount: "5", no_cost: false },
         ],
-      };
+      });
 
       store.loadData(data);
 
@@ -550,20 +535,13 @@ describe("DataStore", () => {
     it("sets meal properties from data", () => {
       const store = createDataStore();
 
-      const data = {
-        id: 1,
-        date: "2023-06-15",
+      const data = mealPayload({
         description: "Taco Tuesday",
         closed: true,
         closed_at: "2023-06-15T18:00:00Z",
         reconciled: true,
-        max: null,
         next_id: 2,
-        prev_id: null,
-        residents: [],
-        guests: [],
-        bills: [],
-      };
+      });
 
       store.loadData(data);
 
@@ -577,16 +555,10 @@ describe("DataStore", () => {
     it("sets extras based on max minus attendees when max is provided", () => {
       const store = createDataStore();
 
-      const data = {
-        id: 1,
-        date: "2023-06-15",
-        description: "",
+      const data = mealPayload({
         closed: true,
         closed_at: "2023-06-15T18:00:00Z",
-        reconciled: false,
         max: 10,
-        next_id: null,
-        prev_id: null,
         residents: [
           {
             id: 10,
@@ -631,8 +603,7 @@ describe("DataStore", () => {
             vegetarian: false,
           },
         ],
-        bills: [],
-      };
+      });
 
       store.loadData(data);
 
@@ -643,16 +614,7 @@ describe("DataStore", () => {
     it("sets extras to null when max is null", () => {
       const store = createDataStore();
 
-      const data = {
-        id: 1,
-        date: "2023-06-15",
-        description: "",
-        closed: false,
-        closed_at: null,
-        reconciled: false,
-        max: null,
-        next_id: null,
-        prev_id: null,
+      const data = mealPayload({
         residents: [
           {
             id: 10,
@@ -666,9 +628,7 @@ describe("DataStore", () => {
             active: true,
           },
         ],
-        guests: [],
-        bills: [],
-      };
+      });
 
       store.loadData(data);
 
@@ -678,20 +638,7 @@ describe("DataStore", () => {
     it("sets mealLoading to false after loading", () => {
       const store = createDataStore();
 
-      const data = {
-        id: 1,
-        date: "2023-06-15",
-        description: "",
-        closed: false,
-        closed_at: null,
-        reconciled: false,
-        max: null,
-        next_id: null,
-        prev_id: null,
-        residents: [],
-        guests: [],
-        bills: [],
-      };
+      const data = mealPayload();
 
       store.loadData(data);
       expect(store.mealLoading).toBe(false);
@@ -702,16 +649,7 @@ describe("DataStore", () => {
         residents: [{ id: 10, meal_id: 1, name: "Alice" }],
       });
 
-      const data = {
-        id: 1,
-        date: "2023-06-15",
-        description: "",
-        closed: false,
-        closed_at: null,
-        reconciled: false,
-        max: null,
-        next_id: null,
-        prev_id: null,
+      const data = mealPayload({
         residents: [
           {
             id: 10,
@@ -725,9 +663,8 @@ describe("DataStore", () => {
             active: true,
           },
         ],
-        guests: [],
         bills: [{ id: "b1", resident_id: 10, amount: "15", no_cost: false }],
-      };
+      });
 
       store.loadData(data);
 
@@ -742,16 +679,7 @@ describe("DataStore", () => {
         residents: [{ id: 10, meal_id: 1, name: "Alice" }],
       });
 
-      const data = {
-        id: 1,
-        date: "2023-06-15",
-        description: "",
-        closed: false,
-        closed_at: null,
-        reconciled: false,
-        max: null,
-        next_id: null,
-        prev_id: null,
+      const data = mealPayload({
         residents: [
           {
             id: 10,
@@ -775,8 +703,7 @@ describe("DataStore", () => {
             name: null,
           },
         ],
-        bills: [],
-      };
+      });
 
       store.loadData(data);
 
@@ -921,20 +848,9 @@ describe("DataStore", () => {
       }));
       window.Comeals.pusher.unsubscribe = vi.fn();
 
-      const mealData = {
-        id: 1,
-        date: "2023-06-15",
+      const mealData = mealPayload({
         description: "Meal",
-        closed: false,
-        closed_at: null,
-        reconciled: false,
-        max: null,
-        next_id: null,
-        prev_id: null,
-        residents: [],
-        guests: [],
-        bills: [],
-      };
+      });
       store.loadData(mealData);
       expect(window.Comeals.mealChannel.name).toBe("meal-1");
 
@@ -1388,23 +1304,6 @@ describe("DataStore", () => {
       );
     }
 
-    function mealPayload(id) {
-      return {
-        id,
-        date: "2023-06-15",
-        description: "",
-        closed: false,
-        closed_at: null,
-        reconciled: false,
-        max: null,
-        next_id: null,
-        prev_id: null,
-        residents: [],
-        guests: [],
-        bills: [],
-      };
-    }
-
     it("a failed first load enters the retry state and retries with growing waits", async () => {
       const store = createDataStore();
       axios.get.mockRejectedValue({ request: {} });
@@ -1444,7 +1343,7 @@ describe("DataStore", () => {
 
     it("a background refetch failure stays silent", async () => {
       const store = createDataStore();
-      store.loadData(mealPayload(1));
+      store.loadData(mealPayload());
       expect(store.mealLoading).toBe(false);
 
       axios.get.mockRejectedValue({ request: {} });
@@ -1512,7 +1411,7 @@ describe("DataStore", () => {
       await vi.advanceTimersByTimeAsync(2000); // retry #1 fails; wait is now 4s
       expect(cooksCallsFor(1).length).toBe(2);
 
-      store.loadData(mealPayload(1));
+      store.loadData(mealPayload());
       expect(store.mealLoadFailed).toBe(false);
 
       // A later failure starts the backoff from the base again.
@@ -1561,78 +1460,15 @@ describe("DataStore", () => {
 
   // ── extras view return types ──
 
-  describe("extras view type consistency", () => {
-    it("returns string 'n/a' when meal is open", () => {
-      const store = createDataStore({
-        mealProps: { closed: false, extras: 5 },
-      });
-      expect(store.extras).toBe("n/a");
-      expect(typeof store.extras).toBe("string");
-    });
-
-    it("returns a number when meal is closed with max set", () => {
-      const store = createDataStore({ mealProps: { closed: true, extras: 3 } });
-      expect(typeof store.extras).toBe("number");
-    });
-
-    it("returns empty string when meal is closed with null max", () => {
-      const store = createDataStore({
-        mealProps: { closed: true, extras: null },
-      });
-      expect(store.extras).toBe("");
-      expect(typeof store.extras).toBe("string");
-    });
-  });
-
-  // ── canAdd boundary conditions ──
-
-  describe("canAdd boundary conditions", () => {
-    it("returns true when closed and extras is exactly 1 (boundary)", () => {
-      // Boundary: extras=1 is the minimum value that allows adding
-      const store = createDataStore({ mealProps: { closed: true, extras: 1 } });
-      expect(store.canAdd).toBe(true);
-    });
-
-    it("returns false when closed and extras is exactly 0 (boundary)", () => {
-      const store = createDataStore({ mealProps: { closed: true, extras: 0 } });
-      expect(store.canAdd).toBe(false);
-    });
-
-    it("handles the transition from extras=1 to 0 after adding a resident", () => {
-      // After someone joins, extras decrements — canAdd should flip from true to false
-      const store = createDataStore({
-        mealProps: { closed: true, extras: 1 },
-        residents: [{ id: 10, meal_id: 1, name: "Alice", attending: false }],
-      });
-      expect(store.canAdd).toBe(true);
-
-      const alice = store.residents.get("10");
-      alice.toggleAttending();
-      expect(store.meal.extras).toBe(0);
-      expect(store.canAdd).toBe(false);
-    });
-  });
-
   // ── BUG-1: closed_at null handling ──
 
   describe("closed_at null handling", () => {
     it("preserves null closed_at instead of creating epoch Date (Regression test for BUG-1)", () => {
       const store = createDataStore();
 
-      const data = {
-        id: 1,
-        date: "2023-06-15",
-        description: "",
+      const data = mealPayload({
         closed: true,
-        closed_at: null,
-        reconciled: false,
-        max: null,
-        next_id: null,
-        prev_id: null,
-        residents: [],
-        guests: [],
-        bills: [],
-      };
+      });
 
       store.loadData(data);
       expect(store.meal.closed_at).toBeNull();
@@ -1641,20 +1477,10 @@ describe("DataStore", () => {
     it("preserves a valid closed_at Date", () => {
       const store = createDataStore();
 
-      const data = {
-        id: 1,
-        date: "2023-06-15",
-        description: "",
+      const data = mealPayload({
         closed: true,
         closed_at: "2023-06-15T18:00:00Z",
-        reconciled: false,
-        max: null,
-        next_id: null,
-        prev_id: null,
-        residents: [],
-        guests: [],
-        bills: [],
-      };
+      });
 
       store.loadData(data);
       expect(store.meal.closed_at).toBeInstanceOf(Date);
@@ -1706,16 +1532,7 @@ describe("DataStore", () => {
       // Mock the loadDataAsync axios.get call with valid meal data
       axios.get.mockResolvedValueOnce({
         status: 200,
-        data: {
-          id: 1,
-          date: "2023-06-15",
-          description: "",
-          closed: false,
-          closed_at: null,
-          reconciled: false,
-          max: null,
-          next_id: null,
-          prev_id: null,
+        data: mealPayload({
           residents: [
             {
               id: 10,
@@ -1729,11 +1546,10 @@ describe("DataStore", () => {
               active: true,
             },
           ],
-          guests: [],
           bills: [
             { id: "bill-1", resident_id: 10, amount: "25.00", no_cost: false },
           ],
-        },
+        }),
       });
 
       store.submitBills();
@@ -1793,16 +1609,7 @@ describe("DataStore", () => {
       const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
       const store = createDataStore();
 
-      const data = {
-        id: 1,
-        date: "2023-06-15",
-        description: "",
-        closed: false,
-        closed_at: null,
-        reconciled: false,
-        max: null,
-        next_id: null,
-        prev_id: null,
+      const data = mealPayload({
         residents: [
           {
             id: 10,
@@ -1816,12 +1623,11 @@ describe("DataStore", () => {
             active: true,
           },
         ],
-        guests: [],
         bills: [
           { id: "b1", resident_id: 10, amount: "15", no_cost: false },
           { id: "b2", resident_id: 999, amount: "20", no_cost: false },
         ],
-      };
+      });
 
       // loadData should not throw
       expect(() => store.loadData(data)).not.toThrow();
@@ -1842,20 +1648,7 @@ describe("DataStore", () => {
   describe("loadData edge cases", () => {
     it("handles completely empty data (no residents, guests, or bills)", () => {
       const store = createDataStore();
-      const data = {
-        id: 1,
-        date: "2023-06-15",
-        description: "",
-        closed: false,
-        closed_at: null,
-        reconciled: false,
-        max: null,
-        next_id: null,
-        prev_id: null,
-        residents: [],
-        guests: [],
-        bills: [],
-      };
+      const data = mealPayload();
 
       store.loadData(data);
       expect(store.residents.size).toBe(0);
@@ -1867,16 +1660,10 @@ describe("DataStore", () => {
 
     it("handles max=0 (capacity set to exactly the current attendees)", () => {
       const store = createDataStore();
-      const data = {
-        id: 1,
-        date: "2023-06-15",
-        description: "",
+      const data = mealPayload({
         closed: true,
         closed_at: "2023-06-15T18:00:00Z",
-        reconciled: false,
         max: 2,
-        next_id: null,
-        prev_id: null,
         residents: [
           {
             id: 10,
@@ -1901,9 +1688,7 @@ describe("DataStore", () => {
             active: true,
           },
         ],
-        guests: [],
-        bills: [],
-      };
+      });
 
       store.loadData(data);
       expect(store.meal.extras).toBe(0); // max=2, attendees=2
@@ -1914,16 +1699,7 @@ describe("DataStore", () => {
       const store = createDataStore({
         residents: [{ id: 10, meal_id: 1, name: "Alice" }],
       });
-      const data = {
-        id: 1,
-        date: "2023-06-15",
-        description: "",
-        closed: false,
-        closed_at: null,
-        reconciled: false,
-        max: null,
-        next_id: null,
-        prev_id: null,
+      const data = mealPayload({
         residents: [
           {
             id: 10,
@@ -1937,9 +1713,8 @@ describe("DataStore", () => {
             active: true,
           },
         ],
-        guests: [],
         bills: [{ id: "b1", resident_id: 10, amount: "0", no_cost: false }],
-      };
+      });
 
       store.loadData(data);
       const bill = Array.from(store.bills.values()).find(
@@ -2329,32 +2104,24 @@ describe("DataStore", () => {
 
     function storeWithCookBill() {
       const store = createDataStore({ mealProps: { closed: false } });
-      store.loadData({
-        id: 1,
-        date: "2023-06-15",
-        description: "",
-        closed: false,
-        closed_at: null,
-        reconciled: false,
-        max: null,
-        next_id: null,
-        prev_id: null,
-        residents: [
-          {
-            id: 11,
-            meal_id: 1,
-            name: "Bob",
-            attending: false,
-            attending_at: null,
-            late: false,
-            vegetarian: false,
-            can_cook: true,
-            active: true,
-          },
-        ],
-        guests: [],
-        bills: [{ id: "b1", resident_id: 11, amount: "", no_cost: false }],
-      });
+      store.loadData(
+        mealPayload({
+          residents: [
+            {
+              id: 11,
+              meal_id: 1,
+              name: "Bob",
+              attending: false,
+              attending_at: null,
+              late: false,
+              vegetarian: false,
+              can_cook: true,
+              active: true,
+            },
+          ],
+          bills: [{ id: "b1", resident_id: 11, amount: "", no_cost: false }],
+        }),
+      );
       return store;
     }
 
@@ -3179,26 +2946,6 @@ describe("DataStore", () => {
   // ── description dirty state (issue #35) ──
 
   describe("description dirty state", () => {
-    function mealPayload(overrides = {}) {
-      return Object.assign(
-        {
-          id: 1,
-          date: "2023-06-15",
-          description: "server text",
-          closed: false,
-          closed_at: null,
-          reconciled: false,
-          max: null,
-          next_id: null,
-          prev_id: null,
-          residents: [],
-          guests: [],
-          bills: [],
-        },
-        overrides,
-      );
-    }
-
     it("loadData leaves the description alone while it has unsaved typing", async () => {
       const store = createDataStore();
       axios.mockRejectedValueOnce({ request: {} });
@@ -3207,7 +2954,7 @@ describe("DataStore", () => {
       await new Promise((r) => setTimeout(r, 0));
       expect(store.meal.descriptionDirty).toBe(true);
 
-      store.loadData(mealPayload());
+      store.loadData(mealPayload({ description: "server text" }));
 
       expect(store.meal.description).toBe("typed text");
     });
@@ -3219,7 +2966,7 @@ describe("DataStore", () => {
       await new Promise((r) => setTimeout(r, 0));
       expect(store.meal.descriptionDirty).toBe(false);
 
-      store.loadData(mealPayload());
+      store.loadData(mealPayload({ description: "server text" }));
 
       expect(store.meal.description).toBe("server text");
     });
