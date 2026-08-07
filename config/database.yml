@@ -115,6 +115,12 @@ test:
 #
 production:
   <<: *default
+<% if ENV['LOCAL_PRODUCTION'] %>
+  # bin/prod runs the production environment on a laptop. It should use
+  # the local development database, not try to reach the real one.
+  database: comeals_development
+<% else %>
   database: comeals_production
   username: comeals
   password: <%= ENV['COMEALS_DATABASE_PASSWORD'] %>
+<% end %>

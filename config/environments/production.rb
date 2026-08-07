@@ -42,7 +42,9 @@ Rails.application.configure do
   # config.action_dispatch.x_sendfile_header = 'X-Accel-Redirect' # for NGINX
 
   # Force all access to the app over SSL, use Strict-Transport-Security, and use secure cookies.
-  config.force_ssl = true
+  # Not when bin/prod runs this environment on a laptop — localhost has no
+  # TLS, so the redirect to https would just break every request.
+  config.force_ssl = ENV['LOCAL_PRODUCTION'].blank?
 
   config.hosts.clear
 
@@ -89,17 +91,22 @@ Rails.application.configure do
   # Devise (AdminUser password reset emails need admin subdomain host)
   config.action_mailer.default_url_options = { host: 'admin.comeals.com' }
 
-  # Gmail
-  config.action_mailer.delivery_method = :smtp
-  config.action_mailer.smtp_settings = {
-    address: 'smtp.gmail.com',
-    port: 587,
-    domain: 'comeals.com',
-    user_name: ENV.fetch('GMAIL_USERNAME', nil),
-    password: ENV.fetch('GMAIL_APP_PASSWORD', nil),
-    authentication: 'plain',
-    enable_starttls_auto: true,
-    open_timeout: 30,
-    read_timeout: 30
-  }
+  # Gmail. Under bin/prod (LOCAL_PRODUCTION) mail must never really send,
+  # so delivery switches to :test, which collects mail in memory instead.
+  if ENV['LOCAL_PRODUCTION'].present?
+    config.action_mailer.delivery_method = :test
+  else
+    config.action_mailer.delivery_method = :smtp
+    config.action_mailer.smtp_settings = {
+      address: 'smtp.gmail.com',
+      port: 587,
+      domain: 'comeals.com',
+      user_name: ENV.fetch('GMAIL_USERNAME', nil),
+      password: ENV.fetch('GMAIL_APP_PASSWORD', nil),
+      authentication: 'plain',
+      enable_starttls_auto: true,
+      open_timeout: 30,
+      read_timeout: 30
+    }
+  end
 end

@@ -1,24 +1,37 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build the production frontend bundle and serve it from Rails alone —
-# the same layout as Heroku: minified hashed assets in public/, the SPA
-# index served by FallbackController, no Vite process, no HMR.
+# Run the app the way Heroku runs it, as closely as a laptop allows:
+# minified hashed assets in public/, the SPA index served by
+# FallbackController, and Rails in the real production environment —
+# eager loading, no code reloading, caching on, no dev-only middleware
+# (no mini-profiler, no better_errors). Use this to test performance.
 #
-# Use this to test frontend performance. One honest caveat: Rails still
-# runs in development mode (code reloading, verbose logging), so API
-# response times are slower than production. The JavaScript, CSS, and
-# bundle sizes are exactly what production ships.
+# LOCAL_PRODUCTION covers the three things a laptop cannot do:
+#   - no TLS, so force_ssl is off (config/environments/production.rb)
+#   - no production database, so it uses comeals_development (config/database.yml)
+#   - no real mail: delivery_method is :test, mail goes nowhere
+# Everything else is the production config, unchanged.
 #
 # Going back to development: just run bin/dev again. The built assets
 # stay in public/ until the next build overwrites them; the dev SPA on
 # 3036 never reads them.
 
 # A clear message beats Puma's "A server is already running (pid ...)".
-# Port 3000 is usually busy because bin/dev is still running.
-if lsof -i :3000 -sTCP:LISTEN -t >/dev/null 2>&1; then
-  echo "Port 3000 is already in use (bin/dev still running?)."
-  echo "Stop it first, then run bin/prod again."
+# Port 3000 is usually busy because bin/dev is still running. Show who
+# is listening and the exact command that stops it — killing the child
+# process is enough even under bin/dev, because foreman shuts down the
+# whole formation when any one of its processes exits.
+pids=$(lsof -ti :3000 -sTCP:LISTEN 2>/dev/null || true)
+if [ -n "$pids" ]; then
+  echo "Port 3000 is already in use (bin/dev still running?) by:"
+  echo
+  lsof -i :3000 -sTCP:LISTEN | awk 'NR==1 || !seen[$2]++'
+  echo
+  echo "Stop it with:"
+  echo "  kill $(echo $pids | tr '\n' ' ')"
+  echo
+  echo "then run bin/prod again."
   exit 1
 fi
 
@@ -27,15 +40,39 @@ fi
 # file exists here it is stale.
 rm -f tmp/pids/server.pid
 
+# In development, dotenv loads .env (Pusher keys). dotenv is a dev-only
+# gem, so in the production environment we load .env here instead —
+# the local stand-in for Heroku config vars.
+if [ -f .env ]; then
+  set -a
+  # shellcheck disable=SC1091
+  source .env
+  set +a
+fi
+
+export RAILS_ENV=production
+export LOCAL_PRODUCTION=1
+# No credentials file in this repo; Heroku sets SECRET_KEY_BASE. Locally,
+# Rails generates a stable key in tmp/local_secret.txt when this is set.
+export SECRET_KEY_BASE_DUMMY=1
+# Production logs to stdout on Heroku; do the same in the terminal.
+export RAILS_LOG_TO_STDOUT=1
+# The skylight gem loads in the production environment, but there is no
+# auth token on a laptop. This turns it off; it still prints one warning
+# at boot, which is harmless.
+export SKYLIGHT_ENABLED=false
+
 npm run build
+bundle exec rake assets:precompile
 
 echo ""
-echo "  Comeals (production bundle):  http://localhost:3000"
+echo "  Comeals (production mode):    http://localhost:3000"
 echo "  ActiveAdmin:                  http://admin.lvh.me:3000/login"
 echo ""
-echo "  Note: the frontend is the exact production build; the Rails"
-echo "  API still runs in development mode, so API calls are slower"
-echo "  than production."
+echo "  Rails is running the real production environment (eager loading,"
+echo "  caching, no dev middleware). Only TLS, the database, and mail"
+echo "  differ from Heroku — see LOCAL_PRODUCTION in this script."
+echo "  Mail is not delivered anywhere; there is no letter_opener here."
 echo ""
 
 exec bundle exec rails server -p 3000
