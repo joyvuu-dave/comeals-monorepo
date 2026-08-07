@@ -12,7 +12,14 @@ module.exports = defineConfig({
   expect: {
     timeout: 5000,
     toHaveScreenshot: {
-      maxDiffPixelRatio: 0.01,
+      // 0.1% of a full-page shot is ~2,700 pixels — enough to absorb
+      // antialiasing shimmer, small enough that a moved or recolored
+      // button fails the test. At the old 1%, five goldens went stale
+      // without a single failure: a UI change small enough to fit in
+      // the budget passed forever against an outdated image. Verified
+      // 2026-08-07: three consecutive runs on macOS and a comparison
+      // run in the Linux container all pass at this setting.
+      maxDiffPixelRatio: 0.001,
     },
   },
   fullyParallel: true,
