@@ -458,7 +458,11 @@ main() {
   check_bundle_outdated
   check_npm_outdated
 
-  summary
+  # Keep summary's verdict: printing the elapsed time afterwards used
+  # to overwrite it, so the script exited 0 even when checks failed —
+  # the opposite of what the header promises.
+  local status=0
+  summary || status=1
 
   local end_time elapsed
   end_time=$(date +%s)
@@ -467,6 +471,7 @@ main() {
   local seconds=$((elapsed % 60))
   echo
   info "Completed in ${minutes}m ${seconds}s"
+  return "$status"
 }
 
 main "$@"
