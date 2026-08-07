@@ -60,15 +60,59 @@ body {
 }
 
 // Balance direction words (BalanceDisplayHelper). The words carry the
-// meaning; the colors only reinforce them.
+// meaning; the colors only reinforce them. Both shades are dark enough
+// to pass WCAG AA on the lavender table stripes.
 .balance-owes {
   color: $error-color;
 }
 
 .balance-is-owed {
-  color: #1e7d34;
+  color: #176728;
 }
 
 .balance-zero {
-  color: $breadcrumbs-color;
+  color: #5c6670;
+}
+
+// Meal dates ("Thu, Feb 4 2027") should not wrap.
+.col-date {
+  min-width: 150px;
+}
+
+// ActiveAdmin defaults that fail WCAG AA contrast with their white
+// text. All three status tag backgrounds fail: the base comes out
+// #cacaca (1.6:1) because it is derived from our light
+// $secondary-color, and ActiveAdmin's own "yes" (#6090DB, 3.3:1) and
+// "no" (grey, 3.9:1) are too light as well. The pagination footer is
+// #b3bcc1 on white (1.9:1). #666 gives 5.7:1, $link-color 6.0:1.
+.status_tag {
+  background: #666;
+
+  &.yes {
+    background: $link-color;
+  }
+
+  &.no {
+    background: #666;
+  }
+}
+
+.pagination_information {
+  color: #5c6670;
+}
+
+// The heading and resident-login link that active_admin.js prepends
+// to the login page.
+.admin-login-banner {
+  text-align: center;
+  padding-top: 30px;
+
+  h3 {
+    color: $primary-color;
+    margin: 0 0 4px;
+  }
+
+  a {
+    color: $link-color;
+  }
 }

@@ -57,7 +57,9 @@ ActiveAdmin.register Bill do
 
   # INDEX
   index do
-    column Meal.model_name.human, :date, sortable: 'meals.date'
+    column Meal.model_name.human, :date, sortable: 'meals.date' do |bill|
+      l(bill.date, format: :admin)
+    end
     column 'Attendees' do |bill|
       bill.meal.meal_residents.size + bill.meal.guests.size
     end
@@ -74,7 +76,7 @@ ActiveAdmin.register Bill do
   form do |f|
     f.inputs do
       f.input :meal, label: 'Common Meal Date', collection: Meal.order(date: :desc).map { |i|
-        [i.date, i.id]
+        [I18n.l(i.date, format: :admin), i.id]
       }
       f.input :community_id, input_html: { value: Community.instance.id }, as: :hidden
       f.input :resident_id, as: :select, include_blank: false, label: 'Cook', collection: Resident.includes(:unit).adult.order('units.name ASC').map { |r|

@@ -31,3 +31,10 @@
 
 en:
   hello: "Hello world"
+  date:
+    formats:
+      # The format admin screens use wherever a meal date is shown,
+      # e.g. "Thu, Feb 4 2027". Rendered by the server; this replaced
+      # JavaScript that reparsed already-rendered dates in the browser,
+      # which depended on the viewer's timezone.
+      admin: "%a, %b %-d %Y"

@@ -50,7 +50,9 @@ ActiveAdmin.register Meal do
   # INDEX
   index do
     column :id
-    column :date
+    column :date, sortable: :date do |meal|
+      l(meal.date, format: :admin)
+    end
     column :attendees_count, sortable: false
     column :closed
     column :max
