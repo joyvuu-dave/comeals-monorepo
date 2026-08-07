@@ -35,7 +35,7 @@ describe("VersionBanner", () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
-    script = addEntryScript("/assets/index-OLD.js");
+    script = addEntryScript("/vite-assets/index-OLD.js");
   });
 
   afterEach(() => {
@@ -45,13 +45,13 @@ describe("VersionBanner", () => {
   });
 
   it("renders nothing before the first poll", () => {
-    mockManifest("assets/index-NEW.js");
+    mockManifest("vite-assets/index-NEW.js");
     const { container } = render(<VersionBanner />);
     expect(container).toBeEmptyDOMElement();
   });
 
   it("shows the banner when the manifest names a newer entry file", async () => {
-    mockManifest("assets/index-NEW.js");
+    mockManifest("vite-assets/index-NEW.js");
     render(<VersionBanner />);
 
     await act(async () => {
@@ -63,7 +63,7 @@ describe("VersionBanner", () => {
   });
 
   it("stays hidden while the manifest matches the running build", async () => {
-    mockManifest("assets/index-OLD.js");
+    mockManifest("vite-assets/index-OLD.js");
     const { container } = render(<VersionBanner />);
 
     await act(async () => {

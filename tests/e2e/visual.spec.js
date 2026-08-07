@@ -479,7 +479,7 @@ test.describe("Visual Baselines", () => {
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
-          "index.html": { isEntry: true, file: "assets/index-NEWBUILD.js" },
+          "index.html": { isEntry: true, file: "vite-assets/index-NEWBUILD.js" },
         }),
       });
     });

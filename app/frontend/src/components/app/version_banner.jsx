@@ -44,11 +44,11 @@ function VersionBanner() {
     // the running code is old — the banner would never fire.
     var currentEntryFile = null;
     var script = document.querySelector(
-      'script[type="module"][src^="/assets/"]',
+      'script[type="module"][src^="/vite-assets/"]',
     );
     if (script) {
       // Strip leading "/" so the value matches the manifest's "file" field
-      // (manifest: "assets/index-abc.js", DOM: "/assets/index-abc.js")
+      // (manifest: "vite-assets/index-abc.js", DOM: "/vite-assets/index-abc.js")
       currentEntryFile = script.getAttribute("src").replace(/^\//, "");
     }
 

@@ -17,6 +17,7 @@
 /storage/*
 
 /public/assets
+/public/vite-assets
 /public/.vite/
 /public/index.html
 .byebug_history
