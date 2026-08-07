@@ -9,6 +9,7 @@ import ConfirmModal from "../app/confirm_modal";
 import useDirtyReport from "../../helpers/use_dirty_report";
 import useMountedRef from "../../helpers/use_mounted_ref";
 import ModalFormHeader from "../modal_form/header";
+import ModalFormFooter from "../modal_form/footer";
 import useDeleteFlow from "../modal_form/use_delete_flow";
 
 // Render the full form from the first frame; the per-event fetch hydrates
@@ -136,14 +137,10 @@ const GuestRoomReservationsEdit = observer(
     return (
       <div>
         <ModalFormHeader
-          title="Guest Room Reservation"
+          title="Edit Guest Room Reservation"
           onClose={handleCloseModal}
-          onDelete={deleteFlow.requestDelete}
-          deleting={loadingAction === "delete"}
-          disabled={disabled}
         />
         <fieldset data-populated={populated ? "true" : undefined}>
-          <legend>Edit</legend>
           <form onSubmit={handleSubmit}>
             <label htmlFor="guest-room-edit-host">Host</label>
             <select
@@ -191,17 +188,12 @@ const GuestRoomReservationsEdit = observer(
             <br />
             <br />
 
-            <button
-              type="submit"
-              className={
-                loadingAction === "submit"
-                  ? "button-dark button-loader"
-                  : "button-dark"
-              }
+            <ModalFormFooter
+              submitting={loadingAction === "submit"}
+              deleting={loadingAction === "delete"}
+              onDelete={deleteFlow.requestDelete}
               disabled={disabled}
-            >
-              Update
-            </button>
+            />
           </form>
         </fieldset>
         <ConfirmModal {...deleteFlow.confirmProps} />

@@ -72,7 +72,7 @@ const GuestRoomReservationsNew = observer(({ handleCloseModal, setDirty }) => {
   return (
     <div>
       <ModalFormHeader
-        title="Guest Room Reservation"
+        title="New Guest Room Reservation"
         onClose={handleCloseModal}
       />
       {/* `data-populated` reflects whether the data needed to fully use
@@ -81,7 +81,6 @@ const GuestRoomReservationsNew = observer(({ handleCloseModal, setDirty }) => {
           flight. Consumed by the modal perf benchmark as an
           apples-to-apples "user can see real data" signal. */}
       <fieldset data-populated={store.hostsLoaded ? "true" : undefined}>
-        <legend>New</legend>
         <form onSubmit={handleSubmit}>
           <label htmlFor="guest-room-new-host">Host</label>
           <select

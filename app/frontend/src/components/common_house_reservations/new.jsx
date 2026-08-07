@@ -85,13 +85,15 @@ const CommonHouseReservationsNew = observer(
     const residents = store.hosts;
     return (
       <div>
-        <ModalFormHeader title="Common House" onClose={handleCloseModal} />
+        <ModalFormHeader
+          title="New Common House Reservation"
+          onClose={handleCloseModal}
+        />
         {/* `data-populated` reflects whether the data needed to fully use
           the form (the residents list) is available. Present at first
           paint when the cache is warm; absent only while a cold fetch
           is in flight. See sibling comment in guest_room_reservations/new.jsx. */}
         <fieldset data-populated={store.hostsLoaded ? "true" : undefined}>
-          <legend>New</legend>
           <form onSubmit={handleSubmit}>
             <label htmlFor="ch-new-resident">Resident</label>
             <select

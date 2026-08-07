@@ -71,9 +71,8 @@ function EventsNew({ handleCloseModal, setDirty }) {
 
   return (
     <div>
-      <ModalFormHeader title="Event" onClose={handleCloseModal} />
+      <ModalFormHeader title="New Event" onClose={handleCloseModal} />
       <fieldset>
-        <legend>New</legend>
         <form onSubmit={handleSubmit}>
           <label htmlFor="event-new-title">Title</label>
           <input

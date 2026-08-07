@@ -11,6 +11,7 @@ import ConfirmModal from "../app/confirm_modal";
 import useDirtyReport from "../../helpers/use_dirty_report";
 import useMountedRef from "../../helpers/use_mounted_ref";
 import ModalFormHeader from "../modal_form/header";
+import ModalFormFooter from "../modal_form/footer";
 import TimeSelect from "../modal_form/time_select";
 import { buildStartEndPayload, toTimeString } from "../modal_form/payload";
 import useDeleteFlow from "../modal_form/use_delete_flow";
@@ -143,15 +144,8 @@ function EventsEdit({ eventId, handleCloseModal, setDirty }) {
 
   return (
     <div>
-      <ModalFormHeader
-        title="Event"
-        onClose={handleCloseModal}
-        onDelete={deleteFlow.requestDelete}
-        deleting={loadingAction === "delete"}
-        disabled={disabled}
-      />
+      <ModalFormHeader title="Edit Event" onClose={handleCloseModal} />
       <fieldset data-populated={loaded ? "true" : undefined}>
-        <legend>Edit</legend>
         <form onSubmit={handleSubmit}>
           <label htmlFor="event-edit-title">Title</label>
           <input
@@ -231,17 +225,12 @@ function EventsEdit({ eventId, handleCloseModal, setDirty }) {
           />
           <br />
           <br />
-          <button
-            type="submit"
-            className={
-              loadingAction === "submit"
-                ? "button-dark button-loader"
-                : "button-dark"
-            }
+          <ModalFormFooter
+            submitting={loadingAction === "submit"}
+            deleting={loadingAction === "delete"}
+            onDelete={deleteFlow.requestDelete}
             disabled={disabled}
-          >
-            Update
-          </button>
+          />
         </form>
       </fieldset>
       <ConfirmModal {...deleteFlow.confirmProps} />

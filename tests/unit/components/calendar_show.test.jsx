@@ -141,7 +141,7 @@ describe("MainCalendar", () => {
 
   it("the events/new path opens the event modal", () => {
     renderCalendar({ path: "/calendar/all/2026-01-15/events/new" });
-    expect(screen.getByText("New")).toBeInTheDocument();
+    expect(screen.getByText("New Event")).toBeInTheDocument();
     expect(screen.getByLabelText("Title")).toBeInTheDocument();
   });
 

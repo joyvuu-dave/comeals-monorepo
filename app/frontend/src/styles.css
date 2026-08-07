@@ -355,6 +355,25 @@ Make modal showup on top of calendar
   cursor: pointer;
 }
 
+/* Modal form header: title centered, like the rotation modal's title.
+   The X is pinned to the corner absolutely — left in the flex row, the
+   title would center in the space next to it and sit half the X's
+   width off-center. */
+.modal-form-header {
+  position: relative;
+}
+
+.modal-form-header h2 {
+  flex: 1;
+  text-align: center;
+}
+
+.modal-form-header .close-button {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
 /* A button that is only its icon. Strips the native button chrome so
    the SVG inside renders exactly as a bare SVG would: font is
    inherited (the icon sizes itself in em), flex layout removes the

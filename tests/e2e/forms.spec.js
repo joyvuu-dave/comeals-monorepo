@@ -158,8 +158,8 @@ test.describe("Form CRUD", () => {
       const modal = page.locator(".ReactModal__Content--after-open");
       await expect(modal).toBeVisible({ timeout: 10000 });
 
-      // Should show the edit fieldset
-      await expect(modal.locator("fieldset legend")).toBeVisible({
+      // Should show the edit title
+      await expect(modal.locator("h2:has-text('Edit Event')")).toBeVisible({
         timeout: 10000,
       });
 
@@ -207,7 +207,7 @@ test.describe("Form CRUD", () => {
       await page.locator("text=Community Meeting").click();
       const modal = page.locator(".ReactModal__Content--after-open");
       await expect(modal).toBeVisible({ timeout: 10000 });
-      await expect(modal.locator("fieldset legend")).toBeVisible({
+      await expect(modal.locator("h2:has-text('Edit Event')")).toBeVisible({
         timeout: 10000,
       });
 
