@@ -7,7 +7,6 @@ const { defineConfig } = require("@playwright/test");
 const DEFAULT_IGNORE = ["**/perf-modals.spec.js", "**/pwa-screenshots.spec.js"];
 
 module.exports = defineConfig({
-  testDir: "./tests/e2e",
   testIgnore: process.env.PLAYWRIGHT_INCLUDE_ALL ? [] : DEFAULT_IGNORE,
   timeout: 30000,
   expect: {
@@ -36,7 +35,23 @@ module.exports = defineConfig({
   projects: [
     {
       name: "chromium",
+      testDir: "./tests/e2e",
       use: { browserName: "chromium" },
+    },
+    // ActiveAdmin is server-rendered by Rails, so this project talks to a
+    // real Rails server (the second webServer below) instead of the vite
+    // preview + mocked API the SPA suite uses. admin.lvh.me is mapped to
+    // 127.0.0.1 inside the browser, so the suite works without DNS.
+    {
+      name: "admin",
+      testDir: "./tests/admin",
+      use: {
+        browserName: "chromium",
+        baseURL: "http://admin.lvh.me:3038",
+        launchOptions: {
+          args: ["--host-resolver-rules=MAP *.lvh.me 127.0.0.1"],
+        },
+      },
     },
   ],
   // Port 3037, not 3036, and never reuse: 3036 is the dev server's port.
@@ -50,12 +65,31 @@ module.exports = defineConfig({
   // layout everywhere. bin/check builds once for the whole run and sets
   // E2E_SKIP_BUILD so this server just serves that build; a standalone
   // `npm run test:e2e` still builds for itself.
-  webServer: {
-    command: process.env.E2E_SKIP_BUILD
-      ? "npx vite preview --port 3037"
-      : "npm run build && npx vite preview --port 3037",
-    port: 3037,
-    timeout: 60000,
-    reuseExistingServer: false,
-  },
+  webServer: [
+    {
+      command: process.env.E2E_SKIP_BUILD
+        ? "npx vite preview --port 3037"
+        : "npm run build && npx vite preview --port 3037",
+      port: 3037,
+      timeout: 60000,
+      reuseExistingServer: false,
+    },
+    // Rails for the admin project. The script prepares and seeds the
+    // dedicated comeals_admin_e2e database before it starts listening,
+    // so waiting on the port is the same as waiting on readiness.
+    // webServer entries are global (not per-project), so environments
+    // that cannot run Rails — the Playwright Linux container that
+    // bin/update-linux-snapshots uses has no Ruby — set
+    // PLAYWRIGHT_SKIP_ADMIN to leave this server out.
+    ...(process.env.PLAYWRIGHT_SKIP_ADMIN
+      ? []
+      : [
+          {
+            command: "tests/admin/server.sh",
+            port: 3038,
+            timeout: 120000,
+            reuseExistingServer: false,
+          },
+        ]),
+  ],
 });

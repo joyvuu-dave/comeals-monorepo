@@ -24,7 +24,7 @@ docker run --rm \
   -v comeals-playwright-modules:/work/node_modules \
   -w /work \
   "$IMAGE" \
-  bash -c "npm install --no-audit --no-fund && npx playwright test tests/e2e/visual.spec.js --update-snapshots"
+  bash -c "PLAYWRIGHT_SKIP_ADMIN=1 npm install --no-audit --no-fund && PLAYWRIGHT_SKIP_ADMIN=1 npx playwright test tests/e2e/visual.spec.js --update-snapshots"
 
 echo
 echo "Done. Review the changed PNGs, then commit them:"
