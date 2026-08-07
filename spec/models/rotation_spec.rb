@@ -111,20 +111,38 @@ RSpec.describe Rotation do
   end
 
   describe '#set_description' do
-    it 'sets description to the date range of meals' do
+    def rotation_with_meals(*dates)
       rotation = create(:rotation, community: community, no_email: true)
-      create(:meal, community: community, rotation: rotation, date: Date.new(2026, 3, 1))
-      create(:meal, community: community, rotation: rotation, date: Date.new(2026, 3, 15))
-
+      dates.each { |date| create(:meal, community: community, rotation: rotation, date: date) }
       rotation.save!
-      expect(rotation.reload.description).to include('2026')
+      rotation.reload
     end
 
-    it 'handles a rotation with no meals' do
+    it 'joins day numbers with a closed-up en dash inside one month' do
+      rotation = rotation_with_meals(Date.new(2026, 3, 1), Date.new(2026, 3, 15))
+      expect(rotation.description).to eq('Mar 1–15, 2026')
+    end
+
+    it 'names both months and says the year once inside one year' do
+      rotation = rotation_with_meals(Date.new(2026, 7, 16), Date.new(2026, 8, 13))
+      expect(rotation.description).to eq('Jul 16 – Aug 13, 2026')
+    end
+
+    it 'says both years when the range crosses a year boundary' do
+      rotation = rotation_with_meals(Date.new(2026, 12, 14), Date.new(2027, 1, 11))
+      expect(rotation.description).to eq('Dec 14, 2026 – Jan 11, 2027')
+    end
+
+    it 'shows a single date when all meals fall on one day' do
+      rotation = rotation_with_meals(Date.new(2026, 7, 16))
+      expect(rotation.description).to eq('Jul 16, 2026')
+    end
+
+    it 'is blank for a rotation with no meals' do
       rotation = create(:rotation, community: community, no_email: true)
 
       rotation.save!
-      expect(rotation.reload.description).to eq(' to ')
+      expect(rotation.reload.description).to eq('')
     end
   end
 

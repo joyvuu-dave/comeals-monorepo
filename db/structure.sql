@@ -680,7 +680,7 @@ CREATE TABLE public.meal_charges (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT meal_charges_bill_amount_on_credits_only CHECK ((((kind)::text = 'credit'::text) = (bill_amount IS NOT NULL))),
-    CONSTRAINT meal_charges_kind_known CHECK (((kind)::text = ANY ((ARRAY['credit'::character varying, 'debit'::character varying, 'guest_debit'::character varying])::text[]))),
+    CONSTRAINT meal_charges_kind_known CHECK (((kind)::text = ANY (ARRAY[('credit'::character varying)::text, ('debit'::character varying)::text, ('guest_debit'::character varying)::text]))),
     CONSTRAINT meal_charges_multiplier_non_negative CHECK (((multiplier IS NULL) OR (multiplier >= 0))),
     CONSTRAINT meal_charges_multiplier_on_debits_only CHECK ((((kind)::text = 'credit'::text) = (multiplier IS NULL)))
 );
@@ -1983,6 +1983,7 @@ ALTER TABLE ONLY public.bills
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260807120000'),
 ('20260802120000'),
 ('20260731130000'),
 ('20260731120000'),

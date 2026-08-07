@@ -337,7 +337,11 @@ RSpec.describe Community do
       last_meal_date = rotation.meals.order(:date).last.date
 
       expect(rotation.start_date).to eq(first_meal_date)
-      expect(rotation.description).to eq("#{first_meal_date} to #{last_meal_date}")
+      # The exact wording of the range is Rotation's concern
+      # (spec/models/rotation_spec.rb); here it is enough that the
+      # description was filled in from the meal dates.
+      expect(rotation.description).to eq(rotation.date_range_description)
+      expect(rotation.description).to include(last_meal_date.strftime('%-d'))
     end
   end
 
