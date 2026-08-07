@@ -42,9 +42,7 @@ test.describe("Admin", () => {
     await page.fill("#admin_user_password", "wrong");
     await page.click('input[type="submit"]');
 
-    await expect(
-      page.getByText("Invalid Email or password"),
-    ).toBeVisible();
+    await expect(page.getByText("Invalid Email or password")).toBeVisible();
   });
 
   test("logs in to the dashboard", async ({ page }) => {
@@ -67,9 +65,9 @@ test.describe("Admin", () => {
     await login(page);
     await page.goto("/bills/1/edit");
 
-    await expect(
-      page.locator("#bill_meal_id option:checked"),
-    ).toHaveText(MEAL_DATE_TEXT);
+    await expect(page.locator("#bill_meal_id option:checked")).toHaveText(
+      MEAL_DATE_TEXT,
+    );
   });
 
   test("meal date field opens a datepicker on the right month", async ({

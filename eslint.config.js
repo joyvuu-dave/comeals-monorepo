@@ -97,7 +97,7 @@ module.exports = [
   // E2E test files -- Node CommonJS (Playwright)
   // -----------------------------------------------------------
   {
-    files: ["tests/e2e/**/*.js", "tests/helpers/**/*.js"],
+    files: ["tests/e2e/**/*.js", "tests/admin/**/*.js", "tests/helpers/**/*.js"],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "commonjs",
