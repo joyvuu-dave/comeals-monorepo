@@ -32,7 +32,10 @@
 
   /* Shoelace variables */
   --state-primary: #851500;
-  --color-green: #2ecc40;
+  /* Dark enough that white text on this green, and this green as text
+     on the yellow header, both pass the WCAG AA contrast rule that
+     Lighthouse checks. The old #2ecc40 failed both. */
+  --color-green: #187426;
 }
 
 .background-white {
@@ -87,6 +90,13 @@
 }
 
 .info-circle {
+  /* These circles were h4 elements, but they are count displays, not
+     section headings — an h4 right after an h2 fails the heading-order
+     accessibility rule. The font lines keep the h4 look on the div. */
+  font-family: Roboto, sans-serif;
+  font-size: 1.5rem;
+  font-weight: 300;
+  line-height: 1.1;
   min-height: 6.5rem;
   height: 6.5rem;
   min-width: 6.5rem;
@@ -391,6 +401,15 @@ Offline Indicator
 
 .rbc-month-view {
   background-color: var(--almost-white);
+}
+
+/*
+react-big-calendar's default gives other-month day numbers #999 text on
+an #e6e6e6 cell — 2.3:1 contrast. WCAG AA (the Lighthouse check) needs
+4.5:1; #666 gives 4.6:1 and still reads as muted.
+*/
+.rbc-off-range {
+  color: #666;
 }
 
 /*

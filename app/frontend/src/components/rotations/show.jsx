@@ -49,15 +49,26 @@ function RotationsShow({ id }) {
   );
 
   return (
-    <div style={styles.main} data-populated={loaded ? "true" : undefined}>
+    // tabIndex makes the modal body focusable. Unlike the form modals,
+    // this one has no inputs or buttons, so without it a keyboard user
+    // could not focus the modal to scroll a long resident list.
+    <div
+      style={styles.main}
+      tabIndex={0}
+      data-populated={loaded ? "true" : undefined}
+    >
       <div className="flex center">
         <u className="cell">
           <h1>{`Rotation ${id}`}</h1>
         </u>
       </div>
       <br />
+      {/* No h2 until the fetch fills it in — an empty heading fails
+          the empty-heading accessibility rule. */}
       <div className="flex center">
-        <h2 className="cell nine text-success">{description}</h2>
+        {description !== "" && (
+          <h2 className="cell nine text-success">{description}</h2>
+        )}
       </div>
       <br />
       {!loaded && !errored && <h3>Loading...</h3>}
@@ -66,9 +77,11 @@ function RotationsShow({ id }) {
         <ul>
           {residents.map((resident) =>
             resident.signed_up ? (
-              <s key={resident.id}>
-                <li className="text-muted">{resident.display_name}</li>
-              </s>
+              // The strike-through goes inside the li — a ul may only
+              // contain li elements, so <s><li>…</li></s> is invalid.
+              <li key={resident.id} className="text-muted">
+                <s>{resident.display_name}</s>
+              </li>
             ) : (
               <li key={resident.id} className="text-bold text-italic">
                 {resident.display_name}

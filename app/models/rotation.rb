@@ -50,7 +50,14 @@ class Rotation < ApplicationRecord
 
   accepts_nested_attributes_for :meals
 
-  COLORS = ['#3DC656', '#009EDC', '#D9443F', '#FFC857', '#E9724C'].freeze
+  # Calendar chip backgrounds. Each color must pass WCAG AA (4.5:1)
+  # with the text color the calendar picks for it (black on light
+  # chips, white on dark — eventTextColor in calendar/show.jsx), in
+  # BOTH states: as-is, and desaturated 35% for past events. The old
+  # red #D9443F sat right on the black/white boundary and its
+  # desaturated form failed (3.7:1); #C9332E is safely on the white
+  # side (5.3:1 base, 7.3:1 dimmed).
+  COLORS = ['#3DC656', '#009EDC', '#C9332E', '#FFC857', '#E9724C'].freeze
 
   def set_color
     last_color = Rotation.order(:id).pluck(:color).last

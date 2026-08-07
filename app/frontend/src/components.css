@@ -63,7 +63,7 @@ code {
   padding: 0.2rem 0.4rem;
 }
 del {
-  color: #ff4136;
+  color: #d40d00;
 }
 figure {
   margin-bottom: 1.5rem;
@@ -111,7 +111,7 @@ img {
   vertical-align: middle;
 }
 ins {
-  color: #2ecc40;
+  color: #187426;
 }
 kbd {
   background-color: #111;
@@ -179,16 +179,16 @@ ul ul {
   margin-bottom: 0;
 }
 ::-webkit-input-placeholder {
-  color: #aaa;
+  color: #666;
 }
 :-ms-input-placeholder {
-  color: #aaa;
+  color: #666;
 }
 ::-ms-input-placeholder {
-  color: #aaa;
+  color: #666;
 }
 ::placeholder {
-  color: #aaa;
+  color: #666;
 }
 ::-moz-selection {
   background-color: #851500;
@@ -216,7 +216,7 @@ ul ul {
   display: none;
 }
 .badge.badge-info {
-  background-color: #39cccc;
+  background-color: #1a8080;
   color: #fff;
 }
 a.badge:hover {
@@ -293,26 +293,27 @@ button:disabled {
 }
 .button.button-secondary,
 button.button-secondary {
-  background-color: #aaa;
-  border-color: #b3b3b3 #aaa #999;
+  /* Was #aaa; white text on it is 2.3:1. #757575 gives 4.6:1. */
+  background-color: #757575;
+  border-color: #8a8a8a #757575 #616161;
   color: #fff;
 }
 .button.button-secondary:hover,
 button.button-secondary:hover {
-  background-color: #999;
-  border-color: #aaa #999 #888;
+  background-color: #696969;
+  border-color: #757575 #696969 #5c5c5c;
   color: #fff;
 }
 .button.button-secondary.active,
 .button.button-secondary:active,
 button.button-secondary.active,
 button.button-secondary:active {
-  background-color: #999;
-  border-color: #888 #999 #999;
+  background-color: #696969;
+  border-color: #5c5c5c #696969 #696969;
 }
 .button.button-secondary:focus,
 button.button-secondary:focus {
-  box-shadow: 0 0 0 2px hsla(0, 0%, 66.7%, 0.5);
+  box-shadow: 0 0 0 2px hsla(0, 0%, 46%, 0.5);
   outline: none;
 }
 .button.button-secondary.disabled,
@@ -326,26 +327,28 @@ button.button-secondary:disabled {
 }
 .button.button-success,
 button.button-success {
-  background-color: #2ecc40;
-  border-color: #43d153 #2ecc40 #29b83a;
+  /* Was #2ecc40; white text on it is 2.1:1. #187426 gives 5.9:1.
+     Same green as --color-green in styles.css. */
+  background-color: #187426;
+  border-color: #1e8a2f #187426 #125a1e;
   color: #fff;
 }
 .button.button-success:hover,
 button.button-success:hover {
-  background-color: #29b83a;
-  border-color: #2ecc40 #29b83a #25a333;
+  background-color: #135e1f;
+  border-color: #187426 #135e1f #0f4c19;
   color: #fff;
 }
 .button.button-success.active,
 .button.button-success:active,
 button.button-success.active,
 button.button-success:active {
-  background-color: #29b83a;
-  border-color: #25a333 #29b83a #29b83a;
+  background-color: #135e1f;
+  border-color: #0f4c19 #135e1f #135e1f;
 }
 .button.button-success:focus,
 button.button-success:focus {
-  box-shadow: 0 0 0 2px rgba(46, 204, 64, 0.5);
+  box-shadow: 0 0 0 2px rgba(24, 116, 38, 0.5);
   outline: none;
 }
 .button.button-success.disabled,
@@ -359,26 +362,27 @@ button.button-success:disabled {
 }
 .button.button-info,
 button.button-info {
-  background-color: #39cccc;
-  border-color: #4dd1d1 #39cccc #33b8b8;
+  /* Was #39cccc; white text on it is 2.0:1. #1a8080 gives 4.7:1. */
+  background-color: #1a8080;
+  border-color: #2a9a9a #1a8080 #126b6b;
   color: #fff;
 }
 .button.button-info:hover,
 button.button-info:hover {
-  background-color: #33b8b8;
-  border-color: #39cccc #33b8b8 #2ea3a3;
+  background-color: #157070;
+  border-color: #1a8080 #157070 #115e5e;
   color: #fff;
 }
 .button.button-info.active,
 .button.button-info:active,
 button.button-info.active,
 button.button-info:active {
-  background-color: #33b8b8;
-  border-color: #2ea3a3 #33b8b8 #33b8b8;
+  background-color: #157070;
+  border-color: #115e5e #157070 #157070;
 }
 .button.button-info:focus,
 button.button-info:focus {
-  box-shadow: 0 0 0 2px rgba(57, 204, 204, 0.5);
+  box-shadow: 0 0 0 2px rgba(26, 128, 128, 0.5);
   outline: none;
 }
 .button.button-info.disabled,
@@ -392,26 +396,28 @@ button.button-info:disabled {
 }
 .button.button-warning,
 button.button-warning {
-  background-color: #ff851b;
-  border-color: #ff9132 #ff851b #e67818;
+  /* Was #ff851b; white text on it is 2.4:1. #b35900 gives 4.8:1.
+     Same orange as .text-warning. */
+  background-color: #b35900;
+  border-color: #cc6600 #b35900 #995200;
   color: #fff;
 }
 .button.button-warning:hover,
 button.button-warning:hover {
-  background-color: #e67818;
-  border-color: #ff851b #e67818 #cc6a16;
+  background-color: #9e4f00;
+  border-color: #b35900 #9e4f00 #8a4500;
   color: #fff;
 }
 .button.button-warning.active,
 .button.button-warning:active,
 button.button-warning.active,
 button.button-warning:active {
-  background-color: #e67818;
-  border-color: #cc6a16 #e67818 #e67818;
+  background-color: #9e4f00;
+  border-color: #8a4500 #9e4f00 #9e4f00;
 }
 .button.button-warning:focus,
 button.button-warning:focus {
-  box-shadow: 0 0 0 2px rgba(255, 133, 27, 0.5);
+  box-shadow: 0 0 0 2px rgba(179, 89, 0, 0.5);
   outline: none;
 }
 .button.button-warning.disabled,
@@ -672,7 +678,7 @@ button.button-link:hover {
   width: 100%;
 }
 .dropdown .dropdown-menu .dropdown-heading {
-  color: #aaa;
+  color: #666;
   cursor: default;
   font-size: 80%;
   font-weight: inherit;
@@ -935,7 +941,7 @@ textarea.input-xs {
   background: #f2f2f2;
   border-bottom: 1px solid #ddd;
   border-top: 1px solid #ddd;
-  color: #aaa;
+  color: #666;
   font-size: 1rem;
   height: 2.25rem;
   line-height: 2.25rem;
@@ -1043,7 +1049,7 @@ table {
 }
 table caption {
   caption-side: bottom;
-  color: #aaa;
+  color: #666;
   font-size: 80%;
   padding-top: 0.5rem;
   text-align: center;
@@ -1063,20 +1069,35 @@ table.table-striped tr:nth-child(odd) td {
 }
 
 /*! Utilities */
+/* Text for screen readers only. The standard clip pattern: the element
+   stays in the accessibility tree but paints nothing. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 .text-secondary {
-  color: #aaa !important;
+  /* Was #aaa, which fails WCAG AA contrast on the yellow header (1.4:1)
+     and on near-white (2.2:1). #4f4f4f passes both (4.9:1 / 7.9:1). */
+  color: #4f4f4f !important;
 }
 .text-success {
-  color: #2ecc40 !important;
+  color: #187426 !important;
 }
 .text-info {
-  color: #39cccc !important;
+  color: #1a8080 !important;
 }
 .text-warning {
-  color: #ff851b !important;
+  color: #b35900 !important;
 }
 .text-danger {
-  color: #ff4136 !important;
+  color: #d40d00 !important;
 }
 .text-light {
   color: #fff !important;
@@ -1094,7 +1115,7 @@ table.table-striped tr:nth-child(odd) td {
   font-style: italic !important;
 }
 .text-muted {
-  color: #aaa !important;
+  color: #666 !important;
 }
 .text-left {
   text-align: left !important;

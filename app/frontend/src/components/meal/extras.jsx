@@ -12,6 +12,7 @@ const styles = {
   closed: {},
   title: {
     textDecoration: "underline",
+    fontSize: "1.25rem",
   },
 };
 
@@ -19,7 +20,9 @@ const Extras = observer(() => {
   const store = useStore();
   return (
     <div style={styles.main}>
-      <h5 style={styles.title}>Extras</h5>
+      {/* h3, not h5: the previous heading is the box's h2, and heading
+          levels may only step down by one. fontSize keeps the h5 look. */}
+      <h3 style={styles.title}>Extras</h3>
       <div
         style={store.meal && store.meal.closed ? styles.closed : styles.open}
       >

@@ -13,9 +13,20 @@ const styles = {
   icon: {
     maxHeight: "1rem",
   },
-  disabled: {
+  // Locked name cells keep a dimmed look without opacity: half-opacity
+  // text blended below the WCAG AA contrast ratio (the Lighthouse
+  // failure on reconciled meals). Plain cells dim by using an
+  // AA-passing gray; attending (green) cells dim by draining the
+  // color, which keeps their white text at AA because the gray keeps
+  // the green's darkness.
+  disabledPlain: {
     cursor: "not-allowed",
-    opacity: "0.5",
+    color: "#666",
+    pointerEvents: "none",
+  },
+  disabledAttending: {
+    cursor: "not-allowed",
+    filter: "grayscale(100%)",
     pointerEvents: "none",
   },
   monospace: {
@@ -49,8 +60,10 @@ const AttendeeComponent = observer(({ resident }) => {
         }
         style={Object.assign(
           {},
-          resident.attending && !resident.canRemove && styles.disabled,
-          meal.reconciled && styles.disabled,
+          ((resident.attending && !resident.canRemove) || meal.reconciled) &&
+            (resident.attending
+              ? styles.disabledAttending
+              : styles.disabledPlain),
         )}
       >
         {resident.name}
@@ -138,7 +151,11 @@ const AttendeesBox = observer(() => {
             <th className="background-white sticky-header">Guests</th>
             <th className="background-white sticky-header">Late</th>
             <th className="background-white sticky-header">Veg</th>
-            <th className="sticky-header" />
+            {/* The column of guest add/remove controls. It shows no
+                visible title; the hidden text gives screen readers one. */}
+            <th className="sticky-header">
+              <span className="visually-hidden">Add or remove guests</span>
+            </th>
           </tr>
         </thead>
         <tbody>

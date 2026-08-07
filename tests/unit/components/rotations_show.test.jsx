@@ -46,8 +46,9 @@ describe("RotationsShow", () => {
     );
     expect(items).toEqual(["Alice", "Bob", "Jane"]);
 
-    // Jane signed up: struck through and muted, not bold.
-    expect(container.querySelector("s li.text-muted")).toHaveTextContent(
+    // Jane signed up: struck through and muted, not bold. The s element
+    // sits inside the li — a ul may only directly contain li elements.
+    expect(container.querySelector("li.text-muted s")).toHaveTextContent(
       "Jane",
     );
     expect(screen.getByText("Alice")).toHaveClass("text-bold");

@@ -22,18 +22,18 @@ const InfoBox = observer(() => {
       </div>
       <div id="info_box" className="flex space-between">
         <div id="info_circles">
-          <h4 className="info-circle">
+          <div className="info-circle">
             <div>Total</div>
             <div>{store.attendeesCount}</div>
-          </h4>
-          <h4 className="info-circle">
+          </div>
+          <div className="info-circle">
             <div>Veg</div>
             <div>{store.vegetarianCount}</div>
-          </h4>
-          <h4 className="info-circle">
+          </div>
+          <div className="info-circle">
             <div>Late</div>
             <div>{store.lateCount}</div>
-          </h4>
+          </div>
         </div>
         <Extras />
       </div>

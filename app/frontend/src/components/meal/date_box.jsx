@@ -157,7 +157,14 @@ const DateBox = observer(() => {
         >
           <Icon name="chevron-left" size="3x" />
         </div>
-        <h2 style={styles.topDate}>{displayTopDate()}</h2>
+        {/* While the meal loads there is no date yet; an empty h2
+            fails the empty-heading accessibility rule, so render a
+            same-size plain box instead. */}
+        {displayTopDate() === "" ? (
+          <div style={styles.topDate} />
+        ) : (
+          <h2 style={styles.topDate}>{displayTopDate()}</h2>
+        )}
         <div
           className="arrow"
           style={styles.arrow}

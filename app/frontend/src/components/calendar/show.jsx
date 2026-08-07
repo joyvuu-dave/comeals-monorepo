@@ -34,6 +34,31 @@ import { enUS } from "date-fns/locale";
 
 import Icon from "../icon";
 
+// Chip text color: white on dark backgrounds, black on light ones.
+// Picks whichever passes WCAG AA (4.5:1) for the given background —
+// 0.179 is the relative luminance where white and black text tie, and
+// every server-issued chip color passes with one or the other. Without
+// this, every chip used white text, which fails on the lighter colors
+// (event green, rotation blue and yellow, guest room orange).
+function eventTextColor(hex) {
+  // Some events carry no color; react-big-calendar then uses its own
+  // dark blue background, where white text is fine.
+  if (!hex) return "#fff";
+  let h = hex.replace("#", "");
+  if (h.length === 3) {
+    h = h
+      .split("")
+      .map((c) => c + c)
+      .join("");
+  }
+  const [r, g, b] = [0, 2, 4].map((i) => {
+    const v = parseInt(h.slice(i, i + 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  });
+  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return luminance > 0.179 ? "#000" : "#fff";
+}
+
 const localizer = dateFnsLocalizer({
   format,
   parse,
@@ -290,10 +315,16 @@ const MainCalendar = observer(() => {
       event.start < todayStartRef.current &&
       typeof event.url !== "undefined"
     ) {
-      eventStyles.style["opacity"] = "0.6";
+      // Washed-out look for past events. saturate() keeps the
+      // brightness of both text and background, so the contrast ratio
+      // stays what the base colors give. The old `opacity: 0.6`
+      // blended text and background toward white, which pushed every
+      // past chip below the WCAG AA ratio Lighthouse checks.
+      eventStyles.style["filter"] = "saturate(35%)";
     }
 
     eventStyles.style["backgroundColor"] = event.color;
+    eventStyles.style["color"] = eventTextColor(event.color);
     return eventStyles;
   }, []);
 
