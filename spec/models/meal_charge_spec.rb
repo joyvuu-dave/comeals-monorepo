@@ -2,6 +2,33 @@
 
 require 'rails_helper'
 
+# == Schema Information
+#
+# Table name: meal_charges
+#
+#  id          :bigint           not null, primary key
+#  amount      :decimal(12, 8)   not null
+#  bill_amount :decimal(12, 8)
+#  kind        :string           not null
+#  multiplier  :integer
+#  unit_cost   :decimal(12, 8)   not null
+#  created_at  :datetime         not null
+#  updated_at  :datetime         not null
+#  meal_id     :bigint           not null
+#  resident_id :bigint           not null
+#
+# Indexes
+#
+#  index_meal_charges_on_meal_id              (meal_id)
+#  index_meal_charges_on_resident_id          (resident_id)
+#  index_meal_charges_one_credit_per_cook     (meal_id,resident_id) UNIQUE WHERE ((kind)::text = 'credit'::text)
+#  index_meal_charges_one_debit_per_attendee  (meal_id,resident_id) UNIQUE WHERE ((kind)::text = 'debit'::text)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (meal_id => meals.id)
+#  fk_rails_...  (resident_id => residents.id)
+#
 RSpec.describe MealCharge do
   let(:community) { create(:community, cap: BigDecimal('4.50')) }
   let(:unit) { create(:unit, community: community) }

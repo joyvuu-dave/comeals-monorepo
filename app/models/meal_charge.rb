@@ -17,9 +17,9 @@
 #
 # Indexes
 #
-#  index_meal_charges_on_meal_id            (meal_id)
-#  index_meal_charges_on_resident_id        (resident_id)
-#  index_meal_charges_one_credit_per_cook   (meal_id,resident_id) UNIQUE WHERE ((kind)::text = 'credit'::text)
+#  index_meal_charges_on_meal_id              (meal_id)
+#  index_meal_charges_on_resident_id          (resident_id)
+#  index_meal_charges_one_credit_per_cook     (meal_id,resident_id) UNIQUE WHERE ((kind)::text = 'credit'::text)
 #  index_meal_charges_one_debit_per_attendee  (meal_id,resident_id) UNIQUE WHERE ((kind)::text = 'debit'::text)
 #
 # Foreign Keys
