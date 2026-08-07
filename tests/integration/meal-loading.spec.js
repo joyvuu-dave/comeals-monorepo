@@ -133,7 +133,7 @@ test.describe("Meal loading (real backend)", () => {
     await expect(page.locator("h1")).toBeVisible({ timeout: 10000 });
 
     // Click the right chevron arrow to go to the next meal
-    await page.locator('[data-icon="chevron-right"]').click();
+    await page.getByRole("button", { name: "Next meal" }).click();
     await page.waitForLoadState("networkidle");
 
     // Should now show tomorrow's meal description
