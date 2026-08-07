@@ -234,6 +234,14 @@ button:focus {
   background-color: var(--hasana-yellow);
 }
 
+/* react-big-calendar sizes itself from an explicit height. It sits on
+   the calendar itself, not its wrapper div, so the wrapper (and every
+   ancestor, including the offwhite background and the sidebar's flex
+   row) grows to hold the nav header plus the full grid. */
+.calendar {
+  height: 2000px;
+}
+
 .offwhite {
   background-color: #ebebe4;
 }

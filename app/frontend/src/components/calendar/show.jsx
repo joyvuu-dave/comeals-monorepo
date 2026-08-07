@@ -520,7 +520,12 @@ const MainCalendar = observer(() => {
       </header>
       <div style={styles.main} className="responsive-calendar">
         <SideBar />
-        <div style={{ height: 2000, marginRight: 15 }}>
+        {/* No height here: the calendar's fixed height lives on
+            .calendar in styles.css. When this wrapper carried it, the
+            month-nav header pushed the calendar ~70px past the
+            wrapper's bottom, so the offwhite background (and the
+            sidebar's column) ended before the calendar grid did. */}
+        <div style={{ marginRight: 15 }}>
           <MonthNavHeader
             dateStr={params.date}
             onPrev={handlePrev}
