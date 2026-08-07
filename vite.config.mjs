@@ -98,6 +98,11 @@ export default defineConfig(({ command }) => ({
     // until the next `rake assets:precompile`. Separate directories,
     // no collision. AssetCacheControl covers both.
     assetsDir: "vite-assets",
+    // Ship source maps: production stack traces then point at real
+    // source lines instead of minified positions. Browsers fetch .map
+    // files only when DevTools is open, so users never download them,
+    // and the repo is public so there is nothing to hide.
+    sourcemap: true,
     manifest: true,
     chunkSizeWarningLimit: 700,
   },
