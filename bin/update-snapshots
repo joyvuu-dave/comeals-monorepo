@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# Refresh the visual-suite goldens on both platforms, deleting first.
+#
+# Why delete first: --update-snapshots only rewrites a golden when the
+# comparison fails. A small intentional change can sit inside the diff
+# tolerance (a moved modal title is ~3,100 sparse pixels against the
+# ~2,700-pixel budget), so its golden silently keeps showing the old
+# UI. Deleting the golden forces a fresh capture.
+#
+# This script only automates the mechanics. A golden is a recorded
+# human judgment — review every changed PNG before committing.
+#
+# Usage:
+#   bin/update-snapshots                        # every golden
+#   bin/update-snapshots event-edit meal-edit   # only the named ones
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+SNAP_DIR=tests/e2e/visual.spec.js-snapshots
+
+if [ "$#" -gt 0 ]; then
+  for name in "$@"; do
+    if ! ls "$SNAP_DIR/$name"-chromium-*.png >/dev/null 2>&1; then
+      echo "No golden named '$name'. The goldens are:" >&2
+      ls "$SNAP_DIR" | sed 's/-chromium.*//' | sort -u >&2
+      exit 1
+    fi
+    rm -f "$SNAP_DIR/$name"-chromium-darwin.png \
+          "$SNAP_DIR/$name"-chromium-linux.png
+    echo "Deleted goldens for: $name"
+  done
+else
+  rm -f "$SNAP_DIR"/*-chromium-darwin.png "$SNAP_DIR"/*-chromium-linux.png
+  echo "Deleted all goldens."
+fi
+
+echo
+echo "Regenerating macOS goldens..."
+npx playwright test tests/e2e/visual.spec.js --update-snapshots --project=chromium
+
+echo
+echo "Regenerating Linux goldens (Docker)..."
+bin/update-linux-snapshots
+
+echo
+echo "Changed goldens:"
+git status --short "$SNAP_DIR"
+echo
+echo "Review each image, then commit. A PNG that changed with no"
+echo "visible difference is antialiasing churn — discard it with"
+echo "git checkout and keep the committed golden."
