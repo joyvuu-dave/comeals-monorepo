@@ -11,4 +11,26 @@ echo "  ActiveAdmin:   http://admin.lvh.me:3000/login"
 echo "  Mail inbox:    http://localhost:3000/letter_opener"
 echo ""
 
+# A leftover server from an earlier run makes Rails refuse to boot.
+# If the pid file points at a live puma for this repo, stop it first.
+# If it points at a dead process, just remove the file.
+pid_file="tmp/pids/server.pid"
+if [ -f "$pid_file" ]; then
+  pid="$(cat "$pid_file")"
+  if ps -p "$pid" -o command= | grep -q "puma.*comeals-monorepo"; then
+    echo "  Stopping leftover server (pid $pid)..."
+    kill "$pid" 2>/dev/null || true
+    # Wait up to 5 seconds for it to exit.
+    for _ in 1 2 3 4 5; do
+      ps -p "$pid" > /dev/null || break
+      sleep 1
+    done
+    if ps -p "$pid" > /dev/null; then
+      echo "  Server (pid $pid) did not stop. Stop it yourself, then rerun bin/dev." >&2
+      exit 1
+    fi
+  fi
+  rm -f "$pid_file"
+fi
+
 exec bundle exec foreman start -f Procfile.dev "$@"
