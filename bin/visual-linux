@@ -1,0 +1,41 @@
+#!/bin/bash
+# Run the visual suite in the official Playwright Linux container,
+# either comparing against the committed -linux goldens (the default)
+# or rewriting them (--update).
+#
+# The goldens are recorded in this container, so they must also be
+# compared in this container. The GitHub runner renders text about a
+# pixel differently than the container — enough to fail the 0.1% diff
+# budget — so CI runs this script instead of comparing on the plain
+# runner. A Mac cannot render these pixels at all (#49).
+#
+# The container gets its own node_modules (a named Docker volume)
+# because the host's may be built for another platform — esbuild and
+# friends ship native binaries. The first run installs them; later
+# runs reuse the volume.
+#
+# Usage:
+#   bin/visual-linux            # compare against the committed goldens
+#   bin/visual-linux --update   # rewrite the goldens (bin/update-linux-snapshots)
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+EXTRA_ARGS=""
+if [ "${1:-}" = "--update" ]; then
+  EXTRA_ARGS="--update-snapshots"
+fi
+
+# The image version must match @playwright/test. package-lock.json has
+# it without needing node_modules installed on the host (CI checks out
+# a bare tree).
+VERSION=$(node -p "require('./package-lock.json').packages['node_modules/@playwright/test'].version")
+IMAGE="mcr.microsoft.com/playwright:v${VERSION}-noble"
+
+echo "Running the visual suite in ${IMAGE}..."
+docker run --rm \
+  --ipc=host \
+  -v "$PWD":/work \
+  -v comeals-playwright-modules:/work/node_modules \
+  -w /work \
+  "$IMAGE" \
+  bash -c "PLAYWRIGHT_SKIP_ADMIN=1 npm install --no-audit --no-fund && PLAYWRIGHT_SKIP_ADMIN=1 npx playwright test tests/e2e/visual.spec.js ${EXTRA_ARGS}"

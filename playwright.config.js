@@ -6,6 +6,16 @@ const { defineConfig } = require("@playwright/test");
 // scripts (`bench:modals`, `pwa:screenshots`) opt back in.
 const DEFAULT_IGNORE = ["**/perf-modals.spec.js", "**/pwa-screenshots.spec.js"];
 
+// The -linux goldens are recorded in the Playwright Docker container,
+// and the GitHub runner renders text about a pixel differently — enough
+// to fail the 0.1% diff budget. So CI compares screenshots inside that
+// container (bin/visual-linux, its own job) and sets
+// PLAYWRIGHT_SKIP_VISUAL in the plain-runner e2e job, which could
+// never match them.
+if (process.env.PLAYWRIGHT_SKIP_VISUAL) {
+  DEFAULT_IGNORE.push("**/visual.spec.js");
+}
+
 module.exports = defineConfig({
   testIgnore: process.env.PLAYWRIGHT_INCLUDE_ALL ? [] : DEFAULT_IGNORE,
   timeout: 30000,

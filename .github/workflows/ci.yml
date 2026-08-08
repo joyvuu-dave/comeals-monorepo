@@ -93,6 +93,10 @@ jobs:
       VITE_PUSHER_KEY: "test-key-for-ci"
       VITE_PUSHER_CLUSTER: "us2"
       ADMIN_E2E_DATABASE_URL: postgres://postgres:postgres@localhost:5432/comeals_admin_e2e
+      # The visual suite runs in its own job (visual-tests) inside the
+      # Playwright container, because this runner renders text about a
+      # pixel differently than the container that records the goldens.
+      PLAYWRIGHT_SKIP_VISUAL: "1"
     steps:
       - uses: actions/checkout@v6
       - uses: ruby/setup-ruby@v1
@@ -109,6 +113,23 @@ jobs:
         if: failure()
         with:
           name: playwright-report
+          path: test-results/
+          retention-days: 7
+
+  visual-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      # bin/visual-linux runs the visual suite inside the official
+      # Playwright container — the same one bin/update-snapshots records
+      # the -linux goldens in. Comparing on the plain runner fails: it
+      # renders text about a pixel differently, which the 0.1% diff
+      # budget does not absorb.
+      - run: bin/visual-linux
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-visual-report
           path: test-results/
           retention-days: 7
 
