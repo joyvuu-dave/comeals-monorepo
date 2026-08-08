@@ -78,7 +78,9 @@ if (!calendarKey || !fs.existsSync(htmlPath)) {
   failed = true;
   console.error(
     "MISSING calendar preload check could not run: " +
-      (calendarKey ? "no built index.html found" : "no calendar/show.jsx chunk in the manifest"),
+      (calendarKey
+        ? "no built index.html found"
+        : "no calendar/show.jsx chunk in the manifest"),
   );
 } else {
   const html = fs.readFileSync(htmlPath, "utf8");

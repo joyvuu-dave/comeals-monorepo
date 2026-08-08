@@ -1,0 +1,6 @@
+# Rails YAML configs are ERB templates, not plain YAML. Prettier parses
+# them as plain YAML, and a block ERB tag (like database.yml's
+# <% if ENV['LOCAL_PRODUCTION'] %>) is a YAML syntax error to it.
+# Value-position ERB happens to parse, but reformatting a template as if
+# it were plain YAML is wrong in principle, so skip them all.
+config/*.yml
