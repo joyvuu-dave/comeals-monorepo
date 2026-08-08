@@ -216,8 +216,11 @@ ul ul {
   display: none;
 }
 .badge.badge-info {
-  background-color: #1a8080;
-  color: #fff;
+  /* Bright teal with dark text: 9.6:1, passes WCAG AA. White text on
+     this teal is 2.0:1 and fails — the text color is what makes the
+     bright background legal. */
+  background-color: #39cccc;
+  color: #111;
 }
 a.badge:hover {
   background-color: #781300;
@@ -230,7 +233,7 @@ a.badge:focus {
 }
 a.badge.badge-info:hover {
   background-color: #33b8b8;
-  color: #fff;
+  color: #111;
 }
 a.badge.badge-info:focus {
   box-shadow: 0 0 0 2px rgba(57, 204, 204, 0.5);
@@ -291,29 +294,33 @@ button:disabled {
   opacity: 0.5;
   text-decoration: none;
 }
+/* The colored button families (secondary, success, info, warning,
+   danger) use bright backgrounds with near-black text. White text on
+   these colors fails WCAG AA (2.0–3.5:1); #111 text passes on every
+   one of them, in every state, with room to spare (4.5–9.6:1). The
+   dark text is what lets the backgrounds stay bright. */
 .button.button-secondary,
 button.button-secondary {
-  /* Was #aaa; white text on it is 2.3:1. #757575 gives 4.6:1. */
-  background-color: #757575;
-  border-color: #8a8a8a #757575 #616161;
-  color: #fff;
+  background-color: #aaa;
+  border-color: #b3b3b3 #aaa #999;
+  color: #111;
 }
 .button.button-secondary:hover,
 button.button-secondary:hover {
-  background-color: #696969;
-  border-color: #757575 #696969 #5c5c5c;
-  color: #fff;
+  background-color: #999;
+  border-color: #aaa #999 #888;
+  color: #111;
 }
 .button.button-secondary.active,
 .button.button-secondary:active,
 button.button-secondary.active,
 button.button-secondary:active {
-  background-color: #696969;
-  border-color: #5c5c5c #696969 #696969;
+  background-color: #999;
+  border-color: #888 #999 #999;
 }
 .button.button-secondary:focus,
 button.button-secondary:focus {
-  box-shadow: 0 0 0 2px hsla(0, 0%, 46%, 0.5);
+  box-shadow: 0 0 0 2px hsla(0, 0%, 66.7%, 0.5);
   outline: none;
 }
 .button.button-secondary.disabled,
@@ -327,28 +334,27 @@ button.button-secondary:disabled {
 }
 .button.button-success,
 button.button-success {
-  /* Was #2ecc40; white text on it is 2.1:1. #187426 gives 5.9:1.
-     Same green as --color-green in styles.css. */
-  background-color: #187426;
-  border-color: #1e8a2f #187426 #125a1e;
-  color: #fff;
+  /* Same green as --color-green-bright in styles.css. */
+  background-color: #2ecc40;
+  border-color: #43d153 #2ecc40 #29b83a;
+  color: #111;
 }
 .button.button-success:hover,
 button.button-success:hover {
-  background-color: #135e1f;
-  border-color: #187426 #135e1f #0f4c19;
-  color: #fff;
+  background-color: #29b83a;
+  border-color: #2ecc40 #29b83a #25a333;
+  color: #111;
 }
 .button.button-success.active,
 .button.button-success:active,
 button.button-success.active,
 button.button-success:active {
-  background-color: #135e1f;
-  border-color: #0f4c19 #135e1f #135e1f;
+  background-color: #29b83a;
+  border-color: #25a333 #29b83a #29b83a;
 }
 .button.button-success:focus,
 button.button-success:focus {
-  box-shadow: 0 0 0 2px rgba(24, 116, 38, 0.5);
+  box-shadow: 0 0 0 2px rgba(46, 204, 64, 0.5);
   outline: none;
 }
 .button.button-success.disabled,
@@ -362,27 +368,26 @@ button.button-success:disabled {
 }
 .button.button-info,
 button.button-info {
-  /* Was #39cccc; white text on it is 2.0:1. #1a8080 gives 4.7:1. */
-  background-color: #1a8080;
-  border-color: #2a9a9a #1a8080 #126b6b;
-  color: #fff;
+  background-color: #39cccc;
+  border-color: #4dd1d1 #39cccc #33b8b8;
+  color: #111;
 }
 .button.button-info:hover,
 button.button-info:hover {
-  background-color: #157070;
-  border-color: #1a8080 #157070 #115e5e;
-  color: #fff;
+  background-color: #33b8b8;
+  border-color: #39cccc #33b8b8 #2ea3a3;
+  color: #111;
 }
 .button.button-info.active,
 .button.button-info:active,
 button.button-info.active,
 button.button-info:active {
-  background-color: #157070;
-  border-color: #115e5e #157070 #157070;
+  background-color: #33b8b8;
+  border-color: #2ea3a3 #33b8b8 #33b8b8;
 }
 .button.button-info:focus,
 button.button-info:focus {
-  box-shadow: 0 0 0 2px rgba(26, 128, 128, 0.5);
+  box-shadow: 0 0 0 2px rgba(57, 204, 204, 0.5);
   outline: none;
 }
 .button.button-info.disabled,
@@ -396,28 +401,26 @@ button.button-info:disabled {
 }
 .button.button-warning,
 button.button-warning {
-  /* Was #ff851b; white text on it is 2.4:1. #b35900 gives 4.8:1.
-     Same orange as .text-warning. */
-  background-color: #b35900;
-  border-color: #cc6600 #b35900 #995200;
-  color: #fff;
+  background-color: #ff851b;
+  border-color: #ff9132 #ff851b #e67818;
+  color: #111;
 }
 .button.button-warning:hover,
 button.button-warning:hover {
-  background-color: #9e4f00;
-  border-color: #b35900 #9e4f00 #8a4500;
-  color: #fff;
+  background-color: #e67818;
+  border-color: #ff851b #e67818 #cc6a16;
+  color: #111;
 }
 .button.button-warning.active,
 .button.button-warning:active,
 button.button-warning.active,
 button.button-warning:active {
-  background-color: #9e4f00;
-  border-color: #8a4500 #9e4f00 #9e4f00;
+  background-color: #e67818;
+  border-color: #cc6a16 #e67818 #e67818;
 }
 .button.button-warning:focus,
 button.button-warning:focus {
-  box-shadow: 0 0 0 2px rgba(179, 89, 0, 0.5);
+  box-shadow: 0 0 0 2px rgba(255, 133, 27, 0.5);
   outline: none;
 }
 .button.button-warning.disabled,
@@ -431,15 +434,16 @@ button.button-warning:disabled {
 }
 .button.button-danger,
 button.button-danger {
+  /* White text on this red is 3.5:1 and fails AA; #111 is 5.5:1. */
   background-color: #ff4136;
   border-color: #ff544a #ff4136 #e63b31;
-  color: #fff;
+  color: #111;
 }
 .button.button-danger:hover,
 button.button-danger:hover {
   background-color: #e63b31;
   border-color: #ff4136 #e63b31 #cc342b;
-  color: #fff;
+  color: #111;
 }
 .button.button-danger.active,
 .button.button-danger:active,
@@ -571,15 +575,17 @@ button.button-link:hover {
   top: calc(50% - 0.5em);
   width: 1em;
 }
+/* The spinner matches the button's text color: white on the dark
+   primary button, #111 on the bright families and button-light. */
+.button-loader:after {
+  border-color: #fff hsla(0, 0%, 100%, 0.2) hsla(0, 0%, 100%, 0.2) #fff;
+}
 .button-danger.button-loader:after,
 .button-info.button-loader:after,
-.button-loader:after,
+.button-light.button-loader:after,
 .button-secondary.button-loader:after,
 .button-success.button-loader:after,
 .button-warning.button-loader:after {
-  border-color: #fff hsla(0, 0%, 100%, 0.2) hsla(0, 0%, 100%, 0.2) #fff;
-}
-.button-light.button-loader:after {
   border-color: #111 rgba(17, 17, 17, 0.2) rgba(17, 17, 17, 0.2) #111;
 }
 .button-dark.button-loader:after {

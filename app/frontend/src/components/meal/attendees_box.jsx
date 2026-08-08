@@ -17,8 +17,8 @@ const styles = {
   // text blended below the WCAG AA contrast ratio (the Lighthouse
   // failure on reconciled meals). Plain cells dim by using an
   // AA-passing gray; attending (green) cells dim by draining the
-  // color, which keeps their white text at AA because the gray keeps
-  // the green's darkness.
+  // color, which keeps their dark text at AA because the gray keeps
+  // the green's brightness.
   disabledPlain: {
     cursor: "not-allowed",
     color: "#666",
@@ -55,7 +55,7 @@ const AttendeeComponent = observer(({ resident }) => {
         onClick={() => resident.toggleAttending()}
         className={
           resident.attending
-            ? "background-green text-white pointer background-transition"
+            ? "background-green pointer background-transition"
             : "pointer background-transition"
         }
         style={Object.assign(

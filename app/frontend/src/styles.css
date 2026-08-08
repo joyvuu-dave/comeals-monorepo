@@ -32,10 +32,14 @@
 
   /* Shoelace variables */
   --state-primary: #851500;
-  /* Dark enough that white text on this green, and this green as text
-     on the yellow header, both pass the WCAG AA contrast rule that
-     Lighthouse checks. The old #2ecc40 failed both. */
+  /* Two greens, split by use. The dark one is for green TEXT on light
+     backgrounds: on white it is 5.9:1, and on the yellow header it is
+     3.5:1, which passes WCAG AA only under the large-text rule (24px+
+     or 19px bold) — keep it large wherever it sits on yellow. The
+     bright one is for green BACKGROUNDS, which carry #111 text (8.8:1);
+     white or #444 text on it fails AA, so pair it with #111 only. */
   --color-green: #187426;
+  --color-green-bright: #2ecc40;
 }
 
 .background-white {
@@ -43,7 +47,9 @@
 }
 
 .background-green {
-  background-color: var(--color-green);
+  background-color: var(--color-green-bright);
+  /* The dark text is what makes the bright background pass AA. */
+  color: #111;
 }
 
 .background-transition {
