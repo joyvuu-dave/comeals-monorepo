@@ -234,6 +234,42 @@ $$;
 
 
 --
+-- Name: comeals_valid_meal_schedule(jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.comeals_valid_meal_schedule(schedule jsonb) RETURNS boolean
+    LANGUAGE plpgsql IMMUTABLE
+    AS $_$
+DECLARE
+  week jsonb;
+  day jsonb;
+  day_count integer := 0;
+BEGIN
+  IF schedule IS NULL OR jsonb_typeof(schedule) <> 'array' THEN
+    RETURN false;
+  END IF;
+  IF jsonb_array_length(schedule) < 1 OR jsonb_array_length(schedule) > 6 THEN
+    RETURN false;
+  END IF;
+  FOR week IN SELECT * FROM jsonb_array_elements(schedule) LOOP
+    IF jsonb_typeof(week) <> 'array' THEN
+      RETURN false;
+    END IF;
+    FOR day IN SELECT * FROM jsonb_array_elements(week) LOOP
+      -- A day is a whole number 0..6. The text form of any other jsonb
+      -- number ("3.5", "-1", "7") fails the pattern.
+      IF jsonb_typeof(day) <> 'number' OR day::text !~ '^[0-6]$' THEN
+        RETURN false;
+      END IF;
+      day_count := day_count + 1;
+    END LOOP;
+  END LOOP;
+  RETURN day_count > 0;
+END;
+$_$;
+
+
+--
 -- Name: prevent_community_delete(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -431,7 +467,13 @@ CREATE TABLE public.communities (
     slug character varying NOT NULL,
     timezone character varying NOT NULL,
     updated_at timestamp without time zone NOT NULL,
-    CONSTRAINT communities_cap_positive_or_null CHECK (((cap IS NULL) OR (cap > (0)::numeric)))
+    schedule jsonb DEFAULT '[[0, 1, 4], [0, 2, 4]]'::jsonb NOT NULL,
+    meals_per_rotation integer DEFAULT 12 NOT NULL,
+    schedule_anchor_date date NOT NULL,
+    CONSTRAINT communities_cap_positive_or_null CHECK (((cap IS NULL) OR (cap > (0)::numeric))),
+    CONSTRAINT communities_meals_per_rotation_range CHECK (((meals_per_rotation >= 1) AND (meals_per_rotation <= 100))),
+    CONSTRAINT communities_schedule_anchor_is_sunday CHECK ((EXTRACT(dow FROM schedule_anchor_date) = (0)::numeric)),
+    CONSTRAINT communities_schedule_shape CHECK (public.comeals_valid_meal_schedule(schedule))
 );
 
 
@@ -1983,6 +2025,7 @@ ALTER TABLE ONLY public.bills
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260807140000'),
 ('20260807130000'),
 ('20260807120000'),
 ('20260802120000'),

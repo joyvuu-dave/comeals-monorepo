@@ -4,14 +4,17 @@
 #
 # Table name: communities
 #
-#  id              :bigint           not null, primary key
-#  cap             :decimal(12, 8)
-#  name            :string           not null
-#  singleton_guard :integer          default(0), not null
-#  slug            :string           not null
-#  timezone        :string           not null
-#  created_at      :datetime         not null
-#  updated_at      :datetime         not null
+#  id                   :bigint           not null, primary key
+#  cap                  :decimal(12, 8)
+#  meals_per_rotation   :integer          default(12), not null
+#  name                 :string           not null
+#  schedule             :jsonb            not null
+#  schedule_anchor_date :date             not null
+#  singleton_guard      :integer          default(0), not null
+#  slug                 :string           not null
+#  timezone             :string           not null
+#  created_at           :datetime         not null
+#  updated_at           :datetime         not null
 #
 # Indexes
 #
@@ -271,6 +274,85 @@ RSpec.describe Community do
     it 'saves without raising instead of overflowing the column' do
       expect { community.update(cap: BigDecimal('10000')) }.not_to raise_error
       expect(community.reload.cap).to eq(BigDecimal('4.50'))
+    end
+  end
+
+  describe 'meal schedule config' do
+    it 'starts with the classic schedule from the column defaults' do
+      expect(community.schedule).to eq([[0, 1, 4], [0, 2, 4]])
+      expect(community.meals_per_rotation).to eq(12)
+      expect(community).to be_valid
+    end
+
+    it 'normalizes the admin form hash, keeping empty weeks' do
+      community.schedule = { '1' => [''], '0' => ['', '4', '0', '4'] }
+      expect(community.schedule).to eq([[0, 4], []])
+      expect(community).to be_valid
+    end
+
+    it 'refuses a schedule with no meal days at all' do
+      community.schedule = [[], []]
+      expect(community).not_to be_valid
+      expect(community.errors[:schedule]).to include('must include at least one meal day')
+    end
+
+    it 'refuses a cycle outside 1 to 6 weeks' do
+      community.schedule = []
+      expect(community).not_to be_valid
+      expect(community.errors[:schedule]).to include('must have between 1 and 6 weeks')
+
+      community.schedule = Array.new(7) { [0] }
+      expect(community).not_to be_valid
+      expect(community.errors[:schedule]).to include('must have between 1 and 6 weeks')
+    end
+
+    it 'refuses days outside Sunday through Saturday' do
+      community.schedule = [[0, 7]]
+      expect(community).not_to be_valid
+      expect(community.errors[:schedule]).to include('days must be 0 (Sunday) through 6 (Saturday)')
+    end
+
+    it 'reports rather than raises on uncoercible form input' do
+      community.schedule = { '0' => %w[banana 0] }
+      expect(community).not_to be_valid
+      expect(community.errors[:schedule]).to include('days must be 0 (Sunday) through 6 (Saturday)')
+    end
+
+    it 'refuses a meals_per_rotation outside 1 to 100' do
+      [0, -3, 101, 2.5].each do |bad|
+        community.meals_per_rotation = bad
+        expect(community).not_to be_valid
+        expect(community.errors[:meals_per_rotation]).to include('must be a whole number from 1 to 100')
+      end
+    end
+
+    it 'normalizes the anchor to the Sunday of its week' do
+      community.schedule_anchor_date = Date.new(2026, 8, 5) # a Wednesday
+      expect(community).to be_valid
+      expect(community.schedule_anchor_date).to eq(Date.new(2026, 8, 2))
+    end
+
+    it 'requires an anchor on an existing record' do
+      community.schedule_anchor_date = nil
+      expect(community).not_to be_valid
+    end
+
+    it 'defaults the anchor to the current week on create' do
+      fresh = described_class.new(name: 'Fresh', timezone: 'America/Los_Angeles')
+      fresh.valid?
+      expect(fresh.schedule_anchor_date).to eq(Time.zone.today.beginning_of_week(:sunday))
+    end
+
+    it 'saves without raising instead of hitting the database constraint' do
+      expect { community.update(schedule: [[], []]) }.not_to raise_error
+      expect(community.reload.schedule).to eq([[0, 1, 4], [0, 2, 4]])
+    end
+
+    it '#meal_schedule wraps the columns' do
+      schedule = community.meal_schedule
+      expect(schedule).to be_a(MealSchedule)
+      expect(schedule.weeks).to eq(community.schedule)
+      expect(schedule.anchor_date).to eq(community.schedule_anchor_date)
     end
   end
 

@@ -4,14 +4,17 @@
 #
 # Table name: communities
 #
-#  id              :bigint           not null, primary key
-#  cap             :decimal(12, 8)
-#  name            :string           not null
-#  singleton_guard :integer          default(0), not null
-#  slug            :string           not null
-#  timezone        :string           not null
-#  created_at      :datetime         not null
-#  updated_at      :datetime         not null
+#  id                   :bigint           not null, primary key
+#  cap                  :decimal(12, 8)
+#  meals_per_rotation   :integer          default(12), not null
+#  name                 :string           not null
+#  schedule             :jsonb            not null
+#  schedule_anchor_date :date             not null
+#  singleton_guard      :integer          default(0), not null
+#  slug                 :string           not null
+#  timezone             :string           not null
+#  created_at           :datetime         not null
+#  updated_at           :datetime         not null
 #
 # Indexes
 #
@@ -74,6 +77,10 @@ class Community < ApplicationRecord
   end
 
   validate :enforce_singleton, on: :create
+  # Both belong to the meal schedule section below; they live up here because
+  # the callback-order cop wants before_validation declared before after_create.
+  before_validation :normalize_schedule_anchor_date
+  before_validation :default_schedule_anchor_date, on: :create
   before_destroy { throw :abort }
 
   # When the singleton is first created, link any orphan admin users (those
@@ -88,7 +95,8 @@ class Community < ApplicationRecord
 
   # Ransack allowlists for ActiveAdmin sorting
   def self.ransackable_attributes(_auth_object = nil)
-    %w[id cap name singleton_guard slug timezone created_at updated_at]
+    %w[id cap name singleton_guard slug timezone created_at updated_at
+       schedule schedule_anchor_date meals_per_rotation]
   end
 
   extend FriendlyId
@@ -109,6 +117,39 @@ class Community < ApplicationRecord
               message: 'must be $9,999.99 or less'
             },
             allow_nil: true
+
+  # --- Meal schedule ---
+  # A repeating cycle of 1..6 weeks; each week an array of days (0 = Sunday).
+  # An empty week means "no meals that week"; the cycle as a whole must have
+  # at least one day or the generator would never find a meal date. The
+  # anchor date names which calendar week is week 1 and is always stored as
+  # a Sunday. All three mirror database CHECK constraints (migration
+  # 20260807140000) so raw writes are caught too. See MealSchedule.
+  validates :meals_per_rotation,
+            numericality: {
+              only_integer: true,
+              in: 1..MealSchedule::MAX_MEALS_PER_ROTATION,
+              message: 'must be a whole number from 1 to 100'
+            }
+  validates :schedule_anchor_date, presence: true
+  validate :schedule_shape
+
+  # The admin form posts the checkbox grid as a hash of week rows, e.g.
+  # {"0" => ["", "0", "1"], "1" => [""]} (the "" comes from a hidden field
+  # that keeps a fully-unchecked week present). Normalize any input shape to
+  # sorted integer arrays here, in the writer, so the form, the preview
+  # endpoint, and the console all go through the same door. Values that
+  # cannot be whole numbers stay as nil for the validation to report,
+  # instead of raising mid-assignment.
+  def schedule=(value)
+    weeks = value.is_a?(Hash) ? value.keys.sort_by(&:to_i).map { |key| value[key] } : value
+    weeks = weeks.map { |week| week.is_a?(Array) ? normalize_schedule_week(week) : week } if weeks.is_a?(Array)
+    super(weeks)
+  end
+
+  def meal_schedule
+    MealSchedule.new(weeks: schedule, anchor_date: schedule_anchor_date)
+  end
 
   has_many :bills, dependent: :destroy
   has_many :meals, dependent: :destroy
@@ -162,10 +203,6 @@ class Community < ApplicationRecord
     mr_count = MealResident.where(meal_id: unreconciled.select(:id)).count
     g_count = Guest.where(meal_id: unreconciled.select(:id)).count
     ((mr_count + g_count).to_f / meal_count).round(1)
-  end
-
-  def meals_per_rotation
-    12
   end
 
   def permanent_meal_days
@@ -280,6 +317,36 @@ class Community < ApplicationRecord
 
   def enforce_singleton
     errors.add(:base, 'Only one Community record is allowed') if Community.exists?
+  end
+
+  def normalize_schedule_week(week)
+    days = week.reject { |day| day.to_s.strip.empty? }
+               .map { |day| day.is_a?(Integer) ? day : Integer(day.to_s, exception: false) }
+               .uniq
+    days.all?(Integer) ? days.sort : days
+  end
+
+  def schedule_shape
+    unless schedule.is_a?(Array) && schedule.length.between?(1, MealSchedule::MAX_WEEKS)
+      errors.add(:schedule, "must have between 1 and #{MealSchedule::MAX_WEEKS} weeks")
+      return
+    end
+    unless schedule.all? { |week| week.is_a?(Array) && week.all? { |day| day.is_a?(Integer) && day.between?(0, 6) } }
+      errors.add(:schedule, 'days must be 0 (Sunday) through 6 (Saturday)')
+      return
+    end
+    errors.add(:schedule, 'must include at least one meal day') if schedule.flatten.empty?
+  end
+
+  def normalize_schedule_anchor_date
+    self.schedule_anchor_date = schedule_anchor_date.beginning_of_week(:sunday) if schedule_anchor_date
+  end
+
+  # Bootstrap: the very first Community can be created before anyone has
+  # thought about schedules. Any Sunday works as an anchor until the grid is
+  # edited, at which point the admin picks the start week explicitly.
+  def default_schedule_anchor_date
+    self.schedule_anchor_date ||= Time.zone.today.beginning_of_week(:sunday)
   end
 
   # The set of calendar keys affected when a meal on `date` changes.
