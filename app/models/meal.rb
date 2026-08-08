@@ -38,7 +38,6 @@ class Meal < ApplicationRecord
   end
 
   ALTERNATING_DAYS = [1, 2].freeze
-  TEMPLATE_WDAYS = [0, 4].freeze
 
   # Attributes frozen once the meal is reconciled. Bills and attendance rows
   # carry their own reconciled guards; this protects the meal row itself.
@@ -126,10 +125,6 @@ class Meal < ApplicationRecord
   accepts_nested_attributes_for :bills, allow_destroy: true, reject_if: proc { |attributes|
     attributes['resident_id'].blank?
   }
-
-  def get_start_time # rubocop:disable Naming/AccessorMethodName -- frontend API expects get_start_time
-    start_time.in_time_zone(community.timezone)
-  end
 
   # NULL cap means "no cap". No more Float::INFINITY.
   def cap
@@ -288,41 +283,13 @@ class Meal < ApplicationRecord
     count
   end
 
-  # *** This method only used during seed generation ***
-  # Modified twice a week schedule
-  def self.create_modified_templates(start_date, end_date)
-    community = Community.instance
-    count = 0
-    dates = (start_date..end_date).to_a
-
-    dates.each do |date|
-      # Skip holidays
-      next if Meal.is_holiday?(date)
-
-      # Skip days without dinner
-      next unless TEMPLATE_WDAYS.any?(date.wday)
-
-      # Create the meal
-      meal = Meal.new(date: date, community: community)
-      if meal.save
-        count += 1
-      else
-        Rails.logger.debug meal.errors
-      end
-    end
-
-    count
-  end
-
   def self.is_holiday?(date)
-    return true if  Meal.is_thanksgiving(date)  ||
-                    Meal.is_christmas(date)     ||
-                    Meal.is_newyears(date)      ||
-                    Meal.is_mothers_day(date)   ||
-                    Meal.is_easter(date)        ||
-                    Meal.is_july_fourth(date)
-
-    false
+    Meal.is_thanksgiving(date)  ||
+      Meal.is_christmas(date)   ||
+      Meal.is_newyears(date)    ||
+      Meal.is_mothers_day(date) ||
+      Meal.is_easter(date)      ||
+      Meal.is_july_fourth(date)
   end
 
   def self.is_thanksgiving(date)
@@ -335,15 +302,11 @@ class Meal < ApplicationRecord
   end
 
   def self.is_christmas(date)
-    return true if date.month == 12 && date.day == 25
-
-    false
+    date.month == 12 && date.day == 25
   end
 
   def self.is_newyears(date)
-    return true if date.month == 1 && date.day == 1
-
-    false
+    date.month == 1 && date.day == 1
   end
 
   def self.is_mothers_day(date)
@@ -373,14 +336,10 @@ class Meal < ApplicationRecord
     month = (h + l - (7 * m) + 114) / 31
     day = ((h + l - (7 * m) + 114) % 31) + 1
 
-    return true if date.month == month && date.day == day
-
-    false
+    date.month == month && date.day == day
   end
 
   def self.is_july_fourth(date)
-    return true if date.month == 7 && date.day == 4
-
-    false
+    date.month == 7 && date.day == 4
   end
 end
