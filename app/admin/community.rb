@@ -5,7 +5,7 @@ ActiveAdmin.register Community do
   menu label: 'Community'
 
   # STRONG PARAMS
-  permit_params :name, :cap, :slug, :timezone, :meals_per_rotation, :schedule_anchor_date,
+  permit_params :name, :cap, :slug, :timezone, :meals_per_rotation,
                 schedule: {}
 
   # CONFIG
@@ -38,12 +38,12 @@ ActiveAdmin.register Community do
 
     draft = Community.first || Community.new
     draft.assign_attributes(params.require(:community)
-                                  .permit(:schedule_anchor_date, :meals_per_rotation, schedule: {}))
+                                  .permit(:meals_per_rotation, schedule: {}))
     draft.validate
     schedule_errors = draft.errors.filter_map do |error|
       # Only the schedule fields decide the preview. A bootstrap draft has no
       # name yet; that is the form's problem at save time, not the preview's.
-      error.full_message if %i[schedule schedule_anchor_date meals_per_rotation].include?(error.attribute)
+      error.full_message if %i[schedule meals_per_rotation].include?(error.attribute)
     end
 
     if schedule_errors.any?
@@ -96,9 +96,6 @@ ActiveAdmin.register Community do
           row "Week #{index + 1}" do
             week.empty? ? 'No meals' : week.map { |wday| Date::DAYNAMES[wday] }.join(', ')
           end
-        end
-        row 'Starts the week of' do
-          community.schedule_anchor_date.strftime('%b %-d, %Y')
         end
         row :meals_per_rotation
       end
@@ -173,17 +170,17 @@ ActiveAdmin.register Community do
         button 'Remove last week', type: 'button', id: 'schedule-remove-week'
       end
 
-      f.input :schedule_anchor_date,
-              as: :datepicker,
-              label: 'This schedule starts the week of',
-              hint: 'Names Week 1 of the cycle. Any date in that week works; it is saved ' \
-                    'as that week\'s Sunday. Check the preview below — it shows the dates ' \
-                    'this schedule produces.'
       f.input :meals_per_rotation,
               hint: 'How many meals each rotation contains (1 to 100).'
 
       li do
         div id: 'schedule-preview'
+        # Which calendar week gets which row is fixed arithmetic
+        # (MealSchedule::EPOCH), so the preview is how an admin sees the
+        # phase, and rearranging days across rows is how they change it.
+        para 'The preview shows the dates this schedule produces. If a day ' \
+             'shows up in the wrong week, move it to the other week row.',
+             class: 'schedule-preview-hint'
       end
     end
 
