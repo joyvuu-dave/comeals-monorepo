@@ -21,7 +21,9 @@ Rails.application.config.to_prepare do
       return if Community.exists?
       # Exempt the Community new/create actions — that's the one doorway out
       # of the bootstrap state. Without this exemption we'd redirect-loop.
-      return if controller_name == 'communities' && %w[new create].include?(action_name)
+      # schedule_preview serves the new form's live meal-schedule preview,
+      # so it has to work in the same doorway.
+      return if controller_name == 'communities' && %w[new create schedule_preview].include?(action_name)
 
       redirect_to(new_admin_community_path,
                   notice: 'Create your community to finish setup.')

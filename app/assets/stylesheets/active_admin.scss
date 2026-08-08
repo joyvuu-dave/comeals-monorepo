@@ -116,3 +116,42 @@ body {
     color: $link-color;
   }
 }
+
+// The meal schedule grid on the community form (app/admin/community.rb).
+.schedule-grid-wrapper {
+  padding: 10px;
+
+  table {
+    width: auto;
+    margin-bottom: 8px;
+
+    th,
+    td {
+      text-align: center;
+      padding: 4px 10px;
+    }
+  }
+
+  .schedule-week-label {
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  button {
+    margin-right: 8px;
+  }
+}
+
+#schedule-preview {
+  padding: 10px;
+
+  .schedule-preview-errors {
+    color: #932419;
+  }
+
+  .schedule-preview-dates {
+    columns: 3;
+    list-style: none;
+    padding-left: 0;
+  }
+}

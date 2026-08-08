@@ -5,7 +5,8 @@ ActiveAdmin.register Community do
   menu label: 'Community'
 
   # STRONG PARAMS
-  permit_params :name, :cap, :slug, :timezone
+  permit_params :name, :cap, :slug, :timezone, :meals_per_rotation, :schedule_anchor_date,
+                schedule: {}
 
   # CONFIG
   config.filters = false
@@ -21,6 +22,47 @@ ActiveAdmin.register Community do
     # Skipped for new/create (find_resource isn't called for those actions).
     def find_resource
       Community.instance
+    end
+  end
+
+  # The live preview under the schedule grid. The form's JS posts the draft
+  # grid here on every change; the reply is an HTML fragment of the dates the
+  # draft would produce. Server-side so the holiday rules and date formatting
+  # stay in one place. A collection route (no id) so the bootstrap
+  # new-community form can preview too.
+  collection_action :schedule_preview, method: :post do
+    # Hand-written action: ActiveAdmin authorizes inside resource and
+    # build_resource, neither of which runs here, so without this line the
+    # adapter is never consulted (the meal_resident.rb trap, ADR 0004).
+    authorize! :update, Community
+
+    draft = Community.first || Community.new
+    draft.assign_attributes(params.require(:community)
+                                  .permit(:schedule_anchor_date, :meals_per_rotation, schedule: {}))
+    draft.validate
+    schedule_errors = draft.errors.filter_map do |error|
+      # Only the schedule fields decide the preview. A bootstrap draft has no
+      # name yet; that is the form's problem at save time, not the preview's.
+      error.full_message if %i[schedule schedule_anchor_date meals_per_rotation].include?(error.attribute)
+    end
+
+    if schedule_errors.any?
+      items = schedule_errors.map { |message| helpers.tag.li(message) }
+      render html: helpers.tag.ul(helpers.safe_join(items), class: 'schedule-preview-errors'),
+             status: :unprocessable_entity
+    else
+      shown = [draft.meals_per_rotation, 20].min
+      dates = draft.meal_schedule.upcoming_dates(from: Time.zone.today, count: shown)
+      items = dates.map { |date| helpers.tag.li(date.strftime('%a %b %-d, %Y')) }
+      note = if shown < draft.meals_per_rotation
+               helpers.tag.p("First #{shown} of #{draft.meals_per_rotation} meals in a rotation.",
+                             class: 'schedule-preview-note')
+             end
+      render html: helpers.safe_join(
+        [helpers.tag.p('Upcoming meals under this schedule:'),
+         helpers.tag.ul(helpers.safe_join(items), class: 'schedule-preview-dates'),
+         note].compact
+      )
     end
   end
 
@@ -47,6 +89,30 @@ ActiveAdmin.register Community do
       row :slug
       row :timezone
     end
+
+    panel 'Meal schedule' do
+      attributes_table_for community do
+        community.schedule.each_with_index do |week, index|
+          row "Week #{index + 1}" do
+            week.empty? ? 'No meals' : week.map { |wday| Date::DAYNAMES[wday] }.join(', ')
+          end
+        end
+        row 'Starts the week of' do
+          community.schedule_anchor_date.strftime('%b %-d, %Y')
+        end
+        row :meals_per_rotation
+      end
+
+      last_meal_date = community.meals.maximum(:date)
+      if last_meal_date
+        para "Meals already exist through #{last_meal_date.strftime('%b %-d, %Y')}. This " \
+             'schedule shapes meals created after that date. To apply a schedule change ' \
+             'sooner, delete upcoming rotations (newest first) on the Rotations page — ' \
+             'the nightly task recreates them under the current schedule within a day.'
+      else
+        para 'No meals exist yet. The nightly task will create them under this schedule.'
+      end
+    end
   end
 
   # FORM
@@ -61,6 +127,64 @@ ActiveAdmin.register Community do
       f.input :timezone,
               as: :select,
               collection: Community::SUPPORTED_TIMEZONES.map { |name, iana| [name, iana] }
+    end
+
+    f.inputs 'Meal schedule' do
+      # The grid: one row per week of the repeating cycle, one checkbox per
+      # day. Checkbox names are community[schedule][ROW][]; the hidden ""
+      # input per row keeps a fully-unchecked week in the params (the same
+      # trick Rails uses for single checkboxes, applied per row). Behavior
+      # (add/remove week, live preview) lives in active_admin.js.
+      li class: 'schedule-grid-wrapper' do
+        table id: 'schedule-grid' do
+          thead do
+            tr do
+              th ''
+              Date::ABBR_DAYNAMES.each { |name| th name }
+            end
+          end
+          tbody do
+            f.object.schedule.each_with_index do |week, row_index|
+              # `input` here is Formtastic's method, not the HTML tag, so the
+              # tags are hand-built strings. Every interpolated value is a
+              # generated integer or day name, never user input. No ids: the
+              # row index in the name is the only identity these need, and
+              # cloned rows must not duplicate ids.
+              field_name = "community[schedule][#{row_index}][]"
+              tr do
+                td class: 'schedule-week-label' do
+                  marker = %(<input type="hidden" name="#{field_name}" value="">)
+                  text_node marker.html_safe # rubocop:disable Rails/OutputSafety -- built from a generated index, no user input
+                  text_node "Week #{row_index + 1}"
+                end
+                (0..6).each do |wday|
+                  td do
+                    checked = week.include?(wday) ? ' checked="checked"' : ''
+                    checkbox = %(<input type="checkbox" name="#{field_name}" value="#{wday}" ) +
+                               %(aria-label="Week #{row_index + 1} #{Date::DAYNAMES[wday]}"#{checked}>)
+                    text_node checkbox.html_safe # rubocop:disable Rails/OutputSafety -- built from integers and DAYNAMES, no user input
+                  end
+                end
+              end
+            end
+          end
+        end
+        button 'Add a week', type: 'button', id: 'schedule-add-week'
+        button 'Remove last week', type: 'button', id: 'schedule-remove-week'
+      end
+
+      f.input :schedule_anchor_date,
+              as: :datepicker,
+              label: 'This schedule starts the week of',
+              hint: 'Names Week 1 of the cycle. Any date in that week works; it is saved ' \
+                    'as that week\'s Sunday. Check the preview below — it shows the dates ' \
+                    'this schedule produces.'
+      f.input :meals_per_rotation,
+              hint: 'How many meals each rotation contains (1 to 100).'
+
+      li do
+        div id: 'schedule-preview'
+      end
     end
 
     f.actions

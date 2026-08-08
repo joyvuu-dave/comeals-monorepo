@@ -1,6 +1,32 @@
 # Plan: configurable meal schedule
 
-Written 2026-08-07. Status: proposed, not started. GitHub issue: #53.
+Written 2026-08-07. Status: done (2026-08-08). GitHub issue: #53.
+
+Three decisions changed during the build; the sections below keep the
+original design for the record, and this list is what actually shipped:
+
+1. **Empty weeks are allowed.** The original rule "no week is empty"
+   was wrong: an empty week is how a community skips weeks (meals
+   every other week is `[[0], []]`). The real rule is that the cycle
+   as a whole must contain at least one day.
+2. **The anchor is a visible field, not hidden state.** The form says
+   "This schedule starts the week of ___". The week holding that date
+   is week 1. This came out of design discussion: naming the start
+   week is easier to understand than a "swap which week is next"
+   button, and it answers the same question.
+3. **There is no regenerate button.** Saving the schedule changes only
+   the config. The nightly task keeps ~6 months of meals generated, so
+   the new schedule reaches the calendar when generation passes the
+   last existing meal. To apply it sooner, the admin deletes upcoming
+   rotations (newest first) on the Rotations page and the nightly task
+   recreates them under the current schedule. That path was made safe
+   instead of building a one-click flow: a rotation refuses destroy if
+   any meal is touched (past, closed, reconciled, or has attendees,
+   cooks, or guests) or if meals exist after it (a middle gap would
+   never refill), an allowed destroy deletes its own meals (no more
+   orphans from `dependent: :nullify`), and rotation destroy requires
+   a superuser because it now deletes meals (ADR 0004). The Community
+   show page explains all of this in one sentence.
 
 ## The ask
 
