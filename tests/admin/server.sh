@@ -14,6 +14,11 @@ export RAILS_ENV=test
 # password. Both point at comeals_admin_e2e, never comeals_test.
 export DATABASE_URL="${ADMIN_E2E_DATABASE_URL:-postgres:///comeals_admin_e2e}"
 
-bundle exec rails db:prepare
+# db:test:prepare, not db:prepare: on a brand-new database db:prepare
+# also runs db/seeds.rb, whose demo events call Pusher over the network
+# (broken in CI, and wrong data for this suite anyway). db:test:prepare
+# recreates the schema from structure.sql and never seeds; the only
+# data comes from tests/admin/seed.rb below.
+bundle exec rails db:test:prepare
 bundle exec rails runner tests/admin/seed.rb
 exec bundle exec rails server -p 3038
