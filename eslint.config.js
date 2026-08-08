@@ -193,6 +193,9 @@ module.exports = [
   {
     ignores: [
       "public/assets/**",
+      // Vite build output (28c66c3 split it out of public/assets).
+      // ESLint does not read .gitignore, so it needs its own entry.
+      "public/vite-assets/**",
       "node_modules/**",
       "eslint.config.js",
       // Sprockets-era ActiveAdmin script; lives outside the Vite world.
