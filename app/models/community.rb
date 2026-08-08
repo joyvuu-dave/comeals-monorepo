@@ -205,14 +205,6 @@ class Community < ApplicationRecord
     ((mr_count + g_count).to_f / meal_count).round(1)
   end
 
-  def permanent_meal_days
-    [0, 4]
-  end
-
-  def alternating_meal_days
-    [1, 2]
-  end
-
   def auto_rotation_length
     residents.where('multiplier >= 2').where(can_cook: true).size / 2
   end
@@ -233,51 +225,21 @@ class Community < ApplicationRecord
     end
   end
 
-  def create_next_rotation # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity -- rotation scheduling with date arithmetic and alternating-day logic
+  # Create the next rotation: the next meals_per_rotation dates the schedule
+  # produces, starting the day after the last existing meal (or today).
+  # Which dates those are is entirely MealSchedule's answer — the anchor date
+  # makes the cycle phase arithmetic, so nothing here needs to look at past
+  # meals to know which week of the cycle comes next.
+  def create_next_rotation
     if meals.where(rotation_id: nil).any?
       raise "Currently #{meals.where(rotation_id: nil).count} Meals not assigned to Rotations"
     end
 
     day_after_last_meal = meals.order(:date).last&.date&.tomorrow
-    current_date = day_after_last_meal.nil? ? Time.zone.today : [Time.zone.today, day_after_last_meal].max
+    start = [Time.zone.today, day_after_last_meal].compact.max
+    dates = meal_schedule.upcoming_dates(from: start, count: meals_per_rotation)
 
-    last_alternating_date = meals.where('extract(dow from date) = ?', alternating_meal_days[0])
-                                 .or(
-                                   meals.where('extract(dow from date) = ?', alternating_meal_days[1])
-                                 )
-                                 .order(:date).last&.date
-    if last_alternating_date.nil?
-      day_sym = Date::DAYNAMES[alternating_meal_days.last].downcase.to_sym
-      last_alternating_date = current_date.beginning_of_week(day_sym) - 7
-    end
-
-    current_alternating_day = if last_alternating_date.wday == alternating_meal_days[0]
-                                alternating_meal_days[1]
-                              else
-                                alternating_meal_days[0]
-                              end
-
-    rotation_meals = []
-    until rotation_meals.length == meals_per_rotation
-      is_permanent = permanent_meal_days.include?(current_date.wday)
-      is_alternating = current_date.wday == current_alternating_day &&
-                       current_date.cweek != last_alternating_date.cweek
-      if !Meal.is_holiday?(current_date) && (is_permanent || is_alternating)
-        rotation_meals.push({ date: current_date, community_id: id })
-      end
-
-      if current_date.wday == current_alternating_day && current_date.cweek != last_alternating_date.cweek
-        last_alternating_date = current_date
-        current_alternating_day = if current_alternating_day == alternating_meal_days[0]
-                                    alternating_meal_days[1]
-                                  else
-                                    alternating_meal_days[0]
-                                  end
-      end
-      current_date = current_date.tomorrow
-    end
-
-    rotations.create!(meals_attributes: rotation_meals)
+    rotations.create!(meals_attributes: dates.map { |date| { date: date, community_id: id } })
   end
 
   # Cache key for a specific calendar month. Same format as the Pusher channel

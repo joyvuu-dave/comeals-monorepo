@@ -394,13 +394,86 @@ RSpec.describe Community do
       expect(community.meals.count).to eq(community.meals_per_rotation)
     end
 
-    it 'creates meals only on valid days (Sun, Mon/Tue alternating, Fri)' do
+    it 'creates meals only on days the schedule allows' do
       4.times { create(:resident, community: community, unit: unit, multiplier: 2, can_cook: true) }
 
       community.create_next_rotation
 
+      allowed = community.schedule.flatten.uniq
       wdays = community.meals.pluck(:date).map(&:wday)
-      expect(wdays.all? { |d| [0, 1, 2, 4].include?(d) }).to be true
+      expect(wdays).to all(be_in(allowed))
+    end
+
+    it 'follows a changed schedule on the next run' do
+      community.update!(schedule: [[3]]) # Wednesdays only
+
+      community.create_next_rotation
+
+      expect(community.meals.pluck(:date).map(&:wday)).to all(eq(3))
+    end
+
+    # The dates below are what the old hard-coded algorithm produced for the
+    # same starting state (computed from it before it was deleted). The anchor
+    # matches what the migration backfill derives from the last Monday-or-
+    # Tuesday meal, so this pins "the first rotation generated after deploy
+    # matches what the old code would have created" — including which of the
+    # alternating days comes next.
+    describe 'equivalence with the old algorithm' do
+      include ActiveSupport::Testing::TimeHelpers
+
+      let(:rotation) { create(:rotation, community: community) }
+
+      it 'continues the alternation when the last alternating meal was a Monday' do
+        travel_to Date.new(2026, 8, 7) do
+          create(:meal, community: community, date: Date.new(2026, 8, 3), rotation_id: rotation.id)
+          # Backfill rule: a Monday meal's week is a week-1 week.
+          community.update!(schedule_anchor_date: Date.new(2026, 8, 2))
+
+          community.create_next_rotation
+
+          expect(community.meals.where.not(rotation_id: rotation.id)
+                          .order(:date).pluck(:date)).to eq [
+                            Date.new(2026, 8, 9), Date.new(2026, 8, 11), Date.new(2026, 8, 13),
+                            Date.new(2026, 8, 16), Date.new(2026, 8, 17), Date.new(2026, 8, 20),
+                            Date.new(2026, 8, 23), Date.new(2026, 8, 25), Date.new(2026, 8, 27),
+                            Date.new(2026, 8, 30), Date.new(2026, 8, 31), Date.new(2026, 9, 3)
+                          ]
+        end
+      end
+
+      it 'continues the alternation when the last alternating meal was a Tuesday' do
+        travel_to Date.new(2026, 8, 7) do
+          create(:meal, community: community, date: Date.new(2026, 8, 4), rotation_id: rotation.id)
+          # Backfill rule: a Tuesday meal's week is a week-2 week, so week 1
+          # was the week before.
+          community.update!(schedule_anchor_date: Date.new(2026, 7, 26))
+
+          community.create_next_rotation
+
+          expect(community.meals.where.not(rotation_id: rotation.id)
+                          .order(:date).pluck(:date)).to eq [
+                            Date.new(2026, 8, 9), Date.new(2026, 8, 10), Date.new(2026, 8, 13),
+                            Date.new(2026, 8, 16), Date.new(2026, 8, 18), Date.new(2026, 8, 20),
+                            Date.new(2026, 8, 23), Date.new(2026, 8, 24), Date.new(2026, 8, 27),
+                            Date.new(2026, 8, 30), Date.new(2026, 9, 1), Date.new(2026, 9, 3)
+                          ]
+        end
+      end
+
+      it 'keeps the phase across consecutive rotations' do
+        travel_to Date.new(2026, 8, 7) do
+          community.update!(schedule_anchor_date: Date.new(2026, 8, 2))
+
+          community.create_next_rotation
+          community.create_next_rotation
+
+          # Mondays and Tuesdays must strictly alternate across the rotation
+          # boundary — the old code got this from meal history, the new code
+          # from anchor arithmetic.
+          alternating = community.meals.order(:date).pluck(:date).map(&:wday).select { |d| [1, 2].include?(d) }
+          alternating.each_cons(2) { |a, b| expect(a).not_to eq(b) }
+        end
+      end
     end
 
     it 'raises when unassigned meals exist' do

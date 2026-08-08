@@ -37,8 +37,6 @@ class Meal < ApplicationRecord
        updated_at]
   end
 
-  ALTERNATING_DAYS = [1, 2].freeze
-
   # Attributes frozen once the meal is reconciled. Bills and attendance rows
   # carry their own reconciled guards; this protects the meal row itself.
   # cap feeds max_cost, so editing it would rewrite settled charges; date
@@ -248,39 +246,6 @@ class Meal < ApplicationRecord
         .group(:id)
         .having('COUNT(bills.id) < 2')
         .exists?
-  end
-
-  # *** This method only used during seed generation ***
-  # Typical 3x a week schedule with alternating Mon / Tues
-  def self.create_templates(start_date, end_date, alternating_dinner_day)
-    community = Community.instance
-    count = 0
-    dates = (start_date..end_date).to_a
-
-    dates.each do |date|
-      # Skip holidays
-      next if Meal.is_holiday?(date)
-
-      # Skip days without dinner
-      next unless [0, alternating_dinner_day, 4].any?(date.wday)
-
-      # Flip the alternating dinner day
-      if date.wday == alternating_dinner_day
-        alternating_dinner_day = ALTERNATING_DAYS.find do |val|
-          val != alternating_dinner_day
-        end
-      end
-
-      # Create the meal
-      meal = Meal.new(date: date, community: community)
-      if meal.save
-        count += 1
-      else
-        Rails.logger.debug meal.errors
-      end
-    end
-
-    count
   end
 
   def self.is_holiday?(date)

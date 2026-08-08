@@ -664,41 +664,6 @@ RSpec.describe Meal do
     end
   end
 
-  describe '.create_templates' do
-    before { community } # Community.instance requires the record to exist
-
-    it 'creates meals on Sun/Fri and alternating Mon/Tue' do
-      # 2 weeks: enough to see the alternating pattern
-      start_date = Date.new(2026, 6, 1) # Monday
-      end_date = Date.new(2026, 6, 14) # Sunday
-
-      count = described_class.create_templates(start_date, end_date, 1)
-
-      expect(count).to be > 0
-      dates = described_class.where(community: community).pluck(:date)
-      wdays = dates.map(&:wday)
-      # Should only be Sun(0), Mon(1), Tue(2), or Fri(4)
-      expect(wdays.all? { |d| [0, 1, 2, 4].include?(d) }).to be true
-    end
-
-    it 'skips holidays' do
-      # July 4th 2026 is a Saturday (wday 6), so pick Christmas which is a Friday (wday 5) in 2026
-      # Actually Christmas 2026 is a Friday, wday 5. Let's use New Year's Day 2026 which is Thursday wday 4...
-      # Actually Jan 1 2026 is Thursday. July 4 2026 is Saturday. Neither falls on our meal days.
-      # Use a range that includes Thanksgiving 2026 (Nov 26, Thursday) — not a meal day.
-      # Let's just verify the count doesn't include any holiday dates
-      start_date = Date.new(2026, 12, 20)
-      end_date = Date.new(2027, 1, 5)
-
-      described_class.create_templates(start_date, end_date, 1)
-
-      dates = described_class.where(community: community).pluck(:date)
-      dates.each do |d|
-        expect(described_class.is_holiday?(d)).to be(false), "Created a meal on holiday: #{d}"
-      end
-    end
-  end
-
   # ---------------------------------------------------------------------------
   # Deletion safeguards
   # ---------------------------------------------------------------------------

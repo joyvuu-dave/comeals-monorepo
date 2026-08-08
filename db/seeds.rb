@@ -73,7 +73,9 @@ Resident.where(multiplier: 2).first.update!(email: 'bowen@email.com', name: 'Bow
 Rails.logger.debug { "#{community.residents.count} Residents created" }
 
 # Meals (will be reconciled)
-Meal.create_templates(26.weeks.ago.to_date, 8.weeks.ago.to_date, 0)
+community.meal_schedule.dates_between(26.weeks.ago.to_date, 8.weeks.ago.to_date).each do |date|
+  Meal.create!(date: date, community: community)
+end
 
 Rails.logger.debug { "#{community.meals.count} Meals created" }
 
@@ -148,7 +150,9 @@ Reconciliation.create!(community: community, date: Time.zone.today, end_date: 8.
 Rails.logger.debug { "#{community.reconciliations.count} Reconciliation created" }
 
 # Meals (will not be reconciled)
-Meal.create_templates(7.weeks.ago.to_date, 26.weeks.from_now.to_date, 0)
+community.meal_schedule.dates_between(7.weeks.ago.to_date, 26.weeks.from_now.to_date).each do |date|
+  Meal.create!(date: date, community: community)
+end
 
 # MealResidents & Guests for the unreconciled batch. Skip reconciled meals
 # because MealResident/Guest enforce immutability via before_save callbacks
