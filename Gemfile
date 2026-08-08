@@ -94,6 +94,9 @@ group :development do
   gem 'bullet'
   gem 'foreman'
   gem 'rack-mini-profiler'
+  # Only bin/check runs it, so it has no reason to be in the :test
+  # group that CI installs.
+  gem 'rubycritic', require: false
   gem 'rufus-scheduler', '~> 3.9'
   gem 'stackprof' # flamegraph support for rack-mini-profiler
   gem 'web-console', '>= 3.3.0'

@@ -131,6 +131,44 @@ check_rubocop() {
   fi
 }
 
+# The quality gate: rubycritic scores app and lib from complexity
+# (flog), duplication (flay), and smells (reek), one cost per file,
+# and the score is 100 minus 6.25 times the average cost. The minimum
+# of 80 means "the codebase's average stays near where it was when the
+# gate was added" — the score was 81.97 on 2026-08-07, so there is
+# about a 2-point buffer. Note that reek and flog run with their
+# defaults, a stricter rulebook than .rubocop.yml's tuned Metrics
+# section, so a method rubocop deliberately exempts still counts
+# against the average here. That is acceptable for a whole-codebase
+# average, and it is why the minimum sits below the current score
+# instead of at it.
+check_rubycritic() {
+  step "RubyCritic"
+
+  local output exit_code=0
+  output=$(bundle exec rubycritic app lib --no-browser --format console --minimum-score 80 2>&1) || exit_code=$?
+
+  # A pass prints "Score: 81.97"; a failure prints "Score (78.3) is
+  # below the minimum 80.0"; a crash prints neither.
+  local score
+  score=$(echo "$output" | grep -oE 'Score:? \(?[0-9]+(\.[0-9]+)?' | grep -oE '[0-9]+(\.[0-9]+)?' | head -1)
+
+  if [ "$exit_code" -eq 0 ]; then
+    pass "Score: $score (minimum: 80)"
+    record "RubyCritic" "PASS" "Score: $score"
+  elif [ -n "$score" ]; then
+    fail "Score: $score — below the minimum of 80"
+    # The worst-rated files, from the console report's "ModuleName:"
+    # then "  Rating: F" shape.
+    echo "$output" | grep -B1 -E '^  Rating: +[DF]' | head -12
+    record "RubyCritic" "FAIL" "Score: $score (minimum: 80)"
+  else
+    fail "rubycritic produced no score (it may have crashed)"
+    echo "$output" | tail -10
+    record "RubyCritic" "FAIL" "no score produced"
+  fi
+}
+
 check_brakeman() {
   step "Brakeman"
 
@@ -438,6 +476,7 @@ main() {
 
   # Static analysis
   check_rubocop
+  check_rubycritic
   check_brakeman
   check_eslint
   check_typecheck
