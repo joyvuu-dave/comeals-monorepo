@@ -214,12 +214,6 @@ class Resident < ApplicationRecord
     resident_balance&.amount || BigDecimal('0')
   end
 
-  def meals_attended
-    return 0 if Meal.unreconciled.none?
-
-    meal_residents.joins(:meal).where({ meals: { reconciliation_id: nil } }).count
-  end
-
   private
 
   def invalidate_calendar_cache_if_birthday_changed

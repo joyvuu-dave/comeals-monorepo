@@ -48,16 +48,6 @@ class Unit < ApplicationRecord
     residents.reduce(BigDecimal('0')) { |sum, resident| sum + resident.balance }
   end
 
-  def meals_cooked
-    return 0 if Meal.unreconciled.none?
-
-    residents.reduce(0) { |sum, resident| sum + resident.bills.joins(:meal).merge(Meal.unreconciled).count }
-  end
-
-  def number_of_occupants
-    residents.count
-  end
-
   private
 
   # Notify connected clients that the community hosts list may have changed.

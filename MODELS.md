@@ -83,8 +83,6 @@ Unit ---< Resident
 **Behavior:**
 
 - `balance` -- sum of all residents' cached balances
-- `meals_cooked` -- count of cooking slots across all residents for unreconciled meals
-- `number_of_occupants` -- how many residents the unit has
 
 **Deletion:** a unit with residents refuses destroy. There is no `active` flag
 on units — to retire one, retire its residents, and it drops out of the hosts

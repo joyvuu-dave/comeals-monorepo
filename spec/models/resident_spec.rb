@@ -508,24 +508,6 @@ RSpec.describe Resident do
     end
   end
 
-  describe '#meals_attended' do
-    it 'counts only unreconciled meals' do
-      resident = create(:resident, community: community, unit: unit, multiplier: 2)
-      reconciliation = create(:reconciliation, community: community)
-
-      # Build the meal_resident first, then reconcile the meal — MealResident's
-      # before_save now rejects any save when meal.reconciled?.
-      reconciled_meal = create(:meal, community: community)
-      create(:meal_resident, meal: reconciled_meal, resident: resident, community: community)
-      reconciled_meal.update_columns(reconciliation_id: reconciliation.id)
-
-      unreconciled_meal = create(:meal, community: community)
-      create(:meal_resident, meal: unreconciled_meal, resident: resident, community: community)
-
-      expect(resident.meals_attended).to eq(1)
-    end
-  end
-
   # ---------------------------------------------------------------------------
   # Deletion safeguards
   # ---------------------------------------------------------------------------

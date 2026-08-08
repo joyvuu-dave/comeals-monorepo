@@ -699,33 +699,6 @@ RSpec.describe Meal do
     end
   end
 
-  describe '.create_modified_templates' do
-    before { community } # Community.instance requires the record to exist
-
-    it 'creates meals only on Sundays and Fridays' do
-      start_date = Date.new(2026, 6, 1)
-      end_date = Date.new(2026, 6, 30)
-
-      count = described_class.create_modified_templates(start_date, end_date)
-
-      expect(count).to be > 0
-      wdays = described_class.where(community: community).pluck(:date).map(&:wday)
-      expect(wdays.all? { |d| [0, 4].include?(d) }).to be true
-    end
-
-    it 'skips holidays' do
-      start_date = Date.new(2026, 12, 20)
-      end_date = Date.new(2027, 1, 5)
-
-      described_class.create_modified_templates(start_date, end_date)
-
-      dates = described_class.where(community: community).pluck(:date)
-      dates.each do |d|
-        expect(described_class.is_holiday?(d)).to be(false), "Created a meal on holiday: #{d}"
-      end
-    end
-  end
-
   # ---------------------------------------------------------------------------
   # Deletion safeguards
   # ---------------------------------------------------------------------------

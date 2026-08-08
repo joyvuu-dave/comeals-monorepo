@@ -54,53 +54,6 @@ RSpec.describe Unit do
     end
   end
 
-  describe '#meals_cooked' do
-    it 'returns 0 when there are no unreconciled meals' do
-      expect(unit.meals_cooked).to eq(0)
-    end
-
-    it 'counts bills for unreconciled meals across all unit residents' do
-      meal_a = create(:meal, community: community)
-      meal_b = create(:meal, community: community)
-      resident_a = create(:resident, community: community, unit: unit)
-      resident_b = create(:resident, community: community, unit: unit)
-
-      create(:bill, meal: meal_a, resident: resident_a, community: community, amount: BigDecimal('50'))
-      create(:bill, meal: meal_b, resident: resident_b, community: community, amount: BigDecimal('30'))
-
-      expect(unit.meals_cooked).to eq(2)
-    end
-
-    it 'does not count bills for reconciled meals' do
-      reconciliation = create(:reconciliation, community: community)
-      reconciled_meal = create(:meal, community: community)
-      unreconciled_meal = create(:meal, community: community)
-      resident = create(:resident, community: community, unit: unit)
-
-      create(:bill, meal: reconciled_meal, resident: resident, community: community,
-                    amount: BigDecimal('50'))
-      create(:bill, meal: unreconciled_meal, resident: resident, community: community,
-                    amount: BigDecimal('30'))
-      reconciled_meal.update_column(:reconciliation_id, reconciliation.id)
-
-      expect(unit.meals_cooked).to eq(1)
-    end
-  end
-
-  describe '#number_of_occupants' do
-    it 'returns the residents_count' do
-      create(:resident, community: community, unit: unit)
-      create(:resident, community: community, unit: unit)
-      unit.reload
-
-      expect(unit.number_of_occupants).to eq(2)
-    end
-
-    it 'returns 0 when the unit has no residents' do
-      expect(unit.number_of_occupants).to eq(0)
-    end
-  end
-
   # ---------------------------------------------------------------------------
   # Deletion safeguards
   # ---------------------------------------------------------------------------
