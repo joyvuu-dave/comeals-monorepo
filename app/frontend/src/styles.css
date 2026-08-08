@@ -437,6 +437,17 @@ Offline Indicator
 }
 
 /*
+react-big-calendar's default today tint (#eaf6ff) is pale enough to
+miss when scanning the month. A slightly deeper tint plus a thin blue
+ring inside the cell makes today findable at a glance without
+competing with the event colors.
+*/
+.rbc-today {
+  background-color: #dcedfb;
+  box-shadow: inset 0 0 0 2px #5a9fd6;
+}
+
+/*
 react-big-calendar's default gives other-month day numbers #999 text on
 an #e6e6e6 cell — 2.3:1 contrast. WCAG AA (the Lighthouse check) needs
 4.5:1; #666 gives 4.6:1 and still reads as muted.
