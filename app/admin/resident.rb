@@ -77,8 +77,7 @@ ActiveAdmin.register Resident do
           link_to meal.date, admin_meal_path(meal)
         end
         column 'Unit Cost' do |meal|
-          summary = MealCostSummary.for(meal)
-          number_to_currency(summary.unit_cost) if summary && !summary.unit_cost.zero?
+          meal_cost_cell(meal, :unit_cost)
         end
       end
       table_for resident.bills.all do
@@ -89,19 +88,17 @@ ActiveAdmin.register Resident do
           number_to_currency(bill.amount) unless bill.amount.zero?
         end
       end
-      table_for resident.guests.all do
+      # Preloads are what MealCostSummary's header asks of callers that
+      # show many meals — same list as the meals table above.
+      table_for resident.guests.includes(meal: %i[bills meal_residents guests meal_charges]) do
         column 'Meal' do |guest|
           link_to guest.meal.date, admin_meal_path(guest.meal)
         end
         column 'Price Category', :multiplier do |guest|
           price_category_label(guest.multiplier)
         end
-        column 'Meal Date' do |guest|
-          link_to guest.meal.date, admin_meal_path(guest.meal)
-        end
         column 'Unit Cost' do |guest|
-          summary = MealCostSummary.for(guest.meal)
-          number_to_currency(summary.unit_cost) if summary && !summary.unit_cost.zero?
+          meal_cost_cell(guest.meal, :unit_cost)
         end
       end
     end
@@ -139,26 +136,7 @@ ActiveAdmin.register Resident do
           end
 
           lines = (lines_by_reconciliation[reconciliation.id] || []).sort_by { |charge| charge.meal.date }
-          if lines.empty?
-            para 'No line items were recorded for this settlement.'
-          else
-            table_for lines do
-              column('Meal') { |charge| link_to charge.meal.date, admin_meal_path(charge.meal) }
-              column('What') { |charge| MealCharge::KIND_LABELS.fetch(charge.kind) }
-              column('Category') do |charge|
-                price_category_label(charge.multiplier) unless charge.multiplier.nil?
-              end
-              column('Amount') { |charge| charge_amount_tag(charge) }
-              # Only when this table has one: the column answers "why was the
-              # credit smaller than the receipt", and with no capped cook in
-              # the section it would be a blank column with no question.
-              if lines.any?(&:subsidized?)
-                column('Cook spent') do |charge|
-                  number_to_currency(charge.bill_amount) if charge.subsidized?
-                end
-              end
-            end
-          end
+          settlement_lines_table(lines, first_column: :meal)
         end
 
         para 'Credited amounts minus charged amounts come to within one cent of the settled ' \

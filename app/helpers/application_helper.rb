@@ -18,4 +18,16 @@ module ApplicationHelper
 
     "Adult x #{number_with_precision(multiplier.to_f / 2, precision: 1, strip_insignificant_zeros: true)}"
   end
+
+  # A meal cost in an admin table cell: the dollar amount, or blank.
+  # Blank covers two cases on purpose: the value is zero, or the meal
+  # was settled before line items existed and MealCostSummary has
+  # nothing for it. Both mean "no amount to show", not "$0.00".
+  def meal_cost_cell(meal, field)
+    summary = MealCostSummary.for(meal)
+    return if summary.nil?
+
+    value = summary.public_send(field)
+    number_to_currency(value) unless value.zero?
+  end
 end

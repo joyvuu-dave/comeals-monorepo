@@ -71,11 +71,9 @@ ActiveAdmin.register Reconciliation do
           cooks.empty? ? '—' : safe_join(cooks.map { |c| link_to(c.name, admin_resident_path(c)) }, ', ')
         end
         # From the stored charges — what this settlement actually used.
-        # Blank for a settlement from before line items existed.
-        column('Total Cost') do |m|
-          summary = MealCostSummary.for(m)
-          number_to_currency(summary.total_cost) if summary
-        end
+        # Blank for zero or for a settlement from before line items
+        # existed, like every other cost cell (meal_cost_cell).
+        column('Total Cost') { |m| meal_cost_cell(m, :total_cost) }
       end
     end
   end

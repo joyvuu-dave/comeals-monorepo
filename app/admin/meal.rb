@@ -64,12 +64,10 @@ ActiveAdmin.register Meal do
       MealCostSummary.for(meal)&.subsidized
     end
     column :total_cost do |meal|
-      summary = MealCostSummary.for(meal)
-      number_to_currency(summary.total_cost) if summary && !summary.total_cost.zero?
+      meal_cost_cell(meal, :total_cost)
     end
     column :unit_cost do |meal|
-      summary = MealCostSummary.for(meal)
-      number_to_currency(summary.unit_cost) if summary && !summary.unit_cost.zero?
+      meal_cost_cell(meal, :unit_cost)
     end
     column 'Number of Bills', :bills_count
     column :reconciled?, sortable: false
@@ -88,12 +86,10 @@ ActiveAdmin.register Meal do
         MealCostSummary.for(meal)&.subsidized
       end
       row :total_cost do |meal|
-        summary = MealCostSummary.for(meal)
-        number_to_currency(summary.total_cost) if summary && !summary.total_cost.zero?
+        meal_cost_cell(meal, :total_cost)
       end
       row :unit_cost do |meal|
-        summary = MealCostSummary.for(meal)
-        number_to_currency(summary.unit_cost) if summary && !summary.unit_cost.zero?
+        meal_cost_cell(meal, :unit_cost)
       end
       table_for meal.guests.order(:created_at) do
         column 'Guests in Attendance' do |guest|
@@ -147,25 +143,7 @@ ActiveAdmin.register Meal do
       panel 'Settlement line items' do
         lines = meal.meal_charges.includes(:resident)
                     .sort_by { |charge| [charge.kind, charge.resident.name] }
-        if lines.empty?
-          para 'No line items were recorded for this settlement.'
-        else
-          table_for lines do
-            column('Resident') { |charge| link_to charge.resident.name, admin_resident_path(charge.resident) }
-            column('What') { |charge| MealCharge::KIND_LABELS.fetch(charge.kind) }
-            column('Category') do |charge|
-              price_category_label(charge.multiplier) unless charge.multiplier.nil?
-            end
-            column('Amount') { |charge| charge_amount_tag(charge) }
-            # Only when the meal has one — see the matching column on the
-            # resident statement.
-            if lines.any?(&:subsidized?)
-              column('Cook spent') do |charge|
-                number_to_currency(charge.bill_amount) if charge.subsidized?
-              end
-            end
-          end
-        end
+        settlement_lines_table(lines, first_column: :resident)
       end
     end
   end
