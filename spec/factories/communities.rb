@@ -4,17 +4,16 @@
 #
 # Table name: communities
 #
-#  id                   :bigint           not null, primary key
-#  cap                  :decimal(12, 8)
-#  meals_per_rotation   :integer          default(12), not null
-#  name                 :string           not null
-#  schedule             :jsonb            not null
-#  schedule_anchor_date :date             not null
-#  singleton_guard      :integer          default(0), not null
-#  slug                 :string           not null
-#  timezone             :string           not null
-#  created_at           :datetime         not null
-#  updated_at           :datetime         not null
+#  id                 :bigint           not null, primary key
+#  cap                :decimal(12, 8)
+#  meals_per_rotation :integer          default(12), not null
+#  name               :string           not null
+#  schedule           :jsonb            not null
+#  singleton_guard    :integer          default(0), not null
+#  slug               :string           not null
+#  timezone           :string           not null
+#  created_at         :datetime         not null
+#  updated_at         :datetime         not null
 #
 # Indexes
 #

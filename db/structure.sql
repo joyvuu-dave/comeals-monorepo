@@ -469,10 +469,8 @@ CREATE TABLE public.communities (
     updated_at timestamp without time zone NOT NULL,
     schedule jsonb DEFAULT '[[0, 1, 4], [0, 2, 4]]'::jsonb NOT NULL,
     meals_per_rotation integer DEFAULT 12 NOT NULL,
-    schedule_anchor_date date NOT NULL,
     CONSTRAINT communities_cap_positive_or_null CHECK (((cap IS NULL) OR (cap > (0)::numeric))),
     CONSTRAINT communities_meals_per_rotation_range CHECK (((meals_per_rotation >= 1) AND (meals_per_rotation <= 100))),
-    CONSTRAINT communities_schedule_anchor_is_sunday CHECK ((EXTRACT(dow FROM schedule_anchor_date) = (0)::numeric)),
     CONSTRAINT communities_schedule_shape CHECK (public.comeals_valid_meal_schedule(schedule))
 );
 
@@ -2025,6 +2023,7 @@ ALTER TABLE ONLY public.bills
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260808120000'),
 ('20260807140000'),
 ('20260807130000'),
 ('20260807120000'),

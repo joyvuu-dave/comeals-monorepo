@@ -1,8 +1,19 @@
 # frozen_string_literal: true
 
 # The community's meal schedule as a value: a repeating cycle of weeks, each
-# week a set of days (0 = Sunday .. 6 = Saturday), pinned to the calendar by
-# an anchor date that names week 1. Weeks are Sunday-start.
+# week a set of days (0 = Sunday .. 6 = Saturday). Weeks are Sunday-start.
+#
+# The cycle is pinned to the calendar by EPOCH, a fixed Sunday: the week
+# containing EPOCH is week 1, the next week is week 2, and so on around the
+# cycle, in both directions, forever. There is no per-community start date.
+# Which calendar week gets which days is chosen by how the days are arranged
+# across the week rows — moving a day to the other row shifts it by a week —
+# and the admin form's preview shows the resulting dates. The exact value of
+# EPOCH is arbitrary (any fixed Sunday gives some assignment of rows to
+# calendar weeks), but it must never change: existing schedules were arranged
+# against this value, and changing it would silently rephase every multi-week
+# schedule. Migration 20260808120000 rotated stored rows against this exact
+# date.
 #
 # This is the one home for "is this date a meal day". Community's rotation
 # generator, the admin preview, and db/seeds.rb all go through it, so the
@@ -10,10 +21,11 @@
 class MealSchedule
   MAX_WEEKS = 6
   MAX_MEALS_PER_ROTATION = 100
+  EPOCH = Date.new(2000, 1, 2)
 
-  attr_reader :weeks, :anchor_date
+  attr_reader :weeks
 
-  def initialize(weeks:, anchor_date:)
+  def initialize(weeks:)
     # Community validations and the communities_schedule_shape database
     # constraint should make these raises unreachable. They stay because this
     # object must not trust its caller: a schedule with no days would make
@@ -23,7 +35,6 @@ class MealSchedule
     raise ArgumentError, 'schedule has no meal days' if weeks.flatten.empty?
 
     @weeks = weeks
-    @anchor_date = anchor_date.to_date
   end
 
   def cycle_length
@@ -31,12 +42,12 @@ class MealSchedule
   end
 
   def meal_day?(date)
-    # (date - anchor_date) is an exact whole number of days, and Integer#/
-    # floors, so dates before the anchor get the right week too (for example
-    # -3 / 7 is -1, and -1 % 2 is 1 in Ruby). Do not rewrite this as
-    # ((date - anchor_date) / 7).to_i — Rational#to_i truncates toward zero,
-    # which is wrong for dates before the anchor. Pinned by specs.
-    week_index = ((date - anchor_date).to_i / 7) % cycle_length
+    # (date - EPOCH) is an exact whole number of days, and Integer#/ floors,
+    # so dates before the epoch get the right week too (for example -3 / 7
+    # is -1, and -1 % 2 is 1 in Ruby). Do not rewrite this as
+    # ((date - EPOCH) / 7).to_i — Rational#to_i truncates toward zero,
+    # which is wrong for dates before the epoch. Pinned by specs.
+    week_index = ((date - EPOCH).to_i / 7) % cycle_length
     weeks[week_index].include?(date.wday)
   end
 

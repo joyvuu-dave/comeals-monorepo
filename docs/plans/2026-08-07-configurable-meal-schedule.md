@@ -14,6 +14,15 @@ original design for the record, and this list is what actually shipped:
    is week 1. This came out of design discussion: naming the start
    week is easier to understand than a "swap which week is next"
    button, and it answers the same question.
+
+   **Reversed on 2026-08-08.** The label read as a start date, but the
+   field never started or delayed anything — it only set the phase.
+   And the phase is already expressible in the grid: moving a day to
+   the other week row shifts it by a week, and the preview shows the
+   result. So the field was redundant. Week 1 is now pinned by a fixed
+   constant (`MealSchedule::EPOCH`); migration 20260808120000 rotated
+   stored rows so generated dates did not change.
+
 3. **There is no regenerate button.** Saving the schedule changes only
    the config. The nightly task keeps ~6 months of meals generated, so
    the new schedule reaches the calendar when generation passes the

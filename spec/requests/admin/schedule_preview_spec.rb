@@ -16,10 +16,9 @@ RSpec.describe 'Admin schedule preview' do
 
   before { host! 'admin.example.com' }
 
-  def post_preview(schedule:, anchor: '2026-08-02', meals_per_rotation: 12)
+  def post_preview(schedule:, meals_per_rotation: 12)
     post '/communities/schedule_preview',
          params: { community: { schedule: schedule,
-                                schedule_anchor_date: anchor,
                                 meals_per_rotation: meals_per_rotation } }
   end
 
@@ -28,12 +27,12 @@ RSpec.describe 'Admin schedule preview' do
 
     it 'returns the upcoming dates for a draft grid' do
       travel_to Date.new(2026, 8, 7) do
-        post_preview(schedule: { '0' => ['', '0', '1', '4'], '1' => ['', '0', '2', '4'] })
+        post_preview(schedule: { '0' => ['', '0', '2', '4'], '1' => ['', '0', '1', '4'] })
       end
 
       expect(response).to have_http_status(:ok)
-      # 2026-08-02 anchors week 1, so the Tuesday of the following week is
-      # the alternating day — same phase the equivalence specs pin.
+      # Under MealSchedule::EPOCH the week of Aug 9 is a week-1 week, and
+      # week 1 holds Tuesday here — same phase the equivalence specs pin.
       expect(response.body).to include('Sun Aug 9, 2026')
       expect(response.body).to include('Tue Aug 11, 2026')
       expect(response.body).not_to include('Mon Aug 10, 2026')
@@ -41,11 +40,12 @@ RSpec.describe 'Admin schedule preview' do
 
     it 'handles a skip-week grid' do
       travel_to Date.new(2026, 8, 7) do
-        post_preview(schedule: { '0' => ['', '3'], '1' => [''] }, meals_per_rotation: 3)
+        post_preview(schedule: { '0' => [''], '1' => ['', '3'] }, meals_per_rotation: 3)
       end
 
       expect(response).to have_http_status(:ok)
-      # Wednesdays every other week: Aug 5 was week 1, so Aug 19, Sep 2, Sep 16.
+      # Wednesdays every other week, in the week-2 row: the week of Aug 9 is
+      # a week-1 (skip) week, so Aug 19, Sep 2, Sep 16.
       expect(response.body).to include('Wed Aug 19, 2026')
       expect(response.body).to include('Wed Sep 2, 2026')
       expect(response.body).not_to include('Aug 12')
@@ -85,12 +85,10 @@ RSpec.describe 'Admin schedule preview' do
     it 'updates the columns from the form params' do
       patch "/communities/#{community.id}",
             params: { community: { schedule: { '0' => ['', '3'], '1' => [''] },
-                                   schedule_anchor_date: '2026-08-05',
                                    meals_per_rotation: 4 } }
 
       community.reload
       expect(community.schedule).to eq([[3], []])
-      expect(community.schedule_anchor_date).to eq(Date.new(2026, 8, 2)) # normalized to Sunday
       expect(community.meals_per_rotation).to eq(4)
     end
 
@@ -135,7 +133,6 @@ RSpec.describe 'Admin schedule preview' do
       post '/communities/schedule_preview',
            params: { token: 'test-token',
                      community: { schedule: { '0' => ['', '0'] },
-                                  schedule_anchor_date: '2026-08-02',
                                   meals_per_rotation: 12 } }
 
       expect(response).not_to have_http_status(:ok)
