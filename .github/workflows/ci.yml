@@ -72,11 +72,32 @@ jobs:
 
   node-e2e-tests:
     runs-on: ubuntu-latest
+    # The admin Playwright project boots a real Rails server
+    # (tests/admin/server.sh), so this job needs Ruby and Postgres in
+    # addition to Node. The server script creates and seeds its own
+    # comeals_admin_e2e database, so no schema-load step is needed here.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       VITE_PUSHER_KEY: "test-key-for-ci"
       VITE_PUSHER_CLUSTER: "us2"
+      ADMIN_E2E_DATABASE_URL: postgres://postgres:postgres@localhost:5432/comeals_admin_e2e
     steps:
       - uses: actions/checkout@v6
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
       - uses: actions/setup-node@v6
         with:
           node-version: 24

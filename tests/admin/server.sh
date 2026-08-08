@@ -9,7 +9,10 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 export RAILS_ENV=test
-export DATABASE_URL=postgres:///comeals_admin_e2e
+# Local runs use a socket connection as the current OS user. CI sets
+# ADMIN_E2E_DATABASE_URL because its Postgres is a TCP service with a
+# password. Both point at comeals_admin_e2e, never comeals_test.
+export DATABASE_URL="${ADMIN_E2E_DATABASE_URL:-postgres:///comeals_admin_e2e}"
 
 bundle exec rails db:prepare
 bundle exec rails runner tests/admin/seed.rb
