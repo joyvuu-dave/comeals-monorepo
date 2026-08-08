@@ -118,6 +118,13 @@ jobs:
 
   visual-tests:
     runs-on: ubuntu-latest
+    env:
+      # Placeholders, like the other jobs: the build throws on a missing
+      # Pusher key, and the visual tests fail on any page error. Locally
+      # these come from .env; CI has no .env. bin/visual-linux forwards
+      # them into the container.
+      VITE_PUSHER_KEY: "test-key-for-ci"
+      VITE_PUSHER_CLUSTER: "us2"
     steps:
       - uses: actions/checkout@v6
       # bin/visual-linux runs the visual suite inside the official

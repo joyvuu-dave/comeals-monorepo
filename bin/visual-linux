@@ -32,8 +32,15 @@ VERSION=$(node -p "require('./package-lock.json').packages['node_modules/@playwr
 IMAGE="mcr.microsoft.com/playwright:v${VERSION}-noble"
 
 echo "Running the visual suite in ${IMAGE}..."
+# The two VITE variables pass through when set (CI sets placeholders).
+# Locally they are usually unset here and the build reads .env instead,
+# which is mounted with the rest of the repo. Without a key the app
+# throws "You must pass your app key when you instantiate Pusher",
+# and every test fails on that page error before comparing pixels.
 docker run --rm \
   --ipc=host \
+  -e VITE_PUSHER_KEY \
+  -e VITE_PUSHER_CLUSTER \
   -v "$PWD":/work \
   -v comeals-playwright-modules:/work/node_modules \
   -w /work \
