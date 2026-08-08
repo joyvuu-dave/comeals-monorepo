@@ -4,17 +4,16 @@
 #
 # Table name: communities
 #
-#  id                   :bigint           not null, primary key
-#  cap                  :decimal(12, 8)
-#  meals_per_rotation   :integer          default(12), not null
-#  name                 :string           not null
-#  schedule             :jsonb            not null
-#  schedule_anchor_date :date             not null
-#  singleton_guard      :integer          default(0), not null
-#  slug                 :string           not null
-#  timezone             :string           not null
-#  created_at           :datetime         not null
-#  updated_at           :datetime         not null
+#  id                 :bigint           not null, primary key
+#  cap                :decimal(12, 8)
+#  meals_per_rotation :integer          default(12), not null
+#  name               :string           not null
+#  schedule           :jsonb            not null
+#  singleton_guard    :integer          default(0), not null
+#  slug               :string           not null
+#  timezone           :string           not null
+#  created_at         :datetime         not null
+#  updated_at         :datetime         not null
 #
 # Indexes
 #
@@ -326,33 +325,15 @@ RSpec.describe Community do
       end
     end
 
-    it 'normalizes the anchor to the Sunday of its week' do
-      community.schedule_anchor_date = Date.new(2026, 8, 5) # a Wednesday
-      expect(community).to be_valid
-      expect(community.schedule_anchor_date).to eq(Date.new(2026, 8, 2))
-    end
-
-    it 'requires an anchor on an existing record' do
-      community.schedule_anchor_date = nil
-      expect(community).not_to be_valid
-    end
-
-    it 'defaults the anchor to the current week on create' do
-      fresh = described_class.new(name: 'Fresh', timezone: 'America/Los_Angeles')
-      fresh.valid?
-      expect(fresh.schedule_anchor_date).to eq(Time.zone.today.beginning_of_week(:sunday))
-    end
-
     it 'saves without raising instead of hitting the database constraint' do
       expect { community.update(schedule: [[], []]) }.not_to raise_error
       expect(community.reload.schedule).to eq([[0, 1, 4], [0, 2, 4]])
     end
 
-    it '#meal_schedule wraps the columns' do
+    it '#meal_schedule wraps the schedule column' do
       schedule = community.meal_schedule
       expect(schedule).to be_a(MealSchedule)
       expect(schedule.weeks).to eq(community.schedule)
-      expect(schedule.anchor_date).to eq(community.schedule_anchor_date)
     end
   end
 
@@ -413,11 +394,13 @@ RSpec.describe Community do
     end
 
     # The dates below are what the old hard-coded algorithm produced for the
-    # same starting state (computed from it before it was deleted). The anchor
-    # matches what the migration backfill derives from the last Monday-or-
-    # Tuesday meal, so this pins "the first rotation generated after deploy
-    # matches what the old code would have created" — including which of the
-    # alternating days comes next.
+    # same starting state (computed from it before it was deleted). The row
+    # arrangement matches what migration 20260808120000 produces when it
+    # rotates a schedule into epoch phase, so this pins "the first rotation
+    # generated after deploy matches what the old code would have created" —
+    # including which of the alternating days comes next. The week of Sunday
+    # 2026-08-02 is a week-2 week under MealSchedule::EPOCH, so the row that
+    # holds that week's alternating day is the second row.
     describe 'equivalence with the old algorithm' do
       include ActiveSupport::Testing::TimeHelpers
 
@@ -426,8 +409,9 @@ RSpec.describe Community do
       it 'continues the alternation when the last alternating meal was a Monday' do
         travel_to Date.new(2026, 8, 7) do
           create(:meal, community: community, date: Date.new(2026, 8, 3), rotation_id: rotation.id)
-          # Backfill rule: a Monday meal's week is a week-1 week.
-          community.update!(schedule_anchor_date: Date.new(2026, 8, 2))
+          # The last alternating meal, Monday 2026-08-03, is in the week of
+          # 2026-08-02 — a week-2 week — so Monday goes in the second row.
+          community.update!(schedule: [[0, 2, 4], [0, 1, 4]])
 
           community.create_next_rotation
 
@@ -444,9 +428,9 @@ RSpec.describe Community do
       it 'continues the alternation when the last alternating meal was a Tuesday' do
         travel_to Date.new(2026, 8, 7) do
           create(:meal, community: community, date: Date.new(2026, 8, 4), rotation_id: rotation.id)
-          # Backfill rule: a Tuesday meal's week is a week-2 week, so week 1
-          # was the week before.
-          community.update!(schedule_anchor_date: Date.new(2026, 7, 26))
+          # The last alternating meal, Tuesday 2026-08-04, is in the week of
+          # 2026-08-02 — a week-2 week — so Tuesday goes in the second row.
+          community.update!(schedule: [[0, 1, 4], [0, 2, 4]])
 
           community.create_next_rotation
 
@@ -462,14 +446,12 @@ RSpec.describe Community do
 
       it 'keeps the phase across consecutive rotations' do
         travel_to Date.new(2026, 8, 7) do
-          community.update!(schedule_anchor_date: Date.new(2026, 8, 2))
-
           community.create_next_rotation
           community.create_next_rotation
 
           # Mondays and Tuesdays must strictly alternate across the rotation
           # boundary — the old code got this from meal history, the new code
-          # from anchor arithmetic.
+          # from epoch arithmetic.
           alternating = community.meals.order(:date).pluck(:date).map(&:wday).select { |d| [1, 2].include?(d) }
           alternating.each_cons(2) { |a, b| expect(a).not_to eq(b) }
         end
