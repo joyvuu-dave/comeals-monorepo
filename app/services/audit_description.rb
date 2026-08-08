@@ -29,6 +29,17 @@ class AuditDescription
     ResidentNameShortener.short(name)
   end
 
+  # The shortened resident name, or 'unknown' when the resident is gone
+  # and the audit trail cannot recover them.
+  def name_or_unknown(resident)
+    resident.present? ? short_name(resident.name) : 'unknown'
+  end
+
+  # What we say about a change no branch above recognized.
+  def fallback_description(audit)
+    "#{audit.auditable_type}, #{audit.action}"
+  end
+
   # The resident an audit row was originally about, recovered from the
   # row's own create audit — used when the record itself is gone.
   def resident_from_audit_trail(auditable_type, auditable_id)
@@ -52,7 +63,7 @@ class AuditDescription
         return 'Meal closed' if changes['closed'][1] == true
         return 'Meal opened' if changes['closed'][0] == true
 
-        return "#{audit.auditable_type}, #{audit.action}"
+        return fallback_description(audit)
       end
 
       # Meal Description Updated
@@ -73,7 +84,7 @@ class AuditDescription
         return "Extras count increased by #{final - initial}" if final > initial
 
         # Extras count decreased
-        return "Extras count decreasesd by #{initial - final}" if initial > final
+        return "Extras count decreased by #{initial - final}" if initial > final
 
         # Shouldn't happen?
         return 'Extras count set'
@@ -83,18 +94,17 @@ class AuditDescription
       return 'Meal assigned to a rotation' if changes['rotation_id'].present?
 
       # Other
-      return "#{audit.auditable_type}, #{audit.action}"
+      return fallback_description(audit)
     end
 
-    "Meal, #{audit.action}" # Shouldn't happen?
+    fallback_description(audit) # Shouldn't happen?
   end
 
   def describe_bill(audit) # rubocop:disable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity, Metrics/MethodLength --audit change parsing with many attribute branches
     changes = audit.audited_changes
 
     if %w[create destroy].include?(audit.action)
-      resident = Resident.find_by(id: changes['resident_id'])
-      name = resident.present? ? short_name(resident.name) : 'unknown'
+      name = name_or_unknown(Resident.find_by(id: changes['resident_id']))
       return "#{name} added as cook" if audit.action == 'create'
 
       return "#{name} removed as cook"
@@ -104,8 +114,7 @@ class AuditDescription
     cook_name = if bill&.resident.present?
                   short_name(bill.resident.name)
                 else
-                  resident = resident_from_audit_trail('Bill', audit.auditable_id)
-                  resident.present? ? short_name(resident.name) : 'unknown'
+                  name_or_unknown(resident_from_audit_trail('Bill', audit.auditable_id))
                 end
 
     if changes['amount'].nil?
@@ -127,7 +136,7 @@ class AuditDescription
       return msg
     end
 
-    "#{audit.auditable_type}, #{audit.action}"
+    fallback_description(audit)
   end
 
   def describe_meal_resident(audit) # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity --audit change parsing with many attribute branches
@@ -139,7 +148,7 @@ class AuditDescription
                  Resident.find_by(id: changes['resident_id'])
                end
 
-    name = resident.present? ? short_name(resident.name) : 'unknown'
+    name = name_or_unknown(resident)
 
     return "#{name} added" if audit.action == 'create'
     return "#{name} removed" if audit.action == 'destroy'
@@ -149,41 +158,33 @@ class AuditDescription
         return "#{name} marked late" if changes['late'][0] == false && changes['late'][1] == true
         return "#{name} marked not late" if changes['late'][0] == true && changes['late'][1] == false
 
-        return "#{audit.auditable_type}, #{audit.action}"
+        return fallback_description(audit)
       end
 
       if changes['vegetarian'].instance_of?(Array)
         return "#{name} marked veg" if changes['vegetarian'][0] == false && changes['vegetarian'][1] == true
         return "#{name} marked not veg" if changes['vegetarian'][0] == true && changes['vegetarian'][1] == false
 
-        return "#{audit.auditable_type}, #{audit.action}"
+        return fallback_description(audit)
       end
 
-      return "#{audit.auditable_type}, #{audit.action}"
+      return fallback_description(audit)
     end
 
-    "#{audit.auditable_type}, #{audit.action}"
+    fallback_description(audit)
   end
 
   def describe_guest(audit)
     changes = audit.audited_changes
-    resident = Resident.find_by(id: changes['resident_id'])
-    name = resident.present? ? short_name(resident.name) : 'unknown'
+    name = name_or_unknown(Resident.find_by(id: changes['resident_id']))
 
-    if audit.action == 'create'
-      return "Veg guest of #{name} added" if changes['vegetarian'] == true
-      return "Omnivore guest of #{name} added" if changes['vegetarian'] == false
+    verb = { 'create' => 'added', 'destroy' => 'removed' }[audit.action]
+    return fallback_description(audit) if verb.nil?
 
-      return "#{audit.auditable_type}, #{audit.action}"
+    case changes['vegetarian']
+    when true then "Veg guest of #{name} #{verb}"
+    when false then "Omnivore guest of #{name} #{verb}"
+    else fallback_description(audit)
     end
-
-    if audit.action == 'destroy'
-      return "Veg guest of #{name} removed" if changes['vegetarian'] == true
-      return "Omnivore guest of #{name} removed" if changes['vegetarian'] == false
-
-      return "#{audit.auditable_type}, #{audit.action}"
-    end
-
-    "#{audit.auditable_type}, #{audit.action}"
   end
 end
