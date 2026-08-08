@@ -11,26 +11,44 @@ echo "  ActiveAdmin:   http://admin.lvh.me:3000/login"
 echo "  Mail inbox:    http://localhost:3000/letter_opener"
 echo ""
 
-# A leftover server from an earlier run makes Rails refuse to boot.
-# If the pid file points at a live puma for this repo, stop it first.
-# If it points at a dead process, just remove the file.
-pid_file="tmp/pids/server.pid"
-if [ -f "$pid_file" ]; then
-  pid="$(cat "$pid_file")"
-  if ps -p "$pid" -o command= | grep -q "puma.*comeals-monorepo"; then
-    echo "  Stopping leftover server (pid $pid)..."
+# A leftover dev session from an earlier run holds our ports: Rails
+# refuses to boot, and Vite silently moves to another port. The pid
+# file is not a reliable sign of this (a killed terminal leaves the
+# processes alive but can lose the file), so check the ports directly.
+# If the listener is ours, stop it. If it belongs to something else,
+# say so and print the command to stop it.
+free_port() {
+  local port="$1" name="$2" pid
+  pid="$(lsof -nP -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null | head -n 1 || true)"
+  [ -n "$pid" ] || return 0
+  if ps -p "$pid" -o command= | grep -q "comeals-monorepo"; then
+    echo "  Stopping leftover $name (pid $pid) on port $port..."
+    # If it was started by foreman, foreman sees the child die and
+    # stops the rest of that session too.
     kill "$pid" 2>/dev/null || true
-    # Wait up to 5 seconds for it to exit.
-    for _ in 1 2 3 4 5; do
-      ps -p "$pid" > /dev/null || break
-      sleep 1
+    # Wait up to 5 seconds for the port to free.
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+      [ -n "$(lsof -nP -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null)" ] || return 0
+      sleep 0.5
     done
-    if ps -p "$pid" > /dev/null; then
-      echo "  Server (pid $pid) did not stop. Stop it yourself, then rerun bin/dev." >&2
-      exit 1
-    fi
+    echo "  Port $port is still busy. Stop pid $pid yourself, then rerun bin/dev:" >&2
+    echo "    kill -9 $pid" >&2
+    exit 1
+  else
+    echo "  Port $port is used by a program that is not part of this repo:" >&2
+    ps -p "$pid" -o pid=,command= >&2
+    echo "  Stop it yourself if you want the port, then rerun bin/dev:" >&2
+    echo "    kill $pid" >&2
+    exit 1
   fi
-  rm -f "$pid_file"
-fi
+}
+
+free_port 3000 "Rails server"
+free_port 3036 "Vite server"
+
+# Any comeals server is gone now, so a pid file left behind is stale.
+# Rails refuses to boot if the pid in it happens to match any live
+# process, so remove it.
+rm -f tmp/pids/server.pid
 
 exec bundle exec foreman start -f Procfile.dev "$@"
