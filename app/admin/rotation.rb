@@ -10,6 +10,21 @@ ActiveAdmin.register Rotation do
   # ACTIONS
   actions :all
 
+  controller do
+    # Deleting a rotation is how a schedule change reaches the calendar
+    # early: delete upcoming rotations newest-first and the nightly task
+    # recreates them under the current schedule. The model guards refuse
+    # anything unsafe; show their reason instead of a silent bounce.
+    def destroy
+      destroy! do |_success, failure|
+        failure.html do
+          flash[:alert] = resource.errors.full_messages.to_sentence
+          redirect_to collection_path
+        end
+      end
+    end
+  end
+
   # INDEX
   index do
     column :id

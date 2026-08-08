@@ -89,8 +89,19 @@ RSpec.describe SuperuserAdapter do
     end
 
     it 'may write on everything that is not money or governance' do
-      expect_writes(admin, [Resident, Unit, Event, Rotation, CommonHouseReservation, GuestRoomReservation],
+      expect_writes(admin, [Resident, Unit, Event, CommonHouseReservation, GuestRoomReservation],
                     allowed: true)
+    end
+
+    # Rotations are open except destroy: destroying a rotation deletes its
+    # meals (dependent: :destroy), and Meal writes are superuser-only, so the
+    # destroy inherits the meal bar.
+    it 'may write rotations but not destroy them' do
+      %i[new create edit update].each do |action|
+        expect(adapter_for(admin).authorized?(action, Rotation)).to be true
+      end
+      expect(adapter_for(admin).authorized?(:destroy, Rotation)).to be false
+      expect(adapter_for(superuser).authorized?(:destroy, Rotation)).to be true
     end
 
     # Editing a resident's price category never reaches back into a settled

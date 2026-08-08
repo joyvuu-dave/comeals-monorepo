@@ -70,6 +70,11 @@ class SuperuserAdapter < ActiveAdmin::AuthorizationAdapter
     return true if READ_ACTIONS.include?(action)
     return true if user&.superuser?
 
+    # Rotations are open to any admin — except destroy. Destroying a rotation
+    # deletes its meals (Rotation's dependent: :destroy), and Meal writes are
+    # superuser-only, so the destroy inherits the meal bar.
+    return false if action == :destroy && model_name(subject) == 'Rotation'
+
     # Any signed-in admin may write, except on the restricted models. A nil or
     # unrecognized subject fails closed: if we cannot tell what is being
     # written, we do not let a non-superuser write it.

@@ -33,13 +33,31 @@ class Rotation < ApplicationRecord
   attr_accessor :no_email
 
   belongs_to :community
-  has_many :meals, dependent: :nullify
+  # dependent: :destroy, not :nullify. A rotation that leaves its meals behind
+  # orphans them, and community:create_rotations refuses to run while a meal
+  # has no rotation — so a plain nullify quietly broke the nightly task.
+  # The guards below only let the cascade run when every meal is untouched,
+  # so it can never delete a meal that carries any ledger data.
+  has_many :meals, dependent: :destroy
   has_many :bills, through: :meals
   has_many :cooks, -> { distinct }, through: :bills, source: :resident
   has_many :residents, -> { where(active: true, can_cook: true).where(multiplier: 2..) }, through: :community
 
   before_validation :set_color, on: :create
-  before_destroy :capture_meal_dates_for_cache
+  # All three prepended, for the same reason as Meal's guards (#26): the
+  # has_many above registers its destroy cascade first, so without prepend a
+  # refused destroy could still delete meals inside an enclosing transaction.
+  # prepend inserts at the front, so these run in reverse declaration order:
+  # touched check, then tail check, then the date capture — all before any
+  # meal is deleted.
+  #
+  # Deleting rotations is how an admin applies a schedule change before the
+  # calendar naturally reaches it: delete the upcoming rotations (newest
+  # first) and the nightly task recreates them under the current schedule.
+  # The guards make that path safe; they are not only about mistakes.
+  before_destroy :capture_meal_dates_for_cache, prepend: true
+  before_destroy :reject_destroy_unless_last, prepend: true
+  before_destroy :reject_destroy_if_any_meal_touched, prepend: true
   after_save :set_description
   after_save :set_start_date
   after_commit :set_place_value, on: %i[create destroy]
@@ -140,7 +158,44 @@ class Rotation < ApplicationRecord
     update_column(:new_rotation_notified_at, Time.current) if no_email
   end
 
+  # A meal is "touched" when deleting it would erase something real: it
+  # already happened (or is happening today), it is closed or reconciled, or
+  # anyone signed up, cooked, or brought a guest. A rotation with any touched
+  # meal refuses to die; everything else about it is regenerable data.
+  def touched_meals
+    meals.where(closed: true)
+         .or(meals.where.not(reconciliation_id: nil))
+         .or(meals.where(date: ..Time.zone.today))
+         .or(meals.where(id: Bill.select(:meal_id)))
+         .or(meals.where(id: MealResident.select(:meal_id)))
+         .or(meals.where(id: Guest.select(:meal_id)))
+  end
+
   private
+
+  def reject_destroy_if_any_meal_touched
+    return unless touched_meals.exists?
+
+    errors.add(:base, 'This rotation has meals that already happened, are closed or reconciled, ' \
+                      'or have attendees, cooks, or guests. Only an untouched upcoming rotation ' \
+                      'can be deleted.')
+    throw :abort
+  end
+
+  # Only the last rotation (by meal date) may be deleted. The nightly task
+  # only adds meals after the last existing one, so deleting a rotation in
+  # the middle would leave a hole in the calendar that nothing ever refills.
+  # Deleting newest-first is always possible instead.
+  def reject_destroy_unless_last
+    last_date = meals.maximum(:date)
+    return if last_date.nil?
+    return unless community.meals.exists?(date: (last_date + 1)..)
+
+    errors.add(:base, 'Meals exist after this rotation, and new meals are only ever added after ' \
+                      'the last one — deleting from the middle would leave a permanent hole. ' \
+                      'Delete the newest rotation first.')
+    throw :abort
+  end
 
   def capture_meal_dates_for_cache
     @meal_dates_before_destroy = Meal.where(rotation_id: id).distinct.pluck(:date)

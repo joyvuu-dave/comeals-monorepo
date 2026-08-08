@@ -189,4 +189,63 @@ RSpec.describe Rotation do
       expect(db_val).to be_nil
     end
   end
+
+  # Deleting upcoming rotations is how an admin applies a schedule change
+  # before the calendar naturally reaches it, so these guards are what makes
+  # that path safe — not only mistake protection.
+  describe 'deletion' do
+    let(:unit) { create(:unit, community: community) }
+    let(:resident) { create(:resident, community: community, unit: unit) }
+
+    def rotation_with_meals(*dates)
+      rotation = create(:rotation, community: community, no_email: true)
+      dates.each { |date| create(:meal, community: community, rotation: rotation, date: date) }
+      rotation
+    end
+
+    it 'destroys an untouched upcoming rotation along with its meals' do
+      rotation = rotation_with_meals(Time.zone.today + 10, Time.zone.today + 12)
+
+      expect(rotation.destroy).to be_truthy
+      expect(Meal.count).to eq(0)
+    end
+
+    it 'destroys an empty rotation' do
+      rotation = create(:rotation, community: community, no_email: true)
+
+      expect(rotation.destroy).to be_truthy
+    end
+
+    it 'refuses when a meal has an attendee, and deletes nothing' do
+      rotation = rotation_with_meals(Time.zone.today + 10, Time.zone.today + 12)
+      create(:meal_resident, meal: rotation.meals.first, resident: resident, community: community)
+
+      expect(rotation.destroy).to be false
+      expect(rotation.errors[:base].to_sentence).to include('attendees, cooks, or guests')
+      expect(Meal.count).to eq(2)
+    end
+
+    it 'refuses when a meal has a cook (bill)' do
+      rotation = rotation_with_meals(Time.zone.today + 10)
+      create(:bill, meal: rotation.meals.first, resident: resident, community: community,
+                    amount: BigDecimal('20'))
+
+      expect(rotation.destroy).to be false
+    end
+
+    it 'refuses when a meal already happened' do
+      rotation = rotation_with_meals(Time.zone.today - 1, Time.zone.today + 10)
+
+      expect(rotation.destroy).to be false
+      expect(rotation.errors[:base].to_sentence).to include('already happened')
+    end
+
+    it 'refuses a rotation that is not the last, so the calendar cannot get a hole' do
+      early = rotation_with_meals(Time.zone.today + 10)
+      rotation_with_meals(Time.zone.today + 20)
+
+      expect(early.destroy).to be false
+      expect(early.errors[:base].to_sentence).to include('Delete the newest rotation first')
+    end
+  end
 end
