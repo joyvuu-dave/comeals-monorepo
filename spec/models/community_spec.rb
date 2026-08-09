@@ -274,6 +274,21 @@ RSpec.describe Community do
       expect { community.update(cap: BigDecimal('10000')) }.not_to raise_error
       expect(community.reload.cap).to eq(BigDecimal('4.50'))
     end
+
+    # A cap is typed by a person, so it is whole cents — the same rule
+    # Bill#amount enforces. 2.32481286 can only be a typo.
+    it 'refuses a sub-cent cap' do
+      community.cap = BigDecimal('2.32481286')
+      expect(community).not_to be_valid
+      expect(community.errors[:cap]).to include('must be whole cents')
+    end
+
+    it 'the database refuses a sub-cent cap from writes that skip the model' do
+      community # the lazy let — without a row, update_all updates nothing
+
+      expect { described_class.update_all(cap: BigDecimal('2.32481286')) }
+        .to raise_error(ActiveRecord::StatementInvalid, /communities_cap_whole_cents/)
+    end
   end
 
   describe 'meal schedule config' do
