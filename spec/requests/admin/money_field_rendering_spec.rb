@@ -46,6 +46,37 @@ RSpec.describe 'Admin money field rendering' do
     expect_blank_field('bill_amount')
   end
 
+  # A blank submit casts "" to nil for the decimal column. The re-render
+  # must show the validation message, not crash on the nil (this was a 500:
+  # nil has no #zero?).
+  it 're-renders the new bill form with the error when the amount is blank' do
+    unit = create(:unit, community: community)
+    cook = create(:resident, community: community, unit: unit)
+    meal = create(:meal, community: community)
+
+    post '/bills', params: { bill: { meal_id: meal.id, resident_id: cook.id,
+                                     community_id: community.id, amount: '' } }
+
+    expect(response).to have_http_status(:ok)
+    expect(response.body).to include('is not a number')
+    expect_blank_field('bill_amount')
+  end
+
+  # A sub-cent amount is refused, and the re-rendered field must still show
+  # the typo the error names — not a rounded value that looks valid.
+  it 'echoes a refused sub-cent amount instead of rounding it' do
+    unit = create(:unit, community: community)
+    cook = create(:resident, community: community, unit: unit)
+    meal = create(:meal, community: community)
+    bill = create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('16'))
+
+    patch "/bills/#{bill.id}", params: { bill: { amount: '16.005' } }
+
+    expect(response).to have_http_status(:ok)
+    expect(response.body).to include('must be whole cents')
+    expect(response.body).to include('value="16.005"')
+  end
+
   # The input with this id must exist and carry no value attribute (or an
   # empty one) — a regex because the tag's other attributes vary.
   def expect_blank_field(dom_id)

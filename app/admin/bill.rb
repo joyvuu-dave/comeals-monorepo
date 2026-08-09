@@ -83,14 +83,14 @@ ActiveAdmin.register Bill do
         ["#{r.name} - #{r.unit.name}", r.id]
       }
       # The column is DECIMAL(12,8), so the raw value renders as "16.0" —
-      # format it as the money it is. A new bill's amount is the column
-      # default 0, which renders blank so the cook's real cost must be
-      # typed. (A jQuery line used to clear the zero; its field id went
-      # stale and it silently stopped working.)
+      # render it as money instead (MoneyFieldHelper). A new bill's amount
+      # is the column default 0, which renders blank so the cook's real
+      # cost must be typed. (A jQuery line used to clear the zero; its
+      # field id went stale and it silently stopped working.)
       f.input :amount,
               label: '$',
               input_html: {
-                value: f.object.new_record? && f.object.amount.zero? ? nil : format('%.2f', f.object.amount)
+                value: helpers.money_field_value(f.object.amount, blank_when_zero: f.object.new_record?)
               }
     end
 
