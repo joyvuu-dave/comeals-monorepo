@@ -127,10 +127,13 @@ ActiveAdmin.register Community do
   form do |f|
     f.inputs do
       f.input :name
+      # The column is DECIMAL(12,8), so the raw value renders as "4.5" —
+      # format it as the money it is. Same treatment as Bill's form.
       f.input :cap,
               label: 'Cap ($)',
-              hint: 'Most a meal can cost per multiplier unit. Leave blank for no cap. ' \
-                    'The lowest cap you can set is $0.01.'
+              input_html: { value: f.object.cap && format('%.2f', f.object.cap) },
+              hint: 'Most a meal can cost per multiplier unit, in whole cents. ' \
+                    'Leave blank for no cap. The lowest cap you can set is $0.01.'
       f.input :slug if f.object.persisted?
       f.input :timezone,
               as: :select,

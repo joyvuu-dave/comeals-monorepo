@@ -82,7 +82,16 @@ ActiveAdmin.register Bill do
       f.input :resident_id, as: :select, include_blank: false, label: 'Cook', collection: Resident.includes(:unit).adult.order('units.name ASC').map { |r|
         ["#{r.name} - #{r.unit.name}", r.id]
       }
-      f.input :amount, label: '$'
+      # The column is DECIMAL(12,8), so the raw value renders as "16.0" —
+      # format it as the money it is. A new bill's amount is the column
+      # default 0, which renders blank so the cook's real cost must be
+      # typed. (A jQuery line used to clear the zero; its field id went
+      # stale and it silently stopped working.)
+      f.input :amount,
+              label: '$',
+              input_html: {
+                value: f.object.new_record? && f.object.amount.zero? ? nil : format('%.2f', f.object.amount)
+              }
     end
 
     f.actions

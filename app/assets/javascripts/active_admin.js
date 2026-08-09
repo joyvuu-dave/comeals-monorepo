@@ -13,11 +13,6 @@ $(function () {
     $("#resident_name").focus();
   }
 
-  // Clear bill amount if it's 0, so the cook's real cost must be typed
-  if ($("#bill_amount_decimal").val() === "0.0") {
-    $("#bill_amount_decimal").val("");
-  }
-
   // Default the remember-me checkbox to checked
   $("#admin_user_remember_me").prop("checked", true);
 

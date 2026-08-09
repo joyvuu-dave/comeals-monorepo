@@ -112,6 +112,12 @@ class Community < ApplicationRecord
               message: 'must be $9,999.99 or less'
             },
             allow_nil: true
+  # A cap is a dollar amount a person types, so it is whole cents — the same
+  # rule Bill#amount enforces. Sub-cent math would still settle correctly,
+  # but a sub-cent cap can only be a typo, and typos in money fields are
+  # refused, not stored. Mirrored by the communities_cap_whole_cents CHECK
+  # constraint for writes that skip the model.
+  validate :cap_in_whole_cents
 
   # --- Meal schedule ---
   # A repeating cycle of 1..6 weeks; each week an array of days (0 = Sunday).
@@ -280,6 +286,12 @@ class Community < ApplicationRecord
                .map { |day| day.is_a?(Integer) ? day : Integer(day.to_s, exception: false) }
                .uniq
     days.all?(Integer) ? days.sort : days
+  end
+
+  def cap_in_whole_cents
+    return if cap.nil? || cap == cap.round(2)
+
+    errors.add(:cap, 'must be whole cents')
   end
 
   def schedule_shape
