@@ -30,5 +30,11 @@ export default defineConfig({
       name: "integration",
       use: { browserName: "chromium" },
     },
+    // Same tests under WebKit (Safari's engine) — see the webkit
+    // project in playwright.config.js for why.
+    {
+      name: "integration-webkit",
+      use: { browserName: "webkit" },
+    },
   ],
 });

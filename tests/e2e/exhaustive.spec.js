@@ -125,8 +125,15 @@ test.describe("Exhaustive Coverage", () => {
       expect(dateText).toMatch(/15/);
 
       // The relative date should also appear (e.g., "2 months ago")
-      // It's rendered below the date in the date box component
-      const dateContainer = page.locator('[style*="grid-area: a1"]');
+      // It's rendered below the date in the date box component.
+      // Matched by class, not by [style*="grid-area: a1"]: the style
+      // attribute holds the browser's serialization of the inline
+      // styles, and WebKit expands the grid-area shorthand where
+      // Chromium keeps it, so a style-substring locator only matched
+      // in Chromium.
+      const dateContainer = page.locator(
+        "div.button-border-radius.background-yellow",
+      );
       const containerText = await dateContainer.textContent();
       // Should contain either "Today", "Yesterday", "Tomorrow", or "ago"/"in"
       expect(

@@ -55,6 +55,17 @@ module.exports = defineConfig({
       testDir: "./tests/e2e",
       use: { browserName: "chromium" },
     },
+    // The same suite again under WebKit — Safari's engine. Residents
+    // mostly open this app on phones, and on iPhones every browser is
+    // WebKit underneath. The rendering bugs that reached production
+    // were Safari-only, so WebKit runs everything Chromium runs,
+    // including the visual snapshots (goldens are recorded per
+    // browser: *-webkit-darwin.png / *-webkit-linux.png).
+    {
+      name: "webkit",
+      testDir: "./tests/e2e",
+      use: { browserName: "webkit" },
+    },
     // ActiveAdmin is server-rendered by Rails, so this project talks to a
     // real Rails server (the second webServer below) instead of the vite
     // preview + mocked API the SPA suite uses. admin.lvh.me is mapped to

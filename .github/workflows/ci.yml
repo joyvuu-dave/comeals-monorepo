@@ -107,7 +107,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:e2e
       - uses: actions/upload-artifact@v7
         if: failure()
@@ -171,7 +171,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium webkit
       # Load the schema the same way ruby-test does. On a fresh empty
       # database, db:prepare inside bin/test-integration would instead
       # replay every migration from zero and re-dump structure.sql.

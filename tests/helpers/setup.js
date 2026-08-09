@@ -96,6 +96,11 @@ async function throttleCpu(page) {
   if (!rate || rate <= 1) {
     return;
   }
+  // CDP is Chromium-only; WebKit has no equivalent, so the throttle
+  // hunts its races in Chromium alone.
+  if (page.context().browser()?.browserType().name() !== "chromium") {
+    return;
+  }
   const session = await page.context().newCDPSession(page);
   await session.send("Emulation.setCPUThrottlingRate", { rate });
 }

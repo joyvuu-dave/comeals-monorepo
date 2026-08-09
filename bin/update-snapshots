@@ -18,25 +18,32 @@ cd "$(dirname "$0")/.."
 
 SNAP_DIR=tests/e2e/visual.spec.js-snapshots
 
+BROWSERS=(chromium webkit)
+
 if [ "$#" -gt 0 ]; then
   for name in "$@"; do
-    if ! ls "$SNAP_DIR/$name"-chromium-*.png >/dev/null 2>&1; then
+    if ! ls "$SNAP_DIR/$name"-*.png >/dev/null 2>&1; then
       echo "No golden named '$name'. The goldens are:" >&2
-      ls "$SNAP_DIR" | sed 's/-chromium.*//' | sort -u >&2
+      ls "$SNAP_DIR" | sed -E 's/-(chromium|webkit)-.*//' | sort -u >&2
       exit 1
     fi
-    rm -f "$SNAP_DIR/$name"-chromium-darwin.png \
-          "$SNAP_DIR/$name"-chromium-linux.png
+    for browser in "${BROWSERS[@]}"; do
+      rm -f "$SNAP_DIR/$name-$browser"-darwin.png \
+            "$SNAP_DIR/$name-$browser"-linux.png
+    done
     echo "Deleted goldens for: $name"
   done
 else
-  rm -f "$SNAP_DIR"/*-chromium-darwin.png "$SNAP_DIR"/*-chromium-linux.png
+  for browser in "${BROWSERS[@]}"; do
+    rm -f "$SNAP_DIR"/*-"$browser"-darwin.png "$SNAP_DIR"/*-"$browser"-linux.png
+  done
   echo "Deleted all goldens."
 fi
 
 echo
-echo "Regenerating macOS goldens..."
-npx playwright test tests/e2e/visual.spec.js --update-snapshots --project=chromium
+echo "Regenerating macOS goldens (chromium + webkit)..."
+npx playwright test tests/e2e/visual.spec.js --update-snapshots \
+  --project=chromium --project=webkit
 
 echo
 echo "Regenerating Linux goldens (Docker)..."
