@@ -18,6 +18,20 @@ RSpec.describe MealSchedule do
     end
   end
 
+  describe '#week_index' do
+    it 'counts weeks from the epoch around the cycle' do
+      schedule = described_class.new(weeks: [[0], [1], [2]])
+
+      expect(schedule.week_index(described_class::EPOCH)).to eq 0
+      expect(schedule.week_index(Date.new(2000, 1, 9))).to eq 1
+      expect(schedule.week_index(Date.new(2000, 1, 23))).to eq 0
+      # 2026-08-02 is 1387 weeks after the epoch; 1387 mod 3 is 1.
+      expect(schedule.week_index(Date.new(2026, 8, 2))).to eq 1
+      # Floor division: the week before the epoch is the cycle's last week.
+      expect(schedule.week_index(Date.new(1999, 12, 26))).to eq 2
+    end
+  end
+
   describe '#meal_day?' do
     it 'repeats a 1-week cycle every week' do
       schedule = described_class.new(weeks: [[0, 4]])

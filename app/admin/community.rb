@@ -91,14 +91,25 @@ ActiveAdmin.register Community do
     end
 
     panel 'Meal schedule' do
-      attributes_table_for community do
-        community.schedule.each_with_index do |week, index|
-          row "Week #{index + 1}" do
-            week.empty? ? 'No meals' : week.map { |wday| Date::DAYNAMES[wday] }.join(', ')
+      # Hand-built with attributes_table markup, not attributes_table_for:
+      # its row() titleizes every label through human_attribute_name, which
+      # turns "Week of Aug 2 (this week)" into "Week Of Aug 2 (This Week)".
+      labels = helpers.schedule_week_labels(community.schedule.length)
+      div class: 'attributes_table' do
+        table do
+          community.schedule.each_with_index do |week, index|
+            tr do
+              th labels[index]
+              td week.empty? ? 'No meals' : week.map { |wday| Date::DAYNAMES[wday] }.join(', ')
+            end
+          end
+          tr do
+            th 'Meals per rotation'
+            td community.meals_per_rotation
           end
         end
-        row :meals_per_rotation
       end
+      para helpers.schedule_repeat_note(community.schedule.length)
 
       last_meal_date = community.meals.maximum(:date)
       if last_meal_date
@@ -128,12 +139,17 @@ ActiveAdmin.register Community do
 
     f.inputs 'Meal schedule' do
       # The grid: one row per week of the repeating cycle, one checkbox per
-      # day. Checkbox names are community[schedule][ROW][]; the hidden ""
-      # input per row keeps a fully-unchecked week in the params (the same
-      # trick Rails uses for single checkboxes, applied per row). Behavior
-      # (add/remove week, live preview) lives in active_admin.js.
+      # day. Each row is labeled with the real calendar week it currently
+      # maps to (ScheduleWeekLabelHelper) — never "Week 1", which every
+      # reader takes to mean "starting now". Checkbox names are
+      # community[schedule][ROW][]; the hidden "" input per row keeps a
+      # fully-unchecked week in the params (the same trick Rails uses for
+      # single checkboxes, applied per row). Behavior (add/remove week,
+      # relabeling, live preview) lives in active_admin.js, fed by the data
+      # attributes on the table.
       li class: 'schedule-grid-wrapper' do
-        table id: 'schedule-grid' do
+        week_labels = helpers.schedule_week_labels(f.object.schedule.length)
+        table({ id: 'schedule-grid' }.merge(helpers.schedule_grid_data)) do
           thead do
             tr do
               th ''
@@ -152,14 +168,14 @@ ActiveAdmin.register Community do
                 td class: 'schedule-week-label' do
                   marker = %(<input type="hidden" name="#{field_name}" value="">)
                   text_node marker.html_safe # rubocop:disable Rails/OutputSafety -- built from a generated index, no user input
-                  text_node "Week #{row_index + 1}"
+                  text_node week_labels[row_index]
                 end
                 (0..6).each do |wday|
                   td do
                     checked = week.include?(wday) ? ' checked="checked"' : ''
                     checkbox = %(<input type="checkbox" name="#{field_name}" value="#{wday}" ) +
-                               %(aria-label="Week #{row_index + 1} #{Date::DAYNAMES[wday]}"#{checked}>)
-                    text_node checkbox.html_safe # rubocop:disable Rails/OutputSafety -- built from integers and DAYNAMES, no user input
+                               %(aria-label="#{week_labels[row_index]} #{Date::DAYNAMES[wday]}"#{checked}>)
+                    text_node checkbox.html_safe # rubocop:disable Rails/OutputSafety -- built from generated dates and DAYNAMES, no user input
                   end
                 end
               end
@@ -168,6 +184,8 @@ ActiveAdmin.register Community do
         end
         button 'Add a week', type: 'button', id: 'schedule-add-week'
         button 'Remove last week', type: 'button', id: 'schedule-remove-week'
+        para helpers.schedule_repeat_note(f.object.schedule.length),
+             id: 'schedule-repeat-note'
       end
 
       f.input :meals_per_rotation,
