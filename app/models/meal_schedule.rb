@@ -41,14 +41,19 @@ class MealSchedule
     weeks.length
   end
 
-  def meal_day?(date)
+  # Which week of the cycle (0-based) holds this date. The admin grid uses
+  # this to label its rows with real calendar weeks.
+  def week_index(date)
     # (date - EPOCH) is an exact whole number of days, and Integer#/ floors,
     # so dates before the epoch get the right week too (for example -3 / 7
     # is -1, and -1 % 2 is 1 in Ruby). Do not rewrite this as
     # ((date - EPOCH) / 7).to_i — Rational#to_i truncates toward zero,
     # which is wrong for dates before the epoch. Pinned by specs.
-    week_index = ((date - EPOCH).to_i / 7) % cycle_length
-    weeks[week_index].include?(date.wday)
+    ((date.to_date - EPOCH).to_i / 7) % cycle_length
+  end
+
+  def meal_day?(date)
+    weeks[week_index(date)].include?(date.wday)
   end
 
   # The next `count` meal dates starting at `from`, skipping holidays.

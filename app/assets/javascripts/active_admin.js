@@ -63,33 +63,52 @@ $(function () {
         });
     };
 
-    var renumberWeeks = function () {
-      var $rows = $("#schedule-grid tbody tr");
+    // Each row is labeled with the real calendar week it maps to ("Week of
+    // Aug 9 (this week)"), mirroring ScheduleWeekLabelHelper. Adding or
+    // removing a row changes the cycle length, which remaps every row, so
+    // all labels are recomputed here. The dates come preformatted from the
+    // server (data-week-labels) — formatting them here would depend on the
+    // viewer's timezone.
+    var relabelWeeks = function () {
+      var $grid = $("#schedule-grid");
+      var epochWeeks = parseInt($grid.attr("data-epoch-weeks"), 10);
+      var sundays = JSON.parse($grid.attr("data-week-labels"));
+      var $rows = $grid.find("tbody tr");
+      var count = $rows.length;
+      var currentIndex = epochWeeks % count;
       $rows.each(function (rowIndex) {
-        var week = "Week " + (rowIndex + 1);
+        var delta = (rowIndex - currentIndex + count) % count;
+        var label =
+          "Week of " + sundays[delta] + (delta === 0 ? " (this week)" : "");
         $(this).find(".schedule-week-label").contents().last()[0].textContent =
-          week;
+          label;
         $(this)
           .find("input")
           .each(function () {
             this.name = "community[schedule][" + rowIndex + "][]";
             if (this.type === "checkbox") {
+              // The day name is always the last word of the old aria-label.
               this.setAttribute(
                 "aria-label",
-                week + " " + this.getAttribute("aria-label").split(" ").pop(),
+                label + " " + this.getAttribute("aria-label").split(" ").pop(),
               );
             }
           });
       });
-      $("#schedule-add-week").prop("disabled", $rows.length >= 6);
-      $("#schedule-remove-week").prop("disabled", $rows.length <= 1);
+      $("#schedule-repeat-note").text(
+        count === 1
+          ? "This pattern repeats every week."
+          : "This pattern repeats every " + count + " weeks.",
+      );
+      $("#schedule-add-week").prop("disabled", count >= 6);
+      $("#schedule-remove-week").prop("disabled", count <= 1);
     };
 
     $("#schedule-add-week").on("click", function () {
       var $row = $("#schedule-grid tbody tr").last().clone();
       $row.find('input[type="checkbox"]').prop("checked", false);
       $("#schedule-grid tbody").append($row);
-      renumberWeeks();
+      relabelWeeks();
       refreshPreview();
     });
 
@@ -98,7 +117,7 @@ $(function () {
       if ($rows.length > 1) {
         $rows.last().remove();
       }
-      renumberWeeks();
+      relabelWeeks();
       refreshPreview();
     });
 
@@ -116,7 +135,7 @@ $(function () {
       },
     );
 
-    renumberWeeks();
+    relabelWeeks();
     refreshPreview();
   }
 
