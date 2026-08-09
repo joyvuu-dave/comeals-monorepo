@@ -94,12 +94,12 @@ ActiveAdmin.register Community do
       # Hand-built with attributes_table markup, not attributes_table_for:
       # its row() titleizes every label through human_attribute_name, which
       # turns "Week of Aug 2 (this week)" into "Week Of Aug 2 (This Week)".
-      labels = helpers.schedule_week_labels(community.schedule.length)
       div class: 'attributes_table' do
         table do
-          community.schedule.each_with_index do |week, index|
+          helpers.schedule_week_rows(community.schedule.length).each do |week_row|
+            week = community.schedule[week_row[:slot]]
             tr do
-              th labels[index]
+              th week_row[:label]
               td week.empty? ? 'No meals' : week.map { |wday| Date::DAYNAMES[wday] }.join(', ')
             end
           end
@@ -128,10 +128,11 @@ ActiveAdmin.register Community do
     f.inputs do
       f.input :name
       # The column is DECIMAL(12,8), so the raw value renders as "4.5" —
-      # format it as the money it is. Same treatment as Bill's form.
+      # render it as money instead (MoneyFieldHelper, shared with Bill's
+      # form).
       f.input :cap,
               label: 'Cap ($)',
-              input_html: { value: f.object.cap && format('%.2f', f.object.cap) },
+              input_html: { value: helpers.money_field_value(f.object.cap) },
               hint: 'Most a meal can cost per multiplier unit, in whole cents. ' \
                     'Leave blank for no cap. The lowest cap you can set is $0.01.'
       f.input :slug if f.object.persisted?
@@ -142,16 +143,18 @@ ActiveAdmin.register Community do
 
     f.inputs 'Meal schedule' do
       # The grid: one row per week of the repeating cycle, one checkbox per
-      # day. Each row is labeled with the real calendar week it currently
-      # maps to (ScheduleWeekLabelHelper) — never "Week 1", which every
-      # reader takes to mean "starting now". Checkbox names are
-      # community[schedule][ROW][]; the hidden "" input per row keeps a
+      # day. Rows appear in calendar order (this week first), and each row is
+      # labeled with the real calendar week it maps to
+      # (ScheduleWeekLabelHelper) — never "Week 1", which every reader takes
+      # to mean "starting now". Checkbox names are community[schedule][SLOT][]
+      # — the slot is the row's index in the stored schedule, which can
+      # differ from its place on screen. The hidden "" input per row keeps a
       # fully-unchecked week in the params (the same trick Rails uses for
       # single checkboxes, applied per row). Behavior (add/remove week,
-      # relabeling, live preview) lives in active_admin.js, fed by the data
-      # attributes on the table.
+      # renaming, relabeling, live preview) lives in active_admin.js, fed
+      # by the data attributes on the table.
       li class: 'schedule-grid-wrapper' do
-        week_labels = helpers.schedule_week_labels(f.object.schedule.length)
+        week_rows = helpers.schedule_week_rows(f.object.schedule.length)
         table({ id: 'schedule-grid' }.merge(helpers.schedule_grid_data)) do
           thead do
             tr do
@@ -160,24 +163,26 @@ ActiveAdmin.register Community do
             end
           end
           tbody do
-            f.object.schedule.each_with_index do |week, row_index|
+            week_rows.each do |week_row|
               # `input` here is Formtastic's method, not the HTML tag, so the
               # tags are hand-built strings. Every interpolated value is a
               # generated integer or day name, never user input. No ids: the
-              # row index in the name is the only identity these need, and
-              # cloned rows must not duplicate ids.
-              field_name = "community[schedule][#{row_index}][]"
+              # slot in the name is the only identity these need, and cloned
+              # rows must not duplicate ids.
+              week = f.object.schedule[week_row[:slot]]
+              label = week_row[:label]
+              field_name = "community[schedule][#{week_row[:slot]}][]"
               tr do
                 td class: 'schedule-week-label' do
                   marker = %(<input type="hidden" name="#{field_name}" value="">)
                   text_node marker.html_safe # rubocop:disable Rails/OutputSafety -- built from a generated index, no user input
-                  text_node week_labels[row_index]
+                  text_node label
                 end
                 (0..6).each do |wday|
                   td do
                     checked = week.include?(wday) ? ' checked="checked"' : ''
                     checkbox = %(<input type="checkbox" name="#{field_name}" value="#{wday}" ) +
-                               %(aria-label="#{week_labels[row_index]} #{Date::DAYNAMES[wday]}"#{checked}>)
+                               %(aria-label="#{label} #{Date::DAYNAMES[wday]}"#{checked}>)
                     text_node checkbox.html_safe # rubocop:disable Rails/OutputSafety -- built from generated dates and DAYNAMES, no user input
                   end
                 end
