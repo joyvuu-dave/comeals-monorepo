@@ -70,7 +70,7 @@ RSpec.describe MealSchedule do
     # Floor division, not truncation: -3 / 7 must be -1 so the week before
     # the epoch is the last week of the cycle. Rewriting the arithmetic as
     # ((date - EPOCH) / 7).to_i truncates toward zero and breaks this.
-    it 'lands on the right week for dates before the epoch' do
+    it 'maps dates before the epoch to the right week' do
       schedule = described_class.new(weeks: [[0, 1, 4], [0, 2, 4]])
 
       expect(schedule.meal_day?(Date.new(1999, 12, 28))).to be true   # prior week Tuesday = week 2

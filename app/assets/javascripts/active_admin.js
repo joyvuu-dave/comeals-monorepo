@@ -58,29 +58,35 @@ $(function () {
         });
     };
 
-    // Each row is labeled with the real calendar week it maps to ("Week of
-    // Aug 9 (this week)"), mirroring ScheduleWeekLabelHelper. Adding or
-    // removing a row changes the cycle length, which remaps every row, so
-    // all labels are recomputed here. The dates come preformatted from the
-    // server (data-week-labels) — formatting them here would depend on the
-    // viewer's timezone.
-    var relabelWeeks = function () {
+    // Rows never move: they are in calendar order (this week first), adding
+    // a week appends an empty bottom row (the furthest-future week), and
+    // removing takes the bottom row away. The checked days you see stay
+    // with the calendar weeks you see. What changes under an add or remove
+    // is the naming: the stored cycle is in slot order (slot = weeks since
+    // the epoch, mod the cycle length), and a new length maps every week to
+    // a different slot — so every row's fields are renamed to the slot its
+    // calendar week maps to now. Every string comes finished from the
+    // server (ScheduleWeekLabelHelper via the data attributes): this code
+    // only picks by index, never composes wording, so the words cannot
+    // drift from the Ruby copy — and formatting dates here would depend on
+    // the viewer's timezone.
+    var arrangeWeeks = function () {
       var $grid = $("#schedule-grid");
       var epochWeeks = parseInt($grid.attr("data-epoch-weeks"), 10);
-      var sundays = JSON.parse($grid.attr("data-week-labels"));
+      var weekLabels = JSON.parse($grid.attr("data-week-labels"));
+      var repeatNotes = JSON.parse($grid.attr("data-repeat-notes"));
       var $rows = $grid.find("tbody tr");
       var count = $rows.length;
       var currentIndex = epochWeeks % count;
       $rows.each(function (rowIndex) {
-        var delta = (rowIndex - currentIndex + count) % count;
-        var label =
-          "Week of " + sundays[delta] + (delta === 0 ? " (this week)" : "");
+        var label = weekLabels[rowIndex];
+        var slot = (currentIndex + rowIndex) % count;
         $(this).find(".schedule-week-label").contents().last()[0].textContent =
           label;
         $(this)
           .find("input")
           .each(function () {
-            this.name = "community[schedule][" + rowIndex + "][]";
+            this.name = "community[schedule][" + slot + "][]";
             if (this.type === "checkbox") {
               // The day name is always the last word of the old aria-label.
               this.setAttribute(
@@ -90,11 +96,7 @@ $(function () {
             }
           });
       });
-      $("#schedule-repeat-note").text(
-        count === 1
-          ? "This pattern repeats every week."
-          : "This pattern repeats every " + count + " weeks.",
-      );
+      $("#schedule-repeat-note").text(repeatNotes[count - 1]);
       $("#schedule-add-week").prop("disabled", count >= 6);
       $("#schedule-remove-week").prop("disabled", count <= 1);
     };
@@ -103,7 +105,7 @@ $(function () {
       var $row = $("#schedule-grid tbody tr").last().clone();
       $row.find('input[type="checkbox"]').prop("checked", false);
       $("#schedule-grid tbody").append($row);
-      relabelWeeks();
+      arrangeWeeks();
       refreshPreview();
     });
 
@@ -112,7 +114,7 @@ $(function () {
       if ($rows.length > 1) {
         $rows.last().remove();
       }
-      relabelWeeks();
+      arrangeWeeks();
       refreshPreview();
     });
 
@@ -130,7 +132,7 @@ $(function () {
       },
     );
 
-    relabelWeeks();
+    arrangeWeeks();
     refreshPreview();
   }
 
