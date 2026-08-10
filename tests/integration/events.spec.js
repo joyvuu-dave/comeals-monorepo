@@ -20,6 +20,18 @@ test.describe("Events (real backend)", () => {
     });
   }
 
+  // A successful save closes the modal by navigating back to the
+  // calendar URL, and that happens after the response arrives. Wait
+  // for the close before reloading: a reload that fires first lands
+  // on the modal's own URL and reopens the modal on top of the
+  // calendar (the race behind the 2026-08-10 CI failure in the
+  // reservations spec — this spec shares the pattern).
+  async function modalClosed(page) {
+    await expect(page.locator(".ReactModal__Overlay")).toHaveCount(0, {
+      timeout: 10000,
+    });
+  }
+
   test("event lifecycle: create, edit, delete, each persisted", async ({
     page,
   }) => {
@@ -44,6 +56,7 @@ test.describe("Events (real backend)", () => {
     );
     await modal.locator("button:has-text('Create')").click();
     await created;
+    await modalClosed(page);
 
     await page.reload();
     await expect(page.locator("text=Lifecycle Test Party")).toBeVisible({
@@ -66,6 +79,7 @@ test.describe("Events (real backend)", () => {
     );
     await editModal.locator("button:has-text('Update')").click();
     await updated;
+    await modalClosed(page);
 
     await page.reload();
     await expect(page.locator("text=Renamed Test Party")).toBeVisible({
@@ -94,6 +108,7 @@ test.describe("Events (real backend)", () => {
     );
     await confirmOverlay.locator('.button-warning:has-text("Delete")').click();
     await deleted;
+    await modalClosed(page);
 
     await page.reload();
     await expect(page.locator("text=Renamed Test Party")).toBeHidden({

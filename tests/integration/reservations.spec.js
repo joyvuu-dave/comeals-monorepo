@@ -28,6 +28,18 @@ test.describe("Reservations (real backend)", () => {
     );
   }
 
+  // A successful save closes the modal by navigating back to the
+  // calendar URL, and that happens after the response arrives. Wait
+  // for the close before reloading: a reload that fires first lands
+  // on the modal's own URL and reopens the modal on top of the
+  // calendar (the race behind the 2026-08-10 CI failure — fast
+  // machines never lost it, the 2-core runner did).
+  async function modalClosed(page) {
+    await expect(page.locator(".ReactModal__Overlay")).toHaveCount(0, {
+      timeout: 10000,
+    });
+  }
+
   test("common house lifecycle: create, edit, delete, each persisted", async ({
     page,
   }) => {
@@ -51,6 +63,7 @@ test.describe("Reservations (real backend)", () => {
     const created = response(page, "POST", "/api/v1/common-house-reservations");
     await modal.locator("button:has-text('Create')").click();
     await created;
+    await modalClosed(page);
 
     await page.reload();
     // The tile title is multiline (time range, "Common House", the
@@ -73,6 +86,7 @@ test.describe("Reservations (real backend)", () => {
     );
     await editModal.locator("button:has-text('Update')").click();
     await updated;
+    await modalClosed(page);
 
     await page.reload();
     await expect(
@@ -98,6 +112,7 @@ test.describe("Reservations (real backend)", () => {
     );
     await confirmOverlay.locator('.button-warning:has-text("Delete")').click();
     await deleted;
+    await modalClosed(page);
 
     await page.reload();
     await expect(
@@ -125,6 +140,7 @@ test.describe("Reservations (real backend)", () => {
     const created = response(page, "POST", "/api/v1/guest-room-reservations");
     await modal.locator("button:has-text('Create')").click();
     await created;
+    await modalClosed(page);
 
     await page.reload();
     // The tile is "Guest Room" plus the host; scope by unit so the
@@ -146,6 +162,7 @@ test.describe("Reservations (real backend)", () => {
     const updated = response(page, "PATCH", "/api/v1/guest-room-reservations");
     await editModal.locator("button:has-text('Update')").click();
     await updated;
+    await modalClosed(page);
 
     await page.reload();
     const janeTile = page.locator(
@@ -168,6 +185,7 @@ test.describe("Reservations (real backend)", () => {
     const deleted = response(page, "DELETE", "/api/v1/guest-room-reservations");
     await confirmOverlay.locator('.button-warning:has-text("Delete")').click();
     await deleted;
+    await modalClosed(page);
 
     await page.reload();
     await expect(janeTile).toBeHidden({ timeout: 10000 });
