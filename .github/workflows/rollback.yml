@@ -1,0 +1,130 @@
+name: Rollback
+
+# Manual production rollback (docs/deploy-confidence-plan.md, item 8).
+# Heroku rollback is the mitigation; the durable rollback is fixing
+# main (usually git revert). This workflow does the mitigation and
+# makes the durable part unavoidable: it sets DEPLOY_HOLD so the daily
+# deploy refuses to re-ship the same sha tomorrow, and files an issue
+# holding the reason.
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Why production is being rolled back (one line, required)"
+        type: string
+        required: true
+      release:
+        description: "Heroku release to roll back to (e.g. v612; empty = previous)"
+        type: string
+        required: false
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: write
+  issues: write
+
+env:
+  PROD_APP: comeals-monorepo
+  PROD_URL: https://comeals.com
+  HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Heroku CLI
+        run: curl -s https://cli-assets.heroku.com/install.sh | sh
+
+      - name: Roll back
+        id: roll
+        run: |
+          set -euo pipefail
+          bad_sha=$(heroku config:get HEROKU_SLUG_COMMIT -a "$PROD_APP")
+          echo "bad_sha=$bad_sha" >> "$GITHUB_OUTPUT"
+          echo "Production currently runs $bad_sha."
+          if [ -n "${{ inputs.release }}" ]; then
+            heroku rollback "${{ inputs.release }}" -a "$PROD_APP"
+          else
+            heroku rollback -a "$PROD_APP"
+          fi
+          live_sha=$(heroku config:get HEROKU_SLUG_COMMIT -a "$PROD_APP")
+          echo "live_sha=$live_sha" >> "$GITHUB_OUTPUT"
+          if [ "$live_sha" = "$bad_sha" ]; then
+            echo "Rollback did not change the running slug."
+            exit 1
+          fi
+          echo "Production now runs $live_sha."
+
+      - name: Set up Node and browsers for the smoke test
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Smoke the rolled-back site
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          bin/smoke "$PROD_URL"
+
+      # The daily deploy refuses while this is set. It clears when a
+      # person fixes main (usually git revert) and removes the variable.
+      - name: Hold the daily deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh variable set DEPLOY_HOLD \
+            --body "rolled back $(date -u +%Y-%m-%d): ${{ inputs.reason }}"
+
+      # Make the GitHub Releases tell the truth: mark the release that
+      # pointed at the rolled-back sha. Deploys older than the release
+      # process have no release to mark — say so and move on.
+      - name: Mark the release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          bad_sha="${{ steps.roll.outputs.bad_sha }}"
+          tag=""
+          for t in $(gh release list --limit 20 --json tagName --jq '.[].tagName'); do
+            # The commits API resolves a tag name to its commit whether
+            # the tag is lightweight or annotated.
+            sha=$(gh api "repos/{owner}/{repo}/commits/$t" --jq '.sha' 2>/dev/null || true)
+            if [ "$sha" = "$bad_sha" ]; then tag="$t"; break; fi
+          done
+          if [ -z "$tag" ]; then
+            echo "No GitHub release points at $bad_sha — nothing to mark."
+            exit 0
+          fi
+          gh release view "$tag" --json body --jq '.body' > body.md
+          {
+            echo "> **Rolled back on $(date -u +%Y-%m-%d)** — ${{ inputs.reason }}"
+            echo
+            cat body.md
+          } > new_body.md
+          gh release edit "$tag" --notes-file new_body.md
+          echo "Marked release $tag as rolled back."
+
+      - name: File the follow-up issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create \
+            --title "Production rolled back: ${{ inputs.reason }}" \
+            --body "Production was rolled back from \`${{ steps.roll.outputs.bad_sha }}\` to \`${{ steps.roll.outputs.live_sha }}\` on $(date -u +%Y-%m-%d).
+
+          Reason: ${{ inputs.reason }}
+
+          The Heroku rollback is only the mitigation — main still contains the change. Until it is fixed, the \`DEPLOY_HOLD\` repository variable blocks the daily deploy.
+
+          - [ ] Fix main (usually \`git revert\` of the offending change)
+          - [ ] Wait for CI to go green on the fix
+          - [ ] Clear the hold: \`gh variable delete DEPLOY_HOLD\`
+          - [ ] Check whether the bad version wrote data that needs correcting entries"
