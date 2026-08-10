@@ -3,7 +3,7 @@
 // These pin the pieces custom CSS/JS and admin config are responsible
 // for: the login banner, server-rendered meal dates, the datepicker,
 // and the singular Community title.
-const { test, expect } = require("@playwright/test");
+const { test, expect } = require("../helpers/test");
 
 // Seeded by tests/admin/seed.rb: meal 1 on 2027-02-04, bill 1 on meal 1.
 const MEAL_DATE_TEXT = "Thu, Feb 4 2027";

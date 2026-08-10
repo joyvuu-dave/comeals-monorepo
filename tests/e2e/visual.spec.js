@@ -1,4 +1,9 @@
-const { test, expect } = require("../helpers/test");
+const {
+  test,
+  expect,
+  httpFailurePattern,
+  combinePatterns,
+} = require("../helpers/test");
 const {
   setupAuthenticatedPage,
   stubPusher,
@@ -64,6 +69,36 @@ test.describe("Visual Baselines", () => {
     await expect(page).toHaveScreenshot("calendar-month.png", {
       fullPage: true,
     });
+  });
+
+  // Months that can only render correctly if the date math is right:
+  // the two daylight-saving transitions and a leap February. Pinned to
+  // the community's timezone because a UTC viewer has no DST — without
+  // it these goldens could not show a DST bug (the November escape).
+  test.describe("calendar edge months", () => {
+    test.use({ timezoneId: "America/Los_Angeles" });
+
+    for (const [name, date] of [
+      ["calendar-november-dst", "2026-11-15"],
+      ["calendar-march-dst", "2026-03-15"],
+      ["calendar-february-leap", "2028-02-15"],
+    ]) {
+      test(name, async ({ page, context }) => {
+        await setupAuthenticatedPage(page, context);
+        await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+
+        await page.goto(`/calendar/all/${date}/`);
+        await page.waitForLoadState("networkidle");
+        await expect(page.locator(".rbc-calendar")).toBeVisible({
+          timeout: 10000,
+        });
+        await page.waitForTimeout(1000);
+
+        await expect(page).toHaveScreenshot(`${name}.png`, {
+          fullPage: true,
+        });
+      });
+    }
   });
 
   test("meal edit page", async ({ page, context }) => {
@@ -441,27 +476,38 @@ test.describe("Visual Baselines", () => {
     await expect(toast).toHaveScreenshot("toast-error.png");
   });
 
-  test("session expired banner", async ({ page, context }) => {
-    await setupAuthenticatedPage(page, context);
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
-
-    // A 401 from the calendar fetch raises the signed-out banner.
-    await page.route("**/api/v1/communities/*/calendar/*", (route) => {
-      route.fulfill({
-        status: 401,
-        contentType: "application/json",
-        body: JSON.stringify({ message: "You are not authenticated." }),
-      });
+  test.describe("with a 401 backend", () => {
+    // The mocked 401 makes the browser log a request failure, and
+    // handle_axios_error logs the server's message.
+    test.use({
+      allowedConsoleErrors: combinePatterns(
+        httpFailurePattern,
+        /^You are not authenticated\.$/,
+      ),
     });
 
-    await page.goto("/calendar/all/2026-01-15/");
-    await expect(
-      page.locator("text=Heads up — you've been signed out"),
-    ).toBeVisible({ timeout: 10000 });
-    await page.waitForTimeout(500);
+    test("session expired banner", async ({ page, context }) => {
+      await setupAuthenticatedPage(page, context);
+      await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
 
-    await expect(page).toHaveScreenshot("session-expired.png", {
-      fullPage: true,
+      // A 401 from the calendar fetch raises the signed-out banner.
+      await page.route("**/api/v1/communities/*/calendar/*", (route) => {
+        route.fulfill({
+          status: 401,
+          contentType: "application/json",
+          body: JSON.stringify({ message: "You are not authenticated." }),
+        });
+      });
+
+      await page.goto("/calendar/all/2026-01-15/");
+      await expect(
+        page.locator("text=Heads up — you've been signed out"),
+      ).toBeVisible({ timeout: 10000 });
+      await page.waitForTimeout(500);
+
+      await expect(page).toHaveScreenshot("session-expired.png", {
+        fullPage: true,
+      });
     });
   });
 

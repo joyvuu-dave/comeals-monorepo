@@ -1,5 +1,21 @@
-const { test, expect } = require("../helpers/test");
+const {
+  test,
+  expect,
+  httpFailurePattern,
+  combinePatterns,
+} = require("../helpers/test");
 const { setupAuthenticatedPage } = require("../helpers/setup");
+
+// Every test here feeds the app a 401 or a dead network. Expected
+// noise: the browser's request-failed line, plus the two messages
+// handle_axios_error logs on exactly these paths.
+test.use({
+  allowedConsoleErrors: combinePatterns(
+    httpFailurePattern,
+    /^You are not authenticated\.$/,
+    /^Error: no response received from server\.$/,
+  ),
+});
 
 test.describe("Session Expiry", () => {
   test("shows session-expired banner when API returns 401", async ({
