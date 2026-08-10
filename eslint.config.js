@@ -101,6 +101,7 @@ module.exports = [
       "tests/e2e/**/*.js",
       "tests/admin/**/*.js",
       "tests/helpers/**/*.js",
+      "tests/smoke/**/*.js",
     ],
     languageOptions: {
       ecmaVersion: 2022,
