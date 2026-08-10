@@ -91,9 +91,12 @@ Rails.application.configure do
   # Devise (AdminUser password reset emails need admin subdomain host)
   config.action_mailer.default_url_options = { host: 'admin.comeals.com' }
 
-  # Gmail. Under bin/prod (LOCAL_PRODUCTION) mail must never really send,
-  # so delivery switches to :test, which collects mail in memory instead.
-  if ENV['LOCAL_PRODUCTION'].present?
+  # Gmail. Under bin/prod (LOCAL_PRODUCTION) and on the staging app
+  # (COMEALS_STAGING) mail must never really send — staging runs against
+  # a copy of the production database, so its Resident rows hold real
+  # people's addresses. Delivery switches to :test, which collects mail
+  # in memory instead.
+  if ENV['LOCAL_PRODUCTION'].present? || ENV['COMEALS_STAGING'].present?
     config.action_mailer.delivery_method = :test
   else
     config.action_mailer.delivery_method = :smtp

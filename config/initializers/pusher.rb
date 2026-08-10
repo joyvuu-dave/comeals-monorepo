@@ -19,7 +19,12 @@ end
 Pusher.logger = Rails.logger
 Pusher.encrypted = true
 
-# Integration test server: suppress Pusher to avoid network calls.
-# RSpec already stubs Pusher per-test via rails_helper; this handles the
-# non-RSpec case (running `rails server` for Playwright integration tests).
-Pusher.define_singleton_method(:trigger) { |*_args| true } if ENV['INTEGRATION_SERVER'].present?
+# Integration test server and the staging app: suppress Pusher to avoid
+# network calls. RSpec already stubs Pusher per-test via rails_helper;
+# this handles the non-RSpec cases — `rails server` for Playwright
+# integration tests, and comeals-staging, which runs with placeholder
+# Pusher credentials and must never broadcast (Pusher.trigger raises on
+# bad credentials, and it runs unrescued after every meal write).
+if ENV['INTEGRATION_SERVER'].present? || ENV['COMEALS_STAGING'].present?
+  Pusher.define_singleton_method(:trigger) { |*_args| true }
+end
