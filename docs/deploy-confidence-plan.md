@@ -234,13 +234,15 @@ Build order:
       targets whose /api/v1/version says staging:true. No stored
       credentials: bin/staging-rehearsal seeds a smoke resident with a
       fresh random password each run. First full pass 2026-08-10.
-- [ ] deploy.yml: the seven steps above, plus the healthchecks ping,
-      the workflow_dispatch trigger with the `fast` input, and the
-      `DEPLOY_HOLD` check.
-- [ ] rollback.yml: Heroku rollback → smoke + version check → release
-      note edits → `DEPLOY_HOLD` + issue.
-- [ ] Make the break-glass loud: typed confirmation, notification,
-      auto-filed issue.
+- [x] deploy.yml (1155ea7): cron + workflow_dispatch with `fast`,
+      hold check, green gate, Claude release note (draft release,
+      commit-list fallback), rehearsal, promote, watched production
+      with guarded auto-rollback, publish, healthchecks ping.
+- [x] rollback.yml (537c1e6): Heroku rollback → slug check → smoke →
+      release-note marking → `DEPLOY_HOLD` + follow-up issue.
+- [x] Break-glass is loud: typed "break glass" phrase, auto-filed
+      review issue (or a warning to file one by hand when GitHub
+      itself is down).
 - [ ] A few supervised runs before trusting it unattended.
 
 ## Order

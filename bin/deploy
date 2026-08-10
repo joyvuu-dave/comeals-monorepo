@@ -135,7 +135,32 @@ preflight_ci() {
   step "Pre-flight: CI status"
 
   if [ "${DEPLOY_WITHOUT_CI:-}" = "1" ]; then
-    warn "DEPLOY_WITHOUT_CI=1 — skipping the CI gate"
+    # The break-glass. Legitimate only when the pipeline itself is the
+    # casualty: GitHub or CI is down AND rollback cannot fix production.
+    # It is loud on purpose: a typed phrase, and a follow-up issue so
+    # every use gets looked at afterward. A red build is never a reason.
+    warn "DEPLOY_WITHOUT_CI=1 — the break-glass. Every CI result will be ignored."
+    warn "Legitimate only when GitHub/CI is itself down and rollback cannot fix prod."
+    if [ ! -t 0 ]; then
+      fail "The break-glass needs a terminal to type the confirmation phrase."
+      exit 1
+    fi
+    printf "Type 'break glass' to continue: "
+    read -r phrase
+    if [ "$phrase" != "break glass" ]; then
+      info "Aborted."
+      exit 1
+    fi
+    local issue_body="bin/deploy ran with DEPLOY_WITHOUT_CI=1 on $(date -u +%Y-%m-%d) at commit $(git rev-parse HEAD).
+
+Every break-glass use gets reviewed. Answer in this issue: what was broken, why rollback could not fix it, and what would have let the normal pipeline handle it."
+    if command -v gh >/dev/null 2>&1 \
+      && gh issue create --title "Break-glass deploy on $(date -u +%Y-%m-%d)" \
+        --body "$issue_body" >/dev/null 2>&1; then
+      ok "Follow-up issue filed"
+    else
+      warn "Could not file the follow-up issue (GitHub down?) — file one by hand"
+    fi
     return
   fi
 
