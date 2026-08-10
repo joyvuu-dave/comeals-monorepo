@@ -374,11 +374,27 @@ test.describe("Visual Baselines", () => {
   });
 
   test("closed meal page with extras", async ({ page, context }) => {
+    // This golden documents the closed-meal row colors. The rule
+    // (attendees_box.jsx + resident.canRemove): an attendee who signed
+    // up BEFORE the meal closed is locked in — green with a grayscale
+    // filter. One added AFTER the close (an extra) can still remove
+    // themselves — bright green. closed_at sits after the fixture's
+    // signups (18:30 and 19:00 LA on Jan 14), so Jane and Alice render
+    // gray; Bob is added as an extra after the close and renders green.
     await setupAuthenticatedPage(page, context, {
       mealData: {
         ...mealFixture,
         closed: true,
-        closed_at: "2026-01-14T20:00:00Z",
+        closed_at: "2026-01-15T08:00:00Z",
+        residents: mealFixture.residents.map((resident) =>
+          resident.id === 2
+            ? {
+                ...resident,
+                attending: true,
+                attending_at: "2026-01-15T01:00:00.000-08:00",
+              }
+            : resident,
+        ),
       },
     });
     await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
