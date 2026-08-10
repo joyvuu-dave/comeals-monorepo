@@ -162,9 +162,34 @@ namespace :test do
     )
 
     # ------------------------------------------------------------------
+    # CLOSE-TEST MEAL (3 days out, cook cost set)
+    # ------------------------------------------------------------------
+    # Owned by the close/reopen integration test (meal-actions.spec.js):
+    # it closes and reopens this meal and no other test touches it. The
+    # bill matters — closing with a blank cook cost asks a question the
+    # close test is not about (bill-entry.spec.js covers that ask).
+    close_test_meal = Meal.create!(
+      date: 3.days.from_now.to_date,
+      community: community,
+      description: 'Close-test casserole'
+    )
+    [jane, bob].each do |r|
+      MealResident.create!(
+        resident: r, meal: close_test_meal, community: community,
+        multiplier: r.multiplier
+      )
+    end
+    Bill.create!(
+      meal: close_test_meal, resident: jane,
+      amount: BigDecimal('20.00'), community: community
+    )
+
+    # ------------------------------------------------------------------
     # FUTURE MEAL (7 days out, empty)
     # ------------------------------------------------------------------
-    Meal.create!(
+    # The description integration test uses this meal: it starts blank,
+    # the test types into it, checks persistence, and blanks it again.
+    future_meal = Meal.create!(
       date: 7.days.from_now.to_date,
       community: community
     )
@@ -223,7 +248,9 @@ namespace :test do
                               reconciled: { id: reconciled_meal.id, date: reconciled_meal.date.iso8601 },
                               closed: { id: closed_meal.id, date: closed_meal.date.iso8601 },
                               today: { id: today_meal.id, date: today_meal.date.iso8601 },
-                              tomorrow: { id: tomorrow_meal.id, date: tomorrow_meal.date.iso8601 }
+                              tomorrow: { id: tomorrow_meal.id, date: tomorrow_meal.date.iso8601 },
+                              close_test: { id: close_test_meal.id, date: close_test_meal.date.iso8601 },
+                              future: { id: future_meal.id, date: future_meal.date.iso8601 }
                             }
                           ))
     puts "  Auth file:  #{auth_file}"
