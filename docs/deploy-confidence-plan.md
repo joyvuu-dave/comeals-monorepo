@@ -133,16 +133,72 @@ Design decisions (approved 2026-08-09):
    shows a change, so a fixture edit always travels in the same commit
    as the Rails change that caused it.
 
-### 8. Release process (the other half of confidence)
+### 8. Release process — now a daily automated deploy (design agreed 2026-08-10)
 
-Tests gate the tag; the process gates the deploy.
+The original sketch had a person approve each release. The goal has
+changed: deploy automatically once a day when everything is green, with
+no human in the loop. If the pipeline stops at any step, it stops for
+the day and notifies — it never retries on its own and never ships
+silently.
 
-- Every deploy is an annotated git tag with a GitHub Release note in plain
-  language: what changed, what you will see, how to undo.
-- A designated community member approves a release before it deploys.
-- `bin/rollback`: redeploy the previous tag in one command (`bin/deploy`
-  already takes a database backup first).
-- The release page always shows which tag is live (`/api/v1/version`).
+The daily job (GitHub Actions, cron at 15:00 UTC — 8am Pacific in
+summer, 7am in winter, since Actions cron has no timezone):
+
+1. **Green gate.** Every CI check on the tip of main must have
+   completed successfully — the same rule bin/deploy's preflight_ci
+   enforces. Nothing to deploy (prod already runs this sha) also stops
+   here, quietly.
+2. **Release note.** A Claude call turns the commit messages between
+   the live sha and the candidate into a plain-language note: what
+   changed, what you will see, how to undo. Saved as a draft GitHub
+   Release on the candidate sha. Draft means "candidate"; publishing
+   it later means "this is live".
+3. **Staging rehearsal.** A persistent staging app sits in a Heroku
+   pipeline next to production, dynos scaled to zero between runs
+   (about $5/month, almost all of it the database). Each run: verify
+   the app is still neutered (no clock dyno, mail off, no
+   healthchecks key, its own Pusher/Bugsnag) — refuse to continue
+   otherwise, because staging holds a copy of real residents' email
+   addresses; restore the latest production backup (the database is
+   ~5 MB); deploy the candidate; run migrations against today's real
+   data. Any release-phase error, boot exception, or deprecation
+   warning in the logs stops the day.
+4. **Exercise staging.** Run the aggressive smoke against it: log in,
+   toggle attendance, open the modals — writes are fine, it is a
+   disposable copy. Watch memory and errors for a few minutes. This
+   catches crashes and error spew, not slow leaks — those remain
+   Bugsnag's and healthchecks' job over days.
+5. **Promote, don't rebuild.** `heroku pipelines:promote` ships the
+   exact compiled slug staging just ran — production never gets a
+   second build that could differ from the one that passed.
+6. **Watch production.** The read-only smoke (bin/smoke) plus a few
+   minutes of log watching. A failed smoke or 5xx spew triggers
+   `heroku rollback` — one command, code only. Rollback can always be
+   code-only because migrations are backward-compatible for one
+   release, enforced at author time by strong_migrations. The
+   pre-deploy database backup stays as the catastrophe option.
+7. **Mark it live.** Publish the draft release. `/api/v1/version`
+   shows the running sha for cross-checking.
+
+Secrets: `HEROKU_API_KEY` and `ANTHROPIC_API_KEY` as environment
+secrets in a GitHub environment named `production`, which only the
+deploy workflow declares. Notification: GitHub's failure email plus a
+dedicated healthchecks.io check the job pings on completion — a
+morning where the job never ran also alerts.
+
+Build order:
+
+- [ ] strong_migrations gem; fix or bless whatever it flags.
+- [ ] Heroku pipeline: create, add production, create the neutered
+      staging app, scale it to zero.
+- [ ] bin/deploy gains a non-interactive mode (it currently stops at
+      a confirmation prompt) and its gates become reusable steps.
+- [ ] bin/staging-rehearsal: the verify-neuter → restore → deploy →
+      migrate → log-grep sequence, runnable by hand first.
+- [ ] The aggressive staging smoke (extend bin/smoke with write flows
+      it may only run against staging).
+- [ ] deploy.yml: the seven steps above, plus the healthchecks ping.
+- [ ] A few supervised runs before trusting it unattended.
 
 ## Order
 
