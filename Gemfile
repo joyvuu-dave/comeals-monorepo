@@ -106,3 +106,5 @@ gem 'oj'
 
 # Windows does not include zoneinfo files, so bundle the tzinfo-data gem
 gem 'tzinfo-data', platforms: %i[jruby windows]
+
+gem 'strong_migrations', '~> 2.8'
