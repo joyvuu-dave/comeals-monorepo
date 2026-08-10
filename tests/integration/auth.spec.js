@@ -1,4 +1,9 @@
-const { test, expect } = require("@playwright/test");
+const {
+  test,
+  expect,
+  httpFailurePattern,
+  combinePatterns,
+} = require("../helpers/test");
 const {
   loadAuthInfo,
   stubPusher,
@@ -33,26 +38,37 @@ test.describe("Authentication (real backend)", () => {
     await expect(page.locator(".rbc-calendar")).toBeVisible({ timeout: 10000 });
   });
 
-  test("login with wrong password shows error", async ({ page }) => {
-    const auth = loadAuthInfo();
+  test.describe("with wrong credentials", () => {
+    // A real 401 from Rails: the browser logs the failed request and
+    // handle_axios_error logs the server's message.
+    test.use({
+      allowedConsoleErrors: combinePatterns(
+        httpFailurePattern,
+        /^Invalid email or password\.?$/,
+      ),
+    });
 
-    await page.goto("/");
-    await page.locator('input[aria-label="email"]').fill(auth.bob_email);
-    await page.locator('input[aria-label="password"]').fill("wrongpassword");
-    await page.getByRole("button", { name: "Submit" }).click();
+    test("login with wrong password shows error", async ({ page }) => {
+      const auth = loadAuthInfo();
 
-    const toast = page.locator(".toast--error");
-    await expect(toast).toBeVisible({ timeout: 5000 });
-  });
+      await page.goto("/");
+      await page.locator('input[aria-label="email"]').fill(auth.bob_email);
+      await page.locator('input[aria-label="password"]').fill("wrongpassword");
+      await page.getByRole("button", { name: "Submit" }).click();
 
-  test("login with nonexistent email shows error", async ({ page }) => {
-    await page.goto("/");
-    await page.locator('input[aria-label="email"]').fill("nobody@test.com");
-    await page.locator('input[aria-label="password"]').fill("password");
-    await page.getByRole("button", { name: "Submit" }).click();
+      const toast = page.locator(".toast--error");
+      await expect(toast).toBeVisible({ timeout: 5000 });
+    });
 
-    const toast = page.locator(".toast--error");
-    await expect(toast).toBeVisible({ timeout: 5000 });
+    test("login with nonexistent email shows error", async ({ page }) => {
+      await page.goto("/");
+      await page.locator('input[aria-label="email"]').fill("nobody@test.com");
+      await page.locator('input[aria-label="password"]').fill("password");
+      await page.getByRole("button", { name: "Submit" }).click();
+
+      const toast = page.locator(".toast--error");
+      await expect(toast).toBeVisible({ timeout: 5000 });
+    });
   });
 
   test("authenticated user can access protected meal page", async ({

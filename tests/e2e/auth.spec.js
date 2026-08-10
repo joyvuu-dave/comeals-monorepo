@@ -1,4 +1,9 @@
-const { test, expect } = require("../helpers/test");
+const {
+  test,
+  expect,
+  httpFailurePattern,
+  combinePatterns,
+} = require("../helpers/test");
 const { stubPusher, disableIdleTimer, mockApi } = require("../helpers/setup");
 
 test.describe("Authentication", () => {
@@ -54,27 +59,38 @@ test.describe("Authentication", () => {
     await expect(page.locator(".toast--error")).not.toBeVisible();
   });
 
-  test("login with invalid credentials shows error", async ({ page }) => {
-    // Override login endpoint to return error
-    await page.route("**/api/v1/residents/token", (route) => {
-      route.fulfill({
-        status: 401,
-        contentType: "application/json",
-        body: JSON.stringify({ message: "Invalid email or password" }),
-      });
+  test.describe("with a failing login endpoint", () => {
+    // The mocked 401 makes the browser log a request failure, and
+    // handle_axios_error logs the server's message.
+    test.use({
+      allowedConsoleErrors: combinePatterns(
+        httpFailurePattern,
+        /^Invalid email or password$/,
+      ),
     });
 
-    await page.goto("/");
-    await page.locator('input[aria-label="email"]').fill("wrong@example.com");
-    await page.locator('input[aria-label="password"]').fill("wrongpass");
-    await page.getByRole("button", { name: "Submit" }).click();
+    test("login with invalid credentials shows error", async ({ page }) => {
+      // Override login endpoint to return error
+      await page.route("**/api/v1/residents/token", (route) => {
+        route.fulfill({
+          status: 401,
+          contentType: "application/json",
+          body: JSON.stringify({ message: "Invalid email or password" }),
+        });
+      });
 
-    // Wait for the error toast
-    const toast = page.locator(".toast--error");
-    await expect(toast).toBeVisible({ timeout: 5000 });
-    await expect(toast.locator(".toast__message")).toContainText(
-      "Invalid email or password",
-    );
+      await page.goto("/");
+      await page.locator('input[aria-label="email"]').fill("wrong@example.com");
+      await page.locator('input[aria-label="password"]').fill("wrongpass");
+      await page.getByRole("button", { name: "Submit" }).click();
+
+      // Wait for the error toast
+      const toast = page.locator(".toast--error");
+      await expect(toast).toBeVisible({ timeout: 5000 });
+      await expect(toast.locator(".toast__message")).toContainText(
+        "Invalid email or password",
+      );
+    });
   });
 
   test("logout clears cookies and redirects to login", async ({

@@ -1,4 +1,20 @@
-const { test, expect } = require("../helpers/test");
+const {
+  test,
+  expect,
+  httpFailurePattern,
+  combinePatterns,
+} = require("../helpers/test");
+
+// Every test here makes the app hit a mocked failure, so the
+// browser's request-failed log lines are the point, and
+// handle_axios_error logs each mocked message below verbatim.
+test.use({
+  allowedConsoleErrors: combinePatterns(
+    httpFailurePattern,
+    /^(boom|not found|Server error: could not update|Cannot close meal right now|Title is required|Warning: test warning message)$/,
+    /^Error: no response received from server\.$/,
+  ),
+});
 const {
   setupAuthenticatedPage,
   stubPusher,
