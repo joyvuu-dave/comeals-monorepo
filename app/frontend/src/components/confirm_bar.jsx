@@ -20,7 +20,9 @@ const ConfirmBar = ({
   armMs = 0,
   className = "",
 }) => {
-  const openedAtRef = useRef(Date.now());
+  // performance.now(), not Date.now(): arming measures elapsed
+  // time, and the wall clock can jump (NTP, a frozen test clock).
+  const openedAtRef = useRef(performance.now());
   const barRef = useRef(null);
   const noButtonRef = useRef(null);
 
@@ -62,7 +64,7 @@ const ConfirmBar = ({
           type="button"
           className="button button-danger"
           onClick={() => {
-            if (Date.now() - openedAtRef.current < armMs) return;
+            if (performance.now() - openedAtRef.current < armMs) return;
             onYes();
           }}
         >

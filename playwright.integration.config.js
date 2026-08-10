@@ -23,6 +23,10 @@ export default defineConfig({
     baseURL: "http://localhost:3001",
     screenshot: "only-on-failure",
     trace: "on-first-retry",
+    // The community's timezone. Rendering depends on the viewer's
+    // zone (the November DST escape), so tests pin it rather than
+    // inherit whatever machine runs the suite.
+    timezoneId: "America/Los_Angeles",
   },
 
   projects: [

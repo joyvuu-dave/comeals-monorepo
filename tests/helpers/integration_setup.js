@@ -9,6 +9,12 @@
 const fs = require("fs");
 const path = require("path");
 
+// The suite's frozen "today" — bin/test-integration exports it to the
+// seed task and the Rails server; the browser freezes to the same
+// instant in setupAuthenticatedPage. Noon avoids day-boundary edges.
+const FAKE_TODAY = process.env.INTEGRATION_FAKE_TODAY || "2026-01-15";
+const FAKE_NOW = new Date(`${FAKE_TODAY}T12:00:00`);
+
 /**
  * Read auth credentials written by `rake test:seed_integration`.
  */
@@ -90,20 +96,34 @@ async function clearStorage(page) {
 }
 
 /**
+ * Freeze the browser's Date to the suite's fake "today", matching the
+ * frozen Rails server. setFixedTime pins Date/Date.now but leaves
+ * timers real, so debounce-driven saves still run.
+ */
+async function freezeClock(page) {
+  await page.clock.setFixedTime(FAKE_NOW);
+}
+
+/**
  * Full authenticated setup for integration tests.
- * Sets cookies, stubs Pusher, disables idle timer. NO API mocking.
+ * Sets cookies, stubs Pusher, disables idle timer, freezes the clock
+ * to the seeded "today". NO API mocking.
  */
 async function setupAuthenticatedPage(page, context) {
   await authenticateContext(context);
   await stubPusher(page);
   await disableIdleTimer(page);
+  await freezeClock(page);
 }
 
 module.exports = {
+  FAKE_TODAY,
+  FAKE_NOW,
   loadAuthInfo,
   authenticateContext,
   stubPusher,
   disableIdleTimer,
   clearStorage,
+  freezeClock,
   setupAuthenticatedPage,
 };

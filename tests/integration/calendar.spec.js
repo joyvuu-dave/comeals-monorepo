@@ -1,5 +1,8 @@
 const { test, expect } = require("../helpers/test");
-const { setupAuthenticatedPage } = require("../helpers/integration_setup");
+const {
+  setupAuthenticatedPage,
+  FAKE_TODAY,
+} = require("../helpers/integration_setup");
 
 test.describe("Calendar (real backend)", () => {
   test.beforeEach(async ({ page, context }) => {
@@ -7,7 +10,7 @@ test.describe("Calendar (real backend)", () => {
   });
 
   test("current month calendar loads with real meal data", async ({ page }) => {
-    const today = new Date().toISOString().split("T")[0];
+    const today = FAKE_TODAY;
     await page.goto(`/calendar/all/${today}/`);
     await page.waitForLoadState("networkidle");
 
@@ -22,7 +25,7 @@ test.describe("Calendar (real backend)", () => {
   });
 
   test("community event appears on calendar", async ({ page }) => {
-    const today = new Date().toISOString().split("T")[0];
+    const today = FAKE_TODAY;
     await page.goto(`/calendar/all/${today}/`);
     await page.waitForLoadState("networkidle");
 
@@ -35,7 +38,7 @@ test.describe("Calendar (real backend)", () => {
   });
 
   test("Next Meal button navigates to meal edit page", async ({ page }) => {
-    const today = new Date().toISOString().split("T")[0];
+    const today = FAKE_TODAY;
     await page.goto(`/calendar/all/${today}/`);
     await page.waitForLoadState("networkidle");
     await expect(page.locator(".rbc-calendar")).toBeVisible({ timeout: 10000 });
@@ -51,7 +54,7 @@ test.describe("Calendar (real backend)", () => {
   });
 
   test("month navigation works", async ({ page }) => {
-    const today = new Date().toISOString().split("T")[0];
+    const today = FAKE_TODAY;
     await page.goto(`/calendar/all/${today}/`);
     await page.waitForLoadState("networkidle");
     await expect(page.locator(".rbc-calendar")).toBeVisible({ timeout: 10000 });

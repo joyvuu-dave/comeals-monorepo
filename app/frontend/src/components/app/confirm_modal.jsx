@@ -34,7 +34,10 @@ function ConfirmModal({
   useEffect(
     function () {
       if (isOpen) {
-        openedAtRef.current = Date.now();
+        // performance.now(), not Date.now(): arming measures elapsed
+        // time, and the wall clock can jump (NTP, a frozen test
+        // clock).
+        openedAtRef.current = performance.now();
         restoreFocusRef.current = document.activeElement;
       } else if (restoreFocusRef.current) {
         if (typeof restoreFocusRef.current.focus === "function") {
@@ -47,7 +50,7 @@ function ConfirmModal({
   );
 
   function handleConfirmClick() {
-    if (Date.now() - openedAtRef.current < armMs) return;
+    if (performance.now() - openedAtRef.current < armMs) return;
     onConfirm();
   }
 
