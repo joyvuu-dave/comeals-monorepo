@@ -67,20 +67,32 @@ export const pusherClient = {
 
 let started = false;
 
+function connect(Pusher) {
+  // Pusher public key + cluster from env vars (VITE_PUSHER_KEY,
+  // VITE_PUSHER_CLUSTER). Local dev: .env file (committed defaults).
+  real = new Pusher(import.meta.env.VITE_PUSHER_KEY, {
+    cluster: import.meta.env.VITE_PUSHER_CLUSTER,
+    encrypted: true,
+  });
+  const pending = queue.splice(0);
+  pending.forEach(function (fn) {
+    fn(real);
+  });
+}
+
 export function startPusher() {
   if (started) return;
   started = true;
+  // The tests stub window.Pusher (tests/helpers/setup.js) so no test
+  // ever opens a real connection. The stub predates the lazy import
+  // below; loading the real library anyway would bypass it, and did —
+  // the CI-only failure that pinned this was pusher-js falling back
+  // to an XHR that WebKit reports as a page error.
+  if (window.Pusher) {
+    connect(window.Pusher);
+    return;
+  }
   import("pusher-js").then(function (mod) {
-    const Pusher = mod.default;
-    // Pusher public key + cluster from env vars (VITE_PUSHER_KEY,
-    // VITE_PUSHER_CLUSTER). Local dev: .env file (committed defaults).
-    real = new Pusher(import.meta.env.VITE_PUSHER_KEY, {
-      cluster: import.meta.env.VITE_PUSHER_CLUSTER,
-      encrypted: true,
-    });
-    const pending = queue.splice(0);
-    pending.forEach(function (fn) {
-      fn(real);
-    });
+    connect(mod.default);
   });
 }
