@@ -727,4 +727,53 @@ RSpec.describe Meal do
       expect { meal.reload.destroy! }.to change(described_class, :count).by(-1)
     end
   end
+
+  # ---------------------------------------------------------------------------
+  # Audits
+  # ---------------------------------------------------------------------------
+
+  describe 'audits' do
+    let(:resident) { create(:resident, community: community, unit: unit) }
+
+    # Every child write touches its meal, and audited 5.8 audits touches
+    # by default. On a meal instance that was created in the same process
+    # — this test uses exactly that instance, the worst case — the touch
+    # audit diffed the leftover creation previous_changes and wrote
+    # phantom rows the history modal showed as "Meal, update" (#56).
+    # Touch auditing is off in config/initializers/audited.rb.
+    it 'writes no meal audit when a child write touches the meal' do
+      meal = create(:meal, community: community)
+
+      expect do
+        Audited.audit_class.as_user(resident) do
+          meal.meal_residents.create!(resident: resident, community: community,
+                                      multiplier: 2)
+        end
+      end.not_to(change do
+        Audited::Audit.where(auditable_type: 'Meal', action: 'update').count
+      end)
+    end
+
+    it 'still audits the child write itself, associated with the meal' do
+      meal = create(:meal, community: community)
+
+      Audited.audit_class.as_user(resident) do
+        meal.meal_residents.create!(resident: resident, community: community,
+                                    multiplier: 2)
+      end
+
+      audit = meal.associated_audits.find_by(auditable_type: 'MealResident')
+      expect(audit).to be_present
+      expect(audit.action).to eq('create')
+      expect(audit.user).to eq(resident)
+    end
+
+    it 'still audits a real meal update' do
+      meal = create(:meal, community: community)
+
+      expect { meal.update!(description: 'New menu') }.to(change do
+        Audited::Audit.where(auditable_type: 'Meal', action: 'update').count
+      end.by(1))
+    end
+  end
 end
