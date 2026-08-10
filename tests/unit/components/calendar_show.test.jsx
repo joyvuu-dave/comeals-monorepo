@@ -215,7 +215,9 @@ describe("MainCalendar", () => {
 
       // The Discard button is armed only after armMs; jump the clock
       // past the delay so the click goes through.
-      const nowSpy = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 1000);
+      const nowSpy = vi
+        .spyOn(performance, "now")
+        .mockReturnValue(performance.now() + 1000);
       fireEvent.click(screen.getByRole("button", { name: "Discard" }));
       nowSpy.mockRestore();
 

@@ -116,7 +116,9 @@ describe("ConfirmModal", () => {
 
     it("a confirm after armMs goes through", () => {
       const { onConfirm } = renderModal({ armMs: 400 });
-      const nowSpy = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 1000);
+      const nowSpy = vi
+        .spyOn(performance, "now")
+        .mockReturnValue(performance.now() + 1000);
       fireEvent.click(screen.getByRole("button", { name: "Delete" }));
       nowSpy.mockRestore();
       expect(onConfirm).toHaveBeenCalledTimes(1);
