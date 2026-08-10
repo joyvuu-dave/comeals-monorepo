@@ -117,6 +117,62 @@ preflight_repo() {
   fi
 }
 
+# Refuse to deploy a commit whose GitHub CI is not green. Runs after
+# preflight_repo, so HEAD here is exactly the commit that would ship.
+# preflight_quality still runs the fast local checks afterwards; this
+# gate is what brings the slow suites (e2e, visual, integration) into
+# the deploy decision without re-running them locally.
+# DEPLOY_WITHOUT_CI=1 skips the gate — for a GitHub outage, not for a
+# red build.
+preflight_ci() {
+  step "Pre-flight: CI status"
+
+  if [ "${DEPLOY_WITHOUT_CI:-}" = "1" ]; then
+    warn "DEPLOY_WITHOUT_CI=1 — skipping the CI gate"
+    return
+  fi
+
+  if ! command -v gh &>/dev/null; then
+    fail "gh CLI not found — needed to read CI status (DEPLOY_WITHOUT_CI=1 overrides)"
+    exit 1
+  fi
+
+  local sha
+  sha=$(git rev-parse HEAD)
+
+  # One line per check run: name|status|conclusion. The API returns
+  # the latest run per check, so retried jobs report their newest try.
+  local runs
+  if ! runs=$(gh api "repos/{owner}/{repo}/commits/${sha}/check-runs" --paginate \
+    --jq '.check_runs[] | "\(.name)|\(.status)|\(.conclusion // "pending")"'); then
+    fail "Could not read check runs from GitHub (DEPLOY_WITHOUT_CI=1 overrides)"
+    exit 1
+  fi
+
+  if [ -z "$runs" ]; then
+    fail "No CI runs found for ${sha:0:7} — push and let CI finish before deploying"
+    exit 1
+  fi
+
+  local bad=0 name status conclusion
+  while IFS='|' read -r name status conclusion; do
+    if [ "$status" != "completed" ]; then
+      fail "still running: $name"
+      bad=1
+    elif [ "$conclusion" != "success" ] && [ "$conclusion" != "neutral" ] && [ "$conclusion" != "skipped" ]; then
+      fail "$conclusion: $name"
+      bad=1
+    fi
+  done <<< "$runs"
+
+  if [ "$bad" -ne 0 ]; then
+    fail "CI is not green for ${sha:0:7}. Fix or wait, then deploy."
+    exit 1
+  fi
+
+  ok "All CI checks green for ${sha:0:7}"
+}
+
 preflight_quality() {
   step "Pre-flight: linting & tests"
 
@@ -375,6 +431,7 @@ main() {
 
   preflight_environment
   preflight_repo
+  preflight_ci
 
   if ! detect_deploy_needs; then
     echo
