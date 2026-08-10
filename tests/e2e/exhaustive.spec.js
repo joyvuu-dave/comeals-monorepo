@@ -101,9 +101,9 @@ test.describe("Exhaustive Coverage", () => {
       const options = cookSelect.locator("option");
       const texts = await options.allTextContents();
 
-      expect(texts).toContain("Jane Smith");
-      expect(texts).toContain("Bob Johnson");
-      expect(texts).not.toContain("Alice Williams");
+      expect(texts).toContain("A - Jane Smith");
+      expect(texts).toContain("B - Bob Johnson");
+      expect(texts).not.toContain("C - Alice Williams");
 
       // Should also have the placeholder option
       expect(texts.some((t) => t.includes("¯\\_(ツ)_/¯"))).toBe(true);
@@ -175,7 +175,7 @@ test.describe("Exhaustive Coverage", () => {
       await page.waitForLoadState("networkidle");
 
       const janeCell = page.getByRole("cell", {
-        name: "Jane Smith",
+        name: "A - Jane Smith",
         exact: true,
       });
       await expect(janeCell).toBeVisible({ timeout: 10000 });

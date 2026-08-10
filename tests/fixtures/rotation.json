@@ -1,0 +1,16 @@
+{
+  "id": 1,
+  "description": "Jan 15–17, 2026",
+  "residents": [
+    {
+      "id": 1,
+      "display_name": "A - Jane Smith",
+      "signed_up": true
+    },
+    {
+      "id": 2,
+      "display_name": "B - Bob Johnson",
+      "signed_up": true
+    }
+  ]
+}

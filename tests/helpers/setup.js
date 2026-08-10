@@ -5,9 +5,18 @@
  * localforage clearing, and clock freezing for visual determinism.
  */
 
+// All fixtures are generated from the real Rails API by
+// `rake test:generate_fixtures` (bin/check fails when they are stale).
+// Do not edit them by hand — change the seed story in
+// lib/tasks/test/generate_fixtures.rake and regenerate.
 const mealFixture = require("../fixtures/meal.json");
 const calendarFixture = require("../fixtures/calendar.json");
 const historyFixture = require("../fixtures/history.json");
+const hostsFixture = require("../fixtures/hosts.json");
+const rotationFixture = require("../fixtures/rotation.json");
+const eventFixture = require("../fixtures/event.json");
+const commonHouseReservationFixture = require("../fixtures/common_house_reservation.json");
+const guestRoomReservationFixture = require("../fixtures/guest_room_reservation.json");
 
 const AUTH_COOKIES = [
   { name: "token", value: "test-token-abc123", domain: "localhost", path: "/" },
@@ -126,11 +135,7 @@ async function mockApi(page, options = {}) {
   const meal = options.mealData || mealFixture;
   const calendar = options.calendarData || calendarFixture;
   const history = options.historyData || historyFixture;
-  const hosts = options.hosts || [
-    [1, "jane@example.com", "Jane Smith"],
-    [2, "bob@example.com", "Bob Johnson"],
-    [3, "alice@example.com", "Alice Williams"],
-  ];
+  const hosts = options.hosts || hostsFixture;
 
   // The app refetches /cooks after a close or extras save settles, so the
   // mock must serve the state those PATCHes wrote — a static fixture would
@@ -305,14 +310,7 @@ async function mockApi(page, options = {}) {
       route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({
-          id: 70,
-          title: "Community Meeting",
-          description: "Monthly community meeting",
-          start_date: "2026-01-28T19:00:00",
-          end_date: "2026-01-28T21:00:00",
-          allday: false,
-        }),
+        body: JSON.stringify(eventFixture),
       });
     } else {
       // PATCH (update) or DELETE
@@ -332,15 +330,7 @@ async function mockApi(page, options = {}) {
       route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({
-          event: {
-            id: 50,
-            resident_id: 1,
-            title: "Book Club",
-            start_date: "2026-01-22T19:00:00",
-            end_date: "2026-01-22T21:00:00",
-          },
-        }),
+        body: JSON.stringify(commonHouseReservationFixture),
       });
     } else {
       route.fulfill({ status: 200, body: "{}" });
@@ -359,13 +349,7 @@ async function mockApi(page, options = {}) {
       route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({
-          event: {
-            id: 60,
-            resident_id: 1,
-            date: "2026-01-25T00:00:00",
-          },
-        }),
+        body: JSON.stringify(guestRoomReservationFixture),
       });
     } else {
       route.fulfill({ status: 200, body: "{}" });
@@ -391,14 +375,7 @@ async function mockApi(page, options = {}) {
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({
-        id: 10,
-        description: "Kitchen cleaning rotation",
-        residents: [
-          { id: 1, display_name: "Jane Smith", signed_up: true },
-          { id: 2, display_name: "Bob Johnson", signed_up: false },
-        ],
-      }),
+      body: JSON.stringify(rotationFixture),
     });
   });
 

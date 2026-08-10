@@ -62,14 +62,13 @@ const BASELINE_MODE = process.env.BASELINE_MODE === "1";
 
 const CALENDAR_URL = "/calendar/all/2026-01-15/";
 
-// Mirrors the real shape of GET /api/v1/communities/:id/hosts —
-// [residents.id, residents.name, units.name] — so the mock exercises
-// the same store-boundary transform as production traffic.
-const HOSTS = [
-  [1, "Jane Smith", "Unit 1"],
-  [2, "Bob Johnson", "Unit 2"],
-  [3, "Alice Williams", "Unit 3"],
-];
+// Generated from the real API by `rake test:generate_fixtures`, so the
+// mocks exercise the same store-boundary transforms as production
+// traffic.
+const HOSTS = require("../fixtures/hosts.json");
+const guestRoomReservationFixture = require("../fixtures/guest_room_reservation.json");
+const commonHouseReservationFixture = require("../fixtures/common_house_reservation.json");
+const eventFixture = require("../fixtures/event.json");
 
 /**
  * Override the modal-relevant endpoints with handlers that inject a
@@ -86,9 +85,7 @@ async function injectLatency(page, latencyMs) {
       route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({
-          event: { id: 60, resident_id: 1, date: "2026-01-25T00:00:00" },
-        }),
+        body: JSON.stringify(guestRoomReservationFixture),
       });
     } else {
       route.fulfill({ status: 200, body: "{}" });
@@ -101,15 +98,7 @@ async function injectLatency(page, latencyMs) {
       route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({
-          event: {
-            id: 50,
-            resident_id: 1,
-            title: "Book Club",
-            start_date: "2026-01-22T19:00:00",
-            end_date: "2026-01-22T21:00:00",
-          },
-        }),
+        body: JSON.stringify(commonHouseReservationFixture),
       });
     } else {
       route.fulfill({ status: 200, body: "{}" });
@@ -122,14 +111,7 @@ async function injectLatency(page, latencyMs) {
       route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({
-          id: 70,
-          title: "Community Meeting",
-          description: "Monthly community meeting",
-          start_date: "2026-01-28T19:00:00",
-          end_date: "2026-01-28T21:00:00",
-          allday: false,
-        }),
+        body: JSON.stringify(eventFixture),
       });
     } else {
       route.fulfill({ status: 200, body: "{}" });
@@ -327,19 +309,19 @@ test.describe(`Modal open perf @ ${LATENCY_MS}ms injected latency`, () => {
 
     const scaffoldTimings = await bench({
       setupIteration: () => gotoCalendarFresh(page),
-      action: () => page.locator("text=GR: Jane's Guest").first().click(),
+      action: () => page.locator("text=Guest Room").first().click(),
       waitFor: () => page.waitForSelector(SCAFFOLD),
     });
 
     const formVisibleTimings = await bench({
       setupIteration: () => gotoCalendarFresh(page),
-      action: () => page.locator("text=GR: Jane's Guest").first().click(),
+      action: () => page.locator("text=Guest Room").first().click(),
       waitFor: () => page.waitForSelector(FORM_VISIBLE),
     });
 
     const populatedTimings = await bench({
       setupIteration: () => gotoCalendarFresh(page),
-      action: () => page.locator("text=GR: Jane's Guest").first().click(),
+      action: () => page.locator("text=Guest Room").first().click(),
       waitFor: () => page.waitForSelector(POPULATED_WITH_DATA),
     });
 
@@ -355,19 +337,19 @@ test.describe(`Modal open perf @ ${LATENCY_MS}ms injected latency`, () => {
 
     const scaffoldTimings = await bench({
       setupIteration: () => gotoCalendarFresh(page),
-      action: () => page.locator("text=CH: Book Club").first().click(),
+      action: () => page.locator("text=Book Club").first().click(),
       waitFor: () => page.waitForSelector(SCAFFOLD),
     });
 
     const formVisibleTimings = await bench({
       setupIteration: () => gotoCalendarFresh(page),
-      action: () => page.locator("text=CH: Book Club").first().click(),
+      action: () => page.locator("text=Book Club").first().click(),
       waitFor: () => page.waitForSelector(FORM_VISIBLE),
     });
 
     const populatedTimings = await bench({
       setupIteration: () => gotoCalendarFresh(page),
-      action: () => page.locator("text=CH: Book Club").first().click(),
+      action: () => page.locator("text=Book Club").first().click(),
       waitFor: () => page.waitForSelector(POPULATED_WITH_DATA),
     });
 
@@ -510,13 +492,13 @@ test.describe(`Modal open perf @ ${LATENCY_MS}ms injected latency`, () => {
   test("Guest Room — Edit (warm cache)", async ({ page }) => {
     await gotoCalendarFresh(page);
     // Prime the hosts cache by opening + closing once.
-    await page.locator("text=GR: Jane's Guest").first().click();
+    await page.locator("text=Guest Room").first().click();
     await page.waitForSelector(POPULATED_WITH_DATA);
     await closeModal(page);
 
     const populatedTimings = await bench({
       setupIteration: () => closeIfOpen(page),
-      action: () => page.locator("text=GR: Jane's Guest").first().click(),
+      action: () => page.locator("text=Guest Room").first().click(),
       waitFor: () => page.waitForSelector(POPULATED_WITH_DATA),
     });
 
@@ -527,13 +509,13 @@ test.describe(`Modal open perf @ ${LATENCY_MS}ms injected latency`, () => {
 
   test("Common House — Edit (warm cache)", async ({ page }) => {
     await gotoCalendarFresh(page);
-    await page.locator("text=CH: Book Club").first().click();
+    await page.locator("text=Book Club").first().click();
     await page.waitForSelector(POPULATED_WITH_DATA);
     await closeModal(page);
 
     const populatedTimings = await bench({
       setupIteration: () => closeIfOpen(page),
-      action: () => page.locator("text=CH: Book Club").first().click(),
+      action: () => page.locator("text=Book Club").first().click(),
       waitFor: () => page.waitForSelector(POPULATED_WITH_DATA),
     });
 

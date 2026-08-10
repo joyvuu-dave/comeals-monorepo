@@ -16,9 +16,11 @@ test.describe("Calendar", () => {
     // Should show January 2026
     await expect(page.locator("text=January 2026")).toBeVisible();
 
-    // Should show meal events from fixtures
-    await expect(page.locator("text=Meal: Jane Smith")).toBeVisible();
-    await expect(page.locator("text=Meal: Bob Johnson")).toBeVisible();
+    // Should show meal events from fixtures. Meal tiles are titled
+    // "Dinner\n<count> attending/signed up"; the counts pick out
+    // today's meal (42) and the upcoming one (43).
+    await expect(page.locator("text=3 attending")).toBeVisible();
+    await expect(page.locator("text=1 signed up")).toBeVisible();
 
     // Should show other event types
     await expect(page.locator("text=Community Meeting")).toBeVisible();

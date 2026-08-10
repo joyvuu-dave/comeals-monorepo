@@ -35,10 +35,15 @@ class MealFormSerializer < ActiveModel::Serializer
   # Without this, deactivated residents (moved/deceased) vanish from old meals
   # they actually attended. The union: all active community residents (for the
   # signup dropdown) + any inactive residents with a meal_resident record.
+  # Ordered by :id for the same reason CalendarSerializer orders every
+  # collection: without ORDER BY, Postgres may return rows in any order,
+  # and this JSON is also captured verbatim as a test fixture
+  # (rake test:generate_fixtures), which must be byte-stable.
   def residents
     Resident.where(active: true)
             .or(Resident.where(id: object.meal_residents.select(:resident_id)))
             .includes(:unit)
+            .order(:id)
   end
 
   class BillSerializer < ActiveModel::Serializer

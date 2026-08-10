@@ -23,15 +23,15 @@ test.describe("Meal Editing", () => {
 
     // --- Residents in attendee table ---
     const janeCell = page.getByRole("cell", {
-      name: "Jane Smith",
+      name: "A - Jane Smith",
       exact: true,
     });
     const bobCell = page.getByRole("cell", {
-      name: "Bob Johnson",
+      name: "B - Bob Johnson",
       exact: true,
     });
     const aliceCell = page.getByRole("cell", {
-      name: "Alice Williams",
+      name: "C - Alice Williams",
       exact: true,
     });
     await expect(janeCell).toBeVisible();
@@ -101,7 +101,7 @@ test.describe("Meal Editing", () => {
     await page.waitForLoadState("networkidle");
 
     const bobCell = page.getByRole("cell", {
-      name: "Bob Johnson",
+      name: "B - Bob Johnson",
       exact: true,
     });
     await expect(bobCell).toBeVisible({ timeout: 10000 });
@@ -140,7 +140,7 @@ test.describe("Meal Editing", () => {
     await page.goto("/meals/42/edit/");
     await page.waitForLoadState("networkidle");
     await expect(
-      page.getByRole("cell", { name: "Jane Smith", exact: true }),
+      page.getByRole("cell", { name: "A - Jane Smith", exact: true }),
     ).toBeVisible({ timeout: 10000 });
 
     // Before: Jane not late, late count = 1 (only Alice)
@@ -175,7 +175,7 @@ test.describe("Meal Editing", () => {
     await page.goto("/meals/42/edit/");
     await page.waitForLoadState("networkidle");
     await expect(
-      page.getByRole("cell", { name: "Jane Smith", exact: true }),
+      page.getByRole("cell", { name: "A - Jane Smith", exact: true }),
     ).toBeVisible({ timeout: 10000 });
 
     // Before: Jane not veg, veg count = 0
@@ -279,7 +279,7 @@ test.describe("Meal Editing", () => {
     await page.waitForLoadState("networkidle");
 
     const janeCell = page.getByRole("cell", {
-      name: "Jane Smith",
+      name: "A - Jane Smith",
       exact: true,
     });
     await expect(janeCell).toBeVisible({ timeout: 10000 });
@@ -314,7 +314,7 @@ test.describe("Meal Editing", () => {
     await page.waitForLoadState("networkidle");
 
     const janeCell = page.getByRole("cell", {
-      name: "Jane Smith",
+      name: "A - Jane Smith",
       exact: true,
     });
     await expect(janeCell).toBeVisible({ timeout: 10000 });
@@ -325,7 +325,7 @@ test.describe("Meal Editing", () => {
 
     // Remove button should exist with correct aria-label
     const removeButton = janeRow.locator(
-      '[aria-label="Remove Guest of Jane Smith"]',
+      '[aria-label="Remove Guest of A - Jane Smith"]',
     );
     await expect(removeButton).toBeVisible();
 
@@ -334,12 +334,12 @@ test.describe("Meal Editing", () => {
 
     // Bob has no guests -- his remove button should be disabled
     const bobCell = page.getByRole("cell", {
-      name: "Bob Johnson",
+      name: "B - Bob Johnson",
       exact: true,
     });
     const bobRow = bobCell.locator("xpath=ancestor::tr");
     const bobRemove = bobRow.locator(
-      '[aria-label="Remove Guest of Bob Johnson"]',
+      '[aria-label="Remove Guest of B - Bob Johnson"]',
     );
     await expect(bobRemove).toBeDisabled();
   });
@@ -380,7 +380,7 @@ test.describe("Meal Editing", () => {
     await page.waitForLoadState("networkidle");
 
     const janeCell = page.getByRole("cell", {
-      name: "Jane Smith",
+      name: "A - Jane Smith",
       exact: true,
     });
     await expect(janeCell).toBeVisible({ timeout: 10000 });
@@ -450,18 +450,23 @@ test.describe("Meal Editing", () => {
     const modal = page.locator(".ReactModal__Content--after-open");
     await expect(modal).toBeVisible({ timeout: 5000 });
 
-    // Should show all 3 history entries from fixture
+    // The fixture is the real audit trail of meal 42's story: signups,
+    // the cook's bill, and the guest. User names are shortened, as the
+    // AuditSerializer shortens them.
     await expect(
-      modal.getByRole("cell", { name: "Jane Smith" }).first(),
+      modal.getByRole("cell", { name: "Jane" }).first(),
     ).toBeVisible();
     await expect(
-      modal.getByRole("cell", { name: "signed up", exact: true }),
+      modal.getByRole("cell", { name: "Jane added", exact: true }),
     ).toBeVisible();
     await expect(
-      modal.getByRole("cell", { name: "signed up late" }),
+      modal.getByRole("cell", { name: "Alice added", exact: true }),
     ).toBeVisible();
     await expect(
-      modal.getByRole("cell", { name: "added a guest" }),
+      modal.getByRole("cell", { name: "Jane added as cook", exact: true }),
+    ).toBeVisible();
+    await expect(
+      modal.getByRole("cell", { name: "Omnivore guest of Jane added" }),
     ).toBeVisible();
 
     // Table should have header columns
@@ -497,7 +502,7 @@ test.describe("Meal Editing", () => {
     await page.goto("/meals/42/edit/");
     await page.waitForLoadState("networkidle");
     await expect(
-      page.getByRole("cell", { name: "Jane Smith", exact: true }),
+      page.getByRole("cell", { name: "A - Jane Smith", exact: true }),
     ).toBeVisible({ timeout: 10000 });
 
     // Next arrow should be visible (fixture has next_id: 43)

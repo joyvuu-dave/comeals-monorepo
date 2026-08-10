@@ -336,6 +336,38 @@ check_vitest() {
   fi
 }
 
+# The mocked E2E fixtures are generated from the real API
+# (rake test:generate_fixtures). Regenerate them and fail when the
+# result differs from what is committed — that means a Rails change
+# altered an API response without carrying its fixture change in the
+# same commit.
+check_fixture_freshness() {
+  step "API fixtures"
+
+  local output exit_code=0
+  output=$(RAILS_ENV=test bundle exec rake test:generate_fixtures 2>&1) || exit_code=$?
+
+  if [ "$exit_code" -ne 0 ]; then
+    fail "rake test:generate_fixtures failed"
+    echo "$output" | tail -10
+    record "API fixtures" "FAIL" "generation failed"
+    return
+  fi
+
+  local drift
+  drift=$(git status --porcelain -- tests/fixtures/)
+  if [ -z "$drift" ]; then
+    pass "Fixtures match the API"
+    record "API fixtures" "PASS" "no drift"
+  else
+    fail "Fixtures are stale — commit the regenerated files"
+    echo "$drift" | while IFS= read -r line; do
+      info "  $line"
+    done
+    record "API fixtures" "FAIL" "stale fixtures"
+  fi
+}
+
 check_playwright() {
   step "Playwright"
 
@@ -490,6 +522,7 @@ main() {
   # Tests
   check_rspec
   check_vitest
+  check_fixture_freshness
   check_playwright
   check_integration
 

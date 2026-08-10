@@ -44,7 +44,7 @@ test.describe("Error Handling & Edge Cases", () => {
       await page.waitForLoadState("networkidle");
 
       const bobCell = page.getByRole("cell", {
-        name: "Bob Johnson",
+        name: "B - Bob Johnson",
         exact: true,
       });
       await expect(bobCell).toBeVisible({ timeout: 10000 });
@@ -109,7 +109,7 @@ test.describe("Error Handling & Edge Cases", () => {
 
       // The first automatic retry (2s) reaches a healthy server.
       await expect(
-        page.getByRole("cell", { name: "Jane Smith", exact: true }),
+        page.getByRole("cell", { name: "A - Jane Smith", exact: true }),
       ).toBeVisible({ timeout: 10000 });
       await expect(page.getByText("Trouble loading this meal.")).toHaveCount(0);
     });
@@ -149,7 +149,7 @@ test.describe("Error Handling & Edge Cases", () => {
       healthy = true;
       await page.getByRole("button", { name: "Retry now" }).click();
       await expect(
-        page.getByRole("cell", { name: "Jane Smith", exact: true }),
+        page.getByRole("cell", { name: "A - Jane Smith", exact: true }),
       ).toBeVisible({ timeout: 2500 });
       await expect(page.getByText("Trouble loading this meal.")).toHaveCount(0);
     });
@@ -346,7 +346,7 @@ test.describe("Error Handling & Edge Cases", () => {
       await page.waitForLoadState("networkidle");
 
       const bobCell = page.getByRole("cell", {
-        name: "Bob Johnson",
+        name: "B - Bob Johnson",
         exact: true,
       });
       await expect(bobCell).toBeVisible({ timeout: 10000 });
@@ -421,7 +421,7 @@ test.describe("Error Handling & Edge Cases", () => {
       await page.goto("/meals/42/edit/");
       await page.waitForLoadState("networkidle");
       await expect(
-        page.getByRole("cell", { name: "Jane Smith", exact: true }),
+        page.getByRole("cell", { name: "A - Jane Smith", exact: true }),
       ).toBeVisible({ timeout: 10000 });
 
       // Previous arrow should work (prev_id: 41)
@@ -446,7 +446,7 @@ test.describe("Error Handling & Edge Cases", () => {
       await page.goto("/meals/42/edit/");
       await page.waitForLoadState("networkidle");
       await expect(
-        page.getByRole("cell", { name: "Jane Smith", exact: true }),
+        page.getByRole("cell", { name: "A - Jane Smith", exact: true }),
       ).toBeVisible({ timeout: 10000 });
 
       // Next arrow should work (next_id: 43)

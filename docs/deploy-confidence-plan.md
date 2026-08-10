@@ -97,28 +97,29 @@ switching over: log in, open a meal, open the calendar on a DST month.
 Catches the class of bug where the code is fine but the deploy is not
 (env vars, asset serving, the things no local test sees).
 
-### 7. Mock fixtures generated from Rails — OPEN, bigger than planned
+### 7. Mock fixtures generated from Rails — DONE
 
-A rake task renders each serializer with seed data and writes the JSON the
-mocked e2e suite serves. A Rails change then updates the mocks in the same
-commit, and drift between the mocked suite and the real API becomes
-impossible instead of merely checked (today the contract test pins key
-names only).
+`rake test:generate_fixtures` seeds the fixture story (meal 42,
+Jane/Bob/Alice, January 2026) with pinned ids and a frozen clock, then
+captures eight real API responses through the full controller stack —
+an ActionDispatch integration session — into tests/fixtures/. Two runs
+write identical bytes. bin/check regenerates them and fails on any git
+diff, so a Rails change that alters an API response must carry its
+fixture change in the same commit. Drift between the mocked suite and
+the real API is now impossible, not merely checked.
 
-Discovered while starting this (2026-08-09): the fixtures have already
-drifted in content, not just in risk. tests/fixtures/calendar.json gives
-tiles titles like "CH: Book Club" and "GR: Jane's Guest", but the real
-serializers emit multiline titles (time range, "Common House", the title,
-the shortened resident name and unit). The mocked suite renders calendar
-text that production never shows.
+What the drift had been hiding (found 2026-08-09, fixed here): the
+handwritten calendar.json gave tiles titles like "CH: Book Club" that
+production never shows; the hosts stub served email addresses where
+production serves names and units; the handwritten history.json showed
+three tidy rows where the real audit trail has nine, including noisy
+"Meal, update" rows from touch audits (tracked as its own issue). The
+mocked suite now renders exactly what production renders.
 
-Fixing this properly means: generate the fixtures through the real
-controller stack (an ActionDispatch integration session against seeded
-records with pinned ids), update roughly 28 test assertions across 9
-files that quote the old tile text, and re-record every golden that shows
-calendar tiles — most of the visual suite, across two browsers and two
-platforms. Each re-recorded golden needs human review. Do it as its own
-change, not as a side effect of anything else.
+The cost, as predicted: assertion updates across the e2e and unit
+suites, and 63 of 92 visual goldens re-recorded (both browsers, both
+platforms). MealFormSerializer#residents gained an ORDER BY so the
+captured JSON cannot depend on Postgres row order.
 
 Design decisions (approved 2026-08-09):
 

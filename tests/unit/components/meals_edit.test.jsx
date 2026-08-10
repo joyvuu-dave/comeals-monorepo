@@ -78,7 +78,7 @@ describe("MealsEdit", () => {
       await screen.findByText("OPEN", {}, { timeout: 5000 }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("cell", { name: "Jane Smith" }),
+      screen.getByRole("cell", { name: "A - Jane Smith" }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Enter meal description")).toHaveDisplayValue(
       "Pasta night with garlic bread",

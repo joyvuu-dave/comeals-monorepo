@@ -52,9 +52,9 @@ test.describe("Critical Paths", () => {
           id: 10,
           description: "Kitchen cleaning rotation",
           residents: [
-            { id: 1, display_name: "Jane Smith", signed_up: true },
-            { id: 2, display_name: "Bob Johnson", signed_up: false },
-            { id: 3, display_name: "Alice Williams", signed_up: false },
+            { id: 1, display_name: "A - Jane Smith", signed_up: true },
+            { id: 2, display_name: "B - Bob Johnson", signed_up: false },
+            { id: 3, display_name: "C - Alice Williams", signed_up: false },
           ],
         }),
       });
@@ -87,7 +87,11 @@ test.describe("Critical Paths", () => {
     // Residents should be sorted alphabetically
     const listItems = modal.locator("li");
     const names = await listItems.allTextContents();
-    expect(names).toEqual(["Alice Williams", "Bob Johnson", "Jane Smith"]);
+    expect(names).toEqual([
+      "A - Jane Smith",
+      "B - Bob Johnson",
+      "C - Alice Williams",
+    ]);
 
     // API: GET to /rotations/10
     expect(rotationGetUrl).toContain("/rotations/10");
@@ -212,7 +216,7 @@ test.describe("Critical Paths", () => {
     await page.goto("/meals/42/edit/");
     await page.waitForLoadState("networkidle");
     await expect(
-      page.getByRole("cell", { name: "Jane Smith", exact: true }),
+      page.getByRole("cell", { name: "A - Jane Smith", exact: true }),
     ).toBeVisible({ timeout: 10000 });
 
     const mealIndicator = page.locator("span.online, span.offline");
@@ -239,7 +243,7 @@ test.describe("Critical Paths", () => {
     await page.waitForLoadState("networkidle");
 
     const janeCell = page.getByRole("cell", {
-      name: "Jane Smith",
+      name: "A - Jane Smith",
       exact: true,
     });
     await expect(janeCell).toBeVisible({ timeout: 10000 });

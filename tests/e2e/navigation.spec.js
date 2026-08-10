@@ -40,7 +40,7 @@ test.describe("Navigation", () => {
 
     // Should show history items from fixture -- use exact cell match
     await expect(
-      page.getByRole("cell", { name: "signed up", exact: true }),
+      page.getByRole("cell", { name: "Jane added", exact: true }),
     ).toBeVisible({ timeout: 5000 });
   });
 
@@ -77,7 +77,7 @@ test.describe("Navigation", () => {
     // Load the meal page fully: attendee rows and cook rows on screen.
     await page.goto("/meals/42/edit/");
     const janeCell = page.getByRole("cell", {
-      name: "Jane Smith",
+      name: "A - Jane Smith",
       exact: true,
     });
     await expect(janeCell).toBeVisible({ timeout: 10000 });
@@ -85,7 +85,8 @@ test.describe("Navigation", () => {
     // To the calendar. Its mount tears down the meal page's store state.
     await page.getByRole("button", { name: "Calendar" }).click();
     await expect(page).toHaveURL(/\/calendar\//, { timeout: 5000 });
-    const mealEvent = page.locator("text=Meal: Jane Smith");
+    // Meal 42's tile: "Dinner\n3 attending".
+    const mealEvent = page.locator("text=3 attending");
     await expect(mealEvent).toBeVisible({ timeout: 5000 });
 
     // Back into the meal, the same way production does it: the calendar
@@ -163,7 +164,7 @@ test.describe("Navigation", () => {
     // the load lands — a longer timeout could let the loaded state mask
     // a stale-row bug (the loaded meal also has blank cost inputs).
     await expect(
-      page.getByRole("cell", { name: "Jane Smith", exact: true }),
+      page.getByRole("cell", { name: "A - Jane Smith", exact: true }),
     ).toHaveCount(0, { timeout: 900 });
     await expect(page.getByLabel("Set meal cost")).toHaveCount(0, {
       timeout: 900,
@@ -269,7 +270,7 @@ test.describe("Navigation", () => {
       timeout: 10000,
     });
     await expect(
-      page.getByRole("cell", { name: "signed up", exact: true }),
+      page.getByRole("cell", { name: "Jane added", exact: true }),
     ).toBeVisible({ timeout: 5000 });
   });
 });

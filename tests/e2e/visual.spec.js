@@ -112,7 +112,7 @@ test.describe("Visual Baselines", () => {
 
     // Wait for residents to render in attendee table
     await expect(
-      page.getByRole("cell", { name: "Jane Smith", exact: true }),
+      page.getByRole("cell", { name: "A - Jane Smith", exact: true }),
     ).toBeVisible({ timeout: 10000 });
     await page.waitForTimeout(500);
 
@@ -318,7 +318,8 @@ test.describe("Visual Baselines", () => {
 
     const modal = page.locator(".ReactModal__Content--after-open");
     await expect(modal).toBeVisible({ timeout: 10000 });
-    await expect(modal.locator("text=Kitchen cleaning rotation")).toBeVisible({
+    // The fixture rotation's description is its meals' date range.
+    await expect(modal.locator("text=Jan 15–17, 2026")).toBeVisible({
       timeout: 5000,
     });
     await page.waitForTimeout(500);
@@ -342,7 +343,7 @@ test.describe("Visual Baselines", () => {
     const modal = page.locator(".ReactModal__Content--after-open");
     await expect(modal).toBeVisible({ timeout: 5000 });
     await expect(
-      modal.getByRole("cell", { name: "signed up", exact: true }),
+      modal.getByRole("cell", { name: "Jane added", exact: true }),
     ).toBeVisible({ timeout: 5000 });
     await page.waitForTimeout(500);
 
@@ -440,7 +441,7 @@ test.describe("Visual Baselines", () => {
     await page.waitForLoadState("networkidle");
 
     const janeCell = page.getByRole("cell", {
-      name: "Jane Smith",
+      name: "A - Jane Smith",
       exact: true,
     });
     await expect(janeCell).toBeVisible({ timeout: 10000 });
