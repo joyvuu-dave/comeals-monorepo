@@ -97,7 +97,7 @@ switching over: log in, open a meal, open the calendar on a DST month.
 Catches the class of bug where the code is fine but the deploy is not
 (env vars, asset serving, the things no local test sees).
 
-### 7. Mock fixtures generated from Rails — DONE
+### 7. Mock fixtures generated from Rails — DONE (286544a)
 
 `rake test:generate_fixtures` seeds the fixture story (meal 42,
 Jane/Bob/Alice, January 2026) with pinned ids and a frozen clock, then
