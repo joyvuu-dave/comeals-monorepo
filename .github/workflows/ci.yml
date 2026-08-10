@@ -58,6 +58,118 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
+      - run: npm run format:check
+
+  # Vitest strips types without checking them (esbuild), so the
+  # API-contract compile gate in tests/unit/api_contract.test.ts only
+  # bites here. Without this job, a type-level drift at the API
+  # boundary merges green.
+  node-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+
+  node-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm audit
+
+  ruby-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+      - run: bundle exec brakeman --no-pager -q
+      - run: bundle exec bundle audit check --update
+
+  # The same quality gate bin/check runs: complexity, duplication, and
+  # smells averaged over app and lib, minimum score 80.
+  ruby-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+      - run: bundle exec rubycritic app lib --no-browser --format console --minimum-score 80
+
+  bundle-budget:
+    runs-on: ubuntu-latest
+    env:
+      VITE_PUSHER_KEY: "test-key-for-ci"
+      VITE_PUSHER_CLUSTER: "us2"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: bin/bundle-budget
+
+  # The mocked E2E fixtures are generated from the real API
+  # (rake test:generate_fixtures). Regenerate and fail on any diff: a
+  # commit that changes an API response must carry its fixture change.
+  api-fixtures:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: comeals_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      RAILS_ENV: test
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/comeals_test
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+      # The generation task shells out to prettier for formatting.
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # Same stubs as ruby-test: the app boots without a Vite build.
+      - name: Create frontend build stubs
+        run: |
+          echo '<!DOCTYPE html><html><head></head><body><div id="root"></div></body></html>' > public/index.html
+          mkdir -p public/.vite
+          echo '{}' > public/.vite/manifest.json
+      - run: bin/rails db:schema:load
+      - run: bundle exec rake test:generate_fixtures
+      - name: Fail if fixtures are stale
+        run: |
+          if [ -n "$(git status --porcelain tests/fixtures/)" ]; then
+            echo "Fixtures are stale — run 'RAILS_ENV=test bundle exec rake test:generate_fixtures' and commit the result:"
+            git status --porcelain tests/fixtures/
+            git diff tests/fixtures/
+            exit 1
+          fi
 
   node-unit-tests:
     runs-on: ubuntu-latest
