@@ -34,7 +34,7 @@ Lessons, each mapped to an item below:
 
 ## Worklist
 
-### 1. Calendar month sweep
+### 1. Calendar month sweep — DONE (3646a15)
 
 The calendar is the most shared surface in the app, and the November bug
 would have been caught by rendering more months. A test that walks every
@@ -49,13 +49,13 @@ February, and months starting on every weekday) and asserts, for each:
 Plus visual goldens for a handful of representative months — November
 permanently among them.
 
-### 2. Any console error fails the test
+### 2. Any console error fails the test — DONE (3646a15)
 
 One hook in the shared e2e and integration helpers. Rendering bugs almost
 always log to the console before a person notices them; today those logs
 are ignored outside the visual specs.
 
-### 3. Frozen clock for the integration suite
+### 3. Frozen clock for the integration suite — DONE (5606761)
 
 Deterministic screenshots against a real backend need everyone to agree on
 the fake date: seed data with fixed dates, Playwright's clock API freezing
@@ -63,7 +63,7 @@ the browser, and an env var the test Rails server reads so `community_today`
 matches. This is the one design-heavy item; it must land before item 4 so
 the action tests can assert rendering, not only persistence.
 
-### 4. Exhaustive action inventory
+### 4. Exhaustive action inventory — DONE (d35f6bc)
 
 Walk the SPA code and list every action a user can take. Every action gets
 an integration test: perform it against real Rails, reload, assert the
@@ -84,27 +84,42 @@ The seed task grows dedicated meals for the mutating tests so tests stay
 independent; lifecycle tests (create, edit, delete) clean up after
 themselves. Roughly 30–40 new tests, all doubled across both engines.
 
-### 5. Ratchets and known gaps
+### 5. Ratchets and known gaps — DONE (712985b)
 
 - Vitest coverage thresholds pinned at today's numbers (84% statements,
   77% branches) so they can only rise.
 - Tests for `data_store_hosts.js` — 6% covered, and it is the in-flight /
   stale-response cache feeding the reservation forms.
 
-### 6. Post-deploy smoke test
+### 6. Post-deploy smoke test — DONE (9367389)
 
 A small Playwright script `bin/deploy` runs against the live site after
 switching over: log in, open a meal, open the calendar on a DST month.
 Catches the class of bug where the code is fine but the deploy is not
 (env vars, asset serving, the things no local test sees).
 
-### 7. Mock fixtures generated from Rails
+### 7. Mock fixtures generated from Rails — OPEN, bigger than planned
 
 A rake task renders each serializer with seed data and writes the JSON the
 mocked e2e suite serves. A Rails change then updates the mocks in the same
 commit, and drift between the mocked suite and the real API becomes
 impossible instead of merely checked (today the contract test pins key
 names only).
+
+Discovered while starting this (2026-08-09): the fixtures have already
+drifted in content, not just in risk. tests/fixtures/calendar.json gives
+tiles titles like "CH: Book Club" and "GR: Jane's Guest", but the real
+serializers emit multiline titles (time range, "Common House", the title,
+the shortened resident name and unit). The mocked suite renders calendar
+text that production never shows.
+
+Fixing this properly means: generate the fixtures through the real
+controller stack (an ActionDispatch integration session against seeded
+records with pinned ids), update roughly 28 test assertions across 9
+files that quote the old tile text, and re-record every golden that shows
+calendar tiles — most of the visual suite, across two browsers and two
+platforms. Each re-recorded golden needs human review. Do it as its own
+change, not as a side effect of anything else.
 
 ### 8. Release process (the other half of confidence)
 
