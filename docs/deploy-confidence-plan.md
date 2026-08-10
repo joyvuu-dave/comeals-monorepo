@@ -222,16 +222,18 @@ Build order:
       has fresh secrets, placeholder Pusher values, no mail/healthchecks/
       Bugsnag/Skylight/scheduler, and the COMEALS_STAGING code guards
       (a06363c). Parked at zero dynos.
-- [ ] bin/deploy gains a non-interactive mode (it currently stops at
-      a confirmation prompt) and its gates become reusable steps.
+- [x] bin/deploy --yes (5edd972): skips the question, never the gates.
 - [x] bin/staging-rehearsal: verify-neuter → fresh prod backup →
       restore → deploy → migrate → log-grep → smoke → park. First
       supervised run passed 2026-08-10, applying the pending schedule
       migrations against a copy of that day's production data. Note:
       the Procfile release phase already runs db:migrate, so promote
       will migrate production automatically.
-- [ ] The aggressive staging smoke (extend bin/smoke with write flows
-      it may only run against staging).
+- [x] Aggressive staging smoke (89fd533): tests/smoke/aggressive.js
+      logs in and proves the attendance write path persists, locked to
+      targets whose /api/v1/version says staging:true. No stored
+      credentials: bin/staging-rehearsal seeds a smoke resident with a
+      fresh random password each run. First full pass 2026-08-10.
 - [ ] deploy.yml: the seven steps above, plus the healthchecks ping,
       the workflow_dispatch trigger with the `fast` input, and the
       `DEPLOY_HOLD` check.
