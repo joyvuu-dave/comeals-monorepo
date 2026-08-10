@@ -23,6 +23,13 @@ DEPLOY_TIMESTAMP=""
 NEEDS_MAINTENANCE=false
 HEROKU_SHA=""
 
+# --yes (or DEPLOY_YES=1): proceed without the interactive
+# confirmation. The automated pipeline (deploy.yml) runs with this;
+# every gate still runs — the flag only removes the question.
+if [ "${1:-}" = "--yes" ]; then
+  DEPLOY_YES=1
+fi
+
 # --- Output helpers (shared with bin/check) -----------------------------------
 
 . "$(dirname "$0")/lib/output.sh"
@@ -462,11 +469,15 @@ main() {
   done
 
   echo
-  printf "Continue? (y/n) "
-  read -r confirm
-  if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
-    info "Aborted."
-    exit 0
+  if [ "${DEPLOY_YES:-}" = "1" ]; then
+    info "Proceeding without a prompt (--yes)"
+  else
+    printf "Continue? (y/n) "
+    read -r confirm
+    if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+      info "Aborted."
+      exit 0
+    fi
   fi
 
   DEPLOY_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S")
