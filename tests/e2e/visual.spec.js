@@ -406,6 +406,26 @@ test.describe("Visual Baselines", () => {
       timeout: 10000,
     });
     await expect(page.locator("text=Extras")).toBeVisible({ timeout: 5000 });
+
+    // Guard the story before diffing pixels (the day-picker pattern):
+    // a screenshot alone stays green when the state it depicts changes
+    // meaning — that is how the all-green version of this golden
+    // slipped through in 286544a. Jane must be locked in (green cell
+    // with the grayscale filter), Bob must be a removable extra (green
+    // cell, no filter). If these fail, the test data is broken, not
+    // the styling.
+    const janeCell = page.getByRole("cell", {
+      name: "A - Jane Smith",
+      exact: true,
+    });
+    const bobCell = page.getByRole("cell", {
+      name: "B - Bob Johnson",
+      exact: true,
+    });
+    await expect(janeCell).toHaveClass(/background-green/);
+    await expect(janeCell).toHaveAttribute("style", /grayscale/);
+    await expect(bobCell).toHaveClass(/background-green/);
+    await expect(bobCell).not.toHaveAttribute("style", /grayscale/);
     await page.waitForTimeout(500);
 
     await expect(page).toHaveScreenshot("meal-closed.png", {
