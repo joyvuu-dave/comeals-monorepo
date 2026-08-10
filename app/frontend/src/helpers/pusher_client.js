@@ -83,6 +83,12 @@ function connect(Pusher) {
 export function startPusher() {
   if (started) return;
   started = true;
+  // No key, no connection. The staging app builds with a blank
+  // VITE_PUSHER_KEY on purpose — it must not connect anywhere real,
+  // and a placeholder key would spray console errors that fail the
+  // smoke tests. Queued calls simply never replay; the app works
+  // without live updates. Same graceful-absence pattern as bugsnag.js.
+  if (!import.meta.env.VITE_PUSHER_KEY) return;
   // The tests stub window.Pusher (tests/helpers/setup.js) so no test
   // ever opens a real connection. The stub predates the lazy import
   // below; loading the real library anyway would bypass it, and did —

@@ -111,6 +111,26 @@ if grep -qi "DEPRECAT" "$migrate_log"; then
 fi
 ok "Migrations ran clean"
 
+step "Seed the smoke resident and smoke meal"
+
+# A per-rehearsal random password, passed as env, never stored. The
+# seed refuses to run unless the app says COMEALS_STAGING.
+SMOKE_EMAIL="smoke@staging.invalid"
+SMOKE_PASSWORD=$(openssl rand -hex 16)
+seed_log=$(mktemp)
+if ! heroku run --exit-code -a "$STAGING_APP" \
+  --env "SMOKE_EMAIL=$SMOKE_EMAIL;SMOKE_PASSWORD=$SMOKE_PASSWORD" \
+  -- bin/rails runner bin/lib/staging_smoke_seed.rb 2>&1 | tee "$seed_log"; then
+  fail "Smoke seed failed"
+  exit 1
+fi
+SMOKE_MEAL_ID=$(grep -o 'SMOKE_MEAL_ID=[0-9]*' "$seed_log" | cut -d= -f2)
+if [ -z "$SMOKE_MEAL_ID" ]; then
+  fail "Smoke seed printed no SMOKE_MEAL_ID"
+  exit 1
+fi
+ok "Smoke resident ready; smoke meal $SMOKE_MEAL_ID created"
+
 step "Boot"
 
 heroku ps:scale web=1 -a "$STAGING_APP"
@@ -154,10 +174,18 @@ if [ -n "$log_hits" ]; then
 fi
 ok "Logs are quiet"
 
-step "Smoke test"
+step "Smoke test (read-only checks, logged in)"
 
-bin/smoke "$staging_url"
-ok "Smoke passed"
+SMOKE_EMAIL="$SMOKE_EMAIL" SMOKE_PASSWORD="$SMOKE_PASSWORD" \
+  bin/smoke "$staging_url"
+ok "Read-only smoke passed"
+
+step "Aggressive smoke (real writes on the disposable copy)"
+
+SMOKE_URL="$staging_url" SMOKE_EMAIL="$SMOKE_EMAIL" \
+  SMOKE_PASSWORD="$SMOKE_PASSWORD" SMOKE_MEAL_ID="$SMOKE_MEAL_ID" \
+  node tests/smoke/aggressive.js
+ok "Aggressive smoke passed"
 
 if [ "${STAGING_KEEP_UP:-}" != "1" ]; then
   step "Park"

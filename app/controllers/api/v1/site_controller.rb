@@ -10,8 +10,18 @@ module Api
       # dyno and changes only on the next release. Returns 0 outside
       # production and 1 when we can't parse a real release in production
       # (missing or malformed env var) — sentinel values, not real releases.
+      #
+      # commit: the deployed git sha (also Dyno Metadata), so the deploy
+      # pipeline can cross-check what is running over plain HTTP.
+      # staging: true only on the staging app. The aggressive smoke test
+      # (tests/smoke/aggressive.js) writes real data and refuses to run
+      # against any server that does not say staging here.
       def version
-        render json: { version: heroku_release_number }
+        render json: {
+          version: heroku_release_number,
+          commit: ENV.fetch('HEROKU_SLUG_COMMIT', nil),
+          staging: ENV['COMEALS_STAGING'].present?
+        }
       end
 
       private
