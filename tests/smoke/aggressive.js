@@ -79,7 +79,10 @@ async function main() {
   // 2. Attendance toggle on the seeded open meal: on, persisted, off,
   // persisted. This exercises the locked meal write path end to end.
   const mealUrl = `${BASE}/meals/${MEAL_ID}/edit/`;
-  const smokeCell = () => page.getByRole("cell", { name: /Smoke Test/ });
+  // The clickable name cell alone carries background-transition; the
+  // row's toggle cells also contain "Smoke Test" in their aria-labels.
+  const smokeCell = () =>
+    page.locator("td.background-transition", { hasText: "Smoke Test" });
 
   await page.goto(mealUrl);
   await smokeCell().waitFor({ timeout: 15000 });
