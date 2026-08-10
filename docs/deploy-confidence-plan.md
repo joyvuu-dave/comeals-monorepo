@@ -10,8 +10,7 @@ In August 2026 a community member found that production renders November
 2026 with every day under the wrong weekday. The cause was react-big-calendar's
 dayjs localizer, which walks the month grid in 24-hour steps; a month that
 contains the end of daylight saving time has a 25-hour day, so the grid
-shears by one column. The bug had been in production at least since April
-2026. No test caught it because the visual goldens only ever showed January —
+shears by one column. The bug had been in production at least since April 2026. No test caught it because the visual goldens only ever showed January —
 a month with no DST transition. The fix (bd1b46e, a performance change that
 swapped the localizer for date-fns) sat on main, undeployed.
 
