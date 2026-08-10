@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Post-deploy smoke test: drive the LIVE site with a real browser and
+# fail loudly if it is broken (docs/deploy-confidence-plan.md item 6).
+# This catches the class of bug no local test can: the code is fine
+# but the deploy is not (env vars, asset serving, a stale build).
+#
+# Read-only by design — production is real ledger data. Without
+# credentials it checks the public surface: the login page renders
+# with no console errors, and the API answers. With SMOKE_EMAIL and
+# SMOKE_PASSWORD set it also logs in and renders the calendar on a
+# daylight-saving month (the November escape) and the meal page.
+#
+# Usage:
+#   bin/smoke                        # against https://comeals.com
+#   bin/smoke http://localhost:3000  # against any other base URL
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+SMOKE_URL="${1:-https://comeals.com}" node tests/smoke/smoke.js

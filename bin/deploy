@@ -318,6 +318,21 @@ check_logs() {
   fi
 }
 
+# Drive the live site with a real browser (bin/smoke): login page,
+# and with SMOKE_EMAIL/SMOKE_PASSWORD set, login + calendar on a DST
+# month + meal page. curl proves the server answers; this proves the
+# app runs. A failure here means the deploy is bad — roll back.
+run_smoke() {
+  step "Browser smoke test"
+
+  if bin/smoke "$APP_URL"; then
+    ok "Smoke test passed"
+  else
+    fail "SMOKE TEST FAILED — the deployed app is broken. Roll back."
+    exit 1
+  fi
+}
+
 check_health() {
   step "Health check"
 
@@ -414,6 +429,7 @@ main() {
 
   check_logs
   check_health
+  run_smoke
 
   echo
   green "============================================"
