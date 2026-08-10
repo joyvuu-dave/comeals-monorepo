@@ -8,12 +8,44 @@ const BASE = process.env.SMOKE_URL || "https://comeals.com";
 const EMAIL = process.env.SMOKE_EMAIL;
 const PASSWORD = process.env.SMOKE_PASSWORD;
 
-// The calendar month to render when logged in: the next November,
-// because a DST fall-back month is where grid bugs show first.
-function nextNovember() {
+// The calendar months to render when logged in: the next November
+// (DST fall-back, where the shipped grid bug lived) and the next
+// March (DST spring-forward). monthIndex is 0-based.
+function nextOccurrence(monthIndex) {
   const now = new Date();
-  const year = now.getMonth() >= 10 ? now.getFullYear() + 1 : now.getFullYear();
-  return `${year}-11-15`;
+  const year =
+    now.getMonth() >= monthIndex ? now.getFullYear() + 1 : now.getFullYear();
+  const month = String(monthIndex + 1).padStart(2, "0");
+  return { year, date: `${year}-${month}-15` };
+}
+
+// Renders /calendar/all/<date>/ and asserts the month's 1st sits in
+// its true weekday column.
+async function checkMonthGrid(page, base, monthIndex, label) {
+  const { year, date } = nextOccurrence(monthIndex);
+  await page.goto(`${base}/calendar/all/${date}/`);
+  await page.waitForSelector(".rbc-calendar", { timeout: 15000 });
+  const grid = await page.$$eval(".rbc-month-row", (rows) =>
+    rows.map((row) =>
+      Array.from(row.querySelectorAll(".rbc-date-cell"))
+        .map(
+          (c) =>
+            c.textContent.trim() +
+            (c.classList.contains("rbc-off-range") ? "*" : ""),
+        )
+        .join(" "),
+    ),
+  );
+  const startCol = new Date(year, monthIndex, 1).getDay();
+  const firstRow = grid[0].split(" ");
+  const firstInRange = firstRow.findIndex((cell) => !cell.endsWith("*"));
+  if (firstInRange !== startCol || firstRow[startCol] !== "01") {
+    throw new Error(
+      `${label} ${year} grid misaligned: row 1 is "${grid[0]}", ` +
+        `expected the 01 in column ${startCol}`,
+    );
+  }
+  return `${label} ${year} grid aligned`;
 }
 
 async function main() {
@@ -55,32 +87,9 @@ async function main() {
     await page.waitForSelector(".rbc-calendar", { timeout: 15000 });
     pass("login works, calendar renders");
 
-    // 4. The DST month renders with the 1st under its true weekday.
-    const november = nextNovember();
-    await page.goto(`${BASE}/calendar/all/${november}/`);
-    await page.waitForSelector(".rbc-calendar", { timeout: 15000 });
-    const grid = await page.$$eval(".rbc-month-row", (rows) =>
-      rows.map((row) =>
-        Array.from(row.querySelectorAll(".rbc-date-cell"))
-          .map(
-            (c) =>
-              c.textContent.trim() +
-              (c.classList.contains("rbc-off-range") ? "*" : ""),
-          )
-          .join(" "),
-      ),
-    );
-    const [year] = november.split("-").map(Number);
-    const startCol = new Date(year, 10, 1).getDay();
-    const firstRow = grid[0].split(" ");
-    const firstInRange = firstRow.findIndex((cell) => !cell.endsWith("*"));
-    if (firstInRange !== startCol || firstRow[startCol] !== "01") {
-      throw new Error(
-        `November ${year} grid misaligned: row 1 is "${grid[0]}", ` +
-          `expected the 01 in column ${startCol}`,
-      );
-    }
-    pass(`November ${year} grid aligned`);
+    // 4. Both DST months render with the 1st under its true weekday.
+    pass(await checkMonthGrid(page, BASE, 10, "November"));
+    pass(await checkMonthGrid(page, BASE, 2, "March"));
 
     // 5. The next meal's page renders.
     await page.getByRole("button", { name: "Next Meal" }).click();
