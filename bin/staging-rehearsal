@@ -1,0 +1,169 @@
+#!/usr/bin/env bash
+# Rehearse the current commit on staging before production sees it
+# (docs/deploy-confidence-plan.md, item 8, steps 3-4).
+#
+# Sequence: prove the staging app cannot email or broadcast -> capture
+# a fresh production backup -> restore it into staging -> deploy HEAD
+# -> run migrations against today's real data -> boot -> check the
+# logs -> smoke test. Any failure stops the script with exit 1.
+#
+# The neuter check runs first and is absolute: staging holds a copy of
+# the production database, which contains real residents' email
+# addresses. If the app could send mail or push events, this script
+# must not put data on it.
+#
+# Usage:
+#   bin/staging-rehearsal                  # rehearse HEAD, park after
+#   STAGING_KEEP_UP=1 bin/staging-rehearsal  # leave web running
+#                                            # (the pipeline promotes
+#                                            # right after, then parks)
+#
+# SMOKE_EMAIL / SMOKE_PASSWORD pass through to bin/smoke for the
+# logged-in flows; without them the smoke checks the public surface.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+. bin/lib/output.sh
+
+PROD_APP=comeals-monorepo
+STAGING_APP=comeals-staging
+
+# Config vars that must NOT exist on staging. Each one is an outbound
+# channel to the real world.
+FORBIDDEN_VARS=(
+  GMAIL_USERNAME
+  GMAIL_APP_PASSWORD
+  HEALTHCHECKS_PING_KEY
+  BUGSNAG_API_KEY
+  VITE_BUGSNAG_API_KEY
+  SKYLIGHT_AUTHENTICATION
+)
+
+step "Neuter check on $STAGING_APP"
+
+config_keys=$(heroku config -a "$STAGING_APP" --json | python3 -c \
+  "import json,sys; print('\n'.join(json.load(sys.stdin).keys()))")
+
+if ! grep -qx "COMEALS_STAGING" <<< "$config_keys"; then
+  fail "COMEALS_STAGING is not set — the mail and Pusher guards are off"
+  exit 1
+fi
+ok "COMEALS_STAGING is set (mail collects in memory, Pusher is a no-op)"
+
+for var in "${FORBIDDEN_VARS[@]}"; do
+  if grep -qx "$var" <<< "$config_keys"; then
+    fail "$var is set on $STAGING_APP — staging must not have it"
+    exit 1
+  fi
+done
+ok "No mail, healthchecks, Bugsnag, or Skylight credentials present"
+
+if heroku addons -a "$STAGING_APP" 2>/dev/null | grep -q scheduler; then
+  fail "A scheduler addon exists on $STAGING_APP — staging must not run jobs"
+  exit 1
+fi
+ok "No scheduler addon"
+
+# The clock process sends reminder emails and pings healthchecks. It
+# must never run here. (Before the first deploy the formation is empty,
+# which also passes.)
+clock_count=$(heroku ps -a "$STAGING_APP" --json | python3 -c \
+  "import json,sys; d=json.load(sys.stdin); print(sum(1 for p in d if p.get('type')=='clock'))")
+if [ "$clock_count" != "0" ]; then
+  fail "A clock dyno is running on $STAGING_APP"
+  exit 1
+fi
+ok "No clock dyno"
+
+step "Fresh production backup"
+
+heroku pg:backups:capture -a "$PROD_APP"
+backup_url=$(heroku pg:backups:url -a "$PROD_APP")
+ok "Captured and fetched signed backup URL"
+
+step "Restore into staging"
+
+# Stop web while the database is replaced. Before the first deploy the
+# formation has no web entry; that is fine.
+heroku ps:scale web=0 -a "$STAGING_APP" 2>/dev/null || true
+heroku pg:backups:restore "$backup_url" DATABASE_URL \
+  -a "$STAGING_APP" --confirm "$STAGING_APP"
+ok "Production backup restored into staging"
+
+step "Deploy HEAD to staging"
+
+sha=$(git rev-parse HEAD)
+info "Deploying $(git rev-parse --short HEAD)"
+git push --force "https://git.heroku.com/$STAGING_APP.git" "HEAD:refs/heads/main"
+ok "Build and release succeeded"
+
+step "Migrate against today's data"
+
+migrate_log=$(mktemp)
+if ! heroku run --exit-code -a "$STAGING_APP" -- bin/rails db:migrate 2>&1 | tee "$migrate_log"; then
+  fail "Migrations failed on a copy of today's production data"
+  exit 1
+fi
+if grep -qi "DEPRECAT" "$migrate_log"; then
+  fail "Migrations printed deprecation warnings:"
+  grep -i "DEPRECAT" "$migrate_log"
+  exit 1
+fi
+ok "Migrations ran clean"
+
+step "Boot"
+
+heroku ps:scale web=1 -a "$STAGING_APP"
+
+staging_url=$(heroku apps:info -a "$STAGING_APP" --json | python3 -c \
+  "import json,sys; print(json.load(sys.stdin)['app']['web_url'].rstrip('/'))")
+
+booted=false
+for _ in $(seq 1 30); do
+  if curl -sf "$staging_url/api/v1/version" >/dev/null 2>&1; then
+    booted=true
+    break
+  fi
+  sleep 2
+done
+if [ "$booted" != "true" ]; then
+  fail "Staging did not answer /api/v1/version within 60s"
+  heroku logs -n 100 -a "$STAGING_APP" | tail -30
+  exit 1
+fi
+ok "Staging answers at $staging_url"
+
+running_sha=$(heroku config:get HEROKU_SLUG_COMMIT -a "$STAGING_APP")
+if [ "$running_sha" != "$sha" ]; then
+  fail "Staging runs $running_sha, expected $sha"
+  exit 1
+fi
+ok "Running slug is the candidate commit"
+
+step "Log check"
+
+# Everything the release and boot logged. Deprecation warnings fail on
+# purpose — a deploy is the moment to hear them, not later.
+log_hits=$(heroku logs -n 1500 -a "$STAGING_APP" \
+  | grep -iE "FATAL|DEPRECAT|status=5[0-9][0-9]| ERROR |Exception" \
+  | grep -v "pg_restore" || true)
+if [ -n "$log_hits" ]; then
+  fail "Worrying lines in the staging logs:"
+  echo "$log_hits" | head -20
+  exit 1
+fi
+ok "Logs are quiet"
+
+step "Smoke test"
+
+bin/smoke "$staging_url"
+ok "Smoke passed"
+
+if [ "${STAGING_KEEP_UP:-}" != "1" ]; then
+  step "Park"
+  heroku ps:scale web=0 -a "$STAGING_APP"
+  ok "Staging scaled back to zero"
+fi
+
+echo
+green "Rehearsal passed: $sha is ready to promote."

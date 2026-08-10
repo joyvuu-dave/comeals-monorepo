@@ -216,13 +216,20 @@ morning where the job never ran also alerts.
 
 Build order:
 
-- [ ] strong_migrations gem; fix or bless whatever it flags.
-- [ ] Heroku pipeline: create, add production, create the neutered
-      staging app, scale it to zero.
+- [x] strong_migrations gem (2565e9a); it flagged nothing — existing
+      migrations are blessed via start_after.
+- [x] Heroku pipeline `comeals`: production + comeals-staging, which
+      has fresh secrets, placeholder Pusher values, no mail/healthchecks/
+      Bugsnag/Skylight/scheduler, and the COMEALS_STAGING code guards
+      (a06363c). Parked at zero dynos.
 - [ ] bin/deploy gains a non-interactive mode (it currently stops at
       a confirmation prompt) and its gates become reusable steps.
-- [ ] bin/staging-rehearsal: the verify-neuter → restore → deploy →
-      migrate → log-grep sequence, runnable by hand first.
+- [x] bin/staging-rehearsal: verify-neuter → fresh prod backup →
+      restore → deploy → migrate → log-grep → smoke → park. First
+      supervised run passed 2026-08-10, applying the pending schedule
+      migrations against a copy of that day's production data. Note:
+      the Procfile release phase already runs db:migrate, so promote
+      will migrate production automatically.
 - [ ] The aggressive staging smoke (extend bin/smoke with write flows
       it may only run against staging).
 - [ ] deploy.yml: the seven steps above, plus the healthchecks ping,
