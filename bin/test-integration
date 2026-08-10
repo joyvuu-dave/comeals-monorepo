@@ -18,6 +18,20 @@ RAILS_PID=""
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
+# The suite's frozen clock: seeds, the Rails test server, and the
+# browser (tests/helpers/integration_setup.js) all see this date as
+# today, so relative seed dates and screenshots are the same on any
+# day the suite runs. config/initializers/integration_fake_time.rb
+# reads it, test environment only. Thu 2026-01-15 matches the mocked
+# e2e suite's frozen date.
+#
+# Set AFTER db:prepare below: Rails refuses migration timestamps that
+# are later than "now", and with the clock frozen in the past every
+# migration added since the fake date looks like it is from the
+# future. Only the seed task and the server run frozen.
+FAKE_TODAY="${INTEGRATION_FAKE_TODAY:-2026-01-15}"
+unset INTEGRATION_FAKE_TODAY
+
 cleanup() {
   if [ -n "$RAILS_PID" ]; then
     echo ""
@@ -39,7 +53,8 @@ echo "==> Preparing test database..."
 # and when preparation fails the error must be readable in CI logs.
 RAILS_ENV=test bundle exec rails db:prepare
 
-echo "==> Seeding integration test data..."
+echo "==> Seeding integration test data (frozen at $FAKE_TODAY)..."
+export INTEGRATION_FAKE_TODAY="$FAKE_TODAY"
 RAILS_ENV=test bundle exec rails test:seed_integration
 
 # ------------------------------------------------------------------
