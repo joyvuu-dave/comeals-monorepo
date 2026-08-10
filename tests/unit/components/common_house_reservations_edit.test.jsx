@@ -64,7 +64,9 @@ function renderForm({
 // ConfirmModal's confirm button is armed only after armMs; jump the
 // clock past the delay so the click goes through.
 function armAndClick(button) {
-  const nowSpy = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 1000);
+  const nowSpy = vi
+    .spyOn(performance, "now")
+    .mockReturnValue(performance.now() + 1000);
   fireEvent.click(button);
   nowSpy.mockRestore();
 }
