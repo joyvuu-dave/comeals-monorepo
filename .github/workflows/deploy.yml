@@ -1,0 +1,282 @@
+name: Deploy
+
+# The daily automated deploy (docs/deploy-confidence-plan.md, item 8).
+# Runs at 15:00 UTC — 8am Pacific in summer, 7am in winter — and on
+# demand via workflow_dispatch (same gates; `fast` only trims the
+# post-deploy soak). If any step fails, the run stops and notifies;
+# it never retries and never ships silently.
+#
+# Secrets (GitHub environment "production"): HEROKU_API_KEY,
+# ANTHROPIC_API_KEY, and optionally HEALTHCHECKS_DEPLOY_URL — a
+# healthchecks.io ping URL; when set, success pings it and failure
+# pings /fail, so a morning where the job never ran also alerts.
+
+on:
+  schedule:
+    - cron: "0 15 * * *"
+  workflow_dispatch:
+    inputs:
+      fast:
+        description: "Trim the post-deploy soak (never the checks)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  checks: read
+  actions: read
+
+env:
+  PROD_APP: comeals-monorepo
+  STAGING_APP: comeals-staging
+  PROD_URL: https://comeals.com
+  HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+
+jobs:
+  daily-deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # A hold means a person decided production should not follow main
+      # (set by rollback.yml with the reason). Fail loudly, never skip.
+      - name: Hold check
+        if: vars.DEPLOY_HOLD != ''
+        run: |
+          echo "DEPLOY_HOLD is set: ${{ vars.DEPLOY_HOLD }}"
+          echo "Fix main (usually git revert), then clear the variable."
+          exit 1
+
+      - name: Install Heroku CLI
+        run: |
+          curl -s https://cli-assets.heroku.com/install.sh | sh
+          # git pushes to git.heroku.com authenticate via netrc.
+          cat > ~/.netrc <<EOF
+          machine api.heroku.com
+            login deploy-pipeline
+            password $HEROKU_API_KEY
+          machine git.heroku.com
+            login deploy-pipeline
+            password $HEROKU_API_KEY
+          EOF
+          chmod 600 ~/.netrc
+
+      # Anything to deploy? The live sha comes from Heroku dyno
+      # metadata, not from the app, so this works regardless of what
+      # version production runs.
+      - name: Compare candidate with production
+        id: compare
+        run: |
+          set -euo pipefail
+          candidate=$(git rev-parse HEAD)
+          live=$(heroku config:get HEROKU_SLUG_COMMIT -a "$PROD_APP")
+          echo "candidate=$candidate" >> "$GITHUB_OUTPUT"
+          echo "live=$live" >> "$GITHUB_OUTPUT"
+          if [ "$candidate" = "$live" ]; then
+            echo "Production already runs $candidate — nothing to deploy."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Candidate $candidate; production runs $live."
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Every CI check on the candidate must have completed
+      # successfully. This run's own job is excluded — it is attached
+      # to the same sha and would otherwise wait on itself.
+      - name: Green gate
+        if: steps.compare.outputs.proceed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sha="${{ steps.compare.outputs.candidate }}"
+          runs=$(gh api "repos/{owner}/{repo}/commits/${sha}/check-runs" --paginate \
+            --jq '.check_runs[] | select(.name != "daily-deploy") | "\(.name)|\(.status)|\(.conclusion // "pending")"')
+          if [ -z "$runs" ]; then
+            echo "No CI runs found for $sha — refusing to deploy untested code."
+            exit 1
+          fi
+          bad=0
+          while IFS='|' read -r name status conclusion; do
+            if [ "$status" != "completed" ]; then
+              echo "still running: $name"; bad=1
+            elif [ "$conclusion" != "success" ] && [ "$conclusion" != "neutral" ] && [ "$conclusion" != "skipped" ]; then
+              echo "$conclusion: $name"; bad=1
+            fi
+          done <<< "$runs"
+          [ "$bad" -eq 0 ] || { echo "CI is not green for $sha."; exit 1; }
+          echo "All CI checks green."
+
+      - name: Set up Node and browsers for the smoke tests
+        if: steps.compare.outputs.proceed == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install smoke dependencies
+        if: steps.compare.outputs.proceed == 'true'
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      # The release note: commit messages between the live sha and the
+      # candidate, turned into plain language by Claude. If the call
+      # fails, fall back to the raw commit list — the note is
+      # packaging, not verification, and must not cost a deploy day.
+      - name: Write the release note
+        if: steps.compare.outputs.proceed == 'true'
+        id: note
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -euo pipefail
+          live="${{ steps.compare.outputs.live }}"
+          candidate="${{ steps.compare.outputs.candidate }}"
+          git log --reverse --format='- %s%n%w(0,2,2)%b' "$live..$candidate" > commits.txt
+          npm install -g @anthropic-ai/claude-code >/dev/null 2>&1
+          {
+            echo "Below are the commit messages going into today's deploy of Comeals,"
+            echo "a meal signup app for a co-housing community. Write a short release"
+            echo "note for community members and the developer. Plain, simple language;"
+            echo "short sentences; no idioms. Three sections: What changed (grouped,"
+            echo "user-visible things first), What you will see (only if anything is"
+            echo "visible; say 'Nothing looks different.' if not), How to undo (one"
+            echo "line: this release can be rolled back in one command). Do not invent"
+            echo "anything not in the commits. Output only the note, in Markdown."
+            echo
+            cat commits.txt
+          } > prompt.txt
+          if claude -p "$(cat prompt.txt)" > note.md 2>claude.err && [ -s note.md ]; then
+            echo "Note written by Claude."
+          else
+            echo "Claude call failed — falling back to the commit list." >&2
+            cat claude.err >&2 || true
+            {
+              echo "Automatically generated commit list (note generator was unavailable):"
+              echo
+              cat commits.txt
+            } > note.md
+          fi
+          tag="deploy-$(date -u +%Y%m%d-%H%M)"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Create the draft release
+        if: steps.compare.outputs.proceed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "${{ steps.note.outputs.tag }}" \
+            --draft \
+            --target "${{ steps.compare.outputs.candidate }}" \
+            --title "Deploy $(date -u +%Y-%m-%d)" \
+            --notes-file note.md
+          echo "Draft release ${{ steps.note.outputs.tag }} created."
+
+      # Restore a fresh production backup into staging, deploy the
+      # candidate, migrate on today's real data, smoke it — the whole
+      # bin/staging-rehearsal sequence, including the neuter check.
+      # The backup it captures doubles as the pre-deploy backup.
+      - name: Staging rehearsal
+        if: steps.compare.outputs.proceed == 'true'
+        run: STAGING_KEEP_UP=1 bin/staging-rehearsal
+
+      # Promote the slug staging just ran — production never gets a
+      # second build. The Procfile release phase migrates production
+      # during the promote; strong_migrations guarantees the old code
+      # keeps working against the new schema, so no maintenance mode.
+      - name: Promote to production
+        if: steps.compare.outputs.proceed == 'true'
+        id: promote
+        run: |
+          set -euo pipefail
+          staging_sha=$(heroku config:get HEROKU_SLUG_COMMIT -a "$STAGING_APP")
+          if [ "$staging_sha" != "${{ steps.compare.outputs.candidate }}" ]; then
+            echo "Staging runs $staging_sha, not the candidate — refusing to promote."
+            exit 1
+          fi
+          echo "started=$(date -u +%Y-%m-%dT%H:%M:%S)" >> "$GITHUB_OUTPUT"
+          heroku pipelines:promote -a "$STAGING_APP"
+
+      - name: Watch production
+        if: steps.compare.outputs.proceed == 'true'
+        run: |
+          set -euo pipefail
+          candidate="${{ steps.compare.outputs.candidate }}"
+          # Wait for the release (including its migration) to finish.
+          live=""
+          for _ in $(seq 1 60); do
+            live=$(curl -sf "$PROD_URL/api/v1/version" | python3 -c "import json,sys; print(json.load(sys.stdin).get('commit') or '')" || true)
+            [ "$live" = "$candidate" ] && break
+            sleep 5
+          done
+          if [ "$live" != "$candidate" ]; then
+            echo "Production never started serving $candidate (still $live)."
+            # Only roll back if the new release actually became current.
+            # If the promote's release phase failed, production never
+            # moved, and a rollback would undo the previous GOOD release.
+            current=$(heroku config:get HEROKU_SLUG_COMMIT -a "$PROD_APP")
+            if [ "$current" = "$candidate" ]; then
+              echo "The slug is current but not serving — rolling back."
+              heroku rollback -a "$PROD_APP"
+            else
+              echo "Production still runs the old release — nothing to roll back."
+            fi
+            exit 1
+          fi
+          echo "Production serves the candidate."
+          if ! bin/smoke "$PROD_URL"; then
+            echo "Smoke failed on production. Rolling back."
+            heroku rollback -a "$PROD_APP"
+            exit 1
+          fi
+          # The soak: watch the logs for a few minutes of real traffic.
+          if [ "${{ inputs.fast }}" != "true" ]; then
+            sleep 180
+          fi
+          # Only lines logged after the promote began — the last 1500
+          # lines would include pre-deploy noise, and a stale error must
+          # not trigger a rollback of a healthy release.
+          hits=$(heroku logs -n 1500 -a "$PROD_APP" \
+            | awk -v since="${{ steps.promote.outputs.started }}" '$1 >= since' \
+            | grep -iE "FATAL|status=5[0-9][0-9]| ERROR |Exception" || true)
+          if [ -n "$hits" ]; then
+            echo "Worrying production log lines after the deploy:"
+            echo "$hits" | head -20
+            echo "Rolling back."
+            heroku rollback -a "$PROD_APP"
+            exit 1
+          fi
+          echo "Logs are quiet."
+
+      - name: Publish the release
+        if: steps.compare.outputs.proceed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release edit "${{ steps.note.outputs.tag }}" --draft=false
+          echo "Release ${{ steps.note.outputs.tag }} is live."
+
+      - name: Park staging
+        if: always() && steps.compare.outputs.proceed == 'true'
+        run: heroku ps:scale web=0 -a "$STAGING_APP" || true
+
+      - name: Ping healthchecks
+        if: always()
+        env:
+          HC_URL: ${{ secrets.HEALTHCHECKS_DEPLOY_URL }}
+        run: |
+          [ -z "$HC_URL" ] && exit 0
+          if [ "${{ job.status }}" = "success" ]; then
+            curl -fsS -m 10 --retry 3 "$HC_URL" >/dev/null || true
+          else
+            curl -fsS -m 10 --retry 3 "$HC_URL/fail" >/dev/null || true
+          fi
