@@ -147,7 +147,9 @@ summer, 7am in winter, since Actions cron has no timezone):
 1. **Green gate.** Every CI check on the tip of main must have
    completed successfully — the same rule bin/deploy's preflight_ci
    enforces. Nothing to deploy (prod already runs this sha) also stops
-   here, quietly.
+   here, quietly. The gate also refuses while the `DEPLOY_HOLD` repo
+   variable is set (see rollbacks below) — a hold means a person
+   decided production should not follow main until main is fixed.
 2. **Release note.** A Claude call turns the commit messages between
    the live sha and the candidate into a plain-language note: what
    changed, what you will see, how to undo. Saved as a draft GitHub
@@ -180,6 +182,32 @@ summer, 7am in winter, since Actions cron has no timezone):
 7. **Mark it live.** Publish the draft release. `/api/v1/version`
    shows the running sha for cross-checking.
 
+**Manual deploys** (agreed 2026-08-10): one path to production. The
+same workflow, triggered by hand (workflow_dispatch), same gates —
+manual skips the clock, never the checks. An emergency fix written
+under stress is the change most likely to carry the second bug, and
+the ~20-minute pipeline is what catches it. A `fast` input may trim
+the post-staging soak minutes, never a test. The break-glass
+(`DEPLOY_WITHOUT_CI=1` on bin/deploy) stays for the one case where
+the pipeline itself is the casualty (CI or Actions down); it must be
+loud — typed confirmation, the same notification the pipeline sends,
+and a mark left behind (an auto-filed issue) so every use gets looked
+at afterward.
+
+**Manual rollbacks** (agreed 2026-08-10): production is downstream of
+main, so a raw `heroku rollback` is temporary by construction — the
+next 8am run would redeploy the same sha. `rollback.yml`
+(workflow_dispatch; inputs: target release, required one-line reason)
+does all three parts: Heroku rollback, then the read-only smoke and
+an `/api/v1/version` cross-check; edit the GitHub Releases so they
+tell the truth (loud "rolled back — reason" note on the bad one, the
+live-again one annotated as current); set `DEPLOY_HOLD` with the
+reason and file an issue. The hold clears when main is fixed —
+usually `git revert`, which is the durable rollback; Heroku rollback
+is only the mitigation. Caveat that belongs in the runbook: rolling
+back code does not roll back data the bad version wrote — that is a
+correcting-entries problem, not a deploy-tooling problem.
+
 Secrets: `HEROKU_API_KEY` and `ANTHROPIC_API_KEY` as environment
 secrets in a GitHub environment named `production`, which only the
 deploy workflow declares. Notification: GitHub's failure email plus a
@@ -197,7 +225,13 @@ Build order:
       migrate → log-grep sequence, runnable by hand first.
 - [ ] The aggressive staging smoke (extend bin/smoke with write flows
       it may only run against staging).
-- [ ] deploy.yml: the seven steps above, plus the healthchecks ping.
+- [ ] deploy.yml: the seven steps above, plus the healthchecks ping,
+      the workflow_dispatch trigger with the `fast` input, and the
+      `DEPLOY_HOLD` check.
+- [ ] rollback.yml: Heroku rollback → smoke + version check → release
+      note edits → `DEPLOY_HOLD` + issue.
+- [ ] Make the break-glass loud: typed confirmation, notification,
+      auto-filed issue.
 - [ ] A few supervised runs before trusting it unattended.
 
 ## Order
