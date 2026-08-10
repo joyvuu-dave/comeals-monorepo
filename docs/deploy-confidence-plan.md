@@ -121,6 +121,18 @@ calendar tiles — most of the visual suite, across two browsers and two
 platforms. Each re-recorded golden needs human review. Do it as its own
 change, not as a side effect of anything else.
 
+Design decisions (approved 2026-08-09):
+
+1. Generate through the real controller stack — an integration session
+   hitting the seeded endpoints — not by calling serializers directly.
+   Same output as production by construction.
+2. Keep today's fixture story (meal 42, Jane/Bob/Alice, January 2026),
+   just with the true serializer output. Smallest assertion and golden
+   churn.
+3. A bin/check step regenerates the fixtures and fails if git status
+   shows a change, so a fixture edit always travels in the same commit
+   as the Rails change that caused it.
+
 ### 8. Release process (the other half of confidence)
 
 Tests gate the tag; the process gates the deploy.
