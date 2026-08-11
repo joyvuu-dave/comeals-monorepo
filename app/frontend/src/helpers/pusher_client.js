@@ -83,6 +83,16 @@ function connect(Pusher) {
 export function startPusher() {
   if (started) return;
   started = true;
+  // DEBUG (temporary, this branch only): what does CI see here?
+  console.error(
+    "PUSHER DEBUG:",
+    JSON.stringify({
+      key: import.meta.env.VITE_PUSHER_KEY,
+      cluster: import.meta.env.VITE_PUSHER_CLUSTER,
+      mode: import.meta.env.MODE,
+      winPusher: typeof window !== "undefined" && !!window.Pusher,
+    }),
+  );
   // No key, no connection. The staging app builds with a blank
   // VITE_PUSHER_KEY on purpose — it must not connect anywhere real,
   // and a placeholder key would spray console errors that fail the
@@ -98,7 +108,14 @@ export function startPusher() {
     connect(window.Pusher);
     return;
   }
-  import("pusher-js").then(function (mod) {
-    connect(mod.default);
-  });
+  import("pusher-js")
+    .then(function (mod) {
+      // DEBUG (temporary, this branch only)
+      console.error("PUSHER DEBUG import resolved:", mod.default && mod.default.name);
+      connect(mod.default);
+    })
+    .catch(function (e) {
+      // DEBUG (temporary, this branch only)
+      console.error("PUSHER DEBUG import failed:", e);
+    });
 }
