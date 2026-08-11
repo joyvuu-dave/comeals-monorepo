@@ -16,6 +16,38 @@ ActiveAdmin.register Resident do
   # be removed. Everyone else is retired with the active flag.
   actions :all
 
+  # For a resident who cannot work the "forgot password" flow themselves: an
+  # admin presses this button, the resident gets the same reset email and
+  # clicks the link. The admin never sees or chooses the password — a typed
+  # password would be a secret two people know, and it would let any admin
+  # sign in as any resident without a trace. Any admin may send it (open to
+  # the same tier as editing the resident); the read-only token cannot, and
+  # spec/requests/admin/password_reset_button_spec.rb pins both.
+  action_item :send_password_reset, only: :show, if: -> { resource.email.present? } do
+    link_to 'Send password reset email', send_password_reset_admin_resident_path(resource), method: :post
+  end
+
+  member_action :send_password_reset, method: :post do
+    # `resource` runs the authorization check (:send_password_reset on this
+    # Resident) — keep it as the loader here.
+    resident = resource
+
+    if resident.email.blank?
+      redirect_to resource_path, alert: "#{resident.name} has no email address, so a reset link cannot be sent."
+      return
+    end
+
+    case PasswordReset.request(resident)
+    when :sent
+      redirect_to resource_path, notice: "Password reset link emailed to #{resident.email}."
+    when :mail_failed
+      redirect_to resource_path,
+                  alert: 'The reset link was saved, but the email could not be sent. Try again in a few minutes.'
+    else
+      redirect_to resource_path, alert: resident.errors.full_messages.to_sentence
+    end
+  end
+
   # On a refused delete, show the model's own error ("Cannot delete record
   # because dependent bills exist") instead of the generic
   # "could not be destroyed" flash.
@@ -167,7 +199,8 @@ ActiveAdmin.register Resident do
       f.input :active
       f.input :community_id, input_html: { value: Community.instance.id }, as: :hidden
     end
-    f.label 'Note: passwords can be reset through the resident login page'
+    f.label 'Note: to change a password, use the "Send password reset email" button on the ' \
+            "resident's page, or the resident login page"
     f.actions
     f.semantic_errors
   end
