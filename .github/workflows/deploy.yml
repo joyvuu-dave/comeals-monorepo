@@ -12,8 +12,14 @@ name: Deploy
 # pings /fail, so a morning where the job never ran also alerts.
 
 on:
-  schedule:
-    - cron: "0 15 * * *"
+  # The daily cron is off until the community has weighed in on
+  # automatic deploys (2026-08-11). To turn it back on, restore:
+  #
+  #   schedule:
+  #     - cron: "0 15 * * *"
+  #
+  # Everything else stays: this workflow runs on demand, with the
+  # same gates a scheduled run would have.
   workflow_dispatch:
     inputs:
       fast:

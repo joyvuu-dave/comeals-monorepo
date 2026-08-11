@@ -141,6 +141,12 @@ no human in the loop. If the pipeline stops at any step, it stops for
 the day and notifies — it never retries on its own and never ships
 silently.
 
+**Status 2026-08-11: the cron is off.** The pipeline is built and the
+workflow runs on demand (workflow_dispatch) with every gate intact,
+but it will not run on a schedule until the community has weighed in
+on automatic deploys. Turning it back on is uncommenting the schedule
+block in deploy.yml.
+
 The daily job (GitHub Actions, cron at 15:00 UTC — 8am Pacific in
 summer, 7am in winter, since Actions cron has no timezone):
 
