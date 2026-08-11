@@ -47,6 +47,13 @@ import {
 describe("DataStore", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // startPusher refuses to connect without a key (the staging build
+    // relies on that), so the Pusher tests need one. Locally the repo's
+    // untracked .env provides it; CI has no .env, so without this stub
+    // the mock Pusher never connects there and every test that reaches
+    // into the mock instance fails.
+    vi.stubEnv("VITE_PUSHER_KEY", "test-key");
+    vi.stubEnv("VITE_PUSHER_CLUSTER", "us2");
     // Set up window/navigator stubs for afterCreate
     Object.defineProperty(globalThis, "navigator", {
       value: { onLine: true },

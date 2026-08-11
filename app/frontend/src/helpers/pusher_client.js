@@ -69,7 +69,8 @@ let started = false;
 
 function connect(Pusher) {
   // Pusher public key + cluster from env vars (VITE_PUSHER_KEY,
-  // VITE_PUSHER_CLUSTER). Local dev: .env file (committed defaults).
+  // VITE_PUSHER_CLUSTER). Local dev: the untracked .env file. CI has
+  // no .env, so anything there that needs a key must set one itself.
   real = new Pusher(import.meta.env.VITE_PUSHER_KEY, {
     cluster: import.meta.env.VITE_PUSHER_CLUSTER,
     encrypted: true,
