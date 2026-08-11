@@ -161,8 +161,15 @@ ActiveAdmin.register Resident do
         balances.each do |balance|
           reconciliation = balance.reconciliation
           h3 do
-            text_node link_to("#{reconciliation.date} to #{reconciliation.end_date}",
-                              admin_reconciliation_path(reconciliation))
+            # The meals' own date range, not "date to end_date" — those two
+            # columns are the settlement day and the sweep cutoff, which read
+            # backwards as a range (see Reconciliation#date_range_description).
+            # The fallback covers a settlement with no meals, which no normal
+            # path can create — without it the link text would be empty and
+            # the link invisible.
+            label = reconciliation.date_range_description.presence ||
+                    "through #{reconciliation.end_date.strftime('%b %-d, %Y')}"
+            text_node link_to(label, admin_reconciliation_path(reconciliation))
             text_node ' — settled: '
             text_node balance_tag(balance.amount)
           end

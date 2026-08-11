@@ -35,7 +35,7 @@ RSpec.describe 'Admin settlement statement' do
 
       expect(response).to have_http_status(:ok)
       expect(response.body).to include('Settlement statement')
-      expect(response.body).to include("#{reconciliation.date} to #{reconciliation.end_date}")
+      expect(response.body).to include(reconciliation.date_range_description)
       # The eater's settled balance and their one line, in direction words —
       # never a signed number (BalanceDisplayHelper).
       expect(response.body).to include('settled:')
@@ -46,6 +46,23 @@ RSpec.describe 'Admin settlement statement' do
       # No capped cook in this section, so the column that explains capping
       # is absent rather than blank.
       expect(response.body).not_to include('Cook spent')
+    end
+
+    # Regression: the heading used to say "#{date} to #{end_date}" — the day
+    # the settlement ran "to" the sweep cutoff, which read backwards
+    # ("2026-08-10 to 2026-06-15"). The heading is the swept meals' own range.
+    it 'labels each section with the dates of the meals the settlement swept' do
+      [Date.new(2026, 6, 1), Date.new(2026, 6, 15)].each do |date|
+        meal = create(:meal, community: community, date: date)
+        create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('16'))
+        create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
+      end
+      reconciliation = Reconciliation.create!(community: community, end_date: Date.new(2026, 6, 15))
+
+      get "/residents/#{eater.id}"
+
+      expect(response.body).to include('Jun 1–15, 2026')
+      expect(response.body).not_to include("#{reconciliation.date} to #{reconciliation.end_date}")
     end
 
     it 'shows the cook a credit line' do

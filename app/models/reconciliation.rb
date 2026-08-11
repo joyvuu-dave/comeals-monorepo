@@ -67,6 +67,14 @@ class Reconciliation < ApplicationRecord
     cooks.uniq
   end
 
+  # The period this settlement covers: the dates of the meals it swept.
+  # Neither date column is the start of that period — `date` is the day the
+  # settlement ran and `end_date` is the sweep cutoff — so a "date to
+  # end_date" display reads backwards ("2026-08-10 to 2026-06-15").
+  def date_range_description
+    DateRangeDescription.for(meals.minimum(:date), meals.maximum(:date))
+  end
+
   # Assigns all unreconciled meals (with at least one bill) on or before the
   # cutoff date. Meals from days that are not yet over are never swept,
   # regardless of end_date — their receipts and attendance are not final.
