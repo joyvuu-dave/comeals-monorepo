@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, debug/pusher-env-ci]
   pull_request:
     branches: [main]
 
