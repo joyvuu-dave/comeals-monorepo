@@ -48,6 +48,19 @@ RSpec.describe 'Communities API' do
       names = body.pluck('title')
       expect(names.join).to include(march_bday.name.split[0])
     end
+
+    # An adult with no birthday must never appear — this is the fix for the
+    # old 1900-01-01 placeholder, which put a dozen fake birthdays on Jan 1.
+    it 'excludes residents with no birthday' do
+      create(:resident, community: community, unit: unit, birthday: nil)
+
+      get "/api/v1/communities/#{community.id}/birthdays", params: {
+        token: token, start: '2026-01-01'
+      }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to be_empty
+    end
   end
 
   describe 'GET /api/v1/communities/:id/calendar/:date' do
@@ -125,6 +138,47 @@ RSpec.describe 'Communities API' do
 
       expect(response).to have_http_status(:not_modified)
       expect(response.body).to be_empty
+    end
+
+    # The full pipeline for a birthday appearing or disappearing, against a
+    # real cache: the calendar response is cached per month, so setting or
+    # clearing a birthday only shows up if the model callback invalidates
+    # the affected month. The test env cache is a null store, so these swap
+    # in a MemoryStore — without invalidation they would fail on stale data.
+    describe 'birthday set or cleared, against a real cache' do
+      around do |example|
+        original_store = Rails.cache
+        Rails.cache = ActiveSupport::Cache::MemoryStore.new
+        example.run
+        Rails.cache = original_store
+      end
+
+      let(:this_year) { Time.zone.today.year }
+
+      it 'shows the birthday after an adult adds one' do
+        resident = create(:resident, community: community, unit: unit, birthday: nil)
+
+        get "/api/v1/communities/#{community.id}/calendar/#{this_year}-06-15", params: { token: token }
+        expect(response.parsed_body['birthdays']).to be_empty
+
+        resident.update!(birthday: Date.new(1980, 6, 5))
+
+        get "/api/v1/communities/#{community.id}/calendar/#{this_year}-06-15", params: { token: token }
+        expect(response.parsed_body['birthdays']).not_to be_empty
+      end
+
+      it 'removes the birthday after it is cleared' do
+        resident = create(:resident, community: community, unit: unit,
+                                     birthday: Date.new(1980, 6, 5))
+
+        get "/api/v1/communities/#{community.id}/calendar/#{this_year}-06-15", params: { token: token }
+        expect(response.parsed_body['birthdays']).not_to be_empty
+
+        resident.update!(birthday: nil)
+
+        get "/api/v1/communities/#{community.id}/calendar/#{this_year}-06-15", params: { token: token }
+        expect(response.parsed_body['birthdays']).to be_empty
+      end
     end
 
     it 'returns a fresh 200 with new ETag after invalidation' do

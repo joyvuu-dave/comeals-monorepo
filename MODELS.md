@@ -116,7 +116,7 @@ Resident
 - `active` -- false for residents who moved/died
 - `can_cook` -- eligible for cooking rotation
 - `vegetarian` -- the default carried onto new attendance rows
-- `birthday` -- `rake residents:set_multiplier` reads it each night to set the multiplier by age
+- `birthday` -- `rake residents:set_multiplier` reads it each night to set the multiplier by age. Optional: NULL means "adult, no birthday given" — the task skips them and the calendar shows nothing. Children must have one (model validation) so they age into adult pricing.
 - `keys_valid_since` -- API tokens issued before this time stop working
 
 **Scopes:**
@@ -474,7 +474,9 @@ Child guest:             multiplier = 1
 ```
 
 `rake residents:set_multiplier` runs nightly and sets each resident's
-multiplier from their birthday. A `MealResident` copies the resident's
+multiplier from their birthday. A resident with no birthday is an adult
+who did not give one; the task skips them and their multiplier stays
+whatever the admin set. A `MealResident` copies the resident's
 multiplier when the row is created, so a later birthday never changes what
 someone was charged for a past meal.
 

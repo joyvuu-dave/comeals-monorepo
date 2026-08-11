@@ -930,7 +930,7 @@ ALTER SEQUENCE public.resident_balances_id_seq OWNED BY public.resident_balances
 CREATE TABLE public.residents (
     id bigint NOT NULL,
     active boolean DEFAULT true NOT NULL,
-    birthday date DEFAULT '1900-01-01'::date NOT NULL,
+    birthday date,
     can_cook boolean DEFAULT true NOT NULL,
     community_id bigint NOT NULL,
     created_at timestamp without time zone NOT NULL,
@@ -944,6 +944,7 @@ CREATE TABLE public.residents (
     unit_id bigint NOT NULL,
     updated_at timestamp without time zone NOT NULL,
     vegetarian boolean DEFAULT false NOT NULL,
+    CONSTRAINT residents_birthday_not_sentinel CHECK (((birthday IS NULL) OR (birthday > '1900-01-01'::date))),
     CONSTRAINT residents_multiplier_non_negative CHECK ((multiplier >= 0))
 );
 
@@ -2024,6 +2025,7 @@ ALTER TABLE ONLY public.bills
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260811120000'),
 ('20260808130000'),
 ('20260808120000'),
 ('20260807140000'),

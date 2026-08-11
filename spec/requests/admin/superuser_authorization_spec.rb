@@ -58,7 +58,8 @@ RSpec.describe 'Admin write authorization' do
         expect do
           post '/residents', params: {
             resident: { name: 'New Person', multiplier: 1, unit_id: unit.id,
-                        community_id: community.id, password: '' }
+                        community_id: community.id, password: '',
+                        birthday: 8.years.ago.to_date }
           }
         end.to change(Resident, :count).by(1)
       end

@@ -151,10 +151,12 @@ ActiveAdmin.register Resident do
     f.inputs do
       f.input :name
       f.input :birthday, as: :datepicker,
+                         hint: 'Leave blank for an adult who does not want a birthday on the ' \
+                               'calendar. Children need one so pricing updates as they grow.',
                          datepicker_options: {
                            change_month: true,
                            change_year: true,
-                           year_range: "1900:#{Time.zone.now.year}"
+                           year_range: "1901:#{Time.zone.now.year}"
                          }
       f.input :email
       f.input :password if f.object.new_record?

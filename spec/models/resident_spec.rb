@@ -6,7 +6,7 @@
 #
 #  id                     :bigint           not null, primary key
 #  active                 :boolean          default(TRUE), not null
-#  birthday               :date             default(Mon, 01 Jan 1900), not null
+#  birthday               :date
 #  can_cook               :boolean          default(TRUE), not null
 #  email                  :string
 #  keys_valid_since       :datetime         not null
@@ -134,6 +134,30 @@ RSpec.describe Resident do
     end
   end
 
+  describe 'birthday validation' do
+    it 'allows an adult with no birthday' do
+      resident = build(:resident, community: community, unit: unit, multiplier: 2, birthday: nil)
+
+      expect(resident).to be_valid
+    end
+
+    it 'requires a birthday for children so they age into adult pricing' do
+      resident = build(:resident, community: community, unit: unit, multiplier: 1, birthday: nil)
+
+      expect(resident).not_to be_valid
+      expect(resident.errors[:birthday]).to include('is required for children — pricing changes as they age')
+    end
+
+    it 'rejects the old 1900-01-01 placeholder' do
+      resident = build(:resident, community: community, unit: unit,
+                                  multiplier: 2, birthday: Date.new(1900, 1, 1))
+
+      expect(resident).not_to be_valid
+      expect(resident.errors[:birthday])
+        .to include('cannot be the old 1900-01-01 placeholder — leave it blank instead')
+    end
+  end
+
   describe '#set_email' do
     it 'converts empty string email to nil' do
       resident = create(:resident, community: community, unit: unit,
@@ -169,6 +193,53 @@ RSpec.describe Resident do
                                    birthday: Date.new(2000, Time.zone.today.month, Time.zone.today.day))
 
       expect(resident.age).to eq(Time.zone.today.year - 2000)
+    end
+
+    it 'returns nil for an adult with no birthday' do
+      resident = create(:resident, community: community, unit: unit, birthday: nil)
+
+      expect(resident.age).to be_nil
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Calendar cache invalidation
+  # ---------------------------------------------------------------------------
+  describe 'after_commit :invalidate_calendar_cache_if_birthday_changed' do
+    let(:this_year) { Time.zone.today.year }
+
+    before { allow(community).to receive(:invalidate_calendar_cache) }
+
+    it 'invalidates only the new month when a birthday is set for the first time' do
+      resident = create(:resident, community: community, unit: unit, birthday: nil)
+
+      resident.update!(birthday: Date.new(1990, 6, 15))
+
+      expect(community).to have_received(:invalidate_calendar_cache)
+        .with(Date.new(this_year, 6, 1)).once
+    end
+
+    it 'invalidates only the old month when a birthday is cleared' do
+      resident = create(:resident, community: community, unit: unit,
+                                   birthday: Date.new(1990, 6, 15))
+
+      resident.update!(birthday: nil)
+
+      # Once for the create (new month), once for the clear (old month).
+      expect(community).to have_received(:invalidate_calendar_cache)
+        .with(Date.new(this_year, 6, 1)).twice
+    end
+
+    it 'invalidates both months when a birthday moves' do
+      resident = create(:resident, community: community, unit: unit,
+                                   birthday: Date.new(1990, 3, 10))
+
+      resident.update!(birthday: Date.new(1990, 4, 10))
+
+      expect(community).to have_received(:invalidate_calendar_cache)
+        .with(Date.new(this_year, 3, 1)).twice # create + old month of the move
+      expect(community).to have_received(:invalidate_calendar_cache)
+        .with(Date.new(this_year, 4, 1)).once
     end
   end
 

@@ -6,7 +6,9 @@ namespace :residents do
     Healthcheck.monitor('residents-set-multiplier') do
       start_time = Time.current
 
-      Resident.find_each do |resident|
+      # A resident with no birthday is an adult who did not give one. Skip
+      # them: their multiplier stays whatever the admin set.
+      Resident.where.not(birthday: nil).find_each do |resident|
         age = resident.age
 
         resident.update_columns(multiplier: 0) and next if age < 5

@@ -68,6 +68,15 @@ RSpec.describe 'residents:set_multiplier' do
     expect(exactly_12.reload.multiplier).to eq(2)
   end
 
+  it 'skips residents with no birthday — the admin-set multiplier stands' do
+    adult = create(:resident, community: community, unit: unit,
+                              birthday: nil, multiplier: 2)
+
+    Rake::Task['residents:set_multiplier'].invoke
+
+    expect(adult.reload.multiplier).to eq(2)
+  end
+
   it 'updates multiple residents in a single run' do
     infant = create(:resident, community: community, unit: unit,
                                birthday: 1.year.ago.to_date, multiplier: 2)

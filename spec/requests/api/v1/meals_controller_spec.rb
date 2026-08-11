@@ -182,7 +182,7 @@ RSpec.describe 'Meals API' do
     end
 
     it 'copies the resident multiplier to the meal_resident' do
-      resident.update!(multiplier: 1)
+      resident.update!(multiplier: 1, birthday: 8.years.ago.to_date)
 
       post "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: {
         token: token, late: false, vegetarian: false

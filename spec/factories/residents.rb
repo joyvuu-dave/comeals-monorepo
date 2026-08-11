@@ -6,7 +6,7 @@
 #
 #  id                     :bigint           not null, primary key
 #  active                 :boolean          default(TRUE), not null
-#  birthday               :date             default(Mon, 01 Jan 1900), not null
+#  birthday               :date
 #  can_cook               :boolean          default(TRUE), not null
 #  email                  :string
 #  keys_valid_since       :datetime         not null
@@ -41,6 +41,18 @@ FactoryBot.define do
     sequence(:name) { |n| "#{Faker::Name.first_name} #{Faker::Name.last_name} #{n}" }
     email { Faker::Internet.email }
     password { Faker::Internet.password }
+    multiplier { 2 }
+
+    # Children must have a birthday (model validation) so the nightly task
+    # can move them to adult pricing. Give each price category an
+    # age-appropriate one, so specs can just say `multiplier: 1`. Adults
+    # get none — an adult with no birthday is the normal case.
+    birthday do
+      case multiplier
+      when 0 then 3.years.ago.to_date
+      when 1 then 8.years.ago.to_date
+      end
+    end
 
     # Production creates a Key only at login. Tests treat a just-created
     # resident as already logged in for convenience — most request specs

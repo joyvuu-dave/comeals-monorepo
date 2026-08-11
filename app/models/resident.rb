@@ -6,7 +6,7 @@
 #
 #  id                     :bigint           not null, primary key
 #  active                 :boolean          default(TRUE), not null
-#  birthday               :date             default(Mon, 01 Jan 1900), not null
+#  birthday               :date
 #  can_cook               :boolean          default(TRUE), not null
 #  email                  :string
 #  keys_valid_since       :datetime         not null
@@ -73,6 +73,18 @@ class Resident < ApplicationRecord
   validates :multiplier, numericality: { only_integer: true }
   validates :name, presence: true, uniqueness: { case_sensitive: false }
 
+  # Birthday is optional for adults: NULL means "adult, no birthday given" —
+  # the nightly multiplier task skips them and the calendar shows nothing.
+  # Children must have one so the task can move them to adult pricing as
+  # they age. 1900-01-01 was the old placeholder for "adult, no birthday";
+  # the exclusion keeps it from coming back through the admin datepicker,
+  # and the residents_birthday_not_sentinel CHECK catches writes that skip
+  # the model.
+  validates :birthday, presence: { message: 'is required for children — pricing changes as they age' },
+                       if: -> { multiplier < 2 }
+  validates :birthday, exclusion: { in: [Date.new(1900, 1, 1)],
+                                    message: 'cannot be the old 1900-01-01 placeholder — leave it blank instead' }
+
   VALID_EMAIL_REGEX = /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i
   validates :email, presence: true, length: { maximum: 255 },
                     format: { with: VALID_EMAIL_REGEX },
@@ -115,7 +127,10 @@ class Resident < ApplicationRecord
     self.email = nil if email == ''
   end
 
+  # nil when no birthday is given (an adult who left it blank).
   def age
+    return nil if birthday.nil?
+
     now = Time.zone.today
     had_birthday = now.month > birthday.month ||
                    (now.month == birthday.month && now.day >= birthday.day)
@@ -222,13 +237,16 @@ class Resident < ApplicationRecord
     # Birthdays appear on the calendar. See CalendarSerializer for the full
     # cache invalidation contract. Invalidate both the old and new month
     # (if birthday moved from March to April, both months need refreshing).
+    # Either side can be nil — a birthday being set for the first time, or
+    # cleared for an adult who does not want it shown.
     old_birthday = birthday_before_last_save
     if old_birthday.present?
       old_date = Date.new(Time.zone.today.year, old_birthday.month, 1)
       community.invalidate_calendar_cache(old_date)
     end
 
-    # Invalidate the new month
+    return if birthday.blank?
+
     new_date = Date.new(Time.zone.today.year, birthday.month, 1)
     community.invalidate_calendar_cache(new_date)
   end
