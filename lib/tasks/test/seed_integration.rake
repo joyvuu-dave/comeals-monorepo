@@ -21,7 +21,6 @@ namespace :test do
     # ------------------------------------------------------------------
     community = Community.create!(
       name: 'Test Community',
-      slug: 'test-community',
       cap: nil,
       timezone: 'America/Los_Angeles'
     )
@@ -241,7 +240,6 @@ namespace :test do
                             resident_id: jane.id,
                             community_id: community.id,
                             username: jane.name,
-                            slug: community.slug,
                             bob_email: bob.email,
                             bob_password: 'password',
                             meals: {

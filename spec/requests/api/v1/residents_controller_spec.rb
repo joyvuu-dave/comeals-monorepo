@@ -3,7 +3,7 @@
 require 'rails_helper'
 
 RSpec.describe 'Residents API' do
-  let(:community) { create(:community, slug: 'testcom') }
+  let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
   let!(:resident) do
     create(:resident, community: community, unit: unit, email: 'alice@example.com',
@@ -27,7 +27,6 @@ RSpec.describe 'Residents API' do
       expect(JwtAuth.authenticate(body['token'])).to eq(resident)
       expect(body['community_id']).to eq(community.id)
       expect(body['resident_id']).to eq(resident.id)
-      expect(body['slug']).to eq('testcom')
     end
 
     it 'is case-insensitive on email' do

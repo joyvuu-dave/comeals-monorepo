@@ -10,7 +10,6 @@
 #  name               :string           not null
 #  schedule           :jsonb            not null
 #  singleton_guard    :integer          default(0), not null
-#  slug               :string           not null
 #  timezone           :string           not null
 #  created_at         :datetime         not null
 #  updated_at         :datetime         not null
@@ -19,7 +18,6 @@
 #
 #  index_communities_on_name             (name) UNIQUE
 #  index_communities_on_singleton_guard  (singleton_guard) UNIQUE
-#  index_communities_on_slug             (slug) UNIQUE
 #
 
 class Community < ApplicationRecord
@@ -90,15 +88,11 @@ class Community < ApplicationRecord
 
   # Ransack allowlists for ActiveAdmin sorting
   def self.ransackable_attributes(_auth_object = nil)
-    %w[id cap name singleton_guard slug timezone created_at updated_at
+    %w[id cap name singleton_guard timezone created_at updated_at
        schedule meals_per_rotation]
   end
 
-  extend FriendlyId
-
-  friendly_id :name, use: :slugged
-  validates :name, uniqueness: { case_sensitive: false }
-  validates :slug, length: { within: 3..40 }
+  validates :name, presence: true, uniqueness: { case_sensitive: false }
   validates :timezone, inclusion: { in: SUPPORTED_TIMEZONES.values }
   validates :cap,
             numericality: {

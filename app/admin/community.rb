@@ -5,7 +5,7 @@ ActiveAdmin.register Community do
   menu label: 'Community'
 
   # STRONG PARAMS
-  permit_params :name, :cap, :slug, :timezone, :meals_per_rotation,
+  permit_params :name, :cap, :timezone, :meals_per_rotation,
                 schedule: {}
 
   # CONFIG
@@ -72,7 +72,6 @@ ActiveAdmin.register Community do
     column :cap do |community|
       number_to_currency(community.cap) if community.capped?
     end
-    column :slug
     column :timezone
 
     actions
@@ -86,7 +85,6 @@ ActiveAdmin.register Community do
       row :cap do |community|
         number_to_currency(community.cap) if community.capped?
       end
-      row :slug
       row :timezone
     end
 
@@ -135,7 +133,6 @@ ActiveAdmin.register Community do
               input_html: { value: helpers.money_field_value(f.object.cap) },
               hint: 'Most a meal can cost per multiplier unit, in whole cents. ' \
                     'Leave blank for no cap. The lowest cap you can set is $0.01.'
-      f.input :slug if f.object.persisted?
       f.input :timezone,
               as: :select,
               collection: Community::SUPPORTED_TIMEZONES.map { |name, iana| [name, iana] }

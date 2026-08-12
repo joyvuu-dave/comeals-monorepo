@@ -38,7 +38,6 @@ RSpec.describe 'Admin community creation' do
       post '/communities', params: {
         community: {
           name: 'Second Community',
-          slug: 'second',
           cap: '2.50',
           timezone: 'America/New_York'
         }

@@ -3,7 +3,7 @@
 require 'rails_helper'
 
 RSpec.describe 'Sessions API' do
-  let(:community) { create(:community, slug: 'testcom') }
+  let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
   let!(:resident) do
     create(:resident, community: community, unit: unit, email: 'alice@example.com',

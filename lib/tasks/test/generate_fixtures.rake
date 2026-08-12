@@ -41,7 +41,6 @@ namespace :test do
       community = Community.create!(
         id: 1,
         name: 'Test Community',
-        slug: 'test-community',
         cap: nil,
         timezone: 'America/Los_Angeles'
       )

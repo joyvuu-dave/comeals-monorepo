@@ -10,7 +10,6 @@
 #  name               :string           not null
 #  schedule           :jsonb            not null
 #  singleton_guard    :integer          default(0), not null
-#  slug               :string           not null
 #  timezone           :string           not null
 #  created_at         :datetime         not null
 #  updated_at         :datetime         not null
@@ -19,7 +18,6 @@
 #
 #  index_communities_on_name             (name) UNIQUE
 #  index_communities_on_singleton_guard  (singleton_guard) UNIQUE
-#  index_communities_on_slug             (slug) UNIQUE
 #
 require 'rails_helper'
 
@@ -47,7 +45,7 @@ RSpec.describe Community do
     # operators must explicitly pick a tz at create time. This prevents
     # silently deploying a Berlin community on Pacific time.
     it 'requires a timezone at creation' do
-      community_without_tz = described_class.new(name: 'No TZ', slug: 'no-tz', timezone: nil)
+      community_without_tz = described_class.new(name: 'No TZ', timezone: nil)
 
       expect(community_without_tz).not_to be_valid
       expect(community_without_tz.errors[:timezone]).to be_present
@@ -55,7 +53,7 @@ RSpec.describe Community do
 
     it 'accepts any timezone from SUPPORTED_TIMEZONES' do
       Community::SUPPORTED_TIMEZONES.each_value do |iana|
-        c = described_class.new(name: 'Fixture', slug: 'fixture', timezone: iana)
+        c = described_class.new(name: 'Fixture', timezone: iana)
         c.valid?
         expect(c.errors[:timezone]).to be_empty, "expected #{iana} to be accepted"
       end

@@ -10,7 +10,6 @@
 #  name               :string           not null
 #  schedule           :jsonb            not null
 #  singleton_guard    :integer          default(0), not null
-#  slug               :string           not null
 #  timezone           :string           not null
 #  created_at         :datetime         not null
 #  updated_at         :datetime         not null
@@ -19,7 +18,6 @@
 #
 #  index_communities_on_name             (name) UNIQUE
 #  index_communities_on_singleton_guard  (singleton_guard) UNIQUE
-#  index_communities_on_slug             (slug) UNIQUE
 #
 
 FactoryBot.define do

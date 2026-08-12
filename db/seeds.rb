@@ -16,7 +16,6 @@ start = Time.zone.now
 community = Community.first || Community.create!(name: 'Patches Way',
                                                  cap: BigDecimal('2.50'),
                                                  timezone: 'America/Los_Angeles')
-community.update!(slug: 'patches')
 
 Rails.logger.debug '1 Community created'
 

@@ -67,7 +67,6 @@ RSpec.describe 'Admin bootstrap guard' do
       post '/communities', params: {
         community: {
           name: 'Patches Way',
-          slug: 'patches',
           cap: '2.50',
           timezone: 'America/Los_Angeles'
         }
@@ -83,7 +82,6 @@ RSpec.describe 'Admin bootstrap guard' do
       post '/communities', params: {
         community: {
           name: 'Patches Way',
-          slug: 'patches',
           cap: '2.50',
           timezone: 'America/Los_Angeles'
         }
@@ -121,7 +119,6 @@ RSpec.describe 'Admin bootstrap guard' do
         post '/communities', params: {
           community: {
             name: 'Second Community',
-            slug: 'second',
             cap: '2.50',
             timezone: 'America/New_York'
           }

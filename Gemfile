@@ -47,7 +47,6 @@ gem 'rack-attack'
 gem 'bugsnag'
 
 gem 'devise'
-gem 'friendly_id'
 gem 'goldiloader'
 gem 'icalendar'
 gem 'letter_opener_web', group: :development
