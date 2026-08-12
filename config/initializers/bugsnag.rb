@@ -43,6 +43,13 @@ if api_key.present?
       'ActionController::BadRequest'
     ]
 
+    # Requests for a format a page does not render, which Rails already
+    # refuses with a 406 Not Acceptable. Scanners probing for PHP admin
+    # panels trigger this on the admin login page: /login.php parses as
+    # format: php, and Devise's login page only renders HTML. First seen:
+    # GET admin.comeals.com/login.php on 2026-08-09.
+    config.discard_classes += ['ActionController::UnknownFormat']
+
     # Never send anything Rails would keep out of its own logs. Bugsnag has
     # its own defaults; adding config.filter_parameters keeps the two lists
     # from drifting apart, so a parameter added there is filtered here too.
