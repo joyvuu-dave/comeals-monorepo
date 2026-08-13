@@ -72,20 +72,45 @@ fi
 # 3. Start Rails test server
 # ------------------------------------------------------------------
 echo ""
+
+# Refuse to run if something else already holds the port. Without this
+# check, our server dies on "address already in use", the health check
+# below gets a friendly answer from whatever is squatting there, and
+# the whole suite runs against a server built from other code. That
+# happened: a test server left over from Aug 9 answered every run for
+# three days, and its pre-slug-removal code turned the login test red.
+if lsof -tiTCP:"$RAILS_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
+  echo "ERROR: port $RAILS_PORT is already in use:"
+  lsof -iTCP:"$RAILS_PORT" -sTCP:LISTEN -P
+  echo "Kill that process (likely a leftover test server) and re-run."
+  exit 1
+fi
+
 echo "==> Starting Rails test server on port $RAILS_PORT..."
-RAILS_ENV=test INTEGRATION_SERVER=1 bundle exec rails server -p "$RAILS_PORT" &>/dev/null &
+SERVER_LOG="tmp/integration_server.log"
+RAILS_ENV=test INTEGRATION_SERVER=1 bundle exec rails server -p "$RAILS_PORT" &>"$SERVER_LOG" &
 RAILS_PID=$!
 
 # Wait for server to be ready
 echo -n "    Waiting for server"
 for i in $(seq 1 30); do
+  # Our server dying (crash, port stolen between the check above and
+  # the bind) must fail the run — never fall through to a health check
+  # that some other process might answer.
+  if ! kill -0 "$RAILS_PID" 2>/dev/null; then
+    echo " DIED"
+    echo "ERROR: Rails server exited during startup. Its output ($SERVER_LOG):"
+    tail -20 "$SERVER_LOG"
+    exit 1
+  fi
   if curl -sf "http://localhost:$RAILS_PORT/api/v1/version" &>/dev/null; then
     echo " ready!"
     break
   fi
   if [ "$i" -eq 30 ]; then
     echo " TIMEOUT"
-    echo "ERROR: Rails server failed to start within 30 seconds."
+    echo "ERROR: Rails server failed to start within 30 seconds. Its output ($SERVER_LOG):"
+    tail -20 "$SERVER_LOG"
     exit 1
   fi
   echo -n "."
