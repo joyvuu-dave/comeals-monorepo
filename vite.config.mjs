@@ -88,9 +88,7 @@ function buildId(command) {
   if (command === "serve") return "dev";
   if (process.env.SOURCE_VERSION) return process.env.SOURCE_VERSION;
   try {
-    return execSync("git rev-parse HEAD", { cwd: __dirname })
-      .toString()
-      .trim();
+    return execSync("git rev-parse HEAD", { cwd: __dirname }).toString().trim();
   } catch {
     // No git and no SOURCE_VERSION: fall back to the build time, so
     // the id still changes with every build instead of sticking.
