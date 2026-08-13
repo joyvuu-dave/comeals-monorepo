@@ -71,11 +71,19 @@ class Rotation < ApplicationRecord
   # Calendar chip backgrounds. Each color must pass WCAG AA (4.5:1)
   # with the text color the calendar picks for it (black on light
   # chips, white on dark — eventTextColor in calendar/show.jsx), in
-  # BOTH states: as-is, and desaturated 35% for past events. The old
-  # red #D9443F sat right on the black/white boundary and its
-  # desaturated form failed (3.7:1); #C9332E is safely on the white
-  # side (5.3:1 base, 7.3:1 dimmed).
-  COLORS = ['#3DC656', '#009EDC', '#C9332E', '#FFC857', '#E9724C'].freeze
+  # BOTH states: as-is, and desaturated 35% for past events. This
+  # property is pinned by spec/serializers/calendar_chip_contrast_spec.rb,
+  # which also covers the other calendar chip colors (event, guest
+  # room, common house, birthday, meal).
+  #
+  # The red has moved twice. The original #D9443F failed once dimmed
+  # (3.7:1 with either text color). The first fix, #C9332E, passed
+  # with room to spare but looked visibly darker than what residents
+  # were used to. #D53E3A is the closest passing red to the original:
+  # a search over the full RGB neighborhood, ranked by OKLab distance,
+  # picked it (4.6:1 base, 6.2:1 dimmed, white text). Side by side it
+  # is at the edge of what eyes can tell apart from #D9443F.
+  COLORS = ['#3DC656', '#009EDC', '#D53E3A', '#FFC857', '#E9724C'].freeze
 
   def set_color
     last_color = Rotation.order(:id).pluck(:color).last

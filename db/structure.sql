@@ -1941,6 +1941,7 @@ ALTER TABLE ONLY public.bills
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260812120000'),
 ('20260811130000'),
 ('20260811120000'),
 ('20260808130000'),
