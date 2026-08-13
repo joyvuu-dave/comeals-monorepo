@@ -51,6 +51,7 @@ RSpec/DescribeClass:
     - "spec/requests/**/*"
     - "spec/db/**/*"
     - "spec/serializers/api_contract_spec.rb"
+    - "spec/serializers/calendar_chip_contrast_spec.rb"
 
 # before(:all) is used for expensive test setup (e.g., seeding shared
 # records). Acceptable when tests are wrapped in transactions.
