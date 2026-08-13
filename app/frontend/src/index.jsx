@@ -91,15 +91,23 @@ const MealsEdit = React.lazy(
 );
 
 document.addEventListener("DOMContentLoaded", () => {
-  // Bump this version to force-clear all cached calendar/meal data on next visit.
-  // clear() is async but completes well before any user navigation
-  // triggers a data load, so no race condition in practice.
-  const CACHE_VERSION = "3";
+  // Clear all cached calendar/meal data the first time a browser loads
+  // a new build. A deploy can change any cached payload — the Aug 2026
+  // migration that darkened rotation red did, and every stale month
+  // then flashed the old color before revalidation replaced it — and
+  // nothing else tells a browser its copies are stale: Pusher only
+  // covers the month on screen and its two neighbors. Keying on the
+  // build id (vite.config.mjs bakes one into each production build)
+  // makes this automatic; it used to be a hand-bumped constant, and
+  // the hand forgot. clear() is async but completes well before any
+  // user navigation triggers a data load, so no race in practice.
+  const CACHE_VERSION = __BUILD_ID__;
   if (localStorage.getItem("cacheVersion") !== CACHE_VERSION) {
     clear();
-    // Version 3 switched the cache from localforage to idb-keyval, which
-    // uses its own IndexedDB database. Delete the old localforage one so
-    // it does not sit on disk forever. Safe if it never existed.
+    // Cache version 3 (2026) switched from localforage to idb-keyval,
+    // which uses its own IndexedDB database. Delete the old localforage
+    // one so it does not sit on disk forever. Safe if it never existed,
+    // so it can run again on every version change.
     indexedDB.deleteDatabase("localforage");
     localStorage.setItem("cacheVersion", CACHE_VERSION);
   }

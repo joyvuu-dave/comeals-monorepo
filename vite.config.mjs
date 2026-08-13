@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import fs from "node:fs";
 import path from "node:path";
+import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -76,8 +77,32 @@ function preloadCalendarPlugin() {
   };
 }
 
+// One id per production build, baked into the bundle as __BUILD_ID__.
+// index.jsx compares it to localStorage and clears the IndexedDB
+// caches when it changes, so cached payloads never outlive the deploy
+// that wrote them (the same policy bin/deploy applies to the server
+// cache). Heroku builds have no .git directory but set SOURCE_VERSION
+// to the commit SHA; local builds ask git. The dev server uses a
+// fixed id so restarts don't clear the caches for nothing.
+function buildId(command) {
+  if (command === "serve") return "dev";
+  if (process.env.SOURCE_VERSION) return process.env.SOURCE_VERSION;
+  try {
+    return execSync("git rev-parse HEAD", { cwd: __dirname })
+      .toString()
+      .trim();
+  } catch {
+    // No git and no SOURCE_VERSION: fall back to the build time, so
+    // the id still changes with every build instead of sticking.
+    return `t${Date.now()}`;
+  }
+}
+
 export default defineConfig(({ command }) => ({
   root: "app/frontend",
+  define: {
+    __BUILD_ID__: JSON.stringify(buildId(command)),
+  },
   envDir: "../..",
   // Only serve public/ files during dev; in build/preview, outDir IS public/
   publicDir: command === "serve" ? "../../public" : false,

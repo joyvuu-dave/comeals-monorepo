@@ -24,6 +24,8 @@ module.exports = [
       },
       globals: {
         ...globals.browser,
+        // Baked in at build time by the `define` block in vite.config.mjs.
+        __BUILD_ID__: "readonly",
       },
     },
     settings: {
