@@ -45,6 +45,13 @@ env:
 jobs:
   daily-deploy:
     runs-on: ubuntu-latest
+    # Without a timeout, a hung step holds the job for GitHub's 6-hour
+    # default — and because this job shares the "deploy" concurrency
+    # group with rollback.yml, a rollback would queue behind it that
+    # whole time. 60 minutes is roughly twice a full rehearsal, promote,
+    # and soak. The always() steps (park staging, ping healthchecks
+    # /fail) still run when the timeout cancels the job.
+    timeout-minutes: 60
     environment: production
     steps:
       - uses: actions/checkout@v6

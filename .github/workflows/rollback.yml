@@ -36,6 +36,11 @@ env:
 jobs:
   rollback:
     runs-on: ubuntu-latest
+    # The heroku rollback itself runs in the first step, seconds in;
+    # everything after it is bookkeeping. If a later step hangs, fail
+    # in 15 minutes — production is already fixed by then — instead of
+    # holding the shared "deploy" concurrency group for 6 hours.
+    timeout-minutes: 15
     environment: production
     steps:
       - uses: actions/checkout@v6
