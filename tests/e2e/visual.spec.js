@@ -72,12 +72,11 @@ test.describe("Visual Baselines", () => {
   });
 
   // Months that can only render correctly if the date math is right:
-  // the two daylight-saving transitions and a leap February. Pinned to
+  // the two daylight-saving transitions and a leap February. These need
   // the community's timezone because a UTC viewer has no DST — without
   // it these goldens could not show a DST bug (the November escape).
+  // The whole suite is pinned to that timezone in playwright.config.js.
   test.describe("calendar edge months", () => {
-    test.use({ timezoneId: "America/Los_Angeles" });
-
     for (const [name, date] of [
       ["calendar-november-dst", "2026-11-15"],
       ["calendar-march-dst", "2026-03-15"],

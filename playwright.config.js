@@ -42,6 +42,12 @@ module.exports = defineConfig({
   reporter: "list",
   use: {
     baseURL: "http://localhost:3037",
+    // The browser always runs in the community's timezone, no matter what
+    // the machine is set to. Without this, the visual goldens encode the
+    // timezone of the machine that recorded them: the fixture rotation
+    // ends at 2026-01-17T23:59 -08:00, and a machine set to Chicago drew
+    // that chip on Jan 18, failing every visual test (2026-08-15).
+    timezoneId: "America/Los_Angeles",
     // retain-on-failure keeps the trace of every FAILED attempt — including
     // the first attempt of a flaky test — and discards traces of passing
     // runs. on-first-retry would only trace the retry, which usually
