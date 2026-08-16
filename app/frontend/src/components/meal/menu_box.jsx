@@ -20,7 +20,7 @@ const styles = {
     whiteSpace: "pre-wrap",
   },
   notSaved: {
-    color: "#b00020",
+    color: "var(--vivid-red)",
     fontWeight: "bold",
     alignSelf: "center",
   },

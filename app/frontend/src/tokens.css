@@ -80,7 +80,7 @@
   --bright-yellow: #ffdc00; /* <mark> highlight */
 
   /* Red one-offs. */
-  --vivid-red: #d40d00; /* <del> text */
+  --vivid-red: #d40d00; /* <del> text, the menu box's "Not saved" text */
 
   /* Blues. */
   --pale-blue: #dcedfb; /* calendar today tint */
