@@ -67,7 +67,11 @@ bundle install --quiet
 echo "==> npm install"
 npm install --no-audit --no-fund --loglevel=error
 echo "==> preparing test database comeals_test$suffix"
-RAILS_ENV=test bundle exec rails db:prepare
+# db:test:prepare, not db:prepare: db:prepare runs the seeds when it
+# creates a new database, and a seeded test database fails hundreds of
+# specs that expect an empty one. db:test:prepare loads the schema and
+# never seeds.
+RAILS_ENV=test bundle exec rails db:test:prepare
 
 echo ""
 echo "Ready. Work in $(pwd) on branch $branch."

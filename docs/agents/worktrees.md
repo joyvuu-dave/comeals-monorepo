@@ -13,7 +13,9 @@ doc is the full rulebook; the short version lives in CLAUDE.md.
 2. **Every shared resource is either namespaced per worktree or guarded
    by a check that stops with a clear message.** Files are isolated by
    the worktree itself. Services are handled one by one — see the table.
-3. **The result of a task is a branch, not a merge.** The human merges.
+3. **The result of a task is a branch, a report, and a question.** The
+   agent merges and pushes only after the human reads the report and
+   says yes.
 
 ## Shared resources
 
@@ -24,7 +26,7 @@ doc is the full rulebook; the short version lives in CLAUDE.md.
 | Dev server, ports 3000/3036              | **Guarded.** `bin/dev` kills a leftover server only if it was started from the same directory. A server from another worktree gets a message: leave it alone, work from tests.                                                                         |
 | Integration suite, port 3001             | **Guarded.** `bin/test-integration` refuses if the port is taken. One worktree at a time.                                                                                                                                                              |
 | Playwright suites, ports 3037/3038       | **Guarded.** `reuseExistingServer: false`, so a collision fails loudly instead of silently testing another worktree's build. One worktree at a time.                                                                                                   |
-| Development database                     | **Policy.** Worktrees never migrate or write `comeals_development`. New migrations run against the worktree's test database only (`RAILS_ENV=test rails db:prepare`). `bin/check` knows: in a worktree its migration check looks at the test database. |
+| Development database                     | **Policy.** Worktrees never migrate or write `comeals_development`. New migrations run against the worktree's test database only (`RAILS_ENV=test rails db:migrate`). `bin/check` knows: in a worktree its migration check looks at the test database. |
 | Admin e2e database (`comeals_admin_e2e`) | Serialized by the port 3038 guard, so it needs no suffix.                                                                                                                                                                                              |
 
 So: linters, RSpec, and Vitest run in any number of worktrees at once.
@@ -51,18 +53,33 @@ it.
 1. Rebase on `main`. If the rebase conflicts in shared files
    (`Gemfile.lock`, `db/structure.sql`, factories, shared CSS), stop and
    report the conflict instead of resolving it silently.
-2. Run `bin/check` in the worktree.
-3. Report the branch name (`agent/<task-name>`) and what could not run.
-4. Do not merge to `main`. Do not push.
+2. Run `bin/check` in the worktree. Commit.
+3. Report, in this order:
+   - what changed and why, in a few sentences;
+   - the branch name (`agent/<task-name>`) and which suites could not
+     run;
+   - how to view the diff (`git diff main..agent/<task-name>` from the
+     main checkout);
+   - how to try the change locally, if there is something to try;
+   - then ask: "Say **merge it** and I'll merge to main, push, and clean
+     up."
+4. Wait. Do not merge or push without the human's explicit yes in this
+   conversation. A yes given for one branch covers only that branch.
 
-The human then merges, runs migrations against the development database
-if the branch added any, and cleans up:
+On that yes, the agent runs, from the main checkout:
 
 ```bash
-git merge agent/<task-name>
+git merge --ff-only agent/<task-name>
+git push
 bin/agent-worktree-done <task-name>   # removes worktree, drops its test DB
 git branch -d agent/<task-name>
 ```
+
+If the branch added migrations, the agent then runs
+`bin/rails db:migrate` in the main checkout — the migration is on `main`
+at that point, so this is the same act as the human running it. Pushing
+goes to GitHub only; deploys always go through `bin/deploy`, run by the
+human.
 
 `bin/agent-worktree-done` refuses while the worktree has uncommitted
 changes, and it always keeps the branch.
