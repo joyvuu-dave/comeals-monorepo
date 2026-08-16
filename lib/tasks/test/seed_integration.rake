@@ -13,7 +13,9 @@ namespace :test do
     # CLEAN
     # ------------------------------------------------------------------
     # Truncate all tables in FK-safe order. CASCADE handles dependencies.
-    ActiveRecord::Base.connection.execute('TRUNCATE communities CASCADE')
+    # ledger_check_runs is listed by name: it has no foreign key to
+    # communities, so the CASCADE does not reach it.
+    ActiveRecord::Base.connection.execute('TRUNCATE communities, ledger_check_runs CASCADE')
     Current.reset
 
     # ------------------------------------------------------------------

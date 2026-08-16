@@ -47,8 +47,10 @@ cleanup() {
     wait "$RAILS_PID" 2>/dev/null || true
   fi
   # Wipe integration seed data so RSpec finds a clean database.
+  # ledger_check_runs is listed by name: the seed task writes it, but it
+  # has no foreign key to communities, so the CASCADE does not reach it.
   echo "Resetting test database..."
-  psql -q -d "$TEST_DB" -c "TRUNCATE communities CASCADE" 2>/dev/null || true
+  psql -q -d "$TEST_DB" -c "TRUNCATE communities, ledger_check_runs CASCADE" 2>/dev/null || true
 }
 trap cleanup EXIT
 
