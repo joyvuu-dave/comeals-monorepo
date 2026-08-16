@@ -1,4 +1,7 @@
 const { defineConfig } = require("@playwright/test");
+// 3037 (vite preview) and 3038 (admin Rails) in the main checkout; an
+// agent worktree gets its own pair through .env (#65).
+const { E2E_PORT, ADMIN_E2E_PORT } = require("./tests/helpers/ports");
 
 // perf-modals and pwa-screenshots are on-demand tooling, not correctness
 // tests. They're excluded from the default run (`npm run test:e2e`) but must
@@ -52,7 +55,7 @@ module.exports = defineConfig({
   workers: 1,
   reporter: "list",
   use: {
-    baseURL: "http://localhost:3037",
+    baseURL: `http://localhost:${E2E_PORT}`,
     // The browser always runs in the community's timezone, no matter what
     // the machine is set to. Without this, the visual goldens encode the
     // timezone of the machine that recorded them: the fixture rotation
@@ -92,14 +95,14 @@ module.exports = defineConfig({
       testDir: "./tests/admin",
       use: {
         browserName: "chromium",
-        baseURL: "http://admin.lvh.me:3038",
+        baseURL: `http://admin.lvh.me:${ADMIN_E2E_PORT}`,
         launchOptions: {
           args: ["--host-resolver-rules=MAP *.lvh.me 127.0.0.1"],
         },
       },
     },
   ],
-  // Port 3037, not 3036, and never reuse: 3036 is the dev server's port.
+  // Its own port, not 3036, and never reuse: 3036 is the dev server's port.
   // With reuseExistingServer on 3036, running bin/check while bin/dev was
   // up silently ran the whole E2E suite against the dev server (dev-mode
   // React, on-demand transforms, HMR reloads on file edits) instead of the
@@ -113,9 +116,9 @@ module.exports = defineConfig({
   webServer: [
     {
       command: process.env.E2E_SKIP_BUILD
-        ? "npx vite preview --port 3037"
-        : "npm run build && npx vite preview --port 3037",
-      port: 3037,
+        ? `npx vite preview --port ${E2E_PORT}`
+        : `npm run build && npx vite preview --port ${E2E_PORT}`,
+      port: E2E_PORT,
       timeout: 60000,
       reuseExistingServer: false,
     },
@@ -130,8 +133,10 @@ module.exports = defineConfig({
       ? []
       : [
           {
+            // The script resolves the same port and database suffix from
+            // .env itself, so it and this entry cannot disagree.
             command: "tests/admin/server.sh",
-            port: 3038,
+            port: ADMIN_E2E_PORT,
             timeout: 120000,
             reuseExistingServer: false,
           },

@@ -1,14 +1,17 @@
 # frozen_string_literal: true
 
 # Deterministic data for the admin Playwright suite (tests/admin).
-# Run by tests/admin/server.sh inside the dedicated comeals_admin_e2e
-# database, never against development or test data. Every value a test
-# asserts on (dates, emails, names) is set explicitly here.
+# Run by tests/admin/server.sh inside a dedicated admin e2e database —
+# comeals_admin_e2e in the main checkout and CI, comeals_admin_e2e_<task>
+# in an agent worktree (#65) — never against development or test data.
+# Every value a test asserts on (dates, emails, names) is set explicitly
+# here. The TRUNCATE below wipes the whole database, so this guard must
+# stay exact: an admin e2e name, nothing else.
 
 conn = ActiveRecord::Base.connection
-unless conn.current_database == 'comeals_admin_e2e'
+unless conn.current_database.match?(/\Acomeals_admin_e2e(_[a-z0-9_]+)?\z/)
   raise "refusing to seed #{conn.current_database}: this script is only " \
-        'for the comeals_admin_e2e database'
+        'for a comeals_admin_e2e database'
 end
 
 tables = conn.tables - %w[schema_migrations ar_internal_metadata]

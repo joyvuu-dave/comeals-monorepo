@@ -3,9 +3,11 @@ set -euo pipefail
 
 # bin/agent-worktree-done <task-name>
 #
-# Remove the worktree that bin/agent-worktree created and drop its test
-# database. The branch survives — the branch IS the work. Merge it or
-# delete it yourself; this script only tells you which it needs.
+# Remove the worktree that bin/agent-worktree created and drop its two
+# databases (comeals_test<suffix>, and comeals_admin_e2e<suffix> if the
+# admin e2e suite ever ran there). The branch survives — the branch IS
+# the work. Merge it or delete it yourself; this script only tells you
+# which it needs.
 #
 # Refuses if the worktree has uncommitted changes, so nothing is lost
 # by accident.
@@ -48,8 +50,9 @@ ahead=$(git rev-list --count "main..$branch" 2>/dev/null || echo 0)
 
 git worktree remove "$path"
 dropdb --if-exists "comeals_test$suffix"
+dropdb --if-exists "comeals_admin_e2e$suffix"
 
-echo "Removed $path and dropped comeals_test$suffix."
+echo "Removed $path and dropped comeals_test$suffix (and comeals_admin_e2e$suffix if it existed)."
 if [ "$ahead" -gt 0 ]; then
   echo "Branch $branch still has $ahead commit(s) that main does not:"
   echo "  merge it:   git merge $branch && git branch -d $branch"

@@ -1,10 +1,13 @@
 // @ts-check
 import { defineConfig } from "@playwright/test";
+// 3001 in the main checkout; an agent worktree gets its own port
+// through .env (#65). bin/test-integration reads the same .env line.
+import ports from "./tests/helpers/ports.js";
 
 /**
  * Integration test config — runs against a REAL Rails backend.
  *
- * The Rails test server (port 3001) must be running before Playwright starts.
+ * The Rails test server must be running before Playwright starts.
  * Use bin/test-integration to orchestrate seed → server → tests → cleanup.
  *
  * Unlike the mocked E2E suite (playwright.config.js), API calls here hit the
@@ -20,7 +23,7 @@ export default defineConfig({
   reporter: [["list"]],
 
   use: {
-    baseURL: "http://localhost:3001",
+    baseURL: `http://localhost:${ports.INTEGRATION_PORT}`,
     screenshot: "only-on-failure",
     trace: "on-first-retry",
     // The community's timezone. Rendering depends on the viewer's

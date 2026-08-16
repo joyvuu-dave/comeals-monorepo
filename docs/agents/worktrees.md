@@ -19,26 +19,28 @@ doc is the full rulebook; the short version lives in CLAUDE.md.
 
 ## Shared resources
 
-| Resource                                 | Handling                                                                                                                                                                                                                                               |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Files                                    | Isolated by the worktree. Nothing to do.                                                                                                                                                                                                               |
-| Test database                            | **Namespaced.** The worktree's `.env` sets `TEST_DB_SUFFIX`; `config/database.yml` appends it, so tests there use `comeals_test_<task_name>`. RSpec, rake, and `bin/check` all read it through dotenv. Parallel test runs are safe.                    |
-| Dev server, ports 3000/3036              | **Guarded.** `bin/dev` kills a leftover server only if it was started from the same directory. A server from another worktree gets a message: leave it alone, work from tests.                                                                         |
-| Integration suite, port 3001             | **Guarded.** `bin/test-integration` refuses if the port is taken. One worktree at a time.                                                                                                                                                              |
-| Playwright suites, ports 3037/3038       | **Guarded.** `reuseExistingServer: false`, so a collision fails loudly instead of silently testing another worktree's build. One worktree at a time.                                                                                                   |
-| Development database                     | **Policy.** Worktrees never migrate or write `comeals_development`. New migrations run against the worktree's test database only (`RAILS_ENV=test rails db:migrate`). `bin/check` knows: in a worktree its migration check looks at the test database. |
-| Admin e2e database (`comeals_admin_e2e`) | Serialized by the port 3038 guard, so it needs no suffix.                                                                                                                                                                                              |
+| Resource                    | Handling                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Files                       | Isolated by the worktree. Nothing to do.                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Test database               | **Namespaced.** The worktree's `.env` sets `TEST_DB_SUFFIX`; `config/database.yml` appends it, so tests there use `comeals_test_<task_name>`. RSpec, rake, and `bin/check` all read it through dotenv. Parallel test runs are safe.                                                                                                                                                                                                          |
+| Dev server, ports 3000/3036 | **Guarded.** `bin/dev` kills a leftover server only if it was started from the same directory. A server from another worktree gets a message: leave it alone, work from tests.                                                                                                                                                                                                                                                               |
+| Test-server ports           | **Namespaced** (#65). The worktree's `.env` sets `TEST_PORT_INTEGRATION`, `TEST_PORT_E2E`, and `TEST_PORT_ADMIN_E2E` — one block of three from 21000–21999, picked by a hash of the task name and checked against sibling worktrees' `.env` files. `bin/test-integration`, both Playwright configs (`tests/helpers/ports.js`), and `tests/admin/server.sh` all read them. The main checkout and CI set none of them and keep 3001/3037/3038. |
+| Development database        | **Policy.** Worktrees never migrate or write `comeals_development`. New migrations run against the worktree's test database only (`RAILS_ENV=test rails db:migrate`). `bin/check` knows: in a worktree its migration check looks at the test database.                                                                                                                                                                                       |
+| Admin e2e database          | **Namespaced.** `tests/admin/server.sh` appends `TEST_DB_SUFFIX`, so a worktree's admin suite uses `comeals_admin_e2e_<task_name>`. (It used to share one database, serialized by the fixed port 3038; per-worktree ports removed that serialization, so the database is namespaced like the test database.)                                                                                                                                 |
 
-So: linters, RSpec, and Vitest run in any number of worktrees at once.
-The browser suites (Playwright e2e, admin e2e, integration) run in one
-worktree at a time; a second one fails with a port message, not with
-wrong results.
+So: every suite — linters, RSpec, Vitest, and the browser suites — runs
+in any number of worktrees at once. The port guards stay as the last
+defense (`bin/test-integration` refuses a taken port,
+`reuseExistingServer: false` fails loudly), but with each worktree on
+its own block they should fire only when something is truly wrong: a
+leftover server from a crashed run, or two checkouts sharing one `.env`.
 
 ## What an agent does when a guard fires
 
 Do not kill the other session's processes. Run what still runs — RSpec,
 Vitest, the linters — and say in the final report which suites could not
-run and why. The human decides the order of server-holding work.
+run and why, and which port was taken. The human decides what holds the
+port and what runs next.
 
 ## If tests fail on code you did not touch
 
@@ -76,7 +78,7 @@ That one script does the whole landing: fast-forward merge into `main`,
 push to GitHub, `bin/rails db:migrate` if the branch added migrations
 (the migration is on `main` at that point, so this is the same act as
 the human running it), `bin/agent-worktree-done` (removes the worktree,
-drops its test database), and delete the branch. Pushing goes to GitHub
+drops its test and admin-e2e databases), and delete the branch. Pushing goes to GitHub
 only; deploys always go through `bin/deploy`, run by the human.
 
 The script refuses, with a message saying what to do instead, whenever

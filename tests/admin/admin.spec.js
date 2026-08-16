@@ -1,4 +1,4 @@
-// ActiveAdmin smoke tests, run against a real Rails server on port 3038
+// ActiveAdmin smoke tests, run against a real Rails server
 // (tests/admin/server.sh) with deterministic data (tests/admin/seed.rb).
 // These pin the pieces custom CSS/JS and admin config are responsible
 // for: the login banner, server-rendered meal dates, the datepicker,
@@ -21,15 +21,17 @@ async function login(page) {
 test.describe("Admin", () => {
   test("login page shows the banner and a resident-login link", async ({
     page,
+    baseURL,
   }) => {
     await page.goto("/login");
 
     const banner = page.locator(".admin-login-banner");
     await expect(banner.locator("h3")).toHaveText("Admin Login");
-    // The link strips the admin subdomain from the current host.
+    // The link strips the admin subdomain from the current host, so the
+    // expected href is the suite's own base URL minus "admin.".
     await expect(banner.locator("a")).toHaveAttribute(
       "href",
-      "http://lvh.me:3038",
+      baseURL.replace("admin.", ""),
     );
 
     // Remember me defaults to checked (active_admin.js).

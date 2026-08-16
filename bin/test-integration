@@ -13,7 +13,6 @@ set -euo pipefail
 #   bin/test-integration auth.spec.js # run a specific test file
 # ---------------------------------------------------------------------------
 
-RAILS_PORT=3001
 RAILS_PID=""
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
@@ -24,6 +23,14 @@ cd "$ROOT_DIR"
 # `|| true` because .env does not exist in CI, and under `set -e` a failed
 # sed inside the substitution would end the script with sed's exit code.
 TEST_DB="comeals_test$(sed -n 's/^TEST_DB_SUFFIX=//p' .env 2>/dev/null || true)"
+
+# The port comes from the same .env (#65): bin/agent-worktree writes
+# TEST_PORT_INTEGRATION so each worktree's server has its own port. A
+# real environment variable wins; the main checkout and CI, which set
+# neither, keep 3001. playwright.integration.config.js resolves the
+# same line for its baseURL (tests/helpers/ports.js).
+RAILS_PORT="${TEST_PORT_INTEGRATION:-$(sed -n 's/^TEST_PORT_INTEGRATION=//p' .env 2>/dev/null || true)}"
+RAILS_PORT="${RAILS_PORT:-3001}"
 
 # The suite's frozen clock: seeds, the Rails test server, and the
 # browser (tests/helpers/integration_setup.js) all see this date as

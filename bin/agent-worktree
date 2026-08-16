@@ -9,13 +9,18 @@ set -euo pipefail
 #   - gems and node packages installed there
 #   - its own test database, comeals_test_<task_name>, named through
 #     TEST_DB_SUFFIX in the worktree's .env (config/database.yml reads it)
+#   - its own test-server ports, through TEST_PORT_INTEGRATION,
+#     TEST_PORT_E2E, and TEST_PORT_ADMIN_E2E in the same .env; the
+#     admin e2e suite also gets its own database, comeals_admin_e2e
+#     plus the suffix (#65)
 #
 # Result: tests in that worktree cannot touch tests running anywhere else.
-# The main checkout keeps the plain comeals_test database.
+# The main checkout keeps the plain comeals_test database and the fixed
+# ports 3001/3037/3038.
 #
-# What is NOT isolated: the dev server ports (3000/3036), the browser
-# test suites' ports (3001/3037/3038), and the development database.
-# See docs/agents/worktrees.md for the rules about those.
+# What is NOT isolated: the dev server ports (3000/3036) and the
+# development database. See docs/agents/worktrees.md for the rules
+# about those.
 #
 # When the task's branch is merged or abandoned:
 #   bin/agent-worktree-done <task-name>
@@ -49,16 +54,44 @@ suffix="_${name//-/_}"
 # with a clear message — no need to pre-check.
 git worktree add -b "$branch" "$path" main
 
+# Test-server ports (#65): one block of three per worktree, so the
+# browser suites (integration, e2e, admin e2e) can run here while other
+# sessions run theirs. The block starts at a hash of the task name; if
+# a sibling worktree's .env already claims that first port, take the
+# next block. 100 blocks of 10 ports starting at 21000 — far from the
+# fixed 3000-range ports the main checkout keeps. The runtime guards
+# (bin/test-integration's port check, reuseExistingServer: false) stay
+# as the last defense against a collision with anything else.
+hash=$(printf '%s' "$name" | cksum | cut -d' ' -f1)
+base=$((21000 + (hash % 100) * 10))
+tries=0
+while grep -qs "^TEST_PORT_INTEGRATION=$base$" ../comeals-*/.env; do
+  base=$((base >= 21990 ? 21000 : base + 10))
+  tries=$((tries + 1))
+  if [ "$tries" -ge 100 ]; then
+    echo "No free port block: all 100 are claimed in ../comeals-*/.env files." >&2
+    exit 1
+  fi
+done
+
 # .env: copy the main checkout's (Pusher keys and such), then add this
-# worktree's test-database suffix. dotenv-rails loads .env in development
-# and test, so RSpec, rake, and bin/check there all pick it up.
+# worktree's test-database suffix and port block. dotenv-rails loads
+# .env in development and test, so RSpec, rake, and bin/check there all
+# pick it up; the Playwright configs and the server scripts read the
+# port lines themselves (tests/helpers/ports.js, bin/test-integration,
+# tests/admin/server.sh).
 if [ -f .env ]; then
   cp .env "$path/.env"
 fi
 {
   echo ""
-  echo "# Added by bin/agent-worktree: this worktree's own test database."
+  echo "# Added by bin/agent-worktree: this worktree's own test database"
+  echo "# and test-server ports. The admin e2e suite also uses its own"
+  echo "# database, comeals_admin_e2e$suffix (tests/admin/server.sh)."
   echo "TEST_DB_SUFFIX=$suffix"
+  echo "TEST_PORT_INTEGRATION=$base"
+  echo "TEST_PORT_E2E=$((base + 1))"
+  echo "TEST_PORT_ADMIN_E2E=$((base + 2))"
 } >>"$path/.env"
 
 cd "$path"
@@ -76,5 +109,7 @@ RAILS_ENV=test bundle exec rails db:test:prepare
 echo ""
 echo "Ready. Work in $(pwd) on branch $branch."
 echo "Tests here use comeals_test$suffix; run them freely."
+echo "Test servers here use ports $base-$((base + 2)), so the browser"
+echo "suites run in parallel with other sessions too."
 echo "When the branch is merged or abandoned, from the main checkout:"
 echo "  bin/agent-worktree-done $name"
