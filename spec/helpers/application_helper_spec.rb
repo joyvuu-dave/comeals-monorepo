@@ -20,6 +20,44 @@ RSpec.describe ApplicationHelper do
     end
   end
 
+  describe '#child_pricing_rule_sentence' do
+    def sentence(free_below, full_at)
+      helper.child_pricing_rule_sentence(
+        Community.new(free_below_age: free_below, full_price_age: full_at)
+      )
+    end
+
+    it 'spells out the three bands from the configured ages' do
+      expect(sentence(5, 12)).to eq(
+        'Children under 5 eat free, children 5 to 11 pay half price, ' \
+        'and everyone 12 and older pays full price.'
+      )
+    end
+
+    it 'reads the ages from the community, not from fixed numbers' do
+      expect(sentence(3, 10)).to eq(
+        'Children under 3 eat free, children 3 to 9 pay half price, ' \
+        'and everyone 10 and older pays full price.'
+      )
+    end
+
+    it 'drops the half-price band when the ages are equal' do
+      expect(sentence(7, 7)).to eq(
+        'Children under 7 eat free, and everyone 7 and older pays full price.'
+      )
+    end
+
+    it 'drops the free band when free-below is 0' do
+      expect(sentence(0, 12)).to eq(
+        'Children under 12 pay half price, and everyone 12 and older pays full price.'
+      )
+    end
+
+    it 'says everyone pays full price when both ages are 0' do
+      expect(sentence(0, 0)).to eq('Everyone pays full price.')
+    end
+  end
+
   # Pins the deliberate display policy: a blank cell means "no amount
   # to show", never "$0.00". See the helper's comment.
   describe '#meal_cost_cell' do

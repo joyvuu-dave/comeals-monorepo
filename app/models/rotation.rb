@@ -41,7 +41,8 @@ class Rotation < ApplicationRecord
   has_many :meals, dependent: :destroy
   has_many :bills, through: :meals
   has_many :cooks, -> { distinct }, through: :bills, source: :resident
-  has_many :residents, -> { where(active: true, can_cook: true).where(multiplier: 2..) }, through: :community
+  has_many :residents, -> { where(active: true, can_cook: true).where(multiplier: Multiplier::FULL..) },
+           through: :community
 
   before_validation :set_color, on: :create
   # All three prepended, for the same reason as Meal's guards (#26): the

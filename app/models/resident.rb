@@ -46,7 +46,7 @@ class Resident < ApplicationRecord
 
   attr_reader :password
 
-  scope :adult, -> { where('multiplier >= 2') }
+  scope :adult, -> { where(multiplier: Multiplier::FULL..) }
   scope :active, -> { where(active: true) }
 
   belongs_to :community
@@ -84,7 +84,7 @@ class Resident < ApplicationRecord
   # and the residents_birthday_not_sentinel CHECK catches writes that skip
   # the model.
   validates :birthday, presence: { message: 'is required for children — pricing changes as they age' },
-                       if: -> { multiplier < 2 }
+                       if: -> { multiplier < Multiplier::FULL }
   validates :birthday, exclusion: { in: [Date.new(1900, 1, 1)],
                                     message: 'cannot be the old 1900-01-01 placeholder — leave it blank instead' }
 
@@ -123,7 +123,7 @@ class Resident < ApplicationRecord
 
   # HELPERS
   def email_presence
-    errors.add(:email, 'cannot be blank.') if active && can_cook && multiplier >= 2 && email.nil?
+    errors.add(:email, 'cannot be blank.') if active && can_cook && multiplier >= Multiplier::FULL && email.nil?
   end
 
   def set_email
@@ -256,7 +256,7 @@ class Resident < ApplicationRecord
 
   # Columns that the /api/v1/communities/:id/hosts query depends on. A change
   # to any of these can alter whether a resident appears in the list or how
-  # they render. The query filters by `active` + `multiplier >= 2` and plucks
+  # they render. The query filters by the `active` and `adult` scopes and plucks
   # `residents.name` and `units.name` (via `unit_id` join). Keep in sync with
   # CommunitiesController#hosts.
   HOSTS_QUERY_COLUMNS = %w[active multiplier name unit_id].freeze

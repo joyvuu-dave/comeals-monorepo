@@ -6,6 +6,8 @@
 #
 #  id                 :bigint           not null, primary key
 #  cap                :decimal(12, 8)
+#  free_below_age     :integer          default(5), not null
+#  full_price_age     :integer          default(12), not null
 #  meals_per_rotation :integer          default(12), not null
 #  name               :string           not null
 #  schedule           :jsonb            not null
@@ -286,6 +288,42 @@ RSpec.describe Community do
 
       expect { described_class.update_all(cap: BigDecimal('2.32481286')) }
         .to raise_error(ActiveRecord::StatementInvalid, /communities_cap_whole_cents/)
+    end
+  end
+
+  describe 'child pricing ages' do
+    it 'defaults to eating free below 5 and full price from 12' do
+      expect(community.free_below_age).to eq(5)
+      expect(community.full_price_age).to eq(12)
+    end
+
+    it 'allows equal ages, which means no half-price band' do
+      community.assign_attributes(free_below_age: 7, full_price_age: 7)
+      expect(community).to be_valid
+    end
+
+    it 'allows both ages 0, which means everyone pays full price' do
+      community.assign_attributes(free_below_age: 0, full_price_age: 0)
+      expect(community).to be_valid
+    end
+
+    it 'refuses a negative age' do
+      community.free_below_age = -1
+      expect(community).not_to be_valid
+      expect(community.errors[:free_below_age]).to include('must be a whole number of years, 0 or more')
+    end
+
+    it 'refuses a fractional age' do
+      community.full_price_age = 11.5
+      expect(community).not_to be_valid
+      expect(community.errors[:full_price_age]).to include('must be a whole number of years, 0 or more')
+    end
+
+    it 'refuses a free-below age above the full-price age' do
+      community.assign_attributes(free_below_age: 13, full_price_age: 12)
+      expect(community).not_to be_valid
+      expect(community.errors[:free_below_age])
+        .to include('must be at or below the full-price age — a child eats free before they pay half price')
     end
   end
 

@@ -13,10 +13,32 @@ module ApplicationHelper
   # five hand-written copies of this block once disagreed (#51), and
   # one of them showed a 1.5x adult as a plain "Adult".
   def price_category_label(multiplier)
-    return 'Child' if multiplier == 1
-    return 'Adult' if multiplier == 2
+    return 'Child' if multiplier == Multiplier::HALF
+    return 'Adult' if multiplier == Multiplier::FULL
 
-    "Adult x #{number_with_precision(multiplier.to_f / 2, precision: 1, strip_insignificant_zeros: true)}"
+    "Adult x #{number_with_precision(multiplier.to_f / Multiplier::FULL,
+                                     precision: 1, strip_insignificant_zeros: true)}"
+  end
+
+  # The child pricing rule as one plain sentence, built from the community's
+  # two configured ages. Shown next to the age fields on the community form
+  # and next to the price category field on the resident form, so the ages
+  # an admin reads always come from the record, never from a copied number.
+  # The age bands are defined on Community (see "Child pricing ages" there).
+  def child_pricing_rule_sentence(community)
+    free_below = community.free_below_age
+    full_at = community.full_price_age
+
+    if full_at.zero?
+      'Everyone pays full price.'
+    elsif free_below.zero?
+      "Children under #{full_at} pay half price, and everyone #{full_at} and older pays full price."
+    elsif free_below == full_at
+      "Children under #{free_below} eat free, and everyone #{free_below} and older pays full price."
+    else
+      "Children under #{free_below} eat free, children #{free_below} to #{full_at - 1} pay half price, " \
+        "and everyone #{full_at} and older pays full price."
+    end
   end
 
   # A meal cost in an admin table cell: the dollar amount, or blank.

@@ -6,6 +6,7 @@ ActiveAdmin.register Community do
 
   # STRONG PARAMS
   permit_params :name, :cap, :timezone, :meals_per_rotation,
+                :free_below_age, :full_price_age,
                 schedule: {}
 
   # CONFIG
@@ -86,6 +87,7 @@ ActiveAdmin.register Community do
         number_to_currency(community.cap) if community.capped?
       end
       row :timezone
+      row('Child pricing') { |c| child_pricing_rule_sentence(c) }
     end
 
     panel 'Meal schedule' do
@@ -136,6 +138,20 @@ ActiveAdmin.register Community do
       f.input :timezone,
               as: :select,
               collection: Community::SUPPORTED_TIMEZONES.map { |name, iana| [name, iana] }
+    end
+
+    f.inputs 'Child pricing' do
+      f.input :free_below_age,
+              label: 'Eats free below age',
+              hint: 'Children younger than this eat free.'
+      f.input :full_price_age,
+              label: 'Full price from age',
+              hint: 'From this age on, everyone pays full price. Ages between the two ' \
+                    'pay half price. Set both ages the same for no half-price band.'
+      li class: 'child-pricing-rule' do
+        para "Current rule: #{helpers.child_pricing_rule_sentence(f.object)}"
+        para 'Changes apply from the next nightly run, and only to future meal signups.'
+      end
     end
 
     f.inputs 'Meal schedule' do

@@ -6,6 +6,8 @@
 #
 #  id                 :bigint           not null, primary key
 #  cap                :decimal(12, 8)
+#  free_below_age     :integer          default(5), not null
+#  full_price_age     :integer          default(12), not null
 #  meals_per_rotation :integer          default(12), not null
 #  name               :string           not null
 #  schedule           :jsonb            not null
@@ -89,7 +91,7 @@ class Community < ApplicationRecord
   # Ransack allowlists for ActiveAdmin sorting
   def self.ransackable_attributes(_auth_object = nil)
     %w[id cap name singleton_guard timezone created_at updated_at
-       schedule meals_per_rotation]
+       schedule meals_per_rotation free_below_age full_price_age]
   end
 
   validates :name, presence: true, uniqueness: { case_sensitive: false }
@@ -106,6 +108,22 @@ class Community < ApplicationRecord
               message: 'must be $9,999.99 or less'
             },
             allow_nil: true
+  # --- Child pricing ages ---
+  # The nightly residents:set_multiplier task reads these two ages and sets
+  # each resident's multiplier from their birthday:
+  #
+  #   age < free_below_age                    -> Multiplier::FREE
+  #   free_below_age <= age < full_price_age  -> Multiplier::HALF
+  #   age >= full_price_age                   -> Multiplier::FULL
+  #
+  # Equal ages mean no half-price band. Both 0 means everyone with a
+  # birthday pays full price. The communities_child_ages_* CHECK constraints
+  # mirror these rules for writes that skip the model.
+  validates :free_below_age, :full_price_age,
+            numericality: { only_integer: true, greater_than_or_equal_to: 0,
+                            message: 'must be a whole number of years, 0 or more' }
+  validate :child_ages_ordered
+
   # A cap is a dollar amount a person types, so it is whole cents — the same
   # rule Bill#amount enforces. Sub-cent math would still settle correctly,
   # but a sub-cent cap can only be a typo, and typos in money fields are
@@ -175,7 +193,7 @@ class Community < ApplicationRecord
   # so it cannot drift from settlement math: meals nobody attended are
   # skipped by the scope, capped meals count their effective cost, and a
   # zero-multiplier meal charges nobody (its effective cost is zero).
-  # An adult is 2 multiplier units, hence the 2x.
+  # An adult is Multiplier::FULL units, hence the multiply.
   def unreconciled_ave_cost
     unreconciled = meals.unreconciled.with_attendees.preload(:meal_residents, :guests, :bills).to_a
     total_multiplier = unreconciled.sum(&:multiplier)
@@ -185,7 +203,7 @@ class Community < ApplicationRecord
     total_cost = unreconciled.sum(BigDecimal('0')) do |meal|
       ledger.summary_for(meal).effective_cost
     end
-    val = 2 * (total_cost / total_multiplier)
+    val = Multiplier::FULL * (total_cost / total_multiplier)
     "$#{format('%0.02f', val)}/adult"
   end
 
@@ -200,7 +218,7 @@ class Community < ApplicationRecord
   end
 
   def auto_rotation_length
-    residents.where('multiplier >= 2').where(can_cook: true).size / 2
+    residents.adult.where(can_cook: true).size / 2
   end
 
   def auto_create_rotations
@@ -280,6 +298,14 @@ class Community < ApplicationRecord
                .map { |day| day.is_a?(Integer) ? day : Integer(day.to_s, exception: false) }
                .uniq
     days.all?(Integer) ? days.sort : days
+  end
+
+  def child_ages_ordered
+    return if free_below_age.nil? || full_price_age.nil?
+    return if free_below_age <= full_price_age
+
+    errors.add(:free_below_age,
+               'must be at or below the full-price age — a child eats free before they pay half price')
   end
 
   def cap_in_whole_cents

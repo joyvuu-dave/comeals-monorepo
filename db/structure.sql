@@ -470,8 +470,12 @@ CREATE TABLE public.communities (
     updated_at timestamp without time zone NOT NULL,
     schedule jsonb DEFAULT '[[0, 1, 4], [0, 2, 4]]'::jsonb NOT NULL,
     meals_per_rotation integer DEFAULT 12 NOT NULL,
+    free_below_age integer DEFAULT 5 NOT NULL,
+    full_price_age integer DEFAULT 12 NOT NULL,
     CONSTRAINT communities_cap_positive_or_null CHECK (((cap IS NULL) OR (cap > (0)::numeric))),
     CONSTRAINT communities_cap_whole_cents CHECK (((cap IS NULL) OR (cap = round(cap, 2)))),
+    CONSTRAINT communities_child_ages_non_negative CHECK (((free_below_age >= 0) AND (full_price_age >= 0))),
+    CONSTRAINT communities_child_ages_ordered CHECK ((free_below_age <= full_price_age)),
     CONSTRAINT communities_meals_per_rotation_range CHECK (((meals_per_rotation >= 1) AND (meals_per_rotation <= 100))),
     CONSTRAINT communities_schedule_shape CHECK (public.comeals_valid_meal_schedule(schedule))
 );
@@ -1945,6 +1949,7 @@ ALTER TABLE ONLY public.bills
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260816140000'),
 ('20260816130000'),
 ('20260812120000'),
 ('20260811130000'),

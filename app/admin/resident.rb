@@ -207,7 +207,11 @@ ActiveAdmin.register Resident do
                     'outside the US, start with + and the country code: +44 20 7946 0958.'
       f.input :password if f.object.new_record?
       f.input :vegetarian
-      f.input :multiplier, label: 'Price Category', as: :radio, collection: [['Adult', 2], ['Child', 1]]
+      f.input :multiplier, label: 'Price Category', as: :radio,
+                           collection: [['Adult', Multiplier::FULL], ['Child', Multiplier::HALF]],
+                           hint: "#{helpers.child_pricing_rule_sentence(Community.instance)} The nightly " \
+                                 'task applies this rule to every resident with a birthday, so what you ' \
+                                 'set here only stays for a resident without one.'
       f.input :unit, collection: Unit.order(:name)
       f.input :can_cook
       f.input :active
