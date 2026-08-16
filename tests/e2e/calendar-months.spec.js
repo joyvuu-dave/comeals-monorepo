@@ -94,11 +94,15 @@ test("every month of 2024-2028 renders the correct grid", async ({
       if (!last) {
         await page.getByLabel("Goto Next Month").click();
         // WebKit enforces Safari's real limit of 100 history state
-        // writes per 10 seconds, and react-router writes state on
-        // every navigation. Unpaced, this loop clicks several times
-        // per second for a minute and trips it — a speed no person
-        // can sustain. The pause keeps the sweep at a human pace.
-        await page.waitForTimeout(150);
+        // writes per 10 seconds, and one month navigation makes two:
+        // react-router calls pushState for the new URL and then
+        // replaceState (measured by wrapping both methods). So the
+        // loop must average more than 200 ms per month, and the old
+        // 150 ms pause left the difference to test overhead — enough
+        // on CI, not on a fast machine (failed locally 2026-08-16).
+        // 400 ms caps the rate at 5 writes per second, half the
+        // budget, no matter how fast the machine is.
+        await page.waitForTimeout(400);
       }
     }
   }
