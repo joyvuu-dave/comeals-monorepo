@@ -133,22 +133,23 @@ Design decisions (approved 2026-08-09):
    shows a change, so a fixture edit always travels in the same commit
    as the Rails change that caused it.
 
-### 8. Release process — now a daily automated deploy (design agreed 2026-08-10)
+### 8. Release process — now a weekly automated deploy (design agreed 2026-08-10, made weekly 2026-08-16)
 
 The original sketch had a person approve each release. The goal has
-changed: deploy automatically once a day when everything is green, with
-no human in the loop. If the pipeline stops at any step, it stops for
-the day and notifies — it never retries on its own and never ships
-silently.
+changed: deploy automatically when everything is green, with no human
+in the loop. If the pipeline stops at any step, it stops and notifies
+— it never retries on its own and never ships silently.
 
-**Status 2026-08-11: the cron is off.** The pipeline is built and the
-workflow runs on demand (workflow_dispatch) with every gate intact,
-but it will not run on a schedule until the community has weighed in
-on automatic deploys. Turning it back on is uncommenting the schedule
-block in deploy.yml.
+**Status 2026-08-16: the cron is on, weekly.** The design of 2026-08-10
+said daily; the decision (2026-08-16) is once a week instead: every
+Monday at 12:00 UTC — 7am in Chicago in summer, 6am in winter, since
+Actions cron has no timezone. The workflow also still runs on demand
+(workflow_dispatch) with the same gates. Failure alerts go through a
+healthchecks.io check (secret HEALTHCHECKS_DEPLOY_URL): a failed run
+pings /fail and emails right away, and the check's own weekly schedule
+emails when a Monday run never started at all.
 
-The daily job (GitHub Actions, cron at 15:00 UTC — 8am Pacific in
-summer, 7am in winter, since Actions cron has no timezone):
+The weekly job:
 
 1. **Green gate.** Every CI check on the tip of main must have
    completed successfully — the same rule bin/deploy's preflight_ci
@@ -170,7 +171,7 @@ summer, 7am in winter, since Actions cron has no timezone):
    addresses; restore the latest production backup (the database is
    ~5 MB); deploy the candidate; run migrations against today's real
    data. Any release-phase error, boot exception, or deprecation
-   warning in the logs stops the day.
+   warning in the logs stops the run.
 4. **Exercise staging.** Run the aggressive smoke against it: log in,
    toggle attendance, open the modals — writes are fine, it is a
    disposable copy. Watch memory and errors for a few minutes. This
@@ -202,7 +203,7 @@ at afterward.
 
 **Manual rollbacks** (agreed 2026-08-10): production is downstream of
 main, so a raw `heroku rollback` is temporary by construction — the
-next 8am run would redeploy the same sha. `rollback.yml`
+next Monday run would redeploy the same sha. `rollback.yml`
 (workflow_dispatch; inputs: target release, required one-line reason)
 does all three parts: Heroku rollback, then the read-only smoke and
 an `/api/v1/version` cross-check; edit the GitHub Releases so they

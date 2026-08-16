@@ -1,25 +1,22 @@
 name: Deploy
 
-# The daily automated deploy (docs/deploy-confidence-plan.md, item 8).
-# Runs at 15:00 UTC — 8am Pacific in summer, 7am in winter — and on
-# demand via workflow_dispatch (same gates; `fast` only trims the
-# post-deploy soak). If any step fails, the run stops and notifies;
-# it never retries and never ships silently.
+# The weekly automated deploy (docs/deploy-confidence-plan.md, item 8).
+# Runs every Monday at 12:00 UTC — 7am in Chicago in summer, 6am in
+# winter, since Actions cron has no timezone — and on demand via
+# workflow_dispatch (same gates; `fast` only trims the post-deploy
+# soak). If any step fails, the run stops and notifies; it never
+# retries and never ships silently. (Decided 2026-08-16: weekly, not
+# daily. The daily cron was off 2026-08-11 to 2026-08-16 while that
+# decision was open.)
 #
 # Secrets (GitHub environment "production"): HEROKU_API_KEY,
-# ANTHROPIC_API_KEY, and optionally HEALTHCHECKS_DEPLOY_URL — a
-# healthchecks.io ping URL; when set, success pings it and failure
-# pings /fail, so a morning where the job never ran also alerts.
+# ANTHROPIC_API_KEY, and HEALTHCHECKS_DEPLOY_URL — a healthchecks.io
+# ping URL; success pings it and failure pings /fail, so the check's
+# own schedule also catches a Monday where the job never ran.
 
 on:
-  # The daily cron is off until the community has weighed in on
-  # automatic deploys (2026-08-11). To turn it back on, restore:
-  #
-  #   schedule:
-  #     - cron: "0 15 * * *"
-  #
-  # Everything else stays: this workflow runs on demand, with the
-  # same gates a scheduled run would have.
+  schedule:
+    - cron: "0 12 * * 1"
   workflow_dispatch:
     inputs:
       fast:
