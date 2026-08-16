@@ -1608,10 +1608,10 @@ CREATE UNIQUE INDEX index_residents_on_email ON public.residents USING btree (em
 
 
 --
--- Name: index_residents_on_name; Type: INDEX; Schema: public; Owner: -
+-- Name: index_residents_on_lower_name; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE UNIQUE INDEX index_residents_on_name ON public.residents USING btree (name);
+CREATE UNIQUE INDEX index_residents_on_lower_name ON public.residents USING btree (lower((name)::text));
 
 
 --
@@ -1949,6 +1949,7 @@ ALTER TABLE ONLY public.bills
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260816150000'),
 ('20260816140000'),
 ('20260816130000'),
 ('20260812120000'),

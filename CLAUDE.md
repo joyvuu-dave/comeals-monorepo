@@ -6,6 +6,8 @@ Comeals is a meal management and cost-splitting application for a co-housing com
 
 In production, Rails serves the SPA from `public/` and the API from `/api/v1/`. No Express, no CORS, one Heroku dyno.
 
+**The app serves exactly one community, forever.** The `communities` table can never hold a second row: `singleton_guard` is a constant 0 with a unique index, and `Community#enforce_singleton` refuses a second create. Multi-community support is not a future plan — it is a rejected design. So never scope a query, an index, or a uniqueness rule by `community_id` "for when there are more communities"; `community_id` columns are plain foreign keys to the one row. If a global rule looks wrong to you (say, a unique index on `residents.name` with no community scope), this is why it is right.
+
 ## Development Environment
 
 ```bash

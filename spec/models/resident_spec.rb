@@ -25,7 +25,7 @@
 # Indexes
 #
 #  index_residents_on_email                 (email) UNIQUE
-#  index_residents_on_name                  (name) UNIQUE
+#  index_residents_on_lower_name            (lower((name)::text)) UNIQUE
 #  index_residents_on_reset_password_token  (reset_password_token) UNIQUE
 #  index_residents_on_unit_id               (unit_id)
 #
@@ -130,6 +130,36 @@ RSpec.describe Resident do
     it 'allows nil email for residents who cannot cook' do
       resident = build(:resident, community: community, unit: unit,
                                   active: true, can_cook: false, multiplier: 2, email: nil)
+
+      expect(resident).to be_valid
+    end
+  end
+
+  describe 'name uniqueness' do
+    let(:other_unit) { create(:unit, community: community, name: 'B7') }
+
+    it 'refuses a duplicate name and says who the clash is with and what to do' do
+      create(:resident, community: community, unit: other_unit, name: 'John Smith')
+      resident = build(:resident, community: community, unit: unit, name: 'John Smith')
+
+      expect(resident).not_to be_valid
+      expect(resident.errors[:name].first).to eq(
+        'is already used by the resident in unit B7. Add something people use to ' \
+        'tell them apart — a middle name, Jr./Sr., or a nickname.'
+      )
+    end
+
+    it 'treats names as the same regardless of case, matching the database index' do
+      create(:resident, community: community, unit: other_unit, name: 'John Smith')
+      resident = build(:resident, community: community, unit: unit, name: 'john smith')
+
+      expect(resident).not_to be_valid
+      expect(resident.errors[:name].first).to include('unit B7')
+    end
+
+    it 'lets a resident keep their own name on update' do
+      resident = create(:resident, community: community, unit: unit, name: 'John Smith')
+      resident.email = 'john.smith@example.com'
 
       expect(resident).to be_valid
     end

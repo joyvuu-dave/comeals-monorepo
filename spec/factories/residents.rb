@@ -25,7 +25,7 @@
 # Indexes
 #
 #  index_residents_on_email                 (email) UNIQUE
-#  index_residents_on_name                  (name) UNIQUE
+#  index_residents_on_lower_name            (lower((name)::text)) UNIQUE
 #  index_residents_on_reset_password_token  (reset_password_token) UNIQUE
 #  index_residents_on_unit_id               (unit_id)
 #

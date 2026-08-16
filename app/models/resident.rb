@@ -25,7 +25,7 @@
 # Indexes
 #
 #  index_residents_on_email                 (email) UNIQUE
-#  index_residents_on_name                  (name) UNIQUE
+#  index_residents_on_lower_name            (lower((name)::text)) UNIQUE
 #  index_residents_on_reset_password_token  (reset_password_token) UNIQUE
 #  index_residents_on_unit_id               (unit_id)
 #
@@ -74,7 +74,16 @@ class Resident < ApplicationRecord
   has_many :common_house_reservations, dependent: :destroy
 
   validates :multiplier, numericality: { only_integer: true }
-  validates :name, presence: true, uniqueness: { case_sensitive: false }
+  validates :name, presence: true
+
+  # Names must be unique so every screen can tell residents apart (the
+  # calendar, the audit log, and the mailers all show bare names). The
+  # database enforces this too, with the case-insensitive unique index
+  # index_residents_on_lower_name. This check is hand-written instead of
+  # `uniqueness:` so the error can say who the clash is with and what to
+  # do — a duplicate name can only be fixed at the moment someone tries
+  # to create it, usually by the admin adding the second John Smith.
+  validate :name_unique_with_helpful_message
 
   # Birthday is optional for adults: NULL means "adult, no birthday given" —
   # the nightly multiplier task skips them and the calendar shows nothing.
@@ -122,6 +131,17 @@ class Resident < ApplicationRecord
   end
 
   # HELPERS
+  def name_unique_with_helpful_message
+    return if name.blank?
+
+    clash = Resident.where('lower(name) = ?', name.downcase).where.not(id: id).first
+    return if clash.nil?
+
+    errors.add(:name, "is already used by the resident in unit #{clash.unit.name}. " \
+                      'Add something people use to tell them apart — a middle name, ' \
+                      'Jr./Sr., or a nickname.')
+  end
+
   def email_presence
     errors.add(:email, 'cannot be blank.') if active && can_cook && multiplier >= Multiplier::FULL && email.nil?
   end
