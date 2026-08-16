@@ -21,7 +21,9 @@ cd "$ROOT_DIR"
 # In an agent worktree, .env sets TEST_DB_SUFFIX and the test database is
 # comeals_test<suffix> (config/database.yml). Rails reads .env itself via
 # dotenv; this shell needs the name too, for the cleanup TRUNCATE below.
-TEST_DB="comeals_test$(sed -n 's/^TEST_DB_SUFFIX=//p' .env 2>/dev/null)"
+# `|| true` because .env does not exist in CI, and under `set -e` a failed
+# sed inside the substitution would end the script with sed's exit code.
+TEST_DB="comeals_test$(sed -n 's/^TEST_DB_SUFFIX=//p' .env 2>/dev/null || true)"
 
 # The suite's frozen clock: seeds, the Rails test server, and the
 # browser (tests/helpers/integration_setup.js) all see this date as
