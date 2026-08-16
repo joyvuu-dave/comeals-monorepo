@@ -19,14 +19,37 @@ community = Community.first || Community.create!(name: 'Patches Way',
 
 Rails.logger.debug '1 Community created'
 
+# Phone numbers. Every number here is from a range reserved for fiction
+# (US 555-01XX, the UK 020 7946 09XX drama range, the French 01 99 00 XX XX
+# test range), so no seed row ever holds a real person's number — yet
+# libphonenumber accepts them all as valid, which the model requires.
+# Most adults get a US number, a few get an international one to show the
+# E.164 path works past +1, and a few get none, because a blank phone is a
+# state every screen must handle. Inputs are typed the way people type
+# them ("510-555-0123", "+44 20 7946 0958"); the model normalizes each to
+# E.164 before saving.
+phone_counter = 0
+next_phone = lambda do
+  phone_counter += 1
+  case phone_counter % 9
+  when 3 then format('+44 20 7946 09%<n>02d', n: phone_counter)        # UK
+  when 6 then format('+33 1 99 00 %<n>02d 10', n: phone_counter)       # France
+  when 8 then nil                                                      # no phone given
+  else
+    area = %w[212 310 415 510 617 773 808].fetch(phone_counter % 7)
+    format('%<area>s-555-01%<n>02d', area: area, n: phone_counter)
+  end
+end
+
 # AdminUser. Two of them, because SuperuserAdapter has two admin tiers: a
 # superuser may do anything, and a plain admin may do everything except write
 # on the money path. Seeding one of each makes both sides of that boundary
-# something you can log in and look at.
+# something you can log in and look at. One US phone and one UK phone, so
+# both admin forms show a normalized number.
 AdminUser.create!(email: 'joslyn@email.com', password: 'password', password_confirmation: 'password',
-                  community: community, superuser: true)
+                  community: community, superuser: true, phone: '(510) 555-0199')
 AdminUser.create!(email: 'reader@email.com', password: 'password', password_confirmation: 'password',
-                  community: community)
+                  community: community, phone: '+44 20 7946 0999')
 
 Rails.logger.debug { "#{community.admin_users.count} AdminUser created" }
 
@@ -47,7 +70,7 @@ Rails.logger.debug { "#{community.admin_users.count} AdminUser created" }
   Resident.create!(name: "#{Faker::Name.first_name} #{Faker::Name.last_name}",
                    multiplier: 2, unit: unit, email: Faker::Internet.email,
                    community: community, password: 'password',
-                   birthday: adult_birthday)
+                   birthday: adult_birthday, phone: next_phone.call)
   next unless index.even?
 
   veg_year = ((Time.zone.today.year - 90)..(Time.zone.today.year - 20)).to_a.sample
@@ -55,7 +78,7 @@ Rails.logger.debug { "#{community.admin_users.count} AdminUser created" }
   Resident.create!(name: "#{Faker::Name.first_name} #{Faker::Name.last_name}",
                    multiplier: 2, unit: unit, email: Faker::Internet.email,
                    community: community, password: 'password',
-                   vegetarian: true, birthday: veg_birthday)
+                   vegetarian: true, birthday: veg_birthday, phone: next_phone.call)
 end
 
 Rails.logger.debug { "#{community.units.count} Units created" }
