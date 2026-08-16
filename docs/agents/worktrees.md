@@ -69,20 +69,39 @@ it.
 On that yes, the agent runs, from the main checkout:
 
 ```bash
-git merge --ff-only agent/<task-name>
-git push
-bin/agent-worktree-done <task-name>   # removes worktree, drops its test DB
-git branch -d agent/<task-name>
+bin/agent-merge <task-name>
 ```
 
-If the branch added migrations, the agent then runs
-`bin/rails db:migrate` in the main checkout — the migration is on `main`
-at that point, so this is the same act as the human running it. Pushing
-goes to GitHub only; deploys always go through `bin/deploy`, run by the
-human.
+That one script does the whole landing: fast-forward merge into `main`,
+push to GitHub, `bin/rails db:migrate` if the branch added migrations
+(the migration is on `main` at that point, so this is the same act as
+the human running it), `bin/agent-worktree-done` (removes the worktree,
+drops its test database), and delete the branch. Pushing goes to GitHub
+only; deploys always go through `bin/deploy`, run by the human.
 
-`bin/agent-worktree-done` refuses while the worktree has uncommitted
-changes, and it always keeps the branch.
+The script refuses, with a message saying what to do instead, whenever
+landing could lose or hide work:
+
+- the main checkout is dirty, or not on `main`;
+- `main` has local commits that origin does not — they may be unpushed
+  on purpose, and `git push` would push them too;
+- the branch is not a fast-forward of `main` — rebase it in its
+  worktree, rerun `bin/check` there, and rerun the script.
+
+It never rewrites history and never force-pushes. If local `main` is
+only behind origin, it fast-forwards it first; that can only add commits
+already on GitHub.
+
+`bin/agent-worktree-done` (which the script calls, and which can also be
+run alone for an abandoned task) refuses while the worktree has
+uncommitted changes, and it always keeps the branch.
+
+For the agent to run `bin/agent-merge` itself, the command must be
+allowed in the Claude Code permission settings (for example
+`"Bash(bin/agent-merge *)"` in `.claude/settings.local.json`). Allowing
+this one script is deliberately narrower than allowing `git merge` and
+`git push` in general: the script can only land a fast-forward of an
+`agent/` branch, and the human's spoken "merge it" stays the gate.
 
 ## Why this exists
 

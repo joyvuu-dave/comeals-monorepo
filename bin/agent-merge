@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# bin/agent-merge <task-name>
+#
+# The one command that lands a finished agent branch. Run from the main
+# checkout, only after the human has read the report and said "merge it".
+# It does, in order:
+#
+#   1. merge agent/<task-name> into main, fast-forward only
+#   2. push main to GitHub
+#   3. run bin/rails db:migrate if the branch added migrations
+#   4. bin/agent-worktree-done <task-name>  (removes worktree, drops test DB)
+#   5. delete the branch
+#
+# It refuses anything that could lose or hide work:
+#   - a dirty main checkout
+#   - local commits on main that origin does not have (it will not push
+#     someone else's unpushed work as a side effect)
+#   - a branch that is not a fast-forward of main (rebase it first)
+#
+# Every refusal says what to do instead. Nothing here ever rewrites
+# history or force-pushes.
+
+usage() {
+  echo "usage: bin/agent-merge <task-name>" >&2
+  exit 1
+}
+
+[ $# -eq 1 ] || usage
+name="$1"
+[[ "$name" =~ ^[a-z0-9][a-z0-9-]*$ ]] || usage
+
+branch="agent/$name"
+
+if [ "$(git rev-parse --git-dir)" != "$(git rev-parse --git-common-dir)" ]; then
+  echo "Run this from the main checkout, not from inside a worktree." >&2
+  exit 1
+fi
+cd "$(git rev-parse --show-toplevel)"
+
+if [ "$(git rev-parse --abbrev-ref HEAD)" != "main" ]; then
+  echo "The main checkout is on '$(git rev-parse --abbrev-ref HEAD)', not main." >&2
+  echo "Switch it back to main first: git checkout main" >&2
+  exit 1
+fi
+
+if [ -n "$(git status --porcelain)" ]; then
+  echo "The main checkout has uncommitted changes:" >&2
+  git status --short >&2
+  echo "This checkout belongs to the human — commit or stash those changes" >&2
+  echo "yourself, then rerun. bin/agent-merge will not touch them." >&2
+  exit 1
+fi
+
+if ! git rev-parse --verify --quiet "$branch" >/dev/null; then
+  echo "No branch named $branch." >&2
+  exit 1
+fi
+
+git fetch origin main --quiet
+
+# Bring main up to date with origin if origin moved. --ff-only means this
+# can only add commits that are already on GitHub; it cannot lose anything.
+if [ -n "$(git rev-list HEAD..origin/main)" ]; then
+  if [ -n "$(git rev-list origin/main..HEAD)" ]; then
+    echo "Local main and origin/main have each moved. Sort that out by" >&2
+    echo "hand before merging anything." >&2
+    exit 1
+  fi
+  git merge --ff-only origin/main
+fi
+
+# git push below pushes everything on main, not just this branch. If main
+# already has commits origin lacks, they may be unpushed on purpose (for
+# example, waiting on a fix). Do not push them as a side effect.
+unpushed=$(git rev-list origin/main..HEAD)
+if [ -n "$unpushed" ]; then
+  echo "main already has commit(s) that origin/main does not:" >&2
+  git log --oneline origin/main..HEAD >&2
+  echo "Pushing $branch would push these too. If that is intended, push" >&2
+  echo "them first (git push), then rerun bin/agent-merge $name." >&2
+  exit 1
+fi
+
+migrations=$(git diff --name-only "main..$branch" -- db/migrate/)
+
+if ! git merge --ff-only "$branch"; then
+  echo "" >&2
+  echo "$branch is not a fast-forward of main. Rebase it in its worktree:" >&2
+  echo "  cd ../comeals-$name && git rebase main" >&2
+  echo "then rerun bin/check there, and rerun bin/agent-merge $name." >&2
+  exit 1
+fi
+
+git push
+
+if [ -n "$migrations" ]; then
+  echo "==> branch added migrations; migrating the development database"
+  bin/rails db:migrate
+fi
+
+# Remove the worktree before deleting the branch: git refuses to delete a
+# branch that a worktree still has checked out. agent-worktree-done has its
+# own refusal for uncommitted changes, but after a fast-forward merge the
+# worktree is clean by definition.
+if [ -d "../comeals-$name" ]; then
+  bin/agent-worktree-done "$name"
+else
+  echo "No worktree at ../comeals-$name (already removed); skipping cleanup."
+fi
+
+git branch -d "$branch"
+
+echo ""
+echo "Merged $branch into main, pushed, and cleaned up."
