@@ -1048,7 +1048,7 @@ table.table-striped tr:nth-child(odd) td {
   color: var(--dark-green) !important;
 }
 .text-warning {
-  color: var(--dark-orange) !important;
+  color: var(--amber) !important;
 }
 .text-small {
   font-size: 80% !important;

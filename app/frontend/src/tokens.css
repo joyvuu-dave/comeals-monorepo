@@ -68,8 +68,7 @@
   --orange-focus: color-mix(in srgb, var(--orange) 50%, transparent);
 
   /* Orange one-offs. */
-  --dark-orange: #b35900; /* .text-warning text */
-  --amber: #b45309; /* "pending" placeholder text */
+  --amber: #b45309; /* .text-warning text, "pending" placeholder text */
   --cream: #fff6e5; /* confirm bar background */
 
   /* Yellows. */
