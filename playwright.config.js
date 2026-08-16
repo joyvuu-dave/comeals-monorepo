@@ -30,6 +30,17 @@ module.exports = defineConfig({
       // 2026-08-07: three consecutive runs on macOS and a comparison
       // run in the Linux container all pass at this setting.
       maxDiffPixelRatio: 0.001,
+      // The per-pixel cutoff. At Playwright's default (0.2), two pixels
+      // count as equal when their color distance is under 0.2² of the
+      // maximum — wide enough that the error toast's recolor from
+      // #c0392b to #851500 (distance ~1014 against a cutoff of ~1409)
+      // changed 94% of the element's pixels and failed nothing (#62).
+      // At 0.05 the cutoff is ~88, so a recolor between two shades of
+      // the same hue counts every pixel, and the 0.1% budget above can
+      // act. Verified 2026-08-16: three consecutive runs on macOS and
+      // two comparison runs in the Linux container all pass at this
+      // setting.
+      threshold: 0.05,
     },
   },
   fullyParallel: true,

@@ -22,7 +22,12 @@ cd "$(dirname "$0")/.."
 
 EXTRA_ARGS=""
 if [ "${1:-}" = "--update" ]; then
-  EXTRA_ARGS="--update-snapshots"
+  # =all, not plain --update-snapshots: the plain form only rewrites a
+  # golden whose comparison fails, so a golden that is stale but still
+  # inside the diff tolerance is exactly the one it skips (#62). --update
+  # means "rewrite the goldens", so rewrite all of them; the caller then
+  # reviews each changed PNG and discards antialiasing-only churn.
+  EXTRA_ARGS="--update-snapshots=all"
 fi
 
 # The image version must match @playwright/test. package-lock.json has
