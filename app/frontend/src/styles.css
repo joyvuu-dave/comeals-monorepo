@@ -1,3 +1,4 @@
+@import "./tokens.css";
 @import "@fontsource/roboto/latin-300.css";
 @import "@fontsource/roboto/latin-600.css";
 @import "@fontsource/roboto/latin-700.css";
@@ -25,31 +26,14 @@
     url("./fonts/roboto-latin-400.woff") format("woff");
 }
 
-:root {
-  /* Colors */
-  --hasana-yellow: #e9c46a;
-  --almost-white: hsl(0, 0%, 98%);
-
-  /* Shoelace variables */
-  --state-primary: #851500;
-  /* Two greens, split by use. The dark one is for green TEXT on light
-     backgrounds: on white it is 5.9:1, and on the yellow header it is
-     3.5:1, which passes WCAG AA only under the large-text rule (24px+
-     or 19px bold) — keep it large wherever it sits on yellow. The
-     bright one is for green BACKGROUNDS, which carry #111 text (8.8:1);
-     white or #444 text on it fails AA, so pair it with #111 only. */
-  --color-green: #187426;
-  --color-green-bright: #2ecc40;
-}
-
 .background-white {
   background-color: var(--almost-white);
 }
 
 .background-green {
-  background-color: var(--color-green-bright);
+  background-color: var(--bright-green);
   /* The dark text is what makes the bright background pass AA. */
-  color: #111;
+  color: var(--gray-19);
 }
 
 .background-transition {
@@ -63,15 +47,15 @@
 }
 
 .text-black {
-  color: #444 !important;
+  color: var(--gray-13) !important;
 }
 
 .text-green {
-  color: var(--color-green);
+  color: var(--dark-green);
 }
 
 .text-primary {
-  color: var(--state-primary) !important;
+  color: var(--brand-red) !important;
 }
 
 .pointer {
@@ -88,14 +72,14 @@
 }
 
 .button-border-radius {
-  border-radius: 0.25rem;
+  border-radius: var(--radius);
 }
 
 .info-circle {
   /* These circles were h4 elements, but they are count displays, not
      section headings — an h4 right after an h2 fails the heading-order
      accessibility rule. The font lines keep the h4 look on the div. */
-  font-family: Roboto, sans-serif;
+  font-family: var(--font-sans);
   font-size: 1.5rem;
   font-weight: 300;
   line-height: 1.1;
@@ -103,13 +87,13 @@
   height: 6.5rem;
   min-width: 6.5rem;
   width: 6.5rem;
-  border: 1px solid var(--state-primary);
+  border: 1px solid var(--brand-red);
   border-radius: 50%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  margin: 1rem 1rem 1rem 1rem;
+  margin: var(--space-4);
 }
 
 @media all and (max-width: 825px) {
@@ -122,9 +106,9 @@
     min-width: 400px;
     margin-left: auto;
     margin-right: auto;
-    margin-top: 1rem;
-    margin-bottom: 1rem;
-    padding-bottom: 2rem;
+    margin-top: var(--space-4);
+    margin-bottom: var(--space-4);
+    padding-bottom: var(--space-8);
     transition: width 0.5s;
   }
 
@@ -134,7 +118,7 @@
 
   .wrapper {
     display: grid;
-    grid-gap: 1rem;
+    grid-gap: var(--space-4);
     grid-template-areas: "a1 a1 a1" "a2 a2 a2" "a3 a3 a3" "a4 a4 a4" "a5 a5 a5";
     margin-right: auto;
     margin-left: auto;
@@ -189,15 +173,15 @@
 
   .wrapper {
     display: grid;
-    grid-gap: 1rem;
+    grid-gap: var(--space-4);
     grid-template-areas:
       "a1 a1 a1 a1 a1 a1 a2 a2 a2 a2 a2 a2"
       "a3 a3 a3 a3 a3 a3 a4 a4 a4 a4 a4 a4"
       "a5 a5 a5 a5 a5 a5 a5 a5 a5 a5 a5 a5";
     margin-right: auto;
     margin-left: auto;
-    padding-right: 1rem;
-    padding-left: 1rem;
+    padding-right: var(--space-4);
+    padding-left: var(--space-4);
     width: 100%;
     transition: padding-left 1s;
   }
@@ -245,7 +229,7 @@ button:focus {
 }
 
 .offwhite {
-  background-color: #ebebe4;
+  background-color: var(--offwhite);
 }
 
 .arrow {
@@ -260,7 +244,7 @@ button:focus {
 
 .title {
   border-bottom: 0.5px solid;
-  padding: 1rem 1rem 0 1rem;
+  padding: var(--space-4) var(--space-4) 0 var(--space-4);
   background-color: var(--hasana-yellow);
   margin-bottom: 0;
 }
@@ -372,7 +356,7 @@ Offline Indicator
 */
 #status {
   font: bold 1em sans-serif;
-  color: #fff;
+  color: var(--white);
   padding: 0.5em;
 }
 
@@ -403,8 +387,8 @@ ring inside the cell makes today findable at a glance without
 competing with the event colors.
 */
 .rbc-today {
-  background-color: #dcedfb;
-  box-shadow: inset 0 0 0 2px #5a9fd6;
+  background-color: var(--pale-blue);
+  box-shadow: inset 0 0 0 2px var(--mid-blue);
 }
 
 /*
@@ -413,7 +397,7 @@ an #e6e6e6 cell — 2.3:1 contrast. WCAG AA (the Lighthouse check) needs
 4.5:1; #666 gives 4.6:1 and still reads as muted.
 */
 .rbc-off-range {
-  color: #666;
+  color: var(--gray-11);
 }
 
 /*
@@ -436,7 +420,7 @@ a[disabled] {
 Allow AttendeesBox component to fit on mobile
 */
 table td {
-  padding: 0.5rem 0.25rem !important;
+  padding: var(--space-2) var(--space-1) !important;
 }
 
 #info_circles {
@@ -466,17 +450,17 @@ question must never shift the content someone is about to click.
 }
 .confirm-bar {
   align-items: center;
-  background-color: #fff6e5;
-  border: 1px solid #ff851b;
-  border-radius: 0.25rem;
+  background-color: var(--cream);
+  border: 1px solid var(--orange);
+  border-radius: var(--radius);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   display: flex;
   flex-wrap: wrap;
   font-weight: normal;
-  gap: 0.5rem 1rem;
+  gap: var(--space-2) var(--space-4);
   justify-content: space-between;
   left: 0;
-  padding: 0.5rem 0.75rem;
+  padding: var(--space-2) var(--space-3);
   position: absolute;
   right: 0;
   text-align: left;
@@ -493,7 +477,7 @@ question must never shift the content someone is about to click.
 }
 .confirm-bar-buttons {
   display: flex;
-  gap: 1rem;
+  gap: var(--space-4);
   margin-left: auto;
 }
 .confirm-bar-buttons .button {
@@ -501,7 +485,7 @@ question must never shift the content someone is about to click.
 }
 /* The word "pending" in an empty cost box: a status, not a number. */
 .cost-pending::placeholder {
-  color: #b45309;
+  color: var(--amber);
   font-style: italic;
   opacity: 1;
 }
