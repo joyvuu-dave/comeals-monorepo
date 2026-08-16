@@ -28,7 +28,10 @@ ActiveAdmin.register Rotation do
   # INDEX
   index do
     column :id
-    column :place_value
+    # place_value is the number residents see ("Rotation 5" in the app).
+    # It is a position, not an identity: it renumbers when a rotation is
+    # created or deleted. Use the id to cross-reference records.
+    column 'Rotation #', :place_value
     column :start_date
     column 'Period', :description
     column :meals_count
@@ -41,7 +44,7 @@ ActiveAdmin.register Rotation do
   show do
     attributes_table do
       row :id
-      row :place_value
+      row('Rotation #', &:place_value)
       row :start_date
       row('Period', &:description)
       row :meals_count
