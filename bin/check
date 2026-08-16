@@ -221,6 +221,25 @@ check_prettier() {
   fi
 }
 
+# CLAUDE.md bans FIXME/TODO/HACK markers in financial code: unfinished
+# work must be finished or become a tracked issue, not a comment. This
+# greps the money-path directories so a marker fails the check run.
+check_todo_markers() {
+  step "TODO markers"
+
+  local output exit_code=0
+  output=$(grep -rnwE 'FIXME|TODO|HACK' app/models app/services app/controllers/api lib/tasks 2>/dev/null) || exit_code=$?
+
+  if [ "$exit_code" -ne 0 ]; then
+    pass "No FIXME/TODO/HACK in money-path code"
+    record "TODO markers" "PASS" "none in money-path code"
+  else
+    fail "Markers found in money-path code"
+    echo "$output" | head -20
+    record "TODO markers" "FAIL" "markers in money-path code"
+  fi
+}
+
 check_typecheck() {
   step "TypeScript"
 
@@ -513,6 +532,7 @@ main() {
   check_eslint
   check_typecheck
   check_prettier
+  check_todo_markers
   check_bundle_budget
 
   # Security
