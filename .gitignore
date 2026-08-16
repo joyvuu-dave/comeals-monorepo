@@ -51,13 +51,8 @@ latest.dump
 /test-results/
 /tests/test-results/
 
-# AI tooling (Claude Code, AIWG)
-# Framework-installed content is ignored; project-specific intake docs
-# live in .aiwg/intake/ and are explicitly tracked.
+# AI tooling (Claude Code)
 .claude/
-AIWG.md
-.aiwg/*
-!.aiwg/intake/
 
 # Working memory from the planning-with-files skill. Decisions worth keeping
 # live in docs/adr/; these files are local scratch only.

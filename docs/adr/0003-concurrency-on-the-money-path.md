@@ -285,10 +285,10 @@ reads. They all block, and are all refused.)
   `config.use_transactional_fixtures = true`. Threaded specs cannot see the
   outer transaction's uncommitted data, so these tests need their own
   non-transactional tag. Budget for that; it is not a one-line spec.
-- The `.aiwg/intake/` documents describe the system as of 2026-04-11 and
-  repeated the "no threading races" claim. Rather than rewrite them, the three
-  affected lines were annotated in place with a pointer to this ADR, so the
-  original wording and the correction sit next to each other.
+- The `.aiwg/intake/` documents described the system as of 2026-04-11 and
+  repeated the "no threading races" claim. At the time, the three affected
+  lines were annotated in place with a pointer to this ADR. The documents
+  were removed in the 2026-08 dead-code cleanup; they live in git history.
 - The lesson worth keeping from the second hole: when a fix deliberately
   leaves a branch alone, write down the case the exemption covers, then check
   whether the race you are fixing is that case. Here it was not — the
