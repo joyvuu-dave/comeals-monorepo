@@ -22,13 +22,10 @@ gem 'pg', '~> 1.5'
 gem 'puma', '~> 8.0'
 gem 'sassc-rails'
 
-# Gems transitioning from stdlib to bundled gems in Ruby 3.4+
-# (warnings in 3.3, required in 3.4)
+# Stdlib libraries that became ordinary gems in Ruby 3.4+. Only the two we
+# call directly are pinned; the rest arrive as dependencies of other gems.
 gem 'base64'
 gem 'bigdecimal'
-gem 'csv'
-gem 'drb'
-gem 'mutex_m'
 
 gem 'activeadmin', '~> 3.0'
 gem 'active_model_serializers', '~> 0.10'
@@ -66,7 +63,6 @@ gem 'solid_cache'
 gem 'bootsnap', require: false
 
 group :development, :test do
-  gem 'benchmark'
   gem 'brakeman', require: false
   gem 'bundler-audit', require: false
   gem 'byebug', platforms: %i[ruby mri windows]

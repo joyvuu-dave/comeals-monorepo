@@ -22,6 +22,7 @@ git clone https://github.com/joyvuu-dave/comeals-monorepo.git
 cd comeals-monorepo
 bundle install
 npm install
+git config core.hooksPath .githooks   # turn on the repo's git hooks (bin/setup also does this)
 bundle exec rake db:setup   # creates DB + runs db/seeds.rb (dev fixtures)
 bin/dev
 ```
