@@ -29,12 +29,12 @@
 
 .toast--success {
   background-color: var(--bright-green);
-  color: var(--gray-15);
+  color: var(--gray-19);
 }
 
 .toast--warning {
   background-color: var(--hasana-yellow);
-  color: var(--gray-15);
+  color: var(--gray-19);
 }
 
 .toast--info {

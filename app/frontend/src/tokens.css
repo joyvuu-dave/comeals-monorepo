@@ -108,7 +108,8 @@
   --gray-12: #4f4f4f; /* .text-secondary text */
   --gray-13: #444; /* .text-black text */
   --gray-14: #3e3e3e; /* dark button top border */
-  --gray-15: #333; /* toast text on bright backgrounds */
+  /* No gray-15: it was #333, used only for toast text, which now uses
+     gray-19. The other numbers keep their names. */
   --gray-16: #292929; /* dark button base */
   --gray-16-focus: color-mix(in srgb, var(--gray-16) 50%, transparent);
   --gray-17: #252525; /* dark button hover */
