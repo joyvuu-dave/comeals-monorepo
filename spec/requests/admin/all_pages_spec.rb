@@ -19,10 +19,10 @@ ADMIN_PAGE_ACTIONS = %i[index show new edit].freeze
 # pages: it allows only :create and :destroy (per-row attendance
 # corrections nested under Meal).
 #
-# `unrendered` lists pages a resource routes but that this spec cannot open,
-# because they are only reachable in a state this spec cannot be in. They
-# still belong in `pages` — the registry example below compares that list
-# against the routed actions.
+# `unrendered` lists pages a resource routes but that never render here:
+# either they are only reachable in a state this spec cannot be in, or they
+# only redirect. They still belong in `pages` — the registry example below
+# compares that list against the routed actions.
 ADMIN_PAGE_RESOURCES = {
   'AdminUser' => {
     pages: %i[index show new edit],
@@ -38,11 +38,12 @@ ADMIN_PAGE_RESOURCES = {
   },
   # Community is a singleton. The new form is only reachable on a fresh
   # deployment with no row yet, and this spec always has one, so opening it
-  # here is refused. spec/requests/admin/community_creation_spec.rb covers
-  # both the refusal and the bootstrap case.
+  # here is refused (community_creation_spec.rb covers the refusal and the
+  # bootstrap case). The index route stays for the menu and breadcrumbs but
+  # only redirects to the show page (community_singleton_spec.rb).
   'Community' => {
     pages: %i[index show new edit],
-    unrendered: %i[new],
+    unrendered: %i[index new],
     record: -> { community }
   },
   'Event' => {

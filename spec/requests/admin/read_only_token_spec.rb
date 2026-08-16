@@ -85,9 +85,15 @@ RSpec.describe 'Read-only admin token' do
     end
 
     it 'cannot read community settings' do
+      # The index only redirects to the show page now, but a token must be
+      # refused there too — refused means sent to the dashboard, not to the
+      # settings. Both checks name the target so a redirect-to-show does not
+      # pass as a denial.
       get '/communities', params: { token: token }
+      expect(response).to redirect_to('http://admin.example.com/')
 
-      expect(response).to have_http_status(:redirect)
+      get "/communities/#{community.id}", params: { token: token }
+      expect(response).to redirect_to('http://admin.example.com/')
     end
   end
 

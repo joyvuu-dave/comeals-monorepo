@@ -9,9 +9,6 @@ ActiveAdmin.register Community do
                 :free_below_age, :full_price_age,
                 schedule: {}
 
-  # CONFIG
-  config.filters = false
-
   # ACTIONS
   # `new` and `create` stay routed so the very first Community can be created
   # through the UI on a fresh deployment. Once that row exists, SuperuserAdapter
@@ -23,6 +20,27 @@ ActiveAdmin.register Community do
     # Skipped for new/create (find_resource isn't called for those actions).
     def find_resource
       Community.instance
+    end
+
+    # Community is a singleton, so there is no list page. The menu item and
+    # the breadcrumbs link to the index by default; keeping the route and
+    # redirecting means both keep working with no overrides. Before the row
+    # exists (a fresh deployment), the redirect goes to the new form instead.
+    # The bootstrap guard initializer normally handles that state before this
+    # action runs; the branch here keeps the action correct on its own
+    # (Community.instance would raise), not just under the guard.
+    def index
+      # Hand-written action: ActiveAdmin authorizes inside resource and
+      # build_resource, neither of which runs here (the meal_resident.rb
+      # trap, ADR 0004). Nothing private is rendered here, but the adapter
+      # is still asked, so a read-only token is refused like everywhere else.
+      authorize! :read, Community
+
+      if (community = Community.first)
+        redirect_to resource_path(community)
+      else
+        redirect_to new_resource_path
+      end
     end
   end
 
@@ -65,17 +83,6 @@ ActiveAdmin.register Community do
          note].compact
       )
     end
-  end
-
-  # INDEX
-  index do
-    column :name
-    column :cap do |community|
-      number_to_currency(community.cap) if community.capped?
-    end
-    column :timezone
-
-    actions
   end
 
   # SHOW

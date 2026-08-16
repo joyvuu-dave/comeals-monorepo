@@ -5,8 +5,8 @@ require 'rails_helper'
 # The communities table holds exactly one row. Creating it is a bootstrap step
 # on an empty database (spec/requests/admin/bootstrap_guard_spec.rb covers
 # that path). Once the row exists there is nothing left to create, so
-# SuperuserAdapter refuses both `new` and `create` — the "New Community"
-# button is gone from the index and the URLs are denied.
+# SuperuserAdapter refuses both `new` and `create` — no page links to
+# /communities/new and the URLs are denied.
 RSpec.describe 'Admin community creation' do
   let!(:community) { create(:community) }
 
@@ -20,8 +20,8 @@ RSpec.describe 'Admin community creation' do
     expect(flash[:error]).to eq('You are not authorized to perform this action.')
   end
 
-  it 'does not show a New Community button on the index' do
-    get '/communities'
+  it 'does not link to /communities/new from the show page' do
+    get "/communities/#{community.id}"
 
     expect(response).to have_http_status(:ok)
     expect(response.body).not_to include('/communities/new')

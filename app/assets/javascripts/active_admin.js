@@ -16,11 +16,6 @@ $(function () {
   // Default the remember-me checkbox to checked
   $("#admin_user_remember_me").prop("checked", true);
 
-  // There is exactly one community; the plural page title reads wrong
-  if ($("#page_title").html() === "Communities") {
-    $("#page_title").html("Community");
-  }
-
   // Meal schedule grid on the community form: add/remove week rows and a
   // live preview. The markup comes from app/admin/community.rb; the dates
   // come from the server (POST /communities/schedule_preview) so the

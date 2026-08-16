@@ -2,7 +2,7 @@
 // (tests/admin/server.sh) with deterministic data (tests/admin/seed.rb).
 // These pin the pieces custom CSS/JS and admin config are responsible
 // for: the login banner, server-rendered meal dates, the datepicker,
-// and the singular Community title.
+// and the community index redirecting to the one community's page.
 const { test, expect } = require("../helpers/test");
 
 // Seeded by tests/admin/seed.rb: meal 1 on 2027-02-04, bill 1 on meal 1.
@@ -86,10 +86,15 @@ test.describe("Admin", () => {
     );
   });
 
-  test("community page title is singular", async ({ page }) => {
+  test("community index redirects to the one community's page", async ({
+    page,
+  }) => {
     await login(page);
     await page.goto("/communities");
 
-    await expect(page.locator("#page_title")).toHaveText("Community");
+    // Seeded name from tests/admin/seed.rb. The show page's title is the
+    // community's name, so no title rewrite is needed anywhere.
+    await expect(page).toHaveURL(/\/communities\/\d+$/);
+    await expect(page.locator("#page_title")).toHaveText("Admin E2E");
   });
 });
