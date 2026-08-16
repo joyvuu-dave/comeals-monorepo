@@ -137,6 +137,17 @@ end
 Rails.logger.debug { "#{community.guests.count} Guests created" }
 Rails.logger.debug { "#{community.meal_residents.count} MealResidents created" }
 
+# Real receipts are rarely round numbers. Most seeded bills get a cents
+# part from this list — mostly primes, which no attendee count divides
+# evenly — so dev data makes the division and rounding code work on the
+# kind of numbers real receipts have. Zero and 50 stay in the list so
+# round amounts still appear too.
+awkward_cents = [0, 0, 50, 1, 3, 7, 13, 17, 19, 23, 29, 31, 37, 41,
+                 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97]
+bill_amount = lambda do |dollars|
+  BigDecimal(format('%<dollars>d.%<cents>02d', dollars: dollars.to_a.sample, cents: awkward_cents.sample))
+end
+
 # Bills — two cooks per meal, covering every shape a real meal takes:
 # both cooks entered a cost; one entered while the other declared no
 # cost (two cooks, one shopper); one entered while the other never put
@@ -148,7 +159,7 @@ Meal.all.each_with_index do |meal, index|
 
   ids = Resident.pluck(:id).sample(2)
   Bill.create!(meal_id: meal.id, resident_id: ids[0],
-               amount: BigDecimal((25..65).to_a.sample.to_s), community: community)
+               amount: bill_amount.call(25..65), community: community)
   case index % 3
   when 0
     Bill.create!(meal_id: meal.id, resident_id: ids[1],
@@ -158,7 +169,7 @@ Meal.all.each_with_index do |meal, index|
                  amount: BigDecimal('0'), community: community)
   else
     Bill.create!(meal_id: meal.id, resident_id: ids[1],
-                 amount: BigDecimal((35..75).to_a.sample.to_s), community: community)
+                 amount: bill_amount.call(35..75), community: community)
   end
 end
 
@@ -227,19 +238,19 @@ Meal.unreconciled.each_with_index do |meal, index|
   case index % 4
   when 0
     Bill.create!(meal_id: meal.id, resident_id: ids[0],
-                 amount: BigDecimal((25..65).to_a.sample.to_s), community: community)
+                 amount: bill_amount.call(25..65), community: community)
     Bill.create!(meal_id: meal.id, resident_id: ids[1],
                  amount: BigDecimal('0'), no_cost: true, community: community)
   when 1
     Bill.create!(meal_id: meal.id, resident_id: ids[0],
-                 amount: BigDecimal((25..65).to_a.sample.to_s), community: community)
+                 amount: bill_amount.call(25..65), community: community)
     Bill.create!(meal_id: meal.id, resident_id: ids[1],
                  amount: BigDecimal('0'), community: community)
   when 2
     Bill.create!(meal_id: meal.id, resident_id: ids[0],
-                 amount: BigDecimal((25..65).to_a.sample.to_s), community: community)
+                 amount: bill_amount.call(25..65), community: community)
     Bill.create!(meal_id: meal.id, resident_id: ids[1],
-                 amount: BigDecimal((35..75).to_a.sample.to_s), community: community)
+                 amount: bill_amount.call(35..75), community: community)
   end
   # index % 4 == 3: no cooks yet.
 end

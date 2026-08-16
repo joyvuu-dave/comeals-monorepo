@@ -177,6 +177,25 @@ RSpec.describe MealLedger do
       expect(ledger.balances([cook.id, baby.id]).values).to all(eq(BigDecimal('0')))
     end
 
+    it 'keeps fractional cents on a line instead of rounding them away' do
+      cook = resident('Cook')
+      children = [resident('Child A', multiplier: 1), resident('Child B', multiplier: 1)]
+
+      # 53.17 across 2 units of multiplier is 26.585 per unit — half a cent.
+      # The line must carry it exactly; settlement is the only place that
+      # rounds, and it cannot round correctly from lines that already did.
+      meal = create(:meal, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('53.17'))
+      children.each { |child| create(:meal_resident, meal: meal, resident: child, community: community, multiplier: 1) }
+
+      lines = ledger_for(meal).lines
+      debits = lines.select { |line| line.kind == :debit }
+
+      expect(debits.map(&:amount)).to all(eq(BigDecimal('-26.585')))
+      expect(debits.map(&:unit_cost)).to all(eq(BigDecimal('26.585')))
+      expect(lines.sum(BigDecimal('0'), &:amount)).to eq(BigDecimal('0'))
+    end
+
     it 'carries the multiplier on a debit and leaves it off a credit' do
       cook = resident('Cook')
       child = resident('Child', multiplier: 1)
