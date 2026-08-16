@@ -45,7 +45,11 @@
   --bright-green-light: #43d153;
   --bright-green-dark: #29b83a;
   --bright-green-darker: #25a333;
-  --bright-green-focus: color-mix(in srgb, var(--bright-green) 50%, transparent);
+  --bright-green-focus: color-mix(
+    in srgb,
+    var(--bright-green) 50%,
+    transparent
+  );
 
   /* Dark green — green TEXT on light backgrounds: on white it is
      5.9:1, and on the yellow header it is 3.5:1, which passes WCAG AA
