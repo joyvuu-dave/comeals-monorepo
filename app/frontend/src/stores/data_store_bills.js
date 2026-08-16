@@ -27,14 +27,6 @@ export function billsVolatile() {
 
 export function billsActions(self) {
   return {
-    toggleEditBillsMode() {
-      const isSaving = self.editBillsMode;
-      self.editBillsMode = !self.editBillsMode;
-
-      if (isSaving) {
-        self.submitBills();
-      }
-    },
     // Debounced, same delay as the description field: a save fires only
     // after the user stops editing, so half-typed amounts never hit the
     // wire and each pause produces one request instead of one per keystroke.

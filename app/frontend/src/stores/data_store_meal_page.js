@@ -29,14 +29,6 @@ export function mealPageVolatile() {
 
 export function mealPageActions(self) {
   return {
-    toggleEditDescriptionMode() {
-      const isSaving = self.editDescriptionMode;
-      self.editDescriptionMode = !self.editDescriptionMode;
-
-      if (isSaving && self.meal) {
-        self.meal.submitDescription();
-      }
-    },
     // The description save pipeline lives on the meal node (issue #35),
     // so unsaved text stays protected even after the user navigates to
     // another meal. The menu box binds these two actions to the node it

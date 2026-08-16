@@ -62,10 +62,6 @@
   background-color: var(--hasana-yellow);
 }
 
-.text-white {
-  color: var(--almost-white);
-}
-
 .text-black {
   color: #444 !important;
 }
@@ -293,46 +289,10 @@ button:focus {
   box-sizing: border-box;
   flex-shrink: 0;
 }
-.cell.fill {
-  width: 0;
-  min-width: 0;
-  flex-grow: 1;
-}
-.cell.one {
-  width: calc(100% * 1 / 12);
-}
-.cell.two {
-  width: calc(100% * 2 / 12);
-}
-.cell.three {
-  width: calc(100% * 3 / 12);
-}
-.cell.four {
-  width: calc(100% * 4 / 12);
-}
-.cell.five {
-  width: calc(100% * 5 / 12);
-}
-.cell.six {
-  width: calc(100% * 6 / 12);
-}
-.cell.seven {
-  width: calc(100% * 7 / 12);
-}
-.cell.eight {
-  width: calc(100% * 8 / 12);
-}
+/* Only the .cell width in use is kept; the full 12-column set is in git
+   history if a layout needs another width. */
 .cell.nine {
   width: calc(100% * 9 / 12);
-}
-.cell.ten {
-  width: calc(100% * 10 / 12);
-}
-.cell.eleven {
-  width: calc(100% * 11 / 12);
-}
-.cell.twelve {
-  width: 100%;
 }
 
 /*
