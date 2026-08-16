@@ -1,0 +1,239 @@
+name: Nightly dependency update
+
+# Every night: update all gems and npm packages, print both security
+# audits, run the full bin/check, and push the new lockfiles to main
+# only if everything passes. If any check fails, the tree is thrown
+# away and the run goes red — nothing is pushed, and the next night
+# tries again from scratch.
+#
+# Two things to know:
+#
+# - The push uses NIGHTLY_PUSH_TOKEN (a fine-grained PAT with
+#   read/write on this repo's contents), not the built-in
+#   GITHUB_TOKEN. A push made with GITHUB_TOKEN triggers no
+#   workflows, so the new commit on main would have no CI runs —
+#   and deploy.yml's green gate refuses a sha with no CI runs.
+#
+# - bin/check treats a vulnerability from bundle audit or npm audit
+#   as a failure. So if an update cannot fix a known vulnerability,
+#   that night's update is not pushed. The audits themselves only
+#   print; they never change anything.
+#
+# The visual suite is the one part of bin/check that cannot run
+# directly on this runner: the goldens are recorded inside the
+# Playwright container, and the plain runner renders text about a
+# pixel differently (see ci.yml's visual-tests job). So bin/check
+# runs with PLAYWRIGHT_SKIP_VISUAL=1 and bin/visual-linux runs as
+# its own gate step right after. Same coverage, split the way Linux
+# requires.
+
+on:
+  # 10:00 UTC — 3am Pacific in summer, 2am in winter. Five hours
+  # before deploy.yml's (currently disabled) 15:00 slot, so a deploy
+  # never races the nightly push.
+  schedule:
+    - cron: "0 10 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-deps
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  RAILS_ENV: test
+  DATABASE_URL: postgres://postgres:postgres@localhost:5432/comeals_test
+  ADMIN_E2E_DATABASE_URL: postgres://postgres:postgres@localhost:5432/comeals_admin_e2e
+  VITE_PUSHER_KEY: "test-key-for-ci"
+  VITE_PUSHER_CLUSTER: "us2"
+  # The visual suite runs in the container instead (see above).
+  PLAYWRIGHT_SKIP_VISUAL: "1"
+  # setup-ruby turns on frozen/deployment mode when a lockfile is
+  # committed. This job exists to change the lockfile, so turn both
+  # off for every bundler command in it.
+  BUNDLE_FROZEN: "false"
+  BUNDLE_DEPLOYMENT: "false"
+
+jobs:
+  nightly-update:
+    runs-on: ubuntu-latest
+    # bin/check alone takes about 25 minutes here (it runs every CI
+    # job's work in sequence), plus the updates and the visual
+    # container. 60 is about twice a normal run.
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: comeals_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.NIGHTLY_PUSH_TOKEN || github.token }}
+
+      # Fail before doing any work if the token is missing, instead
+      # of failing at the push half an hour in — or worse, pushing
+      # with GITHUB_TOKEN and leaving main on a sha CI never ran on.
+      - name: Require the push token
+        run: |
+          if [ -z "${{ secrets.NIGHTLY_PUSH_TOKEN }}" ]; then
+            echo "The NIGHTLY_PUSH_TOKEN secret is not set."
+            echo "Create a fine-grained PAT with contents read/write on this repo"
+            echo "and save it as a repository secret named NIGHTLY_PUSH_TOKEN."
+            exit 1
+          fi
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium webkit
+
+      # Direct npm dependencies before the update, for the commit
+      # message. npm ls exits non-zero on peer-dependency noise, so
+      # tolerate that; the JSON still comes out.
+      - name: Snapshot npm versions
+        run: npm ls --depth=0 --json > /tmp/npm-before.json || true
+
+      - name: Update gems
+        run: bundle update --all
+
+      # Print only. bin/check runs the same audit later as a gate;
+      # this step is the requested plain listing next to the update
+      # output, and it never fails the run by itself.
+      - name: bundle audit (info only)
+        run: bundle exec bundle audit check --update || true
+
+      - name: Update npm packages
+        run: npm update
+
+      - name: npm audit (info only)
+        run: npm audit || true
+
+      - name: Snapshot npm versions after
+        run: npm ls --depth=0 --json > /tmp/npm-after.json || true
+
+      # Nothing moved? Stop here — no reason to spend half an hour
+      # checking an unchanged tree.
+      - name: Detect changes
+        id: diff
+        run: |
+          if git diff --quiet -- Gemfile.lock package.json package-lock.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No dependency changed tonight."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git diff --stat -- Gemfile.lock package.json package-lock.json
+          fi
+
+      # bin/check's migration check reads .env: with TEST_DB_SUFFIX
+      # present it checks the test database, the same as an agent
+      # worktree — there is no development database on this runner.
+      # An empty suffix keeps the name comeals_test, matching
+      # DATABASE_URL. (.env is gitignored, so this never gets
+      # committed.) The stubs let Rails boot before bin/check's real
+      # Vite build replaces them, same as ci.yml's ruby-test job.
+      - name: Prepare the bin/check environment
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          echo "TEST_DB_SUFFIX=" > .env
+          echo '<!DOCTYPE html><html><head></head><body><div id="root"></div></body></html>' > public/index.html
+          mkdir -p public/.vite
+          echo '{}' > public/.vite/manifest.json
+          bin/rails db:schema:load
+
+      - name: Full health check (bin/check)
+        if: steps.diff.outputs.changed == 'true'
+        run: bin/check
+
+      - name: Visual suite (in the Playwright container)
+        if: steps.diff.outputs.changed == 'true'
+        run: bin/visual-linux
+
+      - name: Commit and push
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          python3 > /tmp/commit-message.txt <<'PY'
+          import json, re, subprocess
+
+          lines = ["Nightly dependency update", ""]
+
+          # Gem changes, read from the lockfile diff. Spec lines look
+          # like "    rails (8.0.3)" at exactly four spaces.
+          diff = subprocess.run(["git", "diff", "Gemfile.lock"],
+                                capture_output=True, text=True).stdout
+          old, new = {}, {}
+          for line in diff.splitlines():
+              m = re.match(r"^([+-])    ([A-Za-z0-9_.-]+) \(([^)]+)\)$", line)
+              if m:
+                  (old if m[1] == "-" else new)[m[2]] = m[3]
+          gems = []
+          for name in sorted(set(old) | set(new)):
+              if name in old and name in new and old[name] != new[name]:
+                  gems.append(f"  {name} {old[name]} -> {new[name]}")
+              elif name in new and name not in old:
+                  gems.append(f"  {name} {new[name]} (added)")
+              elif name in old and name not in new:
+                  gems.append(f"  {name} {old[name]} (removed)")
+          if gems:
+              lines.append("Gems:")
+              lines.extend(gems)
+              lines.append("")
+
+          # Direct npm dependencies, before vs after. Transitive
+          # updates only show in package-lock.json.
+          def deps(path):
+              try:
+                  with open(path) as f:
+                      return {k: v.get("version", "?")
+                              for k, v in json.load(f).get("dependencies", {}).items()}
+              except Exception:
+                  return {}
+          before, after = deps("/tmp/npm-before.json"), deps("/tmp/npm-after.json")
+          npm = [f"  {n} {before[n]} -> {after[n]}"
+                 for n in sorted(after)
+                 if n in before and before[n] != after[n]]
+          lockfile_changed = subprocess.run(
+              ["git", "diff", "--quiet", "--", "package-lock.json"]).returncode != 0
+          if npm:
+              lines.append("npm:")
+              lines.extend(npm)
+              lines.append("")
+          elif lockfile_changed:
+              lines.append("npm: transitive updates only (see package-lock.json)")
+              lines.append("")
+
+          lines.append("Pushed by the nightly workflow after a full bin/check pass.")
+          print("\n".join(lines))
+          PY
+          cat /tmp/commit-message.txt
+
+          git config user.name "nightly-deps workflow"
+          git config user.email "nightly-deps@users.noreply.github.com"
+          git add Gemfile.lock package.json package-lock.json
+          git commit -F /tmp/commit-message.txt
+          git push origin HEAD:main
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: nightly-deps-test-results
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: ignore
