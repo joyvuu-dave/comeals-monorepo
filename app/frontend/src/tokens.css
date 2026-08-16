@@ -77,12 +77,10 @@
 
   /* Red one-offs. */
   --vivid-red: #d40d00; /* <del> text */
-  --muted-red: #c0392b; /* error toast background */
 
   /* Blues. */
   --pale-blue: #dcedfb; /* calendar today tint */
   --mid-blue: #5a9fd6; /* calendar today ring */
-  --bright-blue: #3498db; /* info toast background */
 
   /* Whites. */
   --white: #fff;

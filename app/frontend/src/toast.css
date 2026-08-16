@@ -24,7 +24,7 @@
 }
 
 .toast--error {
-  background-color: var(--muted-red);
+  background-color: var(--brand-red);
 }
 
 .toast--success {
@@ -38,7 +38,8 @@
 }
 
 .toast--info {
-  background-color: var(--bright-blue);
+  background-color: var(--teal);
+  color: var(--gray-19);
 }
 
 .toast__message {
