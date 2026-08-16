@@ -8,6 +8,14 @@
 #   movies = Movie.create([{ name: 'Star Wars' }, { name: 'Lord of the Rings' }])
 #   Character.create(name: 'Luke', movie: movies.first)
 
+# The test database must never get these rows. RSpec expects an empty
+# database, and the browser suites load their own deterministic seeds
+# (lib/tasks/test/seed_integration.rake, tests/admin/seed.rb). db:prepare
+# runs this file whenever it creates a database, so this guard — not the
+# caller's choice of rake task — is what keeps a fresh test database
+# empty (#63).
+return if Rails.env.test?
+
 start = Time.zone.now
 
 # Community (singleton). timezone is explicit because the DB column has no
