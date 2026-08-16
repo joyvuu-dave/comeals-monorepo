@@ -319,6 +319,7 @@ GEM
     pg (1.6.3-x86_64-darwin)
     pg (1.6.3-x86_64-linux)
     pg (1.6.3-x86_64-linux-musl)
+    phonelib (0.10.24)
     pp (0.6.4)
       prettyprint
     prettyprint (0.2.0)
@@ -566,6 +567,7 @@ DEPENDENCIES
   letter_opener_web
   oj
   pg (~> 1.5)
+  phonelib
   puma (~> 8.0)
   pusher
   rack-attack
@@ -721,6 +723,7 @@ CHECKSUMS
   pg (1.6.3-x86_64-darwin) sha256=ee2e04a17c0627225054ffeb43e31a95be9d7e93abda2737ea3ce4a62f2729d6
   pg (1.6.3-x86_64-linux) sha256=5d9e188c8f7a0295d162b7b88a768d8452a899977d44f3274d1946d67920ae8d
   pg (1.6.3-x86_64-linux-musl) sha256=9c9c90d98c72f78eb04c0f55e9618fe55d1512128e411035fe229ff427864009
+  phonelib (0.10.24) sha256=5e8a623040fa496346fa71c48b3184c95caeddf58a36c041f03c0d201d4681ae
   pp (0.6.4) sha256=dfcb0fce700c41456265922884f9fe195d7fbb0674a3578e6c0f69588e82b570
   prettyprint (0.2.0) sha256=2bc9e15581a94742064a3cc8b0fb9d45aae3d03a1baa6ef80922627a0766f193
   prism (1.9.0) sha256=7b530c6a9f92c24300014919c9dcbc055bf4cdf51ec30aed099b06cd6674ef85

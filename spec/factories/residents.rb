@@ -13,6 +13,7 @@
 #  multiplier             :integer          default(2), not null
 #  name                   :string           not null
 #  password_digest        :string           not null
+#  phone                  :string
 #  reset_password_sent_at :datetime
 #  reset_password_token   :string
 #  vegetarian             :boolean          default(FALSE), not null

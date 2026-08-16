@@ -2,8 +2,8 @@
 
 ActiveAdmin.register Resident do
   # STRONG PARAMS
-  permit_params :name, :multiplier, :unit_id, :community_id, :email, :password, :vegetarian, :can_cook, :active,
-                :birthday
+  permit_params :name, :multiplier, :unit_id, :community_id, :email, :phone, :password, :vegetarian, :can_cook,
+                :active, :birthday
 
   # CONFIG
   filter :active
@@ -79,6 +79,9 @@ ActiveAdmin.register Resident do
       price_category_label(resident.multiplier)
     end
     column :unit
+    column :phone do |resident|
+      formatted_phone(resident.phone)
+    end
     column :can_cook
     column :active
     # balance_tag turns the stored sign into words — see BalanceDisplayHelper.
@@ -103,6 +106,7 @@ ActiveAdmin.register Resident do
       row :can_cook
       row :active
       row :email
+      row(:phone) { |r| formatted_phone(r.phone) }
       row :vegetarian
       table_for resident.meals.includes(:bills, :meal_residents, :guests, :meal_charges).order(:date) do
         column 'Meals Attended' do |meal|
@@ -198,6 +202,9 @@ ActiveAdmin.register Resident do
                            year_range: "1901:#{Time.zone.now.year}"
                          }
       f.input :email
+      f.input :phone,
+              hint: 'Any way of typing it works: 510-555-2671, (510) 555-2671. For a number ' \
+                    'outside the US, start with + and the country code: +44 20 7946 0958.'
       f.input :password if f.object.new_record?
       f.input :vegetarian
       f.input :multiplier, label: 'Price Category', as: :radio, collection: [['Adult', 2], ['Child', 1]]

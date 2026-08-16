@@ -10,7 +10,7 @@ ActiveAdmin.register AdminUser do
   # could only be set from a console. The controller below refuses the
   # parameter rather than dropping it when the actor may not set it, because a
   # silent drop looks like success.
-  permit_params :email, :password, :password_confirmation, :community_id, :superuser
+  permit_params :email, :phone, :password, :password_confirmation, :community_id, :superuser
 
   # CONFIG
   config.filters = false
@@ -60,6 +60,9 @@ ActiveAdmin.register AdminUser do
     selectable_column
     id_column
     column :email
+    column :phone do |admin_user|
+      formatted_phone(admin_user.phone)
+    end
     column :superuser
     column :current_sign_in_at
     column :sign_in_count
@@ -70,6 +73,7 @@ ActiveAdmin.register AdminUser do
   show do
     attributes_table do
       row :email
+      row(:phone) { |admin| formatted_phone(admin.phone) }
       row :superuser
       row :current_sign_in_at
       row :sign_in_count
@@ -80,6 +84,9 @@ ActiveAdmin.register AdminUser do
   form do |f|
     f.inputs 'Admin Details' do
       f.input :email
+      f.input :phone,
+              hint: 'Any way of typing it works: 510-555-2671, (510) 555-2671. For a number ' \
+                    'outside the US, start with + and the country code: +44 20 7946 0958.'
       f.input :password
       f.input :password_confirmation
       # Hidden rather than disabled when the actor may not change it, so the

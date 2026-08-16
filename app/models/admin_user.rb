@@ -11,6 +11,7 @@
 #  encrypted_password     :string           default(""), not null
 #  last_sign_in_at        :datetime
 #  last_sign_in_ip        :inet
+#  phone                  :string
 #  remember_created_at    :datetime
 #  reset_password_sent_at :datetime
 #  reset_password_token   :string
@@ -31,11 +32,13 @@
 #
 
 class AdminUser < ApplicationRecord
+  include HasPhoneNumber
+
   # Ransack allowlists for ActiveAdmin sorting.
   # Deliberately excludes encrypted_password, reset_password_token,
   # reset_password_sent_at, and IP address fields.
   def self.ransackable_attributes(_auth_object = nil)
-    %w[id community_id created_at current_sign_in_at email last_sign_in_at remember_created_at sign_in_count
+    %w[id community_id created_at current_sign_in_at email last_sign_in_at phone remember_created_at sign_in_count
        superuser updated_at]
   end
 

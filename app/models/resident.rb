@@ -13,6 +13,7 @@
 #  multiplier             :integer          default(2), not null
 #  name                   :string           not null
 #  password_digest        :string           not null
+#  phone                  :string
 #  reset_password_sent_at :datetime
 #  reset_password_token   :string
 #  vegetarian             :boolean          default(FALSE), not null
@@ -35,10 +36,12 @@
 #
 
 class Resident < ApplicationRecord
+  include HasPhoneNumber
+
   # Ransack allowlists for ActiveAdmin filtering and sorting.
   # Deliberately excludes password_digest and reset_password_token.
   def self.ransackable_attributes(_auth_object = nil)
-    %w[id active birthday can_cook community_id created_at email multiplier name unit_id updated_at vegetarian]
+    %w[id active birthday can_cook community_id created_at email multiplier name phone unit_id updated_at vegetarian]
   end
 
   attr_reader :password

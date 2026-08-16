@@ -305,7 +305,9 @@ CREATE TABLE public.admin_users (
     reset_password_token character varying,
     sign_in_count integer DEFAULT 0 NOT NULL,
     superuser boolean DEFAULT false NOT NULL,
-    updated_at timestamp without time zone NOT NULL
+    updated_at timestamp without time zone NOT NULL,
+    phone character varying,
+    CONSTRAINT admin_users_phone_e164 CHECK (((phone IS NULL) OR ((phone)::text ~ '^\+[1-9][0-9]{1,14}$'::text)))
 );
 
 
@@ -910,8 +912,10 @@ CREATE TABLE public.residents (
     unit_id bigint NOT NULL,
     updated_at timestamp without time zone NOT NULL,
     vegetarian boolean DEFAULT false NOT NULL,
+    phone character varying,
     CONSTRAINT residents_birthday_not_sentinel CHECK (((birthday IS NULL) OR (birthday > '1900-01-01'::date))),
-    CONSTRAINT residents_multiplier_non_negative CHECK ((multiplier >= 0))
+    CONSTRAINT residents_multiplier_non_negative CHECK ((multiplier >= 0)),
+    CONSTRAINT residents_phone_e164 CHECK (((phone IS NULL) OR ((phone)::text ~ '^\+[1-9][0-9]{1,14}$'::text)))
 );
 
 
@@ -1941,6 +1945,7 @@ ALTER TABLE ONLY public.bills
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260816130000'),
 ('20260812120000'),
 ('20260811130000'),
 ('20260811120000'),

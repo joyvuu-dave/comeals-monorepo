@@ -13,6 +13,7 @@
 #  multiplier             :integer          default(2), not null
 #  name                   :string           not null
 #  password_digest        :string           not null
+#  phone                  :string
 #  reset_password_sent_at :datetime
 #  reset_password_token   :string
 #  vegetarian             :boolean          default(FALSE), not null
@@ -685,6 +686,12 @@ RSpec.describe Resident do
       expect(ResidentBalance.where(resident_id: resident_id)).to be_empty
       expect(GuestRoomReservation.where(resident_id: resident_id)).to be_empty
       expect(CommonHouseReservation.where(resident_id: resident_id)).to be_empty
+    end
+  end
+
+  describe 'phone' do
+    it_behaves_like 'a model with a phone number' do
+      let(:record) { build(:resident, community: community, unit: unit) }
     end
   end
 end

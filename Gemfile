@@ -47,6 +47,7 @@ gem 'devise'
 gem 'goldiloader'
 gem 'icalendar'
 gem 'letter_opener_web', group: :development
+gem 'phonelib'
 gem 'pusher'
 gem 'scrypt'
 gem 'skylight', group: :production

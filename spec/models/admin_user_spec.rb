@@ -11,6 +11,7 @@
 #  encrypted_password     :string           default(""), not null
 #  last_sign_in_at        :datetime
 #  last_sign_in_ip        :inet
+#  phone                  :string
 #  remember_created_at    :datetime
 #  reset_password_sent_at :datetime
 #  reset_password_token   :string
@@ -159,6 +160,12 @@ RSpec.describe AdminUser do
       singleton = create(:community)
 
       expect(orphan.reload.community_id).to eq(singleton.id)
+    end
+  end
+
+  describe 'phone' do
+    it_behaves_like 'a model with a phone number' do
+      let(:record) { build(:admin_user, community: community) }
     end
   end
 end
