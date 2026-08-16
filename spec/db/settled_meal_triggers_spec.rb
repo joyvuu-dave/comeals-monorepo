@@ -268,35 +268,10 @@ RSpec.describe 'settled-meal database triggers' do
     # These examples prove the bypass is transaction-scoped: the flag must
     # die with its transaction, on commit and on rollback alike. That needs
     # real transactions, so this group opts out of transactional fixtures
-    # (which would wrap everything in one never-committed transaction) and
-    # cleans up its committed rows itself, like the billing snapshot spec.
-    self.use_transactional_tests = false
-
-    after do
-      ActiveRecord::Base.transaction do
-        ActiveRecord::Base.connection.execute("SET LOCAL comeals.allow_settled_writes = 'on'")
-        Audited::Audit.delete_all
-        Bill.delete_all
-        MealResident.delete_all
-        Guest.delete_all
-        MealCharge.delete_all
-        ReconciliationBalance.delete_all
-        Meal.delete_all
-        Reconciliation.delete_all
-        Key.delete_all
-        Resident.delete_all
-        Unit.delete_all
-        # The balance delete above queued a deferred zero-sum check per row
-        # (20260731120000), and PostgreSQL refuses to TRUNCATE a table with
-        # pending trigger events. Run them now: every balance is gone, so
-        # every reconciliation sums to zero and they all pass.
-        ActiveRecord::Base.connection.execute('SET CONSTRAINTS ALL IMMEDIATE')
-        # DELETE on communities is refused by prevent_community_delete
-        # (20260408000002), which has no bypass. TRUNCATE does not fire
-        # row-level triggers; every referencing table is already empty.
-        ActiveRecord::Base.connection.execute('TRUNCATE communities CASCADE')
-      end
-    end
+    # (which would wrap everything in one never-committed transaction); the
+    # shared context cleans up its committed rows
+    # (spec/support/non_transactional_cleanup.rb).
+    include_context 'with no test transaction'
 
     def repair
       ActiveRecord::Base.transaction do

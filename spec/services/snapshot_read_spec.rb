@@ -17,9 +17,9 @@ RSpec.describe SnapshotRead do
 
   # The real path. Transactional fixtures would leave a transaction already
   # open, which is the case SnapshotRead deliberately skips, so this group
-  # runs without them. It creates no rows, so there is nothing to clean up.
+  # runs without them.
   describe 'with no transaction already open' do
-    self.use_transactional_tests = false
+    include_context 'with no test transaction'
 
     it 'opens the transaction SERIALIZABLE READ ONLY DEFERRABLE' do
       modes = described_class.call { transaction_modes }

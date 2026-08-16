@@ -35,9 +35,9 @@ RSpec.describe 'settlement race against unlocked write paths' do
   # These examples need a second session's statement to be genuinely in
   # flight while the settlement transaction is still open. Transactional
   # fixtures would hide every commit inside one never-committed transaction,
-  # so this file writes real rows and cleans them up itself, like
-  # spec/tasks/billing_recalculate_snapshot_spec.rb.
-  self.use_transactional_tests = false
+  # so this file writes real rows; the shared context below cleans them up
+  # (spec/support/non_transactional_cleanup.rb).
+  include_context 'with no test transaction'
 
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
@@ -63,41 +63,6 @@ RSpec.describe 'settlement race against unlocked write paths' do
     doomed_guest
     latecomer # created up front so the racing INSERT needs no extra session
     other_meal
-  end
-
-  # RetryOnConflict, because this cleanup is not exempt from the thing the
-  # file is about. These examples leave two sessions that have just been
-  # fighting over the same rows, and at SERIALIZABLE the delete_all below
-  # can be refused for a conflict like any other statement. When that
-  # happened the rows stayed, and since this file sorts first, every later
-  # example in the run saw data that should not exist — one failure became
-  # thirty-three, and the rows survived into the next run.
-  after do
-    RetryOnConflict.call do
-      ActiveRecord::Base.transaction do
-        ActiveRecord::Base.connection.execute("SET LOCAL comeals.allow_settled_writes = 'on'")
-        Audited::Audit.delete_all
-        Bill.delete_all
-        MealResident.delete_all
-        Guest.delete_all
-        MealCharge.delete_all
-        ReconciliationBalance.delete_all
-        Meal.delete_all
-        Reconciliation.delete_all
-        Key.delete_all
-        Resident.delete_all
-        Unit.delete_all
-        # The balance delete above queued a deferred zero-sum check per row
-        # (20260731120000), and PostgreSQL refuses to TRUNCATE a table with
-        # pending trigger events. Run them now: every balance is gone, so
-        # every reconciliation sums to zero and they all pass.
-        ActiveRecord::Base.connection.execute('SET CONSTRAINTS ALL IMMEDIATE')
-        # DELETE on communities is refused by prevent_community_delete
-        # (20260408000002), which has no bypass. TRUNCATE does not fire
-        # row-level triggers; every referencing table is already empty.
-        ActiveRecord::Base.connection.execute('TRUNCATE communities CASCADE')
-      end
-    end
   end
 
   # A raw libpq connection, not a second ActiveRecord checkout. libpq's async

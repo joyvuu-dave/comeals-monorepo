@@ -8,9 +8,9 @@ RSpec.describe RetryOnConflict do
 
   # The guard against retrying inside an open transaction is the whole
   # correctness argument, and under transactional fixtures a transaction is
-  # always open. So the retrying cases need it off. They touch no rows.
+  # always open. So the retrying cases need it off.
   describe 'at the outermost transaction' do
-    self.use_transactional_tests = false
+    include_context 'with no test transaction'
 
     it 'returns the block value when nothing conflicts' do
       expect(described_class.call { 42 }).to eq(42)

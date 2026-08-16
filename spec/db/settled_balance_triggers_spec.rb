@@ -21,39 +21,13 @@ RSpec.describe 'settled balance triggers' do
   # And a statement refused by a trigger aborts the transaction it is in. With
   # autocommit that is only the failed statement, so the examples can go on to
   # ask what the row looks like afterwards.
-  self.use_transactional_tests = false
+  include_context 'with no test transaction'
 
   # This file prints four "WARNING: there is no transaction in progress" lines
   # and that is expected, not a problem to chase. A deferred constraint fails
   # during COMMIT, which ends the transaction on the spot; ActiveRecord then
   # sends its own ROLLBACK and PostgreSQL says there is nothing to roll back.
   # One line per example whose commit is refused, and there are four of those.
-
-  after do
-    ActiveRecord::Base.transaction do
-      ActiveRecord::Base.connection.execute("SET LOCAL comeals.allow_settled_writes = 'on'")
-      Audited::Audit.delete_all
-      Bill.delete_all
-      MealResident.delete_all
-      Guest.delete_all
-      MealCharge.delete_all
-      ReconciliationBalance.delete_all
-      Meal.delete_all
-      Reconciliation.delete_all
-      Key.delete_all
-      Resident.delete_all
-      Unit.delete_all
-      # The delete above queued a deferred zero-sum check per row
-      # (20260731120000), and PostgreSQL refuses to TRUNCATE a table with
-      # pending trigger events. Run them now: every balance is gone, so every
-      # reconciliation sums to zero and they all pass.
-      ActiveRecord::Base.connection.execute('SET CONSTRAINTS ALL IMMEDIATE')
-      # DELETE on communities is refused by prevent_community_delete
-      # (20260408000002), which has no bypass. TRUNCATE does not fire
-      # row-level triggers; every referencing table is already empty.
-      ActiveRecord::Base.connection.execute('TRUNCATE communities CASCADE')
-    end
-  end
 
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
