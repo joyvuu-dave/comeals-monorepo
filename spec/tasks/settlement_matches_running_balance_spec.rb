@@ -37,7 +37,7 @@ require 'rake'
 #
 # The exact tie runs against Resident#calc_balance rather than the rake
 # task's output. Both express the running math, but resident_balances.amount
-# is DECIMAL(12,8), and truncating there could in principle change which
+# is DECIMAL(16,8), and truncating there could in principle change which
 # resident wins a residual penny. calc_balance returns the untruncated
 # BigDecimal, so the exact assertion has no rounding in its path.
 RSpec.describe 'settlement and running-balance arithmetic agree', type: :task do

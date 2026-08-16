@@ -686,9 +686,9 @@ CREATE TABLE public.meal_charges (
     meal_id bigint NOT NULL,
     resident_id bigint NOT NULL,
     kind character varying NOT NULL,
-    amount numeric(12,8) NOT NULL,
+    amount numeric(16,8) NOT NULL,
     multiplier integer,
-    unit_cost numeric(12,8) NOT NULL,
+    unit_cost numeric(16,8) NOT NULL,
     bill_amount numeric(12,8),
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
@@ -802,7 +802,7 @@ ALTER SEQUENCE public.meals_id_seq OWNED BY public.meals.id;
 
 CREATE TABLE public.reconciliation_balances (
     id bigint NOT NULL,
-    amount numeric(12,8) DEFAULT 0.0 NOT NULL,
+    amount numeric(16,8) DEFAULT 0.0 NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     reconciliation_id bigint NOT NULL,
     resident_id bigint NOT NULL,
@@ -868,7 +868,7 @@ ALTER SEQUENCE public.reconciliations_id_seq OWNED BY public.reconciliations.id;
 
 CREATE TABLE public.resident_balances (
     id bigint NOT NULL,
-    amount numeric(12,8) DEFAULT 0.0 NOT NULL,
+    amount numeric(16,8) DEFAULT 0.0 NOT NULL,
     created_at timestamp without time zone NOT NULL,
     resident_id bigint NOT NULL,
     updated_at timestamp without time zone NOT NULL,
@@ -1949,6 +1949,7 @@ ALTER TABLE ONLY public.bills
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260816160000'),
 ('20260816150000'),
 ('20260816140000'),
 ('20260816130000'),

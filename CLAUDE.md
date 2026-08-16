@@ -50,7 +50,7 @@ This is the most critical section. Financial calculations in this codebase must 
 
 1. **Never use Float for money.** Not in Ruby, not in SQL, not anywhere. Use `BigDecimal` in Ruby and `NUMERIC`/`DECIMAL` in PostgreSQL. Float arithmetic produces rounding errors (e.g., `0.1 + 0.2 != 0.3`). This is not acceptable for money.
 
-2. **Store monetary values as DECIMAL(12, 8) in the database.** 8 decimal places beyond the dollar. This gives sub-micro-cent precision for intermediate calculations. The only exception is user-input amounts (what a cook spent), which are whole cents — but even those should be stored in DECIMAL columns for type consistency.
+2. **Store monetary values as DECIMAL with 8 decimal places in the database.** 8 decimal places beyond the dollar gives sub-micro-cent precision for intermediate calculations. Single user inputs (a bill's amount, a cap) are DECIMAL(12, 8): one input is capped at $9,999.99, so 4 digits before the point is enough. Columns that hold sums (charges, unit costs, balances) are DECIMAL(16, 8), because nothing caps a sum — a cook's balance over a period can pass $10,000 (issue #60). User-input amounts are whole cents, but even those are stored in DECIMAL columns for type consistency.
 
 3. **Use BigDecimal for all arithmetic in Ruby.** When reading from the database, ensure values are BigDecimal, not Float. When dividing, use `BigDecimal` division with explicit scale: `amount / divisor` where both are BigDecimal.
 
@@ -79,8 +79,10 @@ INPUT (cook's receipt):     Dollars — $50.00 stored as 50.00000000
 INTERMEDIATE (per-unit):    Full precision DECIMAL
                             e.g., 50.00 / 7 = 7.14285714...
 
-STORED (charges/credits):   Full precision DECIMAL(12,8)
+STORED (charges/credits):   Full precision DECIMAL(16,8)
                             Each resident's charge for each meal stored at full precision
+                            (16, not 12: a charge or balance is a sum, and a sum can
+                            pass the $9,999.99 single-bill cap)
 
 SETTLEMENT (reconciliation): Rounded to cents using largest-remainder allocation
                              The final "you owe $X.XX" or "you are owed $X.XX"

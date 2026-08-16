@@ -122,6 +122,36 @@ RSpec.describe Reconciliation do
     expect(balances.values.sum(BigDecimal('0'))).to eq(BigDecimal('0'))
   end
 
+  it 'settles one meal whose cost passes $10,000: two cooks at the bill maximum' do
+    cook_a = resident
+    cook_b = resident
+    eater = resident(multiplier: 1)
+
+    meal = create(:meal, community: community)
+    create(:bill, meal: meal, resident: cook_a, community: community, amount: BigDecimal('9999.99'))
+    create(:bill, meal: meal, resident: cook_b, community: community, amount: BigDecimal('9999.99'))
+    create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 1)
+    meal.reload
+
+    # A single bill is capped at $9,999.99, but a meal's cost is the sum of
+    # its bills, so two cooks put the total at 19,999.98. With one unit of
+    # multiplier, that whole amount is also the unit cost and the eater's
+    # charge. Both used to overflow meal_charges' old DECIMAL(12,8) columns,
+    # and the eater's settled balance overflowed the balance column the same
+    # way — the one-meal half of the issue #60 regression test.
+    balances = settle
+
+    expect(balances[cook_a.id]).to eq(BigDecimal('9999.99'))
+    expect(balances[cook_b.id]).to eq(BigDecimal('9999.99'))
+    expect(balances[eater.id]).to eq(BigDecimal('-19999.98'))
+    expect(balances.values.sum(BigDecimal('0'))).to eq(BigDecimal('0'))
+
+    # The persisted charge lines carry the over-$10,000 amounts.
+    debit = MealCharge.find_by(meal: meal, resident: eater)
+    expect(debit.amount).to eq(BigDecimal('-19999.98'))
+    expect(debit.unit_cost).to eq(BigDecimal('19999.98'))
+  end
+
   it 'settles a cook who eats their own awkward bill alone at exactly zero' do
     cook = resident
 
@@ -173,12 +203,12 @@ RSpec.describe Reconciliation do
     eaters = Array.new(5) { resident }
 
     # Cent counts that no small attendee count divides evenly, from one
-    # cent up to nearly a thousand dollars. Attendee counts cycle 1..5 and
+    # cent up to the largest allowed bill. Attendee counts cycle 1..5 and
     # every third meal has a guest, so the batch mixes the shapes instead
-    # of repeating one. The largest allowed bill (9999.99) lives in its own
-    # example above and cannot join this batch: the cook bills every meal,
-    # and a stored balance is DECIMAL(12,8), which holds less than 10,000.
-    amounts = %w[0.01 0.03 0.97 5.03 9.73 12.37 33.31 53.17 73.31 99.73 997.03]
+    # of repeating one. The 9999.99 bill pushes the cook's settled balance
+    # past $10,000, which used to overflow the old DECIMAL(12,8) balance
+    # columns and crash the settlement — the regression test for issue #60.
+    amounts = %w[0.01 0.03 0.97 5.03 9.73 12.37 33.31 53.17 73.31 99.73 997.03 9999.99]
     amounts.each_with_index do |amount, index|
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal(amount))
@@ -194,6 +224,9 @@ RSpec.describe Reconciliation do
     meals = Meal.where(reconciliation: reconciliation).preload(:bills, :meal_residents, :guests).to_a
     exact = MealLedger.new(meals).balances(community.residents.pluck(:id))
 
+    # The overflow regression only bites past $10,000, so make sure the
+    # batch really gets the cook there.
+    expect(balances[cook.id]).to be > BigDecimal('10_000')
     expect(balances.values.sum(BigDecimal('0'))).to eq(BigDecimal('0'))
     balances.each do |resident_id, cents|
       # Within one cent of exact. The tolerance is a tiny amount more than

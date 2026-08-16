@@ -86,6 +86,26 @@ RSpec.describe 'billing:recalculate' do
     expect(ResidentBalance.find_by(resident: baby).amount).to eq(BigDecimal('0'))
   end
 
+  it 'stores a running balance past $10,000' do
+    cook = create(:resident, community: community, unit: unit, multiplier: 2)
+    eater = create(:resident, community: community, unit: unit, multiplier: 2)
+
+    # A single bill is capped at $9,999.99, but the running balance is a
+    # sum over meals, and nothing caps a sum. Two maximum bills used to
+    # overflow resident_balances' old DECIMAL(12,8) column and crash this
+    # task — part of the issue #60 regression test.
+    2.times do
+      meal = create(:meal, community: community)
+      create(:meal_resident, meal: meal, resident: eater, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('9999.99'))
+    end
+
+    Rake::Task['billing:recalculate'].invoke
+
+    expect(ResidentBalance.find_by(resident: cook).amount).to eq(BigDecimal('19999.98'))
+    expect(ResidentBalance.find_by(resident: eater).amount).to eq(BigDecimal('-19999.98'))
+  end
+
   it 'handles residents with no meals gracefully' do
     resident = create(:resident, community: community, unit: unit)
 

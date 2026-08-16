@@ -343,7 +343,7 @@ ReconciliationBalance ----> Resident
 
 **Key fields:**
 
-- `amount` DECIMAL(12,8) -- negative = owes, positive = is owed
+- `amount` DECIMAL(16,8) -- negative = owes, positive = is owed
 - `(reconciliation_id, resident_id)` is unique
 
 Unlike `ResidentBalance`, this is not a cache. It is the settled record — what
@@ -361,7 +361,7 @@ ResidentBalance ----> Resident (one-to-one)
 
 **Key fields:**
 
-- `amount` DECIMAL(12,8) -- the resident's current balance
+- `amount` DECIMAL(16,8) -- the resident's current balance
 
 This is a **materialized cache**, not a source of truth. It can be rebuilt at any time from bills + meal_residents + guests records.
 

@@ -5,11 +5,11 @@
 # Table name: meal_charges
 #
 #  id          :bigint           not null, primary key
-#  amount      :decimal(12, 8)   not null
+#  amount      :decimal(16, 8)   not null
 #  bill_amount :decimal(12, 8)
 #  kind        :string           not null
 #  multiplier  :integer
-#  unit_cost   :decimal(12, 8)   not null
+#  unit_cost   :decimal(16, 8)   not null
 #  created_at  :datetime         not null
 #  updated_at  :datetime         not null
 #  meal_id     :bigint           not null

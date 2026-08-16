@@ -26,7 +26,7 @@ RSpec.describe 'billing:recalculate correctness', type: :task do
   # task only in the sense of correctness comparison — calc_balance reads
   # source records, not resident_balances, so order does not matter; we
   # compute them first anyway so a task crash still shows oracle values.
-  # Compares at DECIMAL(12,8) precision since that's what the DB stores.
+  # Compares at DECIMAL(16,8) precision since that's what the DB stores.
   def expect_cached_balances_to_match_oracle(residents)
     expected = {}
     residents.each { |resident| expected[resident.id] = resident.calc_balance }

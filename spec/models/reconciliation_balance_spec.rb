@@ -5,7 +5,7 @@
 # Table name: reconciliation_balances
 #
 #  id                :bigint           not null, primary key
-#  amount            :decimal(12, 8)   default(0.0), not null
+#  amount            :decimal(16, 8)   default(0.0), not null
 #  created_at        :datetime         not null
 #  updated_at        :datetime         not null
 #  reconciliation_id :bigint           not null
@@ -88,7 +88,7 @@ RSpec.describe ReconciliationBalance do
   end
 
   describe 'amount precision' do
-    it 'stores DECIMAL(12,8) values' do
+    it 'stores DECIMAL(16,8) values' do
       resident = create(:resident, community: community, unit: unit)
       reconciliation = create(:reconciliation, community: community)
 
