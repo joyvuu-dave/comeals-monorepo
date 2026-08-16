@@ -18,6 +18,11 @@ RAILS_PID=""
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
+# In an agent worktree, .env sets TEST_DB_SUFFIX and the test database is
+# comeals_test<suffix> (config/database.yml). Rails reads .env itself via
+# dotenv; this shell needs the name too, for the cleanup TRUNCATE below.
+TEST_DB="comeals_test$(sed -n 's/^TEST_DB_SUFFIX=//p' .env 2>/dev/null)"
+
 # The suite's frozen clock: seeds, the Rails test server, and the
 # browser (tests/helpers/integration_setup.js) all see this date as
 # today, so relative seed dates and screenshots are the same on any
@@ -41,7 +46,7 @@ cleanup() {
   fi
   # Wipe integration seed data so RSpec finds a clean database.
   echo "Resetting test database..."
-  psql -q -d comeals_test -c "TRUNCATE communities CASCADE" 2>/dev/null || true
+  psql -q -d "$TEST_DB" -c "TRUNCATE communities CASCADE" 2>/dev/null || true
 }
 trap cleanup EXIT
 

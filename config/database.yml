@@ -92,7 +92,12 @@ development:
 # Do not set this db to the same as development or production.
 test:
   <<: *default
-  database: comeals_test
+  # Agent worktrees set TEST_DB_SUFFIX in their .env (bin/agent-worktree),
+  # so each worktree tests against its own database and parallel test runs
+  # never share state. Unset — the main checkout — this is plain
+  # comeals_test. dotenv-rails loads .env in development and test, so the
+  # suffix reaches RSpec and rake without any shell setup.
+  database: comeals_test<%= ENV["TEST_DB_SUFFIX"] %>
 
 # As with config/secrets.yml, you never want to store sensitive information,
 # like your database password, in your source code. If your source code is

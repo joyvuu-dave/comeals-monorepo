@@ -96,8 +96,18 @@ check_node_version() {
 check_pending_migrations() {
   step "Database migrations"
 
+  # In an agent worktree (.env sets TEST_DB_SUFFIX — see bin/agent-worktree)
+  # the shared development database never gets this branch's migrations:
+  # worktrees migrate only their own test database. So check that one there.
+  # In the main checkout this stays what it always was: a check that the
+  # development database is up to date.
+  local rails_env="development"
+  if [ -f .env ] && grep -q '^TEST_DB_SUFFIX=' .env; then
+    rails_env="test"
+  fi
+
   local output
-  output=$(bundle exec rails db:migrate:status 2>&1)
+  output=$(RAILS_ENV="$rails_env" bundle exec rails db:migrate:status 2>&1)
   if echo "$output" | grep -q '^ *down'; then
     fail "Pending migrations detected"
     echo "$output" | grep '^ *down' | while IFS= read -r line; do

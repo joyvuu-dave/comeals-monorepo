@@ -21,6 +21,17 @@ bin/check                  # Full health check: tests, linters, security, freshn
 - **ActiveAdmin**: `http://admin.lvh.me:3000/login` — admin subdomain, served by Rails directly (no Vite proxy)
 - **Mail inbox**: `http://localhost:3000/letter_opener`
 
+## Parallel agents and worktrees
+
+Other Claude sessions may be working in sibling worktrees of this repo at the same time. The rules that keep them from colliding (full rulebook: `docs/agents/worktrees.md`):
+
+- **The main checkout belongs to the human.** If you are asked to change code and you are in the main checkout (`comeals-monorepo`), first run `bin/agent-worktree <short-task-name>` and work in the worktree it creates: `../comeals-<task-name>`, branch `agent/<task-name>`. Do not edit files in the main checkout.
+- **Your test database is yours alone.** The worktree's `.env` sets `TEST_DB_SUFFIX`, so RSpec, rake, and `bin/check` there use a private database. Run tests freely and in parallel with other sessions.
+- **If tests fail on code you did not touch, do not fix that code.** Another worktree's changes cannot be in your worktree, so the failure comes from your branch's base or your own edits. Rebase on `main` and rerun before digging further.
+- **Servers run in one worktree at a time.** The dev server (3000/3036), the integration suite (3001), and the Playwright suites (3037/3038) use fixed ports. If a script says a port is in use, another session has it: do not kill anything. Run the non-server suites (RSpec, Vitest, linters) and say in your final report which suites you could not run.
+- **Never migrate the development database from a worktree.** New migrations run against your own test database only (`RAILS_ENV=test rails db:prepare`). `bin/check` knows this: in a worktree, its migration check looks at the test database.
+- **Finish = a branch, not a merge.** Rebase on `main`, run `bin/check`, commit, and report the branch name. If the rebase conflicts in shared files (`Gemfile.lock`, `db/structure.sql`, factories, shared CSS), stop and report the conflict instead of resolving it silently. Never merge to `main` or push. The human merges, then runs `bin/agent-worktree-done <task-name>` to remove the worktree and drop its test database.
+
 ## Collaboration Style
 
 **Be an opinionated pair programmer.** This is a personal project with one developer. There is no committee to appease. Push back on design choices that are wrong. Propose an alternative when something looks wrong, even if you cannot yet say exactly why. Don't hedge with "you could do X or Y" — say which one is right and why.

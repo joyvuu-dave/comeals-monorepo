@@ -17,11 +17,17 @@ echo ""
 # processes alive but can lose the file), so check the ports directly.
 # If the listener is ours, stop it. If it belongs to something else,
 # say so and print the command to stop it.
+#
+# "Ours" means started from THIS directory — matched by its basename,
+# which puma puts in its process title and vite carries in its path.
+# A server from a sibling worktree (bin/agent-worktree) is NOT ours:
+# it is another live session, and killing it would destroy someone
+# else's running work. Those get the message below instead.
 free_port() {
   local port="$1" name="$2" pid
   pid="$(lsof -nP -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null | head -n 1 || true)"
   [ -n "$pid" ] || return 0
-  if ps -p "$pid" -o command= | grep -q "comeals-monorepo"; then
+  if ps -p "$pid" -o command= | grep -qF "$(basename "$PWD")"; then
     echo "  Stopping leftover $name (pid $pid) on port $port..."
     # If it was started by foreman, foreman sees the child die and
     # stops the rest of that session too.
@@ -35,9 +41,10 @@ free_port() {
     echo "    kill -9 $pid" >&2
     exit 1
   else
-    echo "  Port $port is used by a program that is not part of this repo:" >&2
+    echo "  Port $port is used by a program that was not started from this directory:" >&2
     ps -p "$pid" -o pid=,command= >&2
-    echo "  Stop it yourself if you want the port, then rerun bin/dev:" >&2
+    echo "  If that is another worktree's dev session, leave it alone and work" >&2
+    echo "  from tests here instead. Otherwise stop it and rerun bin/dev:" >&2
     echo "    kill $pid" >&2
     exit 1
   fi

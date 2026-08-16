@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# bin/agent-worktree <task-name>
+#
+# Set up an isolated working copy for one agent task:
+#   - a git worktree at ../comeals-<task-name>, on a new branch
+#     agent/<task-name> made from main
+#   - gems and node packages installed there
+#   - its own test database, comeals_test_<task_name>, named through
+#     TEST_DB_SUFFIX in the worktree's .env (config/database.yml reads it)
+#
+# Result: tests in that worktree cannot touch tests running anywhere else.
+# The main checkout keeps the plain comeals_test database.
+#
+# What is NOT isolated: the dev server ports (3000/3036), the browser
+# test suites' ports (3001/3037/3038), and the development database.
+# See docs/agents/worktrees.md for the rules about those.
+#
+# When the task's branch is merged or abandoned:
+#   bin/agent-worktree-done <task-name>
+
+usage() {
+  echo "usage: bin/agent-worktree <task-name>" >&2
+  echo "  task-name: lowercase letters, digits, hyphens; up to 40 characters" >&2
+  exit 1
+}
+
+[ $# -eq 1 ] || usage
+name="$1"
+[[ "$name" =~ ^[a-z0-9][a-z0-9-]*$ ]] || usage
+# comeals_test_<name> must fit Postgres's 63-character identifier limit.
+[ ${#name} -le 40 ] || usage
+
+# Run from the main checkout only. A worktree made from inside another
+# worktree still works at the git level, but the ../comeals-<name> paths
+# here assume one flat layout next to the main checkout.
+if [ "$(git rev-parse --git-dir)" != "$(git rev-parse --git-common-dir)" ]; then
+  echo "Run this from the main checkout, not from inside a worktree." >&2
+  exit 1
+fi
+cd "$(git rev-parse --show-toplevel)"
+
+path="../comeals-$name"
+branch="agent/$name"
+suffix="_${name//-/_}"
+
+# git refuses on its own if the directory or branch already exists,
+# with a clear message — no need to pre-check.
+git worktree add -b "$branch" "$path" main
+
+# .env: copy the main checkout's (Pusher keys and such), then add this
+# worktree's test-database suffix. dotenv-rails loads .env in development
+# and test, so RSpec, rake, and bin/check there all pick it up.
+if [ -f .env ]; then
+  cp .env "$path/.env"
+fi
+{
+  echo ""
+  echo "# Added by bin/agent-worktree: this worktree's own test database."
+  echo "TEST_DB_SUFFIX=$suffix"
+} >>"$path/.env"
+
+cd "$path"
+echo "==> bundle install"
+bundle install --quiet
+echo "==> npm install"
+npm install --no-audit --no-fund --loglevel=error
+echo "==> preparing test database comeals_test$suffix"
+RAILS_ENV=test bundle exec rails db:prepare
+
+echo ""
+echo "Ready. Work in $(pwd) on branch $branch."
+echo "Tests here use comeals_test$suffix; run them freely."
+echo "When the branch is merged or abandoned, from the main checkout:"
+echo "  bin/agent-worktree-done $name"

@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# bin/agent-worktree-done <task-name>
+#
+# Remove the worktree that bin/agent-worktree created and drop its test
+# database. The branch survives — the branch IS the work. Merge it or
+# delete it yourself; this script only tells you which it needs.
+#
+# Refuses if the worktree has uncommitted changes, so nothing is lost
+# by accident.
+
+usage() {
+  echo "usage: bin/agent-worktree-done <task-name>" >&2
+  exit 1
+}
+
+[ $# -eq 1 ] || usage
+name="$1"
+[[ "$name" =~ ^[a-z0-9][a-z0-9-]*$ ]] || usage
+
+if [ "$(git rev-parse --git-dir)" != "$(git rev-parse --git-common-dir)" ]; then
+  echo "Run this from the main checkout, not from inside a worktree." >&2
+  exit 1
+fi
+cd "$(git rev-parse --show-toplevel)"
+
+path="../comeals-$name"
+branch="agent/$name"
+suffix="_${name//-/_}"
+
+if [ ! -d "$path" ]; then
+  echo "No worktree at $path." >&2
+  exit 1
+fi
+
+# Uncommitted work would be gone forever. Stop and say so.
+if [ -n "$(git -C "$path" status --porcelain)" ]; then
+  echo "The worktree at $path has uncommitted changes:" >&2
+  git -C "$path" status --short >&2
+  echo "Commit them there (or discard them on purpose), then rerun this." >&2
+  exit 1
+fi
+
+# Count commits the branch has that main does not, BEFORE removing
+# anything, so the closing message below can say what is left to do.
+ahead=$(git rev-list --count "main..$branch" 2>/dev/null || echo 0)
+
+git worktree remove "$path"
+dropdb --if-exists "comeals_test$suffix"
+
+echo "Removed $path and dropped comeals_test$suffix."
+if [ "$ahead" -gt 0 ]; then
+  echo "Branch $branch still has $ahead commit(s) that main does not:"
+  echo "  merge it:   git merge $branch && git branch -d $branch"
+  echo "  discard it: git branch -D $branch"
+else
+  echo "Branch $branch has nothing main lacks; delete it with: git branch -d $branch"
+fi
