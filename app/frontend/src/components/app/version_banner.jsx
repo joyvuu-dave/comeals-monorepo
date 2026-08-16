@@ -2,37 +2,6 @@ import { useEffect, useState } from "react";
 
 var POLL_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
-var styles = {
-  banner: {
-    position: "fixed",
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 9999,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "1rem",
-    padding: "0.75rem 1rem",
-    backgroundColor: "#444",
-    color: "#fff",
-    fontSize: "0.95rem",
-  },
-  button: {
-    backgroundColor: "#CCDEEA",
-    color: "#444",
-    border: "none",
-    borderRadius: "4px",
-    padding: "0.4rem 1rem",
-    cursor: "pointer",
-    fontWeight: "bold",
-    fontSize: "0.95rem",
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-};
-
 function VersionBanner() {
   var [updateAvailable, setUpdateAvailable] = useState(false);
 
@@ -93,10 +62,10 @@ function VersionBanner() {
   }
 
   return (
-    <div style={styles.banner}>
+    <div className="app-banner app-banner--info">
       <span>A new version is available.</span>
       <button
-        style={styles.button}
+        className="app-banner__button"
         onClick={function () {
           window.location.reload();
         }}

@@ -85,6 +85,7 @@
   /* Blues. */
   --pale-blue: #dcedfb; /* calendar today tint */
   --mid-blue: #5a9fd6; /* calendar today ring */
+  --powder-blue: #ccdeea; /* modal backgrounds, version banner button */
 
   /* Whites. */
   --white: #fff;
