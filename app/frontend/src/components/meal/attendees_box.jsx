@@ -21,7 +21,7 @@ const styles = {
   // the green's brightness.
   disabledPlain: {
     cursor: "not-allowed",
-    color: "#666",
+    color: "var(--gray-11)",
     pointerEvents: "none",
   },
   disabledAttending: {

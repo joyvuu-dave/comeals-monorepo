@@ -206,7 +206,7 @@ const ResidentsLogin = observer(() => {
         onRequestClose={handleCloseModal}
         style={{
           content: {
-            backgroundColor: "#CCDEEA",
+            backgroundColor: "var(--powder-blue)",
           },
         }}
       >

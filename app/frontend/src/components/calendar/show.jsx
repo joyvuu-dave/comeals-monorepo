@@ -101,7 +101,7 @@ const styles = {
     flexWrap: "nowrap",
   },
   chevron: {
-    backgroundColor: "#444",
+    backgroundColor: "var(--gray-13)",
     border: "1px solid black",
     opacity: "0.75",
     width: "4rem",
@@ -589,7 +589,7 @@ const MainCalendar = observer(() => {
         )}
         style={{
           content: {
-            backgroundColor: "#CCDEEA",
+            backgroundColor: "var(--powder-blue)",
           },
         }}
       >

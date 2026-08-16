@@ -4,7 +4,7 @@ import handleAxiosError from "../../helpers/handle_axios_error";
 
 const styles = {
   main: {
-    backgroundColor: "#ebebe4",
+    backgroundColor: "var(--offwhite)",
   },
 };
 

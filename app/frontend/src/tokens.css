@@ -20,8 +20,14 @@
    Not tokenized, on purpose: pure-black shadow colors like
    rgba(0, 0, 0, 0.3) (they are shading, not palette), the CSS keywords
    green/red in the offline indicator, em-based paddings that scale
-   with their element's font, and one-shot geometry (the switch's
-   1.6875rem, circle radii). */
+   with their element's font, one-shot geometry (the switch's
+   1.6875rem, circle radii), and the "#000"/"#fff" strings that
+   eventTextColor in calendar/show.jsx computes from a chip color's
+   luminance — those are values JavaScript produces, and JS cannot
+   read a CSS variable without asking the browser for computed style.
+
+   JSX inline styles use these tokens too: var() works there, and the
+   same no-repeated-literals rule applies. */
 
 :root {
   /* Brand red — buttons, links, focus, selection. */

@@ -16,10 +16,10 @@ var styles = {
     padding: "0.75rem 2rem",
     fontSize: "1rem",
     lineHeight: "1",
-    backgroundColor: "#444",
-    color: "#fff",
+    backgroundColor: "var(--gray-13)",
+    color: "var(--white)",
     border: "none",
-    borderRadius: "4px",
+    borderRadius: "var(--radius)",
     cursor: "pointer",
   },
 };

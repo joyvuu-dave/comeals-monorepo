@@ -208,7 +208,7 @@ const DateBox = observer(() => {
                 onRequestClose={handleCloseModal}
                 style={{
                   content: {
-                    backgroundColor: "#CCDEEA",
+                    backgroundColor: "var(--powder-blue)",
                   },
                 }}
               >

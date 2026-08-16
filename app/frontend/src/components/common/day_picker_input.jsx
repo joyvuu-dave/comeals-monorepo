@@ -65,7 +65,7 @@ function DayPickerInputWrapper({
             position: "absolute",
             left: 0,
             zIndex: 1,
-            background: "#fff",
+            background: "var(--white)",
             boxShadow: "0 2px 5px rgba(0,0,0,0.15)",
           }}
         >
