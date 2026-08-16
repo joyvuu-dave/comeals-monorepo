@@ -54,13 +54,13 @@ RSpec.describe MealCharge do
       charges = described_class.for_reconciliation(reconciliation)
 
       expect(charges.count).to eq(3)
-      expect(charges.credits.count).to eq(1)
-      expect(charges.debits.count).to eq(2)
+      expect(charges.where(kind: 'credit').count).to eq(1)
+      expect(charges.where(kind: %w[debit guest_debit]).count).to eq(2)
     end
 
     it 'writes a credit that explains the cook' do
       settle_plain_meal
-      credit = described_class.credits.first
+      credit = described_class.where(kind: 'credit').first
 
       expect(credit.resident_id).to eq(cook.id)
       expect(credit.amount).to eq(BigDecimal('16'))
@@ -71,7 +71,7 @@ RSpec.describe MealCharge do
 
     it 'writes a debit that explains one attendee' do
       settle_plain_meal
-      debit = described_class.debits.find_by(resident: eater)
+      debit = described_class.where(kind: %w[debit guest_debit]).find_by(resident: eater)
 
       expect(debit.amount).to eq(BigDecimal('-8'))
       expect(debit.multiplier).to eq(2)
@@ -87,7 +87,7 @@ RSpec.describe MealCharge do
       create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
       Reconciliation.create!(community: community, end_date: Date.yesterday)
 
-      credit = described_class.credits.first
+      credit = described_class.where(kind: 'credit').first
 
       expect(credit.amount).to eq(BigDecimal('18'))
       expect(credit.bill_amount).to eq(BigDecimal('60'))
@@ -116,7 +116,7 @@ RSpec.describe MealCharge do
       create(:meal_resident, meal: meal, resident: cook, community: community, multiplier: 2)
       Reconciliation.create!(community: community, end_date: Date.yesterday)
 
-      expect(described_class.credits.pluck(:resident_id)).to eq([cook.id])
+      expect(described_class.where(kind: 'credit').pluck(:resident_id)).to eq([cook.id])
     end
 
     # The tie-out the nightly check relies on. Worth asserting here too,

@@ -48,13 +48,6 @@ class ApiController < ActionController::API
            status: :unauthorized and return
   end
 
-  def not_authorized_api
-    msg = 'You are not authorized to view the page. You may have mistyped ' \
-          'the address or might be signed into the wrong account.'
-    render json: { message: msg },
-           status: :forbidden and return
-  end
-
   def not_found_api
     msg = "The page you were looking for doesn't exist. You may have " \
           'mistyped the address or the page may have moved.'

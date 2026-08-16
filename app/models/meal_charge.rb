@@ -56,9 +56,6 @@ class MealCharge < ApplicationRecord
     joins(:meal).where(meals: { reconciliation_id: reconciliation })
   }
 
-  scope :credits, -> { where(kind: 'credit') }
-  scope :debits, -> { where(kind: %w[debit guest_debit]) }
-
   validates :kind, inclusion: { in: KINDS }
   validates :amount, :unit_cost, presence: true, numericality: true
 

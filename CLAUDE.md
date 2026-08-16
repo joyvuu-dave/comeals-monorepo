@@ -78,7 +78,7 @@ SETTLEMENT (reconciliation): Rounded to cents using largest-remainder allocation
 
 - **No FIXME/TODO hacks in financial code.** If something needs to change, change it or create a tracked issue.
 - **No hardcoded IDs.** All queries must use proper scopes (e.g., `Meal.unreconciled`), never hardcoded record IDs.
-- **Explicit over implicit.** Name things clearly. `bill.amount` is the cook's actual cost. `bill.effective_amount` accounts for `no_cost` flag.
+- **Explicit over implicit.** Name things clearly. `bill.amount` is the cook's actual cost; `bill.no_cost` marks a cook who spent nothing, and `MealLedger` skips those bills when summing a meal's cost.
 - **Test edge cases.** Zero multiplier, zero cost, single attendee, no attendees, meal with only children, meal with only guests, etc.
 - **Database constraints.** Use NOT NULL, CHECK constraints, and foreign keys. Don't rely on Rails validations alone. A validation only runs when the write goes through the model, so `update_all`, `delete_all`, a rake task, or psql all skip it. The constraint still holds.
 - **No Co-Authored-By trailers in commits.** Do not add `Co-Authored-By` lines or any other AI attribution metadata to git commit messages. Ever.

@@ -94,8 +94,8 @@ RSpec.describe BalanceDisplayHelper do
     it 'says "credited" for a cook credit and "charged" for a debit, with no minus sign' do
       settle_meal
 
-      credit = MealCharge.credits.find_by(resident: cook)
-      debit = MealCharge.debits.find_by(resident: eater)
+      credit = MealCharge.where(kind: 'credit').find_by(resident: cook)
+      debit = MealCharge.where(kind: %w[debit guest_debit]).find_by(resident: eater)
 
       expect(helper.charge_amount_tag(credit)).to include('credited $16.00')
       expect(helper.charge_amount_tag(credit)).not_to include('charged')

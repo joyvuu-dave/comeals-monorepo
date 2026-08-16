@@ -181,7 +181,7 @@ RSpec.describe LedgerVerification do
     # against each other can see this.
     it 'is found when a line item is rewritten and nothing else is' do
       settle
-      charge = MealCharge.credits.first
+      charge = MealCharge.where(kind: 'credit').first
 
       behind_the_guards do
         MealCharge.where(id: charge.id).update_all(amount: charge.amount - BigDecimal('5'))
@@ -195,7 +195,7 @@ RSpec.describe LedgerVerification do
 
     it 'is found when a line item is deleted' do
       settle
-      charge = MealCharge.debits.first
+      charge = MealCharge.where(kind: %w[debit guest_debit]).first
 
       behind_the_guards { MealCharge.where(id: charge.id).delete_all }
 

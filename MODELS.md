@@ -179,7 +179,7 @@ Bill ----> Community
 **Key fields:**
 
 - `amount` DECIMAL(12,8) -- what the cook spent, in dollars
-- `no_cost` -- true if this cook volunteered without cost (effective_amount = 0)
+- `no_cost` -- true if this cook volunteered without cost; MealLedger skips these bills when summing a meal's cost
 - DB constraints: `bills_amount_non_negative` (`amount >= 0`) and
   `bills_amount_whole_cents` (`amount = round(amount, 2)`). The model also caps
   the amount at 9999.99, the largest whole-cent value DECIMAL(12,8) holds.
@@ -187,9 +187,9 @@ Bill ----> Community
 
 **Financial methods:**
 
-- `effective_amount` -- 0 if no_cost, else amount
-- `unit_cost` -- capped_amount / meal.multiplier
-- `capped_amount` -- proportionally reduced when meal exceeds community cap
+Bill has none. All cost math (skipping no_cost bills, applying the community
+cap, computing per-unit cost) lives in `MealLedger`, and settlement writes the
+results to `meal_charges`.
 
 ---
 

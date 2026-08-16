@@ -109,25 +109,6 @@ RSpec.describe Bill do
     end
   end
 
-  describe '#effective_amount' do
-    it 'returns the amount when no_cost is false' do
-      meal = create(:meal, community: community)
-      resident = create(:resident, community: community, unit: unit)
-      bill = create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('50'))
-
-      expect(bill.effective_amount).to eq(BigDecimal('50'))
-    end
-
-    it 'returns 0 when no_cost is true' do
-      meal = create(:meal, community: community)
-      resident = create(:resident, community: community, unit: unit)
-      bill = create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('50'),
-                           no_cost: true)
-
-      expect(bill.effective_amount).to eq(BigDecimal('0'))
-    end
-  end
-
   describe '#destroy' do
     it 'blocks destruction when meal is reconciled' do
       meal = create(:meal, community: community)

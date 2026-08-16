@@ -70,11 +70,5 @@ class Bill < ApplicationRecord
     errors.add(:amount, 'must be whole cents')
   end
 
-  # The amount used for cost-splitting purposes.
-  # If no_cost is true, this cook's bill does not contribute to the meal cost.
-  def effective_amount
-    no_cost? ? BigDecimal('0') : amount
-  end
-
   delegate :reconciled?, to: :meal
 end
