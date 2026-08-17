@@ -155,6 +155,9 @@ jobs:
             echo "visible; say 'Nothing looks different.' if not), How to undo (one"
             echo "line: this release can be rolled back in one command). Do not invent"
             echo "anything not in the commits. Output only the note, in Markdown."
+            echo "Some fixes are described across several commits: one commit names a"
+            echo "bug people saw, another commit fixes it without naming it. Connect"
+            echo "those and report the fix once, in user terms, under What changed."
             echo
             cat commits.txt
           } > prompt.txt
