@@ -2,7 +2,8 @@
 
 Every production deploy of the Heroku app since 2014, from the Heroku
 release record. Entries were backfilled on 2026-08-17: the change
-lists were written by Claude from the commit messages in whichever
+lists were written by Claude from the commit messages — or, where a
+message says almost nothing, from the commit's code — in whichever
 repository served production at the time (comeals-rails, comeals2,
 comeals-backend, then this monorepo). Newest first. Deploys whose
 commits live in this repository have their own GitHub releases and
@@ -64,7 +65,14 @@ have; their histories were rewritten. Only the Heroku record
 
 ## v380 — 2018-05-27 (comeals-backend, `f6dcf8b6`)
 
-- "Fixes" (no detail recorded)
+- The calendar page now works without a type and date in the URL. Going to `/calendar` sends you to `/calendar/all/<today>` (from the code; the message says only "Fixes").
+- Signing in and resetting a password now ignore the case of the email address. `Dave@Example.com` finds the same resident as `dave@example.com`.
+- The page checks the server version once a minute. It shows the version number on the page, and reloads the page when the server version differs from the one stored in the browser cookie.
+- The meal cook list showed wrong data for `reconciled`, `next_id`, `prev_id`, and each resident's attendance. The serializer read those from the wrong record. It now reads them from the meal.
+- The calendar picks its start date from the browser URL instead of the router's stored path.
+- API requests are now authorized by the `token` parameter only. They no longer fall back to the browser cookie, so a signed-in browser session does not authorize API calls.
+- Removed the `GET /api/v1/communities/:id/database` endpoint and its route.
+- Updated prettier to 1.13.0, core-js to 2.5.7, rc to 1.2.8, and xpath to 3.1.0.
 
 ## v378 — 2018-05-26 (comeals-backend, `301859c5`)
 
@@ -431,7 +439,7 @@ have; their histories were rewritten. Only the Heroku record
 
 ## v290 — 2017-08-30 (comeals-backend, `d47ff9b6`)
 
-- "Fix #9" (the commit message names issue #9 with no detail recorded).
+- The count of vegetarian guests on a meal is now correct. Before, every guest was counted as vegetarian; now only guests marked vegetarian are counted. (From the code — the message only says "Fix #9".)
 
 ## v289 — 2017-08-29 (comeals-backend, `fdc1cff3`)
 
@@ -447,7 +455,8 @@ have; their histories were rewritten. Only the Heroku record
 
 ## v286 — 2017-08-29 (comeals-backend, `28ace352`)
 
-- "Fixes #8" (no detail recorded)
+- Admins now get a real logout. Clicking Logout in the admin area deletes the admin "remember me" cookie, clears the session, and sends you to the main site. Before this, Logout only sent you to the root URL (from the code; the message says only "Fixes #8").
+- Added a new admin page at `/admin-logout` on the admin subdomain that does this logout.
 
 ## v285 — 2017-08-29 (comeals-backend, `015dcf6e`)
 
@@ -543,7 +552,7 @@ have; their histories were rewritten. Only the Heroku record
 
 ## v263 — 2017-08-13 (comeals-backend, `4575e0e1`)
 
-- "Logout still acting up" (no detail recorded)
+- Logging out is more reliable. Clicking logout now waits 100 milliseconds before sending you to the home page, so the browser has time to delete the login cookie first. (From the code; the commit message only says logout was "still acting up.")
 
 ## v262 — 2017-08-13 (comeals-backend, `9c0022c4`)
 
@@ -560,7 +569,7 @@ have; their histories were rewritten. Only the Heroku record
 
 ## v259 — 2017-08-13 (comeals-backend, `1bfe9a7f`)
 
-- "Add helper text" (no further detail recorded)
+- Added helper text to the attendee sign-up table: the "Name" column header now says "(click to add)" in small gray italic text, so people know they can click a name to add that person.
 
 ## v258 — 2017-08-13 (comeals-backend, `d17f120c`)
 
@@ -626,7 +635,12 @@ _Re-deploy of the same code; no changes._
 
 ## v194 — 2017-03-09 (comeals-rails, `76fec5e`)
 
-- "progress" (no detail recorded)
+- The calendar and the panel next to it now split the window evenly. Before, the calendar took three quarters of the width and the panel one quarter.
+- The page is now much wider. The container went from 1200–1600px to 1800–3600px, so the app needs a wider screen.
+- The meals and bills APIs now return every record when no start and end date are given. Before, a request without dates returned nothing (from the code; the message says only "progress").
+- Switched the money-rails gem back to the released version instead of a fork.
+- Updated Rails from 5.0.1 to 5.0.2 and many other gems (counter_culture, uglifier, puma, faker, and others).
+- Removed an empty test file for the calendar controller.
 
 ## v193 — 2017-02-02 (comeals-rails, `bb7dfd9`)
 
@@ -634,11 +648,24 @@ _Re-deploy of the same code; no changes._
 
 ## v192 — 2017-02-02 (comeals-rails, `bb7dfd9`)
 
-- "progress" (no further detail recorded)
+- The calendar now shows on every page. It sits on the left, and the page content sits in a narrow column on the right. Before, the calendar had its own page reached from a "Calendar" button in the header. That button is gone. (from the code)
+- The home page now opens the current meal form instead of the calendar page.
+- The report page shows a spinner next to "Residents" and next to "Units" while that data loads. The spinner stops when the data arrives. (from the code)
+- The meal page now lists the names of the residents signed up for that meal.
+- The "Back" and "Edit" buttons are gone from the meal page. Only "Delete" is left.
+- The login page no longer shows the big box with the community name and the line about co-housing in Old Oakland.
+- Lists that use paging now show 5 rows per page instead of 25.
+- The page is now at least 1200 pixels wide and at most 1600 pixels wide.
+- The meals list page title is now smaller.
+- The meals and bills API endpoints now require a start and end date, and return only records in that range. Before, they returned all records. (from the code)
+- Opening a meal form with no id no longer redirects to the current meal's edit page. The redirect line is commented out. (from the code)
+- Updated autoprefixer-rails to 6.7.2, rack-cors to 0.4.1, and the git versions of rails, active_model_serializers, and annotate.
 
 ## v191 — 2017-01-30 (comeals-rails, `0bc2eb5`)
 
-- "progress" (no further detail recorded)
+- Meal forms and lists no longer require you to be signed in. The sign-in check on the meals pages is turned off (from the code; the message says nothing).
+- After you create or update a bill, create meal templates, or update a meal, the app now sends you to the home page instead of the calendar page. The Cancel button on the meal form also goes to the home page now.
+- Updated gems: Rails on the 5-0-stable branch, Puma 3.6.2 to 3.7.0, autoprefixer-rails 6.7.0 to 6.7.1, and a newer minimum for rails-html-sanitizer (1.0.2 to 1.0.3).
 
 ## v190 — 2017-01-27 (comeals-rails, `12b7cf2`)
 
@@ -646,15 +673,37 @@ _Re-deploy of the same code; no changes._
 
 ## v189 — 2017-01-27 (comeals-rails, `12b7cf2`)
 
-- "progress" (no further detail recorded)
+- The site now signs you in as yourself. Instead of one shared "admin" or "user" login, you pick your name from a list on the login page. The list shows unit and name, and marks admins with a star.
+- Residents can have a password. If a resident has no password set, picking the name signs them in with no password. If a resident has a password, the password is required.
+- Admin rights now belong to a resident. Each resident has an admin flag, and admins must have a password (from the code; the message says nothing).
+- The header now shows "Log Out" with your name, and "(admin)" if you are an admin. When you are signed out, it shows a "Log In" button instead.
+- The calendar is now the home page. The old start page is gone, and the `/calendar` address was removed.
+- The calendar page shows a spinner while events load. It stops once all events are drawn.
+- The login page shows the community name and description.
+- Signing in or out shows a message saying who signed in and whether a password was used.
+- The bill form now labels the amount field "Amount" instead of "Amount cents".
+- The calendar page and the meals and bills API no longer require you to be signed in (from the code; the message says nothing).
+- CSRF protection is turned off: `protect_from_forgery` is commented out and the origin check is set to false (from the code; the message says nothing).
+- The login list contains two placeholder options, "Blank" and "foo" with id -1, that look like leftover test code (from the code).
+- Gem updates: bcrypt added for password hashing, bootstrap-sass to 3.3.7, kaminari to 1.0.1, plus smaller updates to autoprefixer-rails, diff-lcs, rb-inotify, spring, tilt, and websocket-driver.
+- Simple Form now supports a minlength attribute on inputs.
+- Seed data now gives half the residents the password "password" and makes about one in seven an admin.
 
 ## v188 — 2017-01-18 (comeals-rails, `c073df4`)
 
-- "fix bug" (no detail recorded)
+- Fixed the reimbursable amount on a bill. It now rounds up to a multiple of the bill's own multiplier, not the meal's multiplier (the commit message says only "fix bug", so this comes from reading the code).
+- Changed the second amount calculation on a bill: the share of the meal cost is now multiplied by the bill's amount in cents instead of by 100.
 
 ## v187 — 2017-01-18 (comeals-rails, `84ca628`)
 
-- "Progress" (no further detail recorded)
+- Calendar meal titles are new. A future dinner shows "Dinner: 12 max (3 left)" when the meal has a max, or "Dinner: no max" when it does not. A past dinner shows "Dinner: 12 present". (from the code; the commit message says only "Progress")
+- Meal titles now show the meal id in parentheses when the meal's money does not balance, with a `*` added when the meal is subsidized.
+- Cook names on the calendar are now short. A cook shows as just a first name when that first name is unique among residents, or as "First L" when it is not. The word "Cook" was removed from the title, and a cook who billed $0 shows only a name, with no amount.
+- Meal cost math was rewritten. The per-person cost is now the sum of each bill's own per-person cost, instead of one number worked out from the meal's total cost. Guest and resident charges use this new number.
+- The rules that blocked a bill from being saved were removed. A bill no longer fails to save when nobody has signed up yet, or when the meal cost would go over the cap.
+- Notifications (notie) now load from a CDN instead of from the app's own files. The bundled copy was deleted.
+- Seed data changed: every resident gets a first and last name, three residents share the same first name, some meals get a $0 bill next to a large one, and meal max is now a random number from 0 to 3 above the number of people signed up.
+- Rails, builder, and ffi were updated to newer versions.
 
 ## v186 — 2017-01-13 (comeals-rails, `4efa2a2`)
 
@@ -674,7 +723,15 @@ _Re-deploy of the same code; no changes._
 
 ## v182 — 2017-01-13 (comeals-rails, `21ed65c`)
 
-- "Improvements" (no detail recorded)
+- Meals now count their bills. A new `bills_count` column on meals is kept up to date automatically (from the code; the message says only "Improvements").
+- The per-person charge for a meal is worked out differently. It is 0 when the meal has no cost or no attendees. Otherwise the cost is divided by the number of attendees, rounded up, and then raised until it divides evenly by the number of attendees, but not past the cap. If no such value exists below the cap, the method returns nothing at all, which is a bug.
+- The reimbursement amount on a bill changed. For a subsidized meal it is now the whole meal's overage (`cost - cap * multiplier`), not that bill's share of it. For a meal that is not subsidized, the bill amount is rounded up until it divides evenly by the number of attendees.
+- A new check, `Meal.can_add_bill`, says a bill may be added when the meal has no bills yet, or when its cost is still under `cap * multiplier`. It is written as a class method but reads per-meal fields, so calling it raises an error. This is a bug.
+- The calendar was updated from FullCalendar 2.7.2 to 3.1.0. Support for old Internet Explorer was dropped in that version, drag and select behavior changed, and a footer bar option was added.
+- The app now loads jQuery 3 instead of jQuery 2, and the unminified moment.js instead of the minified one.
+- Rails was updated to a newer commit on the 5-0-stable branch, and rake to 12.0.0.
+- The `annotate` gem now comes from the `develop` branch on GitHub. The rake task that writes schema comments was replaced with the gem's own tasks and a full options list. Model, serializer, spec, and factory files were re-annotated: they show the new schema version, the new `bills_count` column, and foreign key names shortened to `fk_rails_...`.
+- Seed data now creates meals for September 2016 through April 2017 instead of 2016 dates.
 
 ## v180 — 2017-01-11 (comeals-rails, `e7d1f07`)
 
@@ -767,7 +824,7 @@ _Re-deploy of the same code; no changes._
 
 ## v154 — 2016-02-12 (comeals-rails, `0f3c784`)
 
-- "styling" (no further detail recorded)
+- Meal date fields on the meal page now line up with the other fields. The rule that removes left and right margins on guest name, description, and bill amount fields now also covers the meal date field (from the code; the message says only "styling").
 
 ## v153 — 2016-02-12 (comeals-rails, `e67ac9c`)
 
@@ -850,7 +907,12 @@ describe.
 
 ## v108 — 2015-05-26 (comeals2, `33bc940`)
 
-- "updates" (no further detail recorded)
+- Meal costs now use the multiplier saved on each meal signup, not the resident's current multiplier. A resident's cost for a past meal no longer changes when their multiplier changes later. (From the code; the message says "updates".)
+- Each meal signup now stores the resident's multiplier when it is saved.
+- A meal's total multiplier now counts every signup row for that meal, including duplicates. Before, it counted each resident once.
+- In the admin area, the meal list on the dashboard and the meal picker on the bill form now show the newest date first.
+- Bills no longer run the reconciled update when a bill is deleted. It runs only on create and update.
+- Updated the mime-types gem from 2.5 to 2.6.1.
 
 ## v107 — 2015-05-26 (comeals2, `20bce90`)
 
@@ -966,7 +1028,7 @@ describe.
 
 ## v71 — 2014-08-19 (comeals2, `213429c`)
 
-- "start thin" (no detail recorded).
+- The web server now starts correctly. The Procfile called `thin` without the `start` command; it now runs `thin start` (from the code — the message says only "start thin").
 
 ## v70 — 2014-08-19 (comeals2, `6adfd66`)
 
@@ -1028,7 +1090,10 @@ describe.
 
 ## v59 — 2014-07-14 (comeals2, `2c726a2`)
 
-- "fix date problems" (no further detail recorded)
+- Bill list and Bill edit page now show meal dates with the day of the week, like "Mon, Jul 14 2014". This code was there before but was turned off because it showed the wrong day. It now adds one day to correct that, and is turned on again (from the code; the message only says "fix date problems").
+- The admin dashboard no longer shows the empty welcome box. It now shows three lists side by side: units by name, residents by name, and meals by date (from the code).
+- Updated the ActiveAdmin library to a newer version.
+- Cleaned up spacing and quote style in the admin files and models, and moved private methods to the normal indent level. No behavior change.
 
 ## v58 — 2014-07-14 (comeals2, `e78d9dd`)
 
@@ -1180,7 +1245,7 @@ have; their histories were rewritten. Only the Heroku record
 
 ## v25 — 2014-06-01 (comeals2, `c977862`)
 
-- "bug: return the result" (no detail recorded)
+- Fixed the cost calculation for a resident's meal charges. The method that adds up guest costs did not return its result (from the code; the message only says "return the result").
 
 ## v24 — 2014-06-01 (comeals2, `163792e`)
 
