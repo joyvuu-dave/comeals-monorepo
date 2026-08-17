@@ -153,8 +153,11 @@ jobs:
             echo "short sentences; no idioms. Three sections: What changed (grouped,"
             echo "user-visible things first), What you will see (only if anything is"
             echo "visible; say 'Nothing looks different.' if not), How to undo (one"
-            echo "line: this release can be rolled back in one command). Do not invent"
-            echo "anything not in the commits. Output only the note, in Markdown."
+            echo "line: to undo this release, run the Rollback workflow on the"
+            echo "repo's GitHub Actions page with a one-line reason; it rolls"
+            echo "production back and pauses future deploys). Do not invent"
+            echo "anything not in the commits. Output only the note, in Markdown,"
+            echo "with no code fences around it."
             echo "Some fixes are described across several commits: one commit names a"
             echo "bug people saw, another commit fixes it without naming it. Connect"
             echo "those and report the fix once, in user terms, under What changed."
@@ -162,6 +165,17 @@ jobs:
             cat commits.txt
           } > prompt.txt
           if claude -p "$(cat prompt.txt)" > note.md 2>claude.err && [ -s note.md ]; then
+            # Despite the prompt, the model sometimes wraps the whole note
+            # in a ```markdown fence; GitHub then shows the markdown as
+            # literal text. Strip a wrapping fence if there is one.
+            if head -1 note.md | grep -q '^```'; then
+              tail -n +2 note.md > note.unfenced
+              if [ "$(tail -1 note.unfenced)" = '```' ]; then
+                sed '$d' note.unfenced > note.md
+              else
+                mv note.unfenced note.md
+              fi
+            fi
             echo "Note written by Claude."
           else
             echo "Claude call failed — falling back to the commit list." >&2
