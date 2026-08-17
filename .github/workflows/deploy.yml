@@ -145,6 +145,24 @@ jobs:
           live="${{ steps.compare.outputs.live }}"
           candidate="${{ steps.compare.outputs.candidate }}"
           git log --reverse --format='- %s%n%w(0,2,2)%b' "$live..$candidate" > commits.txt
+          # Platform fact: a stack change lives in Heroku, not in git,
+          # so no commit describes it. stack = what production runs
+          # now; build_stack = what the next build will use. Staging
+          # builds the slug that gets promoted, so staging's
+          # build_stack is what this release will run on. A difference
+          # means this deploy also moves the app to a new base image.
+          # The probes tolerate failure ("|| true") for the same reason
+          # the Claude call does: the note is packaging, and a broken
+          # probe must not cost a deploy day.
+          prod_stack=$(heroku apps:info -a "$PROD_APP" --json \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['app']['stack']['name'])" || true)
+          next_stack=$(heroku apps:info -a "$STAGING_APP" --json \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['app']['build_stack']['name'])" || true)
+          platform_facts=""
+          if [ -n "$prod_stack" ] && [ -n "$next_stack" ] && [ "$prod_stack" != "$next_stack" ]; then
+            platform_facts="This deploy also moves the app from the $prod_stack base image to $next_stack (the operating system image Heroku runs the app on)."
+            echo "Stack change detected: $prod_stack -> $next_stack"
+          fi
           npm install -g @anthropic-ai/claude-code >/dev/null 2>&1
           {
             echo "Below are the commit messages going into today's deploy of Comeals,"
@@ -161,6 +179,10 @@ jobs:
             echo "Some fixes are described across several commits: one commit names a"
             echo "bug people saw, another commit fixes it without naming it. Connect"
             echo "those and report the fix once, in user terms, under What changed."
+            if [ -n "$platform_facts" ]; then
+              echo "One more known fact that is not in the commits: $platform_facts"
+              echo "Report it under What changed, in one sentence."
+            fi
             echo
             cat commits.txt
           } > prompt.txt
@@ -186,6 +208,10 @@ jobs:
             {
               echo "Automatically generated commit list (note generator was unavailable):"
               echo
+              if [ -n "$platform_facts" ]; then
+                echo "$platform_facts"
+                echo
+              fi
               cat commits.txt
             } > note.md
           fi
