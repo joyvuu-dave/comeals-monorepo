@@ -9,10 +9,12 @@
 # friendly_id_slugs history table was dead from the start — the model used
 # `use: :slugged`, not `:history`, so nothing ever wrote to it.
 #
-# In fact production never had the table at all. It exists only in
-# databases built from db/structure.sql (development, test, CI). The
-# 2026-08-17 staging rehearsal failed here: drop_table raised "table
-# does not exist" against a copy of production. Hence if_exists below.
+# Production no longer has the table: the developer dropped it by hand
+# before this migration ever ran there. So the 2026-08-17 staging
+# rehearsal failed here — drop_table raised "table does not exist"
+# against a fresh copy of production. Hence if_exists below. (An
+# earlier version of this comment claimed production never had the
+# table; that was wrong.)
 class RemoveSlugFromCommunities < ActiveRecord::Migration[8.1]
   def up
     # safety_assured: the release before this one still reads slug (the
