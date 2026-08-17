@@ -28,6 +28,12 @@ cd "$(dirname "$0")/.."
 PROD_APP=comeals-monorepo
 STAGING_APP=comeals-staging
 
+# The log check at the end must only read lines from this rehearsal.
+# Heroku keeps a buffer of old lines, so without a time filter, a
+# failure from a previous run fails this one too (seen 2026-08-17).
+# Heroku log lines start with a UTC timestamp; compare as strings.
+REHEARSAL_STARTED=$(date -u +%Y-%m-%dT%H:%M:%S)
+
 # Config vars that must NOT exist on staging. Each one is an outbound
 # channel to the real world.
 FORBIDDEN_VARS=(
@@ -95,6 +101,18 @@ step "Deploy HEAD to staging"
 sha=$(git rev-parse HEAD)
 info "Deploying $(git rev-parse --short HEAD)"
 git push --force "https://git.heroku.com/$STAGING_APP.git" "HEAD:refs/heads/main"
+
+# git push exits 0 even when the release phase (bin/rake db:migrate)
+# fails — it only tells us the build worked. Ask Heroku what the
+# release did. (Learned on 2026-08-17: a failed migration sailed past
+# this point and surfaced three steps later as a wrong-slug error.)
+release_status=$(heroku releases -a "$STAGING_APP" --json | python3 -c \
+  "import json,sys; print(json.load(sys.stdin)[0]['status'])")
+if [ "$release_status" != "succeeded" ]; then
+  fail "The release phase failed (status: $release_status). Its output:"
+  heroku releases:output -a "$STAGING_APP" | tail -30
+  exit 1
+fi
 ok "Build and release succeeded"
 
 step "Migrate against today's data"
@@ -163,8 +181,11 @@ ok "Running slug is the candidate commit"
 step "Log check"
 
 # Everything the release and boot logged. Deprecation warnings fail on
-# purpose — a deploy is the moment to hear them, not later.
+# purpose — a deploy is the moment to hear them, not later. Only lines
+# from this rehearsal count: $1 is the line's timestamp, and comparing
+# against REHEARSAL_STARTED drops the buffered lines of earlier runs.
 log_hits=$(heroku logs -n 1500 -a "$STAGING_APP" \
+  | awk -v since="$REHEARSAL_STARTED" '$1 >= since' \
   | grep -iE "FATAL|DEPRECAT|status=5[0-9][0-9]| ERROR |Exception" \
   | grep -v "pg_restore" || true)
 if [ -n "$log_hits" ]; then
