@@ -11,10 +11,18 @@ are only pointed to here. 75 deploys point at commits that no longer
 exist in any surviving repository (histories were rewritten); they
 are listed as lost.
 
-## v573–v610 (2026-04-09 to 2026-08-04) — this repository
+## v573–v613 (2026-04-09 to 2026-08-17) — this repository
 
-31 deploys from this repository. Each has a GitHub release
+32 deploys from this repository. Each has a GitHub release
 (tags `deploy-YYYYMMDD-HHMM`) with a full note.
+
+v613 (2026-08-17) was the first deploy through the Heroku pipeline:
+the slug was built on the staging app and promoted, so production no
+longer builds its own slug. That promotion also moved the app's stack
+from heroku-26 back to heroku-24, because the staging app was created
+on heroku-24 and an app's reported stack is the stack of the slug it
+runs. Both apps' build stacks are now set to heroku-26, so the next
+deploy returns them to heroku-26.
 
 ## v572–v572 (2026-04-09 to 2026-04-09) — lost
 
