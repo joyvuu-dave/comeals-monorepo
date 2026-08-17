@@ -164,7 +164,10 @@ jobs:
             echo
             cat commits.txt
           } > prompt.txt
-          if claude -p "$(cat prompt.txt)" > note.md 2>claude.err && [ -s note.md ]; then
+          # The prompt goes in on stdin. Passing it as an argument broke
+          # on 2026-08-17: 217 commits made the prompt bigger than the
+          # 128 KiB Linux allows for one argument.
+          if claude -p < prompt.txt > note.md 2>claude.err && [ -s note.md ]; then
             # Despite the prompt, the model sometimes wraps the whole note
             # in a ```markdown fence; GitHub then shows the markdown as
             # literal text. Strip a wrapping fence if there is one.
@@ -185,6 +188,18 @@ jobs:
               echo
               cat commits.txt
             } > note.md
+          fi
+          # GitHub refuses a release body over 125,000 characters. A long
+          # fallback commit list can pass that, so cut the note and say so.
+          if [ "$(wc -c < note.md)" -gt 120000 ]; then
+            head -c 120000 note.md > note.cut
+            {
+              echo
+              echo
+              echo "(The note was longer than GitHub allows in a release body, so it"
+              echo "ends here. The full commit list: git log $live..$candidate)"
+            } >> note.cut
+            mv note.cut note.md
           fi
           tag="deploy-$(date -u +%Y%m%d-%H%M)"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
