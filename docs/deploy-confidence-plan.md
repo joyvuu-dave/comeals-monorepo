@@ -193,8 +193,10 @@ The weekly job:
 same workflow, triggered by hand (workflow_dispatch), same gates —
 manual skips the clock, never the checks. An emergency fix written
 under stress is the change most likely to carry the second bug, and
-the ~20-minute pipeline is what catches it. A `fast` input may trim
-the post-staging soak minutes, never a test. The break-glass
+the ~20-minute pipeline is what catches it. (A `fast` input used to
+trim the post-promote soak minutes; removed 2026-08-16 as not worth
+having — a manual run now waits the same 3 minutes as the Monday
+run.) The break-glass
 (`DEPLOY_WITHOUT_CI=1` on bin/deploy) stays for the one case where
 the pipeline itself is the casualty (CI or Actions down); it must be
 loud — typed confirmation, the same notification the pipeline sends,
@@ -241,7 +243,7 @@ Build order:
       targets whose /api/v1/version says staging:true. No stored
       credentials: bin/staging-rehearsal seeds a smoke resident with a
       fresh random password each run. First full pass 2026-08-10.
-- [x] deploy.yml (1155ea7): cron + workflow_dispatch with `fast`,
+- [x] deploy.yml (1155ea7): cron + workflow_dispatch,
       hold check, green gate, Claude release note (draft release,
       commit-list fallback), rehearsal, promote, watched production
       with guarded auto-rollback, publish, healthchecks ping.
