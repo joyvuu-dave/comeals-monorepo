@@ -34,4 +34,10 @@ RSpec.describe 'AssetCacheControl' do
     expect(response.content_type).to start_with('text/html')
     expect(response.headers['cache-control'].to_s).not_to include('immutable')
   end
+
+  it 'serves /service-worker.js with no-cache, so old browsers revalidate it' do
+    get '/service-worker.js'
+    expect(response).to have_http_status(:ok)
+    expect(response.headers['cache-control']).to eq('no-cache')
+  end
 end

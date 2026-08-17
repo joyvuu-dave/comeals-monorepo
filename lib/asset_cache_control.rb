@@ -15,6 +15,15 @@
 # longer exists, the SPA catch-all route answers it with the app page and
 # status 200. That response must stay uncached, or the browser would keep
 # serving HTML at that URL for a year.
+#
+# /service-worker.js is the opposite case, so it gets 'no-cache': its
+# name never changes, and it is the no-op worker that neutralizes the old
+# caching worker on returning users' browsers (see the comment in the
+# file itself). With no header, a browser may cache it by heuristic.
+# Modern browsers skip the HTTP cache when they check a service worker
+# script for updates, so this only matters for older ones — but the whole
+# point of that file is to reach exactly the browsers still holding old
+# state, so it must not rely on modern behavior.
 class AssetCacheControl
   HEADER = 'public, max-age=31536000, immutable'
 
@@ -29,6 +38,8 @@ class AssetCacheControl
        status == 200 &&
        !headers['content-type'].to_s.start_with?('text/html')
       headers['cache-control'] = HEADER
+    elsif env['PATH_INFO'] == '/service-worker.js' && status == 200
+      headers['cache-control'] = 'no-cache'
     end
 
     [status, headers, body]
