@@ -295,7 +295,9 @@ check_bundle_audit() {
   step "bundle audit"
 
   local output exit_code=0
-  output=$(bundle audit check --update 2>&1) || exit_code=$?
+  # bundle exec matters: with gems in vendor/bundle (CI's setup-ruby
+  # layout), plain `bundle audit` cannot find the audit command.
+  output=$(bundle exec bundle audit check --update 2>&1) || exit_code=$?
 
   if [ "$exit_code" -eq 0 ]; then
     pass "No vulnerable gems"

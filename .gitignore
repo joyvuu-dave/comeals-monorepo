@@ -7,6 +7,9 @@
 # Ignore bundler config.
 /.bundle
 
+# Gems installed into the tree (CI's setup-ruby uses ./vendor/bundle).
+/vendor/bundle
+
 # Ignore all logfiles and tempfiles.
 /log/*
 /tmp/*

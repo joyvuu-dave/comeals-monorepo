@@ -213,6 +213,10 @@ module.exports = [
       "test-results/**",
       "log/**",
       "tmp/**",
+      // Gems installed into the tree. CI's setup-ruby puts them in
+      // vendor/bundle, and gems ship their own browser JS (the
+      // 2026-08-17 nightly run failed on rack-mini-profiler's files).
+      "vendor/**",
     ],
   },
 ];

@@ -4,3 +4,9 @@
 # Value-position ERB happens to parse, but reformatting a template as if
 # it were plain YAML is wrong in principle, so skip them all.
 config/*.yml
+
+# Gems installed into the tree. CI's setup-ruby puts them in
+# vendor/bundle, and Prettier only skips gitignored paths — vendor
+# was in neither list, so the 2026-08-17 nightly run checked every
+# file inside the gems and failed.
+vendor/
