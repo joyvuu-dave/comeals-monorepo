@@ -10,7 +10,7 @@ namespace :reconciliations do
     r.unique_cooks.each do |cook|
       ReconciliationMailer.reconciliation_notify_email(cook, r).deliver_now
     rescue *MAIL_DELIVERY_ERRORS => e
-      Rails.logger.error("reconciliation_notify_email failed for #{cook.email}: #{e.class} - #{e.message}")
+      MailDeliveryFailure.report(e, mailer: 'reconciliation_notify_email', recipient: cook.email)
     end
 
     total_time = Time.current - start_time

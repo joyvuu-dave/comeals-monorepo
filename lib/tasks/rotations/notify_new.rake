@@ -28,7 +28,7 @@ namespace :rotations do
         sent += 1
       rescue *MAIL_DELIVERY_ERRORS => e
         failures += 1
-        Rails.logger.error("new_rotation_email failed for #{resident.email}: #{e.class} - #{e.message}")
+        MailDeliveryFailure.report(e, mailer: 'new_rotation_email', recipient: resident.email)
       end
 
       if failures.positive?

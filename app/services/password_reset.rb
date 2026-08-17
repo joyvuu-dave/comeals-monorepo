@@ -20,7 +20,7 @@ class PasswordReset
     ResidentMailer.password_reset_email(resident).deliver_now
     :sent
   rescue *MAIL_DELIVERY_ERRORS => e
-    Rails.logger.error("Password reset email failed for #{resident.email}: #{e.class} - #{e.message}")
+    MailDeliveryFailure.report(e, mailer: 'password_reset_email', recipient: resident.email)
     :mail_failed
   end
 end

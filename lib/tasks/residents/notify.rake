@@ -50,7 +50,7 @@ namespace :residents do
           sent += 1
         rescue *MAIL_DELIVERY_ERRORS => e
           failures += 1
-          Rails.logger.error("rotation_signup_email failed for #{resident.email}: #{e.class} - #{e.message}")
+          MailDeliveryFailure.report(e, mailer: 'rotation_signup_email', recipient: resident.email)
         end
       end
 

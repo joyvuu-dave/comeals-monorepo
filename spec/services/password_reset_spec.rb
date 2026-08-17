@@ -45,7 +45,17 @@ RSpec.describe PasswordReset do
         described_class.request(resident)
 
         expect(Rails.logger).to have_received(:error)
-          .with(/Password reset email failed.*Net::ReadTimeout/)
+          .with(/password_reset_email failed.*Net::ReadTimeout/)
+      end
+
+      it 'reports the failure through Rails.error, so Bugsnag alerts in production' do
+        allow(Rails.error).to receive(:report)
+
+        described_class.request(resident)
+
+        expect(Rails.error).to have_received(:report)
+          .with(instance_of(Net::ReadTimeout),
+                hash_including(handled: true, context: { mailer: 'password_reset_email' }))
       end
     end
 

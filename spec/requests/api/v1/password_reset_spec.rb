@@ -60,7 +60,7 @@ RSpec.describe 'POST /api/v1/residents/password-reset' do
 
       request_reset(email: 'sarah@example.com')
 
-      expect(Rails.logger).to have_received(:error).with(/Password reset email failed.*Net::ReadTimeout/)
+      expect(Rails.logger).to have_received(:error).with(/password_reset_email failed.*Net::ReadTimeout/)
     end
   end
 

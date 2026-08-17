@@ -8,7 +8,7 @@ namespace :reconciliations do
     begin
       ReconciliationMailer.common_house_collection_email.deliver_now
     rescue *MAIL_DELIVERY_ERRORS => e
-      Rails.logger.error("common_house_collection_email failed: #{e.class} - #{e.message}")
+      MailDeliveryFailure.report(e, mailer: 'common_house_collection_email')
     end
 
     total_time = Time.current - start_time
