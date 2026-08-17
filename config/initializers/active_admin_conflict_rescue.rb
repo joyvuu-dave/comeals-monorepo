@@ -47,6 +47,13 @@ Rails.application.config.to_prepare do
     # same but grow the list on each reload, so register once.
     unless rescue_handlers.any? { |klass, _| klass == 'ActiveRecord::TransactionRollbackError' }
       rescue_from ActiveRecord::TransactionRollbackError, with: :redirect_after_conflict
+
+      # LockWaitTimeout gets the same message because it is the same story
+      # from the person's chair: lock_timeout (config/database.yml) refused
+      # a 5-second wait for a row another writer holds — in admin that is
+      # an unlocked write waiting behind a running settlement. The
+      # transaction was aborted, so "nothing was saved" stays true.
+      rescue_from ActiveRecord::LockWaitTimeout, with: :redirect_after_conflict
     end
 
     private

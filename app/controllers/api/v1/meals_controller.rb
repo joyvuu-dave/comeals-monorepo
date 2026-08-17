@@ -373,7 +373,13 @@ module Api
             end
           end
         end
-      rescue ActiveRecord::TransactionRollbackError
+      rescue ActiveRecord::TransactionRollbackError, ActiveRecord::LockWaitTimeout
+        # LockWaitTimeout is here too: lock_timeout (config/database.yml)
+        # refused the wait for the meal row after 5 seconds — another
+        # writer, usually a running settlement, still holds it. Same story
+        # as a conflict, same answer: nothing was saved, try again. Not
+        # retried by RetryOnConflict: a lock held for 5 seconds is likely
+        # still held, and the retry delays are milliseconds.
         conflict_rejection
       end
 

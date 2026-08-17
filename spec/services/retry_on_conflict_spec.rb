@@ -74,6 +74,24 @@ RSpec.describe RetryOnConflict do
       expect(calls).to eq(1)
     end
 
+    # A lock wait refused by lock_timeout (config/database.yml) must not be
+    # retried here: the lock was held for the full 5 seconds, so it is
+    # likely still held, and these delays are milliseconds. The controllers
+    # rescue it and answer "try again" instead
+    # (Api::V1::MealsController#with_meal_lock).
+    it 'does not retry a lock wait timeout' do
+      calls = 0
+
+      expect do
+        described_class.call do
+          calls += 1
+          raise ActiveRecord::LockWaitTimeout, 'canceling statement due to lock timeout'
+        end
+      end.to raise_error(ActiveRecord::LockWaitTimeout)
+
+      expect(calls).to eq(1)
+    end
+
     # Two transactions that conflicted and then waited the same length of
     # time tend to conflict again, so the wait grows and carries jitter.
     it 'waits longer before each retry' do

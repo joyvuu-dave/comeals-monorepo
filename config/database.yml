@@ -53,8 +53,28 @@ default: &default
   # transient error in config/initializers/solid_cache.rb. Do not set this on
   # a deploy that does not have all three. See app/services/snapshot_read.rb
   # for the batch reads, which are stricter still.
+  # The two timeouts turn "stuck forever" into "fails loudly in seconds".
+  # A statement that runs 10 seconds on a 33 MB database is a bug, and a
+  # loud early failure is the correct response to a bug. A lock wait that
+  # lasts 5 seconds means another writer holds the row; the API and admin
+  # render ActiveRecord::LockWaitTimeout as "try again"
+  # (Api::V1::MealsController#with_meal_lock,
+  # config/initializers/active_admin_conflict_rescue.rb).
+  # RetryOnConflict does not retry either timeout — it retries only
+  # TransactionRollbackError — so a timeout is never paid for twice.
+  #
+  # Migrations are not governed by these values: strong_migrations sets its
+  # own per-migration timeouts (config/initializers/strong_migrations.rb).
+  # A rake task that proves it needs longer may raise its own limit with
+  # SET statement_timeout at its start — a visible per-task exception.
+  #
+  # config/initializers/verify_transaction_isolation.rb checks at boot that
+  # the isolation setting below actually reached the session, and
+  # spec/config/database_config_spec.rb pins this file's shape.
   variables:
     default_transaction_isolation: serializable
+    statement_timeout: 10s
+    lock_timeout: 5s
 
 development:
   <<: *default
@@ -120,6 +140,27 @@ test:
 #
 production:
   <<: *default
+
+  # CAUTION: this hash REPLACES the default one — YAML merge keys are
+  # shallow, so a `variables:` key here throws away everything the default
+  # block set. Every line from the default block must be repeated here, or
+  # production silently loses it. Losing `default_transaction_isolation`
+  # would be the worst regression this file can have, which is why
+  # config/initializers/verify_transaction_isolation.rb refuses to boot
+  # without it and spec/config/database_config_spec.rb pins this hash.
+  #
+  # idle_in_transaction_session_timeout is production-only: it kills a
+  # session that sits inside an open transaction doing nothing — in
+  # practice a forgotten `heroku run console`, which would otherwise block
+  # vacuum and the settlement triggers forever. It cannot go in the default
+  # block: the test suite's transactional fixtures legitimately idle inside
+  # a transaction between examples, and a debugger pause in development
+  # does the same.
+  variables:
+    default_transaction_isolation: serializable
+    statement_timeout: 10s
+    lock_timeout: 5s
+    idle_in_transaction_session_timeout: 5min
 <% if ENV['LOCAL_PRODUCTION'] %>
   # bin/prod runs the production environment on a laptop. It should use
   # the local development database, not try to reach the real one.

@@ -424,7 +424,18 @@ run_smoke() {
 check_health() {
   step "Health check"
 
-  local urls=("$APP_URL" "$APP_URL/api/v1/version")
+  # Every public hostname, not just the apex: config.hosts in production.rb
+  # serves only a fixed list, so a hostname missing from that list is an
+  # outage for that hostname — and this check is what catches it during the
+  # deploy instead of days later. Keep the two lists in step.
+  local urls=(
+    "$APP_URL"
+    "$APP_URL/api/v1/version"
+    "https://www.comeals.com"
+    "https://admin.comeals.com"
+    "https://api.comeals.com"
+    "https://comeals-monorepo-b68ce4e5c3d4.herokuapp.com"
+  )
   for url in "${urls[@]}"; do
     info "Curling $url ..."
 

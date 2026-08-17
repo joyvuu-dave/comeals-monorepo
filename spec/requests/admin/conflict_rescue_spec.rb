@@ -103,6 +103,22 @@ RSpec.describe 'Admin conflict rescue' do
     expect(flash[:alert]).to match(/nothing was saved/i)
   end
 
+  # A lock wait refused by lock_timeout (config/database.yml) is the same
+  # story from the person's chair — another writer had the row, in admin
+  # usually a running settlement behind the child-write trigger's FOR KEY
+  # SHARE. It is not a TransactionRollbackError, so it needs its own
+  # rescue_from, and this example is what notices if that line goes away.
+  it 'answers a lock wait timeout the same way' do
+    # rubocop:disable RSpec/AnyInstance
+    allow_any_instance_of(Unit).to receive(:save)
+      .and_raise(ActiveRecord::LockWaitTimeout, 'canceling statement due to lock timeout')
+    # rubocop:enable RSpec/AnyInstance
+
+    post '/units', params: { unit: { name: 'A-1', community_id: community.id } }
+
+    expect(flash[:alert]).to match(/nothing was saved/i)
+  end
+
   # The handler is registered from a to_prepare block, which runs again on
   # every reload in development. rescue_from appends without checking for a
   # duplicate, so without the guard in the initializer the list would grow on

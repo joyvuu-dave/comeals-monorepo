@@ -835,4 +835,33 @@ RSpec.describe 'Meals API' do
       expect(response).to have_http_status(:conflict)
     end
   end
+
+  # ---------------------------------------------------------------------------
+  # A write refused because the wait for the meal row hit lock_timeout
+  # (config/database.yml). From the person's chair this is the same story as
+  # a serialization conflict — another writer had the row — so it gets the
+  # same 409 and the same message, and RetryOnConflict must not retry it: a
+  # lock held for 5 seconds is likely still held, and the retry delays are
+  # milliseconds (spec/services/retry_on_conflict_spec.rb pins that).
+  # ---------------------------------------------------------------------------
+  describe 'a write refused because the meal lock wait timed out' do
+    let(:meal) { create(:meal, community: community) }
+
+    before do
+      allow_any_instance_of(Meal).to receive(:with_lock) # rubocop:disable RSpec/AnyInstance -- the refusal happens inside one request
+        .and_raise(ActiveRecord::LockWaitTimeout, 'canceling statement due to lock timeout')
+    end
+
+    it 'answers with 409 and writes nothing' do
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: {
+        token: token, late: false, vegetarian: false
+      }
+
+      expect(response).to have_http_status(:conflict)
+      expect(response.parsed_body['message']).to eq(
+        'Someone else was changing this meal at the same time. Nothing was saved. Try again.'
+      )
+      expect(MealResident.where(meal_id: meal.id, resident_id: resident.id)).not_to exist
+    end
+  end
 end

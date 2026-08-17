@@ -46,7 +46,43 @@ Rails.application.configure do
   # TLS, so the redirect to https would just break every request.
   config.force_ssl = ENV['LOCAL_PRODUCTION'].blank?
 
-  config.hosts.clear
+  # Only requests for these hostnames are served. Rails ships production with
+  # an empty list, and an empty list means no check at all. Heroku's router
+  # already routes by hostname, so this is a second layer, not the first —
+  # it protects against a router-level misconfiguration and a careless
+  # wildcard domain. The list must match `heroku domains` exactly: a
+  # hostname missing here is an outage for that hostname. bin/deploy's
+  # health check hits every public hostname after each deploy, so a mistake
+  # here fails the deploy instead of waiting for a person to notice.
+  if ENV['LOCAL_PRODUCTION'].present?
+    # bin/prod on a laptop serves localhost:3000 and admin.lvh.me:3000.
+    # A leading dot matches the domain and its subdomains.
+    config.hosts = ['localhost', '.lvh.me']
+  else
+    config.hosts = [
+      'comeals.com',
+      'www.comeals.com',
+      'admin.comeals.com',
+      'api.comeals.com',
+      'comeals-monorepo-b68ce4e5c3d4.herokuapp.com'
+    ]
+    # The staging app has its own herokuapp hostname; it sets EXTRA_HOSTS.
+    config.hosts += ENV['EXTRA_HOSTS'].split(',') if ENV['EXTRA_HOSTS'].present?
+  end
+
+  # Kill a request that runs longer than 15 seconds. With one Puma thread,
+  # a hung request stops the whole site, so a bounded loud failure beats an
+  # unbounded quiet one. The three timers fire in a deliberate order:
+  # Postgres cancels a stuck statement at 10s (config/database.yml) with a
+  # precise error; this frees the thread at 15s for anything not stuck in
+  # the database; Heroku's router gives up at 30s, which now never happens.
+  # statement_timeout is the only layer that stops server-side work — this
+  # one only frees the client thread. They are not redundant.
+  #
+  # term_on_timeout stays off on purpose: it kills the process, and this
+  # app has one dyno, so every timeout would be a short full outage and a
+  # repeating timeout would be a restart loop.
+  config.middleware.insert_before Rack::Sendfile, Rack::Timeout, service_timeout: 15
 
   # Use the lowest log level to ensure availability of diagnostic information
   # when problems arise.

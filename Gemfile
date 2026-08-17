@@ -38,6 +38,14 @@ gem 'jwt'
 # deliberately loose — only genuinely abusive traffic should trip them.
 gem 'rack-attack'
 
+# Request timeout. Puma runs one thread, so one hung request stops the whole
+# site. This gem raises inside a request after service_timeout seconds and
+# frees the thread. Loaded from 'base' so the gem's railtie does not insert
+# the middleware everywhere on its own; production.rb inserts it explicitly,
+# in production only, with the timeout chosen to fit under Heroku's 30s
+# router limit and over Postgres's 10s statement_timeout (config/database.yml).
+gem 'rack-timeout', require: 'rack/timeout/base'
+
 # Error tracking. Reports unhandled exceptions, and anything sent through
 # Rails.error, to the Bugsnag project. Silent unless BUGSNAG_API_KEY is set,
 # which is production only. See config/initializers/bugsnag.rb.
