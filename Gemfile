@@ -28,7 +28,7 @@ gem 'base64'
 gem 'bigdecimal'
 
 gem 'activeadmin', '~> 3.0'
-gem 'active_model_serializers', '~> 0.10'
+gem 'alba', '~> 3.11'
 gem 'audited'
 
 # Stateless authentication tokens (see app/services/jwt_auth.rb).

@@ -18,12 +18,12 @@ module Api
           rotations = Rotation.all
         end
 
-        render json: rotations
+        render json: RotationSerializer.new(rotations)
       end
 
       # GET /api/v1/rotations/:id
       def show
-        render json: @rotation, cook_ids: @rotation.cook_ids, serializer: RotationLogSerializer
+        render json: RotationLogSerializer.new(@rotation, params: { cook_ids: @rotation.cook_ids })
       end
 
       private

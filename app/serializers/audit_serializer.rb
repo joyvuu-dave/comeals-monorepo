@@ -1,20 +1,22 @@
 # frozen_string_literal: true
 
-class AuditSerializer < ActiveModel::Serializer
+class AuditSerializer
+  include Alba::Resource
+
   attributes :id,
              :user_name,
              :description,
              :display_time
 
-  def user_name
-    ResidentNameShortener.short(object.user&.name)
+  def user_name(audit)
+    ResidentNameShortener.short(audit.user&.name)
   end
 
-  def description
-    AuditDescription.describe(object)
+  def description(audit)
+    AuditDescription.describe(audit)
   end
 
-  def display_time
-    object.created_at
+  def display_time(audit)
+    audit.created_at
   end
 end

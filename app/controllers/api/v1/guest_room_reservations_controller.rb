@@ -16,7 +16,7 @@ module Api
                  GuestRoomReservation.includes({ resident: :unit }).all
                end
 
-        render json: grrs
+        render json: GuestRoomReservationSerializer.new(grrs)
       end
 
       # GET /api/v1/guest-room-reservations/:id
@@ -24,7 +24,7 @@ module Api
       # in the frontend store (DataStore.hosts) so open modals stay in sync
       # via Pusher without per-modal refetches. Don't inline the list here.
       def show
-        render json: { event: @grr }, adapter: nil
+        render json: { event: @grr }
       end
 
       # POST /api/v1/guest-room-reservations/create

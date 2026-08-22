@@ -16,7 +16,7 @@ module Api
                  CommonHouseReservation.includes({ resident: :unit }).all
                end
 
-        render json: chrs
+        render json: CommonHouseReservationSerializer.new(chrs)
       end
 
       # GET /api/v1/common-house-reservations/:id
@@ -24,7 +24,7 @@ module Api
       # cached in the frontend store (DataStore.hosts) so open modals stay
       # in sync via Pusher without per-modal refetches.
       def show
-        render json: { event: @chr }, adapter: nil
+        render json: { event: @chr }
       end
 
       # POST /api/v1/common-house-reservations

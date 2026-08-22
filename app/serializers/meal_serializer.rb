@@ -31,7 +31,11 @@
 #  fk_rails_...  (rotation_id => rotations.id)
 #
 
-class MealSerializer < ActiveModel::Serializer
+class MealSerializer
+  include Alba::Resource
+
+  CHIP_COLOR = '#444'
+
   attributes :id,
              :type,
              :title,
@@ -41,47 +45,47 @@ class MealSerializer < ActiveModel::Serializer
              :description,
              :color
 
-  def id
-    object.cache_key_with_version
+  def id(meal)
+    meal.cache_key_with_version
   end
 
-  def type
-    object.class.to_s
+  def type(meal)
+    meal.class.to_s
   end
 
-  def title
-    message = "Dinner\n#{object.attendees_count}"
+  def title(meal)
+    message = "Dinner\n#{meal.attendees_count}"
 
-    if Time.zone.today > object.date
+    if Time.zone.today > meal.date
       message << ' attended'
       return message
     end
 
-    message << ' attending' if Time.zone.today == object.date
+    message << ' attending' if Time.zone.today == meal.date
 
-    message << ' signed up' if Time.zone.today < object.date
+    message << ' signed up' if Time.zone.today < meal.date
 
-    if object.max.present?
-      count = object.max - object.attendees_count
+    if meal.max.present?
+      count = meal.max - meal.attendees_count
       message << "\n #{count} extra#{'s' unless count == 1}"
     end
 
     message
   end
 
-  def start
-    object.date + 1.minute
+  def start(meal)
+    meal.date + 1.minute
   end
 
-  def end
-    object.date + 1.minute
+  def end(meal)
+    meal.date + 1.minute
   end
 
-  def url
-    "/meals/#{object.id}/edit"
+  def url(meal)
+    "/meals/#{meal.id}/edit"
   end
 
-  def color
-    '#444'
+  def color(_meal)
+    CHIP_COLOR
   end
 end

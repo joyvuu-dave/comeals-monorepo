@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
-# Serializes a community's calendar month for the frontend.
+# Serializes a community's calendar month for the frontend. Build it with
+# `params: { month:, year:, start_date:, end_date:, month_int_array: }`.
 #
 # CACHING: The calendar response is cached by CommunitiesController#calendar
 # via Rails.cache.fetch. Any model whose data appears in this serializer
@@ -23,25 +24,50 @@
 #   Resident (birthday)        after_commit                    community.invalidate_calendar_cache
 #
 # The deploy script (bin/deploy) also flushes the entire cache on every deploy.
-class CalendarSerializer < ActiveModel::Serializer
+class CalendarSerializer
+  include Alba::Resource
+
   attributes :id,
              :month,
              :year
 
-  has_many :meals, serializer: MealSerializer
-  has_many :bills, serializer: BillSerializer
-  has_many :rotations, serializer: RotationSerializer
-  has_many :birthdays, serializer: ResidentBirthdaySerializer
-  has_many :common_house_reservations, serializer: CommonHouseReservationSerializer
-  has_many :guest_room_reservations, serializer: GuestRoomReservationSerializer
-  has_many :events, serializer: EventSerializer
-
-  def month
-    instance_options[:month]
+  # Each collection below is a query scoped to the weeks on screen, so it
+  # is an attribute block that runs the query and serializes the rows,
+  # not a `many` on a model association.
+  attribute :meals do |community|
+    MealSerializer.new(meals_in_range(community)).to_h
   end
 
-  def year
-    instance_options[:year]
+  attribute :bills do |community|
+    BillSerializer.new(bills_in_range(community)).to_h
+  end
+
+  attribute :rotations do |community|
+    RotationSerializer.new(rotations_in_range(community)).to_h
+  end
+
+  attribute :birthdays do |community|
+    ResidentBirthdaySerializer.new(birthdays_in_range(community)).to_h
+  end
+
+  attribute :common_house_reservations do |community|
+    CommonHouseReservationSerializer.new(common_house_reservations_in_range(community)).to_h
+  end
+
+  attribute :guest_room_reservations do |community|
+    GuestRoomReservationSerializer.new(guest_room_reservations_in_range(community)).to_h
+  end
+
+  attribute :events do |community|
+    EventSerializer.new(events_in_range(community)).to_h
+  end
+
+  def month(_community)
+    params.fetch(:month)
+  end
+
+  def year(_community)
+    params.fetch(:year)
   end
 
   # Every collection here is ordered deterministically. Without explicit ORDER
@@ -51,61 +77,71 @@ class CalendarSerializer < ActiveModel::Serializer
   # is cheap (PK B-tree) and gives the cache-miss recompute path a stable
   # fingerprint.
 
-  def meals
-    object.meals
-          .where(date: (instance_options[:start_date])..)
-          .where(date: ..(instance_options[:end_date]))
-          .order(:id)
-          .preload(:meal_residents, :guests)
+  def meals_in_range(community)
+    community.meals
+             .where(date: start_date..)
+             .where(date: ..end_date)
+             .order(:id)
+             .preload(:meal_residents, :guests)
   end
 
-  def bills
-    object.bills
-          .includes(:meal, { resident: :unit })
-          .joins(:meal)
-          .where(meals: { date: (instance_options[:start_date]).. })
-          .where(meals: { date: ..(instance_options[:end_date]) })
-          .order('bills.id')
+  def bills_in_range(community)
+    community.bills
+             .includes(:meal, { resident: :unit })
+             .joins(:meal)
+             .where(meals: { date: start_date.. })
+             .where(meals: { date: ..end_date })
+             .order('bills.id')
   end
 
-  def rotations
-    rotation_ids = meals.where.not(rotation_id: nil)
-                        .pluck(:rotation_id).uniq
+  def rotations_in_range(community)
+    rotation_ids = meals_in_range(community).where.not(rotation_id: nil)
+                                            .pluck(:rotation_id).uniq
     Rotation.where(id: rotation_ids).order(:id).preload(:meals).to_a
   end
 
-  def birthdays
-    object.residents.active
-          .where('extract(month from birthday) in (?)', instance_options[:month_int_array])
-          .order(:id)
+  def birthdays_in_range(community)
+    community.residents.active
+             .where('extract(month from birthday) in (?)', params.fetch(:month_int_array))
+             .order(:id)
   end
 
-  def common_house_reservations
-    object.common_house_reservations
-          .includes({ resident: :unit })
-          .where(start_date: (instance_options[:start_date])..)
-          .where(start_date: ..(instance_options[:end_date]))
-          .order(:id)
+  def common_house_reservations_in_range(community)
+    community.common_house_reservations
+             .includes({ resident: :unit })
+             .where(start_date: start_date..)
+             .where(start_date: ..end_date)
+             .order(:id)
   end
 
-  def guest_room_reservations
-    object.guest_room_reservations
-          .includes({ resident: :unit })
-          .where(date: (instance_options[:start_date])..)
-          .where(date: ..(instance_options[:end_date]))
-          .order(:id)
+  def guest_room_reservations_in_range(community)
+    community.guest_room_reservations
+             .includes({ resident: :unit })
+             .where(date: start_date..)
+             .where(date: ..end_date)
+             .order(:id)
   end
 
-  def events
-    object.events
-          .where(start_date: (instance_options[:start_date])..)
-          .where(start_date: ..(instance_options[:end_date]))
-          .or(object.events
-                    .where(end_date: (instance_options[:start_date])..)
-                    .where(end_date: ..(instance_options[:end_date])))
-          .or(object.events
-                    .where(start_date: ...(instance_options[:start_date]))
-                    .where('end_date > ?', instance_options[:end_date]))
-          .order(:id)
+  def events_in_range(community)
+    community.events
+             .where(start_date: start_date..)
+             .where(start_date: ..end_date)
+             .or(community.events
+                          .where(end_date: start_date..)
+                          .where(end_date: ..end_date))
+             .or(community.events
+                          .where(start_date: ...start_date)
+                          .where('end_date > ?', end_date))
+             .order(:id)
+  end
+
+  private
+
+  def start_date
+    params.fetch(:start_date)
+  end
+
+  def end_date
+    params.fetch(:end_date)
   end
 end

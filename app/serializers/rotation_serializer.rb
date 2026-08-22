@@ -1,26 +1,8 @@
 # frozen_string_literal: true
 
-# == Schema Information
-#
-# Table name: rotations
-#
-#  id                       :bigint           not null, primary key
-#  color                    :string           not null
-#  description              :string           default(""), not null
-#  new_rotation_notified_at :datetime
-#  place_value              :integer
-#  residents_notified       :boolean          default(FALSE), not null
-#  start_date               :date
-#  created_at               :datetime         not null
-#  updated_at               :datetime         not null
-#  community_id             :bigint           not null
-#
-# Foreign Keys
-#
-#  fk_rails_...  (community_id => communities.id)
-#
+class RotationSerializer
+  include Alba::Resource
 
-class RotationSerializer < ActiveModel::Serializer
   attributes :id,
              :type,
              :start,
@@ -29,37 +11,37 @@ class RotationSerializer < ActiveModel::Serializer
              :title,
              :url
 
-  def id
-    object.cache_key_with_version
+  def id(rotation)
+    rotation.cache_key_with_version
   end
 
-  def type
-    object.class.to_s
+  def type(rotation)
+    rotation.class.to_s
   end
 
-  def start
-    first_date = if object.meals.loaded?
-                   object.meals.min_by(&:date)&.date
+  def start(rotation)
+    first_date = if rotation.meals.loaded?
+                   rotation.meals.min_by(&:date)&.date
                  else
-                   object.meals.minimum(:date)
+                   rotation.meals.minimum(:date)
                  end
     first_date&.+(1.minute)
   end
 
-  def end
-    last_date = if object.meals.loaded?
-                  object.meals.max_by(&:date)&.date
+  def end(rotation)
+    last_date = if rotation.meals.loaded?
+                  rotation.meals.max_by(&:date)&.date
                 else
-                  object.meals.maximum(:date)
+                  rotation.meals.maximum(:date)
                 end
     last_date && (last_date + 1.day - 1.minute) # ReactBigCalendar date ranges are exclusive
   end
 
-  def title
-    "Rotation #{object.place_value}"
+  def title(rotation)
+    "Rotation #{rotation.place_value}"
   end
 
-  def url
-    "rotations/show/#{object.id}"
+  def url(rotation)
+    "rotations/show/#{rotation.id}"
   end
 end

@@ -11,8 +11,7 @@ RSpec.describe MealFormSerializer do
       active_resident = create(:resident, community: community, unit: unit, active: true, multiplier: 2)
       meal = create(:meal, community: community)
 
-      serializer = described_class.new(meal, scope: meal)
-      resident_ids = serializer.residents.pluck(:id)
+      resident_ids = described_class.new(meal).residents(meal).pluck(:id)
 
       expect(resident_ids).to include(active_resident.id)
     end
@@ -22,8 +21,7 @@ RSpec.describe MealFormSerializer do
                                                multiplier: 2)
       meal = create(:meal, community: community)
 
-      serializer = described_class.new(meal, scope: meal)
-      resident_ids = serializer.residents.pluck(:id)
+      resident_ids = described_class.new(meal).residents(meal).pluck(:id)
 
       expect(resident_ids).not_to include(inactive_nonattendee.id)
     end
@@ -38,8 +36,7 @@ RSpec.describe MealFormSerializer do
       # Resident is later deactivated (moved/died)
       resident.update!(active: false)
 
-      serializer = described_class.new(meal, scope: meal)
-      resident_ids = serializer.residents.pluck(:id)
+      resident_ids = described_class.new(meal).residents(meal).pluck(:id)
 
       expect(resident_ids).to include(resident.id)
     end
@@ -49,8 +46,7 @@ RSpec.describe MealFormSerializer do
       meal = create(:meal, community: community)
       create(:meal_resident, meal: meal, resident: resident, community: community)
 
-      serializer = described_class.new(meal, scope: meal)
-      resident_ids = serializer.residents.pluck(:id)
+      resident_ids = described_class.new(meal).residents(meal).pluck(:id)
 
       # Should appear exactly once, not duplicated by the OR
       expect(resident_ids.count(resident.id)).to eq(1)

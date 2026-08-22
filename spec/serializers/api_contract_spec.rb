@@ -35,17 +35,13 @@ RSpec.describe 'API contract (tests/fixtures/api_contract.json)', type: :seriali
   end
 
   describe 'GET /api/v1/meals/:meal_id/cooks' do
-    # Mirrors MealsController#show_cooks exactly: same serializer, same scope,
-    # same meal_residents_lookup instance option.
+    # Mirrors MealsController#show_cooks exactly: same serializer, same call.
     let(:meal_form) do
       create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('12.34'))
       create(:meal_resident, meal: meal, resident: resident, community: community)
       create(:guest, meal: meal, resident: resident)
 
-      lookup = meal.meal_residents.index_by(&:resident_id)
-      ActiveModelSerializers::SerializableResource.new(
-        meal, serializer: MealFormSerializer, scope: meal, meal_residents_lookup: lookup
-      ).as_json
+      MealFormSerializer.new(meal).to_h
     end
 
     it 'matches MealForm' do
@@ -74,9 +70,7 @@ RSpec.describe 'API contract (tests/fixtures/api_contract.json)', type: :seriali
   describe 'POST /api/v1/meals/:meal_id/residents/:resident_id' do
     it 'matches MealResident' do
       meal_resident = create(:meal_resident, meal: meal, resident: resident, community: community)
-      result = ActiveModelSerializers::SerializableResource.new(
-        meal_resident, serializer: MealResidentSerializer
-      ).as_json
+      result = MealResidentSerializer.new(meal_resident).to_h
 
       expect(keys_of(result)).to eq(contract.fetch('MealResident').sort)
     end
@@ -85,9 +79,7 @@ RSpec.describe 'API contract (tests/fixtures/api_contract.json)', type: :seriali
   describe 'POST /api/v1/meals/:meal_id/residents/:resident_id/guests' do
     it 'matches Guest' do
       guest = create(:guest, meal: meal, resident: resident)
-      result = ActiveModelSerializers::SerializableResource.new(
-        guest, serializer: GuestSerializer
-      ).as_json
+      result = GuestSerializer.new(guest).to_h
 
       expect(keys_of(result)).to eq(contract.fetch('Guest').sort)
     end

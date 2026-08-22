@@ -7,8 +7,8 @@ RSpec.describe 'Serializers', type: :serializer do
   let(:unit) { create(:unit, community: community) }
   let(:resident) { create(:resident, community: community, unit: unit) }
 
-  def serialize(object, serializer, options = {})
-    ActiveModelSerializers::SerializableResource.new(object, { serializer: serializer }.merge(options)).as_json
+  def serialize(object, serializer, params = {})
+    serializer.new(object, params: params).to_h
   end
 
   describe MealSerializer do
@@ -64,9 +64,10 @@ RSpec.describe 'Serializers', type: :serializer do
 
   describe MealFormSerializer::BillSerializer do
     # BigDecimal amounts must serialize as JSON strings, not floats.
-    # Floats lose precision (0.1 + 0.2 != 0.3). This test ensures
-    # Oj.optimize_rails preserves the string convention. If this test
-    # fails, financial data is being silently corrupted in transit.
+    # Floats lose precision (0.1 + 0.2 != 0.3). This test ensures the
+    # Oj Rails-mode encoder (Alba.backend in config/initializers/alba.rb)
+    # keeps the string convention. If this test fails, financial data is
+    # being silently corrupted in transit.
     # (Bill amounts are whole cents since issue #29, so the fixture is a
     # two-decimal value; the string-on-the-wire rule is what matters here.)
     it 'serializes BigDecimal amounts as strings, not floats' do
@@ -74,9 +75,7 @@ RSpec.describe 'Serializers', type: :serializer do
       bill = create(:bill, meal: meal, resident: resident, community: community,
                            amount: BigDecimal('50.12'))
 
-      json = ActiveModelSerializers::SerializableResource.new(
-        bill, serializer: described_class
-      ).to_json
+      json = described_class.new(bill).serialize
       parsed = JSON.parse(json)
 
       expect(parsed['amount']).to be_a(String)

@@ -17,7 +17,7 @@ RSpec.describe SolidCache::Store do
 
   subject(:cache) { build_solid_cache_store(namespace: "solid-cache-spec-#{SecureRandom.hex(4)}") }
 
-  # Shaped like what ActiveModelSerializers hands back: string keys, nested
+  # Shaped like what a serializer hands back: string keys, nested
   # arrays and hashes, and a BigDecimal, since money in this app is never a
   # Float (see CLAUDE.md).
   let(:serialized_payload) do

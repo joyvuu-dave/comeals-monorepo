@@ -18,14 +18,14 @@ module Api
                       .all
                 end
 
-        render json: bills
+        render json: BillSerializer.new(bills)
       end
 
       def show
         bill = Bill.find_by(id: params[:id])
         return not_found_api if bill.blank?
 
-        render json: bill
+        render json: BillSerializer.new(bill)
       end
     end
   end

@@ -61,9 +61,9 @@ RSpec.describe 'Calendar chip contrast', type: :serializer do
   end
 
   it 'every serializer chip color passes with its chosen text, as-is and dimmed' do
-    # These serializers hardcode their color, so it can be read without
-    # a real record. If one ever computes color from its object, build
-    # the record here instead of passing nil.
+    # Each of these serializers keeps its color in a constant, so it can
+    # be read without a real record. If one ever computes color from its
+    # record, build the record here and read the attribute instead.
     {
       EventSerializer => 'event',
       GuestRoomReservationSerializer => 'guest room',
@@ -71,7 +71,7 @@ RSpec.describe 'Calendar chip contrast', type: :serializer do
       ResidentBirthdaySerializer => 'birthday',
       MealSerializer => 'meal'
     }.each do |serializer, label|
-      expect_chip_to_pass(serializer.new(nil).color, label)
+      expect_chip_to_pass(serializer::CHIP_COLOR, label)
     end
   end
 end

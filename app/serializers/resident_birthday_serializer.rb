@@ -1,6 +1,10 @@
 # frozen_string_literal: true
 
-class ResidentBirthdaySerializer < ActiveModel::Serializer
+class ResidentBirthdaySerializer
+  include Alba::Resource
+
+  CHIP_COLOR = '#7335bc'
+
   attributes :id,
              :type,
              :title,
@@ -9,46 +13,49 @@ class ResidentBirthdaySerializer < ActiveModel::Serializer
              :end,
              :color
 
-  def id
-    object.cache_key_with_version
+  def id(resident)
+    resident.cache_key_with_version
   end
 
-  def type
+  def type(_resident)
     'Birthday'
   end
 
-  def title
-    if object.age < 22
-      "#{ResidentNameShortener.short(object.name)}'s #{object.age.ordinalize} B-day!"
+  def title(resident)
+    if resident.age < 22
+      "#{ResidentNameShortener.short(resident.name)}'s #{resident.age.ordinalize} B-day!"
     else
-      "#{ResidentNameShortener.short(object.name)}'s B-day!"
+      "#{ResidentNameShortener.short(resident.name)}'s B-day!"
     end
   end
 
-  def description
-    if object.age < 22
-      "#{ResidentNameShortener.short(object.name)}'s #{object.age.ordinalize} Birthday!"
+  def description(resident)
+    if resident.age < 22
+      "#{ResidentNameShortener.short(resident.name)}'s #{resident.age.ordinalize} Birthday!"
     else
-      "#{ResidentNameShortener.short(object.name)}'s Birthday!"
+      "#{ResidentNameShortener.short(resident.name)}'s Birthday!"
     end
   end
 
-  def start
+  def start(resident)
+    birthday_this_year(resident)
+  end
+
+  def end(resident)
+    birthday_this_year(resident)
+  end
+
+  def color(_resident)
+    CHIP_COLOR
+  end
+
+  private
+
+  def birthday_this_year(resident)
     year = Time.zone.today.year
-    Date.new(year, object.birthday.month, object.birthday.day)
+    Date.new(year, resident.birthday.month, resident.birthday.day)
   rescue ArgumentError
     # Feb 29 birthday in a non-leap year — display on Feb 28
     Date.new(year, 2, 28)
-  end
-
-  def end
-    year = Time.zone.today.year
-    Date.new(year, object.birthday.month, object.birthday.day)
-  rescue ArgumentError
-    Date.new(year, 2, 28)
-  end
-
-  def color
-    '#7335bc'
   end
 end

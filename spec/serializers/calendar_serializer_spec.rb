@@ -13,13 +13,12 @@ RSpec.describe CalendarSerializer, type: :serializer do
     {
       month: 4, year: 2026,
       start_date: start_date, end_date: end_date,
-      month_int_array: [4],
-      serializer: described_class
+      month_int_array: [4]
     }
   end
 
   def serialize
-    ActiveModelSerializers::SerializableResource.new(community, options).as_json
+    described_class.new(community, params: options).to_h
   end
 
   describe 'top-level attributes' do

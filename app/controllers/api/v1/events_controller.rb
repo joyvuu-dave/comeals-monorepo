@@ -19,12 +19,12 @@ module Api
                    Event.all
                  end
 
-        render json: events
+        render json: EventSerializer.new(events)
       end
 
       # GET /api/v1/events/:id
       def show
-        render json: @event, adapter: nil
+        render json: @event
       end
 
       # POST /api/v1/events/create

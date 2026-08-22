@@ -27,8 +27,8 @@ module Api
                       Time.zone.today.month
                     end
 
-        render json: Community.instance.residents.active.where('extract(month from birthday) = ?', month_int),
-               each_serializer: ResidentBirthdaySerializer
+        residents = Community.instance.residents.active.where('extract(month from birthday) = ?', month_int)
+        render json: ResidentBirthdaySerializer.new(residents)
       end
 
       # GET /api/v1/communities/:id/hosts
@@ -36,7 +36,7 @@ module Api
         hosts = Resident.adult.active.joins(:unit).order('units.name').pluck(
           'residents.id', 'residents.name', 'units.name'
         )
-        render json: hosts, adapter: nil
+        render json: hosts
       end
 
       # GET /api/v1/communities/:id/calendar/:date
@@ -61,13 +61,14 @@ module Api
         key = community.calendar_cache_key(year, month)
 
         result = Rails.cache.fetch(key, expires_in: 1.hour) do
-          ActiveModelSerializers::SerializableResource.new(
+          CalendarSerializer.new(
             community,
-            month: month, year: year,
-            start_date: start_date, end_date: end_date,
-            month_int_array: month_int_array,
-            serializer: CalendarSerializer
-          ).as_json
+            params: {
+              month: month, year: year,
+              start_date: start_date, end_date: end_date,
+              month_int_array: month_int_array
+            }
+          ).to_h
         end
 
         # stale? digests `result` into an ETag. When the client sends a matching

@@ -1,26 +1,33 @@
 # frozen_string_literal: true
 
-class RotationLogSerializer < ActiveModel::Serializer
-  attributes :id,
-             :description
+# The rotation page: one rotation, and every resident with a flag that
+# says whether they signed up to cook in it. Build it with
+# `params: { cook_ids: rotation.cook_ids }`.
+class RotationLogSerializer
+  include Alba::Resource
 
-  def id
-    object.place_value
-  end
+  class ResidentSerializer
+    include Alba::Resource
 
-  has_many :residents
-
-  class ResidentSerializer < ActiveModel::Serializer
     attributes :id,
                :display_name,
                :signed_up
 
-    def display_name
-      "#{object.unit.name} - #{object.name}"
+    def display_name(resident)
+      "#{resident.unit.name} - #{resident.name}"
     end
 
-    def signed_up
-      instance_options[:cook_ids].include?(object.id)
+    def signed_up(resident)
+      params.fetch(:cook_ids).include?(resident.id)
     end
+  end
+
+  attributes :id,
+             :description
+
+  many :residents, resource: ResidentSerializer
+
+  def id(rotation)
+    rotation.place_value
   end
 end

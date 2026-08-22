@@ -30,7 +30,7 @@ module Api
                   Meal.all
                 end
 
-        render json: meals
+        render json: MealSerializer.new(meals)
       end
 
       # GET /api/v1/meals/next
@@ -47,15 +47,14 @@ module Api
 
       # GET /api/v1/meals/:meal_id
       def show
-        render json: @meal
+        render json: MealSerializer.new(@meal)
       end
 
       # GET /api/v1/meals/:meal_id/history
       def history
         render json: {
           date: @meal.date,
-          items: ActiveModelSerializers::SerializableResource.new(@meal.total_audits,
-                                                                  each_serializer: AuditSerializer).as_json
+          items: AuditSerializer.new(@meal.total_audits).to_h
         }
       end
 
@@ -73,7 +72,7 @@ module Api
           meal_resident = @meal.meal_residents.find_or_initialize_by(resident_id: params[:resident_id])
           meal_resident.assign_attributes(late: params[:late], vegetarian: params[:vegetarian])
           if meal_resident.save
-            { json: meal_resident }
+            { json: MealResidentSerializer.new(meal_resident) }
           else
             { json: { message: meal_resident.errors.full_messages.join("\n") }, status: :bad_request }
           end
@@ -115,7 +114,7 @@ module Api
           # multiplier omitted intentionally — DB default of 2 applies (adult guest).
           guest = Guest.new(meal_id: @meal.id, resident_id: params[:resident_id], vegetarian: params[:vegetarian])
           if guest.save
-            { json: guest }
+            { json: GuestSerializer.new(guest) }
           else
             { json: { message: guest.errors.full_messages.join("\n") }, status: :bad_request }
           end
@@ -144,11 +143,9 @@ module Api
         cached_value = Rails.cache.read(key)
 
         if cached_value.nil?
-          # @meal.meal_residents is already loaded by set_meal's .includes()
-          lookup = @meal.meal_residents.index_by(&:resident_id)
-          result = ActiveModelSerializers::SerializableResource.new(@meal, serializer: MealFormSerializer,
-                                                                           scope: @meal,
-                                                                           meal_residents_lookup: lookup).as_json
+          # @meal.meal_residents is already loaded by set_meal's .includes(),
+          # so the serializer's attending lookup costs no query.
+          result = MealFormSerializer.new(@meal).to_h
           Rails.cache.write(key, result)
         else
           result = cached_value
