@@ -1,0 +1,19 @@
+# Comeals
+
+> A meal sign-up and cost-splitting app for one cohousing community. Residents sign up for shared dinners, volunteer to cook, and each meal's cost is split among the people who ate. This site is a private app for that community, not a public service. It has a JSON API, and a resident can use it from a script or an agent with their own login.
+
+The app at https://comeals.com is a React single-page app. Its pages hold no text to read; everything goes through the API at `/api/v1/`. There is also an admin site at https://admin.comeals.com that needs an admin login. It is a web app, not an API.
+
+## API
+
+- [API reference](https://comeals.com/api.md): how to sign in, every endpoint, the rules a meal enforces (closed, full, reconciled), and how the cost is split.
+
+## Source and design
+
+- [Source code](https://github.com/joyvuu-dave/comeals-monorepo): Rails API plus React app in one repository.
+- [Architecture decisions](https://github.com/joyvuu-dave/comeals-monorepo/tree/main/docs/adr): the records behind the money rules, locking, and admin access.
+- [CLAUDE.md](https://github.com/joyvuu-dave/comeals-monorepo/blob/main/CLAUDE.md): the project's rules in one file, including how money is handled.
+
+## Optional
+
+- [Community calendar feed](https://comeals.com/api/v1/communities/1/ical): every meal as an iCal feed. No login needed.
