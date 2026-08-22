@@ -124,6 +124,7 @@ SETTLEMENT (reconciliation): Rounded to cents using largest-remainder allocation
   - `rake ledger:verify` — run daily to check every settled balance against its source data. Records every run, pass or fail, in `ledger_check_runs`. See `docs/money-path-observability.md`.
   - `rake reconciliations:create` — manual trigger to settle all unreconciled meals
 - **Job monitoring:** scheduled tasks wrap their body in `Healthcheck.monitor` (`app/services/healthcheck.rb`), which pings healthchecks.io on success or failure. Pings are off unless `HEALTHCHECKS_PING_KEY` is set (production only). A job that stops running entirely triggers a "check is late" email from healthchecks.io.
+- **Site monitoring:** Better Stack (uptime.betterstack.com, team t586972) checks `https://comeals.com` and `https://comeals.com/api/v1/version` every 3 minutes from four regions, and alerts by email when a keyword is missing from the response (`<title>Comeals</title>`, `"version"`). The public status page is `https://status.comeals.com`. This replaced a GitHub Actions cron workflow (`site-up.yml`, removed 2026-08-22): GitHub delays and drops scheduled runs, so the "every 5 minutes" workflow actually ran every 20–100 minutes, and its healthchecks.io check fired false "late" alerts.
 
 ## Agent skills
 
