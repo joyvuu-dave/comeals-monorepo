@@ -112,6 +112,38 @@ RSpec.describe 'Events API' do
       expect(event.reload.title).to eq('Updated Title')
     end
 
+    # A field left out of the body keeps its stored value. description is
+    # NOT NULL in the database with no model validation, so before #69 a
+    # missing description reached the database as nil and returned a 500.
+    it 'keeps the stored description and title when the body leaves them out' do
+      event.update!(title: 'Work party', description: 'Bring gloves')
+
+      patch "/api/v1/events/#{event.id}/update", params: {
+        token: token,
+        start_year: 2026, start_month: 5, start_day: 1,
+        start_hours: 18, start_minutes: 0,
+        end_hours: 20, end_minutes: 0
+      }
+
+      expect(response).to have_http_status(:ok)
+      event.reload
+      expect(event.title).to eq('Work party')
+      expect(event.description).to eq('Bring gloves')
+      expect(event.start_date.hour).to eq(18)
+    end
+
+    it 'still refuses an empty title sent on purpose' do
+      patch "/api/v1/events/#{event.id}/update", params: {
+        token: token, title: '',
+        start_year: 2026, start_month: 5, start_day: 1,
+        start_hours: 18, start_minutes: 0,
+        end_hours: 20, end_minutes: 0
+      }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to include("Title can't be blank")
+    end
+
     it 'returns 400 for invalid date params' do
       patch "/api/v1/events/#{event.id}/update", params: {
         token: token, title: 'Updated Title',

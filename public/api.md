@@ -328,8 +328,7 @@ Create and update body:
   "end_hours": 12, "end_minutes": 30 }
 ```
 
-Send `title` and `description` on every update. Leaving `description`
-out of an update is a server error today, not a `400` (issue #69).
+On update, a field left out of the body keeps its stored value.
 
 An event is one day. With `"all_day": true` the hour fields are ignored.
 Without `all_day` on create, it is false; on update, the stored value
