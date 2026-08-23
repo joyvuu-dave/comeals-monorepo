@@ -23,7 +23,6 @@ Rails.application.routes.draw do
       get '/communities/:id/hosts', to: 'communities#hosts'
       get '/communities/:id/calendar/:date', to: 'communities#calendar'
       get '/meals/next', to: 'meals#next'
-      get '/meals/:meal_id', to: 'meals#show'
       get '/meals/:meal_id/history', to: 'meals#history'
       post '/meals/:meal_id/residents/:resident_id', to: 'meals#create_meal_resident'
       delete '/meals/:meal_id/residents/:resident_id', to: 'meals#destroy_meal_resident'

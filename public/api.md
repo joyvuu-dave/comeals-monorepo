@@ -111,9 +111,8 @@ There are two ways to read a meal, and they return different things:
 - `GET /meals/:meal_id/cooks` returns the **meal form**: who is signed
   up, who is cooking, the bills, and the meal's state. This is the
   endpoint to use when you want to know or change anything about a meal.
-- `GET /meals/:meal_id` and the calendar endpoint return
-  **calendar cards**: a title string, a start, an end, a color, and a
-  URL. They exist to draw the month view. They do not carry ids you can
+- The calendar endpoint returns **calendar cards**: a title string, a
+  start, an end, a color, and a URL. They exist to draw the month view. They do not carry ids you can
   write with (the `id` field is a cache key like `meals/42-2026...`, not
   the record id).
 
@@ -127,7 +126,6 @@ The record id is the number in the card's `url` field (`/meals/42/edit`
 | Method | Path                      | Returns                                                                                                                   |
 | ------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | `GET`  | `/meals/next`             | `{ "meal_id": 42 }` for the next meal on or after today. `400` with `{ "meal_id": null }` if there is none.               |
-| `GET`  | `/meals/:meal_id`         | One calendar card.                                                                                                        |
 | `GET`  | `/meals/:meal_id/history` | `{ "date": ..., "items": [...] }`. Each item is one change to the meal: `id`, `user_name`, `description`, `display_time`. |
 
 ### Read the meal form

@@ -66,25 +66,6 @@ RSpec.describe 'Meals API' do
   end
 
   # ---------------------------------------------------------------------------
-  # GET /api/v1/meals/:meal_id
-  # ---------------------------------------------------------------------------
-  describe 'GET /api/v1/meals/:meal_id' do
-    it 'returns the meal' do
-      meal = create(:meal, community: community)
-
-      get "/api/v1/meals/#{meal.id}", params: { token: token }
-
-      expect(response).to have_http_status(:ok)
-    end
-
-    it 'returns 404 for nonexistent meal' do
-      get '/api/v1/meals/999999', params: { token: token }
-
-      expect(response).to have_http_status(:not_found)
-    end
-  end
-
-  # ---------------------------------------------------------------------------
   # GET /api/v1/meals/:meal_id/history
   # ---------------------------------------------------------------------------
   describe 'GET /api/v1/meals/:meal_id/history' do
