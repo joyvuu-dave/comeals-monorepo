@@ -35,7 +35,6 @@ Rails.application.routes.draw do
       patch '/meals/:meal_id/max', to: 'meals#update_max'
       patch '/meals/:meal_id/bills', to: 'meals#update_bills'
       patch '/meals/:meal_id/closed', to: 'meals#update_closed'
-      get '/bills/:id', to: 'bills#show'
       get '/rotations/:id', to: 'rotations#show'
       get '/residents/:id/ical', to: 'residents#ical', as: :resident_ical
       get '/communities/:id/ical', to: 'communities#ical', as: :community_ical
