@@ -421,12 +421,9 @@ async function setupAuthenticatedPage(page, context, options = {}) {
 }
 
 module.exports = {
-  AUTH_COOKIES,
-  authenticateContext,
   stubPusher,
   disableIdleTimer,
   clearStorage,
-  throttleCpu,
   mockApi,
   setupAuthenticatedPage,
 };

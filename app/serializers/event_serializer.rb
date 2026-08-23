@@ -1,5 +1,27 @@
 # frozen_string_literal: true
 
+# == Schema Information
+#
+# Table name: events
+#
+#  id           :bigint           not null, primary key
+#  allday       :boolean          default(FALSE), not null
+#  description  :string           default(""), not null
+#  end_date     :datetime
+#  start_date   :datetime         not null
+#  title        :string           not null
+#  created_at   :datetime         not null
+#  updated_at   :datetime         not null
+#  community_id :bigint           not null
+#
+# Indexes
+#
+#  index_events_on_start_date  (start_date)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (community_id => communities.id)
+#
 class EventSerializer
   include Alba::Resource
 

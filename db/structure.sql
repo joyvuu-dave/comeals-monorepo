@@ -1398,13 +1398,6 @@ CREATE UNIQUE INDEX index_admin_users_on_reset_password_token ON public.admin_us
 
 
 --
--- Name: index_bills_on_meal_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_bills_on_meal_id ON public.bills USING btree (meal_id);
-
-
---
 -- Name: index_bills_on_meal_id_and_resident_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1531,13 +1524,6 @@ CREATE UNIQUE INDEX index_meal_charges_one_debit_per_attendee ON public.meal_cha
 
 
 --
--- Name: index_meal_residents_on_meal_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_meal_residents_on_meal_id ON public.meal_residents USING btree (meal_id);
-
-
---
 -- Name: index_meal_residents_on_meal_id_and_resident_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1580,13 +1566,6 @@ CREATE UNIQUE INDEX index_recon_balances_on_recon_id_and_resident_id ON public.r
 
 
 --
--- Name: index_reconciliation_balances_on_reconciliation_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_reconciliation_balances_on_reconciliation_id ON public.reconciliation_balances USING btree (reconciliation_id);
-
-
---
 -- Name: index_reconciliation_balances_on_resident_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1601,10 +1580,10 @@ CREATE UNIQUE INDEX index_resident_balances_on_resident_id ON public.resident_ba
 
 
 --
--- Name: index_residents_on_email; Type: INDEX; Schema: public; Owner: -
+-- Name: index_residents_on_lower_email; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE UNIQUE INDEX index_residents_on_email ON public.residents USING btree (email);
+CREATE UNIQUE INDEX index_residents_on_lower_email ON public.residents USING btree (lower((email)::text));
 
 
 --
@@ -1949,6 +1928,7 @@ ALTER TABLE ONLY public.bills
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260823120000'),
 ('20260816160000'),
 ('20260816150000'),
 ('20260816140000'),

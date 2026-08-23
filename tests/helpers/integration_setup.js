@@ -118,12 +118,9 @@ async function setupAuthenticatedPage(page, context) {
 
 module.exports = {
   FAKE_TODAY,
-  FAKE_NOW,
   loadAuthInfo,
-  authenticateContext,
   stubPusher,
   disableIdleTimer,
   clearStorage,
-  freezeClock,
   setupAuthenticatedPage,
 };

@@ -13,9 +13,8 @@
 #
 # Indexes
 #
-#  index_recon_balances_on_recon_id_and_resident_id    (reconciliation_id,resident_id) UNIQUE
-#  index_reconciliation_balances_on_reconciliation_id  (reconciliation_id)
-#  index_reconciliation_balances_on_resident_id        (resident_id)
+#  index_recon_balances_on_recon_id_and_resident_id  (reconciliation_id,resident_id) UNIQUE
+#  index_reconciliation_balances_on_resident_id      (resident_id)
 #
 # Foreign Keys
 #

@@ -24,7 +24,7 @@
 #
 # Indexes
 #
-#  index_residents_on_email                 (email) UNIQUE
+#  index_residents_on_lower_email           (lower((email)::text)) UNIQUE
 #  index_residents_on_lower_name            (lower((name)::text)) UNIQUE
 #  index_residents_on_reset_password_token  (reset_password_token) UNIQUE
 #  index_residents_on_unit_id               (unit_id)
@@ -162,6 +162,26 @@ RSpec.describe Resident do
       resident.email = 'john.smith@example.com'
 
       expect(resident).to be_valid
+    end
+  end
+
+  describe 'email uniqueness' do
+    let(:other_unit) { create(:unit, community: community, name: 'B7') }
+
+    it 'treats emails as the same regardless of case, matching the database index' do
+      create(:resident, community: community, unit: other_unit, email: 'john@example.com')
+      resident = build(:resident, community: community, unit: unit, email: 'John@Example.com')
+
+      expect(resident).not_to be_valid
+      expect(resident.errors[:email]).to include('has already been taken')
+    end
+
+    it 'refuses a duplicate email at the database even when validations are skipped' do
+      create(:resident, community: community, unit: other_unit, email: 'john@example.com')
+      resident = create(:resident, community: community, unit: unit, email: 'jane@example.com')
+
+      expect { resident.update_column(:email, 'John@Example.com') }
+        .to raise_error(ActiveRecord::RecordNotUnique)
     end
   end
 
