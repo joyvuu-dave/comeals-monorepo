@@ -10,7 +10,7 @@ module Api
       WHOLE_CENTS_AMOUNT = /\A\d{1,4}(\.\d{1,2})?\z/
 
       before_action :authenticate
-      before_action :set_meal, except: %i[index next]
+      before_action :set_meal, except: [:next]
       before_action :reject_if_reconciled, only: %i[
         create_meal_resident destroy_meal_resident update_meal_resident
         create_guest destroy_guest
@@ -19,19 +19,7 @@ module Api
       before_action :verify_resident_exists, only: %i[create_meal_resident create_guest]
       before_action :set_guest, only: [:destroy_guest]
       before_action :set_meal_resident, only: %i[destroy_meal_resident update_meal_resident]
-      after_action :trigger_pusher, except: %i[index next show history show_cooks]
-
-      # GET /api/v1/meals
-      def index
-        meals = if params[:start].present? && params[:end].present?
-                  Meal.where(date: (params[:start])..)
-                      .where(date: ..(params[:end]))
-                else
-                  Meal.all
-                end
-
-        render json: MealSerializer.new(meals)
-      end
+      after_action :trigger_pusher, except: %i[next show history show_cooks]
 
       # GET /api/v1/meals/next
       def next

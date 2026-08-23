@@ -8,39 +8,6 @@ RSpec.describe 'Common House Reservations API' do
   let(:resident) { create(:resident, community: community, unit: unit) }
   let(:token) { resident.keys.first.token }
 
-  describe 'GET /api/v1/common-house-reservations' do
-    it 'returns reservations for the community' do
-      create(:common_house_reservation, community: community, resident: resident)
-
-      get '/api/v1/common-house-reservations', params: { token: token }
-
-      expect(response).to have_http_status(:ok)
-      expect(response.parsed_body.length).to eq(1)
-    end
-
-    it 'filters by date range' do
-      create(:common_house_reservation, community: community, resident: resident,
-                                        start_date: Time.zone.local(2025, 1, 15, 14, 0),
-                                        end_date: Time.zone.local(2025, 1, 15, 17, 0))
-      create(:common_house_reservation, community: community, resident: resident,
-                                        start_date: Time.zone.local(2026, 4, 10, 14, 0),
-                                        end_date: Time.zone.local(2026, 4, 10, 17, 0))
-
-      get '/api/v1/common-house-reservations', params: {
-        token: token,
-        start: '2026-04-01', end: '2026-04-30'
-      }
-
-      expect(response).to have_http_status(:ok)
-      expect(response.parsed_body.length).to eq(1)
-    end
-
-    it 'returns 401 without a token' do
-      get '/api/v1/common-house-reservations', params: { community_id: community.id }
-      expect(response).to have_http_status(:unauthorized)
-    end
-  end
-
   describe 'GET /api/v1/common-house-reservations/:id' do
     it 'returns the reservation event' do
       chr = create(:common_house_reservation, community: community, resident: resident)

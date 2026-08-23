@@ -8,47 +8,6 @@ RSpec.describe 'Bills API' do
   let(:resident) { create(:resident, community: community, unit: unit) }
   let(:token) { resident.keys.first.token }
 
-  # ---------------------------------------------------------------------------
-  # GET /api/v1/bills
-  # ---------------------------------------------------------------------------
-  describe 'GET /api/v1/bills' do
-    let(:cook) { create(:resident, community: community, unit: unit) }
-    let(:meal1) { create(:meal, community: community, date: Date.new(2025, 3, 1)) }
-    let(:meal2) { create(:meal, community: community, date: Date.new(2025, 6, 1)) }
-    let!(:bill1) do # rubocop:disable RSpec/LetSetup -- creates data needed by index endpoint
-      create(:bill, meal: meal1, resident: cook, community: community, amount: BigDecimal('30'))
-    end
-    let!(:bill2) do # rubocop:disable RSpec/LetSetup -- creates data needed by index endpoint
-      create(:bill, meal: meal2, resident: cook, community: community, amount: BigDecimal('50'))
-    end
-
-    it 'returns all bills for the community' do
-      get '/api/v1/bills', params: { token: token }
-
-      expect(response).to have_http_status(:ok)
-      body = response.parsed_body
-      expect(body.length).to eq(2)
-    end
-
-    it 'filters bills by date range' do
-      get '/api/v1/bills', params: {
-        token: token,
-        start: '2025-05-01',
-        end: '2025-07-01'
-      }
-
-      expect(response).to have_http_status(:ok)
-      body = response.parsed_body
-      expect(body.length).to eq(1)
-    end
-
-    it 'returns 401 without a token' do
-      get '/api/v1/bills', params: { community_id: community.id }
-
-      expect(response).to have_http_status(:unauthorized)
-    end
-  end
-
   describe 'GET /api/v1/bills/:id' do
     it 'returns the bill' do
       cook = create(:resident, community: community, unit: unit)

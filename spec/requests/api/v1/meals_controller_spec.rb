@@ -9,42 +9,6 @@ RSpec.describe 'Meals API' do
   let(:token) { resident.keys.first.token }
 
   # ---------------------------------------------------------------------------
-  # GET /api/v1/meals
-  # ---------------------------------------------------------------------------
-  describe 'GET /api/v1/meals' do
-    it 'returns meals for the community' do
-      create(:meal, community: community)
-
-      get '/api/v1/meals', params: { token: token }
-
-      expect(response).to have_http_status(:ok)
-      body = response.parsed_body
-      expect(body.length).to eq(1)
-    end
-
-    it 'filters by date range when start and end are provided' do
-      create(:meal, community: community, date: Date.new(2025, 1, 1))
-      create(:meal, community: community, date: Date.new(2025, 6, 1))
-
-      get '/api/v1/meals', params: {
-        token: token,
-        start: '2025-05-01',
-        end: '2025-07-01'
-      }
-
-      expect(response).to have_http_status(:ok)
-      body = response.parsed_body
-      expect(body.length).to eq(1)
-    end
-
-    it 'returns 401 without a token' do
-      get '/api/v1/meals', params: { community_id: community.id }
-
-      expect(response).to have_http_status(:unauthorized)
-    end
-  end
-
-  # ---------------------------------------------------------------------------
   # CSRF safety: API controllers inherit from ActionController::API, which does
   # not include CSRF protection. These tests verify that write operations work
   # with token auth alone — no CSRF token required. This is the safety net for

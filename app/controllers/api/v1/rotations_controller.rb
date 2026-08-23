@@ -6,21 +6,6 @@ module Api
       before_action :authenticate
       before_action :set_resource, only: [:show]
 
-      # GET /api/v1/rotations
-      def index
-        if params[:start].present? && params[:end].present?
-          rotation_ids = Meal.where(date: (params[:start])..)
-                             .where(date: ..(params[:end]))
-                             .where.not(rotation_id: nil)
-                             .pluck(:rotation_id).uniq
-          rotations = Rotation.find(rotation_ids)
-        else
-          rotations = Rotation.all
-        end
-
-        render json: RotationSerializer.new(rotations)
-      end
-
       # GET /api/v1/rotations/:id
       def show
         render json: RotationLogSerializer.new(@rotation, params: { cook_ids: @rotation.cook_ids })

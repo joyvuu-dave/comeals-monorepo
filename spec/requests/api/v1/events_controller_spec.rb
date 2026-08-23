@@ -8,37 +8,6 @@ RSpec.describe 'Events API' do
   let(:resident) { create(:resident, community: community, unit: unit) }
   let(:token) { resident.keys.first.token }
 
-  describe 'GET /api/v1/events' do
-    it 'returns events for the community' do
-      create(:event, community: community)
-
-      get '/api/v1/events', params: { token: token }
-
-      expect(response).to have_http_status(:ok)
-      expect(response.parsed_body.length).to eq(1)
-    end
-
-    it 'filters by date range' do
-      create(:event, community: community,
-                     start_date: Time.zone.local(2025, 1, 15, 18, 0), end_date: Time.zone.local(2025, 1, 15, 20, 0))
-      create(:event, community: community,
-                     start_date: Time.zone.local(2026, 4, 10, 18, 0), end_date: Time.zone.local(2026, 4, 10, 20, 0))
-
-      get '/api/v1/events', params: {
-        token: token,
-        start: '2026-04-01', end: '2026-04-30'
-      }
-
-      expect(response).to have_http_status(:ok)
-      expect(response.parsed_body.length).to eq(1)
-    end
-
-    it 'returns 401 without a token' do
-      get '/api/v1/events', params: { community_id: community.id }
-      expect(response).to have_http_status(:unauthorized)
-    end
-  end
-
   describe 'GET /api/v1/events/:id' do
     it 'returns the event' do
       event = create(:event, community: community)

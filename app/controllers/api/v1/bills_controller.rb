@@ -5,22 +5,6 @@ module Api
     class BillsController < ApiController
       before_action :authenticate
 
-      # GET /bills?start=12345&end=12345
-      def index
-        bills = if params[:start].present? && params[:end].present?
-                  Bill.includes(:meal, { resident: :unit })
-                      .joins(:meal)
-                      .where(meals: { date: (params[:start]).. })
-                      .where(meals: { date: ..(params[:end]) })
-                else
-                  Bill.includes(:meal, { resident: :unit })
-                      .joins(:meal)
-                      .all
-                end
-
-        render json: BillSerializer.new(bills)
-      end
-
       def show
         bill = Bill.find_by(id: params[:id])
         return not_found_api if bill.blank?

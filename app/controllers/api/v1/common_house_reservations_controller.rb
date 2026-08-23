@@ -6,19 +6,6 @@ module Api
       before_action :authenticate
       before_action :set_resource, only: %i[show update destroy]
 
-      # GET /api/v1/common-house-reservations?start_date=123
-      def index
-        chrs = if params[:start].present? && params[:end].present?
-                 CommonHouseReservation.includes({ resident: :unit })
-                                       .where(start_date: (params[:start])..)
-                                       .where(start_date: ..(params[:end]))
-               else
-                 CommonHouseReservation.includes({ resident: :unit }).all
-               end
-
-        render json: CommonHouseReservationSerializer.new(chrs)
-      end
-
       # GET /api/v1/common-house-reservations/:id
       # Residents are served separately by CommunitiesController#hosts and
       # cached in the frontend store (DataStore.hosts) so open modals stay

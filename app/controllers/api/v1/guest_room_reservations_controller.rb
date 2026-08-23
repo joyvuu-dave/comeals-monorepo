@@ -6,19 +6,6 @@ module Api
       before_action :authenticate
       before_action :set_resource, only: %i[show update destroy]
 
-      # GET /api/v1/guest-room-reservations
-      def index
-        grrs = if params[:start].present? && params[:end].present?
-                 GuestRoomReservation.includes({ resident: :unit })
-                                     .where(date: (params[:start])..)
-                                     .where(date: ..(params[:end]))
-               else
-                 GuestRoomReservation.includes({ resident: :unit }).all
-               end
-
-        render json: GuestRoomReservationSerializer.new(grrs)
-      end
-
       # GET /api/v1/guest-room-reservations/:id
       # Hosts are served separately by CommunitiesController#hosts and cached
       # in the frontend store (DataStore.hosts) so open modals stay in sync

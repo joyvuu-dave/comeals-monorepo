@@ -6,22 +6,6 @@ module Api
       before_action :authenticate
       before_action :set_resource, only: %i[show update destroy]
 
-      # GET /api/v1/events
-      def index
-        events = if params[:start].present? && params[:end].present?
-                   Event.where(start_date: (params[:start])..)
-                        .where(start_date: ..(params[:end]))
-                        .or(Event.where(end_date: (params[:start])..)
-                                 .where(end_date: ..(params[:end])))
-                        .or(Event.where(start_date: ...(params[:start]))
-                                 .where('end_date > ?', params[:end]))
-                 else
-                   Event.all
-                 end
-
-        render json: EventSerializer.new(events)
-      end
-
       # GET /api/v1/events/:id
       def show
         render json: @event
