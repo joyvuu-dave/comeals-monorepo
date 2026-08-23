@@ -16,8 +16,11 @@ Worth writing down so nobody rebuilds it.
   `request_uuid`.
 - **Correlating one request's changes.** `audits.request_uuid` groups every row
   change made by a single request.
-- **Settled data cannot change through normal paths.** The three triggers, the
-  model concerns, and `Reconciliation#reject_update` / `#reject_destroy`.
+- **Settled data cannot change through normal paths.** The seven protect and
+  reject triggers in `db/structure.sql` (settled meals, bills, guests,
+  attendance, settled balances, meal charges, and ledger check runs), the
+  model concerns, and the `AppendOnly` concern
+  (`app/models/concerns/append_only.rb`) that `Reconciliation` includes.
 - **Settled balances sum to zero.** `assert_balanced_input!` and
   `assert_candidates_cover_pennies!` in `Reconciliation`, and since
   `20260731120000` a deferred constraint trigger that makes PostgreSQL check
@@ -164,9 +167,10 @@ the rule bans.
 
 ### C. What inputs produced this, and when?
 
-The general form of the `as_of_reconciliation_id` watermark already agreed for
-`resident_balances` (see ADR 0005 follow-up work): every derived row should be
-able to describe its own inputs.
+One idea, not decided: give `resident_balances` an `as_of_reconciliation_id`
+column that says which settlement the row was computed after. The general
+form of that idea is that every derived row should be able to describe its
+own inputs.
 
 Beyond the watermark, the useful addition is a `source_digest` — a hash over the
 input set: sorted meal ids, bill ids with amounts, attendance ids with

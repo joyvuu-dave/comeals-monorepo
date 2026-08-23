@@ -57,7 +57,9 @@ write.
 
 Bills, attendance, guests, meals, reconciliations and balances are the ledger.
 Writing any of them changes what somebody owes or is owed, so it needs a
-superuser. Residents, units, events, rotations and both kinds of reservation
+superuser. (`LEDGER_MODELS` in `app/models/superuser_adapter.rb` also lists
+`MealCharge` and `LedgerCheckRun`, added later: a meal charge is a settled
+amount, and a ledger check run is the record of checking one.) Residents, units, events, rotations and both kinds of reservation
 are ordinary community admin, open to any admin.
 
 This matches how a co-housing group actually divides labor: some committee
@@ -164,8 +166,12 @@ It now calls `authorize!(action_name.to_sym, MealResident)` in a
 deliberate: the decision is per resource, and building the row first would run
 model callbacks before deciding whether the actor may write at all.
 
-The other three custom controller actions (`unit.rb`, `meal.rb`,
-`resident.rb`) are safe — each calls `destroy!`, which goes through `resource`.
+The other custom controller actions are safe too (checked 2026-08-23). The
+custom `destroy` in `unit.rb`, `meal.rb`, `resident.rb` and `rotation.rb` calls
+`destroy!`, which goes through `resource`. The `send_password_reset` member
+action in `resident.rb` loads the row through `resource`. The hand-written
+`index` and the `schedule_preview` collection action in `community.rb` load
+nothing through ActiveAdmin, so each calls `authorize!` itself.
 
 The rule for anything added later: **if an admin action does not call
 `resource` or `build_resource`, it is unauthorized until it calls `authorize!`

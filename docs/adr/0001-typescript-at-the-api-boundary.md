@@ -9,7 +9,7 @@ The frontend is ~48 `.js` / `.jsx` files: a React 19 SPA with MobX stores, talki
 
 A full TypeScript rewrite is tempting but mostly cosmetic for this codebase:
 
-- The financial logic — the part where types prevent disasters — lives in Rails with `BigDecimal` and DECIMAL(12, 8) columns. JS never does the arithmetic.
+- The financial logic — the part where types prevent disasters — lives in Rails with `BigDecimal` and DECIMAL columns (DECIMAL(12, 8) for one input, DECIMAL(16, 8) for a sum). JS never does the arithmetic.
 - MobX `types.model(...)` stores type cleanly only with non-trivial scaffolding. A sloppy migration leaks `any` and produces worse-than-JS code.
 - One developer. The cost is weeks; the realized safety is small.
 
@@ -23,7 +23,7 @@ Concretely:
 
 1. Add a permissive `tsconfig.json` at the repo root with `allowJs: true` and `checkJs: false`. Vite already understands `.ts`/`.tsx` with no plugin.
 2. Create `app/frontend/src/types/api.ts` as the single source of truth for serializer response shapes. Each interface mirrors one `app/serializers/*.rb` file. Update them in lockstep when serializers change.
-3. Create `app/frontend/src/helpers/api.ts`: thin typed wrappers around `axios`, one function per endpoint, returning `Promise<T>` where `T` comes from `types/api.ts`. Replace bare `axios({ method, url, data })` call sites incrementally.
+3. Create `app/frontend/src/helpers/api.ts`: thin typed wrappers around `axios`, one function per endpoint, returning `Promise<AxiosResponse<T>>` where `T` comes from `types/api.ts`. (Not `Promise<T>`: the existing call sites check `response.status`, so keeping the response wrapper lets them move over one at a time. `api.ts` says this at the top.) Replace bare `axios({ method, url, data })` call sites incrementally.
 4. Money on the wire is typed as `MoneyString` (a branded `string`), never `number`. Rails serializes `BigDecimal` as a JSON string; treating it as a number on the JS side is a bug class we want the compiler to forbid.
 5. New frontend code is written in `.ts` / `.tsx` by default. Existing `.js` / `.jsx` files are converted opportunistically when touched, never as a migration project.
 

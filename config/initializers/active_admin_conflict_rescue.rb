@@ -22,7 +22,10 @@
 # message, and the person taps again.
 #
 # Nothing is written when a transaction is refused, and nothing outside the
-# database happens either. No admin path sends mail. Meal, Bill, MealResident
+# database happens either. The one admin path that sends mail, the "Send
+# password reset email" button (app/admin/resident.rb), goes through
+# PasswordReset.request, which saves the token and commits before it mails,
+# so a conflict raises before any email. Meal, Bill, MealResident
 # and Guest send their Pusher event from an after_action in
 # Api::V1::MealsController, so admin never sends one. Event, Rotation,
 # CommonHouseReservation and GuestRoomReservation send theirs from

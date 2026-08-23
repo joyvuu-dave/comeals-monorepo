@@ -174,7 +174,7 @@ in the migration, instead of on every run.
 ## Loose end, separate from this work
 
 Meal start times are also hard-coded by weekday: 18:00 Sundays, 19:00
-otherwise (`meal.rb:143`, `app/services/meal_ical_feed.rb`). The grid
+otherwise (`meal.rb:141`, `app/services/meal_ical_feed.rb`). The grid
 gives a natural home for that later — a time per cell or per column.
 Ship day-of-week configuration first; do not fold times into it.
 

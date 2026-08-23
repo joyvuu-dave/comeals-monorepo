@@ -108,6 +108,8 @@ request specs cover these actions and none of them changed.
 
 `with_meal_lock` now calls `RetryOnConflict.call` around `@meal.with_lock`, and
 rescues `ActiveRecord::TransactionRollbackError` into `conflict_rejection`.
+(Since 2026-08-16 it rescues `ActiveRecord::LockWaitTimeout` the same way: the
+`lock_timeout` in `config/database.yml` turns a long wait into that error.)
 
 `RetryOnConflict` goes outside `with_lock`, not inside. It refuses to retry
 when a transaction is already open, so inside the lock it would do nothing at
@@ -204,9 +206,13 @@ The person retries by submitting the form again. That is fine in admin, where
 one person is using it at a time, and it is what the shared screen already
 does.
 
-Two things were checked before trusting that message, and both hold. No admin
-path sends mail — every `deliver_now` is in a rake task, except the password
-reset in `Api::V1::ResidentsController`. And no Pusher event survives a
+Two things were checked before trusting that message, and both hold. No mail
+goes out before a commit. Every `deliver_now` is in a rake task, except the
+password reset in `PasswordReset.request` (`app/services/password_reset.rb`).
+Since 2026-08-11 admin calls that one too, from the "Send password reset
+email" button in `app/admin/resident.rb`. That is still safe: `PasswordReset`
+saves the token first, and a conflict raises inside that save, before the
+mail line runs. And no Pusher event survives a
 rollback — meal, bill, attendance and guest events come from an `after_action`
 in `Api::V1::MealsController`, so admin sends none, and the calendar models use
 `after_commit`, which does not run on a rollback.
@@ -218,8 +224,9 @@ Devise's sign-in controllers inherit from Devise, not ActiveAdmin, so a
 conflict while signing in is still a 500. Left alone: it is a trackable write
 on a table the money code never touches.
 
-Nine new examples in `spec/requests/admin/conflict_rescue_spec.rb`. Eight of
-them fail if the initializer is deleted — checked by deleting it. The ninth
+Nine new examples in `spec/requests/admin/conflict_rescue_spec.rb` (ten since
+2026-08-16, when a lock-wait-timeout example was added). Eight of the original
+nine fail if the initializer is deleted — checked by deleting it. The ninth
 checks that ActiveAdmin still memoizes the row, so if a future version stops,
 the reason for having no retry is visible and worth revisiting.
 
@@ -241,7 +248,12 @@ above.
 
 The `variables:` block moved from `test:` to `default:` in
 `config/database.yml`, so development, test and production all run the same
-way.
+way. (Since 2026-08-16 `production:` has its own `variables:` block again. It
+repeats every line of the default block, because a YAML merge is shallow and a
+second `variables:` key replaces the first one, and it adds
+`idle_in_transaction_session_timeout: 5min`, which the test suite and a
+development debugger could not live with. `spec/config/database_config_spec.rb`
+pins the production block.)
 
 One thing worth checking, because the whole step is a no-op if it is wrong:
 Heroku sets `DATABASE_URL`, and Rails merges that into the config from this
@@ -345,8 +357,11 @@ know where the conflict is.
 
 ## Still open
 
-- Is the role-level isolation setting still there after Heroku rotates
-  credentials? Unknown. This is why we set it in `database.yml` instead.
+- ~~Is the role-level isolation setting still there after Heroku rotates
+  credentials?~~ Resolved 2026-08-23: the question no longer applies. The
+  role-level setting was reset to `read committed` on 2026-07-29 (see "Is the
+  production role back to READ COMMITTED?" above). The only setting that
+  matters is the one in `database.yml`.
 - Whether the shared screen needs a "Try again" button when a signup runs out
   of retries. It shows the message and reverts the change today. Decide from
   what Bugsnag reports now that production is at SERIALIZABLE.

@@ -63,7 +63,7 @@ automatically the moment you create the Community below.
 Then start the server and sign in on the admin subdomain — `/login` on
 `admin.lvh.me:3000` in development, `admin.<your-domain>` in production. On
 your first sign-in, the dashboard sends you to the form for creating the
-Community. Pick a name, a slug, and a **timezone** (the dropdown covers Hawaii
+Community. Pick a name and a **timezone** (the dropdown covers Hawaii
 through Auckland). Saving that form finishes setup and links your admin user
 to the new community.
 

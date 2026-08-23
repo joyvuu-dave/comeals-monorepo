@@ -38,13 +38,21 @@ rake tasks, every model callback, and the cache configuration.
 A retried transaction is only safe if nothing irreversible happened before the
 commit that failed. In this codebase nothing does:
 
-- Every Pusher trigger is `after_commit` — `unit.rb:38`, `resident.rb:85`,
-  `meal.rb:154`, and the three reservation models. They fire only on success.
-- Every cache invalidation is `after_commit` too. `community.rb:270` writes
+- Every Pusher trigger in a model is `after_commit` — `unit.rb:39`,
+  `resident.rb:114`, and the three reservation models. They fire only on
+  success. `Meal#trigger_pusher` is not a callback at all: an `after_action`
+  in `meals_controller.rb:22` calls it after the transaction is over (see
+  decision 5). (Corrected 2026-08-23: an earlier version of this line said
+  `meal.rb` had an `after_commit` hook. It never did.)
+- Every cache invalidation is `after_commit` too. `community.rb:283` writes
   this down as a contract, not as a habit.
 - Both `deliver_now` calls are outside any transaction:
   `residents_controller.rb:74` runs after the save returns, and the
   reconciliation mailers run after `Reconciliation.create!` returns.
+  (Amended 2026-08-23: the password-reset `deliver_now` moved to
+  `PasswordReset.request` in `app/services/password_reset.rb` on 2026-08-11,
+  and the admin "Send password reset email" button calls it too. It still runs
+  after `resident.save` returns, so the point holds.)
 
 So a retried transaction in this app re-runs pure database work. This is the
 single biggest reason the change is cheaper here than it would be elsewhere,
@@ -52,7 +60,7 @@ and it is a consequence of the `after_commit` discipline that already exists.
 
 ### There is one choke point, and it already opens a transaction
 
-`with_meal_lock` (`meals_controller.rb:339`) is an explicit transaction that
+`with_meal_lock` (`meals_controller.rb:351`) is an explicit transaction that
 every mutating meal action goes through — nine call sites. That is the whole
 API write surface for the ledger. A retry placed inside it covers the API.
 
@@ -66,7 +74,7 @@ is the bulk of the diff.
 
 ### ActiveAdmin has no such choke point
 
-Its twelve resources open their transactions inside `resource` and
+Its thirteen resources open their transactions inside `resource` and
 `build_resource`, where application code cannot reach them. Admin needs a
 different retry boundary than the API does. **It turned out to need no retry at
 all** — those same methods memoize the row they read, so any retry in the same
@@ -111,11 +119,11 @@ The two real failures:
 
 1. `spec/services/snapshot_read_spec.rb:60` asserts the isolation level inside
    the fixture transaction is `read committed`. Working as designed; update it
-   when the flip ships.
-2. `spec/db/settlement_race_spec.rb:308`, two settlements racing each other.
-   The losing settlement never reaches its compare-and-swap. SSI cancels it
-   earlier, where `settlement_balances` reads the bills
-   (`reconciliation.rb:146`): _"could not serialize access due to read/write
+   when the flip ships. _Done: the spec (now line 27) asserts `serializable`._
+2. `spec/db/settlement_race_spec.rb:306` (then line 308), "lets exactly one of
+   two racing settlements survive". The losing settlement never reaches its
+   compare-and-swap. SSI cancels it earlier, where `settlement_balances` reads
+   the bills (`reconciliation.rb:139`): _"could not serialize access due to read/write
    dependencies... Canceled on identification as a pivot."_ The money outcome is
    unchanged — the loser rolls back whole — but the mechanism is different, so
    the assertion no longer describes what happens.
@@ -183,8 +191,9 @@ change cheap into the thing that breaks.
 
 Retries: a small fixed count, three to five, with jitter. Out of retries
 returns a 409 with a message the shared screen can show. That last part is a UX
-decision, not only a technical one — see `docs/` on the shared-screen
-principles before choosing the wording.
+decision, not only a technical one. The rule that matters: the message says
+what happened in plain words, and the safe action (tap again) stays under the
+tap.
 
 ### 4. Rendering moves out of the lock
 
@@ -198,7 +207,7 @@ action, and it must be done before any retry is switched on.
 
 **Changed 2026-07-30. Shipped the same day.** This decision first said admin
 would get an `around_action` on `ActiveAdmin::BaseController` that re-runs the
-action and resets `response_body`. Reading the twelve resources before writing
+action and resets `response_body`. Reading the (then) twelve resources before writing
 it showed that cannot work.
 
 ActiveAdmin memoizes the row it read into `@meal`, `@bill` and so on, inside
@@ -223,8 +232,11 @@ and the person taps again.
 
 Two of the three original reasons for the `around_action` were checked and hold,
 and they are what makes the message truthful rather than what makes a retry
-safe. No admin path sends mail: every `deliver_now` in the app is in a rake
-task, except the password reset in `Api::V1::ResidentsController`. And no
+safe. No mail goes out before a commit: every `deliver_now` in the app is in a
+rake task, except the password reset in `PasswordReset.request`. (Amended
+2026-08-23: since 2026-08-11 admin calls `PasswordReset.request` from the
+"Send password reset email" button in `app/admin/resident.rb`. It saves the
+token before it mails, so a conflict raises before any email.) And no
 Pusher event survives a rollback: Meal, Bill, MealResident and Guest send
 theirs from an `after_action` in `Api::V1::MealsController`, so admin sends
 none at all, while Event, Rotation, CommonHouseReservation and
@@ -259,7 +271,9 @@ retry. All three modes must be set together — `DEFERRABLE` has no effect
 except on a `SERIALIZABLE READ ONLY` transaction.
 
 One timing change to expect after the global switch: today nothing else runs at
-`SERIALIZABLE`, so the snapshot is granted at once. Afterwards this block waits
+`SERIALIZABLE`, so the snapshot is granted at once. (Amended 2026-08-23: "today"
+here means before 2026-08-02. Since then every session runs at `SERIALIZABLE`,
+so the wait described next is the current behavior.) Afterwards this block waits
 for in-flight writers instead of racing them. For a nightly batch job that is
 the behavior we want, but it is a change, and it is the kind that shows up as a
 job that suddenly takes longer rather than as an error.
@@ -348,9 +362,14 @@ is needed by the specs before it is needed by the application.
    is the reason decision 1 relies on `database.yml` rather than the role.
 2. ~~Does solid_cache surface a serialization failure as a raised error or a
    cache miss?~~ Answered 2026-07-29: it raises. See decision 7.
-3. What does the shared screen show when a signup runs out of retries? It
-   should not be a raw error, and the safe action should stay under the tap.
-   Still open, and it is a UX decision rather than a technical one.
+3. ~~What does the shared screen show when a signup runs out of retries?~~
+   Answered (marked 2026-08-23). The API returns 409 with "Someone else was
+   changing this meal at the same time. Nothing was saved. Try again."
+   (`conflict_rejection` in `meals_controller.rb`). The store reverts the
+   toggle it just made (`app/frontend/src/stores/resident.js`) and
+   `handleAxiosError` (`app/frontend/src/helpers/handle_axios_error.js`) shows
+   the message as a toast. The safe action, tapping again, stays under the
+   tap.
 
 ## What has shipped so far
 

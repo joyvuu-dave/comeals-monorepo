@@ -85,8 +85,9 @@ themselves. Roughly 30–40 new tests, all doubled across both engines.
 
 ### 5. Ratchets and known gaps — DONE (712985b)
 
-- Vitest coverage thresholds pinned at today's numbers (84% statements,
-  77% branches) so they can only rise.
+- Vitest coverage thresholds pinned so they can only rise. Today
+  (2026-08-23) `vitest.config.mjs` holds 85% statements, 77% branches, 86%
+  functions, 88% lines.
 - Tests for `data_store_hosts.js` — 6% covered, and it is the in-flight /
   stale-response cache feeding the reservation forms.
 
@@ -95,7 +96,10 @@ themselves. Roughly 30–40 new tests, all doubled across both engines.
 A small Playwright script `bin/deploy` runs against the live site after
 switching over: log in, open a meal, open the calendar on a DST month.
 Catches the class of bug where the code is fine but the deploy is not
-(env vars, asset serving, the things no local test sees).
+(env vars, asset serving, the things no local test sees). One gap:
+`bin/smoke` only logs in when `SMOKE_EMAIL` and `SMOKE_PASSWORD` are set, and
+production does not set them yet, so the logged-in checks are skipped there
+(issue #68, open).
 
 ### 7. Mock fixtures generated from Rails — DONE (286544a)
 

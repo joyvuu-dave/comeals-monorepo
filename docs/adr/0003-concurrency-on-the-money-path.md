@@ -55,6 +55,8 @@ Not from Puma. From out-of-band processes:
 - **`billing:recalculate`** runs on Heroku Scheduler at 03:00 UTC. It **cannot
   corrupt the ledger.** It reads under `REPEATABLE READ` and writes only
   `resident_balances`, a derived cache the next daily run rebuilds.
+  _Amended 2026-08-23: it now reads through `SnapshotRead`, which opens the
+  transaction `SERIALIZABLE READ ONLY DEFERRABLE`. See ADR 0005, decision 6._
 - **`reconciliations:create`** is the one task that writes the ledger, and it
   is **not scheduled**. `lib/clock_schedule.rb` lists it under "Manual tasks."
   It runs when a human types `heroku run rake reconciliations:create`.
@@ -71,7 +73,7 @@ This was verified, not assumed. It is correct and should not be re-audited:
   on the meal row; `Reconciliation#assign_meals`' `update_all` takes
   `FOR NO KEY UPDATE` on the same row. Those two conflict, so request and
   settlement serialize in **both** orders, and the loser sees `reconciled?` on
-  a fresh reload and returns a 400. All 10 mutating meal actions go through it.
+  a fresh reload and returns a 400. All 9 mutating meal actions go through it.
 - **Compare-and-swap in `assign_meals`** raises if a rival settlement claimed a
   plucked meal, rolling the whole settlement back.
 - **Balances are derived, never stored** as source of truth, and there are no
@@ -300,6 +302,9 @@ reads. They all block, and are all refused.)
 
 - A test finds a race the pessimistic locks do not cover — then reconsider
   `SERIALIZABLE` application-wide, with retry.
+  _Amended 2026-08-23: done. Since 2026-08-02 every session runs at
+  `SERIALIZABLE` (the `variables:` block in `config/database.yml`) and
+  `RetryOnConflict` retries the API's meal writes. See ADR 0005._
 - A real throughput problem appears. Then the thread/worker conversation is
   worth having, and connection-pool math comes with it: pool ≥ threads plus
   background threads, per dyno, under the Postgres tier's connection cap.
