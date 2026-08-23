@@ -50,4 +50,21 @@ RSpec.describe 'llms.txt and the API reference' do
 
     expect(missing).to be_empty, "api.md does not mention: #{missing.map { |v, p| "#{v} #{p}" }.join(', ')}"
   end
+
+  it 'documents no route that does not exist' do
+    routes = Rails.application.routes.routes.filter_map do |route|
+      path = route.path.spec.to_s.delete_suffix('(.:format)')
+      next unless path.start_with?('/api/v1/')
+
+      [route.verb, path.delete_prefix('/api/v1')]
+    end
+
+    # Every table row or code-block line that names a verb and a path.
+    documented = reference.scan(/\|\s*`(GET|POST|PATCH|DELETE)`\s*\|\s*`([^`?]+)/) +
+                 reference.scan(/^(GET|POST|PATCH|DELETE) (\S+)$/)
+
+    stale = documented.uniq.reject { |verb, path| routes.include?([verb, path]) }
+
+    expect(stale).to be_empty, "api.md names routes that do not exist: #{stale.map { |v, p| "#{v} #{p}" }.join(', ')}"
+  end
 end

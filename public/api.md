@@ -111,7 +111,7 @@ There are two ways to read a meal, and they return different things:
 - `GET /meals/:meal_id/cooks` returns the **meal form**: who is signed
   up, who is cooking, the bills, and the meal's state. This is the
   endpoint to use when you want to know or change anything about a meal.
-- `GET /meals`, `GET /meals/:meal_id`, and the calendar endpoint return
+- `GET /meals/:meal_id` and the calendar endpoint return
   **calendar cards**: a title string, a start, an end, a color, and a
   URL. They exist to draw the month view. They do not carry ids you can
   write with (the `id` field is a cache key like `meals/42-2026...`, not
@@ -124,12 +124,11 @@ The record id is the number in the card's `url` field (`/meals/42/edit`
 
 ### Find a meal
 
-| Method | Path                                     | Returns                                                                                                                   |
-| ------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `GET`  | `/meals/next`                            | `{ "meal_id": 42 }` for the next meal on or after today. `400` with `{ "meal_id": null }` if there is none.               |
-| `GET`  | `/meals?start=YYYY-MM-DD&end=YYYY-MM-DD` | Calendar cards for meals in that range. Without `start` and `end`, every meal.                                            |
-| `GET`  | `/meals/:meal_id`                        | One calendar card.                                                                                                        |
-| `GET`  | `/meals/:meal_id/history`                | `{ "date": ..., "items": [...] }`. Each item is one change to the meal: `id`, `user_name`, `description`, `display_time`. |
+| Method | Path                      | Returns                                                                                                                   |
+| ------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/meals/next`             | `{ "meal_id": 42 }` for the next meal on or after today. `400` with `{ "meal_id": null }` if there is none.               |
+| `GET`  | `/meals/:meal_id`         | One calendar card.                                                                                                        |
+| `GET`  | `/meals/:meal_id/history` | `{ "date": ..., "items": [...] }`. Each item is one change to the meal: `id`, `user_name`, `description`, `display_time`. |
 
 ### Read the meal form
 
@@ -290,33 +289,26 @@ The response carries an `ETag`. Send it back as `If-None-Match` to get
 A rotation is a cooking schedule: a set of residents who share the
 cooking for a run of meals.
 
-| Method | Path                                         | Returns                                                                                                                                                                                |
-| ------ | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET`  | `/rotations?start=YYYY-MM-DD&end=YYYY-MM-DD` | Calendar cards for rotations with a meal in that range. Without the range, every rotation.                                                                                             |
-| `GET`  | `/rotations/:id`                             | `{ "id": <place_value>, "description": ..., "residents": [ { "id", "display_name", "signed_up" } ] }`. `signed_up` is true for members who have a bill on one of the rotation's meals. |
+| Method | Path             | Returns                                                                                                                                                                                |
+| ------ | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/rotations/:id` | `{ "id": <place_value>, "description": ..., "residents": [ { "id", "display_name", "signed_up" } ] }`. `signed_up` is true for members who have a bill on one of the rotation's meals. |
 
 ## Bills as records
 
-| Method | Path                                     | Returns                                          |
-| ------ | ---------------------------------------- | ------------------------------------------------ |
-| `GET`  | `/bills?start=YYYY-MM-DD&end=YYYY-MM-DD` | Calendar cards for bills on meals in that range. |
-| `GET`  | `/bills/:id`                             | One calendar card.                               |
-
-To read or write a bill's amount, use the meal form and
-`PATCH /meals/:meal_id/bills`.
+There is no endpoint that reads a bill on its own. To read or write a
+bill's amount, use the meal form and `PATCH /meals/:meal_id/bills`.
 
 ## Events
 
 An event is a note on the calendar with a title, a start, and either an
 end or the `all_day` flag.
 
-| Method   | Path                                      | Returns                                                                                   |
-| -------- | ----------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `GET`    | `/events?start=YYYY-MM-DD&end=YYYY-MM-DD` | Calendar cards for events that touch the range.                                           |
-| `GET`    | `/events/:id`                             | The record: `id`, `title`, `description`, `start_date`, `end_date`, `allday`, timestamps. |
-| `POST`   | `/events`                                 | Creates. Body below.                                                                      |
-| `PATCH`  | `/events/:id/update`                      | Updates. Same body.                                                                       |
-| `DELETE` | `/events/:id/delete`                      | Deletes.                                                                                  |
+| Method   | Path                 | Returns                                                                                   |
+| -------- | -------------------- | ----------------------------------------------------------------------------------------- |
+| `GET`    | `/events/:id`        | The record: `id`, `title`, `description`, `start_date`, `end_date`, `allday`, timestamps. |
+| `POST`   | `/events`            | Creates. Body below.                                                                      |
+| `PATCH`  | `/events/:id/update` | Updates. Same body.                                                                       |
+| `DELETE` | `/events/:id/delete` | Deletes.                                                                                  |
 
 Create and update body:
 
@@ -339,13 +331,12 @@ stays. End must be after start. A date that does not exist returns
 
 One reservation per day. `resident_id` is the host.
 
-| Method   | Path                                                       | Returns                                              |
-| -------- | ---------------------------------------------------------- | ---------------------------------------------------- |
-| `GET`    | `/guest-room-reservations?start=YYYY-MM-DD&end=YYYY-MM-DD` | Calendar cards.                                      |
-| `GET`    | `/guest-room-reservations/:id`                             | `{ "event": { "id", "resident_id", "date", ... } }`. |
-| `POST`   | `/guest-room-reservations`                                 | Body `{ "resident_id": 12, "date": "2026-09-05" }`.  |
-| `PATCH`  | `/guest-room-reservations/:id/update`                      | Same body.                                           |
-| `DELETE` | `/guest-room-reservations/:id/delete`                      | Deletes.                                             |
+| Method   | Path                                  | Returns                                              |
+| -------- | ------------------------------------- | ---------------------------------------------------- |
+| `GET`    | `/guest-room-reservations/:id`        | `{ "event": { "id", "resident_id", "date", ... } }`. |
+| `POST`   | `/guest-room-reservations`            | Body `{ "resident_id": 12, "date": "2026-09-05" }`.  |
+| `PATCH`  | `/guest-room-reservations/:id/update` | Same body.                                           |
+| `DELETE` | `/guest-room-reservations/:id/delete` | Deletes.                                             |
 
 A day that is already taken returns `400`.
 
@@ -354,13 +345,12 @@ A day that is already taken returns `400`.
 A block of time in the common house on one day. `resident_id` is who
 booked it. `title` is optional.
 
-| Method   | Path                                                         | Returns                                                                         |
-| -------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| `GET`    | `/common-house-reservations?start=YYYY-MM-DD&end=YYYY-MM-DD` | Calendar cards.                                                                 |
-| `GET`    | `/common-house-reservations/:id`                             | `{ "event": { "id", "resident_id", "title", "start_date", "end_date", ... } }`. |
-| `POST`   | `/common-house-reservations`                                 | Body below.                                                                     |
-| `PATCH`  | `/common-house-reservations/:id/update`                      | Same body.                                                                      |
-| `DELETE` | `/common-house-reservations/:id/delete`                      | Deletes.                                                                        |
+| Method   | Path                                    | Returns                                                                         |
+| -------- | --------------------------------------- | ------------------------------------------------------------------------------- |
+| `GET`    | `/common-house-reservations/:id`        | `{ "event": { "id", "resident_id", "title", "start_date", "end_date", ... } }`. |
+| `POST`   | `/common-house-reservations`            | Body below.                                                                     |
+| `PATCH`  | `/common-house-reservations/:id/update` | Same body.                                                                      |
+| `DELETE` | `/common-house-reservations/:id/delete` | Deletes.                                                                        |
 
 Body:
 
@@ -400,4 +390,7 @@ needed. `version` is the Heroku release number.
   needs an admin login and is not an API.
 - No endpoint lists residents on its own. The meal form and `/hosts`
   are the two lists.
+- No endpoint lists meals, bills, rotations, events, or reservations by
+  date range. The calendar endpoint is the one list, one month at a
+  time.
 - Nothing is paginated. The lists are small.
