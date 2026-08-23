@@ -9,7 +9,8 @@ vi.mock("pusher-js", () => import("../mocks/pusher.js"));
 
 vi.mock("idb-keyval", () => import("../mocks/idb_keyval.js"));
 
-vi.mock("uuid", () => import("../mocks/uuid.js"));
+import { stubRandomUUID } from "../mocks/uuid.js";
+stubRandomUUID();
 
 import { unprotect, isAlive } from "mobx-state-tree";
 import { createDataStore } from "../helpers/create_data_store.js";

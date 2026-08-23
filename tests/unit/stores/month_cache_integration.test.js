@@ -34,7 +34,8 @@ vi.mock("idb-keyval", () => {
   };
 });
 
-vi.mock("uuid", () => import("../mocks/uuid.js"));
+import { stubRandomUUID } from "../mocks/uuid.js";
+stubRandomUUID();
 
 let DataStore;
 let monthCache;

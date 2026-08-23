@@ -11,7 +11,8 @@ vi.mock("pusher-js", () => import("../mocks/pusher.js"));
 
 vi.mock("idb-keyval", () => import("../mocks/idb_keyval.js"));
 
-vi.mock("uuid", () => import("../mocks/uuid.js"));
+import { stubRandomUUID } from "../mocks/uuid.js";
+stubRandomUUID();
 
 import { unprotect } from "mobx-state-tree";
 import { runInAction } from "mobx";

@@ -5,7 +5,7 @@ set -euo pipefail
 # minified hashed assets in public/, the SPA index served by
 # FallbackController, and Rails in the real production environment —
 # eager loading, no code reloading, caching on, no dev-only middleware
-# (no mini-profiler, no better_errors). Use this to test performance.
+# (no mini-profiler, no web-console). Use this to test performance.
 #
 # LOCAL_PRODUCTION covers the three things a laptop cannot do:
 #   - no TLS, so force_ssl is off (config/environments/production.rb)

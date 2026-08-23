@@ -22,9 +22,8 @@ gem 'pg', '~> 1.5'
 gem 'puma', '~> 8.0'
 gem 'sassc-rails'
 
-# Stdlib libraries that became ordinary gems in Ruby 3.4+. Only the two we
-# call directly are pinned; the rest arrive as dependencies of other gems.
-gem 'base64'
+# A stdlib library that became an ordinary gem in Ruby 3.4+. Pinned because
+# the app calls it directly; the rest arrive as dependencies of other gems.
 gem 'bigdecimal'
 
 gem 'activeadmin', '~> 3.0'
@@ -74,7 +73,6 @@ gem 'bootsnap', require: false
 group :development, :test do
   gem 'brakeman', require: false
   gem 'bundler-audit', require: false
-  gem 'byebug', platforms: %i[ruby mri windows]
   gem 'dotenv-rails'
   gem 'factory_bot_rails'
   gem 'faker'
@@ -93,8 +91,6 @@ end
 
 group :development do
   gem 'annotaterb'
-  gem 'better_errors'
-  gem 'binding_of_caller'
   gem 'bullet'
   gem 'foreman'
   gem 'rack-mini-profiler'

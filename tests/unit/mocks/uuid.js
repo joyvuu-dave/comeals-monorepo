@@ -1,7 +1,7 @@
-// The shared uuid mock: deterministic ids. Use it with the redirect
-// form:
+// Deterministic ids in place of crypto.randomUUID(). Use it with:
 //
-//   vi.mock("uuid", () => import("../mocks/uuid.js"));
+//   import { stubRandomUUID } from "../mocks/uuid.js";
+//   stubRandomUUID();
 //
 // The counter runs for the life of the test file (vitest isolates
 // modules per file), so ids are "test-uuid-1", "test-uuid-2", ... in
@@ -10,4 +10,8 @@ import { vi } from "vitest";
 
 let counter = 0;
 
-export const v4 = vi.fn(() => "test-uuid-" + ++counter);
+export function stubRandomUUID() {
+  vi.spyOn(crypto, "randomUUID").mockImplementation(
+    () => "test-uuid-" + ++counter,
+  );
+}

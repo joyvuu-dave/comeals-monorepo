@@ -4,7 +4,8 @@ vi.mock("axios", () => import("../mocks/axios.js"));
 vi.mock("js-cookie", () => import("../mocks/js_cookie.js"));
 vi.mock("pusher-js", () => import("../mocks/pusher.js"));
 vi.mock("idb-keyval", () => import("../mocks/idb_keyval.js"));
-vi.mock("uuid", () => import("../mocks/uuid.js"));
+import { stubRandomUUID } from "../mocks/uuid.js";
+stubRandomUUID();
 
 import axios from "axios";
 import { createDataStore } from "../helpers/create_data_store.js";

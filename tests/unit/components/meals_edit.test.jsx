@@ -19,7 +19,8 @@ vi.mock("pusher-js", () => import("../mocks/pusher.js"));
 
 vi.mock("idb-keyval", () => import("../mocks/idb_keyval.js"));
 
-vi.mock("uuid", () => import("../mocks/uuid.js"));
+import { stubRandomUUID } from "../mocks/uuid.js";
+stubRandomUUID();
 
 import { MemoryRouter, Routes, Route } from "react-router";
 import axios from "axios";
