@@ -10,7 +10,7 @@ test.describe("Form CRUD", () => {
     test("create a new event sends POST with form data", async ({ page }) => {
       let eventPayload = null;
       let eventMethod = null;
-      await page.route("**/api/v1/events?*", (route) => {
+      await page.route(/\/api\/v1\/events(\?.*)?$/, (route) => {
         eventMethod = route.request().method();
         if (eventMethod === "POST") {
           eventPayload = route.request().postDataJSON();
@@ -243,13 +243,16 @@ test.describe("Form CRUD", () => {
     }) => {
       let postPayload = null;
       let postMethod = null;
-      await page.route("**/api/v1/common-house-reservations?*", (route) => {
-        postMethod = route.request().method();
-        if (postMethod === "POST") {
-          postPayload = route.request().postDataJSON();
-        }
-        route.fulfill({ status: 200, body: "{}" });
-      });
+      await page.route(
+        /\/api\/v1\/common-house-reservations(\?.*)?$/,
+        (route) => {
+          postMethod = route.request().method();
+          if (postMethod === "POST") {
+            postPayload = route.request().postDataJSON();
+          }
+          route.fulfill({ status: 200, body: "{}" });
+        },
+      );
 
       await page.goto("/calendar/all/2026-01-15/");
       await page.waitForLoadState("networkidle");
@@ -287,13 +290,16 @@ test.describe("Form CRUD", () => {
     test("create a new guest room reservation sends POST", async ({ page }) => {
       let postPayload = null;
       let postMethod = null;
-      await page.route("**/api/v1/guest-room-reservations?*", (route) => {
-        postMethod = route.request().method();
-        if (postMethod === "POST") {
-          postPayload = route.request().postDataJSON();
-        }
-        route.fulfill({ status: 200, body: "{}" });
-      });
+      await page.route(
+        /\/api\/v1\/guest-room-reservations(\?.*)?$/,
+        (route) => {
+          postMethod = route.request().method();
+          if (postMethod === "POST") {
+            postPayload = route.request().postDataJSON();
+          }
+          route.fulfill({ status: 200, body: "{}" });
+        },
+      );
 
       await page.goto("/calendar/all/2026-01-15/");
       await page.waitForLoadState("networkidle");
