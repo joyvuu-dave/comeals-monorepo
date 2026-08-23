@@ -84,12 +84,21 @@ RSpec.describe 'Admin Reconciliation Immutability' do
     # The form refuses a reconciliation that would settle nothing, so give the
     # next period a meal to settle.
     cook = create(:resident, community: community, unit: unit, multiplier: 2)
+    eater = create(:resident, community: community, unit: unit, multiplier: 2)
     meal = create(:meal, community: community, date: Date.yesterday)
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('25'))
+    create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
 
     expect do
       post '/reconciliations',
            params: { reconciliation: { end_date: Date.yesterday } }
     end.to change(Reconciliation, :count).by(1)
+
+    # The form must settle, not just insert a row: the meal is claimed and
+    # the ledger tables are written.
+    reconciliation = Reconciliation.order(:id).last
+    expect(reconciliation.meals).to contain_exactly(meal)
+    expect(reconciliation.reconciliation_balances.pluck(:resident_id)).to contain_exactly(cook.id, eater.id)
+    expect(MealCharge.for_reconciliation(reconciliation).count).to eq(2)
   end
 end

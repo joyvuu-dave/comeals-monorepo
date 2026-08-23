@@ -22,17 +22,6 @@ RSpec.describe MealLedger do
     described_class.new(Meal.where(id: meals.map(&:id)).preload(:bills, :meal_residents, :guests).to_a)
   end
 
-  def count_queries
-    count = 0
-    subscriber = ActiveSupport::Notifications.subscribe('sql.active_record') do |_, _, _, _, payload|
-      count += 1 unless payload[:name].in?(%w[SCHEMA TRANSACTION CACHE])
-    end
-    yield
-    count
-  ensure
-    ActiveSupport::Notifications.unsubscribe(subscriber)
-  end
-
   describe 'signs' do
     it 'credits a cook a positive amount and charges an eater a negative one' do
       cook = resident('Cook')

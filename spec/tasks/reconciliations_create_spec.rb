@@ -117,6 +117,49 @@ RSpec.describe 'reconciliations:create' do
     expect(eater_balance.amount).to eq(BigDecimal('0'))
   end
 
+  it 'mails each cook once, however many meals they cooked' do
+    twice = create(:resident, community: community, unit: unit, multiplier: 2)
+    once = create(:resident, community: community, unit: unit, multiplier: 2)
+    [3, 2].each do |days_ago|
+      meal = create(:meal, community: community, date: Date.yesterday - days_ago)
+      create(:bill, meal: meal, resident: twice, community: community, amount: BigDecimal('20'))
+    end
+    meal = create(:meal, community: community, date: Date.yesterday)
+    create(:bill, meal: meal, resident: once, community: community, amount: BigDecimal('20'))
+
+    Rake::Task['reconciliations:create'].invoke
+
+    expect(ReconciliationMailer).to have_received(:reconciliation_notify_email).twice
+    expect(ReconciliationMailer).to have_received(:reconciliation_notify_email).with(twice, Reconciliation.last).once
+    expect(ReconciliationMailer).to have_received(:reconciliation_notify_email).with(once, Reconciliation.last).once
+  end
+
+  it 'still mails the second cook when the first mail fails' do
+    first = create(:resident, community: community, unit: unit, multiplier: 2, name: 'Aaron First')
+    second = create(:resident, community: community, unit: unit, multiplier: 2, name: 'Zoe Second')
+    [first, second].each_with_index do |cook, i|
+      meal = create(:meal, community: community, date: Date.yesterday - i)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('20'))
+    end
+
+    delivered = []
+    allow(ReconciliationMailer).to receive(:reconciliation_notify_email) do |cook, _reconciliation|
+      mail = instance_double(ActionMailer::MessageDelivery)
+      allow(mail).to receive(:deliver_now) do
+        raise Net::ReadTimeout if cook == first
+
+        delivered << cook
+      end
+      mail
+    end
+    allow(Rails.logger).to receive(:error)
+
+    expect { Rake::Task['reconciliations:create'].invoke }.not_to raise_error
+
+    expect(delivered).to eq([second])
+    expect(Rails.logger).to have_received(:error).with(/reconciliation_notify_email failed/)
+  end
+
   it 'handles email delivery failures gracefully' do
     cook = create(:resident, community: community, unit: unit, multiplier: 2)
     meal = create(:meal, community: community, date: Date.yesterday)

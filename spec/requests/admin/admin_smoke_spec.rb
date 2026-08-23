@@ -109,15 +109,6 @@ RSpec.describe 'Admin smoke tests' do
       add_meals.call(3)
       expect(count_queries { get '/' }).to eq(baseline)
     end
-
-    def count_queries(&)
-      count = 0
-      counter = lambda do |_name, _start, _finish, _id, payload|
-        count += 1 unless payload[:name] == 'SCHEMA' || payload[:cached]
-      end
-      ActiveSupport::Notifications.subscribed(counter, 'sql.active_record', &)
-      count
-    end
   end
 
   describe 'resource pages (authenticated)' do
