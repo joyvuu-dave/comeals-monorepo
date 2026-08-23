@@ -11,7 +11,7 @@
 //   data_store_hosts.js     — the hosts list the reservation modals show
 //
 // The month cache/fetch machinery is not a subsystem of the store at
-// all — it lives in ./month_data, because the boot-time prefetch runs
+// all — it lives in ./month_fetch, because the boot-time prefetch runs
 // before any store exists.
 import { types } from "mobx-state-tree";
 import dayjs from "dayjs";

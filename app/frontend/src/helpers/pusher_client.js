@@ -1,6 +1,31 @@
-// Loads pusher-js outside the main bundle, so first paint does not wait
-// for it (#44 item 1). The library is 60 KB and nothing on screen needs
-// it — its job is live updates and cache invalidation.
+// How live updates work, end to end. This is the only place the whole
+// protocol is written down; the server half is Community#trigger_pusher
+// and Meal#trigger_pusher.
+//
+// 1. A Pusher message carries no data. It means "what you have for this
+//    month is stale". The client always refetches; it never applies a
+//    payload.
+// 2. Before it broadcasts, the server deletes its own Rails cache entry
+//    for the month (Community#invalidate_calendar_cache), so the refetch
+//    cannot get a stale server copy.
+// 3. Channels: community-<id>-calendar-<year>-<month> for a month (the
+//    name is also the server cache key, on purpose), and meal-<id> for
+//    one meal's page. The event name is always "update".
+// 4. The client subscribes to the month on screen and refetches on
+//    "update" (data_store_calendar.js loadMonth). It also subscribes to
+//    the two neighbouring months and only evicts them from the client
+//    caches, so the next navigation fetches fresh.
+// 5. The browser that caused the change is excluded: the server passes
+//    the client's socket_id, so a tap never triggers its own refetch.
+// 6. Pusher does not replay messages missed while the socket was down,
+//    so every reconnect and every browser "online" event refetches
+//    (data_store_app.js handleReconnect).
+// 7. With no VITE_PUSHER_KEY the client never connects and the app runs
+//    without live updates; nothing else changes.
+//
+// This file is only the transport. It loads pusher-js outside the main
+// bundle, so first paint does not wait for it (#44 item 1). The library
+// is 60 KB and nothing on screen needs it.
 //
 // The rest of the app talks to `pusherClient`, which has the same shape
 // as the small part of the Pusher API the app uses: subscribe,

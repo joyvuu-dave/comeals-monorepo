@@ -280,7 +280,9 @@ class Community < ApplicationRecord
   # Invalidate calendar cache and send Pusher notifications for the
   # affected month(s). Called by Meal#trigger_pusher and by calendar-visible
   # models (Event, CommonHouseReservation, GuestRoomReservation) via
-  # after_commit. See CalendarSerializer for the full invalidation contract.
+  # after_commit. See CalendarSerializer for the full invalidation contract,
+  # and app/frontend/src/helpers/pusher_client.js for what the client does
+  # with the message (it refetches; the message carries no data).
   def trigger_pusher(date)
     invalidate_calendar_cache(date)
     notify_pusher(date)

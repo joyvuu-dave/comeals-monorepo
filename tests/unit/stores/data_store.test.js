@@ -36,7 +36,7 @@ function mealPayload(overrides = {}) {
   };
 }
 import { runInAction } from "mobx";
-import { prefetchMonth } from "../../../app/frontend/src/stores/month_data.js";
+import { prefetchMonth } from "../../../app/frontend/src/stores/month_fetch.js";
 import * as idbKeyval from "idb-keyval";
 import axios from "axios";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";

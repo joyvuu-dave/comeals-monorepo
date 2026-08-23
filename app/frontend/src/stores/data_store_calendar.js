@@ -1,11 +1,11 @@
 // The calendar page: rendering a month's events and managing its
 // Pusher subscriptions. The cache/fetch machinery lives in
-// ./month_data; this file is the render side. One of the DataStore's
+// ./month_fetch; this file is the render side. One of the DataStore's
 // subsystem files — see data_store.js, which composes them.
 import Cookie from "js-cookie";
 import dayjs from "dayjs";
 
-import * as monthData from "./month_data";
+import * as monthData from "./month_fetch";
 import { toCommunityDayjs } from "../helpers/helpers";
 import { mark } from "../helpers/nav_trace";
 

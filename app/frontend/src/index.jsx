@@ -46,7 +46,7 @@ import {
 } from "react-router";
 
 import { DataStore } from "./stores/data_store";
-import { prefetchMonth } from "./stores/month_data";
+import { prefetchMonth } from "./stores/month_fetch";
 import { clear } from "idb-keyval";
 
 import ResidentsLogin from "./components/residents/login";

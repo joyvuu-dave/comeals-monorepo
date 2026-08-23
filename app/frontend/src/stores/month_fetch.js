@@ -1,10 +1,20 @@
-// Everything about getting one calendar month's data onto the screen:
-// the in-memory LRU (./month_cache), the IndexedDB copies, the
+// The fetch side of the calendar. This file owns every network request
+// for a month of calendar data and every decision about whether to make
+// one: the in-memory LRU (./month_cache), the IndexedDB copies, the
 // dedupe of in-flight requests, the freshness window, and the
-// navigation guard that lets the newest navigation win. The DataStore
-// only renders — it hands loadForNavigation/revalidate a `render`
-// callback (its loadMonth action) and this module decides which data
-// reaches it, if any.
+// navigation guard that lets the newest navigation win.
+//
+// The calendar's data path is four files, one job each:
+//   stores/month_fetch.js          fetch, cache lookups, freshness  (this file)
+//   stores/month_cache.js          the in-memory LRU
+//   stores/data_store_calendar.js  render: turn a month into calendar events,
+//                                  subscribe to live updates
+//   helpers/pusher_client.js       the live-update transport, and the
+//                                  end-to-end protocol in its header
+//
+// The DataStore only renders — it hands loadForNavigation/revalidate a
+// `render` callback (its loadMonth action) and this module decides
+// which data reaches it, if any.
 //
 // This state is module-level on purpose: the boot-time prefetch
 // (index.jsx) runs before any store exists, and the store's navigation

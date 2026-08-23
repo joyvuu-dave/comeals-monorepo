@@ -3,6 +3,11 @@
 // extraction against the exact strings the app uses — an upgrade of
 // react-router that changes matching behavior then fails a small test
 // instead of a page.
+//
+// There is no money screen in the SPA. Residents see what they owe in
+// ActiveAdmin, through read-only links that ReconciliationMailer emails
+// after each settlement. The SPA only collects the inputs: attendance,
+// guests, and cooks' bills.
 export const CALENDAR_PATH = "/calendar/:type/:date/:modal?/:view?/:id?";
 export const MEAL_EDIT_PATH = "/meals/:id/edit/*";
 export const LOGIN_PATH = "/:modal?/:token?";

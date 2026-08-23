@@ -40,6 +40,11 @@ module Api
       end
 
       # GET /api/v1/communities/:id/calendar/:date
+      #
+      # The :id in the path is not read. There is exactly one community
+      # (see CLAUDE.md), so this always answers for Community.instance. The
+      # path keeps the :id only so existing links and the SPA's cookie-based
+      # URLs stay valid.
       def calendar
         begin
           date = Date.parse(params[:date])
