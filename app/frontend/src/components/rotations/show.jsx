@@ -8,10 +8,16 @@ const styles = {
   },
 };
 
-// Render the modal scaffold — including the title, which we already know
-// from props — from the first frame. The residents list fetches in a
-// mount effect; skeleton covers the small latency gap.
+// Render the modal scaffold from the first frame. The residents list
+// fetches in a mount effect; skeleton covers the small latency gap.
+//
+// `id` is the database id from the URL. The number people see is the
+// rotation's `place_value` (its position in date order), which is what
+// the calendar bar shows. It comes back with the fetch, so the title
+// reads "Rotation" alone until then. Showing `id` instead was a bug:
+// the bar said "Rotation 104" and the modal said "Rotation 886".
 function RotationsShow({ id }) {
+  const [placeValue, setPlaceValue] = useState(null);
   const [residents, setResidents] = useState([]);
   const [description, setDescription] = useState("");
   const [loaded, setLoaded] = useState(false);
@@ -30,6 +36,7 @@ function RotationsShow({ id }) {
               if (a.display_name > b.display_name) return 1;
               return 0;
             });
+            setPlaceValue(response.data.place_value);
             setResidents(sorted);
             setDescription(response.data.description);
             setLoaded(true);
@@ -59,7 +66,7 @@ function RotationsShow({ id }) {
     >
       <div className="flex center">
         <u className="cell">
-          <h1>{`Rotation ${id}`}</h1>
+          <h1>{placeValue === null ? "Rotation" : `Rotation ${placeValue}`}</h1>
         </u>
       </div>
       <br />

@@ -11,17 +11,26 @@ describe("RotationsShow", () => {
     vi.clearAllMocks();
   });
 
-  it("renders the title from props and a loading skeleton first", async () => {
+  it("renders a loading skeleton first, then the title with the place value", async () => {
     axios.get.mockResolvedValue({
       status: 200,
-      data: { description: "Kitchen cleaning", residents: [] },
+      data: {
+        id: 10,
+        place_value: 3,
+        description: "Kitchen cleaning",
+        residents: [],
+      },
     });
     render(<RotationsShow id="10" />);
 
-    expect(screen.getByText("Rotation 10")).toBeInTheDocument();
+    expect(screen.getByText("Rotation")).toBeInTheDocument();
     expect(screen.getByText("Loading...")).toBeInTheDocument();
 
     expect(await screen.findByText("Kitchen cleaning")).toBeInTheDocument();
+    // The number is the place value from the response, never the
+    // database id from the URL.
+    expect(screen.getByText("Rotation 3")).toBeInTheDocument();
+    expect(screen.queryByText("Rotation 10")).not.toBeInTheDocument();
     expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
     expect(axios.get).toHaveBeenCalledWith("/api/v1/rotations/10");
   });
@@ -30,6 +39,8 @@ describe("RotationsShow", () => {
     axios.get.mockResolvedValue({
       status: 200,
       data: {
+        id: 10,
+        place_value: 3,
         description: "Kitchen cleaning",
         residents: [
           { id: 1, display_name: "Jane", signed_up: true },

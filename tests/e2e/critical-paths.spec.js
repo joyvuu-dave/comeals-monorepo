@@ -50,6 +50,7 @@ test.describe("Critical Paths", () => {
         contentType: "application/json",
         body: JSON.stringify({
           id: 10,
+          place_value: 3,
           description: "Kitchen cleaning rotation",
           residents: [
             { id: 1, display_name: "A - Jane Smith", signed_up: true },
@@ -68,10 +69,11 @@ test.describe("Critical Paths", () => {
     const modal = page.locator(".ReactModal__Content--after-open");
     await expect(modal).toBeVisible({ timeout: 10000 });
 
-    // Should show rotation title and description
-    await expect(modal.locator("text=Rotation 10")).toBeVisible({
+    // The title shows the place value (3), not the database id (10).
+    await expect(modal.locator("text=Rotation 3")).toBeVisible({
       timeout: 5000,
     });
+    await expect(modal.locator("text=Rotation 10")).toHaveCount(0);
     await expect(modal.locator("text=Kitchen cleaning rotation")).toBeVisible();
 
     // Signed-up residents should be struck through (muted)

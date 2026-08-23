@@ -158,13 +158,17 @@ describe("MainCalendar", () => {
     axios.get.mockResolvedValue({
       status: 200,
       data: {
+        id: 10,
+        place_value: 3,
         description: "Kitchen cleaning",
         residents: [{ id: 1, display_name: "Jane", signed_up: false }],
       },
     });
     renderCalendar({ path: "/calendar/all/2026-01-15/rotations/show/10" });
-    expect(screen.getByText("Rotation 10")).toBeInTheDocument();
+    expect(screen.getByText("Rotation")).toBeInTheDocument();
     expect(await screen.findByText("Kitchen cleaning")).toBeInTheDocument();
+    // The title shows the place value, not the id from the URL.
+    expect(screen.getByText("Rotation 3")).toBeInTheDocument();
   });
 
   it("renders the sidebar buttons", () => {

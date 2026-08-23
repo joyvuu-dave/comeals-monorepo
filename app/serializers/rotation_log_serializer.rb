@@ -22,12 +22,12 @@ class RotationLogSerializer
     end
   end
 
+  # `id` is the database id, the one in the URL. `place_value` is the
+  # number people see: the rotation's position in date order, the same
+  # number the calendar bar shows.
   attributes :id,
+             :place_value,
              :description
 
   many :residents, resource: ResidentSerializer
-
-  def id(rotation)
-    rotation.place_value
-  end
 end

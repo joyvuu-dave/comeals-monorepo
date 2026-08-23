@@ -307,8 +307,12 @@ RSpec.describe 'Serializers', type: :serializer do
       cook = create(:resident, community: community, unit: unit)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
 
+      # place_value is written by an after_commit with update_all, so the
+      # object in memory does not have it until it is reloaded.
+      rotation.reload
       result = serialize(rotation, described_class, cook_ids: rotation.cook_ids)
-      expect(result[:id]).to eq(rotation.place_value)
+      expect(result[:id]).to eq(rotation.id)
+      expect(result[:place_value]).to eq(1)
       expect(result[:residents]).to be_an(Array)
 
       cook_entry = result[:residents].find { |r| r[:id] == cook.id }

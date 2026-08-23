@@ -53,7 +53,9 @@ RSpec.describe 'Rotations API' do
 
       expect(response).to have_http_status(:ok)
       body = response.parsed_body
-      expect(body).to have_key('id')
+      expect(body['id']).to eq(rotation.id)
+      # The only rotation, so its place in date order is 1.
+      expect(body['place_value']).to eq(1)
       expect(body).to have_key('residents')
     end
 
