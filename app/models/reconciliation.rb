@@ -16,6 +16,8 @@
 #  fk_rails_...  (community_id => communities.id)
 #
 class Reconciliation < ApplicationRecord
+  include BelongsToTheCommunity
+
   # Raw balances are computed with BigDecimal division carrying ~20+
   # significant digits, so a balanced input sums to within ~1e-15 of zero even
   # across thousands of meals. Any genuine upstream imbalance manifests at a
@@ -24,14 +26,13 @@ class Reconciliation < ApplicationRecord
 
   # Ransack allowlists for ActiveAdmin sorting
   def self.ransackable_attributes(_auth_object = nil)
-    %w[id community_id date end_date created_at updated_at]
+    %w[id date end_date created_at updated_at]
   end
 
   has_many :meals, dependent: :nullify
   has_many :bills, through: :meals
   has_many :cooks, through: :bills, source: :resident
   has_many :reconciliation_balances, dependent: :destroy
-  belongs_to :community
 
   audited
 

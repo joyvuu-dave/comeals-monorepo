@@ -21,9 +21,11 @@
 #
 
 class Rotation < ApplicationRecord
+  include BelongsToTheCommunity
+
   # Ransack allowlists for ActiveAdmin sorting
   def self.ransackable_attributes(_auth_object = nil)
-    %w[id color community_id created_at description place_value residents_notified start_date updated_at]
+    %w[id color created_at description place_value residents_notified start_date updated_at]
   end
 
   # no_email suppresses the new-rotation notification for auto-created
@@ -32,7 +34,6 @@ class Rotation < ApplicationRecord
   # rotations:notify_new rake task skips it.
   attr_accessor :no_email
 
-  belongs_to :community
   # dependent: :destroy, not :nullify. A rotation that leaves its meals behind
   # orphans them, and community:create_rotations refuses to run while a meal
   # has no rotation — so a plain nullify quietly broke the nightly task.
@@ -41,8 +42,6 @@ class Rotation < ApplicationRecord
   has_many :meals, dependent: :destroy
   has_many :bills, through: :meals
   has_many :cooks, -> { distinct }, through: :bills, source: :resident
-  has_many :residents, -> { where(active: true, can_cook: true).where(multiplier: Multiplier::FULL..) },
-           through: :community
 
   before_validation :set_color, on: :create
   # All three prepended, for the same reason as Meal's guards (#26): the

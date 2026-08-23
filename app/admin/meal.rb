@@ -6,7 +6,7 @@ ActiveAdmin.register Meal do
   # association removes MealResident rows without their audit hooks or
   # closed/reconciled guards running per row (issue #7). Attendance is
   # managed through the API, which operates on individual rows.
-  permit_params :date, :closed, :max, :community_id,
+  permit_params :date, :closed, :max,
                 guests_attributes: %i[id multiplier resident_id meal_id _destroy]
 
   # CONFIG
@@ -24,7 +24,7 @@ ActiveAdmin.register Meal do
     def scoped_collection
       # Everything MealCostSummary reads, so the index computes each
       # row's numbers without per-row queries.
-      end_of_association_chain.includes(:community, :bills, :meal_residents, :guests, :meal_charges)
+      end_of_association_chain.includes(:bills, :meal_residents, :guests, :meal_charges)
     end
 
     def block_if_reconciled
@@ -79,7 +79,6 @@ ActiveAdmin.register Meal do
   show do
     attributes_table do
       row :date
-      row :community
       row :closed
       row :max
       row :subsidized? do |meal|
@@ -121,8 +120,7 @@ ActiveAdmin.register Meal do
         end
       end
       unless meal.reconciled?
-        candidates = Resident.where(community_id: meal.community_id)
-                             .where.not(id: meal.meal_residents.select(:resident_id))
+        candidates = Resident.where.not(id: meal.meal_residents.select(:resident_id))
                              .order(:name)
         form action: admin_meal_meal_residents_path(meal), method: :post do
           input type: :hidden, name: 'authenticity_token', value: form_authenticity_token
@@ -152,7 +150,6 @@ ActiveAdmin.register Meal do
   form do |f|
     f.inputs do
       f.input :date, as: :datepicker
-      f.input :community_id, input_html: { value: Community.instance.id }, as: :hidden
       f.input :closed
       f.input :max if f.object.closed
     end

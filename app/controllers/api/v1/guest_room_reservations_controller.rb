@@ -29,8 +29,7 @@ module Api
 
       # POST /api/v1/guest-room-reservations/create
       def create
-        grr = GuestRoomReservation.new(resident_id: params[:resident_id], date: params[:date],
-                                       community: Community.instance)
+        grr = GuestRoomReservation.new(resident_id: params[:resident_id], date: params[:date])
         if grr.save
           render json: { message: 'Guest Room Reservation has been created' }
         else

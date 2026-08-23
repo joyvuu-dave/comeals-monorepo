@@ -2,7 +2,7 @@
 
 ActiveAdmin.register Unit do
   # STRONG PARAMS
-  permit_params :name, :community_id
+  permit_params :name
 
   # CONFIG
   config.filters = false
@@ -58,7 +58,6 @@ ActiveAdmin.register Unit do
   form do |f|
     f.inputs do
       f.input :name
-      f.input :community_id, input_html: { value: Community.instance.id }, as: :hidden
     end
 
     f.actions

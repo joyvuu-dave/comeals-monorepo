@@ -20,9 +20,11 @@
 #
 
 class Unit < ApplicationRecord
+  include BelongsToTheCommunity
+
   # Ransack allowlists for ActiveAdmin sorting
   def self.ransackable_attributes(_auth_object = nil)
-    %w[id community_id created_at name updated_at]
+    %w[id created_at name updated_at]
   end
 
   # A unit with residents can never be deleted. Old bills and meals show the
@@ -31,7 +33,6 @@ class Unit < ApplicationRecord
   # hosts dropdown on its own. Only an empty unit, one created by mistake,
   # can be destroyed.
   has_many :residents, dependent: :restrict_with_error
-  belongs_to :community
 
   validates :name, uniqueness: true
 

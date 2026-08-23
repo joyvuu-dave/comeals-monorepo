@@ -4,7 +4,7 @@ ActiveAdmin.register GuestRoomReservation do
   menu label: 'Guest Room'
 
   # STRONG PARAMS
-  permit_params :community_id, :resident_id, :date
+  permit_params :resident_id, :date
 
   # CONFIG
   config.filters = false
@@ -16,7 +16,6 @@ ActiveAdmin.register GuestRoomReservation do
         ["#{r.name} - #{r.unit.name}", r.id]
       }
       f.input :date, as: :datepicker
-      f.input :community_id, input_html: { value: Community.instance.id }, as: :hidden
     end
     f.actions
     f.semantic_errors

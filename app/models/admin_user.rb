@@ -38,7 +38,7 @@ class AdminUser < ApplicationRecord
   # Deliberately excludes encrypted_password, reset_password_token,
   # reset_password_sent_at, and IP address fields.
   def self.ransackable_attributes(_auth_object = nil)
-    %w[id community_id created_at current_sign_in_at email last_sign_in_at phone remember_created_at sign_in_count
+    %w[id created_at current_sign_in_at email last_sign_in_at phone remember_created_at sign_in_count
        superuser updated_at]
   end
 
@@ -51,7 +51,12 @@ class AdminUser < ApplicationRecord
   # `rails c` on an empty database, then create the singleton Community via
   # ActiveAdmin. Community#after_create backfills orphan admins, so post-setup
   # every AdminUser points at the one community.
+  #
+  # Not BelongsToTheCommunity: that concern calls Community.instance, which
+  # raises on an empty database. Community.first is nil there, and nil is
+  # allowed here.
   belongs_to :community, optional: true
+  before_validation { self.community ||= Community.first }
 
   # No has_many :through sugar here on purpose. This is a
   # single-community app: an admin's "units" are just

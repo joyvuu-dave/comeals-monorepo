@@ -36,7 +36,7 @@ RSpec.describe 'Admin write authorization' do
         expect do
           post '/events', params: {
             event: { title: 'Community potluck', start_date: 1.day.from_now,
-                     end_date: 1.day.from_now + 2.hours, community_id: community.id }
+                     end_date: 1.day.from_now + 2.hours }
           }
         end.to change(Event, :count).by(1)
       end
@@ -58,7 +58,7 @@ RSpec.describe 'Admin write authorization' do
         expect do
           post '/residents', params: {
             resident: { name: 'New Person', multiplier: 1, unit_id: unit.id,
-                        community_id: community.id, password: '',
+                        password: '',
                         birthday: 8.years.ago.to_date }
           }
         end.to change(Resident, :count).by(1)
@@ -69,7 +69,7 @@ RSpec.describe 'Admin write authorization' do
       it 'may not create a reconciliation' do
         expect do
           post '/reconciliations', params: {
-            reconciliation: { community_id: community.id, end_date: 1.day.ago.to_date }
+            reconciliation: { end_date: 1.day.ago.to_date }
           }
         end.not_to change(Reconciliation, :count)
 
@@ -82,7 +82,7 @@ RSpec.describe 'Admin write authorization' do
 
         expect do
           post '/bills', params: {
-            bill: { meal_id: meal.id, resident_id: resident.id, amount: '25.00', community_id: community.id }
+            bill: { meal_id: meal.id, resident_id: resident.id, amount: '25.00' }
           }
         end.not_to change(Bill, :count)
 
@@ -127,7 +127,7 @@ RSpec.describe 'Admin write authorization' do
 
       expect do
         post '/reconciliations', params: {
-          reconciliation: { community_id: community.id, end_date: 1.day.ago.to_date }
+          reconciliation: { end_date: 1.day.ago.to_date }
         }
       end.to change(Reconciliation, :count).by(1)
     end

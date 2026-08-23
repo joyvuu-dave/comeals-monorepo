@@ -29,5 +29,10 @@ class RotationLogSerializer
              :place_value,
              :description
 
-  many :residents, resource: ResidentSerializer
+  # Every resident who can be asked to cook, not only the ones signed up.
+  # The log is a sign-up sheet: each row says whether that person has a
+  # bill on one of this rotation's meals.
+  attribute :residents do |_rotation|
+    ResidentSerializer.new(Resident.eligible_cooks.includes(:unit), params: params).to_h
+  end
 end

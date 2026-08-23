@@ -5,10 +5,6 @@ import { MemoryRouter, Routes, Route } from "react-router";
 
 vi.mock("axios", () => import("../mocks/axios.js"));
 
-vi.mock("js-cookie", () => import("../mocks/js_cookie.js"));
-import { cookies } from "../mocks/js_cookie.js";
-cookies.current = { community_id: "7" };
-
 import axios from "axios";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
 import { CALENDAR_PATH } from "../../../app/frontend/src/routes.js";
@@ -98,7 +94,7 @@ describe("CommonHouseReservationsNew", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
     expect(axios.post).toHaveBeenCalledWith(
-      "/api/v1/common-house-reservations?community_id=7",
+      "/api/v1/common-house-reservations",
       expect.objectContaining({
         resident_id: "1",
         start_hours: "19",

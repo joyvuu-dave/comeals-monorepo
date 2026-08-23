@@ -37,8 +37,7 @@ RSpec.describe 'Admin permit_params smoke tests' do
             multiplier: 1,
             unit_id: unit.id,
             can_cook: false,
-            active: false,
-            community_id: community.id
+            active: false
           }
         }
       end.to change(Resident, :count).by(1)
@@ -65,8 +64,7 @@ RSpec.describe 'Admin permit_params smoke tests' do
             description: 'A smoke test event',
             start_date: '2026-05-01 18:00:00',
             end_date: '2026-05-01 20:00:00',
-            allday: false,
-            community_id: community.id
+            allday: false
           }
         }
       end.to change(Event, :count).by(1)
@@ -83,7 +81,7 @@ RSpec.describe 'Admin permit_params smoke tests' do
     it 'persists every form field' do
       expect do
         post '/units', params: {
-          unit: { name: 'Smoke Unit', community_id: community.id }
+          unit: { name: 'Smoke Unit' }
         }
       end.to change(Unit, :count).by(1)
 
@@ -101,8 +99,7 @@ RSpec.describe 'Admin permit_params smoke tests' do
         post '/guest_room_reservations', params: {
           guest_room_reservation: {
             resident_id: resident.id,
-            date: '2026-05-15',
-            community_id: community.id
+            date: '2026-05-15'
           }
         }
       end.to change(GuestRoomReservation, :count).by(1)
@@ -124,8 +121,7 @@ RSpec.describe 'Admin permit_params smoke tests' do
             resident_id: resident.id,
             title: 'Smoke Booking',
             start_date: '2026-05-20 14:00:00',
-            end_date: '2026-05-20 16:00:00',
-            community_id: community.id
+            end_date: '2026-05-20 16:00:00'
           }
         }
       end.to change(CommonHouseReservation, :count).by(1)
@@ -145,7 +141,6 @@ RSpec.describe 'Admin permit_params smoke tests' do
         post '/meals', params: {
           meal: {
             date: '2026-06-01',
-            community_id: community.id,
             closed: false,
             guests_attributes: {
               '0' => { multiplier: 2, resident_id: host.id, _destroy: '0' }
@@ -171,7 +166,6 @@ RSpec.describe 'Admin permit_params smoke tests' do
       post '/meals', params: {
         meal: {
           date: '2026-06-02',
-          community_id: community.id,
           closed: false,
           attendee_ids: [eater.id.to_s]
         }
@@ -190,8 +184,7 @@ RSpec.describe 'Admin permit_params smoke tests' do
           admin_user: {
             email: 'smoke-admin@example.com',
             password: 'newpassword123',
-            password_confirmation: 'newpassword123',
-            community_id: community.id
+            password_confirmation: 'newpassword123'
           }
         }
       end.to change(AdminUser, :count).by(1)

@@ -24,12 +24,12 @@
 #
 
 class Event < ApplicationRecord
+  include BelongsToTheCommunity
+
   # Ransack allowlists for ActiveAdmin sorting
   def self.ransackable_attributes(_auth_object = nil)
-    %w[id allday community_id created_at description end_date start_date title updated_at]
+    %w[id allday created_at description end_date start_date title updated_at]
   end
-
-  belongs_to :community
 
   validates :title, presence: true
   validates :start_date, presence: true

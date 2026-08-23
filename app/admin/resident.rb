@@ -2,7 +2,7 @@
 
 ActiveAdmin.register Resident do
   # STRONG PARAMS
-  permit_params :name, :multiplier, :unit_id, :community_id, :email, :phone, :password, :vegetarian, :can_cook,
+  permit_params :name, :multiplier, :unit_id, :email, :phone, :password, :vegetarian, :can_cook,
                 :active, :birthday
 
   # CONFIG
@@ -215,7 +215,6 @@ ActiveAdmin.register Resident do
       f.input :unit, collection: Unit.order(:name)
       f.input :can_cook
       f.input :active
-      f.input :community_id, input_html: { value: Community.instance.id }, as: :hidden
     end
     f.label 'Note: to change a password, use the "Send password reset email" button on the ' \
             "resident's page, or the resident login page"

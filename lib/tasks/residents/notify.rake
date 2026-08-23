@@ -25,15 +25,11 @@ namespace :residents do
       # Signed Up Residents
       signed_up_residents_ids = Bill.joins(:resident).where(id: bill_ids).pluck('residents.id')
 
-      community = rotation.community
-
-      eligible_cooks_ids = community.residents.where(can_cook: true, active: true)
-                                    .where(multiplier: Multiplier::FULL..).where.not(email: nil).ids
-      eligible_cooks = Resident.joins(:unit).where(id: eligible_cooks_ids).order('units.name')
+      eligible_cooks = Resident.eligible_cooks.where.not(email: nil).joins(:unit).order('units.name')
 
       # Meals with less than 2 cooks
       open_meal_dates = Meal.order(:date)
-                            .where(community_id: community.id, rotation_id: rotation.id)
+                            .where(rotation_id: rotation.id)
                             .left_joins(:bills)
                             .group(:id)
                             .having('COUNT(bills.id) < ?', 2)
@@ -46,7 +42,7 @@ namespace :residents do
         next if signed_up_residents_ids.include?(resident.id)
 
         begin
-          ResidentMailer.rotation_signup_email(resident, rotation, open_meal_dates, community).deliver_now
+          ResidentMailer.rotation_signup_email(resident, rotation, open_meal_dates, rotation.community).deliver_now
           sent += 1
         rescue *MAIL_DELIVERY_ERRORS => e
           failures += 1

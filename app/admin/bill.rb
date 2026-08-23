@@ -2,7 +2,7 @@
 
 ActiveAdmin.register Bill do
   # STRONG PARAMS
-  permit_params :meal_id, :resident_id, :community_id, :amount
+  permit_params :meal_id, :resident_id, :amount
 
   # CONFIG
   filter :resident, as: :select, collection: proc { Resident.order(:name).pluck('name', 'id') }, include_blank: true
@@ -78,7 +78,6 @@ ActiveAdmin.register Bill do
       f.input :meal, label: 'Common Meal Date', collection: Meal.order(date: :desc).map { |i|
         [I18n.l(i.date, format: :admin), i.id]
       }
-      f.input :community_id, input_html: { value: Community.instance.id }, as: :hidden
       f.input :resident_id, as: :select, include_blank: false, label: 'Cook', collection: Resident.includes(:unit).adult.order('units.name ASC').map { |r|
         ["#{r.name} - #{r.unit.name}", r.id]
       }

@@ -74,7 +74,7 @@ RSpec.describe 'Admin Reconciliation Immutability' do
   it 'refuses a reconciliation that would settle no meals' do
     expect do
       post '/reconciliations',
-           params: { reconciliation: { community_id: community.id, end_date: Date.yesterday } }
+           params: { reconciliation: { end_date: Date.yesterday } }
     end.not_to change(Reconciliation, :count)
 
     expect(response.body).to include('must settle at least one meal')
@@ -89,7 +89,7 @@ RSpec.describe 'Admin Reconciliation Immutability' do
 
     expect do
       post '/reconciliations',
-           params: { reconciliation: { community_id: community.id, end_date: Date.yesterday } }
+           params: { reconciliation: { end_date: Date.yesterday } }
     end.to change(Reconciliation, :count).by(1)
   end
 end

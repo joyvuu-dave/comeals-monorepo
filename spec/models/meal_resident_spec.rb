@@ -77,15 +77,6 @@ RSpec.describe MealResident do
     end
   end
 
-  describe '#set_community_id' do
-    it 'copies the meal community_id before validation' do
-      mr = described_class.new(meal: meal, resident: resident)
-      mr.valid?
-
-      expect(mr.community_id).to eq(meal.community_id)
-    end
-  end
-
   describe '#meal_has_open_spots' do
     it 'allows signup when meal is open' do
       meal.update_columns(closed: false)

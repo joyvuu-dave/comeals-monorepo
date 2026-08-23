@@ -31,9 +31,11 @@
 #  fk_rails_...  (rotation_id => rotations.id)
 #
 class Meal < ApplicationRecord
+  include BelongsToTheCommunity
+
   # Ransack allowlists for ActiveAdmin filtering and sorting
   def self.ransackable_attributes(_auth_object = nil)
-    %w[id cap closed closed_at community_id created_at date description max reconciliation_id rotation_id start_time
+    %w[id cap closed closed_at created_at date description max reconciliation_id rotation_id start_time
        updated_at]
   end
 
@@ -69,7 +71,6 @@ class Meal < ApplicationRecord
     )
   }
 
-  belongs_to :community
   belongs_to :reconciliation, optional: true
   belongs_to :rotation, optional: true
 
@@ -85,7 +86,6 @@ class Meal < ApplicationRecord
   has_many :guests, inverse_of: :meal, dependent: :destroy
   has_many :hosts, through: :guests, source: :resident, dependent: :destroy
   has_many :attendees, through: :meal_residents, source: :resident, dependent: :destroy
-  has_many :residents, -> { where active: true }, through: :community
 
   before_validation :set_start_time, on: :create
 

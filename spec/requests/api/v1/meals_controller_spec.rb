@@ -15,7 +15,7 @@ RSpec.describe 'Meals API' do
     it 'returns meals for the community' do
       create(:meal, community: community)
 
-      get '/api/v1/meals', params: { community_id: community.id, token: token }
+      get '/api/v1/meals', params: { token: token }
 
       expect(response).to have_http_status(:ok)
       body = response.parsed_body
@@ -27,7 +27,6 @@ RSpec.describe 'Meals API' do
       create(:meal, community: community, date: Date.new(2025, 6, 1))
 
       get '/api/v1/meals', params: {
-        community_id: community.id,
         token: token,
         start: '2025-05-01',
         end: '2025-07-01'

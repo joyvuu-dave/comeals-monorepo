@@ -12,7 +12,7 @@ RSpec.describe 'Guest Room Reservations API' do
     it 'returns reservations for the community' do
       create(:guest_room_reservation, community: community, resident: resident)
 
-      get '/api/v1/guest-room-reservations', params: { community_id: community.id, token: token }
+      get '/api/v1/guest-room-reservations', params: { token: token }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body.length).to eq(1)
@@ -25,7 +25,7 @@ RSpec.describe 'Guest Room Reservations API' do
                                       date: Date.yesterday)
 
       get '/api/v1/guest-room-reservations', params: {
-        community_id: community.id, token: token,
+        token: token,
         start: 1.week.ago.to_date.to_s, end: Time.zone.today.to_s
       }
 
@@ -61,7 +61,7 @@ RSpec.describe 'Guest Room Reservations API' do
   describe 'POST /api/v1/guest-room-reservations' do
     it 'creates a reservation' do
       post '/api/v1/guest-room-reservations', params: {
-        community_id: community.id, token: token,
+        token: token,
         resident_id: resident.id, date: Date.tomorrow.to_s
       }
 
@@ -73,7 +73,7 @@ RSpec.describe 'Guest Room Reservations API' do
       create(:guest_room_reservation, community: community, resident: resident, date: Date.tomorrow)
 
       post '/api/v1/guest-room-reservations', params: {
-        community_id: community.id, token: token,
+        token: token,
         resident_id: resident.id, date: Date.tomorrow.to_s
       }
 

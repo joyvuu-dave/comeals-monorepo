@@ -17,7 +17,6 @@ namespace :reconciliations do
     # drift — and had (it lacked the distinct and the today exclusion).
     begin
       reconciliation = Reconciliation.create!(
-        community: community,
         date: Time.zone.today,
         end_date: cutoff
       )

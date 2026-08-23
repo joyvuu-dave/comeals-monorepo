@@ -12,7 +12,7 @@ RSpec.describe 'Common House Reservations API' do
     it 'returns reservations for the community' do
       create(:common_house_reservation, community: community, resident: resident)
 
-      get '/api/v1/common-house-reservations', params: { community_id: community.id, token: token }
+      get '/api/v1/common-house-reservations', params: { token: token }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body.length).to eq(1)
@@ -27,7 +27,7 @@ RSpec.describe 'Common House Reservations API' do
                                         end_date: Time.zone.local(2026, 4, 10, 17, 0))
 
       get '/api/v1/common-house-reservations', params: {
-        community_id: community.id, token: token,
+        token: token,
         start: '2026-04-01', end: '2026-04-30'
       }
 
@@ -63,7 +63,7 @@ RSpec.describe 'Common House Reservations API' do
   describe 'POST /api/v1/common-house-reservations' do
     it 'creates a reservation' do
       post '/api/v1/common-house-reservations', params: {
-        community_id: community.id, token: token,
+        token: token,
         resident_id: resident.id, title: 'Birthday party',
         start_year: 2026, start_month: 5, start_day: 1,
         start_hours: 14, start_minutes: 0,
@@ -81,7 +81,7 @@ RSpec.describe 'Common House Reservations API' do
                                         end_date: Time.zone.local(2026, 5, 1, 17, 0))
 
       post '/api/v1/common-house-reservations', params: {
-        community_id: community.id, token: token,
+        token: token,
         resident_id: resident.id, title: 'Conflict',
         start_year: 2026, start_month: 5, start_day: 1,
         start_hours: 15, start_minutes: 0,

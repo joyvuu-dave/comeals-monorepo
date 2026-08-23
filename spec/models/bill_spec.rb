@@ -77,17 +77,6 @@ RSpec.describe Bill do
     end
   end
 
-  describe '#set_community_id' do
-    it 'copies community_id from the meal before validation' do
-      meal = create(:meal, community: community)
-      resident = create(:resident, community: community, unit: unit)
-      bill = described_class.new(meal: meal, resident: resident, amount: BigDecimal('10'))
-
-      bill.valid?
-      expect(bill.community_id).to eq(community.id)
-    end
-  end
-
   describe '#reconciled?' do
     it 'returns true when the meal is reconciled' do
       meal = create(:meal, community: community)

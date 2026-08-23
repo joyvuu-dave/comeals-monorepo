@@ -221,7 +221,7 @@ test.describe("Error Handling & Edge Cases", () => {
       await setupAuthenticatedPage(page, context);
 
       // Override events endpoint to return error
-      await page.route("**/api/v1/events?*", (route) => {
+      await page.route("**/api/v1/events", (route) => {
         route.fulfill({
           status: 422,
           contentType: "application/json",
@@ -260,7 +260,7 @@ test.describe("Error Handling & Edge Cases", () => {
       await setupAuthenticatedPage(page, context);
 
       // Override events endpoint to return error
-      await page.route("**/api/v1/events?*", (route) => {
+      await page.route("**/api/v1/events", (route) => {
         route.fulfill({
           status: 422,
           contentType: "application/json",
@@ -301,7 +301,7 @@ test.describe("Error Handling & Edge Cases", () => {
       await setupAuthenticatedPage(page, context);
 
       // Override events endpoint to return a warning (type: "warning")
-      await page.route("**/api/v1/events?*", (route) => {
+      await page.route("**/api/v1/events", (route) => {
         route.fulfill({
           status: 400,
           contentType: "application/json",

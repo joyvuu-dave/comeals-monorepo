@@ -13,7 +13,7 @@ RSpec.describe 'Rotations API' do
       rotation = create(:rotation, community: community)
       create(:meal, community: community, rotation: rotation)
 
-      get '/api/v1/rotations', params: { community_id: community.id, token: token }
+      get '/api/v1/rotations', params: { token: token }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body.length).to eq(1)
@@ -27,7 +27,7 @@ RSpec.describe 'Rotations API' do
       create(:meal, community: community, rotation: new_rotation, date: Date.new(2026, 4, 15))
 
       get '/api/v1/rotations', params: {
-        community_id: community.id, token: token,
+        token: token,
         start: '2026-04-01', end: '2026-05-01'
       }
 

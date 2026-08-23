@@ -3,7 +3,6 @@ import { useParams } from "react-router";
 import DayPickerInputWrapper from "../common/day_picker_input";
 import dayjs from "dayjs";
 import axios from "axios";
-import Cookie from "js-cookie";
 import { observer } from "mobx-react-lite";
 import { useStore } from "../../helpers/store_context";
 import handleAxiosError from "../../helpers/handle_axios_error";
@@ -29,8 +28,6 @@ const CommonHouseReservationsNew = observer(
     const [startTime, setStartTime] = useState("");
     const [endTime, setEndTime] = useState("");
     const [loading, setLoading] = useState(false);
-
-    const communityId = Cookie.get("community_id");
     const mountedRef = useMountedRef();
 
     // Hosts cache: kick off fetch if empty; no-op if already loaded.
@@ -45,7 +42,7 @@ const CommonHouseReservationsNew = observer(
       e.preventDefault();
       setLoading(true);
       axios
-        .post(`/api/v1/common-house-reservations?community_id=${communityId}`, {
+        .post(`/api/v1/common-house-reservations`, {
           resident_id: residentId,
           ...buildStartEndPayload(day, startTime, endTime),
           title: title,

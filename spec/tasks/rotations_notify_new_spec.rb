@@ -23,8 +23,8 @@ RSpec.describe 'rotations:notify_new', type: :task do
     stub_const('BROADCAST_EMAIL_ENABLED', false)
     create(:resident, community: community, unit: unit, active: true)
     meal = create(:meal, community: community)
-    attrs = [{ date: meal.date + 100.days, community_id: community.id }]
-    rotation = Rotation.create!(community_id: community.id, meals_attributes: attrs)
+    attrs = [{ date: meal.date + 100.days }]
+    rotation = Rotation.create!(meals_attributes: attrs)
 
     initial_count = ActionMailer::Base.deliveries.size
     Rake::Task['rotations:notify_new'].invoke
@@ -36,8 +36,8 @@ RSpec.describe 'rotations:notify_new', type: :task do
   it 'skips rotations created more than 7 days ago, so re-enabling cannot flood' do
     create(:resident, community: community, unit: unit, active: true)
     meal = create(:meal, community: community)
-    attrs = [{ date: meal.date + 100.days, community_id: community.id }]
-    stale = Rotation.create!(community_id: community.id, meals_attributes: attrs)
+    attrs = [{ date: meal.date + 100.days }]
+    stale = Rotation.create!(meals_attributes: attrs)
     stale.update_column(:created_at, 8.days.ago)
 
     initial_count = ActionMailer::Base.deliveries.size
@@ -50,9 +50,8 @@ RSpec.describe 'rotations:notify_new', type: :task do
   it 'sends new-rotation emails for rotations not yet notified' do
     create(:resident, community: community, unit: unit, active: true)
     meal = create(:meal, community: community)
-    attrs = [{ date: meal.date + 100.days, community_id: community.id }]
-    rotation = Rotation.create!(community_id: community.id,
-                                meals_attributes: attrs)
+    attrs = [{ date: meal.date + 100.days }]
+    rotation = Rotation.create!(meals_attributes: attrs)
 
     expect(rotation.new_rotation_notified_at).to be_nil
 
@@ -69,9 +68,8 @@ RSpec.describe 'rotations:notify_new', type: :task do
   it 'skips rotations that are already notified' do
     create(:resident, community: community, unit: unit, active: true)
     meal = create(:meal, community: community)
-    attrs = [{ date: meal.date + 200.days, community_id: community.id }]
-    rotation = Rotation.create!(community_id: community.id,
-                                meals_attributes: attrs)
+    attrs = [{ date: meal.date + 200.days }]
+    rotation = Rotation.create!(meals_attributes: attrs)
     rotation.update_column(:new_rotation_notified_at, 1.day.ago)
 
     initial_count = ActionMailer::Base.deliveries.size
@@ -91,8 +89,8 @@ RSpec.describe 'rotations:notify_new', type: :task do
                       active: true, multiplier: 1, email: nil)
 
     meal = create(:meal, community: community)
-    attrs = [{ date: meal.date + 300.days, community_id: community.id }]
-    Rotation.create!(community_id: community.id, meals_attributes: attrs)
+    attrs = [{ date: meal.date + 300.days }]
+    Rotation.create!(meals_attributes: attrs)
 
     Rake::Task['rotations:notify_new'].invoke
 
@@ -108,8 +106,7 @@ RSpec.describe 'rotations:notify_new', type: :task do
   it 'suppresses notification for rotations created with no_email' do
     create(:resident, community: community, unit: unit, active: true)
     # Simulate auto_create_rotations behavior
-    rotation = Rotation.create!(community_id: community.id,
-                                no_email: true)
+    rotation = Rotation.create!(no_email: true)
 
     # no_email sets new_rotation_notified_at immediately
     rotation.reload

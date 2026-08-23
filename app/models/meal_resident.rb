@@ -28,9 +28,10 @@
 #
 
 class MealResident < ApplicationRecord
+  include BelongsToTheCommunity
+
   belongs_to :meal, inverse_of: :meal_residents, touch: true
   belongs_to :resident
-  belongs_to :community
 
   audited associated_with: :meal
 
@@ -42,16 +43,11 @@ class MealResident < ApplicationRecord
   include ClosedMealAttendanceFreeze
 
   before_validation :set_multiplier, on: :create
-  before_validation :set_community_id
 
   validates :meal_id, uniqueness: { scope: :resident_id }
   validates :multiplier, numericality: { only_integer: true }
 
   def set_multiplier
     self.multiplier = resident&.multiplier
-  end
-
-  def set_community_id
-    self.community_id = meal&.community_id
   end
 end

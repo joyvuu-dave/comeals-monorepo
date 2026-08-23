@@ -12,7 +12,7 @@ RSpec.describe 'Events API' do
     it 'returns events for the community' do
       create(:event, community: community)
 
-      get '/api/v1/events', params: { community_id: community.id, token: token }
+      get '/api/v1/events', params: { token: token }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body.length).to eq(1)
@@ -25,7 +25,7 @@ RSpec.describe 'Events API' do
                      start_date: Time.zone.local(2026, 4, 10, 18, 0), end_date: Time.zone.local(2026, 4, 10, 20, 0))
 
       get '/api/v1/events', params: {
-        community_id: community.id, token: token,
+        token: token,
         start: '2026-04-01', end: '2026-04-30'
       }
 
@@ -57,7 +57,7 @@ RSpec.describe 'Events API' do
   describe 'POST /api/v1/events' do
     it 'creates a timed event' do
       post '/api/v1/events', params: {
-        community_id: community.id, token: token,
+        token: token,
         title: 'Movie Night', description: 'Bring popcorn',
         all_day: false,
         start_year: 2026, start_month: 4, start_day: 15,
@@ -74,7 +74,7 @@ RSpec.describe 'Events API' do
 
     it 'creates an all-day event' do
       post '/api/v1/events', params: {
-        community_id: community.id, token: token,
+        token: token,
         title: 'Work Day', all_day: true,
         start_year: 2026, start_month: 4, start_day: 20
       }
@@ -87,7 +87,7 @@ RSpec.describe 'Events API' do
 
     it 'returns 400 without a title' do
       post '/api/v1/events', params: {
-        community_id: community.id, token: token,
+        token: token,
         title: '', all_day: true,
         start_year: 2026, start_month: 5, start_day: 1
       }

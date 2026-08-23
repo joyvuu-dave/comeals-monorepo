@@ -105,7 +105,7 @@ RSpec.describe Rotation do
       rotations[2].destroy!
 
       # After: the remaining 4 should be green, blue, red, yellow
-      remaining = described_class.where(community_id: community.id).order(:id)
+      remaining = described_class.order(:id)
       expect(remaining.pluck(:color)).to eq(Rotation::COLORS[0..3])
     end
   end

@@ -26,7 +26,7 @@ RSpec.describe 'Admin superuser management' do
         admin_user: {
           email: 'fresh@example.com', password: 'password123',
           password_confirmation: 'password123',
-          community_id: community.id, superuser: true
+          superuser: true
         }
       }
 
@@ -40,7 +40,7 @@ RSpec.describe 'Admin superuser management' do
         admin_user: {
           email: 'plain@example.com', password: 'password123',
           password_confirmation: 'password123',
-          community_id: community.id, superuser: false
+          superuser: false
         }
       }
 
@@ -118,7 +118,7 @@ RSpec.describe 'Admin superuser management' do
           admin_user: {
             email: 'sneaky@example.com', password: 'password123',
             password_confirmation: 'password123',
-            community_id: community.id, superuser: true
+            superuser: true
           }
         }
       end.not_to change(AdminUser, :count)

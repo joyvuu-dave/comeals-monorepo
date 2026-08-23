@@ -10,7 +10,7 @@ ActiveAdmin.register AdminUser do
   # could only be set from a console. The controller below refuses the
   # parameter rather than dropping it when the actor may not set it, because a
   # silent drop looks like success.
-  permit_params :email, :phone, :password, :password_confirmation, :community_id, :superuser
+  permit_params :email, :phone, :password, :password_confirmation, :superuser
 
   # CONFIG
   config.filters = false
@@ -97,7 +97,6 @@ ActiveAdmin.register AdminUser do
                 hint: 'Superusers may settle reconciliations, edit bills and attendance, and ' \
                       'grant admin access. Other admins may do everything except touch the ledger.'
       end
-      f.input :community_id, input_html: { value: Community.instance.id }, as: :hidden
     end
     f.actions
   end

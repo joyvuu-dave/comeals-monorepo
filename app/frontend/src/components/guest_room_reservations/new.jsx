@@ -3,7 +3,6 @@ import { useParams } from "react-router";
 import DayPickerInputWrapper from "../common/day_picker_input";
 import dayjs from "dayjs";
 import axios from "axios";
-import Cookie from "js-cookie";
 import { observer } from "mobx-react-lite";
 import { useStore } from "../../helpers/store_context";
 import handleAxiosError from "../../helpers/handle_axios_error";
@@ -23,8 +22,6 @@ const GuestRoomReservationsNew = observer(({ handleCloseModal, setDirty }) => {
   const [residentId, setResidentId] = useState("");
   const [day, setDay] = useState(null);
   const [loading, setLoading] = useState(false);
-
-  const communityId = Cookie.get("community_id");
   const mountedRef = useMountedRef();
 
   // Hosts cache: kick off fetch if empty; no-op if already loaded.
@@ -39,7 +36,7 @@ const GuestRoomReservationsNew = observer(({ handleCloseModal, setDirty }) => {
     e.preventDefault();
     setLoading(true);
     axios
-      .post(`/api/v1/guest-room-reservations?community_id=${communityId}`, {
+      .post(`/api/v1/guest-room-reservations`, {
         resident_id: residentId,
         date: day ? dayjs(day).format("YYYY-MM-DD") : null,
       })

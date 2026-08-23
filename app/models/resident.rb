@@ -36,20 +36,24 @@
 #
 
 class Resident < ApplicationRecord
+  include BelongsToTheCommunity
+
   include HasPhoneNumber
 
   # Ransack allowlists for ActiveAdmin filtering and sorting.
   # Deliberately excludes password_digest and reset_password_token.
   def self.ransackable_attributes(_auth_object = nil)
-    %w[id active birthday can_cook community_id created_at email multiplier name phone unit_id updated_at vegetarian]
+    %w[id active birthday can_cook created_at email multiplier name phone unit_id updated_at vegetarian]
   end
 
   attr_reader :password
 
   scope :adult, -> { where(multiplier: Multiplier::FULL..) }
   scope :active, -> { where(active: true) }
+  # Who can be asked to cook: active adults with can_cook set. The rotation
+  # log lists these.
+  scope :eligible_cooks, -> { active.adult.where(can_cook: true) }
 
-  belongs_to :community
   belongs_to :unit
 
   # Ledger rows are permanent. A resident who has any of these can never be

@@ -34,7 +34,7 @@ RSpec.describe 'Admin conflict rescue' do
     it 'redirects instead of raising' do
       refuse_the_next_write
 
-      post '/units', params: { unit: { name: 'A-1', community_id: community.id } }
+      post '/units', params: { unit: { name: 'A-1' } }
 
       expect(response).to have_http_status(:found)
     end
@@ -42,7 +42,7 @@ RSpec.describe 'Admin conflict rescue' do
     it 'says nothing was saved and to try again' do
       refuse_the_next_write
 
-      post '/units', params: { unit: { name: 'A-1', community_id: community.id } }
+      post '/units', params: { unit: { name: 'A-1' } }
 
       expect(flash[:alert]).to eq('Someone else was changing this at the same time. ' \
                                   'Nothing was saved. Try again.')
@@ -52,7 +52,7 @@ RSpec.describe 'Admin conflict rescue' do
       refuse_the_next_write
 
       expect do
-        post '/units', params: { unit: { name: 'A-1', community_id: community.id } }
+        post '/units', params: { unit: { name: 'A-1' } }
       end.not_to change(Unit, :count)
     end
 
@@ -60,7 +60,7 @@ RSpec.describe 'Admin conflict rescue' do
       refuse_the_next_write
 
       post '/units',
-           params: { unit: { name: 'A-1', community_id: community.id } },
+           params: { unit: { name: 'A-1' } },
            headers: { 'HTTP_REFERER' => 'http://admin.example.com/units/new' }
 
       expect(response).to redirect_to('http://admin.example.com/units/new')
@@ -71,7 +71,7 @@ RSpec.describe 'Admin conflict rescue' do
     it 'goes to the dashboard when there is no referer' do
       refuse_the_next_write
 
-      post '/units', params: { unit: { name: 'A-1', community_id: community.id } }
+      post '/units', params: { unit: { name: 'A-1' } }
 
       expect(response).to redirect_to(admin_root_path)
     end
@@ -82,7 +82,7 @@ RSpec.describe 'Admin conflict rescue' do
       refuse_the_next_write
       allow(Rails.error).to receive(:report)
 
-      post '/units', params: { unit: { name: 'A-1', community_id: community.id } }
+      post '/units', params: { unit: { name: 'A-1' } }
 
       expect(Rails.error).to have_received(:report)
         .with(instance_of(ActiveRecord::SerializationFailure), hash_including(handled: true))
@@ -98,7 +98,7 @@ RSpec.describe 'Admin conflict rescue' do
       .and_raise(ActiveRecord::Deadlocked, 'deadlock detected')
     # rubocop:enable RSpec/AnyInstance
 
-    post '/units', params: { unit: { name: 'A-1', community_id: community.id } }
+    post '/units', params: { unit: { name: 'A-1' } }
 
     expect(flash[:alert]).to match(/nothing was saved/i)
   end
@@ -114,7 +114,7 @@ RSpec.describe 'Admin conflict rescue' do
       .and_raise(ActiveRecord::LockWaitTimeout, 'canceling statement due to lock timeout')
     # rubocop:enable RSpec/AnyInstance
 
-    post '/units', params: { unit: { name: 'A-1', community_id: community.id } }
+    post '/units', params: { unit: { name: 'A-1' } }
 
     expect(flash[:alert]).to match(/nothing was saved/i)
   end

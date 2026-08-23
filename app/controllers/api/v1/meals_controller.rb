@@ -16,7 +16,7 @@ module Api
         create_guest destroy_guest
         update_description update_max update_bills update_closed
       ]
-      before_action :verify_resident_community, only: %i[create_meal_resident create_guest]
+      before_action :verify_resident_exists, only: %i[create_meal_resident create_guest]
       before_action :set_guest, only: [:destroy_guest]
       before_action :set_meal_resident, only: %i[destroy_meal_resident update_meal_resident]
       after_action :trigger_pusher, except: %i[index next show history show_cooks]
@@ -390,7 +390,7 @@ module Api
           status: :conflict }
       end
 
-      def verify_resident_community
+      def verify_resident_exists
         return if Resident.exists?(id: params[:resident_id])
 
         render json: { message: 'Resident not found.' }, status: :bad_request

@@ -35,8 +35,7 @@ module Api
         return render_invalid_date unless times
 
         chr = CommonHouseReservation.new(resident_id: params[:resident_id], start_date: times[:start_date],
-                                         end_date: times[:end_date], community: Community.instance,
-                                         title: params[:title])
+                                         end_date: times[:end_date], title: params[:title])
         if chr.save
           render json: { message: 'Common House Reservation has been created' }
         else

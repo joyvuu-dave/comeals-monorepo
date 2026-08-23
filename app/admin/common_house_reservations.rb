@@ -4,7 +4,7 @@ ActiveAdmin.register CommonHouseReservation do
   menu label: 'Common House'
 
   # STRONG PARAMS
-  permit_params :community_id, :resident_id, :start_date, :end_date, :title
+  permit_params :resident_id, :start_date, :end_date, :title
 
   # CONFIG
   config.filters = false
@@ -18,7 +18,6 @@ ActiveAdmin.register CommonHouseReservation do
       f.input :title, input_html: { placeholder: 'optional' }
       f.input :start_date
       f.input :end_date
-      f.input :community_id, input_html: { value: Community.instance.id }, as: :hidden
     end
     f.actions
     f.semantic_errors

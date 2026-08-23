@@ -251,7 +251,7 @@ class Community < ApplicationRecord
     start = [Time.zone.today, day_after_last_meal].compact.max
     dates = meal_schedule.upcoming_dates(from: start, count: meals_per_rotation)
 
-    rotations.create!(meals_attributes: dates.map { |date| { date: date, community_id: id } })
+    rotations.create!(meals_attributes: dates.map { |date| { date: date } })
   end
 
   # Cache key for a specific calendar month. Same format as the Pusher channel

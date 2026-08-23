@@ -29,7 +29,7 @@ module Api
       private
 
       def set_resource
-        @rotation = Rotation.includes({ residents: :unit }).find_by(id: params[:id])
+        @rotation = Rotation.find_by(id: params[:id])
 
         not_found_api if @rotation.blank?
       end

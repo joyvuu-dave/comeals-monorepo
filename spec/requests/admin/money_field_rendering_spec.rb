@@ -55,7 +55,7 @@ RSpec.describe 'Admin money field rendering' do
     meal = create(:meal, community: community)
 
     post '/bills', params: { bill: { meal_id: meal.id, resident_id: cook.id,
-                                     community_id: community.id, amount: '' } }
+                                     amount: '' } }
 
     expect(response).to have_http_status(:ok)
     expect(response.body).to include('is not a number')

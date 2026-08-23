@@ -23,7 +23,7 @@ RSpec.describe 'Bills API' do
     end
 
     it 'returns all bills for the community' do
-      get '/api/v1/bills', params: { community_id: community.id, token: token }
+      get '/api/v1/bills', params: { token: token }
 
       expect(response).to have_http_status(:ok)
       body = response.parsed_body
@@ -32,7 +32,6 @@ RSpec.describe 'Bills API' do
 
     it 'filters bills by date range' do
       get '/api/v1/bills', params: {
-        community_id: community.id,
         token: token,
         start: '2025-05-01',
         end: '2025-07-01'
@@ -57,7 +56,7 @@ RSpec.describe 'Bills API' do
       bill = create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
 
       get "/api/v1/bills/#{bill.id}", params: {
-        community_id: community.id, token: token
+        token: token
       }
 
       expect(response).to have_http_status(:ok)
@@ -65,7 +64,7 @@ RSpec.describe 'Bills API' do
 
     it 'returns 404 for nonexistent bill' do
       get '/api/v1/bills/999999', params: {
-        community_id: community.id, token: token
+        token: token
       }
 
       expect(response).to have_http_status(:not_found)

@@ -3,7 +3,6 @@ import { useParams } from "react-router";
 import DayPickerInputWrapper from "../common/day_picker_input";
 import dayjs from "dayjs";
 import axios from "axios";
-import Cookie from "js-cookie";
 import { useStore } from "../../helpers/store_context";
 import handleAxiosError from "../../helpers/handle_axios_error";
 import useDirtyReport from "../../helpers/use_dirty_report";
@@ -23,15 +22,13 @@ function EventsNew({ handleCloseModal, setDirty }) {
   const [endTime, setEndTime] = useState("");
   const [allDay, setAllDay] = useState(false);
   const [loading, setLoading] = useState(false);
-
-  const communityId = Cookie.get("community_id");
   const mountedRef = useMountedRef();
 
   function handleSubmit(e) {
     e.preventDefault();
     setLoading(true);
     axios
-      .post(`/api/v1/events?community_id=${communityId}`, {
+      .post(`/api/v1/events`, {
         title: title,
         description: description,
         ...buildStartEndPayload(day, startTime, endTime),

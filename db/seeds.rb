@@ -54,10 +54,10 @@ end
 # on the money path. Seeding one of each makes both sides of that boundary
 # something you can log in and look at. One US phone and one UK phone, so
 # both admin forms show a normalized number.
-AdminUser.create!(email: 'joslyn@email.com', password: 'password', password_confirmation: 'password',
-                  community: community, superuser: true, phone: '(510) 555-0199')
+AdminUser.create!(email: 'joslyn@email.com', password: 'password', password_confirmation: 'password', superuser: true,
+                  phone: '(510) 555-0199')
 AdminUser.create!(email: 'reader@email.com', password: 'password', password_confirmation: 'password',
-                  community: community, phone: '+44 20 7946 0999')
+                  phone: '+44 20 7946 0999')
 
 Rails.logger.debug { "#{community.admin_users.count} AdminUser created" }
 
@@ -65,27 +65,25 @@ Rails.logger.debug { "#{community.admin_users.count} AdminUser created" }
 ('A'..'Z').to_a.each_with_index do |letter, index|
   next if %w[O I].include?(letter)
 
-  unit = Unit.create!(name: letter, community: community)
+  unit = Unit.create!(name: letter)
   if (index % 5).zero?
     child_year = ((Time.zone.today.year - 10)..(Time.zone.today.year - 1)).to_a.sample
     child_birthday = Date.new(child_year, (1..12).to_a.sample, (1..28).to_a.sample)
     Resident.create!(name: "#{Faker::Name.first_name} #{Faker::Name.last_name}",
-                     multiplier: 1, unit: unit, community: community,
+                     multiplier: 1, unit: unit,
                      password: '', birthday: child_birthday)
   end
   adult_year = ((Time.zone.today.year - 90)..(Time.zone.today.year - 20)).to_a.sample
   adult_birthday = Date.new(adult_year, (1..12).to_a.sample, (1..28).to_a.sample)
   Resident.create!(name: "#{Faker::Name.first_name} #{Faker::Name.last_name}",
-                   multiplier: 2, unit: unit, email: Faker::Internet.email,
-                   community: community, password: 'password',
+                   multiplier: 2, unit: unit, email: Faker::Internet.email, password: 'password',
                    birthday: adult_birthday, phone: next_phone.call)
   next unless index.even?
 
   veg_year = ((Time.zone.today.year - 90)..(Time.zone.today.year - 20)).to_a.sample
   veg_birthday = Date.new(veg_year, (1..12).to_a.sample, (1..28).to_a.sample)
   Resident.create!(name: "#{Faker::Name.first_name} #{Faker::Name.last_name}",
-                   multiplier: 2, unit: unit, email: Faker::Internet.email,
-                   community: community, password: 'password',
+                   multiplier: 2, unit: unit, email: Faker::Internet.email, password: 'password',
                    vegetarian: true, birthday: veg_birthday, phone: next_phone.call)
 end
 
@@ -104,7 +102,7 @@ Rails.logger.debug { "#{community.residents.count} Residents created" }
 
 # Meals (will be reconciled)
 community.meal_schedule.dates_between(26.weeks.ago.to_date, 8.weeks.ago.to_date).each do |date|
-  Meal.create!(date: date, community: community)
+  Meal.create!(date: date)
 end
 
 Rails.logger.debug { "#{community.meals.count} Meals created" }
@@ -131,13 +129,11 @@ Meal.find_each do |meal|
       MealResident.create!(resident_id: resident.id,
                            meal_id: meal.id,
                            multiplier: resident.multiplier,
-                           community: community,
                            late: true)
     else
       MealResident.create!(resident_id: resident.id,
                            meal_id: meal.id,
-                           multiplier: resident.multiplier,
-                           community: community)
+                           multiplier: resident.multiplier)
     end
   end
 end
@@ -167,17 +163,17 @@ Meal.all.each_with_index do |meal, index|
 
   ids = Resident.pluck(:id).sample(2)
   Bill.create!(meal_id: meal.id, resident_id: ids[0],
-               amount: bill_amount.call(25..65), community: community)
+               amount: bill_amount.call(25..65))
   case index % 3
   when 0
     Bill.create!(meal_id: meal.id, resident_id: ids[1],
-                 amount: BigDecimal('0'), no_cost: true, community: community)
+                 amount: BigDecimal('0'), no_cost: true)
   when 1
     Bill.create!(meal_id: meal.id, resident_id: ids[1],
-                 amount: BigDecimal('0'), community: community)
+                 amount: BigDecimal('0'))
   else
     Bill.create!(meal_id: meal.id, resident_id: ids[1],
-                 amount: bill_amount.call(35..75), community: community)
+                 amount: bill_amount.call(35..75))
   end
 end
 
@@ -187,12 +183,12 @@ Rails.logger.debug { "#{community.bills.count} Bills created" }
 # end_date must be strictly in the past (issue #3): a meal from a day that
 # is not over must not be settled. The cutoff sits on the first batch's
 # boundary so the sweep takes exactly that batch.
-Reconciliation.create!(community: community, date: Time.zone.today, end_date: 8.weeks.ago.to_date)
+Reconciliation.create!(date: Time.zone.today, end_date: 8.weeks.ago.to_date)
 Rails.logger.debug { "#{community.reconciliations.count} Reconciliation created" }
 
 # Meals (will not be reconciled)
 community.meal_schedule.dates_between(7.weeks.ago.to_date, 26.weeks.from_now.to_date).each do |date|
-  Meal.create!(date: date, community: community)
+  Meal.create!(date: date)
 end
 
 # MealResidents & Guests for the unreconciled batch. Skip reconciled meals
@@ -220,13 +216,11 @@ Meal.unreconciled.find_each do |meal|
       MealResident.create(resident_id: resident.id,
                           meal_id: meal.id,
                           multiplier: resident.multiplier,
-                          community: community,
                           late: true)
     else
       MealResident.create(resident_id: resident.id,
                           meal_id: meal.id,
-                          multiplier: resident.multiplier,
-                          community: community)
+                          multiplier: resident.multiplier)
     end
   end
 end
@@ -246,19 +240,19 @@ Meal.unreconciled.each_with_index do |meal, index|
   case index % 4
   when 0
     Bill.create!(meal_id: meal.id, resident_id: ids[0],
-                 amount: bill_amount.call(25..65), community: community)
+                 amount: bill_amount.call(25..65))
     Bill.create!(meal_id: meal.id, resident_id: ids[1],
-                 amount: BigDecimal('0'), no_cost: true, community: community)
+                 amount: BigDecimal('0'), no_cost: true)
   when 1
     Bill.create!(meal_id: meal.id, resident_id: ids[0],
-                 amount: bill_amount.call(25..65), community: community)
+                 amount: bill_amount.call(25..65))
     Bill.create!(meal_id: meal.id, resident_id: ids[1],
-                 amount: BigDecimal('0'), community: community)
+                 amount: BigDecimal('0'))
   when 2
     Bill.create!(meal_id: meal.id, resident_id: ids[0],
-                 amount: bill_amount.call(25..65), community: community)
+                 amount: bill_amount.call(25..65))
     Bill.create!(meal_id: meal.id, resident_id: ids[1],
-                 amount: bill_amount.call(35..75), community: community)
+                 amount: bill_amount.call(35..75))
   end
   # index % 4 == 3: no cooks yet.
 end
@@ -290,19 +284,20 @@ Rails.logger.debug { "#{community.rotations.count} Rotations created" }
 # Event
 Time.zone = community.timezone
 today = Time.zone.today
-Event.create!(community: community, title: 'HOA Meeting',
+Event.create!(title: 'HOA Meeting',
               start_date: Time.zone.local(today.year, today.month, today.day, 20, 0, 0),
               end_date: Time.zone.local(today.year, today.month, today.day, 21, 30, 0))
-Event.create!(community: community, title: "Swan's Anniversary",
+Event.create!(title: "Swan's Anniversary",
               start_date: Time.zone.local(Time.zone.now.year, Time.zone.now.month, 15, 1, 0, 0), allday: true)
 
 Rails.logger.debug { "#{community.events.count} Event#{'s' unless Event.one?} created" }
 
 # GuestRoomReservation
 Time.zone = community.timezone
-GuestRoomReservation.create!(community: community,
-                             resident_id: Resident.adult.pluck(:id).sample,
-                             date: Time.zone.today)
+GuestRoomReservation.create!(
+  resident_id: Resident.adult.pluck(:id).sample,
+  date: Time.zone.today
+)
 
 Rails.logger.debug do
   "#{community.guest_room_reservations.count} GuestRoomReservation#{'s' unless GuestRoomReservation.one?} created"
@@ -312,7 +307,6 @@ end
 Time.zone = community.timezone
 tomorrow = Date.tomorrow
 CommonHouseReservation.create!(
-  community: community,
   resident_id: Resident.adult.pluck(:id).sample,
   start_date: Time.zone.local(tomorrow.year, tomorrow.month, tomorrow.day, 10, 30, 0),
   end_date: Time.zone.local(tomorrow.year, tomorrow.month, tomorrow.day, 14, 0, 0)

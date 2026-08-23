@@ -161,6 +161,16 @@ RSpec.describe AdminUser do
 
       expect(orphan.reload.community_id).to eq(singleton.id)
     end
+
+    it 'points a new admin at the community once one exists, without being told' do
+      community = create(:community)
+      admin = described_class.new(email: 'later@example.com',
+                                  password: 'password',
+                                  password_confirmation: 'password')
+
+      expect(admin.save).to be true
+      expect(admin.community).to eq(community)
+    end
   end
 
   describe 'phone' do

@@ -54,13 +54,14 @@ RSpec.describe Meal do
       expect(meal.errors[:date]).to be_present
     end
 
-    it 'requires a community' do
+    it 'points at the one community without being told' do
+      community
       meal = build(:meal, community: nil)
-      expect(meal).not_to be_valid
-      expect(meal.errors[:community]).to be_present
+      expect(meal).to be_valid
+      expect(meal.community).to eq(community)
     end
 
-    it 'enforces date uniqueness per community' do
+    it 'enforces date uniqueness' do
       date = Date.new(2025, 6, 15)
       create(:meal, community: community, date: date)
 

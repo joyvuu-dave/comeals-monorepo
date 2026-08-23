@@ -102,7 +102,7 @@ RSpec.describe 'Read-only admin token' do
       expect do
         post '/events', params: {
           token: token,
-          event: { title: 'Sneaky', start_date: 1.day.from_now, community_id: community.id }
+          event: { title: 'Sneaky', start_date: 1.day.from_now }
         }
       end.not_to change(Event, :count)
     end
@@ -124,7 +124,7 @@ RSpec.describe 'Read-only admin token' do
           admin_user: {
             email: 'sneaky@example.com', password: 'password123',
             password_confirmation: 'password123',
-            community_id: community.id, superuser: true
+            superuser: true
           }
         }
       end.not_to change(AdminUser, :count)
@@ -134,7 +134,7 @@ RSpec.describe 'Read-only admin token' do
       expect do
         post '/reconciliations', params: {
           token: token,
-          reconciliation: { community_id: community.id, end_date: 1.day.ago.to_date }
+          reconciliation: { end_date: 1.day.ago.to_date }
         }
       end.not_to change(Reconciliation, :count)
     end

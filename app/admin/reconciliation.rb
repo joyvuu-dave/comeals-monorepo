@@ -13,7 +13,7 @@ ActiveAdmin.register Reconciliation do
   # enforces this too; see Reconciliation#reject_update / #reject_destroy).
   actions :index, :show, :new, :create
 
-  permit_params :community_id, :end_date
+  permit_params :end_date
 
   # INDEX
   index do
@@ -81,7 +81,6 @@ ActiveAdmin.register Reconciliation do
   # FORM
   form do |f|
     f.inputs do
-      f.input :community_id, input_html: { value: Community.instance.id }, as: :hidden
       f.input :end_date, as: :datepicker,
                          hint: 'Settle all unreconciled meals up to this date.'
     end

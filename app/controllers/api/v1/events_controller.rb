@@ -38,7 +38,7 @@ module Api
         return render_invalid_date unless times
 
         event = Event.new(start_date: times[:start_date], end_date: times[:end_date], title: params[:title],
-                          description: params[:description] || '', community: Community.instance, allday: allday)
+                          description: params[:description] || '', allday: allday)
         if event.save
           render json: { message: 'Event has been created' }
         else
