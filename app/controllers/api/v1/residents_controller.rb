@@ -86,6 +86,12 @@ module Api
                  status: :bad_request and return
         end
 
+        # An empty password would hash fine and then let this account log in
+        # with an empty password. (Admin creates children with a blank
+        # password on purpose; they have no email, so they can never reach
+        # the login. A resident on this path has an email.)
+        render json: { message: 'Invalid password.' }, status: :bad_request and return if params[:password].blank?
+
         resident.reset_password_token = nil
         resident.reset_password_sent_at = nil
         resident.password = params[:password]

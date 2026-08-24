@@ -306,8 +306,23 @@ class Settlement
     return if ids.blank?
 
     Rails.cache.delete_multi(ids.map { |id| "meal-#{id}" })
-    Meal.where(id: ids).distinct.pluck(:date).map(&:beginning_of_month).uniq.each do |month|
-      reconciliation.community.trigger_pusher(month)
-    end
+    months = Meal.where(id: ids).distinct.pluck(:date).map(&:beginning_of_month).uniq
+    # Clear every month's cache before the first push. A push is a call to
+    # Pusher's HTTP API and can fail; the cache clear is what keeps the
+    # calendar correct, so it must not wait behind a push that may raise.
+    months.each { |month| reconciliation.community.invalidate_calendar_cache(month) }
+    months.each { |month| notify_pusher(month) } # rubocop:disable Style/CombinableLoops -- every clear must run before any push
+  end
+
+  # The ledger is committed by the time this runs. A Pusher outage must not
+  # turn a settlement that happened into a raised error: the caller would
+  # then skip the balance refresh and the cook emails (SettleAndNotify),
+  # the rake task would exit 1, and the API would answer 500 for a
+  # settlement that is in the database. Report it and go on; a client that
+  # missed the push refetches on its next load anyway.
+  def notify_pusher(month)
+    reconciliation.community.notify_pusher(month)
+  rescue Pusher::Error, SocketError, Timeout::Error, SystemCallError => e
+    Rails.error.report(e, handled: true, context: { reconciliation_id: reconciliation.id, month: month })
   end
 end

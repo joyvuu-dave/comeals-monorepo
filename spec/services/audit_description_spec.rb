@@ -155,4 +155,78 @@ RSpec.describe AuditDescription do
     result = described_class.describe(audit)
     expect(result).to include('Veg guest')
   end
+
+  describe 'the less common meal changes' do # -- a group of cases, not a method
+    let(:community) { create(:community) }
+    let(:unit) { create(:unit, community: community) }
+    let(:resident) { create(:resident, community: community, unit: unit) }
+    # max only holds on a closed meal (Meal#conditionally_set_max).
+    let(:meal) { create(:meal, community: community, closed: true, max: nil) }
+
+    def last_update_audit(record)
+      record.audits.where(action: 'update').last
+    end
+
+    it 'says the extras count was set the first time' do
+      meal.update!(max: 4)
+      expect(described_class.describe(last_update_audit(meal))).to eq('Extras count set')
+    end
+
+    it 'says the extras count was cleared' do
+      meal.update!(max: 4)
+      meal.update!(max: nil)
+      expect(described_class.describe(last_update_audit(meal))).to eq('Extras count cleared')
+    end
+
+    it 'says by how much the extras count went up' do
+      meal.update!(max: 4)
+      meal.update!(max: 7)
+      expect(described_class.describe(last_update_audit(meal))).to eq('Extras count increased by 3')
+    end
+
+    it 'says by how much the extras count went down' do
+      meal.update!(max: 7)
+      meal.update!(max: 2)
+      expect(described_class.describe(last_update_audit(meal))).to eq('Extras count decreased by 5')
+    end
+
+    it 'says the meal was assigned to a rotation' do
+      rotation = create(:rotation, community: community)
+      meal.update!(rotation: rotation)
+      expect(described_class.describe(last_update_audit(meal))).to eq('Meal assigned to a rotation')
+    end
+
+    it 'falls back to the type and action for a meal change it does not recognize' do
+      audit = instance_double(Audited::Audit, auditable_type: 'Meal', action: 'update',
+                                              audited_changes: { 'start_time' => [nil, '18:00'] })
+      expect(described_class.describe(audit)).to eq('Meal, update')
+    end
+
+    it 'falls back for a closed change with no true on either side' do
+      audit = instance_double(Audited::Audit, auditable_type: 'Meal', action: 'update',
+                                              audited_changes: { 'closed' => [nil, false] })
+      expect(described_class.describe(audit)).to eq('Meal, update')
+    end
+
+    it 'says a bill changed in an unknown way when neither amount nor no_cost moved' do
+      bill = create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('30'))
+      audit = instance_double(Audited::Audit, auditable_type: 'Bill', action: 'update', auditable_id: bill.id,
+                                              audited_changes: { 'updated_at' => [1, 2] })
+      expect(described_class.describe(audit)).to eq('unknown bill changed')
+    end
+
+    it 'falls back for a meal_resident late change with no clear direction' do
+      open_meal = create(:meal, community: community, date: meal.date + 1)
+      meal_resident = create(:meal_resident, meal: open_meal, resident: resident, community: community)
+      audit = instance_double(Audited::Audit, auditable_type: 'MealResident', action: 'update',
+                                              auditable_id: meal_resident.id,
+                                              audited_changes: { 'late' => [nil, nil] })
+      expect(described_class.describe(audit)).to eq('MealResident, update')
+    end
+
+    it 'falls back for a record type it has never heard of' do
+      audit = instance_double(Audited::Audit, auditable_type: 'Rotation', action: 'update', audited_changes: {})
+      expect(described_class.describe(audit)).to eq('Rotation, update')
+    end
+  end
 end

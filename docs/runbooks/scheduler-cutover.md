@@ -27,14 +27,17 @@ healthchecks.io's grace period (1 hour) expires and emails you.
 2. Raise the database pool before starting the supervisor, not after:
    `heroku config:set RAILS_DB_POOL=4 -a comeals-monorepo`. Today's pool
    of 2 is sized for one web request thread plus solid_cache's background
-   trim thread (`config/database.yml` says so). Solid Queue's supervisor
-   adds a dispatcher thread and a worker thread inside the same process,
-   each of which checks out a connection while polling or running a job —
-   up to 4 wanted at once against a pool of 2 would surface as
-   `ActiveRecord::ConnectionTimeoutError`, not a job failure. Check the
-   Postgres plan's connection ceiling first (`heroku pg:info`) — 4 is far
-   under any Heroku Postgres plan's limit, but confirm before raising it
-   further.
+   trim thread (`config/database.yml` says so). The Puma plugin starts
+   Solid Queue's supervisor, which forks the dispatcher, the scheduler,
+   and the worker as separate processes. Each process gets its own pool
+   of `RAILS_DB_POOL` connections, and each holds one open while it polls
+   or runs a job. So the dyno goes from about 2 Postgres sessions to
+   about 6 (web, trim thread, and one per Solid Queue process). A job
+   that runs the solid_cache trim thread as well wants a second
+   connection in its process; the pool of 4 leaves room for that. Check
+   the Postgres plan's connection ceiling first (`heroku pg:info`) and
+   count a one-off dyno on top; 6 is far under any Heroku Postgres plan's
+   limit, but confirm before raising the pool further.
 3. Set the config var that starts the supervisor inside Puma:
    `heroku config:set SOLID_QUEUE_IN_PUMA=true -a comeals-monorepo`.
    The dyno restarts; the log shows `SolidQueue-…: Started Supervisor`.

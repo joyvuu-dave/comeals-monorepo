@@ -168,4 +168,48 @@ RSpec.describe 'residents:notify' do
 
     expect(ActionMailer::Base.deliveries).to be_empty
   end
+
+  describe 'residents:notify when the run is not complete' do
+    before(:all) { RakeTasks.ensure_loaded }
+
+    let(:community) { create(:community) }
+    let(:unit) { create(:unit, community: community) }
+
+    before { stub_const('BROADCAST_EMAIL_ENABLED', true) }
+
+    after { Rake::Task['residents:notify'].reenable }
+
+    def rotation_starting_in(days)
+      rotation = create(:rotation, community: community)
+      create(:meal, community: community, rotation: rotation, date: Time.zone.today + days + 1)
+      rotation.update_columns(start_date: Time.zone.today + days, residents_notified: false)
+      rotation
+    end
+
+    it 'does not mark the rotation notified when a mail failed, so the next run tries again' do
+      rotation = rotation_starting_in(3)
+      create(:resident, community: community, unit: unit, can_cook: true, active: true, multiplier: 2,
+                        email: 'cook@example.com')
+      allow(PacedDelivery).to receive(:deliver).and_return(PacedDelivery::Result.new(sent: 0, failed: 1, skipped: 0))
+      allow(Rails.logger).to receive(:error)
+
+      Rake::Task['residents:notify'].invoke
+
+      expect(rotation.reload.residents_notified).to be(false)
+      expect(Rails.logger).to have_received(:error).with(/1 email\(s\) failed.*not marking as notified/)
+    end
+
+    it 'does not mark the rotation notified when the per-run cap cut the list short' do
+      rotation = rotation_starting_in(3)
+      create(:resident, community: community, unit: unit, can_cook: true, active: true, multiplier: 2,
+                        email: 'cook@example.com')
+      allow(PacedDelivery).to receive(:deliver).and_return(PacedDelivery::Result.new(sent: 100, failed: 0, skipped: 3))
+      allow(Rails.logger).to receive(:error)
+
+      Rake::Task['residents:notify'].invoke
+
+      expect(rotation.reload.residents_notified).to be(false)
+      expect(Rails.logger).to have_received(:error).with(/3 over the cap/)
+    end
+  end
 end

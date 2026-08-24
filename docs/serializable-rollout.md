@@ -309,8 +309,8 @@ psql comeals_test -c "SELECT count(*) FROM communities"
 `before(:create)` hook builds its own unit, cook, meal and bill. Wrapping it in
 `RetryOnConflict` makes a retry create new records: the second attempt settles
 a meal that did not exist when the race started, and you end up with two
-reconciliations. Retry the calls production makes — `Reconciliation.create!` —
-not factory calls. This is `RetryOnConflict`'s own "safe to run twice" rule
+reconciliations. Retry the calls production makes — `Settlement.run!(cutoff:)`, which since
+2026-08-23 is the only way a reconciliation row is written — not factory calls. This is `RetryOnConflict`'s own "safe to run twice" rule
 finding a real case in the first place it was used.
 
 **At SERIALIZABLE the two sides of a two-settlement race change places.** At READ COMMITTED

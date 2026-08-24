@@ -230,6 +230,13 @@ namespace :test do
     puts "  Jane ID:    #{jane.id}"
     puts "  Community:  #{community.id}"
 
+    # Two rotations, each with one meal after the seeded ones, so the
+    # rotation modal has a second rotation to show: its title must say
+    # "Rotation 2" (its place in date order), whatever its database id is.
+    first_rotation = Rotation.create!(meals_attributes: [{ date: 40.days.from_now.to_date }])
+    second_rotation = Rotation.create!(meals_attributes: [{ date: 80.days.from_now.to_date }])
+    Bill.create!(meal: first_rotation.meals.first, resident: jane, community: community, amount: BigDecimal('0'))
+
     # Write test context for Playwright to read at test time.
     auth_file = Rails.root.join('tmp/integration_auth.json')
     FileUtils.mkdir_p(auth_file.dirname)
@@ -240,6 +247,10 @@ namespace :test do
                             username: jane.name,
                             bob_email: bob.email,
                             bob_password: 'password',
+                            rotations: {
+                              first: { id: first_rotation.id, place_value: first_rotation.reload.place_value },
+                              second: { id: second_rotation.id, place_value: second_rotation.reload.place_value }
+                            },
                             meals: {
                               reconciled: { id: reconciled_meal.id, date: reconciled_meal.date.iso8601 },
                               closed: { id: closed_meal.id, date: closed_meal.date.iso8601 },

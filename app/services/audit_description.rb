@@ -20,7 +20,9 @@ class AuditDescription
     return describe_bill(audit) if audit.auditable_type == 'Bill'
     return describe_meal_resident(audit) if audit.auditable_type == 'MealResident'
 
-    describe_guest(audit) if audit.auditable_type == 'Guest'
+    return describe_guest(audit) if audit.auditable_type == 'Guest'
+
+    fallback_description(audit)
   end
 
   private

@@ -48,7 +48,8 @@ commit that failed. In this codebase nothing does:
   this down as a contract, not as a habit.
 - Both `deliver_now` calls are outside any transaction:
   `residents_controller.rb:74` runs after the save returns, and the
-  reconciliation mailers run after `Reconciliation.create!` returns.
+  reconciliation mailers run after the settlement transaction returns
+  (`Settlement.run!` since 2026-08-23; `Reconciliation.create!` before that).
   (Amended 2026-08-23: the password-reset `deliver_now` moved to
   `PasswordReset.request` in `app/services/password_reset.rb` on 2026-08-11,
   and the admin "Send password reset email" button calls it too. It still runs

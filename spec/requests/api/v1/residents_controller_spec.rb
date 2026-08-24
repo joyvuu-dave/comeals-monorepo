@@ -160,4 +160,29 @@ RSpec.describe 'Residents API' do
       expect(response).to have_http_status(:bad_request)
     end
   end
+
+  describe 'password reset, the failure branches' do
+    let(:community) { create(:community) }
+    let(:unit) { create(:unit, community: community) }
+    let(:resident) { create(:resident, community: community, unit: unit, email: 'ann@example.com') }
+
+    it 'answers 400 when the reset token could not be saved' do
+      allow(PasswordReset).to receive(:request).and_return(:save_failed)
+
+      post '/api/v1/residents/password-reset', params: { email: resident.email }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Error. Please try again.')
+    end
+
+    it 'answers 400 for a blank new password and keeps the old one' do
+      resident.update!(reset_password_token: 'reset-token-789', reset_password_sent_at: Time.current)
+
+      post '/api/v1/residents/password-reset/reset-token-789', params: { password: '' }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Invalid password.')
+      expect(resident.reload.reset_password_token).to eq('reset-token-789')
+    end
+  end
 end

@@ -118,4 +118,28 @@ RSpec.describe 'rotations:notify_new', type: :task do
     # No emails sent
     expect(ActionMailer::Base.deliveries.size).to eq(initial_count)
   end
+
+  describe 'rotations:notify_new when the run is not complete' do
+    before(:all) { RakeTasks.ensure_loaded }
+
+    let(:community) { create(:community) }
+    let(:unit) { create(:unit, community: community) }
+
+    before { stub_const('BROADCAST_EMAIL_ENABLED', true) }
+
+    after { Rake::Task['rotations:notify_new'].reenable }
+
+    it 'does not stamp the rotation notified when a mail failed, so the next run tries again' do
+      create(:resident, community: community, unit: unit, active: true)
+      meal = create(:meal, community: community)
+      rotation = Rotation.create!(meals_attributes: [{ date: meal.date + 100.days }])
+      allow(PacedDelivery).to receive(:deliver).and_return(PacedDelivery::Result.new(sent: 0, failed: 1, skipped: 0))
+      allow(Rails.logger).to receive(:error)
+
+      Rake::Task['rotations:notify_new'].invoke
+
+      expect(rotation.reload.new_rotation_notified_at).to be_nil
+      expect(Rails.logger).to have_received(:error).with(/1 email\(s\) failed.*not marking as notified/)
+    end
+  end
 end

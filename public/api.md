@@ -287,9 +287,9 @@ The response carries an `ETag`. Send it back as `If-None-Match` to get
 A rotation is a cooking schedule: a set of residents who share the
 cooking for a run of meals.
 
-| Method | Path             | Returns                                                                                                                                                                                |
-| ------ | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET`  | `/rotations/:id` | `{ "id": <place_value>, "description": ..., "residents": [ { "id", "display_name", "signed_up" } ] }`. `signed_up` is true for members who have a bill on one of the rotation's meals. |
+| Method | Path             | Returns                                                                                                                                                                                                                                                   |
+| ------ | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/rotations/:id` | `{ "id": <database id>, "place_value": <1 for the earliest rotation, 2 for the next, ...>, "description": ..., "residents": [ { "id", "display_name", "signed_up" } ] }`. `signed_up` is true for members who have a bill on one of the rotation's meals. |
 
 ## Settlement preview
 

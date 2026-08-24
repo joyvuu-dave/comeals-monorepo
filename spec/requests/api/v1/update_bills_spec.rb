@@ -705,4 +705,26 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
       expect(response).to have_http_status(:not_found)
     end
   end
+
+  describe 'PATCH /api/v1/meals/:meal_id/bills with a cook who does not exist' do
+    let(:community) { create(:community) }
+    let(:unit) { create(:unit, community: community) }
+    let(:resident) { create(:resident, community: community, unit: unit) }
+    let(:token) { resident.keys.first.token }
+    let(:meal) { create(:meal, community: community, date: Date.yesterday) }
+    let!(:bill) { create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('10')) }
+
+    it 'answers 400 before the lock and writes nothing' do
+      patch "/api/v1/meals/#{meal.id}/bills", params: {
+        token: token,
+        bills: [{ resident_id: resident.id, amount: '20', no_cost: false },
+                { resident_id: 999_999, amount: '5', no_cost: false }]
+      }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Resident not found.')
+      expect(bill.reload.amount).to eq(BigDecimal('10'))
+      expect(meal.bills.count).to eq(1)
+    end
+  end
 end

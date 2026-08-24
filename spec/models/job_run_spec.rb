@@ -54,4 +54,13 @@ RSpec.describe JobRun do
       described_class.create!(name: 'x', started_at: Time.current, finished_at: 1.minute.ago, outcome: 'ok')
     end.to raise_error(ActiveRecord::StatementInvalid, /job_runs_finished_after_started/)
   end
+
+  describe '#duration' do
+    it 'is the seconds between start and finish' do
+      started = Time.zone.parse('2026-08-24 03:00:00')
+      run = described_class.create!(name: 'refresh_balances', started_at: started, finished_at: started + 2.5,
+                                    outcome: 'ok')
+      expect(run.duration).to eq(2.5)
+    end
+  end
 end
