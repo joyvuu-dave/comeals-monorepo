@@ -199,6 +199,30 @@ RSpec.describe 'residents:notify' do
       expect(Rails.logger).to have_received(:error).with(/1 email\(s\) failed.*not marking as notified/)
     end
 
+    it 'mails the rest on the next run, once, and only then marks the rotation notified' do
+      rotation = rotation_starting_in(3)
+      cooks = %w[Ann Bob Cid].map do |name|
+        create(:resident, community: community, unit: unit, can_cook: true, active: true, multiplier: 2,
+                          name: name, email: "#{name.downcase}@example.com")
+      end
+      stub_const('PacedDelivery::CAP', 2)
+      allow(Rails.logger).to receive(:error)
+
+      before = ActionMailer::Base.deliveries.size
+      Rake::Task['residents:notify'].invoke
+      first_run = ActionMailer::Base.deliveries.drop(before).map(&:to).flatten
+      expect(first_run.size).to eq(2)
+      expect(rotation.reload.residents_notified).to be(false)
+
+      Rake::Task['residents:notify'].reenable
+      Rake::Task['residents:notify'].invoke
+      second_run = ActionMailer::Base.deliveries.drop(before + 2).map(&:to).flatten
+      expect(second_run.size).to eq(1)
+      expect(first_run + second_run).to match_array(cooks.map(&:email))
+      expect(rotation.reload.residents_notified).to be(true)
+      expect(MailDelivery.where(about: rotation).count).to eq(3)
+    end
+
     it 'does not mark the rotation notified when the per-run cap cut the list short' do
       rotation = rotation_starting_in(3)
       create(:resident, community: community, unit: unit, can_cook: true, active: true, multiplier: 2,

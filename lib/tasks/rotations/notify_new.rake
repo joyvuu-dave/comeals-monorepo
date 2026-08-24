@@ -19,17 +19,30 @@ namespace :rotations do
     Rotation.where(new_rotation_notified_at: nil)
             .where(created_at: 7.days.ago..)
             .find_each do |rotation|
-      residents = rotation.community.residents.where(active: true).where.not(email: nil)
-      result = PacedDelivery.deliver(residents, mailer: 'new_rotation_email') do |resident|
+      # Only the people not yet mailed about this rotation (mail_deliveries),
+      # so a run that stopped part way mails the rest next time and nobody
+      # gets a second copy (#74).
+      mailer = 'new_rotation_email'
+      residents = MailDelivery.not_yet_sent(rotation.community.residents.where(active: true).where.not(email: nil),
+                                            mailer: mailer, about: rotation)
+      result = PacedDelivery.deliver(
+        residents, mailer: mailer,
+                   after_send: lambda { |resident|
+                     MailDelivery.record!(mailer: mailer, about: rotation, resident: resident)
+                   }
+      ) do |resident|
         ResidentMailer.new_rotation_email(resident, rotation, rotation.community)
       end
 
+      # Notified means nobody is left to mail. A failed or capped run leaves
+      # the stamp off, and the next run picks up the people it missed.
       if result.complete?
         rotation.update_column(:new_rotation_notified_at, Time.current)
         Rails.logger.info("Rotation #{rotation.id}: #{result.sent} new-rotation email(s) sent")
       else
         Rails.logger.error("Rotation #{rotation.id}: #{result.failed} email(s) failed, " \
-                           "#{result.skipped} over the cap, #{result.sent} sent — not marking as notified")
+                           "#{result.skipped} over the cap, #{result.sent} sent — not marking as notified; " \
+                           'the next run mails the rest')
       end
     end
 

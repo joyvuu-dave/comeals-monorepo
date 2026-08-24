@@ -129,6 +129,28 @@ RSpec.describe 'rotations:notify_new', type: :task do
 
     after { Rake::Task['rotations:notify_new'].reenable }
 
+    it 'mails only the people it missed on the next run, then stamps the rotation' do
+      residents = %w[Ann Bob Cid].map do |name|
+        create(:resident, community: community, unit: unit, active: true, name: name,
+                          email: "#{name.downcase}@example.com")
+      end
+      meal = create(:meal, community: community)
+      rotation = Rotation.create!(meals_attributes: [{ date: meal.date + 100.days }])
+      stub_const('PacedDelivery::CAP', 2)
+      allow(Rails.logger).to receive(:error)
+
+      Rake::Task['rotations:notify_new'].invoke
+      first_run = ActionMailer::Base.deliveries.select { |m| m.subject == 'New Rotation Posted' }.map(&:to).flatten
+      expect(first_run.size).to eq(2)
+      expect(rotation.reload.new_rotation_notified_at).to be_nil
+
+      Rake::Task['rotations:notify_new'].reenable
+      Rake::Task['rotations:notify_new'].invoke
+      all = ActionMailer::Base.deliveries.select { |m| m.subject == 'New Rotation Posted' }.map(&:to).flatten
+      expect(all).to match_array(residents.map(&:email))
+      expect(rotation.reload.new_rotation_notified_at).to be_present
+    end
+
     it 'does not stamp the rotation notified when a mail failed, so the next run tries again' do
       create(:resident, community: community, unit: unit, active: true)
       meal = create(:meal, community: community)

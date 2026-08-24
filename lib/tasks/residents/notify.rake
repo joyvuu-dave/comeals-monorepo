@@ -35,16 +35,29 @@ namespace :residents do
                             .having('COUNT(bills.id) < ?', 2)
                             .pluck(:date)
 
-      to_notify = eligible_cooks.reject { |resident| signed_up_residents_ids.include?(resident.id) }
-      result = PacedDelivery.deliver(to_notify, mailer: 'rotation_signup_email') do |resident|
+      # Only the people not yet mailed about this rotation (mail_deliveries),
+      # so a run that stopped part way — a failure, the per-run cap — mails
+      # the rest next time and nobody gets a second copy (#74).
+      mailer = 'rotation_signup_email'
+      to_notify = MailDelivery.not_yet_sent(eligible_cooks.where.not(id: signed_up_residents_ids),
+                                            mailer: mailer, about: rotation)
+      result = PacedDelivery.deliver(
+        to_notify, mailer: mailer,
+                   after_send: lambda { |resident|
+                     MailDelivery.record!(mailer: mailer, about: rotation, resident: resident)
+                   }
+      ) do |resident|
         ResidentMailer.rotation_signup_email(resident, rotation, open_meal_dates, rotation.community)
       end
 
+      # Notified means nobody is left to mail. A failed or capped run leaves
+      # the flag off, and the next run picks up the people it missed.
       if result.complete?
         rotation.update(residents_notified: true)
       else
         Rails.logger.error("Rotation #{rotation.id}: #{result.failed} email(s) failed, " \
-                           "#{result.skipped} over the cap, #{result.sent} sent — not marking as notified")
+                           "#{result.skipped} over the cap, #{result.sent} sent — not marking as notified; " \
+                           'the next run mails the rest')
       end
     end
 
