@@ -41,10 +41,17 @@ class Settlement
   # exactly the rows a run! on the same data would store — a spec pins that.
   #
   # Returns a Preview: the cutoff, the meals with their ledger and their
-  # cooks preloaded, the ledger itself (for per-meal summaries), and the
+  # cooks preloaded, the ledger itself (for per-meal summaries), the
   # rounded per-resident balances for every resident in the community
-  # (zero included, so a screen can show everyone).
-  Preview = Data.define(:cutoff, :meals, :ledger, :resident_balances) do
+  # (zero included, so a screen can show everyone), and the meals the
+  # settlement would leave behind.
+  #
+  # skipped_meals are the meals in the period that people ate but no cook
+  # billed. A settlement never claims a meal without a bill, so these stay
+  # unreconciled — past this settlement and every later one — until someone
+  # enters a bill, and nobody who ate is charged. They are not in `meals`
+  # (nothing about them settles); they are here so the preview can warn.
+  Preview = Data.define(:cutoff, :meals, :ledger, :resident_balances, :skipped_meals) do
     def meal_summary(meal) = ledger.summary_for(meal)
   end
 
@@ -55,7 +62,16 @@ class Settlement
     ledger = MealLedger.new(meals)
     raw = ledger.balances(community.residents.pluck(:id))
     Preview.new(cutoff: cutoff, meals: meals, ledger: ledger,
-                resident_balances: allocate_to_cents(raw, reconciliation_id: 'preview'))
+                resident_balances: allocate_to_cents(raw, reconciliation_id: 'preview'),
+                skipped_meals: skipped_by(cutoff))
+  end
+
+  # Unreconciled meals in the period with attendance and no bill at all.
+  # The date rules are settleable_by's; the difference is the missing bill.
+  def self.skipped_by(cutoff)
+    Meal.unreconciled.where(date: ..cutoff).where(date: ...Time.zone.today)
+        .where.missing(:bills).with_attendees
+        .order(:date).preload(:meal_residents, :guests).to_a
   end
 
   attr_reader :reconciliation

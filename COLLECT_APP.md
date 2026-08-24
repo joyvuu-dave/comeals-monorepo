@@ -165,7 +165,7 @@ On the iOS side, all money is `Decimal`. A thin `Money` wrapper type may be just
 
 #### Design decisions worth preserving
 
-**Warnings at the top level, not inlined per meal.** Cross-referenced by `meal_id`. This lets the iOS app render them in a dedicated "Issues to Review" screen _and_ render inline badges on the meal list using the same data. Strictly more flexible than either alternative on its own.
+**Warnings at the top level, not inlined per meal.** Cross-referenced by `meal_id` — but an `attendance_without_bill` warning names a meal that is _not_ in `meals`, because a settlement never claims a meal without a bill (added 2026-08-23; the client must not assume every warning's meal is in the list). This lets the iOS app render them in a dedicated "Issues to Review" screen _and_ render inline badges on the meal list using the same data. Strictly more flexible than either alternative on its own.
 
 **`warning.id` is deterministic, not a UUID.** Format: `kind:meal=N:bill=N`. Critical for SwiftUI `List`/`ForEach` diffing — the same warning on a re-fetch gets the same identifier, so the list animates smoothly instead of rebuilding.
 

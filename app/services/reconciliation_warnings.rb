@@ -11,6 +11,12 @@
 # kind it does not know by its title and body, which is how new kinds get
 # added without a client release.
 #
+# Two inputs, because the most important warning is about meals that are
+# NOT in the settlement. `meals` are the ones the settlement would claim;
+# `skipped` are the ones it would leave behind because people ate and no
+# cook billed (Settlement::Preview#skipped_meals). A warning's meal_id can
+# therefore name a meal that is not in the preview's meal list.
+#
 # The meals must come with bills (and their residents), meal_residents,
 # and guests preloaded — Settlement.preview does that.
 class ReconciliationWarnings
@@ -18,16 +24,18 @@ class ReconciliationWarnings
 
   KINDS = %w[bill_with_no_attendees attendance_without_bill zero_bill_not_flagged].freeze
 
-  def self.for(meals)
-    new(meals).call
+  def self.for(meals, skipped: [])
+    new(meals, skipped: skipped).call
   end
 
-  def initialize(meals)
+  def initialize(meals, skipped: [])
     @meals = meals
+    @skipped = skipped
   end
 
   def call
-    @meals.flat_map { |meal| warnings_for(meal) }
+    @skipped.map { |meal| attendance_without_bill(meal) } +
+      @meals.flat_map { |meal| warnings_for(meal) }
   end
 
   private
@@ -37,11 +45,7 @@ class ReconciliationWarnings
     real_bills = meal.bills.reject(&:no_cost)
 
     warnings = []
-    if attendees.zero?
-      real_bills.each { |bill| warnings << bill_with_no_attendees(meal, bill) }
-    elsif meal.bills.empty?
-      warnings << attendance_without_bill(meal, attendees)
-    end
+    real_bills.each { |bill| warnings << bill_with_no_attendees(meal, bill) } if attendees.zero?
     real_bills.select { |bill| bill.amount.zero? }.each { |bill| warnings << zero_bill_not_flagged(meal, bill) }
     warnings
   end
@@ -55,12 +59,16 @@ class ReconciliationWarnings
             body: "#{bill.resident.name} submitted a #{money(bill.amount)} bill for a meal with zero attendees.")
   end
 
-  # People ate but no cook entered a receipt, so nobody is charged.
-  def attendance_without_bill(meal, attendees)
+  # People ate but no cook entered a receipt. A settlement never claims a
+  # meal without a bill, so this meal is left behind and nobody who ate is
+  # charged, until someone enters a bill.
+  def attendance_without_bill(meal)
+    attendees = meal.meal_residents.size + meal.guests.size
     warning('attendance_without_bill', meal, nil,
             severity: 'warning',
             title: 'Attendance without bill',
-            body: "#{attendees} #{'person'.pluralize(attendees)} signed up to eat, but no bill was submitted.")
+            body: "#{attendees} #{'person'.pluralize(attendees)} signed up to eat on #{meal.date.iso8601}, " \
+                  'but no bill was submitted. This meal will not be settled until a cook enters a bill.')
   end
 
   # A $0 bill is probably a no-cost meal that was not marked as one.

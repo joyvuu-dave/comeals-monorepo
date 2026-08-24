@@ -306,7 +306,10 @@ with its cost numbers, counts, and `cooks`), `balances` per resident and
 per unit, and `warnings` about data that settles fine but usually means
 someone forgot a step (`kind` is one of `bill_with_no_attendees`,
 `attendance_without_bill`, `zero_bill_not_flagged`; show `title` and
-`body` for a kind you do not know). Money is a string; the sign is the
+`body` for a kind you do not know). An `attendance_without_bill` warning
+names a meal that is not in `meals`: people ate, no cook billed, and a
+settlement never claims a meal without a bill, so it is left behind until
+someone enters one. Money is a string; the sign is the
 direction: positive means the community owes the resident. No meals to
 settle is a `200` with empty lists, not an error.
 

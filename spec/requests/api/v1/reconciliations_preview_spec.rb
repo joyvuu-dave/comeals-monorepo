@@ -107,18 +107,30 @@ RSpec.describe 'GET /api/v1/reconciliations/preview' do
       expect(preview[:warnings].map(&:deep_symbolize_keys)).to eq([expected])
     end
 
-    it 'flags attendance with no bill, on a meal that is settleable because another meal has a bill' do
+    it 'flags a meal people ate that no cook billed — a meal the settlement would leave behind' do
       billed = create(:meal, community: community, date: Date.yesterday - 1)
       create(:bill, meal: billed, resident: cook, community: community, amount: BigDecimal('20'))
       create(:meal_resident, meal: billed, resident: resident, community: community, multiplier: 2)
-      # A meal with attendance and no bill is not settleable at all, so it
-      # cannot appear in a preview and this warning has no meal to attach to.
       unbilled = create(:meal, community: community, date: Date.yesterday)
       create(:meal_resident, meal: unbilled, resident: resident, community: community, multiplier: 2)
+      create(:guest, meal: unbilled, resident: resident, multiplier: 2)
+      # Not in the period, and nobody ate: neither is a warning.
+      create(:meal_resident, meal: create(:meal, community: community, date: Time.zone.today),
+                             resident: resident, community: community, multiplier: 2)
+      create(:meal, community: community, date: Date.yesterday - 2)
 
       body = preview
       expect(body[:meals].pluck(:id)).to eq([billed.id])
-      expect(body[:warnings]).to eq([])
+      expected = {
+        id: "attendance_without_bill:meal=#{unbilled.id}",
+        kind: 'attendance_without_bill',
+        severity: 'warning',
+        meal_id: unbilled.id,
+        title: 'Attendance without bill',
+        body: "2 people signed up to eat on #{unbilled.date.iso8601}, but no bill was submitted. " \
+              'This meal will not be settled until a cook enters a bill.'
+      }
+      expect(body[:warnings].map(&:deep_symbolize_keys)).to eq([expected])
     end
 
     it 'flags a $0 bill that was not marked no-cost, and not one that was' do
