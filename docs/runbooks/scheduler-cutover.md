@@ -16,21 +16,44 @@ no jobs and can be removed; the schedule lives in git.
 
 ## Steps
 
+Do not delete anything on the Scheduler dashboard until step 6. If Solid
+Queue fails to start, the jobs still run from Scheduler while you fix it;
+deleting first would leave the four jobs silently unrun until
+healthchecks.io's grace period (1 hour) expires and emails you.
+
 1. Deploy (`bin/deploy`). The migration creates Solid Queue's tables and
-   `job_runs` in the primary database.
-2. Set the config var that starts the supervisor inside Puma:
+   `job_runs` in the primary database. Scheduler is still running the
+   four jobs; nothing about them changes yet.
+2. Raise the database pool before starting the supervisor, not after:
+   `heroku config:set RAILS_DB_POOL=4 -a comeals-monorepo`. Today's pool
+   of 2 is sized for one web request thread plus solid_cache's background
+   trim thread (`config/database.yml` says so). Solid Queue's supervisor
+   adds a dispatcher thread and a worker thread inside the same process,
+   each of which checks out a connection while polling or running a job —
+   up to 4 wanted at once against a pool of 2 would surface as
+   `ActiveRecord::ConnectionTimeoutError`, not a job failure. Check the
+   Postgres plan's connection ceiling first (`heroku pg:info`) — 4 is far
+   under any Heroku Postgres plan's limit, but confirm before raising it
+   further.
+3. Set the config var that starts the supervisor inside Puma:
    `heroku config:set SOLID_QUEUE_IN_PUMA=true -a comeals-monorepo`.
    The dyno restarts; the log shows `SolidQueue-…: Started Supervisor`.
-3. Confirm the catch-up ran: `heroku run rails runner 'puts JobRun.order(:id).last(4).map { |r| [r.name, r.outcome, r.finished_at] }'`.
+4. Confirm the catch-up ran: `heroku run rails runner 'puts JobRun.order(:id).last(4).map { |r| [r.name, r.outcome, r.finished_at] }'`.
    Every job that had never recorded a run is due at boot, so all four
    should have a row within a minute of the restart.
-4. Leave both schedules running for one full day. Each healthchecks.io
+5. Leave both schedules running for one full day. Each healthchecks.io
    check should receive two pings per day (Scheduler's and Solid Queue's).
-5. Delete the four jobs on the Heroku Scheduler dashboard
+   The two can fire within seconds of each other at the shared UTC times;
+   every job is idempotent, so a double run costs a few queries, not
+   correctness — RefreshBalancesJob and VerifyLedgerJob recompute from
+   source either way, SetMultipliersJob only moves a resident that is not
+   already in the right band, and EnsureRotationsJob's own guard makes a
+   second run a no-op once the calendar reaches six months out.
+6. Delete the four jobs on the Heroku Scheduler dashboard
    (`https://dashboard.heroku.com/apps/comeals-monorepo/scheduler`).
-6. The next day, confirm each check received exactly one ping, and that
+7. The next day, confirm each check received exactly one ping, and that
    `job_runs` has one `ok` row per job.
-7. Remove the add-on: `heroku addons:destroy scheduler -a comeals-monorepo`.
+8. Remove the add-on: `heroku addons:destroy scheduler -a comeals-monorepo`.
 
 ## If a job stops running
 
