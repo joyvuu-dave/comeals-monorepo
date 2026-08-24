@@ -3,6 +3,7 @@
 // description plumbing, open/close, and the page teardown. One of the
 // DataStore's subsystem files — see data_store.js, which composes them.
 import { isAlive } from "mobx-state-tree";
+import { newId } from "../helpers/new_id";
 import { get as kvGet, set as kvSet, del as kvDel } from "idb-keyval";
 
 import { api } from "../helpers/api";
@@ -274,7 +275,7 @@ export function mealPageActions(self) {
 
       // Assign ids to bills (types.identifier requires strings)
       bills = bills.map((obj) => {
-        var bill = Object.assign({ id: crypto.randomUUID() }, obj);
+        var bill = Object.assign({ id: newId() }, obj);
         bill.id = String(bill.id);
         return bill;
       });
