@@ -8,6 +8,7 @@
 #  active                 :boolean          default(TRUE), not null
 #  birthday               :date
 #  can_cook               :boolean          default(TRUE), not null
+#  can_reconcile          :boolean          default(FALSE), not null
 #  email                  :string
 #  keys_valid_since       :datetime         not null
 #  multiplier             :integer          default(2), not null

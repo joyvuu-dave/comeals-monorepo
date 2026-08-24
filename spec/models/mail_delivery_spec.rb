@@ -2,6 +2,27 @@
 
 require 'rails_helper'
 
+# == Schema Information
+#
+# Table name: mail_deliveries
+#
+#  id          :bigint           not null, primary key
+#  about_type  :string           not null
+#  mailer      :string           not null
+#  sent_at     :datetime         not null
+#  created_at  :datetime         not null
+#  updated_at  :datetime         not null
+#  about_id    :bigint           not null
+#  resident_id :bigint           not null
+#
+# Indexes
+#
+#  index_mail_deliveries_one_per_person  (mailer,about_type,about_id,resident_id) UNIQUE
+#
+# Foreign Keys
+#
+#  fk_rails_...  (resident_id => residents.id)
+#
 RSpec.describe MailDelivery do
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
