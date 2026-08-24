@@ -5,7 +5,7 @@ require 'rails_helper'
 RSpec.describe 'GET /api/v1/reconciliations/preview' do
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community, name: '5B') }
-  let(:resident) { create(:resident, community: community, unit: unit, multiplier: 2) }
+  let(:resident) { create(:resident, community: community, unit: unit, multiplier: 2, can_reconcile: true) }
   let(:token) { resident.keys.first.token }
 
   def preview(cutoff = Date.yesterday)

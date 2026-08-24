@@ -2,8 +2,15 @@
 
 ActiveAdmin.register Resident do
   # STRONG PARAMS
-  permit_params :name, :multiplier, :unit_id, :email, :phone, :password, :vegetarian, :can_cook,
-                :active, :birthday
+  # can_reconcile lets a resident settle the period through the API, a
+  # money-path write with no undo, so only a superuser may grant it — the
+  # same tier that may write a Reconciliation here (ADR 0004). For a plain
+  # admin the param is not permitted, so a hand-made request drops it too.
+  permit_params do
+    params = %i[name multiplier unit_id email phone password vegetarian can_cook active birthday]
+    params << :can_reconcile if current_active_admin_user&.superuser?
+    params
+  end
 
   # CONFIG
   filter :active
@@ -104,6 +111,7 @@ ActiveAdmin.register Resident do
       row('Category') { |r| price_category_label(r.multiplier) }
       row :unit
       row :can_cook
+      row :can_reconcile
       row :active
       row :email
       row(:phone) { |r| formatted_phone(r.phone) }
@@ -214,6 +222,12 @@ ActiveAdmin.register Resident do
                                  'set here only stays for a resident without one.'
       f.input :unit, collection: Unit.order(:name)
       f.input :can_cook
+      if current_active_admin_user&.superuser?
+        f.input :can_reconcile,
+                hint: 'May settle the period from the reconciliation app: claim the meals, write the ' \
+                      'ledger, and mail the cooks. There is no undo, so give this to the person who ' \
+                      'does the books and nobody else.'
+      end
       f.input :active
     end
     f.label 'Note: to change a password, use the "Send password reset email" button on the ' \

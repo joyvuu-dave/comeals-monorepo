@@ -1027,6 +1027,7 @@ CREATE TABLE public.residents (
     updated_at timestamp without time zone NOT NULL,
     vegetarian boolean DEFAULT false NOT NULL,
     phone character varying,
+    can_reconcile boolean DEFAULT false NOT NULL,
     CONSTRAINT residents_birthday_not_sentinel CHECK (((birthday IS NULL) OR (birthday > '1900-01-01'::date))),
     CONSTRAINT residents_multiplier_non_negative CHECK ((multiplier >= 0)),
     CONSTRAINT residents_phone_e164 CHECK (((phone IS NULL) OR ((phone)::text ~ '^\+[1-9][0-9]{1,14}$'::text)))
@@ -3030,6 +3031,7 @@ ALTER TABLE ONLY public.bills
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260825110000'),
 ('20260825100000'),
 ('20260824100000'),
 ('20260823150000'),

@@ -11,7 +11,7 @@ RSpec.describe 'POST /api/v1/reconciliations' do
 
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
-  let(:resident) { create(:resident, community: community, unit: unit, multiplier: 2) }
+  let(:resident) { create(:resident, community: community, unit: unit, multiplier: 2, can_reconcile: true) }
   let(:token) { resident.keys.first.token }
   let(:cook) { create(:resident, community: community, unit: unit, multiplier: 2) }
 

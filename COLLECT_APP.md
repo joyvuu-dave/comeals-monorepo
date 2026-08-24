@@ -55,7 +55,7 @@ The token has no expiry. Revocation happens when the resident's password changes
 
 **No OAuth, no separate mobile auth system.** One auth mechanism, two clients.
 
-**Permissioning for v1: any authenticated resident can preview and create.** Small trusted community, financial data is already visible in email reports, no need to gate further. If we later want to restrict, add a `residents.can_reconcile` boolean column — that's the seam to target.
+**Permissioning: `residents.can_reconcile`.** Preview and create both answer `403` unless the logged-in resident has the flag (issue #72; `Api::V1::ReconciliationsController#require_reconciler`). A superuser grants it on the resident's admin page; a plain admin cannot. The reason it is not open to every resident: a token never expires, the app runs on a shared screen, some residents choose a blank password, and settling has no undo. The app should show a plain "ask an admin for the reconciler role" screen on a `403`, not a login screen.
 
 ## Money representation
 

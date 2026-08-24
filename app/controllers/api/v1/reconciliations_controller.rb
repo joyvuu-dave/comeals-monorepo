@@ -3,7 +3,7 @@
 module Api
   module V1
     class ReconciliationsController < ApiController
-      before_action :authenticate
+      before_action :authenticate, :require_reconciler
 
       # GET /api/v1/reconciliations/preview?cutoff=YYYY-MM-DD
       #
@@ -47,6 +47,20 @@ module Api
         render json: { message: 'Someone else was changing these meals at the same time. ' \
                                 'Nothing was saved. Try again.' },
                status: :conflict
+      end
+
+      private
+
+      # Settling is a money-path write with no undo, and the preview shows
+      # every resident's balance. Both are for the person who does the
+      # books: a superuser grants residents.can_reconcile in admin (#72).
+      # A resident token never expires, so "any logged-in resident" would
+      # mean anyone who can reach the shared screen's token.
+      def require_reconciler
+        return if current_resident_api.can_reconcile?
+
+        render json: { message: 'Only a resident with the reconciler role may do this. Ask an admin.' },
+               status: :forbidden
       end
     end
   end

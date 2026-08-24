@@ -12,6 +12,7 @@ require 'rails_helper'
 # removing the adapter wiring or a resource opting out would fail a test.
 RSpec.describe 'Admin write authorization' do
   let(:community) { create(:community) }
+  let(:unit) { create(:unit, community: community) }
   let!(:event) { create(:event, community: community) }
 
   before { host! 'admin.example.com' }
@@ -66,6 +67,21 @@ RSpec.describe 'Admin write authorization' do
     end
 
     describe 'on the money path' do
+      it 'may not grant the reconciler role: the param is dropped, the resident is saved without it' do
+        resident = create(:resident, community: community, unit: unit)
+
+        patch "/residents/#{resident.id}", params: { resident: { can_reconcile: true, name: 'Renamed' } }
+
+        expect(resident.reload.name).to eq('Renamed')
+        expect(resident.can_reconcile).to be(false)
+      end
+
+      it 'does not see the reconciler checkbox on the form' do
+        resident = create(:resident, community: community, unit: unit)
+        get "/residents/#{resident.id}/edit"
+        expect(response.body).not_to include('resident_can_reconcile')
+      end
+
       it 'may not create a reconciliation' do
         expect do
           post '/reconciliations', params: {
@@ -116,6 +132,14 @@ RSpec.describe 'Admin write authorization' do
       end.to change(Event, :count).by(-1)
 
       expect(response).to redirect_to('/events')
+    end
+
+    it 'may grant the reconciler role' do
+      resident = create(:resident, community: community, unit: unit)
+
+      patch "/residents/#{resident.id}", params: { resident: { can_reconcile: true } }
+
+      expect(resident.reload.can_reconcile).to be(true)
     end
 
     it 'may create a reconciliation' do
