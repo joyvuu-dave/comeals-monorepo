@@ -2,6 +2,24 @@
 
 require 'rails_helper'
 
+# == Schema Information
+#
+# Table name: job_runs
+#
+#  id          :bigint           not null, primary key
+#  details     :jsonb            not null
+#  error       :text
+#  finished_at :datetime         not null
+#  name        :string           not null
+#  outcome     :string           not null
+#  started_at  :datetime         not null
+#  created_at  :datetime         not null
+#  updated_at  :datetime         not null
+#
+# Indexes
+#
+#  index_job_runs_on_name_and_finished_at  (name,finished_at)
+#
 RSpec.describe JobRun do
   def run!(name: 'refresh_balances', outcome: 'ok', finished_at: Time.current)
     described_class.create!(name: name, started_at: finished_at - 1.second, finished_at: finished_at, outcome: outcome)
