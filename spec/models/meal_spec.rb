@@ -11,7 +11,6 @@
 #  date              :date             not null
 #  description       :text             default(""), not null
 #  max               :integer
-#  start_time        :datetime         not null
 #  created_at        :datetime         not null
 #  updated_at        :datetime         not null
 #  community_id      :bigint           not null
@@ -118,29 +117,6 @@ RSpec.describe Meal do
         meal = create(:meal, community: uncapped_community)
 
         expect(meal.cap).to be_nil
-      end
-    end
-
-    describe '#set_start_time (before_create)' do
-      it 'sets start_time to date + 18 hours on Sundays' do
-        sunday = Date.new(2025, 6, 15) # a Sunday
-        meal = create(:meal, community: community, date: sunday)
-
-        expect(meal.start_time).to eq(sunday.to_datetime + 18.hours)
-      end
-
-      it 'sets start_time to date + 19 hours on non-Sunday days' do
-        monday = Date.new(2025, 6, 16) # a Monday
-        meal = create(:meal, community: community, date: monday)
-
-        expect(meal.start_time).to eq(monday.to_datetime + 19.hours)
-      end
-
-      it 'sets start_time to date + 19 hours on Friday' do
-        friday = Date.new(2025, 6, 20) # a Friday
-        meal = create(:meal, community: community, date: friday)
-
-        expect(meal.start_time).to eq(friday.to_datetime + 19.hours)
       end
     end
 

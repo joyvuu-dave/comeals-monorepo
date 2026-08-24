@@ -6,6 +6,7 @@
 #
 #  id                 :bigint           not null, primary key
 #  cap                :decimal(12, 8)
+#  dinner_start_times :jsonb            not null
 #  free_below_age     :integer          default(5), not null
 #  full_price_age     :integer          default(12), not null
 #  meals_per_rotation :integer          default(12), not null
@@ -91,7 +92,7 @@ class Community < ApplicationRecord
   # Ransack allowlists for ActiveAdmin sorting
   def self.ransackable_attributes(_auth_object = nil)
     %w[id cap name singleton_guard timezone created_at updated_at
-       schedule meals_per_rotation free_below_age full_price_age]
+       schedule meals_per_rotation free_below_age full_price_age dinner_start_times]
   end
 
   validates :name, presence: true, uniqueness: { case_sensitive: false }
@@ -161,6 +162,44 @@ class Community < ApplicationRecord
 
   def meal_schedule
     MealSchedule.new(weeks: schedule)
+  end
+
+  # --- Dinner start times ---
+  # One "HH:MM" per weekday, Sunday first (index = Date#wday), 24-hour
+  # clock, in this community's time zone. The default is 19:00 every day;
+  # the admin form overrides single days (this community eats at 18:00 on
+  # Sundays). The rule mirrors the database CHECK (migration 20260825120000).
+  #
+  # A time here is a wall-clock time, not a moment. It becomes a moment
+  # only for one date, in this community's zone — see dinner_start_at —
+  # so the UTC offset follows that date's daylight-saving rule. Building
+  # the moment any other way (Date#to_datetime + hours, which is UTC) is
+  # the bug that put a wrong start_time on eight years of meals.
+  DINNER_START_DEFAULT = '19:00'
+  DINNER_START_TIME_PATTERN = /\A([01]\d|2[0-3]):[0-5]\d\z/
+
+  validate :dinner_start_times_shape
+
+  # The admin form posts one field per day as a hash keyed by wday
+  # ({"0" => "18:00", "1" => "19:00", ...}); the console and seeds pass an
+  # array. Both become the stored array here, in the writer, so every path
+  # goes through the same door. A blank field means the default.
+  def dinner_start_times=(value)
+    times = value.is_a?(Hash) ? (0..6).map { |wday| value[wday.to_s] || value[wday] } : value
+    times = times.map { |time| time.presence || DINNER_START_DEFAULT } if times.is_a?(Array)
+    super(times)
+  end
+
+  # "HH:MM" for a date's weekday.
+  def dinner_start_time_on(date)
+    dinner_start_times[date.wday]
+  end
+
+  # The moment dinner starts on `date`: that day's "HH:MM" in this
+  # community's zone, as an ActiveSupport::TimeWithZone.
+  def dinner_start_at(date)
+    hour, minute = dinner_start_time_on(date).split(':').map(&:to_i)
+    ActiveSupport::TimeZone[timezone].local(date.year, date.month, date.day, hour, minute)
   end
 
   has_many :bills, dependent: :destroy
@@ -327,6 +366,14 @@ class Community < ApplicationRecord
     return if cap.nil? || cap == cap.round(2)
 
     errors.add(:cap, 'must be whole cents')
+  end
+
+  def dinner_start_times_shape
+    valid = dinner_start_times.is_a?(Array) && dinner_start_times.length == 7 &&
+            dinner_start_times.all? { |time| time.is_a?(String) && DINNER_START_TIME_PATTERN.match?(time) }
+    return if valid
+
+    errors.add(:dinner_start_times, 'must be seven times, Sunday to Saturday, each HH:MM on a 24-hour clock')
   end
 
   def schedule_shape

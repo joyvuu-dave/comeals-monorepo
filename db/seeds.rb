@@ -21,9 +21,12 @@ start = Time.zone.now
 # Community (singleton). timezone is explicit because the DB column has no
 # default — operators on a real deploy pick one via the ActiveAdmin form.
 # Dev seed pins Pacific so fixture timestamps render consistently.
+# Sunday dinner at 18:00, like the real community; every other day the
+# 19:00 default.
 community = Community.first || Community.create!(name: 'Patches Way',
                                                  cap: BigDecimal('2.50'),
-                                                 timezone: 'America/Los_Angeles')
+                                                 timezone: 'America/Los_Angeles',
+                                                 dinner_start_times: %w[18:00 19:00 19:00 19:00 19:00 19:00 19:00])
 
 Rails.logger.debug '1 Community created'
 

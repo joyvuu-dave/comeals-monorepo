@@ -7,7 +7,7 @@ ActiveAdmin.register Community do
   # STRONG PARAMS
   permit_params :name, :cap, :timezone, :meals_per_rotation,
                 :free_below_age, :full_price_age,
-                schedule: {}
+                schedule: {}, dinner_start_times: {}
 
   # ACTIONS
   # `new` and `create` stay routed so the very first Community can be created
@@ -97,6 +97,21 @@ ActiveAdmin.register Community do
       row('Child pricing') { |c| child_pricing_rule_sentence(c) }
     end
 
+    panel 'Dinner start times' do
+      div class: 'attributes_table' do
+        table do
+          Date::DAYNAMES.each_with_index do |day_name, wday|
+            tr do
+              th day_name
+              td community.dinner_start_times[wday]
+            end
+          end
+        end
+      end
+      para 'Times are on a 24-hour clock in the community\'s time zone. They appear on the ' \
+           'calendar feeds; the app itself shows no time of day.'
+    end
+
     panel 'Meal schedule' do
       # Hand-built with attributes_table markup, not attributes_table_for:
       # its row() titleizes every label through human_attribute_name, which
@@ -158,6 +173,26 @@ ActiveAdmin.register Community do
       li class: 'child-pricing-rule' do
         para "Current rule: #{helpers.child_pricing_rule_sentence(f.object)}"
         para 'Changes apply from the next nightly run, and only to future meal signups.'
+      end
+    end
+
+    f.inputs 'Dinner start times' do
+      # One time field per weekday, named community[dinner_start_times][WDAY]
+      # (Community#dinner_start_times= reads that hash). Hand-built because
+      # Formtastic has no input for one jsonb array; every interpolated
+      # value is a day name or a stored "HH:MM", never user input.
+      Date::DAYNAMES.each_with_index do |day_name, wday|
+        li class: 'time input' do
+          field_id = "community_dinner_start_time_#{wday}"
+          label day_name, for: field_id, class: 'label'
+          field = %(<input type="time" id="#{field_id}" name="community[dinner_start_times][#{wday}]" ) +
+                  %(value="#{f.object.dinner_start_times[wday]}" step="60">)
+          text_node field.html_safe # rubocop:disable Rails/OutputSafety -- day index and a validated HH:MM, no user input
+        end
+      end
+      li class: 'dinner-start-times-hint' do
+        para "Blank means the default, #{Community::DINNER_START_DEFAULT}. Times are in the " \
+             "community's time zone and show up on the calendar feeds."
       end
     end
 

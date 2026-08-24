@@ -3,7 +3,11 @@
 require 'rails_helper'
 
 RSpec.describe 'Residents iCal API' do
-  let(:community) { create(:community) }
+  # Sunday dinner at 18:00, every other day at the 19:00 default — this
+  # community's real setting (Community#dinner_start_times).
+  let(:community) do
+    create(:community, dinner_start_times: %w[18:00 19:00 19:00 19:00 19:00 19:00 19:00])
+  end
   let(:unit) { create(:unit, community: community) }
   let(:resident) { create(:resident, community: community, unit: unit) }
 
@@ -64,6 +68,16 @@ RSpec.describe 'Residents iCal API' do
       # Sunday: 18:00 (T180000), weekday: 19:00 (T190000)
       expect(response.body).to include('T180000')
       expect(response.body).to include('T190000')
+    end
+
+    it "reads the start time from the community's settings" do
+      community.update!(dinner_start_times: %w[17:30 19:00 19:00 19:00 19:00 19:00 19:00])
+      create(:bill, meal: sunday_meal, resident: resident, community: community)
+
+      get "/api/v1/residents/#{resident.id}/ical"
+
+      expect(response.body).to include('DTSTART;TZID=America/Los_Angeles:20260405T173000')
+      expect(response.body).to include('DTEND;TZID=America/Los_Angeles:20260405T193000')
     end
 
     it 'returns an empty calendar for a resident with no meals' do

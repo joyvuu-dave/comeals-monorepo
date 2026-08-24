@@ -271,6 +271,31 @@ $$;
 
 
 --
+-- Name: comeals_valid_dinner_start_times(jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.comeals_valid_dinner_start_times(times jsonb) RETURNS boolean
+    LANGUAGE plpgsql IMMUTABLE
+    AS $_$
+DECLARE
+  item jsonb;
+BEGIN
+  IF times IS NULL OR jsonb_typeof(times) <> 'array' OR jsonb_array_length(times) <> 7 THEN
+    RETURN false;
+  END IF;
+  FOR item IN SELECT * FROM jsonb_array_elements(times) LOOP
+    -- A 24-hour clock time, "HH:MM", zero-padded. The #>> '{}' form
+    -- reads the string without its JSON quotes.
+    IF jsonb_typeof(item) <> 'string' OR (item #>> '{}') !~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' THEN
+      RETURN false;
+    END IF;
+  END LOOP;
+  RETURN true;
+END;
+$_$;
+
+
+--
 -- Name: comeals_valid_meal_schedule(jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -509,10 +534,12 @@ CREATE TABLE public.communities (
     meals_per_rotation integer DEFAULT 12 NOT NULL,
     free_below_age integer DEFAULT 5 NOT NULL,
     full_price_age integer DEFAULT 12 NOT NULL,
+    dinner_start_times jsonb DEFAULT '["19:00", "19:00", "19:00", "19:00", "19:00", "19:00", "19:00"]'::jsonb NOT NULL,
     CONSTRAINT communities_cap_positive_or_null CHECK (((cap IS NULL) OR (cap > (0)::numeric))),
     CONSTRAINT communities_cap_whole_cents CHECK (((cap IS NULL) OR (cap = round(cap, 2)))),
     CONSTRAINT communities_child_ages_non_negative CHECK (((free_below_age >= 0) AND (full_price_age >= 0))),
     CONSTRAINT communities_child_ages_ordered CHECK ((free_below_age <= full_price_age)),
+    CONSTRAINT communities_dinner_start_times_shape CHECK (public.comeals_valid_dinner_start_times(dinner_start_times)),
     CONSTRAINT communities_meals_per_rotation_range CHECK (((meals_per_rotation >= 1) AND (meals_per_rotation <= 100))),
     CONSTRAINT communities_schedule_shape CHECK (public.comeals_valid_meal_schedule(schedule))
 );
@@ -881,7 +908,6 @@ CREATE TABLE public.meals (
     max integer,
     reconciliation_id bigint,
     rotation_id bigint,
-    start_time timestamp without time zone NOT NULL,
     updated_at timestamp without time zone NOT NULL,
     CONSTRAINT meals_cap_positive_or_null CHECK (((cap IS NULL) OR (cap > (0)::numeric)))
 );
@@ -3031,6 +3057,7 @@ ALTER TABLE ONLY public.bills
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260825120000'),
 ('20260825110000'),
 ('20260825100000'),
 ('20260824100000'),

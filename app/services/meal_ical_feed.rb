@@ -2,16 +2,14 @@
 
 # Builds the iCal feeds (the webcal links on the calendar page): the
 # calendar scaffolding with the community's timezone, and one event per
-# meal. The dinner window is domain knowledge that used to live in
-# three controller loops (#51): dinner starts at 18:00 on Sundays and
-# 19:00 every other day, and runs two hours.
+# meal. Dinner starts at the community's time for that weekday
+# (Community#dinner_start_times) and runs two hours.
 class MealIcalFeed
-  SUNDAY_START_HOUR = 18
-  WEEKDAY_START_HOUR = 19
   DINNER_HOURS = 2
 
   def initialize(community, calendar_name:)
     require 'icalendar/tzinfo'
+    @community = community
     @tzid = community.timezone
     @calendar = Icalendar::Calendar.new
     @calendar.add_timezone TZInfo::Timezone.get(@tzid).ical_timezone(DateTime.new(2017, 6, 1, 8, 0, 0))
@@ -31,15 +29,19 @@ class MealIcalFeed
 
   private
 
+  # Icalendar wants the wall-clock value and gets the zone from `tzid`,
+  # so these are built from the community's moment field by field: a
+  # DateTime with its own offset would be read as that offset, not as
+  # the zone's.
   def dinner_start(date)
-    DateTime.new(date.year, date.month, date.day, start_hour(date), 0)
+    wall_clock(@community.dinner_start_at(date))
   end
 
   def dinner_end(date)
-    DateTime.new(date.year, date.month, date.day, start_hour(date) + DINNER_HOURS, 0)
+    wall_clock(@community.dinner_start_at(date) + DINNER_HOURS.hours)
   end
 
-  def start_hour(date)
-    date.sunday? ? SUNDAY_START_HOUR : WEEKDAY_START_HOUR
+  def wall_clock(time)
+    DateTime.new(time.year, time.month, time.day, time.hour, time.min)
   end
 end

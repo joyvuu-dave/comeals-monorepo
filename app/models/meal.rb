@@ -11,7 +11,6 @@
 #  date              :date             not null
 #  description       :text             default(""), not null
 #  max               :integer
-#  start_time        :datetime         not null
 #  created_at        :datetime         not null
 #  updated_at        :datetime         not null
 #  community_id      :bigint           not null
@@ -94,8 +93,6 @@ class Meal < ApplicationRecord
   has_many :hosts, through: :guests, source: :resident, dependent: :destroy
   has_many :attendees, through: :meal_residents, source: :resident, dependent: :destroy
 
-  before_validation :set_start_time, on: :create
-
   validates :date, presence: true
   validates :max,
             numericality: {
@@ -142,10 +139,6 @@ class Meal < ApplicationRecord
 
   def set_cap
     self.cap = community.cap
-  end
-
-  def set_start_time
-    self.start_time = date.wday.zero? ? date.to_datetime + 18.hours : date.to_datetime + 19.hours
   end
 
   def conditionally_set_max

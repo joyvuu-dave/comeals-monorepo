@@ -6,6 +6,7 @@
 #
 #  id                 :bigint           not null, primary key
 #  cap                :decimal(12, 8)
+#  dinner_start_times :jsonb            not null
 #  free_below_age     :integer          default(5), not null
 #  full_price_age     :integer          default(12), not null
 #  meals_per_rotation :integer          default(12), not null

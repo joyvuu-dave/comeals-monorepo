@@ -11,7 +11,6 @@
 #  date              :date             not null
 #  description       :text             default(""), not null
 #  max               :integer
-#  start_time        :datetime         not null
 #  created_at        :datetime         not null
 #  updated_at        :datetime         not null
 #  community_id      :bigint           not null
