@@ -307,7 +307,7 @@ module Api
           status: :bad_request }
       end
 
-      # Serializes the write against Reconciliation#assign_meals' update_all
+      # Serializes the write against Settlement#assign_meals' update_all
       # (row locks on the swept meals) and re-checks reconciled? on the lock's
       # fresh reload. The reject_if_reconciled before_action reads the meal
       # before the lock is taken, so a settlement committing mid-request slips

@@ -17,7 +17,7 @@ require 'rails_helper'
 #
 # Closing it took three things, and each was tested alone and fails:
 #
-#   1. Reconciliation#assign_meals takes FOR UPDATE before claiming, so a rival
+#   1. Settlement#assign_meals takes FOR UPDATE before claiming, so a rival
 #      write's FOR KEY SHARE on the parent meal has something to wait on. Its
 #      UPDATE alone takes only FOR NO KEY UPDATE, which FOR KEY SHARE does not
 #      conflict with — there would be no wait at all.
@@ -294,7 +294,7 @@ RSpec.describe 'settlement race against unlocked write paths' do
     #                   claimed, and its compare-and-swap in assign_meals
     #                   raises.
     #   SERIALIZABLE    SSI cancels *this* settlement first, at the bills
-    #                   read inside persist_settlement!, for a read/write
+    #                   read inside write_ledger!, for a read/write
     #                   dependency with the blocked rival ("canceled on
     #                   identification as a pivot"). This settlement rolls
     #                   back, the rival wakes to unclaimed meals, and the
@@ -396,7 +396,7 @@ RSpec.describe 'settlement race against unlocked write paths' do
 
         retried = begin
           RetryOnConflict.call do
-            Reconciliation.create!(community: community, date: Time.zone.today, end_date: Date.yesterday)
+            settle!(community, cutoff: Date.yesterday)
           end
         rescue ActiveRecord::RecordInvalid => e
           e

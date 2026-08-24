@@ -15,7 +15,7 @@ RSpec.describe LedgerVerification do
     create(:meal_resident, meal: meal, resident: cook, community: community, multiplier: 2)
     create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
 
-    Reconciliation.create!(community: community, end_date: Date.yesterday)
+    settle!(community, cutoff: Date.yesterday)
   end
 
   # Settled data is immutable by design, so the only way to set up the thing
@@ -214,7 +214,7 @@ RSpec.describe LedgerVerification do
       [cook, eater, cook_c].each do |person|
         create(:meal_resident, meal: meal, resident: person, community: community, multiplier: 2)
       end
-      Reconciliation.create!(community: community, end_date: Date.yesterday)
+      settle!(community, cutoff: Date.yesterday)
 
       # 100 split three ways does not divide evenly, so allocation really did
       # move pennies here — this example is worthless if it did not.

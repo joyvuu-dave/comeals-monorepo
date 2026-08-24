@@ -70,7 +70,7 @@ This was verified, not assumed. It is correct and should not be re-audited:
 
 - **The API path is genuinely serialized.** `with_meal_lock`
   (`app/controllers/api/v1/meals_controller.rb`) takes `SELECT ... FOR UPDATE`
-  on the meal row; `Reconciliation#assign_meals`' `update_all` takes
+  on the meal row; `Settlement#assign_meals`' `update_all` takes
   `FOR NO KEY UPDATE` on the same row. Those two conflict, so request and
   settlement serialize in **both** orders, and the loser sees `reconciled?` on
   a fresh reload and returns a 400. All 9 mutating meal actions go through it.
@@ -179,7 +179,7 @@ is nothing to wait on. Verified: the stray bill still lands.
 
 Both together do close it, and this combination was verified end to end:
 
-1. **`Reconciliation#assign_meals` takes an explicit row lock before claiming:**
+1. **`Settlement#assign_meals` takes an explicit row lock before claiming:**
 
    ```ruby
    Meal.where(id: meal_ids).order(:id).lock.pluck(:id)   # FOR UPDATE
@@ -205,7 +205,10 @@ With both in place the admin insert blocks on the settlement and then fails
 loudly with the trigger's exception. Silent loss becomes a visible error.
 
 **This fix shipped on 2026-07-27** (issue #43). Part 1 is in
-`Reconciliation#assign_meals`; part 2 is migration `20260727120000`, which
+`Settlement#assign_meals` (it was `Reconciliation#assign_meals` until
+2026-08-23, when the settlement pipeline moved out of the model's
+`after_create` callback into `app/services/settlement.rb`, unchanged); part 2
+is migration `20260727120000`, which
 locks **both** lookups, replaces the function body with
 `CREATE OR REPLACE FUNCTION`, and leaves the already-applied `20260707100000`
 untouched. `spec/db/settlement_race_spec.rb` pins it for inserts, deletes, and
@@ -223,7 +226,7 @@ either on `20260707100000`'s non-locking function or on this one.
 
 One detail the spec had to get right, because it is easy to write a test that
 passes for the wrong reason. The dangerous instant is not when `assign_meals`
-claims the meals. It is after `persist_settlement!` has read the bills,
+claims the meals. It is after `write_ledger!` has read the bills,
 attendance, and guests — the latest moment a racing write can start and still
 be missed by the balances. Firing the racing write there is the hardest
 version of the test; anything earlier only waits longer.

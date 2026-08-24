@@ -75,7 +75,7 @@ On the iOS side, all money is `Decimal`. A thin `Money` wrapper type may be just
 
 **Query parameters:**
 
-- `cutoff` (required, ISO date `YYYY-MM-DD`): meals on or before this date are included. Must match `Reconciliation#assign_meals` semantics exactly, which are `date <= cutoff` **and** `date < today` — a meal on a day that is not yet over is never swept, whatever the cutoff says (issue #3). A cutoff of today or later is not a valid reconciliation, so the endpoint should reject it the same way the model does.
+- `cutoff` (required, ISO date `YYYY-MM-DD`): meals on or before this date are included. Must match `Meal.settleable_by(cutoff)` exactly, which is `date <= cutoff` **and** `date < today` — a meal on a day that is not yet over is never swept, whatever the cutoff says (issue #3). A cutoff of today or later is not a valid reconciliation, so the endpoint should reject it the same way the model does.
 
 **Auth:** `Authorization: Bearer <jwt>` header (see the Authentication section). No `token` query parameter.
 
@@ -197,16 +197,16 @@ Contracts below are placeholders — each gets its own sketch when we get to it.
 
 ## Backend implementation strategy
 
-### The blocker: `Reconciliation#after_create :finalize`
+### The seam: `Settlement`
 
-The existing `Reconciliation` model computes and persists in one atomic act: an `after_create` callback runs `assign_meals` then `persist_balances!`. That means today you cannot compute a reconciliation's balances _without_ persisting records. (The callback is named `finalize`, which predates the decision not to have a separate finalize step. The name is about finishing the create, not about a lifecycle state.)
+Settlement used to be an `after_create` callback on `Reconciliation`, so there was no way to compute a period's balances without writing them. On 2026-08-23 the pipeline moved into `app/services/settlement.rb` (approach D, step 1). `Settlement.run!(cutoff:)` creates the row, claims the meals, and writes `meal_charges` and `reconciliation_balances` in one transaction; `Reconciliation.create!` on its own is refused. The cutoff is already a parameter, so the rake task and the future `POST` endpoint call the same thing.
 
-For the preview endpoint to work, we need a way to run the calculation **without side effects**. That is the whole point of the preview: `review → create` as two steps, with the review carrying no commitment. Creating stays one atomic, locking act — we are not splitting it.
+### Plan: `Settlement.preview(cutoff:)`
 
-### Plan: extract `ReconciliationCalculator` PORO
+Add a pure entry point next to `run!`:
 
 ```
-ReconciliationCalculator.new(community:, cutoff_date:).call
+Settlement.preview(cutoff:)
   # => {
   #   meals: [...],
   #   resident_balances: [...],
@@ -215,13 +215,9 @@ ReconciliationCalculator.new(community:, cutoff_date:).call
   # }
 ```
 
-- Takes a community and cutoff date, queries the exact same meal scope as `assign_meals`:
-  `Meal.unreconciled.joins(:bills).where(date: ..cutoff_date).where(date: ...Time.zone.today).distinct`
-- Runs the existing settlement math including Hamilton's method
-- Returns a structured result — zero persistence, zero side effects
-- `Reconciliation#settlement_balances` becomes a thin wrapper delegating to the PORO
-
-The refactor should be near-pure: the existing `reconciliation_spec.rb` model specs are the safety net and should pass unchanged.
+- Reads `Meal.settleable_by(cutoff)` — the exact scope `run!` claims — through a `MealLedger` with bills, attendance, and guests preloaded
+- Rounds with `Settlement.allocate_to_cents`, the same step `run!` uses
+- Returns a structured result — zero persistence, zero side effects; a spec pins that the four ledger tables do not change and that `preview` equals what `run!` then stores on the same data
 
 ### Plan: `ReconciliationWarnings` module
 
@@ -250,10 +246,7 @@ The preview controller composes both: calculator for the money, warnings for the
 class Api::V1::ReconciliationsController < ApiController
   def preview
     cutoff = Date.iso8601(params.require(:cutoff))
-    result = ReconciliationCalculator.new(
-      community: Community.instance,
-      cutoff_date: cutoff
-    ).call
+    result = Settlement.preview(cutoff: cutoff)
     warnings = ReconciliationWarnings.new(meals: result[:meals]).call
     render json: PreviewSerializer.new(result, warnings, cutoff).as_json
   rescue Date::Error, ActionController::ParameterMissing
@@ -306,7 +299,7 @@ Before designing any real UI, the first iOS milestone is "hit the preview endpoi
 
 Build the Rails work fully before opening Xcode. **This is the single most important decision in this document.** If we start writing Swift against a shifting API, we will spend half the iOS time reworking code every time a JSON shape changes. Worse, the iOS work is more fun than the backend work, and the backend work is where the value is.
 
-1. **Extract `ReconciliationCalculator` PORO** — near-pure refactor, existing specs as safety net
+1. ~~Extract the settlement pipeline into a service~~ — done 2026-08-23 (`Settlement`); then add `Settlement.preview(cutoff:)`
 2. **Write `ReconciliationWarnings` module** with the three v1 warning kinds + unit specs
 3. **Write `Api::V1::ReconciliationsController#preview`** action + serializer
 4. **Request specs for the preview endpoint:** happy path, no meals, each warning kind in isolation, mixed warnings, cutoff in the future, invalid date, unauthenticated

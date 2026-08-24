@@ -86,7 +86,7 @@ RSpec.describe 'Admin attendance correction' do
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('50'))
       meal.update!(closed: true)
-      Reconciliation.create!(community: community, end_date: Date.yesterday)
+      settle!(community, cutoff: Date.yesterday)
       meal.reload
       expect(meal).to be_reconciled
     end
@@ -149,7 +149,7 @@ RSpec.describe 'Admin attendance correction' do
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('50'))
       meal.update!(closed: true)
-      Reconciliation.create!(community: community, end_date: Date.yesterday)
+      settle!(community, cutoff: Date.yesterday)
       expect(meal.reload).to be_reconciled
 
       get "/meals/#{meal.id}"

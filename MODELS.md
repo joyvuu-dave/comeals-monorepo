@@ -231,7 +231,7 @@ Cook pays for groceries
     MealLedger#balances            sum of a resident's lines (full precision)
         |
         +-----> rake billing:recalculate  ->  resident_balances   (running, unrounded)
-        +-----> Reconciliation#finalize   ->  meal_charges        (every line, unrounded)
+        +-----> Settlement#settle!        ->  meal_charges        (every line, unrounded)
                                               reconciliation_balances (rounded to cents)
 ```
 
@@ -431,27 +431,40 @@ Reconciliation ----< ReconciliationBalance ---> Resident
 
 **Behavior:**
 
-- `finalize` (`after_create`) runs `assign_meals`, then
-  `persist_settlement!`.
-- `assign_meals` — claims every unreconciled meal that has at least one bill,
-  is dated on or before `end_date`, and is dated before today
-  (`eligible_meals`, the same scope the create validation reads). It takes
-  `SELECT ... FOR UPDATE` on those meals in id order first, then updates
-  only rows whose `reconciliation_id` is still NULL, and raises if a rival
-  settlement claimed any of them. See ADR 0003.
+- A reconciliation row is only ever written by `Settlement`
+  (`app/services/settlement.rb`), in the same transaction that claims the
+  meals and writes the ledger. `Reconciliation.create!` on its own raises
+  `Reconciliation::NotSettled`, so no path can leave a settlement that
+  settled nothing. `Settlement.run!(cutoff:)` is what the rake task, the
+  admin form, and the specs call; the pipeline is:
+  1. save the row (validations run here);
+  2. `assign_meals` — claim every meal in `eligible_meals`
+     (`Meal.settleable_by(end_date)`: unreconciled, has a bill, dated on or
+     before the cutoff, and from a day that is over). It takes
+     `SELECT ... FOR UPDATE` on those meals in id order first, then updates
+     only rows whose `reconciliation_id` is still NULL, and raises if a rival
+     settlement claimed any of them. See ADR 0003.
+  3. `write_ledger!` — one `MealLedger` pass, then in one transaction:
+     every line (including zero lines) into `meal_charges` with
+     `insert_all`, and each non-zero rounded balance into
+     `reconciliation_balances`. Both tables come from the same read, so the
+     lines explain the balances.
+  4. after commit, clear the `meal-<id>` cache of every claimed meal and the
+     calendar months they fall in (issue #70).
+- `eligible_meals` — the scope above; the create validation and the claim
+  read the same one, so they cannot disagree.
 - `settlement_ledger` — a `MealLedger` over the claimed meals, with bills,
   attendance, and guests preloaded.
 - `settlement_balances` — `MealLedger#balances` for every resident, then
-  `allocate_to_cents`: largest-remainder rounding (Hamilton's method) so
-  the cent amounts sum to exactly zero. Each amount is within one cent of its
-  exact value. Ties go to the lowest `resident_id`. It raises if the input
-  does not already sum to zero (within `ZERO_SUM_EPSILON`) or if the output
-  does not sum to exactly zero.
-- `persist_settlement!` — one `MealLedger` pass, then in one transaction:
-  `persist_charges!` inserts every line (including zero lines) into
-  `meal_charges` with `insert_all`, and `persist_balances!` writes each
-  non-zero rounded balance to `reconciliation_balances`. Both tables come
-  from the same read, so the lines explain the balances.
+  `Settlement.allocate_to_cents`: largest-remainder rounding (Hamilton's
+  method) so the cent amounts sum to exactly zero. Each amount is within one
+  cent of its exact value. Ties go to the lowest `resident_id`. It raises if
+  the input does not already sum to zero (within `ZERO_SUM_EPSILON`) or if
+  the output does not sum to exactly zero. `rake ledger:verify` recomputes
+  through this method.
+- `Settlement#rewrite!` — repair only: rewrites the ledger of an existing
+  row after both tables were cleared inside one transaction with the
+  settled-write bypass on (`docs/runbooks/settled-data-repair.md`).
 - `unit_balances` — the settled balances grouped by unit, including units at
   $0.00
 - `date_range_description` — the dates of the meals it swept. Neither

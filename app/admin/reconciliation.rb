@@ -15,6 +15,18 @@ ActiveAdmin.register Reconciliation do
 
   permit_params :end_date
 
+  controller do
+    # The form settles a period; it does not just insert a row. Settlement
+    # saves the row, claims the meals, and writes the ledger in one
+    # transaction, and puts validation errors on the row like save would.
+    def create_resource(object)
+      Settlement.new(object).settle!
+      true
+    rescue ActiveRecord::RecordInvalid
+      false
+    end
+  end
+
   # INDEX
   index do
     column :date

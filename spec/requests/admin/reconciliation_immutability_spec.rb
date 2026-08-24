@@ -26,7 +26,7 @@ RSpec.describe 'Admin Reconciliation Immutability' do
     create(:meal_resident, meal: meal, resident: eater, community: community)
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('40'))
 
-    Reconciliation.create!(community: community, end_date: Date.new(2025, 3, 31))
+    settle!(community, cutoff: Date.new(2025, 3, 31))
   end
 
   it 'exposes no update_meals route — the settled meal set cannot be rewritten' do

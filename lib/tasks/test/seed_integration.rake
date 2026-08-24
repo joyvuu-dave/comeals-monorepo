@@ -95,13 +95,9 @@ namespace :test do
       amount: BigDecimal('42.00'), community: community
     )
 
-    # Creating the reconciliation triggers after_create :finalize, which
-    # calls assign_meals (sweeps unreconciled meals with bills on or before
-    # end_date) and persist_settlement! (computes settlement).
-    Reconciliation.create!(
-      community: community,
-      end_date: 30.days.ago.to_date
-    )
+    # Settle the period: claims the unreconciled meals with bills on or
+    # before the cutoff and writes their charges and balances.
+    Settlement.run!(cutoff: 30.days.ago.to_date, community: community)
 
     # ------------------------------------------------------------------
     # CLOSED MEAL (2 days ago)

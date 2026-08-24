@@ -121,7 +121,7 @@ RSpec.describe MealCostSummary do
       eater = create(:resident, community: community, unit: unit, multiplier: 2)
       create(:meal_resident, meal: meal, resident: eater, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('16'))
-      Reconciliation.create!(community: community, end_date: Date.yesterday)
+      settle!(community, cutoff: Date.yesterday)
 
       summary = described_class.for(meal.reload)
       expect(summary.total_cost).to eq(BigDecimal('16'))
@@ -137,7 +137,7 @@ RSpec.describe MealCostSummary do
       eater = create(:resident, community: capped_community, unit: capped_unit, multiplier: 2)
       create(:meal_resident, meal: meal, resident: eater, community: capped_community)
       create(:bill, meal: meal, resident: cook, community: capped_community, amount: BigDecimal('10'))
-      Reconciliation.create!(community: capped_community, end_date: Date.yesterday)
+      settle!(capped_community, cutoff: Date.yesterday)
 
       settled = described_class.for(meal.reload)
       expect(settled.effective_cost).to eq(BigDecimal('5'))
@@ -154,7 +154,7 @@ RSpec.describe MealCostSummary do
       meal = create(:meal, community: community)
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('40'))
-      Reconciliation.create!(community: community, end_date: Date.yesterday)
+      settle!(community, cutoff: Date.yesterday)
 
       # Swept, but no lines on purpose: nobody was charged, the cook
       # absorbed the receipts.

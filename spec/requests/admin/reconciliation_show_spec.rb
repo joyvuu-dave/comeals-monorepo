@@ -48,7 +48,7 @@ RSpec.describe 'Admin Reconciliation Show' do
     meal = create(:meal, community: community, date: Date.new(2025, 3, 1))
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('40'))
 
-    reconciliation = Reconciliation.create!(community: community, end_date: Date.new(2025, 3, 31))
+    reconciliation = settle!(community, cutoff: Date.new(2025, 3, 31))
     expect(meal.reload.reconciliation_id).to eq(reconciliation.id)
 
     get "/reconciliations/#{reconciliation.id}",

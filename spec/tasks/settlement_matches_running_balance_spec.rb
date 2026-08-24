@@ -66,13 +66,15 @@ RSpec.describe 'settlement and running-balance arithmetic agree', type: :task do
     Rake::Task['billing:recalculate'].invoke
     stored_running = ResidentBalance.pluck(:resident_id, :amount).to_h
 
-    reconciliation = Reconciliation.create!(community: community, end_date: Date.yesterday)
+    reconciliation = settle!(community, cutoff: Date.yesterday)
     settled = reconciliation.reconciliation_balances.pluck(:resident_id, :amount).to_h
 
     # allocate_to_cents is private. Reaching past that is deliberate: the
     # point of this spec is that one copy of the arithmetic feeds the other
     # copy's rounding step, and any public stand-in would be a fourth copy.
-    expected = reconciliation.send(:allocate_to_cents, running).reject { |_, amount| amount.zero? }
+    expected = Settlement.allocate_to_cents(running, reconciliation_id: reconciliation.id).reject do |_, amount|
+      amount.zero?
+    end
 
     expect(settled).to eq(expected)
 

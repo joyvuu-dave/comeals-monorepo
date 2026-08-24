@@ -39,6 +39,10 @@ FactoryBot.define do
 
     end_date { Date.yesterday }
 
+    # Creating a reconciliation means settling a period, so the factory goes
+    # through Settlement like every other path does.
+    to_create { |reconciliation| Settlement.new(reconciliation).settle! }
+
     before(:create) do |reconciliation, evaluator|
       unit = create(:unit, community: reconciliation.community)
       cook = create(:resident, community: reconciliation.community, unit: unit)

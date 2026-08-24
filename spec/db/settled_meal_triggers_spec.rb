@@ -11,7 +11,7 @@ RSpec.describe 'settled-meal database triggers' do
   let(:community) { create(:community) }
 
   # A meal with one bill and one attendee, settled through the real
-  # settlement path: Reconciliation#assign_meals sweeps it on create.
+  # settlement path: Settlement#assign_meals sweeps it.
   # This doubles as proof that the triggers leave settlement itself legal.
   def settled_meal
     meal = create(:meal, community: community)

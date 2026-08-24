@@ -151,7 +151,7 @@ Two things that surprise people:
 
 A settlement writes two tables: `meal_charges` (one line per bill, per
 attendance, per guest) and `reconciliation_balances` (the per-resident totals
-those lines add up to). `Reconciliation#persist_settlement!` writes both, and
+those lines add up to). `Settlement#rewrite!` writes both, and
 it is not re-runnable on its own — re-running it would rewrite the ledger
 rather than correct it. Rebuilding is a deliberate repair, and a last resort:
 the stored balances are what residents were already told they owed.
@@ -164,7 +164,7 @@ ActiveRecord::Base.transaction do
   ActiveRecord::Base.connection.execute("SET LOCAL comeals.allow_settled_writes = 'on'")
   MealCharge.for_reconciliation(reconciliation).delete_all
   reconciliation.reconciliation_balances.delete_all
-  reconciliation.persist_settlement!
+  Settlement.new(reconciliation).rewrite!
 end
 ```
 

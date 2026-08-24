@@ -13,13 +13,10 @@ namespace :reconciliations do
 
     # No pre-check: Reconciliation#must_settle_at_least_one_meal already
     # refuses an empty sweep, reading the same eligible_meals scope that
-    # assign_meals uses. A second copy of that predicate here could
+    # Settlement#assign_meals uses. A second copy of that predicate here could
     # drift — and had (it lacked the distinct and the today exclusion).
     begin
-      reconciliation = Reconciliation.create!(
-        date: Time.zone.today,
-        end_date: cutoff
-      )
+      reconciliation = Settlement.run!(cutoff: cutoff, community: community)
     rescue ActiveRecord::RecordInvalid => e
       Rails.logger.info(
         "reconciliations:create skipping #{community.name} — #{e.record.errors.full_messages.to_sentence}"

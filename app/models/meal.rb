@@ -55,6 +55,13 @@ class Meal < ApplicationRecord
   attr_accessor :socket_id
 
   scope :unreconciled, -> { where(reconciliation_id: nil) }
+  # The meals a settlement with this cutoff sweeps: not yet settled, with at
+  # least one bill, on or before the cutoff, and from a day that is over.
+  # Meals on today's date are never swept, whatever the cutoff — their
+  # receipts and attendance are not final (issue #3).
+  scope :settleable_by, lambda { |cutoff|
+    unreconciled.joins(:bills).where(date: ..cutoff).where(date: ...Time.zone.today).distinct
+  }
   scope :open, -> { where(closed: false) }
   scope :closed_with_bills, -> { where(closed: true).joins(:bills).distinct }
 

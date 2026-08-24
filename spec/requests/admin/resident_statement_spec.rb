@@ -24,7 +24,7 @@ RSpec.describe 'Admin settlement statement' do
     create(:meal_resident, meal: meal, resident: cook, community: community, multiplier: 2)
     create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
 
-    Reconciliation.create!(community: community, end_date: Date.yesterday)
+    settle!(community, cutoff: Date.yesterday)
   end
 
   describe 'the resident page' do
@@ -57,7 +57,7 @@ RSpec.describe 'Admin settlement statement' do
         create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('16'))
         create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
       end
-      reconciliation = Reconciliation.create!(community: community, end_date: Date.new(2026, 6, 15))
+      reconciliation = settle!(community, cutoff: Date.new(2026, 6, 15))
 
       get "/residents/#{eater.id}"
 
@@ -96,7 +96,7 @@ RSpec.describe 'Admin settlement statement' do
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('60'))
       create(:meal_resident, meal: meal, resident: cook, community: community, multiplier: 2)
       create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
-      Reconciliation.create!(community: community, end_date: Date.yesterday)
+      settle!(community, cutoff: Date.yesterday)
 
       get "/residents/#{cook.id}"
 

@@ -18,9 +18,7 @@ RSpec.describe 'reconciliation email tasks' do
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
       meal = create(:meal, community: community, date: Date.yesterday)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('40'))
-      reconciliation = Reconciliation.create!(
-        community: community, end_date: Date.yesterday
-      )
+      reconciliation = settle!(community, cutoff: Date.yesterday)
 
       mail_double = instance_double(ActionMailer::MessageDelivery)
       allow(ReconciliationMailer).to receive(:reconciliation_notify_email).and_return(mail_double)
@@ -36,9 +34,7 @@ RSpec.describe 'reconciliation email tasks' do
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
       meal = create(:meal, community: community, date: Date.yesterday)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('40'))
-      Reconciliation.create!(
-        community: community, end_date: Date.yesterday
-      )
+      settle!(community, cutoff: Date.yesterday)
 
       mail_double = instance_double(ActionMailer::MessageDelivery)
       allow(ReconciliationMailer).to receive(:reconciliation_notify_email).and_return(mail_double)

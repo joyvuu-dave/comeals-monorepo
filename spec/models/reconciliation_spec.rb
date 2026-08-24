@@ -35,7 +35,7 @@ RSpec.describe Reconciliation do
     meal
   end
 
-  describe '#assign_meals' do
+  describe 'what a settlement claims' do
     it 'assigns unreconciled meals with bills to the new reconciliation' do
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
 
@@ -44,7 +44,7 @@ RSpec.describe Reconciliation do
 
       meal_without_bill = create(:meal, community: community)
 
-      reconciliation = described_class.create!(community: community, end_date: Date.yesterday)
+      reconciliation = settle!(community, cutoff: Date.yesterday)
 
       meal_with_bill.reload
       meal_without_bill.reload
@@ -56,8 +56,7 @@ RSpec.describe Reconciliation do
     it 'does not reassign already-reconciled meals' do
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
       settleable_meal(date: 3.years.ago.to_date)
-      old_reconciliation = described_class.create!(community: community, date: Time.zone.today - 30,
-                                                   end_date: 2.years.ago.to_date)
+      old_reconciliation = settle!(community, cutoff: 2.years.ago.to_date)
 
       old_meal = create(:meal, community: community)
       create(:bill, meal: old_meal, resident: cook, community: community, amount: BigDecimal('40'))
@@ -68,8 +67,7 @@ RSpec.describe Reconciliation do
       new_meal = create(:meal, community: community)
       create(:bill, meal: new_meal, resident: cook, community: community, amount: BigDecimal('60'))
 
-      new_reconciliation = described_class.create!(community: community, date: Time.zone.today,
-                                                   end_date: Date.yesterday)
+      new_reconciliation = settle!(community, cutoff: Date.yesterday)
 
       old_meal.reload
       new_meal.reload
@@ -89,7 +87,7 @@ RSpec.describe Reconciliation do
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('50'))
       meal.reload
 
-      reconciliation = described_class.create!(community: community, end_date: Date.yesterday)
+      reconciliation = settle!(community, cutoff: Date.yesterday)
 
       balances = reconciliation.settlement_balances
 
@@ -114,7 +112,7 @@ RSpec.describe Reconciliation do
       # eater_2 debit = 3.33333... * 1 = 3.33333... → truncated to 3.33
       # Residual = 10 - 6.66 - 3.33 = 0.01 → 1 penny to eater_1 (larger remainder)
 
-      reconciliation = described_class.create!(community: community, end_date: Date.yesterday)
+      reconciliation = settle!(community, cutoff: Date.yesterday)
       balances = reconciliation.settlement_balances
 
       expect(balances[eater_1.id]).to eq(BigDecimal('-6.67'))
@@ -136,7 +134,7 @@ RSpec.describe Reconciliation do
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('1'))
       meal.reload
 
-      reconciliation = described_class.create!(community: community, end_date: Date.yesterday)
+      reconciliation = settle!(community, cutoff: Date.yesterday)
       balances = reconciliation.settlement_balances
 
       expect(balances[cook.id]).to eq(BigDecimal('1'))
@@ -165,9 +163,7 @@ RSpec.describe Reconciliation do
       # total_cost = 20 > max_cost → subsidized
       # cook credit = (20/20) * 10 = 10
       # eater debit = (10/2) * 2 = 10
-      reconciliation = described_class.create!(
-        community: capped_community, end_date: Date.yesterday
-      )
+      reconciliation = settle!(capped_community, cutoff: Date.yesterday)
       balances = reconciliation.settlement_balances
 
       expect(balances[cook.id]).to eq(BigDecimal('10'))
@@ -193,9 +189,7 @@ RSpec.describe Reconciliation do
       # cook_a credit = (15/20) * 10 = 7.50
       # cook_b credit = (5/20) * 10 = 2.50
       # total credits = 10, total debits = 10
-      reconciliation = described_class.create!(
-        community: capped_community, end_date: Date.yesterday
-      )
+      reconciliation = settle!(capped_community, cutoff: Date.yesterday)
       balances = reconciliation.settlement_balances
 
       expect(balances[cook_a.id]).to eq(BigDecimal('7.5'))
@@ -217,9 +211,7 @@ RSpec.describe Reconciliation do
 
       # multiplier = 2, cap = 5.00, max_cost = 10
       # total_cost = 8 < max_cost → not subsidized, no capping
-      reconciliation = described_class.create!(
-        community: capped_community, end_date: Date.yesterday
-      )
+      reconciliation = settle!(capped_community, cutoff: Date.yesterday)
       balances = reconciliation.settlement_balances
 
       expect(balances[cook.id]).to eq(BigDecimal('8'))
@@ -247,9 +239,7 @@ RSpec.describe Reconciliation do
       # cook balance = 20 - 10 = 10
       # eater balance = 0 - 10 = -10
       # books: 10 - 10 = 0 ✓
-      reconciliation = described_class.create!(
-        community: capped_community, end_date: Date.yesterday
-      )
+      reconciliation = settle!(capped_community, cutoff: Date.yesterday)
       balances = reconciliation.settlement_balances
 
       expect(balances[cook.id]).to eq(BigDecimal('10'))
@@ -266,9 +256,7 @@ RSpec.describe Reconciliation do
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('100'))
       meal.reload
 
-      reconciliation = described_class.create!(
-        community: community, end_date: Date.yesterday
-      )
+      reconciliation = settle!(community, cutoff: Date.yesterday)
       balances = reconciliation.settlement_balances
 
       expect(balances[cook.id]).to eq(BigDecimal('100'))
@@ -302,9 +290,7 @@ RSpec.describe Reconciliation do
       # eater debit = 10.00 exactly (remainder 0)
       # Truncated sum = 3.33 + 6.66 − 10.00 = −0.01 → the penny must go to the
       # MOST-POSITIVE remainder: cook_b.
-      reconciliation = described_class.create!(
-        community: capped_community, end_date: Date.yesterday
-      )
+      reconciliation = settle!(capped_community, cutoff: Date.yesterday)
       balances = reconciliation.settlement_balances
 
       expect(balances[cook_a.id]).to eq(BigDecimal('3.33'))
@@ -336,9 +322,7 @@ RSpec.describe Reconciliation do
       # eater debit = 6.67 exactly (remainder 0)
       # Truncated sum = 3.33 + 3.33 − 6.67 = −0.01 → remainders tie at 0.005 →
       # the penny goes to the LOWEST resident_id: cook_a.
-      reconciliation = described_class.create!(
-        community: capped_community, end_date: Date.yesterday
-      )
+      reconciliation = settle!(capped_community, cutoff: Date.yesterday)
       balances = reconciliation.settlement_balances
 
       expect(balances[cook_a.id]).to eq(BigDecimal('3.34'))
@@ -348,27 +332,27 @@ RSpec.describe Reconciliation do
     end
   end
 
-  describe '#allocate_to_cents input validation' do
-    # These specs invoke the private method directly: the guards are
+  describe 'Settlement.allocate_to_cents input validation' do
+    # These specs call the rounding step directly: the guards are
     # defense-in-depth against future upstream bugs, and no public path today
     # can produce unbalanced raw balances (per-meal credits and debits are
     # structurally symmetric). See issue #16.
     let(:reconciliation) do
       settleable_meal
-      described_class.create!(community: community, end_date: Date.yesterday)
+      settle!(community, cutoff: Date.yesterday)
     end
 
     it 'raises when raw balances carry a sub-cent imbalance instead of silently absorbing it' do
       unbalanced = { 1 => BigDecimal('0.004') }
 
-      expect { reconciliation.send(:allocate_to_cents, unbalanced) }
+      expect { Settlement.allocate_to_cents(unbalanced, reconciliation_id: reconciliation.id) }
         .to raise_error(/do not sum to zero/)
     end
 
     it 'raises when raw balances carry a material imbalance instead of crashing on nil' do
       unbalanced = { 1 => BigDecimal('0.10') }
 
-      expect { reconciliation.send(:allocate_to_cents, unbalanced) }
+      expect { Settlement.allocate_to_cents(unbalanced, reconciliation_id: reconciliation.id) }
         .to raise_error(/do not sum to zero/)
     end
 
@@ -379,7 +363,7 @@ RSpec.describe Reconciliation do
       stub_const('Reconciliation::ZERO_SUM_EPSILON', BigDecimal('1'))
       unbalanced = { 1 => BigDecimal('0.055') }
 
-      expect { reconciliation.send(:allocate_to_cents, unbalanced) }
+      expect { Settlement.allocate_to_cents(unbalanced, reconciliation_id: reconciliation.id) }
         .to raise_error(/books do not balance/)
     end
 
@@ -387,7 +371,7 @@ RSpec.describe Reconciliation do
       stub_const('Reconciliation::ZERO_SUM_EPSILON', BigDecimal('1'))
       unbalanced = { 1 => BigDecimal('-0.055') }
 
-      expect { reconciliation.send(:allocate_to_cents, unbalanced) }
+      expect { Settlement.allocate_to_cents(unbalanced, reconciliation_id: reconciliation.id) }
         .to raise_error(/books do not balance/)
     end
 
@@ -396,13 +380,13 @@ RSpec.describe Reconciliation do
       third = BigDecimal('10') / BigDecimal('3')
       noisy = { 1 => third, 2 => third, 3 => BigDecimal('-10') + third }
 
-      balances = reconciliation.send(:allocate_to_cents, noisy)
+      balances = Settlement.allocate_to_cents(noisy, reconciliation_id: reconciliation.id)
 
       expect(balances.values.sum(BigDecimal('0'))).to eq(BigDecimal('0'))
     end
   end
 
-  describe '#assign_meals as settlement sweep' do
+  describe 'the settlement sweep' do
     it 'sweeps all unreconciled meals on or before end_date' do
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
 
@@ -412,9 +396,7 @@ RSpec.describe Reconciliation do
       after_cutoff = create(:meal, community: community, date: Date.new(2025, 7, 1))
       create(:bill, meal: after_cutoff, resident: cook, community: community, amount: BigDecimal('30'))
 
-      reconciliation = described_class.create!(
-        community: community, end_date: Date.new(2025, 6, 30)
-      )
+      reconciliation = settle!(community, cutoff: Date.new(2025, 6, 30))
 
       expect(before_cutoff.reload.reconciliation_id).to eq(reconciliation.id)
       expect(after_cutoff.reload.reconciliation_id).to be_nil
@@ -428,10 +410,8 @@ RSpec.describe Reconciliation do
       tonight = create(:meal, community: community, date: Time.zone.today)
       create(:bill, meal: tonight, resident: cook, community: community, amount: BigDecimal('0'))
 
-      legacy = build(:reconciliation, community: community, end_date: Time.zone.today)
-      legacy.save!(validate: false)
-
-      expect(tonight.reload.reconciliation_id).to be_nil
+      expect(Meal.settleable_by(Time.zone.today)).not_to include(tonight)
+      expect(Meal.settleable_by(Date.tomorrow)).not_to include(tonight)
     end
 
     it 'includes late-entered meals from before the previous reconciliation' do
@@ -441,7 +421,7 @@ RSpec.describe Reconciliation do
       create(:bill, meal: original_meal, resident: cook, community: community, amount: BigDecimal('40'))
 
       # First reconciliation sweeps everything through Mar 31
-      recon1 = described_class.create!(community: community, end_date: Date.new(2025, 3, 31))
+      recon1 = settle!(community, cutoff: Date.new(2025, 3, 31))
       expect(original_meal.reload.reconciliation_id).to eq(recon1.id)
 
       # Late entry: someone forgot to enter this meal, creates it after recon1
@@ -449,20 +429,20 @@ RSpec.describe Reconciliation do
       create(:bill, meal: late_meal, resident: cook, community: community, amount: BigDecimal('25'))
 
       # Second reconciliation sweeps everything unreconciled through Jun 30
-      recon2 = described_class.create!(community: community, end_date: Date.new(2025, 6, 30))
+      recon2 = settle!(community, cutoff: Date.new(2025, 6, 30))
 
       expect(late_meal.reload.reconciliation_id).to eq(recon2.id)
       expect(original_meal.reload.reconciliation_id).to eq(recon1.id)
     end
   end
 
-  describe '#assign_meals under concurrent settlement' do
+  describe 'concurrent settlements' do
     it 'raises and rolls back instead of stealing meals a concurrent reconciliation claimed after the pluck' do
       # Rival settles a meal of its own, created before the contested ones, so
       # its sweep never touches them. (It needs one: a reconciliation that
       # would settle no meals is refused at create.)
       settleable_meal
-      rival = described_class.create!(community: community, end_date: Date.yesterday)
+      rival = settle!(community, cutoff: Date.yesterday)
 
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
       contested = create(:meal, community: community)
@@ -477,11 +457,12 @@ RSpec.describe Reconciliation do
       # claims one of those meals and commits. Without re-asserting
       # reconciliation_id IS NULL, the UPDATE would silently overwrite the
       # rival's assignment and both ledgers would charge for the same meal.
-      allow(loser).to receive(:eligible_meal_ids).and_wrap_original do |original|
+      settlement = Settlement.new(loser)
+      allow(settlement).to receive(:eligible_meal_ids).and_wrap_original do |original|
         original.call.tap { contested.update_column(:reconciliation_id, rival.id) }
       end
 
-      expect { loser.save! }.to raise_error(/concurrent reconciliation/)
+      expect { settlement.settle! }.to raise_error(/concurrent reconciliation/)
 
       # The losing settlement must vanish entirely: no reconciliation row and
       # no partial meal claims survive the rollback.
@@ -490,7 +471,7 @@ RSpec.describe Reconciliation do
     end
   end
 
-  describe '#persist_settlement!' do
+  describe 'what a settlement stores' do
     it 'persists settlement balances to reconciliation_balances table' do
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
       eater = create(:resident, community: community, unit: unit, multiplier: 2)
@@ -500,12 +481,9 @@ RSpec.describe Reconciliation do
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('80'))
       meal.reload
 
-      reconciliation = described_class.create!(
-        community: community, date: Time.zone.today,
-        end_date: Date.yesterday
-      )
+      reconciliation = settle!(community, cutoff: Date.yesterday)
 
-      # finalize callback runs assign_meals + persist_settlement!
+      # Settlement runs assign_meals, then write_ledger!
       expect(reconciliation.reconciliation_balances.count).to be > 0
 
       cook_balance = reconciliation.reconciliation_balances.find_by(resident: cook)
@@ -525,10 +503,7 @@ RSpec.describe Reconciliation do
       create(:meal_resident, meal: meal, resident: eater, community: community)
       meal.reload
 
-      reconciliation = described_class.create!(
-        community: community, date: Time.zone.today,
-        end_date: Date.yesterday
-      )
+      reconciliation = settle!(community, cutoff: Date.yesterday)
 
       # Cook and eater have balances, bystander has zero and is skipped
       expect(reconciliation.reconciliation_balances.find_by(resident: bystander)).to be_nil
@@ -545,10 +520,7 @@ RSpec.describe Reconciliation do
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('50'))
       # No meal_residents or guests — nobody ate
 
-      reconciliation = described_class.create!(
-        community: community, date: Time.zone.today,
-        end_date: Date.yesterday
-      )
+      reconciliation = settle!(community, cutoff: Date.yesterday)
 
       # Cook is NOT reimbursed — zero-attendee meal has no financial impact
       expect(reconciliation.reconciliation_balances.find_by(resident: cook)&.amount.to_d)
@@ -561,10 +533,7 @@ RSpec.describe Reconciliation do
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('50'))
 
-      reconciliation = described_class.create!(
-        community: community, date: Time.zone.today,
-        end_date: Date.yesterday
-      )
+      reconciliation = settle!(community, cutoff: Date.yesterday)
 
       # Meal is assigned so it doesn't pile up as unreconciled
       expect(meal.reload.reconciliation).to eq(reconciliation)
@@ -580,40 +549,21 @@ RSpec.describe Reconciliation do
     end
   end
 
-  describe 'transaction safety' do
-    it 'rolls back meal assignments if persist_settlement! fails' do
-      cook = create(:resident, community: community, unit: unit, multiplier: 2)
-      meal = create(:meal, community: community)
-      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('50'))
-
-      # rubocop:disable RSpec/AnyInstance -- testing rollback behavior requires stubbing any instance
-      allow_any_instance_of(described_class).to receive(:persist_settlement!)
-        .and_raise(RuntimeError, 'simulated failure')
-      # rubocop:enable RSpec/AnyInstance
-
-      expect do
-        described_class.create!(community: community, end_date: Date.yesterday)
-      end.to raise_error(RuntimeError, 'simulated failure')
-
-      meal.reload
-      expect(meal.reconciliation_id).to be_nil
-      expect(described_class.count).to eq(0)
-    end
-  end
+  # Atomicity is pinned in spec/services/settlement_contract_spec.rb, where
+  # the failure comes from the database rather than from a stubbed method.
 
   describe 'date default' do
     it 'defaults date to today when not provided' do
       settleable_meal
-      recon = described_class.create!(community: community, end_date: Date.yesterday)
+      recon = settle!(community, cutoff: Date.yesterday)
       expect(recon.date).to eq(Time.zone.today)
     end
 
     it 'preserves an explicitly set date' do
       settleable_meal
       explicit_date = Date.new(2025, 6, 15)
-      recon = described_class.create!(
-        community: community, date: explicit_date, end_date: Date.yesterday
-      )
+      recon = described_class.new(community: community, end_date: Date.yesterday, date: explicit_date)
+      Settlement.new(recon).settle!
       expect(recon.date).to eq(explicit_date)
     end
   end
@@ -684,7 +634,7 @@ RSpec.describe Reconciliation do
 
     it 'rejects a period whose only meal is already reconciled' do
       meal = settleable_meal
-      described_class.create!(community: community, end_date: Date.yesterday)
+      settle!(community, cutoff: Date.yesterday)
       expect(meal.reload.reconciliation_id).to be_present
 
       second = build(:reconciliation, community: community, end_date: Date.yesterday)
@@ -706,9 +656,11 @@ RSpec.describe Reconciliation do
 
     # The rule guards creation only. Existing rows — including empty ones
     # written before this validation, or by a deliberate rake task using
-    # save(validate: false) — must still load and behave normally.
+    # mark_settling! and save(validate: false) — must still load and behave
+    # normally.
     it 'does not re-run on an existing empty reconciliation' do
       legacy = build(:reconciliation, community: community, end_date: Date.yesterday)
+      legacy.mark_settling!
       legacy.save!(validate: false)
 
       expect(legacy.reload.number_of_meals).to eq(0)
@@ -730,9 +682,7 @@ RSpec.describe Reconciliation do
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('50'), no_cost: true)
       meal.reload
 
-      reconciliation = described_class.create!(
-        community: community, end_date: Date.yesterday
-      )
+      reconciliation = settle!(community, cutoff: Date.yesterday)
       balances = reconciliation.settlement_balances
 
       # All bills are no_cost → total_cost = 0 → credits and debits both 0
@@ -749,9 +699,7 @@ RSpec.describe Reconciliation do
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
       meal.reload
 
-      reconciliation = described_class.create!(
-        community: community, end_date: Date.yesterday
-      )
+      reconciliation = settle!(community, cutoff: Date.yesterday)
       balances = reconciliation.settlement_balances
 
       # unit_cost = 30 / 2 = 15, guest debit = 15 * 2 = 30 charged to host
@@ -767,9 +715,7 @@ RSpec.describe Reconciliation do
       create(:bill, meal: meal, resident: solo, community: community, amount: BigDecimal('40'))
       meal.reload
 
-      reconciliation = described_class.create!(
-        community: community, end_date: Date.yesterday
-      )
+      reconciliation = settle!(community, cutoff: Date.yesterday)
       balances = reconciliation.settlement_balances
 
       # credit = 40, debit = (40/2) * 2 = 40 → net 0
@@ -787,9 +733,7 @@ RSpec.describe Reconciliation do
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('20'))
       meal.reload
 
-      reconciliation = described_class.create!(
-        community: community, end_date: Date.yesterday
-      )
+      reconciliation = settle!(community, cutoff: Date.yesterday)
       balances = reconciliation.settlement_balances
 
       # total_mult = 2 + 0 = 2, unit_cost = 20/2 = 10
@@ -810,9 +754,7 @@ RSpec.describe Reconciliation do
       create(:bill, meal: meal, resident: free_cook, community: community, amount: BigDecimal('0'), no_cost: true)
       meal.reload
 
-      reconciliation = described_class.create!(
-        community: community, end_date: Date.yesterday
-      )
+      reconciliation = settle!(community, cutoff: Date.yesterday)
       balances = reconciliation.settlement_balances
 
       # total_cost = 60 (only paid_cook's bill counts)
@@ -837,9 +779,7 @@ RSpec.describe Reconciliation do
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('0.05'))
       meal.reload
 
-      reconciliation = described_class.create!(
-        community: community, end_date: Date.yesterday
-      )
+      reconciliation = settle!(community, cutoff: Date.yesterday)
       balances = reconciliation.settlement_balances
 
       expect(balances[cook.id]).to eq(BigDecimal('0.05'))
@@ -861,9 +801,7 @@ RSpec.describe Reconciliation do
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('0.05'))
       meal.reload
 
-      reconciliation = described_class.create!(
-        community: community, end_date: Date.yesterday
-      )
+      reconciliation = settle!(community, cutoff: Date.yesterday)
       balances = reconciliation.settlement_balances
 
       # Both eaters have identical fractional remainders. Tie-break: lowest ID absorbs.
@@ -883,9 +821,7 @@ RSpec.describe Reconciliation do
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('25'))
       meal.reload
 
-      reconciliation = described_class.create!(
-        community: community, end_date: Date.yesterday
-      )
+      reconciliation = settle!(community, cutoff: Date.yesterday)
       balances = reconciliation.settlement_balances
 
       # total_mult = 0 → unit_cost = 0 → no debits, but cook IS credited
@@ -911,9 +847,7 @@ RSpec.describe Reconciliation do
       create(:bill, meal: meal, resident: cook, community: capped_community, amount: BigDecimal('20'))
       meal.reload
 
-      reconciliation = described_class.create!(
-        community: capped_community, end_date: Date.yesterday
-      )
+      reconciliation = settle!(capped_community, cutoff: Date.yesterday)
       balances = reconciliation.settlement_balances
 
       # total_cost == max_cost → not subsidized → full credit
@@ -928,6 +862,7 @@ RSpec.describe Reconciliation do
       bystander = create(:resident, community: community, unit: unit, multiplier: 2)
 
       reconciliation = build(:reconciliation, community: community, end_date: Date.yesterday)
+      reconciliation.mark_settling!
       reconciliation.save!(validate: false)
       balances = reconciliation.settlement_balances
 
@@ -944,9 +879,7 @@ RSpec.describe Reconciliation do
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
       meal.reload
 
-      reconciliation = described_class.create!(
-        community: community, end_date: Date.yesterday
-      )
+      reconciliation = settle!(community, cutoff: Date.yesterday)
       balances = reconciliation.settlement_balances
 
       expect(balances[cook.id]).to eq(BigDecimal('30'))
@@ -968,9 +901,7 @@ RSpec.describe Reconciliation do
 
       [meal1, meal2].each(&:reload)
 
-      reconciliation = described_class.create!(
-        community: community, end_date: Date.yesterday
-      )
+      reconciliation = settle!(community, cutoff: Date.yesterday)
       balances = reconciliation.settlement_balances
 
       # Meal 1: cook credit 50, eater debit 50
@@ -992,9 +923,7 @@ RSpec.describe Reconciliation do
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('1'))
       meal.reload
 
-      reconciliation = described_class.create!(
-        community: community, end_date: Date.yesterday
-      )
+      reconciliation = settle!(community, cutoff: Date.yesterday)
       balances = reconciliation.settlement_balances
 
       expect(balances[cook.id]).to eq(BigDecimal('1'))
@@ -1020,9 +949,7 @@ RSpec.describe Reconciliation do
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('50'))
       meal.reload
 
-      reconciliation = described_class.create!(
-        community: community, end_date: Date.yesterday
-      )
+      reconciliation = settle!(community, cutoff: Date.yesterday)
 
       result = reconciliation.unit_balances
 
@@ -1044,9 +971,7 @@ RSpec.describe Reconciliation do
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
       meal.reload
 
-      reconciliation = described_class.create!(
-        community: community, end_date: Date.yesterday
-      )
+      reconciliation = settle!(community, cutoff: Date.yesterday)
 
       result = reconciliation.unit_balances
 
@@ -1063,6 +988,7 @@ RSpec.describe Reconciliation do
       create(:unit, community: community, name: 'Unit B')
 
       reconciliation = build(:reconciliation, community: community, end_date: Date.yesterday)
+      reconciliation.mark_settling!
       reconciliation.save!(validate: false)
 
       result = reconciliation.unit_balances
@@ -1075,7 +1001,7 @@ RSpec.describe Reconciliation do
   describe '#destroy' do
     it 'is blocked — reconciliations are immutable settlement events' do
       settleable_meal
-      reconciliation = described_class.create!(community: community, end_date: Date.yesterday)
+      reconciliation = settle!(community, cutoff: Date.yesterday)
 
       expect { reconciliation.destroy }.not_to change(described_class, :count)
       expect(reconciliation.errors[:base])
@@ -1090,7 +1016,7 @@ RSpec.describe Reconciliation do
       create(:meal_resident, meal: meal, resident: eater, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('50'))
 
-      reconciliation = described_class.create!(community: community, end_date: Date.yesterday)
+      reconciliation = settle!(community, cutoff: Date.yesterday)
       expect(reconciliation.reconciliation_balances.count).to eq(2)
 
       reconciliation.destroy
@@ -1101,7 +1027,7 @@ RSpec.describe Reconciliation do
   describe '#update' do
     it 'is blocked — settled reconciliations are immutable' do
       settleable_meal(date: Date.new(2025, 3, 1))
-      reconciliation = described_class.create!(community: community, end_date: Date.new(2025, 3, 31))
+      reconciliation = settle!(community, cutoff: Date.new(2025, 3, 31))
 
       expect(reconciliation.update(end_date: Date.new(2025, 4, 30))).to be(false)
       expect(reconciliation.errors[:base])
@@ -1112,7 +1038,7 @@ RSpec.describe Reconciliation do
 
     it 'blocks update! with an exception and persists nothing' do
       settleable_meal(date: Date.new(2025, 3, 1))
-      reconciliation = described_class.create!(community: community, end_date: Date.new(2025, 3, 31))
+      reconciliation = settle!(community, cutoff: Date.new(2025, 3, 31))
 
       expect { reconciliation.update!(date: Date.new(2025, 4, 1)) }
         .to raise_error(ActiveRecord::RecordNotSaved)
@@ -1121,7 +1047,7 @@ RSpec.describe Reconciliation do
 
     it 'does not record an update audit for the blocked write' do
       settleable_meal(date: Date.new(2025, 3, 1))
-      reconciliation = described_class.create!(community: community, end_date: Date.new(2025, 3, 31))
+      reconciliation = settle!(community, cutoff: Date.new(2025, 3, 31))
 
       expect { reconciliation.update(end_date: Date.new(2025, 4, 30)) }
         .not_to change(reconciliation.audits, :count)
@@ -1131,7 +1057,7 @@ RSpec.describe Reconciliation do
   describe 'auditing' do
     it 'records an audit on create' do
       settleable_meal(date: Date.new(2025, 3, 1))
-      reconciliation = described_class.create!(community: community, end_date: Date.new(2025, 3, 31))
+      reconciliation = settle!(community, cutoff: Date.new(2025, 3, 31))
 
       audit = reconciliation.audits.last
       expect(audit.action).to eq('create')

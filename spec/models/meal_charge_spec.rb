@@ -45,7 +45,7 @@ RSpec.describe MealCharge do
     create(:meal_resident, meal: meal, resident: cook, community: community, multiplier: 2)
     create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
 
-    Reconciliation.create!(community: community, end_date: Date.yesterday)
+    settle!(community, cutoff: Date.yesterday)
   end
 
   describe 'what settlement writes' do
@@ -85,7 +85,7 @@ RSpec.describe MealCharge do
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('60'))
       create(:meal_resident, meal: meal, resident: cook, community: community, multiplier: 2)
       create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
-      Reconciliation.create!(community: community, end_date: Date.yesterday)
+      settle!(community, cutoff: Date.yesterday)
 
       credit = described_class.where(kind: 'credit').first
 
@@ -100,7 +100,7 @@ RSpec.describe MealCharge do
       create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
       create(:guest, meal: meal, resident: eater, multiplier: 2)
       create(:guest, meal: meal, resident: eater, multiplier: 1)
-      Reconciliation.create!(community: community, end_date: Date.yesterday)
+      settle!(community, cutoff: Date.yesterday)
 
       guest_lines = described_class.where(kind: 'guest_debit')
 
@@ -114,7 +114,7 @@ RSpec.describe MealCharge do
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('80'))
       create(:bill, meal: meal, resident: eater, community: community, amount: BigDecimal('9'), no_cost: true)
       create(:meal_resident, meal: meal, resident: cook, community: community, multiplier: 2)
-      Reconciliation.create!(community: community, end_date: Date.yesterday)
+      settle!(community, cutoff: Date.yesterday)
 
       expect(described_class.where(kind: 'credit').pluck(:resident_id)).to eq([cook.id])
     end
