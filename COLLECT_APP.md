@@ -300,9 +300,9 @@ Before designing any real UI, the first iOS milestone is "hit the preview endpoi
 Build the Rails work fully before opening Xcode. **This is the single most important decision in this document.** If we start writing Swift against a shifting API, we will spend half the iOS time reworking code every time a JSON shape changes. Worse, the iOS work is more fun than the backend work, and the backend work is where the value is.
 
 1. ~~Extract the settlement pipeline into a service~~ — done 2026-08-23 (`Settlement`); then add `Settlement.preview(cutoff:)`
-2. **Write `ReconciliationWarnings` module** with the three v1 warning kinds + unit specs
-3. **Write `Api::V1::ReconciliationsController#preview`** action + serializer
-4. **Request specs for the preview endpoint:** happy path, no meals, each warning kind in isolation, mixed warnings, cutoff in the future, invalid date, unauthenticated
+2. ~~Write `ReconciliationWarnings`~~ — done 2026-08-23 (`app/services/reconciliation_warnings.rb`)
+3. ~~Write `Api::V1::ReconciliationsController#preview`~~ — done 2026-08-23, with `ReconciliationPreviewSerializer`
+4. ~~Request specs for the preview endpoint~~ — done 2026-08-23 (`spec/requests/api/v1/reconciliations_preview_spec.rb`)
 5. **Hand-test with `curl`** to verify the JSON actually matches the sketch above
 6. **Open Xcode.** New SwiftUI project, strict concurrency on, build the "render raw JSON" throwaway screen
 7. **Real iOS UI** for the preview screen

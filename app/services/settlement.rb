@@ -26,8 +26,36 @@
 # The money rules this enforces are in CLAUDE.md ("Money Handling
 # Standards"); the concurrency rules are in docs/adr/0003 and 0005.
 class Settlement
+  # Raised by preview for a cutoff that run! would refuse, with the same
+  # words the model's validation uses.
+  class InvalidCutoff < ArgumentError; end
+
   def self.run!(cutoff:, community: Community.instance)
     new(Reconciliation.new(community: community, end_date: cutoff)).settle!
+  end
+
+  # What run! would settle and store for this cutoff, computed without
+  # writing anything. The meals are the same scope run! claims
+  # (Meal.settleable_by), the arithmetic is the same MealLedger pass, and
+  # the rounding is the same allocate_to_cents, so a preview's balances are
+  # exactly the rows a run! on the same data would store — a spec pins that.
+  #
+  # Returns a Preview: the cutoff, the meals with their ledger and their
+  # cooks preloaded, the ledger itself (for per-meal summaries), and the
+  # rounded per-resident balances for every resident in the community
+  # (zero included, so a screen can show everyone).
+  Preview = Data.define(:cutoff, :meals, :ledger, :resident_balances) do
+    def meal_summary(meal) = ledger.summary_for(meal)
+  end
+
+  def self.preview(cutoff:, community: Community.instance)
+    raise InvalidCutoff, 'cutoff must be in the past' unless cutoff < Time.zone.today
+
+    meals = Meal.settleable_by(cutoff).order(:date).preload({ bills: :resident }, :meal_residents, :guests).to_a
+    ledger = MealLedger.new(meals)
+    raw = ledger.balances(community.residents.pluck(:id))
+    Preview.new(cutoff: cutoff, meals: meals, ledger: ledger,
+                resident_balances: allocate_to_cents(raw, reconciliation_id: 'preview'))
   end
 
   attr_reader :reconciliation

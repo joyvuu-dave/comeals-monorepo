@@ -116,6 +116,35 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
     end
   end
 
+  describe 'preview' do
+    it 'writes nothing and predicts exactly the balances a settlement then stores' do
+      cook = resident
+      eaters = Array.new(3) { resident }
+      meal = meal_on(Date.yesterday - 1)
+      bill(meal, cook, 50)
+      eaters.each { |eater| attend(meal, eater) }
+      capped = meal_on(Date.yesterday - 2)
+      capped.update!(cap: BigDecimal('4'))
+      bill(capped, cook, 70)
+      eaters.each { |eater| attend(capped, eater) }
+
+      predicted = nil
+      expect { predicted = Settlement.preview(cutoff: Date.yesterday) }
+        .not_to(change { [Reconciliation.count, MealCharge.count, ReconciliationBalance.count, Meal.where.not(reconciliation_id: nil).count] }) # rubocop:disable Layout/LineLength
+      expect(predicted.meals).to contain_exactly(meal, capped)
+
+      reconciliation = settle!(community)
+
+      stored = reconciliation.reconciliation_balances.pluck(:resident_id, :amount).to_h
+      expect(predicted.resident_balances.reject { |_, amount| amount.zero? }).to eq(stored)
+    end
+
+    it 'refuses a cutoff a settlement would refuse' do
+      community
+      expect { Settlement.preview(cutoff: Time.zone.today) }.to raise_error(Settlement::InvalidCutoff)
+    end
+  end
+
   describe 'what gets written' do
     def settle_three_mixed_meals
       cook = resident

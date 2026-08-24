@@ -291,6 +291,25 @@ cooking for a run of meals.
 | ------ | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET`  | `/rotations/:id` | `{ "id": <place_value>, "description": ..., "residents": [ { "id", "display_name", "signed_up" } ] }`. `signed_up` is true for members who have a bill on one of the rotation's meals. |
 
+## Settlement preview
+
+```
+GET /reconciliations/preview
+```
+
+Takes `?cutoff=YYYY-MM-DD`, a past day. Returns what a settlement at that
+cutoff would claim and store, computed the same way a real settlement is
+and written nowhere. Returns `cutoff_date`, `generated_at`, a `summary` (`meal_count`,
+`total_cost`, `earliest_meal_date`, `latest_meal_date`,
+`residents_affected`, `units_affected`), the `meals` it would claim (each
+with its cost numbers, counts, and `cooks`), `balances` per resident and
+per unit, and `warnings` about data that settles fine but usually means
+someone forgot a step (`kind` is one of `bill_with_no_attendees`,
+`attendance_without_bill`, `zero_bill_not_flagged`; show `title` and
+`body` for a kind you do not know). Money is a string; the sign is the
+direction: positive means the community owes the resident. No meals to
+settle is a `200` with empty lists, not an error.
+
 ## Bills as records
 
 There is no endpoint that reads a bill on its own. To read or write a

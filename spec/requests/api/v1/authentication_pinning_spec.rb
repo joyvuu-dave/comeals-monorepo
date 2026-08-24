@@ -42,6 +42,7 @@ RSpec.describe 'API authentication boundary' do
     [:get,    '/api/v1/communities/1/hosts'],
     [:get,    '/api/v1/communities/1/calendar/2026-01-01'],
     [:get,    '/api/v1/residents/id'],
+    [:get,    '/api/v1/reconciliations/preview'],
     # Single-record reads, listed so the whole read side stays pinned
     [:get,    '/api/v1/rotations/1'],
     [:get,    '/api/v1/events/1'],
