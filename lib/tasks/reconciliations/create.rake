@@ -6,12 +6,14 @@ namespace :reconciliations do
     start_time = Time.current
     community = Community.instance
 
-    # Yesterday, always: a meal from a day that is not over is never settled.
+    # The community's yesterday, always: a meal from a day that is not over
+    # for the people who ate it is never settled. Not Date.yesterday — this
+    # task runs in the app time zone, which need not be the community's.
     # Reconciliation#must_settle_at_least_one_meal refuses an empty sweep,
     # reading the same scope Settlement#assign_meals claims, so there is no
     # pre-check here — the refusal arrives as RecordInvalid.
     begin
-      reconciliation = SettleAndNotify.call(cutoff: Date.yesterday, community: community)
+      reconciliation = SettleAndNotify.call(cutoff: community.yesterday, community: community)
     rescue ActiveRecord::RecordInvalid => e
       Rails.logger.info(
         "reconciliations:create skipping #{community.name} — #{e.record.errors.full_messages.to_sentence}"

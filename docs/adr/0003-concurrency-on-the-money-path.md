@@ -58,7 +58,8 @@ Not from Puma. From out-of-band processes:
   _Amended 2026-08-23: it now reads through `SnapshotRead`, which opens the
   transaction `SERIALIZABLE READ ONLY DEFERRABLE`. See ADR 0005, decision 6._
 - **`reconciliations:create`** is the one task that writes the ledger, and it
-  is **not scheduled**. `lib/clock_schedule.rb` lists it under "Manual tasks."
+  is **not scheduled** — it is not in `config/recurring.yml` (the old clock table
+  listed it under "Manual tasks").
   It runs when a human types `heroku run rake reconciliations:create`.
 
 So the concurrent-write surface is one manually triggered task racing whatever

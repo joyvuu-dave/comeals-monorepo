@@ -9,7 +9,7 @@
 # fails, none of it happened — there is never a reconciliation row without
 # its ledger, and never a claimed meal without a reconciliation.
 #
-#   Settlement.run!(cutoff: Date.yesterday)   # the rake task, the API
+#   Settlement.run!(cutoff: community.yesterday)   # the rake task, the API
 #   Settlement.new(reconciliation).settle!    # a built row (the admin form,
 #                                             # the factory)
 #   Settlement.new(reconciliation).rewrite!   # repair only: rewrite the
@@ -60,20 +60,21 @@ class Settlement
   end
 
   def self.preview(cutoff:, community: Community.instance)
-    raise InvalidCutoff, 'cutoff must be in the past' unless cutoff < Time.zone.today
+    raise InvalidCutoff, 'cutoff must be in the past' unless cutoff < community.today
 
-    meals = Meal.settleable_by(cutoff).order(:date).preload({ bills: :resident }, :meal_residents, :guests).to_a
+    meals = Meal.settleable_by(cutoff, today: community.today).order(:date).preload({ bills: :resident },
+                                                                                    :meal_residents, :guests).to_a
     ledger = MealLedger.new(meals)
     raw = ledger.balances(community.residents.pluck(:id))
     Preview.new(cutoff: cutoff, meals: meals, ledger: ledger,
                 resident_balances: allocate_to_cents(raw, reconciliation_id: 'preview'),
-                skipped_meals: skipped_by(cutoff))
+                skipped_meals: skipped_by(cutoff, today: community.today))
   end
 
   # Unreconciled meals in the period with attendance and no bill at all.
   # The date rules are settleable_by's; the difference is the missing bill.
-  def self.skipped_by(cutoff)
-    Meal.unreconciled.where(date: ..cutoff).where(date: ...Time.zone.today)
+  def self.skipped_by(cutoff, today:)
+    Meal.unreconciled.where(date: ..cutoff).where(date: ...today)
         .where.missing(:bills).with_attendees
         .order(:date).preload(:meal_residents, :guests).to_a
   end

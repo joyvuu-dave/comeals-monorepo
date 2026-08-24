@@ -144,7 +144,7 @@ class Reconciliation < ApplicationRecord
   # and then a reconciliation would pass validation and go on to claim zero
   # meals.
   def eligible_meals
-    Meal.settleable_by(end_date)
+    Meal.settleable_by(end_date, today: community.today)
   end
 
   # Settlement calls this before saving the row it is about to settle. See
@@ -156,7 +156,7 @@ class Reconciliation < ApplicationRecord
   private
 
   def set_date
-    self.date ||= Time.zone.today
+    self.date ||= community.today
   end
 
   # A reconciliation may only settle days that are over. Meals on today's date
@@ -164,7 +164,7 @@ class Reconciliation < ApplicationRecord
   # not final — so the cutoff must be strictly in the past (issue #3).
   def end_date_before_today
     return if end_date.blank?
-    return if end_date < Time.zone.today
+    return if end_date < community.today
 
     errors.add(:end_date, 'must be in the past')
   end

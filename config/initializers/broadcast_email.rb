@@ -11,7 +11,7 @@
 # per-run cap), and every path that mails more than one person uses it.
 #
 # To enable: heroku config:set BROADCAST_EMAIL_ENABLED=true
-# (and re-add the two jobs to Heroku Scheduler).
+# (and add the two tasks to config/recurring.yml as jobs).
 #
 # Transactional mail (password resets) and the settlement mail to cooks do
 # not check this switch — a person triggers them, for one period at a time.

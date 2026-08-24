@@ -58,6 +58,7 @@ module NonTransactionalCleanup
     reconciliation_balances
     resident_balances
     ledger_check_runs
+    job_runs
     meals
     reconciliations
     keys

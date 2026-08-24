@@ -63,6 +63,7 @@ gem 'skylight', group: :production
 # Postgres database — the whole database is tiny, so a second one would be
 # cost and moving parts for nothing. See config/solid_cache.yml.
 gem 'solid_cache'
+gem 'solid_queue'
 
 # Use ActiveStorage variant
 # gem 'mini_magick', '~> 4.8'
@@ -97,7 +98,6 @@ group :development do
   # Only bin/check runs it, so it has no reason to be in the :test
   # group that CI installs.
   gem 'rubycritic', require: false
-  gem 'rufus-scheduler', '~> 3.9'
   gem 'stackprof' # flamegraph support for rack-mini-profiler
   gem 'web-console', '>= 3.3.0'
 end

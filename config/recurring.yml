@@ -1,0 +1,40 @@
+# The schedule. This file is the only place the production schedule is
+# written down; there is no dashboard. Solid Queue's scheduler reads it and
+# enqueues each job at its time, and RecurringCatchUp enqueues any job that
+# missed its last tick while the process was down (Heroku restarts every
+# dyno once a day).
+#
+# Every schedule is a cron line with an explicit UTC zone: Fugit reads a
+# schedule with no zone in the process's local time, which is UTC on Heroku
+# but not on a laptop. Every job is a RecurringJob: it records a JobRun, pings
+# healthchecks.io, and is safe to run at any time, twice, or late.
+# spec/config/recurring_spec.rb pins that every entry names a real job and a
+# parseable schedule.
+#
+# To run one now: bin/rails runner 'RefreshBalancesJob.perform_now'
+
+shared: &shared
+  refresh_balances:
+    class: RefreshBalancesJob
+    schedule: 0 3 * * * UTC
+  verify_ledger:
+    class: VerifyLedgerJob
+    schedule: 0 5 * * * UTC
+  set_multipliers:
+    class: SetMultipliersJob
+    schedule: 0 11 * * * UTC
+  ensure_rotations:
+    class: EnsureRotationsJob
+    schedule: 30 22 * * * UTC
+  clear_finished_jobs:
+    command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
+    schedule: 12 * * * * UTC
+
+development:
+  <<: *shared
+
+test:
+  <<: *shared
+
+production:
+  <<: *shared

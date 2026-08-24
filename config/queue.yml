@@ -1,0 +1,28 @@
+# Solid Queue processes. One dispatcher (moves scheduled jobs to ready) and
+# one worker with one thread: the jobs are four daily tasks that take
+# seconds, and one at a time is the point (RecurringJob limits concurrency
+# per job anyway). Polling every 5 seconds keeps the database quiet; a job
+# starting five seconds late does not matter here.
+#
+# In production the supervisor runs inside Puma (config/puma.rb,
+# SOLID_QUEUE_IN_PUMA), so there is no worker dyno. To move the jobs to
+# their own dyno later: add `worker: bin/jobs` to the Procfile and unset
+# SOLID_QUEUE_IN_PUMA. Nothing else changes.
+default: &default
+  dispatchers:
+    - polling_interval: 5
+      batch_size: 100
+  workers:
+    - queues: "*"
+      threads: 1
+      processes: 1
+      polling_interval: 5
+
+development:
+  <<: *default
+
+test:
+  <<: *default
+
+production:
+  <<: *default

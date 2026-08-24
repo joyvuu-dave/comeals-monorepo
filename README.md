@@ -28,7 +28,7 @@ bundle exec rake db:setup   # creates the database and runs db/seeds.rb (dev fix
 bin/dev
 ```
 
-`bin/dev` starts Rails (port 3000), Vite (port 3036), and the clock process
+`bin/dev` starts Rails (port 3000), Vite (port 3036), and the Solid Queue supervisor (`bin/jobs`, which runs `config/recurring.yml`)
 via foreman.
 
 The resident app is at `http://localhost:3036`. ActiveAdmin is on its own

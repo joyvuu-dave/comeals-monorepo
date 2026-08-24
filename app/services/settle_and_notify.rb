@@ -4,7 +4,7 @@
 # balances, tell the cooks. One entry point for the nightly rake task and
 # the API, so the two cannot drift.
 #
-#   SettleAndNotify.call(cutoff: Date.yesterday)   # => the Reconciliation
+#   SettleAndNotify.call(cutoff: community.yesterday)   # => the Reconciliation
 #
 # Raises ActiveRecord::RecordInvalid when there is nothing to settle or the
 # cutoff is not in the past (nothing was written), and Settlement::Contested

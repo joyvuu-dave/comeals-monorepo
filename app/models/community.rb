@@ -257,6 +257,19 @@ class Community < ApplicationRecord
   # Cache key for a specific calendar month. Same format as the Pusher channel
   # name in data_store.js — one key serves both cache and real-time notification.
   # Stale cache across deploys is handled by bin/deploy clearing the cache.
+  # The community's calendar day, in its own time zone. This is the "today"
+  # of the settlement path: a meal is settleable only when its day is over
+  # for the people who ate it. Rake tasks run in the app time zone
+  # (config.time_zone) and API requests run in the community's, so neither
+  # may use Time.zone.today for this — they both ask here.
+  def today
+    Time.current.in_time_zone(timezone).to_date
+  end
+
+  def yesterday
+    today - 1
+  end
+
   def calendar_cache_key(year, month)
     "community-#{id}-calendar-#{year}-#{month}"
   end

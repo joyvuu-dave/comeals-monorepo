@@ -49,3 +49,13 @@ workers ENV.fetch('WEB_CONCURRENCY', 0).to_i
 
 # Allow puma to be restarted by `bin/rails restart` command.
 plugin :tmp_restart
+
+# Solid Queue's supervisor runs inside this process when SOLID_QUEUE_IN_PUMA
+# is set (the production config var). This is Rails 8's own layout for a
+# single-server deployment, and it is what lets the schedule in
+# config/recurring.yml run without a worker dyno. After boot, any job that
+# missed its last tick while the dyno was down is enqueued (RecurringCatchUp).
+if ENV['SOLID_QUEUE_IN_PUMA'].present?
+  plugin :solid_queue
+  on_booted { RecurringCatchUp.call }
+end

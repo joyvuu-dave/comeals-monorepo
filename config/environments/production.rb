@@ -101,6 +101,10 @@ Rails.application.configure do
   # Raise delivery errors so failed emails aren't silently swallowed.
   config.action_mailer.raise_delivery_errors = true
 
+  # Jobs run through Solid Queue in the primary database (no `connects_to`,
+  # on purpose — see the migration that created its tables).
+  config.active_job.queue_adapter = :solid_queue
+
   # Enable locale fallbacks for I18n (makes lookups for any locale fall back to
   # the I18n.default_locale when a translation cannot be found).
   config.i18n.fallbacks = true

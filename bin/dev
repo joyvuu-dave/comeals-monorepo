@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# In development the clock fires all tasks every 2 minutes (fast mode).
-# Pass CLOCK_FAST=0 to run the real schedules instead.
-# Example: CLOCK_FAST=0 bin/dev
+# The jobs process runs config/recurring.yml on its real schedule. To run
+# a job now: bin/rails runner 'RefreshBalancesJob.perform_now'
 
 echo ""
 echo "  Comeals:       http://localhost:3036"

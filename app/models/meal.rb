@@ -59,8 +59,8 @@ class Meal < ApplicationRecord
   # least one bill, on or before the cutoff, and from a day that is over.
   # Meals on today's date are never swept, whatever the cutoff — their
   # receipts and attendance are not final (issue #3).
-  scope :settleable_by, lambda { |cutoff|
-    unreconciled.joins(:bills).where(date: ..cutoff).where(date: ...Time.zone.today).distinct
+  scope :settleable_by, lambda { |cutoff, today: Community.instance.today|
+    unreconciled.joins(:bills).where(date: ..cutoff).where(date: ...today).distinct
   }
   scope :open, -> { where(closed: false) }
   scope :closed_with_bills, -> { where(closed: true).joins(:bills).distinct }
