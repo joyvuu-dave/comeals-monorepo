@@ -35,26 +35,16 @@ namespace :residents do
                             .having('COUNT(bills.id) < ?', 2)
                             .pluck(:date)
 
-      failures = 0
-      sent = 0
-
-      eligible_cooks.each do |resident|
-        next if signed_up_residents_ids.include?(resident.id)
-
-        begin
-          ResidentMailer.rotation_signup_email(resident, rotation, open_meal_dates, rotation.community).deliver_now
-          sent += 1
-        rescue *MAIL_DELIVERY_ERRORS => e
-          failures += 1
-          MailDeliveryFailure.report(e, mailer: 'rotation_signup_email', recipient: resident.email)
-        end
+      to_notify = eligible_cooks.reject { |resident| signed_up_residents_ids.include?(resident.id) }
+      result = PacedDelivery.deliver(to_notify, mailer: 'rotation_signup_email') do |resident|
+        ResidentMailer.rotation_signup_email(resident, rotation, open_meal_dates, rotation.community)
       end
 
-      if failures.positive?
-        Rails.logger.error("Rotation #{rotation.id}: #{failures} email(s) failed, " \
-                           "#{sent} sent — not marking as notified")
-      else
+      if result.complete?
         rotation.update(residents_notified: true)
+      else
+        Rails.logger.error("Rotation #{rotation.id}: #{result.failed} email(s) failed, " \
+                           "#{result.skipped} over the cap, #{result.sent} sent — not marking as notified")
       end
     end
 

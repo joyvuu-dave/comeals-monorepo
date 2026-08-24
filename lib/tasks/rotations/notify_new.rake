@@ -20,23 +20,16 @@ namespace :rotations do
             .where(created_at: 7.days.ago..)
             .find_each do |rotation|
       residents = rotation.community.residents.where(active: true).where.not(email: nil)
-      failures = 0
-      sent = 0
-
-      residents.each do |resident|
-        ResidentMailer.new_rotation_email(resident, rotation, rotation.community).deliver_now
-        sent += 1
-      rescue *MAIL_DELIVERY_ERRORS => e
-        failures += 1
-        MailDeliveryFailure.report(e, mailer: 'new_rotation_email', recipient: resident.email)
+      result = PacedDelivery.deliver(residents, mailer: 'new_rotation_email') do |resident|
+        ResidentMailer.new_rotation_email(resident, rotation, rotation.community)
       end
 
-      if failures.positive?
-        Rails.logger.error("Rotation #{rotation.id}: #{failures} email(s) failed, " \
-                           "#{sent} sent — not marking as notified")
-      else
+      if result.complete?
         rotation.update_column(:new_rotation_notified_at, Time.current)
-        Rails.logger.info("Rotation #{rotation.id}: #{sent} new-rotation email(s) sent")
+        Rails.logger.info("Rotation #{rotation.id}: #{result.sent} new-rotation email(s) sent")
+      else
+        Rails.logger.error("Rotation #{rotation.id}: #{result.failed} email(s) failed, " \
+                           "#{result.skipped} over the cap, #{result.sent} sent — not marking as notified")
       end
     end
 

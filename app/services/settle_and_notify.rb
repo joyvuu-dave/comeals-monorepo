@@ -12,6 +12,9 @@
 # first after the retries (nothing was written either). Mail failures are
 # reported (MailDeliveryFailure) and never raised: the settlement is
 # committed by then, and a lost email is fixable; a lost settlement is not.
+# The mails go through PacedDelivery (one SMTP session, a pause between
+# messages, a per-run cap), so a settlement with thirty cooks cannot trip
+# Gmail the way the broadcasts did in July 2026.
 class SettleAndNotify
   def self.call(cutoff:, community: Community.instance)
     # Only the settlement is retried. The recalculation and the mails run
@@ -24,11 +27,10 @@ class SettleAndNotify
     reconciliation
   end
 
+  # One SMTP session, paced, capped — see PacedDelivery.
   def self.notify_cooks(reconciliation)
-    reconciliation.unique_cooks.each do |cook|
-      ReconciliationMailer.reconciliation_notify_email(cook, reconciliation).deliver_now
-    rescue *MAIL_DELIVERY_ERRORS => e
-      MailDeliveryFailure.report(e, mailer: 'reconciliation_notify_email', recipient: cook.email)
+    PacedDelivery.deliver(reconciliation.unique_cooks, mailer: 'reconciliation_notify_email') do |cook|
+      ReconciliationMailer.reconciliation_notify_email(cook, reconciliation)
     end
   end
 

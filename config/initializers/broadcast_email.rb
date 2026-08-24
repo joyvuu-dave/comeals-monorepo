@@ -6,12 +6,14 @@
 #
 # Broadcasts were turned off in July 2026 after the per-message SMTP login
 # pattern tripped Gmail's throttle and no broadcast had delivered since 2023.
-# Before turning this back on, build a paced sender: one SMTP session per
-# run, a pause between messages, a per-run cap.
+# The paced sender that was the condition for turning them back on exists
+# now: PacedDelivery (one SMTP session per run, a pause between messages, a
+# per-run cap), and every path that mails more than one person uses it.
 #
 # To enable: heroku config:set BROADCAST_EMAIL_ENABLED=true
 # (and re-add the two jobs to Heroku Scheduler).
 #
-# Transactional mail (password resets) and the manual reconciliation mailers
-# do not check this switch — they are one-at-a-time and user-triggered.
+# Transactional mail (password resets) and the settlement mail to cooks do
+# not check this switch — a person triggers them, for one period at a time.
+# They still go through PacedDelivery when there is more than one message.
 BROADCAST_EMAIL_ENABLED = ENV['BROADCAST_EMAIL_ENABLED'] == 'true'
