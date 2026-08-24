@@ -9,6 +9,8 @@ require 'rails_helper'
 # update_all with no audit trail, then rewrote the settled balances in place).
 # Corrections settle as new entries in the next reconciliation.
 RSpec.describe 'Admin Reconciliation Immutability' do
+  include ActiveJob::TestHelper
+
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
   let(:admin_user) { create(:admin_user, community: community, superuser: true) }
@@ -100,5 +102,12 @@ RSpec.describe 'Admin Reconciliation Immutability' do
     expect(reconciliation.meals).to contain_exactly(meal)
     expect(reconciliation.reconciliation_balances.pluck(:resident_id)).to contain_exactly(cook.id, eater.id)
     expect(MealCharge.for_reconciliation(reconciliation).count).to eq(2)
+    expect(response).to redirect_to("/reconciliations/#{reconciliation.id}")
+
+    # And the same two things the nightly task and the API do after the
+    # settlement (#73): the running balances follow at once, and the cooks
+    # get their mail from the job.
+    expect(ResidentBalance.find_by(resident_id: eater.id).amount).to eq(BigDecimal('0'))
+    expect(NotifyCooksJob).to have_been_enqueued.with(reconciliation).once
   end
 end

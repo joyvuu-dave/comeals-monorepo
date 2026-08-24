@@ -16,14 +16,21 @@ ActiveAdmin.register Reconciliation do
   permit_params :end_date
 
   controller do
-    # The form settles a period; it does not just insert a row. Settlement
-    # saves the row, claims the meals, and writes the ledger in one
-    # transaction, and puts validation errors on the row like save would.
-    def create_resource(object)
-      Settlement.new(object).settle!
-      true
-    rescue ActiveRecord::RecordInvalid
-      false
+    # The form settles a period, the same way the nightly task and the API
+    # do: SettleAndNotify claims the meals, writes the ledger, refreshes the
+    # running balances, and enqueues the cook mail (#73). build_resource
+    # runs the authorization check and permits the params; the row it
+    # builds is only read for its cutoff, because a retry after a conflict
+    # needs a fresh row each time (RetryOnConflict). A refused settlement
+    # comes back as RecordInvalid with the errors on its row, which the
+    # form renders like any failed save.
+    def create
+      cutoff = build_resource.end_date
+      reconciliation = SettleAndNotify.call(cutoff: cutoff)
+      redirect_to resource_path(reconciliation), notice: 'Reconciliation was successfully created.'
+    rescue ActiveRecord::RecordInvalid => e
+      set_resource_ivar(e.record)
+      render :new
     end
   end
 
