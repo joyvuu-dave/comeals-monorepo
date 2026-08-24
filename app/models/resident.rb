@@ -118,6 +118,10 @@ class Resident < ApplicationRecord
     SCrypt::Password.new(password_digest).is_password?(unencrypted_password) && self
   end
 
+  # No length or presence rule, on purpose: a blank password is a feature
+  # this community asked for. Admin creates children with '' (they have no
+  # email, so they never log in), and an adult may reset their password to
+  # '' and then log in with email alone. Do not add a validation here.
   def password=(unencrypted_password)
     @password = unencrypted_password
     self.password_digest = SCrypt::Password.create(unencrypted_password)

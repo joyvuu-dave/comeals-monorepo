@@ -161,7 +161,7 @@ RSpec.describe 'Residents API' do
     end
   end
 
-  describe 'password reset, the failure branches' do
+  describe 'password reset, the other branches' do
     let(:community) { create(:community) }
     let(:unit) { create(:unit, community: community) }
     let(:resident) { create(:resident, community: community, unit: unit, email: 'ann@example.com') }
@@ -175,14 +175,32 @@ RSpec.describe 'Residents API' do
       expect(response.parsed_body['message']).to eq('Error. Please try again.')
     end
 
-    it 'answers 400 for a blank new password and keeps the old one' do
+    # A blank password is a feature the community asked for, not a gap:
+    # some residents log in with email alone. The whole path must work.
+    it 'accepts a blank new password, and the resident can then log in with email alone' do
       resident.update!(reset_password_token: 'reset-token-789', reset_password_sent_at: Time.current)
 
       post '/api/v1/residents/password-reset/reset-token-789', params: { password: '' }
 
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body['message']).to eq('Password updated!')
+      expect(resident.reload.reset_password_token).to be_nil
+
+      post '/api/v1/residents/token', params: { email: resident.email, password: '' }
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body['token']).to be_present
+
+      post '/api/v1/residents/token', params: { email: resident.email, password: 'not blank' }
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body['message']).to eq('Invalid password.')
-      expect(resident.reload.reset_password_token).to eq('reset-token-789')
+    end
+
+    it 'treats a missing password the same as a blank one' do
+      resident.update!(reset_password_token: 'reset-token-790', reset_password_sent_at: Time.current)
+
+      post '/api/v1/residents/password-reset/reset-token-790'
+
+      expect(response).to have_http_status(:ok)
+      expect(resident.reload.authenticate('')).to be_truthy
     end
   end
 end

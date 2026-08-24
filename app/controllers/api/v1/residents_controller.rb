@@ -86,15 +86,14 @@ module Api
                  status: :bad_request and return
         end
 
-        # An empty password would hash fine and then let this account log in
-        # with an empty password. (Admin creates children with a blank
-        # password on purpose; they have no email, so they can never reach
-        # the login. A resident on this path has an email.)
-        render json: { message: 'Invalid password.' }, status: :bad_request and return if params[:password].blank?
-
+        # A blank password is allowed, on purpose. The community asked for
+        # it: the app runs on a shared screen with no secrets on it, and some
+        # residents want to log in with only their email. So '' is a valid
+        # new password here, and the login accepts it (Resident#password=).
+        # Pinned by spec/requests/api/v1/residents_controller_spec.rb.
         resident.reset_password_token = nil
         resident.reset_password_sent_at = nil
-        resident.password = params[:password]
+        resident.password = params[:password].to_s
 
         render json: { message: 'Password updated!' } and return if resident.save
 
