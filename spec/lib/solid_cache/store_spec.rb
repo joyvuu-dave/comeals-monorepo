@@ -5,13 +5,13 @@ require 'rails_helper'
 # Production switched from memcached (dalli/MemCachier) to solid_cache, which
 # keeps entries in a Postgres table instead of a separate memcached server.
 #
-# The app has exactly four cache call sites and they use five methods between
-# them: fetch with expires_in (the calendar, CommunitiesController#calendar),
-# read and write (MealsController#show_cooks), and delete (the invalidation in
-# Community#invalidate_calendar_cache and Meal#trigger_pusher). This spec runs
-# each of those against a real SolidCache::Store, with the kind of value the
-# app actually stores — a serializer's as_json output, which is nested hashes
-# and arrays, not a flat string.
+# The app's cache call sites use these methods: fetch with expires_in (the
+# calendar, CommunitiesController#calendar), delete (the invalidation in
+# Community#invalidate_calendar_cache), and read and write (rack_attack
+# counters). This spec runs each of those against a real SolidCache::Store,
+# with the kind of value the app actually stores — a serializer's as_json
+# output, which is nested hashes and arrays, not a flat string. (The cooks
+# page used to be cached too; #76 removed that.)
 RSpec.describe SolidCache::Store do
   include ActiveSupport::Testing::TimeHelpers
 
@@ -44,7 +44,7 @@ RSpec.describe SolidCache::Store do
       .to change(SolidCache::Entry, :count).by(1)
   end
 
-  describe 'read and write — the show_cooks path' do
+  describe 'read and write' do
     it 'round-trips a serialized payload unchanged' do
       cache.write('meal-7', serialized_payload)
 

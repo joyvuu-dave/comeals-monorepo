@@ -157,14 +157,16 @@ class Meal < ApplicationRecord
     self.closed_at = nil if closed == false && closed_was == true
   end
 
-  # Invalidate caches and notify connected clients via Pusher.
-  # Called by MealsController after_action for all write operations.
-  # Also handles calendar cache invalidation for meals, bills, meal_residents,
-  # and guests. See CalendarSerializer for the full cache invalidation contract.
+  # Notify connected clients via Pusher, and clear the calendar cache for
+  # this meal's month. Called by MealsController after_action for all write
+  # operations, so it also covers bills, meal_residents, and guests. See
+  # CalendarSerializer for the full cache invalidation contract.
+  #
+  # meal-<id> is only a Pusher channel now. The cooks page is not cached
+  # (MealsController#show_cooks explains why), so there is no entry to
+  # delete here.
   def trigger_pusher
     key = "meal-#{id}"
-
-    Rails.cache.delete(key)
 
     Pusher.trigger(
       key,

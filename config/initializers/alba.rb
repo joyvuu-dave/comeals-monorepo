@@ -11,8 +11,8 @@
 #   produce the same bytes: a BigDecimal becomes a string, a Time becomes
 #   ISO 8601.
 # - symbolize_keys!: `to_h` returns symbol keys, like a Ruby hash literal.
-#   The calendar and meal-form hashes are cached and digested into ETags,
-#   and the specs read them with symbols.
+#   The calendar hash is cached and digested into an ETag, and the specs
+#   read serializer output with symbols.
 # - inflector nil (no inference): every association names its serializer with
 #   `resource:`. A missing name raises instead of guessing a class.
 Alba.backend = :oj_rails

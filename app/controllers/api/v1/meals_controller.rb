@@ -120,21 +120,20 @@ module Api
       end
 
       # GET /api/v1/meals/:meal_id/cooks
+      #
+      # Built fresh on every request, on purpose. This page used to be
+      # cached under meal-<id>, and the cache was cleared only when the
+      # meal itself was written or settled. But the page also holds the
+      # sign-up list (every resident's name, unit, active flag) and the
+      # ids of the meals before and after this one, and nothing cleared
+      # the entry when a resident was retired or renamed or when the next
+      # rotation was created — so the page showed old data for up to a
+      # day (#76). The cache also saved almost nothing: set_meal already
+      # loads the meal, its bills, attendance and guests, and the rest is
+      # three small queries. spec/requests/api/v1/meal_cooks_performance_spec.rb
+      # bounds them.
       def show_cooks
-        key = "meal-#{params[:meal_id]}"
-
-        cached_value = Rails.cache.read(key)
-
-        if cached_value.nil?
-          # @meal.meal_residents is already loaded by set_meal's .includes(),
-          # so the serializer's attending lookup costs no query.
-          result = MealFormSerializer.new(@meal).to_h
-          Rails.cache.write(key, result)
-        else
-          result = cached_value
-        end
-
-        render json: result
+        render json: MealFormSerializer.new(@meal)
       end
 
       # PATCH /api/v1/meals/:meal_id/description { description }

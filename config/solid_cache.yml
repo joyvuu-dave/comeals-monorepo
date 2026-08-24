@@ -8,14 +8,12 @@
 # max_size is the cap on total cache size. When writes push past it,
 # solid_cache trims the oldest entries. 64 MB is generous for this app:
 # the cache holds calendar JSON (a few KB per month, a handful of months
-# in play at a time), one meal-form blob per meal, and rack_attack
-# counters. The whole production database is about 33 MB, so this bounds
+# in play at a time) and rack_attack counters. The whole production database is about 33 MB, so this bounds
 # the cache at roughly twice the rest of the data even in the worst case.
 #
-# max_age is a hard expiry floor. Every entry we write either has its own
-# expires_in (the calendar's 1 hour) or is deleted explicitly on change
-# (show_cooks). A day is far past both, so this only catches entries that
-# somehow escape both paths.
+# max_age is a hard expiry floor. Every entry we write has its own
+# expires_in (the calendar's 1 hour). A day is far past that, so this only
+# catches entries that somehow escape it.
 default: &default
   store_options:
     max_age: <%= 1.day.to_i %>

@@ -295,17 +295,16 @@ class Settlement
     end
   end
 
-  # A settled meal is frozen, and the screens show that through `reconciled`
-  # in the cached cooks-page JSON (meal-<id>) and in the cached calendar
-  # months. Nothing else clears those after a settlement, because the claim
-  # is an update_all that fires no callbacks (issue #70). Runs after the
-  # transaction commits, so no reader can refill a cache from a claim that
-  # then rolled back.
+  # A settled meal is frozen, and the calendar shows that through
+  # `reconciled` in the cached calendar months. Nothing else clears those
+  # after a settlement, because the claim is an update_all that fires no
+  # callbacks (issue #70). Runs after the transaction commits, so no reader
+  # can refill a cache from a claim that then rolled back. (The cooks page
+  # is not cached — MealsController#show_cooks — so it needs nothing here.)
   def forget_cached_meals
     ids = @claimed_meal_ids
     return if ids.blank?
 
-    Rails.cache.delete_multi(ids.map { |id| "meal-#{id}" })
     months = Meal.where(id: ids).distinct.pluck(:date).map(&:beginning_of_month).uniq
     # Clear every month's cache before the first push. A push is a call to
     # Pusher's HTTP API and can fail; the cache clear is what keeps the

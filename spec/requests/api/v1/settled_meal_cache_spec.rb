@@ -2,11 +2,12 @@
 
 require 'rails_helper'
 
-# Settling a meal changes what its cooks page says (`reconciled`), and that
-# page is served from the meal-<id> cache. The claim is an update_all that
-# fires no callbacks, so the settlement itself has to clear the cache
-# (issue #70). Without that, a page cached before the settlement keeps
-# saying the meal is open.
+# Settling a meal changes what its cooks page says (`reconciled`). That
+# page used to be served from a meal-<id> cache, and the claim is an
+# update_all that fires no callbacks, so a page cached before the
+# settlement kept saying the meal was open (issue #70). The cache is gone
+# now (#76); this spec stays so the page can never go stale that way again,
+# whatever serves it.
 RSpec.describe 'the cooks page after a settlement' do # -- a request contract across the API and Settlement
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }

@@ -10,7 +10,8 @@
 //    cannot get a stale server copy.
 // 3. Channels: community-<id>-calendar-<year>-<month> for a month (the
 //    name is also the server cache key, on purpose), and meal-<id> for
-//    one meal's page. The event name is always "update".
+//    one meal's page (a channel only; that page is not cached on the
+//    server). The event name is always "update".
 // 4. The client subscribes to the month on screen and refetches on
 //    "update" (data_store_calendar.js loadMonth). It also subscribes to
 //    the two neighbouring months and only evicts them from the client
