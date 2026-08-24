@@ -4,6 +4,12 @@ require 'rails_helper'
 require 'rake'
 
 RSpec.describe 'reconciliations:create' do
+  include ActiveJob::TestHelper
+
+  # The cook mail is a job (NotifyCooksJob). Run it inline so these examples
+  # see the whole of what a settlement does.
+  around { |example| perform_enqueued_jobs { example.run } }
+
   before(:all) do
     RakeTasks.ensure_loaded
   end

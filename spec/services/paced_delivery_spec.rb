@@ -25,6 +25,18 @@ RSpec.describe PacedDelivery do
       expect(described_class).not_to have_received(:pause)
     end
 
+    it 'calls after_send once per delivered message, and not for a failed one' do
+      messages = cooks.index_with { |cook| message_for(cook) }
+      allow(messages[cooks[1]]).to receive(:deliver_now).and_raise(Net::ReadTimeout)
+      allow(Rails.logger).to receive(:error)
+      recorded = []
+
+      described_class.deliver(cooks, mailer: 'reconciliation_notify_email',
+                                     after_send: ->(cook) { recorded << cook }) { |cook| messages[cook] }
+
+      expect(recorded).to eq([cooks[0], cooks[2]])
+    end
+
     it 'reports a failed message and goes on to the next person' do
       messages = cooks.index_with { |cook| message_for(cook) }
       allow(messages[cooks[1]]).to receive(:deliver_now).and_raise(Net::ReadTimeout)

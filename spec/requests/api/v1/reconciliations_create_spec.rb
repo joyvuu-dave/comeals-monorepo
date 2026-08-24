@@ -3,6 +3,12 @@
 require 'rails_helper'
 
 RSpec.describe 'POST /api/v1/reconciliations' do
+  include ActiveJob::TestHelper
+
+  # The cook mail is a job (NotifyCooksJob). Run it inline so these examples
+  # see the whole of what a settlement does.
+  around { |example| perform_enqueued_jobs { example.run } }
+
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
   let(:resident) { create(:resident, community: community, unit: unit, multiplier: 2) }
@@ -46,6 +52,29 @@ RSpec.describe 'POST /api/v1/reconciliations' do
     # The running balance no longer counts the settled meal, only today's.
     expect(ResidentBalance.find_by(resident_id: resident.id).amount).to eq(BigDecimal('-30'))
     expect(ReconciliationMailer).to have_received(:reconciliation_notify_email).with(cook, reconciliation).once
+  end
+
+  it 'answers as soon as the ledger and balances are written; the cook mail is a job' do
+    settleable_meal
+    # Not performed inline here: this example is about what the request
+    # itself does.
+    queue_adapter.perform_enqueued_jobs = false
+
+    settle(Date.yesterday)
+
+    expect(response).to have_http_status(:created)
+    expect(ReconciliationMailer).not_to have_received(:reconciliation_notify_email)
+    expect(NotifyCooksJob).to have_been_enqueued.with(Reconciliation.last).once
+    expect(ResidentBalance.find_by(resident_id: resident.id).amount).to eq(BigDecimal('0'))
+  end
+
+  it 'enqueues no mail when the settlement was refused' do
+    queue_adapter.perform_enqueued_jobs = false
+
+    settle(Date.yesterday)
+
+    expect(response).to have_http_status(:bad_request)
+    expect(NotifyCooksJob).not_to have_been_enqueued
   end
 
   it 'refuses a cutoff that is not in the past, and writes nothing' do

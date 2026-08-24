@@ -85,6 +85,15 @@ $$;
 
 
 --
+-- Name: comeals_protect_mail_delivery(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.comeals_protect_mail_delivery() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$ BEGIN RAISE EXCEPTION '% on mail_deliveries refused: a sent email is a record of what happened, so it is never edited or deleted', TG_OP; END; $$;
+
+
+--
 -- Name: comeals_protect_meal_charge(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -648,7 +657,7 @@ CREATE TABLE public.job_runs (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT job_runs_finished_after_started CHECK ((finished_at >= started_at)),
-    CONSTRAINT job_runs_outcome_known CHECK (((outcome)::text = ANY ((ARRAY['ok'::character varying, 'failed'::character varying])::text[])))
+    CONSTRAINT job_runs_outcome_known CHECK (((outcome)::text = ANY (ARRAY[('ok'::character varying)::text, ('failed'::character varying)::text])))
 );
 
 
@@ -741,6 +750,41 @@ CREATE SEQUENCE public.ledger_check_runs_id_seq
 --
 
 ALTER SEQUENCE public.ledger_check_runs_id_seq OWNED BY public.ledger_check_runs.id;
+
+
+--
+-- Name: mail_deliveries; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.mail_deliveries (
+    id bigint NOT NULL,
+    mailer character varying NOT NULL,
+    about_type character varying NOT NULL,
+    about_id bigint NOT NULL,
+    resident_id bigint NOT NULL,
+    sent_at timestamp(6) without time zone NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: mail_deliveries_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.mail_deliveries_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: mail_deliveries_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.mail_deliveries_id_seq OWNED BY public.mail_deliveries.id;
 
 
 --
@@ -1640,6 +1684,13 @@ ALTER TABLE ONLY public.ledger_check_runs ALTER COLUMN id SET DEFAULT nextval('p
 
 
 --
+-- Name: mail_deliveries id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mail_deliveries ALTER COLUMN id SET DEFAULT nextval('public.mail_deliveries_id_seq'::regclass);
+
+
+--
 -- Name: meal_charges id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1894,6 +1945,14 @@ ALTER TABLE ONLY public.keys
 
 ALTER TABLE ONLY public.ledger_check_runs
     ADD CONSTRAINT ledger_check_runs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: mail_deliveries mail_deliveries_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mail_deliveries
+    ADD CONSTRAINT mail_deliveries_pkey PRIMARY KEY (id);
 
 
 --
@@ -2219,6 +2278,13 @@ CREATE UNIQUE INDEX index_keys_on_token ON public.keys USING btree (token);
 --
 
 CREATE INDEX index_ledger_check_runs_on_started_at ON public.ledger_check_runs USING btree (started_at);
+
+
+--
+-- Name: index_mail_deliveries_one_per_person; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_mail_deliveries_one_per_person ON public.mail_deliveries USING btree (mailer, about_type, about_id, resident_id);
 
 
 --
@@ -2621,6 +2687,13 @@ CREATE TRIGGER ledger_check_runs_protect BEFORE DELETE OR UPDATE ON public.ledge
 
 
 --
+-- Name: mail_deliveries mail_deliveries_protect; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER mail_deliveries_protect BEFORE DELETE OR UPDATE ON public.mail_deliveries FOR EACH ROW EXECUTE FUNCTION public.comeals_protect_mail_delivery();
+
+
+--
 -- Name: meal_charges meal_charges_protect; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -2847,6 +2920,14 @@ ALTER TABLE ONLY public.guests
 
 
 --
+-- Name: mail_deliveries fk_rails_9cd3362c47; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mail_deliveries
+    ADD CONSTRAINT fk_rails_9cd3362c47 FOREIGN KEY (resident_id) REFERENCES public.residents(id);
+
+
+--
 -- Name: solid_queue_claimed_executions fk_rails_9cfe4d4944; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2949,8 +3030,9 @@ ALTER TABLE ONLY public.bills
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
-('20260823150000'),
+('20260825100000'),
 ('20260824100000'),
+('20260823150000'),
 ('20260823120000'),
 ('20260816160000'),
 ('20260816150000'),

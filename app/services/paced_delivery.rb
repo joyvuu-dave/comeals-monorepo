@@ -40,9 +40,11 @@ class PacedDelivery
   end
 
   # Delivers the message the block builds for each item. `recipient` is
-  # only for the failure log; it defaults to the item's email.
-  def self.deliver(items, mailer:, recipient: ->(item) { item.email }, &build)
-    new(items, mailer: mailer, recipient: recipient, build: build).call
+  # only for the failure log; it defaults to the item's email. `after_send`
+  # runs once per delivered message, right after it went out — callers use
+  # it to write the MailDelivery row that keeps a rerun from sending twice.
+  def self.deliver(items, mailer:, recipient: ->(item) { item.email }, after_send: ->(_item) {}, &build)
+    new(items, mailer: mailer, recipient: recipient, after_send: after_send, build: build).call
   end
 
   # Overridable in specs; sleeps in real runs.
@@ -50,10 +52,11 @@ class PacedDelivery
     sleep(PAUSE)
   end
 
-  def initialize(items, mailer:, recipient:, build:)
+  def initialize(items, mailer:, recipient:, after_send:, build:)
     @items = items.to_a
     @mailer = mailer
     @recipient = recipient
+    @after_send = after_send
     @build = build
   end
 
@@ -80,6 +83,7 @@ class PacedDelivery
       begin
         deliver.call(@build.call(item))
         @sent += 1
+        @after_send.call(item)
       rescue *MAIL_DELIVERY_ERRORS => e
         @failed += 1
         MailDeliveryFailure.report(e, mailer: @mailer, recipient: @recipient.call(item))

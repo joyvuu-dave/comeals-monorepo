@@ -25,9 +25,11 @@ module Api
       #
       # Settles the period: the same thing rake reconciliations:create does
       # nightly, with the cutoff chosen by the caller. Claims the meals,
-      # writes the ledger, refreshes the running balances, and emails the
-      # cooks. Creating it is the lock — the row and its meals are frozen
-      # from this moment, and there is no undo. Preview first.
+      # writes the ledger, and refreshes the running balances before it
+      # answers; the cook emails go out from a job right after (#71), so
+      # the answer does not wait on SMTP. Creating it is the lock — the row
+      # and its meals are frozen from this moment, and there is no undo.
+      # Preview first.
       def create
         cutoff = Date.iso8601(params.require(:cutoff))
         reconciliation = SettleAndNotify.call(cutoff: cutoff)

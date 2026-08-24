@@ -9,6 +9,12 @@ require 'rails_helper'
 # balances and no cook emails, a rake task that exits 1, and an API that
 # answers 500 for a settlement that is in the database.
 RSpec.describe SettleAndNotify do
+  include ActiveJob::TestHelper
+
+  # The cook mail is a job (NotifyCooksJob). Run it inline so these examples
+  # see the whole of what a settlement does.
+  around { |example| perform_enqueued_jobs { example.run } }
+
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
   let(:resident) { create(:resident, community: community, unit: unit, multiplier: 2) }
