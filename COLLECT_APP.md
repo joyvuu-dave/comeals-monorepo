@@ -191,7 +191,7 @@ On the iOS side, all money is `Decimal`. A thin `Money` wrapper type may be just
 
 Contracts below are placeholders — each gets its own sketch when we get to it.
 
-- `POST /api/v1/reconciliations` — commit a previewed reconciliation at a given cutoff. Equivalent to today's `rake reconciliations:create`, but with the cutoff passed in instead of hardcoded to yesterday. Creating it is the lock: the row refuses update and destroy from that moment, and its meals' bills, attendance, and guests are frozen by database triggers. There is no separate finalize step and no unfinalize — see `RECONCILIATION_WORKFLOW.md` item 4.
+- ~~`POST /api/v1/reconciliations`~~ — done 2026-08-23: `{ "cutoff": "YYYY-MM-DD" }`, calls `SettleAndNotify` (settle, refresh running balances, email cooks — the same service the nightly rake task calls), returns `201` with `id`, `date`, `cutoff_date`, `meal_count`; `400` for a non-past cutoff or nothing to settle; `409` when another writer got there first. Creating it is the lock: the row refuses update and destroy from that moment, and its meals' bills, attendance, and guests are frozen by database triggers. There is no separate finalize step and no unfinalize — see `RECONCILIATION_WORKFLOW.md` item 4.
 - `POST /api/v1/reconciliations/:id/balances/:balance_id/mark_paid` — sets `paid_at` on a `reconciliation_balance`, automatically triggers derived `settled_at` on the reconciliation if all balances are now paid. Both columns are still unbuilt; see `COLLECTION_WORKFLOW.md` items 1 and 2.
 - `GET /api/v1/reconciliations/:id` — historical view for a created reconciliation. What Collect's collection screen will consume.
 

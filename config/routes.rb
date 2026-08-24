@@ -36,6 +36,7 @@ Rails.application.routes.draw do
       patch '/meals/:meal_id/closed', to: 'meals#update_closed'
       get '/rotations/:id', to: 'rotations#show'
       get '/reconciliations/preview', to: 'reconciliations#preview'
+      post '/reconciliations', to: 'reconciliations#create'
       get '/residents/:id/ical', to: 'residents#ical', as: :resident_ical
       get '/communities/:id/ical', to: 'communities#ical', as: :community_ical
       get '/version', to: 'site#version'

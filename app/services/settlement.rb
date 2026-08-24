@@ -30,6 +30,10 @@ class Settlement
   # words the model's validation uses.
   class InvalidCutoff < ArgumentError; end
 
+  # Raised when a concurrent settlement claimed one of this settlement's
+  # meals first. Everything rolls back; the request can simply be sent again.
+  class Contested < RuntimeError; end
+
   def self.run!(cutoff:, community: Community.instance)
     new(Reconciliation.new(community: community, end_date: cutoff)).settle!
   end
@@ -223,9 +227,9 @@ class Settlement
     @claimed_meal_ids = meal_ids
     return if claimed == meal_ids.size
 
-    raise "assign_meals: reconciliation #{reconciliation.id} plucked #{meal_ids.size} " \
-          "#{'meal'.pluralize(meal_ids.size)} but claimed #{claimed} — a concurrent reconciliation " \
-          'settled the rest first. Rolling back to avoid settling the same meals twice.'
+    raise Contested, "assign_meals: reconciliation #{reconciliation.id} plucked #{meal_ids.size} " \
+                     "#{'meal'.pluralize(meal_ids.size)} but claimed #{claimed} — a concurrent reconciliation " \
+                     'settled the rest first. Rolling back to avoid settling the same meals twice.'
   end
 
   # The same scope the create validation reads (Reconciliation#eligible_meals),

@@ -20,6 +20,32 @@ module Api
       rescue Settlement::InvalidCutoff => e
         render json: { message: e.message }, status: :bad_request
       end
+
+      # POST /api/v1/reconciliations { "cutoff": "YYYY-MM-DD" }
+      #
+      # Settles the period: the same thing rake reconciliations:create does
+      # nightly, with the cutoff chosen by the caller. Claims the meals,
+      # writes the ledger, refreshes the running balances, and emails the
+      # cooks. Creating it is the lock — the row and its meals are frozen
+      # from this moment, and there is no undo. Preview first.
+      def create
+        cutoff = Date.iso8601(params.require(:cutoff))
+        reconciliation = SettleAndNotify.call(cutoff: cutoff)
+        render json: { id: reconciliation.id, date: reconciliation.date.iso8601,
+                       cutoff_date: reconciliation.end_date.iso8601,
+                       meal_count: reconciliation.number_of_meals },
+               status: :created
+      rescue Date::Error, ActionController::ParameterMissing
+        render json: { message: 'cutoff must be a date, YYYY-MM-DD' }, status: :bad_request
+      rescue ActiveRecord::RecordInvalid => e
+        render json: { message: e.record.errors.full_messages.to_sentence }, status: :bad_request
+      rescue Settlement::Contested, ActiveRecord::TransactionRollbackError, ActiveRecord::LockWaitTimeout
+        # Another settlement or a meal write got there first. Nothing was
+        # saved; the same request can be sent again.
+        render json: { message: 'Someone else was changing these meals at the same time. ' \
+                                'Nothing was saved. Try again.' },
+               status: :conflict
+      end
     end
   end
 end

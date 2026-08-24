@@ -313,6 +313,21 @@ someone enters one. Money is a string; the sign is the
 direction: positive means the community owes the resident. No meals to
 settle is a `200` with empty lists, not an error.
 
+```
+POST /reconciliations
+{ "cutoff": "YYYY-MM-DD" }
+```
+
+Settles the period up to and including `cutoff`, a past day: the same
+thing the nightly task does, with the day chosen by you. Claims the
+meals the preview listed, writes the ledger, refreshes every resident's
+running balance, and emails each cook. Returns `201` with `id`, `date`,
+`cutoff_date`, and `meal_count`. Creating it is the lock: the settlement
+and its meals are frozen from this moment and there is no undo, so
+preview first. `400` when the cutoff is not a past day or there is
+nothing to settle; `409` when another settlement or a meal write got
+there first — nothing was saved, send the same request again.
+
 ## Bills as records
 
 There is no endpoint that reads a bill on its own. To read or write a
