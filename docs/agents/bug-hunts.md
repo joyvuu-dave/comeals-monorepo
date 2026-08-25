@@ -5,6 +5,37 @@ One entry per run of the `bug-hunt` skill
 and what they found, including "found nothing". The next run reads this
 to pick the hunt that has waited longest.
 
+## 2026-08-25 (night)
+
+Hunt run: frontend seam, all the way through. Every API response the SPA
+keeps, and what refreshes it:
+
+- Calendar month (RAM and IndexedDB): the month's Pusher channel and the
+  two adjacent months' channels; the residents channel (drops every
+  cached month and meal); reconnect and the browser's `online` event;
+  the midnight timer. Boot serves the IndexedDB copy and fetches again.
+- Meal page (IndexedDB per meal): the meal's channel (settlement and
+  neighbour changes push it); the residents channel; reconnect.
+- Hosts list: the residents channel; reconnect.
+- Rotation modal, history modal, "Next Meal": fetched on every open or
+  click. Nothing kept.
+- Deploy version: the banner polls the manifest.
+- Cookies from login: `community_id`, `resident_id` (fixed for a
+  session, correct); `username` (a rename leaves "logout OLDNAME" until
+  re-login; cosmetic, no spec); **`timezone`: nothing refreshes it.**
+
+Found: after the admin changes the community's time zone, every open
+tab keeps the old zone until logout and login. `toCommunityDayjs` shows
+every reservation and event time in the old zone, and `communityToday`
+and the midnight timer run on it. Three red specs, one per piece of the
+fix: the month payload carries `timezone`
+(`spec/serializers/calendar_serializer_spec.rb`), the store adopts it
+when a month loads (`tests/unit/stores/data_store_timezone.test.js`),
+and a zone change pushes the residents channel so open tabs fetch again
+(`spec/requests/api/v1/live_update_contract_spec.rb`).
+
+Every hunt in the skill has now run at least once.
+
 ## 2026-08-25 (evening)
 
 Hunt run: lock, all the way through. Every write to bills, meal_residents,
@@ -56,7 +87,7 @@ the seven ADRs). Rows: `docs/agents/invariant-hunt-2026-08-25.md`.
   before this hunt: dates read from `Time.zone.today` outside API
   requests (7ccb527).
 
-Not yet run: frontend seam.
+All hunts have run once; pick the one that has waited longest.
 
 ## 2026-08-24
 

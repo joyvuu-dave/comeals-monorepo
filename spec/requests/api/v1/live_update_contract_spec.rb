@@ -133,6 +133,21 @@ RSpec.describe 'live updates: every write reaches the screen that shows it' do
       end
     end
 
+    it 'a community time zone change pushes the residents channel, because every open tab keeps the zone' do
+      # The SPA writes the zone to a cookie at login and reads it for every
+      # time it shows and for "today". Nothing refreshed it (frontend-seam
+      # hunt, 2026-08-25). The residents channel is the one that makes a
+      # tab drop every cached month and fetch again, and the month payload
+      # is where the new zone can travel.
+      community
+      RSpec::Mocks.space.proxy_for(Pusher).reset
+      allow(Pusher).to receive(:trigger)
+
+      community.update!(timezone: 'America/New_York')
+
+      expect_pushed(residents_channel)
+    end
+
     it 'a resident birthday change pushes the residents channel, because the calendar shows birthdays' do
       resident
       RSpec::Mocks.space.proxy_for(Pusher).reset

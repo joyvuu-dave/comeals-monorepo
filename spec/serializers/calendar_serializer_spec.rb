@@ -25,6 +25,10 @@ RSpec.describe CalendarSerializer, type: :serializer do
     it 'includes month and year' do
       result = serialize
       expect(result[:month]).to eq(4)
+      # The SPA shows every time in the community's zone and takes the zone
+      # from a login cookie; the month payload is how a changed zone reaches
+      # a tab that is already open.
+      expect(result[:timezone]).to eq('America/Los_Angeles')
       expect(result[:year]).to eq(2026)
     end
   end
