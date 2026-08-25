@@ -21,7 +21,9 @@
 #   CommonHouseReservation     after_commit :trigger_pusher    community.trigger_pusher(start_date)
 #   GuestRoomReservation       after_commit :trigger_pusher    community.trigger_pusher(date)
 #   Rotation                   after_commit                    community.invalidate_calendar_cache
-#   Resident (birthday)        after_commit                    community.invalidate_calendar_cache
+#   Resident, Unit             none needed                     Community#calendar_cache_version
+#                                                              (part of the fetch; any change
+#                                                              to a resident or unit is a miss)
 #
 # The deploy script (bin/deploy) also flushes the entire cache on every deploy.
 class CalendarSerializer

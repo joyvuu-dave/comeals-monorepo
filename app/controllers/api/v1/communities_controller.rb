@@ -65,7 +65,11 @@ module Api
         community = Community.instance
         key = community.calendar_cache_key(year, month)
 
-        result = Rails.cache.fetch(key, expires_in: 1.hour) do
+        # The key is per month, and is what a change to a meal, event or
+        # reservation deletes. The version changes when any resident or unit
+        # changes, because those can appear in any month. See
+        # Community#calendar_cache_version.
+        result = Rails.cache.fetch(key, version: community.calendar_cache_version, expires_in: 1.hour) do
           CalendarSerializer.new(
             community,
             params: {

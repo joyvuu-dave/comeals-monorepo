@@ -313,6 +313,34 @@ class Community < ApplicationRecord
     "community-#{id}-calendar-#{year}-#{month}"
   end
 
+  # Version for every cached calendar month. A resident's name, unit, active
+  # flag, or birthday can show up in any month (cooks on bills, reservations,
+  # birthdays), and solid_cache cannot delete keys by pattern, so a change to
+  # a resident or a unit cannot clear the months one by one. Instead the
+  # controller stores each month with this version (`Rails.cache.fetch(key,
+  # version:)`), and a stored entry with an old version is a miss. The
+  # version is the row count and newest updated_at of residents and units,
+  # so any save or delete through the model changes it. A write that skips
+  # the model (update_all, psql) does not touch updated_at, so it does not
+  # change the version; the one-hour expiry covers that case. One cheap
+  # query per calendar request: the cached path has a query budget
+  # (spec/requests/api/v1/calendar_performance_spec.rb), and two
+  # `cache_version` calls would be one over it. (#77)
+  def calendar_cache_version
+    row = self.class.connection.select_one(<<~SQL.squish)
+      SELECT (SELECT COUNT(*) FROM residents) AS residents_count,
+             (SELECT MAX(updated_at) FROM residents) AS residents_updated_at,
+             (SELECT COUNT(*) FROM units) AS units_count,
+             (SELECT MAX(updated_at) FROM units) AS units_updated_at
+    SQL
+    # The timestamps come back as Time objects. Format them to the
+    # microsecond, because Time#to_s stops at whole seconds and two saves in
+    # the same second would then share a version.
+    row.values_at('residents_count', 'residents_updated_at', 'units_count', 'units_updated_at')
+       .map { |value| value.respond_to?(:strftime) ? value.strftime('%Y%m%d%H%M%S%6N') : value }
+       .join('-')
+  end
+
   # Invalidate calendar cache entries that may include meals on this date.
   # Must be called synchronously (before the response) so the next request
   # doesn't get stale data. See CalendarSerializer for the full list of models

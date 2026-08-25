@@ -255,47 +255,6 @@ RSpec.describe Resident do
   end
 
   # ---------------------------------------------------------------------------
-  # Calendar cache invalidation
-  # ---------------------------------------------------------------------------
-  describe 'after_commit :invalidate_calendar_cache_if_birthday_changed' do
-    let(:this_year) { Time.zone.today.year }
-
-    before { allow(community).to receive(:invalidate_calendar_cache) }
-
-    it 'invalidates only the new month when a birthday is set for the first time' do
-      resident = create(:resident, community: community, unit: unit, birthday: nil)
-
-      resident.update!(birthday: Date.new(1990, 6, 15))
-
-      expect(community).to have_received(:invalidate_calendar_cache)
-        .with(Date.new(this_year, 6, 1)).once
-    end
-
-    it 'invalidates only the old month when a birthday is cleared' do
-      resident = create(:resident, community: community, unit: unit,
-                                   birthday: Date.new(1990, 6, 15))
-
-      resident.update!(birthday: nil)
-
-      # Once for the create (new month), once for the clear (old month).
-      expect(community).to have_received(:invalidate_calendar_cache)
-        .with(Date.new(this_year, 6, 1)).twice
-    end
-
-    it 'invalidates both months when a birthday moves' do
-      resident = create(:resident, community: community, unit: unit,
-                                   birthday: Date.new(1990, 3, 10))
-
-      resident.update!(birthday: Date.new(1990, 4, 10))
-
-      expect(community).to have_received(:invalidate_calendar_cache)
-        .with(Date.new(this_year, 3, 1)).twice # create + old month of the move
-      expect(community).to have_received(:invalidate_calendar_cache)
-        .with(Date.new(this_year, 4, 1)).once
-    end
-  end
-
-  # ---------------------------------------------------------------------------
   # Real-time notifications
   # ---------------------------------------------------------------------------
   describe 'after_commit :notify_residents_update' do

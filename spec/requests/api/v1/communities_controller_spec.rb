@@ -140,12 +140,12 @@ RSpec.describe 'Communities API' do
       expect(response.body).to be_empty
     end
 
-    # The full pipeline for a birthday appearing or disappearing, against a
-    # real cache: the calendar response is cached per month, so setting or
-    # clearing a birthday only shows up if the model callback invalidates
-    # the affected month. The test env cache is a null store, so these swap
-    # in a MemoryStore — without invalidation they would fail on stale data.
-    describe 'birthday set or cleared, against a real cache' do
+    # The full pipeline for a resident change, against a real cache: the
+    # calendar response is cached per month, so a change to a resident or a
+    # unit only shows up because Community#calendar_cache_version is part of
+    # the fetch (#77). The test env cache is a null store, so these swap in
+    # a MemoryStore — without the version they would fail on stale data.
+    describe 'resident or unit changed, against a real cache' do
       around do |example|
         original_store = Rails.cache
         Rails.cache = ActiveSupport::Cache::MemoryStore.new
@@ -178,6 +178,48 @@ RSpec.describe 'Communities API' do
 
         get "/api/v1/communities/#{community.id}/calendar/#{this_year}-06-15", params: { token: token }
         expect(response.parsed_body['birthdays']).to be_empty
+      end
+
+      it 'shows the new name after a cook is renamed' do
+        cook = create(:resident, community: community, unit: unit, name: 'Oldname')
+        meal = create(:meal, community: community, date: Date.new(2026, 4, 10))
+        create(:bill, meal: meal, resident: cook, amount: 10)
+
+        get "/api/v1/communities/#{community.id}/calendar/2026-04-15", params: { token: token }
+        expect(response.body).to include('Oldname')
+
+        cook.update!(name: 'Newname')
+
+        get "/api/v1/communities/#{community.id}/calendar/2026-04-15", params: { token: token }
+        expect(response.body).not_to include('Oldname')
+        expect(response.body).to include('Newname')
+      end
+
+      it 'drops the birthday after the resident is retired' do
+        retiree = create(:resident, community: community, unit: unit, birthday: Date.new(1980, 6, 5))
+
+        get "/api/v1/communities/#{community.id}/calendar/#{this_year}-06-15", params: { token: token }
+        expect(response.parsed_body['birthdays']).not_to be_empty
+
+        retiree.update!(active: false)
+
+        get "/api/v1/communities/#{community.id}/calendar/#{this_year}-06-15", params: { token: token }
+        expect(response.parsed_body['birthdays']).to be_empty
+      end
+
+      it 'shows the new unit name after a unit is renamed' do
+        meal = create(:meal, community: community, date: Date.new(2026, 4, 10))
+        create(:bill, meal: meal, resident: resident, amount: 10)
+        unit.update!(name: 'Old Unit')
+
+        get "/api/v1/communities/#{community.id}/calendar/2026-04-15", params: { token: token }
+        expect(response.body).to include('Old Unit')
+
+        unit.update!(name: 'New Unit')
+
+        get "/api/v1/communities/#{community.id}/calendar/2026-04-15", params: { token: token }
+        expect(response.body).not_to include('Old Unit')
+        expect(response.body).to include('New Unit')
       end
     end
 

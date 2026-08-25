@@ -111,7 +111,6 @@ class Resident < ApplicationRecord
   before_validation :set_email
   before_save { self.email = email.downcase unless email.nil? }
   after_save :revoke_all_sessions_if_password_changed
-  after_commit :invalidate_calendar_cache_if_birthday_changed
   after_commit :notify_residents_update
 
   # PASSWORD STUFF
@@ -262,26 +261,6 @@ class Resident < ApplicationRecord
   end
 
   private
-
-  def invalidate_calendar_cache_if_birthday_changed
-    return unless saved_change_to_birthday?
-
-    # Birthdays appear on the calendar. See CalendarSerializer for the full
-    # cache invalidation contract. Invalidate both the old and new month
-    # (if birthday moved from March to April, both months need refreshing).
-    # Either side can be nil — a birthday being set for the first time, or
-    # cleared for an adult who does not want it shown.
-    old_birthday = birthday_before_last_save
-    if old_birthday.present?
-      old_date = Date.new(Time.zone.today.year, old_birthday.month, 1)
-      community.invalidate_calendar_cache(old_date)
-    end
-
-    return if birthday.blank?
-
-    new_date = Date.new(Time.zone.today.year, birthday.month, 1)
-    community.invalidate_calendar_cache(new_date)
-  end
 
   # Columns that the /api/v1/communities/:id/hosts query depends on. A change
   # to any of these can alter whether a resident appears in the list or how
