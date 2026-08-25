@@ -5,6 +5,31 @@ One entry per run of the `bug-hunt` skill
 and what they found, including "found nothing". The next run reads this
 to pick the hunt that has waited longest.
 
+## 2026-08-26
+
+Hunt run: money, by the skill's definition this time (the 2026-08-24 run
+was by hand, before the skill existed).
+
+- Edge list: every edge in the skill has at least one spec (nobody
+  attending, one attendee, only children, only guests, zero cost and
+  no_cost, capped, multi-cook, a cook who also eats, a sum past
+  $9,999.99).
+- Property spec, new: `spec/services/settlement_allocate_to_cents_on_random_ledgers_spec.rb` builds 100
+  random ledgers in memory (1 to 40 meals; 0 to 3 cooks, some no_cost;
+  0 to 12 eaters at multipliers 0, 1, 2; guests; caps on 40% of meals;
+  cooks who eat) and checks that each meal's lines cancel within
+  `ZERO_SUM_EPSILON`, that the rounded balances sum to exactly zero, are
+  whole cents, and are within a cent of the exact amount, and that the
+  rounding is deterministic. All 100 hold. `MONEY_PROPERTY_SEED=n` reruns
+  one.
+- Float grep: no Float on the money path. The `to_f` and `round` calls in
+  `app/` are counts, display ratios, JWT times, and elapsed seconds.
+- Noted, not a bug: BigDecimal `/` is not exact (50/7 leaves 3e-30 per
+  meal); a 40-meal ledger stays about 1e-28 from zero, against an epsilon
+  of 1e-6.
+
+Found nothing.
+
 ## 2026-08-25 (night)
 
 Hunt run: frontend seam, all the way through. Every API response the SPA
