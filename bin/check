@@ -231,6 +231,27 @@ check_prettier() {
   fi
 }
 
+# CLAUDE.md: every wall-clock time is read in the community's zone, through
+# Community#today. Time.zone is the app's fixed default zone (and only the
+# community's inside an API request, where ApiController wraps the call),
+# so a date read from it is wrong for jobs and admin whenever the two zones
+# differ. RuboCop's Rails/TimeZone catches Time.now, not these.
+check_app_zone_dates() {
+  step "App-zone dates"
+
+  local output exit_code=0
+  output=$(grep -rnE 'Time\.zone\.today|Time\.zone\.now|Date\.today|Date\.current' app lib/tasks --exclude-dir=test 2>/dev/null | grep -v 'app/models/community.rb') || exit_code=$?
+
+  if [ "$exit_code" -ne 0 ]; then
+    pass "No date read from the app zone outside Community#today"
+    record "App-zone dates" "PASS" "none outside Community#today"
+  else
+    fail "Date read from the app zone (use Community#today)"
+    echo "$output" | head -20
+    record "App-zone dates" "FAIL" "app-zone date reads"
+  fi
+}
+
 # CLAUDE.md bans FIXME/TODO/HACK markers in financial code: unfinished
 # work must be finished or become a tracked issue, not a comment. This
 # greps the money-path directories so a marker fails the check run.
@@ -408,6 +429,14 @@ check_playwright() {
 
   local summary
   summary=$(echo "$output" | grep -oE '[0-9]+ passed' || echo "unknown")
+  # A test that failed once and passed on retry is "flaky" in Playwright's
+  # summary, not "passed"; say so, or a flake is invisible here (#21).
+  local flaky
+  flaky=$(echo "$output" | grep -oE '[0-9]+ flaky' || true)
+  if [ -n "$flaky" ]; then
+    summary="$summary, $flaky"
+    echo "$output" | grep -A3 -E '^\s*[0-9]+ flaky' | head -4
+  fi
 
   if [ "$exit_code" -eq 0 ]; then
     pass "$summary"
@@ -545,6 +574,7 @@ main() {
   check_typecheck
   check_prettier
   check_todo_markers
+  check_app_zone_dates
   check_bundle_budget
 
   # Security

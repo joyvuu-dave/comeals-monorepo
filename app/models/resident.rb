@@ -163,7 +163,7 @@ class Resident < ApplicationRecord
   def age
     return nil if birthday.nil?
 
-    now = Time.zone.today
+    now = community.today
     had_birthday = now.month > birthday.month ||
                    (now.month == birthday.month && now.day >= birthday.day)
     now.year - birthday.year - (had_birthday ? 0 : 1)

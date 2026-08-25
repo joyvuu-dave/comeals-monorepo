@@ -22,7 +22,7 @@ module Api
 
       # GET /api/v1/meals/next
       def next
-        next_meal = Meal.where(date: Time.zone.now.to_date..)
+        next_meal = Meal.where(date: Community.instance.today..)
                         .order(:date).first
 
         if next_meal.nil?

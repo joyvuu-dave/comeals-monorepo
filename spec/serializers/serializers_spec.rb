@@ -3,6 +3,8 @@
 require 'rails_helper'
 
 RSpec.describe 'Serializers', type: :serializer do
+  include ActiveSupport::Testing::TimeHelpers
+
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
   let(:resident) { create(:resident, community: community, unit: unit) }
@@ -232,7 +234,7 @@ RSpec.describe 'Serializers', type: :serializer do
                                     birthday: Date.new(2000, 2, 29))
 
       # Force the "current year" to a non-leap year for this test
-      allow(Time.zone).to receive(:today).and_return(Date.new(2027, 6, 1))
+      travel_to(Date.new(2027, 6, 1))
 
       result = serialize(leap_baby, described_class)
       expect(result[:start]).to eq(Date.new(2027, 2, 28))
@@ -243,7 +245,7 @@ RSpec.describe 'Serializers', type: :serializer do
       leap_baby = create(:resident, community: community, unit: unit,
                                     birthday: Date.new(2000, 2, 29))
 
-      allow(Time.zone).to receive(:today).and_return(Date.new(2028, 6, 1))
+      travel_to(Date.new(2028, 6, 1))
 
       result = serialize(leap_baby, described_class)
       expect(result[:start]).to eq(Date.new(2028, 2, 29))

@@ -207,7 +207,7 @@ ActiveAdmin.register Resident do
                          datepicker_options: {
                            change_month: true,
                            change_year: true,
-                           year_range: "1901:#{Time.zone.now.year}"
+                           year_range: "1901:#{Community.instance.today.year}"
                          }
       f.input :email
       f.input :phone,

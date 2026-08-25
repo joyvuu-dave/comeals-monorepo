@@ -55,14 +55,15 @@ class MealSerializer
   def title(meal)
     message = "Dinner\n#{meal.attendees_count}"
 
-    if Time.zone.today > meal.date
+    today = Community.instance.today
+    if today > meal.date
       message << ' attended'
       return message
     end
 
-    message << ' attending' if Time.zone.today == meal.date
+    message << ' attending' if today == meal.date
 
-    message << ' signed up' if Time.zone.today < meal.date
+    message << ' signed up' if today < meal.date
 
     if meal.max.present?
       count = meal.max - meal.attendees_count

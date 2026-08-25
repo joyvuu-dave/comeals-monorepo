@@ -24,7 +24,7 @@ module Api
         month_int = if params[:start]
                       (Date.parse(params[:start]) + 2.weeks).month
                     else
-                      Time.zone.today.month
+                      Community.instance.today.month
                     end
 
         residents = Community.instance.residents.active.where('extract(month from birthday) = ?', month_int)

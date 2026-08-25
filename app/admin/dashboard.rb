@@ -42,7 +42,7 @@ ActiveAdmin.register_page 'Dashboard' do
       end
 
       column do
-        upcoming = community.meals.unreconciled.open.where(date: Time.zone.today..).order(date: :desc).to_a
+        upcoming = community.meals.unreconciled.open.where(date: community.today..).order(date: :desc).to_a
         panel "Upcoming Meals - #{upcoming.size}" do
           ul do
             upcoming.map do |meal|

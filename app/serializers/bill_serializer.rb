@@ -45,7 +45,7 @@ class BillSerializer
   end
 
   def title(bill)
-    if bill.amount.positive? && bill.meal.date < Time.zone.today
+    if bill.amount.positive? && bill.meal.date < Community.instance.today
       name = ResidentNameShortener.short(bill.resident.name)
       unit_name = bill.resident.unit.name
       "Cook\n#{name} - Unit #{unit_name}\n#{number_to_currency(bill.amount)}"
@@ -67,7 +67,7 @@ class BillSerializer
   end
 
   def description(bill)
-    if bill.amount.positive? && bill.meal.date < Time.zone.today
+    if bill.amount.positive? && bill.meal.date < Community.instance.today
       name = ResidentNameShortener.short(bill.resident.name)
       unit_name = bill.resident.unit.name
       "Cook:  #{name} - Unit #{unit_name} - #{number_to_currency(bill.amount)}"

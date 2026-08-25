@@ -169,7 +169,7 @@ class Rotation < ApplicationRecord
   def touched_meals
     meals.where(closed: true)
          .or(meals.where.not(reconciliation_id: nil))
-         .or(meals.where(date: ..Time.zone.today))
+         .or(meals.where(date: ..community.today))
          .or(meals.where(id: Bill.select(:meal_id)))
          .or(meals.where(id: MealResident.select(:meal_id)))
          .or(meals.where(id: Guest.select(:meal_id)))

@@ -71,7 +71,8 @@ ActiveAdmin.register Community do
              status: :unprocessable_entity
     else
       shown = [draft.meals_per_rotation, 20].min
-      dates = draft.meal_schedule.upcoming_dates(from: Time.zone.today, count: shown)
+      dates = draft.meal_schedule.upcoming_dates(from: Time.current.in_time_zone(ActiveSupport::TimeZone[draft.timezone.to_s] || Time.zone).to_date,
+                                                 count: shown)
       items = dates.map { |date| helpers.tag.li(date.strftime('%a %b %-d, %Y')) }
       note = if shown < draft.meals_per_rotation
                helpers.tag.p("First #{shown} of #{draft.meals_per_rotation} meals in a rotation.",
@@ -118,7 +119,7 @@ ActiveAdmin.register Community do
       # turns "Week of Aug 2 (this week)" into "Week Of Aug 2 (This Week)".
       div class: 'attributes_table' do
         table do
-          helpers.schedule_week_rows(community.schedule.length).each do |week_row|
+          helpers.schedule_week_rows(community, community.schedule.length).each do |week_row|
             week = community.schedule[week_row[:slot]]
             tr do
               th week_row[:label]
@@ -209,8 +210,8 @@ ActiveAdmin.register Community do
       # renaming, relabeling, live preview) lives in active_admin.js, fed
       # by the data attributes on the table.
       li class: 'schedule-grid-wrapper' do
-        week_rows = helpers.schedule_week_rows(f.object.schedule.length)
-        table({ id: 'schedule-grid' }.merge(helpers.schedule_grid_data)) do
+        week_rows = helpers.schedule_week_rows(f.object, f.object.schedule.length)
+        table({ id: 'schedule-grid' }.merge(helpers.schedule_grid_data(f.object))) do
           thead do
             tr do
               th ''

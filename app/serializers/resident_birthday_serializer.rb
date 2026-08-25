@@ -52,7 +52,7 @@ class ResidentBirthdaySerializer
   private
 
   def birthday_this_year(resident)
-    year = Time.zone.today.year
+    year = Community.instance.today.year
     Date.new(year, resident.birthday.month, resident.birthday.day)
   rescue ArgumentError
     # Feb 29 birthday in a non-leap year — display on Feb 28

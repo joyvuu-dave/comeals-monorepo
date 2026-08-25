@@ -27,10 +27,13 @@ module ScheduleWeekLabelHelper
   # `label` names the calendar week that slot currently maps to. Empty for a
   # zero-length schedule (only reachable through forged params; the form
   # re-render must show the validation errors, not crash).
-  def schedule_week_rows(weeks_count)
+  # `community` may be the unsaved bootstrap draft, which has no time zone
+  # yet, or a re-rendered form carrying a zone name that failed validation;
+  # then the app zone is the only zone there is.
+  def schedule_week_rows(community, weeks_count)
     return [] if weeks_count.zero?
 
-    sunday = current_sunday
+    sunday = current_sunday(community)
     current = MealSchedule.weeks_since_epoch(sunday) % weeks_count
     Array.new(weeks_count) do |delta|
       { slot: (current + delta) % weeks_count, label: week_label(sunday, delta) }
@@ -51,8 +54,8 @@ module ScheduleWeekLabelHelper
   # and the repeat note for every possible cycle length. All strings are
   # composed here — the JS never builds wording, and formatting dates in the
   # browser would depend on the viewer's timezone.
-  def schedule_grid_data
-    sunday = current_sunday
+  def schedule_grid_data(community)
+    sunday = current_sunday(community)
     { 'data-epoch-weeks' => MealSchedule.weeks_since_epoch(sunday),
       'data-week-labels' =>
         Array.new(MealSchedule::MAX_WEEKS) { |delta| week_label(sunday, delta) }.to_json,
@@ -62,8 +65,9 @@ module ScheduleWeekLabelHelper
 
   private
 
-  def current_sunday
-    Time.zone.today.beginning_of_week(:sunday)
+  def current_sunday(community)
+    zone = ActiveSupport::TimeZone[community.timezone.to_s] || Time.zone
+    Time.current.in_time_zone(zone).to_date.beginning_of_week(:sunday)
   end
 
   # The one home for the label wording, keyed by how many weeks ahead the

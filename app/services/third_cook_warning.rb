@@ -18,7 +18,7 @@ class ThirdCookWarning
 
   # The warning text, or nil when the payload raises no concern.
   def message
-    return nil unless @meal.date > Time.zone.today
+    return nil unless @meal.date > Community.instance.today
     return nil unless @cook_ids.length > 2
     return nil unless adding? || switching?
     return nil unless @meal.another_meal_in_this_rotation_has_less_than_two_cooks?

@@ -287,7 +287,7 @@ class Community < ApplicationRecord
     end
 
     day_after_last_meal = meals.order(:date).last&.date&.tomorrow
-    start = [Time.zone.today, day_after_last_meal].compact.max
+    start = [today, day_after_last_meal].compact.max
     dates = meal_schedule.upcoming_dates(from: start, count: meals_per_rotation)
 
     rotations.create!(meals_attributes: dates.map { |date| { date: date } })
