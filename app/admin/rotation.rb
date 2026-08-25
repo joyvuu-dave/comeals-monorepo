@@ -1,14 +1,19 @@
 # frozen_string_literal: true
 
 ActiveAdmin.register Rotation do
-  # STRONG PARAMS
-  permit_params :description, meal_ids: []
-
   # CONFIG
   config.filters = false
 
   # ACTIONS
-  actions :all
+  # No new or edit form. Rotations are created by the nightly job
+  # (Community#create_next_rotation), which also assigns their meals. The
+  # form used to offer a check-box list of unassigned meals; saving it sent
+  # only the checked ids, Rails read that as the rotation's whole meal
+  # list, and `has_many :meals, dependent: :destroy` then deleted every
+  # meal that was already in the rotation (#78). Nothing an admin needs
+  # to do here needs a form: delete the newest rotation to apply a
+  # schedule change, and the job recreates it.
+  actions :index, :show, :destroy
 
   controller do
     # Deleting a rotation is how a schedule change reaches the calendar
@@ -55,18 +60,5 @@ ActiveAdmin.register Rotation do
         end
       end
     end
-  end
-
-  # FORM
-  form do |f|
-    f.inputs do
-      f.input :description, input_html: { value: '' }, as: :hidden
-      f.input :meals, as: :check_boxes, collection: Meal.where(rotation_id: nil).order(:date).map { |m|
-        [m.date.to_s, m.id]
-      }
-    end
-
-    f.actions
-    f.semantic_errors
   end
 end

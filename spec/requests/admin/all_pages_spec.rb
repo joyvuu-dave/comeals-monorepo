@@ -77,8 +77,10 @@ ADMIN_PAGE_RESOURCES = {
     pages: %i[index show new edit],
     record: -> { resident }
   },
+  # No form: the nightly job creates rotations and assigns their meals.
+  # The edit form deleted the rotation's existing meals (#78).
   'Rotation' => {
-    pages: %i[index show new edit],
+    pages: %i[index show],
     record: -> { create(:rotation, community: community) }
   },
   'Unit' => {

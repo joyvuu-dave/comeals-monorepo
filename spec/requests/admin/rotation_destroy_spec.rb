@@ -32,12 +32,32 @@ RSpec.describe 'Admin rotation destroy' do
     expect(response).to redirect_to(admin_rotations_path)
   end
 
-  it 'renders the new form with the unassigned meals as check boxes' do
-    meal = create(:meal, community: community, rotation: nil, date: Date.current + 30)
+  # The form is gone (#78): its check-box list sent only the checked meal
+  # ids, Rails read that as the whole list, and `dependent: :destroy`
+  # deleted every meal already in the rotation. There is no admin path
+  # that writes a rotation's meals now.
+  describe 'the rotation form' do
+    it 'has no new or edit page' do
+      rotation = create(:rotation, community: community)
 
-    get '/rotations/new'
+      # "new" is read as a show id now, so it is a missing record; both
+      # are a 404 in production.
+      expect { get '/rotations/new' }.to raise_error(ActiveRecord::RecordNotFound)
+      expect { get "/rotations/#{rotation.id}/edit" }.to raise_error(ActionController::RoutingError)
+    end
 
-    expect(response).to have_http_status(:ok)
-    expect(response.body).to include(meal.date.to_s)
+    it 'cannot replace a rotation\'s meals, so its existing meals survive' do
+      rotation = create(:rotation, community: community)
+      existing = create(:meal, community: community, rotation: rotation, date: Date.current + 30)
+      loose = create(:meal, community: community, rotation: nil, date: Date.current + 40)
+
+      expect do
+        patch "/rotations/#{rotation.id}", params: { rotation: { meal_ids: [loose.id] } }
+      end.to raise_error(ActionController::RoutingError)
+
+      expect(Meal.exists?(existing.id)).to be(true)
+      expect(existing.reload.rotation_id).to eq(rotation.id)
+      expect(loose.reload.rotation_id).to be_nil
+    end
   end
 end
