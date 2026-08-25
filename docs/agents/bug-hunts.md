@@ -5,6 +5,53 @@ One entry per run of the `bug-hunt` skill
 and what they found, including "found nothing". The next run reads this
 to pick the hunt that has waited longest.
 
+## 2026-08-26 (time)
+
+Hunt run: time, all the way through. Every place a date becomes an
+instant or an instant a date, with its zone:
+
+- Community zone, by construction: `Community#dinner_start_at`,
+  `Community#today`, `LiveUpdate` (converts timestamps with the
+  community zone), the schedule helper (community or draft zone).
+- Community zone, only because `ApiController#set_community_timezone`
+  wraps the request in `Time.use_zone`: the reservation and event
+  params (`ApiController#parse_dates`, `Time.zone.local`), the calendar
+  window (`Time.zone.parse(...).beginning_of_day` in
+  `CalendarSerializer` and `Community#calendar_cache_version`), and the
+  `strftime('%l:%M%P')` times in the event and common-house serializers.
+  All API-only paths; the wrapper holds.
+- **App zone, wrong: admin.** `ApplicationController` has no zone
+  wrapper, so every admin form parses a typed time in Pacific and every
+  admin page shows a stored time in Pacific, whatever the community's
+  zone. Red spec `spec/requests/admin/admin_zone_spec.rb`: a New York
+  community's "18:00" is stored as 18:00 Pacific (a DST-switch day
+  included), and a stored 18:00 Eastern shows as 15:00. The one
+  community is Pacific today, so nothing is wrong in production; the
+  zone form makes it one click away.
+- Instants, correct as instants: `closed_at` (compared to `created_at`),
+  `keys_valid_since`, `reset_password_sent_at`, `sent_at`, job and
+  ledger run stamps, task timing, the preview's `generated_at`
+  (explicit UTC).
+- Dates only, no zone: `MealSchedule` (epoch weeks, holidays,
+  upcoming dates), `DateRangeDescription`, `settleable_by`,
+  `Rotation.starting_within`, the reconciliation cutoff.
+- Client: every displayed time goes through `toCommunityDayjs` /
+  `communityNow` (cookie zone, refreshed from the month payload since
+  2026-08-25); a community date becomes a browser-local midnight
+  `Date` for display only.
+
+Timestamp columns compared to date columns: none. Timestamps are
+compared to timestamps (`closed_at`/`created_at`, event and reservation
+ranges against a zoned window) and dates to dates.
+
+DST-switch specs: `community_dinner_start_times_spec`,
+`meal_schedule_spec`, and the new admin spec.
+
+Proposed fix: an `around_action` in `ApplicationController` that wraps
+every request in the community's zone (`Time.use_zone`), tolerant of
+the bootstrap state with no community row. One place, both directions
+(parse and show).
+
 ## 2026-08-26 (cache)
 
 Hunt run: cache, all the way through. One server cache: the calendar
