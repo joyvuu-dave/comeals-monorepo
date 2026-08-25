@@ -43,6 +43,8 @@ const ResidentsLogin = observer(() => {
   // callbacks from setting state after unmount, like the class's
   // _isMounted.
   const mountedRef = useRef(true);
+  // True from a successful login until the full page load replaces this page.
+  const reloadingRef = useRef(false);
   useEffect(function () {
     mountedRef.current = true;
     return function () {
@@ -92,9 +94,15 @@ const ResidentsLogin = observer(() => {
       })
       .then(function (response) {
         if (!mountedRef.current) return;
-        setLoading(false);
 
         if (response.status === 200) {
+          // The page is about to be replaced by a full load (below), so
+          // the loader stays up and the Navigate branch in render is
+          // switched off first. Without both, the re-render finds the
+          // token cookie, mounts the calendar client-side, and its first
+          // requests are cancelled by the reload a few ms later — WebKit
+          // reports that as an uncaught error (#80).
+          reloadingRef.current = true;
           Cookie.set("token", response.data.token, {
             expires: 7300,
           });
@@ -117,6 +125,8 @@ const ResidentsLogin = observer(() => {
           // response), so defaultFrom() picks up the fresh value here.
           var { from } = location.state || { from: defaultFrom() };
           window.location.href = from.pathname || from;
+        } else {
+          setLoading(false);
         }
       })
       .catch(function (error) {
@@ -129,6 +139,7 @@ const ResidentsLogin = observer(() => {
   const { from } = location.state || { from: defaultFrom() };
 
   if (
+    !reloadingRef.current &&
     typeof Cookie.get("token") !== "undefined" &&
     Cookie.get("token") !== "undefined"
   ) {
