@@ -21,11 +21,15 @@ seams, each checked to a done condition, does.
    The human decides. The spec stays red on the branch.
 4. **Say "found nothing" plainly.** A hunt with no findings is a good
    result. Do not report weak findings to fill the page.
-5. **Read the log first.** `docs/agents/bug-hunts.md` says which hunts ran
+5. **Read the action table too.** `docs/agents/action-table.md` lists
+   every action by entry point; its EMPTY and THIN cells are where the
+   next seam bug is most likely. A hunt that finds a bug in a cell the
+   table calls covered must fix the cell.
+6. **Read the log first.** `docs/agents/bug-hunts.md` says which hunts ran
    and when. Pick the hunt that has not run for longest, or one the
    recent merges touched. Add a dated entry when done, even for
    "found nothing".
-6. **Flag the incidental.** Anything wrong that is not a bug (a false
+7. **Flag the incidental.** Anything wrong that is not a bug (a false
    sentence in CLAUDE.md, a stale comment, a column nothing reads) goes
    in the report under "Also noticed", with a file and line.
 

@@ -139,6 +139,10 @@ GitHub Issues at `joyvuu-dave/comeals-monorepo`, accessed via the `gh` CLI. See 
 
 Five canonical labels (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`) — defaults, no aliases. See `docs/agents/triage-labels.md`.
 
+### Action table
+
+Every action a person can take, one row each, with a cell per entry point (API, admin, task, browser) naming the spec that covers it. Empty cells are the test work list. When you add a route, an admin action, a task, or a job, update the row in the same change. See `docs/agents/action-table.md`.
+
 ### Domain docs
 
 Architecture decisions live in `docs/adr/`. See `docs/agents/domain.md`.
