@@ -24,10 +24,9 @@ RSpec.describe 'Admin conflict rescue' do
   # Raised where the write happens, so everything before it — authorization,
   # the reconciled guards, strong params — has already run.
   def refuse_the_next_write
-    # rubocop:disable RSpec/AnyInstance
+    # rubocop:disable-next RSpec/AnyInstance
     allow_any_instance_of(Unit).to receive(:save)
       .and_raise(ActiveRecord::SerializationFailure, 'could not serialize access')
-    # rubocop:enable RSpec/AnyInstance
   end
 
   describe 'a write refused for a conflict' do
@@ -93,10 +92,9 @@ RSpec.describe 'Admin conflict rescue' do
   # subclasses of ActiveRecord::TransactionRollbackError, which is what the
   # rescue names.
   it 'answers a deadlock the same way' do
-    # rubocop:disable RSpec/AnyInstance
+    # rubocop:disable-next RSpec/AnyInstance
     allow_any_instance_of(Unit).to receive(:save)
       .and_raise(ActiveRecord::Deadlocked, 'deadlock detected')
-    # rubocop:enable RSpec/AnyInstance
 
     post '/units', params: { unit: { name: 'A-1' } }
 
@@ -109,10 +107,9 @@ RSpec.describe 'Admin conflict rescue' do
   # SHARE. It is not a TransactionRollbackError, so it needs its own
   # rescue_from, and this example is what notices if that line goes away.
   it 'answers a lock wait timeout the same way' do
-    # rubocop:disable RSpec/AnyInstance
+    # rubocop:disable-next RSpec/AnyInstance
     allow_any_instance_of(Unit).to receive(:save)
       .and_raise(ActiveRecord::LockWaitTimeout, 'canceling statement due to lock timeout')
-    # rubocop:enable RSpec/AnyInstance
 
     post '/units', params: { unit: { name: 'A-1' } }
 

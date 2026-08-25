@@ -150,7 +150,7 @@ class LockMealInSettledChildWriteTrigger < ActiveRecord::Migration[8.1]
   # reversible, not because rolling back is a reasonable thing to do on a live
   # database.
   def down
-    # rubocop:disable Rails/SquishedSQLHeredocs -- PL/pgSQL function bodies need preserved formatting
+    # rubocop:disable-next Rails/SquishedSQLHeredocs -- PL/pgSQL function bodies need preserved formatting
     execute <<~SQL
       CREATE OR REPLACE FUNCTION comeals_reject_settled_child_write() RETURNS trigger AS $$
       DECLARE
@@ -181,6 +181,5 @@ class LockMealInSettledChildWriteTrigger < ActiveRecord::Migration[8.1]
       END;
       $$ LANGUAGE plpgsql;
     SQL
-    # rubocop:enable Rails/SquishedSQLHeredocs
   end
 end
