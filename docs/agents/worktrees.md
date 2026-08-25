@@ -90,6 +90,15 @@ landing could lose or hide work:
 - the branch is not a fast-forward of `main` — rebase it in its
   worktree, rerun `bin/check` there, and rerun the script.
 
+One thing to expect after a merge that ran a migration: `git status` in
+the main checkout may show a small diff in `db/structure.sql`. Look at
+it. If it is only whitespace inside function bodies, it is not a real
+change: the development database was built from squished SQL heredocs,
+so `pg_dump` prints its functions on one line, while the committed file
+comes from the test database. Restore it with
+`git checkout db/structure.sql`. If the diff is anything else, stop and
+report it.
+
 It never rewrites history and never force-pushes. If local `main` is
 only behind origin, it fast-forwards it first; that can only add commits
 already on GitHub.

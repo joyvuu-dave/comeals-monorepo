@@ -55,7 +55,8 @@ latest.dump
 /tests/test-results/
 
 # AI tooling (Claude Code)
-.claude/
+.claude/*
+!.claude/skills/
 
 # Working memory from the planning-with-files skill. Decisions worth keeping
 # live in docs/adr/; these files are local scratch only.
