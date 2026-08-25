@@ -118,8 +118,8 @@ class CalendarSerializer
   def common_house_reservations_in_range(community)
     community.common_house_reservations
              .includes({ resident: :unit })
-             .where(start_date: start_date..)
-             .where(start_date: ..end_date)
+             .where(start_date: window_start..)
+             .where(start_date: ..window_end)
              .order(:id)
   end
 
@@ -133,14 +133,14 @@ class CalendarSerializer
 
   def events_in_range(community)
     community.events
-             .where(start_date: start_date..)
-             .where(start_date: ..end_date)
+             .where(start_date: window_start..)
+             .where(start_date: ..window_end)
              .or(community.events
-                          .where(end_date: start_date..)
-                          .where(end_date: ..end_date))
+                          .where(end_date: window_start..)
+                          .where(end_date: ..window_end))
              .or(community.events
-                          .where(start_date: ...start_date)
-                          .where('end_date > ?', end_date))
+                          .where(start_date: ...window_start)
+                          .where('end_date > ?', window_end))
              .order(:id)
   end
 
@@ -152,5 +152,18 @@ class CalendarSerializer
 
   def end_date
     params.fetch(:end_date)
+  end
+
+  # The window's dates are strings. Compared with a date column that is
+  # fine. Compared with a datetime column, `..end_date` means midnight
+  # at the start of the last day, so an event at 10:00 that day was
+  # left out (#79). The datetime queries compare against these instants
+  # instead, the same ones Community#calendar_cache_version uses.
+  def window_start
+    Time.zone.parse(start_date).beginning_of_day
+  end
+
+  def window_end
+    Time.zone.parse(end_date).end_of_day
   end
 end
