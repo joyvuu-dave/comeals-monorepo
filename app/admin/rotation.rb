@@ -37,8 +37,8 @@ ActiveAdmin.register Rotation do
     # It is a position, not an identity: it renumbers when a rotation is
     # created or deleted. Use the id to cross-reference records.
     column 'Rotation #', :place_value
-    column :start_date
-    column 'Period', :description
+    column :start_date, sortable: false
+    column 'Period', :description, sortable: false
     column :meals_count
     column :color
 

@@ -2,11 +2,11 @@
 
 require 'rails_helper'
 
-# rotations.start_date is "the date of the rotation's first meal"
-# (Rotation#set_start_date). It is recomputed only in the rotation's own
-# after_save. Deleting a meal does not save the rotation, so the column
-# keeps the deleted meal's date. residents:notify reads start_date to pick
-# the rotations that begin within a week; the calendar chip reads it too.
+# Rotation#start_date is the date of the rotation's first meal. It used to
+# be a column filled in the rotation's own after_save, and a meal write does
+# not save the rotation, so deleting or moving the first meal left the old
+# date (invariant hunt, 2026-08-25). It is derived from the meals now; these
+# pin that a meal delete or move is seen at once.
 RSpec.describe Rotation, '#start_date' do
   let(:community) { create(:community) }
 

@@ -6,11 +6,9 @@
 #
 #  id                       :bigint           not null, primary key
 #  color                    :string           not null
-#  description              :string           default(""), not null
 #  new_rotation_notified_at :datetime
 #  place_value              :integer
 #  residents_notified       :boolean          default(FALSE), not null
-#  start_date               :date
 #  created_at               :datetime         not null
 #  updated_at               :datetime         not null
 #  community_id             :bigint           not null
@@ -23,9 +21,14 @@
 class Rotation < ApplicationRecord
   include BelongsToTheCommunity
 
+  # Dropped 2026-08-25 (both were stale copies of the meals; see #start_date).
+  # Kept here for one deploy so code that started before the migration ran
+  # does not select them (strong_migrations); remove after the next deploy.
+  self.ignored_columns += %w[start_date description]
+
   # Ransack allowlists for ActiveAdmin sorting
   def self.ransackable_attributes(_auth_object = nil)
-    %w[id color created_at description place_value residents_notified start_date updated_at]
+    %w[id color created_at place_value residents_notified updated_at]
   end
 
   # no_email suppresses the new-rotation notification for auto-created
@@ -61,8 +64,6 @@ class Rotation < ApplicationRecord
   before_destroy :capture_meal_dates_for_cache, prepend: true
   before_destroy :reject_destroy_unless_last, prepend: true
   before_destroy :reject_destroy_if_any_meal_touched, prepend: true
-  after_save :set_description
-  after_save :set_start_date
   after_save :note_live_update
   after_commit :set_place_value, on: %i[create destroy]
   after_commit :recolor_remaining_rotations, on: :destroy
@@ -103,25 +104,39 @@ class Rotation < ApplicationRecord
       new_color = COLORS[index % COLORS.length]
       next if rotation.color == new_color
 
-      rotation.update_column(:color, new_color)
+      # update!, not update_column: the color is on the calendar, so the
+      # save has to move updated_at (the month's cache version) and note the
+      # meals' months in LiveUpdate. A bare column write did neither, and a
+      # month built while the delete committed stayed stale for an hour.
+      rotation.update!(color: new_color)
       changed_rotation_ids << rotation.id
     end
     changed_rotation_ids
   end
 
-  def set_description
-    update_columns(description: date_range_description)
+  # The date of the rotation's first meal, read from the meals every time.
+  # This used to be a column filled in the rotation's own after_save, so it
+  # kept the old date when a meal was deleted or moved (a meal write does
+  # not save the rotation). Derived, it cannot be stale.
+  def start_date
+    meals.minimum(:date)
+  end
+
+  # Rotations whose first meal falls inside `range`. What residents:notify
+  # asks; a subquery on meals, since start_date is not a column.
+  def self.starting_within(range)
+    first_dates = Meal.group(:rotation_id).having('MIN(meals.date) >= ? AND MIN(meals.date) < ?', range.begin,
+                                                  range.end)
+    where(id: first_dates.select(:rotation_id))
   end
 
   # The date range shown wherever a rotation is named (the SPA's rotation
-  # modal, admin's Period column). Format lives in DateRangeDescription.
-  def date_range_description
+  # modal, admin's Period column, the rotation emails). Derived for the
+  # same reason as start_date. Format lives in DateRangeDescription.
+  def description
     DateRangeDescription.for(meals.minimum(:date), meals.maximum(:date))
   end
-
-  def set_start_date
-    update_columns(start_date: meals.order(:date).first&.date)
-  end
+  alias date_range_description description
 
   delegate :count, to: :meals, prefix: true
 
@@ -132,7 +147,10 @@ class Rotation < ApplicationRecord
   # whose number did not change are left alone.
   def set_place_value
     renumbered = []
-    Rotation.order(:start_date, :id).pluck(:id, :place_value).each_with_index do |(rot_id, place_value), index|
+    ordered = Rotation.left_joins(:meals).group('rotations.id')
+                      .order(Arel.sql('MIN(meals.date) NULLS LAST'), :id)
+                      .pluck(:id, :place_value)
+    ordered.each_with_index do |(rot_id, place_value), index|
       next if place_value == index + 1
 
       Rotation.where(id: rot_id).update_all(place_value: index + 1, updated_at: Time.current)

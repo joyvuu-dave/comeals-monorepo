@@ -1088,11 +1088,9 @@ CREATE TABLE public.rotations (
     color character varying NOT NULL,
     community_id bigint NOT NULL,
     created_at timestamp without time zone NOT NULL,
-    description character varying DEFAULT ''::character varying NOT NULL,
     new_rotation_notified_at timestamp(6) without time zone,
     place_value integer,
     residents_notified boolean DEFAULT false NOT NULL,
-    start_date date,
     updated_at timestamp without time zone NOT NULL
 );
 
@@ -3057,6 +3055,7 @@ ALTER TABLE ONLY public.bills
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260825140000'),
 ('20260825120000'),
 ('20260825110000'),
 ('20260825100000'),

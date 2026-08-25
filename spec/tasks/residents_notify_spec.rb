@@ -19,17 +19,15 @@ RSpec.describe 'residents:notify' do
     Rake::Task['residents:notify'].reenable
   end
 
-  # The Rotation model's after_save :set_start_date callback overwrites
-  # start_date from the first meal's date. We must use update_columns
-  # after creating meals to set it to the value we need for the query.
+  # start_date is the first meal's date, read from the meals; so the first
+  # meal is created on it.
   def create_rotation_with_meals(community:, start_date:, residents_notified: false, meal_dates: nil)
     rotation = create(:rotation, community: community,
                                  residents_notified: residents_notified)
-    dates = meal_dates || [start_date + 1.day]
+    dates = meal_dates || [start_date]
     dates.each do |date|
       create(:meal, community: community, rotation: rotation, date: date)
     end
-    rotation.update_columns(start_date: start_date, residents_notified: residents_notified)
     rotation
   end
 
@@ -181,8 +179,7 @@ RSpec.describe 'residents:notify' do
 
     def rotation_starting_in(days)
       rotation = create(:rotation, community: community)
-      create(:meal, community: community, rotation: rotation, date: Time.zone.today + days + 1)
-      rotation.update_columns(start_date: Time.zone.today + days, residents_notified: false)
+      create(:meal, community: community, rotation: rotation, date: Time.zone.today + days)
       rotation
     end
 

@@ -264,14 +264,8 @@ class Community < ApplicationRecord
     unassigned = meals.where(rotation_id: nil).order(:date)
     rotation = nil
     unassigned.find_each do |meal|
-      if rotation.nil?
-        rotation = rotations.create!(description: "#{meal.date} to #{meal.date}",
-                                     no_email: true)
-      end
+      rotation = rotations.create!(no_email: true) if rotation.nil?
       meal.update!(rotation_id: rotation.id)
-      first_date = rotation.meals.order(:date).first.date
-      last_date = rotation.meals.order(:date).last.date
-      rotation.update!(description: "#{first_date} to #{last_date}")
       rotation = nil if rotation.meals.count == auto_rotation_length
     end
   end

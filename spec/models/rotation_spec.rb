@@ -6,11 +6,9 @@
 #
 #  id                       :bigint           not null, primary key
 #  color                    :string           not null
-#  description              :string           default(""), not null
 #  new_rotation_notified_at :datetime
 #  place_value              :integer
 #  residents_notified       :boolean          default(FALSE), not null
-#  start_date               :date
 #  created_at               :datetime         not null
 #  updated_at               :datetime         not null
 #  community_id             :bigint           not null
@@ -110,12 +108,11 @@ RSpec.describe Rotation do
     end
   end
 
-  describe '#set_description' do
+  describe '#description' do
     def rotation_with_meals(*dates)
       rotation = create(:rotation, community: community, no_email: true)
       dates.each { |date| create(:meal, community: community, rotation: rotation, date: date) }
-      rotation.save!
-      rotation.reload
+      rotation
     end
 
     it 'joins day numbers with a closed-up en dash inside one month' do
@@ -141,26 +138,23 @@ RSpec.describe Rotation do
     it 'is blank for a rotation with no meals' do
       rotation = create(:rotation, community: community, no_email: true)
 
-      rotation.save!
-      expect(rotation.reload.description).to eq('')
+      expect(rotation.description).to eq('')
     end
   end
 
-  describe '#set_start_date' do
-    it 'sets start_date from the first meal date' do
+  describe '#start_date' do
+    it 'is the first meal date' do
       rotation = create(:rotation, community: community, no_email: true)
       create(:meal, community: community, rotation: rotation, date: Date.new(2026, 4, 1))
       create(:meal, community: community, rotation: rotation, date: Date.new(2026, 4, 15))
 
-      rotation.save!
-      expect(rotation.reload.start_date).to eq(Date.new(2026, 4, 1))
+      expect(rotation.start_date).to eq(Date.new(2026, 4, 1))
     end
 
-    it 'sets start_date to nil when rotation has no meals' do
+    it 'is nil when the rotation has no meals' do
       rotation = create(:rotation, community: community, no_email: true)
 
-      rotation.save!
-      expect(rotation.reload.start_date).to be_nil
+      expect(rotation.start_date).to be_nil
     end
   end
 
