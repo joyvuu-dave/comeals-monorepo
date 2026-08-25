@@ -158,6 +158,6 @@ sentence.
 Pulled out so they can be worked in order. The ones on the money path
 come first.
 
--1. Dinner start time change: calendar and iCal show the new time. 0. Time zone change: what "today" does on the day it changes.
-
-1. Broadcast email flag as a form submission.
+1. Dinner start time change: calendar and iCal show the new time.
+2. Time zone change: what "today" does on the day it changes.
+3. Broadcast email flag as a form submission.
