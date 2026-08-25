@@ -61,6 +61,13 @@ RSpec.describe 'Admin superuser management' do
       expect(spare.reload.superuser).to be false
     end
 
+    it 'refuses to delete its own account, and says so' do
+      expect { delete "/admin_users/#{me.id}" }.not_to change(AdminUser, :count)
+
+      expect(response).to redirect_to("/admin_users/#{me.id}")
+      expect(flash[:alert]).to include('your own account')
+    end
+
     it 'refuses to demote itself, and says so' do
       patch "/admin_users/#{me.id}", params: { admin_user: { superuser: false } }
 

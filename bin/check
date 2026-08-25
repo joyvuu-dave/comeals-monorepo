@@ -240,7 +240,7 @@ check_app_zone_dates() {
   step "App-zone dates"
 
   local output exit_code=0
-  output=$(grep -rnE 'Time\.zone\.today|Time\.zone\.now|Date\.today|Date\.current' app lib/tasks --exclude-dir=test 2>/dev/null | grep -v 'app/models/community.rb') || exit_code=$?
+  output=$(grep -rnE 'Time\.zone\.today|Time\.zone\.now|Date\.today|Date\.current' app lib/tasks db/seeds.rb 2>/dev/null | grep -v 'app/models/community.rb') || exit_code=$?
 
   if [ "$exit_code" -ne 0 ]; then
     pass "No date read from the app zone outside Community#today"
@@ -249,6 +249,34 @@ check_app_zone_dates() {
     fail "Date read from the app zone (use Community#today)"
     echo "$output" | head -20
     record "App-zone dates" "FAIL" "app-zone date reads"
+  fi
+}
+
+# ADR 0001: new frontend code is TypeScript. The .js/.jsx files that
+# remain are listed in docs/agents/frontend-js-files.txt; a new one fails
+# here, and a converted one must be taken off the list, so it only shrinks.
+check_new_js_files() {
+  step "New JS files"
+
+  local listed present added removed
+  listed=$(grep -v '^#' docs/agents/frontend-js-files.txt | sort)
+  present=$(find app/frontend/src -name '*.js' -o -name '*.jsx' | sort)
+  added=$(comm -13 <(echo "$listed") <(echo "$present"))
+  removed=$(comm -23 <(echo "$listed") <(echo "$present"))
+
+  if [ -z "$added" ] && [ -z "$removed" ]; then
+    pass "No new .js/.jsx file under app/frontend/src"
+    record "New JS files" "PASS" "none"
+  else
+    if [ -n "$added" ]; then
+      fail "New .js/.jsx file(s): write new frontend code in TypeScript (ADR 0001)"
+      echo "$added" | head -10
+    fi
+    if [ -n "$removed" ]; then
+      fail "Converted file(s) still listed in docs/agents/frontend-js-files.txt; remove them"
+      echo "$removed" | head -10
+    fi
+    record "New JS files" "FAIL" "list out of date"
   fi
 }
 
@@ -575,6 +603,7 @@ main() {
   check_prettier
   check_todo_markers
   check_app_zone_dates
+  check_new_js_files
   check_bundle_budget
 
   # Security

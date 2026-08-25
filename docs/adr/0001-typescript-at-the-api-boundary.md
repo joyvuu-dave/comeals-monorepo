@@ -25,7 +25,7 @@ Concretely:
 2. Create `app/frontend/src/types/api.ts` as the single source of truth for serializer response shapes. Each interface mirrors one `app/serializers/*.rb` file. Update them in lockstep when serializers change.
 3. Create `app/frontend/src/helpers/api.ts`: thin typed wrappers around `axios`, one function per endpoint, returning `Promise<AxiosResponse<T>>` where `T` comes from `types/api.ts`. (Not `Promise<T>`: the existing call sites check `response.status`, so keeping the response wrapper lets them move over one at a time. `api.ts` says this at the top.) Replace bare `axios({ method, url, data })` call sites incrementally.
 4. Money on the wire is typed as `MoneyString` (a branded `string`), never `number`. Rails serializes `BigDecimal` as a JSON string; treating it as a number on the JS side is a bug class we want the compiler to forbid.
-5. New frontend code is written in `.ts` / `.tsx` by default. Existing `.js` / `.jsx` files are converted opportunistically when touched, never as a migration project.
+5. New frontend code is written in `.ts` / `.tsx` by default. Existing `.js` / `.jsx` files are converted opportunistically when touched, never as a migration project. Since 2026-08-25 `bin/check` enforces the first half: the remaining `.js` / `.jsx` files are listed in `docs/agents/frontend-js-files.txt`, a file not on the list fails the check, and a converted file is taken off it, so the list only shrinks.
 
 ## Consequences
 

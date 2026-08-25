@@ -28,6 +28,10 @@ ActiveAdmin.register AdminUser do
     #     seven superusers, demoting yourself is recoverable but still almost
     #     never what you meant to click.
     before_action :refuse_unauthorized_superuser_change, only: %i[create update]
+    # Deleting your own account is the same click with less way back: the
+    # model allows it while another superuser exists, so the controller
+    # refuses it at any count, like self-demotion.
+    before_action :refuse_self_destroy, only: :destroy
 
     private
 
@@ -42,6 +46,13 @@ ActiveAdmin.register AdminUser do
         redirect_to resource_or_collection_path,
                     alert: 'You cannot remove your own superuser access. Ask another superuser to do it.'
       end
+    end
+
+    def refuse_self_destroy
+      return unless resource.id == current_active_admin_user&.id
+
+      redirect_to admin_admin_user_path(resource),
+                  alert: 'You cannot delete your own account. Ask another superuser to do it.'
     end
 
     def demoting_self?(requested)

@@ -103,6 +103,9 @@ contract as `ConfirmBar` (see `confirm_bar.jsx`):
 - No path loses typed work silently. The worst case is one extra tap.
 - The forms keep their Create/Update buttons forever; any future
   request to make them real-time should be answered by pointing here.
-- Every new modal form must accept `setDirty` and report through
-  `useDirtyReport`, or dismissal will silently discard its changes —
-  the exact bug this ADR removes.
+- Every modal form that creates or edits a record must accept
+  `setDirty` and report through `useDirtyReport`, or dismissal will
+  silently discard its changes — the exact bug this ADR removes. The
+  login form is a modal too, but it edits nothing: an email and a
+  password are retyped in seconds, so it stays outside the gate on
+  purpose (invariant hunt, 2026-08-25).

@@ -45,20 +45,20 @@ namespace :test do
         timezone: 'America/Los_Angeles'
       )
 
-      unit_a = Unit.create!(id: 1, name: 'A', community: community)
-      unit_b = Unit.create!(id: 2, name: 'B', community: community)
-      unit_c = Unit.create!(id: 3, name: 'C', community: community)
+      unit_a = Unit.create!(id: 1, name: 'A')
+      unit_b = Unit.create!(id: 2, name: 'B')
+      unit_c = Unit.create!(id: 3, name: 'C')
 
       jane = Resident.create!(
         id: 1, name: 'Jane Smith', email: 'jane@test.com', password: 'password',
-        community: community, unit: unit_a,
+        unit: unit_a,
         multiplier: 2, can_cook: true, vegetarian: false,
         birthday: Date.new(1985, 3, 15)
       )
 
       bob = Resident.create!(
         id: 2, name: 'Bob Johnson', email: 'bob@test.com', password: 'password',
-        community: community, unit: unit_b,
+        unit: unit_b,
         multiplier: 2, can_cook: true, vegetarian: true,
         birthday: Date.new(1990, 7, 22)
       )
@@ -67,7 +67,7 @@ namespace :test do
       # calendar's birthday tile.
       alice = Resident.create!(
         id: 3, name: 'Alice Williams', email: 'alice@test.com', password: 'password',
-        community: community, unit: unit_c,
+        unit: unit_c,
         multiplier: 2, can_cook: false, vegetarian: false,
         birthday: Date.new(1978, 1, 20)
       )
@@ -78,18 +78,18 @@ namespace :test do
     clock.travel_to Time.zone.parse('2026-01-10 09:00') do
       # Color, description, and place_value are model-managed; the
       # rotation only needs to exist and own meals 42 and 43.
-      rotation = Rotation.create!(id: 10, community: community)
+      rotation = Rotation.create!(id: 10)
 
       # Meal 41 is in the past on the frozen "today" (2026-01-15); 42 is
       # today's meal; 43 is upcoming. 41 and 43 exist mostly so meal 42
       # has real prev/next ids.
-      Meal.create!(id: 41, date: Date.new(2026, 1, 13), community: community)
+      Meal.create!(id: 41, date: Date.new(2026, 1, 13))
       meal42 = Meal.create!(
-        id: 42, date: Date.new(2026, 1, 15), community: community,
+        id: 42, date: Date.new(2026, 1, 15),
         description: 'Pasta night with garlic bread', rotation: rotation
       )
       meal43 = Meal.create!(
-        id: 43, date: Date.new(2026, 1, 17), community: community,
+        id: 43, date: Date.new(2026, 1, 17),
         rotation: rotation
       )
 
@@ -100,27 +100,27 @@ namespace :test do
 
       # Bob cooks meal 43. No amount yet — the meal is in the future.
       Audited.audit_class.as_user(bob) do
-        Bill.create!(id: 202, meal: meal43, resident: bob, community: community)
+        Bill.create!(id: 202, meal: meal43, resident: bob)
         MealResident.create!(
-          resident: bob, meal: meal43, community: community, multiplier: bob.multiplier
+          resident: bob, meal: meal43, multiplier: bob.multiplier
         )
       end
 
       Event.create!(
-        id: 70, community: community, title: 'Community Meeting',
+        id: 70, title: 'Community Meeting',
         description: 'Monthly community meeting',
         start_date: Time.zone.parse('2026-01-28 19:00'),
         end_date: Time.zone.parse('2026-01-28 21:00')
       )
 
       CommonHouseReservation.create!(
-        id: 50, community: community, resident: jane, title: 'Book Club',
+        id: 50, resident: jane, title: 'Book Club',
         start_date: Time.zone.parse('2026-01-22 19:00'),
         end_date: Time.zone.parse('2026-01-22 21:00')
       )
 
       GuestRoomReservation.create!(
-        id: 60, community: community, resident: jane,
+        id: 60, resident: jane,
         date: Date.new(2026, 1, 25)
       )
     end
@@ -130,10 +130,10 @@ namespace :test do
     clock.travel_to Time.zone.parse('2026-01-14 18:30') do
       Audited.audit_class.as_user(jane) do
         MealResident.create!(
-          resident: jane, meal: meal42, community: community, multiplier: jane.multiplier
+          resident: jane, meal: meal42, multiplier: jane.multiplier
         )
         Bill.create!(
-          id: 201, meal: meal42, resident: jane, community: community,
+          id: 201, meal: meal42, resident: jane,
           amount: BigDecimal('25.50')
         )
       end
@@ -150,7 +150,7 @@ namespace :test do
     clock.travel_to Time.zone.parse('2026-01-14 19:00') do
       Audited.audit_class.as_user(alice) do
         MealResident.create!(
-          resident: alice, meal: meal42, community: community,
+          resident: alice, meal: meal42,
           multiplier: alice.multiplier, late: true
         )
       end

@@ -16,7 +16,7 @@
 # empty (#63).
 return if Rails.env.test?
 
-start = Time.zone.now
+start = Time.current
 
 # Community (singleton). timezone is explicit because the DB column has no
 # default — operators on a real deploy pick one via the ActiveAdmin form.
@@ -70,20 +70,20 @@ Rails.logger.debug { "#{community.admin_users.count} AdminUser created" }
 
   unit = Unit.create!(name: letter)
   if (index % 5).zero?
-    child_year = ((Time.zone.today.year - 10)..(Time.zone.today.year - 1)).to_a.sample
+    child_year = ((community.today.year - 10)..(community.today.year - 1)).to_a.sample
     child_birthday = Date.new(child_year, (1..12).to_a.sample, (1..28).to_a.sample)
     Resident.create!(name: "#{Faker::Name.first_name} #{Faker::Name.last_name}",
                      multiplier: 1, unit: unit,
                      password: '', birthday: child_birthday)
   end
-  adult_year = ((Time.zone.today.year - 90)..(Time.zone.today.year - 20)).to_a.sample
+  adult_year = ((community.today.year - 90)..(community.today.year - 20)).to_a.sample
   adult_birthday = Date.new(adult_year, (1..12).to_a.sample, (1..28).to_a.sample)
   Resident.create!(name: "#{Faker::Name.first_name} #{Faker::Name.last_name}",
                    multiplier: 2, unit: unit, email: Faker::Internet.email, password: 'password',
                    birthday: adult_birthday, phone: next_phone.call)
   next unless index.even?
 
-  veg_year = ((Time.zone.today.year - 90)..(Time.zone.today.year - 20)).to_a.sample
+  veg_year = ((community.today.year - 90)..(community.today.year - 20)).to_a.sample
   veg_birthday = Date.new(veg_year, (1..12).to_a.sample, (1..28).to_a.sample)
   Resident.create!(name: "#{Faker::Name.first_name} #{Faker::Name.last_name}",
                    multiplier: 2, unit: unit, email: Faker::Internet.email, password: 'password',
@@ -112,7 +112,7 @@ Rails.logger.debug { "#{community.meals.count} Meals created" }
 
 # MealResidents & Guests
 Meal.find_each do |meal|
-  next if meal.date > Time.zone.today + 7
+  next if meal.date > community.today + 7
 
   Resident.all.shuffle[0..(Random.rand(8..21))].each_with_index do |resident, index|
     if (index % 10).zero?
@@ -162,7 +162,7 @@ end
 # reconciliation sweeps it — the outcome the close-time question now
 # exists to prevent.
 Meal.all.each_with_index do |meal, index|
-  next if meal.date > Time.zone.today + 14
+  next if meal.date > community.today + 14
 
   ids = Resident.pluck(:id).sample(2)
   Bill.create!(meal_id: meal.id, resident_id: ids[0],
@@ -199,7 +199,7 @@ end
 # (see app/models/meal_resident.rb, guest.rb) — writing to a reconciled meal
 # raises RecordNotSaved.
 Meal.unreconciled.find_each do |meal|
-  next if meal.date > Time.zone.today + 7
+  next if meal.date > community.today + 7
 
   Resident.all.shuffle[0..(Random.rand(8..21))].each_with_index do |resident, index|
     if (index % 10).zero?
@@ -237,7 +237,7 @@ Rails.logger.debug { "#{community.meal_residents.count} MealResidents created" }
 # entered" cook on a closed meal is the pending state the meal page
 # displays.
 Meal.unreconciled.each_with_index do |meal, index|
-  next if meal.date > Time.zone.today + 14
+  next if meal.date > community.today + 14
 
   ids = Resident.pluck(:id).sample(2)
   case index % 4
@@ -264,14 +264,14 @@ Rails.logger.debug { "#{community.bills.count} Bills created" }
 
 # Set description
 Meal.find_each do |meal|
-  next if meal.date > Time.zone.today + 14
+  next if meal.date > community.today + 14
 
   meal.update!(description: "#{Faker::Food.dish}, #{Faker::Food.ingredient}, and #{Faker::Dessert.flavor} #{Faker::Dessert.variety}")
 end
 
 # Set Max
 Meal.all.each_with_index do |meal, index|
-  if (meal.date < Time.zone.today && index.even?) || meal.date.between?(Time.zone.today, Time.zone.today + 3)
+  if (meal.date < community.today && index.even?) || meal.date.between?(community.today, community.today + 3)
     meal.update!(closed: true)
     meal.update!(max: meal.attendees_count + rand(1..4))
   end
@@ -286,12 +286,12 @@ Rails.logger.debug { "#{community.rotations.count} Rotations created" }
 
 # Event
 Time.zone = community.timezone
-today = Time.zone.today
+today = community.today
 Event.create!(title: 'HOA Meeting',
               start_date: Time.zone.local(today.year, today.month, today.day, 20, 0, 0),
               end_date: Time.zone.local(today.year, today.month, today.day, 21, 30, 0))
 Event.create!(title: "Swan's Anniversary",
-              start_date: Time.zone.local(Time.zone.now.year, Time.zone.now.month, 15, 1, 0, 0), allday: true)
+              start_date: Time.zone.local(today.year, today.month, 15, 1, 0, 0), allday: true)
 
 Rails.logger.debug { "#{community.events.count} Event#{'s' unless Event.one?} created" }
 
@@ -299,7 +299,7 @@ Rails.logger.debug { "#{community.events.count} Event#{'s' unless Event.one?} cr
 Time.zone = community.timezone
 GuestRoomReservation.create!(
   resident_id: Resident.adult.pluck(:id).sample,
-  date: Time.zone.today
+  date: community.today
 )
 
 Rails.logger.debug do
@@ -378,4 +378,4 @@ LedgerVerification.call
 Rails.logger.debug { "#{LedgerCheckRun.count} LedgerCheckRuns created (1 real, 2 staged)" }
 
 # Analytics
-Rails.logger.debug { "Seed records created in #{Time.zone.now - start}s" }
+Rails.logger.debug { "Seed records created in #{Time.current - start}s" }

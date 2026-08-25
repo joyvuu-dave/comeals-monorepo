@@ -30,48 +30,47 @@ namespace :test do
     AdminUser.create!(
       email: 'admin@test.com',
       password: 'password',
-      password_confirmation: 'password',
-      community: community
+      password_confirmation: 'password'
     )
 
     # ------------------------------------------------------------------
     # UNITS & RESIDENTS
     # ------------------------------------------------------------------
-    unit_a = Unit.create!(name: 'A', community: community)
-    unit_b = Unit.create!(name: 'B', community: community)
-    unit_c = Unit.create!(name: 'C', community: community)
+    unit_a = Unit.create!(name: 'A')
+    unit_b = Unit.create!(name: 'B')
+    unit_c = Unit.create!(name: 'C')
 
     jane = Resident.create!(
       name: 'Jane Smith', email: 'jane@test.com', password: 'password',
-      community: community, unit: unit_a,
+      unit: unit_a,
       multiplier: 2, can_cook: true, vegetarian: false,
       birthday: Date.new(1985, 3, 15)
     )
 
     bob = Resident.create!(
       name: 'Bob Johnson', email: 'bob@test.com', password: 'password',
-      community: community, unit: unit_b,
+      unit: unit_b,
       multiplier: 2, can_cook: true, vegetarian: true,
       birthday: Date.new(1990, 7, 22)
     )
 
     alice = Resident.create!(
       name: 'Alice Williams', email: 'alice@test.com', password: 'password',
-      community: community, unit: unit_c,
+      unit: unit_c,
       multiplier: 2, can_cook: false, vegetarian: false,
       birthday: Date.new(1978, 11, 8)
     )
 
     charlie = Resident.create!(
       name: 'Charlie Brown', password: '',
-      community: community, unit: unit_a,
+      unit: unit_a,
       multiplier: 1, can_cook: false, vegetarian: false,
       birthday: Date.new(2015, 5, 1)
     )
 
     Resident.create!(
       name: 'Diana Prince', email: 'diana@test.com', password: 'password',
-      community: community, unit: unit_c,
+      unit: unit_c,
       multiplier: 2, can_cook: true, vegetarian: false,
       active: false, birthday: Date.new(1982, 6, 20)
     )
@@ -81,57 +80,51 @@ namespace :test do
     # ------------------------------------------------------------------
     reconciled_meal = Meal.create!(
       date: 60.days.ago.to_date,
-      community: community,
       description: 'Stir fry vegetables'
     )
     [jane, bob, alice, charlie].each do |r|
       MealResident.create!(
-        resident: r, meal: reconciled_meal, community: community,
-        multiplier: r.multiplier
+        resident: r, meal: reconciled_meal, multiplier: r.multiplier
       )
     end
     Bill.create!(
       meal: reconciled_meal, resident: alice,
-      amount: BigDecimal('42.00'), community: community
+      amount: BigDecimal('42.00')
     )
 
     # Settle the period: claims the unreconciled meals with bills on or
     # before the cutoff and writes their charges and balances.
-    Settlement.run!(cutoff: 30.days.ago.to_date, community: community)
+    Settlement.run!(cutoff: 30.days.ago.to_date)
 
     # ------------------------------------------------------------------
     # CLOSED MEAL (2 days ago)
     # ------------------------------------------------------------------
     closed_meal = Meal.create!(
       date: 2.days.ago.to_date,
-      community: community,
       description: 'Tacos and rice',
       closed: true,
       max: 5
     )
     [bob, alice, charlie].each do |r|
       MealResident.create!(
-        resident: r, meal: closed_meal, community: community,
-        multiplier: r.multiplier
+        resident: r, meal: closed_meal, multiplier: r.multiplier
       )
     end
     Bill.create!(
       meal: closed_meal, resident: bob,
-      amount: BigDecimal('35.50'), community: community
+      amount: BigDecimal('35.50')
     )
 
     # ------------------------------------------------------------------
     # TODAY'S MEAL (open, no bills yet)
     # ------------------------------------------------------------------
     today_meal = Meal.create!(
-      date: Date.current,
-      community: community,
+      date: Community.instance.today,
       description: 'Pizza and salad'
     )
     [jane, alice].each do |r|
       MealResident.create!(
-        resident: r, meal: today_meal, community: community,
-        multiplier: r.multiplier
+        resident: r, meal: today_meal, multiplier: r.multiplier
       )
     end
 
@@ -140,13 +133,11 @@ namespace :test do
     # ------------------------------------------------------------------
     tomorrow_meal = Meal.create!(
       date: Date.tomorrow,
-      community: community,
       description: 'Pasta night with garlic bread'
     )
     [jane, bob, alice].each do |r|
       MealResident.create!(
-        resident: r, meal: tomorrow_meal, community: community,
-        multiplier: r.multiplier
+        resident: r, meal: tomorrow_meal, multiplier: r.multiplier
       )
     end
     Guest.create!(
@@ -155,7 +146,7 @@ namespace :test do
     )
     Bill.create!(
       meal: tomorrow_meal, resident: jane,
-      amount: BigDecimal('50.00'), community: community
+      amount: BigDecimal('50.00')
     )
 
     # ------------------------------------------------------------------
@@ -167,18 +158,16 @@ namespace :test do
     # close test is not about (bill-entry.spec.js covers that ask).
     close_test_meal = Meal.create!(
       date: 3.days.from_now.to_date,
-      community: community,
       description: 'Close-test casserole'
     )
     [jane, bob].each do |r|
       MealResident.create!(
-        resident: r, meal: close_test_meal, community: community,
-        multiplier: r.multiplier
+        resident: r, meal: close_test_meal, multiplier: r.multiplier
       )
     end
     Bill.create!(
       meal: close_test_meal, resident: jane,
-      amount: BigDecimal('20.00'), community: community
+      amount: BigDecimal('20.00')
     )
 
     # ------------------------------------------------------------------
@@ -187,29 +176,28 @@ namespace :test do
     # The description integration test uses this meal: it starts blank,
     # the test types into it, checks persistence, and blanks it again.
     future_meal = Meal.create!(
-      date: 7.days.from_now.to_date,
-      community: community
+      date: 7.days.from_now.to_date
     )
 
     # ------------------------------------------------------------------
     # CALENDAR ITEMS
     # ------------------------------------------------------------------
-    today = Date.current
+    today = Community.instance.today
     Event.create!(
-      community: community, title: 'Community Meeting',
+      title: 'Community Meeting',
       start_date: Time.zone.local(today.year, today.month, today.day, 19, 0, 0),
       end_date: Time.zone.local(today.year, today.month, today.day, 21, 0, 0)
     )
 
     CommonHouseReservation.create!(
-      community: community, resident: jane,
+      resident: jane,
       title: 'Book Club',
       start_date: Time.zone.local(today.year, today.month, today.day, 10, 0, 0),
       end_date: Time.zone.local(today.year, today.month, today.day, 12, 0, 0)
     )
 
     GuestRoomReservation.create!(
-      community: community, resident: bob,
+      resident: bob,
       date: Date.tomorrow
     )
 
@@ -235,7 +223,7 @@ namespace :test do
     # "Rotation 2" (its place in date order), whatever its database id is.
     first_rotation = Rotation.create!(meals_attributes: [{ date: 40.days.from_now.to_date }])
     second_rotation = Rotation.create!(meals_attributes: [{ date: 80.days.from_now.to_date }])
-    Bill.create!(meal: first_rotation.meals.first, resident: jane, community: community, amount: BigDecimal('0'))
+    Bill.create!(meal: first_rotation.meals.first, resident: jane, amount: BigDecimal('0'))
 
     # Write test context for Playwright to read at test time.
     auth_file = Rails.root.join('tmp/integration_auth.json')
