@@ -10,7 +10,7 @@ Verdicts: HOLDS = enforced and the skipping path cannot break it.
 NOT CHECKABLE = advice, history, or a rule for people. SUSPECT = a path
 where the rule is not enforced; each is discussed under "Findings".
 
-## Findings (red specs on the branch)
+## Findings (fixed in 1af0317; the specs stay as regression tests)
 
 1. **A rotation recolored by a delete in another month can stay stale
    for an hour.** `Rotation.recolor_community` writes `color` with

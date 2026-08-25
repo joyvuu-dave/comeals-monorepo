@@ -17,6 +17,9 @@ the seven ADRs). Rows: `docs/agents/invariant-hunt-2026-08-25.md`.
 - Found: `rotations.start_date` keeps the old date after the rotation's
   first meal is deleted or moved. Red spec
   `spec/models/rotation_start_date_spec.rb`.
+- Both fixed the same day on the same branch (1af0317): the two columns
+  are dropped and derived from the meals; the recolor saves with
+  `update!`.
 - Six rule gaps with no wrong result today (test tasks passing
   `community:`, seeds reading the app zone, untyped money in `.js`
   stores, ADR 0001's "TS by default", a superuser deleting their own
