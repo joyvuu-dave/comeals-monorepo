@@ -40,6 +40,7 @@ class MealResident < ApplicationRecord
   # host's explicit extras. Included after ReconciledMealImmutability so the
   # reconciled check runs first.
   include ClosedMealAttendanceFreeze
+  include NotesMealLiveUpdate
 
   before_validation :set_multiplier, on: :create
 

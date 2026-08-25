@@ -1,26 +1,35 @@
 // How live updates work, end to end. This is the only place the whole
-// protocol is written down; the server half is Community#trigger_pusher
-// and Meal#trigger_pusher.
+// protocol is written down; the server half is app/services/live_update.rb.
 //
 // 1. A Pusher message carries no data. It means "what you have for this
-//    month is stale". The client always refetches; it never applies a
-//    payload.
-// 2. Before it broadcasts, the server deletes its own Rails cache entry
-//    for the month (Community#invalidate_calendar_cache), so the refetch
-//    cannot get a stale server copy.
+//    is stale". The client always refetches; it never applies a payload.
+// 2. The server pushes after the write commits, from the models — so
+//    every writer pushes, not only the API. Before it pushes it deletes
+//    its own Rails cache entry for the month, and the entry is stored
+//    under a version read from the rows, so a refetch can never get a
+//    stale server copy — not even one a slow request stored after the
+//    delete (Community#calendar_cache_version).
 // 3. Channels: community-<id>-calendar-<year>-<month> for a month (the
-//    name is also the server cache key, on purpose), and meal-<id> for
-//    one meal's page (a channel only; that page is not cached on the
-//    server). The event name is always "update".
+//    name is also the server cache key, on purpose); meal-<id> for one
+//    meal's page (a channel only; that page is not cached on the
+//    server); and community-<id>-residents for any change to a resident
+//    or unit, whose names are on every screen. The event name is always
+//    "update".
 // 4. The client subscribes to the month on screen and refetches on
-//    "update" (data_store_calendar.js loadMonth). It also subscribes to
-//    the two neighbouring months and only evicts them from the client
-//    caches, so the next navigation fetches fresh.
-// 5. The browser that caused the change is excluded: the server passes
-//    the client's socket_id, so a tap never triggers its own refetch.
+//    "update" (data_store_calendar.js loadMonth), dropping its copies
+//    first so a fetch that was already on the wire cannot bring back
+//    the old month (month_fetch.js refetch). It also subscribes to the
+//    two neighbouring months and only evicts them from the client
+//    caches, so the next navigation fetches fresh. On the residents
+//    channel it drops every cached month and meal and refetches what
+//    is on screen (data_store_app.js handleResidentsUpdate).
+// 5. The browser that caused the change is excluded from the meal-page
+//    push: the server passes the client's socket_id, so a tap never
+//    triggers its own refetch.
 // 6. Pusher does not replay messages missed while the socket was down,
 //    so every reconnect and every browser "online" event refetches
-//    (data_store_app.js handleReconnect).
+//    (data_store_app.js handleReconnect). Midnight refetches the month
+//    too: the chips' words depend on the day and nothing pushes then.
 // 7. With no VITE_PUSHER_KEY the client never connects and the app runs
 //    without live updates; nothing else changes.
 //

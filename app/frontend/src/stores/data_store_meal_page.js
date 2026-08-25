@@ -10,6 +10,7 @@ import { api } from "../helpers/api";
 import { toCommunityDayjs } from "../helpers/helpers";
 import { toDisplayAmountString } from "../helpers/money";
 import handleAxiosError from "../helpers/handle_axios_error";
+import createVersionGuard from "../helpers/version_guard";
 
 // Backoff for retrying a failed FIRST load of a meal: 2s, 4s, 8s,
 // 16s, then every 30s — forever. A shared screen must heal without a
@@ -24,6 +25,11 @@ export function mealPageVolatile() {
     // The wait used for the last scheduled retry, or null when the
     // backoff is at its starting point.
     mealRetryDelayMs: null,
+    // Stale-response guard for meal fetches. Two fetches of the same
+    // meal can be on the wire at once (a Pusher update during a
+    // reconnect refetch), and the responses can land in either order;
+    // only the newest fetch's response may reach the screen.
+    mealFetches: createVersionGuard(),
   };
 }
 
@@ -97,13 +103,18 @@ export function mealPageActions(self) {
       // callback that lands after that has nothing to refetch.
       if (!self.meal) return;
       const mealIdAtFetch = self.meal.id;
+      const fetchToken = self.mealFetches.bump();
       api.meals
         .getCooks(mealIdAtFetch)
         .then(
           function (response) {
             if (response.status === 200) {
+              // A newer fetch is out: this answer is older than what
+              // that one will bring, so neither cache nor screen gets it.
+              if (!self.mealFetches.isCurrent(fetchToken)) return;
               return kvSet(response.data.id.toString(), response.data).then(
                 function () {
+                  if (!self.mealFetches.isCurrent(fetchToken)) return;
                   // Skip stale responses from a previous meal
                   if (self.meal && self.meal.id === response.data.id) {
                     self.loadData(response.data);
@@ -312,6 +323,9 @@ export function mealPageActions(self) {
       window.Comeals.mealChannel.bind("update", function () {
         self.loadDataAsync();
       });
+
+      // The sign-up list is every resident; they have their own channel.
+      self.ensureResidentsChannel();
     },
     clearResidents() {
       self.residents.clear();

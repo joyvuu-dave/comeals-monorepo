@@ -22,7 +22,12 @@
 import axios from "axios";
 import Cookie from "js-cookie";
 import dayjs from "dayjs";
-import { get as kvGet, set as kvSet, del as kvDel } from "idb-keyval";
+import {
+  get as kvGet,
+  set as kvSet,
+  del as kvDel,
+  clear as kvClear,
+} from "idb-keyval";
 
 import * as monthCache from "./month_cache";
 import createVersionGuard from "../helpers/version_guard";
@@ -67,6 +72,29 @@ export function invalidateMonth(communityId, year, month) {
   monthCache.remove(key);
   kvDel(key);
   monthCache.bumpVersion(key);
+}
+
+// Drop every cached month and meal, in RAM and in IndexedDB. The
+// residents channel fires this: a renamed, retired or moved resident
+// (or a renamed unit) appears on chips in any month and in every
+// meal's sign-up list, and there is no way to know which copies hold
+// the old value. IndexedDB holds only these copies, so it is cleared
+// whole. The month on screen is refetched by the caller.
+export function invalidateAllMonths() {
+  monthCache.clear();
+  kvClear();
+}
+
+// The month on screen is stale (a Pusher update, a reconnect, the day
+// changing): drop the copies, so a navigation away and back cannot
+// show them, and mark the version, so a prefetch of this month that
+// is still on the wire drops its answer instead of storing it —
+// revalidate would otherwise adopt that in-flight request and render
+// data read before the change. Then fetch.
+export function refetch(date, render) {
+  var d = dayjs(date);
+  invalidateMonth(Cookie.get("community_id"), d.format("YYYY"), d.format("M"));
+  revalidate(date, render);
 }
 
 // The client that knows, invalidates (issue #37): only the current

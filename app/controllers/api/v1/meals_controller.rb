@@ -19,7 +19,6 @@ module Api
       before_action :verify_resident_exists, only: %i[create_meal_resident create_guest]
       before_action :set_guest, only: [:destroy_guest]
       before_action :set_meal_resident, only: %i[destroy_meal_resident update_meal_resident]
-      after_action :trigger_pusher, except: %i[next history show_cooks]
 
       # GET /api/v1/meals/next
       def next
@@ -258,19 +257,15 @@ module Api
         payload[:bills] = @meal.bills.reload.map { |bill| bill.slice(:resident_id, :amount, :no_cost) }
         render json: payload, status: request_symbol
       rescue ActiveRecord::RecordNotFound, ActiveRecord::RecordInvalid => e
-        @skip_pusher = true
         render json: { message: e.message }, status: :bad_request
       rescue ActiveRecord::RecordNotDestroyed => e
-        @skip_pusher = true
         render json: { message: e.record.errors.full_messages.join("\n") }, status: :bad_request
       rescue ActiveRecord::InvalidForeignKey
-        @skip_pusher = true
         render json: { message: 'Invalid cook assignment.' }, status: :bad_request
       rescue ActiveRecord::RangeError
         # Unreachable while the grammar check above holds (it caps amounts at
         # 9999.99, which fits DECIMAL(12,8)) — kept so a value that would
         # overflow the column can never surface as a 500.
-        @skip_pusher = true
         render json: { message: 'Invalid amount. Amounts are whole cents, 0 to 9999.99.' }, status: :bad_request
       end
 
@@ -301,7 +296,6 @@ module Api
       # The render arguments, not the render. with_meal_lock returns this from
       # inside the transaction and the action renders it afterwards.
       def reconciled_rejection
-        @skip_pusher = true
         { json: { message: 'Change not permitted. Meal has already been reconciled.' },
           status: :bad_request }
       end
@@ -364,9 +358,9 @@ module Api
 
       # The render arguments, not the render — same as reconciled_rejection.
       # 409 Conflict, because the request was fine and would work if sent
-      # again. Nothing was written, so there is no Pusher event to send.
+      # again. Nothing was written, so nothing is pushed: the models push,
+      # and a rolled-back write drops its pushes with it (LiveUpdate).
       def conflict_rejection
-        @skip_pusher = true
         { json: { message: 'Someone else was changing this meal at the same time. ' \
                            'Nothing was saved. Try again.' },
           status: :conflict }
@@ -383,7 +377,10 @@ module Api
 
         return not_found_api if @meal.blank?
 
-        @meal.socket_id = params[:socket_id]
+        # The sender's Pusher socket. The models push (LiveUpdate); this
+        # is how the meal-page push skips the browser that made the
+        # change, which updated its own screen already.
+        Current.socket_id = params[:socket_id].presence
       end
 
       def set_guest
@@ -398,12 +395,6 @@ module Api
         end
 
         not_found_api if @meal_resident.blank?
-      end
-
-      def trigger_pusher
-        return if @skip_pusher
-
-        @meal.trigger_pusher
       end
     end
   end

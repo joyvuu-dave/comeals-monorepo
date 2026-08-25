@@ -35,11 +35,13 @@ class GuestRoomReservation < ApplicationRecord
   validates :date, presence: true
   validates :date, uniqueness: true
 
-  after_commit :trigger_pusher
+  after_destroy :note_live_update
+  after_save :note_live_update
 
-  # Reservations appear on the calendar. See CalendarSerializer for the full
-  # cache invalidation contract.
-  def trigger_pusher
-    community.trigger_pusher(date)
+  # Reservations appear on the calendar; after a date change the old
+  # month is stale too. See LiveUpdate.
+  def note_live_update
+    LiveUpdate.calendar(date)
+    LiveUpdate.calendar(saved_changes.dig('date', 0))
   end
 end

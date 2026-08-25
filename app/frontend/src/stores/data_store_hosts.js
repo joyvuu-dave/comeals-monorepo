@@ -17,10 +17,6 @@ export function hostsVolatile() {
     // Stale-response guard for hosts fetches: a superseded fetch's
     // response is discarded in favor of the newer fetch's.
     hostsFetches: createVersionGuard(),
-    // Single Pusher subscription for hosts updates. Assigned the first
-    // time ensureHosts() succeeds; never resubscribed for the lifetime
-    // of the store because the channel name only depends on community_id.
-    hostsChannel: null,
   };
 }
 
@@ -66,7 +62,9 @@ export function hostsActions(self) {
           if (!self.hostsFetches.isCurrent(versionAtStart)) return self.hosts;
           if (response.status === 200) {
             self.setHosts(response.data);
-            self.subscribeHostsChannel(communityId);
+            // The residents channel (data_store_app.js) refetches this
+            // list when a resident or unit changes.
+            self.ensureResidentsChannel();
           }
           return self.hosts;
         })
@@ -99,15 +97,6 @@ export function hostsActions(self) {
     },
     setHostsInFlight(promise) {
       self.hostsInFlight = promise;
-    },
-    subscribeHostsChannel(communityId) {
-      if (self.hostsChannel) return;
-      self.hostsChannel = window.Comeals.pusher.subscribe(
-        `community-${communityId}-residents`,
-      );
-      self.hostsChannel.bind("update", function () {
-        self.refetchHostsSilently();
-      });
     },
   };
 }

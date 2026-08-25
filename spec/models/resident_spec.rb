@@ -257,16 +257,17 @@ RSpec.describe Resident do
   # ---------------------------------------------------------------------------
   # Real-time notifications
   # ---------------------------------------------------------------------------
-  describe 'after_commit :notify_residents_update' do
+  describe 'the residents channel (note_live_update)' do
     # Pusher is stubbed silently across all examples. Positive assertions use
     # `.at_least(:once)`; negative assertions use `.exactly(:once)` to allow
     # the single trigger from the initial `create` while forbidding any
     # further trigger from the mutation under test.
     let(:expected_channel) { "community-#{community.id}-residents" }
 
-    # Filter by the `residents updated` message so this spec is decoupled
-    # from Unit#notify_residents_update (which emits `unit updated` on the
-    # same channel and runs when a `let(:unit)` is lazily created).
+    # Units push the same channel when they are created, so every unit an
+    # example needs exists before the counting starts.
+    let!(:other_unit) { create(:unit, community: community) }
+
     def expect_resident_triggers(count)
       expect(Pusher).to have_received(:trigger).with(
         expected_channel,
@@ -275,7 +276,11 @@ RSpec.describe Resident do
       ).exactly(count).times
     end
 
-    before { allow(Pusher).to receive(:trigger) }
+    before do
+      unit
+      RSpec::Mocks.space.proxy_for(Pusher).reset
+      allow(Pusher).to receive(:trigger)
+    end
 
     it 'triggers on create' do
       create(:resident, community: community, unit: unit)
@@ -297,44 +302,41 @@ RSpec.describe Resident do
       unit_id: ->(r, other_unit) { r.update!(unit: other_unit) }
     }.each do |column, mutation|
       it "triggers on #{column} change" do
-        other_unit = create(:unit, community: community)
         resident = create(:resident, community: community, unit: unit)
         mutation.call(resident, other_unit)
         expect_resident_triggers(2)
       end
     end
 
-    # Non-hosts-relevant columns must NOT produce a Pusher round-trip on
-    # every save (prevents broadcast storms on password rotations, token
-    # refreshes, birthday edits, email changes, and can_cook toggles —
-    # none of those affect the hosts endpoint's output).
+    # The channel is not only for the hosts dropdown. The meal page's
+    # sign-up list shows vegetarian and can_cook, and the calendar shows
+    # birthdays, so those changes push too — the old rule pushed only the
+    # hosts columns, and a birthday added in admin stayed off every
+    # calendar already on screen.
+    {
+      birthday: ->(r) { r.update!(birthday: Date.new(1990, 6, 15)) },
+      vegetarian: ->(r) { r.update!(vegetarian: !r.vegetarian) },
+      can_cook: ->(r) { r.update!(can_cook: !r.can_cook) }
+    }.each do |column, mutation|
+      it "triggers on #{column} change, which a screen shows" do
+        resident = create(:resident, community: community, unit: unit)
+        mutation.call(resident)
+        expect_resident_triggers(2)
+      end
+    end
+
+    # Columns no screen shows must not cause a push on every save: a
+    # password rotation or a token refresh would otherwise make every
+    # open screen refetch.
     it 'does not trigger on password-only change' do
       resident = create(:resident, community: community, unit: unit, password: 'secret123')
       resident.update!(password: 'newsecret456')
       expect_resident_triggers(1)
     end
 
-    it 'does not trigger on birthday-only change' do
-      resident = create(:resident, community: community, unit: unit)
-      resident.update!(birthday: Date.new(1990, 6, 15))
-      expect_resident_triggers(1)
-    end
-
-    it 'does not trigger on vegetarian-only change' do
-      resident = create(:resident, community: community, unit: unit)
-      resident.update!(vegetarian: !resident.vegetarian)
-      expect_resident_triggers(1)
-    end
-
     it 'does not trigger on email-only change' do
       resident = create(:resident, community: community, unit: unit)
       resident.update!(email: 'new@example.com')
-      expect_resident_triggers(1)
-    end
-
-    it 'does not trigger on can_cook-only change' do
-      resident = create(:resident, community: community, unit: unit)
-      resident.update!(can_cook: !resident.can_cook)
       expect_resident_triggers(1)
     end
 

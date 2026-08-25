@@ -18,11 +18,12 @@ export function calendarVolatile() {
 
 export function calendarActions(self) {
   return {
-    // Refetch the month on screen (Pusher update, reconnect). The
-    // month module decides whether to adopt an in-flight prefetch or
-    // fetch, and drops superseded responses; loadMonth renders.
+    // The month on screen can no longer be trusted (a Pusher update, a
+    // reconnect, the day changing): drop its copies and fetch it again.
+    // The month module drops superseded and pre-change responses;
+    // loadMonth renders.
     loadMonthAsync() {
-      monthData.revalidate(self.currentDate, self.loadMonth);
+      monthData.refetch(self.currentDate, self.loadMonth);
     },
     // The modal that changed a date calls this so the affected month
     // is refetched even when it has no Pusher channel (issue #37).
@@ -133,6 +134,10 @@ export function calendarActions(self) {
       window.Comeals.calendarChannel.bind("update", function () {
         self.loadMonthAsync();
       });
+
+      // Names on chips and birthdays come from residents and units,
+      // which have their own channel.
+      self.ensureResidentsChannel();
 
       // Clean up previous adjacent month subscriptions
       self.adjacentChannels.forEach(function (ch) {

@@ -18,4 +18,15 @@ class Current < ActiveSupport::CurrentAttributes
   # ResidentNameShortener — a serializer collection shortens one name
   # per row, and each row must not re-run the pluck.
   attribute :resident_names
+
+  # The Pusher socket id of the browser making this request, from the
+  # socket_id param. LiveUpdate excludes it from the meal-page push, so a
+  # tap never tells its own screen to refetch. Nil outside the API.
+  attribute :socket_id
+
+  # LiveUpdate's pending batches: one per open database transaction,
+  # keyed by the transaction's uuid, and the manual batch opened by
+  # LiveUpdate.batch. See app/services/live_update.rb.
+  attribute :live_update_batches
+  attribute :live_update_manual_batch
 end

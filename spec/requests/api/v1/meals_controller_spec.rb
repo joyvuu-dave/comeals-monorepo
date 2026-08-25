@@ -769,14 +769,20 @@ RSpec.describe 'Meals API' do
       expect(response).to have_http_status(:conflict)
     end
 
+    # The models push after commit (LiveUpdate), and a rolled-back write
+    # drops its pushes with it.
     it 'sends no Pusher event, because nothing changed' do
-      expect_any_instance_of(Meal).not_to receive(:trigger_pusher) # rubocop:disable RSpec/AnyInstance -- asserting the after_action does not fire
+      meal
+      resident
+      RSpec::Mocks.space.proxy_for(Pusher).reset
+      allow(Pusher).to receive(:trigger)
 
       post "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: {
         token: token, late: false, vegetarian: false
       }
 
       expect(response).to have_http_status(:conflict)
+      expect(Pusher).not_to have_received(:trigger)
     end
   end
 

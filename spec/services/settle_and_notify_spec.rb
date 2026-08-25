@@ -54,7 +54,7 @@ RSpec.describe SettleAndNotify do
       expect(ResidentBalance.find_by(resident_id: resident.id).amount).to eq(BigDecimal('0'))
       expect(ReconciliationMailer).to have_received(:reconciliation_notify_email).with(cook, reconciliation).once
       expect(Rails.error).to have_received(:report).with(an_instance_of(Pusher::HTTPError),
-                                                         hash_including(handled: true))
+                                                         hash_including(handled: true)).at_least(:once)
     end
 
     it 'still clears every affected month from the calendar cache' do

@@ -295,33 +295,25 @@ class Settlement
     end
   end
 
-  # A settled meal is frozen, and the calendar shows that through
-  # `reconciled` in the cached calendar months. Nothing else clears those
-  # after a settlement, because the claim is an update_all that fires no
-  # callbacks (issue #70). Runs after the transaction commits, so no reader
-  # can refill a cache from a claim that then rolled back. (The cooks page
-  # is not cached — MealsController#show_cooks — so it needs nothing here.)
+  # A settled meal is frozen: its page says `reconciled` and locks its
+  # forms, and its calendar month is cached. Nothing else tells the
+  # clients, because the claim is an update_all that fires no callbacks
+  # (issue #70). Runs after the transaction commits, so no reader can
+  # refill a cache from a claim that then rolled back. LiveUpdate clears
+  # every month before the first push, and a push that fails is reported,
+  # not raised — the ledger is committed by the time this runs, and a
+  # raise here would make the caller skip the balance refresh and the
+  # cook emails (SettleAndNotify) for a settlement that is in the
+  # database.
   def forget_cached_meals
     ids = @claimed_meal_ids
     return if ids.blank?
 
-    months = Meal.where(id: ids).distinct.pluck(:date).map(&:beginning_of_month).uniq
-    # Clear every month's cache before the first push. A push is a call to
-    # Pusher's HTTP API and can fail; the cache clear is what keeps the
-    # calendar correct, so it must not wait behind a push that may raise.
-    months.each { |month| reconciliation.community.invalidate_calendar_cache(month) }
-    months.each { |month| notify_pusher(month) } # rubocop:disable Style/CombinableLoops -- every clear must run before any push
-  end
-
-  # The ledger is committed by the time this runs. A Pusher outage must not
-  # turn a settlement that happened into a raised error: the caller would
-  # then skip the balance refresh and the cook emails (SettleAndNotify),
-  # the rake task would exit 1, and the API would answer 500 for a
-  # settlement that is in the database. Report it and go on; a client that
-  # missed the push refetches on its next load anyway.
-  def notify_pusher(month)
-    reconciliation.community.notify_pusher(month)
-  rescue Pusher::Error, SocketError, Timeout::Error, SystemCallError => e
-    Rails.error.report(e, handled: true, context: { reconciliation_id: reconciliation.id, month: month })
+    LiveUpdate.batch do
+      Meal.where(id: ids).pluck(:id, :date).each do |id, date|
+        LiveUpdate.meal(id, socket_id: nil)
+        LiveUpdate.calendar(date)
+      end
+    end
   end
 end

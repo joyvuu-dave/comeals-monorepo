@@ -8,12 +8,17 @@ import dayjs from "dayjs";
 
 import { pusherClient, startPusher } from "../helpers/pusher_client";
 import { communityNow } from "../helpers/helpers";
+import * as monthData from "./month_fetch";
 
 export function appVolatile() {
   return {
     // Pending timer for the next community-midnight rollover of
     // communityToday, or null.
     midnightTimer: null,
+    // The one subscription to community-<id>-residents, made the first
+    // time any page that shows residents loads and kept for the life
+    // of the store (the name depends only on community_id).
+    residentsChannel: null,
   };
 }
 
@@ -103,6 +108,35 @@ export function appActions(self) {
     setIsOnline(val) {
       self.isOnline = !!val;
     },
+    // Subscribe to the residents channel once. The server pushes it
+    // when a resident or unit changes in any way a screen shows
+    // (Resident#note_live_update): the hosts dropdown, the meal page's
+    // sign-up list and every calendar month list residents, so all of
+    // them are stale at once.
+    ensureResidentsChannel() {
+      if (self.residentsChannel) return;
+      self.residentsChannel = window.Comeals.pusher.subscribe(
+        `community-${Cookie.get("community_id")}-residents`,
+      );
+      self.residentsChannel.bind("update", function () {
+        self.handleResidentsUpdate();
+      });
+    },
+    // A resident or unit changed. Every cached month and meal may hold
+    // the old name, so all of them go, and whatever is on screen is
+    // fetched again.
+    handleResidentsUpdate() {
+      monthData.invalidateAllMonths();
+      if (self.hostsLoaded) {
+        self.refetchHostsSilently();
+      }
+      if (self.meal && self.meal.id) {
+        self.loadDataAsync();
+      }
+      if (window.Comeals.calendarChannel !== null) {
+        self.loadMonthAsync();
+      }
+    },
     // One recovery path for both wake-up signals: the Pusher reconnect
     // (afterCreate above) and the browser's `online` event (index.jsx).
     // Any gap means the data on screen can no longer be trusted, so
@@ -150,6 +184,13 @@ export function appActions(self) {
       self.midnightTimer = setTimeout(function () {
         self.recomputeCommunityToday();
         self.scheduleMidnightRecompute();
+        // A meal chip's words come from the server and depend on the
+        // day ("signed up" becomes "attending"), and nothing writes at
+        // midnight to push the change — so the calendar fetches the
+        // month again itself.
+        if (window.Comeals.calendarChannel !== null) {
+          self.loadMonthAsync();
+        }
       }, msUntilMidnight);
     },
     // Clears every subsystem's timer — MST allows one beforeDestroy

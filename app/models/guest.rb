@@ -36,6 +36,7 @@ class Guest < ApplicationRecord
   # host's explicit extras. Included after ReconciledMealImmutability so the
   # reconciled check runs first.
   include ClosedMealAttendanceFreeze
+  include NotesMealLiveUpdate
 
   validates :multiplier, numericality: { only_integer: true }
 end

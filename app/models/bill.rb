@@ -44,6 +44,7 @@ class Bill < ApplicationRecord
   # ActiveAdmin's Bill form would otherwise allow a superuser to quietly
   # rewrite a reconciled bill's amount, or move it between meals.
   include ReconciledMealImmutability
+  include NotesMealLiveUpdate
 
   delegate :date, to: :meal
   delegate :unit, to: :resident

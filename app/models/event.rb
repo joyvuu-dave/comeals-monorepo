@@ -37,7 +37,8 @@ class Event < ApplicationRecord
   validate :end_date_or_allday
   validate :start_date_is_before_end_date
 
-  after_commit :trigger_pusher
+  after_destroy :note_live_update
+  after_save :note_live_update
 
   def end_date_or_allday
     return if end_date.present? || allday
@@ -51,21 +52,14 @@ class Event < ApplicationRecord
     errors.add(:base, 'Start time must occur before end time') if end_date < start_date
   end
 
-  # Events appear on the calendar. See CalendarSerializer for the full
-  # cache invalidation contract. Multi-month events and date changes require
-  # invalidating all affected months, not just the current start_date.
-  def trigger_pusher
-    community.trigger_pusher(start_date)
-    if end_date.present?
-      ed = end_date.to_date
-      sd = start_date.to_date
-      community.trigger_pusher(end_date) if ed.month != sd.month || ed.year != sd.year
-    end
+  # Events appear on the calendar: every month from start to end, and,
+  # after a date change, every month of the old range too. See
+  # LiveUpdate.
+  def note_live_update
+    LiveUpdate.calendar_range(start_date, end_date)
+    return unless saved_change_to_start_date? || saved_change_to_end_date?
 
-    # When dates change, also invalidate the old months
-    %w[start_date end_date].each do |attr|
-      old_val = saved_changes.dig(attr, 0)
-      community.trigger_pusher(old_val) if old_val.present?
-    end
+    LiveUpdate.calendar_range(saved_changes.dig('start_date', 0) || start_date,
+                              saved_changes.dig('end_date', 0) || end_date)
   end
 end

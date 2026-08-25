@@ -62,23 +62,10 @@ module Api
         start_date = start_date.to_s
         end_date = end_date.to_s
 
-        community = Community.instance
-        key = community.calendar_cache_key(year, month)
-
-        # The key is per month, and is what a change to a meal, event or
-        # reservation deletes. The version changes when any resident or unit
-        # changes, because those can appear in any month. See
-        # Community#calendar_cache_version.
-        result = Rails.cache.fetch(key, version: community.calendar_cache_version, expires_in: 1.hour) do
-          CalendarSerializer.new(
-            community,
-            params: {
-              month: month, year: year,
-              start_date: start_date, end_date: end_date,
-              month_int_array: month_int_array
-            }
-          ).to_h
-        end
+        result = cached_month(Community.instance,
+                              month: month, year: year,
+                              start_date: start_date, end_date: end_date,
+                              month_int_array: month_int_array)
 
         # stale? digests `result` into an ETag. When the client sends a matching
         # If-None-Match, Rails auto-renders 304 Not Modified with an empty body.
@@ -87,6 +74,20 @@ module Api
         # the pre-ETag behavior. The win is bandwidth: a 304 is ~200 bytes vs.
         # a full calendar JSON payload.
         render json: result if stale?(etag: result, public: false)
+      end
+
+      private
+
+      # The key is per month, and is what a write deletes (LiveUpdate).
+      # The version is read from the rows before they are serialized, so
+      # a write that lands mid-build cannot leave a stale copy that
+      # serves anyone. See Community#calendar_cache_version.
+      def cached_month(community, **serializer_params)
+        key = community.calendar_cache_key(serializer_params[:year], serializer_params[:month])
+        version = community.calendar_cache_version(serializer_params[:start_date], serializer_params[:end_date])
+        Rails.cache.fetch(key, version: version, expires_in: 1.hour) do
+          CalendarSerializer.new(community, params: serializer_params).to_h
+        end
       end
     end
   end

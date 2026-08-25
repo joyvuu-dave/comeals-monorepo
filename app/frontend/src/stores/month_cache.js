@@ -36,6 +36,10 @@ const cache = new Map();
 // and the stale response must be dropped. When a key is evicted its
 // version goes too — with no cached entry there is nothing left to
 // guard, and the next invalidation recreates it at 1.
+//
+// Asking for a key's version registers the key, so clear() can bump
+// every key a fetch has ever captured — a response that started before
+// a clear-everything is dropped whichever month it was for.
 const versions = new Map();
 
 export function keyFor(communityId, year, month) {
@@ -100,5 +104,17 @@ export function bumpVersion(key) {
 }
 
 export function versionFor(key) {
-  return versions.get(key) || 0;
+  if (!versions.has(key)) versions.set(key, 0);
+  return versions.get(key);
+}
+
+// Drop every month: a resident or unit changed, and their names are on
+// chips in any month. In-flight reads and fetches that started before
+// this see a different version on arrival and drop their result.
+export function clear() {
+  cache.clear();
+  fetchedAt.clear();
+  versions.forEach(function (_version, key) {
+    bumpVersion(key);
+  });
 }

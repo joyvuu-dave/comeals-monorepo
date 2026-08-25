@@ -51,8 +51,6 @@ class Meal < ApplicationRecord
   audited
   has_associated_audits
 
-  attr_accessor :socket_id
-
   scope :unreconciled, -> { where(reconciliation_id: nil) }
   # The meals a settlement with this cutoff sweeps: not yet settled, with at
   # least one bill, on or before the cutoff, and from a day that is over.
@@ -120,6 +118,11 @@ class Meal < ApplicationRecord
   # meals that are both reconciled and closed.
   before_destroy :reject_destroy_if_closed, prepend: true
   before_destroy :reject_destroy_if_reconciled, prepend: true
+  # Every write, from any path, tells the clients (LiveUpdate). Bills,
+  # attendance and guests note themselves; `touch: true` on their
+  # belongs_to does not run these callbacks.
+  after_destroy :note_live_update
+  after_save :note_live_update
 
   accepts_nested_attributes_for :guests, allow_destroy: true, reject_if: proc { |attributes|
     attributes['resident_id'].blank?
@@ -150,27 +153,29 @@ class Meal < ApplicationRecord
     self.closed_at = nil if closed == false && closed_was == true
   end
 
-  # Notify connected clients via Pusher, and clear the calendar cache for
-  # this meal's month. Called by MealsController after_action for all write
-  # operations, so it also covers bills, meal_residents, and guests. See
-  # CalendarSerializer for the full cache invalidation contract.
-  #
-  # meal-<id> is only a Pusher channel now. The cooks page is not cached
-  # (MealsController#show_cooks explains why), so there is no entry to
-  # delete here.
-  def trigger_pusher
-    key = "meal-#{id}"
+  # This meal's page and its calendar month are stale. So are the pages
+  # of the meals on either side by date when this meal is new, gone, or
+  # moved: their next_id and prev_id (MealFormSerializer) point past it.
+  # That is how the last meal's "next" arrow wakes up when the nightly
+  # job adds the next rotation.
+  def note_live_update
+    LiveUpdate.meal(id)
+    LiveUpdate.calendar(date)
+    old_date = saved_changes.dig('date', 0)
+    LiveUpdate.calendar(old_date) if old_date
 
-    Pusher.trigger(
-      key,
-      'update',
-      { message: 'meal updated' },
-      { socket_id: socket_id }
-    )
+    return unless destroyed? || previously_new_record? || old_date
 
-    community.trigger_pusher(date)
+    [date, old_date].compact.each { |day| neighbour_ids(day).each { |neighbour| LiveUpdate.meal(neighbour) } }
+  end
 
-    true
+  # The meals just before and just after `day`, other than this one.
+  def neighbour_ids(day)
+    others = Meal.where.not(id: id)
+    [
+      others.where(date: ...day).order(date: :desc, id: :desc).limit(1).pick(:id),
+      others.where(date: (day + 1)..).order(:date, :id).limit(1).pick(:id)
+    ].compact
   end
 
   # DERIVED DATA — all computed from source, no cached columns.

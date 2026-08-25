@@ -1201,9 +1201,11 @@ describe("DataStore", () => {
       window.Comeals.pusher.unsubscribe = vi.fn();
 
       store.loadMonth(calendarData());
-      const subscribed = window.Comeals.pusher.subscribe.mock.calls.map(
-        (call) => call[0],
-      );
+      // The residents channel is not the calendar page's: it stays for
+      // the life of the store (live_updates.test.js).
+      const subscribed = window.Comeals.pusher.subscribe.mock.calls
+        .map((call) => call[0])
+        .filter((name) => !name.endsWith("-residents"));
       expect(window.Comeals.calendarChannel).not.toBeNull();
       // One current-month channel plus two adjacent months
       expect(subscribed.length).toBe(3);

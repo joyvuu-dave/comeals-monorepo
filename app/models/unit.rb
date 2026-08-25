@@ -36,7 +36,8 @@ class Unit < ApplicationRecord
 
   validates :name, uniqueness: true
 
-  after_commit :notify_residents_update
+  after_destroy :note_live_update
+  after_save :note_live_update
 
   # DERIVED DATA
   # Signed: positive means the community owes this unit, negative means the
@@ -51,22 +52,13 @@ class Unit < ApplicationRecord
 
   private
 
-  # Notify connected clients that the community hosts list may have changed.
-  # CommunitiesController#hosts plucks `units.name` for both the dropdown
-  # label ("Unit A - Alice") and the result ordering, so a rename must
-  # invalidate the centralized MobX host cache just like a Resident change.
-  # Resident#notify_residents_update does not cover this: a Unit rename
-  # touches zero Resident rows.
-  def notify_residents_update
+  # A unit's name is part of every resident's display name ("Unit A -
+  # Alice"), in the hosts dropdown, on the meal page and on calendar
+  # chips. A rename touches zero Resident rows, so the unit pushes the
+  # residents channel itself. See LiveUpdate.
+  def note_live_update
     return unless destroyed? || saved_change_to_name?
 
-    Pusher.trigger(
-      "community-#{community_id}-residents",
-      'update',
-      { message: 'unit updated' }
-    )
-  rescue StandardError => e
-    Rails.logger.warn("Pusher.trigger failed in Unit#notify_residents_update: #{e.class}: #{e.message}")
-    nil
+    LiveUpdate.residents
   end
 end

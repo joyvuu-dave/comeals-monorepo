@@ -3,27 +3,34 @@
 # Serializes a community's calendar month for the frontend. Build it with
 # `params: { month:, year:, start_date:, end_date:, month_int_array: }`.
 #
-# CACHING: The calendar response is cached by CommunitiesController#calendar
-# via Rails.cache.fetch. Any model whose data appears in this serializer
-# MUST invalidate the cache when its data changes, or users will see stale
-# calendars. Call community.invalidate_calendar_cache(date) where `date` is
-# a date that falls within the affected calendar month.
+# CACHING: CommunitiesController#calendar caches this month for an hour
+# under a version read from the rows (Community#calendar_cache_version).
+# Two things keep a cached month right, and a model that appears here
+# must be in both:
 #
-# Current invalidation points (if you add a new one, add it to this list):
+#   1. The version. It is the row count and newest updated_at of every
+#      table drawn here, so a write through the model is a miss for the
+#      next reader — even a write that lands while a request is still
+#      building the month. The tables are listed in
+#      Community#calendar_cache_version; a new table here goes there.
+#   2. The push. Clients refetch only when told. Every model here notes
+#      itself in LiveUpdate from its save and destroy callbacks (and
+#      after_remove for rotation membership), which deletes the entry
+#      and pushes the month's channel after commit. A new model here
+#      needs those callbacks; spec/requests/api/v1/live_update_contract_spec.rb
+#      is where its case goes.
 #
-#   Model                      Trigger                         How
-#   -------------------------  ------------------------------  ---------------------------------
-#   Meal                       after_action in controller      Meal#trigger_pusher
-#   Bill                       after_action in controller      (through Meal#trigger_pusher)
-#   MealResident               after_action in controller      (through Meal#trigger_pusher)
-#   Guest                      after_action in controller      (through Meal#trigger_pusher)
-#   Event                      after_commit :trigger_pusher    community.trigger_pusher(start_date)
-#   CommonHouseReservation     after_commit :trigger_pusher    community.trigger_pusher(start_date)
-#   GuestRoomReservation       after_commit :trigger_pusher    community.trigger_pusher(date)
-#   Rotation                   after_commit                    community.invalidate_calendar_cache
-#   Resident, Unit             none needed                     Community#calendar_cache_version
-#                                                              (part of the fetch; any change
-#                                                              to a resident or unit is a miss)
+#   Model                      Version sees it through        Push
+#   -------------------------  -----------------------------  -----------------------------
+#   Meal                       meals.updated_at               Meal#note_live_update
+#   Bill, MealResident, Guest  meals.updated_at (touch: true) NotesMealLiveUpdate
+#   Rotation                   rotations.updated_at           Rotation#note_live_update
+#   Event                      events.updated_at              Event#note_live_update
+#   CommonHouseReservation     its updated_at                 #note_live_update
+#   GuestRoomReservation       its updated_at                 #note_live_update
+#   Resident, Unit             their updated_at               LiveUpdate.residents (the
+#                                                             residents channel; the client
+#                                                             drops every cached month)
 #
 # The deploy script (bin/deploy) also flushes the entire cache on every deploy.
 class CalendarSerializer

@@ -562,6 +562,31 @@ RSpec.describe Community do
       expect(Rails.cache).to have_received(:delete).with(march_key)
     end
 
+    # May 2026 starts on a Friday, so the May calendar starts on Sunday
+    # April 26 and shows April 26-30. A change on April 26 must reach the
+    # May month. The old check asked whether the date's week ended in the
+    # next month, and with Monday-start weeks a Sunday's week ends on
+    # itself — so a Sunday at the end of a month never cleared or pushed
+    # the next month, and the May calendar showed a stale April 26.
+    it 'invalidates the next month when a Sunday falls in its calendar range' do
+      community.trigger_pusher(Date.new(2026, 4, 26))
+
+      may_key = community.calendar_cache_key(2026, 5)
+      expect(Rails.cache).to have_received(:delete).with(may_key)
+      expect(Pusher).to have_received(:trigger).with(may_key, 'update', anything)
+    end
+
+    # A date that no other month shows must clear only its own month.
+    # Over-clearing is only cost, but a spec that checked only inclusion
+    # would pass a "clear everything" version too.
+    it 'does not invalidate a neighbouring month that does not show the date' do
+      community.trigger_pusher(Date.new(2026, 4, 15))
+
+      expect(Rails.cache).to have_received(:delete).with(community.calendar_cache_key(2026, 4))
+      expect(Rails.cache).not_to have_received(:delete).with(community.calendar_cache_key(2026, 3))
+      expect(Rails.cache).not_to have_received(:delete).with(community.calendar_cache_key(2026, 5))
+    end
+
     # Pusher channels and cache keys use the same format, which must match
     # the frontend subscription in data_store.js: "community-{id}-calendar-{year}-{month}".
     # If these ever diverge (e.g., someone adds a version prefix to cache keys),

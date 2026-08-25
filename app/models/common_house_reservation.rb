@@ -40,7 +40,8 @@ class CommonHouseReservation < ApplicationRecord
   validate :period_is_free
   validate :start_date_is_before_end_date
 
-  after_commit :trigger_pusher
+  after_destroy :note_live_update
+  after_save :note_live_update
 
   def period_is_free
     errors.add(:base, 'Time period is already taken') if CommonHouseReservation
@@ -55,18 +56,14 @@ class CommonHouseReservation < ApplicationRecord
     errors.add(:base, 'Start time must occur before end time') if end_date < start_date
   end
 
-  # Reservations appear on the calendar. See CalendarSerializer for the full
-  # cache invalidation contract. Overnight reservations that span a month
-  # boundary require invalidating both the start and end months.
-  def trigger_pusher
-    community.trigger_pusher(start_date)
-    ed = end_date.to_date
-    sd = start_date.to_date
-    community.trigger_pusher(end_date) if ed.month != sd.month || ed.year != sd.year
+  # Reservations appear on the calendar: every month from start to end
+  # (an overnight booking can cross a month), and, after a date change,
+  # the months of the old range too. See LiveUpdate.
+  def note_live_update
+    LiveUpdate.calendar_range(start_date, end_date)
+    return unless saved_change_to_start_date? || saved_change_to_end_date?
 
-    %w[start_date end_date].each do |attr|
-      old_val = saved_changes.dig(attr, 0)
-      community.trigger_pusher(old_val) if old_val.present?
-    end
+    LiveUpdate.calendar_range(saved_changes.dig('start_date', 0) || start_date,
+                              saved_changes.dig('end_date', 0) || end_date)
   end
 end

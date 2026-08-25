@@ -8,6 +8,7 @@ import { stubRandomUUID } from "../mocks/uuid.js";
 stubRandomUUID();
 
 import axios from "axios";
+import { runInAction } from "mobx";
 import { createDataStore } from "../helpers/create_data_store.js";
 
 // The hosts cache (data_store_hosts.js): the adult-residents list the
@@ -113,9 +114,14 @@ describe("hosts cache", () => {
     consoleError.mockRestore();
   });
 
-  it("subscribes the Pusher channel once and refetches on update", async () => {
+  it("subscribes the residents channel once and refetches on update", async () => {
     const bind = vi.fn();
     window.Comeals.pusher.subscribe = vi.fn(() => ({ bind }));
+    // No meal on screen: the residents channel also refetches the meal
+    // page and the calendar when they are up (live_updates.test.js).
+    runInAction(() => {
+      store.meal = null;
+    });
     mockHostsResponse();
     await store.ensureHosts();
 

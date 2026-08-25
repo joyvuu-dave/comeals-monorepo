@@ -110,8 +110,9 @@ class Resident < ApplicationRecord
 
   before_validation :set_email
   before_save { self.email = email.downcase unless email.nil? }
+  after_destroy :note_live_update
   after_save :revoke_all_sessions_if_password_changed
-  after_commit :notify_residents_update
+  after_save :note_live_update
 
   # PASSWORD STUFF
   def authenticate(unencrypted_password)
@@ -262,34 +263,20 @@ class Resident < ApplicationRecord
 
   private
 
-  # Columns that the /api/v1/communities/:id/hosts query depends on. A change
-  # to any of these can alter whether a resident appears in the list or how
-  # they render. The query filters by the `active` and `adult` scopes and plucks
-  # `residents.name` and `units.name` (via `unit_id` join). Keep in sync with
-  # CommunitiesController#hosts.
-  HOSTS_QUERY_COLUMNS = %w[active multiplier name unit_id].freeze
-  private_constant :HOSTS_QUERY_COLUMNS
+  # Columns no screen shows. A change to any other column — name, unit,
+  # active, multiplier, birthday, vegetarian, can_cook, and whatever is
+  # added next — is pushed on the residents channel: the hosts dropdown,
+  # the meal page's sign-up list and every cached calendar month list
+  # residents, so all of them refetch. A list of the shown columns would
+  # go stale the first time a serializer gained one; this list only has
+  # to name what is secret or invisible.
+  UNSHOWN_COLUMNS = %w[email phone password_digest reset_password_token reset_password_sent_at
+                       created_at updated_at].freeze
+  private_constant :UNSHOWN_COLUMNS
 
-  # Notify connected clients that the community hosts list may have changed.
-  # The frontend caches the hosts list in its MobX store for use by the
-  # reservation New/Edit modals; this push lets it refresh the cache in real
-  # time so no modal ever shows stale host data.
-  def notify_residents_update
-    # On create, saved_changes includes every column we set (name/email/unit_id
-    # at minimum), so the column intersection already covers the create path —
-    # no need for a separate previously_new_record? branch. Destroy leaves
-    # saved_changes empty, so gate it explicitly.
-    return unless destroyed? || saved_changes.keys.intersect?(HOSTS_QUERY_COLUMNS)
+  def note_live_update
+    return unless destroyed? || (saved_changes.keys - UNSHOWN_COLUMNS).any?
 
-    Pusher.trigger(
-      "community-#{community_id}-residents",
-      'update',
-      { message: 'residents updated' }
-    )
-  rescue StandardError => e
-    # Never let a Pusher outage break a resident save. Frontend falls back
-    # to silent refetch on reconnect (see DataStore#refetchHostsSilently).
-    Rails.logger.warn("Pusher.trigger failed in notify_residents_update: #{e.class}: #{e.message}")
-    nil
+    LiveUpdate.residents
   end
 end

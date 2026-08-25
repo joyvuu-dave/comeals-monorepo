@@ -313,60 +313,121 @@ class Community < ApplicationRecord
     "community-#{id}-calendar-#{year}-#{month}"
   end
 
-  # Version for every cached calendar month. A resident's name, unit, active
-  # flag, or birthday can show up in any month (cooks on bills, reservations,
-  # birthdays), and solid_cache cannot delete keys by pattern, so a change to
-  # a resident or a unit cannot clear the months one by one. Instead the
-  # controller stores each month with this version (`Rails.cache.fetch(key,
-  # version:)`), and a stored entry with an old version is a miss. The
-  # version is the row count and newest updated_at of residents and units,
-  # so any save or delete through the model changes it. A write that skips
-  # the model (update_all, psql) does not touch updated_at, so it does not
-  # change the version; the one-hour expiry covers that case. One cheap
-  # query per calendar request: the cached path has a query budget
-  # (spec/requests/api/v1/calendar_performance_spec.rb), and two
-  # `cache_version` calls would be one over it. (#77)
-  def calendar_cache_version
-    row = self.class.connection.select_one(<<~SQL.squish)
-      SELECT (SELECT COUNT(*) FROM residents) AS residents_count,
-             (SELECT MAX(updated_at) FROM residents) AS residents_updated_at,
-             (SELECT COUNT(*) FROM units) AS units_count,
-             (SELECT MAX(updated_at) FROM units) AS units_updated_at
-    SQL
+  # The rows-derived part of #calendar_cache_version, one statement.
+  CALENDAR_CACHE_VERSION_SQL = <<~SQL.squish
+    SELECT (SELECT COUNT(*) FROM residents) AS residents_count,
+           (SELECT MAX(updated_at) FROM residents) AS residents_updated_at,
+           (SELECT COUNT(*) FROM units) AS units_count,
+           (SELECT MAX(updated_at) FROM units) AS units_updated_at,
+           (SELECT COUNT(*) FROM meals WHERE date >= :from AND date <= :to) AS meals_count,
+           (SELECT MAX(updated_at) FROM meals WHERE date >= :from AND date <= :to) AS meals_updated_at,
+           (SELECT COUNT(*) FROM rotations
+              WHERE id IN (SELECT rotation_id FROM meals WHERE date >= :from AND date <= :to)) AS rotations_count,
+           (SELECT MAX(updated_at) FROM rotations
+              WHERE id IN (SELECT rotation_id FROM meals WHERE date >= :from AND date <= :to)) AS rotations_updated_at,
+           (SELECT COUNT(*) FROM events
+              WHERE (start_date >= :from AND start_date <= :to)
+                 OR (end_date >= :from AND end_date <= :to)
+                 OR (start_date < :from AND end_date > :to)) AS events_count,
+           (SELECT MAX(updated_at) FROM events
+              WHERE (start_date >= :from AND start_date <= :to)
+                 OR (end_date >= :from AND end_date <= :to)
+                 OR (start_date < :from AND end_date > :to)) AS events_updated_at,
+           (SELECT COUNT(*) FROM common_house_reservations
+              WHERE start_date >= :from AND start_date <= :to) AS common_house_count,
+           (SELECT MAX(updated_at) FROM common_house_reservations
+              WHERE start_date >= :from AND start_date <= :to) AS common_house_updated_at,
+           (SELECT COUNT(*) FROM guest_room_reservations WHERE date >= :from AND date <= :to) AS guest_room_count,
+           (SELECT MAX(updated_at) FROM guest_room_reservations
+              WHERE date >= :from AND date <= :to) AS guest_room_updated_at
+  SQL
+
+  # The version of one cached calendar month: the six weeks from
+  # `start_date` to `end_date`. The controller stores the month with it
+  # (`Rails.cache.fetch(key, version:)`), and a stored entry whose version
+  # differs is a miss.
+  #
+  # The version is read from the rows themselves, before the rows are
+  # serialized: the row count and the newest updated_at of every table
+  # the month is drawn from, plus today's date. That is what makes the
+  # cache safe against a write that lands while a request is building
+  # the month (spec/requests/api/v1/calendar_cache_race_spec.rb). Deleting
+  # the entry on write cannot close that window — the slow request
+  # stores its stale copy after the delete — but a stale copy stored
+  # under the old version is a miss for every later reader, so it serves
+  # no one. Today's date is in the version because a meal chip's words
+  # depend on it ("signed up" becomes "attending" at midnight,
+  # MealSerializer#title) and nothing writes at midnight.
+  #
+  # The tables, and why each is here:
+  #
+  #   residents, units           every row: a name, unit, active flag or
+  #                              birthday can appear in any month
+  #   meals                      in the window. bills, meal_residents and
+  #                              guests belong to a meal with `touch:
+  #                              true`, so any write to them moves the
+  #                              meal's updated_at
+  #   rotations                  of the meals in the window (color, number)
+  #   events                     overlapping the window
+  #   common_house_reservations  starting in the window
+  #   guest_room_reservations    in the window
+  #
+  # A write that skips the model and its timestamps (update_all, psql)
+  # does not change the version. Those paths note themselves in
+  # LiveUpdate, which deletes the entry, and the one-hour expiry is the
+  # last resort. One query per calendar request: the cached path has a
+  # query budget (spec/requests/api/v1/calendar_performance_spec.rb).
+  def calendar_cache_version(start_date, end_date)
+    from = Time.zone.parse(start_date.to_s).beginning_of_day
+    to = Time.zone.parse(end_date.to_s).end_of_day
+    sql = self.class.sanitize_sql_array([CALENDAR_CACHE_VERSION_SQL, { from: from, to: to }])
+    row = self.class.connection.select_one(sql)
     # The timestamps come back as Time objects. Format them to the
     # microsecond, because Time#to_s stops at whole seconds and two saves in
     # the same second would then share a version.
-    row.values_at('residents_count', 'residents_updated_at', 'units_count', 'units_updated_at')
-       .map { |value| value.respond_to?(:strftime) ? value.strftime('%Y%m%d%H%M%S%6N') : value }
-       .join('-')
+    values = row.values.map { |value| value.respond_to?(:strftime) ? value.strftime('%Y%m%d%H%M%S%6N') : value }
+    [today.to_s, *values].join('-')
   end
 
-  # Invalidate calendar cache entries that may include meals on this date.
-  # Must be called synchronously (before the response) so the next request
-  # doesn't get stale data. See CalendarSerializer for the full list of models
-  # that must call this when their data changes.
+  # Delete the cached months that show `date`. LiveUpdate calls this
+  # before it pushes; the version above is what makes the delete safe,
+  # and this delete is what covers writes the version cannot see.
   def invalidate_calendar_cache(date)
     affected_calendar_keys(date).each { |key| Rails.cache.delete(key) }
   end
 
-  # Send Pusher notifications for calendar channels affected by this date.
-  # Fire-and-forget — safe to call asynchronously.
+  # Push every calendar channel that shows `date`. LiveUpdate calls this
+  # after the caches are cleared.
   def notify_pusher(date)
     affected_calendar_keys(date).each do |key|
       Pusher.trigger(key, 'update', { message: 'calendar updated' })
     end
   end
 
-  # Invalidate calendar cache and send Pusher notifications for the
-  # affected month(s). Called by Meal#trigger_pusher and by calendar-visible
-  # models (Event, CommonHouseReservation, GuestRoomReservation) via
-  # after_commit. See CalendarSerializer for the full invalidation contract,
-  # and app/frontend/src/helpers/pusher_client.js for what the client does
-  # with the message (it refetches; the message carries no data).
+  # A day on the calendar changed. Clears the months that show it and
+  # pushes their channels — at once when no transaction is open, or once
+  # after commit when one is. Model callbacks call LiveUpdate directly;
+  # this is for code that holds a date and a community.
   def trigger_pusher(date)
-    invalidate_calendar_cache(date)
-    notify_pusher(date)
+    LiveUpdate.calendar(date)
     true
+  end
+
+  # The cache keys (and Pusher channels) of every month whose calendar
+  # shows `date`. A month's calendar is six weeks starting on the Sunday
+  # on or before the 1st (CommunitiesController#calendar), so a day can be
+  # on its own month's calendar and on the one before or after it. Each
+  # candidate month is tested with that same window. The old test asked
+  # whether the date's week ended in the next month, with Monday-start
+  # weeks, and so missed a Sunday that opens the next month's calendar
+  # (April 26, 2026 is on May's) — spec/models/community_spec.rb.
+  def affected_calendar_keys(date)
+    date = date.to_date
+    [-1, 0, 1].filter_map do |offset|
+      month = date.beginning_of_month >> offset
+      window_start = month.beginning_of_week(:sunday)
+      calendar_cache_key(month.year, month.month) if (window_start..(window_start + 41)).cover?(date)
+    end
   end
 
   private
@@ -414,27 +475,5 @@ class Community < ApplicationRecord
       return
     end
     errors.add(:schedule, 'must include at least one meal day') if schedule.flatten.empty?
-  end
-
-  # The set of calendar keys affected when a meal on `date` changes.
-  # A calendar view shows ~42 days (6 weeks), so a meal near a month boundary
-  # can appear in the current, next, or previous month's calendar.
-  def affected_calendar_keys(date)
-    keys = []
-
-    # Current month
-    keys << calendar_cache_key(date.year, date.month)
-
-    # Next month — if the date's week spills into the following month
-    keys << calendar_cache_key(date.end_of_week.year, date.end_of_week.month) if date.end_of_week.month != date.month
-
-    # Previous month — if the date falls within the previous month's 42-day window
-    range_start = (date.beginning_of_month - 1.day).beginning_of_month.beginning_of_week(:sunday)
-    if date.between?(range_start, range_start + 41.days)
-      prev_month = date.beginning_of_month - 1.day
-      keys << calendar_cache_key(prev_month.year, prev_month.month)
-    end
-
-    keys
   end
 end

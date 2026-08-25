@@ -106,7 +106,7 @@ RSpec.describe Unit do
   # ---------------------------------------------------------------------------
   # Real-time notifications
   # ---------------------------------------------------------------------------
-  describe 'after_commit :notify_residents_update' do
+  describe 'the residents channel (note_live_update)' do
     # CommunitiesController#hosts plucks `units.name` for both the dropdown
     # label and the ordering, so a Unit rename must invalidate the frontend
     # host cache. Resident callbacks do not cover this — a rename touches
@@ -118,7 +118,7 @@ RSpec.describe Unit do
     it 'triggers on create' do
       create(:unit, community: community)
       expect(Pusher).to have_received(:trigger).with(
-        expected_channel, 'update', hash_including(message: 'unit updated')
+        expected_channel, 'update', hash_including(message: 'residents updated')
       ).at_least(:once)
     end
 

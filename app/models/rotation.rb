@@ -39,7 +39,10 @@ class Rotation < ApplicationRecord
   # has no rotation — so a plain nullify quietly broke the nightly task.
   # The guards below only let the cascade run when every meal is untouched,
   # so it can never delete a meal that carries any ledger data.
-  has_many :meals, dependent: :destroy
+  # after_remove: the admin form assigns meals with meal_ids=, and the
+  # meals it drops are detached with update_all — no Meal callback runs
+  # for them, so the rotation notes their months itself.
+  has_many :meals, dependent: :destroy, after_remove: :note_meal_removed
   has_many :bills, through: :meals
   has_many :cooks, -> { distinct }, through: :bills, source: :resident
 
@@ -60,8 +63,8 @@ class Rotation < ApplicationRecord
   before_destroy :reject_destroy_if_any_meal_touched, prepend: true
   after_save :set_description
   after_save :set_start_date
+  after_save :note_live_update
   after_commit :set_place_value, on: %i[create destroy]
-  after_commit :invalidate_calendar_cache
   after_commit :recolor_remaining_rotations, on: :destroy
   after_create_commit :suppress_notification_if_no_email
   validates :color, presence: true
@@ -122,22 +125,35 @@ class Rotation < ApplicationRecord
 
   delegate :count, to: :meals, prefix: true
 
+  # Renumbers every rotation. The number is the calendar chip's title
+  # ("Rotation 5", RotationSerializer), so a rotation whose number
+  # changed is a calendar change: its updated_at moves, which changes the
+  # months' cache version, and its meals' months are pushed. Rotations
+  # whose number did not change are left alone.
   def set_place_value
-    Rotation.order(:start_date, :id)
-            .pluck(:id)
-            .each_with_index do |rot_id, index|
-      Rotation.where(id: rot_id).update_all(place_value: index + 1)
+    renumbered = []
+    Rotation.order(:start_date, :id).pluck(:id, :place_value).each_with_index do |(rot_id, place_value), index|
+      next if place_value == index + 1
+
+      Rotation.where(id: rot_id).update_all(place_value: index + 1, updated_at: Time.current)
+      renumbered << rot_id
+    end
+    return if renumbered.empty?
+
+    LiveUpdate.batch do
+      Meal.where(rotation_id: renumbered).distinct.pluck(:date).each { |date| LiveUpdate.calendar(date) }
     end
   end
 
-  def invalidate_calendar_cache
-    # Rotations appear as colored bars on the calendar.
-    # See CalendarSerializer for the full cache invalidation contract.
-    # Uses a direct DB query (not `meals` association) to avoid eagerly
-    # loading and tainting the association proxy.
-    Meal.where(rotation_id: id).distinct.pluck(:date).each do |date|
-      community.invalidate_calendar_cache(date)
-    end
+  # Rotations appear as colored bars on the calendar, one per meal date.
+  # A direct query, not the `meals` association, so the association proxy
+  # is not loaded here. See LiveUpdate.
+  def note_live_update
+    Meal.where(rotation_id: id).distinct.pluck(:date).each { |date| LiveUpdate.calendar(date) }
+  end
+
+  def note_meal_removed(meal)
+    LiveUpdate.calendar(meal.date)
   end
 
   # Mark auto-created rotations as already notified so the
@@ -195,6 +211,6 @@ class Rotation < ApplicationRecord
     dates = @meal_dates_before_destroy || []
     dates |= Meal.where(rotation_id: changed_ids).distinct.pluck(:date) if changed_ids.any?
 
-    dates.each { |date| community.trigger_pusher(date) }
+    LiveUpdate.batch { dates.each { |date| LiveUpdate.calendar(date) } }
   end
 end
