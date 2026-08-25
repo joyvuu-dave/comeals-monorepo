@@ -47,10 +47,10 @@ ranges against a zoned window) and dates to dates.
 DST-switch specs: `community_dinner_start_times_spec`,
 `meal_schedule_spec`, and the new admin spec.
 
-Proposed fix: an `around_action` in `ApplicationController` that wraps
-every request in the community's zone (`Time.use_zone`), tolerant of
-the bootstrap state with no community row. One place, both directions
-(parse and show).
+Fixed the same day: `ApplicationController#use_community_timezone`, an
+`around_action` that wraps every request in the community's zone and
+yields plainly before the first community row exists. One place, both
+directions (parse and show). The spec stays as a regression test.
 
 ## 2026-08-26 (cache)
 

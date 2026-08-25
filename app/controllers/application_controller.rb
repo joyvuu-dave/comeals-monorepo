@@ -8,12 +8,26 @@ class ApplicationController < ActionController::Base
   # never has to guess. Setting it to the boolean (not the token) keeps the
   # secret out of anything that dumps Current.
   before_action :expose_read_only_admin_token
+  # Every wall-clock time is read in the community's zone (CLAUDE.md). The
+  # API has its own wrapper (ApiController#set_community_timezone); this
+  # one covers admin, where a typed time is parsed and a stored time is
+  # shown in Time.zone. Without it both used the app's fixed zone
+  # (time hunt, 2026-08-26). Before the first Community row exists there
+  # is no zone to use, and the app zone is the only one there is.
+  around_action :use_community_timezone
 
   # GET /admin-logout (admin)
   def admin_logout
     cookies.delete(:remember_admin_user_token)
     reset_session
     redirect_to '/'
+  end
+
+  def use_community_timezone(&)
+    zone = ActiveSupport::TimeZone[Community.first&.timezone.to_s]
+    return yield if zone.nil?
+
+    Time.use_zone(zone, &)
   end
 
   def access_denied(_exception)
