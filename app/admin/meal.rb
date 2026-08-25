@@ -37,6 +37,19 @@ ActiveAdmin.register Meal do
     # On a refused delete (closed meal), show the model's own error instead
     # of the generic "could not be destroyed" flash. Reconciled meals never
     # reach this — block_if_reconciled redirects first.
+    # A nested guest refused by the closed-meal freeze (ClosedMealAttendanceFreeze)
+    # fails in two different ways. An add is a validation error on the
+    # guest, which Rails copies onto meal.errors[:guests] and the form shows
+    # (see semantic_errors below). A remove is a before_destroy abort, which
+    # Rails raises as RecordNotDestroyed out of the nested save. Catch it
+    # and show the same sentence, instead of a 500 page.
+    def update
+      update!
+    rescue ActiveRecord::RecordNotDestroyed => e
+      resource.errors.add(:guests, e.record.errors.full_messages.to_sentence)
+      render :edit
+    end
+
     def destroy
       destroy! do |_success, failure|
         failure.html do
@@ -165,6 +178,8 @@ ActiveAdmin.register Meal do
     end
 
     f.actions
-    f.semantic_errors
+    # Every attribute, not only :base: a refused nested guest puts its
+    # sentence on :guests, and with no arguments this would show nothing.
+    f.semantic_errors(*f.object.errors.attribute_names)
   end
 end

@@ -149,7 +149,7 @@ class Meal < ApplicationRecord
   end
 
   def conditionally_set_closed_at
-    self.closed_at = DateTime.now if closed == true && closed_was == false
+    self.closed_at = Time.current if closed == true && closed_was == false
     self.closed_at = nil if closed == false && closed_was == true
   end
 
