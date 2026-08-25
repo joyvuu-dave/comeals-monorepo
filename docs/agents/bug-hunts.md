@@ -5,6 +5,36 @@ One entry per run of the `bug-hunt` skill
 and what they found, including "found nothing". The next run reads this
 to pick the hunt that has waited longest.
 
+## 2026-08-26 (dead column)
+
+Hunt run: dead column, all the way through. Every column in
+`db/structure.sql` counted against non-comment mentions in `app/`,
+`lib/`, `config/` and `db/seeds.rb` (the schema annotations in models,
+factories and specs were excluded, since they mention every column).
+Columns with two or fewer mentions, each with a verdict:
+
+- `admin_users.current_sign_in_ip`, `last_sign_in_ip`, `last_sign_in_at`,
+  `remember_created_at`, `encrypted_password`: read and written by
+  Devise (`:trackable`, `:rememberable`, `:database_authenticatable` are
+  all enabled). Right.
+- `keys.identity_id`, `identity_type`: read through
+  `belongs_to :identity, polymorphic: true`. Right. Nothing in `app/` or
+  `lib/` creates a `keys` row any more (only a factory does); the table
+  is read only by the legacy session path, which #42 and #67 already
+  cover.
+- `mail_deliveries.about_id`, `about_type`, `sent_at`: the polymorphic
+  `about` and the record's own stamp. Right.
+- `communities.singleton_guard`: read by the unique index, which is its
+  whole job. Right.
+- `residents.keys_valid_since`: read by `JwtAuth`. Right.
+
+No column is unread, and none of the rarely read ones has a writer that
+could be wrong. The rotation columns this hunt would have flagged
+(`start_date`, `description`) were dropped by the invariant hunt on
+2026-08-25.
+
+Found nothing.
+
 ## 2026-08-26 (time)
 
 Hunt run: time, all the way through. Every place a date becomes an
