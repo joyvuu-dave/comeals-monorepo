@@ -57,12 +57,7 @@ COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
 
 CREATE FUNCTION public.comeals_protect_job_run() RETURNS trigger
     LANGUAGE plpgsql
-    AS $$
-BEGIN
-  RAISE EXCEPTION '% on job_runs refused: a job run is a record of what happened, so it is never edited or deleted',
-    TG_OP;
-END;
-$$;
+    AS $$ BEGIN RAISE EXCEPTION '% on job_runs refused: a job run is a record of what happened, so it is never edited or deleted', TG_OP; END; $$;
 
 
 --
@@ -3055,6 +3050,7 @@ ALTER TABLE ONLY public.bills
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260825150000'),
 ('20260825140000'),
 ('20260825120000'),
 ('20260825110000'),
