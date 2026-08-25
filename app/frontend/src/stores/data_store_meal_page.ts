@@ -2,7 +2,13 @@
 // server), the retry backoff for a failed first load, the menu
 // description plumbing, open/close, and the page teardown. One of the
 // DataStore's subsystem files — see data_store.js, which composes them.
-import { isAlive } from "mobx-state-tree";
+import {
+  isAlive,
+  IMSTArray,
+  IMSTMap,
+  Instance,
+  SnapshotIn,
+} from "mobx-state-tree";
 import { newId } from "../helpers/new_id";
 import { get as kvGet, set as kvSet, del as kvDel } from "idb-keyval";
 
@@ -11,6 +17,52 @@ import { toCommunityDayjs } from "../helpers/helpers";
 import { toDisplayAmountString } from "../helpers/money";
 import handleAxiosError from "../helpers/handle_axios_error";
 import createVersionGuard from "../helpers/version_guard";
+import { MealForm } from "../types/api";
+import Bill from "./bill";
+import Guest from "./guest";
+import Meal from "./meal";
+import Resident from "./resident";
+
+type MealNode = Instance<typeof Meal>;
+
+// What this file reads and writes on the DataStore it is composed into
+// (data_store.js, still JavaScript): its own volatile fields, the meal on
+// screen and its rows, the loading flags, two actions from other
+// subsystems, and the actions it defines and calls on itself.
+export interface MealPageStore extends ReturnType<typeof mealPageVolatile> {
+  // A reference: read as the node, written with the node's id.
+  get meal(): MealNode | null;
+  set meal(value: MealNode | number | null);
+  meals: IMSTArray<typeof Meal>;
+  residents: IMSTMap<typeof Resident>;
+  guests: IMSTMap<typeof Guest>;
+  bills: IMSTMap<typeof Bill>;
+  mealLoading: boolean;
+  mealLoadFailed: boolean;
+  mealLoadNotFound: boolean;
+  closedPending: boolean;
+  flushPendingBillsSave(): void;
+  ensureResidentsChannel(): void;
+  settleClosed(): void;
+  loadDataAsync(): void;
+  handleMealLoadError(error: unknown, mealId: number): void;
+  scheduleMealRetry(mealId: number): void;
+  onMealRetryTimer(mealId: number): void;
+  cancelMealRetry(): void;
+  preLoadData(): void;
+  loadData(data: MealForm): void;
+  clearResidents(): void;
+  clearBills(): void;
+  clearGuests(): void;
+  addMeal(snapshot: SnapshotIn<typeof Meal>): void;
+  switchMeals(id: number): void;
+}
+
+// The HTTP status a failed request answered with, if it answered at all.
+// Read by shape: the object the client rejects with is what carries it.
+function statusIn(error: unknown): number | undefined {
+  return (error as { response?: { status?: number } } | null)?.response?.status;
+}
 
 // Backoff for retrying a failed FIRST load of a meal: 2s, 4s, 8s,
 // 16s, then every 30s — forever. A shared screen must heal without a
@@ -21,10 +73,10 @@ const MEAL_RETRY_CAP_MS = 30000;
 export function mealPageVolatile() {
   return {
     // Pending timer for the next automatic meal-load retry, or null.
-    mealRetryTimer: null,
+    mealRetryTimer: null as ReturnType<typeof setTimeout> | null,
     // The wait used for the last scheduled retry, or null when the
     // backoff is at its starting point.
-    mealRetryDelayMs: null,
+    mealRetryDelayMs: null as number | null,
     // Stale-response guard for meal fetches. Two fetches of the same
     // meal can be on the wire at once (a Pusher update during a
     // reconnect refetch), and the responses can land in either order;
@@ -33,7 +85,7 @@ export function mealPageVolatile() {
   };
 }
 
-export function mealPageActions(self) {
+export function mealPageActions(self: MealPageStore) {
   return {
     // The description save pipeline lives on the meal node (issue #35),
     // so unsaved text stays protected even after the user navigates to
@@ -41,14 +93,14 @@ export function mealPageActions(self) {
     // rendered: a debounced flush that fires after a meal switch must
     // land on the meal the text was typed on — landing on store.meal
     // silently replaced the NEW meal's menu.
-    setDescriptionOn(node, val) {
+    setDescriptionOn(node: MealNode | null, val: string) {
       if (!node || !isAlive(node)) return;
       node.setDescription(val);
     },
     // Called on every keystroke, before any flush: a dirty node
     // survives the switchMeals prune, so its text still has a live
     // node to land on.
-    noteMenuTyping(node) {
+    noteMenuTyping(node: MealNode | null) {
       if (!node || !isAlive(node)) return;
       node.markDescriptionEditing();
     },
@@ -82,16 +134,18 @@ export function mealPageActions(self) {
         return;
       }
 
-      const val = !self.meal.closed;
-      self.meal.closed = val;
+      const meal = self.meal;
+      if (!meal) return;
+      const val = !meal.closed;
+      meal.closed = val;
       self.closedPending = true;
 
       api.meals
-        .updateClosed(self.meal.id, {
+        .updateClosed(meal.id, {
           closed: val,
           socketId: window.Comeals.socketId,
         })
-        .catch(function (error) {
+        .catch(function (error: unknown) {
           handleAxiosError(error);
         })
         .then(function () {
@@ -128,12 +182,12 @@ export function mealPageActions(self) {
           // failures — a bug while processing a good response must
           // not loop retries forever. The state change comes first:
           // the console logging must not be able to break it.
-          function (error) {
+          function (error: unknown) {
             self.handleMealLoadError(error, mealIdAtFetch);
             handleAxiosError(error, { silent: true });
           },
         )
-        .catch(function (error) {
+        .catch(function (error: unknown) {
           // A processing failure keeps its old silent behavior.
           handleAxiosError(error, { silent: true });
         });
@@ -143,10 +197,10 @@ export function mealPageActions(self) {
     // on screen, and background refetch failures already heal through
     // the reconnect and online handlers. A 404 means the meal does
     // not exist — no retry can fix that.
-    handleMealLoadError(error, mealId) {
+    handleMealLoadError(error: unknown, mealId: number) {
       if (!self.meal || self.meal.id !== mealId) return;
       if (!self.mealLoading) return;
-      const status = error && error.response && error.response.status;
+      const status = statusIn(error);
       if (status === 404) {
         self.cancelMealRetry();
         self.mealLoadNotFound = true;
@@ -155,7 +209,7 @@ export function mealPageActions(self) {
       self.mealLoadFailed = true;
       self.scheduleMealRetry(mealId);
     },
-    scheduleMealRetry(mealId) {
+    scheduleMealRetry(mealId: number) {
       if (self.mealRetryTimer !== null) {
         clearTimeout(self.mealRetryTimer);
       }
@@ -167,7 +221,7 @@ export function mealPageActions(self) {
         self.onMealRetryTimer(mealId);
       }, self.mealRetryDelayMs);
     },
-    onMealRetryTimer(mealId) {
+    onMealRetryTimer(mealId: number) {
       self.mealRetryTimer = null;
       // The screen may have moved on while the timer waited.
       if (!self.meal || self.meal.id !== mealId) return;
@@ -202,39 +256,43 @@ export function mealPageActions(self) {
       self.clearResidents();
       self.clearGuests();
     },
-    loadData(data) {
+    loadData(data: MealForm) {
       self.preLoadData();
+      const meal = self.meal;
+      if (!meal) return;
 
       // Assign Meal Data — construct a "fake local" Date whose year/month/day
       // components come from the community's timezone so that dayjs(meal.date)
       // always reflects the community day, consistent with getCommunityNow()
       // in calendar/show.jsx.
-      var d = toCommunityDayjs(data.date);
-      self.meal.date = new Date(d.year(), d.month(), d.date());
+      const d = toCommunityDayjs(data.date);
+      meal.date = new Date(d.year(), d.month(), d.date());
       // While the menu has unsaved typing, a reload must not overwrite it
       // (issue #35): your text wins on your own screen until it saves.
       // After it saves, last-write-wins as usual.
-      if (!self.meal.descriptionDirty) {
-        self.meal.description = data.description;
+      if (!meal.descriptionDirty) {
+        meal.description = data.description;
       }
-      self.meal.closed = data.closed;
-      self.meal.closed_at = data.closed_at ? new Date(data.closed_at) : null;
-      self.meal.reconciled = data.reconciled;
-      self.meal.nextId = data.next_id;
-      self.meal.prevId = data.prev_id;
+      meal.closed = data.closed;
+      meal.closed_at = data.closed_at ? new Date(data.closed_at) : null;
+      meal.reconciled = data.reconciled;
+      meal.nextId = data.next_id;
+      meal.prevId = data.prev_id;
 
       if (data.max === null) {
-        self.meal.extras = null;
+        meal.extras = null;
       } else {
         const residentsCount = data.residents.filter(
           (resident) => resident.attending,
         ).length;
 
         const guestsCount = data.guests.length;
-        self.meal.extras = data.max - (residentsCount + guestsCount);
+        meal.extras = data.max - (residentsCount + guestsCount);
       }
 
-      let residents = data.residents.sort((a, b) => {
+      // Copies, not the wire rows: the payload may be the IndexedDB
+      // copy, which must stay as the server sent it.
+      const residents = [...data.residents].sort((a, b) => {
         if (a.name < b.name) return -1;
         if (a.name > b.name) return 1;
         return 0;
@@ -242,54 +300,37 @@ export function mealPageActions(self) {
 
       // Assign Residents
       residents.forEach((resident) => {
-        if (resident.attending_at !== null) {
-          resident.attending_at = new Date(resident.attending_at);
-        }
-        self.residents.put(resident);
+        self.residents.put({
+          ...resident,
+          attending_at:
+            resident.attending_at === null
+              ? null
+              : new Date(resident.attending_at),
+        });
       });
 
       // Assign Guests
       data.guests.forEach((guest) => {
-        guest.created_at = new Date(guest.created_at);
-        self.guests.put(guest);
+        self.guests.put({ ...guest, created_at: new Date(guest.created_at) });
       });
 
-      // Assign Bills
-      let bills = data.bills;
-
-      // Rename resident_id --> resident (copy to avoid mutating cached data)
-      bills = bills.map((bill) => {
-        var obj = Object.assign({}, bill);
-        obj["resident"] = obj["resident_id"];
-        delete obj["resident_id"];
-        return obj;
-      });
-
-      // Zero displays as blank ("not filled in yet"); any other amount
-      // keeps its exact wire value, zero-padded to two decimals by string
-      // edits. Never reformat money through a float — a rounded display
-      // value must not exist at all, so it can never reach the ledger.
-      bills = bills.map((bill) =>
-        Object.assign({}, bill, {
-          amount: toDisplayAmountString(bill["amount"]),
-        }),
-      );
-
-      // Determine # of blank bills needed
+      // Assign Bills. The wire's resident_id becomes the `resident`
+      // reference. Zero displays as blank ("not filled in yet"); any other
+      // amount keeps its exact wire value, zero-padded to two decimals by
+      // string edits. Never reformat money through a float — a rounded
+      // display value must not exist at all, so it can never reach the
+      // ledger. Three rows are always shown, so blanks fill the rest.
+      // (types.identifier requires string ids.)
+      const bills: SnapshotIn<typeof Bill>[] = data.bills.map((bill) => ({
+        id: String(newId()),
+        resident: bill.resident_id,
+        amount: toDisplayAmountString(bill.amount),
+        no_cost: bill.no_cost,
+      }));
       const extra = Math.max(3 - bills.length, 0);
-
-      // Create array for iterating
-      const array = Array(extra).fill();
-
-      // Create blanks bills
-      array.forEach(() => bills.push({}));
-
-      // Assign ids to bills (types.identifier requires strings)
-      bills = bills.map((obj) => {
-        var bill = Object.assign({ id: newId() }, obj);
-        bill.id = String(bill.id);
-        return bill;
-      });
+      for (let i = 0; i < extra; i += 1) {
+        bills.push({ id: String(newId()) });
+      }
 
       // Put bills into the map, skipping any with dangling resident references
       bills.forEach((bill) => {
@@ -318,7 +359,7 @@ export function mealPageActions(self) {
 
       // Subscribe to changes of this meal
       window.Comeals.mealChannel = window.Comeals.pusher.subscribe(
-        `meal-${self.meal.id}`,
+        `meal-${meal.id}`,
       );
       window.Comeals.mealChannel.bind("update", function () {
         self.loadDataAsync();
@@ -336,23 +377,23 @@ export function mealPageActions(self) {
     clearGuests() {
       self.guests.clear();
     },
-    appendGuest(obj) {
+    appendGuest(obj: SnapshotIn<typeof Guest>) {
       self.guests.put(obj);
     },
-    removeGuest(id) {
+    removeGuest(id: number | string) {
       self.guests.delete(id.toString());
     },
-    addMeal(obj) {
+    addMeal(obj: SnapshotIn<typeof Meal>) {
       self.meals.push(obj);
     },
-    switchMeals(id) {
+    switchMeals(id: number) {
       // A bill edit still sitting in the debounce window belongs to the
       // meal we are leaving. Send it now, while the meal id and the bill
       // rows it was typed on are still current.
       self.flushPendingBillsSave();
 
       if (typeof self.meals.find((item) => item.id === id) === "undefined") {
-        self.addMeal({ id: Number.parseInt(id, 10) });
+        self.addMeal({ id });
       }
 
       self.meal = id;
@@ -364,7 +405,7 @@ export function mealPageActions(self) {
       // text on the node until a save lands, and the retry loop reads
       // these nodes.
       self.meals
-        .filter((m) => m.id !== self.meal.id && !m.descriptionDirty)
+        .filter((m) => m.id !== id && !m.descriptionDirty)
         .forEach((m) => self.meals.remove(m));
 
       // The rows belong to the meal we are leaving, so they leave with
@@ -393,11 +434,11 @@ export function mealPageActions(self) {
           if (value === null || typeof value === "undefined") {
             self.loadDataAsync();
           } else {
-            self.loadData(value);
+            self.loadData(value as MealForm);
             self.loadDataAsync();
           }
         })
-        .catch(function (error) {
+        .catch(function (error: unknown) {
           console.error(
             "Failed to load cached meal data, fetching from server:",
             error,
@@ -406,9 +447,9 @@ export function mealPageActions(self) {
           self.loadDataAsync();
         });
     },
-    goToMeal(mealId) {
+    goToMeal(mealId: number | string) {
       self.mealLoading = true;
-      self.switchMeals(Number.parseInt(mealId, 10));
+      self.switchMeals(Number.parseInt(String(mealId), 10));
     },
     // The calendar page calls this on mount (issue #38). Without it the
     // last meal's channel stayed live forever: every edit to that meal

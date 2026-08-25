@@ -1,4 +1,5 @@
-import { types, getRoot } from "mobx-state-tree";
+import { types, getRoot, Instance } from "mobx-state-tree";
+
 import Resident from "./resident";
 import {
   isValidAmountString,
@@ -6,12 +7,26 @@ import {
   toDisplayAmountString,
 } from "../helpers/money";
 
+// What a bill reads from the DataStore at the root of its tree. The store
+// itself is still JavaScript (data_store.js), so this is the typed slice
+// of it a bill depends on, and nothing more.
+interface BillRoot {
+  meal: { closed: boolean; reconciled: boolean } | null;
+  saveBills(): void;
+}
+
+// A cook picked from the sign-up list: a Resident node, or "" for the
+// blank option.
+type ResidentChoice = "" | Instance<typeof Resident>;
+
 const Bill = types
   .model("Bill", {
     id: types.identifier,
     resident: types.maybeNull(types.reference(Resident)),
-    amount: "",
-    no_cost: false,
+    // The wire value, a string ("12.34"): never a number, so nothing here
+    // can add to it (ADR 0001). The helpers in ../helpers/money read it.
+    amount: types.optional(types.string, ""),
+    no_cost: types.optional(types.boolean, false),
   })
   // `touched` is volatile on purpose: it is per-session UI state, not data.
   // submitBills only sends amount/no_cost for touched rows, so a row the
@@ -20,10 +35,18 @@ const Bill = types
   .volatile(() => ({
     touched: false,
   }))
+  // Two views blocks: MobX-State-Tree types `self` inside a block without
+  // the views that block defines, so a view another view reads goes first.
   .views((self) => ({
-    get resident_id() {
+    get resident_id(): number | "" {
       return self.resident && self.resident.id ? self.resident.id : "";
     },
+    // The DataStore at the root of the tree.
+    get root(): BillRoot {
+      return getRoot<BillRoot>(self);
+    },
+  }))
+  .views((self) => ({
     get amountIsValid() {
       return isValidAmountString(self.amount);
     },
@@ -42,13 +65,9 @@ const Bill = types
         isZeroAmountString(self.amount)
       );
     },
-    // The DataStore at the root of the tree.
-    get root() {
-      return getRoot(self);
-    },
   }))
   .actions((self) => ({
-    setResident(val) {
+    setResident(val: ResidentChoice) {
       self.touched = true;
       if (val === "") {
         self.resident = null;
@@ -62,7 +81,7 @@ const Bill = types
     },
     // A keystroke that breaks the whole-cents grammar does not land: the
     // amount keeps its previous value and nothing is saved.
-    setAmount(val) {
+    setAmount(val: string) {
       if (!isValidAmountString(val)) {
         return self.amount;
       }

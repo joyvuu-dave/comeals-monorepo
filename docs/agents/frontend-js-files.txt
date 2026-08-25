@@ -56,15 +56,11 @@ app/frontend/src/helpers/use_mounted_ref.js
 app/frontend/src/helpers/version_guard.js
 app/frontend/src/index.jsx
 app/frontend/src/routes.js
-app/frontend/src/stores/bill.js
 app/frontend/src/stores/data_store.js
 app/frontend/src/stores/data_store_app.js
-app/frontend/src/stores/data_store_bills.js
 app/frontend/src/stores/data_store_calendar.js
 app/frontend/src/stores/data_store_hosts.js
-app/frontend/src/stores/data_store_meal_page.js
 app/frontend/src/stores/guest.js
-app/frontend/src/stores/meal.js
 app/frontend/src/stores/month_cache.js
 app/frontend/src/stores/month_fetch.js
 app/frontend/src/stores/resident.js

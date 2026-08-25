@@ -3,6 +3,14 @@ import { api } from "../helpers/api";
 import createVersionGuard from "../helpers/version_guard";
 import handleAxiosError from "../helpers/handle_axios_error";
 
+// What a meal reads from the DataStore at the root of its tree (the store
+// is still JavaScript): the head count its cap is computed from, and the
+// refetch that follows a settled save.
+interface MealRoot {
+  attendeesCount: number;
+  loadDataAsync(): void;
+}
+
 const Meal = types
   .model("Meal", {
     id: types.identifierNumber,
@@ -45,17 +53,22 @@ const Meal = types
     // "not saved" marker.
     descriptionSaveFailed: false,
   }))
+  // Two views blocks: MobX-State-Tree types `self` inside a block without
+  // the views that block defines, so `root` goes first.
   .views((self) => ({
-    get max() {
+    // The DataStore at the root of the tree.
+    get root(): MealRoot {
+      return getRoot<MealRoot>(self);
+    },
+  }))
+  .views((self) => ({
+    // extras is a seat count, never money: Number() is right here.
+    get max(): number | null {
       if (self.extras === null) {
         return null;
       } else {
         return Number(self.extras) + self.root.attendeesCount;
       }
-    },
-    // The DataStore at the root of the tree.
-    get root() {
-      return getRoot(self);
     },
     // The "not saved" marker: there is unsaved text AND a save has
     // failed. Plain dirty is not enough — every normal save round-trip
@@ -65,29 +78,32 @@ const Meal = types
       return self.descriptionDirty && self.descriptionSaveFailed;
     },
   }))
-  .actions((self) => ({
+  // Local functions, returned as the actions: MobX-State-Tree types
+  // `self` inside this block without the actions it defines, so an
+  // action that calls another calls the function.
+  .actions((self) => {
     // The menu autosave (issue #35). A failed save used to look exactly
     // like a saved one; now the typed text is protected by the dirty
     // flag and a persistent "not saved" marker until a save really
     // lands. There is no rollback and no refetch-over-text on purpose:
     // for a checkbox, restoring server truth costs one click to redo;
     // for typed prose, it destroys work.
-    setDescription(val) {
+    function setDescription(val: string) {
       self.description = val;
       self.descriptionDirty = true;
       self.descriptionEdits.bump();
-      self.submitDescription();
-    },
+      submitDescription();
+    }
     // A keystroke's protection starts at the keystroke, not at the
     // debounced flush. Dirty keeps this node alive across a meal
     // switch, so the flush still has a live node to land on; the
     // version bump stops an in-flight ack (for older text) from
     // clearing that protection before the flush arrives.
-    markDescriptionEditing() {
+    function markDescriptionEditing() {
       self.descriptionDirty = true;
       self.descriptionEdits.bump();
-    },
-    submitDescription() {
+    }
+    function submitDescription() {
       // Single-flight: one request at a time. The queued resend in
       // settleDescriptionSave sends whatever was typed meanwhile.
       if (self.descriptionSaveInFlight) {
@@ -105,45 +121,47 @@ const Meal = types
         })
         .then(function () {
           if (!isAlive(self)) return;
-          self.applyDescriptionAck(versionAtSend);
+          applyDescriptionAck(versionAtSend);
         })
-        .catch(function (error) {
+        .catch(function (error: unknown) {
           handleAxiosError(error);
           if (!isAlive(self)) return;
-          self.markDescriptionSaveFailed();
+          markDescriptionSaveFailed();
         })
         .then(function () {
           if (!isAlive(self)) return;
-          self.settleDescriptionSave();
+          settleDescriptionSave();
         });
-    },
+    }
     // A 200 means the network works again, so the marker can go. The
     // dirty flag clears only if no keystrokes arrived after the request
     // went out — newer text is still unsaved and keeps its protection
     // until its own resend is acked.
-    applyDescriptionAck(versionAtSend) {
+    function applyDescriptionAck(versionAtSend: number) {
       self.descriptionSaveFailed = false;
       if (!self.descriptionEdits.isCurrent(versionAtSend)) return;
       self.descriptionDirty = false;
-    },
-    markDescriptionSaveFailed() {
+    }
+    function markDescriptionSaveFailed() {
       self.descriptionSaveFailed = true;
-    },
-    settleDescriptionSave() {
+    }
+    function settleDescriptionSave() {
       self.descriptionSaveInFlight = false;
       if (!self.descriptionSaveQueued) return;
       self.descriptionSaveQueued = false;
-      self.submitDescription();
-    },
+      submitDescription();
+    }
     // Runs when the extras save settles — success or failure. The refetch
     // lets loadData write the server's truth over the optimistic value.
     // There is no rollback on purpose: this node is edited in place by
     // refetches, so restoring a captured value could overwrite fresh data.
-    settleExtras() {
+    function settleExtras() {
       self.extrasPending = false;
       self.root.loadDataAsync();
-    },
-    setExtras(val) {
+    }
+    // A seat count from a form control: a number, a numeric string, ""
+    // (which becomes 0), or null to clear.
+    function setExtras(val: number | string | null) {
       if (self.extrasPending) {
         return;
       }
@@ -159,19 +177,19 @@ const Meal = types
             max: null,
             socketId: window.Comeals.socketId,
           })
-          .catch(function (error) {
+          .catch(function (error: unknown) {
             handleAxiosError(error);
           })
           .then(function () {
             if (!isAlive(self)) return;
-            self.settleExtras();
+            settleExtras();
           });
 
         return;
       }
 
       // Scenario #2: non-negative integer
-      const num = parseInt(Number(val), 10);
+      const num = Math.trunc(Number(val));
       if (Number.isInteger(num) && num >= 0) {
         self.extras = num;
         self.extrasPending = true;
@@ -181,37 +199,50 @@ const Meal = types
             max: self.max,
             socketId: window.Comeals.socketId,
           })
-          .catch(function (error) {
+          .catch(function (error: unknown) {
             handleAxiosError(error);
           })
           .then(function () {
             if (!isAlive(self)) return;
-            self.settleExtras();
+            settleExtras();
           });
       }
-    },
-    incrementExtras() {
+    }
+    function incrementExtras() {
       if (self.extras === null) {
         return;
       }
 
-      const num = parseInt(Number(self.extras), 10);
+      const num = Math.trunc(Number(self.extras));
       if (Number.isInteger(num)) {
         const temp = num + 1;
         self.extras = temp;
       }
-    },
-    decrementExtras() {
+    }
+    function decrementExtras() {
       if (self.extras === null) {
         return;
       }
 
-      const num = parseInt(Number(self.extras), 10);
+      const num = Math.trunc(Number(self.extras));
       if (Number.isInteger(num)) {
         const temp = num - 1;
         self.extras = temp;
       }
-    },
-  }));
+    }
+
+    return {
+      setDescription,
+      markDescriptionEditing,
+      submitDescription,
+      applyDescriptionAck,
+      markDescriptionSaveFailed,
+      settleDescriptionSave,
+      settleExtras,
+      setExtras,
+      incrementExtras,
+      decrementExtras,
+    };
+  });
 
 export default Meal;

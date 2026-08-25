@@ -1,18 +1,52 @@
 // The bill save pipeline (issue #30): debounce, single-flight,
 // version-guarded acks. One of the DataStore's subsystem files — see
 // data_store.js, which composes them.
-import { api } from "../helpers/api";
+import { Instance } from "mobx-state-tree";
+
+import { api, BillInput } from "../helpers/api";
 import { SAVE_DEBOUNCE_MS } from "../helpers/helpers";
 import { toDisplayAmountString } from "../helpers/money";
 import { evictMealCache } from "../helpers/meal_cache";
 import handleAxiosError from "../helpers/handle_axios_error";
 import createVersionGuard from "../helpers/version_guard";
+import { BillsAck } from "../types/api";
+import Bill from "./bill";
 import toastStore from "./toast_store";
+
+type BillNode = Instance<typeof Bill>;
+
+// The warning the bills endpoint answers with when a cook-scheduling guard
+// refused part of the write but the rest was saved. Read by shape, not by
+// class: the response is what the server put in the body, whatever object
+// carried it.
+function warningIn(error: unknown): BillsAck | null {
+  const response = (error as { response?: { data?: BillsAck } } | null)
+    ?.response;
+  return response?.data?.type === "warning" ? response.data : null;
+}
+
+// What this file reads and writes on the DataStore it is composed into
+// (data_store.js, still JavaScript): its own volatile fields, the rows and
+// flags it saves, and the actions it defines and calls on itself.
+export interface BillsStore extends ReturnType<typeof billsVolatile> {
+  meal: { id: number } | null;
+  bills: { values(): IterableIterator<BillNode> };
+  editBillsMode: boolean;
+  loadDataAsync(): void;
+  flushBillsSave(): void;
+  submitBills(): void;
+  applyBillsAck(
+    data: BillsAck,
+    versionAtSend: number,
+    mealIdAtSend: number,
+  ): void;
+  settleBillsSave(mealIdAtSend: number): void;
+}
 
 export function billsVolatile() {
   return {
     // Pending debounce timer for a bill save, or null.
-    billsSaveTimer: null,
+    billsSaveTimer: null as ReturnType<typeof setTimeout> | null,
     // True while a bills request is in flight. With one request at a time,
     // this client's writes cannot arrive at the server out of order.
     billsSaveInFlight: false,
@@ -25,7 +59,7 @@ export function billsVolatile() {
   };
 }
 
-export function billsActions(self) {
+export function billsActions(self: BillsStore) {
   return {
     // Debounced, same delay as the description field: a save fires only
     // after the user stops editing, so half-typed amounts never hit the
@@ -89,17 +123,21 @@ export function billsActions(self) {
       // left out), but only rows the user touched carry amount/no_cost.
       // The server leaves the other rows' stored values alone, so a
       // display value can never rewrite a bill nobody edited.
-      let bills = Array.from(self.bills.values())
-        .filter((bill) => bill.resident_id !== "")
-        .map((bill) =>
-          bill.touched
-            ? {
-                resident_id: bill.resident_id,
-                amount: bill.amount,
-                no_cost: bill.no_cost,
-              }
-            : { resident_id: bill.resident_id },
-        );
+      const bills: BillInput[] = Array.from(self.bills.values()).flatMap(
+        (bill) => {
+          const residentId = bill.resident_id;
+          if (residentId === "") return [];
+          return [
+            bill.touched
+              ? {
+                  resident_id: residentId,
+                  amount: bill.amount,
+                  no_cost: bill.no_cost,
+                }
+              : { resident_id: residentId },
+          ];
+        },
+      );
 
       const versionAtSend = self.billsEdits.current();
       const mealIdAtSend = self.meal.id;
@@ -116,16 +154,13 @@ export function billsActions(self) {
           evictMealCache(mealIdAtSend);
           self.applyBillsAck(response.data, versionAtSend, mealIdAtSend);
         })
-        .catch(function (error) {
-          var isWarning =
-            error.response &&
-            error.response.data &&
-            error.response.data.type === "warning";
-          if (isWarning) {
+        .catch(function (error: unknown) {
+          const warning = warningIn(error);
+          if (warning) {
             // A warning response still persisted the bills — evict, same
             // as the success path.
             evictMealCache(mealIdAtSend);
-            var msg = error.response.data.message || "";
+            const msg = warning.message || "";
             toastStore.replaceAll(
               "Cooks saved." + (msg ? " " + msg : ""),
               "info",
@@ -144,7 +179,7 @@ export function billsActions(self) {
     // rows on screen are the rows this ack answers: same meal, and no edits
     // since the request went out. Otherwise ignore it; the queued next save
     // covers the newer edits and its own ack will reconcile.
-    applyBillsAck(data, versionAtSend, mealIdAtSend) {
+    applyBillsAck(data: BillsAck, versionAtSend: number, mealIdAtSend: number) {
       if (!self.billsEdits.isCurrent(versionAtSend)) return;
       if (!self.meal || self.meal.id !== mealIdAtSend) return;
       if (!data || !Array.isArray(data.bills)) return;
@@ -171,7 +206,7 @@ export function billsActions(self) {
         bill.touched = false;
       });
     },
-    settleBillsSave(mealIdAtSend) {
+    settleBillsSave(mealIdAtSend: number) {
       self.billsSaveInFlight = false;
       if (!self.billsSaveQueued) return;
       self.billsSaveQueued = false;
