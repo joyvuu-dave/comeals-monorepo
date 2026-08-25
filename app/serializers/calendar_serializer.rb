@@ -31,6 +31,8 @@
 #   Resident, Unit             their updated_at               LiveUpdate.residents (the
 #                                                             residents channel; the client
 #                                                             drops every cached month)
+#   Community (timezone)       communities.updated_at         Community#note_zone_change
+#                                                             (the residents channel)
 #
 # The deploy script (bin/deploy) also flushes the entire cache on every deploy.
 class CalendarSerializer

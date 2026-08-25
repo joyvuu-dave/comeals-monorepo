@@ -5,6 +5,39 @@ One entry per run of the `bug-hunt` skill
 and what they found, including "found nothing". The next run reads this
 to pick the hunt that has waited longest.
 
+## 2026-08-26 (cache)
+
+Hunt run: cache, all the way through. One server cache: the calendar
+month (`CommunitiesController#calendar`, one hour, versioned by rows).
+Every column the month shows, and what the version sees it through:
+
+- meals: date, closed, max, attendees (bills, attendance and guests
+  `touch` the meal) — `meals.updated_at`.
+- rotations: color, place_value, first and last meal date —
+  `rotations.updated_at` (`set_place_value` bumps it by hand; the recolor
+  saves through the model since 2026-08-25).
+- events, both reservations: own columns — their `updated_at`.
+- residents and units: name, unit name, birthday, and the shortened
+  first names (which depend on every resident's name) — their
+  `updated_at`.
+- today (the chip words) — the date is part of the version.
+- **communities: `timezone`** (added to the payload 2026-08-25) — not in
+  the version. Red spec `spec/requests/api/v1/calendar_cache_timezone_spec.rb`:
+  a zone change told every tab to fetch the month again and the server
+  answered from the old entry for up to an hour. Fixed the same day:
+  `communities.updated_at` is in the version now.
+
+Callback-skipping writes on those tables: `SetMultipliersJob`
+(multiplier), the password reset (token columns),
+`rotations:notify_new` (notified_at) — none shown on the month;
+`set_place_value` bumps `updated_at`; the settlement's `update_all`
+forgets the cached meals itself.
+
+Expiry: an hour. A missed clear lives at most that long.
+
+Client caches (the month in RAM and IndexedDB, the meal page, hosts) were
+covered by the frontend-seam hunt the night before.
+
 ## 2026-08-26
 
 Hunt run: money, by the skill's definition this time (the 2026-08-24 run

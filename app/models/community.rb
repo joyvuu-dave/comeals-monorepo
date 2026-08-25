@@ -309,7 +309,8 @@ class Community < ApplicationRecord
 
   # The rows-derived part of #calendar_cache_version, one statement.
   CALENDAR_CACHE_VERSION_SQL = <<~SQL.squish
-    SELECT (SELECT COUNT(*) FROM residents) AS residents_count,
+    SELECT (SELECT MAX(updated_at) FROM communities) AS community_updated_at,
+           (SELECT COUNT(*) FROM residents) AS residents_count,
            (SELECT MAX(updated_at) FROM residents) AS residents_updated_at,
            (SELECT COUNT(*) FROM units) AS units_count,
            (SELECT MAX(updated_at) FROM units) AS units_updated_at,
