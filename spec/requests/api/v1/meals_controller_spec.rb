@@ -521,6 +521,24 @@ RSpec.describe 'Meals API' do
         end
     end
 
+    it 'create_meal_resident returns 400 and adds nothing when the meal is swept mid-request' do
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: { token: token, late: false, vegetarian: false }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to include('reconciled')
+      expect(MealResident.where(meal: meal)).to be_empty
+    end
+
+    it 'create_guest returns 400 and adds nothing when the meal is swept mid-request' do
+      create(:meal_resident, meal: meal, resident: resident, community: community)
+
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests", params: { token: token, multiplier: 2 }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to include('reconciled')
+      expect(Guest.where(meal: meal)).to be_empty
+    end
+
     it 'destroy_meal_resident returns 400 and keeps the row when the meal is swept mid-request' do
       mr = create(:meal_resident, meal: meal, resident: resident, community: community)
 
