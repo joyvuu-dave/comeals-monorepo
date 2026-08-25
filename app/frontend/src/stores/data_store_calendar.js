@@ -38,6 +38,17 @@ export function calendarActions(self) {
       self.monthLoading = true;
       self.switchMonths(date);
     },
+    // The zone the SPA computes every time and "today" from comes
+    // from a cookie written at login. A month payload carries the
+    // community's current zone; when it differs, the admin changed it
+    // since login, so take it, recompute today, and move the midnight
+    // timer. Otherwise a tab kept the old zone until logout and login.
+    adoptCommunityTimezone(timezone) {
+      if (!timezone || timezone === Cookie.get("timezone")) return;
+      Cookie.set("timezone", timezone, { expires: 7300 });
+      self.recomputeCommunityToday();
+      self.scheduleMidnightRecompute();
+    },
     loadMonth(data) {
       if (typeof data === "string") {
         self.monthLoading = false;
@@ -46,6 +57,8 @@ export function calendarActions(self) {
       }
 
       mark("loadMonth-start");
+
+      self.adoptCommunityTimezone(data.timezone);
 
       // Build the full events array as plain JS, then replace the
       // observable in one shot for a single MobX notification.

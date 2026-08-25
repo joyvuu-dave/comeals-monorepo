@@ -2,6 +2,7 @@
   "id": 1,
   "month": 1,
   "year": 2026,
+  "timezone": "America/Los_Angeles",
   "meals": [
     {
       "id": "meals/41-20260110170000000000",

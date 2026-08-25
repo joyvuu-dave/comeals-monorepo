@@ -38,7 +38,11 @@ class CalendarSerializer
 
   attributes :id,
              :month,
-             :year
+             :year,
+             # The community's zone rides with every month: the SPA computes every
+             # time it shows and "today" from a zone it got at login, and this is
+             # how a changed zone reaches a tab that is already open.
+             :timezone
 
   # Each collection below is a query scoped to the weeks on screen, so it
   # is an attribute block that runs the query and serializes the rows,

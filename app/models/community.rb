@@ -392,6 +392,15 @@ class Community < ApplicationRecord
 
   # Push every calendar channel that shows `date`. LiveUpdate calls this
   # after the caches are cleared.
+  # A changed zone moves every time the SPA shows and its "today". The
+  # residents channel is the one that makes a tab drop every cached month
+  # and fetch again; the month payload then carries the new zone.
+  after_update :note_zone_change, if: :saved_change_to_timezone?
+
+  def note_zone_change
+    LiveUpdate.residents
+  end
+
   def notify_pusher(date)
     affected_calendar_keys(date).each do |key|
       Pusher.trigger(key, 'update', { message: 'calendar updated' })

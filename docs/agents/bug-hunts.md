@@ -32,7 +32,8 @@ fix: the month payload carries `timezone`
 (`spec/serializers/calendar_serializer_spec.rb`), the store adopts it
 when a month loads (`tests/unit/stores/data_store_timezone.test.js`),
 and a zone change pushes the residents channel so open tabs fetch again
-(`spec/requests/api/v1/live_update_contract_spec.rb`).
+(`spec/requests/api/v1/live_update_contract_spec.rb`). Fixed the same
+night on the same branch; the specs stay as regression tests.
 
 Every hunt in the skill has now run at least once.
 
