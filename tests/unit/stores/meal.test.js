@@ -11,7 +11,7 @@ vi.mock("idb-keyval", () => import("../mocks/idb_keyval.js"));
 
 import axios from "axios";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
-import { createDataStore } from "../helpers/create_data_store.js";
+import { createDataStore, stubAction } from "../helpers/create_data_store.js";
 
 // The real DataStore, with loadDataAsync stubbed onto the module-level
 // mock: Meal.settleExtras calls self.root.loadDataAsync(), and these
@@ -20,7 +20,7 @@ const loadDataAsyncMock = vi.fn();
 
 function createStore(mealProps = {}, residents = [], guests = []) {
   const store = createDataStore({ mealProps, residents, guests });
-  vi.spyOn(store, "loadDataAsync").mockImplementation(loadDataAsyncMock);
+  stubAction(store, "loadDataAsync", loadDataAsyncMock);
   window.Comeals.socketId = "test";
   return store;
 }

@@ -8,8 +8,7 @@ import { stubRandomUUID } from "../mocks/uuid.js";
 stubRandomUUID();
 
 import axios from "axios";
-import { runInAction } from "mobx";
-import { createDataStore } from "../helpers/create_data_store.js";
+import { createDataStore, stage } from "../helpers/create_data_store.js";
 
 // The hosts cache (data_store_hosts.js): the adult-residents list the
 // reservation modals show. The interesting behavior is concurrency —
@@ -119,7 +118,7 @@ describe("hosts cache", () => {
     window.Comeals.pusher.subscribe = vi.fn(() => ({ bind }));
     // No meal on screen: the residents channel also refetches the meal
     // page and the calendar when they are up (live_updates.test.js).
-    runInAction(() => {
+    stage(store, () => {
       store.meal = null;
     });
     mockHostsResponse();

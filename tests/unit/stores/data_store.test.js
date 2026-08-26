@@ -12,8 +12,8 @@ vi.mock("idb-keyval", () => import("../mocks/idb_keyval.js"));
 import { stubRandomUUID } from "../mocks/uuid.js";
 stubRandomUUID();
 
-import { unprotect, isAlive } from "mobx-state-tree";
-import { createDataStore } from "../helpers/create_data_store.js";
+import { isAlive } from "mobx-state-tree";
+import { createDataStore, stage } from "../helpers/create_data_store.js";
 
 // The full wire shape /meals/:id/cooks returns, every field at its
 // blank default. Tests override only what they exercise, so a wire
@@ -35,7 +35,6 @@ function mealPayload(overrides = {}) {
     ...overrides,
   };
 }
-import { runInAction } from "mobx";
 import { prefetchMonth } from "../../../app/frontend/src/stores/month_fetch.js";
 import * as idbKeyval from "idb-keyval";
 import axios from "axios";
@@ -804,8 +803,7 @@ describe("DataStore", () => {
       });
 
       // Set up a second meal so we can switch to it
-      unprotect(store);
-      runInAction(() => {
+      stage(store, () => {
         store.meals.push({ id: 2 });
       });
 
@@ -823,7 +821,7 @@ describe("DataStore", () => {
       idbKeyval.set.mockResolvedValueOnce();
 
       // Switch to meal 2 and load its data
-      runInAction(() => {
+      stage(store, () => {
         store.meal = 2;
       });
       store.loadData(makeMealData(2, { attending: false }));
@@ -887,8 +885,7 @@ describe("DataStore", () => {
       });
 
       // Add meals 2 and 3 to the array
-      unprotect(store);
-      runInAction(() => {
+      stage(store, () => {
         store.meals.push({ id: 2 });
         store.meals.push({ id: 3 });
       });
@@ -906,7 +903,7 @@ describe("DataStore", () => {
       // Before localforage resolves, user navigates to meal 3. switchMeals
       // pruned the pre-pushed stub for meal 3 (issue #38), so recreate it
       // the way switchMeals would.
-      runInAction(() => {
+      stage(store, () => {
         store.meals.push({ id: 3 });
         store.meal = 3;
       });
@@ -959,14 +956,13 @@ describe("DataStore", () => {
         .mockResolvedValueOnce(augustResponse);
 
       // Navigate to July: the fetch starts but does not resolve
-      unprotect(store);
-      runInAction(() => {
+      stage(store, () => {
         store.currentDate = "2023-07-01";
       });
       store.loadMonthAsync();
 
       // Navigate to August before July's response arrives
-      runInAction(() => {
+      stage(store, () => {
         store.currentDate = "2023-08-01";
       });
       store.loadMonthAsync();
@@ -1172,7 +1168,7 @@ describe("DataStore", () => {
     it("teardownMealPage keeps a node holding unsaved menu text", () => {
       const store = createDataStore();
       const node = store.meals[0];
-      runInAction(() => {
+      stage(store, () => {
         node.descriptionDirty = true;
       });
 
@@ -1274,7 +1270,7 @@ describe("DataStore", () => {
     it("switchMeals keeps a left-behind node with unsaved menu text", () => {
       const store = createDataStore();
       const node = store.meals[0];
-      runInAction(() => {
+      stage(store, () => {
         node.descriptionDirty = true;
       });
 
@@ -2061,7 +2057,7 @@ describe("DataStore", () => {
       // setAmount refuses invalid input, so force the state directly to
       // exercise submitBills' second-layer gate (paste paths, refactors).
       const bill = store.bills.get("b1");
-      runInAction(() => {
+      stage(store, () => {
         bill.amount = "1e3";
         bill.touched = true;
       });
@@ -2295,7 +2291,9 @@ describe("DataStore", () => {
 
       bill.setAmount("1");
       vi.advanceTimersByTime(SAVE_DEBOUNCE_MS); // save fires; row settles
-      bill.touched = false;
+      stage(store, () => {
+        bill.touched = false;
+      });
 
       bill.normalizeAmountDisplay(); // what the input's onBlur calls
       expect(bill.amount).toBe("1.00");
@@ -2990,7 +2988,7 @@ describe("DataStore", () => {
 
       // The user moved on to another meal; the unsaved text stays behind
       // on meal 1's node.
-      runInAction(() => {
+      stage(store, () => {
         store.addMeal({ id: 2 });
         store.meal = 2;
       });

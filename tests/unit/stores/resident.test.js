@@ -13,8 +13,11 @@ vi.mock("idb-keyval", () => import("../mocks/idb_keyval.js"));
 
 import axios from "axios";
 import * as idbKeyval from "idb-keyval";
-import { runInAction } from "mobx";
-import { createDataStore } from "../helpers/create_data_store.js";
+import {
+  createDataStore,
+  stage,
+  stubAction,
+} from "../helpers/create_data_store.js";
 
 // The attendance actions read created_at from the server's response;
 // give the callable mock that default for the whole file.
@@ -31,16 +34,14 @@ axios.mockImplementation(() =>
 let loadDataAsyncSpy;
 function createStore(opts = {}) {
   const store = createDataStore(opts);
-  loadDataAsyncSpy = vi
-    .spyOn(store, "loadDataAsync")
-    .mockImplementation(() => {});
+  loadDataAsyncSpy = stubAction(store, "loadDataAsync", () => {});
   window.Comeals.socketId = "test";
   return store;
 }
 
 // Stage a raced refetch: the node the action captured is destroyed.
 function removeResident(store, id) {
-  runInAction(() => store.residents.delete(String(id)));
+  stage(store, () => store.residents.delete(String(id)));
 }
 
 describe("Resident model", () => {

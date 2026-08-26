@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
+import { stage } from "../helpers/create_data_store.js";
 
 // Mock external modules before importing stores (same set as the
 // data_store tests — the real DataStore pulls all of these in).
@@ -14,8 +15,6 @@ vi.mock("idb-keyval", () => import("../mocks/idb_keyval.js"));
 import { stubRandomUUID } from "../mocks/uuid.js";
 stubRandomUUID();
 
-import { unprotect } from "mobx-state-tree";
-import { runInAction } from "mobx";
 import { DataStore } from "../../../app/frontend/src/stores/data_store.js";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
 import AttendeesBox from "../../../app/frontend/src/components/meal/attendees_box.jsx";
@@ -31,9 +30,7 @@ function createDataStore(opts = {}) {
     meals: [mealDefaults],
     meal: mealDefaults.id,
   });
-
-  unprotect(store);
-  runInAction(() => {
+  stage(store, () => {
     residents.forEach((r) => store.residents.put(r));
     guests.forEach((g) => store.guests.put(g));
   });

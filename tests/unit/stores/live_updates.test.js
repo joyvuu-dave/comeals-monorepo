@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { stage } from "../helpers/create_data_store.js";
 
 // The client half of the live-update contract (the server half is
 // spec/requests/api/v1/live_update_contract_spec.rb): what the store
@@ -36,8 +37,6 @@ vi.mock("idb-keyval", () => {
 import { stubRandomUUID } from "../mocks/uuid.js";
 stubRandomUUID();
 
-import { runInAction } from "mobx";
-import { unprotect } from "mobx-state-tree";
 import axios from "axios";
 import * as idbKeyval from "idb-keyval";
 import { DataStore } from "../../../app/frontend/src/stores/data_store.js";
@@ -115,7 +114,6 @@ function serveFrom(payloads, meals) {
 
 function createStore() {
   const store = DataStore.create({ meals: [{ id: 1 }], meal: 1 });
-  unprotect(store);
   window.Comeals.pusher.subscribe = vi.fn((name) => {
     const channel = { name, bind: vi.fn() };
     channels.set(name, channel);
@@ -162,7 +160,7 @@ describe("live updates in the store", () => {
   describe("the residents channel", () => {
     it("is subscribed by the calendar, and an update drops every cached month and refetches the one on screen", async () => {
       const store = createStore();
-      runInAction(() => {
+      stage(store, () => {
         store.meal = null;
       });
 
@@ -248,7 +246,7 @@ describe("live updates in the store", () => {
       expect(requests).toHaveLength(1);
 
       const store = createStore();
-      runInAction(() => {
+      stage(store, () => {
         store.meal = null;
       });
       store.switchMonths("2024-07-15");
@@ -288,7 +286,7 @@ describe("live updates in the store", () => {
       vi.setSystemTime(new Date("2024-07-15T23:59:58-07:00"));
 
       const store = createStore();
-      runInAction(() => {
+      stage(store, () => {
         store.meal = null;
       });
       store.switchMonths("2024-07-15");

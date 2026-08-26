@@ -9,7 +9,7 @@ vi.mock("pusher-js", () => import("../mocks/pusher.js"));
 
 vi.mock("idb-keyval", () => import("../mocks/idb_keyval.js"));
 
-import { createDataStore } from "../helpers/create_data_store.js";
+import { createDataStore, stubAction } from "../helpers/create_data_store.js";
 
 // The real DataStore, with saveBills stubbed: these tests assert WHEN
 // the bill actions ask the store to save, not what the save pipeline
@@ -18,7 +18,7 @@ import { createDataStore } from "../helpers/create_data_store.js";
 let saveBillsSpy;
 function createStore(opts = {}) {
   const store = createDataStore(opts);
-  saveBillsSpy = vi.spyOn(store, "saveBills").mockImplementation(() => {});
+  saveBillsSpy = stubAction(store, "saveBills");
   window.Comeals.socketId = "test";
   return store;
 }
