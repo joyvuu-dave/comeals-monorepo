@@ -5,6 +5,36 @@ One entry per run of the `bug-hunt` skill
 and what they found, including "found nothing". The next run reads this
 to pick the hunt that has waited longest.
 
+## 2026-08-26 (invariant, delta)
+
+Hunt run: invariant, as a delta on the 2026-08-25 run — every rule
+sentence in CLAUDE.md and the ADRs added or changed since (three), and
+every row whose enforcer changed since (four).
+
+- CLAUDE.md time-zone bullet: **false since 6a4f6c9.** It said the
+  community zone applies "never in a job, a rake task, or admin"; admin
+  is wrapped by `ApplicationController#use_community_timezone` now.
+  Sentence fixed. The `bin/check` grep it names covers what it says
+  (`app/`, `lib/tasks/`, `db/seeds.rb`; verified).
+- ADR 0001 point 5: enforcers are the `New JS files` step (list matches
+  the tree, 0 differences) and typescript-eslint in `npm run lint`.
+  Holds.
+- ADR 0006 "every modal form that creates or edits a record": six forms
+  report through `useDirtyReport`; the four modal files without it are
+  the login form (exempt by the sentence), the history modal, the
+  confirm dialog, and `calendar/show.jsx`, which hosts the modals and
+  the gate itself; none of them edits a record.
+  Holds, by review only (no mechanical check).
+- ADR 0004 "refuses self-demotion at any count": **incomplete since
+  800ae88** — the controller refuses self-deletion too. Sentence fixed.
+- "A community must always keep one superuser": trigger, model guard
+  and controller rule unchanged. Holds.
+- "Every cache entry must come with a written list of every write":
+  `communities` joined the month version and the serializer's table on
+  2026-08-26. Holds.
+
+Found nothing in code; two sentences that code had outrun.
+
 ## 2026-08-26 (dead column)
 
 Hunt run: dead column, all the way through. Every column in

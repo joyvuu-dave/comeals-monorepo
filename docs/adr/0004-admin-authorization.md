@@ -137,7 +137,7 @@ Demoting or destroying the last superuser is refused at three layers:
   is a statement about the table, not a row, so no CHECK constraint or partial
   unique index can express it. A trigger is the only database-level way to say
   it.
-- The admin controller additionally refuses **self-demotion** at any count.
+- The admin controller additionally refuses **self-demotion** and **self-deletion** at any count (deletion added 2026-08-25: the same click, with less way back).
   The model rule protects the community; this one protects the person. When
   other superusers remain, demoting yourself is recoverable, but it is still
   almost never what you meant to click.
