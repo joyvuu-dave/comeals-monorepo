@@ -29,7 +29,14 @@ seams, each checked to a done condition, does.
    and when. Pick the hunt that has not run for longest, or one the
    recent merges touched. Add a dated entry when done, even for
    "found nothing".
-7. **Flag the incidental.** Anything wrong that is not a bug (a false
+7. **A fix that changes what a rule sentence claims changes the
+   sentence in the same commit.** CLAUDE.md and the ADRs state rules as
+   facts ("admin has no zone wrapper", "refuses self-demotion"); a fix
+   that makes such a fact false leaves a sentence the next invariant hunt
+   has to catch. Two of them were caught on 2026-08-26, both from fixes
+   made the same day. Grep the docs for the words the fix touches before
+   committing it.
+8. **Flag the incidental.** Anything wrong that is not a bug (a false
    sentence in CLAUDE.md, a stale comment, a column nothing reads) goes
    in the report under "Also noticed", with a file and line.
 
