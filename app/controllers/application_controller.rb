@@ -16,6 +16,15 @@ class ApplicationController < ActionController::Base
   # is no zone to use, and the app zone is the only one there is.
   around_action :use_community_timezone
 
+  # A POST whose CSRF token does not match its session. Two senders: a bot
+  # posting a canned body at admin.comeals.com, and an admin who left the
+  # login tab open until the session cookie expired. Rails' default renders
+  # a 422 error page and reports to Bugsnag (8 bot reports, 2026-08-22 to
+  # 24). Sending both to the login page with a message is right for the
+  # admin and harmless for the bot. The API is ActionController::API and
+  # does not inherit this.
+  rescue_from ActionController::InvalidAuthenticityToken, with: :csrf_failed
+
   # GET /admin-logout (admin)
   def admin_logout
     cookies.delete(:remember_admin_user_token)
@@ -28,6 +37,11 @@ class ApplicationController < ActionController::Base
     return yield if zone.nil?
 
     Time.use_zone(zone, &)
+  end
+
+  def csrf_failed
+    reset_session
+    redirect_to '/login', alert: 'Your session expired. Please try again.'
   end
 
   def access_denied(_exception)
