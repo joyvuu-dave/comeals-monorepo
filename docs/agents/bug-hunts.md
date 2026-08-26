@@ -5,6 +5,21 @@ One entry per run of the `bug-hunt` skill
 and what they found, including "found nothing". The next run reads this
 to pick the hunt that has waited longest.
 
+## 2026-08-26 (lock and frontend seam, deltas)
+
+Hunts run: lock and frontend seam, each as a delta on its 2026-08-25
+run.
+
+- Lock: every write to bills, meal_residents, guests, meals,
+  meal_charges and the balance tables added or changed since 9b88dec.
+  There are none in `app/`; the only new writes are in
+  `lib/tasks/test/*.rake` (fixture and seed data through the models, on
+  a test database). Found nothing.
+- Frontend seam: every piece of client state or fetch added or changed
+  since c141414. The four money stores were rewritten in TypeScript with
+  the same fields, the same fetches and the same refresh paths; no new
+  state. Found nothing.
+
 ## 2026-08-26 (invariant, delta)
 
 Hunt run: invariant, as a delta on the 2026-08-25 run — every rule
