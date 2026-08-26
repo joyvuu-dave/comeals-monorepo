@@ -2,6 +2,7 @@ const js = require("@eslint/js");
 const react = require("eslint-plugin-react");
 const reactHooks = require("eslint-plugin-react-hooks");
 const globals = require("globals");
+const tseslint = require("typescript-eslint");
 
 module.exports = [
   // Base: ESLint recommended rules for all JS files
@@ -124,8 +125,6 @@ module.exports = [
   // only *.js here, every component test was silently unlinted (#52).
   // -----------------------------------------------------------
   {
-    // .ts is absent on purpose: eslint has no TypeScript parser here,
-    // and `npm run typecheck` (tsc) is the gate for those files.
     files: ["tests/unit/**/*.{js,jsx}"],
     plugins: {
       react,
@@ -193,6 +192,30 @@ module.exports = [
       "no-console": "off",
     },
   },
+
+  // -----------------------------------------------------------
+  // TypeScript, wherever it lives (app/frontend/src and tests/unit).
+  // typescript-eslint's recommended rules, scoped to .ts/.tsx by
+  // tseslint.config's `extends`. Type-aware rules are not on: they need
+  // the TypeScript program for every lint run, and `npm run typecheck`
+  // already runs it once. TypeScript itself is pinned to the 6.x line in
+  // package.json because typescript-eslint has no parser for the native
+  // 7.x compiler yet (it has no JavaScript API); move back to 7 when it
+  // does. Every .ts file used to be type-checked but never linted.
+  // -----------------------------------------------------------
+  ...tseslint.config({
+    files: ["**/*.{ts,tsx}"],
+    extends: [...tseslint.configs.recommended],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+      },
+    },
+    rules: {
+      "no-console": ["warn", { allow: ["error", "warn"] }],
+    },
+  }),
 
   // -----------------------------------------------------------
   // Ignore build output, dependencies, and this config file

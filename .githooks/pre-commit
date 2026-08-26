@@ -1,2 +1,11 @@
 #!/bin/sh
+# Every commit: Ruby style, and, when a frontend or test file is staged,
+# the JavaScript/TypeScript lint and the type check too. All code is
+# linted before it is committed, not only before it is pushed (bin/check).
+set -e
 bundle exec rubocop
+
+if git diff --cached --name-only --diff-filter=ACMR | grep -qE '\.(js|jsx|ts|tsx|mjs)$'; then
+  npm run --silent lint
+  npm run --silent typecheck
+fi
