@@ -1,4 +1,4 @@
-# typed: true
+# typed: strict
 # frozen_string_literal: true
 
 # Settles a billing period.
@@ -27,6 +27,8 @@
 # The money rules this enforces are in CLAUDE.md ("Money Handling
 # Standards"); the concurrency rules are in docs/adr/0003 and 0005.
 class Settlement
+  extend T::Sig
+
   # Raised by preview for a cutoff that run! would refuse, with the same
   # words the model's validation uses.
   class InvalidCutoff < ArgumentError; end
@@ -35,6 +37,7 @@ class Settlement
   # meals first. Everything rolls back; the request can simply be sent again.
   class Contested < RuntimeError; end
 
+  sig { params(cutoff: Date, community: Community).returns(Reconciliation) }
   def self.run!(cutoff:, community: Community.instance)
     new(Reconciliation.new(community: community, end_date: cutoff)).settle!
   end
@@ -56,10 +59,20 @@ class Settlement
   # unreconciled — past this settlement and every later one — until someone
   # enters a bill, and nobody who ate is charged. They are not in `meals`
   # (nothing about them settles); they are here so the preview can warn.
-  Preview = Data.define(:cutoff, :meals, :ledger, :resident_balances, :skipped_meals) do
+  class Preview < T::Struct
+    extend T::Sig
+
+    const :cutoff, Date
+    const :meals, T::Array[Meal]
+    const :ledger, MealLedger
+    const :resident_balances, T::Hash[Integer, BigDecimal]
+    const :skipped_meals, T::Array[Meal]
+
+    sig { params(meal: Meal).returns(MealLedger::Summary) }
     def meal_summary(meal) = ledger.summary_for(meal)
   end
 
+  sig { params(cutoff: Date, community: Community).returns(Preview) }
   def self.preview(cutoff:, community: Community.instance)
     raise InvalidCutoff, 'cutoff must be in the past' unless cutoff < community.today
 
@@ -74,22 +87,27 @@ class Settlement
 
   # Unreconciled meals in the period with attendance and no bill at all.
   # The date rules are settleable_by's; the difference is the missing bill.
+  sig { params(cutoff: Date, today: Date).returns(T::Array[Meal]) }
   def self.skipped_by(cutoff, today:)
     Meal.unreconciled.where(date: ..cutoff).where(date: ...today)
         .where.missing(:bills).with_attendees
         .order(:date).preload(:meal_residents, :guests).to_a
   end
 
+  sig { returns(Reconciliation) }
   attr_reader :reconciliation
 
+  sig { params(reconciliation: Reconciliation).void }
   def initialize(reconciliation)
     @reconciliation = reconciliation
+    @claimed_meal_ids = T.let(nil, T.nilable(T::Array[Integer]))
   end
 
   # Create the row, claim the meals, write the ledger. Raises
   # ActiveRecord::RecordInvalid when the period is not settleable (cutoff
   # not in the past, or no meal to settle), and RuntimeError when a
   # concurrent settlement claimed a meal first; both roll everything back.
+  sig { returns(Reconciliation) }
   def settle!
     reconciliation.mark_settling!
 
@@ -107,9 +125,14 @@ class Settlement
   # that already exists and already claimed its meals. Not re-runnable on
   # its own — the caller clears both tables first, inside one transaction,
   # with the settled-write bypass on. See the runbook.
+  sig { void }
   def rewrite!
     write_ledger!
   end
+
+  # The name a preview passes as the reconciliation id in error messages,
+  # since it has no row.
+  ReconciliationRef = T.type_alias { T.nilable(T.any(Integer, String)) }
 
   # Distributes full-precision balances (which sum to zero) into cent-rounded
   # balances that also sum to exactly zero, using the largest-remainder method
@@ -123,18 +146,15 @@ class Settlement
   #
   # A class method because Reconciliation#settlement_balances (the read side,
   # used by ledger:verify) rounds the same way.
+  sig do
+    params(raw_balances: T::Hash[Integer, BigDecimal], reconciliation_id: ReconciliationRef)
+      .returns(T::Hash[Integer, BigDecimal])
+  end
   def self.allocate_to_cents(raw_balances, reconciliation_id: nil)
     assert_balanced_input!(raw_balances, reconciliation_id)
 
     one_cent = BigDecimal('0.01')
-
-    truncated = {}
-    remainders = {}
-
-    raw_balances.each do |id, raw|
-      truncated[id] = raw >= 0 ? raw.floor(2) : raw.ceil(2)
-      remainders[id] = raw - truncated[id]
-    end
+    truncated, remainders = truncate_toward_zero(raw_balances)
 
     residual = truncated.values.sum(BigDecimal('0'))
     pennies = (residual / one_cent).round.to_i
@@ -144,12 +164,12 @@ class Settlement
       # (those entries benefited most from truncation toward zero).
       candidates = remainders.select { |_, r| r.negative? }.sort_by { |id, r| [r, id] }
       assert_candidates_cover_pennies!(candidates, pennies, reconciliation_id)
-      pennies.times { |i| truncated[candidates.fetch(i)[0]] -= one_cent }
+      pennies.times { |i| adjust!(truncated, candidates.fetch(i).first, -one_cent) }
     elsif pennies.negative?
       # Sum too negative — add pennies to entries with most-positive remainders.
       candidates = remainders.select { |_, r| r.positive? }.sort_by { |id, r| [-r, id] }
       assert_candidates_cover_pennies!(candidates, pennies.abs, reconciliation_id)
-      pennies.abs.times { |i| truncated[candidates.fetch(i)[0]] += one_cent }
+      pennies.abs.times { |i| adjust!(truncated, candidates.fetch(i).first, one_cent) }
     end
 
     truncated
@@ -159,6 +179,29 @@ class Settlement
   # when the input already balances. A materially nonzero input sum means an
   # upstream bug — allocating anyway would silently spread the imbalance
   # across residents' settled amounts.
+  # Step 1: each balance cut to whole cents, and what the cut discarded.
+  sig do
+    params(raw_balances: T::Hash[Integer, BigDecimal])
+      .returns([T::Hash[Integer, BigDecimal], T::Hash[Integer, BigDecimal]])
+  end
+  def self.truncate_toward_zero(raw_balances)
+    truncated = T.let({}, T::Hash[Integer, BigDecimal])
+    remainders = T.let({}, T::Hash[Integer, BigDecimal])
+
+    raw_balances.each do |id, raw|
+      truncated[id] = raw >= 0 ? raw.floor(2) : raw.ceil(2)
+      remainders[id] = raw - truncated.fetch(id)
+    end
+
+    [truncated, remainders]
+  end
+
+  sig { params(balances: T::Hash[Integer, BigDecimal], id: Integer, delta: BigDecimal).void }
+  def self.adjust!(balances, id, delta)
+    balances[id] = balances.fetch(id) + delta
+  end
+
+  sig { params(raw_balances: T::Hash[Integer, BigDecimal], reconciliation_id: ReconciliationRef).void }
   def self.assert_balanced_input!(raw_balances, reconciliation_id)
     input_sum = raw_balances.values.sum(BigDecimal('0'))
     return if input_sum.abs <= Reconciliation::ZERO_SUM_EPSILON
@@ -172,6 +215,10 @@ class Settlement
   # ever needs more pennies than there are fractional remainders to absorb
   # them, the books cannot balance — fail with a diagnostic instead of
   # indexing past the end of the candidate list.
+  sig do
+    params(candidates: T::Array[[Integer, BigDecimal]], pennies_needed: Integer, reconciliation_id: ReconciliationRef)
+      .void
+  end
   def self.assert_candidates_cover_pennies!(candidates, pennies_needed, reconciliation_id)
     return if pennies_needed <= candidates.size
 
@@ -181,7 +228,7 @@ class Settlement
           'This indicates an upstream bug in balance computation.'
   end
 
-  private_class_method :assert_balanced_input!, :assert_candidates_cover_pennies!
+  private_class_method :truncate_toward_zero, :adjust!, :assert_balanced_input!, :assert_candidates_cover_pennies!
 
   private
 
@@ -222,6 +269,7 @@ class Settlement
   #
   # ORDER BY id keeps the lock order deterministic so two concurrent
   # settlements cannot deadlock against each other.
+  sig { void }
   def assign_meals
     meal_ids = eligible_meal_ids
     Meal.where(id: meal_ids).order(:id).lock.pluck(:id)
@@ -236,6 +284,7 @@ class Settlement
 
   # The same scope the create validation reads (Reconciliation#eligible_meals),
   # so the two cannot disagree about which meals count.
+  sig { returns(T::Array[Integer]) }
   def eligible_meal_ids
     reconciliation.eligible_meals.pluck(:id)
   end
@@ -258,6 +307,7 @@ class Settlement
   # deletes by the triggers in 20260731120000 and 20260802120000, and the
   # re-inserts by the unique indexes on both tables. To rebuild a
   # reconciliation on purpose, see docs/runbooks/settled-data-repair.md.
+  sig { void }
   def write_ledger!
     ledger = reconciliation.settlement_ledger
 
@@ -272,6 +322,7 @@ class Settlement
   # in a batch and there is nothing per-row to validate that the check
   # constraints and MealLedger do not already guarantee — and a settlement
   # writes a few hundred of them.
+  sig { params(ledger: MealLedger).void }
   def persist_charges!(ledger)
     lines = ledger.lines
     return if lines.empty?
@@ -288,6 +339,7 @@ class Settlement
     )
   end
 
+  sig { params(ledger: MealLedger).void }
   def persist_balances!(ledger)
     reconciliation.settlement_balances(ledger).each do |resident_id, amount|
       next if amount.zero?
@@ -306,6 +358,7 @@ class Settlement
   # raise here would make the caller skip the balance refresh and the
   # cook emails (SettleAndNotify) for a settlement that is in the
   # database.
+  sig { void }
   def forget_cached_meals
     ids = @claimed_meal_ids
     return if ids.blank?
