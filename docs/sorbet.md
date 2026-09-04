@@ -29,7 +29,7 @@ Every Ruby file carries a sigil on line 1.
 
 The money path is `# typed: strict`: `MealLedger`, `Settlement`,
 `BalanceRecalculation`, `SnapshotRead`, `LedgerVerification` and the
-`MealCharge` model. Every hand-written method there has a `sig`, and the
+`MealCharge` and `Reconciliation` models. Every hand-written method there has a `sig`, and the
 value objects (`MealLedger::Line`, `MealLedger::Summary`,
 `Settlement::Preview`) are `T::Struct`s, so a nil or a Float in a money
 field raises before any arithmetic runs. The `*_types_spec.rb` files under
@@ -130,8 +130,9 @@ Three more things a concern needs:
   `requires_ancestor { T.class_of(ApplicationRecord) }`.
   `ActiveSupport::Concern` treats both the same.
 
-The next candidate after the concerns is `Reconciliation`, which holds
-`settlement_balances`.
+Nothing is queued after the concerns. Moving another file to `strict` is
+a small change on its own: add `extend T::Sig`, a `sig` per hand-written
+method, and a `T.let` per constant and instance variable.
 
 ## Runtime behaviour
 
@@ -178,3 +179,9 @@ handler:
   `return render(...)` so the nil check before it narrows the variable.
 - **`sum(&:amount)` over nilable columns** returns a nilable to Sorbet.
   Use a block with `T.must`.
+- **Tapioca's relation classes exist only in the RBI files.** `Meal::PrivateRelation`
+  is what a scope returns to Sorbet, and it is not a constant at runtime.
+  A `sig` that names it raises `NameError` the first time the method is
+  called, which took every settlement spec down at once. Write
+  `returns(ActiveRecord::Relation)` instead; Sorbet knows the generated
+  classes are subclasses of it.

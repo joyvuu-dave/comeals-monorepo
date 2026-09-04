@@ -1,4 +1,4 @@
-# typed: true
+# typed: strict
 # frozen_string_literal: true
 
 # == Schema Information
@@ -17,6 +17,8 @@
 #  fk_rails_...  (community_id => communities.id)
 #
 class Reconciliation < ApplicationRecord
+  extend T::Sig
+
   include BelongsToTheCommunity
 
   # Raised when something tries to create a row without going through
@@ -27,9 +29,10 @@ class Reconciliation < ApplicationRecord
   # significant digits, so a balanced input sums to within ~1e-15 of zero even
   # across thousands of meals. Any genuine upstream imbalance manifests at a
   # fraction of a cent or more — orders of magnitude above this epsilon.
-  ZERO_SUM_EPSILON = BigDecimal('0.000001')
+  ZERO_SUM_EPSILON = T.let(BigDecimal('0.000001'), BigDecimal)
 
   # Ransack allowlists for ActiveAdmin sorting
+  sig { params(_auth_object: T.untyped).returns(T::Array[String]) }
   def self.ransackable_attributes(_auth_object = nil)
     %w[id date end_date created_at updated_at]
   end
@@ -65,10 +68,12 @@ class Reconciliation < ApplicationRecord
                               'Corrections settle as new entries in the next reconciliation.',
               destroy_message: 'Reconciliations are settlement events and cannot be destroyed.'
 
+  sig { returns(Integer) }
   def number_of_meals
     meals.count
   end
 
+  sig { returns(T::Array[Resident]) }
   def unique_cooks
     cooks.uniq
   end
@@ -77,6 +82,7 @@ class Reconciliation < ApplicationRecord
   # Neither date column is the start of that period — `date` is the day the
   # settlement ran and `end_date` is the sweep cutoff — so a "date to
   # end_date" display reads backwards ("2026-08-10 to 2026-06-15").
+  sig { returns(String) }
   def date_range_description
     DateRangeDescription.for(meals.minimum(:date), meals.maximum(:date))
   end
@@ -93,6 +99,7 @@ class Reconciliation < ApplicationRecord
   # Memory: loads all reconciled meals + associations into RAM. For a co-housing
   # community (~500 meals max), this is ~18K AR objects (~36 MB). Bounded by the
   # physical size of the community.
+  sig { params(ledger: MealLedger).returns(T::Hash[Integer, BigDecimal]) }
   def settlement_balances(ledger = settlement_ledger)
     raw_balances = ledger.balances(T.must(community).residents.pluck(:id))
 
@@ -121,22 +128,29 @@ class Reconciliation < ApplicationRecord
   # included table, which would produce a cartesian product across 3
   # associations. MealLedger runs no queries of its own, so these three
   # associations must be loaded before it sees the meals.
+  sig { returns(MealLedger) }
   def settlement_ledger
     MealLedger.new(meals.with_attendees.preload(:bills, :meal_residents, :guests).to_a)
   end
 
   # Settlement balances grouped by unit. Returns { [unit_id, unit_name] => BigDecimal }
   # for every community unit, including units whose residents all have $0.00 balances.
-  def unit_balances
-    grouped = reconciliation_balances
-              .joins(resident: :unit)
-              .group('units.id', 'units.name')
-              .sum(:amount)
+  UnitKey = T.type_alias { [Integer, String] }
 
-    T.must(community).units.order(:name).each_with_object({}) do |unit, result|
-      key = [unit.id, unit.name]
-      result[key] = grouped[key] || BigDecimal('0')
+  sig { returns(T::Hash[UnitKey, BigDecimal]) }
+  def unit_balances
+    # Grouped sum: Sorbet's relation sigs only know the ungrouped, scalar form.
+    grouped = T.cast(reconciliation_balances
+                       .joins(resident: :unit)
+                       .group('units.id', 'units.name')
+                       .sum(:amount), T::Hash[UnitKey, BigDecimal])
+
+    result = T.let({}, T::Hash[UnitKey, BigDecimal])
+    T.must(community).units.order(:name).each do |unit|
+      key = [T.must(unit.id), T.must(unit.name)]
+      result[key] = grouped.fetch(key, BigDecimal('0'))
     end
+    result
   end
 
   # The meals this reconciliation would sweep. The create validation and
@@ -144,18 +158,21 @@ class Reconciliation < ApplicationRecord
   # about what "eligible" means. A second copy of the predicate could drift,
   # and then a reconciliation would pass validation and go on to claim zero
   # meals.
+  sig { returns(ActiveRecord::Relation) }
   def eligible_meals
     Meal.settleable_by(end_date, today: T.must(community).today)
   end
 
   # Settlement calls this before saving the row it is about to settle. See
   # refuse_create_outside_settlement.
+  sig { void }
   def mark_settling!
-    @settling = true
+    @settling = T.let(true, T.nilable(T::Boolean))
   end
 
   private
 
+  sig { void }
   def set_date
     self.date ||= T.must(community).today
   end
@@ -163,6 +180,7 @@ class Reconciliation < ApplicationRecord
   # A reconciliation may only settle days that are over. Meals on today's date
   # (or later) may not have happened yet — cooks' receipts and attendance are
   # not final — so the cutoff must be strictly in the past (issue #3).
+  sig { void }
   def end_date_before_today
     end_date = self.end_date
     return if end_date.nil?
@@ -182,6 +200,7 @@ class Reconciliation < ApplicationRecord
   #
   # This reads the same eligible_meals scope that assign_meals sweeps, so the
   # two cannot disagree about which meals count.
+  sig { void }
   def must_settle_at_least_one_meal
     return if end_date.blank?
     return if errors[:end_date].any?
@@ -195,6 +214,7 @@ class Reconciliation < ApplicationRecord
   # transaction that claims the meals and writes the ledger. A row created
   # any other way would be a settlement that settled nothing, and the table
   # is append-only, so it could never be cleaned up.
+  sig { void }
   def refuse_create_outside_settlement
     return if @settling
 
