@@ -1,4 +1,4 @@
-# typed: true
+# typed: strict
 # frozen_string_literal: true
 
 # The one place the money arithmetic lives.
@@ -44,6 +44,8 @@
 # Every amount is BigDecimal at full precision. Nothing here rounds. Rounding
 # to cents happens once, at settlement, in Reconciliation#allocate_to_cents.
 class MealLedger
+  extend T::Sig
+
   # One debit or credit, for one resident, on one meal.
   #
   #   meal_id, resident_id  what this line is about
@@ -55,15 +57,37 @@ class MealLedger
   #                         nil on a debit. On a subsidized meal this differs
   #                         from the credit, and is the only way to explain
   #                         why the cook was not paid back in full.
-  Line = Data.define(:meal_id, :resident_id, :kind, :amount, :multiplier, :unit_cost, :bill_amount)
+  class Line < T::Struct
+    const :meal_id, Integer
+    const :resident_id, Integer
+    const :kind, Symbol
+    const :amount, BigDecimal
+    const :multiplier, T.nilable(Integer)
+    const :unit_cost, BigDecimal
+    const :bill_amount, T.nilable(BigDecimal)
+  end
 
-  ZERO = BigDecimal('0')
+  ZERO = T.let(BigDecimal('0'), BigDecimal)
 
+  # The three numbers one meal's lines are built from. Private to this
+  # class; screens get them through Summary.
+  class Financials < T::Struct
+    const :unit_cost, BigDecimal
+    const :total_cost, BigDecimal
+    const :effective_cost, BigDecimal
+  end
+  private_constant :Financials
+
+  # Callers hand in an Array, not a relation, so that every query has
+  # already run (see "This class runs no queries" above).
+  sig { params(meals: T::Array[Meal]).void }
   def initialize(meals)
     @meals = meals
+    @lines = T.let(nil, T.nilable(T::Array[Line]))
   end
 
   # Every line these meals produce, in no particular order.
+  sig { returns(T::Array[Line]) }
   def lines
     @lines ||= @meals.flat_map { |meal| lines_for(meal) }
   end
@@ -74,15 +98,21 @@ class MealLedger
   # the display face of the same financials_for pass the lines are built
   # from — screens must read it (via MealCostSummary), never re-derive
   # the arithmetic.
-  Summary = Data.define(:total_cost, :effective_cost, :unit_cost, :subsidized)
+  class Summary < T::Struct
+    const :total_cost, BigDecimal
+    const :effective_cost, BigDecimal
+    const :unit_cost, BigDecimal
+    const :subsidized, T::Boolean
+  end
 
+  sig { params(meal: Meal).returns(Summary) }
   def summary_for(meal)
     financials = financials_for(meal)
     Summary.new(
-      total_cost: financials[:total_cost],
-      effective_cost: financials[:effective_cost],
-      unit_cost: financials[:unit_cost],
-      subsidized: financials[:effective_cost] < financials[:total_cost]
+      total_cost: financials.total_cost,
+      effective_cost: financials.effective_cost,
+      unit_cost: financials.unit_cost,
+      subsidized: financials.effective_cost < financials.total_cost
     )
   end
 
@@ -94,15 +124,17 @@ class MealLedger
   # callers had before: each asked for its community's residents, and a row
   # cannot belong to anyone else (foreign keys, plus the destroy guards on
   # Resident).
+  sig { params(resident_ids: T::Array[Integer]).returns(T::Hash[Integer, BigDecimal]) }
   def balances(resident_ids)
-    totals = Hash.new(ZERO)
-    lines.each { |line| totals[line.resident_id] += line.amount }
+    totals = T.let({}, T::Hash[Integer, BigDecimal])
+    lines.each { |line| totals[line.resident_id] = totals.fetch(line.resident_id, ZERO) + line.amount }
 
-    resident_ids.index_with { |resident_id| totals[resident_id] }
+    resident_ids.index_with { |resident_id| totals.fetch(resident_id, ZERO) }
   end
 
   private
 
+  sig { params(meal: Meal).returns(T::Array[Line]) }
   def lines_for(meal)
     financials = financials_for(meal)
 
@@ -119,34 +151,39 @@ class MealLedger
   # Nobody can be charged a share of a meal with no units of multiplier — a
   # meal attended only by babies. Everything is zero there, which also means
   # the cooks get no credit and absorb the cost themselves.
+  sig { params(meal: Meal).returns(Financials) }
   def financials_for(meal)
-    total_multiplier = meal.meal_residents.sum(&:multiplier) + meal.guests.sum(&:multiplier)
-    return { unit_cost: ZERO, total_cost: ZERO, effective_cost: ZERO } if total_multiplier.zero?
+    total_multiplier = meal.meal_residents.sum { |attendance| T.must(attendance.multiplier) } +
+                       meal.guests.sum { |guest| T.must(guest.multiplier) }
+    return Financials.new(unit_cost: ZERO, total_cost: ZERO, effective_cost: ZERO) if total_multiplier.zero?
 
-    total_cost = meal.bills.reject(&:no_cost).sum(ZERO, &:amount)
+    total_cost = meal.bills.reject(&:no_cost).sum(ZERO) { |bill| T.must(bill.amount) }
     effective_cost = total_cost
 
-    if meal.capped?
-      max_cost = meal.cap * total_multiplier
+    cap = meal.cap # nil means uncapped (Meal#capped?)
+    unless cap.nil?
+      max_cost = cap * total_multiplier
       effective_cost = max_cost if total_cost > max_cost
     end
 
-    { unit_cost: effective_cost / total_multiplier, total_cost: total_cost, effective_cost: effective_cost }
+    Financials.new(unit_cost: effective_cost / total_multiplier, total_cost: total_cost,
+                   effective_cost: effective_cost)
   end
 
   # A no_cost bill records that someone cooked without spending money. It
   # produces no line at all, so it neither credits its cook nor raises what
   # anyone is charged.
+  sig { params(meal: Meal, financials: Financials).returns(T::Array[Line]) }
   def credit_lines(meal, financials)
     meal.bills.reject(&:no_cost).map do |bill|
       Line.new(
-        meal_id: meal.id,
-        resident_id: bill.resident_id,
+        meal_id: T.must(meal.id),
+        resident_id: T.must(bill.resident_id),
         kind: :credit,
         amount: credit_amount(bill, financials),
         multiplier: nil,
-        unit_cost: financials[:unit_cost],
-        bill_amount: bill.amount
+        unit_cost: financials.unit_cost,
+        bill_amount: T.must(bill.amount)
       )
     end
   end
@@ -154,13 +191,16 @@ class MealLedger
   # On a subsidized meal each cook is credited their share of what the eaters
   # were actually charged, in proportion to what they spent. Two cooks who
   # spent $40 and $20 on a meal capped at $18 are credited $12 and $6.
+  sig { params(bill: Bill, financials: Financials).returns(BigDecimal) }
   def credit_amount(bill, financials)
-    return ZERO if financials[:total_cost].zero?
-    return bill.amount unless financials[:effective_cost] < financials[:total_cost]
+    amount = T.must(bill.amount)
+    return ZERO if financials.total_cost.zero?
+    return amount unless financials.effective_cost < financials.total_cost
 
-    (bill.amount / financials[:total_cost]) * financials[:effective_cost]
+    (amount / financials.total_cost) * financials.effective_cost
   end
 
+  sig { params(meal: Meal, financials: Financials).returns(T::Array[Line]) }
   def debit_lines(meal, financials)
     residents = meal.meal_residents.map { |attendance| debit_line(meal, attendance, financials, :debit) }
     guests = meal.guests.map { |guest| debit_line(meal, guest, financials, :guest_debit) }
@@ -170,14 +210,19 @@ class MealLedger
 
   # A guest's debit goes to the resident who brought them, which is why a
   # guest line carries a resident_id at all.
+  sig do
+    params(meal: Meal, attendance: T.any(MealResident, Guest), financials: Financials, kind: Symbol)
+      .returns(Line)
+  end
   def debit_line(meal, attendance, financials, kind)
+    multiplier = T.must(attendance.multiplier)
     Line.new(
-      meal_id: meal.id,
-      resident_id: attendance.resident_id,
+      meal_id: T.must(meal.id),
+      resident_id: T.must(attendance.resident_id),
       kind: kind,
-      amount: -(financials[:unit_cost] * attendance.multiplier),
-      multiplier: attendance.multiplier,
-      unit_cost: financials[:unit_cost],
+      amount: -(financials.unit_cost * multiplier),
+      multiplier: multiplier,
+      unit_cost: financials.unit_cost,
       bill_amount: nil
     )
   end
