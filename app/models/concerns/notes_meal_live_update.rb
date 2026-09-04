@@ -1,4 +1,4 @@
-# typed: false
+# typed: true
 # frozen_string_literal: true
 
 # A row that belongs to a meal and shows on its page and on the calendar
@@ -8,8 +8,13 @@
 # of the meal's save callbacks, so the row has to note itself.
 module NotesMealLiveUpdate
   extend ActiveSupport::Concern
+  extend T::Helpers
+
+  requires_ancestor { ApplicationRecord }
 
   included do
+    T.bind(self, T.class_of(ApplicationRecord))
+
     after_save :note_meal_live_update
     after_destroy :note_meal_live_update
   end
@@ -18,7 +23,7 @@ module NotesMealLiveUpdate
 
   def note_meal_live_update
     LiveUpdate.meal(meal_id)
-    LiveUpdate.calendar(meal.date)
+    LiveUpdate.calendar(T.must(meal).date)
     old_meal_id = saved_changes.dig('meal_id', 0)
     return unless old_meal_id
 

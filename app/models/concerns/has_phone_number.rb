@@ -1,4 +1,4 @@
-# typed: false
+# typed: true
 # frozen_string_literal: true
 
 # A phone column that accepts any way of typing a number and stores one
@@ -21,8 +21,13 @@
 # writes that skip the model.
 module HasPhoneNumber
   extend ActiveSupport::Concern
+  extend T::Helpers
+
+  requires_ancestor { ApplicationRecord }
 
   included do
+    T.bind(self, T.class_of(ApplicationRecord))
+
     before_validation :normalize_phone
     validate :phone_must_be_a_real_number
   end
@@ -30,6 +35,7 @@ module HasPhoneNumber
   private
 
   def normalize_phone
+    phone = self.phone
     if phone.blank?
       self.phone = nil
       return
@@ -40,6 +46,7 @@ module HasPhoneNumber
   end
 
   def phone_must_be_a_real_number
+    phone = self.phone
     return if phone.nil? || Phonelib.valid?(phone)
 
     errors.add(:phone, 'does not look like a real phone number. Enter it with the area code ' \

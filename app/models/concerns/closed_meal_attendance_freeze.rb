@@ -1,4 +1,4 @@
-# typed: false
+# typed: true
 # frozen_string_literal: true
 
 # Closing a meal freezes its headcount — attendance rows (MealResident,
@@ -18,14 +18,19 @@
 # stronger, settlement-level freeze — always runs first.
 module ClosedMealAttendanceFreeze
   extend ActiveSupport::Concern
+  extend T::Helpers
+
+  requires_ancestor { ApplicationRecord }
+
+  # The one sanctioned bypass (issue #25): an admin correcting the record
+  # to match reality. Set per row by the ActiveAdmin attendance controller,
+  # never persisted, never assignable through the API (its controllers
+  # assign only late/vegetarian). Reconciled meals still refuse —
+  # ReconciledMealImmutability runs first and has no bypass.
+  attr_accessor :admin_correction
 
   included do
-    # The one sanctioned bypass (issue #25): an admin correcting the record
-    # to match reality. Set per row by the ActiveAdmin attendance controller,
-    # never persisted, never assignable through the API (its controllers
-    # assign only late/vegetarian). Reconciled meals still refuse —
-    # ReconciledMealImmutability runs first and has no bypass.
-    attr_accessor :admin_correction
+    T.bind(self, T.class_of(ApplicationRecord))
 
     validate :meal_has_open_spots, on: :create
     before_destroy :record_can_be_removed
@@ -35,14 +40,17 @@ module ClosedMealAttendanceFreeze
     # Scenario: Admin attendance correction — the freeze does not apply
     return true if admin_correction
 
+    meal = T.must(self.meal)
+
     # Scenario: Meal is open
     return true if meal.closed == false
 
     # Scenario: Meal is closed and max has NOT been set
-    return errors.add(:base, 'Meal has been closed.') if meal.max.nil?
+    max = meal.max
+    return errors.add(:base, 'Meal has been closed.') if max.nil?
 
     # Scenario: Meal is closed, max has been set, there are open spots
-    return true if meal.attendees_count < meal.max
+    return true if meal.attendees_count < max
 
     # Scenario: Meal is closed, max has been set, there are NOT open spots
     errors.add(:base, 'Meal has no open spots.')
@@ -53,11 +61,14 @@ module ClosedMealAttendanceFreeze
     # Scenario: Admin attendance correction — the freeze does not apply
     return true if admin_correction
 
+    meal = T.must(self.meal)
+
     # Scenario: Meal is open
     return true if meal.closed == false
 
     # Scenario: Meal is closed, record was added after meal was closed (there were extras)
-    return true if meal.closed == true && meal.closed_at.present? && created_at > meal.closed_at
+    closed_at = meal.closed_at
+    return true if meal.closed == true && closed_at.present? && T.must(created_at) > closed_at
 
     # Scenario: Meal is closed, record was added before meal was closed
     errors.add(:base, 'Meal has been closed.')

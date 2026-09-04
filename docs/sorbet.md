@@ -21,11 +21,11 @@ old reader in the RBI, and Sorbet accepts calls to it.
 
 Every Ruby file carries a sigil on line 1.
 
-| Sigil            | Where                                                                                                               | Why                                                                                                                                                                                            |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `# typed: true`  | `app/models`, `app/services`, `app/serializers`, `app/controllers`, `app/jobs`, `app/mailers`, `app/helpers`, `lib` | The code that computes money and serves requests. Sorbet reports a method that does not exist, a call on a value that can be nil, and a wrong argument count.                                  |
-| `# typed: false` | `app/models/concerns`, `app/admin`, `config`, `db`                                                                  | Sorbet only checks syntax and that constants resolve. Concerns: see below. Admin: the ActiveAdmin DSL runs blocks with a `self` Sorbet cannot see. Config and db: DSL files and migrations.    |
-| none             | `spec`                                                                                                              | Sorbet ignores `spec/` (`sorbet/config`). A `def` inside an RSpec block is a method on `Object` to Sorbet, so the 125 helpers defined inside describe blocks would leak into every typed file. |
+| Sigil            | Where                                                                                                                                   | Why                                                                                                                                                                                            |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `# typed: true`  | `app/models` (concerns included), `app/services`, `app/serializers`, `app/controllers`, `app/jobs`, `app/mailers`, `app/helpers`, `lib` | The code that computes money and serves requests. Sorbet reports a method that does not exist, a call on a value that can be nil, and a wrong argument count.                                  |
+| `# typed: false` | `app/admin`, `config`, `db`                                                                                                             | Sorbet only checks syntax and that constants resolve. Admin: the ActiveAdmin DSL runs blocks with a `self` Sorbet cannot see. Config and db: DSL files and migrations.                         |
+| none             | `spec`                                                                                                                                  | Sorbet ignores `spec/` (`sorbet/config`). A `def` inside an RSpec block is a method on `Object` to Sorbet, so the 125 helpers defined inside describe blocks would leak into every typed file. |
 
 The money path is `# typed: strict`: `MealLedger`, `Settlement`,
 `BalanceRecalculation`, `SnapshotRead`, `LedgerVerification` and the
@@ -38,9 +38,6 @@ field raises before any arithmetic runs. The `*_types_spec.rb` files under
 A model at `strict` is mostly Rails' work: the column readers,
 associations and scopes come from the generated RBIs, so the sigs go on
 the few methods the model writes itself, and constants get a `T.let`.
-
-The next candidates, in order: the concerns (see below), then
-`Reconciliation`, which holds `settlement_balances`.
 
 ## How column and association types are generated
 
@@ -110,16 +107,31 @@ with `method_missing`. Both are declared by hand in `sorbet/rbi/shims/`.
 Keep a shim next to a comment saying which gem call defines the method,
 so it can be removed when Tapioca learns to generate it.
 
-## Concerns stay at `typed: false` for now
+## Concerns: what the includer provides is declared in a shim
 
-A concern calls methods that only exist on the model that includes it:
-`meal`, `phone`, `meal_id_in_database`, `errors`, `throw`. Sorbet checks
-the module on its own and finds none of them. The fix is an interface
-module that declares the methods the concern needs (`sig { abstract
-.returns(Meal) }` for `meal`) and `requires_ancestor`. Two of the seven
-concerns hold money-path rules (`ClosedMealAttendanceFreeze`,
-`ReconciledMealImmutability`), so this is worth doing, but as its own
-change.
+A concern calls methods that only the model including it has: `meal`,
+`phone`, `meal_id_in_database`. Sorbet checks the module on its own and
+finds none of them. They are declared in `sorbet/rbi/shims/concerns.rbi`,
+one block per concern, as the list of what an includer must provide.
+
+Why a shim and not an interface module in Ruby: a `def meal` in any
+module that a model includes sits before Rails' generated modules in the
+ancestor chain, so at runtime it would shadow the real `belongs_to`
+reader. An RBI file has no runtime, so it cannot.
+
+Three more things a concern needs:
+
+- `extend T::Helpers` and `requires_ancestor { ApplicationRecord }`, so
+  `errors`, `throw` and dirty tracking resolve.
+- `T.bind(self, T.class_of(ApplicationRecord))` as the first line of an
+  `included do` block, and `T.bind(self, TheConcern)` inside a callback
+  lambda, because Sorbet cannot see what `self` is inside those blocks.
+- `module ClassMethods` written out instead of `class_methods do`, with
+  `requires_ancestor { T.class_of(ApplicationRecord) }`.
+  `ActiveSupport::Concern` treats both the same.
+
+The next candidate after the concerns is `Reconciliation`, which holds
+`settlement_balances`.
 
 ## Runtime behaviour
 

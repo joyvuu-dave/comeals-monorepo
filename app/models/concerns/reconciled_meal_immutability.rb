@@ -1,4 +1,4 @@
-# typed: false
+# typed: true
 # frozen_string_literal: true
 
 # Rows that feed a meal's settlement (bills, attendance) are immutable once
@@ -12,14 +12,19 @@
 # check always runs first.
 module ReconciledMealImmutability
   extend ActiveSupport::Concern
+  extend T::Helpers
+
+  requires_ancestor { ApplicationRecord }
 
   included do
+    T.bind(self, T.class_of(ApplicationRecord))
+
     before_save :reject_if_reconciled
     before_destroy :reject_if_reconciled
   end
 
   def reject_if_reconciled
-    return unless meal.reconciled? || previous_meal_reconciled?
+    return unless T.must(meal).reconciled? || previous_meal_reconciled?
 
     errors.add(:base, 'Meal has been reconciled.')
     throw(:abort)
@@ -28,8 +33,9 @@ module ReconciledMealImmutability
   private
 
   def previous_meal_reconciled?
-    return false unless will_save_change_to_meal_id? && meal_id_in_database.present?
+    old_meal_id = meal_id_in_database
+    return false unless will_save_change_to_meal_id? && old_meal_id.present?
 
-    Meal.find(meal_id_in_database).reconciled?
+    Meal.find(old_meal_id).reconciled?
   end
 end

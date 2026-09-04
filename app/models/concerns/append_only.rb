@@ -1,4 +1,4 @@
-# typed: false
+# typed: true
 # frozen_string_literal: true
 
 # Financial records are append-only: once written they are never edited
@@ -19,11 +19,24 @@
 # callbacks entirely.
 module AppendOnly
   extend ActiveSupport::Concern
+  extend T::Helpers
 
-  class_methods do
+  requires_ancestor { ApplicationRecord }
+
+  module ClassMethods
+    extend T::Helpers
+
+    requires_ancestor { T.class_of(ApplicationRecord) }
+
     def append_only(update_message:, destroy_message:)
-      before_update -> { append_only_refuse(update_message) }
-      before_destroy -> { append_only_refuse(destroy_message) }, prepend: true
+      before_update lambda {
+        T.bind(self, AppendOnly)
+        append_only_refuse(update_message)
+      }
+      before_destroy lambda {
+        T.bind(self, AppendOnly)
+        append_only_refuse(destroy_message)
+      }, prepend: true
     end
   end
 

@@ -1,4 +1,4 @@
-# typed: false
+# typed: true
 # frozen_string_literal: true
 
 # Every row in these tables points at the one Community row. The app serves
@@ -18,10 +18,15 @@ module BelongsToTheCommunity
   extend ActiveSupport::Concern
 
   included do
+    T.bind(self, T.class_of(ApplicationRecord))
+
     belongs_to :community
 
     # ||= so a caller that does set the community (a spec, a nested
     # attributes hash) keeps what it set.
-    before_validation { self.community ||= Community.instance }
+    before_validation do
+      T.bind(self, BelongsToTheCommunity)
+      self.community ||= Community.instance
+    end
   end
 end
