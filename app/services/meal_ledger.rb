@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # The one place the money arithmetic lives.

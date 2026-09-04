@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # The value a money text field shows on an admin form. Money columns are

@@ -1,3 +1,4 @@
+# typed: false
 # frozen_string_literal: true
 
 # One thread because nothing needs more — roughly 30 residents, one dyno.

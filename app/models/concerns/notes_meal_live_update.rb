@@ -1,3 +1,4 @@
+# typed: false
 # frozen_string_literal: true
 
 # A row that belongs to a meal and shows on its page and on the calendar

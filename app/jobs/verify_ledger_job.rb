@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # Check every settled balance against its source data. LedgerVerification

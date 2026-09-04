@@ -1,0 +1,15 @@
+gem:
+  # net-imap's RBI redefines two superclasses that Sorbet's built-in stdlib
+  # RBI already declares (Net::IMAP::Literal, Net::IMAP::QuotedString), and
+  # `srb tc` refuses that. Nothing in the app uses IMAP; the gem is only
+  # here because `mail` depends on it.
+  exclude:
+    - net-imap
+dsl:
+  compiler_options:
+    # Every column reader returns T.nilable. The default, `persisted`, types
+    # a NOT NULL column as never nil, which is only true after a successful
+    # save. Validations and before_validation callbacks run before that, on
+    # records that can hold nil, and with `persisted` Sorbet marked the nil
+    # guards in them as unreachable code. See docs/sorbet.md.
+    ActiveRecordColumnTypes: nilable

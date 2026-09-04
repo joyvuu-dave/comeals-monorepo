@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # == Schema Information
@@ -91,10 +92,11 @@ class Rotation < ApplicationRecord
 
   def set_color
     last_color = Rotation.order(:id).pluck(:color).last
-    self.color = if last_color && COLORS.include?(last_color)
-                   COLORS[(COLORS.index(last_color) + 1) % COLORS.length]
+    last_index = last_color && COLORS.index(last_color)
+    self.color = if last_index
+                   COLORS.fetch((last_index + 1) % COLORS.length)
                  else
-                   COLORS[0]
+                   COLORS.fetch(0)
                  end
   end
 
@@ -187,7 +189,7 @@ class Rotation < ApplicationRecord
   def touched_meals
     meals.where(closed: true)
          .or(meals.where.not(reconciliation_id: nil))
-         .or(meals.where(date: ..community.today))
+         .or(meals.where(date: ..T.must(community).today))
          .or(meals.where(id: Bill.select(:meal_id)))
          .or(meals.where(id: MealResident.select(:meal_id)))
          .or(meals.where(id: Guest.select(:meal_id)))
@@ -211,7 +213,7 @@ class Rotation < ApplicationRecord
   def reject_destroy_unless_last
     last_date = meals.maximum(:date)
     return if last_date.nil?
-    return unless community.meals.exists?(date: (last_date + 1)..)
+    return unless T.must(community).meals.exists?(date: (last_date + 1)..)
 
     errors.add(:base, 'Meals exist after this rotation, and new meals are only ever added after ' \
                       'the last one — deleting from the middle would leave a permanent hole. ' \

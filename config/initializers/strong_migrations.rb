@@ -1,3 +1,4 @@
+# typed: false
 # frozen_string_literal: true
 
 # The migration policy behind automated rollback (deploy-confidence

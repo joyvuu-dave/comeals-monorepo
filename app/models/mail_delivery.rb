@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # A record that one email went out: which mailer, about which record, to

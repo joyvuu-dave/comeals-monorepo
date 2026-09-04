@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # == Schema Information
@@ -51,7 +52,9 @@ class CommonHouseReservation < ApplicationRecord
   end
 
   def start_date_is_before_end_date
-    return if start_date.blank? || end_date.blank?
+    start_date = self.start_date
+    end_date = self.end_date
+    return if start_date.nil? || end_date.nil?
 
     errors.add(:base, 'Start time must occur before end time') if end_date < start_date
   end

@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 class ApiController < ActionController::API
@@ -95,7 +96,7 @@ class ApiController < ActionController::API
       return
     end
 
-    key = token && Key.find_by(token: token)
+    key = token ? Key.find_by(token: token) : nil
     @current_api_key = key
     @current_resident_api = key&.identity
   end

@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # Recomputes every resident's running balance from source data and stores
@@ -21,9 +22,6 @@ class BalanceRecalculation
 
   # Returns the number of balances written.
   def call
-    unreconciled_meals = nil
-    resident_ids = nil
-
     # Read every source record inside one snapshot so all five queries
     # (meals, three preloads, residents) see one instant. Unreconciled meals
     # are mutable: without this, a meal edit committing between two of the
@@ -31,7 +29,7 @@ class BalanceRecalculation
     # ledger. SnapshotRead opens the transaction SERIALIZABLE READ ONLY
     # DEFERRABLE, which cannot abort with a serialization failure and so
     # still needs no retry. See app/services/snapshot_read.rb.
-    SnapshotRead.call do
+    unreconciled_meals, resident_ids = SnapshotRead.call do
       # Batch-load all unreconciled meals with their financial associations
       # (4 queries). Uses preload (not includes) to guarantee separate IN(?)
       # queries. The joins(:bills).distinct excludes meals without bills —
@@ -39,10 +37,10 @@ class BalanceRecalculation
       #
       # MealLedger below runs no queries of its own, which is what keeps the
       # whole computation inside this snapshot.
-      unreconciled_meals = @community.meals.unreconciled.with_attendees
-                                     .joins(:bills).distinct
-                                     .preload(:bills, :meal_residents, :guests).to_a
-      resident_ids = @community.residents.pluck(:id)
+      meals = @community.meals.unreconciled.with_attendees
+                        .joins(:bills).distinct
+                        .preload(:bills, :meal_residents, :guests).to_a
+      [meals, @community.residents.pluck(:id)]
     end
 
     # The arithmetic is MealLedger's, shared with Reconciliation#settlement_balances

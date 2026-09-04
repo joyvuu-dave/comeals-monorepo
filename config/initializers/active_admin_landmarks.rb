@@ -1,3 +1,4 @@
+# typed: false
 # frozen_string_literal: true
 
 # ActiveAdmin 3.5 renders the page body inside <div id="main_content_wrapper">

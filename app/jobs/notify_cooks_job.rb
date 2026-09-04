@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # Email every cook in a settlement. Runs after the settlement has committed,

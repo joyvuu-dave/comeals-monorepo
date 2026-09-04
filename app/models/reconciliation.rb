@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # == Schema Information
@@ -93,7 +94,7 @@ class Reconciliation < ApplicationRecord
   # community (~500 meals max), this is ~18K AR objects (~36 MB). Bounded by the
   # physical size of the community.
   def settlement_balances(ledger = settlement_ledger)
-    raw_balances = ledger.balances(community.residents.pluck(:id))
+    raw_balances = ledger.balances(T.must(community).residents.pluck(:id))
 
     # Round to cents using largest-remainder method (Hamilton's method).
     # This guarantees rounded balances sum to exactly zero — the standard
@@ -132,7 +133,7 @@ class Reconciliation < ApplicationRecord
               .group('units.id', 'units.name')
               .sum(:amount)
 
-    community.units.order(:name).each_with_object({}) do |unit, result|
+    T.must(community).units.order(:name).each_with_object({}) do |unit, result|
       key = [unit.id, unit.name]
       result[key] = grouped[key] || BigDecimal('0')
     end
@@ -144,7 +145,7 @@ class Reconciliation < ApplicationRecord
   # and then a reconciliation would pass validation and go on to claim zero
   # meals.
   def eligible_meals
-    Meal.settleable_by(end_date, today: community.today)
+    Meal.settleable_by(end_date, today: T.must(community).today)
   end
 
   # Settlement calls this before saving the row it is about to settle. See
@@ -156,15 +157,16 @@ class Reconciliation < ApplicationRecord
   private
 
   def set_date
-    self.date ||= community.today
+    self.date ||= T.must(community).today
   end
 
   # A reconciliation may only settle days that are over. Meals on today's date
   # (or later) may not have happened yet — cooks' receipts and attendance are
   # not final — so the cutoff must be strictly in the past (issue #3).
   def end_date_before_today
-    return if end_date.blank?
-    return if end_date < community.today
+    end_date = self.end_date
+    return if end_date.nil?
+    return if end_date < T.must(community).today
 
     errors.add(:end_date, 'must be in the past')
   end

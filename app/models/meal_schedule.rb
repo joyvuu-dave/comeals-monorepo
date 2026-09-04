@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # The community's meal schedule as a value: a repeating cycle of weeks, each

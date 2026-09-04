@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # The base of every scheduled job. Three things every recurring job gets:
@@ -22,12 +23,12 @@ class RecurringJob < ApplicationJob
 
   # The name a run is recorded under, and the key config/recurring.yml uses.
   def self.run_name
-    name.delete_suffix('Job').underscore
+    T.must(name).delete_suffix('Job').underscore
   end
 
   def perform
     started_at = Time.current
-    details = nil
+    details = T.let(nil, T.untyped)
     self.class.const_get(:HEALTHCHECK).then do |slug|
       Healthcheck.monitor(slug) { details = run }
     end
@@ -35,6 +36,12 @@ class RecurringJob < ApplicationJob
   rescue StandardError => e
     record(started_at, outcome: 'failed', error: "#{e.class}: #{e.message}")
     raise
+  end
+
+  # Every subclass defines this. It is here so the base class names the
+  # contract, and so a subclass that forgets it fails with a clear message.
+  def run
+    raise NotImplementedError, "#{self.class.name} must define #run"
   end
 
   private

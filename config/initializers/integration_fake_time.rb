@@ -1,3 +1,4 @@
+# typed: false
 # frozen_string_literal: true
 
 # The integration suite's frozen clock (docs/deploy-confidence-plan.md,

@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # Make sure the meal calendar reaches at least six months ahead, creating

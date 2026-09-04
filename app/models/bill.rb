@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # == Schema Information
@@ -60,6 +61,7 @@ class Bill < ApplicationRecord
   validates :resident_id, uniqueness: { scope: :meal_id }
 
   def amount_in_whole_cents
+    amount = self.amount
     return if amount.nil? || amount == amount.round(2)
 
     errors.add(:amount, 'must be whole cents')

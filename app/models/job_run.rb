@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # One row per run of a recurring job: when it started and finished, whether
@@ -41,6 +42,6 @@ class JobRun < ApplicationRecord
   end
 
   def duration
-    finished_at - started_at
+    T.must(finished_at) - T.must(started_at)
   end
 end

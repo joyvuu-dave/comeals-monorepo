@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # Admin authorization. Three levels, described in full in

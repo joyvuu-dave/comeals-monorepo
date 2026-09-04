@@ -1,3 +1,4 @@
+# typed: false
 # frozen_string_literal: true
 
 # A phone column that accepts any way of typing a number and stores one

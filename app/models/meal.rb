@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # == Schema Information
@@ -141,7 +142,7 @@ class Meal < ApplicationRecord
   end
 
   def set_cap
-    self.cap = community.cap
+    self.cap = T.must(community).cap
   end
 
   def conditionally_set_max
@@ -182,7 +183,7 @@ class Meal < ApplicationRecord
 
   def multiplier
     if meal_residents.loaded? && guests.loaded?
-      meal_residents.sum(&:multiplier) + guests.sum(&:multiplier)
+      meal_residents.sum { |mr| T.must(mr.multiplier) } + guests.sum { |guest| T.must(guest.multiplier) }
     else
       meal_residents.sum(:multiplier) + guests.sum(:multiplier)
     end

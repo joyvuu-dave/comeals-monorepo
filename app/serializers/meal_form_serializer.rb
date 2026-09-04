@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # The meal form: GET /api/v1/meals/:meal_id/cooks. One meal, its bills,
@@ -104,6 +105,7 @@ class MealFormSerializer
   many :bills, resource: BillSerializer
 
   attribute :residents do |meal|
+    T.bind(self, MealFormSerializer)
     ResidentSerializer.new(residents(meal), params: { meal: meal }).to_h
   end
 

@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # The JSON for GET /api/v1/reconciliations/preview: what a settlement at the
@@ -71,7 +72,7 @@ class ReconciliationPreviewSerializer
       residents: nonzero.keys.sort.map do |resident_id|
         resident = residents.fetch(resident_id)
         { resident_id: resident_id, name: resident.name, unit_id: resident.unit_id,
-          unit_name: resident.unit.name, amount: nonzero[resident_id] }
+          unit_name: T.must(resident.unit).name, amount: nonzero[resident_id] }
       end,
       units: Unit.order(:name).map do |unit|
         in_unit = residents.values.select { |resident| resident.unit_id == unit.id }

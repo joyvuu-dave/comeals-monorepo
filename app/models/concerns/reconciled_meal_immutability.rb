@@ -1,3 +1,4 @@
+# typed: false
 # frozen_string_literal: true
 
 # Rows that feed a meal's settlement (bills, attendance) are immutable once

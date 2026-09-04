@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # Builds the iCal feeds (the webcal links on the calendar page): the

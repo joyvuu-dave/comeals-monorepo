@@ -84,6 +84,8 @@ group :development, :test do
   gem 'rubocop-rails', require: false
   gem 'rubocop-rspec', require: false
   gem 'rubocop-rspec_rails', require: false
+  gem 'sorbet', require: false
+  gem 'tapioca', require: false
 end
 
 group :test do
@@ -108,3 +110,8 @@ gem 'oj'
 gem 'tzinfo-data', platforms: %i[jruby windows]
 
 gem 'strong_migrations', '~> 2.8'
+
+# Static types. sorbet-runtime is the only part the app loads at runtime
+# (T::Sig, T.let and friends); the checker and the RBI generator are
+# development-only. `bin/check` runs `srb tc`. See docs/sorbet.md.
+gem 'sorbet-runtime'

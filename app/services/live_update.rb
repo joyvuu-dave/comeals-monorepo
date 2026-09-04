@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # The one way the server tells the SPA that something changed.

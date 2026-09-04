@@ -1,3 +1,4 @@
+# typed: false
 # frozen_string_literal: true
 
 # A phone number typed without a + prefix is parsed as a number from this

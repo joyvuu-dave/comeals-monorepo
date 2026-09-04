@@ -1,3 +1,4 @@
+# typed: false
 # frozen_string_literal: true
 
 # Request throttling for abusive traffic. The goal here is NOT to rate-limit

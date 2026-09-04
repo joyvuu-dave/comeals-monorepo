@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # Runs a block, and runs it again if PostgreSQL refused it for a conflict

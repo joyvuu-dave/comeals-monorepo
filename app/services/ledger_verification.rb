@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # Control A: does every settled balance still match the source data behind it?

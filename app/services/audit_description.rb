@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # Turns an audited change row into the sentence the meal page's history
@@ -112,9 +113,9 @@ class AuditDescription
       return "#{name} removed as cook"
     end
 
-    bill = Bill.find_by(id: audit.auditable_id)
-    cook_name = if bill&.resident.present?
-                  short_name(bill.resident.name)
+    cook = Bill.find_by(id: audit.auditable_id)&.resident
+    cook_name = if cook
+                  short_name(cook.name)
                 else
                   name_or_unknown(resident_from_audit_trail('Bill', audit.auditable_id))
                 end

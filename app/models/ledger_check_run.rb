@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # == Schema Information
@@ -45,11 +46,11 @@ class LedgerCheckRun < ApplicationRecord
   # nothing about the books, which is different from a run that finished and
   # found them right.
   def passed?
-    error.nil? && mismatch_count.zero?
+    error.nil? && T.must(mismatch_count).zero?
   end
 
   def failed?
-    error.nil? && mismatch_count.positive?
+    error.nil? && T.must(mismatch_count).positive?
   end
 
   def errored?
@@ -57,6 +58,6 @@ class LedgerCheckRun < ApplicationRecord
   end
 
   def duration
-    finished_at - started_at
+    T.must(finished_at) - T.must(started_at)
   end
 end

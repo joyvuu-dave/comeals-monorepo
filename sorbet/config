@@ -1,0 +1,9 @@
+--dir
+.
+--ignore=tmp/
+--ignore=vendor/
+# A `def` inside an RSpec block is a method on Object to Sorbet, so every
+# helper defined in a describe block would leak into every typed file.
+--ignore=spec/
+--parser=prism
+--enable-experimental-requires-ancestor

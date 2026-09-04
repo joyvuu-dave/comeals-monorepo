@@ -1,3 +1,4 @@
+# typed: false
 # frozen_string_literal: true
 
 require Rails.root.join('lib/bugsnag_error_subscriber')

@@ -1,3 +1,4 @@
+# typed: false
 # frozen_string_literal: true
 
 # When the app runs at SERIALIZABLE, PostgreSQL can refuse any transaction for

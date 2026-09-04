@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # == Schema Information
@@ -77,6 +78,9 @@ class MealCharge < ApplicationRecord
   # less than they laid out and the difference was absorbed rather than
   # charged to the eaters.
   def subsidized?
-    credit? && bill_amount > amount
+    bill_amount = self.bill_amount
+    return false unless credit? && bill_amount
+
+    T.must(amount) < bill_amount
   end
 end

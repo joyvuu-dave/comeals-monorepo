@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # Make every resident's running balance match the source data. Safe at any

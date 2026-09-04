@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 class ApplicationController < ActionController::Base
@@ -59,7 +60,7 @@ class ApplicationController < ActionController::Base
   end
 
   def current_admin_user_custom
-    return AdminUser.find(ENV.fetch('READ_ONLY_ADMIN_ID', nil)) if read_only_admin_token?
+    return AdminUser.find(ENV.fetch('READ_ONLY_ADMIN_ID', nil).to_s) if read_only_admin_token?
 
     current_admin_user
   end

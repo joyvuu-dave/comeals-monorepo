@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # Cook-scheduling guard for the bills form. Warns when a payload adds or

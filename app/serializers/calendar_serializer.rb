@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # Serializes a community's calendar month for the frontend. Build it with
@@ -50,30 +51,37 @@ class CalendarSerializer
   # is an attribute block that runs the query and serializes the rows,
   # not a `many` on a model association.
   attribute :meals do |community|
+    T.bind(self, CalendarSerializer)
     MealSerializer.new(meals_in_range(community)).to_h
   end
 
   attribute :bills do |community|
+    T.bind(self, CalendarSerializer)
     BillSerializer.new(bills_in_range(community)).to_h
   end
 
   attribute :rotations do |community|
+    T.bind(self, CalendarSerializer)
     RotationSerializer.new(rotations_in_range(community)).to_h
   end
 
   attribute :birthdays do |community|
+    T.bind(self, CalendarSerializer)
     ResidentBirthdaySerializer.new(birthdays_in_range(community)).to_h
   end
 
   attribute :common_house_reservations do |community|
+    T.bind(self, CalendarSerializer)
     CommonHouseReservationSerializer.new(common_house_reservations_in_range(community)).to_h
   end
 
   attribute :guest_room_reservations do |community|
+    T.bind(self, CalendarSerializer)
     GuestRoomReservationSerializer.new(guest_room_reservations_in_range(community)).to_h
   end
 
   attribute :events do |community|
+    T.bind(self, CalendarSerializer)
     EventSerializer.new(events_in_range(community)).to_h
   end
 

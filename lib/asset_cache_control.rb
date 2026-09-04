@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # Marks files under /assets/ and /vite-assets/ as cacheable for a year.

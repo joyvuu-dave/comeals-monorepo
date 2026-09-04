@@ -1,3 +1,4 @@
+# typed: false
 # frozen_string_literal: true
 
 # Intercepts all outgoing emails and redirects them to a single address.

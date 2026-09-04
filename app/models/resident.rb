@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # == Schema Information
@@ -98,7 +99,7 @@ class Resident < ApplicationRecord
   # and the residents_birthday_not_sentinel CHECK catches writes that skip
   # the model.
   validates :birthday, presence: { message: 'is required for children — pricing changes as they age' },
-                       if: -> { multiplier < Multiplier::FULL }
+                       if: ->(resident) { T.must(resident.multiplier) < Multiplier::FULL }
   validates :birthday, exclusion: { in: [Date.new(1900, 1, 1)],
                                     message: 'cannot be the old 1900-01-01 placeholder — leave it blank instead' }
 
@@ -109,7 +110,7 @@ class Resident < ApplicationRecord
   validate :email_presence
 
   before_validation :set_email
-  before_save { self.email = email.downcase unless email.nil? }
+  before_save { self.email = email&.downcase }
   after_destroy :note_live_update
   after_save :revoke_all_sessions_if_password_changed
   after_save :note_live_update
@@ -141,18 +142,19 @@ class Resident < ApplicationRecord
 
   # HELPERS
   def name_unique_with_helpful_message
+    name = self.name
     return if name.blank?
 
-    clash = Resident.where('lower(name) = ?', name.downcase).where.not(id: id).first
+    clash = Resident.where('lower(name) = ?', T.must(name).downcase).where.not(id: id).first
     return if clash.nil?
 
-    errors.add(:name, "is already used by the resident in unit #{clash.unit.name}. " \
+    errors.add(:name, "is already used by the resident in unit #{T.must(clash.unit).name}. " \
                       'Add something people use to tell them apart — a middle name, ' \
                       'Jr./Sr., or a nickname.')
   end
 
   def email_presence
-    errors.add(:email, 'cannot be blank.') if active && can_cook && multiplier >= Multiplier::FULL && email.nil?
+    errors.add(:email, 'cannot be blank.') if active && can_cook && T.must(multiplier) >= Multiplier::FULL && email.nil?
   end
 
   def set_email
@@ -161,9 +163,10 @@ class Resident < ApplicationRecord
 
   # nil when no birthday is given (an adult who left it blank).
   def age
+    birthday = self.birthday
     return nil if birthday.nil?
 
-    now = community.today
+    now = T.must(community).today
     had_birthday = now.month > birthday.month ||
                    (now.month == birthday.month && now.day >= birthday.day)
     now.year - birthday.year - (had_birthday ? 0 : 1)
@@ -202,22 +205,25 @@ class Resident < ApplicationRecord
                           .preload(meal: %i[bills meal_residents guests])
 
     relevant_bills.sum(BigDecimal('0')) do |bill|
-      meal = bill.meal
-      total_cost = meal.bills.reject(&:no_cost).sum(BigDecimal('0'), &:amount)
+      meal = T.must(bill.meal)
+      amount = T.must(bill.amount)
+      total_cost = meal.bills.reject(&:no_cost).sum(BigDecimal('0')) { |b| T.must(b.amount) }
       next BigDecimal('0') if total_cost.zero?
 
-      total_mult = meal.meal_residents.sum(&:multiplier) + meal.guests.sum(&:multiplier)
+      total_mult = meal.meal_residents.sum { |mr| T.must(mr.multiplier) } +
+                   meal.guests.sum { |guest| T.must(guest.multiplier) }
       # Zero total multiplier (child-only meal): nobody can be charged a
       # share, so the cook absorbs the cost and gets no credit. Mirrors the
       # total_mult.zero? branch in billing:recalculate and
       # Reconciliation#settlement_balances.
       next BigDecimal('0') if total_mult.zero?
 
-      next bill.amount unless meal.capped?
+      cap = meal.cap # nil means uncapped (Meal#capped?)
+      next amount if cap.nil?
 
-      max_cost = meal.cap * total_mult
+      max_cost = cap * total_mult
       if total_cost > max_cost
-        (bill.amount / total_cost) * max_cost
+        (amount / total_cost) * max_cost
       else
         bill.amount
       end

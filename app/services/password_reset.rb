@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # Issues a password reset link: stamps a fresh token on the resident and

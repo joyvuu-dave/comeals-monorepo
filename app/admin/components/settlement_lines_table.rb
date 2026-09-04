@@ -1,3 +1,4 @@
+# typed: false
 # frozen_string_literal: true
 
 # The settlement line items table, shared by the meal page and the

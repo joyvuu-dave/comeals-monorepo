@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # Phone numbers are stored in E.164 form ("+15105552671" — see

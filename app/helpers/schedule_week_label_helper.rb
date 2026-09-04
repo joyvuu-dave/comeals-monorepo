@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # Row labels for the admin schedule grid. Each week row of the cycle is

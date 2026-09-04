@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # Data-quality warnings for a settlement preview: things that are allowed,

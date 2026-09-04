@@ -1,3 +1,4 @@
+# typed: false
 # frozen_string_literal: true
 
 # Kill switch for broadcast email — the rake tasks that mail many residents

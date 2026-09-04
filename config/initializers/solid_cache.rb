@@ -1,3 +1,4 @@
+# typed: false
 # frozen_string_literal: true
 
 # solid_cache keeps its entries in the primary database (see CLAUDE.md), so

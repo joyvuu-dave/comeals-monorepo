@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # One place for a caught mail delivery error to go. Every rescue of

@@ -1,3 +1,4 @@
+# typed: false
 # frozen_string_literal: true
 
 # Attendance corrections (issue #25). One row per change, through normal

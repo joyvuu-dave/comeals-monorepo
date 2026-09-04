@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # The one place that says what a multiplier value means. This is the

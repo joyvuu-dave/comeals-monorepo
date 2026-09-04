@@ -1,3 +1,4 @@
+# typed: false
 # frozen_string_literal: true
 
 # Every row in these tables points at the one Community row. The app serves

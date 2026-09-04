@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # View formatting only. Name shortening lives in ResidentNameShortener
@@ -5,6 +6,10 @@
 # put model queries in a view module and re-ran the name pluck once per
 # serializer instance (#51).
 module ApplicationHelper
+  extend T::Helpers
+
+  requires_ancestor { ActionView::Base }
+
   include ActiveSupport::NumberHelper
 
   # The one rendering of a price category. A multiplier of 2 is one

@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # Move each resident with a birthday into the multiplier band their age

@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # The human-readable form of a date range, shown wherever a period is named

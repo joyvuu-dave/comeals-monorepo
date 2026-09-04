@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # How the direction of a balance is shown to humans.
@@ -24,6 +25,10 @@
 # Do not call number_to_currency directly on a signed amount anywhere a
 # person will read it.
 module BalanceDisplayHelper
+  extend T::Helpers
+
+  requires_ancestor { ActionView::Base }
+
   # A signed balance, as words: "is owed $12.50", "owes $12.50", or "$0.00".
   #
   # The direction is decided from the amount rounded to cents, not the raw

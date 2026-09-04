@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # Per-request attributes. Automatically reset between requests by Rails middleware.

@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # Stateless authentication using JSON Web Tokens.

@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # Settling a period, as a person means it: settle, refresh the running

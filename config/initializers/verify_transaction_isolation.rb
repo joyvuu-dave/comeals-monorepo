@@ -1,3 +1,4 @@
+# typed: false
 # frozen_string_literal: true
 
 # Refuse to boot if the database session is not at SERIALIZABLE.

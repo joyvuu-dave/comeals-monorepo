@@ -1,3 +1,4 @@
+# typed: false
 # frozen_string_literal: true
 
 # Closing a meal freezes its headcount — attendance rows (MealResident,

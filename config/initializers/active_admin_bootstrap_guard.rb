@@ -1,3 +1,4 @@
+# typed: false
 # frozen_string_literal: true
 
 # During bootstrap (AdminUser exists but Community does not), redirect every

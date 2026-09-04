@@ -1,3 +1,4 @@
+# typed: false
 # frozen_string_literal: true
 
 # Financial records are append-only: once written they are never edited

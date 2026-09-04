@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 module Api
@@ -16,11 +17,12 @@ module Api
       def show_name
         resident = Resident.find_by(reset_password_token: params[:token])
 
-        if resident.blank?
-          render json: { message: 'Password reset link is incorrect or expired.' }, status: :bad_request and return
+        if resident.nil?
+          return render json: { message: 'Password reset link is incorrect or expired.' }, status: :bad_request
         end
 
-        if resident.reset_password_sent_at.blank? || resident.reset_password_sent_at < RESET_TOKEN_LIFETIME.ago
+        sent_at = resident.reset_password_sent_at
+        if sent_at.nil? || sent_at < RESET_TOKEN_LIFETIME.ago
           render json: { message: 'Password reset link has expired. Please request a new one.' },
                  status: :bad_request and return
         end
@@ -36,15 +38,16 @@ module Api
         render json: { message: 'Email required.' }, status: :bad_request and return if params[:email].blank?
 
         resident = Resident.find_by(email: params[:email]&.strip&.downcase)
-        if resident.blank?
-          render json: { message: "No resident with email #{params[:email]}" }, status: :bad_request and return
+        if resident.nil?
+          return render json: { message: "No resident with email #{params[:email]}" }, status: :bad_request
         end
 
         if resident.authenticate(params[:password])
+          community = T.must(resident.community)
           render json: { token: JwtAuth.encode(resident),
-                         community_id: resident.community.id,
+                         community_id: community.id,
                          resident_id: resident.id, username: ResidentNameShortener.short(resident.name),
-                         timezone: resident.community.timezone }
+                         timezone: community.timezone }
         else
           render json: { message: 'Incorrect password' }, status: :bad_request
         end
@@ -57,9 +60,7 @@ module Api
 
         resident = Resident.find_by(email: params[:email]&.strip&.downcase)
 
-        if resident.blank?
-          render json: { message: 'No resident with that email address.' }, status: :bad_request and return
-        end
+        return render json: { message: 'No resident with that email address.' }, status: :bad_request if resident.nil?
 
         case PasswordReset.request(resident)
         when :sent
@@ -78,9 +79,10 @@ module Api
       def password_new
         resident = Resident.find_by(reset_password_token: params[:token])
 
-        render json: { message: 'Error.' }, status: :bad_request and return if resident.blank?
+        return render json: { message: 'Error.' }, status: :bad_request if resident.nil?
 
-        if resident.reset_password_sent_at.blank? || resident.reset_password_sent_at < RESET_TOKEN_LIFETIME.ago
+        sent_at = resident.reset_password_sent_at
+        if sent_at.nil? || sent_at < RESET_TOKEN_LIFETIME.ago
           resident.update_columns(reset_password_token: nil, reset_password_sent_at: nil)
           render json: { message: 'Password reset link has expired. Please request a new one.' },
                  status: :bad_request and return
@@ -103,7 +105,8 @@ module Api
       # GET api/v1/residents/:id/ical
       def ical
         resident = Resident.find(params[:id]) # rubocop:disable Rails/StrongParametersExpect --routed :id is read directly, matching this codebase's bare params[] convention
-        feed = MealIcalFeed.new(resident.community, calendar_name: "My #{resident.community.name}")
+        community = T.must(resident.community)
+        feed = MealIcalFeed.new(community, calendar_name: "My #{community.name}")
 
         # Precompute cook dates to avoid a query per meal_resident in the loop below
         cook_dates = Bill.joins(:meal)
@@ -111,7 +114,7 @@ module Api
                          .pluck('meals.date').to_set
 
         Bill.where(resident_id: resident.id).includes(:meal).find_each do |bill|
-          meal = bill.meal
+          meal = T.must(bill.meal)
           feed.add_meal(meal,
                         summary: 'Cook Common Dinner',
                         description: "#{meal.description}\n\n\n\nView here: #{root_url}/meals/#{meal.id}/edit")
@@ -119,11 +122,12 @@ module Api
 
         # A day they cook already has its Cook event; skip the Attend one.
         MealResident.where(resident_id: resident.id).includes(:meal).find_each do |mr|
-          next if cook_dates.include?(mr.meal.date)
+          meal = T.must(mr.meal)
+          next if cook_dates.include?(meal.date)
 
-          feed.add_meal(mr.meal,
+          feed.add_meal(meal,
                         summary: 'Attend Common Dinner',
-                        description: "#{mr.meal.description}\n\n\n\nView here: #{root_url}/meals/#{mr.meal.id}/edit")
+                        description: "#{meal.description}\n\n\n\nView here: #{root_url}/meals/#{meal.id}/edit")
         end
 
         render plain: feed.to_ical, content_type: 'text/calendar'

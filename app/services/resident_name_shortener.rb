@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # Shortens a resident's full name to the shortest form that is still

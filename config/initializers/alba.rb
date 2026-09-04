@@ -1,3 +1,4 @@
+# typed: false
 # frozen_string_literal: true
 
 # Alba builds the JSON that the API returns (app/serializers). A serializer

@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # Settles a billing period.
@@ -143,12 +144,12 @@ class Settlement
       # (those entries benefited most from truncation toward zero).
       candidates = remainders.select { |_, r| r.negative? }.sort_by { |id, r| [r, id] }
       assert_candidates_cover_pennies!(candidates, pennies, reconciliation_id)
-      pennies.times { |i| truncated[candidates[i][0]] -= one_cent }
+      pennies.times { |i| truncated[candidates.fetch(i)[0]] -= one_cent }
     elsif pennies.negative?
       # Sum too negative — add pennies to entries with most-positive remainders.
       candidates = remainders.select { |_, r| r.positive? }.sort_by { |id, r| [-r, id] }
       assert_candidates_cover_pennies!(candidates, pennies.abs, reconciliation_id)
-      pennies.abs.times { |i| truncated[candidates[i][0]] += one_cent }
+      pennies.abs.times { |i| truncated[candidates.fetch(i)[0]] += one_cent }
     end
 
     truncated

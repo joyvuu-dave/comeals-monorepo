@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # == Schema Information
@@ -262,7 +263,7 @@ class Community < ApplicationRecord
 
   def auto_create_rotations
     unassigned = meals.where(rotation_id: nil).order(:date)
-    rotation = nil
+    rotation = T.let(nil, T.nilable(Rotation))
     unassigned.find_each do |meal|
       rotation = rotations.create!(no_email: true) if rotation.nil?
       meal.update!(rotation_id: rotation.id)
@@ -448,6 +449,8 @@ class Community < ApplicationRecord
   end
 
   def child_ages_ordered
+    free_below_age = self.free_below_age
+    full_price_age = self.full_price_age
     return if free_below_age.nil? || full_price_age.nil?
     return if free_below_age <= full_price_age
 

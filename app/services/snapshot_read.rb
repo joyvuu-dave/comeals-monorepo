@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # Runs a block inside one read-only database snapshot.

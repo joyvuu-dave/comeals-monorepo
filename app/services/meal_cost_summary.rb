@@ -1,3 +1,4 @@
+# typed: true
 # frozen_string_literal: true
 
 # What one meal cost, for a screen. Admin reads this; nothing here
