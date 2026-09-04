@@ -1,4 +1,4 @@
-# typed: true
+# typed: strict
 # frozen_string_literal: true
 
 # Control A: does every settled balance still match the source data behind it?
@@ -57,17 +57,33 @@
 # check would report a mismatch that never existed. The run record is written
 # afterwards, because that transaction may not write.
 class LedgerVerification
+  extend T::Sig
+
+  # One reported difference: { resident_id:, stored:, source: }, amounts as
+  # strings (see differences_between). A detail wraps a list of them with
+  # the reconciliation and the check that found them (see #detail). Both
+  # are plain hashes because they are written to ledger_check_runs.details
+  # as JSON and read back by the admin page.
+  Difference = T.type_alias { T::Hash[Symbol, T.untyped] }
+  Detail = T.type_alias { T::Hash[Symbol, T.untyped] }
+  Balances = T.type_alias { T::Hash[Integer, BigDecimal] }
+
   # Raised when at least one reconciliation disagrees with its source data.
   # The run row is already written by the time this is raised.
   class MismatchError < StandardError
+    extend T::Sig
+
+    sig { returns(LedgerCheckRun) }
     attr_reader :run
 
+    sig { params(run: LedgerCheckRun).void }
     def initialize(run)
       @run = run
       super(LedgerVerification.summary_for(run))
     end
   end
 
+  sig { returns(LedgerCheckRun) }
   def self.call
     new.call
   end
@@ -75,13 +91,16 @@ class LedgerVerification
   # One reconciliation can fail both checks, so the count is of findings, not
   # of reconciliations. Naming which reconciliations are involved matters more
   # than the count anyway — that is what someone acts on.
+  sig { params(run: LedgerCheckRun).returns(String) }
   def self.summary_for(run)
     ids = run.details.pluck('reconciliation_id').uniq.sort
     checks = run.details.pluck('check').uniq.sort.join(' and ')
+    findings = T.must(run.mismatch_count)
+    checked = T.must(run.reconciliations_checked)
 
-    "Ledger check failed: #{run.mismatch_count} #{'finding'.pluralize(run.mismatch_count)} " \
-      "(#{checks}) across #{ids.size} of #{run.reconciliations_checked} " \
-      "#{'reconciliation'.pluralize(run.reconciliations_checked)} — #{ids.join(', ')}. " \
+    "Ledger check failed: #{findings} #{'finding'.pluralize(findings)} " \
+      "(#{checks}) across #{ids.size} of #{checked} " \
+      "#{'reconciliation'.pluralize(checked)} — #{ids.join(', ')}. " \
       'Settled balances were changed after settlement, or the source rows behind them were. ' \
       'See docs/runbooks/settled-data-repair.md.'
   end
@@ -89,12 +108,13 @@ class LedgerVerification
   # Largest-remainder allocation moves a balance by at most one cent away from
   # its exact amount, so that is the whole tolerance the line-item check is
   # allowed. Anything further apart is a real disagreement.
-  ROUNDING_TOLERANCE = BigDecimal('0.01')
+  ROUNDING_TOLERANCE = T.let(BigDecimal('0.01'), BigDecimal)
 
+  sig { returns(LedgerCheckRun) }
   def call
     started_at = Time.current
-    checked = 0
-    mismatches = []
+    checked = T.let(0, Integer)
+    mismatches = T.let([], T::Array[Detail])
 
     begin
       SnapshotRead.call do
@@ -119,6 +139,7 @@ class LedgerVerification
 
   # Two independent checks per reconciliation, and they fail for different
   # reasons, so both run and both are reported.
+  sig { params(reconciliation: Reconciliation).returns(T::Array[Detail]) }
   def checks_for(reconciliation)
     [recompute_check(reconciliation), line_item_check(reconciliation)].compact
   end
@@ -128,9 +149,10 @@ class LedgerVerification
   #
   # Zero balances are not stored — a resident who owes and is owed nothing
   # gets no row — so the recomputed side drops them too before comparing.
+  sig { params(reconciliation: Reconciliation).returns(T.nilable(Detail)) }
   def recompute_check(reconciliation)
     stored = stored_balances(reconciliation)
-    source = reconciliation.settlement_balances.reject { |_, amount| amount.zero? }
+    source = T.let(reconciliation.settlement_balances.reject { |_, amount| amount.zero? }, Balances)
     return nil if stored == source
 
     detail(reconciliation, 'recompute', differences_between(stored, source))
@@ -146,12 +168,14 @@ class LedgerVerification
   # Skipped for reconciliations settled before meal_charges existed. They
   # have no lines, and inventing some now would be recording today's belief
   # as though it were what happened then. Those keep the recompute check.
+  sig { params(reconciliation: Reconciliation).returns(T.nilable(Detail)) }
   def line_item_check(reconciliation)
     charges = MealCharge.for_reconciliation(reconciliation)
     return nil unless charges.exists?
 
     stored = stored_balances(reconciliation)
-    summed = charges.group(:resident_id).sum(:amount)
+    # Grouped sum: Sorbet's relation sigs only know the ungrouped, scalar form.
+    summed = T.cast(charges.group(:resident_id).sum(:amount), Balances)
 
     differences = line_item_differences(stored, summed)
     total = summed.values.sum(BigDecimal('0'))
@@ -164,6 +188,7 @@ class LedgerVerification
   # The line items are full precision and the balances are rounded to cents,
   # so these two can never be compared for equality — only for being within
   # the one cent that largest-remainder allocation is allowed to move things.
+  sig { params(stored: Balances, summed: Balances).returns(T::Array[Difference]) }
   def line_item_differences(stored, summed)
     (stored.keys | summed.keys).sort.filter_map do |resident_id|
       stored_amount = stored[resident_id] || BigDecimal('0')
@@ -191,12 +216,14 @@ class LedgerVerification
   #
   # Reported without a resident because it is a fact about the whole
   # reconciliation, not about one person.
+  sig { params(total: BigDecimal).returns(Difference) }
   def lines_do_not_balance(total)
     { resident_id: nil, stored: nil, source: total.to_s('F') }
   end
 
+  sig { params(reconciliation: Reconciliation).returns(Balances) }
   def stored_balances(reconciliation)
-    reconciliation.reconciliation_balances.pluck(:resident_id, :amount).to_h
+    T.let(reconciliation.reconciliation_balances.pluck(:resident_id, :amount).to_h, Balances)
   end
 
   # One reported difference is { resident_id:, stored:, source: }, and
@@ -211,6 +238,7 @@ class LedgerVerification
   # The key names are pinned by stored history: every past run in
   # ledger_check_runs.details already uses them, and the admin page
   # reads them back. Renaming the keys would orphan every past run.
+  sig { params(reconciliation: Reconciliation, check: String, differences: T::Array[Difference]).returns(Detail) }
   def detail(reconciliation, check, differences)
     {
       reconciliation_id: reconciliation.id,
@@ -225,6 +253,7 @@ class LedgerVerification
   # as absent rather than as zero, because those are different faults — one
   # is a wrong amount, the other is a row that should not be there or one
   # that vanished.
+  sig { params(stored: Balances, source: Balances).returns(T::Array[Difference]) }
   def differences_between(stored, source)
     (stored.keys | source.keys).sort.filter_map do |resident_id|
       next if stored[resident_id] == source[resident_id]
@@ -237,6 +266,11 @@ class LedgerVerification
     end
   end
 
+  sig do
+    params(started_at: ActiveSupport::TimeWithZone, checked: Integer, mismatches: T::Array[Detail],
+           error: T.nilable(StandardError))
+      .returns(LedgerCheckRun)
+  end
   def record(started_at:, checked:, mismatches:, error:)
     LedgerCheckRun.create!(
       started_at: started_at,
@@ -248,6 +282,7 @@ class LedgerVerification
     )
   end
 
+  sig { params(run: LedgerCheckRun).void }
   def log(run)
     if run.passed?
       Rails.logger.info(
