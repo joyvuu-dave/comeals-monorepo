@@ -1,4 +1,4 @@
-# typed: true
+# typed: strict
 # frozen_string_literal: true
 
 # Recomputes every resident's running balance from source data and stores
@@ -12,15 +12,20 @@
 # (SettleAndNotify), because a settlement moves meals out of the running
 # balance and the number on the admin screens should follow at once.
 class BalanceRecalculation
+  extend T::Sig
+
+  sig { params(community: Community).returns(Integer) }
   def self.call(community: Community.instance)
     new(community).call
   end
 
+  sig { params(community: Community).void }
   def initialize(community)
     @community = community
   end
 
   # Returns the number of balances written.
+  sig { returns(Integer) }
   def call
     # Read every source record inside one snapshot so all five queries
     # (meals, three preloads, residents) see one instant. Unreconciled meals
@@ -54,7 +59,7 @@ class BalanceRecalculation
     # daily run corrects whichever result lost the last-writer race).
     now = Time.current
     rows = resident_ids.map do |resident_id|
-      { resident_id: resident_id, amount: balances[resident_id], created_at: now, updated_at: now }
+      { resident_id: resident_id, amount: balances.fetch(resident_id), created_at: now, updated_at: now }
     end
     ResidentBalance.upsert_all(rows, unique_by: :resident_id, update_only: %i[amount]) if rows.any?
     rows.size

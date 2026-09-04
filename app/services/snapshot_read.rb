@@ -1,4 +1,4 @@
-# typed: true
+# typed: strict
 # frozen_string_literal: true
 
 # Runs a block inside one read-only database snapshot.
@@ -47,7 +47,16 @@
 # Both must run before the transaction's first real query; PostgreSQL
 # refuses them after that.
 class SnapshotRead
-  def self.call
+  extend T::Sig
+
+  # Returns whatever the block returns, so a caller can read several
+  # values inside the snapshot and hand them out in one line.
+  sig do
+    type_parameters(:Result)
+      .params(blk: T.proc.returns(T.type_parameter(:Result)))
+      .returns(T.type_parameter(:Result))
+  end
+  def self.call(&blk) # rubocop:disable Naming/BlockForwarding -- the sig above has to name the block
     connection = ActiveRecord::Base.connection
 
     # A transaction is already open. In production this does not happen —

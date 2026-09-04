@@ -27,13 +27,14 @@ Every Ruby file carries a sigil on line 1.
 | `# typed: false` | `app/models/concerns`, `app/admin`, `config`, `db`                                                                  | Sorbet only checks syntax and that constants resolve. Concerns: see below. Admin: the ActiveAdmin DSL runs blocks with a `self` Sorbet cannot see. Config and db: DSL files and migrations.    |
 | none             | `spec`                                                                                                              | Sorbet ignores `spec/` (`sorbet/config`). A `def` inside an RSpec block is a method on `Object` to Sorbet, so the 125 helpers defined inside describe blocks would leak into every typed file. |
 
-`MealLedger` and `Settlement` are `# typed: strict`: every method has a
-`sig`, and their value objects (`MealLedger::Line`, `MealLedger::Summary`,
-`Settlement::Preview`) are `T::Struct`s, so a nil or a Float in a money
-field raises before any arithmetic runs (`spec/services/meal_ledger_spec.rb`
-"runtime type checks", `spec/services/settlement_types_spec.rb`). The
-plan is to do the same for the rest of the money path, one file at a
-time: `BalanceRecalculation`, `LedgerVerification`, `MealCharge`.
+`MealLedger`, `Settlement`, `BalanceRecalculation` and `SnapshotRead` are
+`# typed: strict`: every method has a `sig`, and the value objects
+(`MealLedger::Line`, `MealLedger::Summary`, `Settlement::Preview`) are
+`T::Struct`s, so a nil or a Float in a money field raises before any
+arithmetic runs. The `*_types_spec.rb` files under `spec/services` pin
+that the runtime checks are on. The plan is to do the same for the rest
+of the money path, one file at a time: `LedgerVerification`,
+`MealCharge`.
 
 ## How column and association types are generated
 
