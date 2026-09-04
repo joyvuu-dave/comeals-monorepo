@@ -1,4 +1,4 @@
-# typed: true
+# typed: strict
 # frozen_string_literal: true
 
 # == Schema Information
@@ -37,12 +37,16 @@
 # negative (the eater owes the community). Show it to a person only through
 # BalanceDisplayHelper#charge_amount_tag, never as a raw signed number.
 class MealCharge < ApplicationRecord
-  KINDS = %w[credit debit guest_debit].freeze
+  extend T::Sig
+
+  KINDS = T.let(%w[credit debit guest_debit].freeze, T::Array[String])
 
   # What each kind reads as on the statement pages.
-  KIND_LABELS = { 'credit' => 'Cooked', 'debit' => 'Attended', 'guest_debit' => 'Guest' }.freeze
+  KIND_LABELS = T.let({ 'credit' => 'Cooked', 'debit' => 'Attended', 'guest_debit' => 'Guest' }.freeze,
+                      T::Hash[String, String])
 
   # Ransack allowlist for ActiveAdmin sorting
+  sig { params(_auth_object: T.untyped).returns(T::Array[String]) }
   def self.ransackable_attributes(_auth_object = nil)
     %w[id meal_id resident_id kind amount multiplier unit_cost bill_amount created_at updated_at]
   end
@@ -70,6 +74,7 @@ class MealCharge < ApplicationRecord
               destroy_message: 'Settlement line items record what a meal cost and who was charged for it. ' \
                                'They cannot be destroyed.'
 
+  sig { returns(T::Boolean) }
   def credit?
     kind == 'credit'
   end
@@ -77,6 +82,7 @@ class MealCharge < ApplicationRecord
   # True when the cook spent more than the cap allowed, so they were credited
   # less than they laid out and the difference was absorbed rather than
   # charged to the eaters.
+  sig { returns(T::Boolean) }
   def subsidized?
     bill_amount = self.bill_amount
     return false unless credit? && bill_amount
