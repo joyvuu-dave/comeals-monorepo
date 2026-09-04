@@ -114,18 +114,34 @@ change.
 
 ## Runtime behaviour
 
-`sorbet-runtime` checks a `sig` when the method is called. By default a
-value that does not match raises `TypeError`, in production too.
-`config/initializers/sorbet.rb` changes that outside the test suite: a
-failed check is reported through `Rails.error` to Bugsnag and the call
-goes on. In the test suite it raises, so a wrong sig fails a spec, and in
-production it shows up as a Bugsnag report instead of a 500.
+`sorbet-runtime` checks a `sig` when the method is called and raises
+`TypeError` when a value does not match. That is the default, and it is
+on in production too, on purpose.
 
-The setting `T::Configuration.default_checked_level = :tests` would skip
-the checks in production instead of reporting them. It is not used because
-it must be set before any sig is evaluated, and `bin/tapioca dsl`, which
-is itself written with Sorbet, has evaluated sigs long before it loads the
-app's initializers. It refuses to boot the app with that setting in place.
+A sig failure means one of two things: the sig is wrong, or a value the
+sig says is impossible has reached the method. From inside the method
+there is no way to tell which. Reporting the failure and going on would
+let `Settlement` or `MealLedger` run with that value and write the
+ledger. Raising happens before the body runs, inside the transaction, so
+nothing is written. For a ledger, a rolled-back settlement plus a Bugsnag
+report is the safe failure; a completed settlement plus a Bugsnag report
+is not.
+
+The confidence to raise comes from how sigs are added, not from a
+handler:
+
+1. A sig is written only where the type is certain. `typed: true` does
+   not require one. When the return type is not certain, leave the sig
+   out or widen it (`T.nilable(BigDecimal)`).
+2. The test suite runs every sig with checking on, so a sig the tests
+   contradict never merges.
+3. Before the first deploy that carries sigs on the money path, run
+   `rake billing:recalculate` and `rake ledger:verify` against the local
+   production copy (`comeals_prodcheck`). Every real row then passes
+   through every money sig before production does.
+4. One method that needs watching before it is trusted can soften its
+   own sig: `sig { ... }.on_failure(:soft, notify: 'bugsnag')`. The
+   default stays raise.
 
 `T.must`, `T.let` and `T.cast` are not sigs. They always raise.
 
