@@ -1,4 +1,4 @@
-# typed: true
+# typed: strict
 # frozen_string_literal: true
 
 # == Schema Information
@@ -26,13 +26,17 @@
 #  fk_rails_...  (resident_id => residents.id)
 #
 class Bill < ApplicationRecord
+  extend T::Sig
+
   include BelongsToTheCommunity
 
   # Ransack allowlists for ActiveAdmin filtering and sorting
+  sig { params(_auth_object: T.untyped).returns(T::Array[String]) }
   def self.ransackable_attributes(_auth_object = nil)
     %w[id amount no_cost meal_id resident_id created_at updated_at]
   end
 
+  sig { params(_auth_object: T.untyped).returns(T::Array[String]) }
   def self.ransackable_associations(_auth_object = nil)
     %w[meal resident]
   end
@@ -60,6 +64,7 @@ class Bill < ApplicationRecord
   validate :amount_in_whole_cents
   validates :resident_id, uniqueness: { scope: :meal_id }
 
+  sig { void }
   def amount_in_whole_cents
     amount = self.amount
     return if amount.nil? || amount == amount.round(2)

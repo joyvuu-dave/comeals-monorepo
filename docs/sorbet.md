@@ -28,8 +28,10 @@ Every Ruby file carries a sigil on line 1.
 | none             | `spec`                                                                                                                                  | Sorbet ignores `spec/` (`sorbet/config`). A `def` inside an RSpec block is a method on `Object` to Sorbet, so the 125 helpers defined inside describe blocks would leak into every typed file. |
 
 The money path is `# typed: strict`: `MealLedger`, `Settlement`,
-`BalanceRecalculation`, `SnapshotRead`, `LedgerVerification` and the
-`MealCharge` and `Reconciliation` models. Every hand-written method there has a `sig`, and the
+`BalanceRecalculation`, `SnapshotRead`, `LedgerVerification`, and the
+models that hold ledger rows: `Bill`, `MealResident`, `Guest`,
+`MealCharge`, `Reconciliation`, `ReconciliationBalance`,
+`ResidentBalance`. Every hand-written method there has a `sig`, and the
 value objects (`MealLedger::Line`, `MealLedger::Summary`,
 `Settlement::Preview`) are `T::Struct`s, so a nil or a Float in a money
 field raises before any arithmetic runs. The `*_types_spec.rb` files under

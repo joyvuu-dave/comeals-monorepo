@@ -1,4 +1,4 @@
-# typed: true
+# typed: strict
 # frozen_string_literal: true
 
 # == Schema Information
@@ -28,6 +28,8 @@
 #
 
 class MealResident < ApplicationRecord
+  extend T::Sig
+
   include BelongsToTheCommunity
 
   belongs_to :meal, inverse_of: :meal_residents, touch: true
@@ -48,6 +50,7 @@ class MealResident < ApplicationRecord
   validates :meal_id, uniqueness: { scope: :resident_id }
   validates :multiplier, numericality: { only_integer: true }
 
+  sig { void }
   def set_multiplier
     self.multiplier = resident&.multiplier
   end
