@@ -1,4 +1,4 @@
-# typed: true
+# typed: strict
 # frozen_string_literal: true
 
 # == Schema Information
@@ -31,9 +31,12 @@
 #  fk_rails_...  (rotation_id => rotations.id)
 #
 class Meal < ApplicationRecord
+  extend T::Sig
+
   include BelongsToTheCommunity
 
   # Ransack allowlists for ActiveAdmin filtering and sorting
+  sig { params(_auth_object: T.untyped).returns(T::Array[String]) }
   def self.ransackable_attributes(_auth_object = nil)
     %w[id cap closed closed_at created_at date description max reconciliation_id rotation_id start_time
        updated_at]
@@ -47,7 +50,7 @@ class Meal < ApplicationRecord
   # community_id is deliberately absent: Community is a DB-enforced singleton
   # (unique singleton_guard), so there is no other community to move to and
   # belongs_to already rejects nonexistent ids before before_save runs.
-  FROZEN_WHEN_RECONCILED = %w[cap date reconciliation_id].freeze
+  FROZEN_WHEN_RECONCILED = T.let(%w[cap date reconciliation_id].freeze, T::Array[String])
 
   audited
   has_associated_audits
@@ -133,22 +136,27 @@ class Meal < ApplicationRecord
   }
 
   # NULL cap means "no cap". No more Float::INFINITY.
+  sig { returns(T.nilable(BigDecimal)) }
   def cap
     read_attribute(:cap)
   end
 
+  sig { returns(T::Boolean) }
   def capped?
     cap.present?
   end
 
+  sig { void }
   def set_cap
     self.cap = T.must(community).cap
   end
 
+  sig { void }
   def conditionally_set_max
     self.max = nil if closed == false
   end
 
+  sig { void }
   def conditionally_set_closed_at
     self.closed_at = Time.current if closed == true && closed_was == false
     self.closed_at = nil if closed == false && closed_was == true
@@ -159,6 +167,7 @@ class Meal < ApplicationRecord
   # moved: their next_id and prev_id (MealFormSerializer) point past it.
   # That is how the last meal's "next" arrow wakes up when the nightly
   # job adds the next rotation.
+  sig { void }
   def note_live_update
     LiveUpdate.meal(id)
     LiveUpdate.calendar(date)
@@ -171,6 +180,7 @@ class Meal < ApplicationRecord
   end
 
   # The meals just before and just after `day`, other than this one.
+  sig { params(day: Date).returns(T::Array[Integer]) }
   def neighbour_ids(day)
     others = Meal.where.not(id: id)
     [
@@ -181,14 +191,16 @@ class Meal < ApplicationRecord
 
   # DERIVED DATA — all computed from source, no cached columns.
 
+  sig { returns(Integer) }
   def multiplier
     if meal_residents.loaded? && guests.loaded?
       meal_residents.sum { |mr| T.must(mr.multiplier) } + guests.sum { |guest| T.must(guest.multiplier) }
     else
-      meal_residents.sum(:multiplier) + guests.sum(:multiplier)
+      T.cast(meal_residents.sum(:multiplier) + guests.sum(:multiplier), Integer)
     end
   end
 
+  sig { returns(Integer) }
   def attendees_count
     if meal_residents.loaded? && guests.loaded?
       meal_residents.size + guests.size
@@ -204,6 +216,7 @@ class Meal < ApplicationRecord
   # meal) through MealCostSummary. A convenience copy on this model is
   # how the math ended up living in three places (#48).
 
+  sig { returns(T::Boolean) }
   def reconciled?
     reconciliation_id.present?
   end
@@ -211,6 +224,7 @@ class Meal < ApplicationRecord
   # Guards the meal row itself once settled. Checks the DATABASE value of
   # reconciliation_id, not the in-memory one, so reconciling an unreconciled
   # meal (nil -> id) stays legal at the model layer.
+  sig { void }
   def reject_frozen_changes_if_reconciled
     return if reconciliation_id_in_database.nil?
 
@@ -223,6 +237,7 @@ class Meal < ApplicationRecord
 
   # Destroying a settled meal would erase settled source data (and cascade
   # into its bills and attendance rows). Corrections happen as new entries.
+  sig { void }
   def reject_destroy_if_reconciled
     return unless reconciled?
 
@@ -234,6 +249,7 @@ class Meal < ApplicationRecord
   # destroy could never complete anyway — the cascade would abort on the
   # first frozen row. Refuse up front with a clear reason instead. To delete
   # a closed meal that never happened, reopen it first — two deliberate steps.
+  sig { void }
   def reject_destroy_if_closed
     return unless closed?
 
@@ -241,11 +257,13 @@ class Meal < ApplicationRecord
     throw(:abort)
   end
 
+  sig { returns(T::Array[Audited::Audit]) }
   def total_audits
     (associated_audits + audits).sort { |a, b| b.created_at <=> a.created_at }
   end
 
   # HELPERS
+  sig { returns(T::Boolean) }
   def another_meal_in_this_rotation_has_less_than_two_cooks?
     return false if rotation_id.nil?
 
@@ -256,6 +274,7 @@ class Meal < ApplicationRecord
         .exists?
   end
 
+  sig { params(date: Date).returns(T::Boolean) }
   def self.is_holiday?(date)
     Meal.is_thanksgiving(date)  ||
       Meal.is_christmas(date)   ||
@@ -265,6 +284,7 @@ class Meal < ApplicationRecord
       Meal.is_july_fourth(date)
   end
 
+  sig { params(date: Date).returns(T::Boolean) }
   def self.is_thanksgiving(date)
     return false unless date.instance_of?(Date)
     return false unless date.month == 11
@@ -274,14 +294,17 @@ class Meal < ApplicationRecord
     true
   end
 
+  sig { params(date: Date).returns(T::Boolean) }
   def self.is_christmas(date)
     date.month == 12 && date.day == 25
   end
 
+  sig { params(date: Date).returns(T::Boolean) }
   def self.is_newyears(date)
     date.month == 1 && date.day == 1
   end
 
+  sig { params(date: Date).returns(T::Boolean) }
   def self.is_mothers_day(date)
     return false unless date.instance_of?(Date)
     return false unless date.month == 5
@@ -291,6 +314,7 @@ class Meal < ApplicationRecord
     true
   end
 
+  sig { params(date: Date).returns(T::Boolean) }
   def self.is_easter(date) # rubocop:disable Metrics/AbcSize -- Anonymous Gregorian algorithm, inherently arithmetic-heavy
     y = date.year
     a = y % 19
@@ -312,6 +336,7 @@ class Meal < ApplicationRecord
     date.month == month && date.day == day
   end
 
+  sig { params(date: Date).returns(T::Boolean) }
   def self.is_july_fourth(date)
     date.month == 7 && date.day == 4
   end

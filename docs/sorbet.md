@@ -29,8 +29,8 @@ Every Ruby file carries a sigil on line 1.
 
 The money path is `# typed: strict`: `MealLedger`, `Settlement`,
 `BalanceRecalculation`, `SnapshotRead`, `LedgerVerification`, and the
-models that hold ledger rows: `Bill`, `MealResident`, `Guest`,
-`MealCharge`, `Reconciliation`, `ReconciliationBalance`,
+models that hold ledger rows: `Meal`, `Resident`, `Bill`, `MealResident`,
+`Guest`, `MealCharge`, `Reconciliation`, `ReconciliationBalance`,
 `ResidentBalance`. Every hand-written method there has a `sig`, and the
 value objects (`MealLedger::Line`, `MealLedger::Summary`,
 `Settlement::Preview`) are `T::Struct`s, so a nil or a Float in a money

@@ -1,4 +1,4 @@
-# typed: true
+# typed: strict
 # frozen_string_literal: true
 
 # == Schema Information
@@ -38,16 +38,20 @@
 #
 
 class Resident < ApplicationRecord
+  extend T::Sig
+
   include BelongsToTheCommunity
 
   include HasPhoneNumber
 
   # Ransack allowlists for ActiveAdmin filtering and sorting.
   # Deliberately excludes password_digest and reset_password_token.
+  sig { params(_auth_object: T.untyped).returns(T::Array[String]) }
   def self.ransackable_attributes(_auth_object = nil)
     %w[id active birthday can_cook created_at email multiplier name phone unit_id updated_at vegetarian]
   end
 
+  sig { returns(T.nilable(String)) }
   attr_reader :password
 
   scope :adult, -> { where(multiplier: Multiplier::FULL..) }
@@ -99,11 +103,11 @@ class Resident < ApplicationRecord
   # and the residents_birthday_not_sentinel CHECK catches writes that skip
   # the model.
   validates :birthday, presence: { message: 'is required for children — pricing changes as they age' },
-                       if: ->(resident) { T.must(resident.multiplier) < Multiplier::FULL }
+                       if: :child?
   validates :birthday, exclusion: { in: [Date.new(1900, 1, 1)],
                                     message: 'cannot be the old 1900-01-01 placeholder — leave it blank instead' }
 
-  VALID_EMAIL_REGEX = /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i
+  VALID_EMAIL_REGEX = T.let(/\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i, Regexp)
   validates :email, presence: true, length: { maximum: 255 },
                     format: { with: VALID_EMAIL_REGEX },
                     uniqueness: { case_sensitive: false }, allow_nil: true
@@ -115,17 +119,26 @@ class Resident < ApplicationRecord
   after_save :revoke_all_sessions_if_password_changed
   after_save :note_live_update
 
+  # Priced below a full adult share. Children must have a birthday, so the
+  # nightly multiplier task can move them to adult pricing as they age.
+  sig { returns(T::Boolean) }
+  def child?
+    T.must(multiplier) < Multiplier::FULL
+  end
+
   # PASSWORD STUFF
+  sig { params(unencrypted_password: T.nilable(String)).returns(T.any(FalseClass, Resident)) }
   def authenticate(unencrypted_password)
-    SCrypt::Password.new(password_digest).is_password?(unencrypted_password) && self
+    SCrypt::Password.new(T.must(password_digest)).is_password?(unencrypted_password) ? self : false
   end
 
   # No length or presence rule, on purpose: a blank password is a feature
   # this community asked for. Admin creates children with '' (they have no
   # email, so they never log in), and an adult may reset their password to
   # '' and then log in with email alone. Do not add a validation here.
+  sig { params(unencrypted_password: String).void }
   def password=(unencrypted_password)
-    @password = unencrypted_password
+    @password = T.let(unencrypted_password, T.nilable(String))
     self.password_digest = SCrypt::Password.create(unencrypted_password)
   end
 
@@ -133,6 +146,7 @@ class Resident < ApplicationRecord
   # paths because a user might have sessions of either kind — a legacy
   # opaque Key cookie from before the JWT deploy, a JWT issued after, or
   # both simultaneously (different devices in different eras).
+  sig { void }
   def revoke_all_sessions_if_password_changed
     return unless saved_change_to_password_digest?
 
@@ -141,11 +155,12 @@ class Resident < ApplicationRecord
   end
 
   # HELPERS
+  sig { void }
   def name_unique_with_helpful_message
     name = self.name
     return if name.blank?
 
-    clash = Resident.where('lower(name) = ?', T.must(name).downcase).where.not(id: id).first
+    clash = Resident.where('lower(name) = ?', name.downcase).where.not(id: id).first
     return if clash.nil?
 
     errors.add(:name, "is already used by the resident in unit #{T.must(clash.unit).name}. " \
@@ -153,15 +168,18 @@ class Resident < ApplicationRecord
                       'Jr./Sr., or a nickname.')
   end
 
+  sig { void }
   def email_presence
     errors.add(:email, 'cannot be blank.') if active && can_cook && T.must(multiplier) >= Multiplier::FULL && email.nil?
   end
 
+  sig { void }
   def set_email
     self.email = nil if email == ''
   end
 
   # nil when no birthday is given (an adult who left it blank).
+  sig { returns(T.nilable(Integer)) }
   def age
     birthday = self.birthday
     return nil if birthday.nil?
@@ -193,12 +211,14 @@ class Resident < ApplicationRecord
   # If you change financial logic in MealLedger, update these methods too
   # (and vice versa) — they must stay in sync.
 
+  sig { returns(BigDecimal) }
   def calc_balance
     return BigDecimal('0') unless Meal.unreconciled.exists?
 
     bill_reimbursements - meal_resident_costs - guest_costs
   end
 
+  sig { returns(BigDecimal) }
   def bill_reimbursements # rubocop:disable Metrics/PerceivedComplexity -- mirrors the settlement credit calculation; intentionally kept as a single auditable method
     relevant_bills = bills.joins(:meal).merge(Meal.unreconciled.with_attendees)
                           .where(no_cost: false)
@@ -225,33 +245,40 @@ class Resident < ApplicationRecord
       if total_cost > max_cost
         (amount / total_cost) * max_cost
       else
-        bill.amount
+        amount
       end
     end
   end
 
+  sig { returns(BigDecimal) }
   def meal_resident_costs
     meal_residents.joins(:meal).merge(Meal.unreconciled)
                   .preload(meal: %i[bills meal_residents guests])
-                  .sum(BigDecimal('0')) { |attendance| oracle_unit_cost(attendance.meal) * attendance.multiplier }
+                  .sum(BigDecimal('0')) do |attendance|
+      oracle_unit_cost(T.must(attendance.meal)) * T.must(attendance.multiplier)
+    end
   end
 
+  sig { returns(BigDecimal) }
   def guest_costs
     guests.joins(:meal).merge(Meal.unreconciled)
           .preload(meal: %i[bills meal_residents guests])
-          .sum(BigDecimal('0')) { |guest| oracle_unit_cost(guest.meal) * guest.multiplier }
+          .sum(BigDecimal('0')) { |guest| oracle_unit_cost(T.must(guest.meal)) * T.must(guest.multiplier) }
   end
 
   # The oracle's own per-unit cost, written out like bill_reimbursements
   # above: the debit side must not read MealLedger or any display code,
   # or the oracle would agree with the thing it exists to check.
+  sig { params(meal: Meal).returns(BigDecimal) }
   def oracle_unit_cost(meal)
-    total_mult = meal.meal_residents.sum(&:multiplier) + meal.guests.sum(&:multiplier)
+    total_mult = meal.meal_residents.sum { |mr| T.must(mr.multiplier) } +
+                 meal.guests.sum { |guest| T.must(guest.multiplier) }
     return BigDecimal('0') if total_mult.zero?
 
-    total_cost = meal.bills.reject(&:no_cost).sum(BigDecimal('0'), &:amount)
-    if meal.capped?
-      max_cost = meal.cap * total_mult
+    total_cost = meal.bills.reject(&:no_cost).sum(BigDecimal('0')) { |b| T.must(b.amount) }
+    cap = meal.cap # nil means uncapped (Meal#capped?)
+    unless cap.nil?
+      max_cost = cap * total_mult
       total_cost = max_cost if total_cost > max_cost
     end
     total_cost / total_mult
@@ -263,6 +290,7 @@ class Resident < ApplicationRecord
   # they owe the community (the MealLedger sign convention). Show it to a
   # person only through BalanceDisplayHelper#balance_tag, never as a raw
   # signed number.
+  sig { returns(BigDecimal) }
   def balance
     resident_balance&.amount || BigDecimal('0')
   end
@@ -276,10 +304,11 @@ class Resident < ApplicationRecord
   # residents, so all of them refetch. A list of the shown columns would
   # go stale the first time a serializer gained one; this list only has
   # to name what is secret or invisible.
-  UNSHOWN_COLUMNS = %w[email phone password_digest reset_password_token reset_password_sent_at
-                       created_at updated_at].freeze
+  UNSHOWN_COLUMNS = T.let(%w[email phone password_digest reset_password_token reset_password_sent_at
+                             created_at updated_at].freeze, T::Array[String])
   private_constant :UNSHOWN_COLUMNS
 
+  sig { void }
   def note_live_update
     return unless destroyed? || (saved_changes.keys - UNSHOWN_COLUMNS).any?
 
