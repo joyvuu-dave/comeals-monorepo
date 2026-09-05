@@ -1,9 +1,11 @@
-# typed: true
+# typed: strict
 # frozen_string_literal: true
 
 module Api
   module V1
     class ReconciliationsController < ApiController
+      extend T::Sig
+
       before_action :authenticate, :require_reconciler
 
       # GET /api/v1/reconciliations/preview?cutoff=YYYY-MM-DD
@@ -12,6 +14,7 @@ module Api
       # writing anything. The cutoff must be a past day, like the settlement
       # itself requires. No meals to settle is a valid answer, not an error:
       # the lists come back empty.
+      sig { void }
       def preview
         cutoff = Date.iso8601(params.require(:cutoff))
         preview = Settlement.preview(cutoff: cutoff)
@@ -31,6 +34,7 @@ module Api
       # the answer does not wait on SMTP. Creating it is the lock — the row
       # and its meals are frozen from this moment, and there is no undo.
       # Preview first.
+      sig { void }
       def create
         cutoff = Date.iso8601(params.require(:cutoff))
         reconciliation = SettleAndNotify.call(cutoff: cutoff)
@@ -58,6 +62,7 @@ module Api
       # books: a superuser grants residents.can_reconcile in admin (#72).
       # A resident token never expires, so "any logged-in resident" would
       # mean anyone who can reach the shared screen's token.
+      sig { void }
       def require_reconciler
         return if current_resident_api.can_reconcile?
 

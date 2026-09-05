@@ -30,7 +30,8 @@ Every Ruby file carries a sigil on line 1.
 The money path is `# typed: strict`: `MealLedger`, `Settlement`,
 `BalanceRecalculation`, `SnapshotRead`, `LedgerVerification`, the three
 services that wrap them (`SettleAndNotify`, `RetryOnConflict`,
-`MealCostSummary`), and the
+`MealCostSummary`), the two API controllers on it
+(`Api::V1::MealsController`, `Api::V1::ReconciliationsController`), and the
 models that hold ledger rows: `Meal`, `Resident`, `Bill`, `MealResident`,
 `Guest`, `MealCharge`, `Reconciliation`, `ReconciliationBalance`,
 `ResidentBalance`. Every hand-written method there has a `sig`, and the
@@ -38,6 +39,13 @@ value objects (`MealLedger::Line`, `MealLedger::Summary`,
 `Settlement::Preview`) are `T::Struct`s, so a nil or a Float in a money
 field raises before any arithmetic runs. The `*_types_spec.rb` files under
 `spec/services` pin that the runtime checks are on.
+
+A controller at `strict` has one extra job: the records its
+`before_action`s load are instance variables, which Sorbet types as
+nilable, so each gets a private reader (`meal`, `guest`, `meal_resident`
+in `MealsController`) that does the `T.must` once, with a comment saying
+why the value is never nil by the time an action runs. Inside the loader
+itself, test the instance variable, not the reader.
 
 A model at `strict` is mostly Rails' work: the column readers,
 associations and scopes come from the generated RBIs, so the sigs go on
