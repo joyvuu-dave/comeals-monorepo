@@ -34,8 +34,9 @@ module Api
       def create
         cutoff = Date.iso8601(params.require(:cutoff))
         reconciliation = SettleAndNotify.call(cutoff: cutoff)
-        render json: { id: reconciliation.id, date: reconciliation.date.iso8601,
-                       cutoff_date: reconciliation.end_date.iso8601,
+        # Both dates are NOT NULL on a saved row, which this is.
+        render json: { id: reconciliation.id, date: T.must(reconciliation.date).iso8601,
+                       cutoff_date: T.must(reconciliation.end_date).iso8601,
                        meal_count: reconciliation.number_of_meals },
                status: :created
       rescue Date::Error, ActionController::ParameterMissing

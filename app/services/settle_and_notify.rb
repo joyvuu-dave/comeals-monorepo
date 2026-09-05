@@ -1,4 +1,4 @@
-# typed: true
+# typed: strict
 # frozen_string_literal: true
 
 # Settling a period, as a person means it: settle, refresh the running
@@ -18,6 +18,9 @@
 # a web request is allowed (#71). Enqueuing happens after the settlement
 # has committed, so a rolled-back settlement never mails anyone.
 class SettleAndNotify
+  extend T::Sig
+
+  sig { params(cutoff: Date, community: Community).returns(Reconciliation) }
   def self.call(cutoff:, community: Community.instance)
     # Only the settlement is retried. The recalculation and the mails run
     # after it has committed, so retrying past that point would settle the

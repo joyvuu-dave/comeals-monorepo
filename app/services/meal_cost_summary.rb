@@ -1,4 +1,4 @@
-# typed: true
+# typed: strict
 # frozen_string_literal: true
 
 # What one meal cost, for a screen. Admin reads this; nothing here
@@ -17,6 +17,9 @@
 # :bills, :meal_residents, :guests, and :meal_charges — MealLedger
 # runs no queries, and the charges read is one association.
 class MealCostSummary
+  extend T::Sig
+
+  sig { params(meal: Meal).returns(T.nilable(MealLedger::Summary)) }
   def self.for(meal)
     if meal.reconciled?
       from_charges(meal)
@@ -29,15 +32,17 @@ class MealCostSummary
   # what the cooks spent (no_cost bills produce no line, matching
   # total_cost's definition), the credit amounts sum to the effective
   # cost, and every line carries the meal's unit_cost.
+  sig { params(meal: Meal).returns(T.nilable(MealLedger::Summary)) }
   def self.from_charges(meal)
     charges = meal.meal_charges.to_a
-    return chargeless(meal) if charges.empty?
+    first = charges.first
+    return chargeless(meal) if first.nil?
 
     credits = charges.select(&:credit?)
     MealLedger::Summary.new(
-      total_cost: credits.sum(BigDecimal('0'), &:bill_amount),
-      effective_cost: credits.sum(BigDecimal('0'), &:amount),
-      unit_cost: charges.first.unit_cost,
+      total_cost: credits.sum(BigDecimal('0')) { |credit| T.must(credit.bill_amount) },
+      effective_cost: credits.sum(BigDecimal('0')) { |credit| T.must(credit.amount) },
+      unit_cost: T.must(first.unit_cost),
       subsidized: charges.any?(&:subsidized?)
     )
   end
@@ -49,11 +54,12 @@ class MealCostSummary
   # WITH attendance and no lines was settled before line items existed
   # (2026-08-02): unrecorded, so show nothing rather than a recomputed
   # number the settlement never used.
+  sig { params(meal: Meal).returns(T.nilable(MealLedger::Summary)) }
   def self.chargeless(meal)
     return nil if meal.meal_residents.any? || meal.guests.any?
 
     MealLedger::Summary.new(
-      total_cost: meal.bills.reject(&:no_cost).sum(BigDecimal('0'), &:amount),
+      total_cost: meal.bills.reject(&:no_cost).sum(BigDecimal('0')) { |bill| T.must(bill.amount) },
       effective_cost: BigDecimal('0'),
       unit_cost: BigDecimal('0'),
       subsidized: false

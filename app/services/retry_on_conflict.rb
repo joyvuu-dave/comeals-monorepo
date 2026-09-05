@@ -1,4 +1,4 @@
-# typed: true
+# typed: strict
 # frozen_string_literal: true
 
 # Runs a block, and runs it again if PostgreSQL refused it for a conflict
@@ -30,14 +30,22 @@
 # merely survived. A retry that works and a retry that fires constantly look
 # identical from the outside, and the second one is a problem.
 class RetryOnConflict
-  MAX_ATTEMPTS = 3
+  extend T::Sig
+
+  MAX_ATTEMPTS = T.let(3, Integer)
 
   # Doubling, from 10ms, with jitter. The jitter matters: two transactions
   # that conflicted once and then wait the same length of time are likely to
   # conflict again on the retry.
-  BASE_DELAY = 0.01
+  BASE_DELAY = T.let(0.01, Float)
 
-  def self.call
+  # Returns whatever the block returns on the attempt that succeeds.
+  sig do
+    type_parameters(:Result)
+      .params(blk: T.proc.returns(T.type_parameter(:Result)))
+      .returns(T.type_parameter(:Result))
+  end
+  def self.call(&blk) # rubocop:disable Naming/BlockForwarding -- the sig above has to name the block
     # Already inside a transaction, so a retry here cannot succeed. See
     # above. This is also what a spec running under transactional fixtures
     # hits, which is why the fault injection lives in the non-transactional

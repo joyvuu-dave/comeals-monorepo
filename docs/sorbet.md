@@ -28,7 +28,9 @@ Every Ruby file carries a sigil on line 1.
 | none             | `spec`                                                                                                                                  | Sorbet ignores `spec/` (`sorbet/config`). A `def` inside an RSpec block is a method on `Object` to Sorbet, so the 125 helpers defined inside describe blocks would leak into every typed file. |
 
 The money path is `# typed: strict`: `MealLedger`, `Settlement`,
-`BalanceRecalculation`, `SnapshotRead`, `LedgerVerification`, and the
+`BalanceRecalculation`, `SnapshotRead`, `LedgerVerification`, the three
+services that wrap them (`SettleAndNotify`, `RetryOnConflict`,
+`MealCostSummary`), and the
 models that hold ledger rows: `Meal`, `Resident`, `Bill`, `MealResident`,
 `Guest`, `MealCharge`, `Reconciliation`, `ReconciliationBalance`,
 `ResidentBalance`. Every hand-written method there has a `sig`, and the
@@ -82,9 +84,11 @@ return if end_date.nil?
 return if end_date < T.must(community).today
 ```
 
-**`blank?` and `present?` do not narrow.** Use `nil?` on a local when the
-value is a record, a date, or a number, where blank means nil. Keep
-`blank?` for strings and add `T.must` after it.
+**`blank?` narrows a String and nothing else.** Sorbet's Rails
+annotations teach it that a `T.nilable(String)` is a `String` after
+`return if name.blank?`. For a record, a date or a number, `blank?` and
+`present?` teach it nothing: use `nil?` on a local there, which is what
+blank means for those types anyway.
 
 **Name `self` inside a class-level DSL block.** Alba's `attribute :x do
 |record| ... end` runs the block on the serializer instance, but Sorbet sees
