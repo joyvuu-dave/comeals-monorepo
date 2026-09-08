@@ -17,6 +17,18 @@ checked, what is not, and how to work with it.
 an RBI file is stale. A stale RBI hides errors: a renamed column keeps its
 old reader in the RBI, and Sorbet accepts calls to it.
 
+`bin/tapioca dsl` always boots the app in the development environment,
+even when `RAILS_ENV` says something else: tapioca sets `RAILS_ENV` from
+its own `--environment` option, which defaults to `development`. The
+committed RBIs depend on that. The route helpers differ by environment
+(`config/routes.rb` mounts letter_opener_web in development only), so
+`-e test` writes different `generated_path_helpers_module.rbi` and
+`generated_url_helpers_module.rbi` files, and `--verify` then calls them
+stale. Two things follow. Run it plain, never with `-e`. And a machine
+with no `.env` has to supply the four Pusher variables that
+`config/initializers/pusher.rb` requires outside test; the nightly
+workflow sets placeholders for exactly this.
+
 ## Which files are typed
 
 Every Ruby file carries a sigil on line 1. Two rubocop cops from

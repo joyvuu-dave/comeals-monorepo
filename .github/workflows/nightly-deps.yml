@@ -54,6 +54,18 @@ env:
   ADMIN_E2E_DATABASE_URL: postgres://postgres:postgres@localhost:5432/comeals_admin_e2e
   VITE_PUSHER_KEY: "test-key-for-ci"
   VITE_PUSHER_CLUSTER: "us2"
+  # bin/tapioca dsl boots the app in development no matter what
+  # RAILS_ENV says (tapioca sets RAILS_ENV from its own --environment
+  # option, default development), and outside test
+  # config/initializers/pusher.rb refuses to boot without these four.
+  # Placeholders: nothing in this job calls Pusher. Generating in
+  # development is required, not a shortcut — the route-helper RBIs
+  # differ by environment, so -e test would write files bin/check on a
+  # laptop then reports as stale.
+  PUSHER_APP_ID: "test"
+  PUSHER_KEY: "test"
+  PUSHER_SECRET: "test"
+  PUSHER_CLUSTER: "test"
   # The visual suite runs in the container instead (see above).
   PLAYWRIGHT_SKIP_VISUAL: "1"
   # setup-ruby turns on frozen/deployment mode when a lockfile is
