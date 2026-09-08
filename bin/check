@@ -447,9 +447,13 @@ check_vitest() {
   local output exit_code=0
   output=$(npm test 2>&1) || exit_code=$?
 
-  local files tests
-  files=$(echo "$output" | grep -oE 'Test Files  [0-9]+ passed' || true)
-  tests=$(echo "$output" | grep -oE 'Tests  [0-9]+ passed' || true)
+  # On GitHub Actions Vitest colors its summary (any CI variable turns
+  # colors on), which puts escape codes between "Tests" and the count.
+  # Strip them, or the summary reads "unknown".
+  local plain files tests
+  plain=$(printf '%s' "$output" | sed -E "s/$(printf '\033')\[[0-9;]*m//g")
+  files=$(echo "$plain" | grep -oE 'Test Files  [0-9]+ passed' || true)
+  tests=$(echo "$plain" | grep -oE 'Tests  [0-9]+ passed' || true)
   local summary="${files:+$files, }${tests:-unknown}"
 
   if [ "$exit_code" -eq 0 ]; then
