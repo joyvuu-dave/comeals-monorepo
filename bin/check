@@ -390,6 +390,13 @@ check_bundle_audit() {
   if [ "$exit_code" -eq 0 ]; then
     pass "No vulnerable gems"
     record "bundle audit" "PASS" "no vulnerabilities"
+  elif echo "$output" | grep -q '^No vulnerabilities found'; then
+    # The advisory database update failed (two checks updating the shared
+    # copy at once do this) but the check still ran against the cached
+    # copy and found nothing. That is not a vulnerability; say what it is.
+    warn "Advisory database update failed; gems checked against the cached copy"
+    echo "$output" | grep -i 'failed\|error' | head -5
+    record "bundle audit" "WARN" "advisory db update failed, cached copy clean"
   else
     fail "Vulnerable gems found"
     echo "$output" | grep -v '^Updating\|^$' | head -30
