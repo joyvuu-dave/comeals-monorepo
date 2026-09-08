@@ -19,7 +19,11 @@ old reader in the RBI, and Sorbet accepts calls to it.
 
 ## Which files are typed
 
-Every Ruby file carries a sigil on line 1.
+Every Ruby file carries a sigil on line 1. Two rubocop cops from
+`rubocop-sorbet` enforce that under `app/`, `lib/`, `config/` and
+`db/seeds.rb`: `Sorbet/HasSigil` (a file without one is `typed: false`
+to Sorbet, so a new service could go unchecked) and `Sorbet/ValidSigil`.
+The plugin's other cops stay off (`.rubocop.yml` says why).
 
 | Sigil            | Where                                                                                                                                   | Why                                                                                                                                                                                            |
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

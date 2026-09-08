@@ -4,6 +4,7 @@ plugins:
   - rubocop-rspec
   - rubocop-rspec_rails
   - rubocop-factory_bot
+  - rubocop-sorbet
 
 AllCops:
   NewCops: enable
@@ -14,6 +15,31 @@ AllCops:
     - "vendor/**/*"
     - "node_modules/**/*"
     - "tmp/**/*"
+
+# --- Sorbet ---
+# Only the two cops that keep the type checker honest: every Ruby file
+# Sorbet reads must carry a sigil, and it must be a real one. A file with
+# no sigil is `typed: false` to Sorbet, so a new service could go
+# unchecked without anyone noticing. Style cops for sig layout stay off;
+# they would argue with the rest of this file over nothing that affects
+# correctness. `strict` is required only where docs/sorbet.md says so,
+# not by a cop.
+Sorbet:
+  Enabled: false
+Sorbet/HasSigil:
+  Enabled: true
+  Include:
+    - "app/**/*.rb"
+    - "lib/**/*.rb"
+    - "config/**/*.rb"
+    - "db/seeds.rb"
+Sorbet/ValidSigil:
+  Enabled: true
+  Include:
+    - "app/**/*.rb"
+    - "lib/**/*.rb"
+    - "config/**/*.rb"
+    - "db/seeds.rb"
 
 # --- Bundler ---
 # Gems are grouped with explanatory comments (e.g. above rack-attack, jwt).
