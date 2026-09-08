@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# The screen-state measure: how much of the components' branches the
+# visual suite's goldens show. Builds the SPA with istanbul counters into
+# tmp/visual-coverage/build (vite.config.mjs), runs tests/e2e/visual.spec.js
+# against it on Chromium with the screenshot checks off
+# (playwright.config.js), collects the counters each page hands out
+# (tests/helpers/test.js), and reports them
+# (tests/helpers/visual_coverage_report.js). Pixels are compared
+# elsewhere; this run works on any machine.
+#
+# Usage:
+#   bin/visual-coverage
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+rm -rf tmp/visual-coverage
+# PLAYWRIGHT_SKIP_VISUAL is what CI sets to keep the pixel comparison
+# off the plain runner; it must not keep this run off.
+env -u PLAYWRIGHT_SKIP_VISUAL VISUAL_COVERAGE=1 \
+  npx playwright test tests/e2e/visual.spec.js --project chromium
+node tests/helpers/visual_coverage_report.js

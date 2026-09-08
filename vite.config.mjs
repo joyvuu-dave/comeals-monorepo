@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import istanbulSource from "./tests/helpers/vite_istanbul.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -96,6 +97,13 @@ function buildId(command) {
   }
 }
 
+// The screen-state measure (bin/visual-coverage): with VISUAL_COVERAGE
+// set, the build carries istanbul counters, goes to its own directory
+// so it never replaces the real build in public/, and the visual suite
+// reads the counters out of the page. The number it produces is how
+// much of the components' branches the goldens show.
+const visualCoverage = Boolean(process.env.VISUAL_COVERAGE);
+
 export default defineConfig(({ command }) => ({
   root: "app/frontend",
   define: {
@@ -104,7 +112,14 @@ export default defineConfig(({ command }) => ({
   envDir: "../..",
   // Only serve public/ files during dev; in build/preview, outDir IS public/
   publicDir: command === "serve" ? "../../public" : false,
-  plugins: [react(), perfLogPlugin(), preloadCalendarPlugin()],
+  plugins: [
+    react(),
+    perfLogPlugin(),
+    preloadCalendarPlugin(),
+    ...(visualCoverage
+      ? [istanbulSource({ include: "app/frontend/src" })]
+      : []),
+  ],
   server: {
     port: 3036,
     proxy: {
@@ -112,8 +127,8 @@ export default defineConfig(({ command }) => ({
     },
   },
   build: {
-    outDir: "../../public",
-    emptyOutDir: false,
+    outDir: visualCoverage ? "../../tmp/visual-coverage/build" : "../../public",
+    emptyOutDir: visualCoverage,
     // NOT the default "assets": Sprockets writes ActiveAdmin's files to
     // public/assets, and Vite deletes everything inside its own assets
     // directory on each build even with emptyOutDir false. Sharing the

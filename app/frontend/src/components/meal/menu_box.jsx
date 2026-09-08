@@ -110,7 +110,6 @@ const MenuBox = observer(() => {
       <div>
         <DebouncedTextarea
           key={meal ? meal.id : "no-meal"}
-          className={store.editDescriptionMode ? "" : "offwhite"}
           style={styles.text}
           value={meal && meal.description}
           onChange={(val) => store.setDescriptionOn(meal, val)}
@@ -119,9 +118,7 @@ const MenuBox = observer(() => {
             // Frozen while the next meal loads: the box shows "" until
             // the data arrives, and text typed into that emptiness would
             // overwrite the real menu that has not shown yet.
-            store.mealLoading ||
-            !store.editDescriptionMode ||
-            (meal && meal.closed)
+            store.mealLoading || (meal && meal.closed)
           }
           aria-label="Enter meal description"
         />

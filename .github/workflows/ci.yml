@@ -258,6 +258,9 @@ jobs:
       - if: steps.playwright-cache.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium webkit
       - run: npm run test:e2e
+      # The screen-state measure compares counters, not pixels, so it
+      # runs on this plain runner even though the goldens cannot.
+      - run: bin/visual-coverage
       - uses: actions/upload-artifact@v7
         if: failure()
         with:

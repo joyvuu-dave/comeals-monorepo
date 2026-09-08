@@ -530,6 +530,29 @@ check_playwright() {
   fi
 }
 
+# Screen states: the share of the components' markup branches that the
+# visual suite's goldens show (bin/visual-coverage). Runs the visual
+# spec once more, against an instrumented build with the screenshot
+# checks off, so it needs no goldens for this machine.
+check_visual_coverage() {
+  step "Screen states"
+
+  local output exit_code=0
+  output=$(bin/visual-coverage 2>&1) || exit_code=$?
+
+  local summary
+  summary=$(echo "$output" | grep -oE 'Markup branches : [0-9.]+%' | sed 's/Markup branches : //' || echo "unknown")
+
+  if [ "$exit_code" -eq 0 ]; then
+    pass "$summary of markup branches shown by a golden"
+    record "Screen states" "PASS" "$summary"
+  else
+    fail "Below the threshold, or the run failed"
+    echo "$output" | grep -E 'unseen|ERROR|✘' | head -20
+    record "Screen states" "FAIL" "$summary"
+  fi
+}
+
 check_integration() {
   step "Integration tests"
 
@@ -669,6 +692,7 @@ main() {
   check_vitest
   check_fixture_freshness
   check_playwright
+  check_visual_coverage
   check_integration
 
   # Dependency freshness

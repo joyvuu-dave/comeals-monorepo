@@ -41,8 +41,6 @@ export const DataStore = types
     // the prev/next arrows before nextId/prevId existed.
     mealLoading: true,
     monthLoading: true,
-    editDescriptionMode: true,
-    editBillsMode: true,
     // True while an open/close save is in flight; the button is disabled.
     closedPending: false,
     // The first load of the meal on screen failed and automatic

@@ -23,12 +23,29 @@
  * test.
  */
 const base = require("@playwright/test");
+const { saveCoverage } = require("./visual_coverage");
 
 const test = base.test.extend({
   allowedConsoleErrors: [null, { option: true }],
-  page: async ({ page, allowedConsoleErrors }, use) => {
+  page: async ({ page, allowedConsoleErrors }, use, testInfo) => {
     const pageErrors = [];
     const consoleErrors = [];
+    // The screen-state measure (bin/visual-coverage): the instrumented
+    // build keeps istanbul counters in window.__coverage__. A full page
+    // load (a login, a logout) would drop them, so the page hands them
+    // out before it unloads, and again when the test ends.
+    if (process.env.VISUAL_COVERAGE) {
+      await page.exposeFunction("__saveCoverage", (json) =>
+        saveCoverage(json, testInfo),
+      );
+      await page.addInitScript(() => {
+        window.addEventListener("pagehide", () => {
+          if (window.__coverage__) {
+            window.__saveCoverage(JSON.stringify(window.__coverage__));
+          }
+        });
+      });
+    }
     page.on("pageerror", (error) => pageErrors.push(String(error)));
     page.on("console", (message) => {
       if (message.type() !== "error") return;
@@ -37,6 +54,12 @@ const test = base.test.extend({
       consoleErrors.push(text);
     });
     await use(page);
+    if (process.env.VISUAL_COVERAGE && !page.isClosed()) {
+      const coverage = await page
+        .evaluate(() => window.__coverage__ || null)
+        .catch(() => null);
+      if (coverage) saveCoverage(JSON.stringify(coverage), testInfo);
+    }
     base.expect(pageErrors, "uncaught page errors during the test").toEqual([]);
     base
       .expect(consoleErrors, "unexpected console errors during the test")

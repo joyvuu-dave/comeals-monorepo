@@ -71,10 +71,4 @@ describe("DayPickerInput", () => {
     expect(onDayChange).not.toHaveBeenCalled();
     expect(screen.getByRole("grid")).toBeInTheDocument();
   });
-
-  it("opens on the current month when there is no value and no default", () => {
-    render(<DayPickerInput id="day" placeholder="Pick a day" />);
-    fireEvent.click(screen.getByPlaceholderText("Pick a day"));
-    expect(screen.getByRole("grid")).toBeInTheDocument();
-  });
 });

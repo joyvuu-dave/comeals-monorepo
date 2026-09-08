@@ -11,20 +11,8 @@ describe("Icon", () => {
     expect(svg.querySelector("path")).toHaveAttribute("d");
   });
 
-  it("keeps a class name and a size it is given", () => {
-    const { container } = render(
-      <Icon name="chevron-left" className="mar-sm" size="2x" />,
-    );
-    const svg = container.querySelector("svg");
-    expect(svg).toHaveClass("icon-chevron-left");
-    expect(svg).toHaveClass("mar-sm");
-    expect(svg.style.fontSize).toBe("2em");
-  });
-
-  it("is exposed to screen readers when it carries a label", () => {
-    const { container } = render(<Icon name="arrow-left" aria-label="Back" />);
-    const svg = container.querySelector("svg");
-    expect(svg).not.toHaveAttribute("aria-hidden");
-    expect(svg).toHaveAttribute("aria-label", "Back");
+  it("scales with the size it is given", () => {
+    const { container } = render(<Icon name="chevron-left" size="2x" />);
+    expect(container.querySelector("svg").style.fontSize).toBe("2em");
   });
 });

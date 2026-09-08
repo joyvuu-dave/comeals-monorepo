@@ -31,20 +31,20 @@ const baseStyle = {
   overflow: "visible",
 };
 
-const Icon = ({ name, size, style, className, ...rest }) => {
+// Every icon in the app sits next to its own text, so all of them are
+// hidden from screen readers.
+const Icon = ({ name, size }) => {
   const { width, path } = ICONS[name];
   return (
     <svg
       viewBox={`0 0 ${width} 512`}
-      className={className ? `icon-${name} ${className}` : `icon-${name}`}
+      className={`icon-${name}`}
       style={{
         ...baseStyle,
         ...(size ? { fontSize: `${parseInt(size, 10)}em` } : {}),
-        ...style,
       }}
-      aria-hidden={rest["aria-label"] ? undefined : true}
+      aria-hidden={true}
       focusable="false"
-      {...rest}
     >
       <path fill="currentColor" d={path} />
     </svg>

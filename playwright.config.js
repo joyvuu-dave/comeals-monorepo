@@ -21,8 +21,16 @@ if (process.env.PLAYWRIGHT_SKIP_VISUAL) {
   DEFAULT_IGNORE.push("**/visual.spec.js");
 }
 
+// The screen-state measure (bin/visual-coverage) runs the visual suite
+// against an instrumented build and reads coverage counters, not
+// pixels: the screenshot expectations are skipped, so the run works on
+// any machine, and the instrumented build is served from its own
+// directory (vite.config.mjs).
+const visualCoverage = Boolean(process.env.VISUAL_COVERAGE);
+
 module.exports = defineConfig({
   testIgnore: process.env.PLAYWRIGHT_INCLUDE_ALL ? [] : DEFAULT_IGNORE,
+  ignoreSnapshots: visualCoverage,
   timeout: 30000,
   expect: {
     timeout: 5000,
@@ -122,9 +130,13 @@ module.exports = defineConfig({
   // `npm run test:e2e` still builds for itself.
   webServer: [
     {
-      command: process.env.E2E_SKIP_BUILD
-        ? `npx vite preview --port ${E2E_PORT}`
-        : `npm run build && npx vite preview --port ${E2E_PORT}`,
+      // The coverage build never touches public/, so it does not go
+      // through npm run build, which clears public/vite-assets first.
+      command: visualCoverage
+        ? `npx vite build && npx vite preview --port ${E2E_PORT}`
+        : process.env.E2E_SKIP_BUILD
+          ? `npx vite preview --port ${E2E_PORT}`
+          : `npm run build && npx vite preview --port ${E2E_PORT}`,
       port: E2E_PORT,
       timeout: 60000,
       reuseExistingServer: false,

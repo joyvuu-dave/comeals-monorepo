@@ -318,8 +318,10 @@ async function mockApi(page, options = {}) {
     }
   });
 
-  // Events collection (POST to create)
-  await page.route("**/api/v1/events?*", (route) => {
+  // Events collection (POST to create). The pattern names the path
+  // exactly: in a Playwright glob "?" is one character, so the old
+  // "events?*" never matched a POST to /api/v1/events.
+  await page.route("**/api/v1/events", (route) => {
     route.fulfill({ status: 200, body: "{}" });
   });
 
@@ -338,7 +340,7 @@ async function mockApi(page, options = {}) {
   });
 
   // Common house reservations -- collection (POST to create)
-  await page.route("**/api/v1/common-house-reservations?*", (route) => {
+  await page.route("**/api/v1/common-house-reservations", (route) => {
     route.fulfill({ status: 200, body: "{}" });
   });
 
@@ -357,7 +359,7 @@ async function mockApi(page, options = {}) {
   });
 
   // Guest room reservations -- collection (POST to create)
-  await page.route("**/api/v1/guest-room-reservations?*", (route) => {
+  await page.route("**/api/v1/guest-room-reservations", (route) => {
     route.fulfill({ status: 200, body: "{}" });
   });
 

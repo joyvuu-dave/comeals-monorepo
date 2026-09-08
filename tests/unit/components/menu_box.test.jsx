@@ -15,7 +15,6 @@ function makeStore(overrides = {}, mealOverrides = {}) {
         closed: false,
         ...mealOverrides,
       },
-      editDescriptionMode: true,
       mealLoading: false,
       setDescriptionOn: vi.fn(),
       noteMenuTyping: vi.fn(),
@@ -99,13 +98,6 @@ describe("MenuBox", () => {
     const closed = makeStore({}, { closed: true });
     renderBox(closed);
     expect(screen.getByLabelText("Enter meal description")).toBeDisabled();
-  });
-
-  it("greys the textarea outside description edit mode", () => {
-    renderBox(makeStore({ editDescriptionMode: false }));
-    expect(screen.getByLabelText("Enter meal description")).toHaveClass(
-      "offwhite",
-    );
   });
 
   // The store echoes a saved description back through the prop. When

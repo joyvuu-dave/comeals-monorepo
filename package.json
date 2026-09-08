@@ -30,6 +30,8 @@
     "react-router": "^8.3.0"
   },
   "devDependencies": {
+    "@babel/parser": "^8.0.4",
+    "@babel/traverse": "^8.0.4",
     "@eslint/js": "^9.39.4",
     "@playwright/test": "^1.58.2",
     "@testing-library/jest-dom": "^7.0.0",
@@ -40,6 +42,10 @@
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
     "globals": "^17.4.0",
+    "istanbul-lib-coverage": "^3.2.2",
+    "istanbul-lib-instrument": "^6.0.3",
+    "istanbul-lib-report": "^3.0.1",
+    "istanbul-reports": "^3.2.0",
     "jsdom": "^30.0.1",
     "prettier": "^3.8.1",
     "typescript": "^6.0.3",

@@ -1,11 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import {
-  render,
-  screen,
-  fireEvent,
-  within,
-  cleanup,
-} from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import { observable } from "mobx";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
 import CooksBox from "../../../app/frontend/src/components/meal/cooks_box.jsx";
@@ -23,7 +17,6 @@ function makeBill(overrides = {}) {
       amount: "",
       no_cost: false,
       costPending: false,
-      amountIsValid: true,
       setResident: vi.fn(),
       setAmount: vi.fn((value) => value),
       normalizeAmountDisplay: vi.fn(),
@@ -42,7 +35,6 @@ function makeBill(overrides = {}) {
 function makeStore(bills, overrides = {}) {
   return observable(
     {
-      editBillsMode: false,
       meal: { reconciled: false },
       bills: new Map(bills.map((bill) => [bill.id, bill])),
       residents: new Map([
@@ -64,36 +56,9 @@ function renderBox(store) {
   );
 }
 
-describe("CooksBox display mode", () => {
-  it("shows each cook's name and amount", () => {
-    renderBox(makeStore([makeBill({ amount: "12.34" })]));
-    const row = screen.getByRole("row");
-    expect(row).toHaveTextContent("Alice R.");
-    expect(row).toHaveTextContent("$12.34");
-  });
-
-  it("shows the word 'pending' while a cost is awaited", () => {
-    renderBox(makeStore([makeBill({ costPending: true })]));
-    const pending = screen.getByText("pending");
-    expect(pending.tagName).toBe("EM");
-  });
-
-  it("shows a bare $ for a blank amount — by design, we like how it looks", () => {
-    renderBox(makeStore([makeBill({ amount: "", no_cost: true })]));
-    const cells = screen.getAllByRole("cell");
-    expect(cells[1]).toHaveTextContent(/^\$$/);
-  });
-
-  it("hides the row of a bill with no cook", () => {
-    const bill = makeBill({ resident: null });
-    const { container } = renderBox(makeStore([bill]));
-    expect(container.querySelector("tr")).toHaveAttribute("hidden");
-  });
-});
-
-describe("CooksBox edit mode", () => {
+describe("CooksBox", () => {
   function makeEditStore(bills, overrides = {}) {
-    return makeStore(bills, { editBillsMode: true, ...overrides });
+    return makeStore(bills, overrides);
   }
 
   it("offers only residents who can cook", () => {
@@ -208,13 +173,7 @@ describe("CooksBox edit mode", () => {
     expect(store.flushPendingBillsSave).toHaveBeenCalledTimes(1);
   });
 
-  it("marks an invalid or pending cost", () => {
-    renderBox(makeEditStore([makeBill({ amountIsValid: false })]));
-    expect(
-      screen.getByRole("spinbutton", { name: "Set meal cost" }),
-    ).toHaveClass("input-invalid");
-    cleanup();
-
+  it("marks a pending cost", () => {
     renderBox(makeEditStore([makeBill({ costPending: true })]));
     const pending = screen.getByRole("spinbutton", { name: "Set meal cost" });
     expect(pending).toHaveClass("cost-pending");

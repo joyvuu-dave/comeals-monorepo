@@ -2099,7 +2099,6 @@ describe("DataStore", () => {
 
       store.submitBills();
 
-      expect(store.editBillsMode).toBe(true);
       expect(billsPatchCalls().length).toBe(0);
     });
 

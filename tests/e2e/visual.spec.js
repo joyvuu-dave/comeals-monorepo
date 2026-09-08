@@ -584,4 +584,489 @@ test.describe("Visual Baselines", () => {
       fullPage: true,
     });
   });
+
+  // The looks below are the states a screen can take beyond its first
+  // paint. bin/visual-coverage lists the markup branches no golden
+  // shows; each test here closes one or more of those.
+
+  // A request that never answers, so a form stays in its saving look.
+  async function holdRoute(page, url, method) {
+    await page.route(url, async (route) => {
+      if (method && route.request().method() !== method) {
+        return route.fallback();
+      }
+      await new Promise((resolve) => setTimeout(resolve, 60000));
+      return route.fulfill({ status: 200, body: "{}" });
+    });
+  }
+
+  // Offline: the browser's own event flips the header's ONLINE word.
+  test("calendar offline", async ({ page, context }) => {
+    await setupAuthenticatedPage(page, context);
+    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+
+    await page.goto("/calendar/all/2026-01-15/");
+    await page.waitForLoadState("networkidle");
+    await expect(page.locator(".rbc-calendar")).toBeVisible({ timeout: 10000 });
+    await page.waitForTimeout(1000);
+
+    await context.setOffline(true);
+    await expect(page.locator(".offline")).toHaveText("OFFLINE");
+    await page.waitForTimeout(500);
+
+    await expect(page).toHaveScreenshot("calendar-offline.png", {
+      fullPage: true,
+    });
+  });
+
+  test("meal page offline", async ({ page, context }) => {
+    await setupAuthenticatedPage(page, context);
+    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+
+    await page.goto("/meals/42/edit/");
+    await page.waitForLoadState("networkidle");
+    await expect(
+      page.getByRole("cell", { name: "A - Jane Smith", exact: true }),
+    ).toBeVisible({ timeout: 10000 });
+
+    await context.setOffline(true);
+    await expect(page.locator(".offline")).toHaveText("OFFLINE");
+    await page.waitForTimeout(500);
+
+    await expect(page).toHaveScreenshot("meal-offline.png", { fullPage: true });
+  });
+
+  test("login page offline", async ({ page, context }) => {
+    await stubPusher(page);
+    await disableIdleTimer(page);
+    await mockApi(page);
+    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+    await expect(page.locator('input[aria-label="email"]')).toBeVisible({
+      timeout: 10000,
+    });
+
+    await context.setOffline(true);
+    await expect(page.locator(".offline")).toHaveText("OFFLINE");
+    await page.waitForTimeout(500);
+
+    await expect(page).toHaveScreenshot("login-offline.png", {
+      fullPage: true,
+    });
+  });
+
+  // The picker over an edit form: the reservation's day is marked.
+  test("day picker with a chosen day", async ({ page, context }) => {
+    await setupAuthenticatedPage(page, context);
+    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+
+    await page.goto("/calendar/all/2026-01-15/events/edit/70/");
+    await page.waitForLoadState("networkidle");
+    const modal = page.locator(".ReactModal__Content--after-open");
+    await expect(modal.locator("#event-edit-title")).toHaveValue(
+      "Community Meeting",
+      { timeout: 10000 },
+    );
+
+    await modal.locator("#event-edit-day").click();
+    const overlay = modal.locator(".rdp-root");
+    await expect(overlay).toBeVisible({ timeout: 3000 });
+    await expect(overlay.locator(".rdp-selected")).toHaveCount(1);
+    await page.waitForTimeout(500);
+
+    await expect(overlay).toHaveScreenshot("day-picker-selected.png");
+  });
+
+  // The saving look of each form: the button spins and the picker dims
+  // until the server answers.
+  test("event form submitting", async ({ page, context }) => {
+    await setupAuthenticatedPage(page, context);
+    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await holdRoute(page, "**/api/v1/events", "POST");
+
+    await page.goto("/calendar/all/2026-01-15/events/new/");
+    await page.waitForLoadState("networkidle");
+    const modal = page.locator(".ReactModal__Content--after-open");
+    await modal.locator("#event-new-title").fill("Movie Night");
+    await modal.getByRole("button", { name: "Create" }).click();
+    await expect(modal.locator(".button-loader")).toBeVisible({
+      timeout: 5000,
+    });
+    await page.waitForTimeout(500);
+
+    await expect(page).toHaveScreenshot("event-form-submitting.png", {
+      fullPage: true,
+    });
+  });
+
+  test("common house form submitting", async ({ page, context }) => {
+    await setupAuthenticatedPage(page, context);
+    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await holdRoute(page, "**/api/v1/common-house-reservations", "POST");
+
+    await page.goto("/calendar/all/2026-01-15/common-house-reservations/new/");
+    await page.waitForLoadState("networkidle");
+    const modal = page.locator(".ReactModal__Content--after-open");
+    await expect(modal.locator("#ch-new-resident")).toBeVisible({
+      timeout: 10000,
+    });
+    await modal.getByRole("button", { name: "Create" }).click();
+    await expect(modal.locator(".button-loader")).toBeVisible({
+      timeout: 5000,
+    });
+    await page.waitForTimeout(500);
+
+    await expect(page).toHaveScreenshot("common-house-form-submitting.png", {
+      fullPage: true,
+    });
+  });
+
+  test("guest room form submitting", async ({ page, context }) => {
+    await setupAuthenticatedPage(page, context);
+    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await holdRoute(page, "**/api/v1/guest-room-reservations", "POST");
+
+    await page.goto("/calendar/all/2026-01-15/guest-room-reservations/new/");
+    await page.waitForLoadState("networkidle");
+    const modal = page.locator(".ReactModal__Content--after-open");
+    await expect(modal.locator("#guest-room-new-host")).toBeVisible({
+      timeout: 10000,
+    });
+    await modal.getByRole("button", { name: "Create" }).click();
+    await expect(modal.locator(".button-loader")).toBeVisible({
+      timeout: 5000,
+    });
+    await page.waitForTimeout(500);
+
+    await expect(page).toHaveScreenshot("guest-room-form-submitting.png", {
+      fullPage: true,
+    });
+  });
+
+  test("event edit updating", async ({ page, context }) => {
+    await setupAuthenticatedPage(page, context);
+    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await holdRoute(page, "**/api/v1/events/**", "PATCH");
+
+    await page.goto("/calendar/all/2026-01-15/events/edit/70/");
+    await page.waitForLoadState("networkidle");
+    const modal = page.locator(".ReactModal__Content--after-open");
+    await expect(modal.locator("#event-edit-title")).toHaveValue(
+      "Community Meeting",
+      { timeout: 10000 },
+    );
+    await modal.getByRole("button", { name: "Update" }).click();
+    await expect(modal.locator(".button-loader")).toBeVisible({
+      timeout: 5000,
+    });
+    await page.waitForTimeout(500);
+
+    await expect(page).toHaveScreenshot("event-edit-updating.png", {
+      fullPage: true,
+    });
+  });
+
+  test("event edit deleting", async ({ page, context }) => {
+    await setupAuthenticatedPage(page, context);
+    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await holdRoute(page, "**/api/v1/events/**", "DELETE");
+
+    await page.goto("/calendar/all/2026-01-15/events/edit/70/");
+    await page.waitForLoadState("networkidle");
+    const modal = page.locator(".ReactModal__Content--after-open");
+    await expect(modal.locator("#event-edit-title")).toHaveValue(
+      "Community Meeting",
+      { timeout: 10000 },
+    );
+    await modal.getByRole("button", { name: "Delete" }).click();
+    const confirmOverlay = page.locator(".ReactModal__Overlay").last();
+    await expect(
+      confirmOverlay.locator("text=Do you really want to delete this event?"),
+    ).toBeVisible({ timeout: 5000 });
+    // The confirm button is armed after 400ms.
+    await page.waitForTimeout(600);
+    await confirmOverlay.getByRole("button", { name: "Delete" }).click();
+    await expect(modal.locator(".button-loader")).toBeVisible({
+      timeout: 5000,
+    });
+    await page.waitForTimeout(500);
+
+    await expect(page).toHaveScreenshot("event-edit-deleting.png", {
+      fullPage: true,
+    });
+  });
+
+  // A settled meal: every control frozen, a name that is not attending
+  // dimmed plain, and a vegetarian guest's carrot badge.
+  test("reconciled meal page", async ({ page, context }) => {
+    await setupAuthenticatedPage(page, context, {
+      mealData: {
+        ...mealFixture,
+        closed: true,
+        closed_at: "2026-01-15T08:00:00Z",
+        reconciled: true,
+        guests: mealFixture.guests.map((guest) => ({
+          ...guest,
+          vegetarian: true,
+        })),
+      },
+    });
+    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+
+    await page.goto("/meals/42/edit/");
+    await page.waitForLoadState("networkidle");
+    await expect(page.locator("h1", { hasText: "RECONCILED" })).toBeVisible({
+      timeout: 10000,
+    });
+    const bobCell = page.getByRole("cell", {
+      name: "B - Bob Johnson",
+      exact: true,
+    });
+    await expect(bobCell).toHaveAttribute("style", /not-allowed/);
+    await expect(page.locator('img[alt="carrot-icon"]').first()).toBeVisible();
+    await page.waitForTimeout(500);
+
+    await expect(page).toHaveScreenshot("meal-reconciled.png", {
+      fullPage: true,
+    });
+  });
+
+  // A closed meal with no seat left: the switches of someone not signed
+  // up are locked, and a cook who has not entered a cost shows "pending".
+  test("closed meal with no seats left", async ({ page, context }) => {
+    await setupAuthenticatedPage(page, context, {
+      mealData: {
+        ...mealFixture,
+        closed: true,
+        closed_at: "2026-01-15T08:00:00Z",
+        // Jane and Alice attend, plus one guest: three seats, all taken.
+        max: 3,
+        bills: [
+          ...mealFixture.bills,
+          { resident_id: 2, amount: "", no_cost: false },
+        ],
+      },
+    });
+    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+
+    await page.goto("/meals/42/edit/");
+    await page.waitForLoadState("networkidle");
+    await expect(page.locator("h1", { hasText: "CLOSED" })).toBeVisible({
+      timeout: 10000,
+    });
+    await expect(
+      page.getByLabel("Toggle Late for B - Bob Johnson"),
+    ).toBeDisabled();
+    await expect(page.getByPlaceholder("pending")).toBeVisible();
+    await page.waitForTimeout(500);
+
+    await expect(page).toHaveScreenshot("meal-closed-full.png", {
+      fullPage: true,
+    });
+  });
+
+  test("close confirm bar with two blank cook costs", async ({
+    page,
+    context,
+  }) => {
+    await setupAuthenticatedPage(page, context, {
+      mealData: {
+        ...mealFixture,
+        bills: [
+          { resident_id: 1, amount: "", no_cost: false },
+          { resident_id: 2, amount: "", no_cost: false },
+        ],
+      },
+    });
+    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+
+    await page.goto("/meals/42/edit/");
+    await page.waitForLoadState("networkidle");
+    await expect(page.locator("h1", { hasText: "OPEN" })).toBeVisible({
+      timeout: 10000,
+    });
+
+    await page.locator("text=Open / Close Meal").click();
+    await expect(
+      page.locator("text=Some cooks haven’t entered a cost yet"),
+    ).toBeVisible({ timeout: 5000 });
+    await page.waitForTimeout(500);
+
+    await expect(page).toHaveScreenshot("close-confirm-bar-two-cooks.png", {
+      fullPage: true,
+    });
+  });
+
+  // Turning "no cost" on over a typed cost asks first.
+  test("no-cost confirm bar", async ({ page, context }) => {
+    await setupAuthenticatedPage(page, context);
+    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+
+    await page.goto("/meals/42/edit/");
+    await page.waitForLoadState("networkidle");
+    await expect(
+      page.getByRole("cell", { name: "A - Jane Smith", exact: true }),
+    ).toBeVisible({ timeout: 10000 });
+
+    // The checkbox is drawn as a switch; its label is the thing to tap.
+    await page.locator('label[for^="no_cost_switch-"]').first().click();
+    await expect(page.getByRole("alertdialog", { name: /^Erase/ })).toBeVisible(
+      {
+        timeout: 5000,
+      },
+    );
+    await page.waitForTimeout(500);
+
+    await expect(page).toHaveScreenshot("no-cost-confirm-bar.png", {
+      fullPage: true,
+    });
+  });
+
+  test("login submitting", async ({ page }) => {
+    await stubPusher(page);
+    await disableIdleTimer(page);
+    await mockApi(page);
+    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await holdRoute(page, "**/api/v1/residents/token", "POST");
+
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+    await page.locator('input[aria-label="email"]').fill("jane@example.com");
+    await page.locator('input[aria-label="password"]').fill("hunter2");
+    await page.getByRole("button", { name: "Submit" }).click();
+    await expect(page.locator(".button-loader")).toBeVisible({ timeout: 5000 });
+    await page.waitForTimeout(500);
+
+    await expect(page).toHaveScreenshot("login-submitting.png", {
+      fullPage: true,
+    });
+  });
+
+  test("password reset submitting", async ({ page }) => {
+    await stubPusher(page);
+    await disableIdleTimer(page);
+    await mockApi(page);
+    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await holdRoute(page, "**/api/v1/residents/password-reset/*", "POST");
+
+    await page.goto("/reset-password/test-reset-token/");
+    await page.waitForLoadState("networkidle");
+    const modal = page.locator(".ReactModal__Content--after-open");
+    await modal.locator('input[type="password"]').fill("hunter2hunter2");
+    await modal.getByRole("button", { name: "Submit" }).click();
+    await expect(modal.locator(".button-loader")).toBeVisible({
+      timeout: 5000,
+    });
+    await page.waitForTimeout(500);
+
+    await expect(page).toHaveScreenshot("password-reset-submitting.png", {
+      fullPage: true,
+    });
+  });
+
+  // The looks a failing server produces. The browser logs each failed
+  // request, and the app logs the server's message.
+  test.describe("with a failing backend", () => {
+    test.use({
+      allowedConsoleErrors: combinePatterns(
+        httpFailurePattern,
+        /^(boom|not found)$/,
+        /^Error: no response received from server\.$/,
+      ),
+    });
+
+    test("meal load failing", async ({ page, context }) => {
+      await setupAuthenticatedPage(page, context);
+      await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+      await page.route("**/api/v1/meals/42/cooks*", (route) =>
+        route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ message: "boom" }),
+        }),
+      );
+
+      await page.goto("/meals/42/edit/");
+      await expect(page.getByText("Trouble loading this meal.")).toBeVisible({
+        timeout: 10000,
+      });
+      await page.waitForTimeout(500);
+
+      await expect(page).toHaveScreenshot("meal-load-failed.png", {
+        fullPage: true,
+      });
+    });
+
+    test("meal not found", async ({ page, context }) => {
+      await setupAuthenticatedPage(page, context);
+      await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+      await page.route("**/api/v1/meals/999/cooks*", (route) =>
+        route.fulfill({
+          status: 404,
+          contentType: "application/json",
+          body: JSON.stringify({ message: "not found" }),
+        }),
+      );
+
+      await page.goto("/meals/999/edit/");
+      await expect(page.getByText("This meal could not be found.")).toBeVisible(
+        { timeout: 10000 },
+      );
+      await page.waitForTimeout(500);
+
+      await expect(page).toHaveScreenshot("meal-not-found.png", {
+        fullPage: true,
+      });
+    });
+
+    test("menu not saved", async ({ page, context }) => {
+      await setupAuthenticatedPage(page, context);
+      await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+      await page.route("**/api/v1/meals/*/description*", (route) =>
+        route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ message: "boom" }),
+        }),
+      );
+
+      await page.goto("/meals/42/edit/");
+      await page.waitForLoadState("networkidle");
+      const textarea = page.getByLabel("Enter meal description");
+      await expect(textarea).toBeEnabled({ timeout: 10000 });
+      await textarea.fill("Pasta night with garlic bread and salad");
+      await expect(page.getByRole("status")).toHaveText(/Not saved/, {
+        timeout: 10000,
+      });
+      await page.waitForTimeout(500);
+
+      await expect(page).toHaveScreenshot("menu-not-saved.png", {
+        fullPage: true,
+      });
+    });
+
+    test("rotation failed to load", async ({ page, context }) => {
+      await setupAuthenticatedPage(page, context);
+      await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+      await page.route("**/api/v1/rotations/*", (route) =>
+        route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ message: "boom" }),
+        }),
+      );
+
+      await page.goto("/calendar/all/2026-01-15/rotations/show/10/");
+      await expect(page.getByText("Failed to load rotation.")).toBeVisible({
+        timeout: 10000,
+      });
+      await page.waitForTimeout(500);
+
+      await expect(page).toHaveScreenshot("rotation-failed.png", {
+        fullPage: true,
+      });
+    });
+  });
 });

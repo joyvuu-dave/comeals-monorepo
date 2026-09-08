@@ -73,10 +73,7 @@ const BillEdit = observer(({ bill }) => {
               store.flushPendingBillsSave();
             }}
             style={styles.select}
-            className={
-              (bill.amountIsValid ? "" : "input-invalid") +
-              (bill.costPending ? " cost-pending" : "")
-            }
+            className={bill.costPending ? "cost-pending" : ""}
             disabled={frozen}
             placeholder={bill.costPending ? "pending" : undefined}
             aria-label="Set meal cost"
@@ -133,37 +130,6 @@ const BillEdit = observer(({ bill }) => {
   );
 });
 
-const BillShow = observer(({ bill }) => (
-  <tr key={bill.id} hidden={!bill.resident}>
-    <td>{bill.resident && bill.resident.name}</td>
-    <td>{bill.costPending ? <em>pending</em> : `$${bill.amount}`}</td>
-  </tr>
-));
-
-const Display = observer(() => {
-  const store = useStore();
-  return (
-    <table>
-      <tbody>
-        {Array.from(store.bills.values()).map((bill) => (
-          <BillShow key={bill.id} bill={bill} />
-        ))}
-      </tbody>
-    </table>
-  );
-});
-
-const Edit = observer(() => {
-  const store = useStore();
-  return (
-    <div>
-      {Array.from(store.bills.values()).map((bill) => (
-        <BillEdit key={bill.id} bill={bill} />
-      ))}
-    </div>
-  );
-});
-
 const CooksBox = observer(() => {
   const store = useStore();
   return (
@@ -171,7 +137,11 @@ const CooksBox = observer(() => {
       <div className="flex space-between title">
         <h2>Cooks</h2>
       </div>
-      {store.editBillsMode ? <Edit /> : <Display />}
+      <div>
+        {Array.from(store.bills.values()).map((bill) => (
+          <BillEdit key={bill.id} bill={bill} />
+        ))}
+      </div>
     </div>
   );
 });

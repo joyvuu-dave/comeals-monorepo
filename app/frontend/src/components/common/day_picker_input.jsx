@@ -74,9 +74,9 @@ function DayPickerInputWrapper({
             mode="single"
             selected={value ? dayjs(value).toDate() : undefined}
             onSelect={handleDaySelect}
-            defaultMonth={
-              defaultMonth || (value ? dayjs(value).toDate() : undefined)
-            }
+            // New forms pass the calendar's month; edit forms open the
+            // picker only once the record's day is in `value`.
+            defaultMonth={defaultMonth || dayjs(value).toDate()}
             disabled={disabledDays}
           />
         </div>

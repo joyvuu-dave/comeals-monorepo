@@ -31,7 +31,6 @@ function warningIn(error: unknown): BillsAck | null {
 export interface BillsStore extends ReturnType<typeof billsVolatile> {
   meal: { id: number } | null;
   bills: { values(): IterableIterator<BillNode> };
-  editBillsMode: boolean;
   loadDataAsync(): void;
   flushBillsSave(): void;
   submitBills(): void;
@@ -108,7 +107,6 @@ export function billsActions(self: BillsStore) {
           (bill) => bill.touched && bill.amountIsValid === false,
         )
       ) {
-        self.editBillsMode = true;
         return;
       }
 
