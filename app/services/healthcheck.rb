@@ -21,11 +21,15 @@ class Healthcheck
   OPEN_TIMEOUT = 5
   READ_TIMEOUT = 10
 
+  # Exception, not StandardError: the fail ping is what turns an outage
+  # into an alert in seconds instead of a "late" email after the grace
+  # period, and a job cut short by a signal or a missing constant is an
+  # outage too. The error is re-raised at once.
   def self.monitor(slug)
     result = yield
     ping(slug)
     result
-  rescue StandardError
+  rescue Exception # rubocop:disable Lint/RescueException -- pinged and re-raised at once
     ping(slug, state: 'fail')
     raise
   end

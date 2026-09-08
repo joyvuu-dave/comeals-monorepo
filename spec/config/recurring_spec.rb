@@ -44,4 +44,15 @@ RSpec.describe 'config/recurring.yml' do # -- a config file
       expect(job::HEALTHCHECK).to be_present
     end
   end
+
+  # The base class raises NotImplementedError from its own `run`. This
+  # keeps that from ever being the version that runs on the schedule.
+  it 'names only jobs that define run themselves' do
+    tasks.each_value do |task|
+      next unless task[:class]
+
+      job = task[:class].constantize
+      expect(job.instance_method(:run).owner).to eq(job), "#{job} inherits run from #{job.instance_method(:run).owner}"
+    end
+  end
 end

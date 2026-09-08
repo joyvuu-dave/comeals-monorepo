@@ -33,7 +33,13 @@ class RecurringJob < ApplicationJob
       Healthcheck.monitor(slug) { details = run }
     end
     record(started_at, outcome: 'ok', details: details)
-  rescue StandardError => e
+  # Exception, not StandardError: this is a record of what happened, and it
+  # must not depend on what kind of error it was. A SIGTERM from a dyno
+  # restart (Interrupt), a missing constant (LoadError), or a forgotten
+  # `run` (NotImplementedError) are all runs that did not finish, and the
+  # row should say so. The error is re-raised at once, so nothing here
+  # swallows it.
+  rescue Exception => e # rubocop:disable Lint/RescueException -- recorded and re-raised at once
     record(started_at, outcome: 'failed', error: "#{e.class}: #{e.message}")
     raise
   end

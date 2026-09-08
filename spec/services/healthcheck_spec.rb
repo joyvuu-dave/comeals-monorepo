@@ -21,6 +21,15 @@ RSpec.describe Healthcheck do
 
       expect(described_class).to have_received(:ping).with('some-job', state: 'fail')
     end
+
+    it 'pings fail for an error that is not a StandardError too' do
+      allow(described_class).to receive(:ping)
+
+      expect { described_class.monitor('some-job') { raise NotImplementedError, 'no run' } }
+        .to raise_error(NotImplementedError)
+
+      expect(described_class).to have_received(:ping).with('some-job', state: 'fail')
+    end
   end
 
   describe '.ping' do

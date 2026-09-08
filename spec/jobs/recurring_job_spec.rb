@@ -30,12 +30,32 @@ RSpec.describe RecurringJob do
     expect(Healthcheck).to have_received(:ping).with('billing-recalculate', state: 'fail')
   end
 
-  it 'fails plainly when a subclass forgets to define run' do
+  # These two errors are not StandardErrors, so a plain rescue would let
+  # them through with no row and no ping.
+  it 'records a failed run and pings fail when a subclass forgets to define run' do
     forgetful = Class.new(described_class) { const_set(:HEALTHCHECK, 'forgetful') }
     stub_const('ForgetfulJob', forgetful)
     allow(Healthcheck).to receive(:ping)
 
     expect { forgetful.perform_now }.to raise_error(NotImplementedError, 'ForgetfulJob must define #run')
+
+    run = JobRun.last
+    expect(run.name).to eq('forgetful')
+    expect(run.outcome).to eq('failed')
+    expect(run.error).to eq('NotImplementedError: ForgetfulJob must define #run')
+    expect(Healthcheck).to have_received(:ping).with('forgetful', state: 'fail')
+  end
+
+  it 'records a run cut short by a signal, which is what a dyno restart sends' do
+    allow(Healthcheck).to receive(:ping)
+    allow(BalanceRecalculation).to receive(:call).and_raise(Interrupt)
+
+    expect { RefreshBalancesJob.perform_now }.to raise_error(Interrupt)
+
+    run = JobRun.last
+    expect(run.outcome).to eq('failed')
+    expect(run.error).to eq('Interrupt: Interrupt')
+    expect(Healthcheck).to have_received(:ping).with('billing-recalculate', state: 'fail')
   end
 
   it 'names runs after the job class' do
