@@ -198,7 +198,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm test
+      # test:coverage, so the thresholds in vitest.config.mjs are enforced.
+      - run: npm run test:coverage
 
   node-e2e-tests:
     runs-on: ubuntu-latest

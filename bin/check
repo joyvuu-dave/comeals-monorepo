@@ -444,8 +444,10 @@ check_rspec() {
 check_vitest() {
   step "Vitest"
 
+  # test:coverage, not test: the thresholds in vitest.config.mjs only
+  # apply when coverage is measured, and this is where they are enforced.
   local output exit_code=0
-  output=$(npm test 2>&1) || exit_code=$?
+  output=$(npm run test:coverage 2>&1) || exit_code=$?
 
   # On GitHub Actions Vitest colors its summary (any CI variable turns
   # colors on), which puts escape codes between "Tests" and the count.

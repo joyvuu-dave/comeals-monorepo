@@ -10,15 +10,31 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],
+      // Its own directory: SimpleCov writes the Ruby report to coverage/,
+      // and Vitest empties its report directory on every run.
+      reportsDirectory: "coverage/vitest",
       include: ["app/frontend/src/**/*.{js,jsx,ts,tsx}"],
-      // A ratchet, not a target: pinned just under the measured
-      // numbers on 2026-08-09 (85.6 / 77.8 / 86.3 / 88.2) so coverage
-      // can only rise. When it rises, raise these to match.
+      // Left out of the count, the way spec/ is on the Ruby side:
+      // index.jsx boots the app (the router, the providers, the
+      // boot-time prefetch) and only runs in a browser, and nav_trace
+      // is development-only timing that production builds shim away.
+      // The browser suites (tests/e2e, tests/integration) run both.
+      exclude: [
+        "app/frontend/src/index.jsx",
+        "app/frontend/src/helpers/nav_trace.js",
+      ],
+      // A ratchet, not a target: pinned just under the numbers measured
+      // on 2026-09-08 (92.5 / 85.6 / 92.6 / 93.9), so coverage can only
+      // rise. When it rises, raise these to match. Unit tests measure
+      // what a unit test should: the stores and helpers. Screens are
+      // exercised by the browser suites, which this number does not
+      // see. bin/check and CI run test:coverage, so a drop below these
+      // fails the check.
       thresholds: {
-        statements: 85,
-        branches: 77,
-        functions: 86,
-        lines: 88,
+        statements: 92,
+        branches: 85,
+        functions: 92,
+        lines: 93,
       },
     },
   },
