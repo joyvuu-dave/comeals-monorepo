@@ -6,7 +6,7 @@ name: Nightly dependency update
 # away and the run goes red — nothing is pushed, and the next night
 # tries again from scratch.
 #
-# Two things to know:
+# Three things to know:
 #
 # - The push uses NIGHTLY_PUSH_TOKEN (a fine-grained PAT with
 #   read/write on this repo's contents), not the built-in
@@ -18,6 +18,12 @@ name: Nightly dependency update
 #   as a failure. So if an update cannot fix a known vulnerability,
 #   that night's update is not pushed. The audits themselves only
 #   print; they never change anything.
+#
+# - The regenerated Sorbet RBI files are part of the update. A gem
+#   RBI is named after the gem's version, so bundle update makes it
+#   stale; bin/tapioca gem runs right after the update and
+#   bin/tapioca dsl after the schema loads, and sorbet/rbi is
+#   committed with the lockfiles.
 #
 # The visual suite is the one part of bin/check that cannot run
 # directly on this runner: the goldens are recorded inside the
@@ -102,7 +108,6 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium webkit
 
       # Direct npm dependencies before the update, for the commit
       # message. npm ls exits non-zero on peer-dependency noise, so
@@ -112,6 +117,12 @@ jobs:
 
       - name: Update gems
         run: bundle update --all
+
+      # A gem RBI file is named after the gem's version, so every gem
+      # update makes one stale, and bin/check fails on a stale RBI.
+      # The DSL RBIs are regenerated after the schema loads, below.
+      - name: Regenerate gem RBIs
+        run: bin/tapioca gem
 
       # Print only. bin/check runs the same audit later as a gate;
       # this step is the requested plain listing next to the update
@@ -141,6 +152,13 @@ jobs:
             git diff --stat -- Gemfile.lock package.json package-lock.json
           fi
 
+      # After npm update, not before it: a new @playwright/test wants
+      # a new browser build, and a browser installed before the update
+      # is the old build, so every browser test fails at launch.
+      - name: Install Playwright browsers
+        if: steps.diff.outputs.changed == 'true'
+        run: npx playwright install --with-deps chromium webkit
+
       # bin/check's migration check reads .env: with TEST_DB_SUFFIX
       # present it checks the test database, the same as an agent
       # worktree — there is no development database on this runner.
@@ -156,6 +174,7 @@ jobs:
           mkdir -p public/.vite
           echo '{}' > public/.vite/manifest.json
           bin/rails db:schema:load
+          bin/tapioca dsl
 
       - name: Full health check (bin/check)
         if: steps.diff.outputs.changed == 'true'
@@ -219,6 +238,13 @@ jobs:
               lines.append("npm: transitive updates only (see package-lock.json)")
               lines.append("")
 
+          rbi_changed = subprocess.run(
+              ["git", "status", "--porcelain", "--", "sorbet/rbi"],
+              capture_output=True, text=True).stdout.strip() != ""
+          if rbi_changed:
+              lines.append("RBI files regenerated with bin/tapioca gem and bin/tapioca dsl.")
+              lines.append("")
+
           lines.append("Pushed by the nightly workflow after a full bin/check pass.")
           print("\n".join(lines))
           PY
@@ -227,6 +253,7 @@ jobs:
           git config user.name "nightly-deps workflow"
           git config user.email "nightly-deps@users.noreply.github.com"
           git add Gemfile.lock package.json package-lock.json
+          git add -A sorbet/rbi
           git commit -F /tmp/commit-message.txt
           git push origin HEAD:main
 
