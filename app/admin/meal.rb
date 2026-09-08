@@ -106,7 +106,7 @@ ActiveAdmin.register Meal do
       end
       table_for meal.guests.order(:created_at) do
         column 'Guests in Attendance' do |guest|
-          li "Guest of #{guest.resident.name}"
+          "Guest of #{guest.resident.name}"
         end
       end
       table_for meal.bills.all do

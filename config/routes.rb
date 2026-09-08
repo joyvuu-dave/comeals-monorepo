@@ -7,6 +7,12 @@ Rails.application.routes.draw do
   # ActiveAdmin (subdomain-based: admin.comeals.com / admin.lvh.me)
   constraints subdomain: 'admin' do
     devise_for :admin_users, ActiveAdmin::Devise.config.merge(path: '')
+    # ActiveAdmin 3 draws routes for its comments resource even with
+    # comments off (config/initializers/active_admin.rb), and that
+    # controller crashes because the table does not exist. These answer
+    # first, so the URLs are a 404 like any other page that is not there
+    # (#82).
+    match '/comments(/*rest)', to: 'application#not_found', via: :all
     ActiveAdmin.routes(self)
     get '/admin-logout', to: 'application#admin_logout'
   end

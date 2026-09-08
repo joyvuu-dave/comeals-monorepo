@@ -10,6 +10,14 @@ cd "$(dirname "$0")/../.."
 
 export RAILS_ENV=test
 
+# The clock stands still at this day for the seed and the server
+# (config/initializers/integration_fake_time.rb, shared with the
+# integration suite). Every value a page shows is then the same on every
+# run: created_at columns, the settlement date, and the sign-in time
+# Devise writes when the visual suite logs in. tests/admin/seed.rb reads
+# its "now" from this clock.
+export INTEGRATION_FAKE_TODAY=2026-01-20
+
 # Port and database name come from .env when bin/agent-worktree wrote
 # them there (#65), so each worktree's admin suite has its own server
 # and its own database. A real environment variable wins over the .env

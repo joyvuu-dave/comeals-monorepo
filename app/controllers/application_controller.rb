@@ -26,6 +26,15 @@ class ApplicationController < ActionController::Base
   # does not inherit this.
   rescue_from ActionController::InvalidAuthenticityToken, with: :csrf_failed
 
+  # The plain 404 page, for a URL that is routed on purpose to nowhere
+  # (the comments routes, config/routes.rb). Rendered here rather than
+  # raised: in the test environment an exception is not turned into an
+  # error page, and a request spec should see the same 404 production
+  # sends.
+  def not_found
+    render file: Rails.public_path.join('404.html'), status: :not_found, layout: false
+  end
+
   # GET /admin-logout (admin)
   def admin_logout
     cookies.delete(:remember_admin_user_token)

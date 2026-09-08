@@ -16,8 +16,8 @@ RSpec.describe 'admin visual goldens' do
     {
       'admin/communities#index' => 'redirects to the one community\'s page',
       'admin/communities#new' => 'refused once the community exists (SuperuserAdapter), and it always does',
-      'admin/comments#index' => 'comments are off (config.comments = false); ActiveAdmin draws the route anyway (#82)',
-      'admin/comments#show' => 'comments are off (config.comments = false); ActiveAdmin draws the route anyway (#82)'
+      'admin/comments#index' => 'comments are off; the route ahead of ActiveAdmin\'s answers 404 (#82)',
+      'admin/comments#show' => 'comments are off; the route ahead of ActiveAdmin\'s answers 404 (#82)'
     }
   end
 

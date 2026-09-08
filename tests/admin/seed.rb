@@ -10,14 +10,10 @@
 #
 # The visual suite (tests/admin/visual.spec.js) photographs every admin
 # page, so every page needs a row to show, and every value on a page
-# must be the same on every run. The clock is frozen while the rows are
-# written, so created_at columns, the settlement date, and the ledger
-# check times are fixed. Only the request-time clock is real: the
-# dashboard's "upcoming" meals are the 2027 ones, which stay upcoming
-# until then.
-
-require 'active_support/testing/time_helpers'
-include ActiveSupport::Testing::TimeHelpers # rubocop:disable Style/MixinUsage -- a script, not a class
+# must be the same on every run. server.sh freezes the clock for this
+# script and for the server (INTEGRATION_FAKE_TODAY), so created_at
+# columns, the settlement date, the ledger check times, and the sign-in
+# time Devise writes are all fixed.
 
 conn = ActiveRecord::Base.connection
 unless conn.current_database.match?(/\Acomeals_admin_e2e(_[a-z0-9_]+)?\z/)
@@ -36,8 +32,10 @@ conn.execute(
 require 'factory_bot'
 FactoryBot.find_definitions if FactoryBot.factories.none?
 
-# The seed's "now": a Tuesday morning in the community's zone.
-SEED_NOW = ActiveSupport::TimeZone['America/Los_Angeles'].local(2026, 1, 20, 10, 0, 0)
+# The frozen "now" from server.sh, in the community's zone.
+raise 'tests/admin/seed.rb needs the frozen clock (INTEGRATION_FAKE_TODAY)' if ENV['INTEGRATION_FAKE_TODAY'].blank?
+
+SEED_NOW = Time.current.in_time_zone('America/Los_Angeles')
 
 # The raw token behind the admin password-reset page. Devise stores its
 # digest; the visual suite visits /password/edit with the raw value.
@@ -129,11 +127,9 @@ def seed_ledger_checks
                     reconciliations_checked: 1)
 end
 
-travel_to(SEED_NOW) do
-  community, cook, bob, carol = seed_people
-  seed_meals(community, cook, bob, carol)
-  seed_calendar(community, cook, bob)
-  seed_ledger_checks
-end
+community, cook, bob, carol = seed_people
+seed_meals(community, cook, bob, carol)
+seed_calendar(community, cook, bob)
+seed_ledger_checks
 
 puts "seeded #{conn.current_database}"
