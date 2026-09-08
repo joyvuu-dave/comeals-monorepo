@@ -171,10 +171,11 @@ handler:
    out or widen it (`T.nilable(BigDecimal)`).
 2. The test suite runs every sig with checking on, so a sig the tests
    contradict never merges.
-3. Before the first deploy that carries sigs on the money path, run
-   `rake billing:recalculate` and `rake ledger:verify` against the local
-   production copy (`comeals_prodcheck`). Every real row then passes
-   through every money sig before production does.
+3. Every deploy rehearses on staging first (`bin/staging-rehearsal`,
+   run by the weekly deploy workflow), and the rehearsal runs
+   `rake billing:recalculate` and `rake ledger:verify` over a copy of
+   that morning's production rows. Every real row passes through every
+   money sig before production runs the same code.
 4. One method that needs watching before it is trusted can soften its
    own sig: `sig { ... }.on_failure(:soft, notify: 'bugsnag')`. The
    default stays raise.
