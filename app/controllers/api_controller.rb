@@ -14,16 +14,12 @@ class ApiController < ActionController::API
   # server-stored row, so this returns nil even when the caller is
   # authenticated. Use current_resident_api as the canonical check.
   def current_api_key
-    return @current_api_key if defined?(@current_api_key)
-
-    resolve_current_session!
+    resolve_current_session
     @current_api_key
   end
 
   def current_resident_api
-    return @current_resident_api if defined?(@current_resident_api)
-
-    resolve_current_session!
+    resolve_current_session
     @current_resident_api
   end
 
@@ -84,12 +80,15 @@ class ApiController < ActionController::API
     render json: { message: 'Error: Invalid date' }, status: :bad_request
   end
 
-  # Resolve both @current_resident_api and @current_api_key in one pass.
-  # JWT path is tried first (the post-migration default). If that fails we
-  # fall back to a Key.find_by lookup so cookies issued before the JWT
-  # deploy keep working. The retirement condition for the fallback is
-  # written on the Key model.
-  def resolve_current_session!
+  # Resolve both @current_resident_api and @current_api_key in one pass,
+  # once per request. JWT path is tried first (the post-migration
+  # default). If that fails we fall back to a Key.find_by lookup so
+  # cookies issued before the JWT deploy keep working. The retirement
+  # condition for the fallback is written on the Key model.
+  def resolve_current_session
+    return if defined?(@session_resolved)
+
+    @session_resolved = true
     token = bearer_token_from_header || params[:token].presence
 
     if (resident = JwtAuth.authenticate(token))
@@ -105,7 +104,7 @@ class ApiController < ActionController::API
 
   # Extract a token from "Authorization: Bearer <token>". Returns nil for any
   # other scheme (Basic, no header, malformed) so we fall through to the
-  # query-param fallback cleanly. Memoized because both resolve_current_session!
+  # query-param fallback cleanly. Memoized because both resolve_current_session
   # and set_community_timezone read it on every request.
   def bearer_token_from_header
     return @bearer_token_from_header if defined?(@bearer_token_from_header)

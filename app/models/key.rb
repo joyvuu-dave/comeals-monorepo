@@ -21,7 +21,7 @@
 # A legacy API session. Login stopped creating Key rows when JWT auth
 # shipped (app/services/jwt_auth.rb); no code writes this table anymore.
 # It exists only so cookies issued before the JWT deploy keep working —
-# ApiController#resolve_current_session! falls back to a Key lookup when
+# ApiController#resolve_current_session falls back to a Key lookup when
 # JWT decoding fails.
 #
 # Retirement condition: when `Key.count` is 0 in production (every pre-JWT
