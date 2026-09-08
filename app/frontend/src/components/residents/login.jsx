@@ -9,6 +9,7 @@ import { useStore } from "../../helpers/store_context";
 import handleAxiosError from "../../helpers/handle_axios_error";
 import toastStore from "../../stores/toast_store";
 import { communityNow } from "../../helpers/helpers";
+import { RESET_PASSWORD_MODAL } from "../../routes";
 import ResidentsPasswordNew from "./password_new";
 
 // Where to send a signed-in resident when no redirect target was saved:
@@ -53,7 +54,8 @@ const ResidentsLogin = observer(() => {
   }, []);
 
   const modalOpen =
-    params.modal === "reset-password" && typeof params.token !== "undefined";
+    params.modal === RESET_PASSWORD_MODAL &&
+    typeof params.token !== "undefined";
 
   function handleCloseModal() {
     navigate("/");

@@ -267,7 +267,23 @@ jobs:
 
   visual-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    # The admin pages are in the visual suite, and their Rails server runs
+    # on the runner (the Playwright container has no Ruby), so this job
+    # needs Ruby and Postgres like node-e2e-tests does.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       # Placeholders, like the other jobs: the build throws on a missing
       # Pusher key, and the visual tests fail on any page error. Locally
@@ -275,8 +291,12 @@ jobs:
       # them into the container.
       VITE_PUSHER_KEY: "test-key-for-ci"
       VITE_PUSHER_CLUSTER: "us2"
+      ADMIN_E2E_DATABASE_URL: postgres://postgres:postgres@localhost:5432/comeals_admin_e2e
     steps:
       - uses: actions/checkout@v6
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
       # bin/visual-linux runs the visual suite inside the official
       # Playwright container — the same one bin/update-snapshots records
       # the -linux goldens in. Comparing on the plain runner fails: it

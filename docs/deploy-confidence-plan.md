@@ -90,6 +90,13 @@ themselves. Roughly 30–40 new tests, all doubled across both engines.
   functions, 88% lines. On 2026-09-08 the unit tests reached 100% on all
   four and the thresholds were set to 100, the same rule SimpleCov holds
   the Ruby side to.
+- Every screen has a golden image, and a spec lists the screens from the
+  routes so a new one cannot go without: `tests/unit/screens.test.js`
+  for the 12 SPA screens, and `spec/admin/visual_goldens_spec.rb` for the
+  42 admin pages, photographed by `tests/admin/visual.spec.js` against
+  `tests/admin/seed.rb` (2026-09-08). The admin goldens for Linux come
+  from `bin/update-linux-snapshots` too: Rails runs on the host and the
+  container's browser reaches it.
 - Tests for `data_store_hosts.js` — 6% covered, and it is the in-flight /
   stale-response cache feeding the reservation forms.
 

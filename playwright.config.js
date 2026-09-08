@@ -15,6 +15,8 @@ const DEFAULT_IGNORE = ["**/perf-modals.spec.js", "**/pwa-screenshots.spec.js"];
 // container (bin/visual-linux, its own job) and sets
 // PLAYWRIGHT_SKIP_VISUAL in the plain-runner e2e job, which could
 // never match them.
+// The pattern also matches tests/admin/visual.spec.js, whose goldens
+// are recorded the same way.
 if (process.env.PLAYWRIGHT_SKIP_VISUAL) {
   DEFAULT_IGNORE.push("**/visual.spec.js");
 }
@@ -97,7 +99,12 @@ module.exports = defineConfig({
         browserName: "chromium",
         baseURL: `http://admin.lvh.me:${ADMIN_E2E_PORT}`,
         launchOptions: {
-          args: ["--host-resolver-rules=MAP *.lvh.me 127.0.0.1"],
+          // Inside the Playwright container (bin/visual-linux) Rails runs
+          // on the host, so the browser resolves admin.lvh.me to the
+          // host's name there instead of to itself.
+          args: [
+            `--host-resolver-rules=MAP *.lvh.me ${process.env.PLAYWRIGHT_ADMIN_HOST || "127.0.0.1"}`,
+          ],
         },
       },
     },

@@ -70,8 +70,9 @@ const localizer = dateFnsLocalizer({
 // The form each modal URL opens: /calendar/:type/:date/:modal/:view/:id.
 // The sidebar links and the event urls the server sends both spell the
 // reservation names with hyphens. A modal or view not listed here
-// (a hand-typed URL) opens an empty dialog.
-const MODAL_FORMS = {
+// (a hand-typed URL) opens an empty dialog. Exported for
+// tests/unit/screens.test.js, which lists every screen of the app.
+export const MODAL_FORMS = {
   "guest-room-reservations": {
     new: GuestRoomReservationsNew,
     edit: GuestRoomReservationsEdit,

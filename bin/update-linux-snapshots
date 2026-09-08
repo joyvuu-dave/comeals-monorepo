@@ -9,7 +9,7 @@ bin/visual-linux --update
 
 echo
 echo "Done. Review the changed PNGs, then commit them:"
-echo "  git status tests/e2e/visual.spec.js-snapshots/"
+echo "  git status tests/e2e/visual.spec.js-snapshots/ tests/admin/visual.spec.js-snapshots/"
 echo
 echo "A PNG that changed by a few bytes with no visible difference is"
 echo "antialiasing inside the diff tolerance — discard it with git"

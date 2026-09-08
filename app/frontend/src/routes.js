@@ -11,6 +11,9 @@
 export const CALENDAR_PATH = "/calendar/:type/:date/:modal?/:view?/:id?";
 export const MEAL_EDIT_PATH = "/meals/:id/edit/*";
 export const LOGIN_PATH = "/:modal?/:token?";
+// The one modal the login page opens: the new-password form behind a
+// reset link.
+export const RESET_PASSWORD_MODAL = "reset-password";
 
 // Matched by the descendant <Routes> inside DateBox against the
 // pathname left over after MEAL_EDIT_PATH's splat.

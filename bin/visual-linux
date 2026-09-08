@@ -14,9 +14,16 @@
 # friends ship native binaries. The first run installs them; later
 # runs reuse the volume.
 #
+# The admin pages are in the suite too. The container has no Ruby, so
+# Rails runs on the host (tests/admin/server.sh, the same server the
+# admin project uses), and the browser inside the container resolves
+# admin.lvh.me to the host. Rails in the test environment listens on
+# every interface, so the container can reach it.
+#
 # Usage:
-#   bin/visual-linux            # compare against the committed goldens
-#   bin/visual-linux --update   # rewrite the goldens (bin/update-linux-snapshots)
+#   bin/visual-linux                     # compare against the committed goldens
+#   bin/visual-linux --update            # rewrite the goldens (bin/update-linux-snapshots)
+#   bin/visual-linux --update tests/admin/visual.spec.js   # only these specs
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -28,7 +35,10 @@ if [ "${1:-}" = "--update" ]; then
   # means "rewrite the goldens", so rewrite all of them; the caller then
   # reviews each changed PNG and discards antialiasing-only churn.
   EXTRA_ARGS="--update-snapshots=all"
+  shift
 fi
+# The specs to run: both visual specs unless the caller names some.
+SPECS="${*:-tests/e2e/visual.spec.js tests/admin/visual.spec.js}"
 
 # The image version must match @playwright/test. package-lock.json has
 # it without needing node_modules installed on the host (CI checks out
@@ -36,18 +46,53 @@ fi
 VERSION=$(node -p "require('./package-lock.json').packages['node_modules/@playwright/test'].version")
 IMAGE="mcr.microsoft.com/playwright:v${VERSION}-noble"
 
+# Rails for the admin pages, on the host. server.sh reads the port from
+# .env the way playwright.config.js does, so the container's browser and
+# this server agree on it; the same default (3038) applies to both when
+# there is no .env line. The server dies with this script.
+ADMIN_PORT="${TEST_PORT_ADMIN_E2E:-$(sed -n 's/^TEST_PORT_ADMIN_E2E=//p' .env 2>/dev/null || true)}"
+ADMIN_PORT="${ADMIN_PORT:-3038}"
+ADMIN_LOG="$(mktemp -t comeals-admin-e2e.XXXXXX)"
+echo "Starting Rails for the admin pages on port ${ADMIN_PORT} (log: ${ADMIN_LOG})..."
+tests/admin/server.sh > "$ADMIN_LOG" 2>&1 &
+ADMIN_PID=$!
+trap 'kill "$ADMIN_PID" 2>/dev/null || true' EXIT
+admin_up() {
+  curl -s -o /dev/null -H "Host: admin.lvh.me" "http://127.0.0.1:${ADMIN_PORT}/login"
+}
+for _ in $(seq 1 120); do
+  admin_up && break
+  if ! kill -0 "$ADMIN_PID" 2>/dev/null; then
+    echo "Rails did not start; see ${ADMIN_LOG}" >&2
+    exit 1
+  fi
+  sleep 1
+done
+if ! admin_up; then
+  echo "Rails did not answer on port ${ADMIN_PORT} within two minutes; see ${ADMIN_LOG}" >&2
+  exit 1
+fi
+
 echo "Running the visual suite in ${IMAGE}..."
 # The two VITE variables pass through when set (CI sets placeholders).
 # Locally they are usually unset here and the build reads .env instead,
 # which is mounted with the rest of the repo. Without a key the app
 # throws "You must pass your app key when you instantiate Pusher",
 # and every test fails on that page error before comparing pixels.
+#
+# host.docker.internal is the host from inside the container: Docker
+# Desktop defines it, and --add-host defines it on Linux (CI). The
+# container starts no Rails of its own (PLAYWRIGHT_SKIP_ADMIN) and
+# points admin.lvh.me at the host instead (PLAYWRIGHT_ADMIN_HOST).
 docker run --rm \
   --ipc=host \
+  --add-host=host.docker.internal:host-gateway \
   -e VITE_PUSHER_KEY \
   -e VITE_PUSHER_CLUSTER \
+  -e PLAYWRIGHT_SKIP_ADMIN=1 \
+  -e PLAYWRIGHT_ADMIN_HOST=host.docker.internal \
   -v "$PWD":/work \
   -v comeals-playwright-modules:/work/node_modules \
   -w /work \
   "$IMAGE" \
-  bash -c "PLAYWRIGHT_SKIP_ADMIN=1 npm install --no-audit --no-fund && PLAYWRIGHT_SKIP_ADMIN=1 npx playwright test tests/e2e/visual.spec.js ${EXTRA_ARGS}"
+  bash -c "npm install --no-audit --no-fund && npx playwright test ${SPECS} ${EXTRA_ARGS}"
