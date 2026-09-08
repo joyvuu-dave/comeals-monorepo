@@ -1096,4 +1096,289 @@ describe("Resident model", () => {
       );
     });
   });
+
+  // ── the server refuses ──
+
+  describe("when the server refuses", () => {
+    const refusal = {
+      response: { data: { message: "Meal has no open spots." } },
+    };
+
+    async function settle() {
+      await new Promise((r) => setTimeout(r, 0));
+    }
+
+    it("rolls back an add, with the late and veg flags it set", async () => {
+      const store = createStore({
+        mealProps: { closed: false, extras: 3 },
+        residents: [
+          {
+            id: 10,
+            meal_id: 1,
+            name: "Alice",
+            attending: false,
+            late: false,
+            vegetarian: false,
+          },
+        ],
+      });
+      axios.mockRejectedValueOnce(refusal);
+
+      const alice = store.residents.get("10");
+      alice.toggleAttending({ late: true, toggleVeg: true });
+      expect(alice.attending).toBe(true);
+      await settle();
+
+      expect(alice.attending).toBe(false);
+      expect(alice.late).toBe(false);
+      expect(alice.vegetarian).toBe(false);
+      expect(alice.attending_at).toBeNull();
+      expect(store.meal.extras).toBe(3);
+    });
+
+    it("rolls back a removal and gives the late flag back", async () => {
+      const store = createStore({
+        mealProps: { closed: false, extras: 3 },
+        residents: [
+          { id: 10, meal_id: 1, name: "Alice", attending: true, late: true },
+        ],
+      });
+      axios.mockRejectedValueOnce(refusal);
+
+      const alice = store.residents.get("10");
+      alice.toggleAttending();
+      expect(alice.attending).toBe(false);
+      await settle();
+
+      expect(alice.attending).toBe(true);
+      expect(alice.late).toBe(true);
+      expect(store.meal.extras).toBe(3);
+    });
+
+    it("rolls back a late toggle", async () => {
+      const store = createStore({
+        mealProps: { closed: false },
+        residents: [
+          { id: 10, meal_id: 1, name: "Alice", attending: true, late: false },
+        ],
+      });
+      axios.mockRejectedValueOnce(refusal);
+
+      const alice = store.residents.get("10");
+      alice.toggleLate();
+      expect(alice.late).toBe(true);
+      await settle();
+
+      expect(alice.late).toBe(false);
+    });
+
+    it("rolls back a veg toggle", async () => {
+      const store = createStore({
+        mealProps: { closed: false },
+        residents: [
+          {
+            id: 10,
+            meal_id: 1,
+            name: "Alice",
+            attending: true,
+            vegetarian: false,
+          },
+        ],
+      });
+      axios.mockRejectedValueOnce(refusal);
+
+      const alice = store.residents.get("10");
+      alice.toggleVeg();
+      expect(alice.vegetarian).toBe(true);
+      await settle();
+
+      expect(alice.vegetarian).toBe(false);
+    });
+
+    it("gives the seat back when a guest cannot be added", async () => {
+      const store = createStore({
+        mealProps: { closed: false, extras: 3 },
+        residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
+      });
+      axios.mockRejectedValueOnce(refusal);
+
+      store.residents.get("10").addGuest();
+      expect(store.meal.extras).toBe(2);
+      await settle();
+
+      expect(store.meal.extras).toBe(3);
+    });
+
+    it("does nothing more when the node died before the refusal arrived", async () => {
+      const store = createStore({
+        mealProps: { closed: false, extras: 3 },
+        residents: [{ id: 10, meal_id: 1, name: "Alice", attending: false }],
+      });
+      let reject;
+      axios.mockImplementationOnce(
+        () =>
+          new Promise((_, rej) => {
+            reject = rej;
+          }),
+      );
+
+      store.residents.get("10").toggleAttending();
+      removeResident(store, 10);
+      reject(refusal);
+      await settle();
+
+      expect(store.residents.has("10")).toBe(false);
+      expect(loadDataAsyncSpy).not.toHaveBeenCalled();
+    });
+
+    // The same rule for every write: a node that died while the
+    // request was out cannot be rolled back, and must not throw.
+    function refuseLater() {
+      let reject;
+      axios.mockImplementationOnce(
+        () =>
+          new Promise((_, rej) => {
+            reject = rej;
+          }),
+      );
+      return () => reject(refusal);
+    }
+
+    it("does nothing more when the node died before a removal was refused", async () => {
+      const store = createStore({
+        mealProps: { closed: false },
+        residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
+      });
+      const refuse = refuseLater();
+
+      store.residents.get("10").toggleAttending();
+      removeResident(store, 10);
+      refuse();
+      await settle();
+
+      expect(loadDataAsyncSpy).not.toHaveBeenCalled();
+    });
+
+    it("does nothing more when the node died before a late toggle was refused", async () => {
+      const store = createStore({
+        mealProps: { closed: false },
+        residents: [
+          { id: 10, meal_id: 1, name: "Alice", attending: true, late: false },
+        ],
+      });
+      const refuse = refuseLater();
+
+      store.residents.get("10").toggleLate();
+      removeResident(store, 10);
+      refuse();
+      await settle();
+
+      expect(loadDataAsyncSpy).not.toHaveBeenCalled();
+    });
+
+    it("does nothing more when the node died before a veg toggle was refused", async () => {
+      const store = createStore({
+        mealProps: { closed: false },
+        residents: [
+          {
+            id: 10,
+            meal_id: 1,
+            name: "Alice",
+            attending: true,
+            vegetarian: false,
+          },
+        ],
+      });
+      const refuse = refuseLater();
+
+      store.residents.get("10").toggleVeg();
+      removeResident(store, 10);
+      refuse();
+      await settle();
+
+      expect(loadDataAsyncSpy).not.toHaveBeenCalled();
+    });
+
+    it("does nothing more when the node died before a guest add was refused", async () => {
+      const store = createStore({
+        mealProps: { closed: false, extras: 3 },
+        residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
+      });
+      const refuse = refuseLater();
+
+      store.residents.get("10").addGuest();
+      removeResident(store, 10);
+      refuse();
+      await settle();
+
+      expect(store.meal.extras).toBe(2);
+      expect(loadDataAsyncSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── removeGuest ──
+
+  describe("removeGuest", () => {
+    function storeWithGuests() {
+      return createStore({
+        mealProps: { closed: false },
+        residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
+        guests: [
+          {
+            id: 100,
+            meal_id: 1,
+            resident_id: 10,
+            created_at: new Date(2026, 3, 1),
+          },
+          {
+            id: 102,
+            meal_id: 1,
+            resident_id: 10,
+            created_at: new Date(2026, 3, 3),
+          },
+          {
+            id: 101,
+            meal_id: 1,
+            resident_id: 10,
+            created_at: new Date(2026, 3, 2),
+          },
+        ],
+      });
+    }
+
+    it("removes the newest guest first, whatever order they were listed in", () => {
+      const store = storeWithGuests();
+
+      store.residents.get("10").removeGuest();
+
+      expect(axios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: "delete",
+          url: "/api/v1/meals/1/residents/10/guests/102",
+        }),
+      );
+    });
+
+    it("answers false with no guest to remove", () => {
+      const store = createStore({
+        mealProps: { closed: false },
+        residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
+      });
+
+      expect(store.residents.get("10").removeGuest()).toBe(false);
+      expect(axios).not.toHaveBeenCalled();
+    });
+
+    it("keeps the guest when the server refuses", async () => {
+      const store = storeWithGuests();
+      axios.mockRejectedValueOnce({
+        response: { data: { message: "Meal has been closed." } },
+      });
+
+      store.residents.get("10").removeGuest();
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(store.guests.has("102")).toBe(true);
+    });
+  });
 });

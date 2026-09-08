@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { observable } from "mobx";
 
 // events/edit renders ConfirmModal, which needs #root at import time.
@@ -16,6 +16,7 @@ import { cookies } from "../mocks/js_cookie.js";
 cookies.current = { timezone: "America/Los_Angeles" };
 
 import axios from "axios";
+import toastStore from "../../../app/frontend/src/stores/toast_store.js";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
 import EventsEdit from "../../../app/frontend/src/components/events/edit.jsx";
 
@@ -121,6 +122,49 @@ describe("EventsEdit", () => {
     await vi.waitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it("a refused delete shows the reason and keeps the form open", async () => {
+    toastStore.clearAll();
+    axios.delete.mockRejectedValue({
+      response: { data: { message: "This event already happened." } },
+    });
+    const { handleCloseModal } = renderForm();
+    await screen.findByDisplayValue("Community Meeting");
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const buttons = screen.getAllByRole("button", { name: "Delete" });
+    armAndClick(buttons[buttons.length - 1]);
+
+    await vi.waitFor(() => {
+      expect(toastStore.toasts.map((t) => t.message)).toEqual([
+        "This event already happened.",
+      ]);
+    });
+    expect(handleCloseModal).not.toHaveBeenCalled();
+    expect(screen.getByDisplayValue("Community Meeting")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Update" })).toBeEnabled();
+  });
+
+  it("a delete that lands after the form closed touches nothing", async () => {
+    let finish;
+    axios.delete.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const { handleCloseModal } = renderForm();
+    await screen.findByDisplayValue("Community Meeting");
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const buttons = screen.getAllByRole("button", { name: "Delete" });
+    armAndClick(buttons[buttons.length - 1]);
+    cleanup();
+    finish({ status: 200, data: {} });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(handleCloseModal).not.toHaveBeenCalled();
   });
 
   it("Cancel keeps the event", async () => {

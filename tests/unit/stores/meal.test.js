@@ -11,7 +11,12 @@ vi.mock("idb-keyval", () => import("../mocks/idb_keyval.js"));
 
 import axios from "axios";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
-import { createDataStore, stubAction } from "../helpers/create_data_store.js";
+import { isAlive } from "mobx-state-tree";
+import {
+  createDataStore,
+  stage,
+  stubAction,
+} from "../helpers/create_data_store.js";
 
 // The real DataStore, with loadDataAsync stubbed onto the module-level
 // mock: Meal.settleExtras calls self.root.loadDataAsync(), and these
@@ -382,6 +387,88 @@ describe("Meal model", () => {
       await new Promise((r) => setTimeout(r, 0));
 
       expect(store.meal.descriptionDirty).toBe(false);
+    });
+  });
+
+  // ── a save that settles after the node is gone ──
+
+  // A meal switch prunes the node a save was started on. The callbacks
+  // must notice and do nothing: no write to a dead node, no refetch.
+  describe("a save that settles after the node is gone", () => {
+    function deferred() {
+      let resolve;
+      let reject;
+      const promise = new Promise((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    }
+
+    function kill(store) {
+      stage(store, () => {
+        store.meal = null;
+        store.meals.clear();
+      });
+    }
+
+    async function settle() {
+      await new Promise((r) => setTimeout(r, 0));
+    }
+
+    it("description: the ack is dropped", async () => {
+      const store = createStore();
+      const request = deferred();
+      axios.mockImplementationOnce(() => request.promise);
+      const meal = store.meal;
+
+      meal.setDescription("Tacos");
+      kill(store);
+      request.resolve({ status: 200, data: {} });
+      await settle();
+
+      expect(isAlive(meal)).toBe(false);
+      expect(loadDataAsyncMock).not.toHaveBeenCalled();
+    });
+
+    it("description: a refusal only shows the error", async () => {
+      const store = createStore();
+      const request = deferred();
+      axios.mockImplementationOnce(() => request.promise);
+
+      store.meal.setDescription("Tacos");
+      kill(store);
+      request.reject({ response: { data: { message: "No." } } });
+      await settle();
+
+      expect(toastStore.toasts.map((t) => t.message)).toEqual(["No."]);
+      expect(loadDataAsyncMock).not.toHaveBeenCalled();
+    });
+
+    it("extras: a settle does not refetch", async () => {
+      const store = createStore({ extras: 5 });
+      const request = deferred();
+      axios.mockImplementationOnce(() => request.promise);
+
+      store.meal.setExtras(3);
+      kill(store);
+      request.resolve({ status: 200, data: {} });
+      await settle();
+
+      expect(loadDataAsyncMock).not.toHaveBeenCalled();
+    });
+
+    it("extras: clearing settles the same way", async () => {
+      const store = createStore({ extras: 5 });
+      const request = deferred();
+      axios.mockImplementationOnce(() => request.promise);
+
+      store.meal.setExtras(null);
+      kill(store);
+      request.resolve({ status: 200, data: {} });
+      await settle();
+
+      expect(loadDataAsyncMock).not.toHaveBeenCalled();
     });
   });
 });

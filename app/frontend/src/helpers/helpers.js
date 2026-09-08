@@ -80,9 +80,6 @@ export function generateTimes() {
       }
     }
   }
-
-  CACHED_TIMES = Object.freeze(times);
-  return CACHED_TIMES;
 }
 
 // How long a save waits after the last edit before firing, for every

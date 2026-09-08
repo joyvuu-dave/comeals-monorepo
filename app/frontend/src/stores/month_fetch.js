@@ -109,14 +109,8 @@ export function refetch(date, render) {
 // month the cache key uses.
 export function invalidateMonthForDate(date) {
   if (!date) return;
-  var d;
-  try {
-    d = date instanceof Date ? dayjs(date) : toCommunityDayjs(date);
-  } catch {
-    // dayjs.tz throws a RangeError on unparseable strings. A date we
-    // cannot read names no month to evict.
-    return;
-  }
+  var d = date instanceof Date ? dayjs(date) : toCommunityDayjs(date);
+  // A date we cannot read names no month to evict.
   if (!d.isValid()) return;
   invalidateMonth(Cookie.get("community_id"), d.format("YYYY"), d.format("M"));
 }

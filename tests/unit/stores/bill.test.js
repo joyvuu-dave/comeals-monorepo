@@ -458,4 +458,28 @@ describe("Bill model", () => {
       expect(bill.amount).toBe("");
     });
   });
+
+  // ── normalizeAmountDisplay ──
+
+  describe("normalizeAmountDisplay", () => {
+    it("pads a valid amount to two decimals without marking it for a save", () => {
+      const store = createStore({ bills: [{ id: "b1", amount: "1" }] });
+      const bill = store.bills.get("b1");
+
+      bill.normalizeAmountDisplay();
+
+      expect(bill.amount).toBe("1.00");
+      expect(bill.touched).toBe(false);
+      expect(saveBillsSpy).not.toHaveBeenCalled();
+    });
+
+    it("leaves an amount it cannot read as it was", () => {
+      const store = createStore({ bills: [{ id: "b1", amount: "abc" }] });
+      const bill = store.bills.get("b1");
+
+      bill.normalizeAmountDisplay();
+
+      expect(bill.amount).toBe("abc");
+    });
+  });
 });

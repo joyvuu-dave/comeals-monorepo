@@ -88,5 +88,20 @@ describe("bugsnag helper", () => {
         componentStack: "at Calendar",
       });
     });
+
+    it("reports without metadata when the caller has none", async () => {
+      vi.stubEnv("VITE_BUGSNAG_API_KEY", "abc123");
+      vi.stubEnv("PROD", true);
+      const { startBugsnag, notifyError } = await loadHelper();
+      startBugsnag();
+
+      const addMetadata = vi.fn();
+      Bugsnag.notify.mockImplementation((_err, onError) =>
+        onError({ addMetadata }),
+      );
+
+      expect(notifyError(new Error("boom"))).toBe(true);
+      expect(addMetadata).not.toHaveBeenCalled();
+    });
   });
 });

@@ -175,9 +175,6 @@ export function calendarActions(self) {
             "-" +
             adjMonth;
 
-          // Don't duplicate the current month's subscription
-          if (channelName === subscribeString) return;
-
           var channel = window.Comeals.pusher.subscribe(channelName);
           channel.bind("update", function () {
             monthData.invalidateMonth(communityId, adjYear, adjMonth);

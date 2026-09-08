@@ -305,6 +305,20 @@ describe("DataStore", () => {
 
   // ── canAdd ──
 
+  describe("with no meal on screen", () => {
+    it("the views answer blank, n/a, and false instead of throwing", () => {
+      const store = createDataStore({ mealProps: { description: "Soup" } });
+      expect(store.description).toBe("Soup");
+      stage(store, () => {
+        store.meal = null;
+      });
+
+      expect(store.description).toBe("");
+      expect(store.extras).toBe("n/a");
+      expect(store.canAdd).toBe(false);
+    });
+  });
+
   describe("canAdd", () => {
     it("returns true when meal is open", () => {
       const store = createDataStore({
@@ -1567,6 +1581,27 @@ describe("DataStore", () => {
         expect(toastStore.toasts[0].message).toContain("Cooks saved.");
       });
     });
+
+    it("says only that the cooks were saved when the warning has no text", async () => {
+      const store = createDataStore({
+        mealProps: { closed: false },
+        residents: [{ id: 10, meal_id: 1, name: "Alice", can_cook: true }],
+        bills: [{ id: "bill-1", resident: 10, amount: "25.00" }],
+      });
+      toastStore.clearAll();
+      axios.mockRejectedValueOnce({
+        response: { status: 400, data: { message: "", type: "warning" } },
+      });
+      axios.get.mockResolvedValueOnce({ status: 200, data: mealPayload() });
+
+      store.submitBills();
+
+      await vi.waitFor(() => {
+        expect(toastStore.toasts.map((t) => t.message)).toEqual([
+          "Cooks saved.",
+        ]);
+      });
+    });
   });
 
   // ── BUG-4: loadMonth with missing event arrays ──
@@ -2248,6 +2283,24 @@ describe("DataStore", () => {
 
       expect(bill.amount).toBe("12.34");
       expect(bill.touched).toBe(false);
+    });
+
+    it("ignores an ack row for a cook who is not on screen", async () => {
+      const store = storeWithCookBill();
+      const bill = bobsBill(store);
+      axios.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          message: "Form submitted.",
+          bills: [{ resident_id: 99, amount: "12.34", no_cost: false }],
+        },
+      });
+
+      bill.setAmount("5.50");
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(bill.amount).toBe("5.50");
     });
 
     // Regression from issue #30's fix. Typing "1", pausing past the
