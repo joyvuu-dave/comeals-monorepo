@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, act } from "@testing-library/react";
 
 vi.mock("axios", () => import("../mocks/axios.js"));
 
@@ -72,5 +72,40 @@ describe("RotationsShow", () => {
     expect(
       await screen.findByText("Failed to load rotation."),
     ).toBeInTheDocument();
+  });
+
+  it("drops an answer that arrives after unmount", async () => {
+    let deliver;
+    axios.get.mockReturnValue(
+      new Promise(function (resolve) {
+        deliver = resolve;
+      }),
+    );
+    const { unmount } = render(<RotationsShow id="10" />);
+    unmount();
+
+    await act(async () => {
+      deliver({
+        status: 200,
+        data: { id: 10, place_value: 3, description: "Late", residents: [] },
+      });
+    });
+    expect(document.body).not.toHaveTextContent("Late");
+  });
+
+  it("drops a failure that arrives after unmount", async () => {
+    let fail;
+    axios.get.mockReturnValue(
+      new Promise(function (resolve, reject) {
+        fail = reject;
+      }),
+    );
+    const { unmount } = render(<RotationsShow id="10" />);
+    unmount();
+
+    await act(async () => {
+      fail({ message: "boom" });
+    });
+    expect(document.body).not.toHaveTextContent("Failed to load rotation.");
   });
 });

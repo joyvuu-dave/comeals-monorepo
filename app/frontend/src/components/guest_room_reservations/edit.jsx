@@ -52,18 +52,16 @@ const GuestRoomReservationsEdit = observer(
           .get(`/api/v1/guest-room-reservations/${eventId}`)
           .then(function (response) {
             if (!mountedRef.current) return;
-            if (response.status === 200) {
-              var evt = response.data.event;
-              var d = dayjs(evt.date);
-              initialRef.current = {
-                residentId: String(evt.resident_id),
-                day: d.format("YYYY-MM-DD"),
-              };
-              setEvent(evt);
-              setLoaded(true);
-              setResidentId(evt.resident_id);
-              setDay(new Date(d.year(), d.month(), d.date()));
-            }
+            var evt = response.data.event;
+            var d = dayjs(evt.date);
+            initialRef.current = {
+              residentId: String(evt.resident_id),
+              day: d.format("YYYY-MM-DD"),
+            };
+            setEvent(evt);
+            setLoaded(true);
+            setResidentId(evt.resident_id);
+            setDay(new Date(d.year(), d.month(), d.date()));
           })
           .catch(function (error) {
             handleAxiosError(error, { silent: true });
@@ -78,22 +76,22 @@ const GuestRoomReservationsEdit = observer(
       axios
         .patch(`/api/v1/guest-room-reservations/${eventId}/update`, {
           resident_id: residentId,
-          date: day ? dayjs(day).format("YYYY-MM-DD") : null,
+          // Submit is disabled until the fetch has set the day, and the
+          // picker never clears it, so there is always a day here.
+          date: dayjs(day).format("YYYY-MM-DD"),
         })
-        .then(function (response) {
+        .then(function () {
           if (!mountedRef.current) return;
           setLoadingAction(null);
-          if (response.status === 200) {
-            // The client that knows, invalidates (issue #37). Both
-            // months: the edit may have moved the reservation out of
-            // its old month.
-            store.invalidateMonthForDate(event.date);
-            store.invalidateMonthForDate(day);
-            // The changes are saved now; close without the discard
-            // question (ADR 0006).
-            setDirty(false);
-            handleCloseModal();
-          }
+          // The client that knows, invalidates (issue #37). Both
+          // months: the edit may have moved the reservation out of
+          // its old month.
+          store.invalidateMonthForDate(event.date);
+          store.invalidateMonthForDate(day);
+          // The changes are saved now; close without the discard
+          // question (ADR 0006).
+          setDirty(false);
+          handleCloseModal();
         })
         .catch(function (error) {
           if (!mountedRef.current) return;

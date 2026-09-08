@@ -67,6 +67,23 @@ const localizer = dateFnsLocalizer({
   locales: { "en-US": enUS },
 });
 
+// The form each modal URL opens: /calendar/:type/:date/:modal/:view/:id.
+// The sidebar links and the event urls the server sends both spell the
+// reservation names with hyphens. A modal or view not listed here
+// (a hand-typed URL) opens an empty dialog.
+const MODAL_FORMS = {
+  "guest-room-reservations": {
+    new: GuestRoomReservationsNew,
+    edit: GuestRoomReservationsEdit,
+  },
+  "common-house-reservations": {
+    new: CommonHouseReservationsNew,
+    edit: CommonHouseReservationsEdit,
+  },
+  events: { new: EventsNew, edit: EventsEdit },
+  rotations: { show: RotationsShow },
+};
+
 // Module-level constants so react-big-calendar's prop identity stays stable
 // across MainCalendar renders. An inline `views={["month"]}` literal would
 // be a new array on every render and defeat MemoCalendar's shallow compare.
@@ -192,7 +209,7 @@ const MainCalendar = observer(() => {
   const todayStartRef = useRef(null);
 
   // Instance caches for referentially-stable Calendar props.
-  const eventsCacheRef = useRef({ version: null, type: null, events: null });
+  const eventsCacheRef = useRef({ version: null, events: null });
   const dateCacheRef = useRef({ str: null, date: null });
 
   // No dependency array: run after every render, splitting on a
@@ -374,18 +391,17 @@ const MainCalendar = observer(() => {
 
   // Return a referentially-stable events array so MemoCalendar can
   // skip re-rendering when the store hasn't actually changed. We cache
-  // a single slice() keyed on (version, type); the store bumps
-  // calendarEventsVersion whenever the underlying array mutates.
+  // a single slice() keyed on the version the store bumps whenever the
+  // underlying array mutates. The :type segment of the URL is always
+  // "all" (every link in the app writes it) and does not filter.
   function filterEvents() {
     var v = store.calendarEventsVersion;
-    var type = params.type;
     var cache = eventsCacheRef.current;
-    if (cache.version !== v || cache.type !== type) {
+    if (cache.version !== v) {
       cache.version = v;
-      cache.type = type;
       // calendarEvents contains frozen (plain JS) objects —
       // slice() copies the array without deep-cloning items.
-      cache.events = type === "all" ? store.calendarEvents.slice() : [];
+      cache.events = store.calendarEvents.slice();
     }
     return cache.events;
   }
@@ -408,90 +424,19 @@ const MainCalendar = observer(() => {
     if (typeof params.modal === "undefined") {
       return null;
     }
-
-    // NEW RESOURCE
-    if (params.view === "new") {
-      switch (params.modal) {
-        case "guest_room_reservations":
-        case "guest-room-reservations":
-          return (
-            <GuestRoomReservationsNew
-              handleCloseModal={handleCloseModal}
-              setDirty={setModalDirty}
-            />
-          );
-
-        case "common_house_reservations":
-        case "common-house-reservations":
-          return (
-            <CommonHouseReservationsNew
-              handleCloseModal={handleCloseModal}
-              setDirty={setModalDirty}
-            />
-          );
-
-        case "events":
-          return (
-            <EventsNew
-              handleCloseModal={handleCloseModal}
-              setDirty={setModalDirty}
-            />
-          );
-
-        default:
-          return null;
-      }
+    const forms = MODAL_FORMS[params.modal];
+    const Form = forms && forms[params.view];
+    if (!Form) {
+      return null;
     }
-
-    // EDIT RESOURCE
-    if (params.view === "edit") {
-      switch (params.modal) {
-        case "guest_room_reservations":
-        case "guest-room-reservations":
-          return (
-            <GuestRoomReservationsEdit
-              eventId={params.id}
-              handleCloseModal={handleCloseModal}
-              setDirty={setModalDirty}
-            />
-          );
-
-        case "common_house_reservations":
-        case "common-house-reservations":
-          return (
-            <CommonHouseReservationsEdit
-              eventId={params.id}
-              handleCloseModal={handleCloseModal}
-              setDirty={setModalDirty}
-            />
-          );
-
-        case "events":
-          return (
-            <EventsEdit
-              eventId={params.id}
-              handleCloseModal={handleCloseModal}
-              setDirty={setModalDirty}
-            />
-          );
-
-        default:
-          return null;
-      }
-    }
-
-    // SHOW RESOURCE
-    if (params.view === "show") {
-      switch (params.modal) {
-        case "rotations":
-          return (
-            <RotationsShow id={params.id} handleCloseModal={handleCloseModal} />
-          );
-
-        default:
-          return null;
-      }
-    }
+    return (
+      <Form
+        id={params.id}
+        eventId={params.id}
+        handleCloseModal={handleCloseModal}
+        setDirty={setModalDirty}
+      />
+    );
   }
 
   // The observable "today" (community timezone, "YYYY-MM-DD").
@@ -578,7 +523,7 @@ const MainCalendar = observer(() => {
           <div
             {...props}
             onMouseDown={(e) => {
-              if (props.onMouseDown) props.onMouseDown(e);
+              props.onMouseDown(e);
               if (e.target === e.currentTarget) {
                 handleCloseModal();
               }

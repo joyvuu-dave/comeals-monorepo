@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
-import { observable } from "mobx";
+import { render, screen, fireEvent, act } from "@testing-library/react";
+import { observable, runInAction } from "mobx";
 import { MemoryRouter, Routes, Route, useLocation } from "react-router";
 
 // date_box.jsx calls Modal.setAppElement("#root") at import time.
@@ -115,5 +115,88 @@ describe("DateBox", () => {
   it("opens the history modal on the history path", () => {
     renderBox(makeStore(), "/meals/42/edit/history/");
     expect(screen.getByLabelText("History Modal")).toBeInTheDocument();
+  });
+
+  it("the previous arrow navigates back, and a null next id never navigates", () => {
+    const store = makeStore();
+    store.meal.nextId = null;
+    renderBox(store);
+
+    fireEvent.click(screen.getByRole("button", { name: "Next meal" }));
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      /^\/meals\/42\/edit\/$/,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Previous meal" }));
+    expect(screen.getByTestId("location")).toHaveTextContent("/meals/41/edit");
+  });
+
+  it("the arrows answer Enter and Space, and no other key", () => {
+    renderBox(makeStore());
+    const next = screen.getByRole("button", { name: "Next meal" });
+    const prev = screen.getByRole("button", { name: "Previous meal" });
+
+    fireEvent.keyDown(next, { key: "a" });
+    fireEvent.keyDown(prev, { key: "a" });
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      /^\/meals\/42\/edit\/$/,
+    );
+
+    fireEvent.keyDown(next, { key: "Enter" });
+    expect(screen.getByTestId("location")).toHaveTextContent("/meals/43/edit");
+    fireEvent.keyDown(prev, { key: " " });
+    expect(screen.getByTestId("location")).toHaveTextContent("/meals/41/edit");
+  });
+
+  // A mousedown on an arrow must not move focus off whatever is being
+  // edited, so the arrow swallows it.
+  it("a mousedown on an arrow is swallowed", () => {
+    renderBox(makeStore());
+    const swallowed = !fireEvent.mouseDown(
+      screen.getByRole("button", { name: "Next meal" }),
+    );
+    expect(swallowed).toBe(true);
+    const swallowedPrev = !fireEvent.mouseDown(
+      screen.getByRole("button", { name: "Previous meal" }),
+    );
+    expect(swallowedPrev).toBe(true);
+  });
+
+  it("says Yesterday and Tomorrow for the neighbor days", () => {
+    const yesterday = makeStore();
+    yesterday.meal.date = new Date(2026, 0, 14);
+    const { unmount } = renderBox(yesterday);
+    expect(screen.getByText("Yesterday")).toBeInTheDocument();
+    unmount();
+
+    const tomorrow = makeStore();
+    tomorrow.meal.date = new Date(2026, 0, 16);
+    renderBox(tomorrow);
+    expect(screen.getByText("Tomorrow")).toBeInTheDocument();
+  });
+
+  it("Escape closes the history modal back to the meal", () => {
+    renderBox(makeStore(), "/meals/42/edit/history/");
+    fireEvent.keyDown(screen.getByRole("dialog"), {
+      key: "Escape",
+      keyCode: 27,
+    });
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      /^\/meals\/42\/edit$/,
+    );
+  });
+
+  it("loads nothing while the store has no meal", () => {
+    const store = makeStore();
+    renderBox(store);
+    expect(store.goToMeal).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      runInAction(() => {
+        store.meal = null;
+      });
+    });
+    expect(screen.getByText("loading...")).toBeInTheDocument();
+    expect(store.goToMeal).toHaveBeenCalledTimes(1);
   });
 });

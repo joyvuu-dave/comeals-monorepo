@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, act } from "@testing-library/react";
 
 // A mutable cookie jar so each test controls whether resident_id is
 // already known.
@@ -60,5 +60,19 @@ describe("WebcalLinks", () => {
     expect(Cookie.set).toHaveBeenCalledWith("resident_id", 9, {
       expires: 7300,
     });
+  });
+
+  it("shows only the community link when the id fetch fails", async () => {
+    axios.get.mockRejectedValue({ response: { status: 500, data: {} } });
+    render(<WebcalLinks />);
+
+    await act(async () => {});
+    expect(
+      screen.getByRole("link", { name: "Subscribe to All Meals" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Subscribe to My Meals" }),
+    ).not.toBeInTheDocument();
+    expect(Cookie.set).not.toHaveBeenCalled();
   });
 });

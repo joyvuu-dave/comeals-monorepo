@@ -25,10 +25,8 @@ function ResidentsPasswordNew() {
         .get(`/api/v1/residents/name/${token}`)
         .then(function (response) {
           if (!mountedRef.current) return;
-          if (response.status === 200) {
-            setName(response.data.name);
-            setReady(true);
-          }
+          setName(response.data.name);
+          setReady(true);
         })
         .catch(function (error) {
           handleAxiosError(error, { silent: true });
@@ -56,12 +54,8 @@ function ResidentsPasswordNew() {
       .then(function (response) {
         if (!mountedRef.current) return;
         setLoading(false);
-        if (response.status === 200) {
-          if (response.data.message) {
-            toastStore.replaceAll(response.data.message, "success");
-          }
-          navigate("/");
-        }
+        toastStore.replaceAll(response.data.message, "success");
+        navigate("/");
       })
       .catch(function (error) {
         if (!mountedRef.current) return;

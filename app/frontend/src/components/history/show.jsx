@@ -15,11 +15,9 @@ function MealHistoryShow({ id }) {
         .get(`/api/v1/meals/${id}/history`)
         .then(function (response) {
           if (cancelled) return;
-          if (response.status === 200) {
-            setItems(response.data.items);
-            setDate(toCommunityDayjs(response.data.date).format("ddd, MMM Do"));
-            setReady(true);
-          }
+          setItems(response.data.items);
+          setDate(toCommunityDayjs(response.data.date).format("ddd, MMM Do"));
+          setReady(true);
         })
         .catch(function (error) {
           handleAxiosError(error, { silent: true });

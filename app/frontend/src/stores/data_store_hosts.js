@@ -60,12 +60,10 @@ export function hostsActions(self) {
         .then(function (response) {
           // Superseded by a later fetch: let the winner's response win.
           if (!self.hostsFetches.isCurrent(versionAtStart)) return self.hosts;
-          if (response.status === 200) {
-            self.setHosts(response.data);
-            // The residents channel (data_store_app.js) refetches this
-            // list when a resident or unit changes.
-            self.ensureResidentsChannel();
-          }
+          self.setHosts(response.data);
+          // The residents channel (data_store_app.js) refetches this
+          // list when a resident or unit changes.
+          self.ensureResidentsChannel();
           return self.hosts;
         })
         .catch(function (error) {

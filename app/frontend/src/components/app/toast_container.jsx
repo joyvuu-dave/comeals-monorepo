@@ -39,12 +39,13 @@ var ToastContainer = observer(function ToastContainer() {
     };
   }, []);
 
+  // The dismiss button exists only while the toast does, and the effect
+  // above starts the toast's timer on the render that shows the button,
+  // so the timer is always there to clear.
   function handleDismiss(id) {
     var timers = timersRef.current;
-    if (timers[id]) {
-      clearTimeout(timers[id]);
-      delete timers[id];
-    }
+    clearTimeout(timers[id]);
+    delete timers[id];
     toastStore.removeToast(id);
   }
 

@@ -75,4 +75,27 @@ describe("CloseButton", () => {
       screen.getByRole("button", { name: "Open / Close Meal" }),
     ).toBeDisabled();
   });
+
+  it("names no one when more than one cook's cost is blank", () => {
+    const store = makeStore({
+      cooksMissingCost: ["Bob Johnson", "Jane Smith"],
+    });
+    renderButton(store);
+    fireEvent.click(screen.getByRole("button", { name: "Open / Close Meal" }));
+
+    expect(
+      screen.getByText(/Some cooks haven’t entered a cost yet/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Bob Johnson")).not.toBeInTheDocument();
+  });
+
+  it("No on the confirm leaves the meal open", () => {
+    const store = makeStore({ cooksMissingCost: ["Bob Johnson"] });
+    renderButton(store);
+    fireEvent.click(screen.getByRole("button", { name: "Open / Close Meal" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "No" }));
+    expect(store.toggleClosed).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
 });

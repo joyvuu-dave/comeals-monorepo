@@ -70,9 +70,7 @@ function DebouncedTextarea(props) {
     var val = e.target.value;
     setValue(val);
     pendingValueRef.current = val;
-    if (props.onTyping) {
-      props.onTyping();
-    }
+    props.onTyping();
     clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
       pendingValueRef.current = null;

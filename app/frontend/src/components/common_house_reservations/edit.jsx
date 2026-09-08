@@ -58,28 +58,26 @@ const CommonHouseReservationsEdit = observer(
           .get(`/api/v1/common-house-reservations/${eventId}`)
           .then(function (response) {
             if (!mountedRef.current) return;
-            if (response.status === 200) {
-              var evt = response.data.event;
-              var sd = toCommunityDayjs(evt.start_date);
-              var ed = toCommunityDayjs(evt.end_date);
-              // title is nullable in the database; a null value would make
-              // the controlled input uncontrolled.
-              var initial = {
-                residentId: String(evt.resident_id),
-                title: evt.title || "",
-                day: sd.format("YYYY-MM-DD"),
-                startTime: toTimeString(sd),
-                endTime: toTimeString(ed),
-              };
-              initialRef.current = initial;
-              setEvent(evt);
-              setLoaded(true);
-              setResidentId(evt.resident_id);
-              setTitle(initial.title);
-              setDay(new Date(sd.year(), sd.month(), sd.date()));
-              setStartTime(initial.startTime);
-              setEndTime(initial.endTime);
-            }
+            var evt = response.data.event;
+            var sd = toCommunityDayjs(evt.start_date);
+            var ed = toCommunityDayjs(evt.end_date);
+            // title is nullable in the database; a null value would make
+            // the controlled input uncontrolled.
+            var initial = {
+              residentId: String(evt.resident_id),
+              title: evt.title || "",
+              day: sd.format("YYYY-MM-DD"),
+              startTime: toTimeString(sd),
+              endTime: toTimeString(ed),
+            };
+            initialRef.current = initial;
+            setEvent(evt);
+            setLoaded(true);
+            setResidentId(evt.resident_id);
+            setTitle(initial.title);
+            setDay(new Date(sd.year(), sd.month(), sd.date()));
+            setStartTime(initial.startTime);
+            setEndTime(initial.endTime);
           })
           .catch(function (error) {
             handleAxiosError(error, { silent: true });
@@ -97,20 +95,18 @@ const CommonHouseReservationsEdit = observer(
           ...buildStartEndPayload(day, startTime, endTime),
           title: title,
         })
-        .then(function (response) {
+        .then(function () {
           if (!mountedRef.current) return;
           setLoadingAction(null);
-          if (response.status === 200) {
-            // The client that knows, invalidates (issue #37). Both
-            // months: the edit may have moved the reservation out of
-            // its old month.
-            store.invalidateMonthForDate(event.start_date);
-            store.invalidateMonthForDate(day);
-            // The changes are saved now; close without the discard
-            // question (ADR 0006).
-            setDirty(false);
-            handleCloseModal();
-          }
+          // The client that knows, invalidates (issue #37). Both
+          // months: the edit may have moved the reservation out of
+          // its old month.
+          store.invalidateMonthForDate(event.start_date);
+          store.invalidateMonthForDate(day);
+          // The changes are saved now; close without the discard
+          // question (ADR 0006).
+          setDirty(false);
+          handleCloseModal();
         })
         .catch(function (error) {
           if (!mountedRef.current) return;

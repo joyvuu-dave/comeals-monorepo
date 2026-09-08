@@ -29,12 +29,10 @@ export default function useDeleteFlow({
     setLoadingAction("delete");
     axios
       .delete(url)
-      .then(function (response) {
+      .then(function () {
         if (!mountedRef.current) return;
         setLoadingAction(null);
-        if (response.status === 200) {
-          onDeleted();
-        }
+        onDeleted();
       })
       .catch(function (error) {
         if (!mountedRef.current) return;

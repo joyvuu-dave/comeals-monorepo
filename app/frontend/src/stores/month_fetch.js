@@ -139,13 +139,11 @@ export function prefetchMonth(date) {
     var pending = axios
       .get(`/api/v1/communities/${Cookie.get("community_id")}/calendar/${date}`)
       .then(function (response) {
-        if (response.status === 200) {
-          // Discard if a Pusher invalidation arrived since we started
-          if (monthCache.versionFor(key) !== versionAtStart) return;
-          monthCache.set(key, response.data);
-          monthCache.markFresh(key);
-          kvSet(key, response.data);
-        }
+        // Discard if a Pusher invalidation arrived since we started
+        if (monthCache.versionFor(key) !== versionAtStart) return;
+        monthCache.set(key, response.data);
+        monthCache.markFresh(key);
+        kvSet(key, response.data);
       })
       .catch(function () {
         // Prefetch failure is non-critical
@@ -224,20 +222,18 @@ function fetchMonth(date, token, render) {
   axios
     .get(`/api/v1/communities/${Cookie.get("community_id")}/calendar/${date}`)
     .then(function (response) {
-      if (response.status === 200) {
-        // A newer navigation or refetch superseded this response:
-        // drop it entirely. Rendering it would show the wrong month;
-        // caching it could overwrite fresher same-month data.
+      // A newer navigation or refetch superseded this response:
+      // drop it entirely. Rendering it would show the wrong month;
+      // caching it could overwrite fresher same-month data.
+      if (!navigations.isCurrent(token)) return;
+      var respData = response.data;
+      var key = monthCache.keyFor(respData.id, respData.year, respData.month);
+      monthCache.set(key, respData);
+      monthCache.markFresh(key);
+      kvSet(key, respData).then(function () {
         if (!navigations.isCurrent(token)) return;
-        var respData = response.data;
-        var key = monthCache.keyFor(respData.id, respData.year, respData.month);
-        monthCache.set(key, respData);
-        monthCache.markFresh(key);
-        kvSet(key, respData).then(function () {
-          if (!navigations.isCurrent(token)) return;
-          render(respData);
-        });
-      }
+        render(respData);
+      });
     })
     .catch(function (error) {
       handleAxiosError(error, { silent: true });

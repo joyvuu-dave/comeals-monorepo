@@ -33,9 +33,7 @@ function SideBar() {
     axios
       .get(`/api/v1/meals/next`)
       .then(function (response) {
-        if (response.status === 200) {
-          navigate(`/meals/${response.data.meal_id}/edit`);
-        }
+        navigate(`/meals/${response.data.meal_id}/edit`);
       })
       .catch(function (error) {
         handleAxiosError(error, { silent: true });

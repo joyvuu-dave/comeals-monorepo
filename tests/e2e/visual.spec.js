@@ -230,7 +230,7 @@ test.describe("Visual Baselines", () => {
     await setupAuthenticatedPage(page, context);
     await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
 
-    await page.goto("/calendar/all/2026-01-15/common_house_reservations/new/");
+    await page.goto("/calendar/all/2026-01-15/common-house-reservations/new/");
     await page.waitForLoadState("networkidle");
 
     const modal = page.locator(".ReactModal__Content--after-open");
@@ -251,7 +251,7 @@ test.describe("Visual Baselines", () => {
 
     // mockApi serves reservation 50 ("Book Club").
     await page.goto(
-      "/calendar/all/2026-01-15/common_house_reservations/edit/50/",
+      "/calendar/all/2026-01-15/common-house-reservations/edit/50/",
     );
     await page.waitForLoadState("networkidle");
 
@@ -271,7 +271,7 @@ test.describe("Visual Baselines", () => {
     await setupAuthenticatedPage(page, context);
     await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
 
-    await page.goto("/calendar/all/2026-01-15/guest_room_reservations/new/");
+    await page.goto("/calendar/all/2026-01-15/guest-room-reservations/new/");
     await page.waitForLoadState("networkidle");
 
     const modal = page.locator(".ReactModal__Content--after-open");
@@ -292,7 +292,7 @@ test.describe("Visual Baselines", () => {
 
     // mockApi serves reservation 60 with resident_id 1 (Jane).
     await page.goto(
-      "/calendar/all/2026-01-15/guest_room_reservations/edit/60/",
+      "/calendar/all/2026-01-15/guest-room-reservations/edit/60/",
     );
     await page.waitForLoadState("networkidle");
 

@@ -40,19 +40,17 @@ const GuestRoomReservationsNew = observer(({ handleCloseModal, setDirty }) => {
         resident_id: residentId,
         date: day ? dayjs(day).format("YYYY-MM-DD") : null,
       })
-      .then(function (response) {
+      .then(function () {
         if (!mountedRef.current) return;
         setLoading(false);
-        if (response.status === 200) {
-          // The client that knows, invalidates (issue #37): the new
-          // reservation's month may be too far out to have a Pusher
-          // channel.
-          store.invalidateMonthForDate(day);
-          // The reservation is saved now; close without the discard
-          // question (ADR 0006).
-          setDirty(false);
-          handleCloseModal();
-        }
+        // The client that knows, invalidates (issue #37): the new
+        // reservation's month may be too far out to have a Pusher
+        // channel.
+        store.invalidateMonthForDate(day);
+        // The reservation is saved now; close without the discard
+        // question (ADR 0006).
+        setDirty(false);
+        handleCloseModal();
       })
       .catch(function (error) {
         if (!mountedRef.current) return;

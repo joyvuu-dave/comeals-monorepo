@@ -49,30 +49,28 @@ function EventsEdit({ eventId, handleCloseModal, setDirty }) {
         .get(`/api/v1/events/${eventId}`)
         .then(function (response) {
           if (!mountedRef.current) return;
-          if (response.status === 200) {
-            var evt = response.data;
-            var sd = toCommunityDayjs(evt.start_date);
-            var ed = evt.end_date ? toCommunityDayjs(evt.end_date) : null;
-            // title and description are nullable in the database; a null
-            // value would make the controlled inputs uncontrolled.
-            var initial = {
-              title: evt.title || "",
-              description: evt.description || "",
-              day: sd.format("YYYY-MM-DD"),
-              startTime: toTimeString(sd),
-              endTime: ed ? toTimeString(ed) : "",
-              allDay: Boolean(evt.allday),
-            };
-            initialRef.current = initial;
-            setEvent(evt);
-            setLoaded(true);
-            setTitle(initial.title);
-            setDescription(initial.description);
-            setDay(new Date(sd.year(), sd.month(), sd.date()));
-            setStartTime(initial.startTime);
-            setEndTime(initial.endTime);
-            setAllDay(initial.allDay);
-          }
+          var evt = response.data;
+          var sd = toCommunityDayjs(evt.start_date);
+          var ed = evt.end_date ? toCommunityDayjs(evt.end_date) : null;
+          // title and description are nullable in the database; a null
+          // value would make the controlled inputs uncontrolled.
+          var initial = {
+            title: evt.title || "",
+            description: evt.description || "",
+            day: sd.format("YYYY-MM-DD"),
+            startTime: toTimeString(sd),
+            endTime: ed ? toTimeString(ed) : "",
+            allDay: Boolean(evt.allday),
+          };
+          initialRef.current = initial;
+          setEvent(evt);
+          setLoaded(true);
+          setTitle(initial.title);
+          setDescription(initial.description);
+          setDay(new Date(sd.year(), sd.month(), sd.date()));
+          setStartTime(initial.startTime);
+          setEndTime(initial.endTime);
+          setAllDay(initial.allDay);
         })
         .catch(function (error) {
           handleAxiosError(error, { silent: true });
@@ -91,19 +89,17 @@ function EventsEdit({ eventId, handleCloseModal, setDirty }) {
         ...buildStartEndPayload(day, startTime, endTime),
         all_day: allDay,
       })
-      .then(function (response) {
+      .then(function () {
         if (!mountedRef.current) return;
         setLoadingAction(null);
-        if (response.status === 200) {
-          // The client that knows, invalidates (issue #37). Both months:
-          // the edit may have moved the event out of its old month.
-          store.invalidateMonthForDate(event.start_date);
-          store.invalidateMonthForDate(day);
-          // The changes are saved now; close without the discard
-          // question (ADR 0006).
-          setDirty(false);
-          handleCloseModal();
-        }
+        // The client that knows, invalidates (issue #37). Both months:
+        // the edit may have moved the event out of its old month.
+        store.invalidateMonthForDate(event.start_date);
+        store.invalidateMonthForDate(day);
+        // The changes are saved now; close without the discard
+        // question (ADR 0006).
+        setDirty(false);
+        handleCloseModal();
       })
       .catch(function (error) {
         if (!mountedRef.current) return;

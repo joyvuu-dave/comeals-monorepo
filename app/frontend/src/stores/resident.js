@@ -183,11 +183,9 @@ const Resident = types
               store.loadDataAsync();
               return;
             }
-            if (response.status === 200) {
-              // The server's created_at is the signup time of record; the
-              // client clock can be skewed.
-              self.setAttendingAt(new Date(response.data.created_at));
-            }
+            // The server's created_at is the signup time of record; the
+            // client clock can be skewed.
+            self.setAttendingAt(new Date(response.data.created_at));
           })
           .catch(function (error) {
             if (!isAlive(self)) return;
@@ -215,15 +213,13 @@ const Resident = types
           .remove(self.meal_id, self.id, {
             socketId: window.Comeals.socketId,
           })
-          .then(function (response) {
+          .then(function () {
             evictMealCache(mealId);
             if (!isAlive(self)) {
               store.loadDataAsync();
               return;
             }
-            if (response.status === 200) {
-              self.setAttendingAt(null);
-            }
+            self.setAttendingAt(null);
           })
           .catch(function (error) {
             if (!isAlive(self)) return;
@@ -311,11 +307,9 @@ const Resident = types
             store.loadDataAsync();
             return;
           }
-          if (response.status === 200) {
-            const guest = response.data;
-            guest.created_at = new Date(guest.created_at);
-            self.root.appendGuest(guest);
-          }
+          const guest = response.data;
+          guest.created_at = new Date(guest.created_at);
+          self.root.appendGuest(guest);
         })
         .catch(function (error) {
           if (!isAlive(self)) return;
@@ -329,14 +323,11 @@ const Resident = types
         return false;
       }
 
-      // Sort Guests
+      // Newest first. created_at is a Date, so the subtraction is
+      // milliseconds.
       const sortedGuests = Array.from(self.guests)
         .slice()
-        .sort((a, b) => {
-          if (a.created_at > b.created_at) return -1;
-          if (a.created_at < b.created_at) return 1;
-          return 0;
-        });
+        .sort((a, b) => b.created_at - a.created_at);
 
       // Grab Id of newest guest
       const guestId = sortedGuests[0].id;
@@ -349,16 +340,14 @@ const Resident = types
         .remove(self.meal_id, self.id, guestId, {
           socketId: window.Comeals.socketId,
         })
-        .then(function (response) {
+        .then(function () {
           evictMealCache(mealId);
           if (!isAlive(self)) {
             store.loadDataAsync();
             return;
           }
-          if (response.status === 200) {
-            self.root.removeGuest(guestId);
-            self.root.meal.incrementExtras();
-          }
+          self.root.removeGuest(guestId);
+          self.root.meal.incrementExtras();
         })
         .catch(function (error) {
           handleAxiosError(error);

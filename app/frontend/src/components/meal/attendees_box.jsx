@@ -34,7 +34,9 @@ const styles = {
   },
 };
 
-const AttendeeComponent = observer(({ resident }) => {
+// Exported for its own test: the dead-node case below cannot be
+// staged through the table, whose rows unmount with their nodes.
+export const AttendeeComponent = observer(({ resident }) => {
   const store = useStore();
   // A row only makes sense against a loaded meal — every column
   // below reads meal state. No meal, no row.

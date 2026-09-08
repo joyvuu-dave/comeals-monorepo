@@ -15,6 +15,7 @@ cookies.current = { username: "Jane Smith" };
 
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
 import Header from "../../../app/frontend/src/components/meal/header.jsx";
+import { fakeLocation } from "../helpers/fake_location.js";
 
 function makeStore(overrides = {}) {
   return observable(
@@ -95,5 +96,33 @@ describe("Header", () => {
   it("renders the history button bar", () => {
     renderHeader(makeStore());
     expect(screen.getByRole("button", { name: "history" })).toBeInTheDocument();
+  });
+
+  it("Calendar goes to today while the meal is still loading", () => {
+    vi.useFakeTimers({ now: new Date(2026, 5, 3, 12, 0, 0) });
+    try {
+      renderHeader(makeStore({ mealLoading: true, meal: null }));
+      fireEvent.click(screen.getByRole("button", { name: /Calendar/ }));
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        "/calendar/all/2026-06-03",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("logout signs out and reloads to the login page", () => {
+    const store = makeStore();
+    renderHeader(store);
+    const { location, restore } = fakeLocation();
+    try {
+      fireEvent.click(
+        screen.getByRole("button", { name: "logout Jane Smith" }),
+      );
+      expect(store.logout).toHaveBeenCalledTimes(1);
+      expect(location.href).toBe("/");
+    } finally {
+      restore();
+    }
   });
 });

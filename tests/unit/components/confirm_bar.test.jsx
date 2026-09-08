@@ -91,4 +91,10 @@ describe("ConfirmBar", () => {
       expect(onYes).toHaveBeenCalledTimes(1);
     });
   });
+
+  it("any other key is not a No", () => {
+    renderBar();
+    fireEvent.keyDown(document, { key: "a" });
+    expect(onDismiss).not.toHaveBeenCalled();
+  });
 });

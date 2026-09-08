@@ -14,14 +14,12 @@ function WebcalLinks() {
         .get(`/api/v1/residents/id`)
         .then(function (response) {
           if (cancelled) return;
-          if (response.status === 200) {
-            Cookie.set("resident_id", response.data, {
-              expires: 7300,
-            });
+          Cookie.set("resident_id", response.data, {
+            expires: 7300,
+          });
 
-            setResidentId(response.data);
-            setReady(true);
-          }
+          setResidentId(response.data);
+          setReady(true);
         })
         .catch(function (error) {
           handleAxiosError(error, { silent: true });

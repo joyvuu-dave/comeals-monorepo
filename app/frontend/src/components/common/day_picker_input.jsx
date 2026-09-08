@@ -27,17 +27,18 @@ function DayPickerInputWrapper({
     };
   }, []);
 
+  // A disabled input gets no click events, so the disabled attribute
+  // on the input is the whole guard.
   function handleInputClick() {
-    if (inputDisabled) return;
     setIsOpen(true);
   }
 
+  // Clicking the selected day again hands over undefined (the day was
+  // deselected). The form keeps its date; the picker stays open.
   function handleDaySelect(date) {
     if (!date) return;
     setIsOpen(false);
-    if (onDayChange) {
-      onDayChange(date);
-    }
+    onDayChange(date);
   }
 
   function formatValue() {

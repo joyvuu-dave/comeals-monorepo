@@ -87,7 +87,9 @@ themselves. Roughly 30–40 new tests, all doubled across both engines.
 
 - Vitest coverage thresholds pinned so they can only rise. Today
   (2026-08-23) `vitest.config.mjs` holds 85% statements, 77% branches, 86%
-  functions, 88% lines.
+  functions, 88% lines. On 2026-09-08 the unit tests reached 100% on all
+  four and the thresholds were set to 100, the same rule SimpleCov holds
+  the Ruby side to.
 - Tests for `data_store_hosts.js` — 6% covered, and it is the in-flight /
   stale-response cache feeding the reservation forms.
 

@@ -162,20 +162,18 @@ export function mealPageActions(self: MealPageStore) {
         .getCooks(mealIdAtFetch)
         .then(
           function (response) {
-            if (response.status === 200) {
-              // A newer fetch is out: this answer is older than what
-              // that one will bring, so neither cache nor screen gets it.
-              if (!self.mealFetches.isCurrent(fetchToken)) return;
-              return kvSet(response.data.id.toString(), response.data).then(
-                function () {
-                  if (!self.mealFetches.isCurrent(fetchToken)) return;
-                  // Skip stale responses from a previous meal
-                  if (self.meal && self.meal.id === response.data.id) {
-                    self.loadData(response.data);
-                  }
-                },
-              );
-            }
+            // A newer fetch is out: this answer is older than what
+            // that one will bring, so neither cache nor screen gets it.
+            if (!self.mealFetches.isCurrent(fetchToken)) return;
+            return kvSet(response.data.id.toString(), response.data).then(
+              function () {
+                if (!self.mealFetches.isCurrent(fetchToken)) return;
+                // Skip stale responses from a previous meal
+                if (self.meal && self.meal.id === response.data.id) {
+                  self.loadData(response.data);
+                }
+              },
+            );
           },
           // Second then-handler on purpose: it fires only when the
           // FETCH rejected. The retry treatment is for network

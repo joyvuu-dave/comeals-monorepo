@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { observable } from "mobx";
 import { MemoryRouter, Routes, Route } from "react-router";
 
 vi.mock("axios", () => import("../mocks/axios.js"));
 
 import axios from "axios";
+import toastStore from "../../../app/frontend/src/stores/toast_store.js";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
 import { CALENDAR_PATH } from "../../../app/frontend/src/routes.js";
 import EventsNew from "../../../app/frontend/src/components/events/new.jsx";
@@ -121,5 +122,58 @@ describe("EventsNew", () => {
       target: { value: "" },
     });
     expect(setDirty).toHaveBeenLastCalledWith(false);
+  });
+
+  it("takes a description, and unchecking All Day frees the times", () => {
+    renderForm();
+    fireEvent.change(screen.getByLabelText("Description"), {
+      target: { value: "Bring a chair" },
+    });
+    expect(screen.getByLabelText("Description")).toHaveDisplayValue(
+      "Bring a chair",
+    );
+
+    fireEvent.click(screen.getByLabelText("All Day"));
+    expect(screen.getByLabelText("Start Time")).toBeDisabled();
+    fireEvent.click(screen.getByLabelText("All Day"));
+    expect(screen.getByLabelText("All Day")).not.toBeChecked();
+    expect(screen.getByLabelText("Start Time")).toBeEnabled();
+  });
+
+  it("a refused create shows the reason and keeps the form open", async () => {
+    toastStore.clearAll();
+    axios.post.mockRejectedValue({
+      response: { status: 400, data: { message: "Title can't be blank" } },
+    });
+    const { handleCloseModal } = renderForm();
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await vi.waitFor(() => {
+      expect(toastStore.toasts.map((t) => t.message)).toEqual([
+        "Title can't be blank",
+      ]);
+    });
+    expect(handleCloseModal).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
+  });
+
+  it("an answer that lands after the form closed touches nothing", async () => {
+    toastStore.clearAll();
+    for (const settle of ["resolve", "reject"]) {
+      let finish;
+      axios.post.mockImplementationOnce(
+        () =>
+          new Promise((resolve, reject) => {
+            finish = settle === "resolve" ? resolve : reject;
+          }),
+      );
+      const { handleCloseModal } = renderForm();
+      fireEvent.click(screen.getByRole("button", { name: "Create" }));
+      cleanup();
+      finish({ status: 200, data: { message: "Late." } });
+      await new Promise((r) => setTimeout(r, 0));
+      expect(handleCloseModal).not.toHaveBeenCalled();
+    }
+    expect(toastStore.toasts).toHaveLength(0);
   });
 });

@@ -72,9 +72,7 @@ const ResidentsLogin = observer(() => {
       .then(function (response) {
         if (!mountedRef.current) return;
         setLoading(false);
-        if (response.status === 200 && response.data.message) {
-          toastStore.replaceAll(response.data.message, "success");
-        }
+        toastStore.replaceAll(response.data.message, "success");
       })
       .catch(function (error) {
         if (!mountedRef.current) return;
@@ -95,39 +93,37 @@ const ResidentsLogin = observer(() => {
       .then(function (response) {
         if (!mountedRef.current) return;
 
-        if (response.status === 200) {
-          // The page is about to be replaced by a full load (below), so
-          // the loader stays up and the Navigate branch in render is
-          // switched off first. Without both, the re-render finds the
-          // token cookie, mounts the calendar client-side, and its first
-          // requests are cancelled by the reload a few ms later — WebKit
-          // reports that as an uncaught error (#80).
-          reloadingRef.current = true;
-          Cookie.set("token", response.data.token, {
+        // The page is about to be replaced by a full load (below), so
+        // the loader stays up and the Navigate branch in render is
+        // switched off first. Without both, the re-render finds the
+        // token cookie, mounts the calendar client-side, and its first
+        // requests are cancelled by the reload a few ms later — WebKit
+        // reports that as an uncaught error (#80).
+        reloadingRef.current = true;
+        Cookie.set("token", response.data.token, {
+          expires: 7300,
+        });
+        Cookie.set("community_id", response.data.community_id, {
+          expires: 7300,
+        });
+        Cookie.set("resident_id", response.data.resident_id, {
+          expires: 7300,
+        });
+        Cookie.set("username", response.data.username, {
+          expires: 7300,
+        });
+        if (response.data.timezone) {
+          Cookie.set("timezone", response.data.timezone, {
             expires: 7300,
           });
-          Cookie.set("community_id", response.data.community_id, {
-            expires: 7300,
-          });
-          Cookie.set("resident_id", response.data.resident_id, {
-            expires: 7300,
-          });
-          Cookie.set("username", response.data.username, {
-            expires: 7300,
-          });
-          if (response.data.timezone) {
-            Cookie.set("timezone", response.data.timezone, {
-              expires: 7300,
-            });
-          }
-
-          // The timezone cookie was just written (if present in the
-          // response), so defaultFrom() picks up the fresh value here.
-          var { from } = location.state || { from: defaultFrom() };
-          window.location.href = from.pathname || from;
-        } else {
-          setLoading(false);
         }
+
+        // The timezone cookie was just written (if present in the
+        // response), so defaultFrom() picks up the fresh value here.
+        // `from` is where PrivateRoute sent the visitor from, or today's
+        // calendar.
+        var { from } = location.state || { from: defaultFrom() };
+        window.location.href = from.pathname;
       })
       .catch(function (error) {
         if (!mountedRef.current) return;

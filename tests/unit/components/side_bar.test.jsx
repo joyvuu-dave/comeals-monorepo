@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 import { observable } from "mobx";
 import {
   MemoryRouter,
@@ -81,5 +81,28 @@ describe("SideBar", () => {
         "/meals/42/edit",
       );
     });
+  });
+
+  it("opens the event form", () => {
+    renderBar();
+
+    fireEvent.click(screen.getByRole("button", { name: "Event" }));
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      "/calendar/all/2026-01-15/events/new",
+    );
+  });
+
+  it("Next Meal stays put when the server has no answer", async () => {
+    axios.get.mockRejectedValue({ response: { status: 404, data: {} } });
+    renderBar();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next Meal" }));
+    await vi.waitFor(() => {
+      expect(axios.get).toHaveBeenCalledWith("/api/v1/meals/next");
+    });
+    await act(async () => {});
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      "/calendar/all/2026-01-15/",
+    );
   });
 });

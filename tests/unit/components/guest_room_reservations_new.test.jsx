@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { observable } from "mobx";
 import { MemoryRouter, Routes, Route } from "react-router";
 
 vi.mock("axios", () => import("../mocks/axios.js"));
 
 import axios from "axios";
+import toastStore from "../../../app/frontend/src/stores/toast_store.js";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
 import { CALENDAR_PATH } from "../../../app/frontend/src/routes.js";
 import GuestRoomReservationsNew from "../../../app/frontend/src/components/guest_room_reservations/new.jsx";
@@ -36,7 +37,7 @@ function renderForm({
     <StoreContext.Provider value={store}>
       <MemoryRouter
         initialEntries={[
-          "/calendar/all/2026-01-15/guest_room_reservations/new",
+          "/calendar/all/2026-01-15/guest-room-reservations/new",
         ]}
       >
         <Routes>
@@ -104,5 +105,55 @@ describe("GuestRoomReservationsNew", () => {
 
     fireEvent.change(screen.getByLabelText("Host"), { target: { value: "" } });
     expect(setDirty).toHaveBeenLastCalledWith(false);
+  });
+
+  // The server refuses a missing date; the form sends the truth rather
+  // than guessing a day.
+  it("submitting without a day sends a null date", () => {
+    renderForm();
+    fireEvent.change(screen.getByLabelText("Host"), { target: { value: "2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    expect(axios.post).toHaveBeenCalledWith("/api/v1/guest-room-reservations", {
+      resident_id: "2",
+      date: null,
+    });
+  });
+
+  it("a refused create shows the reason and keeps the form open", async () => {
+    toastStore.clearAll();
+    axios.post.mockRejectedValue({
+      response: { status: 400, data: { message: "Date can't be blank" } },
+    });
+    const { handleCloseModal } = renderForm();
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await vi.waitFor(() => {
+      expect(toastStore.toasts.map((t) => t.message)).toEqual([
+        "Date can't be blank",
+      ]);
+    });
+    expect(handleCloseModal).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
+  });
+
+  it("an answer that lands after the form closed touches nothing", async () => {
+    toastStore.clearAll();
+    for (const settle of ["resolve", "reject"]) {
+      let finish;
+      axios.post.mockImplementationOnce(
+        () =>
+          new Promise((resolve, reject) => {
+            finish = settle === "resolve" ? resolve : reject;
+          }),
+      );
+      const { handleCloseModal } = renderForm();
+      fireEvent.click(screen.getByRole("button", { name: "Create" }));
+      cleanup();
+      finish({ status: 200, data: { message: "Late." } });
+      await new Promise((r) => setTimeout(r, 0));
+      expect(handleCloseModal).not.toHaveBeenCalled();
+    }
+    expect(toastStore.toasts).toHaveLength(0);
   });
 });

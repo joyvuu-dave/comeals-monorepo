@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, act } from "@testing-library/react";
+import { render, screen, act, fireEvent } from "@testing-library/react";
 import VersionBanner from "../../../app/frontend/src/components/app/version_banner.jsx";
+import { fakeLocation } from "../helpers/fake_location.js";
 
 const POLL_INTERVAL = 5 * 60 * 1000;
 
@@ -85,5 +86,78 @@ describe("VersionBanner", () => {
     });
 
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it("never polls when the page has no module script to compare against", async () => {
+    script.remove();
+    mockManifest("vite-assets/index-NEW.js");
+    const { container } = render(<VersionBanner />);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL + 1000);
+    });
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("stays hidden when the manifest answers with an error status", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve({ ok: false, status: 503 })),
+    );
+    const { container } = render(<VersionBanner />);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL + 1000);
+    });
+
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("drops a manifest that arrives after unmount", async () => {
+    let deliver;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: () =>
+            new Promise(function (resolve) {
+              deliver = resolve;
+            }),
+        }),
+      ),
+    );
+    const { unmount } = render(<VersionBanner />);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL + 1000);
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    unmount();
+
+    await act(async () => {
+      deliver({
+        "index.html": { isEntry: true, file: "vite-assets/index-NEW.js" },
+      });
+    });
+    expect(document.body).not.toHaveTextContent("A new version is available.");
+  });
+
+  it("Refresh reloads the page", async () => {
+    mockManifest("vite-assets/index-NEW.js");
+    render(<VersionBanner />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL + 1000);
+    });
+
+    const { location, restore } = fakeLocation();
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+      expect(location.reload).toHaveBeenCalledTimes(1);
+    } finally {
+      restore();
+    }
   });
 });

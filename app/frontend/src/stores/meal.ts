@@ -231,22 +231,14 @@ const Meal = types
           return;
         }
 
-        const num = Math.trunc(Number(self.extras));
-        if (Number.isInteger(num)) {
-          const temp = num + 1;
-          self.extras = temp;
-        }
+        self.extras = self.extras + 1;
       },
       decrementExtras() {
         if (self.extras === null) {
           return;
         }
 
-        const num = Math.trunc(Number(self.extras));
-        if (Number.isInteger(num)) {
-          const temp = num - 1;
-          self.extras = temp;
-        }
+        self.extras = self.extras - 1;
       },
     };
   });

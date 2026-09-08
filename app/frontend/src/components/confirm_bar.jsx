@@ -27,9 +27,7 @@ const ConfirmBar = ({
   const noButtonRef = useRef(null);
 
   useEffect(() => {
-    if (noButtonRef.current) {
-      noButtonRef.current.focus();
-    }
+    noButtonRef.current.focus();
   }, []);
 
   useEffect(() => {

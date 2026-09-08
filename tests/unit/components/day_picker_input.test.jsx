@@ -51,4 +51,30 @@ describe("DayPickerInput", () => {
     fireEvent.click(screen.getByDisplayValue("01/15/2026"));
     expect(screen.queryByRole("grid")).not.toBeInTheDocument();
   });
+
+  it("stays open on a click inside the picker", () => {
+    render(<DayPickerInput id="day" value="2026-01-15" />);
+    fireEvent.click(screen.getByDisplayValue("01/15/2026"));
+
+    fireEvent.mouseDown(screen.getByRole("grid"));
+    expect(screen.getByRole("grid")).toBeInTheDocument();
+  });
+
+  it("clicking the chosen day again keeps the date and the picker open", () => {
+    const onDayChange = vi.fn();
+    render(
+      <DayPickerInput id="day" value="2026-01-15" onDayChange={onDayChange} />,
+    );
+    fireEvent.click(screen.getByDisplayValue("01/15/2026"));
+
+    fireEvent.click(screen.getByRole("button", { name: /January 15/ }));
+    expect(onDayChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("grid")).toBeInTheDocument();
+  });
+
+  it("opens on the current month when there is no value and no default", () => {
+    render(<DayPickerInput id="day" placeholder="Pick a day" />);
+    fireEvent.click(screen.getByPlaceholderText("Pick a day"));
+    expect(screen.getByRole("grid")).toBeInTheDocument();
+  });
 });

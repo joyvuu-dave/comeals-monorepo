@@ -23,18 +23,15 @@ export default defineConfig({
         "app/frontend/src/index.jsx",
         "app/frontend/src/helpers/nav_trace.js",
       ],
-      // A ratchet, not a target: pinned just under the numbers measured
-      // on 2026-09-08 (92.5 / 85.6 / 92.6 / 93.9), so coverage can only
-      // rise. When it rises, raise these to match. Unit tests measure
-      // what a unit test should: the stores and helpers. Screens are
-      // exercised by the browser suites, which this number does not
-      // see. bin/check and CI run test:coverage, so a drop below these
-      // fails the check.
+      // Every line, branch and function, the same rule SimpleCov holds
+      // the Ruby side to. A branch the app cannot reach is not a reason
+      // to lower these: change the code so the branch is gone. bin/check
+      // and CI run test:coverage, so a drop below 100 fails the check.
       thresholds: {
-        statements: 92,
-        branches: 85,
-        functions: 92,
-        lines: 93,
+        statements: 100,
+        branches: 100,
+        functions: 100,
+        lines: 100,
       },
     },
   },

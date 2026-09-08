@@ -337,7 +337,7 @@ test.describe("Form CRUD", () => {
     test("after picking a day, one click outside the form asks", async ({
       page,
     }) => {
-      await page.goto("/calendar/all/2026-01-15/guest_room_reservations/new/");
+      await page.goto("/calendar/all/2026-01-15/guest-room-reservations/new/");
       await page.waitForLoadState("networkidle");
       const modal = page.locator(".ReactModal__Content--after-open").first();
       await expect(modal.locator("#guest-room-new-day")).toBeVisible({

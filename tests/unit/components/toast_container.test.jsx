@@ -79,4 +79,19 @@ describe("ToastContainer", () => {
     });
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
+
+  // The type comes from the server on an error response, so it can be
+  // a word this component has no delay for.
+  it("a toast of an unknown type dismisses itself after 5 seconds", () => {
+    render(<ToastContainer />);
+    act(() => {
+      toastStore.addToast("Hm.", "notice");
+    });
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
 });

@@ -231,4 +231,94 @@ describe("EventsEdit", () => {
     fireEvent.change(title, { target: { value: "Community Meeting" } });
     expect(setDirty).toHaveBeenLastCalledWith(false);
   });
+
+  it("hydrates a null title and description as empty strings", async () => {
+    axios.get.mockResolvedValue({
+      status: 200,
+      data: { ...EVENT, title: null, description: null },
+    });
+    renderForm();
+    await vi.waitFor(() => {
+      expect(screen.getByRole("button", { name: "Update" })).toBeEnabled();
+    });
+    expect(screen.getByLabelText("Title")).toHaveValue("");
+    expect(screen.getByLabelText("Description")).toHaveValue("");
+  });
+
+  it("All Day clears the times; unchecking it leaves them empty", async () => {
+    renderForm();
+    await screen.findByDisplayValue("Community Meeting");
+
+    fireEvent.click(screen.getByLabelText("All Day"));
+    expect(screen.getByLabelText("All Day")).toBeChecked();
+    expect(screen.getByLabelText("Start Time")).toHaveDisplayValue("");
+    expect(screen.getByLabelText("Start Time")).toBeDisabled();
+
+    fireEvent.click(screen.getByLabelText("All Day"));
+    expect(screen.getByLabelText("All Day")).not.toBeChecked();
+    expect(screen.getByLabelText("Start Time")).toBeEnabled();
+    expect(screen.getByLabelText("Start Time")).toHaveDisplayValue("");
+  });
+
+  it("stays frozen when the event fails to load", async () => {
+    axios.get.mockRejectedValue({ response: { status: 404, data: {} } });
+    renderForm();
+    await vi.waitFor(() => {
+      expect(axios.get).toHaveBeenCalled();
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.getByRole("button", { name: "Update" })).toBeDisabled();
+  });
+
+  it("a refused update shows the reason and keeps the form open", async () => {
+    toastStore.clearAll();
+    axios.patch.mockRejectedValue({
+      response: { status: 400, data: { message: "Title can't be blank" } },
+    });
+    const { handleCloseModal } = renderForm();
+    await screen.findByDisplayValue("Community Meeting");
+
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    await vi.waitFor(() => {
+      expect(toastStore.toasts.map((t) => t.message)).toEqual([
+        "Title can't be blank",
+      ]);
+    });
+    expect(handleCloseModal).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Update" })).toBeEnabled();
+  });
+
+  it("answers that land after the form closed touch nothing", async () => {
+    // The fetch, resolved late.
+    let deliver;
+    axios.get.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          deliver = resolve;
+        }),
+    );
+    renderForm();
+    cleanup();
+    deliver({ status: 200, data: EVENT });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(document.body).not.toHaveTextContent("Community Meeting");
+
+    // The update, resolved late and refused late.
+    for (const settle of ["resolve", "reject"]) {
+      let finish;
+      axios.patch.mockImplementationOnce(
+        () =>
+          new Promise((resolve, reject) => {
+            finish = settle === "resolve" ? resolve : reject;
+          }),
+      );
+      const { handleCloseModal } = renderForm();
+      await screen.findByDisplayValue("Community Meeting");
+      fireEvent.click(screen.getByRole("button", { name: "Update" }));
+      cleanup();
+      finish({ status: 200, data: {} });
+      await new Promise((r) => setTimeout(r, 0));
+      expect(handleCloseModal).not.toHaveBeenCalled();
+    }
+  });
 });

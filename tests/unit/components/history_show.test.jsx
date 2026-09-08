@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, act } from "@testing-library/react";
 
 vi.mock("axios", () => import("../mocks/axios.js"));
 
@@ -60,5 +60,29 @@ describe("MealHistoryShow", () => {
     expect(
       screen.getByRole("cell", { name: "added a guest" }),
     ).toBeInTheDocument();
+  });
+
+  it("keeps Loading when the history fails to load", async () => {
+    axios.get.mockRejectedValue({ response: { status: 500, data: {} } });
+    render(<MealHistoryShow id="42" />);
+
+    await act(async () => {});
+    expect(screen.getByText("Loading...")).toBeInTheDocument();
+  });
+
+  it("drops an answer that arrives after unmount", async () => {
+    let deliver;
+    axios.get.mockReturnValue(
+      new Promise(function (resolve) {
+        deliver = resolve;
+      }),
+    );
+    const { unmount } = render(<MealHistoryShow id="42" />);
+    unmount();
+
+    await act(async () => {
+      deliver({ status: 200, data: { date: "2026-01-15", items: [] } });
+    });
+    expect(document.body).not.toHaveTextContent("Thu, Jan 15th");
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { observable } from "mobx";
 
 // The edit form renders ConfirmModal, which needs #root at import time.
@@ -16,6 +16,7 @@ import { cookies } from "../mocks/js_cookie.js";
 cookies.current = { timezone: "America/Los_Angeles" };
 
 import axios from "axios";
+import toastStore from "../../../app/frontend/src/stores/toast_store.js";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
 import CommonHouseReservationsEdit from "../../../app/frontend/src/components/common_house_reservations/edit.jsx";
 
@@ -229,5 +230,65 @@ describe("CommonHouseReservationsEdit", () => {
     );
     expect(callsBeforeClose.length).toBeGreaterThan(0);
     expect(callsBeforeClose[callsBeforeClose.length - 1]).toEqual([false]);
+  });
+
+  it("stays frozen when the reservation fails to load", async () => {
+    axios.get.mockRejectedValue({ response: { status: 404, data: {} } });
+    renderForm();
+    await vi.waitFor(() => {
+      expect(axios.get).toHaveBeenCalled();
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.getByRole("button", { name: "Update" })).toBeDisabled();
+  });
+
+  it("a refused update shows the reason and keeps the form open", async () => {
+    toastStore.clearAll();
+    axios.patch.mockRejectedValue({
+      response: { status: 400, data: { message: "Those hours are taken" } },
+    });
+    const { handleCloseModal } = renderForm();
+    await screen.findByDisplayValue("Book Club");
+
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    await vi.waitFor(() => {
+      expect(toastStore.toasts.map((t) => t.message)).toEqual([
+        "Those hours are taken",
+      ]);
+    });
+    expect(handleCloseModal).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Update" })).toBeEnabled();
+  });
+
+  it("answers that land after the form closed touch nothing", async () => {
+    let deliver;
+    axios.get.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          deliver = resolve;
+        }),
+    );
+    renderForm();
+    cleanup();
+    deliver({ status: 200, data: RESERVATION });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(document.body).not.toHaveTextContent("Book Club");
+
+    for (const settle of ["resolve", "reject"]) {
+      let finish;
+      axios.patch.mockImplementationOnce(
+        () =>
+          new Promise((resolve, reject) => {
+            finish = settle === "resolve" ? resolve : reject;
+          }),
+      );
+      const { handleCloseModal } = renderForm();
+      await screen.findByDisplayValue("Book Club");
+      fireEvent.click(screen.getByRole("button", { name: "Update" }));
+      cleanup();
+      finish({ status: 200, data: {} });
+      await new Promise((r) => setTimeout(r, 0));
+      expect(handleCloseModal).not.toHaveBeenCalled();
+    }
   });
 });

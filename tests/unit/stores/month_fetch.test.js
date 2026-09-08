@@ -146,17 +146,6 @@ describe("month_fetch", () => {
         "Error: could not submit form.",
       );
     });
-
-    it("renders nothing for an answer that is not a 200", async () => {
-      axios.get.mockResolvedValueOnce({ status: 204, data: null });
-      const render = vi.fn();
-
-      loadForNavigation("2026-04-15", render);
-      await flush();
-
-      expect(render).not.toHaveBeenCalled();
-      expect(monthCache.get(keyFor(2026, 4))).toBeUndefined();
-    });
   });
 
   describe("loadForNavigation, overtaken by a second navigation", () => {

@@ -66,4 +66,13 @@ describe("GuestDropdown", () => {
       screen.getByLabelText("Add Guest of Jane Smith").closest("button"),
     ).toBeDisabled();
   });
+
+  it("stays open on a click inside the menu", () => {
+    const { container } = renderDropdown();
+    const dropdown = container.firstChild;
+    fireEvent.click(screen.getByLabelText("Add Guest of Jane Smith"));
+
+    fireEvent.mouseDown(screen.getByAltText("cow-icon"));
+    expect(dropdown).toHaveClass("active");
+  });
 });

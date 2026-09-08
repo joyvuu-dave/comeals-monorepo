@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 
 vi.mock("../../../app/frontend/src/helpers/bugsnag", () => ({
   notifyError: vi.fn(),
@@ -7,6 +7,7 @@ vi.mock("../../../app/frontend/src/helpers/bugsnag", () => ({
 
 import ErrorBoundary from "../../../app/frontend/src/components/app/error_boundary.jsx";
 import { notifyError } from "../../../app/frontend/src/helpers/bugsnag";
+import { fakeLocation } from "../helpers/fake_location.js";
 
 function Bomb() {
   throw new Error("boom");
@@ -57,5 +58,20 @@ describe("ErrorBoundary", () => {
     const [error, meta] = notifyError.mock.calls[0];
     expect(error.message).toBe("boom");
     expect(meta.componentStack).toContain("Bomb");
+  });
+
+  it("Refresh reloads the page", () => {
+    render(
+      <ErrorBoundary>
+        <Bomb />
+      </ErrorBoundary>,
+    );
+    const { location, restore } = fakeLocation();
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+      expect(location.reload).toHaveBeenCalledTimes(1);
+    } finally {
+      restore();
+    }
   });
 });

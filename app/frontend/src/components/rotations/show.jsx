@@ -30,17 +30,15 @@ function RotationsShow({ id }) {
         .get(`/api/v1/rotations/${id}`)
         .then(function (response) {
           if (cancelled) return;
-          if (response.status === 200) {
-            var sorted = [...response.data.residents].sort(function (a, b) {
-              if (a.display_name < b.display_name) return -1;
-              if (a.display_name > b.display_name) return 1;
-              return 0;
-            });
-            setPlaceValue(response.data.place_value);
-            setResidents(sorted);
-            setDescription(response.data.description);
-            setLoaded(true);
-          }
+          // display_name is "unit - name", and residents.name is unique
+          // (a case-insensitive index), so no two names compare equal.
+          var sorted = [...response.data.residents].sort(function (a, b) {
+            return a.display_name < b.display_name ? -1 : 1;
+          });
+          setPlaceValue(response.data.place_value);
+          setResidents(sorted);
+          setDescription(response.data.description);
+          setLoaded(true);
         })
         .catch(function (error) {
           handleAxiosError(error, { silent: true });

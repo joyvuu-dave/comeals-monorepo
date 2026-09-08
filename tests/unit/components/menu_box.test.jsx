@@ -100,4 +100,35 @@ describe("MenuBox", () => {
     renderBox(closed);
     expect(screen.getByLabelText("Enter meal description")).toBeDisabled();
   });
+
+  it("greys the textarea outside description edit mode", () => {
+    renderBox(makeStore({ editDescriptionMode: false }));
+    expect(screen.getByLabelText("Enter meal description")).toHaveClass(
+      "offwhite",
+    );
+  });
+
+  // The store echoes a saved description back through the prop. When
+  // it is the text already on screen, the textarea keeps it; when the
+  // description was cleared to null, the textarea shows nothing.
+  it("takes a changed description from the store, and null as empty", () => {
+    const store = makeStore();
+    renderBox(store);
+    const textarea = screen.getByLabelText("Enter meal description");
+    fireEvent.change(textarea, { target: { value: "Tacos" } });
+
+    act(() => {
+      runInAction(() => {
+        store.meal.description = "Tacos";
+      });
+    });
+    expect(textarea).toHaveDisplayValue("Tacos");
+
+    act(() => {
+      runInAction(() => {
+        store.meal.description = null;
+      });
+    });
+    expect(textarea).toHaveDisplayValue("");
+  });
 });

@@ -40,9 +40,7 @@ function ConfirmModal({
         openedAtRef.current = performance.now();
         restoreFocusRef.current = document.activeElement;
       } else if (restoreFocusRef.current) {
-        if (typeof restoreFocusRef.current.focus === "function") {
-          restoreFocusRef.current.focus();
-        }
+        restoreFocusRef.current.focus();
         restoreFocusRef.current = null;
       }
     },
