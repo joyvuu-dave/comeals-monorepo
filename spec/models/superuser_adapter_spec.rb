@@ -36,6 +36,13 @@ RSpec.describe SuperuserAdapter do
     end
   end
 
+  describe 'no user at all' do
+    it 'is not a superuser, so the money path is closed and the rest is open' do
+      expect(adapter_for(nil).authorized?(:update, Bill)).to be false
+      expect(adapter_for(nil).authorized?(:update, Event)).to be true
+    end
+  end
+
   describe 'a superuser' do
     it 'may write on the money path' do
       expect_writes(superuser, described_class::LEDGER_MODELS, allowed: true)

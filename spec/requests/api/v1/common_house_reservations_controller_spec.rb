@@ -42,6 +42,20 @@ RSpec.describe 'Common House Reservations API' do
       expect(CommonHouseReservation.last.title).to eq('Birthday party')
     end
 
+    it 'returns 400 for a month that does not exist' do
+      post '/api/v1/common-house-reservations', params: {
+        token: token,
+        resident_id: resident.id, title: 'Never',
+        start_year: 2026, start_month: 13, start_day: 1,
+        start_hours: 14, start_minutes: 0,
+        end_hours: 17, end_minutes: 0
+      }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Error: Invalid date')
+      expect(CommonHouseReservation.count).to eq(0)
+    end
+
     it 'rejects overlapping reservations in the same community' do
       create(:common_house_reservation, community: community, resident: resident,
                                         start_date: Time.zone.local(2026, 5, 1, 14, 0),
@@ -75,6 +89,26 @@ RSpec.describe 'Common House Reservations API' do
     end
 
     # Regression test for BUG-3: update lacked the begin/rescue that create has.
+    it 'refuses to move a reservation onto another one, and says so' do
+      taken = Time.zone.local(2026, 5, 2, 14, 0)
+      create(:common_house_reservation, community: community, resident: resident,
+                                        start_date: taken, end_date: taken + 2.hours)
+      moving = create(:common_house_reservation, community: community, resident: resident,
+                                                 start_date: taken + 5.hours, end_date: taken + 6.hours)
+
+      patch "/api/v1/common-house-reservations/#{moving.id}/update", params: {
+        token: token,
+        resident_id: resident.id, title: 'Moved',
+        start_year: 2026, start_month: 5, start_day: 2,
+        start_hours: 15, start_minutes: 0,
+        end_hours: 16, end_minutes: 0
+      }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Time period is already taken')
+      expect(moving.reload.title).not_to eq('Moved')
+    end
+
     it 'returns 400 for invalid date params instead of 500' do
       chr = create(:common_house_reservation, community: community, resident: resident)
 

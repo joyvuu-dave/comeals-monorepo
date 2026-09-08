@@ -194,6 +194,17 @@ RSpec.describe 'Residents API' do
       expect(response).to have_http_status(:bad_request)
     end
 
+    it 'answers 400 when the resident row itself no longer saves' do
+      resident.update!(reset_password_token: 'reset-token-791', reset_password_sent_at: Time.current)
+      resident.update_columns(name: '')
+
+      post '/api/v1/residents/password-reset/reset-token-791', params: { password: 'new one' }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Invalid password.')
+      expect(resident.reload.reset_password_token).to eq('reset-token-791')
+    end
+
     it 'treats a missing password the same as a blank one' do
       resident.update!(reset_password_token: 'reset-token-790', reset_password_sent_at: Time.current)
 

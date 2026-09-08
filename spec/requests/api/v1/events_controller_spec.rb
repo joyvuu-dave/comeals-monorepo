@@ -41,6 +41,31 @@ RSpec.describe 'Events API' do
       expect(event.end_date).to be_present
     end
 
+    it 'creates a timed event when all_day is left out' do
+      post '/api/v1/events', params: {
+        token: token,
+        title: 'Quiet Hour', description: '',
+        start_year: 2026, start_month: 4, start_day: 16,
+        start_hours: 8, start_minutes: 0,
+        end_hours: 9, end_minutes: 0
+      }
+
+      expect(response).to have_http_status(:ok)
+      expect(Event.last.allday).to be(false)
+    end
+
+    it 'returns 400 for a month that does not exist' do
+      post '/api/v1/events', params: {
+        token: token,
+        title: 'Never', all_day: true,
+        start_year: 2026, start_month: 13, start_day: 1
+      }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Error: Invalid date')
+      expect(Event.count).to eq(0)
+    end
+
     it 'creates an all-day event' do
       post '/api/v1/events', params: {
         token: token,

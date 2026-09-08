@@ -73,6 +73,7 @@ RSpec/IndexedLet:
 # has no single class to describe either.
 RSpec/DescribeClass:
   Exclude:
+    - "spec/admin/**/*"
     - "spec/tasks/**/*"
     - "spec/requests/**/*"
     - "spec/db/**/*"

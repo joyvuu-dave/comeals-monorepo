@@ -58,6 +58,19 @@ RSpec.describe 'Admin password reset button' do
       end
     end
 
+    context 'with a resident row that no longer passes validation' do
+      it 'shows the validation message and sends nothing' do
+        resident.update_columns(name: '')
+
+        expect { post "/residents/#{resident.id}/send_password_reset" }
+          .not_to(change { ActionMailer::Base.deliveries.count })
+
+        expect(resident.reload.reset_password_token).to be_nil
+        follow_redirect!
+        expect(response.body).to include('Name can&#39;t be blank')
+      end
+    end
+
     context 'when the email cannot be delivered' do
       before do
         mail_double = instance_double(ActionMailer::MessageDelivery)

@@ -51,7 +51,9 @@ class AuditDescription
       auditable_id: auditable_id,
       action: 'create'
     )
-    Resident.find_by(id: create_audit&.audited_changes&.dig('resident_id'))
+    return nil if create_audit.nil?
+
+    Resident.find_by(id: create_audit.audited_changes['resident_id'])
   end
 
   def describe_meal(audit) # rubocop:disable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity --audit change parsing with many attribute branches

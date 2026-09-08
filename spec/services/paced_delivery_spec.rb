@@ -64,6 +64,42 @@ RSpec.describe PacedDelivery do
     end
   end
 
+  describe '.pause' do
+    it 'sleeps for the pause between messages' do
+      allow(described_class).to receive(:sleep)
+
+      described_class.pause
+
+      expect(described_class).to have_received(:sleep).with(described_class::PAUSE)
+    end
+  end
+
+  describe 'over smtp with only the required settings' do
+    let(:session) { instance_double(Net::SMTP, send_message: nil) }
+    let(:smtp) { instance_double(Net::SMTP) }
+
+    before do
+      allow(ActionMailer::Base).to receive_messages(
+        delivery_method: :smtp,
+        smtp_settings: { address: 'smtp.example.com', port: 25 }
+      )
+      allow(Net::SMTP).to receive(:new).and_return(smtp)
+      allow(smtp).to receive(:start).and_yield(session)
+      allow(described_class).to receive(:pause)
+    end
+
+    it 'opens the session without STARTTLS, timeouts, or authentication' do
+      message = ActionMailer::MessageDelivery.new(ResidentMailer, :password_reset_email, cooks.first.tap do |c|
+        c.reset_password_token = 't'
+      end)
+
+      result = described_class.deliver([cooks.first], mailer: 'x') { message }
+
+      expect(result).to eq(described_class::Result.new(sent: 1, failed: 0, skipped: 0))
+      expect(smtp).to have_received(:start).once.with(nil, nil, nil, nil)
+    end
+  end
+
   describe 'over smtp' do
     let(:session) { instance_double(Net::SMTP, send_message: nil) }
     let(:smtp) { instance_double(Net::SMTP, :enable_starttls_auto => nil, :open_timeout= => nil, :read_timeout= => nil) }

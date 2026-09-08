@@ -61,6 +61,14 @@ RSpec.describe 'Admin superuser management' do
       expect(spare.reload.superuser).to be false
     end
 
+    it 'deletes another admin' do
+      plain = create(:admin_user, community: community, superuser: false)
+
+      expect { delete "/admin_users/#{plain.id}" }.to change(AdminUser, :count).by(-1)
+
+      expect(response).to redirect_to('/admin_users')
+    end
+
     it 'refuses to delete its own account, and says so' do
       expect { delete "/admin_users/#{me.id}" }.not_to change(AdminUser, :count)
 

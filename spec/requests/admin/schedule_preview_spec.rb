@@ -38,6 +38,14 @@ RSpec.describe 'Admin schedule preview' do
       expect(response.body).not_to include('Mon Aug 10, 2026')
     end
 
+    it 'shows the first 20 dates of a longer rotation and says so' do
+      post_preview(schedule: { '0' => ['', '0', '2', '4'] }, meals_per_rotation: 30)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body.scan('<li>').size).to eq(20)
+      expect(response.body).to include('First 20 of 30 meals in a rotation.')
+    end
+
     it 'handles a skip-week grid' do
       travel_to Date.new(2026, 8, 7) do
         post_preview(schedule: { '0' => [''], '1' => ['', '3'] }, meals_per_rotation: 3)

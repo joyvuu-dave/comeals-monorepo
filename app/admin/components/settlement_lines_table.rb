@@ -20,10 +20,9 @@ class SettlementLinesTable < Arbre::Component
     end
 
     table_for lines do
-      case first_column
-      when :resident
+      if first_column == :resident
         column('Resident') { |charge| link_to charge.resident.name, admin_resident_path(charge.resident) }
-      when :meal
+      else
         column('Meal') { |charge| link_to charge.meal.date, admin_meal_path(charge.meal) }
       end
       column('What') { |charge| MealCharge::KIND_LABELS.fetch(charge.kind) }

@@ -63,6 +63,20 @@ RSpec.describe 'Guest Room Reservations API' do
     end
   end
 
+  describe 'PATCH to a date that is already taken' do
+    it 'is refused with the reason' do
+      create(:guest_room_reservation, community: community, resident: resident, date: Date.new(2026, 6, 1))
+      moving = create(:guest_room_reservation, community: community, resident: resident, date: Date.new(2026, 6, 2))
+
+      patch "/api/v1/guest-room-reservations/#{moving.id}/update",
+            params: { token: token, resident_id: resident.id, date: '2026-06-01' }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Date has already been taken')
+      expect(moving.reload.date).to eq(Date.new(2026, 6, 2))
+    end
+  end
+
   describe 'DELETE /api/v1/guest-room-reservations/:id/delete' do
     it 'deletes the reservation' do
       grr = create(:guest_room_reservation, community: community, resident: resident)

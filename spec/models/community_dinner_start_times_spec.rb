@@ -25,6 +25,12 @@ RSpec.describe Community do
   end
 
   describe 'validation' do
+    it 'refuses a value that is not a list at all' do
+      community.dinner_start_times = nil
+      expect(community).not_to be_valid
+      expect(community.errors[:dinner_start_times]).to include(/must be seven times/)
+    end
+
     it 'refuses a time that is not HH:MM on a 24-hour clock' do
       community.dinner_start_times = %w[7pm 19:00 19:00 19:00 19:00 19:00 19:00]
 

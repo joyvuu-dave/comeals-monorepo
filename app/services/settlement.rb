@@ -360,8 +360,9 @@ class Settlement
   # database.
   sig { void }
   def forget_cached_meals
-    ids = @claimed_meal_ids
-    return if ids.blank?
+    # assign_meals set this, and reconciliation.save! refused a period
+    # with no meal before assign_meals ran, so the list is never empty.
+    ids = T.must(@claimed_meal_ids)
 
     LiveUpdate.batch do
       Meal.where(id: ids).pluck(:id, :date).each do |id, date|

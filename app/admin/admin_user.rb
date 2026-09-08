@@ -40,7 +40,7 @@ ActiveAdmin.register AdminUser do
       requested = params.dig(:admin_user, :superuser)
       return if requested.nil?
 
-      if !current_active_admin_user&.superuser?
+      if !current_active_admin_user.superuser?
         redirect_to resource_or_collection_path,
                     alert: 'Only a superuser may grant or remove superuser access.'
       elsif demoting_self?(requested)
@@ -50,7 +50,7 @@ ActiveAdmin.register AdminUser do
     end
 
     def refuse_self_destroy
-      return unless resource.id == current_active_admin_user&.id
+      return unless resource.id == current_active_admin_user.id
 
       redirect_to admin_admin_user_path(resource),
                   alert: 'You cannot delete your own account. Ask another superuser to do it.'
@@ -58,7 +58,7 @@ ActiveAdmin.register AdminUser do
 
     def demoting_self?(requested)
       action_name == 'update' &&
-        resource.id == current_active_admin_user&.id &&
+        resource.id == current_active_admin_user.id &&
         resource.superuser? &&
         !ActiveModel::Type::Boolean.new.cast(requested)
     end
@@ -103,7 +103,7 @@ ActiveAdmin.register AdminUser do
       f.input :password_confirmation
       # Hidden rather than disabled when the actor may not change it, so the
       # form does not post a value the controller would then have to refuse.
-      if current_active_admin_user&.superuser? && !(f.object.persisted? &&
+      if current_active_admin_user.superuser? && !(f.object.persisted? &&
                                                    f.object.id == current_active_admin_user.id)
         f.input :superuser,
                 hint: 'Superusers may settle reconciliations, edit bills and attendance, and ' \

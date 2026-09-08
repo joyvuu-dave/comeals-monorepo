@@ -39,9 +39,12 @@ RSpec.describe Healthcheck do
       end
 
       it 'sends the ping over HTTPS with timeouts' do
-        allow(Net::HTTP).to receive(:start).and_return(Net::HTTPOK.new('1.1', '200', 'OK'))
+        http = instance_double(Net::HTTP, get: Net::HTTPOK.new('1.1', '200', 'OK'))
+        allow(Net::HTTP).to receive(:start).and_yield(http)
 
         described_class.ping('some-job')
+
+        expect(http).to have_received(:get).with('/test-key/some-job?create=1')
 
         expect(Net::HTTP).to have_received(:start).with(
           'hc-ping.com', 443,

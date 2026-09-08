@@ -41,5 +41,15 @@ RSpec.describe 'Admin community singleton redirect' do
 
       expect(response).to redirect_to(new_admin_community_path)
     end
+
+    # The guard asks Community.exists? and the action asks Community.first,
+    # so telling the guard the row is there lets the action answer alone.
+    it 'picks the same target from the action itself, without the guard' do
+      allow(Community).to receive(:exists?).and_return(true)
+
+      get '/communities'
+
+      expect(response).to redirect_to(new_admin_community_path)
+    end
   end
 end

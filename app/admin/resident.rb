@@ -9,7 +9,7 @@ ActiveAdmin.register Resident do
   # admin the param is not permitted, so a hand-made request drops it too.
   permit_params do
     params = %i[name multiplier unit_id email phone password vegetarian can_cook active birthday]
-    params << :can_reconcile if current_active_admin_user&.superuser?
+    params << :can_reconcile if current_active_admin_user.superuser?
     params
   end
 
@@ -223,7 +223,7 @@ ActiveAdmin.register Resident do
                                  'set here only stays for a resident without one.'
       f.input :unit, collection: Unit.order(:name)
       f.input :can_cook
-      if current_active_admin_user&.superuser?
+      if current_active_admin_user.superuser?
         f.input :can_reconcile,
                 hint: 'May settle the period from the reconciliation app: claim the meals, write the ' \
                       'ledger, and mail the cooks. There is no undo, so give this to the person who ' \

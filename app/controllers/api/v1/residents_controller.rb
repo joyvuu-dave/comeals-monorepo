@@ -37,7 +37,7 @@ module Api
         # this prevents those accounts from signing in
         render json: { message: 'Email required.' }, status: :bad_request and return if params[:email].blank?
 
-        resident = Resident.find_by(email: params[:email]&.strip&.downcase)
+        resident = Resident.find_by(email: params[:email].to_s.strip.downcase)
         if resident.nil?
           return render json: { message: "No resident with email #{params[:email]}" }, status: :bad_request
         end
@@ -58,7 +58,7 @@ module Api
       def password_reset
         render json: { message: 'Email required.' }, status: :bad_request and return if params[:email].blank?
 
-        resident = Resident.find_by(email: params[:email]&.strip&.downcase)
+        resident = Resident.find_by(email: params[:email].to_s.strip.downcase)
 
         return render json: { message: 'No resident with that email address.' }, status: :bad_request if resident.nil?
 

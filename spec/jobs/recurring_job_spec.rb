@@ -30,6 +30,14 @@ RSpec.describe RecurringJob do
     expect(Healthcheck).to have_received(:ping).with('billing-recalculate', state: 'fail')
   end
 
+  it 'fails plainly when a subclass forgets to define run' do
+    forgetful = Class.new(described_class) { const_set(:HEALTHCHECK, 'forgetful') }
+    stub_const('ForgetfulJob', forgetful)
+    allow(Healthcheck).to receive(:ping)
+
+    expect { forgetful.perform_now }.to raise_error(NotImplementedError, 'ForgetfulJob must define #run')
+  end
+
   it 'names runs after the job class' do
     expect(RefreshBalancesJob.run_name).to eq('refresh_balances')
     expect(EnsureRotationsJob.run_name).to eq('ensure_rotations')

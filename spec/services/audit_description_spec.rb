@@ -229,4 +229,105 @@ RSpec.describe AuditDescription do
       expect(described_class.describe(audit)).to eq('Rotation, update')
     end
   end
+
+  # The audited gem writes create, update and destroy. The parser still has
+  # an answer for a row with any other action, or with a change it cannot
+  # read, because a history modal that raises shows nothing at all.
+  describe 'rows the parser cannot read' do
+    let(:community) { create(:community) }
+    let(:unit) { create(:unit, community: community) }
+    let(:resident) { create(:resident, community: community, unit: unit) }
+    let(:meal) { create(:meal, community: community, closed: true, max: nil) }
+    let(:name) { ResidentNameShortener.short(resident.name) }
+
+    def audit(type, action, changes, id: nil)
+      instance_double(Audited::Audit, auditable_type: type, action: action, audited_changes: changes,
+                                      auditable_id: id)
+    end
+
+    it 'says a meal was deleted' do
+      open_meal = create(:meal, community: community, date: meal.date + 1)
+      open_meal.destroy!
+      deleted = Audited::Audit.find_by(auditable_type: 'Meal', auditable_id: open_meal.id, action: 'destroy')
+      expect(described_class.describe(deleted)).to eq('Meal record deleted')
+    end
+
+    it 'falls back for a meal row with an action it does not know' do
+      expect(described_class.describe(audit('Meal', 'touch', {}))).to eq('Meal, touch')
+    end
+
+    it 'says the extras count was set when the row records the same count twice' do
+      expect(described_class.describe(audit('Meal', 'update', { 'max' => [4, 4] }))).to eq('Extras count set')
+    end
+
+    it 'names an unknown cook when the resident on a bill row is gone' do
+      row = audit('Bill', 'create', { 'resident_id' => 999_999, 'amount' => '30.0' })
+      expect(described_class.describe(row)).to eq('unknown added as cook')
+    end
+
+    it 'names an unknown cook when the bill and its create audit are both gone' do
+      row = audit('Bill', 'update', { 'amount' => ['30.0', '50.0'] }, id: 999_999)
+      expect(described_class.describe(row)).to eq('Bill for unknown changed from $30.00 to $50.00')
+    end
+
+    it 'says a bill is no longer no-cost when the amount changed at the same time' do
+      bill = create(:bill, meal: meal, resident: resident, community: community,
+                           amount: BigDecimal('0'), no_cost: true)
+      bill.update!(amount: BigDecimal('12'), no_cost: false)
+      row = bill.audits.where(action: 'update').last
+      expect(described_class.describe(row))
+        .to eq("Bill for #{name} changed from $0.00 to $12.00 and no longer marked as no cost")
+    end
+
+    it 'falls back for a bill row with an action it does not know' do
+      bill = create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('30'))
+      row = audit('Bill', 'touch', { 'amount' => ['30.0', '50.0'] }, id: bill.id)
+      expect(described_class.describe(row)).to eq('Bill, touch')
+    end
+
+    describe 'attendance rows' do
+      let(:open_meal) { create(:meal, community: community, date: meal.date + 1) }
+      let(:attendance) { create(:meal_resident, meal: open_meal, resident: resident, community: community) }
+
+      it 'says who was removed' do
+        attendance.destroy!
+        row = Audited::Audit.find_by(auditable_type: 'MealResident', auditable_id: attendance.id, action: 'destroy')
+        expect(described_class.describe(row)).to eq("#{name} removed")
+      end
+
+      it 'says who is no longer late' do
+        attendance.update!(late: true)
+        attendance.update!(late: false)
+        row = attendance.audits.where(action: 'update').last
+        expect(described_class.describe(row)).to eq("#{name} marked not late")
+      end
+
+      it 'falls back for a vegetarian change with no clear direction' do
+        row = audit('MealResident', 'update', { 'vegetarian' => [nil, nil] }, id: attendance.id)
+        expect(described_class.describe(row)).to eq('MealResident, update')
+      end
+
+      it 'falls back for an update that touched neither late nor vegetarian' do
+        row = audit('MealResident', 'update', { 'multiplier' => [2, 1] }, id: attendance.id)
+        expect(described_class.describe(row)).to eq('MealResident, update')
+      end
+
+      it 'falls back for an action it does not know' do
+        row = audit('MealResident', 'touch', { 'resident_id' => resident.id }, id: attendance.id)
+        expect(described_class.describe(row)).to eq('MealResident, touch')
+      end
+    end
+
+    describe 'guest rows' do
+      it 'falls back for an update, which the API never writes' do
+        row = audit('Guest', 'update', { 'resident_id' => resident.id, 'vegetarian' => [false, true] })
+        expect(described_class.describe(row)).to eq('Guest, update')
+      end
+
+      it 'falls back when the row does not say whether the guest was vegetarian' do
+        row = audit('Guest', 'create', { 'resident_id' => resident.id })
+        expect(described_class.describe(row)).to eq('Guest, create')
+      end
+    end
+  end
 end

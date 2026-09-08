@@ -139,6 +139,13 @@ RSpec.describe Resident do
   describe 'name uniqueness' do
     let(:other_unit) { create(:unit, community: community, name: 'B7') }
 
+    it 'reports a blank name once, without looking for a clash' do
+      resident = build(:resident, community: community, unit: unit, name: '')
+
+      expect(resident).not_to be_valid
+      expect(resident.errors[:name]).to eq(["can't be blank"])
+    end
+
     it 'refuses a duplicate name and says who the clash is with and what to do' do
       create(:resident, community: community, unit: other_unit, name: 'John Smith')
       resident = build(:resident, community: community, unit: unit, name: 'John Smith')
@@ -396,6 +403,18 @@ RSpec.describe Resident do
       meal.reload
 
       # Credit (reimbursement) exactly equals debit (attendance charge)
+      expect(cook.calc_balance).to eq(BigDecimal('0'))
+    end
+
+    it 'gives no credit for a receipt of zero that is not marked no-cost' do
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      attendee = create(:resident, community: community, unit: unit, multiplier: 2)
+      meal = create(:meal, community: community)
+
+      create(:meal_resident, meal: meal, resident: attendee, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('0'), no_cost: false)
+      meal.reload
+
       expect(cook.calc_balance).to eq(BigDecimal('0'))
     end
 

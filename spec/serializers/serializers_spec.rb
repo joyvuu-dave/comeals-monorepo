@@ -156,6 +156,15 @@ RSpec.describe 'Serializers', type: :serializer do
       expect(result[:start]).to be_nil
       expect(result[:end]).to be_nil
     end
+
+    it 'returns nil start/end for a rotation whose empty meal list was preloaded' do
+      rotation = Rotation.includes(:meals).find(create(:rotation, community: community).id)
+
+      result = serialize(rotation, described_class)
+      expect(rotation.meals).to be_loaded
+      expect(result[:start]).to be_nil
+      expect(result[:end]).to be_nil
+    end
   end
 
   describe CommonHouseReservationSerializer do
@@ -168,6 +177,15 @@ RSpec.describe 'Serializers', type: :serializer do
       expect(result[:title]).to include('Common House')
       expect(result[:color]).to eq('#bc357e')
       expect(result[:url]).to eq("common-house-reservations/edit/#{chr.id}")
+    end
+
+    it 'puts the reservation title on its own line when there is one' do
+      chr = create(:common_house_reservation, community: community, resident: resident, title: 'Book club',
+                                              start_date: Time.zone.local(2026, 4, 1, 14, 0),
+                                              end_date: Time.zone.local(2026, 4, 1, 17, 0))
+
+      result = serialize(chr, described_class)
+      expect(result[:title]).to include("Common House\nBook club\n")
     end
   end
 

@@ -35,6 +35,30 @@ RSpec.describe Reconciliation do
     meal
   end
 
+  describe 'creating a row outside Settlement' do
+    it 'is refused, even with meals to settle' do
+      settleable_meal
+
+      expect { described_class.create!(community: community, end_date: Date.yesterday) }
+        .to raise_error(described_class::NotSettled, /Settlement.run!/)
+      expect(described_class.count).to eq(0)
+    end
+  end
+
+  describe '#settlement_balances when allocation returns an unbalanced result' do
+    # allocate_to_cents refuses to return this, so the second check can only
+    # be reached by replacing it. It is here so that a future allocator
+    # cannot write books that do not balance and stay silent about it.
+    it 'raises and names the reconciliation' do
+      settleable_meal
+      reconciliation = settle!(community, cutoff: Date.yesterday)
+      allow(Settlement).to receive(:allocate_to_cents).and_return({ 1 => BigDecimal('0.01') })
+
+      expect { reconciliation.settlement_balances }
+        .to raise_error(RuntimeError, /books do not balance for reconciliation #{reconciliation.id}/)
+    end
+  end
+
   describe 'what a settlement claims' do
     it 'assigns unreconciled meals with bills to the new reconciliation' do
       cook = create(:resident, community: community, unit: unit, multiplier: 2)

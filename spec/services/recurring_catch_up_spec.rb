@@ -30,6 +30,15 @@ RSpec.describe RecurringCatchUp do
     expect(described_class.new(now).due).to contain_exactly(VerifyLedgerJob)
   end
 
+  it 'leaves out a scheduled class that is not a RecurringJob' do
+    allow(Rails.application).to receive(:config_for).with(:recurring).and_return(
+      refresh_balances: { class: 'RefreshBalancesJob', schedule: '0 3 * * * UTC' },
+      stray: { class: 'ApplicationJob', schedule: '0 4 * * * UTC' }
+    )
+
+    expect(described_class.new(now).due).to contain_exactly(RefreshBalancesJob)
+  end
+
   it 'does not count a failed run as a success' do
     JobRun.create!(name: 'refresh_balances', started_at: now - 2.hours, finished_at: now - 2.hours + 1,
                    outcome: 'failed', error: 'boom')

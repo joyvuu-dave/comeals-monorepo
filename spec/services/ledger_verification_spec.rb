@@ -174,7 +174,43 @@ RSpec.describe LedgerVerification do
     end
   end
 
+  describe 'a stored balance row that is gone' do
+    it 'reports the resident as absent on the stored side, not as zero' do
+      reconciliation = settle
+      row = reconciliation.reconciliation_balances.find_by(resident: eater)
+
+      behind_the_guards { ReconciliationBalance.where(id: row.id).delete_all }
+
+      suppress(described_class::MismatchError) { described_class.call }
+
+      details = LedgerCheckRun.recent.first.details
+      recompute = details.find { |d| d['check'] == 'recompute' }
+      eater_difference = recompute['differences'].find { |d| d['resident_id'] == eater.id }
+      expect(eater_difference['stored']).to be_nil
+      expect(eater_difference['source']).to eq('-40.0')
+    end
+  end
+
   describe 'line items that no longer add up to the balances' do
+    it 'reports a resident with a balance but no lines, and one with lines but no balance, as absent' do
+      reconciliation = settle
+      row = reconciliation.reconciliation_balances.find_by(resident: cook)
+
+      behind_the_guards do
+        MealCharge.where(resident_id: eater.id).delete_all
+        ReconciliationBalance.where(id: row.id).delete_all
+      end
+
+      suppress(described_class::MismatchError) { described_class.call }
+
+      lines = LedgerCheckRun.recent.first.details.find { |d| d['check'] == 'line_items' }
+      by_resident = lines['differences'].index_by { |d| d['resident_id'] }
+      expect(by_resident[eater.id]['source']).to be_nil
+      expect(by_resident[eater.id]['stored']).to eq('-40.0')
+      expect(by_resident[cook.id]['stored']).to be_nil
+      expect(by_resident[cook.id]['source']).to eq('40.0')
+    end
+
     # The case that only exists because line items exist. Nothing about the
     # source rows or the balances changed, so the recompute check is happy —
     # it never looks at meal_charges. Only comparing the two stored tables

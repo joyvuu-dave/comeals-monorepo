@@ -28,7 +28,8 @@ module NotesMealLiveUpdate
     return unless old_meal_id
 
     LiveUpdate.meal(old_meal_id)
-    old_date = Meal.where(id: old_meal_id).pick(:date)
-    LiveUpdate.calendar(old_date) if old_date
+    # The old meal is still there: the foreign key refused to delete it
+    # while this row pointed at it. LiveUpdate.calendar ignores nil anyway.
+    LiveUpdate.calendar(Meal.where(id: old_meal_id).pick(:date))
   end
 end
