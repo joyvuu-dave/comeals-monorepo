@@ -41,14 +41,12 @@ RSpec.describe CommonHouseReservation do
 
     it 'validates presence of start_date' do
       reservation = build(:common_house_reservation, start_date: nil)
-      allow(reservation).to receive(:start_date_is_before_end_date)
       expect(reservation).not_to be_valid
       expect(reservation.errors[:start_date]).to include("can't be blank")
     end
 
     it 'validates presence of end_date' do
       reservation = build(:common_house_reservation, end_date: nil)
-      allow(reservation).to receive(:start_date_is_before_end_date)
       expect(reservation).not_to be_valid
       expect(reservation.errors[:end_date]).to include("can't be blank")
     end
@@ -91,8 +89,8 @@ RSpec.describe CommonHouseReservation do
     end
   end
 
-  # Regression test for BUG-4: trigger_pusher only used start_date.
-  describe '#trigger_pusher cache invalidation' do
+  # Regression test for BUG-4: the push once used only start_date.
+  describe 'cache invalidation across months' do
     let(:community) { create(:community) }
     let(:resident) { create(:resident, community: community) }
 

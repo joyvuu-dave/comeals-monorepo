@@ -45,10 +45,6 @@ class ApplicationController < ActionController::Base
     redirect_to '/login', alert: 'Your session expired. Please try again.'
   end
 
-  def access_denied(_exception)
-    redirect_to '/401'
-  end
-
   # Allow read-only admin access via a shared token (used in reconciliation
   # email links so cooks can view their bills without an admin account).
   # When the token matches, we skip Devise authentication and return a

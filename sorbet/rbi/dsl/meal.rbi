@@ -417,9 +417,6 @@ class Meal
     sig { params(value: T::Enumerable[::Bill]).void }
     def bills=(value); end
 
-    sig { params(attributes: T.untyped).returns(T.untyped) }
-    def bills_attributes=(attributes); end
-
     sig { params(args: T.untyped, blk: T.untyped).returns(::Community) }
     def build_community(*args, &blk); end
 

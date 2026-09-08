@@ -63,9 +63,9 @@ RSpec.describe Event do
     end
   end
 
-  # Regression test for BUG-4: trigger_pusher only used start_date, leaving
+  # Regression test for BUG-4: the push once used only start_date, leaving
   # the end_date month's calendar cache stale for multi-month events.
-  describe '#trigger_pusher cache invalidation' do
+  describe 'cache invalidation across months' do
     let(:community) { create(:community) }
 
     before do

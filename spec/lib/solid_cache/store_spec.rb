@@ -7,7 +7,7 @@ require 'rails_helper'
 #
 # The app's cache call sites use these methods: fetch with expires_in (the
 # calendar, CommunitiesController#calendar), delete (the invalidation in
-# Community#invalidate_calendar_cache), and read and write (rack_attack
+# LiveUpdate.flush), and read and write (rack_attack
 # counters). This spec runs each of those against a real SolidCache::Store,
 # with the kind of value the app actually stores — a serializer's as_json
 # output, which is nested hashes and arrays, not a flat string. (The cooks

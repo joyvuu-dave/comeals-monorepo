@@ -385,15 +385,6 @@ class Community < ApplicationRecord
     [today.to_s, *values].join('-')
   end
 
-  # Delete the cached months that show `date`. LiveUpdate calls this
-  # before it pushes; the version above is what makes the delete safe,
-  # and this delete is what covers writes the version cannot see.
-  def invalidate_calendar_cache(date)
-    affected_calendar_keys(date).each { |key| Rails.cache.delete(key) }
-  end
-
-  # Push every calendar channel that shows `date`. LiveUpdate calls this
-  # after the caches are cleared.
   # A changed zone moves every time the SPA shows and its "today". The
   # residents channel is the one that makes a tab drop every cached month
   # and fetch again; the month payload then carries the new zone.
@@ -401,21 +392,6 @@ class Community < ApplicationRecord
 
   def note_zone_change
     LiveUpdate.residents
-  end
-
-  def notify_pusher(date)
-    affected_calendar_keys(date).each do |key|
-      Pusher.trigger(key, 'update', { message: 'calendar updated' })
-    end
-  end
-
-  # A day on the calendar changed. Clears the months that show it and
-  # pushes their channels — at once when no transaction is open, or once
-  # after commit when one is. Model callbacks call LiveUpdate directly;
-  # this is for code that holds a date and a community.
-  def trigger_pusher(date)
-    LiveUpdate.calendar(date)
-    true
   end
 
   # The cache keys (and Pusher channels) of every month whose calendar

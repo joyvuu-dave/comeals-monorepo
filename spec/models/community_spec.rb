@@ -293,6 +293,13 @@ RSpec.describe Community do
   end
 
   describe 'child pricing ages' do
+    it 'reports a missing age without comparing it to the other one' do
+      community.free_below_age = nil
+      expect(community).not_to be_valid
+      expect(community.errors[:free_below_age]).to include('must be a whole number of years, 0 or more')
+      expect(community.errors[:free_below_age]).not_to include(/at or below/)
+    end
+
     it 'defaults to eating free below 5 and full price from 12' do
       expect(community.free_below_age).to eq(5)
       expect(community.full_price_age).to eq(12)
@@ -365,6 +372,16 @@ RSpec.describe Community do
 
     it 'reports rather than raises on uncoercible form input' do
       community.schedule = { '0' => %w[banana 0] }
+      expect(community).not_to be_valid
+      expect(community.errors[:schedule]).to include('days must be 0 (Sunday) through 6 (Saturday)')
+    end
+
+    it 'keeps a value that is not a list of weeks for the validation to report' do
+      community.schedule = nil
+      expect(community).not_to be_valid
+      expect(community.errors[:schedule]).to include('must have between 1 and 6 weeks')
+
+      community.schedule = { '0' => 'Monday' }
       expect(community).not_to be_valid
       expect(community.errors[:schedule]).to include('days must be 0 (Sunday) through 6 (Saturday)')
     end
@@ -534,13 +551,16 @@ RSpec.describe Community do
     end
   end
 
-  describe '#trigger_pusher' do
+  # Which months a changed day reaches, seen through LiveUpdate.calendar,
+  # which clears and pushes exactly the keys this method returns.
+  describe '#affected_calendar_keys' do
     before do
+      community
       allow(Rails.cache).to receive(:delete)
     end
 
-    it 'triggers pusher notifications and clears cache' do
-      community.trigger_pusher(Date.new(2026, 4, 15))
+    it 'clears and pushes the month the day is in' do
+      LiveUpdate.calendar(Date.new(2026, 4, 15))
 
       expect(Pusher).to have_received(:trigger).at_least(:once)
       expect(Rails.cache).to have_received(:delete).at_least(:once)
@@ -554,7 +574,7 @@ RSpec.describe Community do
       # April 2026: calendar starts March 29 (Sunday). A meal on March 30
       # (Monday) is visible in the April calendar. The previous-month
       # invalidation should cover March.
-      community.trigger_pusher(Date.new(2026, 3, 30))
+      LiveUpdate.calendar(Date.new(2026, 3, 30))
 
       # March cache key should be deleted since March 30 is visible in
       # both the March and April calendar views.
@@ -569,7 +589,7 @@ RSpec.describe Community do
     # itself — so a Sunday at the end of a month never cleared or pushed
     # the next month, and the May calendar showed a stale April 26.
     it 'invalidates the next month when a Sunday falls in its calendar range' do
-      community.trigger_pusher(Date.new(2026, 4, 26))
+      LiveUpdate.calendar(Date.new(2026, 4, 26))
 
       may_key = community.calendar_cache_key(2026, 5)
       expect(Rails.cache).to have_received(:delete).with(may_key)
@@ -580,7 +600,7 @@ RSpec.describe Community do
     # Over-clearing is only cost, but a spec that checked only inclusion
     # would pass a "clear everything" version too.
     it 'does not invalidate a neighbouring month that does not show the date' do
-      community.trigger_pusher(Date.new(2026, 4, 15))
+      LiveUpdate.calendar(Date.new(2026, 4, 15))
 
       expect(Rails.cache).to have_received(:delete).with(community.calendar_cache_key(2026, 4))
       expect(Rails.cache).not_to have_received(:delete).with(community.calendar_cache_key(2026, 3))
@@ -592,7 +612,7 @@ RSpec.describe Community do
     # If these ever diverge (e.g., someone adds a version prefix to cache keys),
     # Pusher notifications would go to the wrong channel and real-time updates break silently.
     it 'uses the same key format for both Pusher channels and cache keys' do
-      community.trigger_pusher(Date.new(2026, 4, 15))
+      LiveUpdate.calendar(Date.new(2026, 4, 15))
 
       expected_format = /\Acommunity-\d+-calendar-\d+-\d+\z/
 

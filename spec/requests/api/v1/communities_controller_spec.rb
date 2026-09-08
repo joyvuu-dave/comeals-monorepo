@@ -49,6 +49,21 @@ RSpec.describe 'Communities API' do
       expect(names.join).to include(march_bday.name.split[0])
     end
 
+    it 'uses this month when no start date is given' do
+      today = community.today
+      create(:resident, community: community, unit: unit, name: 'Born Now',
+                        birthday: Date.new(1990, today.month, 1))
+      create(:resident, community: community, unit: unit, name: 'Born Later',
+                        birthday: Date.new(1990, (today.month % 12) + 1, 1))
+
+      get "/api/v1/communities/#{community.id}/birthdays", params: { token: token }
+
+      expect(response).to have_http_status(:ok)
+      titles = response.parsed_body.pluck('title').join
+      expect(titles).to include('Born')
+      expect(titles).not_to include('Later')
+    end
+
     # An adult with no birthday must never appear — this is the fix for the
     # old 1900-01-01 placeholder, which put a dozen fake birthdays on Jan 1.
     it 'excludes residents with no birthday' do
@@ -229,8 +244,7 @@ RSpec.describe 'Communities API' do
       get "/api/v1/communities/#{community.id}/calendar/2026-04-15", params: { token: token }
       first_etag = response.headers['ETag']
 
-      # Simulate a mutation that would invalidate the calendar cache
-      community.invalidate_calendar_cache(Date.new(2026, 4, 10))
+      # A write through a model clears the month (LiveUpdate).
       create(:meal, community: community, date: Date.new(2026, 4, 17))
 
       get "/api/v1/communities/#{community.id}/calendar/2026-04-15",

@@ -38,8 +38,7 @@ class Meal < ApplicationRecord
   # Ransack allowlists for ActiveAdmin filtering and sorting
   sig { params(_auth_object: T.untyped).returns(T::Array[String]) }
   def self.ransackable_attributes(_auth_object = nil)
-    %w[id cap closed closed_at created_at date description max reconciliation_id rotation_id start_time
-       updated_at]
+    %w[id cap closed closed_at created_at date description max reconciliation_id rotation_id updated_at]
   end
 
   # Attributes frozen once the meal is reconciled. Bills and attendance rows
@@ -129,9 +128,6 @@ class Meal < ApplicationRecord
   after_save :note_live_update
 
   accepts_nested_attributes_for :guests, allow_destroy: true, reject_if: proc { |attributes|
-    attributes['resident_id'].blank?
-  }
-  accepts_nested_attributes_for :bills, allow_destroy: true, reject_if: proc { |attributes|
     attributes['resident_id'].blank?
   }
 
@@ -286,7 +282,6 @@ class Meal < ApplicationRecord
 
   sig { params(date: Date).returns(T::Boolean) }
   def self.is_thanksgiving(date)
-    return false unless date.instance_of?(Date)
     return false unless date.month == 11
     return false unless date.thursday?
     return false unless date.day.between?(22, 28)
@@ -306,7 +301,6 @@ class Meal < ApplicationRecord
 
   sig { params(date: Date).returns(T::Boolean) }
   def self.is_mothers_day(date)
-    return false unless date.instance_of?(Date)
     return false unless date.month == 5
     return false unless date.sunday?
     return false unless date.day.between?(8, 14)
