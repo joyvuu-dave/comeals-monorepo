@@ -64,4 +64,9 @@ Rails.application.configure do
 
   # Annotate rendered view with file names.
   # config.action_view.annotate_rendered_view_with_filenames = true
+
+  # The public addresses of the SPA and the admin, for links in feeds and
+  # mail (ApiController#root_url, ApplicationMailer#root_url).
+  config.x.root_url = 'http://localhost:3036'
+  config.x.admin_root_url = 'http://admin.lvh.me:3000'
 end

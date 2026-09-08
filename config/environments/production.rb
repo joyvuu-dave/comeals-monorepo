@@ -153,4 +153,9 @@ Rails.application.configure do
       read_timeout: 30
     }
   end
+
+  # The public addresses of the SPA and the admin, for links in feeds and
+  # mail (ApiController#root_url, ApplicationMailer#root_url).
+  config.x.root_url = 'https://comeals.com'
+  config.x.admin_root_url = 'https://admin.comeals.com'
 end

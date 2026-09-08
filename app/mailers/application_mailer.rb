@@ -5,11 +5,14 @@ class ApplicationMailer < ActionMailer::Base
   default from: ENV.fetch('MAILER_FROM_ADDRESS', 'admin@comeals.com')
   layout 'mailer'
 
+  # Where the SPA and the admin live, for links in mail. Set per
+  # environment in config/environments (config.x.root_url and
+  # config.x.admin_root_url).
   def root_url
-    @root_url ||= Rails.env.production? ? 'https://comeals.com' : 'http://localhost:3036'
+    Rails.configuration.x.root_url
   end
 
   def root_admin_url
-    @root_admin_url ||= Rails.env.production? ? 'https://admin.comeals.com' : 'http://admin.lvh.me:3000'
+    Rails.configuration.x.admin_root_url
   end
 end

@@ -4,8 +4,10 @@
 class ApiController < ActionController::API
   around_action :set_community_timezone
 
+  # Where the SPA lives, for links in feeds. Set per environment in
+  # config/environments (config.x.root_url).
   def root_url
-    @root_url ||= Rails.env.production? ? 'https://comeals.com' : 'http://localhost:3036'
+    Rails.configuration.x.root_url
   end
 
   # Non-nil only for legacy Key-backed sessions. JWT sessions have no

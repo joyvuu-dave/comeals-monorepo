@@ -95,4 +95,9 @@ Rails.application.configure do
     Bullet.add_footer = true
     Bullet.unused_eager_loading_enable = false
   end
+
+  # The public addresses of the SPA and the admin, for links in feeds and
+  # mail (ApiController#root_url, ApplicationMailer#root_url).
+  config.x.root_url = 'http://localhost:3036'
+  config.x.admin_root_url = 'http://admin.lvh.me:3000'
 end
