@@ -40,4 +40,27 @@ RSpec.describe 'AssetCacheControl' do
     expect(response).to have_http_status(:ok)
     expect(response.headers['cache-control']).to eq('no-cache')
   end
+
+  describe '/.vite/manifest.json' do
+    # The real manifest exists only after a build. Bring one when it is
+    # missing, and leave a real one alone.
+    let(:manifest) { Rails.public_path.join('.vite/manifest.json') }
+    let!(:wrote_fixture) do
+      next false if manifest.exist?
+
+      manifest.dirname.mkpath
+      manifest.write('{"index.html":{"file":"vite-assets/index-spec.js","isEntry":true}}')
+      true
+    end
+
+    after { manifest.delete if wrote_fixture }
+
+    it 'is served by the static file server with no-cache, so the version banner sees a deploy' do
+      get '/.vite/manifest.json'
+      expect(response).to have_http_status(:ok)
+      expect(response.content_type).to start_with('application/json')
+      expect(response.headers['cache-control']).to eq('no-cache')
+      expect(response.headers).not_to have_key('x-runtime'), 'the static server, not a controller, should answer'
+    end
+  end
 end

@@ -25,8 +25,16 @@
 # script for updates, so this only matters for older ones — but the whole
 # point of that file is to reach exactly the browsers still holding old
 # state, so it must not rely on modern behavior.
+#
+# /.vite/manifest.json gets 'no-cache' for the same reason. The version
+# banner (version_banner.jsx) polls it to notice a deploy, so a browser
+# must ask the server every time. The static file server serves it (a
+# dotfile directory is no exception), and it sets no Cache-Control of
+# its own in production, so without this rule a browser would keep a
+# manifest fresh by heuristic for hours after a deploy.
 class AssetCacheControl
   HEADER = 'public, max-age=31536000, immutable'
+  REVALIDATE_PATHS = ['/service-worker.js', '/.vite/manifest.json'].freeze
 
   def initialize(app)
     @app = app
@@ -39,7 +47,7 @@ class AssetCacheControl
        status == 200 &&
        !headers['content-type'].to_s.start_with?('text/html')
       headers['cache-control'] = HEADER
-    elsif env['PATH_INFO'] == '/service-worker.js' && status == 200
+    elsif REVALIDATE_PATHS.include?(env['PATH_INFO']) && status == 200
       headers['cache-control'] = 'no-cache'
     end
 

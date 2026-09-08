@@ -32,13 +32,4 @@ RSpec.describe 'FallbackController' do
       expect(response.body).not_to include('<div id="root">')
     end
   end
-
-  describe 'GET /.vite/manifest.json' do
-    it 'serves the Vite manifest as JSON' do
-      get '/.vite/manifest.json'
-      expect(response).to have_http_status(:ok)
-      expect(response.content_type).to start_with('application/json')
-      expect { response.parsed_body }.not_to raise_error
-    end
-  end
 end
