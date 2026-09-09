@@ -24,6 +24,9 @@ return unless ENV['MUTANT']
 
 MUTANT_MONEY_SPECS = {
   'spec/services/settlement_allocate_to_cents_on_random_ledgers_spec.rb' => %w[Settlement],
+  # The oracle comparison describes MealLedger, so it runs for MealLedger
+  # on its own; this row adds it to Settlement for the rounding.
+  'spec/services/meal_ledger_against_plain_ledger_spec.rb' => %w[Settlement],
   'spec/services/settlement_contract_spec.rb' => %w[Settlement Reconciliation MealLedger],
   'spec/services/ledger_verification_spec.rb' => %w[Settlement Reconciliation MealLedger],
   'spec/services/settle_and_notify_spec.rb' => %w[Settlement Reconciliation BalanceRecalculation],

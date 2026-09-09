@@ -131,6 +131,14 @@ that order, but dropping the `order` still survives: without ORDER BY,
 Postgres happened to return the rows in date order for that data. The
 assertion is real; mutant cannot prove it bites.
 
+### 2026-09-09, with the oracle comparison selected
+
+`spec/services/meal_ledger_against_plain_ledger_spec.rb` (MODELS.md, "The
+plain ledger is the stronger oracle") now runs for every `MealLedger`
+method and for `Settlement`. Every `MealLedger` method and
+`truncate_toward_zero` rerun: 737 mutations, no survivor in `MealLedger`
+at all, and `allocate_to_cents` at its 18 documented equivalents.
+
 One survivor moved from "missing assertion" to "noise":
 `assert_candidates_cover_pennies!` with `<` for `<=`. The equal case
 cannot happen for a balanced input: every remainder is under a cent,

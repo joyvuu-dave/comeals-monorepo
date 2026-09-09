@@ -206,6 +206,17 @@ They are plain Ruby loops over preloaded rows, not SQL sums, and they must
 never read `MealLedger` — if they did, the specs would only check
 `MealLedger` against itself. When the money rules change, change both.
 
+**The plain ledger is the stronger oracle.** `spec/support/oracle/plain_ledger.rb`
+is a third copy, written on 2026-09-09 from CLAUDE.md and this file alone by
+an agent that was told not to open the app, so it cannot share a misreading
+with `MealLedger` or `Settlement`. It takes plain hashes, not rows.
+`spec/services/meal_ledger_against_plain_ledger_spec.rb` feeds both sides 400
+random ledgers and eleven named edges and compares every (meal, resident)
+amount, every balance, and the rounding to cents. Its independence is the
+whole point: when a money rule changes, write the rule down here first, then
+have someone who has read the rule and not the code change the plain ledger.
+Never edit it to match `MealLedger`.
+
 ---
 
 ## Financial Models
