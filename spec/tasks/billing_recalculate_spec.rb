@@ -80,7 +80,7 @@ RSpec.describe 'billing:recalculate' do
     Rake::Task['billing:recalculate'].invoke
 
     # Nobody has a chargeable share, so the cook is not reimbursed and the
-    # books stay balanced at zero. Must match Resident#calc_balance and
+    # books stay balanced at zero. Must match the plain ledger and
     # Reconciliation#settlement_balances on the same data.
     expect(ResidentBalance.find_by(resident: cook).amount).to eq(BigDecimal('0'))
     expect(ResidentBalance.find_by(resident: baby).amount).to eq(BigDecimal('0'))

@@ -34,9 +34,9 @@
 # with nothing recomputed.
 #
 # Neither proves the arithmetic is right in the first place. That is the
-# Resident#calc_balance oracle's job, compared in
-# spec/tasks/billing_recalculate_correctness_spec.rb and
-# spec/tasks/settlement_matches_running_balance_spec.rb.
+# plain ledger's job (spec/support/oracle/plain_ledger.rb), compared in
+# spec/services/meal_ledger_against_plain_ledger_spec.rb and
+# spec/tasks/stored_ledger_against_plain_ledger_spec.rb.
 #
 # Reconciliations settled before meal_charges existed have no lines and get
 # check 1 only. Inventing lines for them now would be recording today's

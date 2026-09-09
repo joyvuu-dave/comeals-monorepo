@@ -2,28 +2,19 @@
 
 require 'rails_helper'
 require 'rake'
+require Rails.root.join('spec/support/oracle/plain_ledger')
 
-# The same money arithmetic is written three times in this app:
+# The number a resident watches all month (the running balance, from
+# billing:recalculate) and the number they are finally billed (the settled
+# balance, from Reconciliation#settlement_balances) must come from the same
+# rules. A difference between them is the worst kind of money bug here:
+# every individual number looks reasonable, both ledgers still sum to zero,
+# and the only symptom is that a balance moves at settlement for no reason
+# a resident can see.
 #
-#   1. Reconciliation#settlement_balances — what a resident finally owes.
-#   2. lib/tasks/billing/recalculate.rake — the running balance, over
-#      unreconciled meals.
-#   3. Resident#calc_balance and its helpers — a per-resident version kept
-#      as an oracle, not used in production.
-#
-# Copies 2 and 3 are already checked against each other by
-# spec/tasks/billing_recalculate_correctness_spec.rb. Copy 1 was checked
-# against neither. So nothing said that the number a resident watches all
-# month and the number they are finally billed come from the same rules.
-# A difference between them is the worst kind of money bug here: every
-# individual number looks reasonable, both ledgers still sum to zero, and
-# the only symptom is that a balance moves at settlement for no reason a
-# resident can see.
-#
-# This spec closes that gap. It is a characterization spec: it does not say
-# what the arithmetic should be, only that all three copies say the same
-# thing. That makes it the safety net for merging them into one
-# implementation — see docs/money-path-observability.md.
+# Both now run through MealLedger, so this spec checks them against a third
+# party: the plain ledger (spec/support/oracle/plain_ledger.rb), written
+# from the rules, told exactly which meals count.
 #
 # How the comparison works. The running balance is full precision; the
 # settled balance is rounded to cents by largest-remainder allocation. So
@@ -35,11 +26,11 @@ require 'rake'
 #     rake task's stored running balance, which is the guarantee
 #     largest-remainder allocation actually makes.
 #
-# The exact tie runs against Resident#calc_balance rather than the rake
-# task's output. Both express the running math, but resident_balances.amount
-# is DECIMAL(16,8), and truncating there could in principle change which
-# resident wins a residual penny. calc_balance returns the untruncated
-# BigDecimal, so the exact assertion has no rounding in its path.
+# The exact tie runs against the plain ledger rather than the rake task's
+# output. resident_balances.amount is DECIMAL(16,8), and truncating there
+# could in principle change which resident wins a residual penny. The plain
+# ledger returns the untruncated BigDecimal, so the exact assertion has no
+# rounding in its path.
 RSpec.describe 'settlement and running-balance arithmetic agree', type: :task do
   before(:all) do
     RakeTasks.ensure_loaded
@@ -58,9 +49,16 @@ RSpec.describe 'settlement and running-balance arithmetic agree', type: :task do
   # factory. That factory's before(:create) hook builds its own unit, cook,
   # meal and bill, which would add a meal to the settlement that neither
   # running-balance path was asked about.
+  # The plain ledger over every meal of the community: at this point none
+  # is settled, so that is exactly what the running balance covers.
+  def running_balances(community, residents)
+    rows = community.meals.preload(:bills, :meal_residents, :guests)
+    PlainLedger.balances(rows.map { |meal| RandomLedger.plain(meal) }, residents.map(&:id))
+  end
+
   def expect_settlement_to_match_running_balances(community)
     residents = community.residents.order(:id).to_a
-    running = residents.index_by(&:id).transform_values(&:calc_balance)
+    running = running_balances(community, residents)
 
     Rake::Task['billing:recalculate'].reenable
     Rake::Task['billing:recalculate'].invoke
@@ -187,7 +185,6 @@ RSpec.describe 'settlement and running-balance arithmetic agree', type: :task do
     # an empty table would also satisfy the comparison if both paths were
     # broken in the same way, and this is the branch where that is easiest.
     expect(reconciliation.reconciliation_balances).to be_empty
-    expect(cook.reload.calc_balance).to eq(BigDecimal('0'))
   end
 
   it 'agrees on a meal that has a bill but nobody attending' do

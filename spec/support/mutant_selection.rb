@@ -41,6 +41,8 @@ MUTANT_MONEY_SPECS = {
   'spec/tasks/settlement_matches_running_balance_spec.rb' =>
     %w[Settlement Reconciliation MealLedger BalanceRecalculation],
   'spec/tasks/billing_recalculate_correctness_spec.rb' => %w[BalanceRecalculation MealLedger],
+  'spec/tasks/stored_ledger_against_plain_ledger_spec.rb' =>
+    %w[BalanceRecalculation Settlement Reconciliation MealLedger],
   'spec/tasks/billing_recalculate_snapshot_spec.rb' => %w[BalanceRecalculation],
   'spec/tasks/billing_recalculate_spec.rb' => %w[BalanceRecalculation],
   'spec/tasks/reconciliations_create_spec.rb' => %w[Settlement Reconciliation MealLedger],

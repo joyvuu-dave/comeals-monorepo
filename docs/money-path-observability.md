@@ -75,7 +75,8 @@ Two things this control does **not** prove, both worth keeping straight:
 - It recomputes with `MealLedger`, which is what wrote the stored values. So it
   proves a stored balance still follows from its source rows; it cannot prove
   the arithmetic is right, because the same mistake would be made twice and
-  agree with itself. The `Resident#calc_balance` oracle is what covers that.
+  agree with itself. The plain ledger oracle is what covers that (MODELS.md,
+  "The plain ledger is the stronger oracle").
 - If the settlement arithmetic is ever changed on purpose, this check will
   disagree with every reconciliation settled before the change, every night,
   forever. That alarm is correct — the past no longer reproduces — but it needs

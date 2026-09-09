@@ -116,7 +116,7 @@ RSpec.describe 'reconciliations:create' do
     Rake::Task['reconciliations:create'].invoke
 
     # After reconciliation, unreconciled balances should be zero
-    # (the meal is now reconciled, so calc_balance returns 0)
+    # (the meal is now reconciled, so the running balance is 0)
     cook_balance = ResidentBalance.find_by(resident: cook)
     eater_balance = ResidentBalance.find_by(resident: eater)
     expect(cook_balance.amount).to eq(BigDecimal('0'))

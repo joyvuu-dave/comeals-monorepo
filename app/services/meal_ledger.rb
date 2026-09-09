@@ -19,9 +19,9 @@
 # no reason a resident can find. spec/tasks/settlement_matches_running_balance_spec.rb
 # is what proved they agreed at the moment they were merged.
 #
-# Resident#calc_balance is a third copy, deliberately kept. It is not used in
-# production. Its whole job is to be written independently, so that it
-# disagrees when this class is wrong. Do not route it through here.
+# spec/support/oracle/plain_ledger.rb is a second copy, written from the
+# rules by someone who had not read this class, so that it disagrees when
+# this class is wrong. Do not edit it to match this class.
 #
 # == This class runs no queries
 #

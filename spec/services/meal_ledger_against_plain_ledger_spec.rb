@@ -11,9 +11,8 @@ require Rails.root.join('spec/support/oracle/plain_ledger')
 # oracle, or a rule the documents state badly. Whichever it is, it is
 # worth a look, which is the point.
 #
-# Why the older oracle was not enough: Resident#calc_balance and friends
-# were written next to the code, and three specs compare them on a handful
-# of hand-made ledgers. This runs hundreds of random ones.
+# The end-to-end half, through the database, the rake task and a real
+# settlement, is spec/tasks/stored_ledger_against_plain_ledger_spec.rb.
 RSpec.describe MealLedger do
   describe 'against the plain ledger written from the rules' do
     # BigDecimal division carries about twenty digits, and the two sides

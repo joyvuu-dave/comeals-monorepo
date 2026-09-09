@@ -195,27 +195,24 @@ cache, and reservations are destroyed with the resident.
 `rake billing:recalculate`). It is signed: positive means the community owes
 the resident. Show it only through `BalanceDisplayHelper#balance_tag`.
 
-**The oracle methods are not production code.** `calc_balance`,
-`bill_reimbursements`, `meal_resident_costs`, `guest_costs`, and
-`oracle_unit_cost` are a second, separately written copy of the balance
-arithmetic. Nothing in the app calls them. The specs
-(`spec/tasks/billing_recalculate_correctness_spec.rb`,
-`spec/tasks/settlement_matches_running_balance_spec.rb`,
-`spec/models/resident_spec.rb`) compare `MealLedger`'s answers against them.
-They are plain Ruby loops over preloaded rows, not SQL sums, and they must
-never read `MealLedger` — if they did, the specs would only check
-`MealLedger` against itself. When the money rules change, change both.
-
 **The plain ledger is the stronger oracle.** `spec/support/oracle/plain_ledger.rb`
-is a third copy, written on 2026-09-09 from CLAUDE.md and this file alone by
-an agent that was told not to open the app, so it cannot share a misreading
-with `MealLedger` or `Settlement`. It takes plain hashes, not rows.
+is a second copy of the balance arithmetic, written on 2026-09-09 from
+CLAUDE.md and this file alone by an agent that was told not to open the app,
+so it cannot share a misreading with `MealLedger` or `Settlement`. It takes
+plain hashes, not rows. Two specs compare the app against it.
 `spec/services/meal_ledger_against_plain_ledger_spec.rb` feeds both sides 400
-random ledgers and eleven named edges and compares every (meal, resident)
-amount, every balance, and the rounding to cents. Its independence is the
-whole point: when a money rule changes, write the rule down here first, then
-have someone who has read the rule and not the code change the plain ledger.
-Never edit it to match `MealLedger`.
+random ledgers and eleven named edges in memory and compares every (meal,
+resident) amount, every balance, and the rounding to cents.
+`spec/tasks/stored_ledger_against_plain_ledger_spec.rb` writes random ledgers
+to the database, runs `billing:recalculate` and a settlement, and compares
+what the tables hold. Its independence is the whole point: when a money rule
+changes, write the rule down here first, then have someone who has read the
+rule and not the code change the plain ledger. Never edit it to match
+`MealLedger`.
+
+Until 2026-09-09 `Resident` carried an older oracle (`calc_balance` and four
+helpers). It was written next to the code, so it read like the code, and it
+picked meals with the app's own scopes. The plain ledger replaced it.
 
 ---
 
@@ -846,7 +843,8 @@ balances sum to exactly zero.
   meal reads its stored `meal_charges`, so today's cap is never applied to a
   meal settled under an older one. A settled meal with attendance but no
   lines (settled before 2026-08-02) returns nil and the screen shows nothing.
-- `Resident#calc_balance` — the test oracle, not production. See Resident.
+- `spec/support/oracle/plain_ledger.rb` — the test oracle, not production.
+  See Resident.
 
 ---
 

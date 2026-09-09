@@ -582,13 +582,14 @@ RSpec.describe Reconciliation do
       expect(meal.reload.reconciliation).to eq(reconciliation)
     end
 
-    it 'excludes zero-attendee meals from live balance (calc_balance)' do
+    it 'excludes zero-attendee meals from the running balance' do
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
 
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('50'))
 
-      expect(cook.calc_balance).to eq(BigDecimal('0'))
+      BalanceRecalculation.call(community: community)
+      expect(ResidentBalance.find_by(resident: cook)&.amount.to_d).to eq(BigDecimal('0'))
     end
   end
 

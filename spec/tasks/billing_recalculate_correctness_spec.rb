@@ -2,16 +2,16 @@
 
 require 'rails_helper'
 require 'rake'
+require Rails.root.join('spec/support/oracle/plain_ledger')
 
-# Verifies the production billing:recalculate batch math against the
-# per-resident Resident#calc_balance oracle. The two implementations must
-# stay in sync (see the DERIVED DATA comment in app/models/resident.rb).
+# Checks the numbers billing:recalculate stores against the plain ledger
+# (spec/support/oracle/plain_ledger.rb, written from the rules) and against
+# balances worked out by hand.
 #
-# The deterministic dataset runs in every rspec invocation and covers the
-# money edge cases CLAUDE.md mandates: capped/subsidized meals, multi-cook
-# meals, no_cost bills, guests, and child-only (zero-multiplier) meals.
-# The large randomized dataset is :benchmark-tagged and excluded from normal
-# runs (see rails_helper.rb); run it with BENCHMARK=1.
+# One dataset, covering the money edge cases CLAUDE.md names: capped and
+# subsidized meals, two cooks, no_cost bills, guests, and a child-only
+# (zero-multiplier) meal. Random ledgers through the same path are in
+# spec/tasks/stored_ledger_against_plain_ledger_spec.rb.
 RSpec.describe 'billing:recalculate correctness', type: :task do
   before(:all) do
     RakeTasks.ensure_loaded
@@ -21,15 +21,12 @@ RSpec.describe 'billing:recalculate correctness', type: :task do
     Rake::Task['billing:recalculate'].reenable
   end
 
-  # Run the rake task and verify each resident's cached balance matches the
-  # calc_balance oracle. Oracle balances must be computed BEFORE invoking the
-  # task only in the sense of correctness comparison — calc_balance reads
-  # source records, not resident_balances, so order does not matter; we
-  # compute them first anyway so a task crash still shows oracle values.
-  # Compares at DECIMAL(16,8) precision since that's what the DB stores.
-  def expect_cached_balances_to_match_oracle(residents)
-    expected = {}
-    residents.each { |resident| expected[resident.id] = resident.calc_balance }
+  # Run the rake task and check each resident's stored balance against the
+  # plain ledger, which is told exactly which meals count. Compares at
+  # DECIMAL(16,8) precision, what the table stores.
+  def expect_cached_balances_to_match_oracle(residents, meals)
+    rows = Meal.where(id: meals.map(&:id)).preload(:bills, :meal_residents, :guests)
+    expected = PlainLedger.balances(rows.map { |meal| RandomLedger.plain(meal) }, residents.map(&:id))
 
     Rake::Task['billing:recalculate'].reenable
     Rake::Task['billing:recalculate'].invoke
@@ -93,7 +90,7 @@ RSpec.describe 'billing:recalculate correctness', type: :task do
 
     # Meal 4 — uncapped child-only meal (zero total multiplier).
     # Nobody can be charged a share → the meal is zeroed and cook_a absorbs
-    # the cost. This is the case where the oracle historically diverged
+    # the cost. This is the case where the older oracle once diverged
     # (credited the full bill with no offsetting debit).
     meal4 = create(:meal, community: community)
     meal4.update!(cap: nil)
@@ -106,10 +103,10 @@ RSpec.describe 'billing:recalculate correctness', type: :task do
     create(:bill, meal: meal5, resident: cook_b, community: community, amount: BigDecimal('12'),
                   no_cost: true)
 
-    expected = expect_cached_balances_to_match_oracle(residents)
+    expected = expect_cached_balances_to_match_oracle(residents, [meal1, meal2, meal3, meal4, meal5])
 
-    # Triple-entry check: both implementations must also match the hand-
-    # computed balances, so a bug edited into BOTH paths "in sync" still fails.
+    # Triple-entry check: the oracle must also match the hand-computed
+    # balances, so a rule misread on both sides still fails here.
     hand_computed = {
       cook_a.id => BigDecimal('27.90'),  # 18.90 + 9
       cook_b.id => BigDecimal('42.60'),  # 12.60 + 30
@@ -124,90 +121,5 @@ RSpec.describe 'billing:recalculate correctness', type: :task do
 
     # Books balance: credits equal debits across the whole dataset.
     expect(expected.values.sum(BigDecimal('0')).abs).to be < BigDecimal('0.00000001')
-  end
-
-  describe 'randomized large dataset', :benchmark do
-    it 'optimized rake task produces same results as per-resident calc_balance' do
-      srand(42)
-
-      # Build a community with varied meal data
-      community = create(:community, cap: BigDecimal('4.50'))
-      unit = create(:unit, community: community)
-
-      residents = Array.new(10) do |i|
-        create(:resident, community: community, unit: unit, multiplier: i < 7 ? 2 : 1)
-      end
-
-      # Create 20 meals with varied properties
-      now = Time.current
-      start_date = Date.new(2025, 6, 1)
-      meal_rows = Array.new(20) do |i|
-        date = start_date + i.days
-        {
-          community_id: community.id,
-          date: date,
-          description: '',
-          closed: false,
-          cap: i % 3 == 0 ? nil : community.cap,
-          start_time: date.to_datetime + 19.hours,
-          created_at: now,
-          updated_at: now
-        }
-      end
-      Meal.insert_all(meal_rows)
-      meals = Meal.where(community_id: community.id).order(:date).to_a
-
-      # Bills (1-2 per meal, some no_cost)
-      bill_rows = meals.flat_map do |meal|
-        cook_count = rand(1..2)
-        residents.sample(cook_count).map do |cook|
-          {
-            meal_id: meal.id,
-            resident_id: cook.id,
-            community_id: community.id,
-            amount: BigDecimal(rand(15.0..60.0).round(2).to_s),
-            no_cost: rand(100) < 10,
-            created_at: now,
-            updated_at: now
-          }
-        end
-      end
-      Bill.insert_all(bill_rows)
-
-      # Meal residents (5-8 per meal)
-      mr_rows = meals.flat_map do |meal|
-        residents.sample(rand(5..8)).map do |resident|
-          {
-            meal_id: meal.id,
-            resident_id: resident.id,
-            community_id: community.id,
-            multiplier: resident.multiplier,
-            vegetarian: false,
-            late: false,
-            created_at: now,
-            updated_at: now
-          }
-        end
-      end
-      MealResident.insert_all(mr_rows)
-
-      # Guests (1-3 per meal)
-      guest_rows = meals.flat_map do |meal|
-        residents.sample(rand(1..3)).map do |resident_host|
-          {
-            meal_id: meal.id,
-            resident_id: resident_host.id,
-            multiplier: 2,
-            vegetarian: false,
-            late: false,
-            created_at: now,
-            updated_at: now
-          }
-        end
-      end
-      Guest.insert_all(guest_rows)
-
-      expect_cached_balances_to_match_oracle(residents)
-    end
   end
 end
