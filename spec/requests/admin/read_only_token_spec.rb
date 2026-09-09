@@ -52,7 +52,7 @@ RSpec.describe 'Read-only admin token' do
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('16'))
       create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
-      settle!(community, cutoff: Date.yesterday)
+      settle!(cutoff: Date.yesterday)
 
       get "/residents/#{eater.id}", params: { token: token }
 

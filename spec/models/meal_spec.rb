@@ -268,7 +268,7 @@ RSpec.describe Meal do
       resident = create(:resident, community: community, unit: unit, multiplier: 2)
       create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('10'))
 
-      reconciliation = settle!(community, cutoff: Date.yesterday)
+      reconciliation = settle!(cutoff: Date.yesterday)
       meal.reload
 
       expect(meal.reconciliation_id).to eq(reconciliation.id)
@@ -481,7 +481,7 @@ RSpec.describe Meal do
       create(:bill, meal: reconciled_meal, resident: resident, community: community,
                     amount: BigDecimal('10'))
 
-      settle!(community, cutoff: Date.yesterday)
+      settle!(cutoff: Date.yesterday)
       reconciled_meal.reload
 
       results = community.meals.unreconciled
@@ -688,7 +688,7 @@ RSpec.describe Meal do
     it 'reports the reconciled message for a meal that is both closed and reconciled' do
       meal = build_meal_with_ledger
       meal.update!(closed: true)
-      settle!(community, cutoff: Date.yesterday)
+      settle!(cutoff: Date.yesterday)
       meal.reload
 
       expect(meal.destroy).to be false

@@ -66,7 +66,7 @@ RSpec.describe 'settlement and running-balance arithmetic agree', type: :task do
     Rake::Task['billing:recalculate'].invoke
     stored_running = ResidentBalance.pluck(:resident_id, :amount).to_h
 
-    reconciliation = settle!(community, cutoff: Date.yesterday)
+    reconciliation = settle!(cutoff: Date.yesterday)
     settled = reconciliation.reconciliation_balances.pluck(:resident_id, :amount).to_h
 
     # allocate_to_cents is private. Reaching past that is deliberate: the

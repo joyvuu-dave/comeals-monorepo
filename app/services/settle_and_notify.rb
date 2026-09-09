@@ -25,7 +25,7 @@ class SettleAndNotify
     # Only the settlement is retried. The recalculation and the mails run
     # after it has committed, so retrying past that point would settle the
     # next period by mistake (or fail because there is nothing left).
-    reconciliation = RetryOnConflict.call { Settlement.run!(cutoff: cutoff, community: community) }
+    reconciliation = RetryOnConflict.call { Settlement.run!(cutoff: cutoff) }
 
     BalanceRecalculation.call(community: community)
     NotifyCooksJob.perform_later(reconciliation)

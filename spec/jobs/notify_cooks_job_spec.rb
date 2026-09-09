@@ -19,7 +19,7 @@ RSpec.describe NotifyCooksJob do
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
       create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
     end
-    settle!(community)
+    settle!
   end
 
   before { allow(ReconciliationMailer).to receive_message_chain(:reconciliation_notify_email, :deliver_now) } # rubocop:disable RSpec/MessageChain -- stubbing mailer delivery chain

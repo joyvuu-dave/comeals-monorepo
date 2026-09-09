@@ -187,7 +187,7 @@ Rails.logger.debug { "#{community.bills.count} Bills created" }
 # end_date must be strictly in the past (issue #3): a meal from a day that
 # is not over must not be settled. The cutoff sits on the first batch's
 # boundary so the sweep takes exactly that batch.
-Settlement.run!(cutoff: 8.weeks.ago.to_date, community: community)
+Settlement.run!(cutoff: 8.weeks.ago.to_date)
 Rails.logger.debug { "#{community.reconciliations.count} Reconciliation created" }
 
 # Meals (will not be reconciled)

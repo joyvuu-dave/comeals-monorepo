@@ -95,7 +95,7 @@ def seed_meals(community, cook, bob, carol)
   # guest, swept by reconciliation 1 (dated SEED_NOW).
   seed_closed_meal(date: Date.new(2026, 1, 10), cook: cook, amount: BigDecimal('75'),
                    eaters: [cook, bob, carol], guest_of: bob)
-  Settlement.run!(cutoff: Date.new(2026, 1, 15), community: community)
+  Settlement.run!(cutoff: Date.new(2026, 1, 15))
 
   # Meal 4: closed but not yet settled, so the dashboard's "closed meals"
   # panel and the averages have something to count.

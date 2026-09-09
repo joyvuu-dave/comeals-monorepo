@@ -37,9 +37,9 @@ class Settlement
   # meals first. Everything rolls back; the request can simply be sent again.
   class Contested < RuntimeError; end
 
-  sig { params(cutoff: Date, community: Community).returns(Reconciliation) }
-  def self.run!(cutoff:, community: Community.instance)
-    new(Reconciliation.new(community: community, end_date: cutoff)).settle!
+  sig { params(cutoff: Date).returns(Reconciliation) }
+  def self.run!(cutoff:)
+    new(Reconciliation.new(end_date: cutoff)).settle!
   end
 
   # What run! would settle and store for this cutoff, computed without
@@ -156,8 +156,9 @@ class Settlement
     one_cent = BigDecimal('0.01')
     truncated, remainders = truncate_toward_zero(raw_balances)
 
+    # Every truncated value is whole cents, so the residual is too.
     residual = truncated.values.sum(BigDecimal('0'))
-    pennies = (residual / one_cent).round.to_i
+    pennies = (residual / one_cent).to_i
 
     if pennies.positive?
       # Sum too positive — subtract pennies from entries with most-negative remainders
@@ -324,16 +325,14 @@ class Settlement
   # writes a few hundred of them.
   sig { params(ledger: MealLedger).void }
   def persist_charges!(ledger)
-    lines = ledger.lines
-    return if lines.empty?
-
-    now = Time.current
+    # insert_all fills created_at and updated_at itself, and an empty
+    # list is a no-op without a query.
     MealCharge.insert_all(
-      lines.map do |line|
+      ledger.lines.map do |line|
         {
           meal_id: line.meal_id, resident_id: line.resident_id, kind: line.kind.to_s,
           amount: line.amount, multiplier: line.multiplier, unit_cost: line.unit_cost,
-          bill_amount: line.bill_amount, created_at: now, updated_at: now
+          bill_amount: line.bill_amount
         }
       end
     )

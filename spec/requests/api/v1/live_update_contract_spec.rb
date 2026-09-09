@@ -190,7 +190,7 @@ RSpec.describe 'live updates: every write reaches the screen that shows it' do
       RSpec::Mocks.space.proxy_for(Pusher).reset
       allow(Pusher).to receive(:trigger)
 
-      settle!(community)
+      settle!
 
       expect(settled.reload).to be_reconciled
       expect_pushed(meal_channel(settled))

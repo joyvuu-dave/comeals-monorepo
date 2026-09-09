@@ -396,7 +396,7 @@ RSpec.describe 'settlement race against unlocked write paths' do
 
         retried = begin
           RetryOnConflict.call do
-            settle!(community, cutoff: Date.yesterday)
+            settle!(cutoff: Date.yesterday)
           end
         rescue ActiveRecord::RecordInvalid => e
           e

@@ -57,7 +57,7 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
       attend(meal, resident)
       refuse_inserts_into('meal_charges')
 
-      expect { settle!(community) }.to raise_error(ActiveRecord::StatementInvalid)
+      expect { settle! }.to raise_error(ActiveRecord::StatementInvalid)
 
       ledger_tables_are_empty
     end
@@ -69,7 +69,7 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
       attend(meal, resident)
       refuse_inserts_into('reconciliation_balances')
 
-      expect { settle!(community) }.to raise_error(ActiveRecord::StatementInvalid)
+      expect { settle! }.to raise_error(ActiveRecord::StatementInvalid)
 
       ledger_tables_are_empty
     end
@@ -80,7 +80,7 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
       cook = resident
       settled_before = meal_on(Date.yesterday - 10)
       bill(settled_before, cook, 10)
-      earlier = settle!(community, cutoff: Date.yesterday - 5)
+      earlier = settle!(cutoff: Date.yesterday - 5)
       expect(earlier.meals).to contain_exactly(settled_before)
 
       cutoff = Date.yesterday - 1
@@ -95,7 +95,7 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
       no_bill = meal_on(Date.yesterday - 2)
       attend(no_bill, resident)
 
-      reconciliation = settle!(community, cutoff: cutoff)
+      reconciliation = settle!(cutoff: cutoff)
 
       expect(reconciliation.meals).to contain_exactly(eligible, late_entry)
       expect(Meal.where(id: [past_cutoff, today, no_bill]).pluck(:reconciliation_id)).to all(be_nil)
@@ -109,7 +109,7 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
       past_cutoff = meal_on(Date.yesterday - 1)
       bill(past_cutoff, cook, 20)
 
-      reconciliation = settle!(community, cutoff: Date.yesterday - 2)
+      reconciliation = settle!(cutoff: Date.yesterday - 2)
 
       expect(reconciliation.meals).to contain_exactly(inside)
       expect(past_cutoff.reload.reconciliation_id).to be_nil
@@ -133,10 +133,35 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
         .not_to(change { [Reconciliation.count, MealCharge.count, ReconciliationBalance.count, Meal.where.not(reconciliation_id: nil).count] }) # rubocop:disable Layout/LineLength
       expect(predicted.meals).to contain_exactly(meal, capped)
 
-      reconciliation = settle!(community)
+      reconciliation = settle!
 
       stored = reconciliation.reconciliation_balances.pluck(:resident_id, :amount).to_h
       expect(predicted.resident_balances.reject { |_, amount| amount.zero? }).to eq(stored)
+    end
+
+    it 'lists the skipped meals: in the period, with attendance, no bill, oldest first' do
+      eater = resident
+      cutoff = Date.yesterday - 1
+
+      later = meal_on(cutoff)
+      attend(later, eater)
+      earlier = meal_on(cutoff - 5)
+      attend(earlier, eater)
+
+      billed = meal_on(cutoff - 2)
+      bill(billed, resident, 20)
+      attend(billed, eater)
+      nobody_came = meal_on(cutoff - 3)
+      after_cutoff = meal_on(cutoff + 1)
+      attend(after_cutoff, eater)
+      # Settled meals always have a bill, so this state needs a bypass to
+      # build; the filter still has to hold if a repair ever removes one.
+      settled = meal_on(cutoff - 4)
+      attend(settled, eater)
+      settled.update_column(:reconciliation_id, settle!.id)
+
+      expect(Settlement.preview(cutoff: cutoff).skipped_meals).to eq([earlier, later])
+      expect([billed, nobody_came, after_cutoff, settled]).to all(be_persisted)
     end
 
     it 'refuses a cutoff a settlement would refuse' do
@@ -168,7 +193,7 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
       attend(with_guest, eaters.first)
       create(:guest, meal: with_guest, resident: eaters.first, multiplier: 2)
 
-      settle!(community)
+      settle!
     end
 
     it 'writes charge lines that sum to zero for every meal' do
@@ -199,7 +224,7 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
         eaters.each { |eater| attend(meal, eater) }
         create(:guest, meal: meal, resident: eaters.first, multiplier: 2)
       end
-      count_queries { settle!(community) }
+      count_queries { settle! }
     end
 
     it 'runs the same number of queries for 10 meals as for 30' do

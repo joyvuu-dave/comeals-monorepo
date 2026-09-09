@@ -119,7 +119,7 @@ RSpec.describe 'Admin pages with something to list' do
     let!(:settled) do
       create(:meal_resident, meal: meal, resident: resident, community: community)
       create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('30'))
-      reconciliation = settle!(community, cutoff: Date.yesterday)
+      reconciliation = settle!(cutoff: Date.yesterday)
       meal.reload
       reconciliation
     end

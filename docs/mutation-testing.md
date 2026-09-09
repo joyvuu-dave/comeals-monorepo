@@ -107,26 +107,56 @@ and all equivalent rewrites (`.to_int` for `.to_i`, `Integer(...)`,
 119 alive out of 1873, 21 of them in the search whitelist that is now
 excluded. The lists below are the other 98.
 
+### 2026-09-08, after the survivor branch
+
+The branch after the first run answered the survivors below marked
+"done". What it added: `spec/services/settlement_rounding_spec.rb`
+pins which resident gets each penny; the input guard now has a
+negative-imbalance example; the preview's skipped-meal list has an
+example with every filter live; the contested-claim example names
+`Settlement::Contested`. What it removed: the hand-set timestamps and
+empty-list guard in `persist_charges!`, the `.round` on the penny
+count, and the `community:` argument of `Settlement.run!` (and of the
+`settle!` spec helper, which passed it through).
+
+Confirmed by rerunning the seven touched methods: 509 mutations, 472
+killed, 37 alive, down from 55 on the same methods in the first run.
+`Settlement.run!` and `persist_charges!` went to zero (the `.to_s` in
+`persist_charges!` is kept on purpose). Every survivor left in
+`allocate_to_cents` is one of the equivalent rewrites listed under
+noise below.
+
+One caveat. `skipped_by` orders by date and the new example asserts
+that order, but dropping the `order` still survives: without ORDER BY,
+Postgres happened to return the rows in date order for that data. The
+assertion is real; mutant cannot prove it bites.
+
+One survivor moved from "missing assertion" to "noise":
+`assert_candidates_cover_pennies!` with `<` for `<=`. The equal case
+cannot happen for a balanced input: every remainder is under a cent,
+so the pennies needed are always fewer than the candidates.
+
 **Missing assertions** (the reason to run the tool):
 
-- `Settlement.allocate_to_cents`: sorting candidates by `[id]` instead
+- Done. `Settlement.allocate_to_cents`: sorting candidates by `[id]` instead
   of `[r, id]` survives, and so does `[r, nil]`. No spec pins which
   resident gets a leftover penny. CLAUDE.md rule 5 says the largest
   remainder first, ties to the lowest resident id, and the property
   spec checks only that the result sums to zero and stays within a
   cent, which both orders satisfy. Needs a spec with three or more
   residents where the two orders disagree, and one with a tie.
-- `Settlement.truncate_toward_zero`: `raw >= 0` becoming `raw >= 1`
+- Done. `Settlement.truncate_toward_zero`: `raw >= 0` becoming `raw >= 1`
   survives. No spec has a positive balance under one dollar with a
   fractional cent.
-- `Settlement.assert_balanced_input!`: dropping `.abs` survives. The
+- Done. `Settlement.assert_balanced_input!`: dropping `.abs` survives. The
   guard is never tested with a sum that is too positive.
-- `Settlement.assert_candidates_cover_pennies!`: `<=` becoming `<`
+- Noise, see above. `Settlement.assert_candidates_cover_pennies!`: `<=` becoming `<`
   survives. The case where every candidate is needed is untested.
-- `Settlement.skipped_by`: dropping `unreconciled`, the cutoff, or the
+- Done, except the "before today" filter, which the preview's own
+  cutoff check makes redundant. `Settlement.skipped_by`: dropping `unreconciled`, the cutoff, or the
   "before today" filter all survive. The preview's list of skipped
   meals is only tested on data where those filters do nothing.
-- `Settlement#assign_meals`: `raise Contested` becoming a plain `raise`
+- Done. `Settlement#assign_meals`: `raise Contested` becoming a plain `raise`
   survives. The API rescues `Contested` by name, and no spec checks the
   class.
 - `Settlement#forget_cached_meals`: removing the live-update push
@@ -146,16 +176,16 @@ excluded. The lists below are the other 98.
 
 **Dead or redundant code:**
 
-- `Settlement#persist_charges!`: `created_at: now, updated_at: now`
+- Done, except `.to_s`, kept because it is explicit. `Settlement#persist_charges!`: `created_at: now, updated_at: now`
   can go. `insert_all` fills both timestamps itself. `return if
 lines.empty?` can go too: `insert_all([])` returns an empty result
   without a query (checked in a console). `line.kind.to_s` can be
   `line.kind`.
-- `Settlement.run!`: the `community:` argument only reaches
+- Done. `Settlement.run!`: the `community:` argument only reaches
   `Reconciliation.new`, where `BelongsToTheCommunity` fills the column
   anyway. CLAUDE.md says never to pass it. The parameter can go, and
   with it the argument that `spec/support/settle.rb` passes.
-- `Settlement.allocate_to_cents`: `.round` on the penny count does
+- Done, removed. `Settlement.allocate_to_cents`: `.round` on the penny count does
   nothing. The residual is a sum of two-decimal values, so it is always
   a whole number of cents. Either remove it or turn it into a check
   that raises when the residual is not whole, which is stronger.

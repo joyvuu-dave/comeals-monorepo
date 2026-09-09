@@ -24,7 +24,7 @@ RSpec.describe 'the cooks page after a settlement' do # -- a request contract ac
     get "/api/v1/meals/#{meal.id}/cooks", params: { token: token }
     expect(response.parsed_body[:reconciled]).to be(false)
 
-    settle!(community)
+    settle!
 
     get "/api/v1/meals/#{meal.id}/cooks", params: { token: token }
     expect(response.parsed_body[:reconciled]).to be(true)

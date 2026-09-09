@@ -8,8 +8,8 @@
 # and the specs that call it did not, which is how
 # spec/services/settlement_contract_spec.rb proved the move broke nothing.
 module Settle
-  def settle!(community, cutoff: Date.yesterday)
-    Settlement.run!(cutoff: cutoff, community: community)
+  def settle!(cutoff: Date.yesterday)
+    Settlement.run!(cutoff: cutoff)
   end
 end
 

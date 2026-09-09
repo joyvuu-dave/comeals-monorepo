@@ -36,7 +36,7 @@ RSpec.describe 'the community day' do # rubocop:disable RSpec/DescribeClass -- a
       expect(reconciliation).not_to be_valid
       expect(reconciliation.errors[:end_date]).to include('must be in the past')
 
-      expect(Settlement.run!(cutoff: community.yesterday, community: community).meals).to contain_exactly(finished)
+      expect(Settlement.run!(cutoff: community.yesterday).meals).to contain_exactly(finished)
       expect(tonight.reload.reconciliation_id).to be_nil
     end
   end

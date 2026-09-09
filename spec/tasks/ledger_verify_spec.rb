@@ -28,7 +28,7 @@ RSpec.describe 'ledger:verify' do
     create(:meal_resident, meal: meal, resident: cook, community: community, multiplier: 2)
     create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
 
-    settle!(community, cutoff: Date.yesterday)
+    settle!(cutoff: Date.yesterday)
   end
 
   it 'reports a successful run to healthchecks' do

@@ -88,7 +88,7 @@ RSpec.describe BalanceDisplayHelper do
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('16'))
       create(:meal_resident, meal: meal, resident: cook, community: community, multiplier: 2)
       create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
-      settle!(community, cutoff: Date.yesterday)
+      settle!(cutoff: Date.yesterday)
     end
 
     it 'says "credited" for a cook credit and "charged" for a debit, with no minus sign' do
@@ -108,7 +108,7 @@ RSpec.describe BalanceDisplayHelper do
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('16'))
       create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
       create(:guest, meal: meal, resident: eater, multiplier: 2)
-      settle!(community, cutoff: Date.yesterday)
+      settle!(cutoff: Date.yesterday)
 
       guest_debit = MealCharge.find_by(resident: eater, kind: 'guest_debit')
 

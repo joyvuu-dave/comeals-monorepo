@@ -25,7 +25,7 @@ RSpec.describe Reconciliation do
   end
 
   def settle
-    settle!(community, cutoff: Date.yesterday).settlement_balances
+    settle!(cutoff: Date.yesterday).settlement_balances
   end
 
   it 'splits a prime number of cents across a prime number of eaters' do
@@ -190,7 +190,7 @@ RSpec.describe Reconciliation do
     #   eaters: 2 × 3.47 = 6.94 exactly, each
     # The truncated sum is -0.01, and cook_b has the most positive
     # remainder, so cook_b is credited the extra penny.
-    balances = settle!(capped, cutoff: Date.yesterday).settlement_balances
+    balances = settle!(cutoff: Date.yesterday).settlement_balances
 
     expect(balances[cook_a.id]).to eq(BigDecimal('14.23'))
     expect(balances[cook_b.id]).to eq(BigDecimal('6.59'))
@@ -218,7 +218,7 @@ RSpec.describe Reconciliation do
       create(:guest, meal: meal, resident: eaters.first, multiplier: 2) if (index % 3).zero?
     end
 
-    reconciliation = settle!(community, cutoff: Date.yesterday)
+    reconciliation = settle!(cutoff: Date.yesterday)
     balances = reconciliation.settlement_balances
 
     meals = Meal.where(reconciliation: reconciliation).preload(:bills, :meal_residents, :guests).to_a
