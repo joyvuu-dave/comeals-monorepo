@@ -1,0 +1,55 @@
+# Mutation testing for the money path. Run it with bin/mutant, not
+# with `bundle exec mutant` directly: the script creates one test
+# database per worker first (config/mutant/hooks.rb). Not part of
+# bin/check, because one full run takes many minutes. docs/mutation-testing.md
+# says what the report means and what to do with a survivor.
+# Mutant is free on public open-source projects. This repository is
+# public under the MIT license (LICENSE.md).
+usage: opensource
+includes:
+  - spec
+requires:
+  - rspec/core
+  - rails_helper
+hooks:
+  - ./config/mutant/hooks.rb
+integration:
+  name: rspec
+  arguments:
+    - --fail-fast
+    - spec
+# spec/spec_helper.rb skips SimpleCov when this is set. bin/mutant
+# sets it for the parent process too.
+environment_variables:
+  MUTANT: "1"
+matcher:
+  subjects:
+    - MealLedger*
+    - Settlement*
+    - Reconciliation*
+    - BalanceRecalculation*
+  ignore:
+    # The admin search whitelist, not money. Every mutation of the list
+    # survives because spec/models/application_record_ransackable_attributes_spec.rb
+    # checks the rule (every name is a column), not the exact list.
+    - Reconciliation.ransackable_attributes
+mutation:
+  # Sorbet runtime calls are not code under test. `T.must(x)` becomes
+  # `x` and nothing can fail, because the value was never nil; `T.let`
+  # is a no-op at runtime. Skipping the call skips its arguments too,
+  # which is fine for T.let (every use wraps a literal) and cheap for
+  # T.must (every use wraps a column read). T.cast is not skipped: its
+  # one use wraps a query that should be mutated.
+  ignore_patterns:
+    - send{receiver=const{name=T} selector=must}
+    - send{receiver=const{name=T} selector=let}
+  # A mutation that no example fails within this many seconds is
+  # reported as timed out, which counts as not killed
+  # (coverage_criteria below). The slowest selected example takes a
+  # few seconds, so a timeout here means a mutation made a loop or a
+  # lock wait that never ends, and that is worth reading.
+  timeout: 120.0
+coverage_criteria:
+  test_result: true
+  timeout: false
+  process_abort: false

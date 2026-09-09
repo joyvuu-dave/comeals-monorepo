@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# bin/mutant — mutation testing on the money path
+#
+# Usage:
+#   bin/mutant                       every subject in .mutant.yml
+#   bin/mutant -- Settlement.allocate_to_cents   one subject (mutant's own args after --)
+#   MUTANT_JOBS=8 bin/mutant         more workers (default 4)
+#
+# Each worker gets its own database, comeals_test<suffix>_<n>, copied
+# from the migrated test database (config/mutant/hooks.rb says why).
+# The copies are made at the start of every run and dropped at the end,
+# so they can never be behind a migration and never pile up.
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+. bin/lib/output.sh
+
+export RAILS_ENV=test
+export MUTANT=1
+
+jobs="${MUTANT_JOBS:-4}"
+export MUTANT_JOBS="$jobs"
+
+step "Test database"
+bundle exec rails db:prepare
+base=$(bundle exec rails runner 'print ActiveRecord::Base.connection_db_config.database')
+info "$base is migrated"
+
+drop_workers() {
+  for ((i = 0; i < jobs; i++)); do
+    dropdb --if-exists "${base}_${i}" 2>/dev/null || true
+  done
+}
+
+step "Worker databases ($jobs)"
+drop_workers
+for ((i = 0; i < jobs; i++)); do
+  createdb --template "$base" "${base}_${i}"
+done
+pass "${base}_0 .. ${base}_$((jobs - 1)) copied from $base"
+trap drop_workers EXIT
+
+step "Mutant"
+if [ "${1:-}" = "--" ]; then shift; fi
+bundle exec mutant run --jobs "$jobs" "$@"

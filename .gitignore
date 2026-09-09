@@ -63,3 +63,6 @@ latest.dump
 /task_plan.md
 /findings.md
 /progress.md
+
+# Mutant session data (bin/mutant); read by `mutant session`, remade on each run.
+/.mutant/

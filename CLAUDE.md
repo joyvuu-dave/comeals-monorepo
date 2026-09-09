@@ -14,6 +14,7 @@ In production, Rails serves the SPA from `public/` and the API from `/api/v1/`. 
 bin/dev                    # Starts Rails (3000) + Vite (3036) + Solid Queue (bin/jobs) via foreman
 bin/prod                   # Builds the production bundle, serves it from Rails alone (3000)
 bin/check                  # Full health check: tests, linters, security, freshness
+bin/mutant                 # Mutation testing on the money path (slow, not in bin/check; docs/mutation-testing.md)
 ```
 
 ### Local URLs

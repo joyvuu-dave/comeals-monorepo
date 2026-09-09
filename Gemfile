@@ -77,6 +77,9 @@ group :development, :test do
   gem 'dotenv-rails'
   gem 'factory_bot_rails'
   gem 'faker'
+  # Mutation testing for the money path. Not part of bin/check: one run
+  # takes many minutes. See .mutant.yml and docs/mutation-testing.md.
+  gem 'mutant-rspec', require: false
   gem 'rspec-rails'
   gem 'rubocop', require: false
   gem 'rubocop-factory_bot', require: false

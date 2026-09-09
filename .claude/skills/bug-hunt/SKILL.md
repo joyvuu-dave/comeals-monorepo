@@ -111,6 +111,20 @@ For `MealLedger`, `Settlement`, `allocate_to_cents`, and
 
 Done when every edge has a spec and the property spec passes.
 
+### Mutation hunt
+
+Run `bin/mutant` (`docs/mutation-testing.md`). It changes one thing at
+a time in every method of `MealLedger`, `Settlement`, `Reconciliation`
+and `BalanceRecalculation` and reports each change that no example
+failed on. For each survivor, decide which it is: an assertion no spec
+makes (write the spec), a line the method does not need (remove it),
+or a change no test could ever see (add an `ignore_patterns` entry
+with a reason). A survivor of the first kind is a finding: the spec
+that kills it is the red spec.
+
+Done when the run reports no survivors, or every survivor has a row
+in the report saying which kind it is.
+
 ### Dead column hunt
 
 For every column in `db/structure.sql`, grep `app/` and `lib/` for its
