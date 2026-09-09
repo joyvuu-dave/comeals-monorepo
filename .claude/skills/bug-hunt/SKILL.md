@@ -94,7 +94,10 @@ List every write to `bills`, `meal_residents`, `guests`, and `meals`
 in `app/` and `lib/`. For each, check that it runs inside
 `with_meal_lock` or is refused by the settled-child trigger. Then list
 every write in ActiveAdmin and every rake task, and check the same.
-Done when every write is either locked, refused, or explained.
+Then run `spec/db/meal_write_storm_spec.rb` with fresh seeds: four
+writers and a settler on one meal, checked the way the API locks.
+Done when every write is either locked, refused, or explained, and
+the storm passes.
 
 ### Money hunt
 

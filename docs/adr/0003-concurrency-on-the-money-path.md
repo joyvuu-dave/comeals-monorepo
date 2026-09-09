@@ -315,6 +315,17 @@ reads. They all block, and are all refused.)
 - A second community is added, or `reconciliations:create` is moved onto a
   schedule. Scheduling it turns a rare human-triggered race into a daily one.
 
+_Amended 2026-09-09: `spec/db/meal_write_storm_spec.rb` now runs four
+writer threads and a settler against one meal, five seeds, each taking the
+meal lock the way the API does; `spec/requests/api/v1/meal_random_actions_spec.rb`
+runs forty random write sequences through the API against a model of the
+rules. Both pass. One thing the storm showed: `RetryOnConflict` gives up
+after three serialization failures, and under a storm on the meal being
+settled the settlement itself lost three times in two of five runs. Nothing
+is written then, but the nightly task fails and no reconciliation is made
+until the next night. Open: a batch caller can afford more attempts and a
+longer wait than a request can._
+
 ## Alternatives considered
 
 - **Raise the thread count and rely on `SERIALIZABLE` plus retry.** Rejected:
