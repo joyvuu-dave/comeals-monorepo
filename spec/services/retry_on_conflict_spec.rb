@@ -92,6 +92,25 @@ RSpec.describe RetryOnConflict do
       expect(calls).to eq(1)
     end
 
+    it 'tries as many times as asked, and waits from the delay asked' do
+      delays = []
+      allow(described_class).to receive(:sleep) { |seconds| delays << seconds }
+      calls = 0
+
+      begin
+        described_class.call(attempts: 5, base_delay: 1.0) do
+          calls += 1
+          raise ActiveRecord::SerializationFailure, 'conflict'
+        end
+      rescue ActiveRecord::SerializationFailure
+        nil
+      end
+
+      expect(calls).to eq(5)
+      expect(delays.size).to eq(4)
+      expect(delays.first).to be_between(1.0, 2.0)
+    end
+
     # Two transactions that conflicted and then waited the same length of
     # time tend to conflict again, so the wait grows and carries jitter.
     it 'waits longer before each retry' do

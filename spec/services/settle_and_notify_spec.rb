@@ -75,6 +75,29 @@ RSpec.describe SettleAndNotify do
     end
   end
 
+  # RetryOnConflict only retries at the outermost transaction, and under
+  # transactional fixtures one is always open. So this one runs without.
+  describe 'when the settlement keeps conflicting' do
+    include_context 'with no test transaction'
+
+    it 'keeps trying past a request\'s three attempts' do
+      settleable_meal(Date.yesterday)
+      allow(RetryOnConflict).to receive(:sleep)
+      failures = 0
+      allow(Settlement).to receive(:run!).and_wrap_original do |original, **args|
+        failures += 1
+        raise ActiveRecord::SerializationFailure, 'conflict' if failures <= 6
+
+        original.call(**args)
+      end
+
+      reconciliation = described_class.call(cutoff: Date.yesterday, community: community)
+
+      expect(reconciliation).to be_persisted
+      expect(failures).to eq(7)
+    end
+  end
+
   it 'lets an error from the settlement itself through, so nothing is half done' do
     allow(Settlement).to receive(:run!).and_raise(ActiveRecord::StatementInvalid, 'connection lost')
 

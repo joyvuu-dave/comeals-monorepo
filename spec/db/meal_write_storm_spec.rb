@@ -157,17 +157,15 @@ RSpec.describe 'a write storm against one meal, with a settlement in it' do
         # Not before the writers have done a good part of their work, so
         # phase 1 always has writes on both sides of the settlement.
         sleep(0.005) until log.size >= 40 + rng.rand(20)
+        # The real entry point, with its own patient retries. Giving up
+        # (ActiveRecord::TransactionRollbackError) is not rescued: it would
+        # be an :error outcome, and the storm asserts there are none. With
+        # the request defaults it happened in two of five storms.
         40.times do
-          reconciliation = RetryOnConflict.call { Settlement.run!(cutoff: Date.yesterday) }
+          reconciliation = SettleAndNotify.call(cutoff: Date.yesterday)
           log << [:settler, 0, :settle, [:settled, reconciliation.id]]
           break
         rescue ActiveRecord::RecordInvalid, Settlement::Contested
-          sleep(0.02)
-        rescue ActiveRecord::TransactionRollbackError
-          # RetryOnConflict gave up after three attempts. In production this
-          # fails the nightly task (found 2026-09-09, see the report); here
-          # the settler goes on, so the storm still reaches the settled half.
-          log << [:settler, 0, :settle, :gave_up]
           sleep(0.02)
         rescue StandardError => e
           log << [:settler, 0, :settle, [:error, "#{e.class}: #{e.message}"]]
@@ -189,7 +187,7 @@ RSpec.describe 'a write storm against one meal, with a settlement in it' do
     write(meal_id, :set_bills, Random.new(1))
     locked_write(meal_id) { |m| m.update(closed: false) }
     locked_write(meal_id) { |m| m.meal_residents.find_or_initialize_by(resident_id: residents.first.id).save }
-    RetryOnConflict.call { Settlement.run!(cutoff: Date.yesterday) }
+    SettleAndNotify.call(cutoff: Date.yesterday)
   end
 
   # --- the checks -------------------------------------------------------------
@@ -203,7 +201,7 @@ RSpec.describe 'a write storm against one meal, with a settlement in it' do
   end
 
   def expect_outcomes_clean(log, label)
-    fine = %i[ok refused refused_settled noop conflict gave_up]
+    fine = %i[ok refused refused_settled noop conflict]
     bad = log.reject do |_, _, _, outcome|
       fine.include?(outcome) || (outcome.is_a?(Array) && outcome.first == :settled)
     end

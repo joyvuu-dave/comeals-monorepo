@@ -32,6 +32,9 @@
 class RetryOnConflict
   extend T::Sig
 
+  # The defaults are a request's: a person is waiting, and after three
+  # quick tries a 409 that says "try again" is the honest answer. A batch
+  # job can afford more (SettleAndNotify passes its own).
   MAX_ATTEMPTS = T.let(3, Integer)
 
   # Doubling, from 10ms, with jitter. The jitter matters: two transactions
@@ -42,31 +45,31 @@ class RetryOnConflict
   # Returns whatever the block returns on the attempt that succeeds.
   sig do
     type_parameters(:Result)
-      .params(blk: T.proc.returns(T.type_parameter(:Result)))
+      .params(attempts: Integer, base_delay: Float, blk: T.proc.returns(T.type_parameter(:Result)))
       .returns(T.type_parameter(:Result))
   end
-  def self.call(&blk) # rubocop:disable Naming/BlockForwarding -- the sig above has to name the block
+  def self.call(attempts: MAX_ATTEMPTS, base_delay: BASE_DELAY, &blk)
     # Already inside a transaction, so a retry here cannot succeed. See
     # above. This is also what a spec running under transactional fixtures
     # hits, which is why the fault injection lives in the non-transactional
     # specs.
     return yield if ActiveRecord::Base.connection.transaction_open?
 
-    attempts = 0
+    attempt = 0
     begin
-      attempts += 1
+      attempt += 1
       yield
     rescue ActiveRecord::TransactionRollbackError => e
-      raise if attempts >= MAX_ATTEMPTS
+      raise if attempt >= attempts
 
       Rails.error.report(
         e,
         handled: true,
         severity: :warning,
-        context: { attempt: attempts, max_attempts: MAX_ATTEMPTS }
+        context: { attempt: attempt, max_attempts: attempts }
       )
 
-      sleep(BASE_DELAY * (2**(attempts - 1)) * (1 + Kernel.rand))
+      sleep(base_delay * (2**(attempt - 1)) * (1 + Kernel.rand))
       retry
     end
   end

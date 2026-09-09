@@ -323,8 +323,9 @@ rules. Both pass. One thing the storm showed: `RetryOnConflict` gives up
 after three serialization failures, and under a storm on the meal being
 settled the settlement itself lost three times in two of five runs. Nothing
 is written then, but the nightly task fails and no reconciliation is made
-until the next night. Open: a batch caller can afford more attempts and a
-longer wait than a request can._
+until the next night. So `SettleAndNotify` now retries as a batch job can:
+ten attempts, waiting from a quarter second up to about a minute. The
+request paths keep three quick attempts and a 409._
 
 ## Alternatives considered
 
