@@ -28,7 +28,7 @@ RSpec.describe 'POST /api/v1/reconciliations' do
   def settleable_meal(date = Date.yesterday)
     meal = create(:meal, community: community, date: date)
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
-    create(:meal_resident, meal: meal, resident: resident, community: community, multiplier: 2)
+    create(:meal_resident, meal: meal, resident: resident, community: community)
     meal
   end
 

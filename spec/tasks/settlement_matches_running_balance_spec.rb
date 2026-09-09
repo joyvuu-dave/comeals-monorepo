@@ -107,9 +107,9 @@ RSpec.describe 'settlement and running-balance arithmetic agree', type: :task do
 
     meal = create(:meal, community: community)
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('50'))
-    create(:meal_resident, meal: meal, resident: cook, community: community, multiplier: 2)
-    create(:meal_resident, meal: meal, resident: adult, community: community, multiplier: 2)
-    create(:meal_resident, meal: meal, resident: child, community: community, multiplier: 1)
+    create(:meal_resident, meal: meal, resident: cook, community: community)
+    create(:meal_resident, meal: meal, resident: adult, community: community)
+    create(:meal_resident, meal: meal, resident: child, community: community)
 
     expect_settlement_to_match_running_balances(community)
   end
@@ -121,8 +121,8 @@ RSpec.describe 'settlement and running-balance arithmetic agree', type: :task do
     # 4 units of multiplier * 4.50 cap = 18.00 effective, against 60.00 spent.
     meal = create(:meal, community: community)
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('60'))
-    create(:meal_resident, meal: meal, resident: cook, community: community, multiplier: 2)
-    create(:meal_resident, meal: meal, resident: adult, community: community, multiplier: 2)
+    create(:meal_resident, meal: meal, resident: cook, community: community)
+    create(:meal_resident, meal: meal, resident: adult, community: community)
 
     expect_settlement_to_match_running_balances(community)
   end
@@ -135,9 +135,9 @@ RSpec.describe 'settlement and running-balance arithmetic agree', type: :task do
     meal = create(:meal, community: community)
     create(:bill, meal: meal, resident: cook_a, community: community, amount: BigDecimal('40'))
     create(:bill, meal: meal, resident: cook_b, community: community, amount: BigDecimal('20'))
-    create(:meal_resident, meal: meal, resident: cook_a, community: community, multiplier: 2)
-    create(:meal_resident, meal: meal, resident: cook_b, community: community, multiplier: 2)
-    create(:meal_resident, meal: meal, resident: adult, community: community, multiplier: 2)
+    create(:meal_resident, meal: meal, resident: cook_a, community: community)
+    create(:meal_resident, meal: meal, resident: cook_b, community: community)
+    create(:meal_resident, meal: meal, resident: adult, community: community)
 
     expect_settlement_to_match_running_balances(community)
   end
@@ -150,9 +150,9 @@ RSpec.describe 'settlement and running-balance arithmetic agree', type: :task do
     meal = create(:meal, community: community)
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
     create(:bill, meal: meal, resident: helper, community: community, amount: BigDecimal('12'), no_cost: true)
-    create(:meal_resident, meal: meal, resident: cook, community: community, multiplier: 2)
-    create(:meal_resident, meal: meal, resident: helper, community: community, multiplier: 2)
-    create(:meal_resident, meal: meal, resident: adult, community: community, multiplier: 2)
+    create(:meal_resident, meal: meal, resident: cook, community: community)
+    create(:meal_resident, meal: meal, resident: helper, community: community)
+    create(:meal_resident, meal: meal, resident: adult, community: community)
 
     expect_settlement_to_match_running_balances(community)
   end
@@ -163,8 +163,8 @@ RSpec.describe 'settlement and running-balance arithmetic agree', type: :task do
 
     meal = create(:meal, community: community)
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('50'))
-    create(:meal_resident, meal: meal, resident: cook, community: community, multiplier: 2)
-    create(:meal_resident, meal: meal, resident: host, community: community, multiplier: 2)
+    create(:meal_resident, meal: meal, resident: cook, community: community)
+    create(:meal_resident, meal: meal, resident: host, community: community)
     create(:guest, meal: meal, resident: host, multiplier: 2)
     create(:guest, meal: meal, resident: host, multiplier: 1)
 
@@ -177,7 +177,7 @@ RSpec.describe 'settlement and running-balance arithmetic agree', type: :task do
 
     meal = create(:meal, community: community)
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('25'))
-    create(:meal_resident, meal: meal, resident: baby, community: community, multiplier: 0)
+    create(:meal_resident, meal: meal, resident: baby, community: community)
 
     reconciliation = expect_settlement_to_match_running_balances(community)
 
@@ -223,7 +223,7 @@ RSpec.describe 'settlement and running-balance arithmetic agree', type: :task do
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: spec[:cook], community: community, amount: spec[:amount])
       spec[:eaters].each do |eater|
-        create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: eater.multiplier)
+        create(:meal_resident, meal: meal, resident: eater, community: community)
       end
       spec[:guests].times { create(:guest, meal: meal, resident: host, multiplier: 2) }
     end

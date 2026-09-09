@@ -34,7 +34,7 @@ RSpec.describe Reconciliation do
 
     meal = create(:meal, community: community)
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('73.31'))
-    eaters.each { |eater| create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 1) }
+    eaters.each { |eater| create(:meal_resident, meal: meal, resident: eater, community: community) }
     meal.reload
 
     # 7331 cents is prime, so 7 eaters at multiplier 1 can never split it
@@ -77,7 +77,7 @@ RSpec.describe Reconciliation do
 
     meal = create(:meal, community: community)
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('53.17'))
-    children.each { |child| create(:meal_resident, meal: meal, resident: child, community: community, multiplier: 1) }
+    children.each { |child| create(:meal_resident, meal: meal, resident: child, community: community) }
     meal.reload
 
     # 53.17 across 2 units of multiplier is 26.585 per unit — an exact half
@@ -103,7 +103,7 @@ RSpec.describe Reconciliation do
     create(:meal_resident, meal: meal, resident: cook, community: community)
     create(:meal_resident, meal: meal, resident: adult, community: community)
     create(:guest, meal: meal, resident: adult, multiplier: 2)
-    create(:meal_resident, meal: meal, resident: child, community: community, multiplier: 1)
+    create(:meal_resident, meal: meal, resident: child, community: community)
     meal.reload
 
     # Total multiplier is 7 (cook 2, adult 2, guest 2, child 1), so each
@@ -130,7 +130,7 @@ RSpec.describe Reconciliation do
     meal = create(:meal, community: community)
     create(:bill, meal: meal, resident: cook_a, community: community, amount: BigDecimal('9999.99'))
     create(:bill, meal: meal, resident: cook_b, community: community, amount: BigDecimal('9999.99'))
-    create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 1)
+    create(:meal_resident, meal: meal, resident: eater, community: community)
     meal.reload
 
     # A single bill is capped at $9,999.99, but a meal's cost is the sum of

@@ -12,8 +12,8 @@ RSpec.describe LedgerVerification do
   def settle
     meal = create(:meal, community: community)
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('80'))
-    create(:meal_resident, meal: meal, resident: cook, community: community, multiplier: 2)
-    create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
+    create(:meal_resident, meal: meal, resident: cook, community: community)
+    create(:meal_resident, meal: meal, resident: eater, community: community)
 
     settle!(cutoff: Date.yesterday)
   end
@@ -248,7 +248,7 @@ RSpec.describe LedgerVerification do
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('100'))
       [cook, eater, cook_c].each do |person|
-        create(:meal_resident, meal: meal, resident: person, community: community, multiplier: 2)
+        create(:meal_resident, meal: meal, resident: person, community: community)
       end
       settle!(cutoff: Date.yesterday)
 

@@ -24,8 +24,8 @@ RSpec.describe 'GET /api/v1/reconciliations/preview' do
     eater = create(:resident, community: community, unit: other_unit, multiplier: 2, name: 'Bob Eater')
     meal = create(:meal, community: community, date: Date.yesterday - 1, description: 'Thursday Dinner')
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
-    create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
-    create(:meal_resident, meal: meal, resident: resident, community: community, multiplier: 2)
+    create(:meal_resident, meal: meal, resident: eater, community: community)
+    create(:meal_resident, meal: meal, resident: resident, community: community)
     create(:guest, meal: meal, resident: eater, multiplier: 2)
 
     body = nil
@@ -82,7 +82,7 @@ RSpec.describe 'GET /api/v1/reconciliations/preview' do
     today = create(:meal, community: community, date: Time.zone.today)
     create(:bill, meal: today, resident: cook, community: community, amount: BigDecimal('10'))
     no_bill = create(:meal, community: community, date: Date.yesterday - 3)
-    create(:meal_resident, meal: no_bill, resident: resident, community: community, multiplier: 2)
+    create(:meal_resident, meal: no_bill, resident: resident, community: community)
 
     body = preview(Date.yesterday - 1)
 
@@ -110,9 +110,9 @@ RSpec.describe 'GET /api/v1/reconciliations/preview' do
     it 'flags a meal people ate that no cook billed — a meal the settlement would leave behind' do
       billed = create(:meal, community: community, date: Date.yesterday - 1)
       create(:bill, meal: billed, resident: cook, community: community, amount: BigDecimal('20'))
-      create(:meal_resident, meal: billed, resident: resident, community: community, multiplier: 2)
+      create(:meal_resident, meal: billed, resident: resident, community: community)
       unbilled = create(:meal, community: community, date: Date.yesterday)
-      create(:meal_resident, meal: unbilled, resident: resident, community: community, multiplier: 2)
+      create(:meal_resident, meal: unbilled, resident: resident, community: community)
       create(:guest, meal: unbilled, resident: resident, multiplier: 2)
       # Not in the period, and nobody ate: neither is a warning.
       create(:meal_resident, meal: create(:meal, community: community, date: Time.zone.today),
@@ -138,7 +138,7 @@ RSpec.describe 'GET /api/v1/reconciliations/preview' do
       zero = create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('0'))
       helper = create(:resident, community: community, unit: unit, multiplier: 2)
       create(:bill, meal: meal, resident: helper, community: community, amount: BigDecimal('0'), no_cost: true)
-      create(:meal_resident, meal: meal, resident: resident, community: community, multiplier: 2)
+      create(:meal_resident, meal: meal, resident: resident, community: community)
 
       expected = {
         id: "zero_bill_not_flagged:meal=#{meal.id}:bill=#{zero.id}",

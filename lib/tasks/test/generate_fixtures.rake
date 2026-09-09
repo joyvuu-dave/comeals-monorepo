@@ -102,7 +102,7 @@ namespace :test do
       Audited.audit_class.as_user(bob) do
         Bill.create!(id: 202, meal: meal43, resident: bob)
         MealResident.create!(
-          resident: bob, meal: meal43, multiplier: bob.multiplier
+          resident: bob, meal: meal43
         )
       end
 
@@ -130,7 +130,7 @@ namespace :test do
     clock.travel_to Time.zone.parse('2026-01-14 18:30') do
       Audited.audit_class.as_user(jane) do
         MealResident.create!(
-          resident: jane, meal: meal42, multiplier: jane.multiplier
+          resident: jane, meal: meal42
         )
         Bill.create!(
           id: 201, meal: meal42, resident: jane,
@@ -150,8 +150,7 @@ namespace :test do
     clock.travel_to Time.zone.parse('2026-01-14 19:00') do
       Audited.audit_class.as_user(alice) do
         MealResident.create!(
-          resident: alice, meal: meal42,
-          multiplier: alice.multiplier, late: true
+          resident: alice, meal: meal42, late: true
         )
       end
     end

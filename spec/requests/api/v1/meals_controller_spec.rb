@@ -427,7 +427,7 @@ RSpec.describe 'Meals API' do
     end
 
     it 'blocks destroy_meal_resident on a reconciled meal' do
-      mr = MealResident.create!(meal: meal, resident: resident, community: community, multiplier: 2)
+      mr = MealResident.create!(meal: meal, resident: resident, community: community)
       reconcile!
 
       delete "/api/v1/meals/#{meal.id}/residents/#{resident.id}",
@@ -438,7 +438,7 @@ RSpec.describe 'Meals API' do
     end
 
     it 'blocks update_meal_resident on a reconciled meal' do
-      MealResident.create!(meal: meal, resident: resident, community: community, multiplier: 2)
+      MealResident.create!(meal: meal, resident: resident, community: community)
       reconcile!
 
       patch "/api/v1/meals/#{meal.id}/residents/#{resident.id}",

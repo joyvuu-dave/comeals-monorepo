@@ -54,7 +54,7 @@ RSpec.describe 'settlement race against unlocked write paths' do
   # Rows that already exist on the meal, so the racing DELETE and UPDATE cases
   # have something to aim at without opening another session first.
   let(:doomed_bill) { create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('50')) }
-  let(:doomed_attendance) { create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2) }
+  let(:doomed_attendance) { create(:meal_resident, meal: meal, resident: eater, community: community) }
   let(:doomed_guest) { create(:guest, meal: meal, resident: eater, multiplier: 1) }
 
   before do
@@ -253,7 +253,7 @@ RSpec.describe 'settlement race against unlocked write paths' do
     it 'still writes a child row inside its own meal lock' do
       expect do
         meal.with_lock do
-          MealResident.create!(meal: meal, resident: latecomer, community: community, multiplier: 2)
+          MealResident.create!(meal: meal, resident: latecomer, community: community)
         end
       end.to change { meal.meal_residents.count }.by(1)
     end

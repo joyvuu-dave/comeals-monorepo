@@ -31,6 +31,5 @@ FactoryBot.define do
     meal
     resident
     community
-    multiplier { 2 }
   end
 end

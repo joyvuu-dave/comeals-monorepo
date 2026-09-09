@@ -64,7 +64,7 @@ RSpec.describe BalanceDisplayHelper do
       # convention in MealLedger without flipping the helper, this fails.
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('16'))
-      create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
+      create(:meal_resident, meal: meal, resident: eater, community: community)
 
       balances = MealLedger.new([meal]).balances([cook.id, eater.id])
 
@@ -86,8 +86,8 @@ RSpec.describe BalanceDisplayHelper do
     def settle_meal
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('16'))
-      create(:meal_resident, meal: meal, resident: cook, community: community, multiplier: 2)
-      create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
+      create(:meal_resident, meal: meal, resident: cook, community: community)
+      create(:meal_resident, meal: meal, resident: eater, community: community)
       settle!(cutoff: Date.yesterday)
     end
 
@@ -106,7 +106,7 @@ RSpec.describe BalanceDisplayHelper do
     it 'says "charged" for a guest debit too' do
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('16'))
-      create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
+      create(:meal_resident, meal: meal, resident: eater, community: community)
       create(:guest, meal: meal, resident: eater, multiplier: 2)
       settle!(cutoff: Date.yesterday)
 

@@ -132,12 +132,10 @@ Meal.find_each do |meal|
     elsif (index % 13).zero?
       MealResident.create!(resident_id: resident.id,
                            meal_id: meal.id,
-                           multiplier: resident.multiplier,
                            late: true)
     else
       MealResident.create!(resident_id: resident.id,
-                           meal_id: meal.id,
-                           multiplier: resident.multiplier)
+                           meal_id: meal.id)
     end
   end
 end
@@ -219,12 +217,10 @@ Meal.unreconciled.find_each do |meal|
     elsif (index % 13).zero?
       MealResident.create(resident_id: resident.id,
                           meal_id: meal.id,
-                          multiplier: resident.multiplier,
                           late: true)
     else
       MealResident.create(resident_id: resident.id,
-                          meal_id: meal.id,
-                          multiplier: resident.multiplier)
+                          meal_id: meal.id)
     end
   end
 end

@@ -355,9 +355,11 @@ MealResident ----> Community
 
 **Key fields:**
 
-- `multiplier` — copied from the resident when the row is created
-  (`set_multiplier`). A later change to the resident never changes a past
-  charge. Required; CHECK `meal_residents_multiplier_non_negative`.
+- `multiplier` — the resident's multiplier when the row is created, copied
+  in when none is given (`set_multiplier`) and refused when a different one
+  is given (`multiplier_is_the_residents`). A later change to the resident
+  never changes a past charge. Required; CHECK
+  `meal_residents_multiplier_non_negative`.
 - `late` — arrived late
 - `vegetarian`
 

@@ -42,8 +42,8 @@ RSpec.describe MealCharge do
   def settle_plain_meal
     meal = create(:meal, community: community)
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('16'))
-    create(:meal_resident, meal: meal, resident: cook, community: community, multiplier: 2)
-    create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
+    create(:meal_resident, meal: meal, resident: cook, community: community)
+    create(:meal_resident, meal: meal, resident: eater, community: community)
 
     settle!(cutoff: Date.yesterday)
   end
@@ -83,8 +83,8 @@ RSpec.describe MealCharge do
       # 4 units of multiplier * 4.50 = 18.00 allowed, against 60.00 spent.
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('60'))
-      create(:meal_resident, meal: meal, resident: cook, community: community, multiplier: 2)
-      create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
+      create(:meal_resident, meal: meal, resident: cook, community: community)
+      create(:meal_resident, meal: meal, resident: eater, community: community)
       settle!(cutoff: Date.yesterday)
 
       credit = described_class.where(kind: 'credit').first
@@ -97,7 +97,7 @@ RSpec.describe MealCharge do
     it 'charges each guest to the resident who brought them, one line each' do
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('80'))
-      create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
+      create(:meal_resident, meal: meal, resident: eater, community: community)
       create(:guest, meal: meal, resident: eater, multiplier: 2)
       create(:guest, meal: meal, resident: eater, multiplier: 1)
       settle!(cutoff: Date.yesterday)
@@ -113,7 +113,7 @@ RSpec.describe MealCharge do
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('80'))
       create(:bill, meal: meal, resident: eater, community: community, amount: BigDecimal('9'), no_cost: true)
-      create(:meal_resident, meal: meal, resident: cook, community: community, multiplier: 2)
+      create(:meal_resident, meal: meal, resident: cook, community: community)
       settle!(cutoff: Date.yesterday)
 
       expect(described_class.where(kind: 'credit').pluck(:resident_id)).to eq([cook.id])

@@ -21,8 +21,8 @@ RSpec.describe 'Admin settlement statement' do
   def settle_plain_meal
     meal = create(:meal, community: community)
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('16'))
-    create(:meal_resident, meal: meal, resident: cook, community: community, multiplier: 2)
-    create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
+    create(:meal_resident, meal: meal, resident: cook, community: community)
+    create(:meal_resident, meal: meal, resident: eater, community: community)
 
     settle!(cutoff: Date.yesterday)
   end
@@ -55,7 +55,7 @@ RSpec.describe 'Admin settlement statement' do
       [Date.new(2026, 6, 1), Date.new(2026, 6, 15)].each do |date|
         meal = create(:meal, community: community, date: date)
         create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('16'))
-        create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
+        create(:meal_resident, meal: meal, resident: eater, community: community)
       end
       reconciliation = settle!(cutoff: Date.new(2026, 6, 15))
 
@@ -94,8 +94,8 @@ RSpec.describe 'Admin settlement statement' do
       # 4 units of multiplier * 4.50 = 18.00 allowed, against 60.00 spent.
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('60'))
-      create(:meal_resident, meal: meal, resident: cook, community: community, multiplier: 2)
-      create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
+      create(:meal_resident, meal: meal, resident: cook, community: community)
+      create(:meal_resident, meal: meal, resident: eater, community: community)
       settle!(cutoff: Date.yesterday)
 
       get "/residents/#{cook.id}"

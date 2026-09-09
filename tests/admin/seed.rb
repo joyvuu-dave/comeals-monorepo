@@ -75,8 +75,7 @@ def seed_closed_meal(date:, cook:, amount:, eaters:, guest_of: nil)
   meal = FactoryBot.create(:meal, community: community, date: date)
   FactoryBot.create(:bill, community: community, meal: meal, resident: cook, amount: amount)
   eaters.each do |resident|
-    FactoryBot.create(:meal_resident, community: community, meal: meal, resident: resident,
-                                      multiplier: resident.multiplier)
+    FactoryBot.create(:meal_resident, community: community, meal: meal, resident: resident)
   end
   FactoryBot.create(:guest, meal: meal, resident: guest_of) if guest_of
   meal.update!(closed: true)

@@ -89,7 +89,7 @@ RSpec.describe 'Admin Reconciliation Immutability' do
     eater = create(:resident, community: community, unit: unit, multiplier: 2)
     meal = create(:meal, community: community, date: Date.yesterday)
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('25'))
-    create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
+    create(:meal_resident, meal: meal, resident: eater, community: community)
 
     expect do
       post '/reconciliations',

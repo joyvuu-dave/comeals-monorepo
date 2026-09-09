@@ -17,7 +17,7 @@ RSpec.describe NotifyCooksJob do
     cooks.each_with_index do |cook, i|
       meal = create(:meal, community: community, date: Date.yesterday - i)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
-      create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
+      create(:meal_resident, meal: meal, resident: eater, community: community)
     end
     settle!
   end

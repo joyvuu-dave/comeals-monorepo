@@ -119,7 +119,7 @@ RSpec.describe Community do
       child = create(:resident, community: community, unit: unit, multiplier: 0)
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: child, community: community, amount: BigDecimal('10'))
-      create(:meal_resident, meal: meal, resident: child, community: community, multiplier: 0)
+      create(:meal_resident, meal: meal, resident: child, community: community)
 
       expect(community.unreconciled_ave_cost).to eq('--')
     end
@@ -158,7 +158,7 @@ RSpec.describe Community do
       child_only = create(:meal, community: community)
       child_only.update!(cap: nil) # uncapped, so the cap can't mask the rule
       create(:bill, meal: child_only, resident: cook, community: community, amount: BigDecimal('10'))
-      create(:meal_resident, meal: child_only, resident: child, community: community, multiplier: 0)
+      create(:meal_resident, meal: child_only, resident: child, community: community)
 
       # Only the attended meal contributes cost: 2 * (16 / 4) = $8.00
       expect(community.unreconciled_ave_cost).to eq('$8.00/adult')

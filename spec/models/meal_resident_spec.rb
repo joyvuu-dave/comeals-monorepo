@@ -50,6 +50,21 @@ RSpec.describe MealResident do
       expect(mr.multiplier).to eq(1)
     end
 
+    it 'refuses a multiplier that is not the resident\'s, instead of replacing it' do
+      child = create(:resident, community: community, unit: unit, multiplier: 1)
+      mr = described_class.new(meal: meal, resident: child, community: community, multiplier: 2)
+
+      expect(mr).not_to be_valid
+      expect(mr.errors[:multiplier]).to include("must be the resident's multiplier at signup (1), not 2")
+      expect(mr.multiplier).to eq(2)
+    end
+
+    it 'accepts the resident\'s own multiplier when it is given' do
+      mr = described_class.new(meal: meal, resident: resident, community: community, multiplier: resident.multiplier)
+
+      expect(mr).to be_valid
+    end
+
     # Regression test for BUG-1: set_multiplier must only run on create, not update.
     # If it runs on update, toggling late/vegetarian silently overwrites the
     # point-in-time multiplier when the resident's multiplier has since changed.

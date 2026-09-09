@@ -73,10 +73,10 @@ RSpec.describe 'Admin resident form' do
 
   it 'change the price category by hand: attendance already recorded keeps its own snapshot' do
     open_meal = create(:meal, community: community, date: Date.new(2026, 5, 10))
-    open_row = create(:meal_resident, meal: open_meal, resident: resident, community: community, multiplier: 2)
+    open_row = create(:meal_resident, meal: open_meal, resident: resident, community: community)
 
     create(:bill, meal: meal, resident: viewer, community: community, amount: 10)
-    settled_row = create(:meal_resident, meal: meal, resident: resident, community: community, multiplier: 2)
+    settled_row = create(:meal_resident, meal: meal, resident: resident, community: community)
     create(:reconciliation, community: community)
     raise 'setup failed: meal was not settled' unless meal.reload.reconciled?
 

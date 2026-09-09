@@ -43,7 +43,7 @@ RSpec.describe 'billing:recalculate snapshot isolation' do
     bob = create(:resident, community: community, unit: unit, multiplier: 2)
 
     meal = create(:meal, community: community)
-    alice_mr = create(:meal_resident, meal: meal, resident: alice, community: community, multiplier: 2)
+    alice_mr = create(:meal_resident, meal: meal, resident: alice, community: community)
     bill = create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('50'))
 
     # Right after the task's bills preload runs, commit an atomic meal edit

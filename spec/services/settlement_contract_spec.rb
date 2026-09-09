@@ -29,7 +29,7 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
   end
 
   def attend(meal, eater)
-    create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: eater.multiplier)
+    create(:meal_resident, meal: meal, resident: eater, community: community)
   end
 
   # Refuse every insert into a table for the rest of the test transaction.

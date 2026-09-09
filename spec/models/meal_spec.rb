@@ -723,8 +723,7 @@ RSpec.describe Meal do
 
       expect do
         Audited.audit_class.as_user(resident) do
-          meal.meal_residents.create!(resident: resident, community: community,
-                                      multiplier: 2)
+          meal.meal_residents.create!(resident: resident, community: community)
         end
       end.not_to(change do
         Audited::Audit.where(auditable_type: 'Meal', action: 'update').count
@@ -735,8 +734,7 @@ RSpec.describe Meal do
       meal = create(:meal, community: community)
 
       Audited.audit_class.as_user(resident) do
-        meal.meal_residents.create!(resident: resident, community: community,
-                                    multiplier: 2)
+        meal.meal_residents.create!(resident: resident, community: community)
       end
 
       audit = meal.associated_audits.find_by(auditable_type: 'MealResident')

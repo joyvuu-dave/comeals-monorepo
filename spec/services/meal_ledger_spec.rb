@@ -29,8 +29,8 @@ RSpec.describe MealLedger do
 
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('50'))
-      create(:meal_resident, meal: meal, resident: cook, community: community, multiplier: 2)
-      create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
+      create(:meal_resident, meal: meal, resident: cook, community: community)
+      create(:meal_resident, meal: meal, resident: eater, community: community)
 
       lines = ledger_for(meal).lines
       credit = lines.find { |line| line.kind == :credit }
@@ -46,8 +46,8 @@ RSpec.describe MealLedger do
 
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('50'))
-      create(:meal_resident, meal: meal, resident: cook, community: community, multiplier: 2)
-      create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
+      create(:meal_resident, meal: meal, resident: cook, community: community)
+      create(:meal_resident, meal: meal, resident: eater, community: community)
 
       ledger = ledger_for(meal)
       balances = ledger.balances([cook.id, eater.id])
@@ -67,7 +67,7 @@ RSpec.describe MealLedger do
 
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('50'))
-      create(:meal_resident, meal: meal, resident: cook, community: community, multiplier: 2)
+      create(:meal_resident, meal: meal, resident: cook, community: community)
 
       balances = ledger_for(meal).balances([cook.id, absent.id])
 
@@ -84,8 +84,8 @@ RSpec.describe MealLedger do
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
       create(:bill, meal: meal, resident: helper, community: community, amount: BigDecimal('12'), no_cost: true)
-      create(:meal_resident, meal: meal, resident: cook, community: community, multiplier: 2)
-      create(:meal_resident, meal: meal, resident: helper, community: community, multiplier: 2)
+      create(:meal_resident, meal: meal, resident: cook, community: community)
+      create(:meal_resident, meal: meal, resident: helper, community: community)
 
       credits = ledger_for(meal).lines.select { |line| line.kind == :credit }
 
@@ -98,8 +98,8 @@ RSpec.describe MealLedger do
 
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('60'))
-      create(:meal_resident, meal: meal, resident: cook, community: community, multiplier: 2)
-      create(:meal_resident, meal: meal, resident: host, community: community, multiplier: 2)
+      create(:meal_resident, meal: meal, resident: cook, community: community)
+      create(:meal_resident, meal: meal, resident: host, community: community)
       create(:guest, meal: meal, resident: host, multiplier: 2)
 
       guest_lines = ledger_for(meal).lines.select { |line| line.kind == :guest_debit }
@@ -117,8 +117,8 @@ RSpec.describe MealLedger do
       # 4 units of multiplier * 4.50 = 18.00 allowed, against 60.00 spent.
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('60'))
-      create(:meal_resident, meal: meal, resident: cook, community: community, multiplier: 2)
-      create(:meal_resident, meal: meal, resident: eater, community: community, multiplier: 2)
+      create(:meal_resident, meal: meal, resident: cook, community: community)
+      create(:meal_resident, meal: meal, resident: eater, community: community)
 
       credit = ledger_for(meal).lines.find { |line| line.kind == :credit }
 
@@ -135,8 +135,8 @@ RSpec.describe MealLedger do
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook_a, community: community, amount: BigDecimal('40'))
       create(:bill, meal: meal, resident: cook_b, community: community, amount: BigDecimal('20'))
-      create(:meal_resident, meal: meal, resident: cook_a, community: community, multiplier: 2)
-      create(:meal_resident, meal: meal, resident: cook_b, community: community, multiplier: 2)
+      create(:meal_resident, meal: meal, resident: cook_a, community: community)
+      create(:meal_resident, meal: meal, resident: cook_b, community: community)
 
       credits = ledger_for(meal).lines.select { |line| line.kind == :credit }
       by_resident = credits.to_h { |line| [line.resident_id, line.amount] }
@@ -157,7 +157,7 @@ RSpec.describe MealLedger do
 
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('25'))
-      create(:meal_resident, meal: meal, resident: baby, community: community, multiplier: 0)
+      create(:meal_resident, meal: meal, resident: baby, community: community)
 
       ledger = ledger_for(meal)
 
@@ -175,7 +175,7 @@ RSpec.describe MealLedger do
       # rounds, and it cannot round correctly from lines that already did.
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('53.17'))
-      children.each { |child| create(:meal_resident, meal: meal, resident: child, community: community, multiplier: 1) }
+      children.each { |child| create(:meal_resident, meal: meal, resident: child, community: community) }
 
       lines = ledger_for(meal).lines
       debits = lines.select { |line| line.kind == :debit }
@@ -191,7 +191,7 @@ RSpec.describe MealLedger do
 
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
-      create(:meal_resident, meal: meal, resident: child, community: community, multiplier: 1)
+      create(:meal_resident, meal: meal, resident: child, community: community)
 
       lines = ledger_for(meal).lines
 
@@ -214,8 +214,8 @@ RSpec.describe MealLedger do
       meals = Array.new(3) do
         meal = create(:meal, community: community)
         create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
-        create(:meal_resident, meal: meal, resident: cook, community: community, multiplier: 2)
-        create(:meal_resident, meal: meal, resident: host, community: community, multiplier: 2)
+        create(:meal_resident, meal: meal, resident: cook, community: community)
+        create(:meal_resident, meal: meal, resident: host, community: community)
         create(:guest, meal: meal, resident: host, multiplier: 2)
         meal
       end

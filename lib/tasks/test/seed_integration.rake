@@ -84,7 +84,7 @@ namespace :test do
     )
     [jane, bob, alice, charlie].each do |r|
       MealResident.create!(
-        resident: r, meal: reconciled_meal, multiplier: r.multiplier
+        resident: r, meal: reconciled_meal
       )
     end
     Bill.create!(
@@ -107,7 +107,7 @@ namespace :test do
     )
     [bob, alice, charlie].each do |r|
       MealResident.create!(
-        resident: r, meal: closed_meal, multiplier: r.multiplier
+        resident: r, meal: closed_meal
       )
     end
     Bill.create!(
@@ -124,7 +124,7 @@ namespace :test do
     )
     [jane, alice].each do |r|
       MealResident.create!(
-        resident: r, meal: today_meal, multiplier: r.multiplier
+        resident: r, meal: today_meal
       )
     end
 
@@ -137,7 +137,7 @@ namespace :test do
     )
     [jane, bob, alice].each do |r|
       MealResident.create!(
-        resident: r, meal: tomorrow_meal, multiplier: r.multiplier
+        resident: r, meal: tomorrow_meal
       )
     end
     Guest.create!(
@@ -162,7 +162,7 @@ namespace :test do
     )
     [jane, bob].each do |r|
       MealResident.create!(
-        resident: r, meal: close_test_meal, multiplier: r.multiplier
+        resident: r, meal: close_test_meal
       )
     end
     Bill.create!(
