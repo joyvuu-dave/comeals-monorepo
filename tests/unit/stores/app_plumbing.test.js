@@ -49,11 +49,10 @@ async function connectionHandler(event) {
     if (!instance) return [];
     return instance.connection.bind.mock.calls.filter(([e]) => e === event);
   }
-  // Not a fixed number of microtask turns: the dynamic import takes more of
-  // them on a slow runner, and CI was red for two days with "Cannot read
-  // properties of undefined" here (2026-09-08 to 2026-09-10). waitFor polls
-  // until the handler is bound, and advances fake timers when a test uses
-  // them.
+  // Not a fixed number of microtask turns: waitFor polls until the handler
+  // is bound, and advances fake timers when a test uses them. (When the
+  // handler is never bound, as without a Pusher key, this fails after a
+  // second with a message that says so, instead of a TypeError.)
   await vi.waitFor(() => {
     if (calls().length === 0)
       throw new Error("connection handler not bound yet");
@@ -64,10 +63,16 @@ async function connectionHandler(event) {
 describe("app plumbing", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // startPusher does nothing without a key. The other store tests stub
+    // these too; this file relied on .env, which CI does not have, and was
+    // the one red job on main from 2026-09-08 to 2026-09-10.
+    vi.stubEnv("VITE_PUSHER_KEY", "test-key");
+    vi.stubEnv("VITE_PUSHER_CLUSTER", "us2");
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllEnvs();
   });
 
   it("keeps the socket id once the connection says connected", async () => {
