@@ -20,6 +20,7 @@ RSpec.describe 'the cooks page after a settlement' do # -- a request contract ac
   it 'stops saying the meal is open the moment it is settled' do
     meal = create(:meal, community: community, date: Date.yesterday)
     create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('30'))
+    create(:meal_resident, meal: meal, resident: resident, community: community)
 
     get "/api/v1/meals/#{meal.id}/cooks", params: { token: token }
     expect(response.parsed_body[:reconciled]).to be(false)

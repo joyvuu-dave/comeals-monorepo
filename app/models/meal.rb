@@ -56,27 +56,50 @@ class Meal < ApplicationRecord
 
   scope :unreconciled, -> { where(reconciliation_id: nil) }
   # The meals a settlement with this cutoff sweeps: not yet settled, with at
-  # least one bill, on or before the cutoff, and from a day that is over.
+  # least one bill, on or before the cutoff, from a day that is over, and
+  # with either someone to charge or nothing owed. A meal where a cook
+  # entered a receipt with money on it and nobody signed up is held back
+  # (receipt_and_nobody_ate): settling it would write no lines and freeze
+  # the meal, taking the cook's money silently and for good. Until
+  # 2026-09-10 it did; three times since 2024, for $22.22. A meal whose
+  # cook slots are all $0 or no-cost settles with no effect, as before.
   # Meals on today's date are never swept, whatever the cutoff — their
   # receipts and attendance are not final (issue #3).
   scope :settleable_by, lambda { |cutoff, today: Community.instance.today|
-    unreconciled.joins(:bills).where(date: ..cutoff).where(date: ...today).distinct
+    unreconciled.joins(:bills).where(date: ..cutoff).where(date: ...today)
+                .where(anyone_ate.or(a_receipt_with_money.not)).distinct
   }
   scope :open, -> { where(closed: false) }
   scope :closed_with_bills, -> { where(closed: true).joins(:bills).distinct }
 
   # Meals where at least one person ate (meal_resident or guest).
   # A bill on a meal with no attendees has zero financial impact —
-  # the cook absorbs the cost and is not reimbursed.
-  # Uses EXISTS (not JOIN) to avoid multiplying rows in SUM queries.
-  scope :with_attendees, lambda {
+  # the cook absorbs the cost and is not reimbursed — which is why a
+  # settlement holds such a meal back when the bill has money on it.
+  scope :with_attendees, -> { where(anyone_ate) }
+
+  # Held back from a settlement: a receipt with money on it, and nobody to
+  # charge. The preview lists these (ReconciliationWarnings,
+  # bill_with_no_attendees) so the reconciler can add the attendance or
+  # remove the bill before settling.
+  scope :receipt_and_nobody_ate, -> { where(anyone_ate.not).where(a_receipt_with_money) }
+
+  # EXISTS, not JOIN, so a SUM over meals is not multiplied by the rows.
+  # Public because a scope's lambda runs on the relation, which cannot
+  # reach a private class method.
+  sig { returns(Arel::Nodes::Node) }
+  def self.anyone_ate
     mr = MealResident.arel_table
     g = Guest.arel_table
-    where(
-      MealResident.where(mr[:meal_id].eq(arel_table[:id])).arel.exists
-        .or(Guest.where(g[:meal_id].eq(arel_table[:id])).arel.exists)
-    )
-  }
+    MealResident.where(mr[:meal_id].eq(arel_table[:id])).arel.exists
+                .or(Guest.where(g[:meal_id].eq(arel_table[:id])).arel.exists)
+  end
+
+  sig { returns(Arel::Nodes::Node) }
+  def self.a_receipt_with_money
+    bills = Bill.arel_table
+    Bill.where(bills[:meal_id].eq(arel_table[:id])).where(no_cost: false).where(bills[:amount].gt(0)).arel.exists
+  end
 
   belongs_to :reconciliation, optional: true
   belongs_to :rotation, optional: true

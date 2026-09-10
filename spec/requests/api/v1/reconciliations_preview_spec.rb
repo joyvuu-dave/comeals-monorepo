@@ -77,6 +77,7 @@ RSpec.describe 'GET /api/v1/reconciliations/preview' do
     cook = create(:resident, community: community, unit: unit, multiplier: 2)
     inside = create(:meal, community: community, date: Date.yesterday - 2)
     create(:bill, meal: inside, resident: cook, community: community, amount: BigDecimal('10'))
+    create(:meal_resident, meal: inside, resident: resident, community: community)
     past_cutoff = create(:meal, community: community, date: Date.yesterday)
     create(:bill, meal: past_cutoff, resident: cook, community: community, amount: BigDecimal('10'))
     today = create(:meal, community: community, date: Time.zone.today)
@@ -92,19 +93,26 @@ RSpec.describe 'GET /api/v1/reconciliations/preview' do
   describe 'warnings' do
     let(:cook) { create(:resident, community: community, unit: unit, multiplier: 2, name: 'Charlie Cook') }
 
-    it 'flags a bill on a meal nobody attended' do
+    it 'holds back a bill on a meal nobody attended, and says so' do
       meal = create(:meal, community: community, date: Date.yesterday)
       bill = create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('45'))
+      # Empty cook slots on a meal nobody attended settle with no effect and
+      # get no such warning (the $0 one is the zero_bill_not_flagged below).
+      empty = create(:meal, community: community, date: Date.yesterday - 1)
+      create(:bill, meal: empty, resident: cook, community: community, amount: BigDecimal('0'), no_cost: true)
 
+      body = preview
       expected = {
         id: "bill_with_no_attendees:meal=#{meal.id}:bill=#{bill.id}",
         kind: 'bill_with_no_attendees',
         severity: 'warning',
         meal_id: meal.id,
         title: 'Bill with no attendees',
-        body: 'Charlie Cook submitted a $45.00 bill for a meal with zero attendees.'
+        body: "Charlie Cook submitted a $45.00 bill for #{meal.date.iso8601}, but nobody signed up to eat. " \
+              'This meal will not be settled until someone is signed up or the bill is removed.'
       }
-      expect(preview[:warnings].map(&:deep_symbolize_keys)).to eq([expected])
+      expect(body[:warnings].map(&:deep_symbolize_keys)).to eq([expected])
+      expect(body[:meals].pluck(:id)).to eq([empty.id])
     end
 
     it 'flags a meal people ate that no cook billed — a meal the settlement would leave behind' do

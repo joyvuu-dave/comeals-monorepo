@@ -21,7 +21,8 @@ FactoryBot.define do
     date { Time.zone.today }
 
     # A reconciliation must settle at least one meal, so the factory builds one
-    # for itself: a unit, a cook, a meal, and a bill on that meal. Most specs
+    # for itself: a unit, a cook, a meal, a bill on that meal, and the cook
+    # eating it (a receipt nobody ate is held back, not settled). Most specs
     # use this factory only to get a row they can point a meal at, and do not
     # care what it settled.
     #
@@ -49,6 +50,7 @@ FactoryBot.define do
       meal = create(:meal, community: reconciliation.community, date: evaluator.settled_meal_date)
       create(:bill, meal: meal, resident: cook, community: reconciliation.community,
                     amount: BigDecimal('10'))
+      create(:meal_resident, meal: meal, resident: cook, community: reconciliation.community)
     end
   end
 end

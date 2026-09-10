@@ -187,18 +187,21 @@ RSpec.describe 'settlement and running-balance arithmetic agree', type: :task do
     expect(reconciliation.reconciliation_balances).to be_empty
   end
 
-  it 'agrees on a meal that has a bill but nobody attending' do
+  it 'agrees when a receipt nobody ate is held back' do
     cook = resident('Cook')
-
-    meal = create(:meal, community: community)
-    create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('25'))
+    eater = resident('Eater')
+    held = create(:meal, community: community, date: Date.yesterday - 1)
+    create(:bill, meal: held, resident: cook, community: community, amount: BigDecimal('25'))
+    eaten = create(:meal, community: community)
+    create(:bill, meal: eaten, resident: cook, community: community, amount: BigDecimal('20'))
+    create(:meal_resident, meal: eaten, resident: eater, community: community)
 
     reconciliation = expect_settlement_to_match_running_balances(community)
 
-    # The meal is swept — it has a bill — but with_attendees drops it from
-    # both computations, so it moves no money.
-    expect(meal.reload.reconciliation_id).to eq(reconciliation.id)
-    expect(reconciliation.reconciliation_balances).to be_empty
+    # The held meal is in neither computation: no eater, so no lines in the
+    # running balance, and not swept, so no lines in the settlement.
+    expect(held.reload.reconciliation_id).to be_nil
+    expect(reconciliation.meals).to contain_exactly(eaten)
   end
 
   it 'agrees across many meals at once, where residents both cook and eat' do

@@ -29,6 +29,7 @@ RSpec.describe 'the community day' do # rubocop:disable RSpec/DescribeClass -- a
       create(:bill, meal: tonight, resident: cook, community: community, amount: BigDecimal('30'))
       finished = create(:meal, community: community, date: Date.new(2026, 8, 22))
       create(:bill, meal: finished, resident: cook, community: community, amount: BigDecimal('30'))
+      create(:meal_resident, meal: finished, resident: cook, community: community)
 
       expect(Meal.settleable_by(Date.new(2026, 8, 23))).to contain_exactly(finished)
 

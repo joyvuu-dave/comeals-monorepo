@@ -154,10 +154,14 @@ RSpec.describe MealCostSummary do
       meal = create(:meal, community: community)
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('40'))
-      settle!(cutoff: Date.yesterday)
+      # Settled before 2026-09-10, when a receipt nobody ate was still swept
+      # (138 such meals exist in production). A settlement holds it back
+      # now, so the row is set the way those old ones are.
+      reconciliation = create(:reconciliation, community: community)
+      meal.update_columns(reconciliation_id: reconciliation.id)
 
-      # Swept, but no lines on purpose: nobody was charged, the cook
-      # absorbed the receipts.
+      # Swept, but no lines: nobody was charged, the cook absorbed the
+      # receipts.
       summary = described_class.for(meal.reload)
       expect(meal.meal_charges).to be_empty
       expect(summary.total_cost).to eq(BigDecimal('40'))

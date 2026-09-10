@@ -45,6 +45,7 @@ RSpec.describe 'reconciliations:create' do
     cook = create(:resident, community: community, unit: unit, multiplier: 2)
     meal = create(:meal, community: community, date: Date.yesterday)
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('40'))
+    create(:meal_resident, meal: meal, resident: cook, community: community)
 
     Rake::Task['reconciliations:create'].invoke
 
@@ -68,6 +69,7 @@ RSpec.describe 'reconciliations:create' do
     cook = create(:resident, community: community, unit: unit, multiplier: 2)
     meal = create(:meal, community: community, date: Date.yesterday)
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('40'))
+    create(:meal_resident, meal: meal, resident: cook, community: community)
 
     Rake::Task['reconciliations:create'].invoke
 
@@ -129,9 +131,11 @@ RSpec.describe 'reconciliations:create' do
     [3, 2].each do |days_ago|
       meal = create(:meal, community: community, date: Date.yesterday - days_ago)
       create(:bill, meal: meal, resident: twice, community: community, amount: BigDecimal('20'))
+      create(:meal_resident, meal: meal, resident: twice, community: community)
     end
     meal = create(:meal, community: community, date: Date.yesterday)
     create(:bill, meal: meal, resident: once, community: community, amount: BigDecimal('20'))
+    create(:meal_resident, meal: meal, resident: once, community: community)
 
     Rake::Task['reconciliations:create'].invoke
 
@@ -146,6 +150,7 @@ RSpec.describe 'reconciliations:create' do
     [first, second].each_with_index do |cook, i|
       meal = create(:meal, community: community, date: Date.yesterday - i)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('20'))
+      create(:meal_resident, meal: meal, resident: cook, community: community)
     end
 
     delivered = []
@@ -170,6 +175,7 @@ RSpec.describe 'reconciliations:create' do
     cook = create(:resident, community: community, unit: unit, multiplier: 2)
     meal = create(:meal, community: community, date: Date.yesterday)
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('40'))
+    create(:meal_resident, meal: meal, resident: cook, community: community)
 
     mail_double = instance_double(ActionMailer::MessageDelivery)
     allow(ReconciliationMailer).to receive(:reconciliation_notify_email).and_return(mail_double)

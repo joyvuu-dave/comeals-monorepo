@@ -47,6 +47,7 @@ RSpec.describe 'Admin Reconciliation Show' do
     cook = create(:resident, community: community, unit: unit, name: 'Casey Cook', multiplier: 2)
     meal = create(:meal, community: community, date: Date.new(2025, 3, 1))
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('40'))
+    create(:meal_resident, meal: meal, resident: cook, community: community)
 
     reconciliation = settle!(cutoff: Date.new(2025, 3, 31))
     expect(meal.reload.reconciliation_id).to eq(reconciliation.id)

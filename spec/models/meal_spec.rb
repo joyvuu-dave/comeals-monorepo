@@ -267,6 +267,7 @@ RSpec.describe Meal do
       meal = create(:meal, community: community)
       resident = create(:resident, community: community, unit: unit, multiplier: 2)
       create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('10'))
+      create(:meal_resident, meal: meal, resident: resident, community: community)
 
       reconciliation = settle!(cutoff: Date.yesterday)
       meal.reload
@@ -480,6 +481,7 @@ RSpec.describe Meal do
       resident = create(:resident, community: community, unit: unit, multiplier: 2)
       create(:bill, meal: reconciled_meal, resident: resident, community: community,
                     amount: BigDecimal('10'))
+      create(:meal_resident, meal: reconciled_meal, resident: resident, community: community)
 
       settle!(cutoff: Date.yesterday)
       reconciled_meal.reload
@@ -533,6 +535,46 @@ RSpec.describe Meal do
 
       results = community.meals.closed_with_bills
       expect(results.count).to eq(1)
+    end
+  end
+
+  describe '.settleable_by' do
+    before { community } # the scope reads today from Community.instance
+
+    let(:cook) { create(:resident, community: community, unit: unit, multiplier: 2) }
+    let(:eater) { create(:resident, community: community, unit: unit, multiplier: 2) }
+
+    def meal_with(amount, eaten:, date: Date.yesterday, no_cost: false)
+      meal = create(:meal, community: community, date: date)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal(amount), no_cost: no_cost)
+      create(:meal_resident, meal: meal, resident: eater, community: community) if eaten
+      meal
+    end
+
+    it 'takes a meal with a receipt and someone to charge' do
+      expect(described_class.settleable_by(Date.yesterday)).to include(meal_with('30', eaten: true))
+    end
+
+    it 'takes a meal nobody ate when its cook slots hold no money, so it settles with no effect' do
+      expect(described_class.settleable_by(Date.yesterday)).to include(meal_with('0', eaten: false))
+      expect(described_class.settleable_by(Date.yesterday)).to include(meal_with('12', eaten: false, no_cost: true,
+                                                                                       date: Date.yesterday - 1))
+    end
+
+    it 'holds back a meal nobody ate when a cook entered money, instead of taking it for nothing' do
+      held = meal_with('30', eaten: false)
+
+      expect(described_class.settleable_by(Date.yesterday)).not_to include(held)
+      expect(described_class.receipt_and_nobody_ate).to contain_exactly(held)
+    end
+
+    it 'leaves a meal with no bill, one dated today, and one past the cutoff' do
+      no_bill = create(:meal, community: community, date: Date.yesterday - 2)
+      create(:meal_resident, meal: no_bill, resident: eater, community: community)
+      today = meal_with('30', eaten: true, date: Time.zone.today)
+      later = meal_with('30', eaten: true, date: Date.yesterday)
+
+      expect(described_class.settleable_by(Date.yesterday - 1)).not_to include(no_bill, today, later)
     end
   end
 

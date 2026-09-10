@@ -233,7 +233,7 @@ ReconciliationWarnings.new(meals:).call
 
 v1 checks:
 
-1. **`bill_with_no_attendees`** — a bill exists on a meal with zero `meal_residents` and zero `guests`
+1. **`bill_with_no_attendees`** — a bill with money on it exists on a meal with zero `meal_residents` and zero `guests`; the settlement holds that meal back until someone is signed up or the bill is removed (since 2026-09-10; before, it was settled with no lines and the cook absorbed the money)
 2. **`attendance_without_bill`** — a meal has attendees but no bills
 3. **`zero_bill_not_flagged`** — a bill has `amount == 0` but `no_cost == false`
 

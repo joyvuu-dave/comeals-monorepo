@@ -14,6 +14,7 @@ RSpec.describe 'reconciliation endpoints need the reconciler role' do
   before do
     meal = create(:meal, community: community, date: Date.yesterday)
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
+    create(:meal_resident, meal: meal, resident: cook, community: community)
   end
 
   def headers_for(resident)

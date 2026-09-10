@@ -212,14 +212,17 @@ RSpec.describe 'random action sequences against one meal, through the API' do
     expect(status).to be < 500, "#{where}: settling answered #{status}"
     if model[:settled]
       expect(status).to eq(400), "#{where}: settling twice answered #{status}"
-    elsif model[:bills].any?
-      # The code's rule (Meal.settleable_by): a bill and a past date. Not an
-      # attendee, although MODELS.md says a bill on a meal nobody ate has no
-      # financial effect. Found by seed 13 on 2026-09-09; the rule is open.
-      expect(status).to eq(201), "#{where}: settling a meal with a bill answered #{status}: #{response.body}"
+    elsif model[:bills].any? && (attendees_count(model).positive? || model[:bills].values.none? do |b|
+      b[:amount].positive? && !b[:no_cost]
+    end)
+      # Meal.settleable_by: a bill, a past date, and someone to charge or
+      # nothing owed. A receipt with money and nobody signed up is held back
+      # (seed 13 found it was settled and frozen, 2026-09-09; changed 2026-09-10).
+      expect(status).to eq(201), "#{where}: settling answered #{status}: #{response.body}"
       model[:settled] = true
     else
-      expect(status).to eq(400), "#{where}: settling with nothing to settle answered #{status}"
+      expect(status).to eq(400),
+                        "#{where}: settling with nothing to settle, or only a receipt nobody ate, answered #{status}"
     end
   end
 

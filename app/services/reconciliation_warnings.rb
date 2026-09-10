@@ -25,21 +25,28 @@ class ReconciliationWarnings
 
   KINDS = %w[bill_with_no_attendees attendance_without_bill zero_bill_not_flagged].freeze
 
-  def self.for(meals, skipped: [])
-    new(meals, skipped: skipped).call
+  def self.for(meals, skipped: [], held: [])
+    new(meals, skipped: skipped, held: held).call
   end
 
-  def initialize(meals, skipped: [])
+  def initialize(meals, skipped: [], held: [])
     @meals = meals
     @skipped = skipped
+    @held = held
   end
 
   def call
     @skipped.map { |meal| attendance_without_bill(meal) } +
+      @held.flat_map { |meal| money_bills(meal).map { |bill| bill_with_no_attendees(meal, bill) } } +
       @meals.flat_map { |meal| warnings_for(meal) }
   end
 
   private
+
+  # The bills a settlement would credit: not no-cost, and with money on them.
+  def money_bills(meal)
+    meal.bills.select { |bill| bill.amount.positive? && !bill.no_cost }
+  end
 
   def warnings_for(meal)
     attendees = meal.meal_residents.size + meal.guests.size
@@ -57,7 +64,8 @@ class ReconciliationWarnings
     warning('bill_with_no_attendees', meal, bill,
             severity: 'warning',
             title: 'Bill with no attendees',
-            body: "#{bill.resident.name} submitted a #{money(bill.amount)} bill for a meal with zero attendees.")
+            body: "#{bill.resident.name} submitted a #{money(bill.amount)} bill for #{meal.date.iso8601}, but nobody " \
+                  'signed up to eat. This meal will not be settled until someone is signed up or the bill is removed.')
   end
 
   # People ate but no cook entered a receipt. A settlement never claims a

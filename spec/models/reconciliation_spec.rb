@@ -32,6 +32,8 @@ RSpec.describe Reconciliation do
     attrs[:date] = date if date
     meal = create(:meal, **attrs)
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('10'))
+    # Someone to charge: a receipt nobody ate is held back since 2026-09-10.
+    create(:meal_resident, meal: meal, resident: cook, community: community)
     meal
   end
 
@@ -65,6 +67,7 @@ RSpec.describe Reconciliation do
 
       meal_with_bill = create(:meal, community: community)
       create(:bill, meal: meal_with_bill, resident: cook, community: community, amount: BigDecimal('50'))
+      create(:meal_resident, meal: meal_with_bill, resident: cook, community: community)
 
       meal_without_bill = create(:meal, community: community)
 
@@ -84,12 +87,14 @@ RSpec.describe Reconciliation do
 
       old_meal = create(:meal, community: community)
       create(:bill, meal: old_meal, resident: cook, community: community, amount: BigDecimal('40'))
+      create(:meal_resident, meal: old_meal, resident: cook, community: community)
       # Assign to the old reconciliation after bill creation —
       # before_save :reject_if_reconciled blocks bill creation on reconciled meals.
       old_meal.update_column(:reconciliation_id, old_reconciliation.id)
 
       new_meal = create(:meal, community: community)
       create(:bill, meal: new_meal, resident: cook, community: community, amount: BigDecimal('60'))
+      create(:meal_resident, meal: new_meal, resident: cook, community: community)
 
       new_reconciliation = settle!(cutoff: Date.yesterday)
 
@@ -435,9 +440,11 @@ RSpec.describe Reconciliation do
 
       before_cutoff = create(:meal, community: community, date: Date.new(2025, 3, 1))
       create(:bill, meal: before_cutoff, resident: cook, community: community, amount: BigDecimal('50'))
+      create(:meal_resident, meal: before_cutoff, resident: cook, community: community)
 
       after_cutoff = create(:meal, community: community, date: Date.new(2025, 7, 1))
       create(:bill, meal: after_cutoff, resident: cook, community: community, amount: BigDecimal('30'))
+      create(:meal_resident, meal: after_cutoff, resident: cook, community: community)
 
       reconciliation = settle!(cutoff: Date.new(2025, 6, 30))
 
@@ -462,6 +469,7 @@ RSpec.describe Reconciliation do
 
       original_meal = create(:meal, community: community, date: Date.new(2025, 2, 10))
       create(:bill, meal: original_meal, resident: cook, community: community, amount: BigDecimal('40'))
+      create(:meal_resident, meal: original_meal, resident: cook, community: community)
 
       # First reconciliation sweeps everything through Mar 31
       recon1 = settle!(cutoff: Date.new(2025, 3, 31))
@@ -470,6 +478,7 @@ RSpec.describe Reconciliation do
       # Late entry: someone forgot to enter this meal, creates it after recon1
       late_meal = create(:meal, community: community, date: Date.new(2025, 2, 15))
       create(:bill, meal: late_meal, resident: cook, community: community, amount: BigDecimal('25'))
+      create(:meal_resident, meal: late_meal, resident: cook, community: community)
 
       # Second reconciliation sweeps everything unreconciled through Jun 30
       recon2 = settle!(cutoff: Date.new(2025, 6, 30))
@@ -490,8 +499,10 @@ RSpec.describe Reconciliation do
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
       contested = create(:meal, community: community)
       create(:bill, meal: contested, resident: cook, community: community, amount: BigDecimal('50'))
+      create(:meal_resident, meal: contested, resident: cook, community: community)
       uncontested = create(:meal, community: community)
       create(:bill, meal: uncontested, resident: cook, community: community, amount: BigDecimal('30'))
+      create(:meal_resident, meal: uncontested, resident: cook, community: community)
 
       loser = build(:reconciliation, community: community, end_date: Date.yesterday)
 
@@ -556,30 +567,32 @@ RSpec.describe Reconciliation do
   end
 
   describe 'zero-attendee meals' do
-    it 'excludes meals with no attendees from settlement balances (cook absorbs cost)' do
+    it 'holds back a meal with a receipt nobody ate, instead of settling it for nothing' do
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      settleable_meal(date: Date.yesterday - 1)
 
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('50'))
-      # No meal_residents or guests — nobody ate
+      # No meal_residents or guests — nobody ate, and $50 is at stake
 
       reconciliation = settle!(cutoff: Date.yesterday)
 
-      # Cook is NOT reimbursed — zero-attendee meal has no financial impact
-      expect(reconciliation.reconciliation_balances.find_by(resident: cook)&.amount.to_d)
-        .to eq(BigDecimal('0'))
+      # Until 2026-09-10 this meal was swept with no lines, and the $50 was
+      # gone for good. Now it waits for the attendance or the bill's removal.
+      expect(meal.reload.reconciliation_id).to be_nil
+      expect(reconciliation.reconciliation_balances.find_by(resident: cook)).to be_nil
     end
 
-    it 'still assigns zero-attendee meals to the reconciliation' do
+    it 'still settles a meal nobody ate when its cook slot holds no money, so it does not pile up' do
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
 
       meal = create(:meal, community: community)
-      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('50'))
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('0'))
 
       reconciliation = settle!(cutoff: Date.yesterday)
 
-      # Meal is assigned so it doesn't pile up as unreconciled
       expect(meal.reload.reconciliation).to eq(reconciliation)
+      expect(reconciliation.reconciliation_balances).to be_empty
     end
 
     it 'excludes zero-attendee meals from the running balance' do

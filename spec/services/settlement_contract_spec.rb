@@ -80,25 +80,35 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
       cook = resident
       settled_before = meal_on(Date.yesterday - 10)
       bill(settled_before, cook, 10)
+      attend(settled_before, cook)
       earlier = settle!(cutoff: Date.yesterday - 5)
       expect(earlier.meals).to contain_exactly(settled_before)
 
       cutoff = Date.yesterday - 1
+      eater = resident
       eligible = meal_on(cutoff)
       bill(eligible, cook, 20)
+      attend(eligible, eater)
       late_entry = meal_on(Date.yesterday - 8) # before the earlier cutoff, entered late
       bill(late_entry, cook, 15)
+      attend(late_entry, eater)
+      empty_slots = meal_on(Date.yesterday - 3) # nobody came, no money: settles with no effect
+      bill(empty_slots, cook, 0)
       past_cutoff = meal_on(Date.yesterday)
       bill(past_cutoff, cook, 40)
+      attend(past_cutoff, eater)
       today = meal_on(Time.zone.today)
       bill(today, cook, 30)
+      attend(today, eater)
       no_bill = meal_on(Date.yesterday - 2)
-      attend(no_bill, resident)
+      attend(no_bill, eater)
+      receipt_nobody_ate = meal_on(Date.yesterday - 4) # money at stake, nobody to charge: held back
+      bill(receipt_nobody_ate, cook, 25)
 
       reconciliation = settle!(cutoff: cutoff)
 
-      expect(reconciliation.meals).to contain_exactly(eligible, late_entry)
-      expect(Meal.where(id: [past_cutoff, today, no_bill]).pluck(:reconciliation_id)).to all(be_nil)
+      expect(reconciliation.meals).to contain_exactly(eligible, late_entry, empty_slots)
+      expect(Meal.where(id: [past_cutoff, today, no_bill, receipt_nobody_ate]).pluck(:reconciliation_id)).to all(be_nil)
       expect(settled_before.reload.reconciliation_id).to eq(earlier.id)
     end
 
@@ -106,8 +116,10 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
       cook = resident
       inside = meal_on(Date.yesterday - 3)
       bill(inside, cook, 20)
+      attend(inside, cook)
       past_cutoff = meal_on(Date.yesterday - 1)
       bill(past_cutoff, cook, 20)
+      attend(past_cutoff, cook)
 
       reconciliation = settle!(cutoff: Date.yesterday - 2)
 

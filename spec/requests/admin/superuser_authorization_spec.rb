@@ -148,6 +148,7 @@ RSpec.describe 'Admin write authorization' do
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
       meal = create(:meal, community: community, date: 1.day.ago.to_date)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('25'))
+      create(:meal_resident, meal: meal, resident: cook, community: community)
 
       expect do
         post '/reconciliations', params: {

@@ -67,6 +67,9 @@ class Settlement
     const :ledger, MealLedger
     const :resident_balances, T::Hash[Integer, BigDecimal]
     const :skipped_meals, T::Array[Meal]
+    # Left behind the other way round: a receipt with money on it and nobody
+    # signed up (Meal.receipt_and_nobody_ate). Also not in `meals`.
+    const :held_meals, T::Array[Meal]
 
     sig { params(meal: Meal).returns(MealLedger::Summary) }
     def meal_summary(meal) = ledger.summary_for(meal)
@@ -82,7 +85,8 @@ class Settlement
     raw = ledger.balances(community.residents.pluck(:id))
     Preview.new(cutoff: cutoff, meals: meals, ledger: ledger,
                 resident_balances: allocate_to_cents(raw, reconciliation_id: 'preview'),
-                skipped_meals: skipped_by(cutoff, today: community.today))
+                skipped_meals: skipped_by(cutoff, today: community.today),
+                held_meals: held_by(cutoff, today: community.today))
   end
 
   # Unreconciled meals in the period with attendance and no bill at all.
@@ -92,6 +96,14 @@ class Settlement
     Meal.unreconciled.where(date: ..cutoff).where(date: ...today)
         .where.missing(:bills).with_attendees
         .order(:date).preload(:meal_residents, :guests).to_a
+  end
+
+  # Unreconciled meals in the period held back for a receipt nobody can be
+  # charged for. The date rules are settleable_by's.
+  sig { params(cutoff: Date, today: Date).returns(T::Array[Meal]) }
+  def self.held_by(cutoff, today:)
+    Meal.unreconciled.where(date: ..cutoff).where(date: ...today)
+        .receipt_and_nobody_ate.order(:date).preload(bills: :resident).to_a
   end
 
   sig { returns(Reconciliation) }

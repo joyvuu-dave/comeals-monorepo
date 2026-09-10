@@ -13,7 +13,7 @@ RSpec.describe Settlement do
   it 'refuses a preview whose balances are not keyed by resident id' do
     expect do
       described_class::Preview.new(cutoff: Date.new(2026, 1, 1), meals: [], ledger: MealLedger.new([]),
-                                   resident_balances: 'none', skipped_meals: [])
+                                   resident_balances: 'none', skipped_meals: [], held_meals: [])
     end.to raise_error(TypeError, /resident_balances/)
   end
 

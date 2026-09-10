@@ -325,7 +325,10 @@ how the math once ended up in three places (#48).
 - `open` — closed = false
 - `closed_with_bills` — closed meals that have at least one bill
 - `with_attendees` — at least one attendance or guest row. A bill on a meal
-  nobody ate has no financial effect: the cook absorbs the cost.
+  nobody ate has no financial effect, so a settlement holds such a meal back
+  when the bill has money on it (`receipt_and_nobody_ate`, listed by the
+  preview as `bill_with_no_attendees`) and settles it with no effect when
+  every cook slot is $0 or no-cost.
 
 **Immutability:** once `reconciliation_id` is set, `cap`, `date`, and
 `reconciliation_id` itself can no longer change (`FROZEN_WHEN_RECONCILED`),
@@ -449,7 +452,7 @@ Reconciliation ----< ReconciliationBalance ---> Resident
   admin form, and the specs call; the pipeline is:
   1. save the row (validations run here);
   2. `assign_meals` — claim every meal in `eligible_meals`
-     (`Meal.settleable_by(end_date)`: unreconciled, has a bill, dated on or
+     (`Meal.settleable_by(end_date)`: unreconciled, has a bill, someone to charge or nothing owed, dated on or
      before the cutoff, and from a day that is over). It takes
      `SELECT ... FOR UPDATE` on those meals in id order first, then updates
      only rows whose `reconciliation_id` is still NULL, and raises if a rival
