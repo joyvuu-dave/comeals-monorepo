@@ -50,8 +50,9 @@ RSpec.describe 'random action sequences against one meal, through the API' do
 
   def noise = Reconciliation::ZERO_SUM_EPSILON
 
-  # JSON, as the SPA sends it. A form-encoded empty bills list reaches the
-  # controller as one empty string and answers 500 (noted 2026-09-09).
+  # JSON, as the SPA sends it. (A form-encoded empty bills list reaches the
+  # controller as one empty string; it answered 500 until 2026-09-10 and is
+  # refused with 400 now, see update_bills_spec.rb.)
   def request(verb, path, resident, params = {})
     public_send(verb, path, params: params.merge(token: resident.keys.first.token), as: :json)
     expect(response.status).to be < 500, "#{where}: #{verb.upcase} #{path} answered #{response.status}"

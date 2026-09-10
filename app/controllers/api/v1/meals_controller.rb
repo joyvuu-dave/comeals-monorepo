@@ -194,8 +194,18 @@ module Api
         request_symbol = :ok
         message_type = nil
 
+        # The shape first. A form-encoded empty list arrives as one empty
+        # string, and a body without the key as nil; either used to reach
+        # pluck or key? below and answer 500 (found by the random action
+        # sequences, 2026-09-09). The SPA sends JSON and always sends the key.
+        bills = params[:bills]
+        unless bills.is_a?(Array) && bills.all? { |bill| bill.respond_to?(:key?) }
+          render json: { message: 'bills must be a list of cooks.' }, status: :bad_request
+          return
+        end
+
         # Cooks
-        cook_ids = params[:bills].pluck('resident_id') # rubocop:disable Rails/StrongParametersExpect --:bills is an array param; params.expect(:bills) raises ParameterMissing on arrays
+        cook_ids = bills.pluck('resident_id')
 
         duplicate = cook_ids.map(&:to_i).tally.find { |_, count| count > 1 }&.first
         if duplicate
@@ -215,7 +225,7 @@ module Api
         # (a cook left out of the payload is removed below) but its stored
         # amount and no_cost are never rewritten.
         parsed_bills = []
-        params[:bills].each do |bill|
+        bills.each do |bill|
           unless bill.key?('amount') || bill.key?('no_cost')
             parsed_bills << { resident_id: bill['resident_id'], touched: false }
             next

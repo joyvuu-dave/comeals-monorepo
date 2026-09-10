@@ -289,6 +289,26 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
     end
   end
 
+  describe 'a payload that is not a list of cooks' do
+    # A form-encoded empty list reaches the controller as one empty string,
+    # and a body without the key as nil. Both answered 500 until 2026-09-10.
+    it 'refuses a form-encoded empty list with 400, not 500' do
+      patch "/api/v1/meals/#{meal.id}/bills", params: { token: token, bills: [] }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('bills must be a list of cooks.')
+      expect(bill.reload).to be_persisted
+    end
+
+    it 'refuses a body with no bills key with 400, not 500' do
+      patch "/api/v1/meals/#{meal.id}/bills", params: { token: token }, as: :json
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('bills must be a list of cooks.')
+      expect(bill.reload).to be_persisted
+    end
+  end
+
   describe 'negative amount' do
     # The whole-cents grammar has no minus sign, so the controller rejects
     # a negative amount before any DB write.
