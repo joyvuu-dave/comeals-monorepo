@@ -49,9 +49,15 @@ async function connectionHandler(event) {
     if (!instance) return [];
     return instance.connection.bind.mock.calls.filter(([e]) => e === event);
   }
-  for (let i = 0; i < 20 && calls().length === 0; i++) {
-    await Promise.resolve();
-  }
+  // Not a fixed number of microtask turns: the dynamic import takes more of
+  // them on a slow runner, and CI was red for two days with "Cannot read
+  // properties of undefined" here (2026-09-08 to 2026-09-10). waitFor polls
+  // until the handler is bound, and advances fake timers when a test uses
+  // them.
+  await vi.waitFor(() => {
+    if (calls().length === 0)
+      throw new Error("connection handler not bound yet");
+  });
   return calls()[calls().length - 1][1];
 }
 

@@ -2779,9 +2779,11 @@ describe("DataStore", () => {
           ([event]) => event === "state_change",
         );
       }
-      for (let i = 0; i < 20 && calls().length === 0; i++) {
-        await Promise.resolve();
-      }
+      // Polled, not a fixed number of microtask turns: the dynamic import
+      // takes more of them on a slow runner (see app_plumbing.test.js).
+      await vi.waitFor(() => {
+        if (calls().length === 0) throw new Error("handler not bound yet");
+      });
       return calls()[calls().length - 1][1];
     }
 
@@ -2873,9 +2875,11 @@ describe("DataStore", () => {
           ([event]) => event === "state_change",
         );
       }
-      for (let i = 0; i < 20 && calls().length === 0; i++) {
-        await Promise.resolve();
-      }
+      // Polled, not a fixed number of microtask turns: the dynamic import
+      // takes more of them on a slow runner (see app_plumbing.test.js).
+      await vi.waitFor(() => {
+        if (calls().length === 0) throw new Error("handler not bound yet");
+      });
       return calls()[calls().length - 1][1];
     }
 
