@@ -50,6 +50,14 @@ module Storm
     # A row that is already gone (this client left, or the admin removed it).
     ROW_WRITE = (MEAL_WRITE + [404]).freeze
     READ = [200].freeze
+
+    # PostgreSQL can refuse any transaction at SERIALIZABLE, and every
+    # request the app answers runs at least one. So 409 is a valid answer
+    # to anything — the app's own words for it are "nothing was saved, try
+    # again" (ApiController#render_conflict, ADR 0005). What is never
+    # valid is a 500, and the counts below still hold: a run where
+    # everything answered 409 would write nothing and settle nothing.
+    CONFLICT = 409
     EXPECTED = {
       signup: MEAL_WRITE, leave: ROW_WRITE, toggle: ROW_WRITE, add_guest: MEAL_WRITE,
       remove_guest: MEAL_WRITE, bills: MEAL_WRITE, close: MEAL_WRITE, reopen: MEAL_WRITE,
@@ -139,6 +147,7 @@ module Storm
     # --- what the API promises, per action ---------------------------------
 
     def judge(action, status, response, check)
+      return nil if status == CONFLICT
       return nil if EXPECTED.fetch(action).include?(status) && (check.nil? || check.call(response))
       return nil if status == 429 && throttled_with_reason?(action == :login)
       return "false 429: #{@sent.inspect}" if status == 429

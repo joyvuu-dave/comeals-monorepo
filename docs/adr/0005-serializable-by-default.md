@@ -403,6 +403,19 @@ is needed by the specs before it is needed by the application.
   all, a 500), and the recurring jobs (a failed run and a fail ping). All
   three now retry; the calendar writes answer 409 when the conflict does
   not go away, through `ApiController#render_retrying_on_conflict`.
+- **2026-09-11** — the last path with no answer for a refusal: reads. The
+  calendar month is rebuilt on a conflict, and `ApiController` rescues
+  anything that still escapes — a refusal during a render, in a
+  `before_action`, in any read action — as the same 409. A refused
+  transaction has written nothing, so 409 is the true answer and 500
+  never is. Decision 4 still holds: this is a rescue, not a retry,
+  because by then the action may have rendered.
+- **2026-09-11** — one lock order for a meal and its rows, everywhere.
+  The API locked the meal and then the row; the settled-meal trigger
+  locked them the other way round for any write that did not go through
+  the API, so an admin edit against an API write on one meal deadlocked.
+  `LocksItsMealFirst` takes the trigger's lock (`FOR KEY SHARE`) before
+  the row instead of after it.
 
 The full record of the rollout, step by step, is in
 [docs/serializable-rollout.md](../serializable-rollout.md).

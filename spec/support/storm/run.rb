@@ -26,7 +26,14 @@ module Storm
       end
 
       def background_tally
-        background.map { |who, outcome, name| [name || who, outcome.is_a?(Array) ? outcome.first : outcome] }.tally
+        background.map { |who, outcome, name| [name || who, outcome_name(outcome)] }.tally
+      end
+
+      # The settler reports [:settled, id]; everything else reports a
+      # plain symbol. Reading only the plain one was a bug: a storm where
+      # the settler settled and no request did counted no settlements.
+      def outcome_name(outcome)
+        outcome.is_a?(Array) ? outcome.first : outcome
       end
 
       def ok_writes
@@ -34,7 +41,7 @@ module Storm
       end
 
       def settlements
-        background.count { |who, outcome, _| who == :settler && outcome == :settled } +
+        background.count { |who, outcome, _| who == :settler && outcome_name(outcome) == :settled } +
           requests.count { |e| e.action == :settle && e.status == 201 }
       end
     end

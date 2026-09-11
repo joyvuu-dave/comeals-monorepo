@@ -104,6 +104,29 @@ All three were fixed the same day, each with a deterministic spec.
   raising about a settlement that is already in the database
   (`spec/jobs/recurring_job_spec.rb`, `spec/services/settle_and_notify_spec.rb`).
 
+Three more, found while fixing those:
+
+- An admin write and an API write on one meal deadlocked. The API locks
+  the meal row and then the child row; an admin write had no meal lock of
+  its own, so it wrote the child row first and the settled-meal trigger
+  then asked for the meal from inside that write — the opposite order.
+  PostgreSQL broke it after a second and one side was told to try again.
+  Now every child row takes the trigger's own lock before it writes
+  itself (`LocksItsMealFirst`), so both paths lock meal first, row second
+  (`spec/requests/admin/meal_lock_order_spec.rb`).
+- The calendar read answered 500 when PostgreSQL refused it. A read can
+  be refused at SERIALIZABLE too, and the calendar month reads nine
+  tables and then writes a cache entry, which makes it a likely pick. It
+  is rebuilt now, and anything that still escapes — a conflict during a
+  render, in a `before_action`, in any read — is answered 409 by
+  `ApiController` instead of 500
+  (`spec/requests/api/v1/calendar_read_conflict_spec.rb`). This one
+  predates the branch; the storm finds it about one run in three.
+- The nightly settlement task exited 1 and paged healthchecks.io when a
+  reconciler settled from the app at the same moment and claimed the
+  meals first. That is a period settled by someone else, not a failure,
+  so it is logged and skipped like an empty period.
+
 One thing the storm shows that is not a bug: routes are drawn lazily in
 the test environment, on the first request, and many first requests at
 once race that. Production eager loads, so the storm specs eager load
