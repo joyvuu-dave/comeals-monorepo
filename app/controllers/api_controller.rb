@@ -4,6 +4,23 @@
 class ApiController < ActionController::API
   around_action :set_community_timezone
 
+  # The backstop for a conflict that reaches no other rescue.
+  #
+  # Every write path retries a refusal and answers 409 itself
+  # (Api::V1::MealsController#with_meal_lock,
+  # #render_retrying_on_conflict). But at SERIALIZABLE any statement can
+  # be refused, including ones outside those blocks: a before_action's
+  # lookup, a serializer's query during render, a read action. Nothing
+  # was saved when that happens — a refused transaction writes nothing —
+  # so the honest answer is the same 409, not a 500. Without this the
+  # storm saw both a calendar read and a guest write answer 500
+  # (docs/concurrency-testing.md).
+  #
+  # A rescue, not a retry: by the time this runs the action may already
+  # have rendered, and re-running it would raise DoubleRenderError (ADR
+  # 0005, decision 4). Paths that can retry safely do it themselves.
+  rescue_from ActiveRecord::TransactionRollbackError, ActiveRecord::LockWaitTimeout, with: :render_conflict
+
   # Where the SPA lives, for links in feeds. Set per environment in
   # config/environments (config.x.root_url).
   def root_url
@@ -78,6 +95,16 @@ class ApiController < ActionController::API
 
   def render_invalid_date
     render json: { message: 'Error: Invalid date' }, status: :bad_request
+  end
+
+  # The rescue_from above. Private, and named rather than a block, so
+  # Sorbet sees it as the instance method it is.
+  def render_conflict(error)
+    Rails.error.report(error, handled: true, severity: :warning,
+                              context: { controller: controller_name, action: action_name })
+    render json: { message: 'Someone else was changing this at the same time. ' \
+                            'Nothing was saved. Try again.' },
+           status: :conflict
   end
 
   # A calendar write (an event, a reservation), tried again when PostgreSQL

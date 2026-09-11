@@ -83,11 +83,22 @@ module Api
       # The version is read from the rows before they are serialized, so
       # a write that lands mid-build cannot leave a stale copy that
       # serves anyone. See Community#calendar_cache_version.
+      #
+      # Retried on a conflict, like every other path that reads and writes
+      # at SERIALIZABLE (ADR 0005). A read can be refused too: this one
+      # reads nine tables and then writes a cache entry, and PostgreSQL
+      # can pick it as the transaction to refuse when a meal write commits
+      # underneath it. Nothing has rendered yet, and a rebuilt month is the
+      # same month, so running it again is free. Before this the refusal
+      # was a 500 on a page that only reads
+      # (spec/requests/api/v1/calendar_read_conflict_spec.rb).
       def cached_month(community, **serializer_params)
         key = community.calendar_cache_key(serializer_params[:year], serializer_params[:month])
-        version = community.calendar_cache_version(serializer_params[:start_date], serializer_params[:end_date])
-        Rails.cache.fetch(key, version: version, expires_in: 1.hour) do
-          CalendarSerializer.new(community, params: serializer_params).to_h
+        RetryOnConflict.call do
+          version = community.calendar_cache_version(serializer_params[:start_date], serializer_params[:end_date])
+          Rails.cache.fetch(key, version: version, expires_in: 1.hour) do
+            CalendarSerializer.new(community, params: serializer_params).to_h
+          end
         end
       end
     end
