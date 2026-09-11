@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# bin/storm — the real-server concurrency storm
+#
+# Boots a Puma from this checkout with many threads and workers (production
+# runs one thread; this runs many on purpose), then hits it from many
+# client threads over TCP while a settler, the nightly jobs, and an admin
+# write from another process. Afterwards it checks the database: every
+# answer was one the API promises, every meal's ledger is right, every
+# settled meal is untouched, the calendar cache agrees with the rows.
+# The whole thing: spec/support/storm and lib/tasks/test/storm.rake.
+#
+# The in-process version of this runs in bin/check
+# (spec/concurrency/request_storm_spec.rb). This one is for turning the
+# dial: real sockets, real Puma threads, a forking server, and settings
+# far past anything production sees.
+#
+#   bin/storm                                # 16 threads x 2 workers, 64 clients, 20 s
+#   STORM_THREADS=32 STORM_WORKERS=4 STORM_CLIENTS=128 STORM_SECONDS=60 bin/storm
+#   STORM_POOL=2 bin/storm                   # a pool smaller than the threads
+#
+# Every server thread needs a database connection, plus one for
+# solid_cache's trim thread; STORM_POOL defaults to threads + 2. Postgres
+# allows 100 connections by default, and the driver takes 12 more.
+# ---------------------------------------------------------------------------
+
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT_DIR"
+
+THREADS="${STORM_THREADS:-16}"
+WORKERS="${STORM_WORKERS:-2}"
+POOL="${STORM_POOL:-$((THREADS + 2))}"
+PORT="${STORM_PORT:-${TEST_PORT_INTEGRATION:-$(sed -n 's/^TEST_PORT_INTEGRATION=//p' .env 2>/dev/null || true)}}"
+PORT="${PORT:-3001}"
+TEST_DB="comeals_test$(sed -n 's/^TEST_DB_SUFFIX=//p' .env 2>/dev/null || true)"
+SERVER_LOG="tmp/storm_server.log"
+RAILS_PID=""
+
+cleanup() {
+  if [ -n "$RAILS_PID" ]; then
+    echo ""
+    echo "Stopping the storm server (PID $RAILS_PID)..."
+    kill "$RAILS_PID" 2>/dev/null || true
+    wait "$RAILS_PID" 2>/dev/null || true
+  fi
+  echo "Resetting test database..."
+  psql -q -d "$TEST_DB" -c "TRUNCATE communities, ledger_check_runs, job_runs CASCADE" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+echo "==> Preparing test database..."
+RAILS_ENV=test bundle exec rails db:prepare
+
+if lsof -tiTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
+  echo "ERROR: port $PORT is already in use:"
+  lsof -iTCP:"$PORT" -sTCP:LISTEN -P
+  exit 1
+fi
+
+echo "==> Starting Puma on port $PORT: $THREADS threads x $WORKERS workers, pool $POOL"
+RAILS_ENV=test INTEGRATION_SERVER=1 INTEGRATION_SERVER_CACHE=solid \
+  RAILS_MAX_THREADS="$THREADS" WEB_CONCURRENCY="$WORKERS" RAILS_DB_POOL="$POOL" \
+  bundle exec rails server -p "$PORT" &>"$SERVER_LOG" &
+RAILS_PID=$!
+
+echo -n "    Waiting for server"
+for i in $(seq 1 60); do
+  if ! kill -0 "$RAILS_PID" 2>/dev/null; then
+    echo " DIED"
+    tail -20 "$SERVER_LOG"
+    exit 1
+  fi
+  if curl -sf "http://localhost:$PORT/api/v1/version" &>/dev/null; then
+    echo " ready!"
+    break
+  fi
+  if [ "$i" -eq 60 ]; then
+    echo " TIMEOUT"
+    tail -20 "$SERVER_LOG"
+    exit 1
+  fi
+  echo -n "."
+  sleep 1
+done
+
+echo ""
+STORM_URL="http://localhost:$PORT" RAILS_ENV=test bundle exec rake test:storm
+STATUS=$?
+
+echo ""
+echo "==> Server log: $SERVER_LOG"
+if grep -qE 'Error|error' "$SERVER_LOG"; then
+  echo "    lines with 'error' in the server log:"
+  grep -nE 'Error|error' "$SERVER_LOG" | head -20
+fi
+exit "$STATUS"

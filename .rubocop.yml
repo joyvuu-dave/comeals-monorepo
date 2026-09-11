@@ -74,6 +74,7 @@ RSpec/IndexedLet:
 RSpec/DescribeClass:
   Exclude:
     - "spec/admin/**/*"
+    - "spec/concurrency/**/*"
     - "spec/tasks/**/*"
     - "spec/requests/**/*"
     - "spec/db/**/*"

@@ -396,6 +396,13 @@ is needed by the specs before it is needed by the application.
   with `heroku pg:psql` says `read committed`, and that is expected: the
   setting comes from the `variables:` block in `database.yml`, so only Rails
   sessions get it. psql's own session never does.
+- **2026-09-11** — the request storms (docs/concurrency-testing.md) found
+  three paths that did not retry a refusal: a meal write on its second
+  attempt (the record still held the values the first attempt tried, and
+  `with_lock` refuses a dirty record), the calendar writes (no retry at
+  all, a 500), and the recurring jobs (a failed run and a fail ping). All
+  three now retry; the calendar writes answer 409 when the conflict does
+  not go away, through `ApiController#render_retrying_on_conflict`.
 
 The full record of the rollout, step by step, is in
 [docs/serializable-rollout.md](../serializable-rollout.md).
