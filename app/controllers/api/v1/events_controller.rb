@@ -24,10 +24,12 @@ module Api
 
         event = Event.new(start_date: times[:start_date], end_date: times[:end_date], title: params[:title],
                           description: params[:description] || '', allday: allday)
-        if event.save
-          render json: { message: 'Event has been created' }
-        else
-          render json: { message: event.errors.full_messages.join("\n") }, status: :bad_request
+        render_retrying_on_conflict do
+          if event.save
+            { json: { message: 'Event has been created' } }
+          else
+            { json: { message: event.errors.full_messages.join("\n") }, status: :bad_request }
+          end
         end
       end
 
@@ -45,19 +47,22 @@ module Api
         description = params.key?(:description) ? params[:description] : @event.description
         title = params.key?(:title) ? params[:title] : @event.title
 
-        if @event.update(start_date: times[:start_date], end_date: times[:end_date], allday: allday,
-                         description: description, title: title)
-          render json: { message: 'Event has been updated' }
-        else
-          render json: { message: @event.errors.full_messages.join("\n") }, status: :bad_request
+        render_retrying_on_conflict do
+          if @event.update(start_date: times[:start_date], end_date: times[:end_date], allday: allday,
+                           description: description, title: title)
+            { json: { message: 'Event has been updated' } }
+          else
+            { json: { message: @event.errors.full_messages.join("\n") }, status: :bad_request }
+          end
         end
       end
 
       # DELETE /api/v1/events/:id/delete
       def destroy
-        @event.destroy!
-
-        render json: { message: 'Event has been removed' }
+        render_retrying_on_conflict do
+          @event.destroy!
+          { json: { message: 'Event has been removed' } }
+        end
       end
 
       private

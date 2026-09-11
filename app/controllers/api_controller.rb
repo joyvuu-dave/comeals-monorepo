@@ -80,6 +80,22 @@ class ApiController < ActionController::API
     render json: { message: 'Error: Invalid date' }, status: :bad_request
   end
 
+  # A calendar write (an event, a reservation), tried again when PostgreSQL
+  # refuses it for a conflict with another transaction, and answered 409
+  # when the conflict does not go away (ADR 0005). The block does the write
+  # and returns the render arguments; nothing renders inside it, because a
+  # retry runs it again. A reservation checks that its period is free and
+  # then inserts — a read before a write, which is exactly what SERIALIZABLE
+  # refuses when two of them race — and before this the refusal was a 500
+  # (spec/requests/api/v1/calendar_writes_retry_spec.rb).
+  def render_retrying_on_conflict(&)
+    render(**RetryOnConflict.call(&))
+  rescue ActiveRecord::TransactionRollbackError, ActiveRecord::LockWaitTimeout
+    render json: { message: 'Someone else was changing the calendar at the same time. ' \
+                            'Nothing was saved. Try again.' },
+           status: :conflict
+  end
+
   # Resolve both @current_resident_api and @current_api_key in one pass,
   # once per request. JWT path is tried first (the post-migration
   # default). If that fails we fall back to a Key.find_by lookup so

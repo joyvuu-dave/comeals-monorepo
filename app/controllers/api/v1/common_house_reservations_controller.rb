@@ -24,10 +24,12 @@ module Api
 
         chr = CommonHouseReservation.new(resident_id: params[:resident_id], start_date: times[:start_date],
                                          end_date: times[:end_date], title: params[:title])
-        if chr.save
-          render json: { message: 'Common House Reservation has been created' }
-        else
-          render json: { message: chr.errors.full_messages.join("\n") }, status: :bad_request
+        render_retrying_on_conflict do
+          if chr.save
+            { json: { message: 'Common House Reservation has been created' } }
+          else
+            { json: { message: chr.errors.full_messages.join("\n") }, status: :bad_request }
+          end
         end
       end
 
@@ -36,19 +38,22 @@ module Api
         times = parse_start_end_params
         return render_invalid_date unless times
 
-        if @chr.update(start_date: times[:start_date], end_date: times[:end_date], resident_id: params[:resident_id],
-                       title: params[:title])
-          render json: { message: 'Common House Reservation has been updated' }
-        else
-          render json: { message: @chr.errors.full_messages.join("\n") }, status: :bad_request
+        render_retrying_on_conflict do
+          if @chr.update(start_date: times[:start_date], end_date: times[:end_date], resident_id: params[:resident_id],
+                         title: params[:title])
+            { json: { message: 'Common House Reservation has been updated' } }
+          else
+            { json: { message: @chr.errors.full_messages.join("\n") }, status: :bad_request }
+          end
         end
       end
 
       # DELETE /api/v1/common-house-reservations/:id/delete
       def destroy
-        @chr.destroy!
-
-        render json: { message: 'Common House Reservation has been removed' }
+        render_retrying_on_conflict do
+          @chr.destroy!
+          { json: { message: 'Common House Reservation has been removed' } }
+        end
       end
 
       private
