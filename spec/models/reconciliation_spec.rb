@@ -626,10 +626,13 @@ RSpec.describe Reconciliation do
   end
 
   describe 'validations' do
-    it 'requires end_date' do
+    it 'requires end_date, and says only that' do
       recon = described_class.new(community: community)
       expect(recon).not_to be_valid
       expect(recon.errors[:end_date]).to include("can't be blank")
+      # Not also "no meals on or before this date": that check stands
+      # down when the date itself is wrong.
+      expect(recon.errors[:base]).to be_empty
     end
 
     it 'rejects end_date in the future' do
@@ -992,6 +995,24 @@ RSpec.describe Reconciliation do
     end
   end
 
+  describe '#unique_cooks' do
+    it 'names a cook once, however many meals they cooked in the period' do
+      unit = create(:unit, community: community)
+      cook = create(:resident, community: community, unit: unit, multiplier: 1)
+      eater = create(:resident, community: community, unit: unit, multiplier: 1)
+      2.times do |days_ago|
+        meal = create(:meal, community: community, date: Date.yesterday - days_ago)
+        create(:meal_resident, meal: meal, resident: eater, community: community)
+        create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('10'))
+      end
+
+      reconciliation = settle!(cutoff: Date.yesterday)
+
+      expect(reconciliation.cooks.count).to eq(2)
+      expect(reconciliation.unique_cooks).to eq([cook])
+    end
+  end
+
   describe '#unit_balances' do
     it 'groups settlement balances by unit and sums to exactly zero' do
       unit_a = create(:unit, community: community, name: 'Unit A')
@@ -1035,6 +1056,22 @@ RSpec.describe Reconciliation do
       expect(result.keys.map(&:last)).to include('Unit B')
       expect(result[[unit_b.id, 'Unit B']]).to eq(BigDecimal('0'))
       expect(result.values.sum(BigDecimal('0'))).to eq(BigDecimal('0'))
+    end
+
+    it 'lists units in name order, whatever order they were created in' do
+      unit_b = create(:unit, community: community, name: 'Unit B')
+      unit_a = create(:unit, community: community, name: 'Unit A')
+      cook = create(:resident, community: community, unit: unit_b, multiplier: 1)
+      eater = create(:resident, community: community, unit: unit_a, multiplier: 1)
+
+      meal = create(:meal, community: community)
+      create(:meal_resident, meal: meal, resident: eater, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
+      meal.reload
+
+      reconciliation = settle!(cutoff: Date.yesterday)
+
+      expect(reconciliation.unit_balances.keys).to eq([[unit_a.id, 'Unit A'], [unit_b.id, 'Unit B']])
     end
 
     it 'returns all community units with zero balances for empty reconciliation' do

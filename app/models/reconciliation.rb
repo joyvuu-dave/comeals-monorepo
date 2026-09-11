@@ -158,9 +158,12 @@ class Reconciliation < ApplicationRecord
   # about what "eligible" means. A second copy of the predicate could drift,
   # and then a reconciliation would pass validation and go on to claim zero
   # meals.
+  # The scope reads today from the one community itself, the same value
+  # this row would pass it (mutant showed the argument changed nothing,
+  # 2026-09-10).
   sig { returns(ActiveRecord::Relation) }
   def eligible_meals
-    Meal.settleable_by(end_date, today: T.must(community).today)
+    Meal.settleable_by(end_date)
   end
 
   # Settlement calls this before saving the row it is about to settle. See
@@ -200,9 +203,11 @@ class Reconciliation < ApplicationRecord
   #
   # This reads the same eligible_meals scope that assign_meals sweeps, so the
   # two cannot disagree about which meals count.
+  # A blank end date is already an end_date error by the time this runs
+  # (the presence validation is declared first), so that case needs no
+  # guard of its own (mutant showed it dead, 2026-09-10).
   sig { void }
   def must_settle_at_least_one_meal
-    return if end_date.blank?
     return if errors[:end_date].any?
     return if eligible_meals.exists?
 

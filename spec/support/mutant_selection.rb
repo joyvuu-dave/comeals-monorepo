@@ -34,7 +34,6 @@ MUTANT_MONEY_SPECS = {
   'spec/models/reconciliation_spec.rb' => %w[Reconciliation Settlement MealLedger],
   'spec/models/reconciliation_awkward_bills_spec.rb' => %w[Reconciliation Settlement MealLedger],
   'spec/models/reconciliation_balance_spec.rb' => %w[Reconciliation Settlement],
-  'spec/models/reconciliation_types_spec.rb' => %w[Reconciliation],
   'spec/helpers/balance_display_helper_spec.rb' => %w[MealLedger],
   'spec/mailers/reconciliation_mailer_spec.rb' => %w[Reconciliation],
   'spec/jobs/refresh_balances_job_spec.rb' => %w[BalanceRecalculation],
@@ -74,6 +73,23 @@ MUTANT_DIRECTORY_ORDER = %w[
   spec/mailers spec/requests spec/db
 ].freeze
 
+# The runtime type-check specs. Each one calls a method with the wrong
+# type and expects the Sorbet sig to raise. Mutant cannot run them: it
+# reinserts the method from its own copy of the source, without the
+# `sig` block above it, so the unmutated code fails the example and every
+# mutation "passes" it (2026-09-10: three Settlement and Reconciliation
+# methods reported the unmutated code failing this way). An empty
+# expression list keeps them out of every mutant run; the plain suite
+# still runs them.
+MUTANT_SIG_CHECK_SPECS = %w[
+  spec/models/meal_types_spec.rb
+  spec/models/reconciliation_types_spec.rb
+  spec/services/balance_recalculation_types_spec.rb
+  spec/services/ledger_verification_types_spec.rb
+  spec/services/retry_on_conflict_types_spec.rb
+  spec/services/settlement_types_spec.rb
+].freeze
+
 RSpec.configure do |config|
   config.register_ordering(:global) do |items|
     items.sort_by do |item|
@@ -83,7 +99,8 @@ RSpec.configure do |config|
     end
   end
 
-  MUTANT_MONEY_SPECS.each do |path, expressions|
+  selections = MUTANT_MONEY_SPECS.merge(MUTANT_SIG_CHECK_SPECS.index_with([]))
+  selections.each do |path, expressions|
     absolute = Rails.root.join(path).to_s
     raise "spec/support/mutant_selection.rb names a file that does not exist: #{path}" unless File.exist?(absolute)
 

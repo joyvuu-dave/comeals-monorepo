@@ -144,6 +144,86 @@ One survivor moved from "missing assertion" to "noise":
 cannot happen for a balanced input: every remainder is under a cent,
 so the pennies needed are always fewer than the candidates.
 
+### 2026-09-10, Settlement and Reconciliation, three runs
+
+The first run since a6605b6 changed Settlement: 31 methods, 1265
+mutations, 6 workers. 1226 killed, 39 alive, 27 by timeout. Browser
+suites ran on the same machine for the first half.
+
+Reading the report showed that 13 Settlement methods had a "neutral
+failure": the unmutated code's own test set failed in a quarter of a
+second, on `Name is already used by the resident in unit ...`. A
+resident named 'Cook' was already in the worker's database. The race
+examples (`spec/db/settlement_race_spec.rb`) commit for real and clean
+up in their own hooks, but a mutation that makes one of them wait
+forever is killed at the timeout, and a killed process never reaches
+its after hook. From then on, every example in that worker that
+creates a 'Cook' fails before it checks anything, which mutant counts
+as a kill. So the kills for those 13 methods meant nothing, in this run
+and in the first full run of 2026-09-08. `config/mutant/hooks.rb` now
+truncates the worker's tables before every mutation (hook 3), the same
+TRUNCATE the suite itself uses.
+
+The Reconciliation survivors that were real:
+
+- Done. `Reconciliation#unit_balances`: dropping `order(:name)`. The
+  spec now creates unit B before unit A and expects A first.
+- Done. `Reconciliation#unique_cooks`: dropping `.uniq`. The spec now
+  settles two meals by one cook and expects one cook.
+- Done, removed. `Reconciliation#must_settle_at_least_one_meal`: the
+  blank end-date guard. The presence validation is declared first, so
+  a blank end date is already an `end_date` error when this runs, and
+  the second guard returns. The blank-date example now also expects no
+  base error.
+- Done, removed. `Reconciliation#eligible_meals`: the `today:` argument.
+  The scope's default reads the same value from the one community.
+
+The second run, on an idle machine with those changes: 1220 killed, 31
+alive, 13 of them the same neutral failures. The 18 others are all
+noise from the list below: `count` to `length`, `to_a` to `to_ary`, the
+preload and `with_attendees` removals in `settlement_ledger`, the
+`T.cast` type arguments, `self.end_date` to `end_date()`,
+`errors[:end_date].any?` to `errors.any?` (nothing else validates on
+this model), and the `allocate_to_cents` equivalents.
+
+The third run, with hook 3: 1232 killed, 19 alive, 89 timeouts, 1 hour
+47 minutes. Two more things came out of it.
+
+- Three "neutral failures" were left, and they were the runtime
+  type-check specs (`settlement_types_spec.rb`,
+  `reconciliation_types_spec.rb`). Mutant reinserts a method from its
+  own copy of the source, without the `sig` block above it, so the
+  unmutated method no longer raises `TypeError` and the example fails.
+  `spec/support/mutant_selection.rb` now gives every `*_types_spec.rb`
+  an empty expression list, so mutant never selects them.
+- The 89 timeouts were kills whose cleanup hung. A race example whose
+  rival thread still held a row lock when the example failed reported
+  the failure, then waited forever in its own after-hook TRUNCATE, and
+  was killed at the timeout. Postgres does not notice a killed client
+  that is waiting on a lock, so the lock stayed, and the next
+  mutation's TRUNCATE (hook 3) waited on it too. `Settlement.preview`
+  alone took 76 minutes. Hook 3 now terminates every other session on
+  the worker's database first; only dead processes own them.
+
+The fourth run, with both: 1251 mutations, 1232 killed, 19 alive, no
+neutral failure, 1 hour 43 minutes. The 19 are all noise, all in
+Reconciliation: `count` to `size` (2), `to_a` to `to_ary` and the
+preload and `with_attendees` removals in `settlement_ledger` (9), the
+`T.cast` type arguments in `unit_balances` (2), `self.end_date` to
+`end_date()`, `errors[:end_date].any?` to `errors.any?`, and the
+default-argument rewrites of `settlement_balances` (4). Settlement has
+no survivor. This is the first run whose kills on Settlement mean
+something (the earlier ones had the neutral failure).
+
+The time went to 109 more timeouts, and they were kills too: a race
+example that fails while its rival thread still holds a row lock hangs
+in its own after-hook TRUNCATE until the mutation timeout, 120 seconds
+for a kill that took 5. `Reconciliation#unit_balances` alone took 55
+minutes. Hook 3 now also sets a 10-second lock timeout on the session
+the examples run on, so that TRUNCATE gives up and the process exits
+with the failure it already reported. Checked on that one method: 88 mutations, 86 killed, the same 2 noise
+survivors, no timeout, under 10 minutes.
+
 **Missing assertions** (the reason to run the tool):
 
 - Done. `Settlement.allocate_to_cents`: sorting candidates by `[id]` instead
