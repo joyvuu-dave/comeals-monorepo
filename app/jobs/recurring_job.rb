@@ -21,6 +21,17 @@
 class RecurringJob < ApplicationJob
   limits_concurrency key: ->(*) { name }, duration: 1.hour
 
+  # A run that reads rows and writes rows can be refused by PostgreSQL for
+  # a conflict with another transaction (ADR 0005): the balance refresh
+  # against a settlement's own refresh, a rotation's new meals against a
+  # sign-up. The refusal is transient by definition, and every job here is
+  # safe to run twice by contract, so the run is tried again — inside the
+  # ping and the run record, which see one run. Five tries, a quarter
+  # second apart at first, the way SettleAndNotify waits: nobody is
+  # waiting on a job's answer.
+  CONFLICT_ATTEMPTS = 5
+  CONFLICT_BASE_DELAY = 0.25
+
   # The name a run is recorded under, and the key config/recurring.yml uses.
   def self.run_name
     T.must(name).delete_suffix('Job').underscore
@@ -30,7 +41,9 @@ class RecurringJob < ApplicationJob
     started_at = Time.current
     details = T.let(nil, T.untyped)
     self.class.const_get(:HEALTHCHECK).then do |slug|
-      Healthcheck.monitor(slug) { details = run }
+      Healthcheck.monitor(slug) do
+        details = RetryOnConflict.call(attempts: CONFLICT_ATTEMPTS, base_delay: CONFLICT_BASE_DELAY) { run }
+      end
     end
     record(started_at, outcome: 'ok', details: details)
   # Exception, not StandardError: this is a record of what happened, and it

@@ -39,8 +39,23 @@ class SettleAndNotify
       Settlement.run!(cutoff: cutoff)
     end
 
-    BalanceRecalculation.call(community: community)
+    refresh_balances(community)
     NotifyCooksJob.perform_later(reconciliation)
     reconciliation
+  end
+
+  # The running balances, after the settlement has committed. A conflict
+  # here (the nightly refresh running at the same moment) is tried again;
+  # one that does not go away is reported and skipped, because raising now
+  # would tell the caller "nothing was saved" about a settlement that is
+  # in the database, and skip the cook mail. The balances are a cache the
+  # nightly job rebuilds (CLAUDE.md, money rule 6).
+  sig { params(community: Community).void }
+  def self.refresh_balances(community)
+    RetryOnConflict.call(attempts: ATTEMPTS, base_delay: BASE_DELAY) do
+      BalanceRecalculation.call(community: community)
+    end
+  rescue ActiveRecord::TransactionRollbackError => e
+    Rails.error.report(e, handled: true, severity: :error, context: { step: 'balance refresh after settlement' })
   end
 end

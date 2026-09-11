@@ -98,6 +98,51 @@ RSpec.describe SettleAndNotify do
     end
   end
 
+  # The refresh runs after the settlement has committed. A conflict there
+  # (the nightly refresh job running at the same moment) is not the
+  # settlement's: it is tried again, and if it keeps failing it is
+  # reported and the call goes on to mail the cooks — the balances are a
+  # cache the nightly job rebuilds (CLAUDE.md, money rule 6), and raising
+  # would tell the caller "nothing was saved" about a settlement that is
+  # in the database. Found by spec/concurrency/request_storm_spec.rb.
+  describe 'when the balance refresh conflicts after the settlement committed' do
+    include_context 'with no test transaction'
+
+    before { allow(RetryOnConflict).to receive(:sleep) }
+
+    it 'tries the refresh again' do
+      settleable_meal(Date.yesterday)
+      attempts = 0
+      allow(BalanceRecalculation).to receive(:call).and_wrap_original do |original, **args|
+        attempts += 1
+        raise ActiveRecord::SerializationFailure, 'conflict' if attempts < 3
+
+        original.call(**args)
+      end
+
+      reconciliation = described_class.call(cutoff: Date.yesterday, community: community)
+
+      expect(reconciliation).to be_persisted
+      expect(attempts).to eq(3)
+      expect(ResidentBalance.find_by(resident_id: resident.id).amount).to eq(BigDecimal('0'))
+      expect(ReconciliationMailer).to have_received(:reconciliation_notify_email).with(cook, reconciliation).once
+    end
+
+    it 'reports a refresh that keeps conflicting, and still returns the settlement and mails the cooks' do
+      settleable_meal(Date.yesterday)
+      allow(BalanceRecalculation).to receive(:call).and_raise(ActiveRecord::SerializationFailure, 'conflict')
+      allow(Rails.error).to receive(:report).and_call_original
+
+      reconciliation = described_class.call(cutoff: Date.yesterday, community: community)
+
+      expect(reconciliation).to be_persisted
+      expect(Reconciliation.count).to eq(1)
+      expect(ReconciliationMailer).to have_received(:reconciliation_notify_email).with(cook, reconciliation).once
+      expect(Rails.error).to have_received(:report).with(an_instance_of(ActiveRecord::SerializationFailure),
+                                                         hash_including(handled: true, severity: :error))
+    end
+  end
+
   it 'lets an error from the settlement itself through, so nothing is half done' do
     allow(Settlement).to receive(:run!).and_raise(ActiveRecord::StatementInvalid, 'connection lost')
 
