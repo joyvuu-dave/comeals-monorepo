@@ -27,11 +27,23 @@ ActiveAdmin.register Reconciliation do
     # form renders like any failed save.
     def create
       cutoff = build_resource.end_date
-      reconciliation = SettleAndNotify.call(cutoff: cutoff)
+      # A person is waiting at a form, so the request's three quick tries,
+      # not the nightly task's minutes (SettleAndNotify::REQUEST).
+      reconciliation = SettleAndNotify.call(cutoff: cutoff, retries: SettleAndNotify::REQUEST)
       redirect_to resource_path(reconciliation), notice: 'Reconciliation was successfully created.'
     rescue ActiveRecord::RecordInvalid => e
       set_resource_ivar(e.record)
       render :new
+    rescue Settlement::Contested
+      # Another settlement claimed the meals between this one's read and
+      # its write. Nothing was written, and the period may be settled
+      # already. RetryOnConflict does not cover this — it retries only a
+      # refusal from the database — and the conflict rescue in
+      # config/initializers/active_admin_conflict_rescue.rb does not
+      # either, because Contested is not an ActiveRecord error. So it
+      # answered 500 until now.
+      redirect_to new_resource_path,
+                  alert: 'Someone else was settling at the same time. Nothing was saved. Try again.'
     end
   end
 

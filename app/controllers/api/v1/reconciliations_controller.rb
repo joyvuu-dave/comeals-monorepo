@@ -37,7 +37,9 @@ module Api
       sig { void }
       def create
         cutoff = Date.iso8601(params.require(:cutoff))
-        reconciliation = SettleAndNotify.call(cutoff: cutoff)
+        # A person is waiting, so three quick tries and then the 409 below,
+        # not the nightly task's minutes of patience (SettleAndNotify::REQUEST).
+        reconciliation = SettleAndNotify.call(cutoff: cutoff, retries: SettleAndNotify::REQUEST)
         # Both dates are NOT NULL on a saved row, which this is.
         render json: { id: reconciliation.id, date: T.must(reconciliation.date).iso8601,
                        cutoff_date: T.must(reconciliation.end_date).iso8601,

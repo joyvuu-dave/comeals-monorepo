@@ -61,6 +61,22 @@ RSpec.describe 'Admin Reconciliation Immutability' do
     end.to raise_error(ActionController::RoutingError)
   end
 
+  # Two settlements at the same moment — this form and the nightly task, or
+  # the API. The loser raises Settlement::Contested, which RetryOnConflict
+  # does not retry (it retries only a refusal from the database) and the
+  # admin conflict rescue does not catch (it is not an ActiveRecord error).
+  # So the form answered 500 until this.
+  it 'shows a try-again message when another settlement claimed the meals first' do
+    allow(SettleAndNotify).to receive(:call).and_raise(Settlement::Contested, 'assign_meals: 0 of 3 claimed')
+
+    expect do
+      post '/reconciliations', params: { reconciliation: { end_date: Date.yesterday } }
+    end.not_to change(Reconciliation, :count)
+
+    expect(response).to redirect_to('/reconciliations/new')
+    expect(flash[:alert]).to include('Nothing was saved. Try again.')
+  end
+
   it 'still renders the new-reconciliation form' do
     get '/reconciliations/new'
 

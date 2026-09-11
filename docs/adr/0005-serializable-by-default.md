@@ -410,6 +410,17 @@ is needed by the specs before it is needed by the application.
   transaction has written nothing, so 409 is the true answer and 500
   never is. Decision 4 still holds: this is a rescue, not a retry,
   because by then the action may have rendered.
+- **2026-09-11** — the retry budget belongs to the caller. `SettleAndNotify`
+  gave every caller the nightly task's ten tries, which sleep two to four
+  minutes before giving up, and that included the API's settle endpoint and
+  the admin form. On a dyno that serves one request at a time, a contested
+  settlement from a person stopped the app for everyone and still showed
+  them an error, because Heroku's router gives up at 30 seconds.
+  `SettleAndNotify::BATCH` and `::REQUEST` split it: three quick tries and
+  a 409 when someone is waiting. The admin form also had no rescue for
+  `Settlement::Contested` — not an ActiveRecord error, so neither
+  RetryOnConflict nor the admin conflict rescue covered it — and answered
+  500; it shows the try-again message now.
 - **2026-09-11** — one lock order for a meal and its rows, everywhere.
   The API locked the meal and then the row; the settled-meal trigger
   locked them the other way round for any write that did not go through

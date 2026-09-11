@@ -80,6 +80,28 @@ RSpec.describe SettleAndNotify do
   describe 'when the settlement keeps conflicting' do
     include_context 'with no test transaction'
 
+    it 'gives up after three tries when the caller is a request, so nobody waits minutes' do
+      settleable_meal(Date.yesterday)
+      allow(RetryOnConflict).to receive(:sleep)
+      allow(Settlement).to receive(:run!).and_raise(ActiveRecord::SerializationFailure, 'conflict')
+
+      expect { described_class.call(cutoff: Date.yesterday, community: community, retries: described_class::REQUEST) }
+        .to raise_error(ActiveRecord::SerializationFailure)
+
+      expect(Settlement).to have_received(:run!).exactly(3).times
+    end
+
+    # The whole point of the two budgets: what the nightly task waits out,
+    # a request gives up on. The delays are the difference — ten tries from
+    # a quarter second, doubling, is two to four minutes of sleeping, and
+    # the web dyno serves one request at a time.
+    it 'waits far longer for the nightly task than for a request' do
+      expect(described_class::BATCH.attempts).to be > described_class::REQUEST.attempts
+      expect(described_class::BATCH.base_delay).to be > described_class::REQUEST.base_delay
+      expect(described_class::REQUEST.attempts).to eq(RetryOnConflict::MAX_ATTEMPTS)
+      expect(described_class::REQUEST.base_delay).to eq(RetryOnConflict::BASE_DELAY)
+    end
+
     it 'keeps trying past a request\'s three attempts' do
       settleable_meal(Date.yesterday)
       allow(RetryOnConflict).to receive(:sleep)

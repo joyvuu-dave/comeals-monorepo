@@ -84,7 +84,7 @@ lines.
 
 ## What the storms found (2026-09-11)
 
-All three were fixed the same day, each with a deterministic spec.
+The first three, each fixed the same day with a deterministic spec.
 
 - A meal write refused once for a conflict and retried answered 500. The
   first attempt had assigned the new values to the meal, and `with_lock`
@@ -127,7 +127,28 @@ Three more, found while fixing those:
   meals first. That is a period settled by someone else, not a failure,
   so it is logged and skipped like an empty period.
 
-One thing the storm shows that is not a bug: routes are drawn lazily in
+Two more, from the runs at 128 to 256 clients:
+
+- The settle button used the nightly task's patience. Both web callers,
+  the API endpoint and the admin form, went through the same entry point
+  as the rake task, which tries ten times with the delay doubling from a
+  quarter second — two to four minutes of sleeping before it gives up.
+  The web dyno serves one request at a time, so a contested settlement
+  held the only thread and stopped the app for everyone, while Heroku's
+  router gave up at 30 seconds and showed the reconciler an error for a
+  settlement that was still running. The caller picks now:
+  `SettleAndNotify::BATCH` for the nightly task, `::REQUEST` for a person
+  — three quick tries, then the 409 the controller already had
+  (`spec/requests/api/v1/reconciliations_create_spec.rb`).
+- The admin settle form answered 500 for `Settlement::Contested`. Nothing
+  rescued it: RetryOnConflict retries only a refusal from the database,
+  and the admin conflict rescue catches ActiveRecord errors, which this
+  is not. It shows the same try-again message now
+  (`spec/requests/admin/reconciliation_immutability_spec.rb`).
+
+Two things the storms show that are not bugs. Routes are drawn lazily in
 the test environment, on the first request, and many first requests at
 once race that. Production eager loads, so the storm specs eager load
-too.
+too. And a connection pool smaller than the thread count answers 500
+(`ActiveRecord::ConnectionTimeoutError`) — that is `STORM_POOL` doing its
+job, and production runs a pool of 2 against 1 thread.

@@ -120,4 +120,29 @@ RSpec.describe 'POST /api/v1/reconciliations' do
 
     expect(response).to have_http_status(:conflict)
   end
+
+  # The settle button is a person waiting, and the web dyno serves one
+  # request at a time (config/puma.rb). The nightly task's ten tries sleep
+  # two to four minutes all told, which would hold the only thread and stop
+  # the app for everyone, while Heroku's router gave up at 30 seconds and
+  # showed an error for a settlement that was still running. Found by
+  # bin/storm at 128 clients, 2026-09-11.
+  #
+  # Without a test transaction, because RetryOnConflict does not retry
+  # inside one — it cannot, a refused transaction is done for.
+  describe 'when the settlement keeps conflicting' do
+    include_context 'with no test transaction'
+
+    it 'gives up after three tries and answers 409, instead of waiting minutes' do
+      settleable_meal
+      allow(RetryOnConflict).to receive(:sleep)
+      allow(Settlement).to receive(:run!).and_raise(ActiveRecord::SerializationFailure, 'could not serialize')
+
+      settle(Date.yesterday)
+
+      expect(response).to have_http_status(:conflict)
+      expect(Settlement).to have_received(:run!).exactly(3).times
+      expect(Reconciliation.count).to eq(0)
+    end
+  end
 end
