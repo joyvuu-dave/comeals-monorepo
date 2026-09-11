@@ -82,7 +82,7 @@ MUTANT_DIRECTORY_ORDER = %w[
 # expression list keeps them out of every mutant run; the plain suite
 # still runs them.
 MUTANT_SIG_CHECK_SPECS = %w[
-  spec/models/meal_types_spec.rb
+  spec/models/holidays_types_spec.rb
   spec/models/reconciliation_types_spec.rb
   spec/services/balance_recalculation_types_spec.rb
   spec/services/ledger_verification_types_spec.rb

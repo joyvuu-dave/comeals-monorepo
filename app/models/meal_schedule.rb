@@ -79,7 +79,7 @@ class MealSchedule
         raise "Scanned #{scanned} days from #{from} and found only #{dates.length} of " \
               "#{count} meal days — the schedule #{weeks.inspect} looks broken"
       end
-      dates << date if meal_day?(date) && !Meal.is_holiday?(date)
+      dates << date if meal_day?(date) && !Holidays.holiday?(date)
       date = date.tomorrow
       scanned += 1
     end
@@ -88,6 +88,6 @@ class MealSchedule
 
   # Every meal date in the range, skipping holidays. Used by db/seeds.rb.
   def dates_between(from, to)
-    (from.to_date..to.to_date).select { |date| meal_day?(date) && !Meal.is_holiday?(date) }
+    (from.to_date..to.to_date).select { |date| meal_day?(date) && !Holidays.holiday?(date) }
   end
 end

@@ -107,7 +107,7 @@ RSpec.describe MealSchedule do
 
     it 'raises instead of walking forever when every candidate is refused' do
       schedule = described_class.new(weeks: [[4]])
-      allow(Meal).to receive(:is_holiday?).and_return(true)
+      allow(Holidays).to receive(:holiday?).and_return(true)
 
       expect { schedule.upcoming_dates(from: Date.new(2026, 8, 2), count: 1) }
         .to raise_error(/looks broken/)

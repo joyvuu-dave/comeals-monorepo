@@ -647,42 +647,6 @@ RSpec.describe Meal do
     end
   end
 
-  describe '.is_holiday?' do
-    it 'detects Thanksgiving (4th Thursday in November)' do
-      expect(described_class.is_holiday?(Date.new(2026, 11, 26))).to be true
-      expect(described_class.is_holiday?(Date.new(2025, 11, 27))).to be true
-    end
-
-    it 'detects Christmas' do
-      expect(described_class.is_holiday?(Date.new(2026, 12, 25))).to be true
-    end
-
-    it 'detects New Year' do
-      expect(described_class.is_holiday?(Date.new(2026, 1, 1))).to be true
-    end
-
-    it 'detects Mother\'s Day (2nd Sunday in May)' do
-      expect(described_class.is_holiday?(Date.new(2026, 5, 10))).to be true
-      expect(described_class.is_holiday?(Date.new(2025, 5, 11))).to be true
-    end
-
-    it 'detects Easter' do
-      # Easter 2026 is April 5
-      expect(described_class.is_holiday?(Date.new(2026, 4, 5))).to be true
-      # Easter 2025 is April 20
-      expect(described_class.is_holiday?(Date.new(2025, 4, 20))).to be true
-    end
-
-    it 'detects July 4th' do
-      expect(described_class.is_holiday?(Date.new(2026, 7, 4))).to be true
-    end
-
-    it 'returns false for non-holidays' do
-      expect(described_class.is_holiday?(Date.new(2026, 3, 15))).to be false
-      expect(described_class.is_holiday?(Date.new(2026, 8, 20))).to be false
-    end
-  end
-
   # ---------------------------------------------------------------------------
   # Deletion safeguards
   # ---------------------------------------------------------------------------
