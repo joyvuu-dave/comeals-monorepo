@@ -4,19 +4,10 @@
 // for: the login banner, server-rendered meal dates, the datepicker,
 // and the community index redirecting to the one community's page.
 const { test, expect } = require("../helpers/test");
+const { login } = require("./login");
 
 // Seeded by tests/admin/seed.rb: meal 1 on 2027-02-04, bill 1 on meal 1.
 const MEAL_DATE_TEXT = "Thu, Feb 4 2027";
-
-async function login(page) {
-  await page.goto("/login");
-  await page.fill("#admin_user_email", "admin@example.com");
-  await page.fill("#admin_user_password", "password");
-  await page.click('input[type="submit"]');
-  // The signed-in email in the header proves the session, regardless of
-  // what the dashboard page is titled.
-  await expect(page.locator("#header")).toContainText("admin@example.com");
-}
 
 test.describe("Admin", () => {
   test("login page shows the banner and a resident-login link", async ({

@@ -34,6 +34,21 @@ ActiveAdmin.register AdminUser do
     # refuses it at any count, like self-demotion.
     before_action :refuse_self_destroy, only: :destroy
 
+    # The edit form always posts the two password fields, empty when the
+    # admin leaves them alone. Devise reads an empty string as a typed
+    # password and refuses it as blank, so promoting an admin or fixing a
+    # phone number failed until a new password was typed in (found by
+    # tests/admin/actions.spec.js). Drop the empty fields, so an untouched
+    # password stays what it was and a filled-in one is still changed.
+    def update
+      admin_params = params.fetch(:admin_user, {})
+      if admin_params[:password].blank?
+        admin_params.delete(:password)
+        admin_params.delete(:password_confirmation)
+      end
+      super
+    end
+
     private
 
     def refuse_unauthorized_superuser_change

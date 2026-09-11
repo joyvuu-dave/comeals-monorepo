@@ -61,6 +61,28 @@ RSpec.describe 'Admin superuser management' do
       expect(spare.reload.superuser).to be false
     end
 
+    # The edit form posts both password fields even when nobody typed in
+    # them. Empty means "keep the password", not "set it to nothing".
+    it 'promotes through the form, whose empty password fields leave the password alone' do
+      other = create(:admin_user, community: community, superuser: false)
+      before = other.encrypted_password
+
+      patch "/admin_users/#{other.id}",
+            params: { admin_user: { superuser: true, password: '', password_confirmation: '' } }
+
+      expect(other.reload.superuser).to be true
+      expect(other.encrypted_password).to eq(before)
+    end
+
+    it 'changes the password when the form fills it in' do
+      other = create(:admin_user, community: community, superuser: false)
+
+      patch "/admin_users/#{other.id}",
+            params: { admin_user: { password: 'a-new-long-password', password_confirmation: 'a-new-long-password' } }
+
+      expect(other.reload.valid_password?('a-new-long-password')).to be true
+    end
+
     it 'deletes another admin' do
       plain = create(:admin_user, community: community, superuser: false)
 

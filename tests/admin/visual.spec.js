@@ -7,6 +7,7 @@
 // a Mac, -admin-linux.png by bin/update-linux-snapshots, which runs this
 // suite in the Playwright container against Rails on the host.
 const { test, expect } = require("../helpers/test");
+const { login } = require("./login");
 
 // tests/admin/seed.rb sets the raw token behind this digest.
 const ADMIN_RESET_TOKEN = "admin-e2e-reset-token";
@@ -65,14 +66,6 @@ const SIGNED_IN_PAGES = [
   ["units-new", "/units/new"],
   ["units-edit", "/units/1/edit"],
 ];
-
-async function login(page) {
-  await page.goto("/login");
-  await page.fill("#admin_user_email", "admin@example.com");
-  await page.fill("#admin_user_password", "password");
-  await page.click('input[type="submit"]');
-  await expect(page.locator("#header")).toContainText("admin@example.com");
-}
 
 async function photograph(page, name, path) {
   await page.goto(path);
