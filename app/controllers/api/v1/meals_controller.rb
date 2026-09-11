@@ -352,9 +352,16 @@ module Api
       # and SSI can still find a cycle through rows the lock does not cover.
       # Three attempts, then a 409. Nothing is written when it gives up, so
       # the message can tell the user that plainly.
+      #
+      # A refused attempt leaves the values it tried to write on the record
+      # in memory: Rails rolls the row back, not the assignment, and
+      # `with_lock` refuses to lock a record with unsaved changes. So each
+      # attempt first drops them; the lock's reload reads the row fresh.
+      # Without this the retry was a 500 (spec/requests/api/v1/meal_write_retry_spec.rb).
       sig { params(blk: T.proc.returns(T.nilable(Rendering))).returns(T.nilable(Rendering)) }
       def with_meal_lock(&blk) # rubocop:disable Naming/BlockForwarding -- the sig above has to name the block
         RetryOnConflict.call do
+          meal.restore_attributes
           meal.with_lock do
             if meal.reconciled?
               reconciled_rejection
