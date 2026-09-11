@@ -19,6 +19,14 @@ namespace :reconciliations do
         "reconciliations:create skipping #{community.name} — #{e.record.errors.full_messages.to_sentence}"
       )
       next
+    rescue Settlement::Contested => e
+      # A reconciler settled from the app at the same moment and claimed
+      # the meals first. The period is settled; nothing is left to do.
+      Rails.logger.info(
+        "reconciliations:create skipping #{community.name} — another settlement claimed the meals first " \
+        "(#{e.message})"
+      )
+      next
     end
 
     total_time = Time.current - start_time

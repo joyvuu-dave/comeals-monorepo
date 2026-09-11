@@ -93,6 +93,21 @@ RSpec.describe 'reconciliations:create' do
     expect(tonight.reload.reconciliation_id).to be_nil
   end
 
+  # Two settlements at the same moment — this task and a reconciler's
+  # click in the app — and this one lost: the other claimed the meals
+  # first (Settlement::Contested). The period is settled, by the other
+  # side, so this is a skip like an empty period, not a crash. It used to
+  # exit 1 and page healthchecks.io about a settlement that went fine.
+  it 'exits clean when another settlement claimed the meals first' do
+    community
+    allow(SettleAndNotify).to receive(:call).and_raise(Settlement::Contested, 'assign_meals: 0 of 3 claimed')
+    allow(Rails.logger).to receive(:info)
+
+    expect { Rake::Task['reconciliations:create'].invoke }.not_to raise_error
+
+    expect(Rails.logger).to have_received(:info).with(/another settlement claimed the meals first/)
+  end
+
   it 'skips communities with no unreconciled meals with bills' do
     # Community with no meals at all
     create(:resident, community: community, unit: unit)
