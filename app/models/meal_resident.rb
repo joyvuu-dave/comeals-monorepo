@@ -37,6 +37,10 @@ class MealResident < ApplicationRecord
 
   audited associated_with: :meal
 
+  # Before every other guard: the meal lock comes first, so the checks
+  # below read the meal under it. See the concern for the lock order.
+  include LocksItsMealFirst
+
   # No new attendees, no toggling late/vegetarian, no removals once reconciled.
   include ReconciledMealImmutability
   # Nor signups on or removals from a closed (but unsettled) meal, beyond the

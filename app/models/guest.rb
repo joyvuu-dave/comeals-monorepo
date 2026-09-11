@@ -31,6 +31,10 @@ class Guest < ApplicationRecord
 
   audited associated_with: :meal
 
+  # Before every other guard: the meal lock comes first, so the checks
+  # below read the meal under it. See the concern for the lock order.
+  include LocksItsMealFirst
+
   # A guest can't be added, altered, or removed after settlement.
   include ReconciledMealImmutability
   # Nor added to or removed from a closed (but unsettled) meal, beyond the

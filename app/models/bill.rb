@@ -46,6 +46,10 @@ class Bill < ApplicationRecord
 
   audited associated_with: :meal
 
+  # Before every other guard: the meal lock comes first, so the checks
+  # below read the meal under it. See the concern for the lock order.
+  include LocksItsMealFirst
+
   # ActiveAdmin's Bill form would otherwise allow a superuser to quietly
   # rewrite a reconciled bill's amount, or move it between meals.
   include ReconciledMealImmutability
