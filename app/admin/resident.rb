@@ -56,10 +56,9 @@ ActiveAdmin.register Resident do
     end
   end
 
-  # On a refused delete, show the model's own error ("Cannot delete record
-  # because dependent bills exist") instead of the generic
-  # "could not be destroyed" flash.
   controller do
+    include RefusedDestroyMessage
+
     # The index sorts by balance, and ORDER BY can only use a column that is
     # in the query — the balance lives in resident_balances, so join it.
     # left_joins, not joins: a resident created since the last daily
@@ -67,15 +66,6 @@ ActiveAdmin.register Resident do
     # the page.
     def scoped_collection
       super.left_joins(:resident_balance)
-    end
-
-    def destroy
-      destroy! do |_success, failure|
-        failure.html do
-          flash[:alert] = resource.errors.full_messages.to_sentence
-          redirect_to collection_path
-        end
-      end
     end
   end
 

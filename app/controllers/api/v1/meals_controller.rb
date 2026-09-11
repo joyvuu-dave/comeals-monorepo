@@ -59,16 +59,11 @@ module Api
       # existing signup instead of erroring on the unique index.
       sig { void }
       def create_meal_resident
-        result = with_meal_lock do
+        render_write_under_lock do
           meal_resident = meal.meal_residents.find_or_initialize_by(resident_id: params[:resident_id])
-          meal_resident.assign_attributes(late: params[:late], vegetarian: params[:vegetarian])
-          if meal_resident.save
-            { json: MealResidentSerializer.new(meal_resident) }
-          else
-            { json: { message: meal_resident.errors.full_messages.join("\n") }, status: :bad_request }
-          end
+          meal_resident.update!(late: params[:late], vegetarian: params[:vegetarian])
+          { json: MealResidentSerializer.new(meal_resident) }
         end
-        render(**result)
       end
 
       # DELETE /api/v1/meals/:meal_id/residents/:resident_id
@@ -76,27 +71,19 @@ module Api
       # are the source of truth; a blocked destroy surfaces here as a 400.
       sig { void }
       def destroy_meal_resident
-        result = with_meal_lock do
-          if meal_resident.destroy
-            { json: { message: 'MealResident destroyed.' } }
-          else
-            { json: { message: meal_resident.errors.full_messages.join("\n") }, status: :bad_request }
-          end
+        render_write_under_lock do
+          meal_resident.destroy!
+          { json: { message: 'MealResident destroyed.' } }
         end
-        render(**result)
       end
 
       # PATCH /api/v1/meals/:meal_id/residents/:resident_id { late, vegetarian }
       sig { void }
       def update_meal_resident
-        result = with_meal_lock do
-          if meal_resident.update(meal_resident_params)
-            { json: { message: 'MealResident updated.' } }
-          else
-            { json: { message: meal_resident.errors.full_messages.join("\n") }, status: :bad_request }
-          end
+        render_write_under_lock do
+          meal_resident.update!(meal_resident_params)
+          { json: { message: 'MealResident updated.' } }
         end
-        render(**result)
       end
 
       # POST /api/v1/meals/:meal_id/residents/:resident_id/guests { vegetarian }
@@ -104,16 +91,12 @@ module Api
       # exceeding meal.max.
       sig { void }
       def create_guest
-        result = with_meal_lock do
+        render_write_under_lock do
           # multiplier omitted intentionally — DB default of 2 applies (adult guest).
           guest = Guest.new(meal_id: meal.id, resident_id: params[:resident_id], vegetarian: params[:vegetarian])
-          if guest.save
-            { json: GuestSerializer.new(guest) }
-          else
-            { json: { message: guest.errors.full_messages.join("\n") }, status: :bad_request }
-          end
+          guest.save!
+          { json: GuestSerializer.new(guest) }
         end
-        render(**result)
       end
 
       # DELETE /api/v1/meals/:meal_id/residents/:resident_id/guests/:guest_id
@@ -121,14 +104,10 @@ module Api
       # are the source of truth; a blocked destroy surfaces here as a 400.
       sig { void }
       def destroy_guest
-        result = with_meal_lock do
-          if guest.destroy
-            { json: { message: 'Guest was destroyed.' } }
-          else
-            { json: { message: guest.errors.full_messages.join("\n") }, status: :bad_request }
-          end
+        render_write_under_lock do
+          guest.destroy!
+          { json: { message: 'Guest was destroyed.' } }
         end
-        render(**result)
       end
 
       # GET /api/v1/meals/:meal_id/cooks
@@ -152,14 +131,10 @@ module Api
       # PATCH /api/v1/meals/:meal_id/description { description }
       sig { void }
       def update_description
-        result = with_meal_lock do
-          if meal.update(description: params[:description])
-            { json: { message: 'Description updated.' } }
-          else
-            { json: { message: meal.errors.full_messages.join("\n") }, status: :bad_request }
-          end
+        render_write_under_lock do
+          meal.update!(description: params[:description])
+          { json: { message: 'Description updated.' } }
         end
-        render(**result)
       end
 
       # PATCH /api/v1/meals/:meal_id/max { max }
@@ -171,17 +146,15 @@ module Api
       # the client gets a 200 for a cap the server will never enforce.
       sig { void }
       def update_max
-        result = with_meal_lock do
+        render_write_under_lock do
           if !meal.closed? && params[:max].present?
             { json: { message: 'Meal is open. A cap can only be set on a closed meal.' },
               status: :bad_request }
-          elsif meal.update(max: params[:max])
-            { json: { message: 'Meal max value updated.' } }
           else
-            { json: { message: meal.errors.full_messages.join("\n") }, status: :bad_request }
+            meal.update!(max: params[:max])
+            { json: { message: 'Meal max value updated.' } }
           end
         end
-        render(**result)
       end
 
       # PATCH /meals/:meal_id/bills
@@ -299,17 +272,29 @@ module Api
       # PATCH /api/v1/meals/:meal_id/closed { closed }
       sig { void }
       def update_closed
-        result = with_meal_lock do
-          if meal.update(closed: params[:closed])
-            { json: { message: 'Meal closed value updated.' } }
-          else
-            { json: { message: meal.errors.full_messages.join("\n") }, status: :bad_request }
-          end
+        render_write_under_lock do
+          meal.update!(closed: params[:closed])
+          { json: { message: 'Meal closed value updated.' } }
         end
-        render(**result)
       end
 
       private
+
+      # One write under the meal lock, rendered. The block writes with the
+      # bang methods (save!, update!, destroy!) and returns what to render
+      # on success; a refusal by a model guard or a validation raises,
+      # unwinds the transaction, and is rendered here as a 400 with the
+      # record's own sentences. Every single-record write action goes
+      # through here, so a new one cannot skip the lock (CLAUDE.md, money
+      # rule 9) or answer a refusal with a 500.
+      sig { params(blk: T.proc.returns(Rendering)).void }
+      # rubocop:disable Naming/BlockForwarding, Style/ArgumentsForwarding -- the sig above has to name the block
+      def render_write_under_lock(&blk)
+        render(**T.must(with_meal_lock(&blk)))
+        # rubocop:enable Naming/BlockForwarding, Style/ArgumentsForwarding
+      rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotDestroyed => e
+        render json: { message: e.record.errors.full_messages.join("\n") }, status: :bad_request
+      end
 
       sig { returns(ActionController::Parameters) }
       def meal_resident_params

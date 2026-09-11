@@ -15,18 +15,8 @@ ActiveAdmin.register Unit do
   # mistake — can actually be removed.
   actions :all
 
-  # On a refused delete, show the model's own error ("Cannot delete record
-  # because dependent residents exist") instead of the generic
-  # "could not be destroyed" flash.
   controller do
-    def destroy
-      destroy! do |_success, failure|
-        failure.html do
-          flash[:alert] = resource.errors.full_messages.to_sentence
-          redirect_to collection_path
-        end
-      end
-    end
+    include RefusedDestroyMessage
   end
 
   # INDEX

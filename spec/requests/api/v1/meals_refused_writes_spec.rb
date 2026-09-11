@@ -46,9 +46,10 @@ RSpec.describe 'meal writes that are refused' do
     it 'answers with the model\'s message' do
       attendance = create(:meal_resident, meal: meal, resident: resident, community: community)
       allow(MealResident).to receive(:find_by).and_return(attendance)
-      allow(attendance).to receive(:update) do
+      # The action writes with update!, so a refusal is the raise it makes.
+      allow(attendance).to receive(:update!) do
         attendance.errors.add(:base, 'Attendance is frozen.')
-        false
+        raise ActiveRecord::RecordInvalid, attendance
       end
 
       patch "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: { token: token, late: true }

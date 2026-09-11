@@ -16,6 +16,8 @@ ActiveAdmin.register Meal do
   config.sort_order = 'date_desc'
 
   controller do
+    include RefusedDestroyMessage
+
     # Reconciled meals are immutable — block edit/update/destroy. Adding
     # attendees or guests via the nested form would otherwise be caught by the
     # child models' before_save guards, but the resulting transaction error is
@@ -35,9 +37,6 @@ ActiveAdmin.register Meal do
                   alert: 'This meal is reconciled and cannot be modified.'
     end
 
-    # On a refused delete (closed meal), show the model's own error instead
-    # of the generic "could not be destroyed" flash. Reconciled meals never
-    # reach this — block_if_reconciled redirects first.
     # A nested guest refused by the closed-meal freeze (ClosedMealAttendanceFreeze)
     # fails in two different ways. An add is a validation error on the
     # guest, which Rails copies onto meal.errors[:guests] and the form shows
@@ -51,13 +50,14 @@ ActiveAdmin.register Meal do
       render :edit
     end
 
-    def destroy
-      destroy! do |_success, failure|
-        failure.html do
-          flash[:alert] = resource.errors.full_messages.to_sentence
-          redirect_to admin_meal_path(resource)
-        end
-      end
+    private
+
+    # Back to the meal, not the list: a closed meal is reopened from its
+    # own page, and that is the next step after "reopen it before
+    # deleting". Reconciled meals never reach this — block_if_reconciled
+    # redirects first.
+    def refused_destroy_path
+      admin_meal_path(resource)
     end
   end
 
