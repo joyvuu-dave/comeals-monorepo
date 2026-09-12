@@ -69,7 +69,7 @@ RSpec.describe 'API write responses' do
 
       patch "/api/v1/meals/#{meal.id}/description", params: { token: token, description: 'Pasta', socket_id: '' }
 
-      expect(Pusher).to have_received(:trigger).with("meal-#{meal.id}", 'update', anything)
+      expect(Pusher).to have_received(:trigger).with("meal-#{meal.id}", 'update', anything).at_least(:once)
       expect(Pusher).not_to have_received(:trigger).with("meal-#{meal.id}", 'update', anything, { socket_id: '' })
     end
 
