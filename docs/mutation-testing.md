@@ -364,8 +364,8 @@ the survivors taught.
 | C: controllers and serializers | 1 | 6,719 | 5,313 | 1,406 (79.1%) | 194 | 1h20 awake (the laptop slept mid-run) |
 | C | 2, rows and specs | 6,719 | 5,960 | 759 (88.7%) | 2 | 2h07 |
 | C | 3, the 91 subjects the pass touched | 4,206 | 3,793 | 413 (90.2%) | 2 | 1h53 |
-| C | 3, the other 85 subjects | CRM | CRK | CRA (CRP%) | CRT | CRTIME |
-| A | 4, whole stage, after every later change | A4M | A4K | A4A (A4P%) | A4T | A4TIME |
+| C | 3, the other 85 subjects | 2,513 | 2,382 | 131 (94.8%) | 0 | 15 min |
+| A | 4, whole stage, after every later change | 6,855 | 6,494 | 361 (94.7%) | 20 | 49 min |
 | B | 3, whole stage, after every later change | B3M | B3K | B3A (B3P%) | B3T | B3TIME |
 | C | 4, whole stage, after every later change | C4M | C4K | C4A (C4P%) | C4T | C4TIME |
 
@@ -503,13 +503,20 @@ only one end moves).
   `if` around every log line (the call is ignored, the branch is not).
 - Six "neutral failures" (the unmutated code failing its own tests, so
   its kills mean nothing): `NotifyCooksJob#perform` and three
-  `RecurringJob` methods, where a lock-budget example hit the 10 s
-  statement timeout under six workers and a health check on one
-  laptop — the same examples pass in mutant's order on their own; and
-  `AssetCacheControl`, whose spec wrote one fixture file from six
-  processes and needed a built `index.html`. The spec now names its
-  fixture by process id and writes a placeholder page when there is no
-  build. Rerun these subjects on an idle machine.
+  `RecurringJob` methods, and `AssetCacheControl`, whose spec wrote one
+  fixture file from six processes and needed a built `index.html`. The
+  spec now names its fixture by process id and writes a placeholder
+  page when there is no build, and the whole-stage rerun below found
+  26 real survivors in the middleware (the `/vite-assets/` prefix, the
+  body, and "no-cache" leaking to every 200), answered by three more
+  examples. The four job ones are still there in the rerun, on an idle
+  machine: two lock-budget examples
+  (`SettleAndNotify ... keeps trying past a request's three attempts`,
+  `RecurringJob ... waits with the batch budget`) hit the 10 s statement
+  timeout inside `BalanceRecalculation#call`, only inside a mutant
+  worker; they pass in mutant's order on their own. Not explained yet.
+  Until it is, the kills reported for those four methods mean nothing;
+  everything else in the two classes is proved by the other examples.
 
 Stage B, 373 after the second run, 4 answered in a third pass and the rest read:
 
