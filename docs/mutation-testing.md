@@ -366,7 +366,7 @@ the survivors taught.
 | C | 3, the 91 subjects the pass touched | 4,206 | 3,793 | 413 (90.2%) | 2 | 1h53 |
 | C | 3, the other 85 subjects | 2,513 | 2,382 | 131 (94.8%) | 0 | 15 min |
 | A | 4, whole stage, after every later change | 6,855 | 6,494 | 361 (94.7%) | 20 | 49 min |
-| B | 3, whole stage, after every later change | B3M | B3K | B3A (B3P%) | B3T | B3TIME |
+| B | 3, whole stage, after every later change | 5,263 | 5,053 | 210 (96.0%) | 11 | 33 min |
 | C | 4, whole stage, after every later change | C4M | C4K | C4A (C4P%) | C4T | C4TIME |
 
 **Three ways the selection was wrong.** Each one made a class look
@@ -535,6 +535,17 @@ Stage B, 373 after the second run, 4 answered in a third pass and the rest read:
   capture and `after_remove` (removed).
 - The rest: `return true` in a validation (its value is ignored),
   `self.x` for `x()`, `.present?` for truthiness on an id.
+
+The whole-stage rerun, after the third pass: 210. `Holidays` is down to
+11, all in `easter?` and all giving the same Sunday for every year from
+1583 to 2499 (a `- 15` under a `% 30`, and the `m` correction, which is
+zero for every year in that range). `Community`, 68: the schedule and
+dinner-time shape checks (`instance_of?` for `is_a?`, `lstrip` for
+`strip`), `size` for `count`, and the preloads. `Meal`, 41: the
+`loaded?` branches and the `neighbour_ids` rewrites the unique date
+index makes equal. `Rotation`, 30: `recolor_remaining_rotations` and
+`set_place_value` with `distinct` dropped or the batch opened
+differently, which push the same months.
 
 Stage C, 1,406 after the first run. Two holes, both wide:
 
