@@ -17,7 +17,7 @@ RSpec.describe 'AssetCacheControl' do
   before do
     fixture.dirname.mkpath
     fixture.write('// asset_cache_control_spec fixture')
-    index.write('<!doctype html><title>Comeals</title>') unless index.exist?
+    index.write('<!doctype html><title>Comeals</title><div id="root"></div>') unless index.exist?
   end
 
   after do

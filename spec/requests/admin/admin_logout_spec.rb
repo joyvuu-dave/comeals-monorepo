@@ -15,9 +15,11 @@ RSpec.describe 'GET /admin-logout' do
     get '/dashboard'
     expect(response).to have_http_status(:ok)
 
+    cookies['remember_admin_user_token'] = 'stale'
     get '/admin-logout'
     expect(response).to redirect_to('/')
     expect(response.cookies['remember_admin_user_token']).to be_nil
+    expect(cookies['remember_admin_user_token']).to be_blank
 
     get '/dashboard'
     expect(response).to redirect_to('/login')

@@ -422,7 +422,7 @@ RSpec.describe 'Meals API' do
            params: { token: token, late: false, vegetarian: false }
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body['message']).to include('reconciled')
+      expect(response.parsed_body['message']).to eq('Change not permitted. Meal has already been reconciled.')
       expect(meal.meal_residents.count).to eq(0)
     end
 

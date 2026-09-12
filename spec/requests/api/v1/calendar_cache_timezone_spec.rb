@@ -34,4 +34,14 @@ RSpec.describe 'the calendar cache after a time zone change' do
 
     expect(month_timezone).to eq('America/New_York')
   end
+
+  it 'reads the community zone for a request signed in with a bearer token too' do
+    community.update!(timezone: 'Asia/Tokyo')
+
+    get "/api/v1/communities/#{community.id}/calendar/2026-04-15",
+        headers: { 'Authorization' => "Bearer #{JwtAuth.encode(resident)}" }
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body['timezone']).to eq('Asia/Tokyo')
+  end
 end

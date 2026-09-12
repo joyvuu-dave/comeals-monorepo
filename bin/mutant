@@ -45,7 +45,7 @@ pass "${base}_0 .. ${base}_$((jobs - 1)) copied from $base"
 # again, unless a real one was there.
 placeholder_index=""
 if [ ! -f public/index.html ]; then
-  printf '<!doctype html><title>Comeals</title>\n' > public/index.html
+  printf '<!doctype html><title>Comeals</title><div id="root"></div>\n' > public/index.html
   placeholder_index=public/index.html
 fi
 cleanup() {

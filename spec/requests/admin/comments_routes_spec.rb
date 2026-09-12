@@ -15,6 +15,7 @@ RSpec.describe 'admin comments routes' do
   it 'answers 404 for the comments index and a comment, signed in or not' do
     get '/comments'
     expect(response).to have_http_status(:not_found)
+    expect(response.body).to include("The page you were looking for doesn't exist (404)")
 
     sign_in create(:admin_user, superuser: true)
     get '/comments'

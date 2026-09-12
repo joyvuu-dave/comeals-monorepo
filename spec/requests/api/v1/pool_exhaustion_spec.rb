@@ -48,7 +48,9 @@ RSpec.describe 'a request that cannot get a database connection' do
 
     get "/api/v1/meals/#{meal.id}/cooks", params: { token: token }
 
-    expect(Rails.error).to have_received(:report)
-      .with(an_instance_of(ActiveRecord::ConnectionTimeoutError), hash_including(handled: true, severity: :warning))
+    expect(Rails.error).to have_received(:report).with(
+      an_instance_of(ActiveRecord::ConnectionTimeoutError),
+      handled: true, severity: :warning, context: { controller: 'meals', action: 'show_cooks' }
+    )
   end
 end

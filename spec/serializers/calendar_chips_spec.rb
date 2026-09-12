@@ -44,6 +44,13 @@ RSpec.describe 'the calendar chips', type: :serializer do
       )
     end
 
+    it 'says nothing about extras for a meal that is over' do
+      meal = create(:meal, community: community, date: Date.new(2026, 4, 9))
+      meal.update!(closed: true, max: 4)
+
+      expect(chip(meal)[:title]).to eq("Dinner\n0 attended")
+    end
+
     it 'draws today\'s meal with who is attending and the extras left' do
       meal = create(:meal, community: community, date: Date.new(2026, 4, 10))
       create(:meal_resident, meal: meal, resident: resident, community: community)

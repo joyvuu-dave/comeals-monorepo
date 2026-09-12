@@ -41,15 +41,20 @@ RSpec.describe 'a read refused for a conflict' do
     expect(response.parsed_body['meals'].size).to eq(1)
   end
 
-  it 'answers 409, not 500, when the refusal does not go away' do
+  it 'answers 409, not 500, when the refusal does not go away, and reports it with the action' do
     allow_any_instance_of(Community).to receive(:calendar_cache_version) # rubocop:disable RSpec/AnyInstance -- the refusal happens inside one request
       .and_raise(ActiveRecord::SerializationFailure, 'could not serialize access')
+    allow(Rails.error).to receive(:report).and_call_original
 
     get "/api/v1/communities/#{community.id}/calendar/2026-04-15", params: { token: token }
 
     expect(response).to have_http_status(:conflict)
     expect(response.parsed_body['message']).to eq(
       'Someone else was changing this at the same time. Nothing was saved. Try again.'
+    )
+    expect(Rails.error).to have_received(:report).with(
+      an_instance_of(ActiveRecord::SerializationFailure),
+      handled: true, severity: :warning, context: { controller: 'communities', action: 'calendar' }
     )
   end
 

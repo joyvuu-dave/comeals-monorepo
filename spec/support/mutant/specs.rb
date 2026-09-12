@@ -111,7 +111,9 @@ MUTANT_SPEC_ROWS = {
   'spec/requests/api/v1/site_controller_spec.rb' => %w[Api::V1::SiteController],
   'spec/requests/api/v1/write_messages_spec.rb' =>
     %w[Api::V1::MealsController Api::V1::EventsController Api::V1::CommonHouseReservationsController
-       Api::V1::GuestRoomReservationsController],
+       Api::V1::GuestRoomReservationsController Api::V1::CommunitiesController Api::V1::ResidentsController
+       MealIcalFeed],
+  'spec/requests/admin/comments_routes_spec.rb' => %w[ApplicationController],
   'spec/requests/api/v1/high_trust_authorization_spec.rb' => %w[ApiController],
   'spec/requests/api/v1/calendar_cache_timezone_spec.rb' => %w[CalendarSerializer Community],
   'spec/requests/api/v1/calendar_last_day_spec.rb' => %w[CalendarSerializer],
