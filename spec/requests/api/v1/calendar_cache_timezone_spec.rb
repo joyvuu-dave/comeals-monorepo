@@ -35,6 +35,13 @@ RSpec.describe 'the calendar cache after a time zone change' do
     expect(month_timezone).to eq('America/New_York')
   end
 
+  it 'stores the month under the key for its year and month' do
+    month_timezone
+
+    expect(Rails.cache.exist?(community.calendar_cache_key(2026, 4))).to be(true)
+    expect(Rails.cache.exist?(community.calendar_cache_key(2026, 3))).to be(false)
+  end
+
   it 'reads the community zone for a request signed in with a bearer token too' do
     community.update!(timezone: 'Asia/Tokyo')
 

@@ -90,6 +90,50 @@ RSpec.describe 'API write responses' do
     end
   end
 
+  describe 'the community zone around every API request' do
+    # The wrapper is what makes "19:00" mean 19:00 where the community
+    # is. Without it a Tokyo dinner is stored at 19:00 Pacific.
+    it 'reads the hours of a new event in the community zone, signed in by token or by header' do
+      community.update!(timezone: 'Asia/Tokyo')
+      event_params = { title: 'Movie Night', all_day: false, start_year: 2026, start_month: 4, start_day: 15,
+                       start_hours: 19, start_minutes: 0, end_hours: 21, end_minutes: 0 }
+
+      post '/api/v1/events', params: event_params.merge(token: token)
+      expect(response).to have_http_status(:ok)
+      expect(Event.last.start_date.utc).to eq(Time.utc(2026, 4, 15, 10, 0))
+
+      post '/api/v1/events', params: event_params.merge(start_day: 16),
+                             headers: { 'Authorization' => "Bearer #{JwtAuth.encode(resident)}" }
+      expect(response).to have_http_status(:ok)
+      expect(Event.last.start_date.utc).to eq(Time.utc(2026, 4, 16, 10, 0))
+    end
+  end
+
+  describe 'the calendar month' do
+    it 'covers the six weeks from the Sunday before the 1st, and names the month those weeks show most of' do
+      [Date.new(2026, 3, 28), Date.new(2026, 3, 29), Date.new(2026, 5, 9), Date.new(2026, 5, 10)].each do |date|
+        create(:meal, community: community, date: date)
+      end
+
+      get "/api/v1/communities/#{community.id}/calendar/2026-04-15", params: { token: token }
+
+      body = response.parsed_body
+      expect(body.values_at('month', 'year')).to eq([4, 2026])
+      expect(body.fetch('meals').map { |chip| chip.fetch('start')[0, 10] })
+        .to contain_exactly('2026-03-29', '2026-05-09')
+    end
+
+    it 'leaves retired residents out of the birthdays' do
+      april = create(:resident, community: community, unit: unit, birthday: Date.new(1990, 4, 15))
+      create(:resident, community: community, unit: unit, birthday: Date.new(1991, 4, 16), active: false,
+                        can_cook: false, email: nil)
+
+      get "/api/v1/communities/#{community.id}/birthdays", params: { token: token, start: '2026-03-29' }
+
+      expect(response.parsed_body.pluck('id')).to eq([april.cache_key_with_version])
+    end
+  end
+
   describe 'the answers every API action shares' do
     it 'names a missing record in one sentence' do
       get '/api/v1/events/999999', params: { token: token }
@@ -168,6 +212,35 @@ RSpec.describe 'API write responses' do
       expect(response.parsed_body).to eq('message' => 'Error.')
     end
 
+    it 'names the email it could not find' do
+      post '/api/v1/residents/token', params: { email: 'nobody@example.com', password: 'x' }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq('message' => 'No resident with email nobody@example.com')
+    end
+
+    it 'clears an expired reset token when someone tries to use it' do
+      resident.update!(reset_password_token: 'old', reset_password_sent_at: 3.days.ago)
+
+      post '/api/v1/residents/password-reset/old', params: { password: 'new-secret' }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq('message' => 'Password reset link has expired. Please request a new one.')
+      expect(resident.reload).to have_attributes(reset_password_token: nil, reset_password_sent_at: nil)
+    end
+
+    it 'links each cook slot in the feed to its meal page under the configured root' do
+      meal = create(:meal, community: community, date: Date.new(2026, 4, 10), description: 'Soup night')
+      create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('10'))
+
+      get "/api/v1/residents/#{resident.id}/ical"
+
+      unfolded = response.body.gsub(/\r?\n[ \t]/, '')
+      expect(unfolded).to include('SUMMARY:Cook Common Dinner')
+      expect(unfolded).to include('DESCRIPTION:Soup night\\n\\n\\n\\nView here: ' \
+                                  "http://localhost:3036/meals/#{meal.id}/edit")
+    end
+
     it 'puts only the resident\'s own cook slots in their feed' do
       other = create(:resident, community: community, unit: unit, multiplier: 2)
       mine = create(:meal, community: community, date: Date.new(2026, 4, 10))
@@ -183,6 +256,17 @@ RSpec.describe 'API write responses' do
   end
 
   describe 'events' do
+    it 'keeps an all-day event all day when an update does not mention it' do
+      event = create(:event, community: community, title: 'Work Day', allday: true, end_date: nil,
+                             start_date: Time.zone.local(2026, 4, 16, 0, 0))
+
+      patch "/api/v1/events/#{event.id}/update", params: { token: token, title: 'Big Work Day', start_year: 2026,
+                                                           start_month: 4, start_day: 16 }
+
+      expect(response).to have_http_status(:ok)
+      expect(event.reload).to have_attributes(title: 'Big Work Day', allday: true)
+    end
+
     it 'stores an empty description when none is sent' do
       post '/api/v1/events', params: { token: token, title: 'Quiet Hour', all_day: true, start_year: 2026,
                                        start_month: 4, start_day: 16 }

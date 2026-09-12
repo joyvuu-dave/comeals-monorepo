@@ -115,7 +115,8 @@ MUTANT_SPEC_ROWS = {
        MealIcalFeed],
   'spec/requests/admin/comments_routes_spec.rb' => %w[ApplicationController],
   'spec/requests/api/v1/high_trust_authorization_spec.rb' => %w[ApiController],
-  'spec/requests/api/v1/calendar_cache_timezone_spec.rb' => %w[CalendarSerializer Community],
+  'spec/requests/api/v1/calendar_cache_timezone_spec.rb' =>
+    %w[CalendarSerializer Community Api::V1::CommunitiesController],
   'spec/requests/api/v1/calendar_last_day_spec.rb' => %w[CalendarSerializer],
   'spec/requests/api/v1/calendar_midnight_spec.rb' => %w[CalendarSerializer Community],
   'spec/requests/fallback_controller_spec.rb' => %w[FallbackController],
