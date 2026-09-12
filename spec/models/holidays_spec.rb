@@ -94,5 +94,35 @@ RSpec.describe Holidays do
         expect(marked).to eq(expected_holidays(year).sort), "year #{year}"
       end
     end
+
+    # Gauss's Easter algorithm, a different computation from the one in
+    # the module (Meeus, Jones and Butcher). Forty-one years all share
+    # one century, so a wrong constant in the century terms of the module
+    # still gives the right Sunday for every one of them; nine centuries
+    # do not.
+    def gauss_easter(year)
+      a = year % 19
+      b = year % 4
+      c = year % 7
+      k = year / 100
+      p = (13 + (8 * k)) / 25
+      q = k / 4
+      m = (15 - p + k - q) % 30
+      n = (4 + k - q) % 7
+      d = ((19 * a) + m) % 30
+      e = ((2 * b) + (4 * c) + (6 * d) + n) % 7
+      return Date.new(year, 4, 19) if d == 29 && e == 6
+      return Date.new(year, 4, 18) if d == 28 && e == 6 && ((11 * m) + 11) % 30 < 19
+
+      Date.new(year, 3, 22) + d + e
+    end
+
+    it 'agrees with Gauss on Easter for every year from 1583 to 2499, and marks no other day of spring' do
+      (1583..2499).each do |year|
+        spring = (Date.new(year, 3, 1)..Date.new(year, 4, 30)).select { |day| described_class.easter?(day) }
+
+        expect(spring).to eq([gauss_easter(year)]), "year #{year}"
+      end
+    end
   end
 end

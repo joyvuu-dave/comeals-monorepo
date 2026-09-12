@@ -203,8 +203,8 @@ class Meal < ApplicationRecord
   def neighbour_ids(day)
     others = Meal.where.not(id: id)
     [
-      others.where(date: ...day).order(date: :desc, id: :desc).limit(1).pick(:id),
-      others.where(date: (day + 1)..).order(:date, :id).limit(1).pick(:id)
+      others.where(date: ...day).order(date: :desc, id: :desc).pick(:id),
+      others.where(date: (day + 1)..).order(:date, :id).pick(:id)
     ].compact
   end
 

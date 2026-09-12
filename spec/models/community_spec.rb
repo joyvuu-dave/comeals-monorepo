@@ -652,6 +652,7 @@ RSpec.describe Community do
     it 'says how many meals are unassigned when it refuses' do
       create(:meal, community: community, date: Date.new(2026, 5, 1))
       create(:meal, community: community, date: Date.new(2026, 5, 2))
+      create(:meal, community: community, date: Date.new(2026, 5, 3), rotation: create(:rotation, community: community))
 
       expect { community.create_next_rotation }
         .to raise_error(RuntimeError, 'Currently 2 Meals not assigned to Rotations')

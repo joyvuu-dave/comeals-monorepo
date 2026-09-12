@@ -168,6 +168,13 @@ RSpec.describe MealSchedule do
         .to raise_error(ArgumentError, /no meal days/)
     end
 
+    it 'refuses a schedule that is not a list, with the same error as a bad cycle' do
+      expect { described_class.new(weeks: nil) }
+        .to raise_error(ArgumentError, 'cycle must be 1 to 6 weeks, got nil')
+      expect { described_class.new(weeks: 'Mondays') }
+        .to raise_error(ArgumentError, 'cycle must be 1 to 6 weeks, got "Mondays"')
+    end
+
     it 'refuses a cycle outside 1..6 weeks' do
       expect { described_class.new(weeks: []) }
         .to raise_error(ArgumentError, /1 to 6 weeks/)

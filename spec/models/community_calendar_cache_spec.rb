@@ -47,12 +47,16 @@ RSpec.describe Community do
       community.calendar_cache_version(from, to)
     end
 
-    it 'starts with the community day and joins every part with a dash' do
-      expect(version).to start_with("#{community.today}-")
-      # The day is three parts; then one count and one newest updated_at
-      # for the community, residents, units, meals, rotations, events,
-      # common house and guest room.
-      expect(version.count('-')).to eq(2 + 15)
+    it 'starts with the community day, then a count and a newest change for each table' do
+      create(:unit, community: community)
+      parts = version.delete_prefix("#{community.today}-").split('-', -1)
+
+      # The newest change of the community, then a count and a newest
+      # change for residents, units, meals, rotations, events, common
+      # house and guest room.
+      expect(parts.length).to eq(15)
+      expect(parts.values_at(1, 3, 5, 7, 9, 11, 13)).to all(match(/\A\d+\z/))
+      expect(parts[3]).to eq('1')
     end
 
     it 'changes when the day changes, with no row changed' do
@@ -99,6 +103,17 @@ RSpec.describe Community do
                        end_date: Time.zone.local(2026, 3, 29, 1, 30))
 
         expect(version).not_to eq(before)
+      end
+    end
+
+    it 'ends the six weeks at midnight in the zone of the request, not the machine' do
+      Time.use_zone('Asia/Tokyo') do
+        before = version
+
+        create(:event, community: community, start_date: Time.zone.local(2026, 5, 10, 3, 0),
+                       end_date: Time.zone.local(2026, 5, 10, 4, 0))
+
+        expect(version).to eq(before)
       end
     end
   end

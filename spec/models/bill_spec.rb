@@ -170,6 +170,17 @@ RSpec.describe Bill do
       expect(bill.reload.amount).to eq(BigDecimal('75'))
     end
 
+    it 'allows re-parenting a bill between two open meals' do
+      meal = create(:meal, community: community)
+      resident = create(:resident, community: community, unit: unit)
+      bill = create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('50'))
+      other = create(:meal, community: community)
+
+      bill.meal = other
+      expect(bill.save).to be true
+      expect(bill.reload.meal_id).to eq(other.id)
+    end
+
     it 'blocks re-parenting a bill out of a reconciled meal' do
       meal = create(:meal, community: community)
       resident = create(:resident, community: community, unit: unit)

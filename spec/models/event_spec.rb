@@ -144,6 +144,15 @@ RSpec.describe Event do
       expect(pushed).to include(key(2026, 3), key(2026, 4), key(2026, 7))
     end
 
+    it 'pushes every month it spans when something else about it changes' do
+      event = create(:event, community: community, start_date: Time.zone.local(2026, 3, 15, 14, 0),
+                             end_date: Time.zone.local(2026, 5, 15, 16, 0))
+
+      pushed = months_pushed { event.update!(title: 'Renamed') }
+
+      expect(pushed).to include(key(2026, 3), key(2026, 4), key(2026, 5))
+    end
+
     it 'pushes only its own months when the dates do not change' do
       event = create(:event, community: community, start_date: Time.zone.local(2026, 4, 15, 14, 0),
                              end_date: Time.zone.local(2026, 4, 15, 16, 0))
@@ -171,6 +180,14 @@ RSpec.describe Event do
     it 'skips validation when allday is true' do
       event = build(:event, start_date: 1.hour.ago, end_date: 2.hours.ago, allday: true)
       expect(event).to be_valid
+    end
+
+    it 'reports a missing start when there is an end, instead of comparing against nothing' do
+      event = build(:event, start_date: nil, end_date: Time.zone.local(2026, 4, 15, 16, 0))
+
+      expect(event).not_to be_valid
+      expect(event.errors[:start_date]).to be_present
+      expect(event.errors[:base]).to be_empty
     end
 
     it 'skips validation when end_date is blank' do

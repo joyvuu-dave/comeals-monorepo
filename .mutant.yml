@@ -153,6 +153,13 @@ matcher:
     - Resident.ransackable_attributes
     - Rotation.ransackable_attributes
     - Unit.ransackable_attributes
+    # A class-body macro. It runs once, when MealCharge, LedgerCheckRun,
+    # Reconciliation and ReconciliationBalance are loaded, and registers
+    # their callbacks; mutant inserts a mutated copy after that, so no
+    # mutation of it can run (2026-09-12: all 50 survived, including
+    # "register no callback at all"). The callbacks it registers are
+    # mutated through AppendOnly#append_only_refuse.
+    - AppendOnly::ClassMethods#append_only
 mutation:
   # Sorbet runtime calls are not code under test. `T.must(x)` becomes
   # `x` and nothing can fail, because the value was never nil; `T.let`

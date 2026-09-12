@@ -179,7 +179,6 @@ MUTANT_SPECS = {
   'spec/models/meal_charge_spec.rb' => %w[MealCharge AppendOnly],
   'spec/models/ledger_check_run_spec.rb' => %w[LedgerCheckRun AppendOnly],
   'spec/models/concerns/locks_its_meal_first_spec.rb' => %w[LocksItsMealFirst Bill],
-  'spec/models/community_calendar_cache_spec.rb' => %w[Community LiveUpdate],
   'spec/models/application_record_ransackable_attributes_spec.rb' => %w[ApplicationRecord],
   'spec/db/settled_meal_triggers_spec.rb' => %w[ReconciledMealImmutability],
   'spec/db/seeds_spec.rb' => %w[Community],

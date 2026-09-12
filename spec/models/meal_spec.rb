@@ -586,6 +586,13 @@ RSpec.describe Meal do
       expect(described_class.receipt_and_nobody_ate).to contain_exactly(held)
     end
 
+    it 'holds back a meal nobody ate for any amount of money, however small' do
+      held = meal_with('0.50', eaten: false)
+
+      expect(described_class.settleable_by(Date.yesterday)).not_to include(held)
+      expect(described_class.receipt_and_nobody_ate).to contain_exactly(held)
+    end
+
     it 'judges each meal by its own cook slots, not by money entered on another meal' do
       held = meal_with('30', eaten: false)
       free = meal_with('0', eaten: false, date: Date.yesterday - 1)
@@ -862,6 +869,13 @@ RSpec.describe Meal do
       pushed = meal_pages_pushed { gone.destroy! }
 
       expect(pushed).to contain_exactly("meal-#{gone.id}", "meal-#{april5.id}", "meal-#{april10.id}")
+    end
+
+    it 'tells only the meal before when there is none after' do
+      pushed = meal_pages_pushed { create(:meal, community: community, date: Date.new(2026, 4, 25)) }
+
+      created = described_class.find_by!(date: Date.new(2026, 4, 25))
+      expect(pushed).to contain_exactly("meal-#{created.id}", "meal-#{april20.id}")
     end
 
     it 'tells only the meal itself when its date does not change' do

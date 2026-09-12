@@ -52,14 +52,12 @@ class Rotation < ApplicationRecord
   # has_many above registers its destroy cascade first, so without prepend a
   # refused destroy could still delete meals inside an enclosing transaction.
   # prepend inserts at the front, so these run in reverse declaration order:
-  # touched check, then tail check, then the date capture — all before any
-  # meal is deleted.
+  # touched check, then tail check — both before any meal is deleted.
   #
   # Deleting rotations is how an admin applies a schedule change before the
   # calendar naturally reaches it: delete the upcoming rotations (newest
   # first) and the nightly task recreates them under the current schedule.
   # The guards make that path safe; they are not only about mistakes.
-  before_destroy :capture_meal_dates_for_cache, prepend: true
   before_destroy :reject_destroy_unless_last, prepend: true
   before_destroy :reject_destroy_if_any_meal_touched, prepend: true
   after_save :note_live_update
@@ -214,16 +212,14 @@ class Rotation < ApplicationRecord
     throw :abort
   end
 
-  def capture_meal_dates_for_cache
-    @meal_dates_before_destroy = Meal.where(rotation_id: id).distinct.pluck(:date)
-  end
-
+  # The destroyed rotation's own meals push their months as the cascade
+  # destroys them (Meal#note_live_update); this pushes the months of the
+  # rotations whose color changed.
   def recolor_remaining_rotations
     changed_ids = self.class.recolor_community
 
-    dates = @meal_dates_before_destroy || []
-    dates |= Meal.where(rotation_id: changed_ids).distinct.pluck(:date) if changed_ids.any?
-
-    LiveUpdate.batch { dates.each { |date| LiveUpdate.calendar(date) } }
+    LiveUpdate.batch do
+      Meal.where(rotation_id: changed_ids).distinct.pluck(:date).each { |date| LiveUpdate.calendar(date) }
+    end
   end
 end

@@ -35,6 +35,9 @@ RSpec.describe Community do
     it 'refuses a value that is not a list at all' do
       community.dinner_start_times = nil
       expect(community).not_to be_valid
+
+      community.dinner_start_times = 'seven'
+      expect(community).not_to be_valid
       expect(community.errors[:dinner_start_times]).to include(/must be seven times/)
     end
 

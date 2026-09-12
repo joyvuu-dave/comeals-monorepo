@@ -123,6 +123,14 @@ RSpec.describe Resident do
       expect(resident.errors[:email]).to include('cannot be blank.')
     end
 
+    it 'requires an email above the full multiplier too, not only at it' do
+      resident = build(:resident, community: community, unit: unit, multiplier: 3, can_cook: true, active: true,
+                                  email: nil)
+
+      expect(resident).not_to be_valid
+      expect(resident.errors[:email]).to include('cannot be blank.')
+    end
+
     it 'allows nil email for children (multiplier < 2)' do
       resident = build(:resident, community: community, unit: unit,
                                   active: true, can_cook: true, multiplier: 1, email: nil)

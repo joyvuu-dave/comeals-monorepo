@@ -87,6 +87,23 @@ RSpec.describe CommonHouseReservation do
                               end_date: 6.hours.ago)
       expect(non_overlapping).to be_valid
     end
+
+    it 'is valid before an existing reservation, and when one ends exactly as the other starts' do
+      community = create(:community)
+      resident = create(:resident, community: community)
+      taken_start = Time.zone.local(2026, 4, 10, 14, 0)
+      create(:common_house_reservation, community: community, resident: resident,
+                                        start_date: taken_start, end_date: taken_start + 2.hours)
+
+      earlier = build(:common_house_reservation, community: community, resident: resident,
+                                                 start_date: taken_start - 3.hours, end_date: taken_start - 1.hour)
+      touching_before = build(:common_house_reservation, community: community, resident: resident,
+                                                         start_date: taken_start - 1.hour, end_date: taken_start)
+      touching_after = build(:common_house_reservation, community: community, resident: resident,
+                                                        start_date: taken_start + 2.hours,
+                                                        end_date: taken_start + 3.hours)
+      expect([earlier, touching_before, touching_after]).to all(be_valid)
+    end
   end
 
   # Regression test for BUG-4: the push once used only start_date.
@@ -157,6 +174,16 @@ RSpec.describe CommonHouseReservation do
       pushed = months_pushed { reservation.update!(start_date: Time.zone.local(2026, 7, 14, 14, 0)) }
 
       expect(pushed).to include(key(2026, 3), key(2026, 4), key(2026, 7))
+    end
+
+    it 'pushes every month it spans when something else about it changes' do
+      reservation = create(:common_house_reservation, community: community, resident: resident,
+                                                      start_date: Time.zone.local(2026, 3, 15, 14, 0),
+                                                      end_date: Time.zone.local(2026, 5, 15, 16, 0))
+
+      pushed = months_pushed { reservation.update!(resident: create(:resident, community: community)) }
+
+      expect(pushed).to include(key(2026, 3), key(2026, 4), key(2026, 5))
     end
 
     it 'pushes only its own months when the dates do not change' do
