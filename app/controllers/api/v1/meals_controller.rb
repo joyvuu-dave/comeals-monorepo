@@ -9,12 +9,6 @@ module Api
       # What an action hands to render: { json:, status: }.
       Rendering = T.type_alias { T::Hash[Symbol, T.untyped] }
 
-      # Whole cents, 0 to 9999.99. The SPA blocks input that breaks this
-      # grammar (app/frontend/src/helpers/money.ts holds the same pattern);
-      # here it is enforced, never rounded. Bill's model validation and the
-      # bills_amount_whole_cents CHECK constraint stand behind it.
-      WHOLE_CENTS_AMOUNT = T.let(/\A\d{1,4}(\.\d{1,2})?\z/, Regexp)
-
       before_action :authenticate
       before_action :set_meal, except: [:next]
       before_action :reject_if_reconciled, only: %i[
@@ -161,101 +155,31 @@ module Api
       # PAYLOAD {id: 1, bills: [{resident_id: 3, amount: "0.00",
       #   no_cost: true}, {resident_id: "4", amount: "0.00",
       #   no_cost: true}]}
+      #
+      # BillsPayload checks the list and writes it; this action does the
+      # request's part. The checks run before the lock and write nothing,
+      # so a bad row anywhere means no row changes. The third-cook warning
+      # is answered as a 400 with type 'warning', but the write happens:
+      # the warning is advice about the rotation, not a refusal.
+      #
+      # The write runs under the meal lock (with_meal_lock), which also
+      # re-checks reconciled? on the fresh row, so a settlement that
+      # committed after reject_if_reconciled is refused. Rendering happens
+      # after the transaction, because a retry runs the block again.
       sig { void }
-      def update_bills # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity, Metrics/MethodLength --multi-step bill validation + cook-scheduling guards
-        message = 'Form submitted.'
-        request_symbol = :ok
-        message_type = nil
+      def update_bills
+        payload = BillsPayload.parse(params[:bills])
+        return render json: { message: payload.error }, status: :bad_request unless payload.valid?
 
-        # The shape first. A form-encoded empty list arrives as one empty
-        # string, and a body without the key as nil; either used to reach
-        # pluck or key? below and answer 500 (found by the random action
-        # sequences, 2026-09-09). The SPA sends JSON and always sends the key.
-        bills = params[:bills]
-        unless bills.is_a?(Array) && bills.all? { |bill| bill.respond_to?(:key?) }
-          render json: { message: 'bills must be a list of cooks.' }, status: :bad_request
-          return
-        end
-
-        # Cooks
-        cook_ids = bills.pluck('resident_id')
-
-        duplicate = cook_ids.map(&:to_i).tally.find { |_, count| count > 1 }&.first
-        if duplicate
-          render json: { message: "Duplicate cook in bills: resident ##{duplicate}." }, status: :bad_request
-          return
-        end
-
-        warning = ThirdCookWarning.for(meal, cook_ids)
-        if warning
-          message = warning
-          request_symbol = :bad_request
-          message_type = 'warning'
-        end
-
-        # Validate all amounts before any DB writes. A row without value
-        # keys names a cook the user did not touch: it keeps the bill alive
-        # (a cook left out of the payload is removed below) but its stored
-        # amount and no_cost are never rewritten.
-        parsed_bills = []
-        bills.each do |bill|
-          unless bill.key?('amount') || bill.key?('no_cost')
-            parsed_bills << { resident_id: bill['resident_id'], touched: false }
-            next
-          end
-          amount_str = bill['amount'].to_s
-          amount_str = '0' if amount_str.blank?
-          unless WHOLE_CENTS_AMOUNT.match?(amount_str)
-            render json: { message: "Invalid amount: #{bill['amount']}. Amounts are whole cents, 0 to 9999.99." },
-                   status: :bad_request
-            return # rubocop:disable Lint/NonLocalExitFromIterator -- intentional: render error and exit action
-          end
-          parsed_bills << {
-            resident_id: bill['resident_id'], amount: BigDecimal(amount_str), no_cost: bill['no_cost'],
-            touched: true
-          }
-        end
-
-        # Verify all cooks are valid residents
-        valid_ids = Resident.where(id: cook_ids).pluck(:id)
-        invalid_ids = cook_ids.map(&:to_i) - valid_ids
-        if invalid_ids.any?
-          render json: { message: 'Resident not found.' }, status: :bad_request
-          return
-        end
-
-        # Pessimistic lock on the meal row prevents concurrent update_bills
-        # calls from interleaving (same pattern as create_meal_resident), and
-        # with_meal_lock's reconciled? re-check rejects a sweep that committed
-        # after the reject_if_reconciled check above. Bills are diffed and
-        # destroyed explicitly — never through cook_ids=, which would swallow
-        # a guard-blocked removal silently. destroy! runs the audited hooks
-        # and the reconciled guard as a second line of defense.
+        warning = ThirdCookWarning.for(meal, payload.cook_ids)
         rejection = with_meal_lock do
-          meal.bills.where.not(resident_id: cook_ids).find_each(&:destroy!)
-          parsed_bills.each do |bill|
-            record = meal.bills.find_or_initialize_by(resident_id: bill[:resident_id])
-            if bill[:touched]
-              record.update!(amount: bill[:amount], no_cost: bill[:no_cost])
-            elsif record.new_record?
-              # An untouched row for a cook with no bill yet: create it with
-              # the column defaults (amount 0, no_cost false).
-              record.save!
-            end
-          end
+          payload.write_to(meal)
           nil
         end
         # with_meal_lock returns the rejection if the sweep won.
         return render(**rejection) if rejection
 
-        payload = { message: message }
-        payload[:type] = message_type if message_type
-        # The rows as stored (same shape as the meal form's bills), so the
-        # client can display what the server persisted instead of trusting
-        # what it sent. reload defeats the association cache — the rows were
-        # rewritten under the lock above.
-        payload[:bills] = meal.bills.reload.map { |bill| bill.slice(:resident_id, :amount, :no_cost) }
-        render json: payload, status: request_symbol
+        render json: bills_written(warning), status: warning ? :bad_request : :ok
       rescue ActiveRecord::RecordNotFound, ActiveRecord::RecordInvalid => e
         render json: { message: e.message }, status: :bad_request
       rescue ActiveRecord::RecordNotDestroyed => e
@@ -263,7 +187,7 @@ module Api
       rescue ActiveRecord::InvalidForeignKey
         render json: { message: 'Invalid cook assignment.' }, status: :bad_request
       rescue ActiveRecord::RangeError
-        # Unreachable while the grammar check above holds (it caps amounts at
+        # Unreachable while BillsPayload's grammar holds (it caps amounts at
         # 9999.99, which fits DECIMAL(12,8)) — kept so a value that would
         # overflow the column can never surface as a 500.
         render json: { message: 'Invalid amount. Amounts are whole cents, 0 to 9999.99.' }, status: :bad_request
@@ -294,6 +218,19 @@ module Api
         # rubocop:enable Naming/BlockForwarding, Style/ArgumentsForwarding
       rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotDestroyed => e
         render json: { message: e.record.errors.full_messages.join("\n") }, status: :bad_request
+      end
+
+      # The answer to a bills write: the message, the warning's type when
+      # there is one, and the rows as stored (same shape as the meal
+      # form's bills), so the client shows what the server kept rather than
+      # what it sent. reload defeats the association cache — the rows were
+      # rewritten under the lock.
+      sig { params(warning: T.nilable(String)).returns(Rendering) }
+      def bills_written(warning)
+        payload = { message: warning || 'Form submitted.' }
+        payload[:type] = 'warning' if warning
+        payload[:bills] = meal.bills.reload.map { |bill| bill.slice(:resident_id, :amount, :no_cost) }
+        payload
       end
 
       sig { returns(ActionController::Parameters) }
