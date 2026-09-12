@@ -58,6 +58,14 @@ Rails.application.config.to_prepare do
       # an unlocked write waiting behind a running settlement. The
       # transaction was aborted, so "nothing was saved" stays true.
       rescue_from ActiveRecord::LockWaitTimeout, with: :redirect_after_conflict
+
+      # Pool exhaustion, the admin half of ApiController#render_overloaded:
+      # a 503 with Retry-After rather than a 500. Rendered as plain text
+      # with no layout on purpose — there is no database connection to be
+      # had, and an ActiveAdmin layout reads the database to draw itself.
+      # A redirect would be worse still: one more request against a server
+      # that has just said it is out of capacity.
+      rescue_from ActiveRecord::ConnectionTimeoutError, with: :render_overloaded
     end
 
     private
@@ -65,6 +73,19 @@ Rails.application.config.to_prepare do
     # Reported, because there is no retry here to report it. RetryOnConflict
     # reports each attempt it makes; admin makes none, so without this a
     # conflict in admin would show up nowhere.
+    def render_overloaded(error)
+      Rails.error.report(
+        error,
+        handled: true,
+        severity: :warning,
+        context: { controller: controller_name, action: action_name }
+      )
+
+      response.set_header('Retry-After', '5')
+      render plain: 'The server is busy right now. Nothing was saved. Please try again in a moment.',
+             status: :service_unavailable
+    end
+
     def redirect_after_conflict(error)
       Rails.error.report(
         error,

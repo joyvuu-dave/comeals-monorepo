@@ -127,7 +127,19 @@ Three more, found while fixing those:
   meals first. That is a period settled by someone else, not a failure,
   so it is logged and skipped like an empty period.
 
-Two more, from the runs at 128 to 256 clients:
+Three more, from the runs at 128 to 256 clients:
+
+- A pool smaller than the thread count answered 500
+  (`ActiveRecord::ConnectionTimeoutError`). The two settings are separate
+  on purpose (`config/database.yml`), which is what makes it easy to raise
+  the threads and leave the pool behind. Now the app refuses to boot on
+  that configuration at all (`DatabasePoolCheck`, one connection per
+  thread plus one for solid_cache's trim thread), and a checkout that
+  times out for any other reason answers 503 with a `Retry-After` rather
+  than 500, on both halves of the app
+  (`spec/lib/database_pool_check_spec.rb`,
+  `spec/requests/api/v1/pool_exhaustion_spec.rb`,
+  `spec/requests/admin/pool_exhaustion_spec.rb`).
 
 - The settle button used the nightly task's patience. Both web callers,
   the API endpoint and the admin form, went through the same entry point
@@ -149,6 +161,4 @@ Two more, from the runs at 128 to 256 clients:
 Two things the storms show that are not bugs. Routes are drawn lazily in
 the test environment, on the first request, and many first requests at
 once race that. Production eager loads, so the storm specs eager load
-too. And a connection pool smaller than the thread count answers 500
-(`ActiveRecord::ConnectionTimeoutError`) — that is `STORM_POOL` doing its
-job, and production runs a pool of 2 against 1 thread.
+too.

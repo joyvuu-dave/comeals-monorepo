@@ -21,6 +21,18 @@ class ApiController < ActionController::API
   # 0005, decision 4). Paths that can retry safely do it themselves.
   rescue_from ActiveRecord::TransactionRollbackError, ActiveRecord::LockWaitTimeout, with: :render_conflict
 
+  # Every connection in the pool was busy for the whole checkout timeout.
+  # That is the server being out of capacity for a moment, not a fault in
+  # the request, so it is a 503 with a Retry-After and not a 500 (RFC
+  # 9110). The SPA can back off on a 503; a 500 it can only show.
+  #
+  # config/initializers/verify_database_pool.rb is what keeps this from
+  # being reachable by a setting: the app refuses to boot when the pool is
+  # smaller than the threads drawing from it. This is the answer for what
+  # that check cannot rule out — a query that holds its connection for the
+  # full statement timeout while another thread waits.
+  rescue_from ActiveRecord::ConnectionTimeoutError, with: :render_overloaded
+
   # Where the SPA lives, for links in feeds. Set per environment in
   # config/environments (config.x.root_url).
   def root_url
@@ -95,6 +107,18 @@ class ApiController < ActionController::API
 
   def render_invalid_date
     render json: { message: 'Error: Invalid date' }, status: :bad_request
+  end
+
+  # Nothing here may touch the database: there is no connection to be had,
+  # which is the whole problem. Retry-After is the wait that just failed
+  # (checkout_timeout, five seconds by default) — by then whatever held
+  # the connections has either finished or hit the statement timeout.
+  def render_overloaded(error)
+    Rails.error.report(error, handled: true, severity: :warning,
+                              context: { controller: controller_name, action: action_name })
+    response.set_header('Retry-After', '5')
+    render json: { message: 'The server is busy right now. Nothing was saved. Please try again in a moment.' },
+           status: :service_unavailable
   end
 
   # The rescue_from above. Private, and named rather than a block, so

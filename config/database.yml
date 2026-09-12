@@ -35,6 +35,9 @@ default: &default
   # with the request thread for the only connection there is. Two is the
   # smallest number that gives it one. If ConnectionTimeoutError ever shows
   # up in the logs, raise RAILS_DB_POOL rather than editing this line.
+  # Raising RAILS_MAX_THREADS without it is now a boot failure rather than
+  # a slow leak of 503s: config/initializers/verify_database_pool.rb wants
+  # one connection per thread plus one for the trim thread.
   pool: <%= ENV.fetch("RAILS_DB_POOL") { 2 } %>
 
   # Every environment runs at SERIALIZABLE (ADR 0005). This was in the test

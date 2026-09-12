@@ -19,11 +19,14 @@ set -euo pipefail
 #
 #   bin/storm                                # 16 threads x 2 workers, 64 clients, 20 s
 #   STORM_THREADS=32 STORM_WORKERS=4 STORM_CLIENTS=128 STORM_SECONDS=60 bin/storm
-#   STORM_POOL=2 bin/storm                   # a pool smaller than the threads
+#   STORM_CLIENTS=256 STORM_SECONDS=60 bin/storm
 #
 # Every server thread needs a database connection, plus one for
-# solid_cache's trim thread; STORM_POOL defaults to threads + 2. Postgres
-# allows 100 connections by default, and the driver takes 12 more.
+# solid_cache's trim thread; STORM_POOL defaults to threads + 2. Setting it
+# below threads + 1 no longer starves the server, it stops it booting:
+# config/initializers/verify_database_pool.rb refuses that configuration
+# everywhere, which is the point of the check. Postgres allows 100
+# connections by default, and the driver takes 12 more.
 # ---------------------------------------------------------------------------
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
