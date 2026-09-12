@@ -48,7 +48,7 @@ class Rotation < ApplicationRecord
   has_many :cooks, -> { distinct }, through: :bills, source: :resident
 
   before_validation :set_color, on: :create
-  # All three prepended, for the same reason as Meal's guards (#26): the
+  # Both prepended, for the same reason as Meal's guards (#26): the
   # has_many above registers its destroy cascade first, so without prepend a
   # refused destroy could still delete meals inside an enclosing transaction.
   # prepend inserts at the front, so these run in reverse declaration order:
