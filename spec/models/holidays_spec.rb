@@ -49,5 +49,50 @@ RSpec.describe Holidays do
       expect(described_class.holiday?(Date.new(2026, 3, 15))).to be false
       expect(described_class.holiday?(Date.new(2026, 8, 20))).to be false
     end
+
+    # Every day of forty-one years against a list written without the
+    # code: Easter Sundays as published by the US Naval Observatory, the
+    # other holidays from their calendar rules. Three Easters proved the
+    # method once; the arithmetic in easter? has twenty steps, and a
+    # wrong constant in most of them still lands on the right Sunday in
+    # three chosen years.
+    def easter_sundays
+      {
+        2000 => [4, 23], 2001 => [4, 15], 2002 => [3, 31], 2003 => [4, 20], 2004 => [4, 11],
+        2005 => [3, 27], 2006 => [4, 16], 2007 => [4, 8], 2008 => [3, 23], 2009 => [4, 12],
+        2010 => [4, 4], 2011 => [4, 24], 2012 => [4, 8], 2013 => [3, 31], 2014 => [4, 20],
+        2015 => [4, 5], 2016 => [3, 27], 2017 => [4, 16], 2018 => [4, 1], 2019 => [4, 21],
+        2020 => [4, 12], 2021 => [4, 4], 2022 => [4, 17], 2023 => [4, 9], 2024 => [3, 31],
+        2025 => [4, 20], 2026 => [4, 5], 2027 => [3, 28], 2028 => [4, 16], 2029 => [4, 1],
+        2030 => [4, 21], 2031 => [4, 13], 2032 => [3, 28], 2033 => [4, 17], 2034 => [4, 9],
+        2035 => [3, 25], 2036 => [4, 13], 2037 => [4, 5], 2038 => [4, 25], 2039 => [4, 10],
+        2040 => [4, 1]
+      }
+    end
+
+    def nth_weekday_of(year, month, wday, nth)
+      first = Date.new(year, month, 1)
+      first + ((wday - first.wday) % 7) + ((nth - 1) * 7)
+    end
+
+    def expected_holidays(year)
+      [
+        Date.new(year, 1, 1),
+        Date.new(year, 7, 4),
+        Date.new(year, 12, 25),
+        Date.new(year, *easter_sundays.fetch(year)),
+        nth_weekday_of(year, 5, 0, 2),
+        nth_weekday_of(year, 11, 4, 4)
+      ]
+    end
+
+    it 'marks exactly the six holidays of every year from 2000 to 2040' do
+      easter_sundays.each_key do |year|
+        days = (Date.new(year, 1, 1)..Date.new(year, 12, 31)).to_a
+        marked = days.select { |day| described_class.holiday?(day) }
+
+        expect(marked).to eq(expected_holidays(year).sort), "year #{year}"
+      end
+    end
   end
 end

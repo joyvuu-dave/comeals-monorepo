@@ -112,6 +112,34 @@ RSpec.describe MealSchedule do
       expect { schedule.upcoming_dates(from: Date.new(2026, 8, 2), count: 1) }
         .to raise_error(/looks broken/)
     end
+
+    # The scan stops after count cycles' worth of days plus a year, so a
+    # schedule that refuses everything is reported within a few hundred
+    # days, and one that is merely sparse (a holiday on every meal day
+    # of a short cycle) still gets a whole year to find its dates. The
+    # message says how far it looked, which pins the limit.
+    it 'gives up after the cycles asked for plus a year, and says so' do
+      allow(Holidays).to receive(:holiday?).and_return(true)
+
+      one_week = described_class.new(weeks: [[4]])
+      expect { one_week.upcoming_dates(from: Date.new(2026, 8, 2), count: 1) }
+        .to raise_error(RuntimeError, 'Scanned 374 days from 2026-08-02 and found only 0 of 1 meal days ' \
+                                      '— the schedule [[4]] looks broken')
+
+      two_weeks = described_class.new(weeks: [[4], [1]])
+      expect { two_weeks.upcoming_dates(from: Date.new(2026, 8, 2), count: 3) }
+        .to raise_error(RuntimeError, 'Scanned 409 days from 2026-08-02 and found only 0 of 3 meal days ' \
+                                      '— the schedule [[4], [1]] looks broken')
+    end
+
+    it 'returns dates, not times, when asked from a time' do
+      schedule = described_class.new(weeks: [[4]])
+
+      dates = schedule.upcoming_dates(from: Time.zone.local(2026, 8, 6, 18, 30), count: 2)
+
+      expect(dates).to eq [Date.new(2026, 8, 6), Date.new(2026, 8, 13)]
+      expect(dates).to all(be_an_instance_of(Date))
+    end
   end
 
   describe '#dates_between' do
@@ -122,6 +150,15 @@ RSpec.describe MealSchedule do
       dates = schedule.dates_between(Date.new(2026, 12, 11), Date.new(2027, 1, 8))
 
       expect(dates).to eq [Date.new(2026, 12, 11), Date.new(2026, 12, 18), Date.new(2027, 1, 8)]
+    end
+
+    it 'includes both ends, and takes times as their dates' do
+      schedule = described_class.new(weeks: [[5]])
+
+      dates = schedule.dates_between(Time.zone.local(2026, 12, 11, 9, 0), Time.zone.local(2026, 12, 18, 23, 0))
+
+      expect(dates).to eq [Date.new(2026, 12, 11), Date.new(2026, 12, 18)]
+      expect(dates).to all(be_an_instance_of(Date))
     end
   end
 

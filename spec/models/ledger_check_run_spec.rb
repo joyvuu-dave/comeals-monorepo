@@ -53,6 +53,29 @@ RSpec.describe LedgerCheckRun do
       expect(run).not_to be_passed
       expect(run).not_to be_failed
     end
+
+    it 'is errored, not failed, when the error came after some mismatches were counted' do
+      run = build_run(reconciliations_checked: 2, mismatch_count: 1, error: 'PG::ConnectionBad: gone')
+
+      expect(run.errored?).to be(true)
+      expect(run.failed?).to be(false)
+      expect(run.passed?).to be(false)
+    end
+
+    it 'answers with plain booleans, not the error text' do
+      expect(build_run(mismatch_count: 0).errored?).to be(false)
+      expect(build_run(mismatch_count: 1).failed?).to be(true)
+      expect(build_run(mismatch_count: 0).passed?).to be(true)
+    end
+  end
+
+  describe '#duration' do
+    it 'is the seconds from start to finish' do
+      run = build_run(started_at: Time.zone.local(2026, 4, 10, 3, 0, 0),
+                      finished_at: Time.zone.local(2026, 4, 10, 3, 1, 30))
+
+      expect(run.duration).to eq(90.0)
+    end
   end
 
   describe 'immutability' do
@@ -61,6 +84,8 @@ RSpec.describe LedgerCheckRun do
 
       expect(run.update(mismatch_count: 5)).to be(false)
       expect(run.reload.mismatch_count).to eq(0)
+      expect(run.errors[:base]).to eq(['A ledger check run records what was true at a point in time and cannot ' \
+                                       'be modified.'])
     end
 
     it 'refuses a destroy' do
@@ -68,6 +93,8 @@ RSpec.describe LedgerCheckRun do
 
       expect(run.destroy).to be(false)
       expect(described_class.exists?(run.id)).to be(true)
+      expect(run.errors[:base]).to eq(['A ledger check run records what was true at a point in time and cannot ' \
+                                       'be destroyed.'])
     end
 
     # The trigger, not the model. This is the path that matters — a record

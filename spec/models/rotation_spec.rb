@@ -40,6 +40,126 @@ RSpec.describe Rotation do
       expect(r1.reload.place_value).to eq(1)
       expect(r3.reload.place_value).to eq(2)
     end
+
+    # Place is by first meal date, and it is only recomputed when a
+    # rotation is created or destroyed. A rotation whose place changes
+    # gets a new updated_at (the calendar's version reads it) and its
+    # months are pushed; one whose place is already right is not touched.
+    it 'renumbers by first meal date when a rotation is created, telling the months it renumbered' do
+      r1 = create(:rotation, community: community, no_email: true)
+      r2 = create(:rotation, community: community, no_email: true)
+      create(:meal, community: community, rotation: r1, date: Date.new(2027, 6, 15))
+      create(:meal, community: community, rotation: r2, date: Date.new(2027, 4, 15))
+      expect([r1, r2].map { |rotation| rotation.reload.place_value }).to eq([1, 2])
+      stamps = [r1, r2].map(&:updated_at)
+      pushed = []
+      RSpec::Mocks.space.proxy_for(Pusher).reset
+      allow(Pusher).to receive(:trigger) { |channel, *| pushed << channel }
+
+      r3 = create(:rotation, community: community, no_email: true)
+
+      expect([r2, r1, r3].map { |rotation| rotation.reload.place_value }).to eq([1, 2, 3])
+      expect(r1.updated_at).to be > stamps[0]
+      expect(r2.updated_at).to be > stamps[1]
+      expect(pushed).to include(community.calendar_cache_key(2027, 4), community.calendar_cache_key(2027, 6))
+    end
+
+    it 'leaves a rotation whose place is already right alone' do
+      r1 = create(:rotation, community: community, no_email: true)
+      create(:meal, community: community, rotation: r1, date: Date.new(2027, 4, 15))
+      stamp = r1.reload.updated_at
+      pushed = []
+      RSpec::Mocks.space.proxy_for(Pusher).reset
+      allow(Pusher).to receive(:trigger) { |channel, *| pushed << channel }
+
+      create(:rotation, community: community, no_email: true)
+
+      expect(r1.reload.updated_at).to eq(stamp)
+      expect(pushed).not_to include(community.calendar_cache_key(2027, 4))
+    end
+  end
+
+  describe '.starting_within' do
+    def rotation_starting(*dates)
+      rotation = create(:rotation, community: community, no_email: true)
+      dates.each { |date| create(:meal, community: community, rotation: rotation, date: date) }
+      rotation
+    end
+
+    it 'takes the rotations whose first meal is in the range, start included and end excluded' do
+      rotation_starting(Date.new(2026, 4, 1), Date.new(2026, 4, 8)) # first meal before the range
+      on_start = rotation_starting(Date.new(2026, 4, 5), Date.new(2026, 4, 20))
+      inside = rotation_starting(Date.new(2026, 4, 11), Date.new(2026, 4, 13))
+      rotation_starting(Date.new(2026, 4, 12), Date.new(2026, 4, 14)) # first meal on the excluded end
+      create(:rotation, community: community, no_email: true) # no meals at all
+
+      found = described_class.starting_within(Date.new(2026, 4, 5)...Date.new(2026, 4, 12))
+
+      expect(found).to contain_exactly(on_start, inside)
+    end
+  end
+
+  describe '#touched_meals' do
+    let(:unit) { create(:unit, community: community) }
+    let(:resident) { create(:resident, community: community, unit: unit, multiplier: 2) }
+    let(:today) { community.today }
+
+    it 'is every meal that happened, is closed or settled, or has a bill, an attendee or a guest' do
+      rotation = create(:rotation, community: community, no_email: true)
+      meal = ->(days) { create(:meal, community: community, rotation: rotation, date: today + days) }
+      meal.call(1) # tomorrow: untouched
+      meal.call(2) # untouched
+      happened = meal.call(0) # today counts as happened
+      closed = meal.call(3).tap { |m| m.update!(closed: true, max: 0) }
+      with_bill = meal.call(4).tap do |m|
+        create(:bill, meal: m, resident: resident, community: community, amount: BigDecimal('10'))
+      end
+      with_attendee = meal.call(5).tap { |m| create(:meal_resident, meal: m, resident: resident, community: community) }
+      with_guest = meal.call(6).tap { |m| create(:guest, meal: m, resident: resident) }
+      settled = meal.call(7).tap { |m| m.update!(reconciliation: create(:reconciliation, community: community)) }
+      other = create(:rotation, community: community, no_email: true)
+      create(:meal, community: community, rotation: other, date: today - 1)
+
+      expect(rotation.touched_meals).to contain_exactly(happened, closed, with_bill, with_attendee, with_guest,
+                                                        settled)
+    end
+  end
+
+  describe 'refusing to leave a hole (reject_destroy_unless_last)' do
+    let(:today) { community.today }
+
+    it 'refuses when another rotation has a meal the very next day after its last meal' do
+      first = create(:rotation, community: community, no_email: true)
+      create(:meal, community: community, rotation: first, date: today + 10)
+      second = create(:rotation, community: community, no_email: true)
+      create(:meal, community: community, rotation: second, date: today + 11)
+
+      expect { first.destroy }.not_to change(described_class, :count)
+      expect(first.errors[:base].join).to include('Delete the newest rotation first')
+    end
+  end
+
+  describe 'telling the calendar (note_live_update)' do
+    def calendar_channels_pushed
+      RSpec::Mocks.space.proxy_for(Pusher).reset
+      pushed = []
+      allow(Pusher).to receive(:trigger) { |channel, *| pushed << channel }
+      yield
+      pushed.select { |channel| channel.include?('-calendar-') }
+    end
+
+    # Mid-month dates, so no other month's six-week calendar shows them.
+    it 'pushes every month its meals fall in when it is saved, and no other rotation\'s' do
+      rotation = create(:rotation, community: community, no_email: true)
+      create(:meal, community: community, rotation: rotation, date: Date.new(2027, 4, 15))
+      create(:meal, community: community, rotation: rotation, date: Date.new(2027, 6, 15))
+      other = create(:rotation, community: community, no_email: true)
+      create(:meal, community: community, rotation: other, date: Date.new(2027, 8, 15))
+
+      pushed = calendar_channels_pushed { rotation.update!(color: Rotation::COLORS.last) }
+
+      expect(pushed).to contain_exactly(community.calendar_cache_key(2027, 4), community.calendar_cache_key(2027, 6))
+    end
   end
 
   describe '#set_color' do
@@ -105,6 +225,20 @@ RSpec.describe Rotation do
       # After: the remaining 4 should be green, blue, red, yellow
       remaining = described_class.order(:id)
       expect(remaining.pluck(:color)).to eq(Rotation::COLORS[0..3])
+    end
+
+    it 'pushes the months of the rotations whose color changed, and not of one that kept its color' do
+      rotations = Array.new(5) { create(:rotation, community: community, no_email: true) }
+      create(:meal, community: community, rotation: rotations[0], date: Date.new(2027, 4, 15))
+      create(:meal, community: community, rotation: rotations[4], date: Date.new(2027, 8, 15))
+      pushed = []
+      RSpec::Mocks.space.proxy_for(Pusher).reset
+      allow(Pusher).to receive(:trigger) { |channel, *| pushed << channel }
+
+      rotations[2].destroy!
+
+      expect(pushed).to include(community.calendar_cache_key(2027, 8))
+      expect(pushed).not_to include(community.calendar_cache_key(2027, 4))
     end
   end
 

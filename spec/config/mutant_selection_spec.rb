@@ -35,6 +35,33 @@ RSpec.describe 'the mutant spec selection' do
     expect(wrong).to be_empty
   end
 
+  # A concern's methods are tested through the models that include it,
+  # and mutant only runs those examples for the concern if the row says
+  # so. Without this, the concerns were mapped to a few admin request
+  # specs only (2026-09-12: ReconciledMealImmutability's re-parent guard
+  # could return false and survive, while bill_spec had the very example
+  # that proves it).
+  it 'names every concern a model includes in the rows of that model\'s specs' do
+    concerns = Rails.root.glob('app/models/concerns/*.rb').map { |f| f.basename('.rb').to_s.camelize.constantize }
+    wrong = Rails.root.glob('spec/models/**/*_spec.rb').filter_map do |file|
+      path = file.relative_path_from(Rails.root).to_s
+      next if MUTANT_SIG_CHECK_SPECS.include?(path)
+
+      klass = described_class_of(path)&.safe_constantize
+      next unless klass.is_a?(Class) && klass < ApplicationRecord
+
+      included = (klass.included_modules & concerns).map(&:name)
+      next if included.empty?
+
+      row = MUTANT_SPECS.fetch(path, [])
+      missing = included - row
+      next if missing.empty?
+
+      "#{path} describes #{klass.name}, which includes #{missing.join(', ')}, but its row is #{row.inspect}"
+    end
+    expect(wrong).to be_empty
+  end
+
   it 'gives every runtime type-check spec an empty list, since mutant drops the sig' do
     types_specs = Rails.root.glob('spec/**/*_types_spec.rb').map { |f| f.relative_path_from(Rails.root).to_s }
     expect(MUTANT_SIG_CHECK_SPECS).to match_array(types_specs)

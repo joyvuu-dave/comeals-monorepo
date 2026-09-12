@@ -22,9 +22,10 @@ MUTANT_SPECS = {
   'spec/services/settle_and_notify_spec.rb' =>
     %w[SettleAndNotify Settlement Reconciliation BalanceRecalculation RetryOnConflict NotifyCooksJob],
   'spec/services/meal_cost_summary_spec.rb' => %w[MealCostSummary MealLedger],
-  'spec/models/reconciliation_spec.rb' => %w[Reconciliation Settlement MealLedger],
-  'spec/models/reconciliation_awkward_bills_spec.rb' => %w[Reconciliation Settlement MealLedger],
-  'spec/models/reconciliation_balance_spec.rb' => %w[ReconciliationBalance Reconciliation Settlement],
+  'spec/models/reconciliation_spec.rb' => %w[Reconciliation Settlement MealLedger AppendOnly BelongsToTheCommunity],
+  'spec/models/reconciliation_awkward_bills_spec.rb' =>
+    %w[Reconciliation Settlement MealLedger AppendOnly BelongsToTheCommunity],
+  'spec/models/reconciliation_balance_spec.rb' => %w[ReconciliationBalance Reconciliation Settlement AppendOnly],
   'spec/helpers/balance_display_helper_spec.rb' => %w[BalanceDisplayHelper MealLedger],
   'spec/mailers/reconciliation_mailer_spec.rb' => %w[ReconciliationMailer ApplicationMailer Reconciliation],
   'spec/jobs/refresh_balances_job_spec.rb' => %w[RefreshBalancesJob BalanceRecalculation],
@@ -58,7 +59,9 @@ MUTANT_SPECS = {
   # The same rule: a spec described by a sentence, or by the thing a class
   # is reached through, names the classes whose behaviour it checks.
   'spec/requests/asset_cache_control_spec.rb' => %w[AssetCacheControl],
-  'spec/requests/api/v1/live_update_contract_spec.rb' => %w[Settlement LiveUpdate],
+  'spec/requests/api/v1/live_update_contract_spec.rb' =>
+    %w[Settlement LiveUpdate Meal Rotation Bill MealResident Guest Resident Unit Community
+       Event GuestRoomReservation CommonHouseReservation NotesMealLiveUpdate],
   'spec/requests/api/v1/calendar_cache_race_spec.rb' => %w[LiveUpdate Community],
   'spec/requests/api/v1/calendar_cache_recolor_race_spec.rb' => %w[LiveUpdate Rotation],
   'spec/requests/api/v1/settled_meal_cache_spec.rb' => %w[Settlement LiveUpdate],
@@ -90,7 +93,7 @@ MUTANT_SPECS = {
   'spec/requests/api/v1/meals_refused_writes_spec.rb' =>
     %w[Api::V1::MealsController ReconciledMealImmutability ClosedMealAttendanceFreeze],
   'spec/requests/api/v1/meals_unknown_resident_spec.rb' => %w[Api::V1::MealsController],
-  'spec/requests/api/v1/meal_cooks_performance_spec.rb' => %w[MealFormSerializer],
+  'spec/requests/api/v1/meal_cooks_performance_spec.rb' => %w[MealFormSerializer Meal],
   'spec/requests/api/v1/events_controller_spec.rb' => %w[Api::V1::EventsController Event LiveUpdate],
   'spec/requests/api/v1/guest_room_reservations_controller_spec.rb' =>
     %w[Api::V1::GuestRoomReservationsController GuestRoomReservation],
@@ -144,16 +147,20 @@ MUTANT_SPECS = {
        RotationLogSerializer ResidentBirthdaySerializer AuditSerializer AuditDescription
        ResidentNameShortener MealCostSummary],
   'spec/serializers/calendar_chip_contrast_spec.rb' => %w[RotationSerializer Rotation],
-  'spec/models/event_spec.rb' => %w[Event LiveUpdate],
-  'spec/models/common_house_reservation_spec.rb' => %w[CommonHouseReservation LiveUpdate],
-  'spec/models/guest_room_reservation_spec.rb' => %w[GuestRoomReservation LiveUpdate],
-  'spec/models/rotation_spec.rb' => %w[Rotation LiveUpdate],
-  'spec/models/meal_spec.rb' => %w[Meal LiveUpdate],
-  'spec/models/bill_spec.rb' => %w[Bill LiveUpdate NotesMealLiveUpdate],
-  'spec/models/meal_resident_spec.rb' => %w[MealResident LiveUpdate NotesMealLiveUpdate],
-  'spec/models/guest_spec.rb' => %w[Guest LiveUpdate NotesMealLiveUpdate],
-  'spec/models/resident_spec.rb' => %w[Resident LiveUpdate HasPhoneNumber],
-  'spec/models/unit_spec.rb' => %w[Unit LiveUpdate],
+  'spec/models/event_spec.rb' => %w[Event LiveUpdate BelongsToTheCommunity],
+  'spec/models/common_house_reservation_spec.rb' => %w[CommonHouseReservation LiveUpdate BelongsToTheCommunity],
+  'spec/models/guest_room_reservation_spec.rb' => %w[GuestRoomReservation LiveUpdate BelongsToTheCommunity],
+  'spec/models/rotation_spec.rb' => %w[Rotation LiveUpdate BelongsToTheCommunity],
+  'spec/models/meal_spec.rb' => %w[Meal LiveUpdate BelongsToTheCommunity],
+  'spec/models/bill_spec.rb' =>
+    %w[Bill LiveUpdate BelongsToTheCommunity LocksItsMealFirst ReconciledMealImmutability NotesMealLiveUpdate],
+  'spec/models/meal_resident_spec.rb' =>
+    %w[MealResident LiveUpdate BelongsToTheCommunity LocksItsMealFirst ReconciledMealImmutability
+       ClosedMealAttendanceFreeze NotesMealLiveUpdate],
+  'spec/models/guest_spec.rb' =>
+    %w[Guest LiveUpdate LocksItsMealFirst ReconciledMealImmutability ClosedMealAttendanceFreeze NotesMealLiveUpdate],
+  'spec/models/resident_spec.rb' => %w[Resident LiveUpdate BelongsToTheCommunity HasPhoneNumber],
+  'spec/models/unit_spec.rb' => %w[Unit LiveUpdate BelongsToTheCommunity],
   'spec/requests/admin/all_pages_spec.rb' =>
     %w[BalanceDisplayHelper SettlementLinesTable MoneyFieldHelper ScheduleWeekLabelHelper PhoneDisplayHelper
        ApplicationHelper SuperuserAdapter],
@@ -163,7 +170,12 @@ MUTANT_SPECS = {
   'spec/models/community_dinner_start_times_spec.rb' => %w[Community],
   'spec/models/community_today_spec.rb' => %w[Community],
   'spec/models/community_today_outside_requests_spec.rb' => %w[Community],
-  'spec/models/rotation_start_date_spec.rb' => %w[Rotation],
+  'spec/models/rotation_start_date_spec.rb' => %w[Rotation BelongsToTheCommunity],
+  'spec/models/admin_user_spec.rb' => %w[AdminUser HasPhoneNumber],
+  'spec/models/meal_charge_spec.rb' => %w[MealCharge AppendOnly],
+  'spec/models/ledger_check_run_spec.rb' => %w[LedgerCheckRun AppendOnly],
+  'spec/models/concerns/locks_its_meal_first_spec.rb' => %w[LocksItsMealFirst Bill],
+  'spec/models/community_calendar_cache_spec.rb' => %w[Community LiveUpdate],
   'spec/models/application_record_ransackable_attributes_spec.rb' => %w[ApplicationRecord],
   'spec/db/settled_meal_triggers_spec.rb' => %w[ReconciledMealImmutability],
   'spec/db/seeds_spec.rb' => %w[Community],

@@ -211,6 +211,16 @@ RSpec.describe Meal do
 
       expect(mem_mult).to eq(sql_mult)
     end
+
+    it 'reads preloaded rows without another query' do
+      meal = create(:meal, community: community)
+      resident = create(:resident, community: community, unit: unit, multiplier: 2)
+      create(:meal_resident, meal: meal, resident: resident, community: community)
+      loaded = described_class.preload(:meal_residents, :guests).find(meal.id)
+
+      expect(count_queries { loaded.multiplier }).to eq(0)
+      expect(count_queries { loaded.attendees_count }).to eq(0)
+    end
   end
 
   describe '#attendees_count' do
@@ -333,6 +343,14 @@ RSpec.describe Meal do
 
       expect { meal.destroy }.not_to change(described_class, :count)
       expect(meal.errors[:base]).to include('Meal has been reconciled.')
+    end
+
+    it 'blocks destroying a closed meal, and says to reopen it first' do
+      meal = create(:meal, community: community)
+      meal.update!(closed: true, max: 0)
+
+      expect { meal.destroy }.not_to change(described_class, :count)
+      expect(meal.errors[:base]).to eq(['Meal has been closed. Reopen it before deleting.'])
     end
 
     it 'still allows editing non-settlement fields once reconciled' do
@@ -568,6 +586,15 @@ RSpec.describe Meal do
       expect(described_class.receipt_and_nobody_ate).to contain_exactly(held)
     end
 
+    it 'judges each meal by its own cook slots, not by money entered on another meal' do
+      held = meal_with('30', eaten: false)
+      free = meal_with('0', eaten: false, date: Date.yesterday - 1)
+
+      expect(described_class.receipt_and_nobody_ate).to contain_exactly(held)
+      expect(described_class.settleable_by(Date.yesterday)).to include(free)
+      expect(described_class.settleable_by(Date.yesterday)).not_to include(held)
+    end
+
     it 'leaves a meal with no bill, one dated today, and one past the cutoff' do
       no_bill = create(:meal, community: community, date: Date.yesterday - 2)
       create(:meal_resident, meal: no_bill, resident: eater, community: community)
@@ -599,6 +626,17 @@ RSpec.describe Meal do
       meal = create(:meal, community: community)
 
       expect(described_class.with_attendees).not_to include(meal)
+    end
+
+    it 'tells meals apart by their own rows, not by attendance anywhere' do
+      resident = create(:resident, community: community, unit: unit, multiplier: 2)
+      eaten = create(:meal, community: community)
+      create(:meal_resident, meal: eaten, resident: resident, community: community)
+      with_guest = create(:meal, community: community)
+      create(:guest, meal: with_guest, resident: resident)
+      create(:meal, community: community)
+
+      expect(described_class.with_attendees).to contain_exactly(eaten, with_guest)
     end
 
     it 'does not duplicate meals with multiple attendees' do
@@ -641,8 +679,17 @@ RSpec.describe Meal do
       expect(meal.another_meal_in_this_rotation_has_less_than_two_cooks?).to be true
     end
 
-    it 'returns false when meal has no rotation' do
+    it 'returns false when meal has no rotation, even beside other unassigned meals without cooks' do
+      create(:meal, community: community, rotation: nil)
       meal = create(:meal, community: community, rotation: nil)
+      expect(meal.another_meal_in_this_rotation_has_less_than_two_cooks?).to be false
+    end
+
+    it 'looks only at meals in the same rotation' do
+      meal = create(:meal, community: community, rotation: rotation)
+      other_rotation = create(:rotation, community: community, no_email: true)
+      create(:meal, community: community, rotation: other_rotation) # no cooks, but not this rotation
+
       expect(meal.another_meal_in_this_rotation_has_less_than_two_cooks?).to be false
     end
   end
@@ -755,6 +802,74 @@ RSpec.describe Meal do
       expect { meal.update!(description: 'New menu') }.to(change do
         Audited::Audit.where(auditable_type: 'Meal', action: 'update').count
       end.by(1))
+    end
+  end
+
+  describe '#total_audits' do
+    it 'lists the newest change first, across the meal and its bills' do
+      meal = create(:meal, community: community)
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('10'))
+      meal.update!(description: 'Soup')
+
+      audits = meal.total_audits
+
+      expect(audits.length).to be >= 3
+      expect(audits.map(&:created_at)).to eq(audits.map(&:created_at).sort.reverse)
+      expect(audits.first.auditable).to eq(meal)
+      expect(audits.first.audited_changes).to include('description')
+    end
+  end
+
+  # The meal page links to the previous and the next meal, so a meal that
+  # appears, moves or disappears between two meals changes both of their
+  # pages. Only the nearest meal on each side, and only when the date
+  # changes.
+  describe 'telling the neighbouring meals (note_live_update)' do
+    let!(:april5) { create(:meal, community: community, date: Date.new(2026, 4, 5)) }
+    let!(:april10) { create(:meal, community: community, date: Date.new(2026, 4, 10)) }
+    let!(:april20) { create(:meal, community: community, date: Date.new(2026, 4, 20)) }
+
+    before { create(:meal, community: community, date: Date.new(2026, 4, 1)) }
+
+    def meal_pages_pushed
+      RSpec::Mocks.space.proxy_for(Pusher).reset
+      pushed = []
+      allow(Pusher).to receive(:trigger) { |channel, *| pushed << channel }
+      yield
+      pushed.select { |channel| channel.start_with?('meal-') }
+    end
+
+    it 'tells the meal before and the meal after when a meal is created' do
+      pushed = meal_pages_pushed { create(:meal, community: community, date: Date.new(2026, 4, 7)) }
+
+      created = described_class.find_by!(date: Date.new(2026, 4, 7))
+      expect(pushed).to contain_exactly("meal-#{created.id}", "meal-#{april5.id}", "meal-#{april10.id}")
+    end
+
+    it 'tells the old neighbours and the new ones when a meal moves' do
+      moving = create(:meal, community: community, date: Date.new(2026, 4, 7))
+
+      pushed = meal_pages_pushed { moving.update!(date: Date.new(2026, 4, 15)) }
+
+      expect(pushed).to contain_exactly("meal-#{moving.id}", "meal-#{april5.id}", "meal-#{april10.id}",
+                                        "meal-#{april20.id}")
+    end
+
+    it 'tells the neighbours when a meal is destroyed' do
+      gone = create(:meal, community: community, date: Date.new(2026, 4, 7))
+
+      pushed = meal_pages_pushed { gone.destroy! }
+
+      expect(pushed).to contain_exactly("meal-#{gone.id}", "meal-#{april5.id}", "meal-#{april10.id}")
+    end
+
+    it 'tells only the meal itself when its date does not change' do
+      meal = create(:meal, community: community, date: Date.new(2026, 4, 7))
+
+      pushed = meal_pages_pushed { meal.update!(description: 'Soup') }
+
+      expect(pushed).to eq(["meal-#{meal.id}"])
     end
   end
 end

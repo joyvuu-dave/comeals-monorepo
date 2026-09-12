@@ -8,6 +8,9 @@ RSpec.describe NotesMealLiveUpdate do
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
   let(:cook) { create(:resident, community: community, unit: unit) }
+  # The first meal in the table is one the bill never touches, so a
+  # lookup that forgets which meal it is asking about finds this one.
+  let!(:elsewhere) { create(:meal, community: community, date: Date.new(2026, 1, 14)) }
   let(:from) { create(:meal, community: community, date: Date.new(2026, 3, 30)) }
   let(:to) { create(:meal, community: community, date: Date.new(2026, 5, 4)) }
 
@@ -21,6 +24,19 @@ RSpec.describe NotesMealLiveUpdate do
 
     expect(channels).to include("meal-#{from.id}", "meal-#{to.id}",
                                 community.calendar_cache_key(2026, 3), community.calendar_cache_key(2026, 5))
+    expect(channels).not_to include("meal-#{elsewhere.id}", community.calendar_cache_key(2026, 1))
     expect(channels.uniq).to eq(channels)
+  end
+
+  it 'tells only the meal and its month when the row stays on the meal' do
+    bill = create(:bill, meal: from, resident: cook, community: community, amount: BigDecimal('10'))
+    channels = []
+    allow(Pusher).to receive(:trigger) { |channel, *| channels << channel }
+
+    bill.update!(amount: BigDecimal('12'))
+
+    # March 30, 2026 is on April's six-week calendar too.
+    expect(channels).to contain_exactly("meal-#{from.id}", community.calendar_cache_key(2026, 3),
+                                        community.calendar_cache_key(2026, 4))
   end
 end

@@ -139,6 +139,9 @@ RSpec.describe MealCharge do
 
       expect(charge.update(amount: BigDecimal('1'))).to be(false)
       expect(charge.reload.amount).not_to eq(BigDecimal('1'))
+      expect(charge.errors[:base]).to eq(['Settlement line items record what a meal cost and who was charged ' \
+                                          'for it. They cannot be modified — corrections settle in the next ' \
+                                          'reconciliation.'])
     end
 
     it 'refuses a destroy through Rails' do
@@ -147,6 +150,8 @@ RSpec.describe MealCharge do
 
       expect(charge.destroy).to be(false)
       expect(described_class.exists?(charge.id)).to be(true)
+      expect(charge.errors[:base]).to eq(['Settlement line items record what a meal cost and who was charged ' \
+                                          'for it. They cannot be destroyed.'])
     end
 
     it 'refuses an update that skips Rails' do
@@ -215,6 +220,27 @@ RSpec.describe MealCharge do
 
       expect { insert(kind: 'debit', amount: BigDecimal('-2'), multiplier: 2) }
         .to raise_error(ActiveRecord::RecordNotUnique)
+    end
+  end
+
+  describe '#credit?' do
+    it 'is true for a cook credit and false for either kind of debit' do
+      expect(described_class.new(kind: 'credit').credit?).to be(true)
+      expect(described_class.new(kind: 'debit').credit?).to be(false)
+      expect(described_class.new(kind: 'guest_debit').credit?).to be(false)
+    end
+  end
+
+  describe '#subsidized?' do
+    def charge(kind:, amount:, bill_amount:)
+      described_class.new(kind: kind, amount: BigDecimal(amount), bill_amount: bill_amount && BigDecimal(bill_amount))
+    end
+
+    it 'is true only for a credit smaller than what the cook spent' do
+      expect(charge(kind: 'credit', amount: '16', bill_amount: '20').subsidized?).to be(true)
+      expect(charge(kind: 'credit', amount: '20', bill_amount: '20').subsidized?).to be(false)
+      expect(charge(kind: 'credit', amount: '16', bill_amount: nil).subsidized?).to be(false)
+      expect(charge(kind: 'debit', amount: '-8', bill_amount: '20').subsidized?).to be(false)
     end
   end
 end

@@ -37,6 +37,15 @@ RSpec.describe Community do
       expect(second.errors[:base]).to include('Only one Community record is allowed')
     end
 
+    it 'links the admins created before it, in the console during bootstrap' do
+      orphan = create(:admin_user, community: nil)
+      expect(orphan.community_id).to be_nil
+
+      created = create(:community)
+
+      expect(orphan.reload.community_id).to eq(created.id)
+    end
+
     it 'prevents destruction' do
       expect(community.destroy).to be false
       expect(described_class.count).to eq(1)
@@ -52,6 +61,20 @@ RSpec.describe Community do
 
       expect(community_without_tz).not_to be_valid
       expect(community_without_tz.errors[:timezone]).to be_present
+    end
+
+    it 'pushes the residents channel when the zone changes, and not for another change' do
+      community
+      RSpec::Mocks.space.proxy_for(Pusher).reset
+      allow(Pusher).to receive(:trigger)
+      residents_channel = "community-#{community.id}-residents"
+
+      community.update!(timezone: 'Asia/Tokyo')
+      expect(Pusher).to have_received(:trigger)
+        .with(residents_channel, 'update', hash_including(message: 'residents updated')).once
+
+      community.update!(name: 'Renamed')
+      expect(Pusher).to have_received(:trigger).with(residents_channel, 'update', anything).once
     end
 
     it 'accepts any timezone from SUPPORTED_TIMEZONES' do
@@ -113,6 +136,22 @@ RSpec.describe Community do
 
     it 'returns -- when no unreconciled meals exist' do
       expect(community.unreconciled_ave_cost).to eq('--')
+    end
+
+    it 'leaves settled meals out' do
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      diner = create(:resident, community: community, unit: unit, multiplier: 2)
+      settled = create(:meal, community: community, date: Date.yesterday)
+      create(:bill, meal: settled, resident: cook, community: community, amount: BigDecimal('16'))
+      create(:meal_resident, meal: settled, resident: cook, community: community)
+      create(:meal_resident, meal: settled, resident: diner, community: community)
+      settle!(cutoff: Date.yesterday)
+      open_meal = create(:meal, community: community, date: Time.zone.today)
+      create(:bill, meal: open_meal, resident: cook, community: community, amount: BigDecimal('6'))
+      create(:meal_resident, meal: open_meal, resident: diner, community: community)
+
+      # Only the open meal: $6 over a multiplier of 2 is $3 a unit, $6 an adult.
+      expect(community.unreconciled_ave_cost).to eq('$6.00/adult')
     end
 
     it 'returns -- when total multiplier is zero' do
@@ -183,6 +222,34 @@ RSpec.describe Community do
 
     it 'returns -- when no unreconciled meals exist' do
       expect(community.unreconciled_ave_number_of_attendees).to eq('--')
+    end
+
+    it 'leaves settled meals and their attendance out' do
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      diner = create(:resident, community: community, unit: unit, multiplier: 2)
+      settled = create(:meal, community: community, date: Date.yesterday)
+      create(:bill, meal: settled, resident: cook, community: community, amount: BigDecimal('16'))
+      create(:meal_resident, meal: settled, resident: cook, community: community)
+      create(:meal_resident, meal: settled, resident: diner, community: community)
+      create(:guest, meal: settled, resident: diner)
+      settle!(cutoff: Date.yesterday)
+      open_meal = create(:meal, community: community, date: Time.zone.today)
+      create(:meal_resident, meal: open_meal, resident: diner, community: community)
+
+      expect(community.unreconciled_ave_number_of_attendees).to eq(1.0)
+    end
+
+    it 'rounds to one decimal' do
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      diner = create(:resident, community: community, unit: unit, multiplier: 2)
+      3.times do |n|
+        meal = create(:meal, community: community, date: Date.yesterday - n)
+        create(:meal_resident, meal: meal, resident: cook, community: community)
+        create(:meal_resident, meal: meal, resident: diner, community: community) if n.zero?
+      end
+
+      # 4 attendees over 3 meals is 1.333..., shown as 1.3.
+      expect(community.unreconciled_ave_number_of_attendees).to eq(1.3)
     end
 
     it 'counts guests in addition to residents' do
@@ -278,6 +345,12 @@ RSpec.describe Community do
 
     # A cap is typed by a person, so it is whole cents — the same rule
     # Bill#amount enforces. 2.32481286 can only be a typo.
+    it 'refuses a cap with a third decimal, the smallest fraction of a cent' do
+      community.cap = BigDecimal('2.125')
+      expect(community).not_to be_valid
+      expect(community.errors[:cap]).to include('must be whole cents')
+    end
+
     it 'refuses a sub-cent cap' do
       community.cap = BigDecimal('2.32481286')
       expect(community).not_to be_valid
@@ -298,6 +371,12 @@ RSpec.describe Community do
       expect(community).not_to be_valid
       expect(community.errors[:free_below_age]).to include('must be a whole number of years, 0 or more')
       expect(community.errors[:free_below_age]).not_to include(/at or below/)
+
+      community.free_below_age = 5
+      community.full_price_age = nil
+      expect(community).not_to be_valid
+      expect(community.errors[:full_price_age]).to include('must be a whole number of years, 0 or more')
+      expect(community.errors[:free_below_age]).to be_empty
     end
 
     it 'defaults to eating free below 5 and full price from 12' do
@@ -368,6 +447,22 @@ RSpec.describe Community do
       community.schedule = [[0, 7]]
       expect(community).not_to be_valid
       expect(community.errors[:schedule]).to include('days must be 0 (Sunday) through 6 (Saturday)')
+
+      community.schedule = [[0, -1]]
+      expect(community).not_to be_valid
+      expect(community.errors[:schedule]).to include('days must be 0 (Sunday) through 6 (Saturday)')
+    end
+
+    it 'refuses a bad week even when the other weeks are fine' do
+      community.schedule = [[0, 4], [7]]
+      expect(community).not_to be_valid
+      expect(community.errors[:schedule]).to include('days must be 0 (Sunday) through 6 (Saturday)')
+    end
+
+    it 'drops a field that holds only spaces, like an empty one' do
+      community.schedule = { '0' => [' ', '4', ' 0'] }
+      expect(community.schedule).to eq([[0, 4]])
+      expect(community).to be_valid
     end
 
     it 'reports rather than raises on uncoercible form input' do
@@ -413,6 +508,13 @@ RSpec.describe Community do
       # 4 adults (multiplier >= 2) who can cook, divided by 2 = 2
       expect(community.auto_rotation_length).to eq(2)
     end
+
+    it 'leaves out adults who cannot cook' do
+      6.times { create(:resident, community: community, unit: unit, multiplier: 2, can_cook: true) }
+      2.times { create(:resident, community: community, unit: unit, multiplier: 2, can_cook: false) }
+
+      expect(community.auto_rotation_length).to eq(3)
+    end
   end
 
   describe '#auto_create_rotations' do
@@ -430,6 +532,20 @@ RSpec.describe Community do
       # 3 meals with rotation_length 2 = 2 rotations (2 + 1)
       expect(community.rotations.count).to eq(2)
       expect(Meal.where(community: community, rotation_id: nil).count).to eq(0)
+    end
+
+    it 'fills the rotations in date order, whatever order the meals were entered, and does not email about them' do
+      4.times { create(:resident, community: community, unit: unit, multiplier: 2, can_cook: true) }
+      create(:meal, community: community, date: Date.new(2026, 5, 5))
+      create(:meal, community: community, date: Date.new(2026, 5, 1))
+      create(:meal, community: community, date: Date.new(2026, 5, 3))
+
+      community.auto_create_rotations
+
+      first, second = community.rotations.order(:id).to_a
+      expect(first.meals.order(:date).pluck(:date)).to eq([Date.new(2026, 5, 1), Date.new(2026, 5, 3)])
+      expect(second.meals.pluck(:date)).to eq([Date.new(2026, 5, 5)])
+      expect(community.rotations.where(new_rotation_notified_at: nil)).to be_empty
     end
   end
 
@@ -531,6 +647,25 @@ RSpec.describe Community do
       create(:meal, community: community)
 
       expect { community.create_next_rotation }.to raise_error(RuntimeError, /not assigned to Rotations/)
+    end
+
+    it 'says how many meals are unassigned when it refuses' do
+      create(:meal, community: community, date: Date.new(2026, 5, 1))
+      create(:meal, community: community, date: Date.new(2026, 5, 2))
+
+      expect { community.create_next_rotation }
+        .to raise_error(RuntimeError, 'Currently 2 Meals not assigned to Rotations')
+    end
+
+    it 'starts after the latest meal date, not after the meal entered last' do
+      4.times { create(:resident, community: community, unit: unit, multiplier: 2, can_cook: true) }
+      rotation = create(:rotation, community: community, no_email: true)
+      create(:meal, community: community, rotation: rotation, date: community.today + 30)
+      create(:meal, community: community, rotation: rotation, date: community.today + 10)
+
+      community.create_next_rotation
+
+      expect(community.rotations.order(:id).last.meals.minimum(:date)).to be > community.today + 30
     end
 
     it 'sets start_date and description on the created rotation' do

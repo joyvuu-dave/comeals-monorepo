@@ -59,6 +59,14 @@ RSpec.describe MealResident do
       expect(mr.multiplier).to eq(2)
     end
 
+    it 'reports a missing resident, not a wrong multiplier' do
+      mr = described_class.new(meal: meal, community: community, multiplier: 2)
+
+      expect(mr).not_to be_valid
+      expect(mr.errors[:resident]).to be_present
+      expect(mr.errors[:multiplier]).to be_empty
+    end
+
     it 'accepts the resident\'s own multiplier when it is given' do
       mr = described_class.new(meal: meal, resident: resident, community: community, multiplier: resident.multiplier)
 

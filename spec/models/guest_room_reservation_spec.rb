@@ -80,4 +80,38 @@ RSpec.describe GuestRoomReservation do
       end.to raise_error(ActiveRecord::RecordNotUnique)
     end
   end
+
+  describe 'telling the calendar (note_live_update)' do
+    let(:community) { create(:community) }
+    let(:resident) { create(:resident, community: community) }
+
+    def months_pushed
+      RSpec::Mocks.space.proxy_for(Pusher).reset
+      pushed = []
+      allow(Pusher).to receive(:trigger) { |channel, *| pushed << channel }
+      yield
+      pushed.select { |channel| channel.include?('-calendar-') }
+    end
+
+    def key(year, month)
+      community.calendar_cache_key(year, month)
+    end
+
+    it 'pushes the month of the day when it is created' do
+      pushed = months_pushed do
+        create(:guest_room_reservation, community: community, resident: resident, date: Date.new(2026, 4, 15))
+      end
+
+      expect(pushed).to eq([key(2026, 4)])
+    end
+
+    it 'pushes the old month as well as the new one when the day moves' do
+      reservation = create(:guest_room_reservation, community: community, resident: resident,
+                                                    date: Date.new(2026, 4, 15))
+
+      pushed = months_pushed { reservation.update!(date: Date.new(2026, 6, 15)) }
+
+      expect(pushed).to contain_exactly(key(2026, 4), key(2026, 6))
+    end
+  end
 end

@@ -35,6 +35,12 @@ require 'rails_helper'
 RSpec.describe AdminUser do
   let(:community) { create(:community) }
 
+  describe '#name' do
+    it 'is the email, which is all an admin has' do
+      expect(build(:admin_user, community: community, email: 'ops@example.com').name).to eq('ops@example.com')
+    end
+  end
+
   describe '#superuser?' do
     it 'returns true when superuser is true' do
       admin = create(:admin_user, community: community, superuser: true)
@@ -94,6 +100,22 @@ RSpec.describe AdminUser do
       last = create(:admin_user, community: community, superuser: true)
 
       expect(last.update(email: 'still-here@example.com')).to be true
+    end
+
+    it 'refuses to demote or destroy the last superuser however many plain admins there are' do
+      create(:admin_user, community: community, superuser: false)
+      last = create(:admin_user, community: community, superuser: true)
+
+      expect(last.update(superuser: false)).to be false
+      expect(last.reload.superuser).to be true
+      expect { last.destroy }.not_to change(described_class, :count)
+    end
+
+    it 'leaves a plain admin alone while no superuser exists yet, as during bootstrap' do
+      plain = create(:admin_user, community: community, superuser: false)
+
+      expect(plain.update(email: 'moved@example.com')).to be true
+      expect { plain.destroy }.to change(described_class, :count).by(-1)
     end
   end
 

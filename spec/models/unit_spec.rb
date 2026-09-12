@@ -138,6 +138,14 @@ RSpec.describe Unit do
       ).twice
     end
 
+    it 'triggers on destroy of a record loaded fresh, which remembers no saved changes' do
+      target = create(:unit, community: community)
+      described_class.find(target.id).destroy!
+      expect(Pusher).to have_received(:trigger).with(
+        expected_channel, any_args
+      ).twice
+    end
+
     it 'does not trigger on no-op save' do
       target = create(:unit, community: community)
       target.save!

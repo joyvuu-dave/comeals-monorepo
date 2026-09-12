@@ -264,7 +264,7 @@ class Community < ApplicationRecord
   def auto_create_rotations
     unassigned = meals.where(rotation_id: nil).order(:date)
     rotation = T.let(nil, T.nilable(Rotation))
-    unassigned.find_each do |meal|
+    unassigned.each do |meal|
       rotation = rotations.create!(no_email: true) if rotation.nil?
       meal.update!(rotation_id: rotation.id)
       rotation = nil if rotation.meals.count == auto_rotation_length

@@ -98,6 +98,64 @@ RSpec.describe Event do
     end
   end
 
+  # Every month from start to end is pushed on every save; when the dates
+  # move, the months of the old range too, or a screen showing the old
+  # month keeps the event where it no longer is.
+  describe 'telling the calendar (note_live_update)' do
+    let(:community) { create(:community) }
+
+    def months_pushed
+      RSpec::Mocks.space.proxy_for(Pusher).reset
+      pushed = []
+      allow(Pusher).to receive(:trigger) { |channel, *| pushed << channel }
+      yield
+      pushed.select { |channel| channel.include?('-calendar-') }
+    end
+
+    def key(year, month)
+      community.calendar_cache_key(year, month)
+    end
+
+    it 'pushes every month from start to end when it is created' do
+      pushed = months_pushed do
+        create(:event, community: community, start_date: Time.zone.local(2026, 3, 15, 14, 0),
+                       end_date: Time.zone.local(2026, 5, 15, 16, 0))
+      end
+
+      expect(pushed).to include(key(2026, 3), key(2026, 4), key(2026, 5))
+      expect(pushed).not_to include(key(2026, 7))
+    end
+
+    it 'pushes the months it no longer spans when only its end moves' do
+      event = create(:event, community: community, start_date: Time.zone.local(2026, 3, 15, 14, 0),
+                             end_date: Time.zone.local(2026, 7, 15, 16, 0))
+
+      pushed = months_pushed { event.update!(end_date: Time.zone.local(2026, 3, 16, 16, 0)) }
+
+      expect(pushed).to include(key(2026, 3), key(2026, 6), key(2026, 7))
+    end
+
+    it 'pushes the months it no longer spans when only its start moves' do
+      event = create(:event, community: community, start_date: Time.zone.local(2026, 3, 15, 14, 0),
+                             end_date: Time.zone.local(2026, 7, 15, 16, 0))
+
+      pushed = months_pushed { event.update!(start_date: Time.zone.local(2026, 7, 14, 14, 0)) }
+
+      expect(pushed).to include(key(2026, 3), key(2026, 4), key(2026, 7))
+    end
+
+    it 'pushes only its own months when the dates do not change' do
+      event = create(:event, community: community, start_date: Time.zone.local(2026, 4, 15, 14, 0),
+                             end_date: Time.zone.local(2026, 4, 15, 16, 0))
+
+      pushed = months_pushed { event.update!(title: 'Renamed') }
+
+      # April 1 is on March's six-week calendar too, and a range always
+      # includes the first of its months, so March comes along.
+      expect(pushed).to contain_exactly(key(2026, 3), key(2026, 4))
+    end
+  end
+
   describe '#start_date_is_before_end_date' do
     it 'is invalid when end_date is before start_date' do
       event = build(:event, start_date: 1.hour.ago, end_date: 2.hours.ago, allday: false)

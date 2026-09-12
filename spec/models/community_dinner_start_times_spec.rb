@@ -17,6 +17,13 @@ RSpec.describe Community do
       expect(community.dinner_start_times).to eq(%w[18:00 19:00 19:00 19:00 19:00 19:00 19:00])
     end
 
+    it 'accepts the hash with integer keys too' do
+      community.dinner_start_times = { 0 => '18:00', 1 => '19:00', 2 => '19:00', 3 => '19:00',
+                                       4 => '19:00', 5 => '19:00', 6 => '19:30' }
+
+      expect(community.dinner_start_times).to eq(%w[18:00 19:00 19:00 19:00 19:00 19:00 19:30])
+    end
+
     it 'fills a blank field with the default' do
       community.dinner_start_times = { '0' => '18:00', '1' => '', '2' => nil }
 

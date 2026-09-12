@@ -52,7 +52,16 @@ RSpec.describe Resident do
 
     it 'returns false on incorrect password' do
       resident = create(:resident, community: community, unit: unit, password: 'secret123')
-      expect(resident.authenticate('wrong')).to be_falsey
+      expect(resident.authenticate('wrong')).to be(false)
+    end
+  end
+
+  describe '#password' do
+    it 'keeps the plain password readable on the instance' do
+      resident = build(:resident, community: community, unit: unit)
+      resident.password = 'secret123'
+
+      expect(resident.password).to eq('secret123')
     end
   end
 
@@ -230,6 +239,8 @@ RSpec.describe Resident do
   # Age
   # ---------------------------------------------------------------------------
   describe '#age' do
+    include ActiveSupport::Testing::TimeHelpers
+
     it 'returns correct age for a birthday in the past' do
       resident = create(:resident, community: community, unit: unit,
                                    birthday: Date.new(1990, 1, 1))
@@ -258,6 +269,17 @@ RSpec.describe Resident do
       resident = create(:resident, community: community, unit: unit, birthday: nil)
 
       expect(resident.age).to be_nil
+    end
+
+    it 'turns on the birthday itself, whether the birthday is in this month or another' do
+      travel_to Time.zone.local(2026, 6, 15, 12, 0) do
+        ages = [Date.new(2000, 6, 14), Date.new(2000, 6, 15), Date.new(2000, 6, 16),
+                Date.new(2000, 5, 31), Date.new(2000, 7, 1)].map do |birthday|
+          create(:resident, community: community, unit: unit, birthday: birthday).age
+        end
+
+        expect(ages).to eq([26, 26, 25, 26, 25])
+      end
     end
   end
 
@@ -297,6 +319,14 @@ RSpec.describe Resident do
     it 'triggers on destroy' do
       resident = create(:resident, community: community, unit: unit)
       resident.destroy!
+      expect_resident_triggers(2)
+    end
+
+    # A record loaded fresh remembers no saved changes, so a destroy that
+    # only looked at saved_changes would push nothing for it.
+    it 'triggers on destroy of a record loaded fresh from the database' do
+      resident = create(:resident, community: community, unit: unit)
+      described_class.find(resident.id).destroy!
       expect_resident_triggers(2)
     end
 

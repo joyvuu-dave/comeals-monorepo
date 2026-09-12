@@ -40,6 +40,15 @@ RSpec.describe Bill do
       expect(bill.errors[:amount]).to be_present
     end
 
+    it 'reports a missing amount instead of failing to round it' do
+      meal = create(:meal, community: community)
+      resident = create(:resident, community: community, unit: unit)
+      bill = build(:bill, meal: meal, resident: resident, community: community, amount: nil)
+
+      expect(bill).not_to be_valid
+      expect(bill.errors[:amount]).to eq(['is not a number'])
+    end
+
     it 'rejects sub-cent amounts' do
       meal = create(:meal, community: community)
       resident = create(:resident, community: community, unit: unit)
