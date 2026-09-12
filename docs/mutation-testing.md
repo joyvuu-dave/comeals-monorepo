@@ -28,9 +28,9 @@ costs on six workers:
 | Stage | Subjects | Mutations | Time |
 |---|---|---|---|
 | money | `MealLedger* Settlement* Reconciliation* BalanceRecalculation*` | 1,858 | 1h45 (the race specs are slow) |
-| services, jobs, mailers, helpers, lib | the classes under those directories, minus money | 6,968 | about 40 min |
-| models and concerns | `app/models/**`, minus money | 5,800 | see the results below |
-| controllers and serializers | `app/controllers/**`, `app/serializers/**` | 6,719 | see the results below |
+| services, jobs, mailers, helpers, lib | the classes under those directories, minus money | 6,860 | about 45 min |
+| models and concerns | `app/models/**`, minus money | 5,378 | about 40 min |
+| controllers and serializers | `app/controllers/**`, `app/serializers/**` | 6,719 | about 1h20; request specs are slow per mutation |
 
 The exact subject list for a stage is the matching block of
 `.mutant.yml`; pass it after `--`. It is not part of `bin/check`. Run
@@ -88,6 +88,20 @@ so those fail on the unmutated code).
 
 Mutant runs the examples with `--fail-fast`, so a killed mutation stops
 at the first failing example. Only a survivor pays for the whole list.
+
+Three rules about which examples reach a method, each learned from a
+survivor and each pinned by `spec/config/mutant_selection_spec.rb`:
+
+1. A row replaces mutant's own selection for its file, so it must name
+   the class the file describes.
+2. A `describe '#method'` group anywhere is the whole test set for that
+   method. Nothing described by a sentence is added to it, and nothing
+   from a mapped file either, because a row tags examples at class
+   level. So every example that proves a method goes inside that
+   method's group, and a file that describes the class and has method
+   groups gets no row.
+3. A concern is proved through the models that include it, so a model
+   spec's row names every concern the model includes.
 
 ## Reading a survivor
 
@@ -330,3 +344,216 @@ lines.empty?` can go too: `insert_all([])` returns an empty result
   and dropping the nested transaction in `write_ledger!` (the caller's
   transaction already covers it; `rewrite!` relies on the caller
   opening one too).
+
+### 2026-09-12, every class in app/ and lib/, in three stages
+
+The subjects went from the four money classes to every class, in
+three stages on six workers. Each stage ran two or three times, with
+specs written from the survivors between runs. The numbers, then what
+the survivors taught.
+
+| Stage | Run | Mutations | Killed | Alive | Timeouts | Time |
+|---|---|---|---|---|---|---|
+| A: services, jobs, mailers, helpers, lib | 1 | 6,968 | 5,032 | 1,936 (72.2%) | | 40 min |
+| A | 2, rows fixed | 6,968 | 6,047 | 921 (86.8%) | | 40 min |
+| A | 3, specs added | 6,860 | 6,477 | 383 (94.4%) | 20 | 47 min |
+| B: models and concerns | 1 | 5,378 | 4,410 | 968 (82.0%) | 29 | |
+| B | 2, rows and specs | 5,378 | 5,005 | 373 (93.1%) | 11 | 37 min |
+| B | 3, touched classes | B3M | B3K | B3A (B3P%) | B3T | B3T2 |
+| A | 4, touched classes | A4M | A4K | A4A (A4P%) | A4T | A4T2 |
+| C: controllers and serializers | 1 | 6,719 | 5,313 | 1,406 (79.1%) | 194 | 1h20 awake (the laptop slept mid-run) |
+| C | 2, rows and specs | C2M | C2K | C2A (C2P%) | C2T | C2TIME |
+
+**Three ways the selection was wrong.** Each one made a class look
+tested when nothing ran for it, and each is now pinned by
+`spec/config/mutant_selection_spec.rb`.
+
+1. A row replaces mutant's own selection, so a row that names other
+   classes and forgets the one the file describes turns that file off
+   for it. `LedgerVerification` had 661 survivors with "tests: 0";
+   eleven rows had the same hole.
+2. Mutant takes the most specific group. When any file has
+   `describe '.authenticate'` under `describe JwtAuth`, that group is the
+   whole test set for the method: nothing described by a sentence is
+   added, and neither is anything from a mapped file, because a row
+   tags its examples at class level. `LiveUpdate.calendar_range` had one
+   example in its group and deleting the method body survived;
+   `ResidentMailer#new_rotation_email` had three, and an empty link
+   survived while the example that checked the link sat in a group
+   called "the links in the rotation emails"; a new
+   `community_calendar_cache_spec.rb` with a row was never selected for
+   `Community#affected_calendar_keys`, because `community_spec.rb` has a
+   group of that name. Every example that proves a method now lives
+   inside that method's group, a file that describes the class and
+   holds method groups gets no row, and the rule is written at the top
+   of `live_update_spec.rb`.
+3. A concern is proved through the models that include it, and the
+   rows for those model specs named `LiveUpdate` but not the concerns.
+   `ReconciledMealImmutability` ran only under a few admin request
+   specs; `bill_spec.rb` had the very example that proves its re-parent
+   guard and was never selected for it. The guard now derives each
+   model's concerns from the class and fails when a row leaves one out.
+
+**One bug.** `Community#auto_create_rotations` ordered the meals by date
+and then walked them with `find_each`, which ignores the order (Rails
+says so in the log). Meals entered out of date order were grouped by
+id. Only `db/seeds.rb` calls it. Fixed with `each`;
+`community_spec.rb` has the case.
+
+**Redundant code, removed.** The first `% weeks_count` in
+`ScheduleWeekLabelHelper#schedule_week_rows` (the slot takes the
+modulo again). `Rotation`'s `after_remove` callback: only `meal_ids=`
+reached it, the form that used that is gone since #78, and with
+`dependent: :destroy` a removed meal is destroyed and pushes its own
+month anyway. `Rotation#capture_meal_dates_for_cache`: a destroyed
+rotation's meals are destroyed by the cascade and each pushes its own
+month, so the captured dates pushed the same months a second time.
+The `.limit(1)` before each `pick` in `Meal#neighbour_ids`: `pick`
+limits to one row itself, so every mutation of the limit survived.
+
+**Redundant, left in place.** `MealIcalFeed#wall_clock`: icalendar
+prints a zoned time by its local fields, so the DateTime it builds is
+the same text (checked: both give `20260405T173000`). Kept because its
+comment explains a real concern about offsets; a decision for the
+owner.
+
+**A subject mutant cannot reach.** `AppendOnly::ClassMethods#append_only`
+is a class-body macro: it runs once when the four append-only models
+load and registers their callbacks, and mutant inserts its mutated
+copy after that. All 50 of its mutations survived, "register no
+callback" included. It is now in the `ignore` list, with the reason;
+the callbacks it registers are mutated through
+`AppendOnly#append_only_refuse`, whose survivors went to zero once the
+model specs were mapped to it.
+
+**Specs written from the stage A survivors** (in `spec/services`,
+`spec/jobs`, `spec/mailers`, `spec/helpers`, `spec/tasks`,
+`spec/lib`): `LiveUpdate` rewritten as one file of method groups —
+multi-month ranges, the community day for a time, the sender from
+`Current`, first caller wins, a nested batch runs its block, the batch
+closes on a raise, the push message; `JwtAuth` — the wrong-issuer
+example used to pass with `verify_iss` off, and a token signed with
+another algorithm or none is refused; `ReconciliationWarnings` (new
+file) — a resident and a guest count together, a no-cost bill with an
+amount left on it is not money; `SetMultipliersJob` (new file);
+`PacedDelivery` — the cap counts everyone past it, the SMTP settings,
+the counts when closing the session fails after the messages went out;
+`RetryOnConflict` — the jitter bounds; `SettleAndNotify` — the refresh
+gets the batch budget; `RecurringJob` — five tries from a quarter
+second; `PasswordReset` — the failure report names the recipient;
+both mailers — the links point at the configured root; `MealIcalFeed`
+— VTIMEZONE, calendar name, descriptions; `MealCostSummary` — no-cost
+bills, a guests-only meal, a settled meal that got no charges;
+`LedgerVerification` — the summary string, a negative line sum, a
+one-cent difference tolerated, the error recorded; `AuditDescription`
+— exact strings and every fallback; `ResidentNameShortener`; the
+helpers' exact markup.
+
+**Specs written from the stage B survivors** (`spec/models`):
+`concerns/locks_its_meal_first_spec.rb` (new) pins the lock statement
+itself — `FOR KEY SHARE`, both meal ids in id order when a row moves,
+before the write; `holidays_spec.rb` checks every day of 2000–2040
+against a list written without the code (three Easters proved the
+method once; the arithmetic has twenty steps); `MealSchedule` — the
+scan limit by its message, dates from times; `Meal` — the scopes with
+two meals (a correlation dropped from the EXISTS survived every
+one-meal example), the rotation scoping of the third-cook check, the
+closed-meal destroy guard, the neighbour pushes on create, move and
+destroy, the audit order, no query when preloaded; `Rotation` —
+`starting_within` at both ends, every clause of `touched_meals`, the
+place values with `updated_at` and pushes, the hole guard's boundary
+day, the months pushed on save and on recolor; `Community` — the
+six-week windows day by day, the cache version (day, microsecond,
+range edges, an event on the last day, the request's zone), settled
+meals left out of both averages, rounding, orphan admins, ages, a cap
+with a third decimal, mixed schedule weeks, the zone-change push, the
+next rotation after the latest date; `Resident` — age around the
+birthday, destroy of a fresh record; `Unit`, `Bill` (nil amount),
+`MealResident` (nil resident), `MealCharge` (`credit?`,
+`subsidized?`, the exact refusal messages), `LedgerCheckRun`
+(`duration`, plain booleans, the messages), `AdminUser` (the last
+superuser beside plain admins, bootstrap), `Event`,
+`CommonHouseReservation`, `GuestRoomReservation` (the old months when
+only one end moves).
+
+**What is left alive, by kind.** Stage A, 383:
+
+- `AuditDescription`, 106: `== true` to truthiness, `[]` to `.fetch`,
+  `.instance_of?(Array)` to truthiness. The audited gem stores booleans
+  and two-element arrays there, so no row can tell them apart.
+- `LiveUpdate`, 42: `is_a?` to `instance_of?`, the `nil` guards, and
+  dropping `first` from a range (the month start and `last` already
+  reach every month `first` does).
+- `LedgerVerification`, 38: `.to_s('F')` to `.to_s` — `BigDecimal#to_s`
+  prints plain digits in this Ruby (bigdecimal 3); `.sort` on ids and
+  `order(:id)` — Postgres returned them sorted anyway, the assertion is
+  real and mutant cannot prove it; the `if` around a log line.
+- `MealIcalFeed`, 25: the reference date the VTIMEZONE is built from,
+  and `wall_clock` (above).
+- `JwtAuth`, 18: the key-generator salt (a token is encoded and decoded
+  in one process) and `Time.zone.at` for `Time.at` (instants compare
+  equal in any zone).
+- `PacedDelivery`, 18, and the rest: `.to_a`, `.fetch`, `.key?`,
+  `count` for `size`, default arguments the specs always pass, and the
+  `if` around every log line (the call is ignored, the branch is not).
+- Six "neutral failures" (the unmutated code failing its own tests, so
+  its kills mean nothing): `NotifyCooksJob#perform` and three
+  `RecurringJob` methods, where a lock-budget example hit the 10 s
+  statement timeout under six workers and a health check on one
+  laptop — the same examples pass in mutant's order on their own; and
+  `AssetCacheControl`, whose spec wrote one fixture file from six
+  processes and needed a built `index.html`. The spec now names its
+  fixture by process id and writes a placeholder page when there is no
+  build. Rerun these subjects on an idle machine.
+
+Stage B, 373 after the second run, 4 answered in a third pass and the rest read:
+
+- `Holidays`, 53: every one in `easter?`, and every one gives the same
+  Sunday for 2000–2040 (the century terms are constant inside one
+  century). The spec now checks Gauss's algorithm for 1583–2499.
+- `AppendOnly::ClassMethods`, 50: the class-body macro, above.
+- `Community`, 83: `.fetch` for `[]`, `instance_of?` for `is_a?`,
+  `size` for `count`, the preloads, and a new spec file that was mapped
+  by a row and so lost to `community_spec.rb`'s method groups (the
+  selection rule above; the row is gone).
+- `Meal`, 53 and `Rotation`, 54: `neighbour_ids` with the `limit` that
+  `pick` made redundant (removed) and the order and bound rewrites the
+  unique date index makes equal; the `loaded?` branches of `multiplier`
+  and `attendees_count`, which differ only in query shape; the date
+  capture and `after_remove` (removed).
+- The rest: `return true` in a validation (its value is ignored),
+  `self.x` for `x()`, `.present?` for truthiness on an id.
+
+Stage C, 1,406 after the first run. Two holes, both wide:
+
+- The base controllers. Every API request runs `ApiController`'s
+  filters and rescues and every admin request `ApplicationController`'s,
+  but only five rows named the first and four the second, so 269 and 46
+  mutations survived — "answer nothing to an unknown path" among them.
+  `MUTANT_SPECS` now adds the base controller to every request spec row
+  (`MUTANT_SPEC_ROWS` holds the rows as written), and the guard spec
+  pins it.
+- The calendar chips. The contract spec pins each serializer's keys and
+  `serializers_spec.rb` a few words, so the id the SPA dedups by, the
+  type, the start and end the chip is placed by, the link and the
+  colour were all free to change: 500 survivors across the seven chip
+  serializers. `spec/serializers/calendar_chips_spec.rb` now holds the
+  whole payload of each, value by value, and
+  `calendar_serializer_spec.rb` puts a record one day outside each
+  window edge beside one on it.
+- The write messages: `{ message: 'Description updated.' }` could become
+  `{}` and every status check passed.
+  `spec/requests/api/v1/write_messages_spec.rb` pins each write's
+  answer, the order `meals/next` picks by, the history's date and the
+  sender's socket left out of the push.
+- 194 timeouts: a mutation that makes a request spec wait (a retry
+  loop that never ends) is killed at the 120 s limit; each costs the
+  full limit.
+- One neutral failure: `FallbackController#index` serves
+  `public/index.html`, which only a build writes. `bin/mutant` now
+  writes a placeholder when there is none and removes it after.
+- `Api::V1::MealsController#update_bills`, 44: the branch that splits
+  this method into `BillsPayload` replaces it; run mutant on
+  `BillsPayload*` after that merge.
+
+C2KINDS
