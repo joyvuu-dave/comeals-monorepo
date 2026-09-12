@@ -362,7 +362,8 @@ the survivors taught.
 | B | 3, touched classes | B3M | B3K | B3A (B3P%) | B3T | B3T2 |
 | A | 4, touched classes | A4M | A4K | A4A (A4P%) | A4T | A4T2 |
 | C: controllers and serializers | 1 | 6,719 | 5,313 | 1,406 (79.1%) | 194 | 1h20 awake (the laptop slept mid-run) |
-| C | 2, rows and specs | C2M | C2K | C2A (C2P%) | C2T | C2TIME |
+| C | 2, rows and specs | 6,719 | 5,960 | 759 (88.7%) | 2 | 2h07 |
+| C | 3, touched subjects | C3M | C3K | C3A (C3P%) | C3T | C3TIME |
 
 **Three ways the selection was wrong.** Each one made a class look
 tested when nothing ran for it, and each is now pinned by
@@ -556,4 +557,35 @@ Stage C, 1,406 after the first run. Two holes, both wide:
   this method into `BillsPayload` replaces it; run mutant on
   `BillsPayload*` after that merge.
 
-C2KINDS
+After the second run, 759. What was left and what a third pass answered:
+
+- The shared answers: the 404 and 401 sentences, the reconciled
+  fast-path sentence, the null id when there is no next meal, and the
+  report's `context` (controller and action) on a conflict or an
+  overloaded pool were not pinned. They are now, in
+  `write_messages_spec.rb` and the two conflict specs.
+- `set_community_timezone`: only the token-parameter path was proved;
+  a Bearer-authenticated request now reads the community zone too.
+- `CommunitiesController`: the hosts order and unit names, the month
+  the birthdays are taken from (two weeks after the six-week grid's
+  first Sunday), and the feed's "Sign up here" link under the
+  configured root.
+- `ResidentsController`: an email with spaces and capitals, the
+  shortened name on the reset page when first names clash, the one-word
+  reset error, and only the resident's own cook slots in their feed.
+- `MealFormSerializer`: the previous and next meal links, `reconciled`
+  as a plain boolean, and one resident row value by value.
+- `AuditSerializer` (new spec): a history row value by value.
+- The neutral failure: the placeholder page lacked the `<div id="root">`
+  the fallback spec looks for.
+- Left as noise: `params.fetch` for `params[]`, `Date.iso8601` for
+  `Date.parse`, `.to_i` on a parameter `Time.zone.local` converts
+  anyway, `defined?` memo guards, `instance_of?` for `is_a?`, the
+  `loaded?` branches of the rotation chip (same value either way),
+  `update_bills` (44, replaced by the `BillsPayload` branch), and the
+  `reject_if_reconciled` fast path — both "never reject" mutations
+  survive because the model guard refuses the same write with a
+  message that also says "reconciled"; the fast path is kept for its
+  clearer sentence, which is now pinned.
+
+C3KINDS
