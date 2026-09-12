@@ -21,7 +21,12 @@ RSpec.describe MoneyFieldHelper do
     # After a "must be whole cents" refusal, the field must still show the
     # typo the error names — never a rounded value that looks valid.
     it 'echoes a sub-cent value exactly instead of rounding it' do
-      expect(helper.money_field_value(BigDecimal('16.005'))).to eq('16.005')
+      expect(helper.money_field_value(BigDecimal('16.005'))).to eql('16.005')
+      expect(helper.money_field_value(BigDecimal('1.005'))).to eql('1.005')
+    end
+
+    it 'blanks only a zero when asked, never an amount' do
+      expect(helper.money_field_value(BigDecimal('5'), blank_when_zero: true)).to eq('5.00')
     end
   end
 end

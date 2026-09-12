@@ -1,4 +1,4 @@
-# Mutation testing on the money path
+# Mutation testing
 
 Line and branch coverage say every line ran under some test. They do
 not say a test would fail if the line were wrong. Mutation testing
@@ -7,21 +7,38 @@ constant, a branch, a call), runs the examples for that method, and
 reports every change that no example failed on. Each survivor is a line
 that runs under the suite but that no assertion pins down.
 
-Added 2026-09-08. The tool is the `mutant` gem (free on public
-open-source projects; this repository is public under MIT).
+Added 2026-09-08 for the four money classes; widened to every class in
+`app/` and `lib/` on 2026-09-12. The tool is the `mutant` gem (free on
+public open-source projects; this repository is public under MIT).
 
 ## Running it
 
 ```bash
-bin/mutant                                   # every subject in .mutant.yml
+bin/mutant                                   # every subject in .mutant.yml (hours)
 bin/mutant -- Settlement.allocate_to_cents   # one method
 bin/mutant -- 'MealLedger*'                  # one class
 MUTANT_JOBS=8 bin/mutant                     # more workers (default 4)
 ```
 
-It is not part of `bin/check`. A full run takes tens of minutes. Run it
-after a change to a money file, and after a batch of merges the way a
-bug hunt runs (`.claude/skills/bug-hunt/SKILL.md`).
+The whole app is about 19,500 mutations, so a full run is a night's
+work and is usually run one stage at a time, each stage being the
+subjects of one part of the app. The stages, and roughly what each
+costs on six workers:
+
+| Stage | Subjects | Mutations | Time |
+|---|---|---|---|
+| money | `MealLedger* Settlement* Reconciliation* BalanceRecalculation*` | 1,858 | 1h45 (the race specs are slow) |
+| services, jobs, mailers, helpers, lib | the classes under those directories, minus money | 6,968 | about 40 min |
+| models and concerns | `app/models/**`, minus money | 5,800 | see the results below |
+| controllers and serializers | `app/controllers/**`, `app/serializers/**` | 6,719 | see the results below |
+
+The exact subject list for a stage is the matching block of
+`.mutant.yml`; pass it after `--`. It is not part of `bin/check`. Run
+the stage a change touched after the change, and every stage after a
+batch of merges the way a bug hunt runs
+(`.claude/skills/bug-hunt/SKILL.md`). Never at the same time as
+`bin/check` on the same machine: a mutation that times out under load
+counts as not killed, and the browser suites are load.
 
 `bin/mutant` migrates the test database, then copies it once per worker
 (`comeals_test<suffix>_0`, `_1`, ...). Workers cannot share one
@@ -33,15 +50,19 @@ copy is `config/mutant/hooks.rb`.
 
 ## What is mutated
 
-The subjects in `.mutant.yml`: every method of `MealLedger`,
-`Settlement` (which holds `allocate_to_cents`), `Reconciliation`, and
-`BalanceRecalculation`. Those are the classes that turn bills and
-attendance into an amount a person is told to pay.
+Every class in `app/` and `lib/`, listed by name in `.mutant.yml`. The
+money classes came first — `MealLedger`, `Settlement` (which holds
+`allocate_to_cents`), `Reconciliation`, `BalanceRecalculation`, the
+ones that turn bills and attendance into an amount a person is told to
+pay — and the rest followed. `Current` is left out: it declares
+attributes and has no method to mutate.
 
 Two kinds of node are skipped (`ignore_patterns` in `.mutant.yml`):
 `T.must(...)` and `T.let(...)`. Both are no-ops at runtime, so the
 mutation "remove the call" can never fail a test, and every one would
-be a survivor that means nothing.
+be a survivor that means nothing. And every model's admin search
+whitelist (`ransackable_attributes`) is ignored by name: the spec for
+those checks the rule, that every name is a column, not the list.
 
 ## Which examples run for a subject
 
@@ -58,7 +79,12 @@ never ran them: the first run selected 12 examples for
 `spec/support/mutant_selection.rb` is the fix. It lists each such spec
 file with the classes it proves, and tags its examples so mutant runs
 them for every method of those classes. When you write a spec that
-checks money arithmetic under a sentence description, add a row.
+checks a class under a sentence description — a request spec for a
+controller, a task spec for a job — add a row. The same file gives an
+empty list to the specs mutant must never run: the storms, the random
+sequences, the query-count budget, the thread-safety probes, and the
+runtime type-check specs (mutant reinserts a method without its `sig`,
+so those fail on the unmutated code).
 
 Mutant runs the examples with `--fail-fast`, so a killed mutation stops
 at the first failing example. Only a survivor pays for the whole list.
@@ -79,8 +105,12 @@ Mutant prints a diff for each one. Three kinds:
    saying why, the way the Sorbet calls are ignored. Do not ignore a
    whole method to make a report clean.
 
-A survivor in this code is never "fine as it is". Every method here is
-on the path to a number on a settlement statement.
+A survivor on the money path is never "fine as it is": every method
+there is on the path to a number on a settlement statement. Elsewhere
+the same three kinds apply, and the third — noise — is more common:
+a serializer's attribute order, a log line's wording, a `count` for a
+`size`. Say which kind it is, in the results below, before ignoring
+anything.
 
 ## Results
 

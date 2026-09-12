@@ -45,9 +45,9 @@ RSpec.describe BalanceDisplayHelper do
     end
 
     it 'carries one direction class per sign, for styling' do
-      expect(helper.balance_tag(BigDecimal('12.50'))).to include('balance-is-owed')
-      expect(helper.balance_tag(BigDecimal('-12.50'))).to include('balance-owes')
-      expect(helper.balance_tag(BigDecimal('0'))).to include('balance-zero')
+      expect(helper.balance_tag(BigDecimal('12.50'))).to include('class="balance-is-owed"')
+      expect(helper.balance_tag(BigDecimal('-12.50'))).to include('class="balance-owes"')
+      expect(helper.balance_tag(BigDecimal('0'))).to include('class="balance-zero"')
     end
   end
 
@@ -103,6 +103,14 @@ RSpec.describe BalanceDisplayHelper do
       expect(helper.charge_amount_tag(debit)).not_to include('credited')
     end
 
+    it 'carries the direction class on a settlement line too' do
+      credit = MealCharge.new(amount: BigDecimal('8'), kind: 'credit')
+      debit = MealCharge.new(amount: BigDecimal('-8'), kind: 'debit')
+
+      expect(helper.charge_amount_tag(credit)).to eq('<span class="balance-is-owed">credited $8.00</span>')
+      expect(helper.charge_amount_tag(debit)).to eq('<span class="balance-owes">charged $8.00</span>')
+    end
+
     it 'says "charged" for a guest debit too' do
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('16'))
@@ -130,9 +138,15 @@ RSpec.describe BalanceDisplayHelper do
     it 'shows a non-zero difference in the error style instead of hiding it' do
       html = helper.settlement_totals_tag([BigDecimal('16'), BigDecimal('-8')], 'units')
 
-      expect(html).to include('Difference: $8.00')
-      expect(html).to include('balance-owes')
+      expect(html).to include('<div class="balance-owes">Difference: $8.00</div>')
       expect(html).not_to include('✓')
+    end
+
+    it 'is one block of three lines, each its own element' do
+      html = helper.settlement_totals_tag([BigDecimal('16'), BigDecimal('-16')], 'units')
+
+      expect(html).to eq('<div class="settlement-total"><div>Owed to units: $16.00</div>' \
+                         '<div>Owed by units: $16.00</div><div>Difference: $0.00 ✓</div></div>')
     end
 
     it 'reports all zeros for an empty settlement' do

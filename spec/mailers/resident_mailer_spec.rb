@@ -26,6 +26,10 @@ RSpec.describe ResidentMailer do
       expect(mail.body.encoded).to include('abc123token')
     end
 
+    it 'links to the reset page under the configured app root' do
+      expect(mail.body.encoded).to include('http://localhost:3036/reset-password/abc123token')
+    end
+
     it 'greets the resident by name' do
       expect(mail.body.encoded).to include('Sarah Chen')
     end
@@ -59,6 +63,17 @@ RSpec.describe ResidentMailer do
 
     it 'includes the community name' do
       expect(mail.body.encoded).to include('Swan')
+    end
+  end
+
+  describe 'the links in the rotation emails' do
+    let(:rotation) { create(:rotation, community: community) }
+
+    it 'point at the configured app root' do
+      expect(described_class.new_rotation_email(resident, rotation, community).body.encoded)
+        .to include('http://localhost:3036')
+      expect(described_class.rotation_signup_email(resident, rotation, [], community).body.encoded)
+        .to include('http://localhost:3036')
     end
   end
 end

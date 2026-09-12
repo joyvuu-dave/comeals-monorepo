@@ -23,16 +23,136 @@ integration:
 environment_variables:
   MUTANT: "1"
 matcher:
+  # Every class in app/ and lib/. The four money classes came first
+  # (2026-09-08); the rest followed on 2026-09-12. A full run is hours,
+  # so bin/mutant is usually given a stage — one directory's worth of
+  # subjects — after the `--`; docs/mutation-testing.md lists them.
+  # Current is not here: it only declares attributes.
   subjects:
+    # money
     - MealLedger*
     - Settlement*
     - Reconciliation*
     - BalanceRecalculation*
+    # services
+    - AuditDescription*
+    - DateRangeDescription*
+    - Healthcheck*
+    - JwtAuth*
+    - LedgerVerification*
+    - LiveUpdate*
+    - MailDeliveryFailure*
+    - MealCostSummary*
+    - MealIcalFeed*
+    - PacedDelivery*
+    - PasswordReset*
+    - ReconciliationWarnings*
+    - RecurringCatchUp*
+    - ResidentNameShortener*
+    - RetryOnConflict*
+    - SettleAndNotify*
+    - SnapshotRead*
+    - ThirdCookWarning*
+    # jobs, mailers, helpers, lib
+    - ApplicationJob*
+    - EnsureRotationsJob*
+    - NotifyCooksJob*
+    - RecurringJob*
+    - RefreshBalancesJob*
+    - SetMultipliersJob*
+    - VerifyLedgerJob*
+    - ApplicationMailer*
+    - ReconciliationMailer*
+    - ResidentMailer*
+    - ApplicationHelper*
+    - BalanceDisplayHelper*
+    - MoneyFieldHelper*
+    - PhoneDisplayHelper*
+    - ScheduleWeekLabelHelper*
+    - SettlementLinesTable*
+    - AssetCacheControl*
+    - DatabasePoolCheck*
+    - BugsnagErrorSubscriber*
+    # models and concerns
+    - ApplicationRecord*
+    - AdminUser*
+    - Bill*
+    - CommonHouseReservation*
+    - Community*
+    - Event*
+    - Guest*
+    - GuestRoomReservation*
+    - Holidays*
+    - JobRun*
+    - Key*
+    - LedgerCheckRun*
+    - MailDelivery*
+    - Meal*
+    - MealCharge*
+    - MealResident*
+    - MealSchedule*
+    - Multiplier*
+    - ReconciliationBalance*
+    - Resident*
+    - ResidentBalance*
+    - Rotation*
+    - Unit*
+    - AppendOnly*
+    - BelongsToTheCommunity*
+    - ClosedMealAttendanceFreeze*
+    - HasPhoneNumber*
+    - LocksItsMealFirst*
+    - NotesMealLiveUpdate*
+    - ReconciledMealImmutability*
+    # controllers and serializers
+    - ApiController*
+    - ApplicationController*
+    - FallbackController*
+    - RefusedDestroyMessage*
+    - SuperuserAdapter*
+    - Api::V1::CommonHouseReservationsController*
+    - Api::V1::CommunitiesController*
+    - Api::V1::EventsController*
+    - Api::V1::GuestRoomReservationsController*
+    - Api::V1::MealsController*
+    - Api::V1::ReconciliationsController*
+    - Api::V1::ResidentsController*
+    - Api::V1::RotationsController*
+    - Api::V1::SessionsController*
+    - Api::V1::SiteController*
+    - AuditSerializer*
+    - BillSerializer*
+    - CalendarSerializer*
+    - CommonHouseReservationSerializer*
+    - EventSerializer*
+    - GuestRoomReservationSerializer*
+    - GuestSerializer*
+    - MealFormSerializer*
+    - MealResidentSerializer*
+    - MealSerializer*
+    - ReconciliationPreviewSerializer*
+    - ResidentBirthdaySerializer*
+    - RotationLogSerializer*
+    - RotationSerializer*
   ignore:
-    # The admin search whitelist, not money. Every mutation of the list
-    # survives because spec/models/application_record_ransackable_attributes_spec.rb
+    # The admin search whitelists, not behaviour. Every mutation of a
+    # list survives because spec/models/application_record_ransackable_attributes_spec.rb
     # checks the rule (every name is a column), not the exact list.
+    - AdminUser.ransackable_attributes
+    - Bill.ransackable_attributes
+    - Bill.ransackable_associations
+    - CommonHouseReservation.ransackable_attributes
+    - Community.ransackable_attributes
+    - Event.ransackable_attributes
+    - GuestRoomReservation.ransackable_attributes
+    - JobRun.ransackable_attributes
+    - LedgerCheckRun.ransackable_attributes
+    - MealCharge.ransackable_attributes
+    - Meal.ransackable_attributes
     - Reconciliation.ransackable_attributes
+    - Resident.ransackable_attributes
+    - Rotation.ransackable_attributes
+    - Unit.ransackable_attributes
 mutation:
   # Sorbet runtime calls are not code under test. `T.must(x)` becomes
   # `x` and nothing can fail, because the value was never nil; `T.let`
@@ -43,6 +163,18 @@ mutation:
   ignore_patterns:
     - send{receiver=const{name=T} selector=must}
     - send{receiver=const{name=T} selector=let}
+    # A log line is not behaviour. Every `Rails.logger.info(...)`,
+    # `.warn`, `.error` and `.debug` is skipped, arguments included: the
+    # stage A run (2026-09-12) had over a hundred survivors that were only
+    # the wording or presence of a log line, in LedgerVerification#log,
+    # EnsureRotationsJob#run, Healthcheck.ping, MailDeliveryFailure.report,
+    # PacedDelivery#log_cap and SetMultipliersJob#run. What a run wrote to
+    # the database (JobRun, LedgerCheckRun) is behaviour and is still
+    # mutated.
+    - send{receiver=send{receiver=const{name=Rails} selector=logger} selector=info}
+    - send{receiver=send{receiver=const{name=Rails} selector=logger} selector=warn}
+    - send{receiver=send{receiver=const{name=Rails} selector=logger} selector=error}
+    - send{receiver=send{receiver=const{name=Rails} selector=logger} selector=debug}
   # A mutation that no example fails within this many seconds is
   # reported as timed out, which counts as not killed
   # (coverage_criteria below). The slowest selected example takes a

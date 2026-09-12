@@ -36,6 +36,22 @@ RSpec.describe ScheduleWeekLabelHelper do
     it 'returns no rows for a zero-length schedule' do
       expect(helper.schedule_week_rows(community, 0)).to eq([])
     end
+
+    it "takes this week from the community's zone, not the app's" do
+      # 02:00 UTC on Sunday Aug 9 is still Saturday Aug 8 in Pacific time
+      # (the app zone) and already Sunday in Tokyo.
+      community.update!(timezone: 'Asia/Tokyo')
+      travel_to Time.utc(2026, 8, 9, 2) do
+        expect(helper.schedule_week_rows(community, 1)).to eq([{ slot: 0, label: 'Week of Aug 9 (this week)' }])
+      end
+    end
+
+    it "falls back to the app's zone when the community's is not one" do
+      community.update_column(:timezone, 'Nowhere/Land')
+      travel_to Time.utc(2026, 8, 9, 2) do
+        expect(helper.schedule_week_rows(community, 1)).to eq([{ slot: 0, label: 'Week of Aug 2 (this week)' }])
+      end
+    end
   end
 
   describe '#schedule_grid_data' do
@@ -49,6 +65,18 @@ RSpec.describe ScheduleWeekLabelHelper do
         expect(JSON.parse(data['data-repeat-notes']))
           .to start_with('This pattern repeats every week.',
                          'This pattern repeats every 2 weeks.')
+      end
+    end
+
+    it 'ships one label and one note per possible week, as JSON strings' do
+      travel_to Date.new(2026, 8, 7) do
+        data = helper.schedule_grid_data(community)
+
+        expect(data['data-week-labels']).to be_a(String)
+        expect(JSON.parse(data['data-week-labels']).size).to eq(MealSchedule::MAX_WEEKS)
+        expect(JSON.parse(data['data-repeat-notes']).size).to eq(MealSchedule::MAX_WEEKS)
+        expect(JSON.parse(data['data-repeat-notes']).last)
+          .to eq("This pattern repeats every #{MealSchedule::MAX_WEEKS} weeks.")
       end
     end
   end

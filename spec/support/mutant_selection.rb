@@ -14,81 +14,18 @@
 #
 # This list says, for each such spec file, which classes it proves.
 # Every method of a named class runs the whole file, so a class named
-# here should be one whose numbers the file checks, not one it merely
-# calls on the way. Add a row when a new spec checks money arithmetic.
+# here should be one whose behaviour the file checks, not one it merely
+# calls on the way. Add a row when a new spec checks a class under a
+# sentence description. The first block is the money path; the second
+# is everything else, added when mutant's subjects grew to the whole
+# app (2026-09-12).
 #
 # The first run (2026-09-08) had 12 examples selected for
 # Settlement.truncate_toward_zero, none of which read its result, and
 # 28 of 130 mutations survived, including "drop the rounding".
 return unless ENV['MUTANT']
 
-MUTANT_MONEY_SPECS = {
-  'spec/services/settlement_allocate_to_cents_on_random_ledgers_spec.rb' => %w[Settlement],
-  # The oracle comparison describes MealLedger, so it runs for MealLedger
-  # on its own; this row adds it to Settlement for the rounding.
-  'spec/services/meal_ledger_against_plain_ledger_spec.rb' => %w[Settlement],
-  'spec/services/settlement_contract_spec.rb' => %w[Settlement Reconciliation MealLedger],
-  'spec/services/ledger_verification_spec.rb' => %w[Settlement Reconciliation MealLedger],
-  'spec/services/settle_and_notify_spec.rb' => %w[Settlement Reconciliation BalanceRecalculation],
-  'spec/services/meal_cost_summary_spec.rb' => %w[MealLedger],
-  'spec/models/reconciliation_spec.rb' => %w[Reconciliation Settlement MealLedger],
-  'spec/models/reconciliation_awkward_bills_spec.rb' => %w[Reconciliation Settlement MealLedger],
-  'spec/models/reconciliation_balance_spec.rb' => %w[Reconciliation Settlement],
-  'spec/helpers/balance_display_helper_spec.rb' => %w[MealLedger],
-  'spec/mailers/reconciliation_mailer_spec.rb' => %w[Reconciliation],
-  'spec/jobs/refresh_balances_job_spec.rb' => %w[BalanceRecalculation],
-  'spec/tasks/settlement_matches_running_balance_spec.rb' =>
-    %w[Settlement Reconciliation MealLedger BalanceRecalculation],
-  'spec/tasks/billing_recalculate_correctness_spec.rb' => %w[BalanceRecalculation MealLedger],
-  'spec/tasks/stored_ledger_against_plain_ledger_spec.rb' =>
-    %w[BalanceRecalculation Settlement Reconciliation MealLedger],
-  'spec/tasks/billing_recalculate_snapshot_spec.rb' => %w[BalanceRecalculation],
-  'spec/tasks/billing_recalculate_spec.rb' => %w[BalanceRecalculation],
-  'spec/tasks/reconciliations_create_spec.rb' => %w[Settlement Reconciliation MealLedger],
-  'spec/tasks/ledger_verify_spec.rb' => %w[Settlement Reconciliation],
-  # The race spec is the only one that fails when assign_meals stops
-  # taking the row lock. The two trigger specs in spec/db are not here:
-  # they check database triggers, which mutant does not touch, and cost
-  # 20 seconds a pass.
-  'spec/db/settlement_race_spec.rb' => %w[Settlement],
-  # A method-level entry runs only for that method, and for that method
-  # nothing else runs: this is the one caller of rewrite!, a repair step.
-  'spec/db/settled_balance_triggers_spec.rb' => %w[Settlement#rewrite!],
-  'spec/requests/api/v1/live_update_contract_spec.rb' => %w[Settlement],
-  'spec/tasks/reconciliations_email_spec.rb' => %w[Reconciliation],
-  'spec/requests/api/v1/reconciliations_create_spec.rb' => %w[Settlement Reconciliation MealLedger],
-  'spec/requests/api/v1/reconciliations_preview_spec.rb' => %w[Settlement Reconciliation MealLedger],
-  'spec/requests/api/v1/settled_meal_cache_spec.rb' => %w[Settlement],
-  'spec/requests/admin/reconciliation_show_spec.rb' => %w[Reconciliation],
-  'spec/requests/admin/resident_statement_spec.rb' => %w[Reconciliation]
-}.freeze
-
-# Mutant runs the selected examples with --fail-fast, so a mutation is
-# killed as soon as one example fails. The cheap, exact examples should
-# come first: a unit spec on a service fails in a fraction of a second,
-# a request spec or the race spec takes seconds to get to the same
-# assertion. Ranked by directory; within a directory, by path and line.
-MUTANT_DIRECTORY_ORDER = %w[
-  spec/services spec/models spec/helpers spec/tasks spec/jobs
-  spec/mailers spec/requests spec/db
-].freeze
-
-# The runtime type-check specs. Each one calls a method with the wrong
-# type and expects the Sorbet sig to raise. Mutant cannot run them: it
-# reinserts the method from its own copy of the source, without the
-# `sig` block above it, so the unmutated code fails the example and every
-# mutation "passes" it (2026-09-10: three Settlement and Reconciliation
-# methods reported the unmutated code failing this way). An empty
-# expression list keeps them out of every mutant run; the plain suite
-# still runs them.
-MUTANT_SIG_CHECK_SPECS = %w[
-  spec/models/holidays_types_spec.rb
-  spec/models/reconciliation_types_spec.rb
-  spec/services/balance_recalculation_types_spec.rb
-  spec/services/ledger_verification_types_spec.rb
-  spec/services/retry_on_conflict_types_spec.rb
-  spec/services/settlement_types_spec.rb
-].freeze
+require_relative 'mutant/specs'
 
 RSpec.configure do |config|
   config.register_ordering(:global) do |items|
@@ -99,7 +36,7 @@ RSpec.configure do |config|
     end
   end
 
-  selections = MUTANT_MONEY_SPECS.merge(MUTANT_SIG_CHECK_SPECS.index_with([]))
+  selections = MUTANT_SPECS.merge(MUTANT_SIG_CHECK_SPECS.index_with([]))
   selections.each do |path, expressions|
     absolute = Rails.root.join(path).to_s
     raise "spec/support/mutant_selection.rb names a file that does not exist: #{path}" unless File.exist?(absolute)

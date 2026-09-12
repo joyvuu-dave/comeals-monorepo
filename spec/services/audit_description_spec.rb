@@ -9,6 +9,7 @@ RSpec.describe AuditDescription do
   let(:unit) { create(:unit, community: community) }
   let(:resident) { create(:resident, community: community, unit: unit) }
   let(:meal) { create(:meal, community: community) }
+  let(:name) { ResidentNameShortener.short(resident.name) }
 
   it 'parses meal create audit' do
     audit = meal.audits.first
@@ -115,45 +116,55 @@ RSpec.describe AuditDescription do
   it 'parses meal_resident create audit' do
     mr = create(:meal_resident, meal: meal, resident: resident, community: community)
     audit = mr.audits.first
-    result = described_class.describe(audit)
-    expect(result).to include('added')
+    expect(described_class.describe(audit)).to eq("#{name} added")
+  end
+
+  it 'parses meal_resident destroy audit' do
+    mr = create(:meal_resident, meal: meal, resident: resident, community: community)
+    mr.destroy!
+    expect(described_class.describe(mr.audits.where(action: 'destroy').last)).to eq("#{name} removed")
   end
 
   it 'parses meal_resident marked late audit' do
     mr = create(:meal_resident, meal: meal, resident: resident, community: community, late: false)
     mr.update!(late: true)
     audit = mr.audits.where(action: 'update').last
-    result = described_class.describe(audit)
-    expect(result).to include('marked late')
+    expect(described_class.describe(audit)).to eq("#{name} marked late")
+
+    mr.update!(late: false)
+    audit = mr.audits.where(action: 'update').last
+    expect(described_class.describe(audit)).to eq("#{name} marked not late")
   end
 
   it 'parses meal_resident vegetarian toggle audits' do
     mr = create(:meal_resident, meal: meal, resident: resident, community: community, vegetarian: false)
     mr.update!(vegetarian: true)
     audit = mr.audits.where(action: 'update').last
-    result = described_class.describe(audit)
-    expect(result).to include('marked veg')
-    expect(result).not_to include('not veg')
+    expect(described_class.describe(audit)).to eq("#{name} marked veg")
 
     mr.update!(vegetarian: false)
     audit = mr.audits.where(action: 'update').last
-    result = described_class.describe(audit)
-    expect(result).to include('marked not veg')
+    expect(described_class.describe(audit)).to eq("#{name} marked not veg")
   end
 
   it 'parses guest create audit' do
     guest = create(:guest, meal: meal, resident: resident, vegetarian: false)
-    audit = guest.audits.first
-    result = described_class.describe(audit)
-    expect(result).to include('Omnivore guest')
-    expect(result).to include('added')
+    expect(described_class.describe(guest.audits.first)).to eq("Omnivore guest of #{name} added")
   end
 
   it 'parses vegetarian guest create audit' do
     guest = create(:guest, meal: meal, resident: resident, vegetarian: true)
-    audit = guest.audits.first
-    result = described_class.describe(audit)
-    expect(result).to include('Veg guest')
+    expect(described_class.describe(guest.audits.first)).to eq("Veg guest of #{name} added")
+  end
+
+  it 'parses guest destroy audits, veg and not' do
+    veg = create(:guest, meal: meal, resident: resident, vegetarian: true)
+    omni = create(:guest, meal: meal, resident: resident, vegetarian: false)
+    veg.destroy!
+    omni.destroy!
+    expect(described_class.describe(veg.audits.where(action: 'destroy').last)).to eq("Veg guest of #{name} removed")
+    expect(described_class.describe(omni.audits.where(action: 'destroy').last))
+      .to eq("Omnivore guest of #{name} removed")
   end
 
   describe 'the less common meal changes' do # -- a group of cases, not a method
@@ -307,6 +318,17 @@ RSpec.describe AuditDescription do
         expect(described_class.describe(row)).to eq('MealResident, update')
       end
 
+      # A change that starts and ends the same way has no direction either:
+      # neither "marked veg" nor "marked not veg" is true of it.
+      it 'falls back for a change from true to true, or false to false' do
+        [%w[late vegetarian], [[true, true], [false, false]]].then do |fields, changes|
+          fields.product(changes).each do |field, change|
+            row = audit('MealResident', 'update', { field => change }, id: attendance.id)
+            expect(described_class.describe(row)).to eq('MealResident, update')
+          end
+        end
+      end
+
       it 'falls back for an update that touched neither late nor vegetarian' do
         row = audit('MealResident', 'update', { 'multiplier' => [2, 1] }, id: attendance.id)
         expect(described_class.describe(row)).to eq('MealResident, update')
@@ -321,6 +343,11 @@ RSpec.describe AuditDescription do
     describe 'guest rows' do
       it 'falls back for an update, which the API never writes' do
         row = audit('Guest', 'update', { 'resident_id' => resident.id, 'vegetarian' => [false, true] })
+        expect(described_class.describe(row)).to eq('Guest, update')
+      end
+
+      it 'falls back for an update even when the row reads like a create' do
+        row = audit('Guest', 'update', { 'resident_id' => resident.id, 'vegetarian' => true })
         expect(described_class.describe(row)).to eq('Guest, update')
       end
 

@@ -27,6 +27,18 @@ RSpec.describe 'Residents iCal API' do
       expect(response.body).to include('END:VCALENDAR')
     end
 
+    it 'carries the community zone as a VTIMEZONE, names the calendar, and describes each event' do
+      create(:bill, meal: weekday_meal, resident: resident, community: community, amount: BigDecimal('10'))
+
+      get "/api/v1/residents/#{resident.id}/ical"
+
+      expect(response.body).to include('BEGIN:VTIMEZONE')
+      expect(response.body).to include('TZID:America/Los_Angeles')
+      expect(response.body).to include("X-WR-CALNAME:My #{community.name}")
+      expect(response.body).to include('DESCRIPTION:')
+      expect(response.body).to include("/meals/#{weekday_meal.id}/edit")
+    end
+
     it 'includes Cook events for meals where the resident has a bill' do
       create(:bill, meal: sunday_meal, resident: resident, community: community)
 

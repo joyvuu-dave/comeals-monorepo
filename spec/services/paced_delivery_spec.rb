@@ -51,6 +51,16 @@ RSpec.describe PacedDelivery do
       expect(messages[cooks[2]]).to have_received(:deliver_now)
     end
 
+    it 'counts every person past the cap as skipped, not only the first' do
+      stub_const('PacedDelivery::CAP', 1)
+      messages = cooks.index_with { |cook| message_for(cook) }
+      allow(Rails.logger).to receive(:error)
+
+      result = described_class.deliver(cooks, mailer: 'reconciliation_notify_email') { |cook| messages[cook] }
+
+      expect(result).to eq(described_class::Result.new(sent: 1, failed: 0, skipped: 2))
+    end
+
     it 'stops at the per-run cap and counts the rest as skipped' do
       stub_const('PacedDelivery::CAP', 2)
       messages = cooks.index_with { |cook| message_for(cook) }
@@ -113,6 +123,18 @@ RSpec.describe PacedDelivery do
       allow(Net::SMTP).to receive(:new).and_return(smtp)
       allow(smtp).to receive(:start).and_yield(session)
       allow(described_class).to receive(:pause)
+    end
+
+    it 'gives the session the STARTTLS and timeout settings, so a dead SMTP server cannot hang the job' do
+      cook = cooks.first.tap { |c| c.reset_password_token = 't' }
+      described_class.deliver([cook], mailer: 'x') do
+        ActionMailer::MessageDelivery.new(ResidentMailer, :password_reset_email, cook)
+      end
+
+      expect(smtp).to have_received(:enable_starttls_auto)
+      expect(smtp).to have_received(:open_timeout=).with(30)
+      expect(smtp).to have_received(:read_timeout=).with(30)
+      expect(smtp).to have_received(:start).with('comeals.com', 'u', 'p', :plain)
     end
 
     it 'opens one session, sends every message over it, and pauses between messages' do

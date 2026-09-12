@@ -31,6 +31,16 @@ RSpec.describe 'ledger:verify' do
     settle!(cutoff: Date.yesterday)
   end
 
+  it 'records which check run it made and how many reconciliations it looked at' do
+    settle
+    allow(Healthcheck).to receive(:ping)
+
+    Rake::Task['ledger:verify'].invoke
+
+    expect(JobRun.last.details)
+      .to eq('ledger_check_run_id' => LedgerCheckRun.last.id, 'reconciliations_checked' => 1)
+  end
+
   it 'reports a successful run to healthchecks' do
     settle
     allow(Healthcheck).to receive(:ping)

@@ -17,6 +17,8 @@ RSpec.describe ApplicationHelper do
 
     it 'returns fractional adult for other multipliers' do
       expect(helper.price_category_label(3)).to eq('Adult x 1.5')
+      expect(helper.price_category_label(4)).to eq('Adult x 2')
+      expect(helper.price_category_label(5)).to eq('Adult x 2.5')
     end
   end
 

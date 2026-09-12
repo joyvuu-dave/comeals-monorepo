@@ -96,6 +96,15 @@ RSpec.describe RecurringJob do
       expect(Healthcheck).to have_received(:ping).with('billing-recalculate').once
     end
 
+    it 'waits with the batch budget, not a request\'s: five tries from a quarter second' do
+      allow(Healthcheck).to receive(:ping)
+      allow(RetryOnConflict).to receive(:call).and_call_original
+
+      RefreshBalancesJob.perform_now
+
+      expect(RetryOnConflict).to have_received(:call).with(attempts: 5, base_delay: 0.25)
+    end
+
     it 'gives up after its attempts, and records and pings the failure' do
       allow(Healthcheck).to receive(:ping)
       allow(RetryOnConflict).to receive(:sleep)

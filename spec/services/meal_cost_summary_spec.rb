@@ -169,6 +169,32 @@ RSpec.describe MealCostSummary do
       expect(summary.unit_cost).to eq(BigDecimal('0'))
     end
 
+    it 'leaves a no-cost bill out of the receipts for a meal nobody attended, and never calls it subsidized' do
+      meal = create(:meal, community: community)
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      helper = create(:resident, community: community, unit: unit, multiplier: 2)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('40'))
+      create(:bill, meal: meal, resident: helper, community: community, amount: BigDecimal('0'), no_cost: true)
+      reconciliation = create(:reconciliation, community: community)
+      meal.update_columns(reconciliation_id: reconciliation.id)
+
+      summary = described_class.for(meal.reload)
+
+      expect(summary.total_cost).to eq(BigDecimal('40'))
+      expect(summary.subsidized).to be(false)
+    end
+
+    it 'returns nil for a settlement from before line items existed when only a guest ate' do
+      reconciliation = create(:reconciliation, community: community)
+      meal = create(:meal, community: community)
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      create(:guest, meal: meal, resident: cook)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('16'))
+      meal.update_columns(reconciliation_id: reconciliation.id)
+
+      expect(described_class.for(meal.reload)).to be_nil
+    end
+
     it 'returns nil for a settlement from before line items existed' do
       # The reconciliation first — the factory sweeps every eligible meal
       # on create, and this meal must end up reconciled WITHOUT charges.

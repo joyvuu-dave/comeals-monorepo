@@ -63,6 +63,23 @@ RSpec.describe Healthcheck do
         )
       end
 
+      it 'sends a failure to the /fail URL, not the success one' do
+        http = instance_double(Net::HTTP, get: Net::HTTPOK.new('1.1', '200', 'OK'))
+        allow(Net::HTTP).to receive(:start).and_yield(http)
+
+        described_class.ping('some-job', state: 'fail')
+
+        expect(http).to have_received(:get).with('/test-key/some-job/fail?create=1')
+      end
+
+      it 'returns the response, so a caller can look at it' do
+        ok = Net::HTTPOK.new('1.1', '200', 'OK')
+        http = instance_double(Net::HTTP, get: ok)
+        allow(Net::HTTP).to receive(:start).and_yield(http)
+
+        expect(described_class.ping('some-job')).to be(ok)
+      end
+
       it 'warns when the ping is rejected' do
         rejected = Net::HTTPNotFound.new('1.1', '404', 'Not Found')
         allow(Net::HTTP).to receive(:start).and_return(rejected)

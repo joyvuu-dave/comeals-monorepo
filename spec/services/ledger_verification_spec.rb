@@ -272,7 +272,95 @@ RSpec.describe LedgerVerification do
     end
   end
 
+  describe 'what the run says' do
+    it 'names every reconciliation and every check in the summary, in order, and hands the run to the error' do
+      first = settle
+      second = settle
+      behind_the_guards do
+        [first, second].each do |r|
+          ReconciliationBalance.where(id: r.reconciliation_balances.find_by(resident: cook).id)
+                               .update_all(amount: BigDecimal('39'))
+          ReconciliationBalance.where(id: r.reconciliation_balances.find_by(resident: eater).id)
+                               .update_all(amount: BigDecimal('-39'))
+        end
+      end
+
+      expect { described_class.call }.to raise_error(described_class::MismatchError) do |error|
+        run = LedgerCheckRun.recent.first
+        expect(error.run).to eq(run)
+        expect(error.message).to eq(
+          'Ledger check failed: 4 findings (line_items and recompute) across 2 of 2 reconciliations — ' \
+          "#{first.id}, #{second.id}. Settled balances were changed after settlement, or the source rows " \
+          'behind them were. See docs/runbooks/settled-data-repair.md.'
+        )
+        expect(run.details.pluck('reconciliation_id')).to eq([first.id, first.id, second.id, second.id])
+      end
+    end
+
+    it 'dates each finding and writes the amounts as plain decimals, lowest resident id first' do
+      reconciliation = settle
+      behind_the_guards do
+        ReconciliationBalance.where(reconciliation_id: reconciliation.id, resident_id: cook.id)
+                             .update_all(amount: BigDecimal('39.5'))
+        ReconciliationBalance.where(reconciliation_id: reconciliation.id, resident_id: eater.id)
+                             .update_all(amount: BigDecimal('-39.5'))
+      end
+
+      suppress(described_class::MismatchError) { described_class.call }
+
+      detail = LedgerCheckRun.recent.first.details.find { |d| d['check'] == 'recompute' }
+      expect(detail['date']).to eq(reconciliation.date.iso8601)
+      expect(detail['differences']).to eq([
+                                            { 'resident_id' => cook.id, 'stored' => '39.5', 'source' => '40.0' },
+                                            { 'resident_id' => eater.id, 'stored' => '-39.5', 'source' => '-40.0' }
+                                          ])
+    end
+
+    it 'reports line items that no longer sum to zero as a finding with no resident' do
+      reconciliation = settle
+      behind_the_guards do
+        # The cook's credit for the receipt, not the debit for eating. 80.5
+        # in, 80 charged out: the lines sum to 0.5.
+        MealCharge.where(meal_id: reconciliation.meals.select(:id), resident_id: cook.id, kind: 'credit')
+                  .update_all(amount: BigDecimal('80.5'))
+        ReconciliationBalance.where(reconciliation_id: reconciliation.id, resident_id: cook.id)
+                             .update_all(amount: BigDecimal('40.5'))
+        ReconciliationBalance.where(reconciliation_id: reconciliation.id, resident_id: eater.id)
+                             .update_all(amount: BigDecimal('-40.5'))
+      end
+
+      suppress(described_class::MismatchError) { described_class.call }
+
+      detail = LedgerCheckRun.recent.first.details.find { |d| d['check'] == 'line_items' }
+      expect(detail['differences']).to include('resident_id' => nil, 'stored' => nil, 'source' => '0.5')
+    end
+
+    it 'logs a failed run at error level with the summary' do
+      reconciliation = settle
+      behind_the_guards do
+        ReconciliationBalance.where(reconciliation_id: reconciliation.id, resident_id: cook.id)
+                             .update_all(amount: BigDecimal('39'))
+        ReconciliationBalance.where(reconciliation_id: reconciliation.id, resident_id: eater.id)
+                             .update_all(amount: BigDecimal('-39'))
+      end
+      allow(Rails.logger).to receive(:error)
+
+      suppress(described_class::MismatchError) { described_class.call }
+
+      expect(Rails.logger).to have_received(:error).with(/Ledger check failed: 2 findings/)
+    end
+  end
+
   describe 'a run that cannot finish' do
+    it 'records what went wrong, by class and message' do
+      settle
+      allow(Reconciliation).to receive(:order).and_raise(ActiveRecord::StatementInvalid, 'connection lost')
+
+      suppress(ActiveRecord::StatementInvalid) { described_class.call }
+
+      expect(LedgerCheckRun.recent.first.error).to eq('ActiveRecord::StatementInvalid: connection lost')
+    end
+
     it 'records the error and re-raises, so the failure is never silent' do
       settle
       allow_any_instance_of(Reconciliation).to receive(:settlement_balances) # rubocop:disable RSpec/AnyInstance -- the failure has to come from inside the loop

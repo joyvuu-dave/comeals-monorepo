@@ -130,6 +130,31 @@ RSpec.describe RetryOnConflict do
     # Counting retries is the point. An error tracker sees a crash; it never
     # sees the retry that stopped one, and "how often is this firing" is the
     # number that says whether the change is behaving.
+    it 'waits a random length between the delay and twice the delay, doubling each time' do
+      delays = []
+      allow(described_class).to receive(:sleep) { |seconds| delays << seconds }
+      suppress(ActiveRecord::SerializationFailure) do
+        described_class.call(attempts: 4, base_delay: 1.0) { raise ActiveRecord::SerializationFailure, 'conflict' }
+      end
+
+      expect(delays.size).to eq(3)
+      expect(delays[0]).to be_between(1.0, 2.0)
+      expect(delays[1]).to be_between(2.0, 4.0)
+      expect(delays[2]).to be_between(4.0, 8.0)
+    end
+
+    it 'says which attempt failed and how many there are, so a retry that fires constantly can be seen' do
+      allow(Rails.error).to receive(:report)
+      suppress(ActiveRecord::SerializationFailure) do
+        described_class.call(attempts: 2) { raise ActiveRecord::SerializationFailure, 'conflict' }
+      end
+
+      expect(Rails.error).to have_received(:report).with(
+        an_instance_of(ActiveRecord::SerializationFailure),
+        handled: true, severity: :warning, context: { attempt: 1, max_attempts: 2 }
+      ).once
+    end
+
     it 'reports each retry through Rails.error' do
       allow(Rails.error).to receive(:report)
       calls = 0

@@ -29,4 +29,24 @@ RSpec.describe ThirdCookWarning do
   it 'warns when a third cook is added' do
     expect(described_class.for(meal, cooks.map(&:id))).to include('third cooks should not be added')
   end
+
+  describe 'with three cooks already on the meal' do
+    before { cooks.each { |c| create(:bill, meal: meal, resident: c, community: community, amount: BigDecimal('0')) } }
+
+    it 'says nothing when the same three come back in another order, as strings' do
+      expect(described_class.for(meal, cooks.map(&:id).reverse.map(&:to_s))).to be_nil
+    end
+
+    it 'warns when one of the three is switched for someone else' do
+      other = create(:resident, community: community, unit: unit)
+
+      expect(described_class.for(meal, [cooks[0].id, cooks[1].id, other.id]))
+        .to eq('Warning: third cook should not be switched when there are other meals in the rotation ' \
+               'without at least two cooks.')
+    end
+
+    it 'says nothing when a cook is removed' do
+      expect(described_class.for(meal, cooks.first(2).map(&:id))).to be_nil
+    end
+  end
 end

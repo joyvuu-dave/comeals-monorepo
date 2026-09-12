@@ -42,6 +42,13 @@ RSpec.describe ReconciliationMailer do
       expect(mail.subject).to eq('Reconciliation Balances')
     end
 
+    it 'links the balances under the configured admin root, with the read-only token' do
+      allow(ENV).to receive(:fetch).and_call_original
+      allow(ENV).to receive(:fetch).with('READ_ONLY_ADMIN_TOKEN', nil).and_return('the-token')
+
+      expect(mail.body.encoded).to include('http://admin.lvh.me:3000/units?&amp;token=the-token')
+    end
+
     it 'includes links to resident and unit balances' do
       expect(mail.body.encoded).to include('Residents')
       expect(mail.body.encoded).to include('Units')
