@@ -82,6 +82,19 @@ that runs real sockets, real Puma threads, and a forking server.
 Read `tmp/storm_server.log` after a run; the script prints its error
 lines.
 
+Every run also reports how long the requests took, from the client's
+side: p50, p95, p99 and the slowest, per action and overall, and the
+requests per second the run sustained. Percentiles rather than an
+average, because the slow tail is what a person notices. The numbers
+are this machine's, so a run saves them to `tmp/storm_latency.json`
+under its shape (clients and seconds), and the next run of the same
+shape prints the change against them. `STORM_MAX_P95=<ms>` turns the
+p95 into a check that fails the run. The in-process storm prints the
+same report under `STORM_TALLY=1`. What one laptop showed on
+2026-09-12, 32 clients for 15 seconds against 16 threads x 2 workers:
+about 290 requests a second, p50 83 ms, p95 280 ms, slowest 650 ms —
+a baseline for this machine, not a promise about a dyno.
+
 ## What the storms found (2026-09-11)
 
 The first three, each fixed the same day with a deterministic spec.

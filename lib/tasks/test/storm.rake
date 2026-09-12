@@ -14,6 +14,12 @@
 #   STORM_SECONDS  how long (default 20)
 #   STORM_CLIENTS  how many phones (default 64)
 #   STORM_SEED     the random seed (default 1)
+#   STORM_MAX_P95  fail when the p95 round trip, in ms, is above this (off by default)
+#
+# Every run prints the round-trip times it saw, per action and overall,
+# and saves them under tmp/storm_latency.json keyed by the run's shape
+# (clients and seconds); the next run of the same shape prints the
+# change. The numbers are this machine's, so compare like with like.
 namespace :test do
   desc 'Hit a running test server with a storm of concurrent requests and check the books after'
   task storm: :environment do
@@ -70,6 +76,15 @@ namespace :test do
     puts "requests: #{result.requests.size}, ok writes: #{result.ok_writes}, settlements: #{result.settlements}"
     result.tally.sort.each { |action, statuses| puts "  #{action}: #{statuses.sort_by { |s, _| s.to_s }.to_h}" }
     puts "background: #{result.background_tally}"
+
+    latency = result.latency
+    puts latency.report
+    shape = "#{clients} clients, #{seconds}s"
+    previous = Storm::Latency.record(latency, path: Rails.root.join('tmp/storm_latency.json'), shape: shape)
+    puts Storm::Latency.compare(latency, previous)
+    if ENV['STORM_MAX_P95'] && latency.overall.p95 > Float(ENV.fetch('STORM_MAX_P95'))
+      problems << "p95 round trip #{latency.overall.p95} ms is above STORM_MAX_P95=#{ENV.fetch('STORM_MAX_P95')}"
+    end
     if problems.empty?
       puts 'No problems.'
     else

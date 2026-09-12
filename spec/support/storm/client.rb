@@ -26,7 +26,9 @@ module Storm
   #     requests per throttle window (every client has its own IP), so a
   #     429 under the limit means the counter held someone else's requests.
   class Client
-    Entry = Struct.new(:client, :n, :action, :meal_id, :status, :problem, keyword_init: true)
+    # ms is the round trip as the client saw it, from sending the request
+    # to reading the whole answer, in milliseconds.
+    Entry = Struct.new(:client, :n, :action, :meal_id, :status, :problem, :ms, keyword_init: true)
 
     # config/initializers/rack_attack.rb
     API_LIMIT = 600
@@ -110,9 +112,12 @@ module Storm
       method, path, body, check, done = send(:"request_#{action}", meal)
       # A delete with nothing to delete creates instead; judge what was sent.
       action = done if done
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       status, response = call(method, path, body, action == :login)
+      ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started) * 1000).round(1)
       problem = judge(action, status, response, check)
-      @log << Entry.new(client: @index, n: @n, action: action, meal_id: meal.id, status: status, problem: problem)
+      @log << Entry.new(client: @index, n: @n, action: action, meal_id: meal.id, status: status, problem: problem,
+                        ms: ms)
     rescue StandardError => e
       @log << Entry.new(client: @index, n: @n, action: action, meal_id: meal&.id, status: :exception,
                         problem: "#{e.class}: #{e.message}\n  #{e.backtrace.first(12).join("\n  ")}")

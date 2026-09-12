@@ -20,7 +20,7 @@ module Storm
   # that raised something no path expects). The spec and the rake task
   # decide what to do with them.
   class Run
-    Result = Struct.new(:requests, :background, :problems, :meal_sockets, keyword_init: true) do
+    Result = Struct.new(:requests, :background, :problems, :meal_sockets, :seconds, keyword_init: true) do
       def tally
         requests.group_by(&:action).transform_values { |list| list.map(&:status).tally }
       end
@@ -43,6 +43,10 @@ module Storm
       def settlements
         background.count { |who, outcome, _| who == :settler && outcome_name(outcome) == :settled } +
           requests.count { |e| e.action == :settle && e.status == 201 }
+      end
+
+      def latency
+        Latency.new(requests, seconds: seconds)
       end
     end
 
@@ -82,7 +86,8 @@ module Storm
       threads = clients.map { |client| Thread.new { client.run } } + background_threads
       join(threads)
       Result.new(requests: clients.flat_map(&:log), background: Array.new(@log.size) { @log.pop },
-                 problems: @problems, meal_sockets: clients.map(&:meal_sockets).reduce(Set.new, :|))
+                 problems: @problems, meal_sockets: clients.map(&:meal_sockets).reduce(Set.new, :|),
+                 seconds: @seconds)
     end
 
     private

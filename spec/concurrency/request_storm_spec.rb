@@ -140,7 +140,8 @@ RSpec.describe 'a request storm against the whole API, with the nightly jobs and
   def describe_run(result, reports_tally)
     lines = result.tally.sort.map { |action, statuses| "  #{action}: #{statuses.sort_by { |s, _| s.to_s }.to_h}" }
     "requests: #{result.requests.size}, ok writes: #{result.ok_writes}, settlements: #{result.settlements}\n" \
-      "#{lines.join("\n")}\nbackground: #{result.background_tally}\nreported: #{reports_tally}"
+      "#{lines.join("\n")}\nbackground: #{result.background_tally}\nreported: #{reports_tally}\n" \
+      "#{result.latency.report}"
   end
 
   it "answers every request the way the API promises, keeps every request's state to itself, " \
