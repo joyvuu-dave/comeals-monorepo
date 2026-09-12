@@ -363,7 +363,11 @@ the survivors taught.
 | A | 4, touched classes | A4M | A4K | A4A (A4P%) | A4T | A4T2 |
 | C: controllers and serializers | 1 | 6,719 | 5,313 | 1,406 (79.1%) | 194 | 1h20 awake (the laptop slept mid-run) |
 | C | 2, rows and specs | 6,719 | 5,960 | 759 (88.7%) | 2 | 2h07 |
-| C | 3, touched subjects | C3M | C3K | C3A (C3P%) | C3T | C3TIME |
+| C | 3, the 91 subjects the pass touched | 4,206 | 3,793 | 413 (90.2%) | 2 | 1h53 |
+| C | 3, the other 85 subjects | CRM | CRK | CRA (CRP%) | CRT | CRTIME |
+| A | 4, whole stage, after every later change | A4M | A4K | A4A (A4P%) | A4T | A4TIME |
+| B | 3, whole stage, after every later change | B3M | B3K | B3A (B3P%) | B3T | B3TIME |
+| C | 4, whole stage, after every later change | C4M | C4K | C4A (C4P%) | C4T | C4TIME |
 
 **Three ways the selection was wrong.** Each one made a class look
 tested when nothing ran for it, and each is now pinned by
@@ -588,4 +592,37 @@ After the second run, 759. What was left and what a third pass answered:
   message that also says "reconciled"; the fast path is kept for its
   clearer sentence, which is now pinned.
 
-C3KINDS
+After the third pass, 413 on the subjects it touched (the table's
+whole-stage rerun below is the number to quote). What the third pass
+still showed, and a fourth pass answered:
+
+- `ApiController#set_community_timezone`: every mutation survived,
+  "never use the community zone" included, with 382 examples selected.
+  Nothing in the API suite read a time in the request's zone: the
+  month payload's `timezone` is the community column, not `Time.zone`.
+  `write_messages_spec.rb` now creates an event at 19:00 in a Tokyo
+  community, signed in by token and by header, and expects 10:00 UTC.
+  This is the same class of bug as the admin zone wrapper the time
+  hunt found on 2026-08-26.
+- `CommunitiesController#calendar`: the six-week window's start and
+  length were free (`beginning_of_week` could go, 41 could be 40 or
+  42) and so was the month the payload names; a request-level example
+  now puts a meal on each edge and one day past it, and the cache key
+  is checked in the store.
+- `EventsController#update`: an update that did not mention `all_day`
+  could turn an all-day event into a timed one.
+- The exact "No resident with email", the expired reset token being
+  cleared on use, the resident feed's "View here" link, retired
+  residents left out of the birthdays.
+
+Noise, left: `params.fetch` for `params[]`, `Date.iso8601` for
+`Date.parse`, `.to_i` on a parameter `Time.zone.local` converts
+anyway, `defined?` memo guards, `instance_of?` for `is_a?`, the
+`includes`, `update_bills` (the `BillsPayload` branch replaces it),
+and the `reject_if_reconciled` fast path (above).
+
+The one neutral failure in the third pass was the same placeholder
+page again: a stale one, without the root element, was already there
+from an earlier spec run, so `bin/mutant` left it alone.
+
+C4KINDS
