@@ -129,4 +129,68 @@ RSpec.describe CalendarSerializer, type: :serializer do
       expect(result[:guest_room_reservations].length).to eq(1)
     end
   end
+
+  # April 1 to April 30, both days whole. Every one-day-out record sits
+  # here beside one on the edge, because a window that leaks a day, or
+  # drops its last day, looked exactly like a good one to the examples
+  # above.
+  describe 'the window edges' do
+    it 'takes meals, cook slots and guest room bookings on the first and last day, and not a day outside' do
+      cook = create(:resident, community: community, unit: unit)
+      [Date.new(2026, 3, 31), Date.new(2026, 4, 1), Date.new(2026, 4, 30), Date.new(2026, 5, 1)].each do |date|
+        meal = create(:meal, community: community, date: date)
+        create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('10'))
+        create(:guest_room_reservation, community: community, resident: resident, date: date)
+      end
+
+      result = serialize
+
+      inside = [Date.new(2026, 4, 1), Date.new(2026, 4, 30)]
+      expect(result[:meals].map { |chip| chip[:start].to_date }).to match_array(inside)
+      expect(result[:bills].map { |chip| chip[:start].to_date }).to match_array(inside)
+      expect(result[:guest_room_reservations].map { |chip| chip[:start].to_date }).to match_array(inside)
+    end
+
+    it 'takes a common house booking by its start, from midnight on the first day to the last minute of the last' do
+      [[3, 31, 23, 50], [4, 1, 0, 0], [4, 30, 23, 50], [5, 1, 0, 0]].each do |month, day, hour, minute|
+        start = Time.zone.local(2026, month, day, hour, minute)
+        create(:common_house_reservation, community: community, resident: resident,
+                                          start_date: start, end_date: start + 9.minutes)
+      end
+
+      result = serialize
+
+      starts = result[:common_house_reservations].map { |chip| chip[:start] - 1.minute }
+      expect(starts).to contain_exactly(Time.zone.local(2026, 4, 1, 0, 0), Time.zone.local(2026, 4, 30, 23, 50))
+    end
+
+    it 'takes an event that starts inside, ends inside, or spans the window, and not one entirely outside' do
+      starts_inside = create(:event, community: community, start_date: Time.zone.local(2026, 4, 30, 23, 0),
+                                     end_date: Time.zone.local(2026, 5, 1, 2, 0))
+      ends_inside = create(:event, community: community, start_date: Time.zone.local(2026, 3, 31, 22, 0),
+                                   end_date: Time.zone.local(2026, 4, 1, 0, 0))
+      spans = create(:event, community: community, start_date: Time.zone.local(2026, 3, 20, 12, 0),
+                             end_date: Time.zone.local(2026, 5, 10, 12, 0))
+      create(:event, community: community, start_date: Time.zone.local(2026, 3, 31, 20, 0),
+                     end_date: Time.zone.local(2026, 3, 31, 23, 59))
+      create(:event, community: community, start_date: Time.zone.local(2026, 5, 1, 0, 0),
+                     end_date: Time.zone.local(2026, 5, 1, 2, 0))
+
+      result = serialize
+
+      expect(result[:events].pluck(:id))
+        .to match_array([starts_inside, ends_inside, spans].map(&:cache_key_with_version))
+    end
+
+    it 'takes birthdays in the listed months only, lowest id first' do
+      resident
+      create(:resident, community: community, unit: unit, birthday: Date.new(1988, 5, 3))
+      second_april = create(:resident, community: community, unit: unit, birthday: Date.new(1992, 4, 2))
+
+      result = serialize
+
+      expect(result[:birthdays].pluck(:id))
+        .to eq([resident, second_april].map(&:cache_key_with_version))
+    end
+  end
 end

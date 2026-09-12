@@ -12,7 +12,14 @@
 # "tests: 0" (2026-09-12: 661 of them). So a row for a file that
 # describes a class must name that class too. The spec pins it.
 
-MUTANT_SPECS = {
+# The rows as written. MUTANT_SPECS below adds the base controller to
+# every request spec: every API request runs ApiController's filters and
+# rescues, every admin request runs ApplicationController's, so each of
+# those files proves the base class as well as the controller it names.
+# The first controller run (2026-09-12) selected five files for
+# ApiController and 269 of its mutations survived, "answer nothing to
+# an unknown path" among them.
+MUTANT_SPEC_ROWS = {
   'spec/services/settlement_allocate_to_cents_on_random_ledgers_spec.rb' => %w[Settlement],
   # The oracle comparison describes MealLedger, so it runs for MealLedger
   # on its own; this row adds it to Settlement for the rounding.
@@ -102,6 +109,9 @@ MUTANT_SPECS = {
     %w[Api::V1::CommonHouseReservationsController CommonHouseReservation],
   'spec/requests/api/v1/rotations_controller_spec.rb' => %w[Api::V1::RotationsController RotationSerializer],
   'spec/requests/api/v1/site_controller_spec.rb' => %w[Api::V1::SiteController],
+  'spec/requests/api/v1/write_messages_spec.rb' =>
+    %w[Api::V1::MealsController Api::V1::EventsController Api::V1::CommonHouseReservationsController
+       Api::V1::GuestRoomReservationsController],
   'spec/requests/api/v1/high_trust_authorization_spec.rb' => %w[ApiController],
   'spec/requests/api/v1/calendar_cache_timezone_spec.rb' => %w[CalendarSerializer Community],
   'spec/requests/api/v1/calendar_last_day_spec.rb' => %w[CalendarSerializer],
@@ -151,6 +161,9 @@ MUTANT_SPECS = {
        RotationLogSerializer ResidentBirthdaySerializer AuditSerializer AuditDescription
        ResidentNameShortener MealCostSummary],
   'spec/serializers/calendar_chip_contrast_spec.rb' => %w[RotationSerializer Rotation],
+  'spec/serializers/calendar_chips_spec.rb' =>
+    %w[MealSerializer BillSerializer EventSerializer GuestRoomReservationSerializer
+       CommonHouseReservationSerializer ResidentBirthdaySerializer RotationSerializer],
   'spec/models/event_spec.rb' => %w[Event LiveUpdate BelongsToTheCommunity],
   'spec/models/common_house_reservation_spec.rb' => %w[CommonHouseReservation LiveUpdate BelongsToTheCommunity],
   'spec/models/guest_room_reservation_spec.rb' => %w[GuestRoomReservation LiveUpdate BelongsToTheCommunity],
@@ -195,6 +208,15 @@ MUTANT_SPECS = {
   'spec/requests/api/v1/meal_random_actions_spec.rb' => [],
   'spec/requests/api/v1/calendar_performance_spec.rb' => []
 }.freeze
+
+MUTANT_SPECS = MUTANT_SPEC_ROWS.to_h do |path, expressions|
+  base = if path.start_with?('spec/requests/api/v1/')
+           'ApiController'
+         elsif path.start_with?('spec/requests/admin/')
+           'ApplicationController'
+         end
+  [path, (expressions.empty? || base.nil? ? expressions : (expressions | [base])).freeze]
+end.freeze
 
 # Mutant runs the selected examples with --fail-fast, so a mutation is
 # killed as soon as one example fails. The cheap, exact examples should

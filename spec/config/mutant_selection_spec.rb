@@ -62,6 +62,16 @@ RSpec.describe 'the mutant spec selection' do
     expect(wrong).to be_empty
   end
 
+  it 'adds the base controller to every request spec that has a row' do
+    api = MUTANT_SPECS.select { |path, expressions| path.start_with?('spec/requests/api/v1/') && expressions.any? }
+    admin = MUTANT_SPECS.select { |path, expressions| path.start_with?('spec/requests/admin/') && expressions.any? }
+
+    expect(api).not_to be_empty
+    expect(api.values).to all(include('ApiController'))
+    expect(admin.values).to all(include('ApplicationController'))
+    expect(MUTANT_SPECS.fetch('spec/requests/api/v1/meal_random_actions_spec.rb')).to eq([])
+  end
+
   it 'gives every runtime type-check spec an empty list, since mutant drops the sig' do
     types_specs = Rails.root.glob('spec/**/*_types_spec.rb').map { |f| f.relative_path_from(Rails.root).to_s }
     expect(MUTANT_SIG_CHECK_SPECS).to match_array(types_specs)

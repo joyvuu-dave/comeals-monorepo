@@ -39,7 +39,20 @@ for ((i = 0; i < jobs; i++)); do
   createdb --template "$base" "${base}_${i}"
 done
 pass "${base}_0 .. ${base}_$((jobs - 1)) copied from $base"
-trap drop_workers EXIT
+
+# FallbackController serves public/index.html, which only a build writes.
+# The request specs need one; give them a placeholder and take it away
+# again, unless a real one was there.
+placeholder_index=""
+if [ ! -f public/index.html ]; then
+  printf '<!doctype html><title>Comeals</title>\n' > public/index.html
+  placeholder_index=public/index.html
+fi
+cleanup() {
+  drop_workers
+  [ -n "$placeholder_index" ] && rm -f "$placeholder_index"
+}
+trap cleanup EXIT
 
 step "Mutant"
 if [ "${1:-}" = "--" ]; then shift; fi
