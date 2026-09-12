@@ -43,10 +43,7 @@ class Rotation < ApplicationRecord
   # has no rotation — so a plain nullify quietly broke the nightly task.
   # The guards below only let the cascade run when every meal is untouched,
   # so it can never delete a meal that carries any ledger data.
-  # after_remove: the admin form assigns meals with meal_ids=, and the
-  # meals it drops are detached with update_all — no Meal callback runs
-  # for them, so the rotation notes their months itself.
-  has_many :meals, dependent: :destroy, after_remove: :note_meal_removed
+  has_many :meals, dependent: :destroy
   has_many :bills, through: :meals
   has_many :cooks, -> { distinct }, through: :bills, source: :resident
 
@@ -170,10 +167,6 @@ class Rotation < ApplicationRecord
   # is not loaded here. See LiveUpdate.
   def note_live_update
     Meal.where(rotation_id: id).distinct.pluck(:date).each { |date| LiveUpdate.calendar(date) }
-  end
-
-  def note_meal_removed(meal)
-    LiveUpdate.calendar(meal.date)
   end
 
   # Mark auto-created rotations as already notified so the
