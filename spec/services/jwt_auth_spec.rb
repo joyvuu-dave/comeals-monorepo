@@ -38,6 +38,15 @@ RSpec.describe JwtAuth do
         expect(described_class.authenticate('not.a.jwt')).to be_nil
       end
 
+      it 'rejects a token signed with another algorithm, or with none at all' do
+        payload = { 'resident_id' => resident.id, 'iat' => Time.current.to_i, 'iss' => described_class::ISSUER }
+        unsigned = JWT.encode(payload, nil, 'none')
+        other_algorithm = JWT.encode(payload, described_class.send(:secret), 'HS512')
+
+        expect(described_class.authenticate(unsigned)).to be_nil
+        expect(described_class.authenticate(other_algorithm)).to be_nil
+      end
+
       it 'rejects a token with a tampered signature' do
         token = described_class.encode(resident)
         tampered = token.split('.').tap { |parts| parts[2] = 'bogus' }.join('.')

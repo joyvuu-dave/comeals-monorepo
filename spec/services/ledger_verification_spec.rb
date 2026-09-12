@@ -316,6 +316,35 @@ RSpec.describe LedgerVerification do
                                           ])
     end
 
+    it 'reports lines that sum below zero the same as lines that sum above it' do
+      reconciliation = settle
+      behind_the_guards do
+        # 79.5 in, 80 charged out: the lines sum to -0.5. The balances are
+        # moved with them, so only the sum is wrong.
+        MealCharge.where(meal_id: reconciliation.meals.select(:id), resident_id: cook.id, kind: 'credit')
+                  .update_all(amount: BigDecimal('79.5'))
+        ReconciliationBalance.where(reconciliation_id: reconciliation.id, resident_id: cook.id)
+                             .update_all(amount: BigDecimal('39.5'))
+      end
+
+      suppress(described_class::MismatchError) { described_class.call }
+
+      detail = LedgerCheckRun.recent.first.details.find { |d| d['check'] == 'line_items' }
+      expect(detail['differences']).to include('resident_id' => nil, 'stored' => nil, 'source' => '-0.5')
+    end
+
+    it 'allows a line sum a whole cent away from the balance, which rounding to cents can produce' do
+      reconciliation = settle
+      behind_the_guards do
+        MealCharge.where(meal_id: reconciliation.meals.select(:id), resident_id: cook.id, kind: 'credit')
+                  .update_all(amount: BigDecimal('80.01'))
+        MealCharge.where(meal_id: reconciliation.meals.select(:id), resident_id: eater.id, kind: 'debit')
+                  .update_all(amount: BigDecimal('-40.01'))
+      end
+
+      expect(described_class.call).to be_passed
+    end
+
     it 'reports line items that no longer sum to zero as a finding with no resident' do
       reconciliation = settle
       behind_the_guards do

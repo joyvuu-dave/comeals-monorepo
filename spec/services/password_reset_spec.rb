@@ -67,20 +67,21 @@ RSpec.describe PasswordReset do
           .not_to(change { ActionMailer::Base.deliveries.count })
       end
     end
-  end
 
-  describe 'a failure report' do
-    it 'names the mailer and the person the mail was for' do
-      resident = create(:resident, community: create(:community), unit: create(:unit))
-      allow(ResidentMailer).to receive(:password_reset_email)
-        .and_return(instance_double(ActionMailer::MessageDelivery).tap { |m|
-                      allow(m).to receive(:deliver_now).and_raise(Net::SMTPServerBusy, '451 try later')
-                    })
-      allow(MailDeliveryFailure).to receive(:report)
+    # Inside `.request`, so mutant runs it for that method: a group
+    # described by a sentence is not selected for any method.
+    describe 'a failure report' do
+      it 'names the mailer and the person the mail was for' do
+        allow(ResidentMailer).to receive(:password_reset_email)
+          .and_return(instance_double(ActionMailer::MessageDelivery).tap { |m|
+                        allow(m).to receive(:deliver_now).and_raise(Net::SMTPServerBusy, '451 try later')
+                      })
+        allow(MailDeliveryFailure).to receive(:report)
 
-      expect(described_class.request(resident)).to eq(:mail_failed)
-      expect(MailDeliveryFailure).to have_received(:report)
-        .with(an_instance_of(Net::SMTPServerBusy), mailer: 'password_reset_email', recipient: resident.email)
+        expect(described_class.request(resident)).to eq(:mail_failed)
+        expect(MailDeliveryFailure).to have_received(:report)
+          .with(an_instance_of(Net::SMTPServerBusy), mailer: 'password_reset_email', recipient: resident.email)
+      end
     end
   end
 end

@@ -35,7 +35,7 @@ module ScheduleWeekLabelHelper
     return [] if weeks_count.zero?
 
     sunday = current_sunday(community)
-    current = MealSchedule.weeks_since_epoch(sunday) % weeks_count
+    current = MealSchedule.weeks_since_epoch(sunday)
     Array.new(weeks_count) do |delta|
       { slot: (current + delta) % weeks_count, label: week_label(sunday, delta) }
     end

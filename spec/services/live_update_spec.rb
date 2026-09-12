@@ -34,6 +34,16 @@ RSpec.describe LiveUpdate do
       expect(Pusher).not_to have_received(:trigger)
     end
 
+    it 'marks the last day itself, which can be on the next month\'s six weeks' do
+      # April 10 to April 28, 2026: May starts on a Friday, so May's six
+      # weeks start on Sunday April 26 and show April 28.
+      calls = pushed do
+        described_class.batch { described_class.calendar_range(Date.new(2026, 4, 10), Date.new(2026, 4, 28)) }
+      end
+
+      expect(calendar_channels(calls)).to include("community-#{community.id}-calendar-2026-5")
+    end
+
     it 'marks every month from the first day to the last, not only the two ends' do
       # January 5 to May 20: February, March and April are only reached by
       # walking the months in between. The two ends alone would reach
@@ -82,6 +92,14 @@ RSpec.describe LiveUpdate do
       expect(calendar_channels(calls)).to eq(["community-#{community.id}-calendar-2026-6"])
     end
 
+    it 'pushes each month channel with the calendar message and no options' do
+      calls = pushed do
+        described_class.batch { described_class.calendar(Date.new(2026, 6, 10)) }
+      end
+
+      expect(calls).to eq([["community-#{community.id}-calendar-2026-6", { message: 'calendar updated' }, nil]])
+    end
+
     it 'marks every month whose six weeks show the day' do
       calls = pushed do
         described_class.batch { described_class.calendar(Date.new(2026, 6, 6)) }
@@ -96,6 +114,15 @@ RSpec.describe LiveUpdate do
       calls = pushed { described_class.batch { described_class.meal(7) } }
 
       expect(calls).to eq([['meal-7', { message: 'meal updated' }, nil]])
+    end
+
+    it 'takes the sender from the request (Current) when the caller gives no socket id' do
+      Current.socket_id = 'the-sender'
+      calls = pushed { described_class.batch { described_class.meal(7) } }
+
+      expect(calls).to eq([['meal-7', { message: 'meal updated' }, { socket_id: 'the-sender' }]])
+    ensure
+      Current.reset
     end
 
     it 'leaves the sender out of the push, and the first caller decides who the sender is' do
@@ -123,6 +150,22 @@ RSpec.describe LiveUpdate do
   end
 
   describe '.batch' do
+    it 'runs the block of a batch opened inside another, and flushes its notes with the outer one' do
+      calls = pushed do
+        described_class.batch do
+          described_class.batch { described_class.calendar(Date.new(2026, 6, 10)) }
+          expect(Pusher).not_to have_received(:trigger)
+        end
+      end
+
+      expect(calendar_channels(calls)).to eq(["community-#{community.id}-calendar-2026-6"])
+    end
+
+    it 'starts with nothing to push' do
+      expect(described_class::Batch.new.residents?).to be(false)
+      expect(described_class::Batch.new).to be_empty
+    end
+
     it 'folds a batch opened inside another into the outer one, so there is one flush' do
       described_class.batch do
         described_class.batch { described_class.residents }

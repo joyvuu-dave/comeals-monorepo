@@ -150,6 +150,24 @@ RSpec.describe SettleAndNotify do
       expect(ReconciliationMailer).to have_received(:reconciliation_notify_email).with(cook, reconciliation).once
     end
 
+    it 'gives the nightly refresh the batch budget, so it outlasts the tries a request would make' do
+      settleable_meal(Date.yesterday)
+      attempts = 0
+      allow(BalanceRecalculation).to receive(:call).and_wrap_original do |original, **args|
+        attempts += 1
+        raise ActiveRecord::SerializationFailure, 'conflict' if attempts <= described_class::REQUEST.attempts + 1
+
+        original.call(**args)
+      end
+      allow(Rails.error).to receive(:report).and_call_original
+
+      described_class.call(cutoff: Date.yesterday, community: community)
+
+      expect(attempts).to eq(described_class::REQUEST.attempts + 2)
+      expect(Rails.error).not_to have_received(:report)
+        .with(anything, hash_including(context: { step: 'balance refresh after settlement' }))
+    end
+
     it 'gives the refresh the same patience as the settlement, and names the step when it gives up' do
       settleable_meal(Date.yesterday)
       allow(BalanceRecalculation).to receive(:call).and_raise(ActiveRecord::SerializationFailure, 'conflict')

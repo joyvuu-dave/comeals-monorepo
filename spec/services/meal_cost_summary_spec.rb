@@ -115,6 +115,24 @@ RSpec.describe MealCostSummary do
   end
 
   describe 'a settled meal (from stored charges)' do
+    # A settled meal nobody ate gets no charges; the summary then shows
+    # what the cooks spent, from the bills, and a no-cost bill spends
+    # nothing whatever amount was left on it.
+    it 'sums only the bills with money on a settled meal that got no charges' do
+      meal = create(:meal, community: community)
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      other = create(:resident, community: community, unit: unit, multiplier: 2)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('10'))
+      create(:bill, meal: meal, resident: other, community: community, amount: BigDecimal('12'), no_cost: true)
+      meal.update!(reconciliation: create(:reconciliation, community: community))
+
+      summary = described_class.for(meal.reload)
+      expect(summary.total_cost).to eq(BigDecimal('10'))
+      expect(summary.effective_cost).to eq(BigDecimal('0'))
+      expect(summary.unit_cost).to eq(BigDecimal('0'))
+      expect(summary.subsidized).to be false
+    end
+
     it 'reads the stored charges, not the live bills' do
       meal = create(:meal, community: community)
       cook = create(:resident, community: community, unit: unit, multiplier: 2)

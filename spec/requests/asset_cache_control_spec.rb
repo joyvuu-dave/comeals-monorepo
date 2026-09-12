@@ -4,12 +4,20 @@ require 'rails_helper'
 
 RSpec.describe 'AssetCacheControl' do
   # A fixture file with a Vite-style hashed name. The real built assets
-  # are not present on CI, so the spec brings its own.
-  let(:fixture) { Rails.public_path.join('assets/spec-fixture-Ab12Cd34.js') }
+  # are not present on CI, so the spec brings its own. The name carries
+  # the process id, because mutant runs this file in several processes
+  # at once and one process must not delete another's fixture.
+  let(:fixture) { Rails.public_path.join("assets/spec-fixture-#{Process.pid}-Ab12Cd34.js") }
+
+  # The SPA page exists only after a build. Bring one when it is
+  # missing, and leave it: a later build overwrites it, and deleting it
+  # would race the other processes that also found it missing.
+  let(:index) { Rails.public_path.join('index.html') }
 
   before do
     fixture.dirname.mkpath
     fixture.write('// asset_cache_control_spec fixture')
+    index.write('<!doctype html><title>Comeals</title>') unless index.exist?
   end
 
   after do

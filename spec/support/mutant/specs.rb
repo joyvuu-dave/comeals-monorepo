@@ -28,6 +28,7 @@ MUTANT_SPECS = {
   'spec/models/reconciliation_balance_spec.rb' => %w[ReconciliationBalance Reconciliation Settlement AppendOnly],
   'spec/helpers/balance_display_helper_spec.rb' => %w[BalanceDisplayHelper MealLedger],
   'spec/mailers/reconciliation_mailer_spec.rb' => %w[ReconciliationMailer ApplicationMailer Reconciliation],
+  'spec/mailers/resident_mailer_spec.rb' => %w[ResidentMailer ApplicationMailer],
   'spec/jobs/refresh_balances_job_spec.rb' => %w[RefreshBalancesJob BalanceRecalculation],
   'spec/tasks/settlement_matches_running_balance_spec.rb' =>
     %w[Settlement Reconciliation MealLedger BalanceRecalculation],

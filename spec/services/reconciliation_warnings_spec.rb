@@ -29,6 +29,20 @@ RSpec.describe ReconciliationWarnings do
                            }])
   end
 
+  it 'counts a resident and a guest together, so a meal with one of each is not empty' do
+    bill('12.50')
+    create(:meal_resident, meal: meal, resident: cook, community: community)
+    create(:guest, meal: meal, resident: cook)
+
+    expect(described_class.for([meal])).to be_empty
+  end
+
+  it 'does not take a no-cost bill for money because an amount was left on it' do
+    bill('12', no_cost: true)
+
+    expect(described_class.for([], held: [meal])).to be_empty
+  end
+
   it 'counts a guest as someone who signed up' do
     bill('12.50')
     create(:guest, meal: meal, resident: cook)

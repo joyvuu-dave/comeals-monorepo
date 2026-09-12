@@ -47,6 +47,10 @@ RSpec.describe ResidentMailer do
     it 'has the correct subject' do
       expect(mail.subject).to eq('Sign up to Cook')
     end
+
+    it 'links to the configured app root' do
+      expect(mail.body.encoded).to include('http://localhost:3036')
+    end
   end
 
   describe '#new_rotation_email' do
@@ -64,16 +68,9 @@ RSpec.describe ResidentMailer do
     it 'includes the community name' do
       expect(mail.body.encoded).to include('Swan')
     end
-  end
 
-  describe 'the links in the rotation emails' do
-    let(:rotation) { create(:rotation, community: community) }
-
-    it 'point at the configured app root' do
-      expect(described_class.new_rotation_email(resident, rotation, community).body.encoded)
-        .to include('http://localhost:3036')
-      expect(described_class.rotation_signup_email(resident, rotation, [], community).body.encoded)
-        .to include('http://localhost:3036')
+    it 'links to the configured app root' do
+      expect(mail.body.encoded).to include('http://localhost:3036')
     end
   end
 end

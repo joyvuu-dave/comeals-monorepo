@@ -37,6 +37,10 @@ RSpec.describe ThirdCookWarning do
       expect(described_class.for(meal, cooks.map(&:id).reverse.map(&:to_s))).to be_nil
     end
 
+    it 'says nothing when the same three come back as integers' do
+      expect(described_class.for(meal, cooks.map(&:id).reverse)).to be_nil
+    end
+
     it 'warns when one of the three is switched for someone else' do
       other = create(:resident, community: community, unit: unit)
 
@@ -47,6 +51,20 @@ RSpec.describe ThirdCookWarning do
 
     it 'says nothing when a cook is removed' do
       expect(described_class.for(meal, cooks.first(2).map(&:id))).to be_nil
+    end
+  end
+
+  describe 'with four cooks already on the meal' do
+    let(:fourth) { create(:resident, community: community, unit: unit) }
+
+    before do
+      (cooks + [fourth]).each do |c|
+        create(:bill, meal: meal, resident: c, community: community, amount: BigDecimal('0'))
+      end
+    end
+
+    it 'says nothing when one of the four is removed, since nobody new is cooking' do
+      expect(described_class.for(meal, cooks.map(&:id))).to be_nil
     end
   end
 end

@@ -137,6 +137,25 @@ RSpec.describe PacedDelivery do
       expect(smtp).to have_received(:start).with('comeals.com', 'u', 'p', :plain)
     end
 
+    it 'keeps the sent and skipped counts when closing the session fails after the messages went out' do
+      stub_const('PacedDelivery::CAP', 2)
+      allow(smtp).to receive(:start) do |*, &block|
+        block.call(session)
+        raise Net::SMTPServerBusy, '451 closing'
+      end
+      allow(MailDeliveryFailure).to receive(:report)
+      messages = cooks.index_with do |cook|
+        ActionMailer::MessageDelivery.new(ResidentMailer, :password_reset_email, cook.tap do |c|
+          c.reset_password_token = 't'
+        end)
+      end
+
+      result = described_class.deliver(cooks, mailer: 'x') { |cook| messages[cook] }
+
+      expect(result).to eq(described_class::Result.new(sent: 2, failed: 0, skipped: 1))
+      expect(MailDeliveryFailure).to have_received(:report).with(an_instance_of(Net::SMTPServerBusy), mailer: 'x')
+    end
+
     it 'opens one session, sends every message over it, and pauses between messages' do
       messages = cooks.index_with do |cook|
         ActionMailer::MessageDelivery.new(ResidentMailer, :password_reset_email, cook.tap do |c|
