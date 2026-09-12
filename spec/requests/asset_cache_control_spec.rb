@@ -24,16 +24,30 @@ RSpec.describe 'AssetCacheControl' do
     fixture.delete
   end
 
-  it 'serves /assets/ files with a year-long immutable cache header' do
+  it 'serves /assets/ files with a year-long immutable cache header, and the file itself' do
     get "/assets/#{fixture.basename}"
     expect(response).to have_http_status(:ok)
     expect(response.headers['cache-control']).to eq('public, max-age=31536000, immutable')
+    expect(response.body).to eq('// asset_cache_control_spec fixture')
   end
 
-  it 'does not add the header to public files outside /assets/' do
+  it 'serves /vite-assets/ files with the same header' do
+    vite_fixture = Rails.public_path.join("vite-assets/spec-fixture-#{Process.pid}-Cd34Ef56.js")
+    vite_fixture.dirname.mkpath
+    vite_fixture.write('// vite fixture')
+
+    get "/vite-assets/#{vite_fixture.basename}"
+    expect(response).to have_http_status(:ok)
+    expect(response.headers['cache-control']).to eq('public, max-age=31536000, immutable')
+  ensure
+    vite_fixture&.delete
+  end
+
+  it 'leaves public files outside /assets/ with the static server\'s own header' do
     get '/manifest.json'
     expect(response).to have_http_status(:ok)
     expect(response.headers['cache-control'].to_s).not_to include('immutable')
+    expect(response.headers['cache-control']).not_to eq('no-cache')
   end
 
   it 'does not add the header when the SPA catch-all answers a missing asset' do
