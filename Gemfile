@@ -88,6 +88,7 @@ group :development, :test do
   gem 'rubocop-rspec', require: false
   gem 'rubocop-rspec_rails', require: false
   gem 'rubocop-sorbet', require: false
+  gem 'rubocop-thread_safety', require: false
   gem 'sorbet', require: false
   gem 'tapioca', require: false
 end

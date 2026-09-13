@@ -70,7 +70,7 @@ module JwtAuth
     # Derive a dedicated signing key from secret_key_base so the raw master
     # key never leaves the KeyGenerator boundary. Memoized per process.
     def secret
-      @secret ||= Rails.application.key_generator.generate_key('comeals-jwt-auth-v1', 32)
+      @secret ||= Rails.application.key_generator.generate_key('comeals-jwt-auth-v1', 32) # rubocop:disable ThreadSafety/ClassInstanceVariable -- the one class-level memo, argued for in spec/concurrency/process_wide_state_spec.rb
     end
   end
 end

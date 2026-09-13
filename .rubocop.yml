@@ -5,6 +5,7 @@ plugins:
   - rubocop-rspec_rails
   - rubocop-factory_bot
   - rubocop-sorbet
+  - rubocop-thread_safety
 
 AllCops:
   NewCops: enable
@@ -170,3 +171,21 @@ Naming/PredicateMethod:
 
 Naming/PredicatePrefix:
   Enabled: false
+
+# --- Thread safety ---
+# spec/concurrency/process_wide_state_spec.rb already refuses class
+# variables, Thread.current and class-level memos in app code. These cops
+# add what it does not read: a write to a cattr/mattr/class_attribute,
+# a mutable object held in a class instance variable, Dir.chdir, and an
+# instance variable set in a Rack middleware's call. The gem only looks
+# under app/middleware and lib/middleware for the Rack cop; the one
+# middleware here lives in lib/.
+ThreadSafety/RackMiddlewareInstanceVariable:
+  Include:
+    - "lib/asset_cache_control.rb"
+    - "app/middleware/**/*.rb"
+    - "lib/middleware/**/*.rb"
+# The concurrency specs start threads on purpose: that is what they test.
+ThreadSafety/NewThread:
+  Exclude:
+    - "spec/**/*"

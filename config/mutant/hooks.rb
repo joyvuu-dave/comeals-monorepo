@@ -21,7 +21,7 @@ end
 # The worker's own Postgres session, remembered so hook 3 leaves it alone.
 module MutantWorker
   class << self
-    attr_accessor :backend_pid
+    attr_accessor :backend_pid # rubocop:disable ThreadSafety/ClassAndModuleAttributes -- one mutant worker process, one session
   end
 end
 

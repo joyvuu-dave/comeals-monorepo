@@ -50,7 +50,7 @@ RSpec.describe 'thread-local state across requests and jobs on a reused thread' 
     # rubocop:enable RSpec/InstanceVariable
   end
 
-  def request(method, path, resident, params = {})
+  def request_once(method, path, resident, params = {})
     env = Rack::MockRequest.env_for(path, method: method.to_s.upcase, input: JSON.generate(params),
                                           'CONTENT_TYPE' => 'application/json',
                                           'HTTP_AUTHORIZATION' => "Bearer #{JwtAuth.encode(resident)}")
@@ -59,6 +59,28 @@ RSpec.describe 'thread-local state across requests and jobs on a reused thread' 
     body.each { |chunk| text << chunk }
     body.close if body.respond_to?(:close)
     [status, text]
+  end
+
+  # Four threads writing at the same instant conflict at SERIALIZABLE
+  # (the tables are small enough that every row shares a page, so the
+  # predicate locks overlap), and a write whose three tries all conflict
+  # answers 409 by design. A client tries again; so does this. Any other
+  # answer than 200 is raised, so a request that did not happen is
+  # reported as that and not as a push that never came (2026-09-12: one
+  # thread's first signup went missing under a loaded laptop, and the
+  # spec could only say its socket id was not pushed).
+  def request(method, path, resident, params = {})
+    tries = 0
+    loop do
+      status, text = request_once(method, path, resident, params)
+      return [status, text] if status == 200
+      raise "#{method.to_s.upcase} #{path} answered #{status}: #{text}" unless status == 409
+
+      tries += 1
+      raise "#{method.to_s.upcase} #{path} answered 409 #{tries} times" if tries == 5
+
+      sleep(0.05 * tries)
+    end
   end
 
   # The probes: what Current holds at the start of a request or a job, on

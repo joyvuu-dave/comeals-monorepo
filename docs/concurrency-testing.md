@@ -23,6 +23,17 @@ self`). One memo is allowed, `JwtAuth.secret`, because two threads that
 race it derive the same bytes. `Current` (CurrentAttributes) is the one
 allowed thread-local, because layer 2 proves Rails resets it.
 
+The `rubocop-thread_safety` cops run in `bin/check`'s RuboCop step beside
+this scan (added 2026-09-13). They read the same files for four things
+the scan does not: a write to a `cattr_accessor`, `mattr_accessor` or
+`class_attribute`; a mutable object (an array, a hash, a string) held in
+a class instance variable; `Dir.chdir`; and an instance variable set in
+a Rack middleware's `call`. On the day they were added they found
+nothing the scan had not (the `JwtAuth.secret` memo, and the mutant
+worker's own session id in `config/mutant/hooks.rb`, each marked with
+its reason). Their `NewThread` cop is off under `spec/`, where the
+concurrency specs start threads on purpose.
+
 ### 2. Nothing leaks across a reused thread — `spec/concurrency/recycled_thread_spec.rb`
 
 Four threads, sixty requests each, through the whole Rack stack in one
@@ -175,3 +186,13 @@ Two things the storms show that are not bugs. Routes are drawn lazily in
 the test environment, on the first request, and many first requests at
 once race that. Production eager loads, so the storm specs eager load
 too.
+
+A third, in the reused-thread spec (layer 2): four threads that write at
+the same instant conflict at SERIALIZABLE even on different meals,
+because the test tables are small enough that every row shares a page
+and the predicate locks overlap. A write whose three tries all conflict
+answers 409, by design, and under a loaded laptop that happened to one
+thread's first signup (2026-09-12). The spec now does what a client
+does, tries a 409 again, and raises on any other answer than 200, so a
+request that did not happen is reported as that and not as a push that
+never came.
