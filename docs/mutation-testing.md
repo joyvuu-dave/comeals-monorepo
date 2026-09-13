@@ -367,7 +367,7 @@ the survivors taught.
 | C | 3, the other 85 subjects | 2,513 | 2,382 | 131 (94.8%) | 0 | 15 min |
 | A | 4, whole stage, after every later change | 6,855 | 6,494 | 361 (94.7%) | 20 | 49 min |
 | B | 3, whole stage, after every later change | 5,263 | 5,053 | 210 (96.0%) | 11 | 33 min |
-| C | 4, whole stage, after every later change | C4M | C4K | C4A (C4P%) | C4T | C4TIME |
+| C | 4, whole stage, after every later change | 6,719 | 6,234 | 485 (92.8%) | 78 | 4h33 (the laptop slept once) |
 
 **Three ways the selection was wrong.** Each one made a class look
 tested when nothing ran for it, and each is now pinned by
@@ -643,4 +643,12 @@ The one neutral failure in the third pass was the same placeholder
 page again: a stale one, without the root element, was already there
 from an earlier spec run, so `bin/mutant` left it alone.
 
-C4KINDS
+The whole-stage rerun after the fourth pass: 485, no neutral failure.
+`ApiController` 83 (38 of them the `.to_i` rewrites in
+`parse_start_end_params`), `EventsController` 65 and the two
+reservation controllers 43 (`params.fetch`, `.to_s` on a string), the
+calendar serializer's query shapes 47, `MealsController` 67 (44 in
+`update_bills`), and the resident and community endpoints' `.fetch`
+and `Date.iso8601` rewrites. The list to read next time starts with
+`EventsController#update` (37), whose `all_day` handling has one
+example now and could take a second for each branch.
