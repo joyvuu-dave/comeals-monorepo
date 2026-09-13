@@ -25,12 +25,12 @@ work and is usually run one stage at a time, each stage being the
 subjects of one part of the app. The stages, and roughly what each
 costs on six workers:
 
-| Stage | Subjects | Mutations | Time |
-|---|---|---|---|
-| money | `MealLedger* Settlement* Reconciliation* BalanceRecalculation*` | 1,858 | 1h45 (the race specs are slow) |
-| services, jobs, mailers, helpers, lib | the classes under those directories, minus money | 6,860 | about 45 min |
-| models and concerns | `app/models/**`, minus money | 5,378 | about 40 min |
-| controllers and serializers | `app/controllers/**`, `app/serializers/**` | 6,719 | about 1h20; request specs are slow per mutation |
+| Stage                                 | Subjects                                                        | Mutations | Time                                            |
+| ------------------------------------- | --------------------------------------------------------------- | --------- | ----------------------------------------------- |
+| money                                 | `MealLedger* Settlement* Reconciliation* BalanceRecalculation*` | 1,858     | 1h45 (the race specs are slow)                  |
+| services, jobs, mailers, helpers, lib | the classes under those directories, minus money                | 6,860     | about 45 min                                    |
+| models and concerns                   | `app/models/**`, minus money                                    | 5,378     | about 40 min                                    |
+| controllers and serializers           | `app/controllers/**`, `app/serializers/**`                      | 6,719     | about 1h20; request specs are slow per mutation |
 
 The exact subject list for a stage is the matching block of
 `.mutant.yml`; pass it after `--`. It is not part of `bin/check`. Run
@@ -352,22 +352,22 @@ three stages on six workers. Each stage ran two or three times, with
 specs written from the survivors between runs. The numbers, then what
 the survivors taught.
 
-| Stage | Run | Mutations | Killed | Alive | Timeouts | Time |
-|---|---|---|---|---|---|---|
-| A: services, jobs, mailers, helpers, lib | 1 | 6,968 | 5,032 | 1,936 (72.2%) | | 40 min |
-| A | 2, rows fixed | 6,968 | 6,047 | 921 (86.8%) | | 40 min |
-| A | 3, specs added | 6,860 | 6,477 | 383 (94.4%) | 20 | 47 min |
-| B: models and concerns | 1 | 5,378 | 4,410 | 968 (82.0%) | 29 | |
-| B | 2, rows and specs | 5,378 | 5,005 | 373 (93.1%) | 11 | 37 min |
-| B | 3, touched classes | B3M | B3K | B3A (B3P%) | B3T | B3T2 |
-| A | 4, touched classes | A4M | A4K | A4A (A4P%) | A4T | A4T2 |
-| C: controllers and serializers | 1 | 6,719 | 5,313 | 1,406 (79.1%) | 194 | 1h20 awake (the laptop slept mid-run) |
-| C | 2, rows and specs | 6,719 | 5,960 | 759 (88.7%) | 2 | 2h07 |
-| C | 3, the 91 subjects the pass touched | 4,206 | 3,793 | 413 (90.2%) | 2 | 1h53 |
-| C | 3, the other 85 subjects | 2,513 | 2,382 | 131 (94.8%) | 0 | 15 min |
-| A | 4, whole stage, after every later change | 6,855 | 6,494 | 361 (94.7%) | 20 | 49 min |
-| B | 3, whole stage, after every later change | 5,263 | 5,053 | 210 (96.0%) | 11 | 33 min |
-| C | 4, whole stage, after every later change | 6,719 | 6,234 | 485 (92.8%) | 78 | 4h33 (the laptop slept once) |
+| Stage                                    | Run                                      | Mutations | Killed | Alive         | Timeouts | Time                                  |
+| ---------------------------------------- | ---------------------------------------- | --------- | ------ | ------------- | -------- | ------------------------------------- |
+| A: services, jobs, mailers, helpers, lib | 1                                        | 6,968     | 5,032  | 1,936 (72.2%) |          | 40 min                                |
+| A                                        | 2, rows fixed                            | 6,968     | 6,047  | 921 (86.8%)   |          | 40 min                                |
+| A                                        | 3, specs added                           | 6,860     | 6,477  | 383 (94.4%)   | 20       | 47 min                                |
+| B: models and concerns                   | 1                                        | 5,378     | 4,410  | 968 (82.0%)   | 29       |                                       |
+| B                                        | 2, rows and specs                        | 5,378     | 5,005  | 373 (93.1%)   | 11       | 37 min                                |
+| B                                        | 3, touched classes                       | B3M       | B3K    | B3A (B3P%)    | B3T      | B3T2                                  |
+| A                                        | 4, touched classes                       | A4M       | A4K    | A4A (A4P%)    | A4T      | A4T2                                  |
+| C: controllers and serializers           | 1                                        | 6,719     | 5,313  | 1,406 (79.1%) | 194      | 1h20 awake (the laptop slept mid-run) |
+| C                                        | 2, rows and specs                        | 6,719     | 5,960  | 759 (88.7%)   | 2        | 2h07                                  |
+| C                                        | 3, the 91 subjects the pass touched      | 4,206     | 3,793  | 413 (90.2%)   | 2        | 1h53                                  |
+| C                                        | 3, the other 85 subjects                 | 2,513     | 2,382  | 131 (94.8%)   | 0        | 15 min                                |
+| A                                        | 4, whole stage, after every later change | 6,855     | 6,494  | 361 (94.7%)   | 20       | 49 min                                |
+| B                                        | 3, whole stage, after every later change | 5,263     | 5,053  | 210 (96.0%)   | 11       | 33 min                                |
+| C                                        | 4, whole stage, after every later change | 6,719     | 6,234  | 485 (92.8%)   | 78       | 4h33 (the laptop slept once)          |
 
 **Three ways the selection was wrong.** Each one made a class look
 tested when nothing ran for it, and each is now pinned by
@@ -509,7 +509,9 @@ only one end moves).
   page when there is no build, and the whole-stage rerun below found
   26 real survivors in the middleware (the `/vite-assets/` prefix, the
   body, and "no-cache" leaking to every 200), answered by three more
-  examples. The four job ones are still there in the rerun, on an idle
+  examples; rerun alone (its spec is selected for nothing else): 155
+  mutations, 139 killed, 16 left, all `.fetch` and `&&`-to-`||`
+  rewrites the two paths cannot tell apart. The four job ones are still there in the rerun, on an idle
   machine: two lock-budget examples
   (`SettleAndNotify ... keeps trying past a request's three attempts`,
   `RecurringJob ... waits with the batch budget`) hit the 10 s statement
@@ -623,8 +625,7 @@ still showed, and a fourth pass answered:
   This is the same class of bug as the admin zone wrapper the time
   hunt found on 2026-08-26.
 - `CommunitiesController#calendar`: the six-week window's start and
-  length were free (`beginning_of_week` could go, 41 could be 40 or
-  42) and so was the month the payload names; a request-level example
+  length were free (`beginning_of_week` could go, 41 could be 40 or 42) and so was the month the payload names; a request-level example
   now puts a meal on each edge and one day past it, and the cache key
   is checked in the store.
 - `EventsController#update`: an update that did not mention `all_day`
