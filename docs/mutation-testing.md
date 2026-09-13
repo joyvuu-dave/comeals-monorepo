@@ -41,13 +41,15 @@ batch of merges the way a bug hunt runs
 counts as not killed, and the browser suites are load.
 
 Every run prints "parser/current is loading parser/ruby33 ... but you
-are running 4.0.6". That is the `parser` gem mutant reads Ruby with; it
-ships grammars up to Ruby 3.3 and falls back to that one for anything
-newer (its own note says to use Prism for 3.4 and later, which RuboCop
-already does and mutant does not yet). Every file under `app/`, `lib/`
-and `config/` parses under the 3.3 grammar (checked 2026-09-13), so the
-line is noise today. A construct newer than 3.3, such as the implicit
-`it` block parameter, would break `bin/mutant` and not `bin/check`.
+are running 4.0.6". The line is noise. Mutant reads Ruby through
+`unparser`, and on Ruby 3.5 and later `unparser` parses with Prism
+(`Prism::Translation::Parser40` here), the same parser Ruby itself and
+RuboCop use, so syntax newer than 3.3 is read correctly: the implicit
+`it` block parameter parses and prints back (checked 2026-09-13). The
+warning comes from one line in mutant that still requires
+`parser/current` for the AST classes; the `parser` gem ships grammars
+up to 3.3, notices the newer Ruby, and says so, but that grammar never
+reads a file here. It goes away when mutant drops the require.
 
 `bin/mutant` migrates the test database, then copies it once per worker
 (`comeals_test<suffix>_0`, `_1`, ...). Workers cannot share one
