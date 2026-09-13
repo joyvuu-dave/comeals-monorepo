@@ -29,6 +29,17 @@ hooks.register(:mutation_worker_process_start) do |index:|
   base = ActiveRecord::Base.connection_db_config.configuration_hash
   ActiveRecord::Base.establish_connection(base.merge(database: "#{base[:database]}_#{index}"))
   MutantWorker.backend_pid = ActiveRecord::Base.connection.select_value('SELECT pg_backend_pid()').to_i
+
+  # A DEFERRABLE read waits for every serializable read-write transaction
+  # in the whole PostgreSQL instance, the other workers' databases
+  # included, and a sibling's hung mutation holds one open for up to two
+  # minutes. Two lock-budget examples (SettleAndNotify, RecurringJob) run
+  # a real balance refresh through SnapshotRead and hit the 10 s
+  # statement timeout that way, which made four job methods fail their
+  # own unmutated tests (2026-09-12, both whole-stage runs). Off here;
+  # on everywhere else. SnapshotRead's own spec sets it back on for the
+  # example that checks the mode.
+  Rails.configuration.x.snapshot_reads_deferrable = false
 end
 
 # 3. Start every mutation from empty tables. The examples in

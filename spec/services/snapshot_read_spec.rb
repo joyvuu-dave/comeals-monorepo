@@ -21,8 +21,18 @@ RSpec.describe SnapshotRead do
   describe 'with no transaction already open' do
     include_context 'with no test transaction'
 
+    # Mutant's workers turn the setting off (config/mutant/hooks.rb), so
+    # these two set it themselves.
+    def with_deferrable(value)
+      was = Rails.configuration.x.snapshot_reads_deferrable
+      Rails.configuration.x.snapshot_reads_deferrable = value
+      yield
+    ensure
+      Rails.configuration.x.snapshot_reads_deferrable = was
+    end
+
     it 'opens the transaction SERIALIZABLE READ ONLY DEFERRABLE' do
-      modes = described_class.call { transaction_modes }
+      modes = with_deferrable(true) { described_class.call { transaction_modes } }
 
       expect(modes['isolation']).to eq('serializable')
       expect(modes['read_only']).to eq('on')
@@ -30,6 +40,16 @@ RSpec.describe SnapshotRead do
       # serialization error, so it needs no retry. It only takes effect
       # together with the other two.
       expect(modes['deferrable']).to eq('on')
+    end
+
+    it 'is on by default, and leaves DEFERRABLE out only when the setting is off' do
+      expect(Rails.application.config.x.snapshot_reads_deferrable).to be(true) unless ENV['MUTANT']
+
+      modes = with_deferrable(false) { described_class.call { transaction_modes } }
+
+      expect(modes['isolation']).to eq('serializable')
+      expect(modes['read_only']).to eq('on')
+      expect(modes['deferrable']).to eq('off')
     end
 
     it 'refuses a write inside the block' do

@@ -42,6 +42,18 @@
 # That is the behavior we want for a nightly batch job: a short wait at
 # the start buys a snapshot that can never abort.
 #
+# The wait reaches across databases: PostgreSQL keeps one list of
+# serializable transactions for the whole instance, so a read-write
+# transaction in another database on the same server holds this one up
+# too (checked 2026-09-13 with two psql sessions on two databases: the
+# deferrable one waited the full length of the other's transaction).
+# Under mutant, six workers in six databases never stop writing, and a
+# sibling's hung mutation can hold a transaction open for two minutes,
+# so the read hit the 10 s statement timeout and the unmutated code
+# failed its own examples. config/mutant/hooks.rb therefore turns
+# `config.x.snapshot_reads_deferrable` off in its workers; everywhere
+# else it is on (config/application.rb).
+#
 # Rails has no API for READ ONLY or DEFERRABLE, only for the isolation
 # level, so the other two modes are set with a second SET TRANSACTION.
 # Both must run before the transaction's first real query; PostgreSQL
@@ -72,7 +84,8 @@ class SnapshotRead
     return yield if connection.transaction_open?
 
     ActiveRecord::Base.transaction(isolation: :serializable) do
-      connection.execute('SET TRANSACTION READ ONLY, DEFERRABLE')
+      deferrable = Rails.configuration.x.snapshot_reads_deferrable ? ', DEFERRABLE' : ''
+      connection.execute("SET TRANSACTION READ ONLY#{deferrable}")
       yield
     end
   end

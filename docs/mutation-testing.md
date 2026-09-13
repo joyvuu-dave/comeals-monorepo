@@ -363,22 +363,23 @@ three stages on six workers. Each stage ran two or three times, with
 specs written from the survivors between runs. The numbers, then what
 the survivors taught.
 
-| Stage                                    | Run                                      | Mutations | Killed | Alive         | Timeouts | Time                                  |
-| ---------------------------------------- | ---------------------------------------- | --------- | ------ | ------------- | -------- | ------------------------------------- |
-| A: services, jobs, mailers, helpers, lib | 1                                        | 6,968     | 5,032  | 1,936 (72.2%) |          | 40 min                                |
-| A                                        | 2, rows fixed                            | 6,968     | 6,047  | 921 (86.8%)   |          | 40 min                                |
-| A                                        | 3, specs added                           | 6,860     | 6,477  | 383 (94.4%)   | 20       | 47 min                                |
-| B: models and concerns                   | 1                                        | 5,378     | 4,410  | 968 (82.0%)   | 29       |                                       |
-| B                                        | 2, rows and specs                        | 5,378     | 5,005  | 373 (93.1%)   | 11       | 37 min                                |
-| B                                        | 3, touched classes                       | B3M       | B3K    | B3A (B3P%)    | B3T      | B3T2                                  |
-| A                                        | 4, touched classes                       | A4M       | A4K    | A4A (A4P%)    | A4T      | A4T2                                  |
-| C: controllers and serializers           | 1                                        | 6,719     | 5,313  | 1,406 (79.1%) | 194      | 1h20 awake (the laptop slept mid-run) |
-| C                                        | 2, rows and specs                        | 6,719     | 5,960  | 759 (88.7%)   | 2        | 2h07                                  |
-| C                                        | 3, the 91 subjects the pass touched      | 4,206     | 3,793  | 413 (90.2%)   | 2        | 1h53                                  |
-| C                                        | 3, the other 85 subjects                 | 2,513     | 2,382  | 131 (94.8%)   | 0        | 15 min                                |
-| A                                        | 4, whole stage, after every later change | 6,855     | 6,494  | 361 (94.7%)   | 20       | 49 min                                |
-| B                                        | 3, whole stage, after every later change | 5,263     | 5,053  | 210 (96.0%)   | 11       | 33 min                                |
-| C                                        | 4, whole stage, after every later change | 6,719     | 6,234  | 485 (92.8%)   | 78       | 4h33 (the laptop slept once)          |
+| Stage                                    | Run                                                | Mutations | Killed | Alive         | Timeouts | Time                                  |
+| ---------------------------------------- | -------------------------------------------------- | --------- | ------ | ------------- | -------- | ------------------------------------- |
+| A: services, jobs, mailers, helpers, lib | 1                                                  | 6,968     | 5,032  | 1,936 (72.2%) |          | 40 min                                |
+| A                                        | 2, rows fixed                                      | 6,968     | 6,047  | 921 (86.8%)   |          | 40 min                                |
+| A                                        | 3, specs added                                     | 6,860     | 6,477  | 383 (94.4%)   | 20       | 47 min                                |
+| B: models and concerns                   | 1                                                  | 5,378     | 4,410  | 968 (82.0%)   | 29       |                                       |
+| B                                        | 2, rows and specs                                  | 5,378     | 5,005  | 373 (93.1%)   | 11       | 37 min                                |
+| B                                        | 3, touched classes                                 | B3M       | B3K    | B3A (B3P%)    | B3T      | B3T2                                  |
+| A                                        | 4, touched classes                                 | A4M       | A4K    | A4A (A4P%)    | A4T      | A4T2                                  |
+| C: controllers and serializers           | 1                                                  | 6,719     | 5,313  | 1,406 (79.1%) | 194      | 1h20 awake (the laptop slept mid-run) |
+| C                                        | 2, rows and specs                                  | 6,719     | 5,960  | 759 (88.7%)   | 2        | 2h07                                  |
+| C                                        | 3, the 91 subjects the pass touched                | 4,206     | 3,793  | 413 (90.2%)   | 2        | 1h53                                  |
+| C                                        | 3, the other 85 subjects                           | 2,513     | 2,382  | 131 (94.8%)   | 0        | 15 min                                |
+| A                                        | 4, whole stage, after every later change           | 6,855     | 6,494  | 361 (94.7%)   | 20       | 49 min                                |
+| B                                        | 3, whole stage, after every later change           | 5,263     | 5,053  | 210 (96.0%)   | 11       | 33 min                                |
+| C                                        | 4, whole stage, after every later change           | 6,719     | 6,234  | 485 (92.8%)   | 78       | 4h33 (the laptop slept once)          |
+| A                                        | 5, whole stage, with DEFERRABLE off in the workers | 6,872     | 6,516  | 356 (94.8%)   | 20       | 46 min, no neutral failure            |
 
 **Three ways the selection was wrong.** Each one made a class look
 tested when nothing ran for it, and each is now pinned by
@@ -522,14 +523,30 @@ only one end moves).
   body, and "no-cache" leaking to every 200), answered by three more
   examples; rerun alone (its spec is selected for nothing else): 155
   mutations, 139 killed, 16 left, all `.fetch` and `&&`-to-`||`
-  rewrites the two paths cannot tell apart. The four job ones are still there in the rerun, on an idle
-  machine: two lock-budget examples
+  rewrites the two paths cannot tell apart. The four job ones were still
+  there in the rerun, on an idle machine: two lock-budget examples
   (`SettleAndNotify ... keeps trying past a request's three attempts`,
   `RecurringJob ... waits with the batch budget`) hit the 10 s statement
   timeout inside `BalanceRecalculation#call`, only inside a mutant
-  worker; they pass in mutant's order on their own. Not explained yet.
-  Until it is, the kills reported for those four methods mean nothing;
-  everything else in the two classes is proved by the other examples.
+  worker; they pass in mutant's order on their own. Explained on
+  2026-09-13 with a watchdog that logged every session once a second
+  through a whole-stage run: the query was not waiting on a lock but on
+  `SafeSnapshot`. The balance refresh reads through `SnapshotRead`,
+  which opens a SERIALIZABLE READ ONLY DEFERRABLE transaction, and a
+  DEFERRABLE transaction waits until every serializable read-write
+  transaction in the whole PostgreSQL instance has finished, in every
+  database (checked with two psql sessions on two databases: the
+  deferrable one waited the full length of the other's transaction).
+  Six workers in six databases never stop writing, and a sibling's hung
+  mutation holds a transaction open for up to two minutes, so the read
+  starved. `config/mutant/hooks.rb` now turns
+  `config.x.snapshot_reads_deferrable` off in its workers, and
+  `SnapshotRead`'s spec sets it back on for the example that checks the
+  mode. The small runs never showed it because no sibling hung long
+  enough while the two examples ran. The whole-stage rerun with the
+  setting off had no neutral failure; `SnapshotRead.call` keeps four
+  survivors, the rewrites of its isolation and mode line, which the
+  workers cannot see with the setting off.
 
 Stage B, 373 after the second run, 4 answered in a third pass and the rest read:
 
