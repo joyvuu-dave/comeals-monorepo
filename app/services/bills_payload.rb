@@ -10,9 +10,11 @@
 #             { resident_id: 4 }] }
 #
 # A row with an amount or a no_cost key is a bill the person touched, and
-# both stored values are rewritten from it. A row with neither names a
-# cook the person did not touch: it keeps that cook's bill alive (a cook
-# left out of the list is removed) and never rewrites the stored amount.
+# both stored values are rewritten from it; a value the row leaves out
+# is the empty one, an amount of 0 or no_cost false. A row with neither
+# key names a cook the person did not touch: it keeps that cook's bill
+# alive (a cook left out of the list is removed) and never rewrites the
+# stored amount.
 #
 # Checking comes first and writes nothing, so a bad row anywhere in the
 # list means no row is written. The checks, in order, and the sentence
@@ -143,7 +145,10 @@ class BillsPayload
       return "Invalid amount: #{bill['amount']}. Amounts are whole cents, 0 to 9999.99."
     end
 
-    Row.new(resident_id: bill['resident_id'], touched: true, amount: BigDecimal(text), no_cost: bill['no_cost'])
+    # A touched row without the flag used to write nil, and the NOT NULL
+    # constraint answered 500 (found by mutant, 2026-09-13).
+    Row.new(resident_id: bill['resident_id'], touched: true, amount: BigDecimal(text),
+            no_cost: bill['no_cost'] || false)
   end
 
   sig { params(bill: T.untyped).returns(T::Boolean) }

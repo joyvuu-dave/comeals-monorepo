@@ -51,6 +51,26 @@ RSpec.describe BillsPayload do
     it 'accepts a blank amount as zero and the largest whole-cent amount' do
       expect(payload([{ resident_id: cook.id, amount: '' }, { resident_id: other.id, amount: '9999.99' }])).to be_valid
     end
+
+    it 'refuses a list with one thing that is not a row in it' do
+      expect(described_class.parse([{ 'resident_id' => cook.id, 'amount' => '1' }, '12.00']).error)
+        .to eq('bills must be a list of cooks.')
+    end
+
+    it 'is not valid when it has an error' do
+      expect(payload([{ resident_id: cook.id, amount: 'ten' }])).not_to be_valid
+      expect(payload([{ resident_id: cook.id, amount: '1' }])).to be_valid
+    end
+
+    it 'takes the cook ids as the strings a request sends' do
+      expect(payload([{ resident_id: cook.id.to_s, amount: '1' }])).to be_valid
+    end
+
+    it 'takes an amount sent as a number, not only as text' do
+      payload([{ resident_id: cook.id, amount: 12 }]).write_to(meal)
+
+      expect(meal.bills.find_by(resident_id: cook.id).amount).to eq(BigDecimal('12'))
+    end
   end
 
   describe '#write_to' do
@@ -77,6 +97,24 @@ RSpec.describe BillsPayload do
       payload([{ resident_id: cook.id, amount: '0', no_cost: true }]).write_to(meal)
 
       expect(meal.bills.find_by(resident_id: cook.id).no_cost).to be(true)
+    end
+
+    it 'clears the no_cost flag when a row sends only an amount, instead of writing nothing there' do
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('7'), no_cost: true)
+
+      payload([{ resident_id: cook.id, amount: '9' }]).write_to(meal)
+
+      bill = meal.bills.find_by(resident_id: cook.id)
+      expect([bill.amount, bill.no_cost]).to eq([BigDecimal('9'), false])
+    end
+
+    it 'counts a row with only the no_cost flag as touched' do
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('7'), no_cost: false)
+
+      payload([{ resident_id: cook.id, no_cost: true }]).write_to(meal)
+
+      bill = meal.bills.find_by(resident_id: cook.id)
+      expect([bill.amount, bill.no_cost]).to eq([BigDecimal('0'), true])
     end
   end
 end
