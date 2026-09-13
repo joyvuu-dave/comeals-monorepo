@@ -678,6 +678,10 @@ The whole-stage rerun after the fourth pass: 485, no neutral failure.
 reservation controllers 43 (`params.fetch`, `.to_s` on a string), the
 calendar serializer's query shapes 47, `MealsController` 67 (44 in
 `update_bills`), and the resident and community endpoints' `.fetch`
-and `Date.iso8601` rewrites. The list to read next time starts with
-`EventsController#update` (37), whose `all_day` handling has one
-example now and could take a second for each branch.
+and `Date.iso8601` rewrites. `EventsController#update` (37) went next, on 2026-09-13: an update
+that turns a timed event all-day and one that turns it back, the
+description and the hours of a created event, and a 400 with two
+problems on one body each pinned. Update keeps 7, create 11, all
+`.fetch` for `[]`, `.to_str` for `.to_s`, and an `all_day` default that
+reads the same when the key is absent. Nothing on the controller and
+serializer list is a missing assertion now.

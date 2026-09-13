@@ -36,9 +36,9 @@ RSpec.describe 'Events API' do
 
       expect(response).to have_http_status(:ok)
       event = Event.last
-      expect(event.title).to eq('Movie Night')
-      expect(event.allday).to be(false)
-      expect(event.end_date).to be_present
+      expect(event).to have_attributes(title: 'Movie Night', description: 'Bring popcorn', allday: false,
+                                       start_date: Time.zone.local(2026, 4, 15, 19, 0),
+                                       end_date: Time.zone.local(2026, 4, 15, 21, 30))
     end
 
     it 'creates a timed event when all_day is left out' do
@@ -79,7 +79,7 @@ RSpec.describe 'Events API' do
       expect(event.end_date).to be_nil
     end
 
-    it 'returns 400 without a title' do
+    it 'returns 400 without a title, and says so' do
       post '/api/v1/events', params: {
         token: token,
         title: '', all_day: true,
@@ -87,6 +87,19 @@ RSpec.describe 'Events API' do
       }
 
       expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq('message' => "Title can't be blank")
+    end
+
+    it 'lists every problem, one per line, when there is more than one' do
+      post '/api/v1/events', params: {
+        token: token, title: '', all_day: false,
+        start_year: 2026, start_month: 5, start_day: 1,
+        start_hours: 20, start_minutes: 0,
+        end_hours: 18, end_minutes: 0
+      }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq('message' => "Title can't be blank\nStart time must occur before end time")
     end
   end
 
@@ -103,7 +116,49 @@ RSpec.describe 'Events API' do
       }
 
       expect(response).to have_http_status(:ok)
-      expect(event.reload.title).to eq('Updated Title')
+      event.reload
+      expect(event).to have_attributes(title: 'Updated Title', description: 'New desc', allday: false)
+      expect([event.start_date, event.end_date]).to eq([Time.zone.local(2026, 5, 1, 18, 0),
+                                                        Time.zone.local(2026, 5, 1, 20, 0)])
+    end
+
+    it 'turns a timed event into an all-day one when all_day is true, with no end' do
+      patch "/api/v1/events/#{event.id}/update", params: {
+        token: token, title: 'Work Day', all_day: true,
+        start_year: 2026, start_month: 5, start_day: 1
+      }
+
+      expect(response).to have_http_status(:ok)
+      event.reload
+      expect(event).to have_attributes(allday: true, start_date: Time.zone.local(2026, 5, 1, 0, 0), end_date: nil)
+    end
+
+    it 'turns an all-day event into a timed one when all_day is false' do
+      event.update!(allday: true, start_date: Time.zone.local(2026, 5, 1, 0, 0), end_date: nil)
+
+      patch "/api/v1/events/#{event.id}/update", params: {
+        token: token, all_day: false,
+        start_year: 2026, start_month: 5, start_day: 1,
+        start_hours: 18, start_minutes: 0,
+        end_hours: 20, end_minutes: 0
+      }
+
+      expect(response).to have_http_status(:ok)
+      event.reload
+      expect(event).to have_attributes(allday: false, start_date: Time.zone.local(2026, 5, 1, 18, 0),
+                                       end_date: Time.zone.local(2026, 5, 1, 20, 0))
+    end
+
+    it 'lists every problem, one per line, when there is more than one' do
+      patch "/api/v1/events/#{event.id}/update", params: {
+        token: token, title: '', all_day: false,
+        start_year: 2026, start_month: 5, start_day: 1,
+        start_hours: 20, start_minutes: 0,
+        end_hours: 18, end_minutes: 0
+      }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq("Title can't be blank\nStart time must occur before end time")
     end
 
     # A field left out of the body keeps its stored value. description is
