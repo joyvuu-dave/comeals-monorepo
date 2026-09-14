@@ -22,8 +22,56 @@ module RuboCop::Cop::OperationWithThreadsafeResult
   def operation_produces_threadsafe_object?(param0 = T.unsafe(nil)); end
 end
 
-# pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/class_instance_variable.rb:5
-module RuboCop::Cop::ThreadSafety; end
+# Cops for the `ThreadSafety` department. The department's cops are
+# registered for lazy loading and their files are loaded on demand.
+#
+# pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety.rb:9
+module RuboCop::Cop::ThreadSafety
+  extend ::RuboCop::Cop::LazyLoader
+end
+
+# Avoid mutating ActiveSupport callback chains at runtime.
+#
+# Calls such as `User.skip_callback` and `User.set_callback` mutate callback
+# chains at process scope.
+#
+# @example
+#   # bad
+#   Site.skip_callback(:commit, :after, :after_owner_change)
+#
+#   # bad
+#   Site.set_callback(
+#     :commit, :after, :after_owner_change,
+#     if: :saved_change_to_owner?
+#   )
+#
+#   # good
+#   class User < ApplicationRecord
+#     skip_callback :commit, :after, :after_owner_change
+#   end
+#
+# pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/active_support_callbacks.rb:25
+class RuboCop::Cop::ThreadSafety::ActiveSupportCallbacks < ::RuboCop::Cop::Base
+  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/active_support_callbacks.rb:36
+  def on_csend(node); end
+
+  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/active_support_callbacks.rb:31
+  def on_send(node); end
+
+  private
+
+  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/active_support_callbacks.rb:46
+  def callback_call(node); end
+
+  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/active_support_callbacks.rb:40
+  def constant_receiver?(receiver); end
+end
+
+# pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/active_support_callbacks.rb:28
+RuboCop::Cop::ThreadSafety::ActiveSupportCallbacks::MSG = T.let(T.unsafe(nil), String)
+
+# pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/active_support_callbacks.rb:29
+RuboCop::Cop::ThreadSafety::ActiveSupportCallbacks::RESTRICT_ON_SEND = T.let(T.unsafe(nil), Array)
 
 # Avoid mutating class and module attributes.
 #
@@ -221,13 +269,13 @@ RuboCop::Cop::ThreadSafety::ClassInstanceVariable::RESTRICT_ON_SEND = T.let(T.un
 #   FileUtils.chdir("/var/run")
 #
 # @example AllowCallWithBlock: false (default)
-#   # good
+#   # bad
 #   Dir.chdir("/var/run") do
 #     puts Dir.pwd
 #   end
 #
 # @example AllowCallWithBlock: true
-#   # bad
+#   # good
 #   Dir.chdir("/var/run") do
 #     puts Dir.pwd
 #   end
@@ -254,6 +302,118 @@ RuboCop::Cop::ThreadSafety::DirChdir::MESSAGE = T.let(T.unsafe(nil), String)
 
 # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/dir_chdir.rb:31
 RuboCop::Cop::ThreadSafety::DirChdir::RESTRICT_ON_SEND = T.let(T.unsafe(nil), Array)
+
+# Avoid mutating `ENV`.
+#
+# Environment variables are process-wide. Mutating them can affect other
+# threads, requests, jobs, or subprocesses running in the same Ruby
+# process.
+#
+# @example
+#   # bad
+#   ENV['TZ'] = 'UTC'
+#
+#   # bad
+#   ENV.update('FOO' => 'bar')
+#
+#   # good
+#   system({ 'TZ' => 'UTC' }, 'date')
+#
+#   # good
+#   ENV.fetch('TZ', 'UTC')
+#
+# pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/env_mutation.rb:24
+class RuboCop::Cop::ThreadSafety::EnvMutation < ::RuboCop::Cop::Base
+  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/env_mutation.rb:43
+  def env_mutation?(param0 = T.unsafe(nil)); end
+
+  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/env_mutation.rb:69
+  def on_csend(node); end
+
+  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/env_mutation.rb:64
+  def on_send(node); end
+end
+
+# pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/env_mutation.rb:25
+RuboCop::Cop::ThreadSafety::EnvMutation::MSG = T.let(T.unsafe(nil), String)
+
+# pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/env_mutation.rb:26
+RuboCop::Cop::ThreadSafety::EnvMutation::RESTRICT_ON_SEND = T.let(T.unsafe(nil), Array)
+
+# Avoid lazily initializing synchronization primitives with `||=`.
+#
+# The check-then-set performed by `||=` is not atomic, so concurrent threads
+# can observe an uninitialized primitive or create more than one instance.
+# Eagerly assign the primitive (for example in `initialize`) or use a constant.
+#
+# @example
+#   # bad
+#   def mutex
+#     @mutex ||= Mutex.new
+#   end
+#
+#   # bad
+#   def mutex = @mutex ||= Mutex.new
+#
+#   # good
+#   def initialize
+#     @mutex = Mutex.new
+#   end
+#
+# pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/lazy_synchronization_primitive.rb:26
+class RuboCop::Cop::ThreadSafety::LazySynchronizationPrimitive < ::RuboCop::Cop::Base
+  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/lazy_synchronization_primitive.rb:30
+  def lazy_shared_variable_assignment?(param0 = T.unsafe(nil)); end
+
+  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/lazy_synchronization_primitive.rb:42
+  def on_or_asgn(node); end
+
+  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/lazy_synchronization_primitive.rb:35
+  def synchronization_primitive?(param0 = T.unsafe(nil)); end
+
+  private
+
+  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/lazy_synchronization_primitive.rb:53
+  def method_definition?(node); end
+
+  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/lazy_synchronization_primitive.rb:57
+  def synchronized?(node); end
+end
+
+# pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/lazy_synchronization_primitive.rb:27
+RuboCop::Cop::ThreadSafety::LazySynchronizationPrimitive::MSG = T.let(T.unsafe(nil), String)
+
+# Avoid the thread-unsafe combination of remove_method followed by defining a method with the same name.
+# This can lead to a race condition, as these two actions are not atomic.
+# As a safer alternative, consider aliasing the method to itself instead.
+#
+# @example
+#   # bad
+#   remove_method :foo
+#   def foo; end
+#
+#   # good
+#   alias_method :foo, :foo
+#   def foo; end
+#
+#   # good
+#   alias foo foo
+#   def foo; end
+#
+# pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/method_redefinition.rb:23
+class RuboCop::Cop::ThreadSafety::MethodRedefinition < ::RuboCop::Cop::Base
+  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/method_redefinition.rb:37
+  def on_csend(node); end
+
+  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/method_redefinition.rb:28
+  def on_send(node); end
+end
+
+# pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/method_redefinition.rb:24
+RuboCop::Cop::ThreadSafety::MethodRedefinition::MSG = T.let(T.unsafe(nil), String)
+
+# pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/method_redefinition.rb:26
+RuboCop::Cop::ThreadSafety::MethodRedefinition::RESTRICT_ON_SEND = T.let(T.unsafe(nil), Array)
 
 # Checks whether some class instance variable isn't a
 # mutable literal (e.g. array or hash).
@@ -335,10 +495,10 @@ class RuboCop::Cop::ThreadSafety::MutableClassInstanceVariable < ::RuboCop::Cop:
   # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:112
   def autocorrect(corrector, node); end
 
-  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:218
+  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:220
   def define_method?(param0 = T.unsafe(nil)); end
 
-  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:213
+  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:215
   def define_singleton_method?(param0 = T.unsafe(nil)); end
 
   # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:86
@@ -350,49 +510,52 @@ class RuboCop::Cop::ThreadSafety::MutableClassInstanceVariable < ::RuboCop::Cop:
   # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:92
   def on_or_asgn(node); end
 
-  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:230
+  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:232
   def operation_produces_immutable_object?(param0 = T.unsafe(nil)); end
 
-  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:247
+  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:249
   def range_enclosed_in_parentheses?(param0 = T.unsafe(nil)); end
 
-  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:223
+  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:225
   def splat_value(param0 = T.unsafe(nil)); end
 
   private
 
-  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:159
+  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:161
   def check(value); end
 
-  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:178
+  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:180
   def container?(node); end
 
-  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:204
+  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:206
   def correct_splat_expansion(corrector, expr, splat_value); end
 
   # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:131
   def frozen_string_literal?(node); end
 
-  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:191
+  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:193
   def immutable_literal?(node); end
 
-  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:169
+  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:171
   def in_class?(node); end
 
-  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:185
+  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:187
   def mutable_literal?(node); end
 
   # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:140
   def on_assignment(value); end
 
-  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:200
+  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:202
   def range_type?(node); end
 
-  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:195
+  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:197
   def requires_parentheses?(node); end
 
-  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:148
+  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:150
   def strict_check(value); end
+
+  # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:254
+  def within_dsl_with_threadsafe_semantics?(node); end
 end
 
 # pkg:gem/rubocop-thread_safety#lib/rubocop/cop/thread_safety/mutable_class_instance_variable.rb:83
@@ -522,7 +685,7 @@ module RuboCop::ThreadSafety; end
 #
 # pkg:gem/rubocop-thread_safety#lib/rubocop/thread_safety/plugin.rb:8
 class RuboCop::ThreadSafety::Plugin < ::LintRoller::Plugin
-  # :nocov:
+  # simplecov:disable
   #
   # pkg:gem/rubocop-thread_safety#lib/rubocop/thread_safety/plugin.rb:10
   def about; end
@@ -530,7 +693,7 @@ class RuboCop::ThreadSafety::Plugin < ::LintRoller::Plugin
   # pkg:gem/rubocop-thread_safety#lib/rubocop/thread_safety/plugin.rb:24
   def rules(_context); end
 
-  # :nocov:
+  # simplecov:enable
   #
   # pkg:gem/rubocop-thread_safety#lib/rubocop/thread_safety/plugin.rb:20
   def supported?(context); end
