@@ -33,13 +33,16 @@
 # dropped with it, which is what ActiveRecord::Transaction#after_commit
 # does. A call with no transaction open flushes right away.
 #
-# The flush clears every cache entry before it sends the first push. A
-# push is an HTTP call to Pusher and can fail; the clear is what keeps
-# the next fetch correct, so it must not wait behind a push that may
-# raise. And a push that fails is reported, not raised: the write has
-# committed, and raising here would answer 500 for a change that is in
-# the database. A client that missed a push refetches on its next
-# reconnect (data_store_app.js handleReconnect).
+# The flush clears every cache entry itself, at once: the clear is what
+# keeps the next fetch correct. Each push is then handed to LivePushJob,
+# and Solid Queue makes the HTTP call to Pusher outside the request. The
+# request never waits on Pusher, so a slow Pusher cannot turn a committed
+# write into a timeout (LivePushJob says how long that wait could be).
+# Enqueuing can fail too (the database is gone right after the commit),
+# and that is reported, not raised: the write has committed, and raising
+# here would answer 500 for a change that is in the database. A client
+# that missed a push refetches on its next reconnect (data_store_app.js
+# handleReconnect).
 module LiveUpdate
   # What one transaction (or one manual batch) has to tell the clients.
   class Batch
@@ -189,14 +192,10 @@ module LiveUpdate
     end
 
     def push(channel, data, options = nil)
-      if options
-        Pusher.trigger(channel, 'update', data, options)
-      else
-        Pusher.trigger(channel, 'update', data)
-      end
+      LivePushJob.perform_later(channel, data, options)
     rescue StandardError => e
-      # Whatever went wrong on the way to Pusher (its own errors, DNS, a
-      # timeout), the write is committed and the caller must not fail.
+      # Whatever went wrong on the way to the queue, the write is
+      # committed and the caller must not fail.
       Rails.error.report(e, handled: true, context: { channel: channel })
     end
   end

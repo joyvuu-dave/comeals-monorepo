@@ -72,10 +72,22 @@ one push per channel — using `ActiveRecord::Base.current_transaction`'s
 and drops when one rolls back. A rolled-back write pushes nothing. A
 note with no transaction open flushes at once.
 
-The flush clears every cache entry before the first push, and a push
-that fails is reported (`Rails.error.report`), never raised: the write
-is committed, and a 500 for a change that is in the database would be
-wrong. A client that missed a push refetches on its next reconnect.
+The flush clears every cache entry itself, and hands each push to
+`LivePushJob` (amended 2026-09-15; the flush used to call Pusher from
+inside the request). Pusher's client waits up to 5 seconds each to
+connect, send and receive, so one stalled push could hold a request for
+15 seconds, which is rack-timeout's whole budget, and the person would
+see an error for a write that was already in the database. Solid Queue
+now makes the HTTP call after the request has answered. The job tries a
+failing push three times, a few seconds apart, and then reports it
+(`Rails.error.report`), never raises: the write is committed, and a
+client that missed a push refetches on its next reconnect. A failure to
+enqueue is reported the same way, for the same reason.
+
+This means live updates need the Solid Queue supervisor running, the
+same as the nightly jobs (`docs/runbooks/scheduler-cutover.md`). In the
+test suite the test adapter runs `LivePushJob` inline, so a spec sees
+the Pusher call right after the write (`spec/rails_helper.rb`).
 
 ### The calendar cache is versioned by its rows, not only deleted.
 
@@ -128,7 +140,10 @@ reaches the screen or the cache. Midnight refetches the month.
 ## Pinned by
 
 - `spec/requests/api/v1/live_update_contract_spec.rb` — every write
-  path pushes; one request, one push; a refused write pushes nothing.
+  path pushes; one request, one push; a refused write pushes nothing;
+  the request answers before Pusher is called.
+- `spec/jobs/live_push_job_spec.rb` — the push job's call shape, its
+  retries, and the report after the last try.
 - `spec/requests/api/v1/calendar_cache_race_spec.rb` — a write that
   lands mid-build cannot leave a stale month.
 - `spec/requests/api/v1/calendar_midnight_spec.rb` — the chips' words

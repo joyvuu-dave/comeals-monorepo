@@ -45,6 +45,26 @@ RSpec.configure do |config|
   # `expect(Pusher).to have_received(:trigger)` continues to work.
   config.before { allow(Pusher).to receive(:trigger) }
 
+  # A push is a LivePushJob, enqueued after the commit. The test adapter
+  # runs that one job (and its retries) inline, so a spec still sees the
+  # Pusher call right after the write, and `expect(Pusher).to
+  # have_received(:trigger)` keeps meaning "this write reached the
+  # screen". Every other job stays enqueued, so `have_been_enqueued` and
+  # `perform_enqueued_jobs` work as before. The adapter is one instance
+  # for the whole run. The settings are put back after every example,
+  # not before it: a `before` would run inside a spec's
+  # `perform_enqueued_jobs { example.run }` and undo the block's own
+  # settings. A spec may change them for itself to see the enqueue
+  # (live_update_contract_spec).
+  perform_push_jobs_inline = proc do
+    adapter = ActiveJob::Base.queue_adapter
+    adapter.perform_enqueued_jobs = true
+    adapter.perform_enqueued_at_jobs = true
+    adapter.filter = [LivePushJob]
+  end
+  config.before(:suite, &perform_push_jobs_inline)
+  config.after(&perform_push_jobs_inline)
+
   # Remove this line if you're not using ActiveRecord or ActiveRecord fixtures
   config.fixture_paths = [Rails.root.join('spec/fixtures').to_s]
 

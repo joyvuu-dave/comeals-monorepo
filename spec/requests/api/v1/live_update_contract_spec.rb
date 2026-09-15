@@ -252,6 +252,29 @@ RSpec.describe 'live updates: every write reaches the screen that shows it' do
     end
   end
 
+  describe 'the request does not wait for Pusher' do
+    let(:token) { resident.keys.first.token }
+
+    # The push is an HTTP call that can take up to 15 seconds to fail,
+    # which is rack-timeout's whole budget. It runs in LivePushJob, after
+    # the request has answered, so a stalled Pusher cannot turn a
+    # committed write into an error on screen.
+    it 'a write answers with its push enqueued and Pusher not yet called' do
+      token
+      meal
+      RSpec::Mocks.space.proxy_for(Pusher).reset
+      allow(Pusher).to receive(:trigger)
+      ActiveJob::Base.queue_adapter.perform_enqueued_jobs = false
+
+      patch "/api/v1/meals/#{meal.id}/description", params: { token: token, description: 'x' }, as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(Pusher).not_to have_received(:trigger)
+      expect(LivePushJob).to have_been_enqueued.with(meal_channel(meal), anything, anything)
+      expect(LivePushJob).to have_been_enqueued.with(calendar_channel(meal.date), anything, anything)
+    end
+  end
+
   describe 'one request, one push' do
     let(:token) { resident.keys.first.token }
 

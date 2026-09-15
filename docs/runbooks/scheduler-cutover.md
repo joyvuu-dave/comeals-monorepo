@@ -58,6 +58,16 @@ healthchecks.io's grace period (1 hour) expires and emails you.
    `job_runs` has one `ok` row per job.
 8. Remove the add-on: `heroku addons:destroy scheduler -a comeals-monorepo`.
 
+## Live updates depend on the supervisor too
+
+Since 2026-09-15 every push to Pusher is a `LivePushJob` (ADR 0007). If
+the supervisor is not running, writes still commit and the calendar
+cache still clears, but no open screen is told to refetch until it
+reconnects. So `SOLID_QUEUE_IN_PUMA` must be set on the same deploy
+that carries this change, and step 3 above is not optional. A quick
+check after a deploy: change a meal's description in admin and watch
+an open calendar tab refresh.
+
 ## If a job stops running
 
 - `JobRun.where(name: 'refresh_balances').order(:id).last` — the last run

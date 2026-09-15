@@ -227,8 +227,17 @@ RSpec.describe LiveUpdate do
       expect(store.read(key)).to be_nil
     end
 
-    it 'reports a push that fails, with the channel, and goes on to the next push' do
-      allow(Pusher).to receive(:trigger).and_raise(Pusher::HTTPError, 'Pusher is down')
+    it 'hands each push to LivePushJob with the channel, the data and the options' do
+      ActiveJob::Base.queue_adapter.perform_enqueued_jobs = false
+
+      described_class.batch { described_class.meal(7, socket_id: 'the-sender') }
+
+      expect(LivePushJob).to have_been_enqueued.with('meal-7', { message: 'meal updated' }, { socket_id: 'the-sender' })
+      expect(Pusher).not_to have_received(:trigger)
+    end
+
+    it 'reports a push it cannot enqueue, with the channel, and goes on to the next push' do
+      allow(LivePushJob).to receive(:perform_later).and_raise(ActiveRecord::ConnectionNotEstablished, 'gone')
       allow(Rails.error).to receive(:report)
 
       described_class.batch do
@@ -237,9 +246,10 @@ RSpec.describe LiveUpdate do
       end
 
       expect(Rails.error).to have_received(:report)
-        .with(an_instance_of(Pusher::HTTPError), hash_including(handled: true, context: { channel: 'meal-7' }))
+        .with(an_instance_of(ActiveRecord::ConnectionNotEstablished),
+              hash_including(handled: true, context: { channel: 'meal-7' }))
       expect(Rails.error).to have_received(:report)
-        .with(an_instance_of(Pusher::HTTPError),
+        .with(an_instance_of(ActiveRecord::ConnectionNotEstablished),
               hash_including(context: { channel: "community-#{community.id}-residents" }))
     end
   end

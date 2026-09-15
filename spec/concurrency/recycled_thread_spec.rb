@@ -103,6 +103,12 @@ RSpec.describe 'thread-local state across requests and jobs on a reused thread' 
     subscribers = [probe(events, 'start_processing.action_controller'), probe(events, 'perform_start.active_job')]
     pushes = Queue.new
     allow(Pusher).to receive(:trigger) { |channel, _event, _data, options = nil| pushes << [channel, options] }
+    # The rest of the suite runs LivePushJob inline, inside the request
+    # (spec/rails_helper.rb). Here it is enqueued, as in production, and
+    # run below the way Solid Queue runs it: a job started inside a
+    # request would be probed with that request's Current and look dirty.
+    adapter = ActiveJob::Base.queue_adapter
+    adapter.perform_enqueued_jobs = false
 
     threads = Array.new(thread_count) do |t|
       Thread.new do
@@ -128,6 +134,11 @@ RSpec.describe 'thread-local state across requests and jobs on a reused thread' 
       end
     end
     threads.each { |thread| expect(thread.join(60)).not_to be_nil, 'a thread did not finish' }
+    # The pushes the requests enqueued, run on a thread that just served
+    # requests, each probed like the jobs above.
+    Thread.new do
+      adapter.enqueued_jobs.each { |job| ActiveJob::Base.execute(job) if job[:job] == LivePushJob }
+    end.join
     unsubscribe(subscribers)
 
     seen = Array.new(events.size) { events.pop }
