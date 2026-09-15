@@ -58,6 +58,9 @@ module HasPhoneNumber
 end
 
 module BelongsToTheCommunity
+  sig { returns(T.nilable(Integer)) }
+  def community_id; end
+
   sig { returns(T.nilable(Community)) }
   def community; end
 

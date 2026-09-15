@@ -29,8 +29,10 @@ RSpec.describe JobRun do
     run!(finished_at: 2.days.ago)
     run!(finished_at: 1.hour.ago, outcome: 'failed')
 
-    expect(described_class.last_success_at('refresh_balances')).to be_within(1.second).of(2.days.ago)
-    expect(described_class.last_success_at('verify_ledger')).to be_nil
+    last = described_class.last_success_at(%w[refresh_balances verify_ledger])
+
+    expect(last.fetch('refresh_balances')).to be_within(1.second).of(2.days.ago)
+    expect(last).not_to have_key('verify_ledger')
   end
 
   it 'refuses an update at the database' do

@@ -36,6 +36,19 @@ Rails.application.configure do
   # Raise exceptions instead of rendering exception templates.
   config.action_dispatch.show_exceptions = :none
 
+  # prosopite watches each request for an N+1 query and raises when it
+  # finds one (settings and the allow list: spec/support/prosopite.rb).
+  # One scan per request, not per example, because a spec that sends
+  # many requests runs the same per-request lookups once each, and that
+  # is not a repeat. Outermost, so the error reaches the spec instead of
+  # a rescue further in. Only when RSpec is loaded: the e2e and
+  # integration servers also run in this environment, and a scan costs
+  # a backtrace per query.
+  if defined?(RSpec)
+    require 'prosopite/middleware/rack'
+    config.middleware.insert_before(0, Prosopite::Middleware::Rack)
+  end
+
   # Disable request forgery protection in test environment.
   config.action_controller.allow_forgery_protection = false
 

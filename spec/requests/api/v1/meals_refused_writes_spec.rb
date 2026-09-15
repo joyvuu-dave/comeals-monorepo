@@ -63,10 +63,11 @@ RSpec.describe 'meal writes that are refused' do
     let(:cook) { create(:resident, community: community, unit: unit) }
 
     # The controller reaches the bills through the meal it loaded, so the
-    # meal's bills relation is where the refusal is staged.
+    # meal's bills relation is where the refusal is staged: on the read of
+    # the bills that stay, the first thing BillsPayload#write_to does.
     def stage(error)
       bills = Bill.where(meal_id: meal.id)
-      allow(bills).to receive(:find_or_initialize_by).and_raise(error)
+      allow(bills).to receive(:reload).and_raise(error)
       allow(meal).to receive(:bills).and_return(bills)
       loaded = Meal.all
       allow(loaded).to receive(:find_by).and_return(meal)

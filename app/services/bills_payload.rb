@@ -67,6 +67,7 @@ class BillsPayload
   def initialize(raw)
     @rows = T.let([], T::Array[Row])
     @cook_ids = T.let([], T::Array[T.untyped])
+    @residents = T.let({}, T::Hash[Integer, Resident])
     @error = T.let(check(raw), T.nilable(String))
   end
 
@@ -82,11 +83,19 @@ class BillsPayload
   # assignment, so a removal a model guard refuses raises instead of
   # being swallowed, and the audited hooks run. The caller holds the meal
   # lock (Api::V1::MealsController#with_meal_lock) and rescues.
+  #
+  # The bills that stay are read once, after the removals, and each row
+  # gets its cook as a record the check already loaded: a bill's
+  # validation reads its resident, and with the record in hand that
+  # read runs no query. Looked up by id, every row cost two queries.
   sig { params(meal: Meal).void }
   def write_to(meal)
     meal.bills.where.not(resident_id: cook_ids).find_each(&:destroy!)
+    existing = meal.bills.reload.index_by(&:resident_id)
     @rows.each do |row|
-      record = meal.bills.find_or_initialize_by(resident_id: row.resident_id)
+      resident = @residents.fetch(row.resident_id.to_i)
+      record = existing[resident.id] || meal.bills.build
+      record.resident = resident
       if row.touched
         record.update!(amount: row.amount, no_cost: row.no_cost)
       elsif record.new_record?
@@ -128,10 +137,11 @@ class BillsPayload
     nil
   end
 
+  # Loads the cooks on the way, for write_to.
   sig { returns(T.nilable(String)) }
   def unknown_cook
-    valid_ids = Resident.where(id: @cook_ids).pluck(:id)
-    'Resident not found.' if (@cook_ids.map(&:to_i) - valid_ids).any?
+    @residents = Resident.where(id: @cook_ids).index_by { |resident| T.must(resident.id) }
+    'Resident not found.' if (@cook_ids.map(&:to_i) - @residents.keys).any?
   end
 
   # One row as sent, or the sentence for what is wrong with it.

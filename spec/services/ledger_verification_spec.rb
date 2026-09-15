@@ -277,12 +277,9 @@ RSpec.describe LedgerVerification do
       first = settle
       second = settle
       behind_the_guards do
-        [first, second].each do |r|
-          ReconciliationBalance.where(id: r.reconciliation_balances.find_by(resident: cook).id)
-                               .update_all(amount: BigDecimal('39'))
-          ReconciliationBalance.where(id: r.reconciliation_balances.find_by(resident: eater).id)
-                               .update_all(amount: BigDecimal('-39'))
-        end
+        balances = ReconciliationBalance.where(reconciliation: [first, second])
+        balances.where(resident: cook).update_all(amount: BigDecimal('39'))
+        balances.where(resident: eater).update_all(amount: BigDecimal('-39'))
       end
 
       expect { described_class.call }.to raise_error(described_class::MismatchError) do |error|

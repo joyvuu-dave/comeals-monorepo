@@ -22,11 +22,15 @@ module BelongsToTheCommunity
 
     belongs_to :community
 
-    # ||= so a caller that does set the community (a spec, a nested
-    # attributes hash) keeps what it set.
+    # Only when unset, so a caller that does set the community (a spec, a
+    # nested attributes hash, an unsaved community in a model spec) keeps
+    # what it set. The id column is checked first: reading the
+    # association on a row that has the id but not the record loaded runs
+    # a query, one per row in a loop of saves. With no id, the read is
+    # free: it answers from memory or with nil.
     before_validation do
       T.bind(self, BelongsToTheCommunity)
-      self.community ||= Community.instance
+      self.community = Community.instance if community_id.nil? && community.nil?
     end
   end
 end

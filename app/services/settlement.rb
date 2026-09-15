@@ -350,12 +350,19 @@ class Settlement
     )
   end
 
+  # The resident goes in as a record, not an id: create! checks that the
+  # resident exists, and with the record in hand that check reads
+  # nothing. By id it read one resident per balance. The records come
+  # from their own query, not from community.residents: that association
+  # lives on the shared Community.instance, and once loaded it would
+  # answer every later read in the same request or task, new residents
+  # left out.
   sig { params(ledger: MealLedger).void }
   def persist_balances!(ledger)
-    reconciliation.settlement_balances(ledger).each do |resident_id, amount|
-      next if amount.zero?
-
-      reconciliation.reconciliation_balances.create!(resident_id: resident_id, amount: amount)
+    balances = reconciliation.settlement_balances(ledger).reject { |_, amount| amount.zero? }
+    residents = Resident.where(id: balances.keys).index_by { |resident| T.must(resident.id) }
+    balances.each do |resident_id, amount|
+      reconciliation.reconciliation_balances.create!(resident: residents.fetch(resident_id), amount: amount)
     end
   end
 

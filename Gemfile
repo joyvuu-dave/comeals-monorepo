@@ -80,6 +80,13 @@ group :development, :test do
   # Mutation testing for the money path. Not part of bin/check: one run
   # takes many minutes. See .mutant.yml and docs/mutation-testing.md.
   gem 'mutant-rspec', require: false
+  # Finds N+1 queries by the SQL shape that repeats and the Ruby lines
+  # that ran it. It raises in specs (spec/support/prosopite.rb). Bullet
+  # stays in the development group for its page footer; it cannot see
+  # every repeat, and it cannot fail a spec.
+  gem 'prosopite'
+  # prosopite groups Postgres queries by their parsed shape with this.
+  gem 'pg_query', require: false
   gem 'rspec-rails'
   gem 'rubocop', require: false
   gem 'rubocop-factory_bot', require: false

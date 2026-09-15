@@ -32,6 +32,10 @@ module RandomLedger
       amount = no_cost ? BigDecimal('0') : BigDecimal(rng.rand(0..cents_max)) / 100
       meal.bills.build(resident_id: id, amount: amount, no_cost: no_cost)
     end
+    # The rows built above are all there are. Without this, Rails reads
+    # an association on a new meal that has an id with a query for more
+    # rows, one per meal, which prosopite reports as an N+1 in the ledger.
+    %i[meal_residents guests bills].each { |name| meal.association(name).loaded! }
     meal
   end
 

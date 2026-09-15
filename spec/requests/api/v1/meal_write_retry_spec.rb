@@ -12,7 +12,9 @@ require 'rails_helper'
 #
 # Without a test transaction, because RetryOnConflict does not retry inside
 # one (it cannot: a refused transaction is done for).
-RSpec.describe 'a meal write retried after a conflict' do
+# prosopite is off here: a retry runs the meal lookup again on purpose,
+# and that is not an N+1.
+RSpec.describe 'a meal write retried after a conflict', prosopite: false do
   include_context 'with no test transaction'
 
   let(:community) { create(:community) }

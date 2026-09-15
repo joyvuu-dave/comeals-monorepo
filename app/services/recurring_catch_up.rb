@@ -29,12 +29,15 @@ class RecurringCatchUp
 
   # The recurring jobs whose last success predates their last scheduled tick.
   def due
-    tasks.filter_map do |task|
+    recurring = tasks.filter_map do |task|
       job_class = task[:class].constantize
-      next unless job_class < RecurringJob
+      [job_class, task[:schedule]] if job_class < RecurringJob
+    end
+    last_successes = JobRun.last_success_at(recurring.map { |job_class, _schedule| job_class.run_name })
 
-      last_tick = Fugit.parse(task[:schedule]).previous_time(@now).to_t
-      last_success = JobRun.last_success_at(job_class.run_name)
+    recurring.filter_map do |job_class, schedule|
+      last_tick = Fugit.parse(schedule).previous_time(@now).to_t
+      last_success = last_successes[job_class.run_name]
       job_class if last_success.nil? || last_success < last_tick
     end
   end

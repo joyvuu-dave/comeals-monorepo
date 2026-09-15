@@ -36,9 +36,10 @@ class JobRun < ApplicationRecord
     %w[id name started_at finished_at outcome created_at]
   end
 
-  # When this job last finished without error, or nil if it never has.
-  def self.last_success_at(name)
-    succeeded.where(name: name).maximum(:finished_at)
+  # When each of these jobs last finished without error, by name. A job
+  # that never has is left out.
+  def self.last_success_at(names)
+    succeeded.where(name: names).group(:name).maximum(:finished_at)
   end
 
   def duration
