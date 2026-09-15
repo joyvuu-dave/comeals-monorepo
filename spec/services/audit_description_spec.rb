@@ -77,15 +77,36 @@ RSpec.describe AuditDescription do
     expect(described_class.describe(audit)).to eq("Bill for #{name} changed from $30.00 to $0.00 and marked as no cost")
   end
 
-  it 'resolves resident name from audit trail when bill resident association is nil' do
+  it 'resolves resident name for a bill update audit from the create audit once the bill is gone' do
     bill = create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('30'))
     bill.update!(amount: BigDecimal('50'))
     audit = bill.audits.where(action: 'update').last
-    stub_bill = Bill.find(bill.id)
-    allow(Bill).to receive(:find_by).with(id: audit.auditable_id).and_return(stub_bill)
-    allow(stub_bill).to receive(:resident).and_return(nil)
+    bill.destroy!
     name = ResidentNameShortener.short(resident.name)
     expect(described_class.describe(audit)).to eq("Bill for #{name} changed from $30.00 to $50.00")
+  end
+
+  it 'describes a whole list with the lookups done once, and the same words as one row at a time' do
+    other = create(:resident, community: community, unit: unit)
+    attendance = create(:meal_resident, meal: meal, resident: resident, community: community, late: false)
+    attendance.update!(late: true)
+    gone = create(:meal_resident, meal: meal, resident: other, community: community, late: false)
+    gone.update!(late: true)
+    gone.destroy!
+    bill = create(:bill, meal: meal, resident: other, community: community, amount: BigDecimal('30'))
+    bill.update!(amount: BigDecimal('50'))
+    rows = meal.total_audits
+    # One describer per row is the repeat this spec exists to rule out,
+    # so it is not scanned here; it is the yardstick the list is checked
+    # against.
+    one_at_a_time = Prosopite.pause { rows.map { |row| described_class.describe(row) } }
+
+    describer = described_class.for(rows)
+    together = count_queries { rows.map { |row| describer.describe(row) } }
+
+    expect(together).to eq(0)
+    expect(rows.map { |row| describer.describe(row) }).to eq(one_at_a_time)
+    expect(one_at_a_time).to include("#{name} marked late", "#{ResidentNameShortener.short(other.name)} removed")
   end
 
   it 'resolves resident name for bill destroy audit after bill is deleted' do
@@ -321,12 +342,13 @@ RSpec.describe AuditDescription do
       # A change that starts and ends the same way has no direction either:
       # neither "marked veg" nor "marked not veg" is true of it.
       it 'falls back for a change from true to true, or false to false' do
-        [%w[late vegetarian], [[true, true], [false, false]]].then do |fields, changes|
-          fields.product(changes).each do |field, change|
-            row = audit('MealResident', 'update', { field => change }, id: attendance.id)
-            expect(described_class.describe(row)).to eq('MealResident, update')
+        rows = [%w[late vegetarian], [[true, true], [false, false]]].then do |fields, changes|
+          fields.product(changes).map do |field, change|
+            audit('MealResident', 'update', { field => change }, id: attendance.id)
           end
         end
+        describer = described_class.for(rows)
+        expect(rows.map { |row| describer.describe(row) }).to all(eq('MealResident, update'))
       end
 
       it 'falls back for an update that touched neither late nor vegetarian' do

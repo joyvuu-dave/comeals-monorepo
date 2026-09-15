@@ -50,10 +50,7 @@ Prosopite.allow_stack_paths = [
   # The nightly check reads each settlement's rows on their own, on
   # purpose: one settlement's check must not depend on another's rows.
   # It runs once a night over every settlement, about twelve a year.
-  'app/services/ledger_verification.rb',
-  # Known N+1 on the meal page's history modal: each audit row looks up
-  # the record it names, and its resident, by id (#84).
-  'app/services/audit_description.rb'
+  'app/services/ledger_verification.rb'
 ]
 
 # A factory create runs with the scan paused, and so does everything it

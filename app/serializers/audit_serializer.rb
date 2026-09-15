@@ -14,10 +14,18 @@ class AuditSerializer
   end
 
   def description(audit)
-    AuditDescription.describe(audit)
+    describer.describe(audit)
   end
 
   def display_time(audit)
     audit.created_at
+  end
+
+  private
+
+  # One describer for the whole list, built on the first row: its
+  # lookups then run once for every row instead of once per row (#84).
+  def describer
+    @describer ||= AuditDescription.for(object.is_a?(Enumerable) ? object : [object])
   end
 end

@@ -6,14 +6,30 @@
 # ApplicationHelper, where audit parsing sat next to view formatting and
 # ran its own queries from a view-layer module (#51).
 #
-# Runs queries on purpose: an audit row names records by id, and the
-# record (or its create-audit trail, when the record is gone) is the
-# only way back to a resident's name.
+# An audit row names records by id, and the record (or its create audit,
+# when the record is gone) is the only way back to a resident's name. So
+# a describer is built for a whole list of rows and loads what they name
+# up front, one query per table: the bills and attendance rows that
+# update rows point at, the create audits of those that are gone, and
+# every resident any row names. Describing a row then reads nothing
+# (#84: one to three queries per row made a long history a few hundred
+# queries for one modal).
 class AuditDescription
   include ActiveSupport::NumberHelper
 
   def self.describe(audit)
-    new.describe(audit)
+    self.for([audit]).describe(audit)
+  end
+
+  def self.for(audits)
+    new(audits)
+  end
+
+  def initialize(audits)
+    rows = audits.to_a
+    @bill_cooks = cook_ids(Bill, rows, 'Bill')
+    @attendance_residents = cook_ids(MealResident, rows, 'MealResident')
+    @residents = Resident.where(id: named_resident_ids(rows)).index_by(&:id)
   end
 
   def describe(audit)
@@ -43,17 +59,33 @@ class AuditDescription
     "#{audit.auditable_type}, #{audit.action}"
   end
 
-  # The resident an audit row was originally about, recovered from the
-  # row's own create audit — used when the record itself is gone.
-  def resident_from_audit_trail(auditable_type, auditable_id)
-    create_audit = Audited::Audit.find_by(
-      auditable_type: auditable_type,
-      auditable_id: auditable_id,
-      action: 'create'
-    )
-    return nil if create_audit.nil?
+  # The resident id each update row's record points at, by record id:
+  # from the record while it exists, and from the record's own create
+  # audit once it is gone. A record neither has is left out.
+  def cook_ids(model, rows, auditable_type)
+    ids = rows.filter_map { |row| row.auditable_id if row.auditable_type == auditable_type && row.action == 'update' }
+    return {} if ids.empty?
 
-    Resident.find_by(id: create_audit.audited_changes['resident_id'])
+    from_records = model.where(id: ids).pluck(:id, :resident_id).to_h
+    gone = ids - from_records.keys
+    return from_records if gone.empty?
+
+    from_trail = Audited::Audit.where(auditable_type: auditable_type, auditable_id: gone, action: 'create')
+                               .to_h { |audit| [audit.auditable_id, audit.audited_changes['resident_id']] }
+    from_records.merge(from_trail)
+  end
+
+  # Every resident id the rows name: in a create or destroy row's
+  # changes, or through the record an update row points at.
+  def named_resident_ids(rows)
+    from_changes = rows.filter_map do |row|
+      row.audited_changes['resident_id'] if %w[Bill MealResident Guest].include?(row.auditable_type)
+    end
+    (from_changes + @bill_cooks.values + @attendance_residents.values).compact.uniq
+  end
+
+  def resident(id)
+    @residents[id]
   end
 
   def describe_meal(audit) # rubocop:disable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity --audit change parsing with many attribute branches
@@ -105,22 +137,17 @@ class AuditDescription
     fallback_description(audit) # Shouldn't happen?
   end
 
-  def describe_bill(audit) # rubocop:disable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity, Metrics/MethodLength --audit change parsing with many attribute branches
+  def describe_bill(audit)
     changes = audit.audited_changes
 
     if %w[create destroy].include?(audit.action)
-      name = name_or_unknown(Resident.find_by(id: changes['resident_id']))
+      name = name_or_unknown(resident(changes['resident_id']))
       return "#{name} added as cook" if audit.action == 'create'
 
       return "#{name} removed as cook"
     end
 
-    cook = Bill.find_by(id: audit.auditable_id)&.resident
-    cook_name = if cook
-                  short_name(cook.name)
-                else
-                  name_or_unknown(resident_from_audit_trail('Bill', audit.auditable_id))
-                end
+    cook_name = name_or_unknown(resident(@bill_cooks[audit.auditable_id]))
 
     if changes['amount'].nil?
       if changes['no_cost'].instance_of?(Array)
@@ -144,16 +171,10 @@ class AuditDescription
     fallback_description(audit)
   end
 
-  def describe_meal_resident(audit) # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity --audit change parsing with many attribute branches
+  def describe_meal_resident(audit) # rubocop:disable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity --audit change parsing with many attribute branches
     changes = audit.audited_changes
-    resident = if audit.action == 'update'
-                 MealResident.find_by(id: audit.auditable_id)&.resident ||
-                   resident_from_audit_trail('MealResident', audit.auditable_id)
-               else
-                 Resident.find_by(id: changes['resident_id'])
-               end
-
-    name = name_or_unknown(resident)
+    resident_id = audit.action == 'update' ? @attendance_residents[audit.auditable_id] : changes['resident_id']
+    name = name_or_unknown(resident(resident_id))
 
     return "#{name} added" if audit.action == 'create'
     return "#{name} removed" if audit.action == 'destroy'
@@ -181,7 +202,7 @@ class AuditDescription
 
   def describe_guest(audit)
     changes = audit.audited_changes
-    name = name_or_unknown(Resident.find_by(id: changes['resident_id']))
+    name = name_or_unknown(resident(changes['resident_id']))
 
     verb = { 'create' => 'added', 'destroy' => 'removed' }[audit.action]
     return fallback_description(audit) if verb.nil?
