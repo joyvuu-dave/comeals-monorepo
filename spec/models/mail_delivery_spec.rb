@@ -17,6 +17,7 @@ require 'rails_helper'
 #
 # Indexes
 #
+#  index_mail_deliveries_on_resident_id  (resident_id)
 #  index_mail_deliveries_one_per_person  (mailer,about_type,about_id,resident_id) UNIQUE
 #
 # Foreign Keys

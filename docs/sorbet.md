@@ -31,13 +31,13 @@ workflow sets placeholders for exactly this.
 
 One more: tapioca refuses to compile while the development database has
 a pending migration. In an agent worktree that database is never
-migrated, so a branch that adds a migration cannot run `bin/tapioca dsl`
-plainly. Point it at the worktree's test database, which the branch has
-migrated: `DATABASE_URL=postgresql:///comeals_test_<task> bin/tapioca dsl`
-(the suffix is `TEST_DB_SUFFIX` in the worktree's `.env`). The
+migrated, so a branch that adds a migration could not run `bin/tapioca
+dsl` at all. The `bin/tapioca` wrapper handles this: when the worktree's
+`.env` sets `TEST_DB_SUFFIX` and `DATABASE_URL` is not already set, a
+`dsl` run gets `DATABASE_URL=postgresql:///comeals_test_<suffix>`, the
+worktree's own test database, which the branch has migrated. The
 environment stays development, so the route helpers come out the same;
-only the connection changes. `bin/check` does this itself for its
-`--verify` run.
+only the connection changes.
 
 ## Which files are typed
 

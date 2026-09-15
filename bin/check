@@ -418,20 +418,10 @@ check_sorbet() {
 check_rbi_fresh() {
   step "RBI files"
 
-  # bin/tapioca dsl boots the development environment (docs/sorbet.md).
-  # In a worktree the development database is never migrated, so while
-  # the branch adds a migration tapioca refuses to run against it. Point
-  # it at the worktree's own test database instead: the environment, and
-  # so the route helpers, stay development; only the connection changes.
-  local database_url=""
-  if [ -f .env ] && grep -q '^TEST_DB_SUFFIX=' .env; then
-    local suffix
-    suffix=$(grep '^TEST_DB_SUFFIX=' .env | cut -d= -f2)
-    database_url="postgresql:///comeals_test${suffix}"
-  fi
-
+  # In a worktree, bin/tapioca points the dsl run at the worktree's test
+  # database itself (the development one is never migrated there).
   local output exit_code=0
-  output=$(bin/tapioca gem --verify 2>&1 && DATABASE_URL="$database_url" bin/tapioca dsl --verify 2>&1) || exit_code=$?
+  output=$(bin/tapioca gem --verify 2>&1 && bin/tapioca dsl --verify 2>&1) || exit_code=$?
 
   if [ "$exit_code" -eq 0 ]; then
     pass "Gem and DSL RBIs match the bundle and the schema"

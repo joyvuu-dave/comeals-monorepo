@@ -406,16 +406,16 @@ CREATE TABLE public.ar_internal_metadata (
 CREATE TABLE public.audits (
     id bigint NOT NULL,
     action character varying,
-    associated_id integer,
+    associated_id bigint,
     associated_type character varying,
-    auditable_id integer,
+    auditable_id bigint,
     auditable_type character varying,
     audited_changes jsonb,
     comment character varying,
     created_at timestamp without time zone,
     remote_address character varying,
     request_uuid character varying,
-    user_id integer,
+    user_id bigint,
     user_type character varying,
     username character varying,
     version integer DEFAULT 0
@@ -3057,6 +3057,7 @@ ALTER TABLE ONLY public.bills
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260915120000'),
 ('20260914120000'),
 ('20260825150000'),
 ('20260825140000'),

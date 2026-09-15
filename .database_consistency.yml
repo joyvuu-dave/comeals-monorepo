@@ -17,25 +17,7 @@ AdminUser:
     UniqueIndexChecker:
       enabled: false
 
-# The audits table (audited gem) stores auditable_id, associated_id and
-# user_id as integer while every model's id is bigint. Issue #83 tracks
-# the migration. Each audited model repeats the same finding.
-Bill:
-  audits:
-    ForeignKeyTypeChecker:
-      enabled: false
-Guest:
-  audits:
-    ForeignKeyTypeChecker:
-      enabled: false
-MealResident:
-  audits:
-    ForeignKeyTypeChecker:
-      enabled: false
 Reconciliation:
-  audits:
-    ForeignKeyTypeChecker:
-      enabled: false
   # set_date fills date in before_validation, so a validator would never
   # see it blank.
   date:
@@ -107,12 +89,6 @@ Key:
       enabled: false
 
 Meal:
-  associated_audits:
-    ForeignKeyTypeChecker:
-      enabled: false
-  audits:
-    ForeignKeyTypeChecker:
-      enabled: false
   # The rule is "max is at least the number of attendees", a count of rows
   # in another table. A CHECK constraint cannot read another table.
   max:

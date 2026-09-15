@@ -13,4 +13,18 @@ ENV["BUNDLE_GEMFILE"] ||= File.expand_path("../Gemfile", __dir__)
 require "rubygems"
 require "bundler/setup"
 
+# Added by hand, below Bundler's part. `tapioca dsl` boots the app in the
+# development environment and refuses to run while the development
+# database has a pending migration. In an agent worktree that database is
+# never migrated (docs/agents/worktrees.md), so a branch that adds a
+# migration could not refresh its RBIs. Point the dsl run at the
+# worktree's own test database instead. The environment stays
+# development, so the route helpers come out the same; only the
+# connection changes. See docs/sorbet.md.
+if ARGV.first == "dsl" && !ENV.key?("DATABASE_URL")
+  env_file = File.expand_path("../.env", __dir__)
+  suffix = File.exist?(env_file) && File.read(env_file)[/^TEST_DB_SUFFIX=(\S+)/, 1]
+  ENV["DATABASE_URL"] = "postgresql:///comeals_test#{suffix}" if suffix
+end
+
 load Gem.bin_path("tapioca", "tapioca")
