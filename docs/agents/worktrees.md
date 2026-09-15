@@ -99,6 +99,12 @@ comes from the test database. Restore it with
 `git checkout db/structure.sql`. If the diff is anything else, stop and
 report it.
 
+The same migrate step runs annotaterb, which rewrites the schema comment
+at the top of each model, spec and factory. It finds nothing to write
+when the branch already carries its annotations, and `bin/check`'s
+Annotations step makes sure of that: it runs annotaterb against the
+worktree's test database and fails if a file changed.
+
 It never rewrites history and never force-pushes. If local `main` is
 only behind origin, it fast-forwards it first; that can only add commits
 already on GitHub.

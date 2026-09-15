@@ -577,6 +577,37 @@ check_fixture_freshness() {
   fi
 }
 
+# annotaterb writes each table's columns, indexes and foreign keys as a
+# comment at the top of its model, spec and factory. It runs by itself
+# after every development db:migrate, but a worktree migrates only its
+# test database, so a branch that changes the schema never got its
+# annotations. They were then written into the main checkout by
+# bin/agent-merge's migrate step, uncommitted. This step runs annotaterb
+# against the test database (migrated by the RSpec step above) and fails
+# if it changed a file, so the branch carries its own annotations.
+check_annotations() {
+  step "Annotations"
+
+  local output exit_code=0
+  output=$(RAILS_ENV=test bundle exec annotaterb models 2>&1) || exit_code=$?
+
+  if [ "$exit_code" -ne 0 ]; then
+    fail "annotaterb failed"
+    echo "$output" | tail -10
+    record "Annotations" "FAIL" "annotaterb failed"
+    return
+  fi
+
+  if echo "$output" | grep -q 'Model files unchanged'; then
+    pass "Model annotations match the schema"
+    record "Annotations" "PASS" "no drift"
+  else
+    fail "Annotations are stale — commit the files annotaterb just rewrote"
+    echo "$output" | grep -E '^Annotated' | head -5
+    record "Annotations" "FAIL" "stale annotations"
+  fi
+}
+
 check_playwright() {
   step "Playwright"
 
@@ -771,6 +802,7 @@ main() {
   check_rspec
   check_vitest
   check_fixture_freshness
+  check_annotations
   check_playwright
   check_visual_coverage
   check_integration
