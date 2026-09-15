@@ -100,6 +100,15 @@ end
 group :development do
   gem 'annotaterb'
   gem 'bullet'
+  # Checks that model validations and database constraints agree
+  # (a NOT NULL column without a presence validation, a belongs_to
+  # without a foreign key, and so on). Config: .database_consistency.yml.
+  gem 'database_consistency', require: false
+  # Finds methods nothing calls. Config: none; bin/check passes the
+  # Rails whitelist.
+  gem 'debride', require: false
+  # Suggests faster forms of common Ruby idioms. Config: .fasterer.yml.
+  gem 'fasterer', require: false
   gem 'foreman'
   gem 'rack-mini-profiler'
   # Only bin/check runs it, so it has no reason to be in the :test

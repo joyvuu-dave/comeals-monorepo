@@ -1,0 +1,148 @@
+# database_consistency compares each model's validations and associations
+# with the database's constraints, indexes and foreign keys. bin/check
+# runs it against the test database. Every entry below turns one check
+# off for one column, index or association, and says why. Do not add an
+# entry without a reason: an unexplained entry hides the next real gap.
+
+# Devise's validatable module validates email presence only when
+# email_required? is true, so the checker sees a conditional rule.
+# That is Devise's own design, and the NOT NULL column is the real guard.
+AdminUser:
+  email:
+    ColumnPresenceChecker:
+      enabled: false
+  # A reset token is random, so two can never collide. The unique index
+  # is the guard; a uniqueness validator would add a query for nothing.
+  index_admin_users_on_reset_password_token:
+    UniqueIndexChecker:
+      enabled: false
+
+# The audits table (audited gem) stores auditable_id, associated_id and
+# user_id as integer while every model's id is bigint. Issue #83 tracks
+# the migration. Each audited model repeats the same finding.
+Bill:
+  audits:
+    ForeignKeyTypeChecker:
+      enabled: false
+Guest:
+  audits:
+    ForeignKeyTypeChecker:
+      enabled: false
+MealResident:
+  audits:
+    ForeignKeyTypeChecker:
+      enabled: false
+Reconciliation:
+  audits:
+    ForeignKeyTypeChecker:
+      enabled: false
+  # set_date fills date in before_validation, so a validator would never
+  # see it blank.
+  date:
+    NullConstraintChecker:
+      enabled: false
+  # The model's dependent: :nullify is the cleanup path through callbacks,
+  # and Reconciliation's destroy guard refuses a settled reconciliation
+  # before it runs. The foreign key has no ON DELETE on purpose: a raw
+  # DELETE that skips the model must fail, not quietly unsettle meals.
+  meals:
+    ForeignKeyCascadeChecker:
+      enabled: false
+
+# The communities table holds exactly one row, forever (CLAUDE.md). An
+# index on community_id, or a case-insensitive unique index on name, would
+# serve a second community that can never exist.
+Community:
+  admin_users:
+    MissingIndexChecker:
+      enabled: false
+  bills:
+    MissingIndexChecker:
+      enabled: false
+  common_house_reservations:
+    MissingIndexChecker:
+      enabled: false
+  events:
+    MissingIndexChecker:
+      enabled: false
+  guest_room_reservations:
+    MissingIndexChecker:
+      enabled: false
+  index_communities_on_name:
+    UniqueIndexChecker:
+      enabled: false
+  index_communities_on_singleton_guard:
+    UniqueIndexChecker:
+      enabled: false
+  lower(name):
+    MissingUniqueIndexChecker:
+      enabled: false
+  meal_residents:
+    MissingIndexChecker:
+      enabled: false
+  meals:
+    MissingIndexChecker:
+      enabled: false
+  reconciliations:
+    MissingIndexChecker:
+      enabled: false
+  residents:
+    MissingIndexChecker:
+      enabled: false
+  rotations:
+    MissingIndexChecker:
+      enabled: false
+  units:
+    MissingIndexChecker:
+      enabled: false
+
+# has_secure_token fills the random token in before_create, after
+# validation, so no validator can see it; and random tokens never collide.
+Key:
+  index_keys_on_token:
+    UniqueIndexChecker:
+      enabled: false
+  token:
+    NullConstraintChecker:
+      enabled: false
+
+Meal:
+  associated_audits:
+    ForeignKeyTypeChecker:
+      enabled: false
+  audits:
+    ForeignKeyTypeChecker:
+      enabled: false
+  # The rule is "max is at least the number of attendees", a count of rows
+  # in another table. A CHECK constraint cannot read another table.
+  max:
+    NumericalityConstraintChecker:
+      enabled: false
+
+# Charges are written only by Settlement, inside the meal lock, one credit
+# per cook and one debit per attendee. The unique indexes are the rule;
+# the writes skip validations on purpose (docs/adr/0003).
+MealCharge:
+  index_meal_charges_one_credit_per_cook:
+    UniqueIndexChecker:
+      enabled: false
+  index_meal_charges_one_debit_per_attendee:
+    UniqueIndexChecker:
+      enabled: false
+
+Resident:
+  # Emails are stored lowercase (before_save), and the lookup downcases
+  # its input, so `find_by(email:)` is exact. The unique index is on
+  # lower(email), which Postgres cannot use for a plain equality, but the
+  # table holds about a hundred rows.
+  email:
+    MissingIndexFindByChecker:
+      enabled: false
+  # Name uniqueness is validated by the hand-written
+  # name_unique_with_helpful_message, which the checker cannot recognize.
+  index_residents_on_lower_name:
+    UniqueIndexChecker:
+      enabled: false
+  index_residents_on_reset_password_token:
+    UniqueIndexChecker:
+      enabled: false

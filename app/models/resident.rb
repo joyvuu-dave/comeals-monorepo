@@ -82,6 +82,10 @@ class Resident < ApplicationRecord
   has_one :resident_balance, dependent: :destroy
   has_many :guest_room_reservations, dependent: :destroy
   has_many :common_house_reservations, dependent: :destroy
+  # A record that one email went out to this person. Append-only by
+  # database trigger (comeals_protect_mail_delivery), so a resident who has
+  # one can only be retired, never deleted.
+  has_many :mail_deliveries, dependent: :restrict_with_error
 
   validates :multiplier, numericality: { only_integer: true }
   validates :name, presence: true
@@ -136,6 +140,11 @@ class Resident < ApplicationRecord
   # this community asked for. Admin creates children with '' (they have no
   # email, so they never log in), and an adult may reset their password to
   # '' and then log in with email alone. Do not add a validation here.
+  #
+  # The digest itself must exist, though: a resident created without ever
+  # assigning a password (only the console can do that) gets a validation
+  # error here instead of a NOT NULL error from the database.
+  validates :password_digest, presence: true
   sig { params(unencrypted_password: String).void }
   def password=(unencrypted_password)
     @password = T.let(unencrypted_password, T.nilable(String))

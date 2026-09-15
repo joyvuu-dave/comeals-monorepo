@@ -278,7 +278,8 @@ class Meal < ApplicationRecord
 
   sig { returns(T::Array[Audited::Audit]) }
   def total_audits
-    (associated_audits + audits).sort { |a, b| b.created_at <=> a.created_at }
+    # Newest first; two audits written in the same instant keep id order.
+    (associated_audits + audits).sort_by { |audit| [audit.created_at, audit.id] }.reverse
   end
 
   # HELPERS

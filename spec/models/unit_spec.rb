@@ -57,6 +57,15 @@ RSpec.describe Unit do
   # ---------------------------------------------------------------------------
   # Deletion safeguards
   # ---------------------------------------------------------------------------
+  describe 'name' do
+    it 'must be present' do
+      unit = build(:unit, community: community, name: nil)
+
+      expect(unit).not_to be_valid
+      expect(unit.errors[:name]).to include("can't be blank")
+    end
+  end
+
   describe 'deletion' do
     # Old bills and meals show the unit's name forever, so a unit with
     # residents must never be deleted. The way to retire a unit is to mark

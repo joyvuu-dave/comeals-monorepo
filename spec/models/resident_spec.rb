@@ -65,6 +65,19 @@ RSpec.describe Resident do
     end
   end
 
+  describe 'password_digest' do
+    # A blank password is allowed (see #password=), but the digest column
+    # is NOT NULL: a resident built without ever assigning a password gets
+    # a validation error, not a database error.
+    it 'must be present' do
+      resident = build(:resident, community: community, unit: unit)
+      resident.password_digest = nil
+
+      expect(resident).not_to be_valid
+      expect(resident.errors[:password_digest]).to include("can't be blank")
+    end
+  end
+
   describe '#password=' do
     it 'sets password_digest via SCrypt' do
       resident = build(:resident, community: community, unit: unit)
@@ -459,6 +472,17 @@ RSpec.describe Resident do
       expect(resident.errors[:base]).to include('Cannot delete record because dependent bills exist')
       expect(described_class.exists?(resident.id)).to be true
       expect(Bill.exists?(bill.id)).to be true
+    end
+
+    # A mail delivery record is append-only (a database trigger refuses
+    # the delete), so the resident is refused too, with a readable reason.
+    it 'cannot be destroyed with a mail delivery record' do
+      MailDelivery.record!(mailer: 'reset_password', about: community, resident: resident)
+
+      expect(resident.destroy).to be false
+      expect(resident.errors[:base]).to include('Cannot delete record because dependent mail deliveries exist')
+      expect(described_class.exists?(resident.id)).to be true
+      expect(MailDelivery.count).to eq(1)
     end
 
     it 'cannot be destroyed with meal attendance' do

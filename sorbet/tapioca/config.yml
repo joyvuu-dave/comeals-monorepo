@@ -5,6 +5,11 @@ gem:
   # here because `mail` depends on it.
   exclude:
     - net-imap
+    # debride's RBI names MethodBasedSexpProcessor as a superclass, and
+    # the sexp_processor RBI does not declare that class, so `srb tc`
+    # cannot resolve it. debride is a bin/check tool that nothing in the
+    # app calls, so it needs no RBI.
+    - debride
 dsl:
   compiler_options:
     # Every column reader returns T.nilable. The default, `persisted`, types

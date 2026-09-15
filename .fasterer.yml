@@ -1,0 +1,16 @@
+# fasterer suggests faster forms of common Ruby idioms. bin/check runs it.
+# Two of its rules are off because the "slow" form is the readable one
+# and the difference is nanoseconds per call:
+#   Hash#fetch(key, default) instead of Hash#fetch(key) { default }
+#   each_with_index instead of a while loop
+speedups:
+  fetch_with_argument_vs_block: false
+  each_with_index_vs_while: false
+
+exclude_paths:
+  - "db/migrate/**/*.rb"
+  - "node_modules/**/*"
+  - "public/**/*"
+  - "sorbet/**/*"
+  - "tmp/**/*"
+  - "vendor/**/*"

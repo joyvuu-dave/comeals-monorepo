@@ -1,0 +1,58 @@
+# Methods debride cannot see a caller for, and why each one is called.
+# bin/check passes this file to debride, together with every controller
+# action name from `rails routes`. A line that is not a /regexp/ is read as
+# a method name, so these comment lines match nothing.
+#
+# Rails and gems call these by name:
+ransackable_attributes
+ransackable_associations
+perform
+deliver!
+delivering_email
+authorized?
+build
+audited_user
+csrf_failed
+authenticate_admin_user_custom!
+suppress_notification_if_no_email
+# Named in before_action / rescue_from / config lines debride does not read:
+require_reconciler
+render_conflict
+render_overloaded
+redirect_after_conflict
+refused_destroy_path
+# ActiveAdmin DSL blocks that override a controller method:
+find_resource
+scoped_collection
+resource_or_collection_path
+build_main_content_wrapper
+# Alba serializer attribute methods, named in `attributes :x` lists:
+type
+url
+allDay
+next_id
+prev_id
+reconciled
+attending
+attending_at
+display_name
+signed_up
+display_time
+user_name
+# Mass assignment from the admin form calls the writers:
+schedule=
+dinner_start_times=
+# Keyword arguments debride does not follow (create!(no_email: true),
+# where(about: ...)):
+no_email=
+about
+# Associations kept for their dependent: option or for specs:
+admin_users
+reconciliations
+attendees
+hosts
+mail_deliveries
+# Read by specs only, on purpose: Settlement#rewrite! is a repair step,
+# Resident#password is the plain-text password just assigned.
+rewrite!
+password

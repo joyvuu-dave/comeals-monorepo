@@ -199,6 +199,81 @@ check_brakeman() {
   fi
 }
 
+# fasterer suggests faster forms of common Ruby idioms. Two rules are off
+# in .fasterer.yml because the readable form wins there.
+check_fasterer() {
+  step "Fasterer"
+
+  local output exit_code=0
+  output=$(bundle exec fasterer 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep -v '^NOTE: RubyParser') || exit_code=$?
+
+  local summary
+  summary=$(echo "$output" | grep -E 'files inspected' | tail -1)
+
+  if echo "$summary" | grep -q ', 0 offenses'; then
+    pass "$summary"
+    record "Fasterer" "PASS" "$summary"
+  else
+    fail "${summary:-fasterer produced no summary}"
+    echo "$output" | grep -E '^[a-z].*:[0-9]+ ' | head -20
+    record "Fasterer" "FAIL" "${summary:-no summary}"
+  fi
+}
+
+# debride lists methods it can find no caller for. Rails and the gems call
+# many methods by name (controller actions, serializer attributes, hooks),
+# so the whitelist is .debride_whitelist plus every action name that
+# `rails routes` prints. A method left on the list is either dead or a new
+# framework-called name that belongs in the whitelist with a reason.
+check_debride() {
+  step "Debride"
+
+  local whitelist
+  whitelist=$(mktemp)
+  cp .debride_whitelist "$whitelist"
+  bundle exec rails routes 2>/dev/null | grep -oE '[a-z_/]+#[a-z_]+' | cut -d'#' -f2 | sort -u >> "$whitelist"
+
+  local output
+  output=$(bundle exec debride --rails --whitelist "$whitelist" app lib db/seeds.rb config/initializers config/routes.rb 2>&1 \
+    | grep -v '^NOTE: RubyParser')
+  rm -f "$whitelist"
+
+  local suspects
+  suspects=$(echo "$output" | grep -cE '^  \S+ +\S+\.rb:[0-9]')
+
+  if [ "$suspects" -eq 0 ]; then
+    pass "No method without a caller"
+    record "Debride" "PASS" "no suspects"
+  else
+    fail "$suspects method(s) without a caller (dead, or missing from .debride_whitelist)"
+    echo "$output" | grep -E '^\S|^  \S+ +\S+\.rb:[0-9]' | head -30
+    record "Debride" "FAIL" "$suspects suspects"
+  fi
+}
+
+# database_consistency compares each model's validations and associations
+# with the database's constraints, indexes and foreign keys. It reads the
+# test database, which every worktree has migrated (the development one
+# may be behind). Each disabled check in .database_consistency.yml says why.
+check_database_consistency() {
+  step "Database consistency"
+
+  local output exit_code=0
+  output=$(RAILS_ENV=test bundle exec database_consistency 2>&1) || exit_code=$?
+
+  local failures
+  failures=$(echo "$output" | grep -cE '^[A-Za-z]+Checker fail ')
+
+  if [ "$exit_code" -eq 0 ] && [ "$failures" -eq 0 ]; then
+    pass "Models and schema agree"
+    record "Database consistency" "PASS" "models and schema agree"
+  else
+    fail "$failures check(s) where a model and the schema disagree"
+    echo "$output" | grep -E 'Checker fail ' | head -20
+    record "Database consistency" "FAIL" "$failures disagreements"
+  fi
+}
+
 check_eslint() {
   step "ESLint"
 
@@ -343,8 +418,20 @@ check_sorbet() {
 check_rbi_fresh() {
   step "RBI files"
 
+  # bin/tapioca dsl boots the development environment (docs/sorbet.md).
+  # In a worktree the development database is never migrated, so while
+  # the branch adds a migration tapioca refuses to run against it. Point
+  # it at the worktree's own test database instead: the environment, and
+  # so the route helpers, stay development; only the connection changes.
+  local database_url=""
+  if [ -f .env ] && grep -q '^TEST_DB_SUFFIX=' .env; then
+    local suffix
+    suffix=$(grep '^TEST_DB_SUFFIX=' .env | cut -d= -f2)
+    database_url="postgresql:///comeals_test${suffix}"
+  fi
+
   local output exit_code=0
-  output=$(bin/tapioca gem --verify 2>&1 && bin/tapioca dsl --verify 2>&1) || exit_code=$?
+  output=$(bin/tapioca gem --verify 2>&1 && DATABASE_URL="$database_url" bin/tapioca dsl --verify 2>&1) || exit_code=$?
 
   if [ "$exit_code" -eq 0 ]; then
     pass "Gem and DSL RBIs match the bundle and the schema"
@@ -673,6 +760,9 @@ main() {
   check_rubocop
   check_rubycritic
   check_brakeman
+  check_fasterer
+  check_debride
+  check_database_consistency
   check_eslint
   check_typecheck
   check_sorbet

@@ -2301,6 +2301,13 @@ CREATE INDEX index_ledger_check_runs_on_started_at ON public.ledger_check_runs U
 
 
 --
+-- Name: index_mail_deliveries_on_resident_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_mail_deliveries_on_resident_id ON public.mail_deliveries USING btree (resident_id);
+
+
+--
 -- Name: index_mail_deliveries_one_per_person; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3050,6 +3057,7 @@ ALTER TABLE ONLY public.bills
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260914120000'),
 ('20260825150000'),
 ('20260825140000'),
 ('20260825120000'),

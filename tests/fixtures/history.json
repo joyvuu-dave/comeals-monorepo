@@ -14,15 +14,15 @@
       "display_time": "2026-01-14T18:35:00.000-08:00"
     },
     {
-      "id": 6,
-      "user_name": "Jane",
-      "description": "Jane added",
-      "display_time": "2026-01-14T18:30:00.000-08:00"
-    },
-    {
       "id": 7,
       "user_name": "Jane",
       "description": "Jane added as cook",
+      "display_time": "2026-01-14T18:30:00.000-08:00"
+    },
+    {
+      "id": 6,
+      "user_name": "Jane",
+      "description": "Jane added",
       "display_time": "2026-01-14T18:30:00.000-08:00"
     },
     {

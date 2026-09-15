@@ -470,6 +470,20 @@ class Resident
     sig { params(value: T::Enumerable[::Key]).void }
     def keys=(value); end
 
+    # This method is created by ActiveRecord on the `Resident` class because it declared `has_many :mail_deliveries`.
+    # 🔗 [Rails guide for `has_many` association](https://guides.rubyonrails.org/association_basics.html#the-has-many-association)
+    sig { returns(::MailDelivery::PrivateCollectionProxy) }
+    def mail_deliveries; end
+
+    sig { params(value: T::Enumerable[::MailDelivery]).void }
+    def mail_deliveries=(value); end
+
+    sig { returns(T::Array[T.untyped]) }
+    def mail_delivery_ids; end
+
+    sig { params(ids: T::Array[T.untyped]).returns(T::Array[T.untyped]) }
+    def mail_delivery_ids=(ids); end
+
     sig { returns(T::Array[T.untyped]) }
     def meal_charge_ids; end
 

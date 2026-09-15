@@ -35,7 +35,7 @@ class Unit < ApplicationRecord
   # can be destroyed.
   has_many :residents, dependent: :restrict_with_error
 
-  validates :name, uniqueness: true
+  validates :name, presence: true, uniqueness: true
 
   after_destroy :note_live_update
   after_save :note_live_update
