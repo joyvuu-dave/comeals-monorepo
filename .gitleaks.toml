@@ -1,0 +1,77 @@
+# gitleaks: secrets that must never be in a commit.
+#
+# Runs in three places, all on this file: the pre-commit hook on the
+# staged changes (.githooks/pre-commit), bin/check on the whole history,
+# and CI on the whole history (.github/workflows/ci.yml, gitleaks-action).
+# GitHub's own secret scanning is on too, but it knows only the big
+# providers' token shapes; the rule below knows this app's config vars.
+#
+# A hit in a commit that is already pushed cannot be taken back: this
+# repository is public, and the value is out. The only fix is to rotate
+# the secret at the provider and then allow the commit here, with a note
+# saying it was rotated. Never allow a commit whose secret is still live.
+
+title = "comeals"
+
+[extend]
+useDefault = true
+
+# Every production config var that holds a secret (heroku config -a
+# comeals-monorepo), followed by a value. Uppercase only: that is how the
+# names look wherever a value is written (.env, a yml, a shell export),
+# and the same words in lowercase are Ruby code. Reading the var
+# (ENV.fetch, ${{ secrets.X }}, <%= %>, $NAME) is not a value, and the
+# test placeholders are not secrets.
+[[rules]]
+id = "comeals-production-config-var"
+description = "A comeals production secret written out next to its config var name"
+regex = '''\b(PUSHER_SECRET|BUGSNAG_API_KEY|VITE_BUGSNAG_API_KEY|SECRET_KEY_BASE|SECRET_TOKEN|DEVISE_KEY|GMAIL_APP_PASSWORD|HEALTHCHECKS_PING_KEY|READ_ONLY_ADMIN_TOKEN|SKYLIGHT_AUTHENTICATION|COMEALS_DATABASE_PASSWORD|ANTHROPIC_API_KEY)\b\s*[=:]\s*['"]?([A-Za-z0-9+/=_\-\.]{12,})'''
+secretGroup = 2
+keywords = ["PUSHER_SECRET", "BUGSNAG_API_KEY", "SECRET_KEY_BASE", "SECRET_TOKEN", "DEVISE_KEY", "GMAIL_APP_PASSWORD", "HEALTHCHECKS_PING_KEY", "READ_ONLY_ADMIN_TOKEN", "SKYLIGHT_AUTHENTICATION", "COMEALS_DATABASE_PASSWORD", "ANTHROPIC_API_KEY"]
+[[rules.allowlists]]
+regexTarget = "line"
+regexes = [
+  '''ENV(\.fetch|\[)''',
+  '''secrets\.''',
+  '''<%=''',
+  '''\$\{?[A-Z_]+\}?''',
+  '''test-key-for-ci''',
+  '''admin-e2e-''',
+]
+
+# A database URL that carries a password to a host that is not this
+# machine. Local URLs (postgres:///comeals_test, postgres://postgres:postgres@localhost)
+# are how the test scripts name their databases, and are not secrets.
+[[rules]]
+id = "comeals-database-url-with-password"
+description = "A postgres URL with a password to a remote host"
+regex = '''postgres(?:ql)?://[^:/\s'"]+:([^@\s'"]+)@[^\s'"/]+'''
+secretGroup = 1
+keywords = ["postgres://", "postgresql://"]
+[[rules.allowlists]]
+regexTarget = "line"
+regexes = ['''@(localhost|127\.0\.0\.1)[:/]''']
+
+# Known and accepted, whole repository.
+[[allowlists]]
+description = "Generated RBI files quote gem documentation, and the docs make up passwords"
+paths = ['''^sorbet/rbi/gems/.*''']
+
+[[allowlists]]
+description = "Devise's generator writes its example key as a comment; the app reads secret_key_base"
+regexTarget = "line"
+regexes = ['''^\s*#\s*config\.secret_key = ''']
+
+# The history before this file, scanned on 2026-09-16. Each commit is
+# named so a reader knows what was in it and what was done about it.
+[[allowlists]]
+description = "Dead or being replaced: the Pusher secret (in the 2017 initializer and a 2026 plan doc) got a new key pair on 2026-09-16, and the old pair is deleted once every open screen runs a build with the new key; the 2018 Skylight token and the 2017 New Relic key are not the live values; the 2017 secrets.yml held development and test keys only"
+commits = [
+  "22b397828c0d7cd72457fca07f1115e896cdddb9", # 2017-07-23 Make it realtime: Pusher.secret in the initializer
+  "466b8452519af78976aa7a77d5c2f1671a8ee179", # 2026-04-14 migration plan doc: PUSHER_SECRET=
+  "0ef8ada63b1025d756c7181dbf6fc63e7b99551c", # 2026-04-14 migration plan doc: PUSHER_SECRET=
+  "2ae19a7f811acfa31c9f367f2cbe18e2c5f9723a", # 2018-04-22 Add Skylight: a token that is not the current one
+  "6f6d8112300b1d19095565ccbcee5327a8ff28e3", # 2017-08-05 add newrelic: a license key; New Relic is no longer used
+  "512f5f9c2c95059055a934d34c1071b5e0a5d241", # 2017-05-16 Initial Commit: development and test secret_key_base
+  "b8284e8be81071b4857d386bf7ed800250261bc7", # 2017-05-19 Initial commit: Devise's commented example key
+]

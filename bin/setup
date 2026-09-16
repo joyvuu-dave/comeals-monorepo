@@ -16,6 +16,16 @@ FileUtils.chdir APP_ROOT do
   puts "== Configuring git hooks =="
   system! "git config core.hooksPath .githooks"
 
+  # The pre-commit hook scans the staged changes for secrets.
+  unless system("command -v gitleaks >/dev/null 2>&1")
+    puts "\n== Installing gitleaks =="
+    if system("command -v brew >/dev/null 2>&1")
+      system! "brew install gitleaks"
+    else
+      abort "gitleaks is not installed and Homebrew is not here. Install it from https://github.com/gitleaks/gitleaks#installing and run bin/setup again."
+    end
+  end
+
   puts "\n== Installing dependencies =="
   system! "gem install bundler --conservative"
   system("bundle check") || system!("bundle install")

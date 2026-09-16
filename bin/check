@@ -456,6 +456,31 @@ check_bundle_budget() {
 
 # --- Section 3: Security -----------------------------------------------------
 
+# The whole history, every run: a few seconds for this repository. A hit
+# in a pushed commit is a rotation to do, not a line to fix; .gitleaks.toml
+# says so and lists the commits already dealt with.
+check_gitleaks() {
+  step "gitleaks"
+
+  if ! command -v gitleaks &>/dev/null; then
+    fail "gitleaks is not installed (bin/setup installs it; or: brew install gitleaks)"
+    record "gitleaks" "FAIL" "not installed"
+    return
+  fi
+
+  local output exit_code=0
+  output=$(gitleaks git . --no-banner --redact 2>&1) || exit_code=$?
+
+  if [ "$exit_code" -eq 0 ]; then
+    pass "No secrets in the history or the tree"
+    record "gitleaks" "PASS" "no secrets"
+  else
+    fail "Secrets found"
+    echo "$output" | grep -E '^(Finding|Secret|RuleID|File|Commit|Line):' | head -30
+    record "gitleaks" "FAIL" "secrets found"
+  fi
+}
+
 check_bundle_audit() {
   step "bundle audit"
 
@@ -804,6 +829,7 @@ main() {
   check_bundle_budget
 
   # Security
+  check_gitleaks
   check_bundle_audit
   check_npm_audit
 

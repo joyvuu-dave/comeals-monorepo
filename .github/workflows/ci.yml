@@ -98,6 +98,21 @@ jobs:
           cache: npm
       - run: npm audit
 
+  # The whole history, with this repository's rules (.gitleaks.toml).
+  # GitHub's secret scanning runs too, but knows only the big providers'
+  # token shapes. Free for a personal account; an organization would
+  # need GITLEAKS_LICENSE.
+  secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   ruby-security:
     runs-on: ubuntu-latest
     timeout-minutes: 10
