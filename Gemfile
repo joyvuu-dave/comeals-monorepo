@@ -104,6 +104,14 @@ group :test do
   gem 'simplecov', require: false
 end
 
+# Counts the objects a block allocates. In development it is what makes
+# rack-mini-profiler's ?pp=profile-memory page work (the page checks that
+# MemoryProfiler is loaded, so no `require: false`); in test it is behind
+# the allocation pins (spec/services/money_path_allocations_spec.rb), which
+# hold in CI where a timing pin would not: an allocation count is the same
+# on every machine.
+gem 'memory_profiler', group: %i[development test]
+
 group :development do
   gem 'annotaterb'
   gem 'bullet'

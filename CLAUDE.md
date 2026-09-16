@@ -24,6 +24,7 @@ bin/storm                  # Real-server concurrency storm: many Puma threads, m
 - **Rails direct**: `http://localhost:3000` — API endpoints
 - **ActiveAdmin**: `http://admin.lvh.me:3000/login` — admin subdomain, served by Rails directly (no Vite proxy)
 - **Mail inbox**: `http://localhost:3000/letter_opener`
+- **Profiler**: rack-mini-profiler is on in development. Add `?pp=help` to a page Rails serves (an admin page, or the SPA under `bin/prod`) for the query timeline, `?pp=flamegraph` (stackprof) and `?pp=profile-memory` (memory_profiler). At `localhost:3036` Vite serves the page, so the badge does not show there.
 
 ## Parallel agents and worktrees
 
