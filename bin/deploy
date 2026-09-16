@@ -84,6 +84,36 @@ preflight_environment() {
   ok "heroku remote -> $remote_url"
 }
 
+# The two config vars Solid Queue needs (lib/deploy_config_check.rb).
+# Without them the release phase refuses the deploy, so set them here,
+# after the confirmation, before the push. Setting them early is safe:
+# the running code ignores SOLID_QUEUE_IN_PUMA, and a pool of 4 is fine
+# for one thread.
+NEEDS_SOLID_QUEUE_VARS=false
+
+preflight_solid_queue_vars() {
+  step "Pre-flight: Solid Queue config vars"
+
+  local pool in_puma
+  pool=$(heroku config:get RAILS_DB_POOL -a "$APP" 2>/dev/null || true)
+  in_puma=$(heroku config:get SOLID_QUEUE_IN_PUMA -a "$APP" 2>/dev/null || true)
+
+  if [ "${pool:-0}" -ge 4 ] 2>/dev/null && [ -n "$in_puma" ]; then
+    ok "RAILS_DB_POOL=$pool, SOLID_QUEUE_IN_PUMA=$in_puma"
+  else
+    NEEDS_SOLID_QUEUE_VARS=true
+    warn "RAILS_DB_POOL='${pool}' and SOLID_QUEUE_IN_PUMA='${in_puma}' — the deploy will set RAILS_DB_POOL=4 and SOLID_QUEUE_IN_PUMA=true first"
+    info "Live updates and the nightly jobs run in Solid Queue (docs/runbooks/scheduler-cutover.md)"
+  fi
+}
+
+set_solid_queue_vars() {
+  [ "$NEEDS_SOLID_QUEUE_VARS" = true ] || return 0
+  step "Setting Solid Queue config vars"
+  heroku config:set RAILS_DB_POOL=4 SOLID_QUEUE_IN_PUMA=true -a "$APP"
+  ok "RAILS_DB_POOL=4 and SOLID_QUEUE_IN_PUMA=true set (one dyno restart)"
+}
+
 preflight_repo() {
   step "Pre-flight: repository"
 
@@ -465,6 +495,28 @@ check_health() {
   done
 }
 
+# Solid Queue's supervisor starts with the dyno. A var can be set and the
+# supervisor can still fail to start, so ask the app: every process kind
+# must have a fresh heartbeat (rake deploy:verify_solid_queue). Two tries,
+# because the one-off dyno itself takes a while to boot and the first
+# heartbeats may land after the health check passed.
+check_solid_queue() {
+  step "Solid Queue check"
+
+  local attempt
+  for attempt in 1 2; do
+    if heroku run bin/rake deploy:verify_solid_queue -a "$APP"; then
+      ok "Solid Queue is running (supervisor, dispatcher, worker, scheduler)"
+      return 0
+    fi
+    [ "$attempt" -eq 1 ] && { info "Not yet — retrying in 30s"; sleep 30; }
+  done
+
+  fail "Solid Queue is not running. Live updates and the nightly jobs are off until it is."
+  info "Check: heroku logs -a $APP | grep SolidQueue ; and docs/runbooks/scheduler-cutover.md"
+  exit 1
+}
+
 # --- Main ---------------------------------------------------------------------
 
 main() {
@@ -473,6 +525,7 @@ main() {
   bold "============================================"
 
   preflight_environment
+  preflight_solid_queue_vars
   preflight_repo
   preflight_ci
 
@@ -500,6 +553,9 @@ main() {
   else
     green "    $APP ($sha):  PUSH deploy (no migrations)"
   fi
+  if [ "$NEEDS_SOLID_QUEUE_VARS" = true ]; then
+    yellow "    first: heroku config:set RAILS_DB_POOL=4 SOLID_QUEUE_IN_PUMA=true"
+  fi
   git log --oneline -5 | while IFS= read -r line; do
     info "  $line"
   done
@@ -518,6 +574,7 @@ main() {
 
   DEPLOY_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S")
 
+  set_solid_queue_vars
   capture_backup
 
   if [ "$NEEDS_MAINTENANCE" = true ]; then
@@ -533,6 +590,7 @@ main() {
 
   check_logs
   check_health
+  check_solid_queue
   run_smoke
 
   echo

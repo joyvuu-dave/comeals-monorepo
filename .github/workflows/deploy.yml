@@ -251,6 +251,25 @@ jobs:
         if: steps.compare.outputs.proceed == 'true'
         run: STAGING_KEEP_UP=1 bin/staging-rehearsal
 
+      # The two config vars Solid Queue needs (lib/deploy_config_check.rb).
+      # Production's release phase refuses the promote without them, so
+      # set them first, the way bin/deploy does. Setting them before the
+      # promote is safe: the running code ignores SOLID_QUEUE_IN_PUMA, and
+      # a pool of 4 is fine for one thread. Idempotent: when both are
+      # already right, nothing is written and no dyno restarts.
+      - name: Solid Queue config vars
+        if: steps.compare.outputs.proceed == 'true'
+        run: |
+          set -euo pipefail
+          pool=$(heroku config:get RAILS_DB_POOL -a "$PROD_APP")
+          in_puma=$(heroku config:get SOLID_QUEUE_IN_PUMA -a "$PROD_APP")
+          if [ "${pool:-0}" -ge 4 ] 2>/dev/null && [ -n "$in_puma" ]; then
+            echo "RAILS_DB_POOL=$pool and SOLID_QUEUE_IN_PUMA=$in_puma are set."
+          else
+            echo "Setting RAILS_DB_POOL=4 and SOLID_QUEUE_IN_PUMA=true (were '$pool' and '$in_puma')."
+            heroku config:set RAILS_DB_POOL=4 SOLID_QUEUE_IN_PUMA=true -a "$PROD_APP"
+          fi
+
       # Promote the slug staging just ran — production never gets a
       # second build. The Procfile release phase migrates production
       # during the promote; strong_migrations guarantees the old code
@@ -282,6 +301,9 @@ jobs:
           done
           if [ "$live" != "$candidate" ]; then
             echo "Production never started serving $candidate (still $live)."
+            # A release phase that failed (a refused deploy:verify_config,
+            # a migration error) shows here as a failed release.
+            heroku releases -a "$PROD_APP" -n 3 || true
             # Only roll back if the new release actually became current.
             # If the promote's release phase failed, production never
             # moved, and a rollback would undo the previous GOOD release.
@@ -297,6 +319,17 @@ jobs:
           echo "Production serves the candidate."
           if ! bin/smoke "$PROD_URL"; then
             echo "Smoke failed on production. Rolling back."
+            heroku rollback -a "$PROD_APP"
+            exit 1
+          fi
+          # Live updates and the nightly jobs run in Solid Queue, whose
+          # supervisor starts with the dyno. The release phase already
+          # refused a deploy without its config vars
+          # (deploy:verify_config); this asks the app whether every
+          # process kind then really came up. The old release does not
+          # need the supervisor, so rolling back restores live updates.
+          if ! heroku run bin/rake deploy:verify_solid_queue -a "$PROD_APP"; then
+            echo "Solid Queue is not running on production. Rolling back."
             heroku rollback -a "$PROD_APP"
             exit 1
           fi

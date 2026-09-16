@@ -14,6 +14,20 @@ no jobs and can be removed; the schedule lives in git.
 - `RecurringCatchUp` runs at Puma boot and enqueues any job that missed
   its last tick while the dyno was down.
 
+## Since 2026-09-16 the deploy enforces steps 2 and 3
+
+The Procfile's release phase runs `rake deploy:verify_config` before the
+migration. On production it refuses the release when `RAILS_DB_POOL` is
+under 4 or `SOLID_QUEUE_IN_PUMA` is unset, so Heroku keeps the previous
+release serving; the message names the exact `heroku config:set` to
+run. `bin/deploy` and the weekly workflow both set the two vars before
+they push or promote when production lacks them, and afterwards run
+`rake deploy:verify_solid_queue`, which fails unless the supervisor,
+dispatcher, worker and scheduler all have a heartbeat from the last two
+minutes. `bin/deploy` stops on that; the workflow rolls back. Staging is exempt from the
+config check (`COMEALS_STAGING`), because staging must not run jobs. The
+steps below are still the record of what happens and why.
+
 ## Steps
 
 Do not delete anything on the Scheduler dashboard until step 6. If Solid

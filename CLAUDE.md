@@ -127,11 +127,13 @@ SETTLEMENT (reconciliation): Rounded to cents using largest-remainder allocation
 - **Single app** (`comeals-monorepo`) with two buildpacks: Node (index 1) → Ruby (index 2)
 - Node buildpack: `npm install` → `npm run build` (Vite output to `public/`)
 - Ruby buildpack: `bundle install` → `rake assets:precompile` (Sprockets for ActiveAdmin)
-- Deploy: `bin/deploy` handles migration detection, backup, health checks
+- Deploy: `bin/deploy` handles migration detection, backup, health checks. It also sets `RAILS_DB_POOL=4` and `SOLID_QUEUE_IN_PUMA=true` when production lacks them, and checks afterwards that Solid Queue's four processes are running. The Procfile's release phase runs `rake deploy:verify_config` first, so a production release without those vars is refused and the old release keeps serving (`lib/deploy_config_check.rb`).
 - **Rake tasks:**
   - `rake billing:recalculate` — run daily to refresh resident balances from source data
   - `rake ledger:verify` — run daily to check every settled balance against its source data. Records every run, pass or fail, in `ledger_check_runs`. See `docs/money-path-observability.md`.
   - `rake reconciliations:create` — manual trigger to settle all unreconciled meals
+  - `rake deploy:verify_config` — release phase: refuse a production release missing the Solid Queue config vars
+  - `rake deploy:verify_solid_queue` — after a deploy: fail unless every Solid Queue process has a fresh heartbeat
 - **Job monitoring:** scheduled tasks wrap their body in `Healthcheck.monitor` (`app/services/healthcheck.rb`), which pings healthchecks.io on success or failure. Pings are off unless `HEALTHCHECKS_PING_KEY` is set (production only). A job that stops running entirely triggers a "check is late" email from healthchecks.io.
 - **Site monitoring:** Better Stack (uptime.betterstack.com, team t586972) checks `https://comeals.com` and `https://comeals.com/api/v1/version` every 3 minutes from four regions, and alerts by email when a keyword is missing from the response (`<title>Comeals</title>`, `"version"`). The public status page is `https://status.comeals.com` (a CNAME at DNSimple to `statuspage.betteruptime.com`). Phone-call alerts need a paid Better Stack seat; the free plan alerts by email only. This replaced a GitHub Actions cron workflow (`site-up.yml`, removed 2026-08-22): GitHub delays and drops scheduled runs, so the "every 5 minutes" workflow actually ran every 20–100 minutes, and its healthchecks.io check fired false "late" alerts.
 
