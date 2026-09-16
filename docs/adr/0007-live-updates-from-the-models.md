@@ -81,8 +81,10 @@ see an error for a write that was already in the database. Solid Queue
 now makes the HTTP call after the request has answered. The job tries a
 failing push three times, a few seconds apart, and then reports it
 (`Rails.error.report`), never raises: the write is committed, and a
-client that missed a push refetches on its next reconnect. A failure to
-enqueue is reported the same way, for the same reason.
+client that missed a push refetches on its next reconnect. Enqueuing is
+a small transaction of its own and can be refused for a conflict, so it
+is tried again (`RetryOnConflict`, three tries); a failure that stays is
+reported the same way, for the same reason.
 
 This means live updates need the Solid Queue supervisor running, the
 same as the nightly jobs (`docs/runbooks/scheduler-cutover.md`). In the

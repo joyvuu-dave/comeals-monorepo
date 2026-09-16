@@ -777,6 +777,10 @@ RSpec.describe 'Meals API' do
     # Without this, deleting the RetryOnConflict.call wrapper still passes
     # every example above — the rescue alone produces the same 409.
     it 'runs the write through RetryOnConflict' do
+      # The rows first: every row a factory writes pushes after commit, and
+      # each push goes through RetryOnConflict too (LiveUpdate.push).
+      token
+      meal
       allow(RetryOnConflict).to receive(:call).and_call_original
 
       post "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: {

@@ -268,6 +268,50 @@ RSpec.describe LiveUpdate do
     end
   end
 
+  # The enqueue is a transaction of its own, after the write's commit, so
+  # Postgres can refuse it for a conflict like any other write. These run
+  # with no test transaction open, because RetryOnConflict never retries
+  # inside one.
+  describe 'an enqueue Postgres refuses for a conflict' do
+    include_context 'with no test transaction'
+
+    before do
+      create(:community)
+      allow(RetryOnConflict).to receive(:sleep)
+      allow(Rails.error).to receive(:report)
+    end
+
+    it 'is tried again, and the push goes out' do
+      calls = 0
+      allow(LivePushJob).to receive(:perform_later) do |*args|
+        calls += 1
+        raise ActiveRecord::SerializationFailure, 'conflict' if calls == 1
+
+        LivePushJob.perform_now(*args)
+      end
+
+      described_class.residents
+
+      expect(calls).to eq(2)
+      expect(Pusher).to have_received(:trigger)
+        .with("community-#{Community.instance.id}-residents", 'update', { message: 'residents updated' }).once
+      expect(Rails.error).not_to have_received(:report).with(anything,
+                                                             hash_including(context: hash_including(:channel)))
+    end
+
+    it 'is reported with the channel once the tries run out, and the caller does not fail' do
+      allow(LivePushJob).to receive(:perform_later).and_raise(ActiveRecord::SerializationFailure, 'conflict')
+
+      expect { described_class.residents }.not_to raise_error
+
+      expect(LivePushJob).to have_received(:perform_later).exactly(RetryOnConflict::MAX_ATTEMPTS).times
+      expect(Rails.error).to have_received(:report)
+        .with(an_instance_of(ActiveRecord::SerializationFailure),
+              hash_including(handled: true, context: { channel: "community-#{Community.instance.id}-residents" }))
+        .once
+    end
+  end
+
   describe 'notes inside a transaction' do
     include_context 'with no test transaction'
 

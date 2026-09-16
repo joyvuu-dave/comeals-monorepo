@@ -38,10 +38,13 @@
 # and Solid Queue makes the HTTP call to Pusher outside the request. The
 # request never waits on Pusher, so a slow Pusher cannot turn a committed
 # write into a timeout (LivePushJob says how long that wait could be).
-# Enqueuing can fail too (the database is gone right after the commit),
-# and that is reported, not raised: the write has committed, and raising
-# here would answer 500 for a change that is in the database. A client
-# that missed a push refetches on its next reconnect (data_store_app.js
+# Enqueuing is a small transaction of its own, at SERIALIZABLE like
+# everything else, so Postgres can refuse it for a conflict; it is then
+# tried again the way the API's meal writes are (RetryOnConflict). A
+# failure that stays (the database is gone right after the commit) is
+# reported, not raised: the write has committed, and raising here would
+# answer 500 for a change that is in the database. A client that missed
+# a push refetches on its next reconnect (data_store_app.js
 # handleReconnect).
 module LiveUpdate
   # What one transaction (or one manual batch) has to tell the clients.
@@ -192,7 +195,7 @@ module LiveUpdate
     end
 
     def push(channel, data, options = nil)
-      LivePushJob.perform_later(channel, data, options)
+      RetryOnConflict.call { LivePushJob.perform_later(channel, data, options) }
     rescue StandardError => e
       # Whatever went wrong on the way to the queue, the write is
       # committed and the caller must not fail.
