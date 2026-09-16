@@ -7,6 +7,7 @@
 
 class ApplicationMailer
   include GeneratedUrlHelpersModule
+  include GeneratedMountedHelpers
 
   class << self
     sig { returns(::ActionMailer::MessageDelivery) }

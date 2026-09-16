@@ -8,4 +8,5 @@
 class FallbackController
   include GeneratedUrlHelpersModule
   include GeneratedPathHelpersModule
+  include GeneratedMountedHelpers
 end

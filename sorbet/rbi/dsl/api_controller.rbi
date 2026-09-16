@@ -8,4 +8,5 @@
 class ApiController
   include GeneratedUrlHelpersModule
   include GeneratedPathHelpersModule
+  include GeneratedMountedHelpers
 end
