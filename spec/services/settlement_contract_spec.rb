@@ -213,7 +213,7 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
 
       per_meal = MealCharge.for_reconciliation(reconciliation).group(:meal_id).sum(:amount)
       expect(per_meal.keys).to match_array(reconciliation.meals.pluck(:id))
-      per_meal.each_value { |sum| expect(sum.abs).to be <= Reconciliation::ZERO_SUM_EPSILON }
+      per_meal.each_value { |sum| expect(sum).to eq(0) }
     end
 
     it 'stores exactly the rounded balances it computes, with zero balances left out' do

@@ -185,6 +185,26 @@ RSpec.describe MealLedger do
       expect(lines.sum(BigDecimal('0'), &:amount)).to eq(BigDecimal('0'))
     end
 
+    it 'shares a subsidized credit at the ledger grain, the leftover unit to the lowest resident id' do
+      community.update!(cap: BigDecimal('0.50'))
+      cooks = %w[A B C].map { |name| resident("Cook #{name}") }
+      eater = resident('Eater')
+
+      # 2 units of multiplier * 0.50 = 1.00 charged, against 3.00 spent.
+      # 1.00 across three cooks who spent the same: 0.33333334 and two
+      # 0.33333333, and the three sum to exactly what the eater is charged.
+      meal = create(:meal, community: community)
+      cooks.each { |cook| create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('1')) }
+      create(:meal_resident, meal: meal, resident: eater, community: community)
+
+      lines = ledger_for(meal).lines
+      credits = lines.select { |line| line.kind == :credit }.sort_by(&:resident_id)
+
+      expect(credits.map(&:amount)).to eq([BigDecimal('0.33333334'), BigDecimal('0.33333333'),
+                                           BigDecimal('0.33333333')])
+      expect(lines.sum(BigDecimal('0'), &:amount)).to eq(BigDecimal('0'))
+    end
+
     it 'carries the multiplier on a debit and leaves it off a credit' do
       cook = resident('Cook')
       child = resident('Child', multiplier: 1)
@@ -198,6 +218,97 @@ RSpec.describe MealLedger do
       expect(lines.find { |line| line.kind == :debit }.multiplier).to eq(1)
       expect(lines.find { |line| line.kind == :credit }.multiplier).to be_nil
       expect(lines.find { |line| line.kind == :debit }.bill_amount).to be_nil
+    end
+  end
+
+  # The grain: every line is a whole number of units of 10^-8 dollars,
+  # shares are allocated, and a meal's lines sum to exactly zero (MODELS.md,
+  # "The ledger grain"; ADR 0008; #85).
+  describe 'the ledger grain' do
+    it 'charges the worked example in MODELS.md: the leftover unit goes to the lowest resident id' do
+      cook = resident('Cook')
+      adults = %w[One Two Three].map { |name| resident("Adult #{name}") }
+      child = resident('Child', multiplier: 1)
+
+      meal = create(:meal, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('60'))
+      (adults + [child]).each { |person| create(:meal_resident, meal: meal, resident: person, community: community) }
+
+      lines = ledger_for(meal).lines
+      debits = lines.select { |line| line.kind == :debit }.sort_by(&:resident_id)
+
+      expect(debits.map(&:amount)).to eq([BigDecimal('-17.14285715'), BigDecimal('-17.14285714'),
+                                          BigDecimal('-17.14285714'), BigDecimal('-8.57142857')])
+      expect(debits.map(&:unit_cost)).to all(eq(BigDecimal('8.57142857')))
+      expect(lines.sum(BigDecimal('0'), &:amount)).to eq(BigDecimal('0'))
+    end
+
+    it 'puts an attendee line before a guest line of the same resident in the tie order' do
+      cook = resident('Cook')
+      host = resident('Host', multiplier: 1)
+      other = resident('Other', multiplier: 1)
+
+      # $1.00 across three units: one leftover unit, and the host has the
+      # lowest resident id twice over, once as an attendee and once as a
+      # guest's host. The attendee line gets it.
+      meal = create(:meal, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('1'))
+      create(:meal_resident, meal: meal, resident: host, community: community)
+      create(:meal_resident, meal: meal, resident: other, community: community)
+      create(:guest, meal: meal, resident: host, multiplier: 1)
+
+      debits = ledger_for(meal).lines.reject { |line| line.kind == :credit }
+      by_kind = debits.to_h { |line| [[line.resident_id, line.kind], line.amount] }
+
+      expect(by_kind).to eq(
+        [host.id, :debit] => BigDecimal('-0.33333334'),
+        [host.id, :guest_debit] => BigDecimal('-0.33333333'),
+        [other.id, :debit] => BigDecimal('-0.33333333')
+      )
+    end
+
+    it 'puts the lower guest id first between two guests of one host' do
+      cook = resident('Cook')
+      host = resident('Host', multiplier: 0)
+      other = resident('Other', multiplier: 1)
+
+      meal = create(:meal, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('1'))
+      create(:meal_resident, meal: meal, resident: host, community: community)
+      create(:meal_resident, meal: meal, resident: other, community: community)
+      first_guest = create(:guest, meal: meal, resident: host, multiplier: 1)
+      second_guest = create(:guest, meal: meal, resident: host, multiplier: 1)
+
+      # A resident is charged for each guest separately, and both guest lines
+      # carry the host's id, so the ledger's own order is read off the
+      # guest rows: it hands the units out in that order.
+      ledger = ledger_for(meal)
+      guest_lines = ledger.lines.select { |line| line.kind == :guest_debit }
+
+      expect(first_guest.id).to be < second_guest.id
+      expect(guest_lines.map(&:amount)).to eq([BigDecimal('-0.33333334'), BigDecimal('-0.33333333')])
+      expect(ledger.lines.find { |line| line.kind == :debit && line.resident_id == host.id }.amount)
+        .to eq(BigDecimal('0'))
+    end
+
+    it 'cuts the unit cost a screen shows to the grain' do
+      cook = resident('Cook')
+      eaters = %w[A B C].map { |name| resident("Eater #{name}", multiplier: 1) }
+
+      meal = create(:meal, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('1'))
+      eaters.each { |eater| create(:meal_resident, meal: meal, resident: eater, community: community) }
+
+      summary = ledger_for(meal).summary_for(meal)
+
+      expect(summary.unit_cost).to eq(BigDecimal('0.33333333'))
+      expect(summary.effective_cost).to eq(BigDecimal('1'))
+    end
+
+    it 'refuses an amount that is not a whole number of units' do
+      expect { described_class.units(BigDecimal('0.000000001')) }
+        .to raise_error(ArgumentError, /not a whole number of 10\^-8 dollars/)
+      expect(described_class.units(BigDecimal('12.34'))).to eq(1_234_000_000)
     end
   end
 

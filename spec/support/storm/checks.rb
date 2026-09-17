@@ -20,8 +20,6 @@ module Storm
   #     storm touched reads the same with the cache and without it. A
   #     stale entry that outlived the writes would show here.
   class Checks
-    NOISE = Reconciliation::ZERO_SUM_EPSILON
-
     def self.call(plan:, transport:)
       new(plan, transport).call
     end
@@ -53,7 +51,7 @@ module Storm
     def check_ledger(rows)
       label = "meal #{rows.id}"
       lines = MealLedger.new([rows]).lines
-      problem(label, 'lines do not sum to zero') if lines.sum(BigDecimal('0'), &:amount).abs > NOISE
+      problem(label, 'lines do not sum to zero') unless lines.sum(BigDecimal('0'), &:amount).zero?
       net = lines.group_by(&:resident_id).transform_values { |l| l.sum(BigDecimal('0'), &:amount) }
       expect_close(net, PlainLedger.net_by_meal([RandomLedger.plain(rows)]).transform_keys(&:last),
                    "#{label}: ledger and oracle differ")
@@ -79,7 +77,7 @@ module Storm
       (actual.keys | expected.keys).each do |id|
         a = actual.fetch(id, BigDecimal('0'))
         e = expected.fetch(id, BigDecimal('0'))
-        @problems << "#{label} for resident #{id}: #{a.to_s('F')} vs #{e.to_s('F')}" if (a - e).abs > NOISE
+        @problems << "#{label} for resident #{id}: #{a.to_s('F')} vs #{e.to_s('F')}" if a != e
       end
     end
 

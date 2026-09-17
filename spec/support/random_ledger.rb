@@ -18,19 +18,24 @@ module RandomLedger
 
     resident_multipliers = [0, 1, 2]
     guest_multipliers = [1, 2]
+    # Rows built in memory get ids the way saved rows would, counting up
+    # in the order they are made: the ledger breaks a tie between two
+    # guests of one host by guest id, so a row must have one.
     eaters = RESIDENTS.sample(rng.rand(0..12), random: rng)
-    eaters.each do |id|
-      meal.meal_residents.build(resident_id: id, multiplier: resident_multipliers.sample(random: rng))
+    eaters.each_with_index do |id, row|
+      meal.meal_residents.build(id: (index * 100) + row + 1, resident_id: id,
+                                multiplier: resident_multipliers.sample(random: rng))
     end
-    rng.rand(0..4).times do
-      meal.guests.build(resident_id: RESIDENTS.sample(random: rng), multiplier: guest_multipliers.sample(random: rng))
+    rng.rand(0..4).times do |row|
+      meal.guests.build(id: (index * 100) + row + 1, resident_id: RESIDENTS.sample(random: rng),
+                        multiplier: guest_multipliers.sample(random: rng))
     end
 
     # Cooks may also eat (cook ids drawn from everyone, eaters included).
-    RESIDENTS.sample(rng.rand(0..3), random: rng).each do |id|
+    RESIDENTS.sample(rng.rand(0..3), random: rng).each_with_index do |id, row|
       no_cost = rng.rand < 0.15
       amount = no_cost ? BigDecimal('0') : BigDecimal(rng.rand(0..cents_max)) / 100
-      meal.bills.build(resident_id: id, amount: amount, no_cost: no_cost)
+      meal.bills.build(id: (index * 100) + row + 1, resident_id: id, amount: amount, no_cost: no_cost)
     end
     # The rows built above are all there are. Without this, Rails reads
     # an association on a new meal that has an id with a query for more
@@ -49,9 +54,9 @@ module RandomLedger
     {
       id: meal.id,
       cap: meal.cap,
-      bills: meal.bills.map { |b| { resident_id: b.resident_id, amount: b.amount, no_cost: b.no_cost } },
-      attendees: meal.meal_residents.map { |a| { resident_id: a.resident_id, multiplier: a.multiplier } },
-      guests: meal.guests.map { |g| { host_id: g.resident_id, multiplier: g.multiplier } }
+      bills: meal.bills.map { |b| { id: b.id, resident_id: b.resident_id, amount: b.amount, no_cost: b.no_cost } },
+      attendees: meal.meal_residents.map { |a| { id: a.id, resident_id: a.resident_id, multiplier: a.multiplier } },
+      guests: meal.guests.map { |g| { id: g.id, host_id: g.resident_id, multiplier: g.multiplier } }
     }
   end
 end

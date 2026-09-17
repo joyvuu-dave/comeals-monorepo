@@ -53,7 +53,6 @@ RSpec.describe 'a write storm against one meal, with a settlement in it' do
     [2, 2, 2, 1, 0, 2].map { |m| create(:resident, community: community, unit: unit, multiplier: m) }
   end
   let(:meal) { create(:meal, community: community, date: Date.yesterday) }
-  let(:noise) { Reconciliation::ZERO_SUM_EPSILON }
 
   # --- one write, the way the API does it -----------------------------------
 
@@ -212,14 +211,14 @@ RSpec.describe 'a write storm against one meal, with a settlement in it' do
     (actual.keys | expected.keys).each do |id|
       a = actual.fetch(id, BigDecimal('0'))
       e = expected.fetch(id, BigDecimal('0'))
-      expect((a - e).abs).to be <= noise, "#{label} for resident #{id}: #{a.to_s('F')} vs #{e.to_s('F')}"
+      expect(a).to eq(e), "#{label} for resident #{id}: #{a.to_s('F')} vs #{e.to_s('F')}"
     end
   end
 
   def expect_ledger_sound(meal_id, label)
     rows = Meal.preload(:bills, :meal_residents, :guests).find(meal_id)
     lines = MealLedger.new([rows]).lines
-    expect(lines.sum(BigDecimal('0'), &:amount).abs).to be <= noise, "#{label}: lines do not sum to zero"
+    expect(lines.sum(BigDecimal('0'), &:amount)).to eq(0), "#{label}: lines do not sum to zero"
     net = lines.group_by(&:resident_id).transform_values { |l| l.sum(BigDecimal('0'), &:amount) }
     expect_close(net, PlainLedger.net_by_meal([RandomLedger.plain(rows)]).transform_keys(&:last),
                  "#{label}: ledger and oracle differ")

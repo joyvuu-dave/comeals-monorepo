@@ -8,8 +8,9 @@
 #
 # Money crosses the wire as strings (a BigDecimal encodes as a string under
 # the Oj Rails-mode encoder, see config/initializers/alba.rb). unit_cost is
-# a full-precision intermediate; the balances are rounded to cents by the
-# same largest-remainder step a real settlement uses. The sign carries the
+# the meal's cost per unit of multiplier cut to the ledger grain, a display
+# figure; the balances are rounded to cents by the same largest-remainder
+# step a real settlement uses. The sign carries the
 # direction: positive means the community owes the resident.
 #
 # Contract and design notes: COLLECT_APP.md.

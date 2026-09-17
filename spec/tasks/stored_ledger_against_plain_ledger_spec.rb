@@ -27,8 +27,6 @@ RSpec.describe 'the stored ledger against the plain ledger', type: :task do
     Rake::Task['billing:recalculate'].reenable
   end
 
-  def noise = Reconciliation::ZERO_SUM_EPSILON
-
   def recalculate!
     Rake::Task['billing:recalculate'].reenable
     Rake::Task['billing:recalculate'].invoke
@@ -68,7 +66,7 @@ RSpec.describe 'the stored ledger against the plain ledger', type: :task do
     (actual.keys | expected.keys).each do |key|
       a = actual.fetch(key, BigDecimal('0'))
       e = expected.fetch(key, BigDecimal('0'))
-      expect((a - e).abs).to be <= noise, "#{label} #{key.inspect}: stored #{a.to_s('F')}, oracle #{e.to_s('F')}"
+      expect(a).to eq(e), "#{label} #{key.inspect}: stored #{a.to_s('F')}, oracle #{e.to_s('F')}"
     end
   end
 

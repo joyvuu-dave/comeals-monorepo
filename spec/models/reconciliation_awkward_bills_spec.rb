@@ -10,7 +10,7 @@ require 'rails_helper'
 # the money model makes, against numbers computed by hand:
 #
 #   - the rounded balances sum to exactly zero, and
-#   - every rounded balance is within one cent of the exact full-precision
+#   - every rounded balance is within one cent of the exact ledger-grain
 #     amount, with penny ties broken by lowest resident_id.
 #
 # The last example stops hand-computing and settles a whole batch of
@@ -229,10 +229,8 @@ RSpec.describe Reconciliation do
     expect(balances[cook.id]).to be > BigDecimal('10_000')
     expect(balances.values.sum(BigDecimal('0'))).to eq(BigDecimal('0'))
     balances.each do |resident_id, cents|
-      # Within one cent of exact. The tolerance is a tiny amount more than
-      # 0.01 only because a share that does not terminate (73.31 / 7)
-      # leaves BigDecimal noise some twenty digits down.
-      expect((cents - exact[resident_id]).abs).to be <= BigDecimal('0.0100000001')
+      # Within one cent of exact.
+      expect((cents - exact[resident_id]).abs).to be <= BigDecimal('0.01')
     end
   end
 end

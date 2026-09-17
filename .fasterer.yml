@@ -3,9 +3,15 @@
 # and the difference is nanoseconds per call:
 #   Hash#fetch(key, default) instead of Hash#fetch(key) { default }
 #   each_with_index instead of a while loop
+# A third is off because on the money path the "fast" form is the one
+# that allocates: sort_by builds a key array per element, and sort with a
+# comparison block builds nothing. MealLedger#eaters and
+# LargestRemainderSplit sort that way, and
+# spec/services/money_path_allocations_spec.rb pins what they allocate.
 speedups:
   fetch_with_argument_vs_block: false
   each_with_index_vs_while: false
+  sort_vs_sort_by: false
 
 exclude_paths:
   - "db/migrate/**/*.rb"

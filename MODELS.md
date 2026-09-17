@@ -229,24 +229,70 @@ Cook pays for groceries
         v
     MealLedger.financials_for      total_cost = sum of bills (no_cost skipped)
                                    effective_cost = min(total_cost, cap * total multiplier)
-                                   unit_cost = effective_cost / total multiplier
+                                   unit_cost = effective_cost / total multiplier, cut to the grain
         |
         +-------> credit line  for each bill:   + cook's share of effective_cost
-        +-------> debit line   for each eater:  - unit_cost * multiplier
-        +-------> guest_debit  for each guest:  - unit_cost * multiplier, charged to the host
+        +-------> debit line   for each eater:  - eater's share of effective_cost, by multiplier
+        +-------> guest_debit  for each guest:  - guest's share of effective_cost, charged to the host
         |
         v
-    MealLedger#balances            sum of a resident's lines (full precision)
+    MealLedger#balances            sum of a resident's lines (at the grain, see below)
         |
-        +-----> rake billing:recalculate  ->  resident_balances   (running, unrounded)
-        +-----> Settlement#settle!        ->  meal_charges        (every line, unrounded)
+        +-----> rake billing:recalculate  ->  resident_balances   (running, at the grain)
+        +-----> Settlement#settle!        ->  meal_charges        (every line, at the grain)
                                               reconciliation_balances (rounded to cents)
 ```
+
+Every share above is allocated, never divided. See "The ledger grain".
 
 Signs: positive means the community owes the person. A credit is positive, a
 debit is negative. This is set once in `MealLedger` ("Signs" section) and
 every stored amount inherits it. No screen shows the sign itself; see
 CLAUDE.md money rule 11.
+
+### The ledger grain
+
+Every amount the ledger produces is a whole number of units of 10^-8
+dollars. That is the grain of the money columns (DECIMAL(16,8)) and of every
+line, so what is computed is what is stored. Nothing on the money path
+holds more digits than that.
+
+A split never divides. When an amount has to be shared out in proportion to
+weights, it is allocated by largest remainder at the grain:
+
+1. Each line first gets the whole units of its exact share: the amount
+   times its weight, divided by the total weight, rounded down.
+2. The units left over (fewer than there are lines) go one each to the
+   lines whose exact share lost the most in step 1.
+3. Ties go to the lowest resident id. Between an attendee line and a guest
+   line of the same resident, the attendee line comes first. Between two
+   guest lines of the same host, the lower guest id comes first.
+
+So the lines of a split sum to exactly the amount that was split, and each
+line is within one unit of its exact share.
+
+Two splits happen on a meal:
+
+- The effective cost across the eaters (attendees and guests), each
+  weighted by their multiplier. These are the debit and guest_debit lines,
+  negated.
+- On a subsidized meal only, the effective cost across the cooks, each
+  weighted by their bill amount. These are the credit lines. On a meal that
+  is not subsidized, each cook's credit is their bill amount as it is.
+
+Both splits give out the same effective cost, so a meal's credits and debits
+sum to exactly zero, and every check on the money path is an equality: no
+tolerance, no epsilon. The database holds the same rule: the deferred
+constraint trigger `meal_charges_sum_zero` refuses a commit that leaves a
+meal's stored lines summing to anything but zero.
+
+The unit cost a screen shows (effective cost divided by the total
+multiplier) is cut to the grain, rounded down. It is a figure for a person
+to read. No line is computed from it, so a debit of an eater with
+multiplier 2 can differ from twice the unit cost by one unit.
+
+Rounding to cents happens once, at settlement, on the per-resident totals,
+by the same largest-remainder method at the cent (CLAUDE.md money rule 5).
 
 ### Bill
 
@@ -472,9 +518,9 @@ Reconciliation ----< ReconciliationBalance ---> Resident
   `Settlement.allocate_to_cents`: largest-remainder rounding (Hamilton's
   method) so the cent amounts sum to exactly zero. Each amount is within one
   cent of its exact value. Ties go to the lowest `resident_id`. It raises if
-  the input does not already sum to zero (within `ZERO_SUM_EPSILON`) or if
-  the output does not sum to exactly zero. `rake ledger:verify` recomputes
-  through this method.
+  the input does not already sum to exactly zero (a meal's lines always do,
+  see "The ledger grain") or if the output does not. `rake ledger:verify`
+  recomputes through this method.
 - `Settlement#rewrite!` — repair only: rewrites the ledger of an existing
   row after both tables were cleared inside one transaction with the
   settled-write bypass on (`docs/runbooks/settled-data-repair.md`).
@@ -512,9 +558,11 @@ A charge belongs to a reconciliation only through its meal:
 - `kind` — `credit` (cooked), `debit` (attended), or `guest_debit` (brought a
   guest). CHECK `meal_charges_kind_known`. `KIND_LABELS` gives the words the
   statement pages show.
-- `amount` DECIMAL(16,8) — signed the MealLedger way, full precision. Show
-  it only through `BalanceDisplayHelper#charge_amount_tag`.
-- `unit_cost` DECIMAL(16,8) — the meal's cost per multiplier unit
+- `amount` DECIMAL(16,8) — signed the MealLedger way, a whole number of
+  units at the ledger grain. Show it only through
+  `BalanceDisplayHelper#charge_amount_tag`.
+- `unit_cost` DECIMAL(16,8) — the meal's cost per multiplier unit, cut to
+  the grain; a display figure, no line is computed from it
 - `multiplier` — units eaten. Present on debits only (CHECK
   `meal_charges_multiplier_on_debits_only`, `_non_negative`).
 - `bill_amount` DECIMAL(12,8) — what the cook actually spent, before any cap.
@@ -533,7 +581,10 @@ several `guest_debit` lines on one meal, so those are not unique.
 is larger than `amount`. This is the only `subsidized?` in the app.
 
 **Immutability:** `AppendOnly` in the model; the `meal_charges_protect`
-trigger refuses every UPDATE and DELETE in the database. Reconciliations
+trigger refuses every UPDATE and DELETE in the database. The deferred
+constraint trigger `meal_charges_sum_zero` refuses a commit that leaves a
+meal's lines summing to anything but zero, and the repair bypass does not
+turn it off. Reconciliations
 settled before 2026-08-02 have no lines (see
 `docs/money-path-observability.md`).
 
@@ -583,7 +634,7 @@ ResidentBalance ----> Resident (one-to-one)
 
 **Key fields:**
 
-- `amount` DECIMAL(16,8) — full precision, signed the MealLedger way
+- `amount` DECIMAL(16,8) — at the ledger grain, signed the MealLedger way
 - `resident_id` unique (`index_resident_balances_on_resident_id`)
 - CHECK `resident_balances_amount_not_nan`
 
@@ -804,30 +855,43 @@ birthday never changes what someone was charged for a past meal. The API creates
 database default of 2 (an adult guest); only an admin can set a different
 value.
 
-`MealLedger` does not read `Multiplier`. It sums the numbers and divides by
-the total; it does not know that 2 means one adult. Pricing policy lives in
+`MealLedger` does not read `Multiplier`. It sums the numbers and shares the
+cost out in proportion to them; it does not know that 2 means one adult. Pricing policy lives in
 `Multiplier` and the nightly task; arithmetic lives in the ledger.
 
-A meal's total multiplier is the sum across all attendees and guests. Cost
-per unit = effective cost / total multiplier. An adult pays twice what a
-half-price child pays, and a free child pays nothing.
+A meal's total multiplier is the sum across all attendees and guests. The
+effective cost is shared out across the eaters in proportion to their
+multipliers, by largest remainder at the ledger grain ("The ledger grain"
+above). An adult pays twice what a half-price child pays, give or take one
+unit of 10^-8 dollars, and a free child pays nothing.
 
 A meal whose total multiplier is 0 — nobody there is old enough to be
-charged — has a unit cost of 0 and makes no lines. The cook absorbs the cost
-and gets no credit.
+charged — has a unit cost of 0, and every one of its lines is 0: each cook
+is credited 0 and each eater is charged 0. The cook absorbs the cost. The
+zero lines still exist, because a zero line is a fact about what happened
+and a settled meal's screen reads its lines.
 
-Example: $60 meal, 3 adults and 1 half-price child attending:
+Example: $60 meal, 3 adults (residents 1, 2, 3) and 1 half-price child
+(resident 4) attending:
 
 ```
 total_multiplier = 2 + 2 + 2 + 1 = 7
-unit_cost = $60 / 7 = $8.57142857...
-adult debit = $8.57142857 * 2 = $17.14285714...
-child debit = $8.57142857 * 1 = $8.57142857...
+$60 is 6,000,000,000 units
+adult share  = 6,000,000,000 * 2 / 7 = 1,714,285,714.28...  -> 1,714,285,714 units
+child share  = 6,000,000,000 * 1 / 7 =   857,142,857.14...  ->   857,142,857 units
+handed out so far: 5,999,999,999; one unit is left over
+the adults lost .28 of a unit, the child .14: the unit goes to an adult,
+and between the three adults to the lowest resident id
+adult 1 debit = $17.14285715
+adult 2 debit = $17.14285714
+adult 3 debit = $17.14285714
+child   debit = $ 8.57142857
+sum           = $60.00000000, exactly the cook's credit
+unit cost shown on screens = $60 / 7 cut to the grain = $8.57142857
 ```
 
-Full precision is kept during the billing period. At settlement, balances
-are rounded to cents by largest-remainder allocation, so the rounded
-balances sum to exactly zero.
+At settlement, each resident's total is rounded to cents by the same
+largest-remainder method, so the rounded balances sum to exactly zero.
 
 ---
 
@@ -836,20 +900,27 @@ balances sum to exactly zero.
 - `MealLedger` (`app/services/meal_ledger.rb`) — the one place the
   arithmetic lives. Give it meals with `bills`, `meal_residents`, and
   `guests` preloaded; it runs no queries of its own. `lines` returns every
-  credit, debit, and guest_debit at full precision; `balances(resident_ids)`
+  credit, debit, and guest_debit at the ledger grain; `balances(resident_ids)`
   sums them per resident; `summary_for(meal)` returns `total_cost`,
   `effective_cost`, `unit_cost`, and `subsidized` for a screen. Caps are
   applied here: when `cap * total multiplier` is less than the bills, the
   eaters pay the capped amount and each cook is credited their share of it
-  in proportion to what they spent.
+  in proportion to what they spent. Every share is allocated by
+  `LargestRemainderSplit` (`app/services/largest_remainder_split.rb`), so
+  a meal's lines sum to exactly zero.
 - `Reconciliation#settlement_balances` — the one place that rounds to cents.
 - `MealCostSummary` (`app/services/meal_cost_summary.rb`) — what a meal cost,
   for a screen. An open meal is computed through `MealLedger`. A settled
   meal reads its stored `meal_charges`, so today's cap is never applied to a
   meal settled under an older one. A settled meal with attendance but no
   lines (settled before 2026-08-02) returns nil and the screen shows nothing.
-- `spec/support/oracle/plain_ledger.rb` — the test oracle, not production.
-  See Resident.
+- `spec/support/oracle/plain_ledger.rb` — the test oracle, not production:
+  a second copy of the arithmetic written from this file and CLAUDE.md by
+  someone who had not read the code. Compared in
+  `spec/services/meal_ledger_against_plain_ledger_spec.rb` and
+  `spec/tasks/stored_ledger_against_plain_ledger_spec.rb`. Never edit it to
+  match `MealLedger`; when a rule changes, change the rule here first and
+  have a fresh reader change the oracle.
 
 ---
 
@@ -871,9 +942,10 @@ prepended (#26). Included by Reconciliation, ReconciliationBalance,
 MealCharge, and LedgerCheckRun. Each has a database trigger that refuses the
 same writes for paths that skip callbacks (`update_all`, `delete_all`, psql):
 `reconciliation_balances_protect_settled`, `meal_charges_protect`,
-`ledger_check_runs_protect`. The deferred constraint trigger
-`reconciliation_balances_sum_zero` checks every settlement sums to zero at
-commit.
+`ledger_check_runs_protect`. Two deferred constraint triggers check the
+books at commit: `reconciliation_balances_sum_zero`, that every settlement's
+balances sum to zero, and `meal_charges_sum_zero`, that every meal's lines
+do.
 
 **Settled meals are frozen.** `ReconciledMealImmutability` refuses create,
 update, and destroy on Bill, MealResident, and Guest once their meal (or the

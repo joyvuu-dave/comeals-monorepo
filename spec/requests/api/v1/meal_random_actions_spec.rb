@@ -48,8 +48,6 @@ RSpec.describe 'random action sequences against one meal, through the API' do
     Rails.cache.clear
   end
 
-  def noise = Reconciliation::ZERO_SUM_EPSILON
-
   # JSON, as the SPA sends it. (A form-encoded empty bills list reaches the
   # controller as one empty string; it answered 500 until 2026-09-10 and is
   # refused with 400 now, see update_bills_spec.rb.)
@@ -266,15 +264,14 @@ RSpec.describe 'random action sequences against one meal, through the API' do
     (actual.keys | expected.keys).each do |id|
       a = actual.fetch(id, BigDecimal('0'))
       e = expected.fetch(id, BigDecimal('0'))
-      expect((a - e).abs).to be <= noise,
-                             "#{where}: #{label} differ for resident #{id}: #{a.to_s('F')} vs #{e.to_s('F')}"
+      expect(a).to eq(e), "#{where}: #{label} differ for resident #{id}: #{a.to_s('F')} vs #{e.to_s('F')}"
     end
   end
 
   def expect_ledger_sound(model)
     rows = Meal.preload(:bills, :meal_residents, :guests).find(meal.id)
     lines = MealLedger.new([rows]).lines
-    expect(lines.sum(BigDecimal('0'), &:amount).abs).to be <= noise, "#{where}: lines do not sum to zero"
+    expect(lines.sum(BigDecimal('0'), &:amount)).to eq(0), "#{where}: lines do not sum to zero"
     net = lines.group_by(&:resident_id).transform_values { |l| l.sum(BigDecimal('0'), &:amount) }
     expect_close(net, PlainLedger.net_by_meal([RandomLedger.plain(rows)]).transform_keys(&:last), 'ledger and oracle')
     return unless model[:settled]

@@ -395,10 +395,10 @@ RSpec.describe Reconciliation do
     end
 
     it 'fails loudly when residual pennies exhaust the deduction candidates' do
-      # The input guard above makes this path unreachable; loosen it to prove
-      # the second defensive layer raises descriptively instead of crashing
-      # with NoMethodError on a nil candidate.
-      stub_const('Reconciliation::ZERO_SUM_EPSILON', BigDecimal('1'))
+      # The input guard above makes this path unreachable; switch it off to
+      # prove the second defensive layer raises descriptively instead of
+      # crashing with NoMethodError on a nil candidate.
+      allow(Settlement).to receive(:assert_balanced_input!)
       unbalanced = { 1 => BigDecimal('0.055') }
 
       expect { Settlement.allocate_to_cents(unbalanced, reconciliation_id: reconciliation.id) }
@@ -406,29 +406,33 @@ RSpec.describe Reconciliation do
     end
 
     it 'fails loudly when residual pennies exhaust the award candidates' do
-      stub_const('Reconciliation::ZERO_SUM_EPSILON', BigDecimal('1'))
+      allow(Settlement).to receive(:assert_balanced_input!)
       unbalanced = { 1 => BigDecimal('-0.055') }
 
       expect { Settlement.allocate_to_cents(unbalanced, reconciliation_id: reconciliation.id) }
         .to raise_error(/books do not balance/)
     end
 
-    it 'tolerates an imbalance of exactly ZERO_SUM_EPSILON, and refuses one just over it' do
-      epsilon = Reconciliation::ZERO_SUM_EPSILON
+    it 'refuses an imbalance of one unit of the ledger grain, and accepts exact zero' do
+      # There is no epsilon. The ledger allocates whole units of 10^-8
+      # dollars, so its balances sum to exactly zero, and one unit off is
+      # an upstream bug (#85: the old epsilon let a large correct ledger
+      # fail the daily check, and would have let a small wrong one pass).
+      one_unit = BigDecimal('0.00000001')
 
-      expect(Settlement.allocate_to_cents({ 1 => epsilon }, reconciliation_id: reconciliation.id)).to eq(1 => 0)
-      expect do
-        Settlement.allocate_to_cents({ 1 => epsilon + BigDecimal('1e-9') }, reconciliation_id: reconciliation.id)
-      end
+      expect(Settlement.allocate_to_cents({ 1 => BigDecimal('0') }, reconciliation_id: reconciliation.id))
+        .to eq(1 => 0)
+      expect { Settlement.allocate_to_cents({ 1 => one_unit }, reconciliation_id: reconciliation.id) }
         .to raise_error(/do not sum to zero/)
     end
 
-    it 'tolerates BigDecimal-division noise far below a cent' do
-      # 10/3 split three ways: raw values sum to ~1e-20, not exactly zero.
-      third = BigDecimal('10') / BigDecimal('3')
-      noisy = { 1 => third, 2 => third, 3 => BigDecimal('-10') + third }
+    it 'rounds balances at the ledger grain that sum to zero' do
+      # $10 across three people at the grain: 3.33333334, 3.33333333, and
+      # 3.33333333, which is what LargestRemainderSplit hands out.
+      third = BigDecimal('3.33333333')
+      exact = { 1 => third + BigDecimal('0.00000001'), 2 => third, 3 => BigDecimal('-6.66666667') }
 
-      balances = Settlement.allocate_to_cents(noisy, reconciliation_id: reconciliation.id)
+      balances = Settlement.allocate_to_cents(exact, reconciliation_id: reconciliation.id)
 
       expect(balances.values.sum(BigDecimal('0'))).to eq(BigDecimal('0'))
     end

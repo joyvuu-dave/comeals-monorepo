@@ -24,8 +24,9 @@
 # 2. Line items against balances. The meal_charges rows written at settlement
 #    must add up, per resident, to the stored balance — within one cent, which
 #    is all largest-remainder allocation is allowed to move them — and must sum
-#    to exactly zero overall. No arithmetic happens in Ruby here: both sides
-#    are read and PostgreSQL does the sums.
+#    to exactly zero overall, because every meal's lines do (MODELS.md, "The
+#    ledger grain"). No arithmetic happens in Ruby here: both sides are read
+#    and PostgreSQL does the sums.
 #
 # The second is the stronger one, and it is why line items exist. The
 # recompute check uses MealLedger, which is what wrote the stored values, so
@@ -179,15 +180,16 @@ class LedgerVerification
 
     differences = line_item_differences(stored, summed)
     total = summed.values.sum(BigDecimal('0'))
-    differences << lines_do_not_balance(total) if total.abs > Reconciliation::ZERO_SUM_EPSILON
+    differences << lines_do_not_balance(total) unless total.zero?
     return nil if differences.empty?
 
     detail(reconciliation, 'line_items', differences)
   end
 
-  # The line items are full precision and the balances are rounded to cents,
-  # so these two can never be compared for equality — only for being within
-  # the one cent that largest-remainder allocation is allowed to move things.
+  # The line items are at the ledger grain and the balances are rounded to
+  # cents, so these two can never be compared for equality — only for being
+  # within the one cent that largest-remainder allocation is allowed to move
+  # things.
   sig { params(stored: Balances, summed: Balances).returns(T::Array[Difference]) }
   def line_item_differences(stored, summed)
     (stored.keys | summed.keys).sort.filter_map do |resident_id|
@@ -203,16 +205,13 @@ class LedgerVerification
     end
   end
 
-  # Every settlement's lines must sum to zero, the same rule the database
-  # already enforces on the balances — but to within Reconciliation's epsilon,
-  # not exactly.
-  #
-  # The balances can be held to exactly zero because they are whole cents that
-  # allocate_to_cents made add up. The lines cannot: they are full-precision
-  # BigDecimal, and BigDecimal division carries finite precision, so a meal
-  # split three ways leaves a tail thirty digits down. $100 across three
-  # people sums to -0.000000000000000000000000000002, not 0. Demanding exact
-  # zero here would report every ordinary meal as corrupt.
+  # Every settlement's lines must sum to exactly zero, the same rule the
+  # database enforces on the balances and, per meal, on the lines
+  # themselves (meal_charges_sum_zero). Exactly, not within an epsilon: a
+  # meal's lines are allocated at the ledger grain, so they sum to zero by
+  # construction. Until 2026-09-17 they were divided and then rounded by
+  # the column, and this check allowed 0.000001 of drift, which a large
+  # enough correct ledger could exceed (#85).
   #
   # Reported without a resident because it is a fact about the whole
   # reconciliation, not about one person.

@@ -92,27 +92,35 @@ it ever does, check the most recent N plus a rotating sample of older ones.
 `meal_charges`, written once inside the settlement transaction from the same
 `MealLedger` pass that produces the balances. One row per source row: one
 credit per bill, one debit per attendance, one per guest. Each carries the
-meal, the resident, the kind, the signed full-precision amount, the multiplier
-(debits) and what the cook actually spent before any cap (credits).
+meal, the resident, the kind, the signed amount at the ledger grain (10^-8
+dollars), the multiplier (debits) and what the cook actually spent before any
+cap (credits).
 
 Immutable, guarded the same way the balances are. No `reconciliation_id` — the
 meal already says which settlement it belongs to, and two answers to one
 question can disagree.
 
-**The line-item check is not an equality check, and the original proposal here was wrong about
-that.** The lines are full precision and the balances are rounded to cents, so
-a resident's lines sum to within one cent of their balance, never to exactly
-it. One cent is precisely what largest-remainder allocation is allowed to
-move, so that is the whole tolerance. `LedgerVerification` runs this nightly as
-a second check alongside the recompute, and it is the stronger of the two:
-two tables, written by different code at settlement, compared with no Ruby
-arithmetic at all.
+**The per-resident half of the line-item check is not an equality check, and
+the original proposal here was wrong about that.** The lines are at the ledger
+grain and the balances are rounded to cents, so a resident's lines sum to
+within one cent of their balance, never to exactly it. One cent is precisely
+what largest-remainder allocation is allowed to move, so that is the whole
+tolerance. `LedgerVerification` runs this nightly as a second check alongside
+the recompute, and it is the stronger of the two: two tables, written by
+different code at settlement, compared with no Ruby arithmetic at all.
 
-A second thing the first draft got wrong: the lines cannot be required to sum
-to _exactly_ zero either. `BigDecimal` division carries finite precision, so
-$100 split three ways leaves a tail thirty digits down. The check uses
-`Reconciliation::ZERO_SUM_EPSILON`, which exists for this. Only the rounded
-balances can be held to exact zero, and the database already does that.
+**The zero-sum half is an equality check, and it took two tries to get there.**
+The first draft let the lines sum to within `ZERO_SUM_EPSILON` (0.000001) of
+zero, because they were divided at about twenty digits and rounded to eight by
+the column on the way in, so a meal's stored lines summed to whatever the
+rounding dropped. That epsilon did not grow with the number of lines, and equal
+unit costs drop the same amount the same way every time, so a large enough
+correct ledger failed the check (#85, 2026-09-17). Since then every share is
+allocated at the ledger grain (MODELS.md, "The ledger grain"; ADR 0008), a
+meal's lines sum to exactly zero by construction, the check demands exactly
+zero, and the deferred trigger `meal_charges_sum_zero` refuses a commit that
+leaves a meal's lines unbalanced. There is no epsilon anywhere on the money
+path.
 
 Built on top of this, and the reason it was worth doing:
 
@@ -239,6 +247,18 @@ own, and each is written by different code at a different time.
   the check only recompute rows whose version matches the current code, falling
   back to the SQL cross-check against line items (B) for older ones. Decide this
   before the first deliberate change to the math, not after.
+
+  The first deliberate change happened on 2026-09-17 (ADR 0008: shares are
+  allocated at the ledger grain instead of divided), and it did not need this.
+  The new arithmetic moves a line by at most one unit of 10^-8 dollars, so a
+  settled cent amount can only change if a raw balance sat within a few of
+  those units of a cent boundary or of a tie. Every reconciliation on a
+  production copy (5 of them, 805 meals, all settled before line items
+  existed) recomputed to exactly its stored cents. Note that this is a check on
+  the data, not a proof: a future change that moves a line by more than a unit
+  can still make the recompute disagree with history, and then the version
+  stamp above is the answer.
+
 - **Where the digest evidence lives (part of D).** A hash chain stored in the
   database it protects is tamper-evident against accidents, not against the one
   person who has superuser access. Putting the digest in the settlement email

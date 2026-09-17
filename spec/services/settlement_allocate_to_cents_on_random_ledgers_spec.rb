@@ -6,8 +6,8 @@ require 'rails_helper'
 # random ledgers (spec/support/random_ledger.rb) through MealLedger and
 # described_class.allocate_to_cents, in memory, no database. What must hold for every one of them:
 #
-#   1. the lines of each meal sum to zero, within ZERO_SUM_EPSILON: what the
-#      cooks are credited is what the eaters are charged;
+#   1. the lines of each meal sum to exactly zero: what the cooks are
+#      credited is what the eaters are charged;
 #   2. the rounded balances sum to exactly zero, so no penny is dropped;
 #   3. every rounded balance is whole cents and within one cent of the
 #      exact amount;
@@ -28,8 +28,7 @@ RSpec.describe Settlement, '.allocate_to_cents, on random ledgers' do
       # 1. every meal's lines cancel out
       ledger.lines.group_by(&:meal_id).each do |meal_id, lines|
         sum = lines.sum(BigDecimal('0'), &:amount)
-        expect(sum.abs).to be <= Reconciliation::ZERO_SUM_EPSILON,
-                           "seed #{seed}, meal #{meal_id}: lines sum to #{sum.to_s('F')}"
+        expect(sum).to eq(0), "seed #{seed}, meal #{meal_id}: lines sum to #{sum.to_s('F')}"
       end
 
       raw = ledger.balances(residents)

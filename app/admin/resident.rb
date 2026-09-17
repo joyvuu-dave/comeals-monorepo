@@ -182,7 +182,7 @@ ActiveAdmin.register Resident do
         end
 
         para 'Credited amounts minus charged amounts come to within one cent of the settled ' \
-             'amount. Line amounts are stored at full precision; the settled amount is ' \
+             'amount. Line amounts are stored to eight decimal places; the settled amount is ' \
              'rounded to cents by largest-remainder allocation.'
       end
     end

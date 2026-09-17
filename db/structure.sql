@@ -52,6 +52,43 @@ COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
 
 
 --
+-- Name: comeals_meal_charges_sum_zero(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.comeals_meal_charges_sum_zero() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  affected bigint[] := '{}';
+  target_id bigint;
+  total numeric;
+BEGIN
+  IF TG_OP <> 'INSERT' THEN
+    affected := affected || OLD.meal_id;
+  END IF;
+
+  IF TG_OP <> 'DELETE' THEN
+    affected := affected || NEW.meal_id;
+  END IF;
+
+  FOREACH target_id IN ARRAY affected LOOP
+    SELECT COALESCE(SUM(amount), 0) INTO total
+    FROM meal_charges WHERE meal_id = target_id;
+
+    IF total <> 0 THEN
+      RAISE EXCEPTION 'meal % refused: its stored lines sum to %, not zero. '
+        'What the cooks are credited for a meal is what the eaters are charged. '
+        'See docs/runbooks/settled-data-repair.md.',
+        target_id, total;
+    END IF;
+  END LOOP;
+
+  RETURN NULL;
+END;
+$$;
+
+
+--
 -- Name: comeals_protect_job_run(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2729,6 +2766,13 @@ CREATE TRIGGER meal_charges_protect BEFORE DELETE OR UPDATE ON public.meal_charg
 
 
 --
+-- Name: meal_charges meal_charges_sum_zero; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER meal_charges_sum_zero AFTER INSERT OR DELETE OR UPDATE ON public.meal_charges DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.comeals_meal_charges_sum_zero();
+
+
+--
 -- Name: meal_residents meal_residents_reject_settled_write; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -3058,6 +3102,7 @@ ALTER TABLE ONLY public.bills
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260917130000'),
 ('20260917120000'),
 ('20260915120000'),
 ('20260914120000'),

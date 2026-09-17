@@ -146,9 +146,12 @@ class Settlement
   # since it has no row.
   ReconciliationRef = T.type_alias { T.nilable(T.any(Integer, String)) }
 
-  # Distributes full-precision balances (which sum to zero) into cent-rounded
-  # balances that also sum to exactly zero, using the largest-remainder method
-  # (Hamilton's method). Each rounded value is within 1 cent of its exact amount.
+  # Distributes balances at the ledger grain (which sum to exactly zero) into
+  # cent-rounded balances that also sum to exactly zero, using the
+  # largest-remainder method (Hamilton's method). Each rounded value is
+  # within 1 cent of its exact amount. LargestRemainderSplit is the same
+  # rule at the ledger grain; this one differs in that its input is signed,
+  # so it truncates toward zero rather than down.
   #
   # Algorithm:
   # 1. Truncate each balance toward zero (floor positives, ceil negatives).
@@ -188,10 +191,6 @@ class Settlement
     truncated
   end
 
-  # First defensive layer: the largest-remainder allocation is only meaningful
-  # when the input already balances. A materially nonzero input sum means an
-  # upstream bug — allocating anyway would silently spread the imbalance
-  # across residents' settled amounts.
   # Step 1: each balance cut to whole cents, and what the cut discarded.
   sig do
     params(raw_balances: T::Hash[Integer, BigDecimal])
@@ -214,20 +213,27 @@ class Settlement
     balances[id] = balances.fetch(id) + delta
   end
 
+  # First defensive layer: the largest-remainder allocation is only
+  # meaningful when the input already balances. A meal's lines sum to
+  # exactly zero (MODELS.md, "The ledger grain"), so a nonzero input sum,
+  # however small, means an upstream bug — allocating anyway would silently
+  # spread the imbalance across residents' settled amounts.
   sig { params(raw_balances: T::Hash[Integer, BigDecimal], reconciliation_id: ReconciliationRef).void }
   def self.assert_balanced_input!(raw_balances, reconciliation_id)
     input_sum = raw_balances.values.sum(BigDecimal('0'))
-    return if input_sum.abs <= Reconciliation::ZERO_SUM_EPSILON
+    return if input_sum.zero?
 
     raise "allocate_to_cents: raw balances do not sum to zero for reconciliation #{reconciliation_id}. " \
           "Sum: #{input_sum.to_s('F')}. This indicates an upstream bug in balance computation; " \
           'allocating pennies would silently redistribute the imbalance onto residents.'
   end
 
-  # Second defensive layer behind the zero-sum input guard: if the residual
-  # ever needs more pennies than there are fractional remainders to absorb
-  # them, the books cannot balance — fail with a diagnostic instead of
-  # indexing past the end of the candidate list.
+  # Second defensive layer behind the zero-sum input guard. With an input
+  # that sums to exactly zero there are always enough remainders of the
+  # needed sign to absorb the leftover pennies (each remainder is less than
+  # a cent, so the ones of that sign outnumber the pennies). This is what
+  # runs if the first guard is ever loosened: fail with a diagnostic instead
+  # of indexing past the end of the candidate list.
   sig do
     params(candidates: T::Array[[Integer, BigDecimal]], pennies_needed: Integer, reconciliation_id: ReconciliationRef)
       .void

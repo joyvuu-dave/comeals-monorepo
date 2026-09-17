@@ -25,12 +25,6 @@ class Reconciliation < ApplicationRecord
   # Settlement. See refuse_create_outside_settlement.
   class NotSettled < StandardError; end
 
-  # Raw balances are computed with BigDecimal division carrying ~20+
-  # significant digits, so a balanced input sums to within ~1e-15 of zero even
-  # across thousands of meals. Any genuine upstream imbalance manifests at a
-  # fraction of a cent or more — orders of magnitude above this epsilon.
-  ZERO_SUM_EPSILON = T.let(BigDecimal('0.000001'), BigDecimal)
-
   # Ransack allowlists for ActiveAdmin sorting
   sig { params(_auth_object: T.untyped).returns(T::Array[String]) }
   def self.ransackable_attributes(_auth_object = nil)
@@ -106,7 +100,7 @@ class Reconciliation < ApplicationRecord
     # Round to cents using largest-remainder method (Hamilton's method).
     # This guarantees rounded balances sum to exactly zero — the standard
     # accounting approach for apportioning monetary amounts. Each value is
-    # within 1 cent of its exact full-precision amount.
+    # within 1 cent of its exact amount at the ledger grain.
     balances = Settlement.allocate_to_cents(raw_balances, reconciliation_id: id)
 
     # Verify the books balance exactly. allocate_to_cents guarantees this;

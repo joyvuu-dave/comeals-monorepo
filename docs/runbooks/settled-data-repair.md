@@ -171,6 +171,14 @@ end
 All of it must be in the one transaction, and both tables must be cleared.
 The delete alone leaves the reconciliation with no rows, which sums to zero
 and commits cleanly — and now you have a settlement with no balances at all.
+
+`meal_charges` has the same no-bypass rule as the balances, per meal: the
+deferred trigger `meal_charges_sum_zero` refuses a commit that leaves any
+meal's lines summing to anything but zero. A repair that edits one line by
+hand must edit another line of the same meal by the same amount the other
+way. Since 2026-09-17 the lines are allocated at the ledger grain, so a meal's
+lines written by `Settlement` sum to exactly zero (MODELS.md, "The ledger
+grain").
 Clearing only one of the two tables leaves the line items and the totals
 describing different things, which the nightly check will report the next
 morning.

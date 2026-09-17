@@ -194,8 +194,9 @@ was by hand, before the skill existed).
 - Property spec, new: `spec/services/settlement_allocate_to_cents_on_random_ledgers_spec.rb` builds 100
   random ledgers in memory (1 to 40 meals; 0 to 3 cooks, some no_cost;
   0 to 12 eaters at multipliers 0, 1, 2; guests; caps on 40% of meals;
-  cooks who eat) and checks that each meal's lines cancel within
-  `ZERO_SUM_EPSILON`, that the rounded balances sum to exactly zero, are
+  cooks who eat) and checks that each meal's lines cancel exactly (within
+  `ZERO_SUM_EPSILON` until 2026-09-17, when the epsilon was removed, ADR
+  0008), that the rounded balances sum to exactly zero, are
   whole cents, and are within a cent of the exact amount, and that the
   rounding is deterministic. All 100 hold. `MONEY_PROPERTY_SEED=n` reruns
   one.

@@ -16,7 +16,7 @@ require Rails.root.join('spec/support/oracle/plain_ledger')
 # party: the plain ledger (spec/support/oracle/plain_ledger.rb), written
 # from the rules, told exactly which meals count.
 #
-# How the comparison works. The running balance is full precision; the
+# How the comparison works. The running balance is at the ledger grain; the
 # settled balance is rounded to cents by largest-remainder allocation. So
 # the two cannot be compared directly. Instead each example asserts:
 #

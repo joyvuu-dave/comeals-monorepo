@@ -15,17 +15,15 @@ require Rails.root.join('spec/support/oracle/plain_ledger')
 # settlement, is spec/tasks/stored_ledger_against_plain_ledger_spec.rb.
 RSpec.describe MealLedger do
   describe 'against the plain ledger written from the rules' do
-    # BigDecimal division carries about twenty digits, and the two sides
-    # may divide in a different order, so the last digits can differ. A
-    # real disagreement is many orders larger than this.
-    def noise = Reconciliation::ZERO_SUM_EPSILON
-
-    def expect_close(actual, expected, label)
+    # Exact. Both sides allocate whole units of 10^-8 dollars, so there is
+    # no division and no last digit to disagree about. A pair absent on
+    # one side and zero on the other is the same fact.
+    def expect_same(actual, expected, label)
       keys = actual.keys | expected.keys
       keys.each do |key|
         a = actual.fetch(key, BigDecimal('0'))
         e = expected.fetch(key, BigDecimal('0'))
-        expect((a - e).abs).to be <= noise, "#{label} #{key.inspect}: app #{a.to_s('F')}, oracle #{e.to_s('F')}"
+        expect(a).to eq(e), "#{label} #{key.inspect}: app #{a.to_s('F')}, oracle #{e.to_s('F')}"
       end
     end
 
@@ -35,10 +33,10 @@ RSpec.describe MealLedger do
 
       by_meal = ledger.lines.group_by { |line| [line.meal_id, line.resident_id] }
                       .transform_values { |lines| lines.sum(BigDecimal('0'), &:amount) }
-      expect_close(by_meal, PlainLedger.net_by_meal(plain), "#{label}, meal and resident")
+      expect_same(by_meal, PlainLedger.net_by_meal(plain), "#{label}, meal and resident")
 
       raw = ledger.balances(RandomLedger::RESIDENTS)
-      expect_close(raw, PlainLedger.balances(plain, RandomLedger::RESIDENTS), "#{label}, balance of resident")
+      expect_same(raw, PlainLedger.balances(plain, RandomLedger::RESIDENTS), "#{label}, balance of resident")
 
       rounded = Settlement.allocate_to_cents(raw, reconciliation_id: label)
       expect(rounded).to eq(PlainLedger.round_to_cents(raw)), "#{label}: rounding to cents disagrees"
@@ -60,11 +58,18 @@ RSpec.describe MealLedger do
     # which rule it is about.
     def meal(index, cap: nil, bills: [], eaters: [], guests: [])
       meal = Meal.new(id: index, date: Date.new(2026, 4, 1) + index, cap: cap)
-      bills.each do |id, amount, no_cost|
-        meal.bills.build(resident_id: id, amount: BigDecimal(amount), no_cost: no_cost || false)
+      # Rows built in memory get ids, counting up, the way saved rows
+      # would: the ledger breaks a tie between two guests of one host by
+      # guest id, so a row must have one.
+      bills.each_with_index do |(id, amount, no_cost), row|
+        meal.bills.build(id: row + 1, resident_id: id, amount: BigDecimal(amount), no_cost: no_cost || false)
       end
-      eaters.each { |id, multiplier| meal.meal_residents.build(resident_id: id, multiplier: multiplier) }
-      guests.each { |host, multiplier| meal.guests.build(resident_id: host, multiplier: multiplier) }
+      eaters.each_with_index do |(id, multiplier), row|
+        meal.meal_residents.build(id: row + 1, resident_id: id, multiplier: multiplier)
+      end
+      guests.each_with_index do |(host, multiplier), row|
+        meal.guests.build(id: row + 1, resident_id: host, multiplier: multiplier)
+      end
       meal
     end
 
@@ -80,7 +85,11 @@ RSpec.describe MealLedger do
       'a cap that binds exactly' => [{ cap: '5', bills: [[1, '20']], eaters: [[2, 2], [3, 2]] }],
       'a cook with a no-cost bill next to a paid one' =>
         [{ bills: [[1, '40'], [2, '0', true]], eaters: [[3, 2], [4, 2]] }],
-      'a sub-dollar three-way split' => [{ bills: [[1, '1']], eaters: [[2, 2], [3, 2], [4, 2]] }]
+      'a sub-dollar three-way split' => [{ bills: [[1, '1']], eaters: [[2, 2], [3, 2], [4, 2]] }],
+      'a host who eats and brings two guests, one unit left over' =>
+        [{ bills: [[1, '1']], eaters: [[2, 1], [3, 1]], guests: [[2, 1], [2, 1]] }],
+      'three cooks sharing a subsidized dollar' =>
+        [{ cap: '0.5', bills: [[1, '1'], [2, '1'], [3, '1']], eaters: [[4, 2]] }]
     }.each do |name, meals|
       it "agrees on #{name}" do
         expect_agreement(meals.each_with_index.map { |attrs, i| meal(i + 1, **attrs) }, name)

@@ -57,11 +57,11 @@ This is the most critical section. Financial calculations in this codebase must 
 
 2. **Store monetary values as DECIMAL with 8 decimal places in the database.** 8 decimal places beyond the dollar gives sub-micro-cent precision for intermediate calculations. Single user inputs (a bill's amount, a cap) are DECIMAL(12, 8): one input is capped at $9,999.99, so 4 digits before the point is enough. Columns that hold sums (charges, unit costs, balances) are DECIMAL(16, 8), because nothing caps a sum — a cook's balance over a period can pass $10,000 (issue #60). User-input amounts are whole cents, but even those are stored in DECIMAL columns for type consistency.
 
-3. **Use BigDecimal for all arithmetic in Ruby.** When reading from the database, ensure values are BigDecimal, not Float. When dividing, use `BigDecimal` division with explicit scale: `amount / divisor` where both are BigDecimal.
+3. **Use BigDecimal for all arithmetic in Ruby.** When reading from the database, ensure values are BigDecimal, not Float. The ledger never divides: a share of an amount is allocated by `LargestRemainderSplit` (below), and the one quotient a screen shows (the unit cost) is cut to the grain on purpose, in one place.
 
-4. **Round to cents only at settlement/reconciliation time.** During the billing period, all intermediate values (per-unit costs, individual charges, running balances) remain at full precision. Only when generating the final "you owe $X.XX" do we round.
+4. **The ledger grain is 10^-8 dollars, and rounding to cents happens once, at settlement.** Every line, charge and running balance is a whole number of units of 10^-8 dollars, which is what DECIMAL(16,8) holds, so what is computed is what is stored. A split (an effective cost across eaters by multiplier; on a subsidized meal, across cooks by what each spent) is allocated by largest remainder at that grain, ties to the lowest `resident_id`, so the lines of a meal sum to exactly zero and nothing on the money path needs a tolerance. The rule and a worked example: MODELS.md, "The ledger grain". It replaced "full precision" on 2026-09-17 (ADR 0008): the old lines were divided at about twenty digits and then silently rounded to 8 by the column, so a meal's stored lines did not sum to zero, and the daily check needed an epsilon that a large enough correct ledger could exceed (#85). Only when generating the final "you owe $X.XX" do we round to cents.
 
-5. **Use largest-remainder allocation** (Hamilton's method) for the final cent rounding at settlement. This is the standard accounting approach for apportioning monetary amounts among multiple parties. It guarantees that rounded balances sum to exactly zero — no residual pennies are silently dropped. Each value is within 1 cent of its exact full-precision amount. Each balance is first truncated toward zero (a positive balance floors to the cent, a negative one ceils to the cent), and the leftover pennies then go one each to the largest remainders. Toward zero, not floor, so that a person who owes and a person who is owed lose their fraction the same way (decided 2026-09-09). Ties are broken by lowest `resident_id` for deterministic, auditable results.
+5. **Use largest-remainder allocation** (Hamilton's method) for the final cent rounding at settlement. This is the standard accounting approach for apportioning monetary amounts among multiple parties. It guarantees that rounded balances sum to exactly zero — no residual pennies are silently dropped. Each value is within 1 cent of its exact amount at the ledger grain. Each balance is first truncated toward zero (a positive balance floors to the cent, a negative one ceils to the cent). The truncated amounts then sum to some whole number of cents, positive or negative. If positive, one cent is taken from each of the balances that lost the most on the negative side (the most negative remainders); if negative, one cent is given to each of the balances that lost the most on the positive side (the largest positive remainders). Either way the cent moves each balance toward its exact amount. Toward zero, not floor, so that a person who owes and a person who is owed lose their fraction the same way (decided 2026-09-09). Ties are broken by lowest `resident_id` for deterministic, auditable results.
 
 6. **Balances are always derived, never stored as source of truth.** The source of truth is the set of bills + attendance records. Balances are materialized views — computed from source data by a daily rake task. If the balance table is wiped, it can be perfectly reconstructed.
 
@@ -81,11 +81,12 @@ This is the most critical section. Financial calculations in this codebase must 
 INPUT (cook's receipt):     Dollars — $50.00 stored as 50.00000000
                             (User enters whole dollars/cents; stored as DECIMAL(12,8))
 
-INTERMEDIATE (per-unit):    Full precision DECIMAL
-                            e.g., 50.00 / 7 = 7.14285714...
+INTERMEDIATE (per-line):    Whole units of 10^-8 dollars, allocated by largest remainder
+                            e.g., 50.00 across 7 eaters of multiplier 1: 7.14285714 each,
+                            and the 2 units left over go to the two lowest resident ids
 
-STORED (charges/credits):   Full precision DECIMAL(16,8)
-                            Each resident's charge for each meal stored at full precision
+STORED (charges/credits):   DECIMAL(16,8), the same number the ledger computed
+                            Each resident's charge for each meal, at the ledger grain
                             (16, not 12: a charge or balance is a sum, and a sum can
                             pass the $9,999.99 single-bill cap)
 
