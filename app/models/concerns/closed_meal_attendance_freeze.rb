@@ -66,9 +66,13 @@ module ClosedMealAttendanceFreeze
     # Scenario: Meal is open
     return true if meal.closed == false
 
-    # Scenario: Meal is closed, record was added after meal was closed (there were extras)
-    closed_at = meal.closed_at
-    return true if meal.closed == true && closed_at.present? && T.must(created_at) > closed_at
+    # Scenario: Meal is closed, record was added after meal was closed (there were extras).
+    # A closed meal always has closed_at: Meal#conditionally_set_closed_at sets
+    # it, on create as well as on close, and the database CHECK
+    # meals_closed_at_matches_closed refuses a closed meal without one from
+    # every write path. So T.must, not a nil branch: if it is ever nil the
+    # data is corrupt and raising is right.
+    return true if meal.closed == true && T.must(created_at) > T.must(meal.closed_at)
 
     # Scenario: Meal is closed, record was added before meal was closed
     errors.add(:base, 'Meal has been closed.')

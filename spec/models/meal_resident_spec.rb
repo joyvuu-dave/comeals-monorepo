@@ -186,19 +186,10 @@ RSpec.describe MealResident do
       expect(mr.errors[:base]).to include('Meal has been closed.')
     end
 
-    # Regression: closed meal with nil closed_at (possible via direct DB
-    # manipulation or historical data) must not crash on destroy.
-    it 'blocks removal gracefully when closed_at is nil on a closed meal' do
-      mr = create(:meal_resident, meal: meal, resident: resident, community: community)
-      # Simulate a closed meal with nil closed_at (e.g., from a migration or update_column)
-      meal.update_columns(closed: true, closed_at: nil)
-
-      # Without the guard, `created_at > nil` would raise ArgumentError.
-      # With the guard, the nil closed_at case falls through to the "signed up
-      # before close" branch and blocks removal.
-      expect { mr.destroy }.not_to change(described_class, :count)
-      expect(mr.errors[:base]).to include('Meal has been closed.')
-    end
+    # A closed meal with no closed_at cannot exist: the database CHECK
+    # meals_closed_at_matches_closed refuses it from every write path
+    # (spec/db/closed_at_matches_closed_check_spec.rb). So there is no
+    # "closed_at is nil" case to test here.
 
     it 'blocks removal when meal is reconciled' do
       mr = create(:meal_resident, meal: meal, resident: resident, community: community)

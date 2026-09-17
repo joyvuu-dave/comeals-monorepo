@@ -39,6 +39,13 @@ seams, each checked to a done condition, does.
 8. **Flag the incidental.** Anything wrong that is not a bug (a false
    sentence in CLAUDE.md, a stale comment, a column nothing reads) goes
    in the report under "Also noticed", with a file and line.
+9. **Run the code before you believe a claim about Rails.** A finding
+   that rests on how Rails behaves ("`closed_was` is nil on a new
+   record") is a guess until `bin/rails runner` in the test environment
+   shows it. Rails fills a new record from the column defaults, so
+   `_was` on a new record is the default, not nil. A 2026-09-17 outside
+   review reported a bug on that guess and the spec that would have
+   proved it went green (`docs/agents/bug-hunts.md`).
 
 ## The hunts
 

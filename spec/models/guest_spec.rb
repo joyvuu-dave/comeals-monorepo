@@ -105,15 +105,9 @@ RSpec.describe Guest do
       expect { guest.destroy }.to change(described_class, :count).by(-1)
     end
 
-    # Regression guard: closed meal with nil closed_at (possible via direct DB
-    # writes) must fail closed, not open.
-    it 'blocks removal gracefully when closed_at is nil on a closed meal' do
-      guest = create(:guest, meal: meal, resident: resident)
-      meal.update_columns(closed: true, closed_at: nil)
-
-      expect { guest.destroy }.not_to change(described_class, :count)
-      expect(guest.errors[:base]).to include('Meal has been closed.')
-    end
+    # A closed meal with no closed_at cannot exist: the database CHECK
+    # meals_closed_at_matches_closed refuses it from every write path
+    # (spec/db/closed_at_matches_closed_check_spec.rb).
 
     it 'blocks destruction when meal is reconciled' do
       guest = create(:guest, meal: meal, resident: resident)

@@ -145,6 +145,15 @@ RSpec.describe Meal do
         expect(meal.closed_at).to be_present
       end
 
+      # A new record's closed_was is false (the column default), not nil,
+      # so the set branch fires on create too. Pinned because a review
+      # once claimed the opposite.
+      it 'sets closed_at when a meal is created closed' do
+        meal = create(:meal, community: community, closed: true, max: 0)
+
+        expect(meal.reload.closed_at).to be_present
+      end
+
       it 'clears closed_at when meal is reopened' do
         meal = create(:meal, community: community)
         meal.update!(closed: true, max: 0)

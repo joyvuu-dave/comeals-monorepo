@@ -175,6 +175,17 @@ class Meal < ApplicationRecord
     self.max = nil if closed == false
   end
 
+  # closed_at is the "extras" boundary (ClosedMealAttendanceFreeze): an
+  # attendance row created after it may back out, a row created before
+  # it may not. So every closed meal must have one.
+  #
+  # This also covers a meal created closed. closed_was is false on a new
+  # record, not nil: Rails fills a new record's attributes from the
+  # column defaults, and closed defaults to false. A reviewer once read
+  # closed_was as nil here and reported that Meal.create!(closed: true)
+  # left closed_at empty. It does not (spec/models/meal_spec.rb pins it),
+  # and the database CHECK meals_closed_at_matches_closed refuses a
+  # closed meal without a timestamp from any write path at all.
   sig { void }
   def conditionally_set_closed_at
     self.closed_at = Time.current if closed == true && closed_was == false

@@ -5,6 +5,28 @@ One entry per run of the `bug-hunt` skill
 and what they found, including "found nothing". The next run reads this
 to pick the hunt that has waited longest.
 
+## 2026-09-17 (outside review, not a skill run)
+
+An outside LLM review reported that `Meal#conditionally_set_closed_at`
+never sets `closed_at` on a meal created with `closed: true`, because
+`closed_was` would be nil on a new record. **Not a bug.** Rails fills a
+new record from the column defaults, so `closed_was` is `false` and the
+set branch fires. Checked with `bin/rails runner` in the test
+environment, and the production copy has 858 closed meals, every one
+with a timestamp.
+
+What was true is that nothing pinned it:
+
+- no spec created a meal closed (added to `spec/models/meal_spec.rb`);
+- nothing outside the model kept `closed` and `closed_at` in step
+  (CHECK `meals_closed_at_matches_closed` added, migration
+  `20260917120000`, `spec/db/closed_at_matches_closed_check_spec.rb`).
+
+The two specs that set up a closed meal with no `closed_at` through
+`update_columns` are gone, because the state is now impossible, and
+`ClosedMealAttendanceFreeze#record_can_be_removed` uses `T.must` on
+`closed_at` instead of a nil branch.
+
 ## 2026-08-26 (lock and frontend seam, deltas)
 
 Hunts run: lock and frontend seam, each as a delta on its 2026-08-25
