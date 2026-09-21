@@ -23,7 +23,10 @@ MUTANT_SPEC_ROWS = {
   'spec/services/settlement_allocate_to_cents_on_random_ledgers_spec.rb' => %w[Settlement],
   # The oracle comparison describes MealLedger, so it runs for MealLedger
   # on its own; this row adds it to Settlement for the rounding.
-  'spec/services/meal_ledger_against_plain_ledger_spec.rb' => %w[MealLedger Settlement],
+  'spec/services/meal_ledger_against_plain_ledger_spec.rb' => %w[MealLedger Settlement LargestRemainderSplit],
+  # Describes LedgerVerification; the settlement it checks proves the
+  # ledger's allocation at the grain and the exact zero-sum guard too.
+  'spec/services/ledger_verification_line_rounding_spec.rb' => %w[LedgerVerification MealLedger Settlement],
   'spec/services/settlement_contract_spec.rb' => %w[Settlement Reconciliation MealLedger],
   'spec/services/ledger_verification_spec.rb' => %w[LedgerVerification Settlement Reconciliation MealLedger],
   'spec/services/settle_and_notify_spec.rb' =>
@@ -244,6 +247,7 @@ MUTANT_SIG_CHECK_SPECS = %w[
   spec/models/reconciliation_types_spec.rb
   spec/services/balance_recalculation_types_spec.rb
   spec/services/ledger_verification_types_spec.rb
+  spec/services/meal_ledger_types_spec.rb
   spec/services/retry_on_conflict_types_spec.rb
   spec/services/settlement_types_spec.rb
 ].freeze

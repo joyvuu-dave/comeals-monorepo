@@ -685,3 +685,52 @@ problems on one body each pinned. Update keeps 7, create 11, all
 `.fetch` for `[]`, `.to_str` for `.to_s`, and an `all_day` default that
 reads the same when the key is absent. Nothing on the controller and
 serializer list is a missing assertion now.
+
+### 2026-09-21, the ledger grain (ADR 0008)
+
+The first run after `MealLedger` was rewritten to allocate at the
+ledger grain, with the new `LargestRemainderSplit`, the exact zero-sum
+guard in `Settlement` and the exact line-item check in
+`LedgerVerification`. Only the changed subjects, on six workers: 23
+methods, 1,367 mutations, 1,350 killed, 17 alive, 106 timeouts, 1h07.
+Timeouts count as kills in mutant's total; they were not looked at one
+by one.
+
+Ten of the 17 were one neutral failure: `MealLedger#initialize`, whose
+sig refuses a relation, and the "runtime type checks" group that proves
+it sat inside `meal_ledger_spec.rb`, so it ran against the method with
+its sig removed and failed on the unmutated code. The group is now
+`spec/services/meal_ledger_types_spec.rb`, listed in
+`MUTANT_SIG_CHECK_SPECS` like the others.
+
+The other seven, and what each became:
+
+- `MealLedger#credit_units`: `spent.map { 0 }` to `0` on a
+  zero-multiplier meal. Invisible without the sig, because `0[index]`
+  is the bit at that index, which is 0. Rewritten as
+  `Array.new(spent.size, 0)`, whose mutations all die.
+- `LargestRemainderSplit.call`: the early `return shares if
+leftover.zero?` was redundant code; with nothing left over the
+  ranking is built and `first(0)` uses none of it. Removed. Then
+  `each_index.to_a.sort` to `each_index.sort`, the same: `to_a`
+  removed.
+- `LargestRemainderSplit.check!`: the number in a refusal message, and
+  `weights.inspect` for `weights` (the same string for an Array). The
+  specs now match each whole message, and `.inspect` is gone.
+- `LedgerVerification#lines_do_not_balance`: `total.to_s('F')` to
+  `total`. Noise, left: the JSON encoder writes a BigDecimal as the
+  same plain decimal string (`-0.00000001`, `-40.0`), checked on four
+  values, so the two are the same once the row is stored. The call
+  stays because it says what the row must hold if the encoder ever
+  changes.
+- `LedgerVerification#line_item_check`: `.sum(BigDecimal('0'))` to
+  `.sum`. Noise, left: an empty sum is then Integer 0, and `zero?`
+  reads the same.
+- `MealLedger.units`: `.to_i` to `.to_int`. Noise, left, the alias.
+- `MealLedger#initialize`: the `@lines = T.let(nil, ...)` declaration
+  removed. Noise, left: an instance variable is nil before assignment,
+  and the line is there for Sorbet.
+
+Rerun after the fixes: `LargestRemainderSplit*` 178 mutations, 178
+killed; `MealLedger#initialize`, `#credit_units` and `#credit_lines`
+with the type checks moved out, one alive (the `T.let` line above).

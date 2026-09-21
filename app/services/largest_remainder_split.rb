@@ -43,12 +43,14 @@ class LargestRemainderSplit
       (total * T.must(weights[index])) - (T.must(shares[index]) * whole)
     end, T::Array[Integer])
     leftover = total - shares.sum
-    return shares if leftover.zero?
 
     # Most dropped first, then the earlier position. A comparison block
     # rather than sort_by, which would build a key array per share, and a
-    # settlement splits a few thousand lines.
-    ranked = shares.each_index.to_a.sort do |a, b|
+    # settlement splits a few thousand lines. When nothing is left over
+    # the ranking is built and not used; an early return here was
+    # redundant code by mutant's measure, and the cost is three small
+    # arrays per meal.
+    ranked = shares.each_index.sort do |a, b|
       by_dropped = T.must(dropped[b]) <=> T.must(dropped[a])
       by_dropped.zero? ? a <=> b : by_dropped
     end
@@ -63,7 +65,7 @@ class LargestRemainderSplit
   def self.check!(total, weights)
     raise ArgumentError, "cannot split #{total}: it is negative" if total.negative?
     raise ArgumentError, 'cannot split among no shares' if weights.empty?
-    raise ArgumentError, "a weight is negative: #{weights.inspect}" if weights.any?(&:negative?)
+    raise ArgumentError, "a weight is negative: #{weights}" if weights.any?(&:negative?)
 
     whole = weights.sum
     raise ArgumentError, 'cannot split when every weight is zero' if whole.zero?

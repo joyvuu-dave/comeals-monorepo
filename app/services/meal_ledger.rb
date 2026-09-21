@@ -286,7 +286,7 @@ class MealLedger
 
   sig { params(spent: T::Array[Integer], financials: Financials).returns(T::Array[Integer]) }
   def credit_units(spent, financials)
-    return spent.map { 0 } if financials.total_multiplier.zero?
+    return Array.new(spent.size, 0) if financials.total_multiplier.zero?
     return spent unless subsidized?(financials)
 
     LargestRemainderSplit.call(financials.effective_units, spent)

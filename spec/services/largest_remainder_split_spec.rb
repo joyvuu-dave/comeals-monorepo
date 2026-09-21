@@ -77,20 +77,22 @@ RSpec.describe LargestRemainderSplit do
   end
 
   describe 'refusals' do
+    # The whole message each time: a refusal names the number it refused.
     it 'refuses a negative total' do
-      expect { described_class.call(-1, [1]) }.to raise_error(ArgumentError, /negative/)
+      expect { described_class.call(-1, [1]) }.to raise_error(ArgumentError, 'cannot split -1: it is negative')
     end
 
     it 'refuses no shares' do
-      expect { described_class.call(5, []) }.to raise_error(ArgumentError, /no shares/)
+      expect { described_class.call(5, []) }.to raise_error(ArgumentError, 'cannot split among no shares')
     end
 
     it 'refuses a negative weight' do
-      expect { described_class.call(5, [1, -1]) }.to raise_error(ArgumentError, /negative/)
+      expect { described_class.call(5, [1, -1]) }.to raise_error(ArgumentError, 'a weight is negative: [1, -1]')
     end
 
     it 'refuses weights that are all zero' do
-      expect { described_class.call(5, [0, 0]) }.to raise_error(ArgumentError, /every weight is zero/)
+      expect { described_class.call(5, [0, 0]) }
+        .to raise_error(ArgumentError, 'cannot split when every weight is zero')
     end
   end
 end

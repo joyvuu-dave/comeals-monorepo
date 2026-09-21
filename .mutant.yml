@@ -39,6 +39,7 @@ matcher:
     - DateRangeDescription*
     - Healthcheck*
     - JwtAuth*
+    - LargestRemainderSplit*
     - LedgerVerification*
     - LiveUpdate*
     - MailDeliveryFailure*
