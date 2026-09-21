@@ -254,10 +254,23 @@ class MealLedger
     people = T.let(meal.meal_residents.to_a + meal.guests.to_a, T::Array[T.any(MealResident, Guest)])
     people.sort do |a, b|
       order = T.must(a.resident_id) <=> T.must(b.resident_id)
-      order = (a.is_a?(Guest) ? 1 : 0) <=> (b.is_a?(Guest) ? 1 : 0) if order.zero?
+      order = kind_rank(a) <=> kind_rank(b) if order.zero?
       order = T.must(a.id) <=> T.must(b.id) if order.zero? && a.is_a?(Guest)
       order
     end
+  end
+
+  # 0 for an attendee, 1 for a guest. A method, not a ternary on each side
+  # of the comparison above: which side of a tied comparison holds the
+  # guest depends on the sort algorithm, and Ruby uses the C library's
+  # sort on Linux and its own on macOS. Written inline, one side's
+  # "attendee" case ran on a laptop and never on the CI runner, and the
+  # 100% branch minimum failed there (2026-09-21). Here both cases run
+  # whenever an attendee is compared with a guest, whichever side each is
+  # on.
+  sig { params(eater: T.any(MealResident, Guest)).returns(Integer) }
+  def kind_rank(eater)
+    eater.is_a?(Guest) ? 1 : 0
   end
 
   # Each cook is credited what they spent. On a subsidized meal the eaters

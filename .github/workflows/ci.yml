@@ -67,6 +67,8 @@ jobs:
           path: coverage/
           retention-days: 7
           if-no-files-found: ignore
+          # .resultset.json holds the per-branch counts; the default skips dotfiles.
+          include-hidden-files: true
 
   node-lint:
     runs-on: ubuntu-latest
