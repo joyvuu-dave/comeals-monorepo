@@ -786,8 +786,11 @@ is revoked at once; a password change does it.
 An old API session. Login stopped writing Key rows when JWT auth shipped.
 The table exists only so cookies issued before that deploy keep working:
 `ApiController#resolve_current_session!` tries the JWT first and falls back to
-`Key.find_by(token:)` when decoding fails. Issue #42 tracks removing the
-model, the table, and the fallback once `Key.count` is 0 in production.
+`Key.find_by(token:)` when decoding fails. The model, the table and the
+fallback stay for good (decided 2026-09-21, #42 and #67): removing them
+gains nothing and could sign out a person whose device still holds an old
+token, and the table has no last-used column, so nothing can prove a row
+is dead.
 
 ```
 Key ----> identity (polymorphic: Resident or AdminUser; only residents ever used it)

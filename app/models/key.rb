@@ -24,9 +24,11 @@
 # ApiController#resolve_current_session falls back to a Key lookup when
 # JWT decoding fails.
 #
-# Retirement condition: when `Key.count` is 0 in production (every pre-JWT
-# session has logged in again or expired), delete this model, the keys
-# table, the fallback in ApiController, and `current_api_key`.
+# Kept on purpose (decided 2026-09-21, #42 and #67). Removing the table
+# and the fallback would gain nothing, and could sign out a person whose
+# device still holds a pre-JWT token. Nothing here can tell which rows
+# are still in use: the table has no last-used column. So this model,
+# the table and the fallback stay for as long as the app runs.
 class Key < ApplicationRecord
   has_secure_token
   belongs_to :identity, polymorphic: true

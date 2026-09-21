@@ -9,6 +9,9 @@
 # with no console errors, and the API answers. With SMOKE_EMAIL and
 # SMOKE_PASSWORD set it also logs in and renders the calendar on a
 # daylight-saving month (the November escape) and the meal page.
+# Production never sets them: a smoke resident would be a fake person
+# on the community's shared screen (decided 2026-09-21, #68). The
+# staging rehearsal sets them, so the logged-in checks run there.
 #
 # Usage:
 #   bin/smoke                        # against https://comeals.com

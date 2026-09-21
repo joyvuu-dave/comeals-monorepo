@@ -111,10 +111,17 @@ themselves. Roughly 30–40 new tests, all doubled across both engines.
 A small Playwright script `bin/deploy` runs against the live site after
 switching over: log in, open a meal, open the calendar on a DST month.
 Catches the class of bug where the code is fine but the deploy is not
-(env vars, asset serving, the things no local test sees). One gap:
-`bin/smoke` only logs in when `SMOKE_EMAIL` and `SMOKE_PASSWORD` are set, and
-production does not set them yet, so the logged-in checks are skipped there
-(issue #68, open).
+(env vars, asset serving, the things no local test sees).
+
+`bin/smoke` only logs in when `SMOKE_EMAIL` and `SMOKE_PASSWORD` are set.
+Production never sets them, and never will: a smoke resident would be a
+fake person in the real community's app, which is a shared screen
+(decided 2026-09-21, #68). On the live site the script checks the public
+surface only: the login page renders with no console errors, and the API
+answers. The logged-in checks (calendar on a daylight-saving month, meal
+page) run in the staging rehearsal against a fresh copy of production
+data, with a smoke resident that `bin/staging-rehearsal` creates there
+and nowhere else.
 
 ### 7. Mock fixtures generated from Rails — DONE (286544a)
 
