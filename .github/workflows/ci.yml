@@ -57,6 +57,16 @@ jobs:
           echo '{}' > public/.vite/manifest.json
       - run: bin/rails db:schema:load
       - run: bundle exec rake
+      # The 100% minimum is enforced here too (spec/spec_helper.rb). A
+      # miss on Linux that a laptop does not show needs the report to
+      # name the branch; the summary only names the file.
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: ruby-coverage
+          path: coverage/
+          retention-days: 7
+          if-no-files-found: ignore
 
   node-lint:
     runs-on: ubuntu-latest
