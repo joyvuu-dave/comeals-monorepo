@@ -513,7 +513,16 @@ check_rspec() {
     record "RSpec" "PASS" "$summary"
   else
     fail "$summary"
-    echo "$output" | sed -n '/^Failures:/,/^Finished/ p' | head -30
+    local failures
+    failures=$(echo "$output" | sed -n '/^Failures:/,/^Finished/ p' | head -30)
+    if [ -n "$failures" ]; then
+      echo "$failures"
+    else
+      # rspec exited non-zero with no failing example. That is SimpleCov
+      # refusing coverage below 100%, or an error outside the examples,
+      # and either one says why in its last lines.
+      echo "$output" | grep -vE '^[.F*]*$' | tail -15
+    fi
     record "RSpec" "FAIL" "$summary"
   fi
 }
