@@ -370,4 +370,21 @@ RSpec.describe LiveUpdate do
       expect(described_class.new.tap(&:residents!)).not_to be_empty
     end
   end
+
+  describe '.flush' do
+    # The header's promise: nothing in the flush raises. The clear and
+    # the push have their own rescue; this pins the one around the reads
+    # that name the keys, which are also statements Postgres can refuse.
+    it 'reports and goes on when naming the keys fails, so a committed write is not retried' do
+      batch = described_class::Batch.new
+      batch.dates << Date.new(2026, 6, 10)
+      refusal = ActiveRecord::SerializationFailure.new('could not serialize access')
+      allow(Community).to receive(:instance).and_raise(refusal)
+      allow(Rails.error).to receive(:report).and_call_original
+
+      expect { described_class.flush(batch) }.not_to raise_error
+      expect(Rails.error).to have_received(:report).with(refusal, hash_including(handled: true,
+                                                                                 context: { dates: ['2026-06-10'] }))
+    end
+  end
 end
