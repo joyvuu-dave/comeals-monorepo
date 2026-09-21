@@ -1,9 +1,17 @@
 # frozen_string_literal: true
 
 # True when RSpec was started with no file or directory arguments, which is
-# how bin/check and CI run it (`bundle exec rspec`). Filters, seeds and
-# formatters still count as a whole-suite run; naming a path does not.
-whole_suite = ARGV.none? { |arg| arg.match?(%r{\A(spec/|\./spec/|/)}) || arg.end_with?('_spec.rb') }
+# how bin/check and CI run it: `bundle exec rspec`, and `bundle exec rake`,
+# whose spec task runs rspec with `--pattern spec/**{,/*/**}/*_spec.rb`.
+# Filters, seeds, formatters and a pattern option still count as a
+# whole-suite run; naming a path does not. The value after --pattern is an
+# option, not a path, even though it ends in _spec.rb: until 2026-09-21 it
+# was read as a path, so CI never enforced the minimum below.
+PATTERN_OPTIONS = %w[--pattern -P --exclude-pattern].freeze
+paths = ARGV.each_with_index.reject do |arg, index|
+  arg.start_with?('-') || (index.positive? && PATTERN_OPTIONS.include?(ARGV[index - 1]))
+end.map(&:first)
+whole_suite = paths.none? { |arg| arg.match?(%r{\A(spec/|\./spec/|/)}) || arg.end_with?('_spec.rb') }
 
 # Mutant (bin/mutant) runs a few examples at a time in forked workers,
 # thousands of times. Coverage would slow every run and its threshold
