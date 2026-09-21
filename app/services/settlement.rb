@@ -37,9 +37,23 @@ class Settlement
   # meals first. Everything rolls back; the request can simply be sent again.
   class Contested < RuntimeError; end
 
+  # Settle the period and clear the settled meals from the caches. For a
+  # caller with no retry around it (the seed task).
   sig { params(cutoff: Date).returns(Reconciliation) }
   def self.run!(cutoff:)
-    new(Reconciliation.new(end_date: cutoff)).settle!
+    settlement = settle!(cutoff: cutoff)
+    settlement.forget_cached_meals
+    settlement.reconciliation
+  end
+
+  # Settle the period and stop at the commit. For a caller that retries
+  # the commit on a conflict (SettleAndNotify): it calls
+  # forget_cached_meals itself, after the retry, so nothing that runs
+  # after the commit can be taken for a failed commit and settle the
+  # period again.
+  sig { params(cutoff: Date).returns(Settlement) }
+  def self.settle!(cutoff:)
+    new(Reconciliation.new(end_date: cutoff)).tap(&:settle!)
   end
 
   # What run! would settle and store for this cutoff, computed without
@@ -119,6 +133,7 @@ class Settlement
   # ActiveRecord::RecordInvalid when the period is not settleable (cutoff
   # not in the past, or no meal to settle), and RuntimeError when a
   # concurrent settlement claimed a meal first; both roll everything back.
+  # Does nothing after the commit; the caller runs forget_cached_meals.
   sig { returns(Reconciliation) }
   def settle!
     reconciliation.mark_settling!
@@ -129,7 +144,6 @@ class Settlement
       write_ledger!
     end
 
-    forget_cached_meals
     reconciliation
   end
 
@@ -248,6 +262,31 @@ class Settlement
   end
 
   private_class_method :truncate_toward_zero, :adjust!, :assert_balanced_input!, :assert_candidates_cover_pennies!
+
+  # A settled meal is frozen: its page says `reconciled` and locks its
+  # forms, and its calendar month is cached. Nothing else tells the
+  # clients, because the claim is an update_all that fires no callbacks
+  # (issue #70). Runs after the transaction commits, so no reader can
+  # refill a cache from a claim that then rolled back. LiveUpdate clears
+  # every month before the first push, and nothing in its flush raises —
+  # the ledger is committed by the time this runs, and a raise here would
+  # make the caller skip the balance refresh and the cook emails
+  # (SettleAndNotify) for a settlement that is in the database. Not
+  # called from settle!, so a caller that retries the commit can run it
+  # after the retry.
+  sig { void }
+  def forget_cached_meals
+    # assign_meals set this, and reconciliation.save! refused a period
+    # with no meal before assign_meals ran, so the list is never empty.
+    ids = T.must(@claimed_meal_ids)
+
+    LiveUpdate.batch do
+      Meal.where(id: ids).pluck(:id, :date).each do |id, date|
+        LiveUpdate.meal(id, socket_id: nil)
+        LiveUpdate.calendar(date)
+      end
+    end
+  end
 
   private
 
@@ -369,30 +408,6 @@ class Settlement
     residents = Resident.where(id: balances.keys).index_by { |resident| T.must(resident.id) }
     balances.each do |resident_id, amount|
       reconciliation.reconciliation_balances.create!(resident: residents.fetch(resident_id), amount: amount)
-    end
-  end
-
-  # A settled meal is frozen: its page says `reconciled` and locks its
-  # forms, and its calendar month is cached. Nothing else tells the
-  # clients, because the claim is an update_all that fires no callbacks
-  # (issue #70). Runs after the transaction commits, so no reader can
-  # refill a cache from a claim that then rolled back. LiveUpdate clears
-  # every month before the first push, and a push that fails is reported,
-  # not raised — the ledger is committed by the time this runs, and a
-  # raise here would make the caller skip the balance refresh and the
-  # cook emails (SettleAndNotify) for a settlement that is in the
-  # database.
-  sig { void }
-  def forget_cached_meals
-    # assign_meals set this, and reconciliation.save! refused a period
-    # with no meal before assign_meals ran, so the list is never empty.
-    ids = T.must(@claimed_meal_ids)
-
-    LiveUpdate.batch do
-      Meal.where(id: ids).pluck(:id, :date).each do |id, date|
-        LiveUpdate.meal(id, socket_id: nil)
-        LiveUpdate.calendar(date)
-      end
     end
   end
 end

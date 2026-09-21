@@ -40,12 +40,24 @@
 # write into a timeout (LivePushJob says how long that wait could be).
 # Enqueuing is a small transaction of its own, at SERIALIZABLE like
 # everything else, so Postgres can refuse it for a conflict; it is then
-# tried again the way the API's meal writes are (RetryOnConflict). A
-# failure that stays (the database is gone right after the commit) is
-# reported, not raised: the write has committed, and raising here would
-# answer 500 for a change that is in the database. A client that missed
-# a push refetches on its next reconnect (data_store_app.js
-# handleReconnect).
+# tried again the way the API's meal writes are (RetryOnConflict).
+#
+# Nothing in the flush raises. It runs after the commit, and for the
+# API's meal writes and for a settlement it runs inside the block that
+# RetryOnConflict runs again on a conflict. A raise here would not only
+# answer 500 for a change that is in the database: RetryOnConflict would
+# take it for a rolled-back write and run the block again, and the
+# committed write would be made a second time (a guest added twice; a
+# settlement retried against meals it already claimed). Until 2026-09-21
+# the cache clear could do exactly that: it is a DELETE on
+# solid_cache_entries in the same SERIALIZABLE session, Postgres can
+# refuse it, and solid_cache's failsafe does not swallow a serialization
+# failure (spec/requests/api/v1/live_update_cache_clear_refused_spec.rb).
+# So every step of the flush reports its failure (Rails.error.report)
+# and goes on. A missed clear costs nothing: the month entry is keyed by
+# a version read from the rows (CLAUDE.md, rule 8), so a stale entry is
+# a miss anyway. A client that missed a push refetches on its next
+# reconnect (data_store_app.js handleReconnect).
 module LiveUpdate
   # What one transaction (or one manual batch) has to tell the clients.
   class Batch
@@ -137,20 +149,24 @@ module LiveUpdate
     end
 
     # Clears caches and pushes. Public so a spec can call it on a batch
-    # of its own; everything else goes through the methods above.
+    # of its own; everything else goes through the methods above. Never
+    # raises (see the header): each clear and each push reports its own
+    # failure, and the rescue below catches the reads that name the keys.
     def flush(batch)
       return if batch.blank?
 
       community = Community.instance
       keys = batch.dates.flat_map { |date| community.affected_calendar_keys(date) }.uniq
 
-      keys.each { |key| Rails.cache.delete(key) }
+      keys.each { |key| clear(key) }
 
       keys.each { |key| push(key, { message: 'calendar updated' }) } # rubocop:disable Style/CombinableLoops -- every clear must run before any push
       batch.meals.each do |meal_id, socket_id|
         push("meal-#{meal_id}", { message: 'meal updated' }, socket_id && { socket_id: socket_id })
       end
       push("community-#{community.id}-residents", { message: 'residents updated' }) if batch.residents?
+    rescue StandardError => e
+      Rails.error.report(e, handled: true, context: { dates: batch.dates.map(&:iso8601) })
     end
 
     private
@@ -192,6 +208,16 @@ module LiveUpdate
       return value if value.is_a?(Date)
 
       value.in_time_zone(Community.instance.timezone).to_date
+    end
+
+    # A DELETE on solid_cache_entries, which Postgres can refuse like any
+    # other statement at SERIALIZABLE. The write is committed and the
+    # caller must not fail (and must not be retried), so a refusal is
+    # reported and the entry is left to its version.
+    def clear(key)
+      Rails.cache.delete(key)
+    rescue StandardError => e
+      Rails.error.report(e, handled: true, context: { key: key })
     end
 
     def push(channel, data, options = nil)

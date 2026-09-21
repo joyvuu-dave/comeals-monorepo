@@ -72,7 +72,9 @@ RSpec.describe 'a refused cache clear after the commit' do
 
     expect { post_guest }.to change(Guest, :count).by(1)
     expect(response).to have_http_status(:ok)
+    # Once per refused clear: a write touches every month the change can
+    # show on, and each clear reports on its own and goes on.
     expect(Rails.error).to have_received(:report).with(an_instance_of(ActiveRecord::SerializationFailure),
-                                                       hash_including(handled: true))
+                                                       hash_including(handled: true)).at_least(:once)
   end
 end

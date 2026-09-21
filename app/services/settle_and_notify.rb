@@ -54,9 +54,14 @@ class SettleAndNotify
     # Only the settlement is retried. The recalculation and the mails run
     # after it has committed, so retrying past that point would settle the
     # next period by mistake (or fail because there is nothing left).
-    reconciliation = RetryOnConflict.call(attempts: retries.attempts, base_delay: retries.base_delay) do
-      Settlement.run!(cutoff: cutoff)
+    settlement = RetryOnConflict.call(attempts: retries.attempts, base_delay: retries.base_delay) do
+      Settlement.settle!(cutoff: cutoff)
     end
+    # After the retry, not inside it: the flush never raises now, but a
+    # step that runs after the commit does not belong in a block whose
+    # retry would settle the period again.
+    settlement.forget_cached_meals
+    reconciliation = settlement.reconciliation
 
     refresh_balances(community, retries)
     NotifyCooksJob.perform_later(reconciliation)

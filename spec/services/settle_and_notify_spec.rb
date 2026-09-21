@@ -83,12 +83,12 @@ RSpec.describe SettleAndNotify do
     it 'gives up after three tries when the caller is a request, so nobody waits minutes' do
       settleable_meal(Date.yesterday)
       allow(RetryOnConflict).to receive(:sleep)
-      allow(Settlement).to receive(:run!).and_raise(ActiveRecord::SerializationFailure, 'conflict')
+      allow(Settlement).to receive(:settle!).and_raise(ActiveRecord::SerializationFailure, 'conflict')
 
       expect { described_class.call(cutoff: Date.yesterday, community: community, retries: described_class::REQUEST) }
         .to raise_error(ActiveRecord::SerializationFailure)
 
-      expect(Settlement).to have_received(:run!).exactly(3).times
+      expect(Settlement).to have_received(:settle!).exactly(3).times
     end
 
     # The whole point of the two budgets: what the nightly task waits out,
@@ -106,7 +106,7 @@ RSpec.describe SettleAndNotify do
       settleable_meal(Date.yesterday)
       allow(RetryOnConflict).to receive(:sleep)
       failures = 0
-      allow(Settlement).to receive(:run!).and_wrap_original do |original, **args|
+      allow(Settlement).to receive(:settle!).and_wrap_original do |original, **args|
         failures += 1
         raise ActiveRecord::SerializationFailure, 'conflict' if failures <= 6
 
@@ -199,7 +199,7 @@ RSpec.describe SettleAndNotify do
   end
 
   it 'lets an error from the settlement itself through, so nothing is half done' do
-    allow(Settlement).to receive(:run!).and_raise(ActiveRecord::StatementInvalid, 'connection lost')
+    allow(Settlement).to receive(:settle!).and_raise(ActiveRecord::StatementInvalid, 'connection lost')
 
     expect { described_class.call(cutoff: Date.yesterday, community: community) }
       .to raise_error(ActiveRecord::StatementInvalid)

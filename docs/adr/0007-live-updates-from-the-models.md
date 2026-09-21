@@ -86,6 +86,25 @@ a small transaction of its own and can be refused for a conflict, so it
 is tried again (`RetryOnConflict`, three tries); a failure that stays is
 reported the same way, for the same reason.
 
+The same holds for the cache clear, and for a stronger reason (amended
+2026-09-21). The clear is a DELETE on `solid_cache_entries` in the same
+SERIALIZABLE session, which Postgres can refuse, and solid_cache's
+failsafe does not swallow a serialization failure. The flush runs after
+the commit, inside the block that `RetryOnConflict` runs again on a
+conflict, for the API's meal writes and for a settlement. So a clear
+that raised did not only answer 500: `RetryOnConflict` took it for a
+rolled-back write and ran the block again, and the committed write was
+made a second time, a guest added twice or a settlement retried against
+meals it had already claimed
+(`spec/requests/api/v1/live_update_cache_clear_refused_spec.rb`,
+`spec/services/settle_and_notify_cache_clear_refused_spec.rb`). Now
+nothing in the flush raises: each clear and each push reports its own
+failure and goes on. A missed clear shows nothing stale, because the
+month entry is keyed by a version read from the rows (next section).
+`SettleAndNotify` also runs the settlement's clears after its retry, not
+inside it: a step that runs after the commit does not belong in a block
+whose retry would settle the period again.
+
 This means live updates need the Solid Queue supervisor running, the
 same as the nightly jobs (`docs/runbooks/scheduler-cutover.md`). In the
 test suite the test adapter runs `LivePushJob` inline, so a spec sees

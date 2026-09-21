@@ -102,8 +102,8 @@ RSpec.describe 'POST /api/v1/reconciliations' do
 
   it 'answers 409 when another settlement got there first' do
     settleable_meal
-    allow(Settlement).to receive(:run!).and_raise(Settlement::Contested,
-                                                  'a concurrent reconciliation settled the rest first')
+    allow(Settlement).to receive(:settle!).and_raise(Settlement::Contested,
+                                                     'a concurrent reconciliation settled the rest first')
 
     settle(Date.yesterday)
 
@@ -114,7 +114,7 @@ RSpec.describe 'POST /api/v1/reconciliations' do
 
   it 'answers 409 when the database refused the transaction for a conflict' do
     settleable_meal
-    allow(Settlement).to receive(:run!).and_raise(ActiveRecord::SerializationFailure, 'could not serialize')
+    allow(Settlement).to receive(:settle!).and_raise(ActiveRecord::SerializationFailure, 'could not serialize')
 
     settle(Date.yesterday)
 
@@ -136,12 +136,12 @@ RSpec.describe 'POST /api/v1/reconciliations' do
     it 'gives up after three tries and answers 409, instead of waiting minutes' do
       settleable_meal
       allow(RetryOnConflict).to receive(:sleep)
-      allow(Settlement).to receive(:run!).and_raise(ActiveRecord::SerializationFailure, 'could not serialize')
+      allow(Settlement).to receive(:settle!).and_raise(ActiveRecord::SerializationFailure, 'could not serialize')
 
       settle(Date.yesterday)
 
       expect(response).to have_http_status(:conflict)
-      expect(Settlement).to have_received(:run!).exactly(3).times
+      expect(Settlement).to have_received(:settle!).exactly(3).times
       expect(Reconciliation.count).to eq(0)
     end
   end

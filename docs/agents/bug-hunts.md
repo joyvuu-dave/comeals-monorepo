@@ -29,8 +29,12 @@ branch, none fixed in the hunt. The branches:
   balances refresh and no cook mail goes out. Red specs:
   `spec/requests/api/v1/live_update_cache_clear_refused_spec.rb` (2
   guests, then 3 with a 409) and
-  `spec/services/settle_and_notify_cache_clear_refused_spec.rb`. Also a
-  green pin: `spec/db/meal_charges_sum_zero_reparent_spec.rb`. Also
+  `spec/services/settle_and_notify_cache_clear_refused_spec.rb`. Fixed
+  the same day on the hunt branch: every step of the flush reports and
+  goes on, and `SettleAndNotify` clears the caches after its retry, not
+  inside it (`Settlement.settle!` stops at the commit; `run!` keeps
+  both). Also a green pin:
+  `spec/db/meal_charges_sum_zero_reparent_spec.rb`. Also
   noticed: the concurrency sentence in CLAUDE.md overstates (logout and
   the two password paths answer 409 without a retry); `settlement.rb:176`
   divides on the money path (exact, but ADR 0008 says to look for one);
