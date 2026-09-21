@@ -5,25 +5,6 @@
 # Please instead update this file by running `bin/tapioca gem ransack`.
 
 
-# pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:3
-module ActionView::Helpers::Tags; end
-
-# TODO: Find a better way to solve this issue!
-# This patch is needed since this Rails commit:
-# https://github.com/rails/rails/commit/c1a118a
-#
-# pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:7
-class ActionView::Helpers::Tags::Base
-  include ::ActionView::Helpers::CaptureHelper
-  include ::ActionView::Helpers::OutputSafetyHelper
-  include ::ActionView::Helpers::ContentExfiltrationPreventionHelper
-
-  private
-
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:10
-  def value; end
-end
-
 # pkg:gem/ransack#lib/polyamorous/tree_node.rb:1
 module Polyamorous; end
 
@@ -88,8 +69,6 @@ module Polyamorous::JoinAssociationExtensions
 
   # Same as #join_constraints, but instead of constructing tables from the
   # given block, uses the ones passed
-  # Same as #join_constraints, but instead of constructing tables from the
-  # given block, uses the ones passed
   #
   # pkg:gem/ransack#lib/polyamorous/activerecord/join_association.rb:22
   def join_constraints_with_tables(foreign_table, foreign_klass, join_type, alias_tracker, tables); end
@@ -151,7 +130,7 @@ module Polyamorous::TreeNode
   def add_to_tree(hash); end
 end
 
-# pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:20
+# pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:3
 RANSACK_FORM_BUILDER = T.let(T.unsafe(nil), String)
 
 # pkg:gem/ransack#lib/ransack/constants.rb:1
@@ -250,7 +229,7 @@ end
 
 # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:7
 class Ransack::Adapters::ActiveRecord::Context < ::Ransack::Context
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:128
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:129
   def alias_tracker; end
 
   # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:66
@@ -274,7 +253,7 @@ class Ransack::Adapters::ActiveRecord::Context < ::Ransack::Context
   # The WHERE condition on this query makes it invalid by itself,
   # because it is correlated to the primary key on the outer query.
   #
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:165
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:166
   def build_correlated_subquery(association); end
 
   # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:26
@@ -287,25 +266,25 @@ class Ransack::Adapters::ActiveRecord::Context < ::Ransack::Context
   # This extracts what we need to access the joins using our existing
   # JoinDependency to track table aliases.
   #
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:112
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:113
   def join_sources; end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:93
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:94
   def klassify(obj); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:132
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:133
   def lock_association(association); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:196
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:197
   def primary_key; end
 
   # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:9
   def relation_for(object); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:136
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:137
   def remove_association(association); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:89
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:90
   def table_for(parent); end
 
   # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:13
@@ -313,37 +292,37 @@ class Ransack::Adapters::ActiveRecord::Context < ::Ransack::Context
 
   private
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:335
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:337
   def build_association(name, parent = T.unsafe(nil), klass = T.unsafe(nil)); end
 
   # Checkout active_record/relation/query_methods.rb +build_joins+ for
   # reference. Lots of duplicated code maybe we can avoid it
   #
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:282
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:284
   def build_joins(relation); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:323
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:325
   def build_or_find_association(name, parent = T.unsafe(nil), klass = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:317
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:319
   def convert_join_strings_to_ast(table, joins); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:202
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:203
   def extract_correlated_key(join_root); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:358
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:360
   def extract_joins(association); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:327
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:329
   def find_association(name, parent = T.unsafe(nil), klass = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:266
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:268
   def get_association(str, parent = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:239
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:240
   def get_parent_and_attribute_name(str, parent = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:272
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:274
   def join_dependency(relation); end
 end
 
@@ -358,13 +337,13 @@ end
 
 # pkg:gem/ransack#lib/ransack/configuration.rb:5
 module Ransack::Configuration
-  # pkg:gem/ransack#lib/ransack/configuration.rb:45
+  # pkg:gem/ransack#lib/ransack/configuration.rb:46
   def add_predicate(name, opts = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/configuration.rb:200
+  # pkg:gem/ransack#lib/ransack/configuration.rb:233
   def arel_predicate_with_suffix(arel_predicate, suffix); end
 
-  # pkg:gem/ransack#lib/ransack/configuration.rb:41
+  # pkg:gem/ransack#lib/ransack/configuration.rb:42
   def configure; end
 
   # By default, Ransack displays sort order indicator arrows with HTML codes:
@@ -387,7 +366,7 @@ module Ransack::Configuration
   #   }
   # end
   #
-  # pkg:gem/ransack#lib/ransack/configuration.rb:137
+  # pkg:gem/ransack#lib/ransack/configuration.rb:138
   def custom_arrows=(opts = T.unsafe(nil)); end
 
   # By default Ransack ignores empty predicates. Ransack can also fallback to
@@ -399,8 +378,26 @@ module Ransack::Configuration
   #   config.default_predicate = 'eq'
   # end
   #
-  # pkg:gem/ransack#lib/ransack/configuration.rb:113
+  # pkg:gem/ransack#lib/ransack/configuration.rb:114
   def default_predicate=(name); end
+
+  # The `NULLS FIRST` and `NULLS LAST` options can be used to determine
+  # whether nulls appear before or after non-null values in the sort ordering.
+  #
+  # User may want to configure it like this:
+  #
+  # Ransack.configure do |c|
+  #   c.fields_sort_option = :nulls_first # or e.g. :nulls_always_last
+  # end
+  #
+  # Emitted through Arel's `nulls_first` / `nulls_last`, so it works on any
+  # backend Arel supports it for. MySQL has no NULLS FIRST / LAST syntax and
+  # Arel does not emulate it, so this option does not apply there.
+  #
+  # See https://www.postgresql.org/docs/current/queries-order.html
+  #
+  # pkg:gem/ransack#lib/ransack/configuration.rb:175
+  def fields_sort_option=(setting); end
 
   # By default, Ransack displays sort order indicator arrows in sort links.
   # The default may be globally overridden in an initializer file like
@@ -411,8 +408,28 @@ module Ransack::Configuration
   #   config.hide_sort_order_indicators = true
   # end
   #
-  # pkg:gem/ransack#lib/ransack/configuration.rb:183
+  # pkg:gem/ransack#lib/ransack/configuration.rb:195
   def hide_sort_order_indicators=(boolean); end
+
+  # By default, Ransack ignores search conditions whose value is blank — an
+  # empty string, or an array containing only blank values. This is what makes
+  # a search form submitted with empty fields return every record rather than
+  # none, and it is almost always what an HTML form wants.
+  #
+  # Set this to false to treat a blank value as a value to search *for*:
+  # `name_eq: ''` then generates `WHERE name = ''`, and `id_in: []` generates a
+  # condition matching nothing rather than being dropped. This is usually what
+  # a JSON API wants, where an empty value is an explicit filter rather than an
+  # untouched form field.
+  #
+  # A `nil` value is ignored either way.
+  #
+  # Ransack.configure do |config|
+  #   config.ignore_blank_values = false
+  # end
+  #
+  # pkg:gem/ransack#lib/ransack/configuration.rb:229
+  def ignore_blank_values=(boolean); end
 
   # By default Ransack ignores errors if an unknown predicate, condition or
   # attribute is passed into a search. The default may be overridden in an
@@ -423,7 +440,7 @@ module Ransack::Configuration
   #   config.ignore_unknown_conditions = false
   # end
   #
-  # pkg:gem/ransack#lib/ransack/configuration.rb:100
+  # pkg:gem/ransack#lib/ransack/configuration.rb:101
   def ignore_unknown_conditions=(boolean); end
 
   # pkg:gem/ransack#lib/ransack/configuration.rb:7
@@ -432,18 +449,11 @@ module Ransack::Configuration
   # pkg:gem/ransack#lib/ransack/configuration.rb:7
   def options=(val); end
 
-  # The `NULLS FIRST` and `NULLS LAST` options can be used to determine
-  # whether nulls appear before or after non-null values in the sort ordering.
+  # Renamed to `fields_sort_option` now that NULLS FIRST / NULLS LAST is
+  # emitted through Arel and is no longer PostgreSQL-specific. The old name
+  # still works so existing initializers keep running.
   #
-  # User may want to configure it like this:
-  #
-  # Ransack.configure do |c|
-  #   c.postgres_fields_sort_option = :nulls_first # or e.g. :nulls_always_last
-  # end
-  #
-  # See this feature: https://www.postgresql.org/docs/13/queries-order.html
-  #
-  # pkg:gem/ransack#lib/ransack/configuration.rb:170
+  # pkg:gem/ransack#lib/ransack/configuration.rb:182
   def postgres_fields_sort_option=(setting); end
 
   # pkg:gem/ransack#lib/ransack/configuration.rb:7
@@ -464,7 +474,7 @@ module Ransack::Configuration
   #   config.sanitize_custom_scope_booleans = false
   # end
   #
-  # pkg:gem/ransack#lib/ransack/configuration.rb:155
+  # pkg:gem/ransack#lib/ransack/configuration.rb:156
   def sanitize_custom_scope_booleans=(boolean); end
 
   # The default `search_key` name is `:q`. The default key may be overridden
@@ -486,7 +496,7 @@ module Ransack::Configuration
   # In the view:
   # <%= f.search_form_for @search, as: :log_search %>
   #
-  # pkg:gem/ransack#lib/ransack/configuration.rb:87
+  # pkg:gem/ransack#lib/ransack/configuration.rb:88
   def search_key=(name); end
 
   # By default, Ransack displays strips all whitespace when searching for a string.
@@ -498,7 +508,7 @@ module Ransack::Configuration
   #   config.strip_whitespace = true
   # end
   #
-  # pkg:gem/ransack#lib/ransack/configuration.rb:196
+  # pkg:gem/ransack#lib/ransack/configuration.rb:208
   def strip_whitespace=(boolean); end
 
   class << self
@@ -522,16 +532,16 @@ class Ransack::Configuration::PredicateCollection
   def initialize; end
 
   # pkg:gem/ransack#lib/ransack/configuration.rb:17
-  def [](*_arg0, **_arg1, &_arg2); end
+  def [](*, **, &); end
 
   # pkg:gem/ransack#lib/ransack/configuration.rb:19
   def []=(key, value); end
 
   # pkg:gem/ransack#lib/ransack/configuration.rb:17
-  def has_key?(*_arg0, **_arg1, &_arg2); end
+  def has_key?(*, **, &); end
 
   # pkg:gem/ransack#lib/ransack/configuration.rb:17
-  def keys(*_arg0, **_arg1, &_arg2); end
+  def keys(*, **, &); end
 
   # pkg:gem/ransack#lib/ransack/configuration.rb:10
   def sorted_names_with_underscores; end
@@ -541,15 +551,21 @@ end
 module Ransack::Constants
   private
 
-  # replace % \ to \% \\
+  # Escapes the LIKE wildcards `%` and `_`, and the escape character itself,
+  # so they are matched literally. Paired with the `ESCAPE` clause added in
+  # `Condition#format_predicate`; escaping without it silently does nothing
+  # on SQLite. See https://github.com/activerecord-hackery/ransack/issues/1581
   #
-  # pkg:gem/ransack#lib/ransack/constants.rb:163
+  # pkg:gem/ransack#lib/ransack/constants.rb:197
   def escape_wildcards(unescaped); end
 
   class << self
-    # replace % \ to \% \\
+    # Escapes the LIKE wildcards `%` and `_`, and the escape character itself,
+    # so they are matched literally. Paired with the `ESCAPE` clause added in
+    # `Condition#format_predicate`; escaping without it silently does nothing
+    # on SQLite. See https://github.com/activerecord-hackery/ransack/issues/1581
     #
-    # pkg:gem/ransack#lib/ransack/constants.rb:163
+    # pkg:gem/ransack#lib/ransack/constants.rb:197
     def escape_wildcards(unescaped); end
   end
 end
@@ -617,6 +633,14 @@ Ransack::Constants::JOIN_NODE = T.let(T.unsafe(nil), String)
 # pkg:gem/ransack#lib/ransack/constants.rb:16
 Ransack::Constants::LEFT_PARENTHESIS = T.let(T.unsafe(nil), String)
 
+# The character used to escape LIKE wildcards. Emitted as an explicit
+# `ESCAPE` clause alongside every LIKE / NOT LIKE predicate, so the
+# behaviour does not depend on a backend's default escape character —
+# MySQL and PostgreSQL default to backslash, SQLite has no default at all.
+#
+# pkg:gem/ransack#lib/ransack/constants.rb:190
+Ransack::Constants::LIKE_ESCAPE_CHARACTER = T.let(T.unsafe(nil), String)
+
 # pkg:gem/ransack#lib/ransack/constants.rb:43
 Ransack::Constants::NOT_EQ = T.let(T.unsafe(nil), String)
 
@@ -661,15 +685,13 @@ Ransack::Constants::UNDERSCORE = T.let(T.unsafe(nil), String)
 
 # pkg:gem/ransack#lib/ransack/context.rb:4
 class Ransack::Context
-  # << self
-  #
-  # pkg:gem/ransack#lib/ransack/context.rb:37
+  # pkg:gem/ransack#lib/ransack/context.rb:42
   def initialize(object, options = T.unsafe(nil)); end
 
   # pkg:gem/ransack#lib/ransack/context.rb:5
   def arel_visitor; end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:126
+  # pkg:gem/ransack#lib/ransack/context.rb:139
   def association_path(str, base = T.unsafe(nil)); end
 
   # pkg:gem/ransack#lib/ransack/context.rb:6
@@ -681,49 +703,61 @@ class Ransack::Context
   # pkg:gem/ransack#lib/ransack/context.rb:5
   def base; end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:92
+  # pkg:gem/ransack#lib/ransack/context.rb:105
   def bind(object, str); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:50
+  # pkg:gem/ransack#lib/ransack/context.rb:55
   def bind_pair_for(key); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:76
+  # pkg:gem/ransack#lib/ransack/context.rb:81
   def chain_scope(scope, args); end
 
   # Convert a string representing a chain of associations and an attribute
   # into the attribute itself
   #
-  # pkg:gem/ransack#lib/ransack/context.rb:71
+  # pkg:gem/ransack#lib/ransack/context.rb:76
   def contextualize(str); end
 
   # pkg:gem/ransack#lib/ransack/context.rb:5
   def engine; end
 
+  # pkg:gem/ransack#lib/ransack/context.rb:6
+  def ignore_unknown_conditions; end
+
+  # pkg:gem/ransack#lib/ransack/context.rb:6
+  def ignore_unknown_conditions=(_arg0); end
+
   # pkg:gem/ransack#lib/ransack/context.rb:5
   def klass; end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:59
+  # pkg:gem/ransack#lib/ransack/context.rb:64
   def klassify(obj); end
 
   # pkg:gem/ransack#lib/ransack/context.rb:5
   def object; end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:157
+  # pkg:gem/ransack#lib/ransack/context.rb:170
   def ransackable_alias(str); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:166
+  # pkg:gem/ransack#lib/ransack/context.rb:182
   def ransackable_association?(str, klass); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:161
+  # pkg:gem/ransack#lib/ransack/context.rb:174
   def ransackable_attribute?(str, klass); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:170
+  # pkg:gem/ransack#lib/ransack/context.rb:186
   def ransackable_scope?(str, klass); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:174
+  # pkg:gem/ransack#lib/ransack/context.rb:190
   def ransackable_scope_skip_sanitize_args?(str, klass); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:88
+  # pkg:gem/ransack#lib/ransack/context.rb:178
+  def ransortable_attribute?(str, klass); end
+
+  # pkg:gem/ransack#lib/ransack/context.rb:97
+  def sanitize_scope_args(key, args); end
+
+  # pkg:gem/ransack#lib/ransack/context.rb:93
   def scope_arity(scope); end
 
   # pkg:gem/ransack#lib/ransack/context.rb:5
@@ -735,131 +769,142 @@ class Ransack::Context
   # pkg:gem/ransack#lib/ransack/context.rb:6
   def search_key=(_arg0); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:186
+  # pkg:gem/ransack#lib/ransack/context.rb:202
   def searchable_associations(str = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:178
+  # pkg:gem/ransack#lib/ransack/context.rb:194
   def searchable_attributes(str = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:182
+  # pkg:gem/ransack#lib/ransack/context.rb:198
   def sortable_attributes(str = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:97
+  # Unknown attributes, predicates and combinators raise rather than being
+  # ignored when either the global option or this search's own option says so.
+  #
+  # pkg:gem/ransack#lib/ransack/context.rb:38
+  def strict_conditions?; end
+
+  # pkg:gem/ransack#lib/ransack/context.rb:110
   def traverse(str, base = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:149
+  # pkg:gem/ransack#lib/ransack/context.rb:162
   def unpolymorphize_association(str); end
 
+  private
+
+  # pkg:gem/ransack#lib/ransack/context.rb:208
+  def cast_scope_args(args); end
+
   class << self
-    # pkg:gem/ransack#lib/ransack/context.rb:24
+    # pkg:gem/ransack#lib/ransack/context.rb:23
     def for(object, options = T.unsafe(nil)); end
 
-    # pkg:gem/ransack#lib/ransack/context.rb:11
+    # pkg:gem/ransack#lib/ransack/context.rb:10
     def for_class(klass, options = T.unsafe(nil)); end
 
-    # pkg:gem/ransack#lib/ransack/context.rb:17
+    # pkg:gem/ransack#lib/ransack/context.rb:16
     def for_object(object, options = T.unsafe(nil)); end
   end
 end
 
-# pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:26
+# pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:9
 module Ransack::Helpers; end
 
-# pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:27
+# pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:10
 class Ransack::Helpers::FormBuilder < ::ActionView::Helpers::FormBuilder
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:103
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:86
   def attribute_fields(*args, &block); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:46
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:29
   def attribute_select(options = T.unsafe(nil), html_options = T.unsafe(nil), action = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:156
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:140
   def combinator_select(options = T.unsafe(nil), html_options = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:95
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:78
   def condition_fields(*args, &block); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:99
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:82
   def grouping_fields(*args, &block); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:30
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:13
   def label(method, *args, &block); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:107
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:90
   def predicate_fields(*args, &block); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:130
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:113
   def predicate_select(options = T.unsafe(nil), html_options = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:115
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:98
   def search_fields(name, args, block); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:70
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:53
   def sort_direction_select(options = T.unsafe(nil), html_options = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:83
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:66
   def sort_fields(*args, &block); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:87
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:70
   def sort_link(attribute, *args); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:78
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:61
   def sort_select(options = T.unsafe(nil), html_options = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:91
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:74
   def sort_url(attribute, *args); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:40
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:23
   def submit(value = T.unsafe(nil), options = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:111
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:94
   def value_fields(*args, &block); end
 
   private
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:207
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:191
   def association_array(obj, prefix = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:224
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:208
   def association_hash(obj); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:213
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:197
   def association_object(obj); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:266
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:250
   def attr_from_base_and_column(base, column); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:250
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:234
   def attribute_collection_for_base(attributes, base = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:235
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:219
   def attribute_collection_for_bases(action, bases); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:177
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:161
   def can_use_default?(default, attribute, values); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:261
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:245
   def collection_for_base(action, base); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:193
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:177
   def combinator_choices; end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:270
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:254
   def formbuilder_error_message(action); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:239
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:223
   def get_attribute_element(action, base); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:182
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:166
   def mapped_values(values); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:186
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:170
   def sort_array; end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:170
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:154
   def template_collection_select(name, collection, options, html_options); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:163
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:147
   def template_grouped_collection_select(collection, options, html_options); end
 end
 
@@ -924,10 +969,10 @@ module Ransack::Helpers::FormHelper
   def extract_search_and_set_url(record, options, method_name); end
 
   # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:125
-  def finalize_form_options(options, html_options); end
+  def finalize_form_options(search, options, html_options); end
 
   # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:131
-  def finalize_form_with_options(options, html_options); end
+  def finalize_form_with_options(search, options, html_options); end
 
   # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:146
   def html_option_for(option, search); end
@@ -1087,25 +1132,25 @@ class Ransack::Nodes::Attribute < ::Ransack::Nodes::Node
   # pkg:gem/ransack#lib/ransack/nodes/attribute.rb:11
   def initialize(context, name = T.unsafe(nil), ransacker_args = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/attribute.rb:43
+  # pkg:gem/ransack#lib/ransack/nodes/attribute.rb:44
   def ==(other); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/attribute.rb:27
+  # pkg:gem/ransack#lib/ransack/nodes/attribute.rb:26
   def associated_collection?; end
 
   # pkg:gem/ransack#lib/ransack/nodes/attribute.rb:8
-  def blank?(*_arg0, **_arg1, &_arg2); end
+  def blank?(*, **, &); end
 
   # pkg:gem/ransack#lib/ransack/nodes/attribute.rb:9
-  def engine(*_arg0, **_arg1, &_arg2); end
+  def engine(*, **, &); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/attribute.rb:39
+  # pkg:gem/ransack#lib/ransack/nodes/attribute.rb:40
   def eql?(other); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/attribute.rb:45
+  # pkg:gem/ransack#lib/ransack/nodes/attribute.rb:46
   def hash; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/attribute.rb:53
+  # pkg:gem/ransack#lib/ransack/nodes/attribute.rb:54
   def inspect; end
 
   # pkg:gem/ransack#lib/ransack/nodes/attribute.rb:6
@@ -1114,20 +1159,25 @@ class Ransack::Nodes::Attribute < ::Ransack::Nodes::Node
   # pkg:gem/ransack#lib/ransack/nodes/attribute.rb:17
   def name=(name); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/attribute.rb:49
+  # pkg:gem/ransack#lib/ransack/nodes/attribute.rb:50
   def persisted?; end
 
   # pkg:gem/ransack#lib/ransack/nodes/attribute.rb:8
-  def present?(*_arg0, **_arg1, &_arg2); end
+  def present?(*, **, &); end
 
   # pkg:gem/ransack#lib/ransack/nodes/attribute.rb:6
   def ransacker_args; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/attribute.rb:31
+  # pkg:gem/ransack#lib/ransack/nodes/attribute.rb:30
   def type; end
 
   # pkg:gem/ransack#lib/ransack/nodes/attribute.rb:21
   def valid?; end
+
+  private
+
+  # pkg:gem/ransack#lib/ransack/nodes/attribute.rb:60
+  def enum?; end
 end
 
 # pkg:gem/ransack#lib/ransack/nodes/bindable.rb:3
@@ -1176,22 +1226,22 @@ end
 
 # pkg:gem/ransack#lib/ransack/nodes/condition.rb:5
 class Ransack::Nodes::Condition < ::Ransack::Nodes::Node
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:200
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:215
   def ==(other); end
 
   # pkg:gem/ransack#lib/ransack/nodes/condition.rb:79
   def a; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:96
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:101
   def a=(args); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:220
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:302
   def arel_predicate; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:250
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:261
   def arel_predicate_for_attribute(attr); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:262
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:273
   def attr_value_for_attribute(attr); end
 
   # pkg:gem/ransack#lib/ransack/nodes/condition.rb:76
@@ -1200,7 +1250,7 @@ class Ransack::Nodes::Condition < ::Ransack::Nodes::Node
   # pkg:gem/ransack#lib/ransack/nodes/condition.rb:81
   def attributes=(args); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:174
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:189
   def build(params); end
 
   # == build_attribute
@@ -1221,58 +1271,58 @@ class Ransack::Nodes::Condition < ::Ransack::Nodes::Node
   #  TODO: Add test coverage for this behavior and ensure that `name.nil?`
   #  isn't fixing issue #701 by introducing untested regressions.
   #
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:150
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:158
   def build_attribute(name = T.unsafe(nil), ransacker_args = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:160
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:168
   def build_value(val = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:228
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:239
   def casted_values_for_attribute(attr); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:122
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:129
   def combinator; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:126
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:133
   def combinator=(val); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:270
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:281
   def default_type; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:193
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:208
   def eql?(other); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:232
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:243
   def formatted_values_for_attribute(attr); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:202
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:217
   def hash; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:274
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:285
   def inspect; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:188
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:203
   def key; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:130
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:138
   def m; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:129
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:137
   def m=(val); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:287
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:298
   def negative?; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:333
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:348
   def not_nested_condition(attribute, parent_table); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:218
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:233
   def p; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:213
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:228
   def p=(name); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:184
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:199
   def persisted?; end
 
   # pkg:gem/ransack#lib/ransack/nodes/condition.rb:10
@@ -1281,16 +1331,16 @@ class Ransack::Nodes::Condition < ::Ransack::Nodes::Node
   # pkg:gem/ransack#lib/ransack/nodes/condition.rb:10
   def predicate=(_arg0); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:215
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:230
   def predicate_name; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:206
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:221
   def predicate_name=(name); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:101
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:106
   def v; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:120
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:127
   def v=(args); end
 
   # pkg:gem/ransack#lib/ransack/nodes/condition.rb:67
@@ -1299,42 +1349,51 @@ class Ransack::Nodes::Condition < ::Ransack::Nodes::Node
   # pkg:gem/ransack#lib/ransack/nodes/condition.rb:72
   def valid_arity?; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:224
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:235
   def validated_values; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:166
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:174
   def value; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:98
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:103
   def values; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:103
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:108
   def values=(args); end
 
   private
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:373
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:427
   def casted_array?(predicate); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:339
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:354
   def combinator_method; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:343
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:358
   def format_predicate(attribute); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:377
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:431
   def format_values_for(predicate); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:364
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:404
   def in_predicate?(predicate); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:369
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:456
+  def length_function_for_attribute(attribute); end
+
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:448
+  def length_predicate?; end
+
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:414
   def like_predicate?(arel_predicate); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:383
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:437
   def replace_right_node?(predicate); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:394
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:420
+  def string_like_attribute?(attribute); end
+
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:470
   def valid_combinator?; end
 
   class << self
@@ -1354,113 +1413,134 @@ class Ransack::Nodes::Condition < ::Ransack::Nodes::Node
   end
 end
 
+# CHAR_LENGTH counts characters and is the SQL standard spelling; SQLite
+# has no CHAR_LENGTH and its LENGTH already counts characters for text.
+#
+# pkg:gem/ransack#lib/ransack/nodes/condition.rb:454
+Ransack::Nodes::Condition::CHAR_LENGTH_ADAPTERS = T.let(T.unsafe(nil), Array)
+
+# pkg:gem/ransack#lib/ransack/nodes/condition.rb:409
+Ransack::Nodes::Condition::LIKE_PREDICATES = T.let(T.unsafe(nil), Array)
+
+# The long spellings route through the short setters: `p=` resolves a
+# Predicate object, whereas the `predicate=` attribute writer would store
+# the bare name.
+#
+# pkg:gem/ransack#lib/ransack/nodes/condition.rb:185
+Ransack::Nodes::Condition::LONG_KEYS = T.let(T.unsafe(nil), Hash)
+
+# pkg:gem/ransack#lib/ransack/nodes/condition.rb:418
+Ransack::Nodes::Condition::STRING_LIKE_TYPES = T.let(T.unsafe(nil), Array)
+
 # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:3
 class Ransack::Nodes::Grouping < ::Ransack::Nodes::Node
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:14
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:18
   def initialize(context, combinator = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:51
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:55
   def [](key); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:55
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:59
   def []=(key, value); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:124
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:128
   def attribute_method?(name); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:149
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:153
   def build(params); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:71
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:75
   def build_condition(opts = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:138
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:142
   def build_grouping(params = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:32
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:36
   def c; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:49
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:53
   def c=(conditions); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:5
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:4
   def combinator; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:5
-  def combinator=(_arg0); end
-
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:4
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:33
   def conditions; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:34
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:38
   def conditions=(conditions); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:12
-  def each(*_arg0, **_arg1, &_arg2); end
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:16
+  def each(*, **, &); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:89
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:93
   def g; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:108
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:112
   def g=(groupings); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:86
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:90
   def groupings; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:91
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:95
   def groupings=(groupings); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:161
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:169
   def inspect; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:6
+  # The writer is inherited from Node, which normalises the value. Defining
+  # it here as well — or aliasing before the definition is in place — would
+  # bind `m=` to the plain attribute writer and skip that normalisation,
+  # which is how `g: [{ m: 'OR' }]` silently fell back to AND.
+  #
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:10
   def m; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:7
-  def m=(_arg0); end
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:11
+  def m=(val); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:110
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:114
   def method_missing(method_id, *args); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:77
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:81
   def new_condition(opts = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:145
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:149
   def new_grouping(params = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:19
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:23
   def persisted?; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:64
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:68
   def respond_to?(method_id); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:23
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:27
   def translate(key, options = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:60
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:64
   def values; end
 
   private
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:180
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:188
   def read_attribute(name); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:194
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:212
   def remove_duplicate_conditions!; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:188
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:206
   def strip_predicate_and_index(str); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:173
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:181
   def write_attribute(name, val); end
 
   class << self
     private
 
-    # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:9
+    # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:13
     def __class_attr_i18n_words; end
 
-    # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:9
+    # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:13
     def __class_attr_i18n_words=(new_value); end
   end
 end
@@ -1470,11 +1550,19 @@ class Ransack::Nodes::Node
   # pkg:gem/ransack#lib/ransack/nodes/node.rb:21
   def initialize(context); end
 
+  # Every way of supplying a combinator — a top-level `combinator`/`m`,
+  # or an `m` inside any nested grouping or condition — ends up here, so
+  # this is the one place that normalises the spelling and, when the search
+  # is strict, rejects a value it does not recognise.
+  #
+  # pkg:gem/ransack#lib/ransack/nodes/node.rb:36
+  def combinator=(val); end
+
   # pkg:gem/ransack#lib/ransack/nodes/node.rb:4
   def context; end
 
   # pkg:gem/ransack#lib/ransack/nodes/node.rb:5
-  def contextualize(*_arg0, **_arg1, &_arg2); end
+  def contextualize(*, **, &); end
 
   # pkg:gem/ransack#lib/ransack/nodes/node.rb:7
   def i18n_aliases; end
@@ -1548,19 +1636,19 @@ class Ransack::Nodes::Sort < ::Ransack::Nodes::Node
   # pkg:gem/ransack#lib/ransack/nodes/sort.rb:6
   def dir; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/sort.rb:38
+  # pkg:gem/ransack#lib/ransack/nodes/sort.rb:37
   def dir=(dir); end
 
   # pkg:gem/ransack#lib/ransack/nodes/sort.rb:6
   def name; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/sort.rb:33
+  # pkg:gem/ransack#lib/ransack/nodes/sort.rb:32
   def name=(name); end
 
   # pkg:gem/ransack#lib/ransack/nodes/sort.rb:6
   def ransacker_args; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/sort.rb:48
+  # pkg:gem/ransack#lib/ransack/nodes/sort.rb:47
   def ransacker_args=(ransack_args); end
 
   # pkg:gem/ransack#lib/ransack/nodes/sort.rb:27
@@ -1588,37 +1676,37 @@ class Ransack::Nodes::Value < ::Ransack::Nodes::Node
   # pkg:gem/ransack#lib/ransack/nodes/value.rb:19
   def ==(other); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/value.rb:110
+  # pkg:gem/ransack#lib/ransack/nodes/value.rb:112
   def array_of_arrays?(val); end
 
   # pkg:gem/ransack#lib/ransack/nodes/value.rb:5
-  def blank?(*_arg0, **_arg1, &_arg2); end
+  def blank?(*, **, &); end
 
   # pkg:gem/ransack#lib/ransack/nodes/value.rb:25
   def cast(type); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/value.rb:68
+  # pkg:gem/ransack#lib/ransack/nodes/value.rb:70
   def cast_to_boolean(val); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/value.rb:46
+  # pkg:gem/ransack#lib/ransack/nodes/value.rb:48
   def cast_to_date(val); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/value.rb:90
+  # pkg:gem/ransack#lib/ransack/nodes/value.rb:92
   def cast_to_decimal(val); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/value.rb:86
+  # pkg:gem/ransack#lib/ransack/nodes/value.rb:88
   def cast_to_float(val); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/value.rb:82
+  # pkg:gem/ransack#lib/ransack/nodes/value.rb:84
   def cast_to_integer(val); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/value.rb:102
+  # pkg:gem/ransack#lib/ransack/nodes/value.rb:104
   def cast_to_money(val); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/value.rb:78
+  # pkg:gem/ransack#lib/ransack/nodes/value.rb:80
   def cast_to_string(val); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/value.rb:57
+  # pkg:gem/ransack#lib/ransack/nodes/value.rb:59
   def cast_to_time(val); end
 
   # pkg:gem/ransack#lib/ransack/nodes/value.rb:16
@@ -1627,14 +1715,14 @@ class Ransack::Nodes::Value < ::Ransack::Nodes::Node
   # pkg:gem/ransack#lib/ransack/nodes/value.rb:21
   def hash; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/value.rb:106
+  # pkg:gem/ransack#lib/ransack/nodes/value.rb:108
   def inspect; end
 
   # pkg:gem/ransack#lib/ransack/nodes/value.rb:12
   def persisted?; end
 
   # pkg:gem/ransack#lib/ransack/nodes/value.rb:5
-  def present?(*_arg0, **_arg1, &_arg2); end
+  def present?(*, **, &); end
 
   # pkg:gem/ransack#lib/ransack/nodes/value.rb:4
   def value; end
@@ -1645,10 +1733,10 @@ end
 
 # pkg:gem/ransack#lib/ransack/predicate.rb:2
 class Ransack::Predicate
-  # pkg:gem/ransack#lib/ransack/predicate.rb:35
+  # pkg:gem/ransack#lib/ransack/predicate.rb:46
   def initialize(opts = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/predicate.rb:52
+  # pkg:gem/ransack#lib/ransack/predicate.rb:62
   def ==(other); end
 
   # pkg:gem/ransack#lib/ransack/predicate.rb:3
@@ -1660,28 +1748,28 @@ class Ransack::Predicate
   # pkg:gem/ransack#lib/ransack/predicate.rb:3
   def compound; end
 
-  # pkg:gem/ransack#lib/ransack/predicate.rb:48
+  # pkg:gem/ransack#lib/ransack/predicate.rb:58
   def eql?(other); end
 
-  # pkg:gem/ransack#lib/ransack/predicate.rb:58
+  # pkg:gem/ransack#lib/ransack/predicate.rb:68
   def format(val); end
 
   # pkg:gem/ransack#lib/ransack/predicate.rb:3
   def formatter; end
 
-  # pkg:gem/ransack#lib/ransack/predicate.rb:54
+  # pkg:gem/ransack#lib/ransack/predicate.rb:64
   def hash; end
 
   # pkg:gem/ransack#lib/ransack/predicate.rb:3
   def name; end
 
-  # pkg:gem/ransack#lib/ransack/predicate.rb:70
+  # pkg:gem/ransack#lib/ransack/predicate.rb:91
   def negative?; end
 
   # pkg:gem/ransack#lib/ransack/predicate.rb:3
   def type; end
 
-  # pkg:gem/ransack#lib/ransack/predicate.rb:66
+  # pkg:gem/ransack#lib/ransack/predicate.rb:76
   def validate(vals, type = T.unsafe(nil)); end
 
   # pkg:gem/ransack#lib/ransack/predicate.rb:3
@@ -1691,19 +1779,26 @@ class Ransack::Predicate
   def wants_array; end
 
   class << self
-    # pkg:gem/ransack#lib/ransack/predicate.rb:16
+    # pkg:gem/ransack#lib/ransack/predicate.rb:27
     def detect_and_strip_from_string!(str); end
 
-    # pkg:gem/ransack#lib/ransack/predicate.rb:20
+    # pkg:gem/ransack#lib/ransack/predicate.rb:31
     def detect_from_string(str, chomp: T.unsafe(nil)); end
 
-    # pkg:gem/ransack#lib/ransack/predicate.rb:12
+    # pkg:gem/ransack#lib/ransack/predicate.rb:23
     def named(name); end
 
-    # pkg:gem/ransack#lib/ransack/predicate.rb:8
+    # pkg:gem/ransack#lib/ransack/predicate.rb:19
     def names; end
   end
 end
+
+# Consulted at search time rather than captured at predicate-definition
+# time, so that `Ransack.options[:ignore_blank_values]` set in an
+# initializer applies to the predicates registered before it ran.
+#
+# pkg:gem/ransack#lib/ransack/predicate.rb:9
+Ransack::Predicate::DEFAULT_VALIDATOR = T.let(T.unsafe(nil), Proc)
 
 # pkg:gem/ransack#lib/ransack/ransacker.rb:2
 class Ransack::Ransacker
@@ -1717,7 +1812,7 @@ class Ransack::Ransacker
   def attr_from(bindable); end
 
   # pkg:gem/ransack#lib/ransack/ransacker.rb:6
-  def call(*_arg0, **_arg1, &_arg2); end
+  def call(*, **, &); end
 
   # pkg:gem/ransack#lib/ransack/ransacker.rb:4
   def formatter; end
@@ -1743,70 +1838,100 @@ class Ransack::Search
   # pkg:gem/ransack#lib/ransack/search.rb:16
   def base; end
 
-  # pkg:gem/ransack#lib/ransack/search.rb:48
+  # pkg:gem/ransack#lib/ransack/search.rb:53
   def build(params); end
 
   # pkg:gem/ransack#lib/ransack/search.rb:19
-  def build_condition(*_arg0, **_arg1, &_arg2); end
+  def build_condition(*, **, &); end
 
   # pkg:gem/ransack#lib/ransack/search.rb:19
-  def build_grouping(*_arg0, **_arg1, &_arg2); end
+  def build_grouping(*, **, &); end
 
-  # pkg:gem/ransack#lib/ransack/search.rb:93
+  # pkg:gem/ransack#lib/ransack/search.rb:98
   def build_sort(opts = T.unsafe(nil)); end
 
   # pkg:gem/ransack#lib/ransack/search.rb:16
   def context; end
 
-  # pkg:gem/ransack#lib/ransack/search.rb:119
+  # pkg:gem/ransack#lib/ransack/search.rb:124
   def inspect; end
 
   # pkg:gem/ransack#lib/ransack/search.rb:18
-  def klass(*_arg0, **_arg1, &_arg2); end
+  def klass(*, **, &); end
 
-  # pkg:gem/ransack#lib/ransack/search.rb:103
+  # pkg:gem/ransack#lib/ransack/search.rb:108
   def method_missing(method_id, *args); end
 
   # pkg:gem/ransack#lib/ransack/search.rb:19
-  def new_condition(*_arg0, **_arg1, &_arg2); end
+  def new_condition(*, **, &); end
 
   # pkg:gem/ransack#lib/ransack/search.rb:19
-  def new_grouping(*_arg0, **_arg1, &_arg2); end
+  def new_grouping(*, **, &); end
 
-  # pkg:gem/ransack#lib/ransack/search.rb:99
+  # pkg:gem/ransack#lib/ransack/search.rb:104
   def new_sort(opts = T.unsafe(nil)); end
 
   # pkg:gem/ransack#lib/ransack/search.rb:18
-  def object(*_arg0, **_arg1, &_arg2); end
+  def object(*, **, &); end
 
-  # pkg:gem/ransack#lib/ransack/search.rb:44
+  # pkg:gem/ransack#lib/ransack/search.rb:49
   def result(opts = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/search.rb:91
+  # pkg:gem/ransack#lib/ransack/search.rb:96
   def s; end
 
-  # pkg:gem/ransack#lib/ransack/search.rb:86
+  # pkg:gem/ransack#lib/ransack/search.rb:91
   def s=(args); end
 
-  # pkg:gem/ransack#lib/ransack/search.rb:88
+  # pkg:gem/ransack#lib/ransack/search.rb:93
   def sorts; end
 
-  # pkg:gem/ransack#lib/ransack/search.rb:63
+  # pkg:gem/ransack#lib/ransack/search.rb:68
   def sorts=(args); end
 
   # pkg:gem/ransack#lib/ransack/search.rb:19
-  def translate(*_arg0, **_arg1, &_arg2); end
+  def translate(*, **, &); end
 
   private
 
-  # pkg:gem/ransack#lib/ransack/search.rb:134
+  # pkg:gem/ransack#lib/ransack/search.rb:139
   def add_scope(key, args); end
 
-  # pkg:gem/ransack#lib/ransack/search.rb:163
+  # pkg:gem/ransack#lib/ransack/search.rb:221
+  def blank_advanced_condition?(condition); end
+
+  # True when a condition's value should be dropped before building. With
+  # `ignore_blank_values` on (the default) a blank value means "this form
+  # field was left empty"; with it off, only nil is treated that way and a
+  # blank value is a value to search for. `false` is always a real value, and
+  # an explicit nil inside an array is kept so `name_in: [nil]` still reaches
+  # the query. The `c:` pruning below shares this, so it follows the option.
+  #
+  # pkg:gem/ransack#lib/ransack/search.rb:187
+  def blank_condition_value?(value); end
+
+  # pkg:gem/ransack#lib/ransack/search.rb:150
   def collapse_multiparameter_attributes!(attrs); end
 
-  # pkg:gem/ransack#lib/ransack/search.rb:149
-  def sanitized_scope_args(args); end
+  # Params are not yet indifferent-access here, so look under both spellings
+  # of a key and both its short and long forms.
+  #
+  # pkg:gem/ransack#lib/ransack/search.rb:217
+  def fetch_either(hash, short, long); end
+
+  # The low-level `c:` API nests its values a level deeper than the shorthand
+  # form, so the filter above never sees them. Left in place, a condition with
+  # an empty value still builds its attribute and contributes a join, giving a
+  # LEFT OUTER JOIN with no WHERE clause to go with it.
+  #
+  # pkg:gem/ransack#lib/ransack/search.rb:199
+  def prune_blank_advanced_conditions!(node); end
+
+  # Values in the `c:` API may be given bare or wrapped in a `{ value: ... }`
+  # envelope, the same two forms `Condition#values=` accepts.
+  #
+  # pkg:gem/ransack#lib/ransack/search.rb:234
+  def unwrap_value(value); end
 end
 
 # pkg:gem/ransack#lib/ransack/translate.rb:8
