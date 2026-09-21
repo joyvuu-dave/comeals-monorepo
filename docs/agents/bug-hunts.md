@@ -5,6 +5,62 @@ One entry per run of the `bug-hunt` skill
 and what they found, including "found nothing". The next run reads this
 to pick the hunt that has waited longest.
 
+## 2026-09-21 (invariant, lock and cache, deltas)
+
+Hunts run: invariant (delta since 2026-08-26), lock, and cache, one
+worktree each, after the batch of merges from 2026-09-04 to 2026-09-21
+(Sorbet, the storm suite, mutation testing, the lint gems, prosopite,
+LivePushJob, the ledger grain). Four findings, each a red spec on its
+branch, none fixed in the hunt. The branches:
+`agent/bug-hunt-2026-09-21-invariant` (43bf66f),
+`agent/bug-hunt-2026-09-21-lock` (457d657),
+`agent/bug-hunt-2026-09-21-cache` (9dbaed5).
+
+- Invariant: 31 sentences, each with enforcer, skipping path and
+  verdict. **One finding.** `LiveUpdate.flush` clears the calendar cache
+  after the commit with a plain `Rails.cache.delete`
+  (`app/services/live_update.rb:147`), which in production is a DELETE on
+  `solid_cache_entries` in the same SERIALIZABLE session. solid_cache's
+  failsafe does not swallow a serialization failure, the push beside it
+  is rescued but the clear is not, and the clear runs inside the
+  `RetryOnConflict` block, after the write committed. So a refused clear
+  makes the block run again and commit the write a second time: a guest
+  added twice, or a settlement whose retry fails validation so no
+  balances refresh and no cook mail goes out. Red specs:
+  `spec/requests/api/v1/live_update_cache_clear_refused_spec.rb` (2
+  guests, then 3 with a 409) and
+  `spec/services/settle_and_notify_cache_clear_refused_spec.rb`. Also a
+  green pin: `spec/db/meal_charges_sum_zero_reparent_spec.rb`. Also
+  noticed: the concurrency sentence in CLAUDE.md overstates (logout and
+  the two password paths answer 409 without a retry); `settlement.rb:176`
+  divides on the money path (exact, but ADR 0008 says to look for one);
+  the deletion-policy list omits `meal_charges` and `mail_deliveries`.
+- Lock: 19 writes tabled, lock order checked on every path added since
+  2026-08-26, storm on seeds 1 to 5 and 11 to 15 green, the three
+  concurrency files green. **Two findings**, both admin, neither able to
+  move money. (1) The admin meal form permits `meal_id` on a nested
+  guest, so a superuser can move a guest between meals and
+  `ClosedMealAttendanceFreeze` never runs (it checks create and destroy,
+  not an update): `spec/requests/admin/meal_form_guest_move_spec.rb`.
+  (2) `ReconciledMealImmutability` reads the loaded meal, not the row
+  under the lock, so the comment on `LocksItsMealFirst` lines 32 to 33
+  is false; the trigger still refuses, as a 500 in admin:
+  `spec/models/concerns/reconciled_meal_immutability_with_loaded_meal_spec.rb`.
+  Also noticed: `config/initializers/active_admin_conflict_rescue.rb`
+  lines 29 to 31 still say the API controller sends the Pusher event;
+  `Community#auto_create_rotations` is seed-only.
+- Cache: the calendar month and `resident_balances` tabled column by
+  column with every clearing write; every live-update path and every
+  SPA handler listed; the job timing questions answered by running code.
+  **One finding.** `SetMultipliersJob` moves a resident into the adult
+  band with `update_columns` (`app/jobs/set_multipliers_job.rb:23`), so
+  no callback notes the residents channel and every open screen keeps
+  its old hosts list until it reloads:
+  `spec/requests/api/v1/live_update_contract_spec.rb:207`. Also noticed:
+  the `UNSHOWN_COLUMNS` comment in `resident.rb` is false for that job;
+  `recolor_remaining_rotations` pushes its months twice; a tab showing a
+  meal that an admin deletes keeps showing it (chat only).
+
 ## 2026-09-17 (outside review, not a skill run)
 
 An outside LLM review reported that `Meal#conditionally_set_closed_at`
