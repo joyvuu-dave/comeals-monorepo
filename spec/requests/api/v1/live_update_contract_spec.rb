@@ -195,6 +195,29 @@ RSpec.describe 'live updates: every write reaches the screen that shows it' do
       expect(settled.reload).to be_reconciled
       expect_pushed(meal_channel(settled))
     end
+
+    # The hosts list (GET /communities/:id/hosts) is Resident.adult.active,
+    # and `adult` is multiplier >= FULL. The nightly job moves a resident
+    # who has come of age into the full-price band with update_columns,
+    # which runs no callback, so Resident#note_live_update never sees the
+    # change and no tab refetches its hosts list. On a shared screen that
+    # tab can stay open for days: the new adult cannot be picked as the
+    # host of a Guest Room or Common House reservation until the tab
+    # reconnects or reloads. (Cache hunt, 2026-09-21.)
+    it 'the nightly multiplier job pushes the residents channel when it moves someone into the adult band' do
+      community.update!(free_below_age: 5, full_price_age: 18)
+      newly_adult = create(:resident, community: community, unit: unit,
+                                      birthday: community.today - 18.years, multiplier: Multiplier::HALF)
+      allow(Healthcheck).to receive(:ping)
+      RSpec::Mocks.space.proxy_for(Pusher).reset
+      allow(Pusher).to receive(:trigger)
+
+      SetMultipliersJob.perform_now
+
+      expect(newly_adult.reload.multiplier).to eq(Multiplier::FULL)
+      expect(Resident.adult.active).to include(newly_adult)
+      expect_pushed(residents_channel)
+    end
   end
 
   describe 'a meal page also shows its neighbours' do
