@@ -129,7 +129,7 @@ const GuestRoomReservationsEdit = observer(
       setDirty,
       initial !== null &&
         (String(residentId) !== initial.residentId ||
-          (day ? dayjs(day).format("YYYY-MM-DD") : "") !== initial.day),
+          dayjs(day).format("YYYY-MM-DD") !== initial.day),
     );
 
     return (

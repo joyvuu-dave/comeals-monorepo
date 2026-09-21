@@ -132,7 +132,7 @@ function EventsEdit({ eventId, handleCloseModal, setDirty }) {
     initial !== null &&
       (title !== initial.title ||
         description !== initial.description ||
-        (day ? dayjs(day).format("YYYY-MM-DD") : "") !== initial.day ||
+        dayjs(day).format("YYYY-MM-DD") !== initial.day ||
         startTime !== initial.startTime ||
         endTime !== initial.endTime ||
         allDay !== initial.allDay),

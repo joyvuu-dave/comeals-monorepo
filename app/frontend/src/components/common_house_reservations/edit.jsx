@@ -141,7 +141,7 @@ const CommonHouseReservationsEdit = observer(
       initial !== null &&
         (String(residentId) !== initial.residentId ||
           title !== initial.title ||
-          (day ? dayjs(day).format("YYYY-MM-DD") : "") !== initial.day ||
+          dayjs(day).format("YYYY-MM-DD") !== initial.day ||
           startTime !== initial.startTime ||
           endTime !== initial.endTime),
     );
