@@ -229,7 +229,7 @@ end
 
 # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:7
 class Ransack::Adapters::ActiveRecord::Context < ::Ransack::Context
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:129
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:131
   def alias_tracker; end
 
   # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:66
@@ -253,7 +253,7 @@ class Ransack::Adapters::ActiveRecord::Context < ::Ransack::Context
   # The WHERE condition on this query makes it invalid by itself,
   # because it is correlated to the primary key on the outer query.
   #
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:166
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:168
   def build_correlated_subquery(association); end
 
   # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:26
@@ -266,25 +266,25 @@ class Ransack::Adapters::ActiveRecord::Context < ::Ransack::Context
   # This extracts what we need to access the joins using our existing
   # JoinDependency to track table aliases.
   #
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:113
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:115
   def join_sources; end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:94
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:96
   def klassify(obj); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:133
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:135
   def lock_association(association); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:197
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:199
   def primary_key; end
 
   # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:9
   def relation_for(object); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:137
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:139
   def remove_association(association); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:90
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:92
   def table_for(parent); end
 
   # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:13
@@ -292,37 +292,37 @@ class Ransack::Adapters::ActiveRecord::Context < ::Ransack::Context
 
   private
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:337
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:341
   def build_association(name, parent = T.unsafe(nil), klass = T.unsafe(nil)); end
 
   # Checkout active_record/relation/query_methods.rb +build_joins+ for
   # reference. Lots of duplicated code maybe we can avoid it
   #
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:284
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:288
   def build_joins(relation); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:325
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:329
   def build_or_find_association(name, parent = T.unsafe(nil), klass = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:319
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:323
   def convert_join_strings_to_ast(table, joins); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:203
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:205
   def extract_correlated_key(join_root); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:360
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:364
   def extract_joins(association); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:329
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:333
   def find_association(name, parent = T.unsafe(nil), klass = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:268
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:272
   def get_association(str, parent = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:240
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:242
   def get_parent_and_attribute_name(str, parent = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:274
+  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:278
   def join_dependency(relation); end
 end
 
@@ -556,7 +556,7 @@ module Ransack::Constants
   # `Condition#format_predicate`; escaping without it silently does nothing
   # on SQLite. See https://github.com/activerecord-hackery/ransack/issues/1581
   #
-  # pkg:gem/ransack#lib/ransack/constants.rb:197
+  # pkg:gem/ransack#lib/ransack/constants.rb:206
   def escape_wildcards(unescaped); end
 
   class << self
@@ -565,7 +565,7 @@ module Ransack::Constants
     # `Condition#format_predicate`; escaping without it silently does nothing
     # on SQLite. See https://github.com/activerecord-hackery/ransack/issues/1581
     #
-    # pkg:gem/ransack#lib/ransack/constants.rb:197
+    # pkg:gem/ransack#lib/ransack/constants.rb:206
     def escape_wildcards(unescaped); end
   end
 end
@@ -603,7 +603,7 @@ Ransack::Constants::COMBINATOR = T.let(T.unsafe(nil), String)
 # pkg:gem/ransack#lib/ransack/constants.rb:46
 Ransack::Constants::CONT = T.let(T.unsafe(nil), String)
 
-# pkg:gem/ransack#lib/ransack/constants.rb:53
+# pkg:gem/ransack#lib/ransack/constants.rb:62
 Ransack::Constants::DERIVED_PREDICATES = T.let(T.unsafe(nil), Array)
 
 # pkg:gem/ransack#lib/ransack/constants.rb:51
@@ -638,8 +638,19 @@ Ransack::Constants::LEFT_PARENTHESIS = T.let(T.unsafe(nil), String)
 # behaviour does not depend on a backend's default escape character —
 # MySQL and PostgreSQL default to backslash, SQLite has no default at all.
 #
-# pkg:gem/ransack#lib/ransack/constants.rb:190
+# pkg:gem/ransack#lib/ransack/constants.rb:199
 Ransack::Constants::LIKE_ESCAPE_CHARACTER = T.let(T.unsafe(nil), String)
+
+# The most `_`-separated segments a single condition or sort key may have
+# before Ransack rejects it as invalid instead of parsing it. Working out
+# whether a key is an attribute, an `_and_`/`_or_` compound or a path
+# through associations is superlinear in this count, and the key comes
+# straight from the query string, so an unbounded one is a CPU-exhaustion
+# denial of service (GHSA-j3f8-w227-4hh8). No real search key is this
+# long: OR-ing every column of a very wide table stays well under it.
+#
+# pkg:gem/ransack#lib/ransack/constants.rb:60
+Ransack::Constants::MAX_KEY_DEPTH = T.let(T.unsafe(nil), Integer)
 
 # pkg:gem/ransack#lib/ransack/constants.rb:43
 Ransack::Constants::NOT_EQ = T.let(T.unsafe(nil), String)
@@ -691,7 +702,7 @@ class Ransack::Context
   # pkg:gem/ransack#lib/ransack/context.rb:5
   def arel_visitor; end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:139
+  # pkg:gem/ransack#lib/ransack/context.rb:148
   def association_path(str, base = T.unsafe(nil)); end
 
   # pkg:gem/ransack#lib/ransack/context.rb:6
@@ -703,19 +714,19 @@ class Ransack::Context
   # pkg:gem/ransack#lib/ransack/context.rb:5
   def base; end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:105
+  # pkg:gem/ransack#lib/ransack/context.rb:114
   def bind(object, str); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:55
+  # pkg:gem/ransack#lib/ransack/context.rb:64
   def bind_pair_for(key); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:81
+  # pkg:gem/ransack#lib/ransack/context.rb:90
   def chain_scope(scope, args); end
 
   # Convert a string representing a chain of associations and an attribute
   # into the attribute itself
   #
-  # pkg:gem/ransack#lib/ransack/context.rb:76
+  # pkg:gem/ransack#lib/ransack/context.rb:85
   def contextualize(str); end
 
   # pkg:gem/ransack#lib/ransack/context.rb:5
@@ -727,37 +738,46 @@ class Ransack::Context
   # pkg:gem/ransack#lib/ransack/context.rb:6
   def ignore_unknown_conditions=(_arg0); end
 
+  # False when a key has more `_`-separated segments than Ransack will
+  # parse. The attribute / association / predicate parsing that follows is
+  # superlinear in the segment count and the key is attacker-controlled, so
+  # an over-long key is treated as unknown rather than parsed
+  # (GHSA-j3f8-w227-4hh8).
+  #
+  # pkg:gem/ransack#lib/ransack/context.rb:60
+  def key_within_depth_limit?(key); end
+
   # pkg:gem/ransack#lib/ransack/context.rb:5
   def klass; end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:64
+  # pkg:gem/ransack#lib/ransack/context.rb:73
   def klassify(obj); end
 
   # pkg:gem/ransack#lib/ransack/context.rb:5
   def object; end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:170
+  # pkg:gem/ransack#lib/ransack/context.rb:181
   def ransackable_alias(str); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:182
+  # pkg:gem/ransack#lib/ransack/context.rb:193
   def ransackable_association?(str, klass); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:174
+  # pkg:gem/ransack#lib/ransack/context.rb:185
   def ransackable_attribute?(str, klass); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:186
+  # pkg:gem/ransack#lib/ransack/context.rb:197
   def ransackable_scope?(str, klass); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:190
+  # pkg:gem/ransack#lib/ransack/context.rb:201
   def ransackable_scope_skip_sanitize_args?(str, klass); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:178
+  # pkg:gem/ransack#lib/ransack/context.rb:189
   def ransortable_attribute?(str, klass); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:97
+  # pkg:gem/ransack#lib/ransack/context.rb:106
   def sanitize_scope_args(key, args); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:93
+  # pkg:gem/ransack#lib/ransack/context.rb:102
   def scope_arity(scope); end
 
   # pkg:gem/ransack#lib/ransack/context.rb:5
@@ -769,13 +789,13 @@ class Ransack::Context
   # pkg:gem/ransack#lib/ransack/context.rb:6
   def search_key=(_arg0); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:202
+  # pkg:gem/ransack#lib/ransack/context.rb:213
   def searchable_associations(str = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:194
+  # pkg:gem/ransack#lib/ransack/context.rb:205
   def searchable_attributes(str = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:198
+  # pkg:gem/ransack#lib/ransack/context.rb:209
   def sortable_attributes(str = T.unsafe(nil)); end
 
   # Unknown attributes, predicates and combinators raise rather than being
@@ -784,15 +804,15 @@ class Ransack::Context
   # pkg:gem/ransack#lib/ransack/context.rb:38
   def strict_conditions?; end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:110
+  # pkg:gem/ransack#lib/ransack/context.rb:119
   def traverse(str, base = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:162
+  # pkg:gem/ransack#lib/ransack/context.rb:173
   def unpolymorphize_association(str); end
 
   private
 
-  # pkg:gem/ransack#lib/ransack/context.rb:208
+  # pkg:gem/ransack#lib/ransack/context.rb:219
   def cast_scope_args(args); end
 
   class << self
@@ -1446,13 +1466,13 @@ class Ransack::Nodes::Grouping < ::Ransack::Nodes::Node
   # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:128
   def attribute_method?(name); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:153
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:155
   def build(params); end
 
   # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:75
   def build_condition(opts = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:142
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:144
   def build_grouping(params = T.unsafe(nil)); end
 
   # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:36
@@ -1485,7 +1505,7 @@ class Ransack::Nodes::Grouping < ::Ransack::Nodes::Node
   # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:95
   def groupings=(groupings); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:169
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:171
   def inspect; end
 
   # The writer is inherited from Node, which normalises the value. Defining
@@ -1505,7 +1525,7 @@ class Ransack::Nodes::Grouping < ::Ransack::Nodes::Node
   # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:81
   def new_condition(opts = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:149
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:151
   def new_grouping(params = T.unsafe(nil)); end
 
   # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:23
@@ -1522,16 +1542,16 @@ class Ransack::Nodes::Grouping < ::Ransack::Nodes::Node
 
   private
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:188
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:190
   def read_attribute(name); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:212
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:214
   def remove_duplicate_conditions!; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:206
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:208
   def strip_predicate_and_index(str); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:181
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:183
   def write_attribute(name, val); end
 
   class << self
@@ -1897,7 +1917,7 @@ class Ransack::Search
   # pkg:gem/ransack#lib/ransack/search.rb:139
   def add_scope(key, args); end
 
-  # pkg:gem/ransack#lib/ransack/search.rb:221
+  # pkg:gem/ransack#lib/ransack/search.rb:233
   def blank_advanced_condition?(condition); end
 
   # True when a condition's value should be dropped before building. With
@@ -1907,16 +1927,22 @@ class Ransack::Search
   # an explicit nil inside an array is kept so `name_in: [nil]` still reaches
   # the query. The `c:` pruning below shares this, so it follows the option.
   #
-  # pkg:gem/ransack#lib/ransack/search.rb:187
+  # pkg:gem/ransack#lib/ransack/search.rb:199
   def blank_condition_value?(value); end
 
-  # pkg:gem/ransack#lib/ransack/search.rb:150
+  # Folds `created_at(1i)`, `created_at(2i)`, ... into `created_at` as an
+  # array of cast values, the way Active Record does for form input. The
+  # keys are untrusted, so a malformed one is dropped rather than raised
+  # on: no position (`created_at(`), a position outside 1 to the limit,
+  # or a fragment for an attribute that was also given as a plain value.
+  #
+  # pkg:gem/ransack#lib/ransack/search.rb:161
   def collapse_multiparameter_attributes!(attrs); end
 
   # Params are not yet indifferent-access here, so look under both spellings
   # of a key and both its short and long forms.
   #
-  # pkg:gem/ransack#lib/ransack/search.rb:217
+  # pkg:gem/ransack#lib/ransack/search.rb:229
   def fetch_either(hash, short, long); end
 
   # The low-level `c:` API nests its values a level deeper than the shorthand
@@ -1924,15 +1950,23 @@ class Ransack::Search
   # an empty value still builds its attribute and contributes a join, giving a
   # LEFT OUTER JOIN with no WHERE clause to go with it.
   #
-  # pkg:gem/ransack#lib/ransack/search.rb:199
+  # pkg:gem/ransack#lib/ransack/search.rb:211
   def prune_blank_advanced_conditions!(node); end
 
   # Values in the `c:` API may be given bare or wrapped in a `{ value: ... }`
   # envelope, the same two forms `Condition#values=` accepts.
   #
-  # pkg:gem/ransack#lib/ransack/search.rb:234
+  # pkg:gem/ransack#lib/ransack/search.rb:246
   def unwrap_value(value); end
 end
+
+# The largest position a multiparameter key (`created_at(1i)`) may carry.
+# Rails' date and time selects emit at most six, year to second. The
+# position indexes an array, so an unbounded one from a crafted query
+# string would allocate an array that size (GHSA-vxc9-rm8f-p56j).
+#
+# pkg:gem/ransack#lib/ransack/search.rb:154
+Ransack::Search::MULTIPARAMETER_POSITION_LIMIT = T.let(T.unsafe(nil), Integer)
 
 # pkg:gem/ransack#lib/ransack/translate.rb:8
 module Ransack::Translate
