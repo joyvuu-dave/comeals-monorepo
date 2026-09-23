@@ -1744,6 +1744,14 @@ module DatabaseConsistency::Helper
   # pkg:gem/database_consistency#lib/database_consistency/helper.rb:16
   def database_name(model); end
 
+  # Rewrites exponent notation as the plain decimal PostgreSQL itself writes
+  # when it expands a literal, so `1e+20` and the `1.0e+20` Active Record
+  # generates reach the same string. The digits are shifted as text rather
+  # than through a float, so a wide value keeps every one of them.
+  #
+  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:419
+  def expand_exponent_literals(sql); end
+
   # pkg:gem/database_consistency#lib/database_consistency/helper.rb:130
   def extract_columns(str); end
 
@@ -1765,7 +1773,7 @@ module DatabaseConsistency::Helper
   # contents. Empty literals are left untouched because negated-blank
   # normalization relies on them.
   #
-  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:225
+  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:337
   def mask_condition_literals(sql); end
 
   # Returns list of models to check
@@ -1773,46 +1781,62 @@ module DatabaseConsistency::Helper
   # pkg:gem/database_consistency#lib/database_consistency/helper.rb:41
   def models(configuration); end
 
-  # Rewrites PostgreSQL's `= ANY (ARRAY[...])` form into an `IN (...)` form
-  # so it matches the SQL Active Record typically generates for arrays.
+  # Rewrites the spellings that differ between adapters, or between what an
+  # adapter stores and what Active Record writes: quoted identifiers, casts,
+  # exponent notation, the spacing of an `IN` list, the parentheses PostgreSQL
+  # adds around a cast operand and the `<>` it writes for inequality. Literals are masked throughout, so
+  # none of it reaches the inside of a value.
   #
-  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:338
+  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:450
+  def normalize_adapter_syntax(sql); end
+
+  # Rewrites PostgreSQL's `= ANY (ARRAY[...])` and `<> ALL (ARRAY[...])` forms
+  # into the `IN (...)` and `NOT IN (...)` Active Record generates for arrays.
+  # `<>` has already become `!=` by this point in the pipeline.
+  #
+  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:536
   def normalize_array_any_predicates(sql); end
+
+  # Rewrites the `TRUE` / `FALSE` / `NULL` keywords and the `IS` phrasings
+  # around them to one spelling. These run once literals are masked, so a
+  # value that happens to read `IS TRUE` keeps its own text.
+  #
+  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:392
+  def normalize_boolean_and_null_keywords(sql); end
 
   # Rewrites shorthand boolean predicates into explicit comparisons so
   # `flag` and `NOT flag` line up with `flag = true/false`.
   #
-  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:317
+  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:519
   def normalize_boolean_predicates(sql); end
 
   # Normalizes SQL predicates into a canonical form so semantically equivalent
   # Rails validators and database partial indexes can be compared safely.
   #
-  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:199
+  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:302
   def normalize_condition_sql(sql); end
 
   # Finishes normalization after string literals have been masked: runs the
-  # regex-based transforms that must not see inside literals, restores the
-  # literals, then applies the final clean-ups.
+  # regex-based transforms that must not see inside literals, applies the
+  # final structural clean-ups, and only then restores the literal values.
+  # Restoring last protects literal contents from whitespace collapse and
+  # clause sorting.
   #
-  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:211
+  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:323
   def normalize_masked_condition_sql(masked_sql, literals); end
 
   # Rewrites negated "blank or nil" predicates into the same shape used by
   # `allow_blank`-derived guards: `IS NOT NULL AND != ''`.
   #
-  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:348
+  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:547
   def normalize_negated_blank_or_nil_predicates(sql); end
 
-  # Normalizations that run while string literals are masked.
+  # Rewrites a boolean written as the quoted `'t'` / `'f'` PostgreSQL stores.
+  # It reads the value inside the quotes, so it has to run before literals are
+  # masked, while that value is still there to read.
   #
-  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:264
-  def normalize_sql_post_mask(sql); end
-
-  # Normalizations that must run before string literals are masked.
-  #
-  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:248
-  def normalize_sql_pre_mask(sql); end
+  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:371
+  def normalize_quoted_boolean_literals(sql); end
 
   # Return list of not inherited models
   #
@@ -1821,7 +1845,7 @@ module DatabaseConsistency::Helper
 
   # Tracks parenthesis nesting depth character by character.
   #
-  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:304
+  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:506
   def parenthesis_depth(depth, char); end
 
   # pkg:gem/database_consistency#lib/database_consistency/helper.rb:20
@@ -1840,11 +1864,23 @@ module DatabaseConsistency::Helper
   # pkg:gem/database_consistency#lib/database_consistency/helper.rb:109
   def scope_columns(validator, model); end
 
-  # Sorts simple `AND` clauses so `a AND b` and `b AND a` normalize to the
-  # same string before comparison.
+  # Places the decimal point `position` digits into `digits`, padding with
+  # zeros on whichever side falls short and dropping a fraction that ends in
+  # them, so `1e-20` and `1.0e-20` land on the same digits. A zero that only
+  # holds the decimal point's place goes too, so `0.1e+2` reaches `10`.
   #
-  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:358
-  def sort_and_clauses(sql); end
+  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:430
+  def shift_decimal_point(sign, digits, position); end
+
+  # Sorts simple `AND` clauses so `a AND b` and `b AND a` normalize to the
+  # same string before comparison. Two clauses can be identical apart from the
+  # string each one compares against, and then those strings decide the order,
+  # which is why the literals go back in before the sort. A placeholder is
+  # numbered by where its literal appeared, so sorting on the placeholders
+  # would leave such a pair in whichever order it arrived in.
+  #
+  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:559
+  def sort_and_clauses(sql, literals); end
 
   # pkg:gem/database_consistency#lib/database_consistency/helper.rb:101
   def sorted_uniqueness_validator_columns(attribute, validator, model); end
@@ -1852,7 +1888,7 @@ module DatabaseConsistency::Helper
   # Repeatedly removes one wrapping layer of parentheses when the whole SQL
   # fragment is enclosed, e.g. `((foo))` -> `foo`.
   #
-  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:280
+  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:482
   def strip_outer_parentheses(sql); end
 
   # pkg:gem/database_consistency#lib/database_consistency/helper.rb:105
@@ -1861,7 +1897,7 @@ module DatabaseConsistency::Helper
   # Builds the implicit SQL guard introduced by validator options that skip
   # nil or blank values instead of validating them.
   #
-  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:370
+  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:571
   def uniqueness_validator_guard_sql(model, attribute, validator); end
 
   # Builds the effective uniqueness constraint enforced by a validator.
@@ -1880,25 +1916,42 @@ module DatabaseConsistency::Helper
   # Restores literals in the order they were masked. Uses a block replacement
   # so backslashes inside the literal are not interpreted as regexp backrefs.
   #
-  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:240
+  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:352
   def unmask_condition_literals(sql, literals); end
+
+  # PostgreSQL writes any literal it had to coerce as a quoted string with a
+  # cast: `-1` becomes `'-1'::integer`, `-1.5` becomes `'-1.5'::numeric` and
+  # `1e+20` becomes `'1e+20'::double precision`. Unquoting those lets them line
+  # up with the bare numbers Active Record generates. A `::text` cast is left
+  # alone so a genuine string comparison keeps its quotes.
+  #
+  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:364
+  def unquote_numeric_literals(sql); end
+
+  # Removes the parentheses PostgreSQL puts around an operand it had to cast,
+  # which are redundant once the cast itself is gone: `(0)::numeric` -> `0`,
+  # `((name)::character varying(3))::text` -> `name`, `(abs(1))::numeric` ->
+  # `abs(1)`. Each pass repeats because removing one layer can expose another.
+  #
+  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:470
+  def unwrap_redundant_parentheses(sql); end
 
   # A validator with only `allow_nil` / `allow_blank` and no explicit
   # conditions is still satisfied by a full unique index, because the database
   # constraint is stricter than the validator.
   #
-  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:383
+  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:584
   def validator_guard_only?(model, attribute, validator); end
 
   # @return [String]
   #
-  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:389
+  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:590
   def wrapped_attribute_name(attribute, validator, model); end
 
   # Returns true only when the string is entirely wrapped by one outer pair of
   # parentheses, not when parentheses close earlier inside the expression.
   #
-  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:290
+  # pkg:gem/database_consistency#lib/database_consistency/helper.rb:492
   def wrapped_with_parentheses?(sql); end
 
   class << self
@@ -1935,6 +1988,14 @@ module DatabaseConsistency::Helper
     # pkg:gem/database_consistency#lib/database_consistency/helper.rb:16
     def database_name(model); end
 
+    # Rewrites exponent notation as the plain decimal PostgreSQL itself writes
+    # when it expands a literal, so `1e+20` and the `1.0e+20` Active Record
+    # generates reach the same string. The digits are shifted as text rather
+    # than through a float, so a wide value keeps every one of them.
+    #
+    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:419
+    def expand_exponent_literals(sql); end
+
     # pkg:gem/database_consistency#lib/database_consistency/helper.rb:130
     def extract_columns(str); end
 
@@ -1956,7 +2017,7 @@ module DatabaseConsistency::Helper
     # contents. Empty literals are left untouched because negated-blank
     # normalization relies on them.
     #
-    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:225
+    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:337
     def mask_condition_literals(sql); end
 
     # Returns list of models to check
@@ -1964,46 +2025,62 @@ module DatabaseConsistency::Helper
     # pkg:gem/database_consistency#lib/database_consistency/helper.rb:41
     def models(configuration); end
 
-    # Rewrites PostgreSQL's `= ANY (ARRAY[...])` form into an `IN (...)` form
-    # so it matches the SQL Active Record typically generates for arrays.
+    # Rewrites the spellings that differ between adapters, or between what an
+    # adapter stores and what Active Record writes: quoted identifiers, casts,
+    # exponent notation, the spacing of an `IN` list, the parentheses PostgreSQL
+    # adds around a cast operand and the `<>` it writes for inequality. Literals are masked throughout, so
+    # none of it reaches the inside of a value.
     #
-    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:338
+    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:450
+    def normalize_adapter_syntax(sql); end
+
+    # Rewrites PostgreSQL's `= ANY (ARRAY[...])` and `<> ALL (ARRAY[...])` forms
+    # into the `IN (...)` and `NOT IN (...)` Active Record generates for arrays.
+    # `<>` has already become `!=` by this point in the pipeline.
+    #
+    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:536
     def normalize_array_any_predicates(sql); end
+
+    # Rewrites the `TRUE` / `FALSE` / `NULL` keywords and the `IS` phrasings
+    # around them to one spelling. These run once literals are masked, so a
+    # value that happens to read `IS TRUE` keeps its own text.
+    #
+    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:392
+    def normalize_boolean_and_null_keywords(sql); end
 
     # Rewrites shorthand boolean predicates into explicit comparisons so
     # `flag` and `NOT flag` line up with `flag = true/false`.
     #
-    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:317
+    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:519
     def normalize_boolean_predicates(sql); end
 
     # Normalizes SQL predicates into a canonical form so semantically equivalent
     # Rails validators and database partial indexes can be compared safely.
     #
-    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:199
+    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:302
     def normalize_condition_sql(sql); end
 
     # Finishes normalization after string literals have been masked: runs the
-    # regex-based transforms that must not see inside literals, restores the
-    # literals, then applies the final clean-ups.
+    # regex-based transforms that must not see inside literals, applies the
+    # final structural clean-ups, and only then restores the literal values.
+    # Restoring last protects literal contents from whitespace collapse and
+    # clause sorting.
     #
-    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:211
+    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:323
     def normalize_masked_condition_sql(masked_sql, literals); end
 
     # Rewrites negated "blank or nil" predicates into the same shape used by
     # `allow_blank`-derived guards: `IS NOT NULL AND != ''`.
     #
-    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:348
+    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:547
     def normalize_negated_blank_or_nil_predicates(sql); end
 
-    # Normalizations that run while string literals are masked.
+    # Rewrites a boolean written as the quoted `'t'` / `'f'` PostgreSQL stores.
+    # It reads the value inside the quotes, so it has to run before literals are
+    # masked, while that value is still there to read.
     #
-    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:264
-    def normalize_sql_post_mask(sql); end
-
-    # Normalizations that must run before string literals are masked.
-    #
-    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:248
-    def normalize_sql_pre_mask(sql); end
+    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:371
+    def normalize_quoted_boolean_literals(sql); end
 
     # Return list of not inherited models
     #
@@ -2012,7 +2089,7 @@ module DatabaseConsistency::Helper
 
     # Tracks parenthesis nesting depth character by character.
     #
-    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:304
+    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:506
     def parenthesis_depth(depth, char); end
 
     # pkg:gem/database_consistency#lib/database_consistency/helper.rb:20
@@ -2031,11 +2108,23 @@ module DatabaseConsistency::Helper
     # pkg:gem/database_consistency#lib/database_consistency/helper.rb:109
     def scope_columns(validator, model); end
 
-    # Sorts simple `AND` clauses so `a AND b` and `b AND a` normalize to the
-    # same string before comparison.
+    # Places the decimal point `position` digits into `digits`, padding with
+    # zeros on whichever side falls short and dropping a fraction that ends in
+    # them, so `1e-20` and `1.0e-20` land on the same digits. A zero that only
+    # holds the decimal point's place goes too, so `0.1e+2` reaches `10`.
     #
-    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:358
-    def sort_and_clauses(sql); end
+    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:430
+    def shift_decimal_point(sign, digits, position); end
+
+    # Sorts simple `AND` clauses so `a AND b` and `b AND a` normalize to the
+    # same string before comparison. Two clauses can be identical apart from the
+    # string each one compares against, and then those strings decide the order,
+    # which is why the literals go back in before the sort. A placeholder is
+    # numbered by where its literal appeared, so sorting on the placeholders
+    # would leave such a pair in whichever order it arrived in.
+    #
+    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:559
+    def sort_and_clauses(sql, literals); end
 
     # pkg:gem/database_consistency#lib/database_consistency/helper.rb:101
     def sorted_uniqueness_validator_columns(attribute, validator, model); end
@@ -2043,7 +2132,7 @@ module DatabaseConsistency::Helper
     # Repeatedly removes one wrapping layer of parentheses when the whole SQL
     # fragment is enclosed, e.g. `((foo))` -> `foo`.
     #
-    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:280
+    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:482
     def strip_outer_parentheses(sql); end
 
     # pkg:gem/database_consistency#lib/database_consistency/helper.rb:105
@@ -2052,7 +2141,7 @@ module DatabaseConsistency::Helper
     # Builds the implicit SQL guard introduced by validator options that skip
     # nil or blank values instead of validating them.
     #
-    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:370
+    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:571
     def uniqueness_validator_guard_sql(model, attribute, validator); end
 
     # Builds the effective uniqueness constraint enforced by a validator.
@@ -2071,28 +2160,103 @@ module DatabaseConsistency::Helper
     # Restores literals in the order they were masked. Uses a block replacement
     # so backslashes inside the literal are not interpreted as regexp backrefs.
     #
-    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:240
+    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:352
     def unmask_condition_literals(sql, literals); end
+
+    # PostgreSQL writes any literal it had to coerce as a quoted string with a
+    # cast: `-1` becomes `'-1'::integer`, `-1.5` becomes `'-1.5'::numeric` and
+    # `1e+20` becomes `'1e+20'::double precision`. Unquoting those lets them line
+    # up with the bare numbers Active Record generates. A `::text` cast is left
+    # alone so a genuine string comparison keeps its quotes.
+    #
+    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:364
+    def unquote_numeric_literals(sql); end
+
+    # Removes the parentheses PostgreSQL puts around an operand it had to cast,
+    # which are redundant once the cast itself is gone: `(0)::numeric` -> `0`,
+    # `((name)::character varying(3))::text` -> `name`, `(abs(1))::numeric` ->
+    # `abs(1)`. Each pass repeats because removing one layer can expose another.
+    #
+    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:470
+    def unwrap_redundant_parentheses(sql); end
 
     # A validator with only `allow_nil` / `allow_blank` and no explicit
     # conditions is still satisfied by a full unique index, because the database
     # constraint is stricter than the validator.
     #
-    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:383
+    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:584
     def validator_guard_only?(model, attribute, validator); end
 
     # @return [String]
     #
-    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:389
+    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:590
     def wrapped_attribute_name(attribute, validator, model); end
 
     # Returns true only when the string is entirely wrapped by one outer pair of
     # parentheses, not when parentheses close earlier inside the expression.
     #
-    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:290
+    # pkg:gem/database_consistency#lib/database_consistency/helper.rb:492
     def wrapped_with_parentheses?(sql); end
   end
 end
+
+# Matches `column = ANY (ARRAY[...])` or `column != ALL ((ARRAY[...]))`,
+# capturing the column name, the operator and the array payload. The inner
+# parentheses come from Postgres indexdefs that wrap the array expression
+# before casting; they are optional, but both or neither, so a group
+# enclosing the whole predicate keeps its own.
+#
+# pkg:gem/database_consistency#lib/database_consistency/helper.rb:286
+DatabaseConsistency::Helper::ARRAY_MEMBERSHIP_PREDICATE = T.let(T.unsafe(nil), Regexp)
+
+# Matches a bare boolean predicate such as `most_recent` in those same three
+# places. It runs after the negated form so that `NOT archived` is already
+# gone and cannot be read as the predicate `archived`.
+#
+# pkg:gem/database_consistency#lib/database_consistency/helper.rb:275
+DatabaseConsistency::Helper::BARE_BOOLEAN_PREDICATE = T.let(T.unsafe(nil), Regexp)
+
+# Matches a number PostgreSQL had to quote in order to coerce it, together
+# with the cast that says it is a number rather than a string. `::text` is
+# deliberately absent from the list so a genuine string keeps its quotes.
+#
+# pkg:gem/database_consistency#lib/database_consistency/helper.rb:205
+DatabaseConsistency::Helper::COERCED_NUMERIC_LITERAL = T.let(T.unsafe(nil), Regexp)
+
+# Matches a PostgreSQL cast, covering the type names written as several
+# words, the length or precision an explicit cast carries and the `[]` of an
+# array type: `::text`, `::text[]`, `::double precision`,
+# `::character varying(3)`, `::numeric(5,2)`, `::time without time zone`.
+# A date or time type carries its precision in the middle of its name, as
+# `::timestamp(0) without time zone`, so that branch spells out its own.
+#
+# pkg:gem/database_consistency#lib/database_consistency/helper.rb:216
+DatabaseConsistency::Helper::CONDITION_CAST = T.let(T.unsafe(nil), Regexp)
+
+# Matches one single-quoted string literal, including any `''` it contains:
+# SQL escapes a quote by doubling it, so a `''` pair is part of the value
+# rather than the end of it.
+#
+# pkg:gem/database_consistency#lib/database_consistency/helper.rb:200
+DatabaseConsistency::Helper::CONDITION_LITERAL = T.let(T.unsafe(nil), Regexp)
+
+# Matches a number written in exponent notation, capturing the sign, the
+# digits on each side of the decimal point and the exponent separately so
+# the point can be shifted through the digits as text. The lookbehind keeps
+# the digits of an identifier such as `a1e5` out of it.
+#
+# pkg:gem/database_consistency#lib/database_consistency/helper.rb:233
+DatabaseConsistency::Helper::EXPONENT_LITERAL = T.let(T.unsafe(nil), Regexp)
+
+# The parentheses right after `IN` or `NOT IN` are the list itself rather
+# than something wrapped around a value, so the patterns below leave them
+# alone and `qty IN (1)` stays a list of one. This covers only the
+# parenthesis that opens the list; a value with parentheses of its own
+# further along it, such as the `(1)` in `qty IN ((1), 2)`, still loses
+# them.
+#
+# pkg:gem/database_consistency#lib/database_consistency/helper.rb:244
+DatabaseConsistency::Helper::IN_LIST_OPENING = T.let(T.unsafe(nil), Regexp)
 
 # Prefix used to mask string literals while regex normalization runs, so
 # patterns that strip casts or unwrap parentheses never see the inside of a
@@ -2101,6 +2265,39 @@ end
 #
 # pkg:gem/database_consistency#lib/database_consistency/helper.rb:195
 DatabaseConsistency::Helper::LITERAL_PLACEHOLDER = T.let(T.unsafe(nil), String)
+
+# Matches SQL like `NOT (column = '' OR column IS NULL)`, holding both sides
+# to the same column with the backreference.
+#
+# pkg:gem/database_consistency#lib/database_consistency/helper.rb:294
+DatabaseConsistency::Helper::NEGATED_BLANK_OR_NIL_PREDICATE = T.let(T.unsafe(nil), Regexp)
+
+# Matches a bare negated boolean predicate such as `NOT archived`, in the
+# three places one can stand: at the start of an expression, after `AND` or
+# `OR`, or after an opening parenthesis.
+#
+# pkg:gem/database_consistency#lib/database_consistency/helper.rb:266
+DatabaseConsistency::Helper::NEGATED_BOOLEAN_PREDICATE = T.let(T.unsafe(nil), Regexp)
+
+# Matches parentheses wrapping exactly one function call, such as the
+# `(abs(1))` a removed `::numeric` cast leaves behind. The inner group
+# recurses so the call's own argument list may nest, and the lookbehind
+# keeps a call's own parentheses out of it.
+#
+# pkg:gem/database_consistency#lib/database_consistency/helper.rb:258
+DatabaseConsistency::Helper::WRAPPED_FUNCTION_CALL = T.let(T.unsafe(nil), Regexp)
+
+# Matches a bare identifier wrapped in parentheses, e.g. `(internal_name)`.
+#
+# pkg:gem/database_consistency#lib/database_consistency/helper.rb:247
+DatabaseConsistency::Helper::WRAPPED_IDENTIFIER = T.let(T.unsafe(nil), Regexp)
+
+# Matches a parenthesized numeric literal, e.g. `(0)` or `(0.001)`, which is
+# what a cast such as `(0)::numeric` leaves behind once the cast is gone.
+# The lookbehind keeps the argument list of a call such as `abs(1)` intact.
+#
+# pkg:gem/database_consistency#lib/database_consistency/helper.rb:252
+DatabaseConsistency::Helper::WRAPPED_NUMBER = T.let(T.unsafe(nil), Regexp)
 
 # The module contains Prism AST helper methods for scanning project source files.
 #
