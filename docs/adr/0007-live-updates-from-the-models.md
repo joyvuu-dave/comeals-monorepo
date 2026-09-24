@@ -54,8 +54,9 @@ Every model whose rows a screen shows notes itself in `LiveUpdate`
 (`app/services/live_update.rb`) from its save and destroy callbacks:
 Meal, Bill, MealResident, Guest, Event, CommonHouseReservation,
 GuestRoomReservation, Rotation (and `after_remove` for meals dropped
-from it), Resident, Unit. `Settlement` and `Rotation#set_place_value`
-(both `update_all`) note themselves by hand. A controller does not
+from it), Resident, Unit. `Settlement`, `Rotation#set_place_value`
+(both `update_all`) and `SetMultipliersJob` (`update_columns`, added
+2026-09-24) note themselves by hand. A controller does not
 push. `MealsController` sets `Current.socket_id` so the meal-page push
 skips the browser that made the change.
 

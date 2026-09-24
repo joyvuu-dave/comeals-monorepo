@@ -218,7 +218,11 @@ class Resident < ApplicationRecord
   # the meal page's sign-up list and every cached calendar month list
   # residents, so all of them refetch. A list of the shown columns would
   # go stale the first time a serializer gained one; this list only has
-  # to name what is secret or invisible.
+  # to name what is secret or invisible. One write to a shown column skips
+  # this callback: SetMultipliersJob sets multiplier with update_columns,
+  # and pushes the residents channel itself. The other writes that skip it
+  # (keys_valid_since, the reset-token columns) touch nothing a screen
+  # shows.
   UNSHOWN_COLUMNS = T.let(%w[email phone password_digest reset_password_token reset_password_sent_at
                              created_at updated_at].freeze, T::Array[String])
   private_constant :UNSHOWN_COLUMNS

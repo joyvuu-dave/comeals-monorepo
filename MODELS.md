@@ -101,8 +101,10 @@ removed the slug.
 - `unreconciled_ave_number_of_attendees`, `auto_rotation_length`,
   `auto_create_rotations` — older helpers for grouping meals that have no
   rotation.
-- `trigger_pusher(date)` — deletes the calendar cache entries that cover that
-  date, then sends a Pusher message on the same keys. `after_create` also
+- Clearing the calendar cache and pushing is not the community's job:
+  every model a screen shows notes itself in `LiveUpdate` from its own
+  `note_live_update` callback, and `LiveUpdate` clears and pushes after the
+  commit (ADR 0007). `after_create` also
   fills in `community_id` on any AdminUser rows created before the community
   existed.
 
@@ -387,8 +389,9 @@ trigger enforces the same update and delete rules in the database.
 meal cannot be destroyed.
 
 **Other:** audited, with associated audits from its bills, attendance, and
-guests (`total_audits`). `trigger_pusher` clears the meal's cache entry and
-the calendar cache, then notifies Pusher.
+guests (`total_audits`). `note_live_update` notes the meal's page and its
+month in `LiveUpdate`, which clears the calendar cache and pushes after the
+commit (ADR 0007).
 
 ---
 
@@ -763,8 +766,9 @@ CommonHouseReservation ----> Resident
 
 **Key fields:** `title` (optional), `start_date`, `end_date`
 
-All three call `community.trigger_pusher` after commit for every month they
-touch, including the old months when dates change.
+All three note every month they touch in `LiveUpdate` (`note_live_update`),
+including the old months when dates change, and it clears the calendar cache
+and pushes after the commit (ADR 0007).
 
 ---
 

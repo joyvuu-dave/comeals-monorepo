@@ -60,8 +60,13 @@ branch, none fixed in the hunt. The branches:
   band with `update_columns` (`app/jobs/set_multipliers_job.rb:23`), so
   no callback notes the residents channel and every open screen keeps
   its old hosts list until it reloads:
-  `spec/requests/api/v1/live_update_contract_spec.rb:207`. Also noticed:
-  the `UNSHOWN_COLUMNS` comment in `resident.rb` is false for that job;
+  `spec/requests/api/v1/live_update_contract_spec.rb:207`. Fixed
+  2026-09-24 on the hunt branch: the job keeps `update_columns` and
+  pushes the residents channel itself, once per run, when someone
+  moved. Deriving the band from the birthday at read time, which would
+  remove the job and the gap between a birthday and the next run, is
+  filed as its own issue. Also noticed:
+  the `UNSHOWN_COLUMNS` comment in `resident.rb` was false for that job (fixed with it);
   `recolor_remaining_rotations` pushes its months twice; a tab showing a
   meal that an admin deletes keeps showing it (chat only).
 
