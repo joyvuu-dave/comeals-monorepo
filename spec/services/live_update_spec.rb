@@ -34,6 +34,30 @@ RSpec.describe LiveUpdate do
       expect(Pusher).not_to have_received(:trigger)
     end
 
+    it "reads the start's day in the community's zone when there is no end" do
+      # 16:00 UTC on October 31 is November 1 at 01:00 in Tokyo. November
+      # 2026 starts on a Sunday, so its six-week grid does not show
+      # October 31, and October's grid does show November 1: read in Tokyo
+      # the range marks October and November, read in UTC only October.
+      community.update!(timezone: 'Asia/Tokyo')
+      calls = pushed do
+        described_class.batch { described_class.calendar_range(Time.utc(2026, 10, 31, 16), nil) }
+      end
+
+      expect(calendar_channels(calls)).to eq(%w[2026-10 2026-11].map { |m| "community-#{community.id}-calendar-#{m}" })
+    end
+
+    it "reads the end's day in the community's zone" do
+      community.update!(timezone: 'Asia/Tokyo')
+      calls = pushed do
+        described_class.batch { described_class.calendar_range(Date.new(2026, 10, 20), Time.utc(2026, 10, 31, 16)) }
+      end
+
+      # September too: October 1 is on September's six-week grid.
+      expect(calendar_channels(calls))
+        .to match_array(%w[2026-9 2026-10 2026-11].map { |m| "community-#{community.id}-calendar-#{m}" })
+    end
+
     it 'marks the last day itself, which can be on the next month\'s six weeks' do
       # April 10 to April 28, 2026: May starts on a Friday, so May's six
       # weeks start on Sunday April 26 and show April 28.
@@ -83,6 +107,21 @@ RSpec.describe LiveUpdate do
   end
 
   describe '.calendar' do
+    it 'notes nothing for a nil date' do
+      described_class.batch { described_class.calendar(nil) }
+
+      expect(Pusher).not_to have_received(:trigger)
+    end
+
+    it "reads a time's day in the community's zone" do
+      community.update!(timezone: 'Asia/Tokyo')
+      calls = pushed do
+        described_class.batch { described_class.calendar(Time.utc(2026, 10, 31, 16)) }
+      end
+
+      expect(calendar_channels(calls)).to eq(%w[2026-10 2026-11].map { |m| "community-#{community.id}-calendar-#{m}" })
+    end
+
     it "reads a time's day in the community's zone, not the time's own" do
       community.update!(timezone: 'Asia/Tokyo')
       calls = pushed do
@@ -371,11 +410,16 @@ RSpec.describe LiveUpdate do
     end
   end
 
-  describe '.flush' do
+  # Described by a sentence, not as '.flush': under mutant a '.flush'
+  # group would be the whole test set for flush, and this one example
+  # cannot prove the method (2026-09-25: 104 of its mutations survived
+  # that way). As a sentence it joins the set every mapped request spec
+  # gives flush.
+  describe 'a flush whose key naming fails' do
     # The header's promise: nothing in the flush raises. The clear and
     # the push have their own rescue; this pins the one around the reads
     # that name the keys, which are also statements Postgres can refuse.
-    it 'reports and goes on when naming the keys fails, so a committed write is not retried' do
+    it 'reports and goes on, so a committed write is not retried' do
       batch = described_class::Batch.new
       batch.dates << Date.new(2026, 6, 10)
       refusal = ActiveRecord::SerializationFailure.new('could not serialize access')
@@ -385,6 +429,43 @@ RSpec.describe LiveUpdate do
       expect { described_class.flush(batch) }.not_to raise_error
       expect(Rails.error).to have_received(:report).with(refusal, hash_including(handled: true,
                                                                                  context: { dates: ['2026-06-10'] }))
+    end
+  end
+
+  describe '.clear' do
+    it 'deletes the entry' do
+      allow(Rails.cache).to receive(:delete)
+
+      described_class.send(:clear, 'a-key')
+
+      expect(Rails.cache).to have_received(:delete).with('a-key')
+    end
+
+    # A DELETE on solid_cache_entries at SERIALIZABLE, which Postgres can
+    # refuse; the write is committed, so the refusal is reported and the
+    # entry is left to its version.
+    it 'reports a refused delete with the key and goes on' do
+      refusal = ActiveRecord::SerializationFailure.new('could not serialize access')
+      allow(Rails.cache).to receive(:delete).and_raise(refusal)
+      allow(Rails.error).to receive(:report).and_call_original
+
+      expect { described_class.send(:clear, 'a-key') }.not_to raise_error
+      expect(Rails.error).to have_received(:report).with(refusal, handled: true, context: { key: 'a-key' })
+    end
+  end
+
+  describe '.community_date' do
+    it 'returns a Date for a Date' do
+      expect(described_class.send(:community_date, Date.new(2026, 10, 31))).to eq(Date.new(2026, 10, 31))
+    end
+
+    it "returns the day a time falls on in the community's zone, as a Date" do
+      community.update!(timezone: 'Asia/Tokyo')
+
+      value = described_class.send(:community_date, Time.utc(2026, 10, 31, 16))
+
+      expect(value).to eq(Date.new(2026, 11, 1))
+      expect(value).to be_an_instance_of(Date)
     end
   end
 end

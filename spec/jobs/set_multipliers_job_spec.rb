@@ -4,7 +4,9 @@ require 'rails_helper'
 
 # The rule itself, band by band, is in spec/tasks/residents_set_multiplier_spec.rb.
 # This pins the bookkeeping of one run.
-RSpec.describe SetMultipliersJob do
+# Under prosopite: the job preloads each resident's community, and a
+# run without the preload is one query per resident from one line.
+RSpec.describe SetMultipliersJob, :prosopite do
   let(:community) { create(:community, free_below_age: 5, full_price_age: 12) }
   let(:unit) { create(:unit, community: community) }
 

@@ -89,6 +89,11 @@ RSpec.describe SettleAndNotify do
         .to raise_error(ActiveRecord::SerializationFailure)
 
       expect(Settlement).to have_received(:settle!).exactly(3).times
+      # The request budget's delays: the base delay, then double it, each
+      # stretched by up to half again (RetryOnConflict).
+      base = described_class::REQUEST.base_delay
+      expect(RetryOnConflict).to have_received(:sleep).with(be_between(base, base * 2)).once
+      expect(RetryOnConflict).to have_received(:sleep).with(be_between(base * 2, base * 4)).once
     end
 
     # The whole point of the two budgets: what the nightly task waits out,
@@ -177,6 +182,8 @@ RSpec.describe SettleAndNotify do
 
       expect(BalanceRecalculation).to have_received(:call).with(community: community)
                                                           .exactly(described_class::REQUEST.attempts).times
+      base = described_class::REQUEST.base_delay
+      expect(RetryOnConflict).to have_received(:sleep).with(be_between(base, base * 2)).once
       expect(Rails.error).to have_received(:report).with(
         an_instance_of(ActiveRecord::SerializationFailure),
         hash_including(handled: true, severity: :error, context: { step: 'balance refresh after settlement' })

@@ -86,6 +86,15 @@ RSpec.describe Guest do
       expect(guest.save).to be(true)
     end
 
+    it "counts this meal's attendance only, not another meal's" do
+      meal.update_columns(closed: true, closed_at: 1.hour.ago, max: 1)
+      other_meal = create(:meal, community: community, date: meal.date + 1)
+      create(:meal_resident, meal: other_meal, resident: resident, community: community)
+      create(:guest, meal: other_meal, resident: resident)
+
+      expect(described_class.new(meal: Meal.find(meal.id), resident: resident).save).to be(true)
+    end
+
     it 'allows updating an existing guest when meal is closed at capacity' do
       other_unit = create(:unit, community: community)
       filler = create(:resident, community: community, unit: other_unit, multiplier: 2)

@@ -93,8 +93,11 @@ module LiveUpdate
     end
 
     # Every day from `from` to `to` changed (an event that spans months).
-    # Only the first day of each month is kept: the months are what the
-    # cache and the channels are keyed by.
+    # The first day of each month is kept, and the last day itself: the
+    # months are what the cache and the channels are keyed by, and a day
+    # late in a month is also on the next month's six-week grid. The first
+    # day is not kept on its own: its month's first day reaches every
+    # month it does (mutant, 2026-09-25).
     def calendar_range(from, to)
       return if from.nil?
 
@@ -106,7 +109,6 @@ module LiveUpdate
           batch.dates << month
           month = month.next_month
         end
-        batch.dates << first
         batch.dates << last
       end
     end
@@ -204,9 +206,8 @@ module LiveUpdate
       end
     end
 
+    # A Date comes back as itself (midnight in the zone, then the date).
     def community_date(value)
-      return value if value.is_a?(Date)
-
       value.in_time_zone(Community.instance.timezone).to_date
     end
 

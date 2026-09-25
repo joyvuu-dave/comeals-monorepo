@@ -47,7 +47,7 @@ module ClosedMealAttendanceFreeze
 
   def meal_has_open_spots
     # Scenario: Admin attendance correction — the freeze does not apply
-    return true if admin_correction
+    return if admin_correction
 
     message = refusal_to_join(T.must(meal))
     errors.add(:base, message) if message
@@ -61,9 +61,9 @@ module ClosedMealAttendanceFreeze
   # close of either meal that runs at the same time is ordered before or
   # after the whole of this write, never between the check and the write.
   def move_keeps_both_meals_rules
-    return true unless meal_id_changed?
+    return unless meal_id_changed?
     # Scenario: Admin attendance correction — the freeze does not apply
-    return true if admin_correction
+    return if admin_correction
 
     old_meal = Meal.find(T.must(meal_id_in_database))
     return errors.add(:base, 'Meal has been closed.') unless can_leave?(old_meal)
@@ -76,8 +76,8 @@ module ClosedMealAttendanceFreeze
     # Reconciled check is handled by reject_if_reconciled (a before_destroy
     # declared before this one, so it runs first among the guards).
     # Scenario: Admin attendance correction — the freeze does not apply
-    return true if admin_correction
-    return true if can_leave?(T.must(meal))
+    return if admin_correction
+    return if can_leave?(T.must(meal))
 
     # Scenario: Meal is closed, record was added before meal was closed
     errors.add(:base, 'Meal has been closed.')
@@ -120,11 +120,12 @@ module ClosedMealAttendanceFreeze
     # Scenario: Meal is open
     return true if meal.closed == false
 
-    # A closed meal always has closed_at: Meal#conditionally_set_closed_at sets
-    # it, on create as well as on close, and the database CHECK
-    # meals_closed_at_matches_closed refuses a closed meal without one from
-    # every write path. So T.must, not a nil branch: if it is ever nil the
-    # data is corrupt and raising is right.
-    meal.closed == true && T.must(created_at) > T.must(meal.closed_at)
+    # The meal is closed here. A closed meal always has closed_at:
+    # Meal#conditionally_set_closed_at sets it, on create as well as on
+    # close, and the database CHECK meals_closed_at_matches_closed refuses
+    # a closed meal without one from every write path. So T.must, not a
+    # nil branch: if it is ever nil the data is corrupt and raising is
+    # right.
+    T.must(created_at) > T.must(meal.closed_at)
   end
 end
