@@ -176,18 +176,13 @@ module LiveUpdate
     def note
       if (manual = Current.live_update_manual_batch)
         yield manual
-        return
-      end
-
-      transaction = ActiveRecord::Base.current_transaction
-      unless transaction.open?
+      elsif (transaction = ActiveRecord::Base.current_transaction).open?
+        yield batch_for(transaction)
+      else
         batch = Batch.new
         yield batch
         flush(batch)
-        return
       end
-
-      yield batch_for(transaction)
     end
 
     # One batch per open transaction, keyed by the transaction's uuid.

@@ -415,6 +415,17 @@ RSpec.describe LiveUpdate do
   # cannot prove the method (2026-09-25: 104 of its mutations survived
   # that way). As a sentence it joins the set every mapped request spec
   # gives flush.
+  describe 'a flush of an empty batch' do
+    it 'reads nothing and pushes nothing' do
+      allow(Community).to receive(:instance)
+
+      described_class.flush(described_class::Batch.new)
+
+      expect(Community).not_to have_received(:instance)
+      expect(Pusher).not_to have_received(:trigger)
+    end
+  end
+
   describe 'a flush whose key naming fails' do
     # The header's promise: nothing in the flush raises. The clear and
     # the push have their own rescue; this pins the one around the reads

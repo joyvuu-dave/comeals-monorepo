@@ -734,3 +734,63 @@ leftover.zero?` was redundant code; with nothing left over the
 Rerun after the fixes: `LargestRemainderSplit*` 178 mutations, 178
 killed; `MealLedger#initialize`, `#credit_units` and `#credit_lines`
 with the type checks moved out, one alive (the `T.let` line above).
+
+### 2026-09-25, the four bug-hunt fixes
+
+Run after the fixes of the 2026-09-21 hunt merged: `LiveUpdate*`,
+`Settlement*`, `SettleAndNotify*`, `ClosedMealAttendanceFreeze*`,
+`ReconciledMealImmutability*` and `SetMultipliersJob*`, on six
+workers: 50 subjects, 2,198 mutations, 2,029 killed, 169 alive, 97 of
+them timeouts, 1h43.
+
+Most of the 169 were one spec group. The fix for the refused cache
+clear added a `describe '.flush'` group with a single example, and
+under this suite's rule a `'.method'` group is the whole test set for
+that method, so 104 of `flush`'s 110 mutations ran against that one
+example. The group is described by a sentence now, and `flush` gets
+every mapped request spec again. Lesson for the next fix: add an
+example to a method's group only if the group is the method's whole
+proof; otherwise describe it by a sentence.
+
+Two lines were redundant and are gone: `calendar_range` kept the first
+day on its own (its month's first day reaches every month it does),
+and `community_date` special-cased a Date (a Date through
+`in_time_zone` is the same Date). The freeze's validations returned
+`true` or `false`, which a callback ignores; they return nothing now,
+and `can_leave?` no longer re-tests `closed`, which its caller has
+already ruled out.
+
+New examples: a nil date, the community zone for a range's start and
+its end (October 31 16:00 UTC is November 1 in Tokyo, and November
+2026 starts on a Sunday, so the two readings mark different months), a
+Date result from `community_date`, a refused cache delete reported with
+its key, an empty batch that reads nothing, the attendance count being
+this meal's only, the retry delays of both settlement budgets on both
+retried steps, and the job spec under prosopite.
+
+Rerun on the five subjects that had survivors (Settlement had none and
+did not change), six workers, 200-second timeout: 1,212 mutations,
+1,190 killed, 22 alive, 4 timeouts, 40 minutes. The 22, by kind:
+
+- `ClosedMealAttendanceFreeze#attendees_in_database`, 6: `count` to
+  `size` or `length` (the same number on an unloaded relation) and
+  `where(meal_id: meal)` for `meal.id` (Rails reads the id).
+- `ReconciledMealImmutability#previous_meal_reconciled?`, 3: dropping
+  `will_save_change_to_meal_id?` reads the row's own meal a second time
+  and answers the same; `.present?` for truthiness on an id.
+- `LiveUpdate.flush`, 6: the `return if batch.blank?` shortcut. An
+  empty batch then reads the community and does nothing; the new
+  example pins that it reads nothing, so these should die on the next
+  run.
+- `LiveUpdate.note`, 2: the `return` after the no-transaction flush.
+  Rewritten as one if/elsif/else, so there is no return to drop.
+- `LiveUpdate.calendar_range`, 1: `<=` to `<` on the month loop. The
+  last day is kept on its own and reaches its month, so the loop's last
+  step is covered either way.
+- `SetMultipliersJob#run`, 2: the `includes(:community)` preload. The
+  job spec runs under prosopite now, but a job runs with the query
+  cache on, and prosopite ignores a cached repeat.
+- `SettleAndNotify.call` and `.refresh_balances`, 1 each: dropping
+  `base_delay:`. The request budget's delay is RetryOnConflict's
+  default, so only the batch budget can show it; both examples that use
+  the batch budget now pin the first sleep.

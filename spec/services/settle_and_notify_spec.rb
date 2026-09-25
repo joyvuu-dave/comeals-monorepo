@@ -107,7 +107,7 @@ RSpec.describe SettleAndNotify do
       expect(described_class::REQUEST.base_delay).to eq(RetryOnConflict::BASE_DELAY)
     end
 
-    it 'keeps trying past a request\'s three attempts' do
+    it 'keeps trying past a request\'s three attempts, waiting the batch delay' do
       settleable_meal(Date.yesterday)
       allow(RetryOnConflict).to receive(:sleep)
       failures = 0
@@ -117,11 +117,13 @@ RSpec.describe SettleAndNotify do
 
         original.call(**args)
       end
+      base = described_class::BATCH.base_delay
 
       reconciliation = described_class.call(cutoff: Date.yesterday, community: community)
 
       expect(reconciliation).to be_persisted
       expect(failures).to eq(7)
+      expect(RetryOnConflict).to have_received(:sleep).with(be_between(base, base * 2)).once
     end
   end
 
@@ -169,6 +171,8 @@ RSpec.describe SettleAndNotify do
       described_class.call(cutoff: Date.yesterday, community: community)
 
       expect(attempts).to eq(described_class::REQUEST.attempts + 2)
+      base = described_class::BATCH.base_delay
+      expect(RetryOnConflict).to have_received(:sleep).with(be_between(base, base * 2)).once
       expect(Rails.error).not_to have_received(:report)
         .with(anything, hash_including(context: { step: 'balance refresh after settlement' }))
     end
