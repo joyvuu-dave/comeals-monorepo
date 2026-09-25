@@ -163,6 +163,37 @@ RSpec.describe MealResident do
     end
   end
 
+  # The freeze is shared with Guest; the full table of moves is in
+  # spec/models/guest_spec.rb. These pin that an attendance row gets the
+  # same answer.
+  describe '#move_keeps_both_meals_rules' do
+    let(:other_meal) { create(:meal, community: community, date: meal.date + 1) }
+
+    it 'refuses a move off a closed meal when the resident signed up before it closed' do
+      mr = create(:meal_resident, meal: meal, resident: resident, community: community)
+      meal.update_columns(closed: true, closed_at: DateTime.now + 1.hour)
+
+      expect(mr.update(meal: other_meal)).to be(false)
+      expect(mr.errors[:base]).to include('Meal has been closed.')
+      expect(mr.reload.meal_id).to eq(meal.id)
+    end
+
+    it 'refuses a move onto a closed meal with no max' do
+      mr = create(:meal_resident, meal: meal, resident: resident, community: community)
+      other_meal.update_columns(closed: true, closed_at: 1.hour.ago)
+
+      expect(mr.update(meal: other_meal)).to be(false)
+      expect(mr.errors[:base]).to include('Meal has been closed.')
+    end
+
+    it 'allows a move between two open meals' do
+      mr = create(:meal_resident, meal: meal, resident: resident, community: community)
+
+      expect(mr.update(meal: other_meal)).to be(true)
+      expect(mr.reload.meal_id).to eq(other_meal.id)
+    end
+  end
+
   describe '#record_can_be_removed' do
     it 'allows removal when meal is open' do
       mr = create(:meal_resident, meal: meal, resident: resident, community: community)

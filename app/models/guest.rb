@@ -31,8 +31,11 @@ class Guest < ApplicationRecord
 
   audited associated_with: :meal
 
-  # Before every other guard: the meal lock comes first, so the checks
-  # below read the meal under it. See the concern for the lock order.
+  # Prepended before_save and before_destroy: the meal lock is taken
+  # before the row is written, in the trigger's order. The validations
+  # below run earlier than any before_save, so they do not read under this
+  # lock; the SERIALIZABLE transaction they share with the write keeps
+  # their answer and the write together. See the concern.
   include LocksItsMealFirst
 
   # A guest can't be added, altered, or removed after settlement.

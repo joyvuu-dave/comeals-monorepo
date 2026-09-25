@@ -429,6 +429,8 @@ single-column `meal_id` index was dropped; the composite covers it.
 - Cannot join closed meals if `max` is not set or is full
 - Can be removed from a closed meal only if the row was created after the
   meal closed
+- Can be moved to another meal only if it could leave the old meal and join
+  the new one under the rules above: a move is a removal and an addition
 - A reconciled meal refuses all of it (`ReconciledMealImmutability`, included
   first so it runs first), and the `meal_residents_reject_settled_write`
   trigger enforces the same rule for writes that skip callbacks

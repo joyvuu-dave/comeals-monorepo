@@ -20,6 +20,12 @@ module ClosedMealAttendanceFreeze
 
   sig { returns(T.nilable(ActiveSupport::TimeWithZone)) }
   def created_at; end
+
+  sig { returns(T::Boolean) }
+  def meal_id_changed?; end
+
+  sig { returns(T.nilable(Integer)) }
+  def meal_id_in_database; end
 end
 
 module LocksItsMealFirst

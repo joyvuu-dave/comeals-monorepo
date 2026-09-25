@@ -2,7 +2,7 @@
 
 # Which examples mutant runs for which classes. Read by
 # spec/support/mutant_selection.rb under bin/mutant, and by
-# spec/lib/mutant_selection_spec.rb always, which checks the lists.
+# spec/config/mutant_selection_spec.rb always, which checks the lists.
 #
 # One rule this file has already been wrong about once: a row REPLACES
 # mutant's own selection for that file. Mutant would run the examples of
@@ -140,6 +140,7 @@ MUTANT_SPEC_ROWS = {
   'spec/requests/admin/rotation_destroy_spec.rb' => %w[Rotation RefusedDestroyMessage],
   'spec/requests/admin/meal_lock_order_spec.rb' => %w[LocksItsMealFirst],
   'spec/requests/admin/meal_form_guests_spec.rb' => %w[Guest ClosedMealAttendanceFreeze],
+  'spec/requests/admin/meal_form_guest_move_spec.rb' => %w[Guest ClosedMealAttendanceFreeze],
   'spec/requests/admin/attendance_correction_spec.rb' => %w[MealResident ClosedMealAttendanceFreeze],
   'spec/requests/admin/reconciled_immutability_spec.rb' => %w[ReconciledMealImmutability Bill],
   'spec/requests/admin/reconciliation_immutability_spec.rb' => %w[SettleAndNotify Reconciliation AppendOnly],

@@ -36,6 +36,17 @@ RSpec.describe 'Admin meal form: nested guests' do
     expect(response.body).to include('Meal has been closed.')
   end
 
+  # The form's meal comes preloaded with its attendance (scoped_collection),
+  # and Rails puts the nested guest into that loaded list before validation,
+  # so a count taken from the loaded list included the guest itself and
+  # refused the last open spot (review, 2026-09-24).
+  it 'adds a guest to a closed meal with exactly one spot open' do
+    meal.update!(closed: true, max: 1)
+
+    expect { submit('0' => { multiplier: 2, resident_id: host.id, _destroy: '0' }) }
+      .to change(meal.guests, :count).by(1)
+  end
+
   it 'refuses a guest on a closed meal whose extras are full' do
     meal.update!(closed: true, max: 1)
     create(:meal_resident, meal: meal, resident: host, community: community, admin_correction: true)

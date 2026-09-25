@@ -46,6 +46,16 @@ branch, none fixed in the hunt. The branches:
   guest, so a superuser can move a guest between meals and
   `ClosedMealAttendanceFreeze` never runs (it checks create and destroy,
   not an update): `spec/requests/admin/meal_form_guest_move_spec.rb`.
+  Fixed 2026-09-24 on the hunt branch, both ways: the form no longer
+  permits `meal_id`, and the freeze treats a move as a removal plus an
+  addition, so a write that skips the form is refused too. The review
+  of that fix found one more, older bug in the same helper: the "open
+  spots" count read the meal's loaded associations, and Rails puts a new
+  row into the target's loaded list before validation, so the admin
+  form, whose meal comes preloaded, refused the last open spot. Fixed
+  with it: the count is taken in the database
+  (`spec/requests/admin/meal_form_guests_spec.rb`, "adds a guest to a
+  closed meal with exactly one spot open").
   (2) `ReconciledMealImmutability` reads the loaded meal, not the row
   under the lock, so the comment on `LocksItsMealFirst` lines 32 to 33
   is false; the trigger still refuses, as a 500 in admin:

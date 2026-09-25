@@ -7,8 +7,12 @@ ActiveAdmin.register Meal do
   # association removes MealResident rows without their audit hooks or
   # closed/reconciled guards running per row (issue #7). Attendance is
   # managed through the API, which operates on individual rows.
+  # guests_attributes has no meal_id: a nested guest belongs to the form's
+  # meal by construction, and permitting the key let a hand-made request
+  # move an existing guest to another meal past the closed-meal freeze
+  # (lock hunt, 2026-09-21; the freeze refuses a move now too).
   permit_params :date, :closed, :max,
-                guests_attributes: %i[id multiplier resident_id meal_id _destroy]
+                guests_attributes: %i[id multiplier resident_id _destroy]
 
   # CONFIG
   filter :reconciliation_id_null, as: :select, collection: [['Yes', false], ['No', true]], include_blank: false,
@@ -174,7 +178,6 @@ ActiveAdmin.register Meal do
                              collection: [['Adult', Multiplier::FULL], ['Child', Multiplier::HALF]]
         g.input :resident, label: 'Host',
                            collection: Resident.order(:name)
-        g.input :meal_id, as: :hidden, input_html: { value: meal.id }
       end
     end
 
