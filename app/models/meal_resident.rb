@@ -40,8 +40,9 @@ class MealResident < ApplicationRecord
   # Prepended before_save and before_destroy: the meal lock is taken
   # before the row is written, in the trigger's order. The validations
   # below run earlier than any before_save, so they do not read under this
-  # lock; the SERIALIZABLE transaction they share with the write keeps
-  # their answer and the write together. See the concern.
+  # lock (the reconciled guard reads the row again in its before_save,
+  # which does); the SERIALIZABLE transaction they share with the write
+  # keeps their answer and the write together. See the concern.
   include LocksItsMealFirst
 
   # No new attendees, no toggling late/vegetarian, no removals once reconciled.

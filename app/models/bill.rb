@@ -46,8 +46,12 @@ class Bill < ApplicationRecord
 
   audited associated_with: :meal
 
-  # Before every other guard: the meal lock comes first, so the checks
-  # below read the meal under it. See the concern for the lock order.
+  # Prepended before_save and before_destroy: the meal lock is taken
+  # before the row is written, in the trigger's order. The reconciled
+  # guard's validation runs earlier, before any before_save, so it does
+  # not read under this lock (its before_save reads the row again, and
+  # does); the SERIALIZABLE transaction they share with the write keeps
+  # their answer and the write together. See the concern.
   include LocksItsMealFirst
 
   # ActiveAdmin's Bill form would otherwise allow a superuser to quietly

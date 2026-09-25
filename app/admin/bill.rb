@@ -29,11 +29,12 @@ ActiveAdmin.register Bill do
     # It no longer does. The database catches it now, from any path: the
     # settlement holds FOR UPDATE on every meal it claims, and the child-write
     # trigger's lookups are locking reads (20260727120000), so
-    # a racing write waits for the settlement and is then refused with an
-    # exception. What is left here is a cosmetic race — a user can see this
-    # redirect's friendly message or the trigger's blunt one, depending on
-    # timing. Both refuse. Read docs/adr/0003-concurrency-on-the-money-path.md
-    # before touching this.
+    # a racing write waits for the settlement and is then refused. What is
+    # left here is which sentence the person sees, by timing: this
+    # redirect's, the model guard's ("Meal has been reconciled.", it reads
+    # the meals table), or the conflict alert when the settlement commits
+    # during the save. All three refuse. Read
+    # docs/adr/0003-concurrency-on-the-money-path.md before touching this.
     before_action :block_if_reconciled, only: %i[edit update destroy]
 
     def scoped_collection

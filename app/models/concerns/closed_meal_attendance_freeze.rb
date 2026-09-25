@@ -21,7 +21,8 @@
 # only ever constrains closed meals.
 #
 # Include AFTER ReconciledMealImmutability so the reconciled check — the
-# stronger, settlement-level freeze — always runs first.
+# stronger, settlement-level freeze — runs first: its validation before
+# these validations, its before_destroy before this before_destroy.
 module ClosedMealAttendanceFreeze
   extend ActiveSupport::Concern
   extend T::Helpers
@@ -72,7 +73,8 @@ module ClosedMealAttendanceFreeze
   end
 
   def record_can_be_removed
-    # Reconciled check is handled by reject_if_reconciled (runs first).
+    # Reconciled check is handled by reject_if_reconciled (a before_destroy
+    # declared before this one, so it runs first among the guards).
     # Scenario: Admin attendance correction — the freeze does not apply
     return true if admin_correction
     return true if can_leave?(T.must(meal))

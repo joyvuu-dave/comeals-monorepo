@@ -267,11 +267,13 @@ module Api
       # second waits and then sees the other's committed result.
       #
       # Every money-mutating path should go through here, because it is the
-      # only one that fails politely. Paths that skip it (ActiveAdmin's bill
-      # and attendance forms) are not unprotected — the immutability triggers
-      # take locking reads, so a racing write waits for the settlement and is
-      # then refused — but they are refused by a database exception, not a
-      # 400 with a readable message. See
+      # one that retries and answers 400 with a readable message. Paths that
+      # skip it (ActiveAdmin's bill and attendance forms) are not
+      # unprotected: the model takes the meal lock (LocksItsMealFirst), the
+      # reconciled guard reads the meals table, and the immutability
+      # triggers take locking reads, so a racing write waits for the
+      # settlement and is then refused with the guard's sentence or the
+      # admin conflict alert. See
       # docs/adr/0003-concurrency-on-the-money-path.md.
       #
       # Nothing here renders. The block returns the render arguments and the

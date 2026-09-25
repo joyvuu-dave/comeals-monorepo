@@ -60,6 +60,17 @@ branch, none fixed in the hunt. The branches:
   under the lock, so the comment on `LocksItsMealFirst` lines 32 to 33
   is false; the trigger still refuses, as a 500 in admin:
   `spec/models/concerns/reconciled_meal_immutability_with_loaded_meal_spec.rb`.
+  Fixed 2026-09-24 on its own branch: the guard reads the meals table,
+  never the loaded association, and runs as a validation on create and
+  update as well as a before_save and before_destroy, so its sentence is
+  the one a person sees and the trigger is never the first to refuse
+  (spec renamed to `reconciled_meal_immutability_spec.rb`). The review
+  of that fix found that prosopite's request scan had never fired: two
+  allow-list entries named the audited and rack-attack gem directories,
+  and both gems put a frame on every request's stack (an around_action
+  and a middleware), so every request was allowed. The entries now name
+  the one file in each gem that runs the repeat; every request spec
+  still passes under the real scan.
   Also noticed: `config/initializers/active_admin_conflict_rescue.rb`
   lines 29 to 31 still say the API controller sends the Pusher event;
   `Community#auto_create_rotations` is seed-only.

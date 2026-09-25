@@ -29,8 +29,11 @@
 # rows between the same two meals cannot deadlock against each other
 # either. Same reason Settlement#assign_meals orders its claim by id.
 #
-# Prepended, so it runs before every other guard: ReconciledMealImmutability
-# then reads the meal under this lock instead of from a stale snapshot.
+# Prepended, so it runs before every other save and destroy callback:
+# ReconciledMealImmutability's before_save and before_destroy then read the
+# meal row under this lock. Validations (the reconciled guard's own, and
+# the closed-meal freeze's) run earlier, before any before_save, in the
+# same SERIALIZABLE transaction as the write.
 #
 # Pinned by spec/requests/admin/meal_lock_order_spec.rb.
 module LocksItsMealFirst

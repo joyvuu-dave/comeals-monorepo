@@ -22,10 +22,10 @@ ActiveAdmin.register Meal do
   controller do
     include RefusedDestroyMessage
 
-    # Reconciled meals are immutable — block edit/update/destroy. Adding
-    # attendees or guests via the nested form would otherwise be caught by the
-    # child models' before_save guards, but the resulting transaction error is
-    # a worse admin UX than a clean redirect.
+    # Reconciled meals are immutable — block edit/update/destroy. A guest
+    # added through the nested form would otherwise be refused by the guest's
+    # own validation, with its sentence copied onto the meal's errors; the
+    # redirect is the clearer screen.
     before_action :block_if_reconciled, only: %i[edit update destroy]
 
     def scoped_collection

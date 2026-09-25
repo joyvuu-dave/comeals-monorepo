@@ -37,8 +37,8 @@ module LocksItsMealFirst
 end
 
 module ReconciledMealImmutability
-  sig { returns(T.nilable(Meal)) }
-  def meal; end
+  sig { returns(T.nilable(Integer)) }
+  def meal_id; end
 
   sig { returns(T.nilable(Integer)) }
   def meal_id_in_database; end

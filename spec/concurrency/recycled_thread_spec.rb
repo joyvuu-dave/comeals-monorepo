@@ -22,7 +22,11 @@ require 'rails_helper'
 # on a later request's push (LiveUpdate.meal), and a resident renamed
 # between two requests on one thread is shortened under the new name in
 # the second.
-RSpec.describe 'thread-local state across requests and jobs on a reused thread' do
+# prosopite: false, because these requests conflict at SERIALIZABLE on
+# purpose, and a write that RetryOnConflict runs again repeats its queries
+# from the same lines. That is the retry, not an N+1; the same endpoints
+# are scanned in spec/requests, where nothing conflicts.
+RSpec.describe 'thread-local state across requests and jobs on a reused thread', prosopite: false do
   include_context 'with no test transaction'
 
   # Four threads, sixty requests each; the pool below is sized for them.

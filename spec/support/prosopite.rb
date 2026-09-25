@@ -36,13 +36,21 @@ Prosopite.allow_stack_paths = [
   # the concern's whole point (ADR 0003); a second lock on a row this
   # transaction already holds costs Postgres nothing.
   'app/models/concerns/locks_its_meal_first.rb',
+  # And reads its meal's reconciliation_id from the meals table before it
+  # is written or destroyed: one read per row write, for the same reason
+  # (the row's loaded meal can be stale; the table is not).
+  'app/models/concerns/reconciled_meal_immutability.rb',
   # The audited gem reads the last version number before it writes each
-  # audit row: one read per audited write.
-  %r{/gems/audited-},
+  # audit row: one read per audited write. The file, not the gem: audited
+  # also puts an around_action on every controller, so a pattern on the
+  # gem's directory matched a frame of every request's stack and turned
+  # the request scan off (found 2026-09-25).
+  %r{/gems/audited-[^/]+/lib/audited/audit\.rb},
   # Rack::Attack keeps one counter row per throttle, and a request can
   # fall under two throttles (login by IP and API by IP). Two rows read
-  # from the same line are two counters, not a repeat.
-  %r{/gems/rack-attack-},
+  # from the same line are two counters, not a repeat. The cache file,
+  # not the gem, for the reason above: the middleware is on every stack.
+  %r{/gems/rack-attack-[^/]+/lib/rack/attack/cache\.rb},
   # A moved meal has two days, and each day asks for its two neighbours
   # (the meal before and the meal after) so their pages can be refreshed.
   # Four lookups, once per move.

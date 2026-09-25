@@ -38,7 +38,10 @@ require 'rails_helper'
 # Knobs, for turning it up: STORM_SECONDS (15), STORM_CLIENTS (24),
 # STORM_SEED (1). Every client thread needs a connection, so the pool is
 # widened for this group; Postgres allows 100 by default.
-RSpec.describe 'a request storm against the whole API, with the nightly jobs and a settlement in it' do
+# prosopite: false, for the reason in recycled_thread_spec.rb: a write
+# that RetryOnConflict runs again repeats its queries from the same lines.
+RSpec.describe 'a request storm against the whole API, with the nightly jobs and a settlement in it',
+               prosopite: false do
   include_context 'with no test transaction'
 
   before(:all) do
