@@ -52,14 +52,14 @@ namespace :test do
       jane = Resident.create!(
         id: 1, name: 'Jane Smith', email: 'jane@test.com', password: 'password',
         unit: unit_a,
-        multiplier: 2, can_cook: true, vegetarian: false,
+        can_cook: true, vegetarian: false,
         birthday: Date.new(1985, 3, 15)
       )
 
       bob = Resident.create!(
         id: 2, name: 'Bob Johnson', email: 'bob@test.com', password: 'password',
         unit: unit_b,
-        multiplier: 2, can_cook: true, vegetarian: true,
+        can_cook: true, vegetarian: true,
         birthday: Date.new(1990, 7, 22)
       )
 
@@ -68,7 +68,7 @@ namespace :test do
       alice = Resident.create!(
         id: 3, name: 'Alice Williams', email: 'alice@test.com', password: 'password',
         unit: unit_c,
-        multiplier: 2, can_cook: false, vegetarian: false,
+        can_cook: false, vegetarian: false,
         birthday: Date.new(1978, 1, 20)
       )
     end

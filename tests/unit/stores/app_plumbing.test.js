@@ -156,6 +156,43 @@ describe("app plumbing", () => {
     });
   });
 
+  describe("at midnight", () => {
+    // A birthday moves someone into the adult band with no write on the
+    // server, so nothing pushes it: the hosts list is fetched again.
+    it("refetches the hosts list when one was loaded", () => {
+      vi.useFakeTimers();
+      const store = createDataStore();
+      stage(store, () => {
+        store.hostsLoadedAt = Date.now();
+      });
+      const refetch = stubAction(store, "refetchHostsSilently");
+      stubAction(store, "loadMonthAsync");
+      stubAction(store, "recomputeCommunityToday");
+
+      store.scheduleMidnightRecompute();
+      vi.advanceTimersByTime(25 * 60 * 60 * 1000);
+
+      expect(refetch).toHaveBeenCalledTimes(1);
+      clearTimeout(store.midnightTimer);
+      vi.useRealTimers();
+    });
+
+    it("leaves the hosts list alone when none was loaded", () => {
+      vi.useFakeTimers();
+      const store = createDataStore();
+      const refetch = stubAction(store, "refetchHostsSilently");
+      stubAction(store, "loadMonthAsync");
+      stubAction(store, "recomputeCommunityToday");
+
+      store.scheduleMidnightRecompute();
+      vi.advanceTimersByTime(25 * 60 * 60 * 1000);
+
+      expect(refetch).not.toHaveBeenCalled();
+      clearTimeout(store.midnightTimer);
+      vi.useRealTimers();
+    });
+  });
+
   it("clears its timers when destroyed", () => {
     vi.useFakeTimers();
     const store = createDataStore();

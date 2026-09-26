@@ -69,7 +69,7 @@ module Storm
       end
     end
 
-    JOBS = [RefreshBalancesJob, VerifyLedgerJob, SetMultipliersJob, EnsureRotationsJob].freeze
+    JOBS = [RefreshBalancesJob, VerifyLedgerJob, EnsureRotationsJob].freeze
 
     # What an unlocked admin write may end in, besides success: a rule, a
     # unique index, a guard, the settled-meal trigger, a conflict, or a

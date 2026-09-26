@@ -5,7 +5,7 @@ require 'fugit'
 
 # config/recurring.yml is the production schedule. This pins that every
 # entry names a job that exists and is a RecurringJob, that every schedule
-# parses, and that the four jobs production depends on are there at the
+# parses, and that the jobs production depends on are there at the
 # times the old Heroku Scheduler ran them.
 RSpec.describe 'config/recurring.yml' do # -- a config file
   let(:tasks) { Rails.application.config_for(:recurring, env: 'production') }
@@ -26,11 +26,10 @@ RSpec.describe 'config/recurring.yml' do # -- a config file
     end
   end
 
-  it 'keeps the four production jobs at their times (UTC)' do
+  it 'keeps the three production jobs at their times (UTC)' do
     expected = {
       'refresh_balances' => ['RefreshBalancesJob', '0 3 * * * UTC'],
       'verify_ledger' => ['VerifyLedgerJob', '0 5 * * * UTC'],
-      'set_multipliers' => ['SetMultipliersJob', '0 11 * * * UTC'],
       'ensure_rotations' => ['EnsureRotationsJob', '30 22 * * * UTC']
     }
     expected.each do |key, (klass, cron)|

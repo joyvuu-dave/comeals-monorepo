@@ -163,18 +163,22 @@ Resident
   (`index_residents_on_lower_email`). Stored lowercased. An empty string is
   turned into NULL before validation.
 - `password_digest` — scrypt hash. `authenticate(password)` checks it.
-- `multiplier` — pricing weight, 2, 1, or 0 (`Multiplier::FULL`, `HALF`,
-  `FREE`). Default 2. CHECK `residents_multiplier_non_negative`. See "The
-  Multiplier System" below.
+- `multiplier` — an ignored column since 2026-09-26, kept one release for
+  the rollback story and then dropped. A resident's price band is computed
+  from the birthday (`Resident#multiplier_on(date)`), see "The Multiplier
+  System" below.
 - `active` — false for residents who moved away or died
 - `can_cook` — eligible for the cooking rotation
 - `vegetarian` — the default copied onto new attendance rows
-- `birthday` — `rake residents:set_multiplier` reads it each night to set the
-  multiplier by age. Optional: NULL means "adult, no birthday given"; the
-  task skips them and the calendar shows nothing. Children (multiplier below
-  FULL) must have one so they age into adult pricing. The old placeholder
-  1900-01-01 is refused by the model and by the
-  `residents_birthday_not_sentinel` CHECK.
+- `birthday` — two uses: the calendar shows it, and the price band is
+  computed from it for the day of each meal (`multiplier_on`). Optional:
+  NULL means an adult who gave none, and the calendar shows nothing. A
+  child needs one, so the price follows their age; the admin form says
+  which the person is (`kind`, a virtual attribute, "adult" or "child"),
+  and the model refuses a child without a birthday and a statement the
+  birthday contradicts. An adult can remove theirs later from the admin
+  resident page. The old placeholder 1900-01-01 is refused by the model
+  and by the `residents_birthday_not_sentinel` CHECK.
 - `phone` — optional. `HasPhoneNumber` parses any way of typing a number and
   stores the E.164 form ("+15105552671"). The `residents_phone_e164` CHECK
   enforces that shape for writes that skip the model.
@@ -407,9 +411,10 @@ MealResident ----> Community
 
 **Key fields:**
 
-- `multiplier` — the resident's multiplier when the row is created, copied
-  in when none is given (`set_multiplier`) and refused when a different one
-  is given (`multiplier_is_the_residents`). A later change to the resident
+- `multiplier` — the resident's price band for the meal's date, as of the
+  row's creation (`Resident#multiplier_on`), copied in when none is given
+  (`set_multiplier`) and refused when a different one is given
+  (`multiplier_is_the_residents`). A later birthday or a changed age rule
   never changes a past charge. Required; CHECK
   `meal_residents_multiplier_non_negative`.
 - `late` — arrived late
@@ -855,18 +860,24 @@ age >= full_price_age                     -> FULL
 Equal ages mean there is no half-price band. Both 0 means everyone with a
 birthday pays full price.
 
-`rake residents:set_multiplier` runs nightly, reads the two ages from the
-community, and sets each resident's multiplier from their birthday. A
-resident with no birthday is an adult who did not give one; the task skips
-them and their multiplier stays whatever the admin set. A `MealResident`
-copies the resident's multiplier when the row is created, so a later
-birthday never changes what someone was charged for a past meal. The API creates every guest with the
+A resident's band is not stored. `Resident#multiplier_on(date)` computes
+it from the birthday and the two ages, for the day of the meal: a child
+who turns full-price age before a meal pays full price at that meal,
+whenever they signed up. A resident with no birthday is an adult who did
+not give one. The hosts list computes "adult today" in SQL
+(`Resident.adult_on`), pinned against the Ruby rule on a February 29
+birthday. (Until 2026-09-26 a nightly task copied the band into a column,
+so a price was wrong from a birthday until the next run.) A `MealResident`
+copies the band for the meal's date when the row is created, so a later
+birthday or a changed age rule never changes what someone was charged for
+a past meal. The API creates every guest with the
 database default of 2 (an adult guest); only an admin can set a different
 value.
 
 `MealLedger` does not read `Multiplier`. It sums the numbers and shares the
 cost out in proportion to them; it does not know that 2 means one adult. Pricing policy lives in
-`Multiplier` and the nightly task; arithmetic lives in the ledger.
+`Multiplier`, `Community#multiplier_for_age` and `Resident#multiplier_on`;
+arithmetic lives in the ledger.
 
 A meal's total multiplier is the sum across all attendees and guests. The
 effective cost is shared out across the eaters in proportion to their

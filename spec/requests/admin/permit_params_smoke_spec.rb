@@ -34,7 +34,7 @@ RSpec.describe 'Admin permit_params smoke tests' do
             email: 'smoke@example.com',
             password: 'password123',
             vegetarian: true,
-            multiplier: 1,
+            kind: 'adult',
             unit_id: unit.id,
             can_cook: false,
             active: false
@@ -47,7 +47,7 @@ RSpec.describe 'Admin permit_params smoke tests' do
       expect(resident.name).to eq('Smoke Test Resident')
       expect(resident.birthday).to eq(Date.new(1990, 4, 15))
       expect(resident.vegetarian).to be true
-      expect(resident.multiplier).to eq(1)
+      expect(resident).not_to be_child
       expect(resident.unit_id).to eq(unit.id)
       expect(resident.can_cook).to be false
       expect(resident.active).to be false

@@ -54,7 +54,7 @@ module Storm
       multiplier = MULTIPLIERS[index % MULTIPLIERS.size]
       birthday = { 0 => 3.years.ago.to_date, 1 => 8.years.ago.to_date }[multiplier]
       Resident.create!(name: "Storm Client #{index}", email: "storm-#{index}@example.com", password: 'storm',
-                       unit: unit, multiplier: multiplier, birthday: birthday,
+                       unit: unit, birthday: birthday,
                        can_reconcile: (index % 4).zero?)
     end
   end

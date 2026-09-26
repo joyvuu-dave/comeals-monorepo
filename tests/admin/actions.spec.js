@@ -250,17 +250,41 @@ test.describe("Residents", () => {
     );
   });
 
-  test("changes a resident's price category by hand", async ({ page }) => {
+  test("refuses to call a child an adult while the birthday says child", async ({
+    page,
+  }) => {
     await login(page);
-    // Carol is a child in the seed.
+    // Carol is a child in the seed, with a birthday.
     await page.goto("/residents/3");
     await expect(page.locator(".row-category td")).toHaveText("Child");
     await page.goto("/residents/3/edit");
     await page
-      .locator("#resident_multiplier_input label", { hasText: "Adult" })
+      .locator("#resident_kind_input label", { hasText: "Adult" })
       .click();
     await page.click('input[type="submit"]');
 
+    await expect(page.locator("body")).toContainText(
+      "makes this person a child. Choose Child, or check the date.",
+    );
+    await page.goto("/residents/3");
+    await expect(page.locator(".row-category td")).toHaveText("Child");
+  });
+
+  test("removes an adult's birthday from the calendar", async ({ page }) => {
+    await login(page);
+    // Alice is an adult with no birthday in the seed. Give her one, then
+    // take it off again from her page.
+    await page.goto("/residents/1/edit");
+    await page.fill("#resident_birthday", "1985-03-15");
+    await page.click('input[type="submit"]');
+    await expect(page.locator(".row-birthday td")).toContainText("1985");
+    await expect(page.locator(".row-category td")).toHaveText("Adult");
+
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.click("text=Remove birthday");
+
+    // ActiveAdmin shows a blank attribute as the word Empty.
+    await expect(page.locator(".row-birthday td")).toHaveText("Empty");
     await expect(page.locator(".row-category td")).toHaveText("Adult");
   });
 

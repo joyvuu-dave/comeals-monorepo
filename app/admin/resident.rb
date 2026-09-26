@@ -8,7 +8,7 @@ ActiveAdmin.register Resident do
   # same tier that may write a Reconciliation here (ADR 0004). For a plain
   # admin the param is not permitted, so a hand-made request drops it too.
   permit_params do
-    params = %i[name multiplier unit_id email phone password vegetarian can_cook active birthday]
+    params = %i[name kind unit_id email phone password vegetarian can_cook active birthday]
     params << :can_reconcile if current_active_admin_user.superuser?
     params
   end
@@ -33,6 +33,29 @@ ActiveAdmin.register Resident do
   # spec/requests/admin/password_reset_button_spec.rb pins both.
   action_item :send_password_reset, only: :show, if: -> { resource.email.present? } do
     link_to 'Send password reset email', send_password_reset_admin_resident_path(resource), method: :post
+  end
+
+  # An adult can take a birthday off the calendar later. A child cannot:
+  # the price follows their age.
+  action_item :remove_birthday, only: :show,
+                                if: -> { resource.birthday.present? && !resource.child? && authorized?(:update, resource) } do
+    link_to 'Remove birthday', remove_birthday_admin_resident_path(resource), method: :patch,
+                                                                              data: { confirm: "Remove #{resource.name}'s birthday from the calendar?" }
+  end
+
+  # The link above is only offered for an adult, but the route is open to
+  # a hand-made request, so the action checks again: a child without a
+  # birthday would be priced as an adult. A save can still fail on another
+  # rule (an adult who can cook needs an email), and that is shown, not
+  # raised.
+  member_action :remove_birthday, method: :patch do
+    if resource.child?
+      redirect_to admin_resident_path(resource), alert: 'A child needs a birthday, so the price follows their age.'
+    elsif resource.update(birthday: nil, kind: 'adult')
+      redirect_to admin_resident_path(resource), notice: "#{resource.name}'s birthday is no longer on the calendar."
+    else
+      redirect_to admin_resident_path(resource), alert: resource.errors.full_messages.to_sentence
+    end
   end
 
   member_action :send_password_reset, method: :post do
@@ -73,8 +96,8 @@ ActiveAdmin.register Resident do
   index do
     column :name
     column :birthday
-    column 'Price Category', :multiplier, sortable: :multiplier do |resident|
-      price_category_label(resident.multiplier)
+    column 'Price Category', sortable: false do |resident|
+      price_category_label(resident.multiplier_on(Community.instance.today))
     end
     column :unit
     column :phone do |resident|
@@ -99,7 +122,7 @@ ActiveAdmin.register Resident do
       row :id
       row :name
       row :birthday
-      row('Category') { |r| price_category_label(r.multiplier) }
+      row('Category') { |r| price_category_label(r.multiplier_on(Community.instance.today)) }
       row :unit
       row :can_cook
       row :can_reconcile
@@ -190,11 +213,18 @@ ActiveAdmin.register Resident do
 
   # FORM
   form do |f|
+    # The statement is not stored, so the form starts from what the
+    # birthday says (a new record, or one with no birthday, is an adult).
+    f.object.kind ||= f.object.birthday.present? && f.object.child? ? 'child' : 'adult'
     f.inputs do
       f.input :name
+      f.input :kind, label: 'This person is', as: :radio,
+                     collection: [%w[Adult adult], %w[Child child]],
+                     hint: helpers.child_pricing_rule_sentence(Community.instance)
       f.input :birthday, as: :datepicker,
-                         hint: 'Leave blank for an adult who does not want a birthday on the ' \
-                               'calendar. Children need one so pricing updates as they grow.',
+                         hint: 'Shown on the calendar. A child needs one, so the price follows ' \
+                               'their age. An adult may leave it blank, or remove it later from ' \
+                               "the resident's page.",
                          datepicker_options: {
                            change_month: true,
                            change_year: true,
@@ -206,11 +236,6 @@ ActiveAdmin.register Resident do
                     'outside the US, start with + and the country code: +44 20 7946 0958.'
       f.input :password if f.object.new_record?
       f.input :vegetarian
-      f.input :multiplier, label: 'Price Category', as: :radio,
-                           collection: [['Adult', Multiplier::FULL], ['Child', Multiplier::HALF]],
-                           hint: "#{helpers.child_pricing_rule_sentence(Community.instance)} The nightly " \
-                                 'task applies this rule to every resident with a birthday, so what you ' \
-                                 'set here only stays for a resident without one.'
       f.input :unit, collection: Unit.order(:name)
       f.input :can_cook
       if current_active_admin_user.superuser?

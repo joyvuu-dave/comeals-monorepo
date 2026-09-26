@@ -238,6 +238,9 @@ module GeneratedPathHelpersModule
   def rails_mailers_path(*args); end
 
   sig { params(args: T.untyped).returns(String) }
+  def remove_birthday_admin_resident_path(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
   def root_path(*args); end
 
   sig { params(args: T.untyped).returns(String) }

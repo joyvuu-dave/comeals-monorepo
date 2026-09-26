@@ -43,35 +43,35 @@ namespace :test do
     jane = Resident.create!(
       name: 'Jane Smith', email: 'jane@test.com', password: 'password',
       unit: unit_a,
-      multiplier: 2, can_cook: true, vegetarian: false,
+      can_cook: true, vegetarian: false,
       birthday: Date.new(1985, 3, 15)
     )
 
     bob = Resident.create!(
       name: 'Bob Johnson', email: 'bob@test.com', password: 'password',
       unit: unit_b,
-      multiplier: 2, can_cook: true, vegetarian: true,
+      can_cook: true, vegetarian: true,
       birthday: Date.new(1990, 7, 22)
     )
 
     alice = Resident.create!(
       name: 'Alice Williams', email: 'alice@test.com', password: 'password',
       unit: unit_c,
-      multiplier: 2, can_cook: false, vegetarian: false,
+      can_cook: false, vegetarian: false,
       birthday: Date.new(1978, 11, 8)
     )
 
     charlie = Resident.create!(
       name: 'Charlie Brown', password: '',
       unit: unit_a,
-      multiplier: 1, can_cook: false, vegetarian: false,
+      can_cook: false, vegetarian: false,
       birthday: Date.new(2015, 5, 1)
     )
 
     Resident.create!(
       name: 'Diana Prince', email: 'diana@test.com', password: 'password',
       unit: unit_c,
-      multiplier: 2, can_cook: true, vegetarian: false,
+      can_cook: true, vegetarian: false,
       active: false, birthday: Date.new(1982, 6, 20)
     )
 

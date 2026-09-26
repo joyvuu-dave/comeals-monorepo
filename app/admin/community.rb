@@ -174,7 +174,7 @@ ActiveAdmin.register Community do
                     'pay half price. Set both ages the same for no half-price band.'
       li class: 'child-pricing-rule' do
         para "Current rule: #{helpers.child_pricing_rule_sentence(f.object)}"
-        para 'Changes apply from the next nightly run, and only to future meal signups.'
+        para 'Changes apply to future meal signups. A settled meal keeps what it was charged.'
       end
     end
 

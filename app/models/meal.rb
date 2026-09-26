@@ -148,6 +148,7 @@ class Meal < ApplicationRecord
   # attendance and guests note themselves; `touch: true` on their
   # belongs_to does not run these callbacks.
   after_destroy :note_live_update
+  after_save :restamp_attendance_for_new_date, if: :saved_change_to_date?
   after_save :note_live_update
 
   accepts_nested_attributes_for :guests, allow_destroy: true, reject_if: proc { |attributes|
@@ -245,6 +246,20 @@ class Meal < ApplicationRecord
   # arithmetic; screens read it (or the stored meal_charges of a settled
   # meal) through MealCostSummary. A convenience copy on this model is
   # how the math ended up living in three places (#48).
+
+  # An open meal moved to another date is a meal on a different day, and a
+  # price band is the band for the day someone eats: every attendance row
+  # takes the band for the new date (Resident#multiplier_on). A settled
+  # meal cannot move (FROZEN_WHEN_RECONCILED), so a settled charge never
+  # changes. Guests keep theirs: a guest's band is what the admin set.
+  sig { void }
+  def restamp_attendance_for_new_date
+    date = T.must(self.date)
+    meal_residents.includes(:resident).find_each do |row|
+      expected = T.must(row.resident).multiplier_on(date)
+      row.update!(multiplier: expected) unless row.multiplier == expected
+    end
+  end
 
   sig { returns(T::Boolean) }
   def reconciled?

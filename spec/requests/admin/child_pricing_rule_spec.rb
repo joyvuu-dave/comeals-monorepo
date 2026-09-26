@@ -26,7 +26,8 @@ RSpec.describe 'Admin child pricing rule sentences' do
       expect(response.body).to include('community_free_below_age')
       expect(response.body).to include('community_full_price_age')
       expect(response.body).to include(rule_sentence)
-      expect(response.body).to include('Changes apply from the next nightly run, and only to future meal signups.')
+      expect(response.body)
+        .to include('Changes apply to future meal signups. A settled meal keeps what it was charged.')
     end
 
     it 'accepts new ages through the form params' do

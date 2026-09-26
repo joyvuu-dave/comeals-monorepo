@@ -19,7 +19,6 @@ resident.assign_attributes(
   name: 'Smoke Test',
   community: community,
   unit: unit,
-  multiplier: 2,
   can_cook: true,
   vegetarian: false,
   birthday: Date.new(1990, 1, 1),

@@ -11,7 +11,6 @@
 #  can_reconcile          :boolean          default(FALSE), not null
 #  email                  :string
 #  keys_valid_since       :datetime         not null
-#  multiplier             :integer          default(2), not null
 #  name                   :string           not null
 #  password_digest        :string           not null
 #  phone                  :string
@@ -136,15 +135,7 @@ RSpec.describe Resident do
       expect(resident.errors[:email]).to include('cannot be blank.')
     end
 
-    it 'requires an email above the full multiplier too, not only at it' do
-      resident = build(:resident, community: community, unit: unit, multiplier: 3, can_cook: true, active: true,
-                                  email: nil)
-
-      expect(resident).not_to be_valid
-      expect(resident.errors[:email]).to include('cannot be blank.')
-    end
-
-    it 'allows nil email for children (multiplier < 2)' do
+    it 'allows nil email for children' do
       resident = build(:resident, community: community, unit: unit,
                                   active: true, can_cook: true, multiplier: 1, email: nil)
 
@@ -230,11 +221,49 @@ RSpec.describe Resident do
       expect(resident).to be_valid
     end
 
-    it 'requires a birthday for children so they age into adult pricing' do
-      resident = build(:resident, community: community, unit: unit, multiplier: 1, birthday: nil)
+    # The form says whether the person is an adult or a child; a child
+    # without a birthday would be priced as an adult, so it is refused.
+    it 'requires a birthday for a child the form declares' do
+      resident = build(:resident, community: community, unit: unit, kind: 'child', birthday: nil)
 
       expect(resident).not_to be_valid
-      expect(resident.errors[:birthday]).to include('is required for children — pricing changes as they age')
+      expect(resident.errors[:birthday]).to include('is needed for a child, so the price follows their age.')
+    end
+
+    it 'refuses Adult with a birthday that makes a child, and Child with one that makes an adult' do
+      child_born = community.today - 8.years
+      adult_born = community.today - 30.years
+
+      adult_said = build(:resident, community: community, unit: unit, kind: 'adult', birthday: child_born)
+      child_said = build(:resident, community: community, unit: unit, kind: 'child', birthday: adult_born)
+
+      expect(adult_said).not_to be_valid
+      expect(adult_said.errors[:birthday]).to include('makes this person a child. Choose Child, or check the date.')
+      expect(child_said).not_to be_valid
+      expect(child_said.errors[:birthday]).to include('makes this person an adult. Choose Adult, or check the date.')
+    end
+
+    it 'accepts a statement that matches the birthday, and no statement at all' do
+      expect(build(:resident, community: community, unit: unit, kind: 'adult', birthday: nil)).to be_valid
+      expect(build(:resident, community: community, unit: unit, kind: 'adult',
+                              birthday: community.today - 30.years)).to be_valid
+      expect(build(:resident, community: community, unit: unit, kind: 'child',
+                              birthday: community.today - 8.years)).to be_valid
+      expect(build(:resident, community: community, unit: unit, birthday: community.today - 8.years)).to be_valid
+    end
+
+    it 'refuses a birthday after today, which would be a negative age and a free meal' do
+      resident = build(:resident, community: community, unit: unit, kind: 'child', birthday: community.today + 1)
+
+      expect(resident).not_to be_valid
+      expect(resident.errors[:birthday]).to include('cannot be after today.')
+    end
+
+    it 'refuses a statement that is neither adult nor child' do
+      resident = build(:resident, community: community, unit: unit, kind: 'teen')
+
+      expect(resident).not_to be_valid
+      expect(resident.errors[:kind]).to be_present
     end
 
     it 'rejects the old 1900-01-01 placeholder' do
@@ -356,7 +385,6 @@ RSpec.describe Resident do
     {
       name: ->(r, _) { r.update!(name: 'Renamed') },
       active: ->(r, _) { r.update!(active: false) },
-      multiplier: ->(r, _) { r.update!(multiplier: r.multiplier + 1) },
       unit_id: ->(r, other_unit) { r.update!(unit: other_unit) }
     }.each do |column, mutation|
       it "triggers on #{column} change" do

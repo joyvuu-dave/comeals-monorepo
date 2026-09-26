@@ -59,22 +59,33 @@ class MealResident < ApplicationRecord
   validates :multiplier, numericality: { only_integer: true }
   validate :multiplier_is_the_residents, on: :create
 
-  # The multiplier is the resident's at signup, copied so a later change to
-  # the resident never changes a past charge. Nothing in production passes
-  # one: the API assigns late and vegetarian, the admin create takes a
-  # resident id. So a value given here is filled in when missing and refused
-  # when different. It used to be replaced silently, and 76 spec lines
-  # passed a value that did nothing (2026-09-09).
+  # The multiplier is the resident's price band for the meal's date, as
+  # of signup (Resident#multiplier_on), copied so a later birthday or a
+  # changed age rule never changes a past charge. Nothing in production
+  # passes one: the API assigns late and vegetarian, the admin create
+  # takes a resident id. So a value given here is filled in when missing
+  # and refused when different. It used to be replaced silently, and 76
+  # spec lines passed a value that did nothing (2026-09-09).
   sig { void }
   def set_multiplier
-    self.multiplier = resident&.multiplier if multiplier.nil?
+    self.multiplier = expected_multiplier if multiplier.nil?
   end
 
   sig { void }
   def multiplier_is_the_residents
-    expected = resident&.multiplier
+    expected = expected_multiplier
     return if expected.nil? || multiplier == expected
 
-    errors.add(:multiplier, "must be the resident's multiplier at signup (#{expected}), not #{multiplier}")
+    errors.add(:multiplier, "must be the resident's price for the meal's date (#{expected}), not #{multiplier}")
+  end
+
+  # nil while the row has no resident or no meal yet; belongs_to reports
+  # those.
+  sig { returns(T.nilable(Integer)) }
+  def expected_multiplier
+    date = meal&.date
+    return nil if date.nil?
+
+    resident&.multiplier_on(date)
   end
 end

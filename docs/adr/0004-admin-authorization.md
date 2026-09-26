@@ -72,8 +72,9 @@ Two membership decisions are worth writing down because they are not obvious:
   admin. Its `closed` and `max` fields and its nested guests all feed the cost
   split, and ActiveAdmin authorizes per resource, not per field. Erring the
   other way would put a money-changing field behind a non-money permission.
-- **Resident is not on the restricted list**, even though residents carry a
-  `multiplier` price category. Attendance snapshots its own multiplier into
+- **Resident is not on the restricted list**, even though a resident's
+  birthday decides their price band (computed, since 2026-09-26; before
+  that a `multiplier` column). Attendance snapshots the band into
   `meal_residents.multiplier` when the row is created, so editing a resident
   never reaches back into a settled meal. If that stops being true, this
   boundary has to move.

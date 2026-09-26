@@ -144,14 +144,13 @@ MUTANT_SPEC_ROWS = {
   'spec/requests/admin/attendance_correction_spec.rb' => %w[MealResident ClosedMealAttendanceFreeze],
   'spec/requests/admin/reconciled_immutability_spec.rb' => %w[ReconciledMealImmutability Bill],
   'spec/requests/admin/reconciliation_immutability_spec.rb' => %w[SettleAndNotify Reconciliation AppendOnly],
-  'spec/requests/admin/child_pricing_rule_spec.rb' => %w[Community Multiplier SetMultipliersJob],
+  'spec/requests/admin/child_pricing_rule_spec.rb' => %w[Community Multiplier],
   'spec/requests/admin/community_form_spec.rb' => %w[Community],
   'spec/requests/admin/community_singleton_spec.rb' => %w[Community BelongsToTheCommunity],
   'spec/requests/admin/community_creation_spec.rb' => %w[Community AdminUser],
   'spec/requests/admin/resident_form_spec.rb' => %w[Resident HasPhoneNumber],
   'spec/requests/admin/unit_form_spec.rb' => %w[Unit],
   'spec/requests/admin/meal_move_spec.rb' => %w[Bill ReconciledMealImmutability NotesMealLiveUpdate],
-  'spec/tasks/residents_set_multiplier_spec.rb' => %w[SetMultipliersJob Multiplier],
   'spec/tasks/community_create_rotations_spec.rb' => %w[EnsureRotationsJob Community MealSchedule Rotation],
   'spec/tasks/rotations_notify_new_spec.rb' => %w[PacedDelivery ResidentMailer MailDelivery],
   'spec/tasks/residents_notify_spec.rb' => %w[PacedDelivery ResidentMailer MailDeliveryFailure MailDelivery],
@@ -184,6 +183,7 @@ MUTANT_SPEC_ROWS = {
   'spec/models/guest_spec.rb' =>
     %w[Guest LiveUpdate LocksItsMealFirst ReconciledMealImmutability ClosedMealAttendanceFreeze NotesMealLiveUpdate],
   'spec/models/resident_spec.rb' => %w[Resident LiveUpdate BelongsToTheCommunity HasPhoneNumber],
+  'spec/models/resident_price_band_spec.rb' => %w[Resident Community LiveUpdate BelongsToTheCommunity HasPhoneNumber],
   'spec/models/unit_spec.rb' => %w[Unit LiveUpdate BelongsToTheCommunity],
   'spec/requests/admin/all_pages_spec.rb' =>
     %w[BalanceDisplayHelper SettlementLinesTable MoneyFieldHelper ScheduleWeekLabelHelper PhoneDisplayHelper

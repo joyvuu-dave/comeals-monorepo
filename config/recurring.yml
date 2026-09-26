@@ -20,9 +20,6 @@ shared: &shared
   verify_ledger:
     class: VerifyLedgerJob
     schedule: 0 5 * * * UTC
-  set_multipliers:
-    class: SetMultipliersJob
-    schedule: 0 11 * * * UTC
   ensure_rotations:
     class: EnsureRotationsJob
     schedule: 30 22 * * * UTC

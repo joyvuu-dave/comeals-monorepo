@@ -31,7 +31,7 @@ RSpec.describe 'Admin attendance correction' do
       row = MealResident.last
       expect(row.meal_id).to eq(meal.id)
       expect(row.resident_id).to eq(resident.id)
-      expect(row.multiplier).to eq(resident.multiplier)
+      expect(row.multiplier).to eq(resident.multiplier_on(meal.date))
     end
 
     it 'writes one audit row naming the admin' do

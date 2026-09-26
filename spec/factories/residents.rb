@@ -11,7 +11,6 @@
 #  can_reconcile          :boolean          default(FALSE), not null
 #  email                  :string
 #  keys_valid_since       :datetime         not null
-#  multiplier             :integer          default(2), not null
 #  name                   :string           not null
 #  password_digest        :string           not null
 #  phone                  :string
@@ -43,12 +42,15 @@ FactoryBot.define do
     sequence(:name) { |n| "#{Faker::Name.first_name} #{Faker::Name.last_name} #{n}" }
     email { Faker::Internet.email }
     password { Faker::Internet.password }
-    multiplier { 2 }
 
-    # Children must have a birthday (model validation) so the nightly task
-    # can move them to adult pricing. Give each price category an
-    # age-appropriate one, so specs can just say `multiplier: 1`. Adults
-    # get none — an adult with no birthday is the normal case.
+    # A price band is not a column: it comes from the birthday. Specs
+    # still say `multiplier: 1` for a child, and get an age-appropriate
+    # birthday (8 for half price, 3 for free, under the default ages).
+    # Adults get none — an adult with no birthday is the normal case.
+    transient do
+      multiplier { 2 }
+    end
+
     birthday do
       case multiplier
       when 0 then 3.years.ago.to_date

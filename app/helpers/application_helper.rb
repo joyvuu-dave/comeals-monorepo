@@ -27,7 +27,7 @@ module ApplicationHelper
 
   # The child pricing rule as one plain sentence, built from the community's
   # two configured ages. Shown next to the age fields on the community form
-  # and next to the price category field on the resident form, so the ages
+  # and under the "This person is" radio on the resident form, so the ages
   # an admin reads always come from the record, never from a copied number.
   # The age bands are defined on Community (see "Child pricing ages" there).
   def child_pricing_rule_sentence(community)

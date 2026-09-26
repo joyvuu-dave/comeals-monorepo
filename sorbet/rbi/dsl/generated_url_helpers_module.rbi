@@ -238,6 +238,9 @@ module GeneratedUrlHelpersModule
   def rails_mailers_url(*args); end
 
   sig { params(args: T.untyped).returns(String) }
+  def remove_birthday_admin_resident_url(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
   def root_url(*args); end
 
   sig { params(args: T.untyped).returns(String) }

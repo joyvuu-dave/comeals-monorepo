@@ -895,4 +895,39 @@ RSpec.describe Meal do
       expect(pushed).to eq(["meal-#{meal.id}"])
     end
   end
+
+  describe '#restamp_attendance_for_new_date' do
+    let(:community) { create(:community, free_below_age: 5, full_price_age: 12) }
+    let(:unit) { create(:unit, community: community) }
+
+    it 'gives every attendance row the band for the new date when an open meal moves' do
+      meal = create(:meal, community: community, date: community.today + 2)
+      # Turns 12 five days from now: a child on the meal's date, an adult ten days out.
+      child = create(:resident, community: community, unit: unit, birthday: community.today + 5 - 12.years)
+      adult = create(:resident, community: community, unit: unit, birthday: 30.years.ago.to_date)
+      child_row = create(:meal_resident, meal: meal, resident: child, community: community)
+      adult_row = create(:meal_resident, meal: meal, resident: adult, community: community)
+      expect(child_row.multiplier).to eq(Multiplier::HALF)
+
+      meal.update!(date: community.today + 10)
+
+      expect(child_row.reload.multiplier).to eq(Multiplier::FULL)
+      expect(adult_row.reload.multiplier).to eq(Multiplier::FULL)
+
+      meal.update!(date: community.today + 1)
+
+      expect(child_row.reload.multiplier).to eq(Multiplier::HALF)
+    end
+
+    it 'leaves the rows alone when the date did not change' do
+      meal = create(:meal, community: community, date: community.today + 2)
+      child = create(:resident, community: community, unit: unit, birthday: community.today + 5 - 12.years)
+      row = create(:meal_resident, meal: meal, resident: child, community: community)
+      row.update_columns(multiplier: 7)
+
+      meal.update!(description: 'Soup')
+
+      expect(row.reload.multiplier).to eq(7)
+    end
+  end
 end

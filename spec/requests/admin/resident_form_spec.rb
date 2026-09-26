@@ -71,7 +71,7 @@ RSpec.describe 'Admin resident form' do
     expect(cooks_row[:name]).to eq('B2 - Pat')
   end
 
-  it 'change the price category by hand: attendance already recorded keeps its own snapshot' do
+  it 'change the price category through the birthday: attendance already recorded keeps its own snapshot' do
     open_meal = create(:meal, community: community, date: Date.new(2026, 5, 10))
     open_row = create(:meal_resident, meal: open_meal, resident: resident, community: community)
 
@@ -80,11 +80,80 @@ RSpec.describe 'Admin resident form' do
     create(:reconciliation, community: community)
     raise 'setup failed: meal was not settled' unless meal.reload.reconciled?
 
-    # A half-price resident is a child, and a child must have a birthday.
-    submit(multiplier: 1, birthday: 8.years.ago.to_date.iso8601)
+    # The form says the person is a child and gives the birthday that makes
+    # them one; the band is computed from it from now on.
+    submit(kind: 'child', birthday: 8.years.ago.to_date.iso8601)
 
-    expect(resident.reload.multiplier).to eq(1)
+    expect(resident.reload).to be_child
     expect(open_row.reload.multiplier).to eq(2)
     expect(settled_row.reload.multiplier).to eq(2)
+  end
+
+  it 'refuses Adult with a birthday that makes a child, and says so on the form' do
+    host! 'admin.example.com'
+    sign_in admin_user
+
+    patch "/residents/#{resident.id}", params: { resident: { kind: 'adult', birthday: 8.years.ago.to_date.iso8601 } }
+
+    expect(response).to have_http_status(:ok)
+    expect(response.body).to include('makes this person a child. Choose Child, or check the date.')
+    expect(resident.reload.birthday).to be_nil
+  end
+
+  it 'removes an adult\'s birthday from the resident page' do
+    resident.update!(birthday: 30.years.ago.to_date)
+    host! 'admin.example.com'
+    sign_in admin_user
+
+    get "/residents/#{resident.id}"
+    expect(response.body).to include('Remove birthday')
+
+    patch "/residents/#{resident.id}/remove_birthday"
+
+    expect(response).to redirect_to("/residents/#{resident.id}")
+    expect(resident.reload.birthday).to be_nil
+    get "/residents/#{resident.id}"
+    expect(response.body).not_to include('Remove birthday')
+  end
+
+  it 'refuses to remove a child\'s birthday by the route, since a child needs one' do
+    child = create(:resident, community: community, unit: unit, name: 'Kid', birthday: 8.years.ago.to_date)
+    host! 'admin.example.com'
+    sign_in admin_user
+
+    patch "/residents/#{child.id}/remove_birthday"
+
+    expect(response).to redirect_to("/residents/#{child.id}")
+    expect(flash[:alert]).to include('A child needs a birthday')
+    expect(child.reload.birthday).not_to be_nil
+  end
+
+  it 'shows why a removal could not be saved, instead of raising' do
+    # A child with no email who can cook: fine while a child. Grown up
+    # (the birthday moved by hand, the way time would move it), the row
+    # fails the adult email rule on every save.
+    grown = create(:resident, community: community, unit: unit, name: 'Grown', email: nil, can_cook: true,
+                              birthday: 11.years.ago.to_date)
+    grown.update_columns(birthday: 13.years.ago.to_date)
+    host! 'admin.example.com'
+    sign_in admin_user
+
+    patch "/residents/#{grown.id}/remove_birthday"
+
+    expect(response).to redirect_to("/residents/#{grown.id}")
+    expect(flash[:alert]).to include('Email cannot be blank')
+    expect(grown.reload.birthday).not_to be_nil
+  end
+
+  it 'offers no removal on a child\'s page, and prefills Child on the child\'s form' do
+    child = create(:resident, community: community, unit: unit, name: 'Kid', birthday: 8.years.ago.to_date)
+    host! 'admin.example.com'
+    sign_in admin_user
+
+    get "/residents/#{child.id}"
+    expect(response.body).not_to include('Remove birthday')
+
+    get "/residents/#{child.id}/edit"
+    expect(response.body).to match(/id="resident_kind_child"[^>]*checked/)
   end
 end

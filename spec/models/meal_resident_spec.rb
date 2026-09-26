@@ -35,11 +35,26 @@ RSpec.describe MealResident do
   let(:resident) { create(:resident, community: community, unit: unit, multiplier: 2) }
 
   describe '#set_multiplier' do
-    it 'copies the resident multiplier before validation' do
+    it "copies the resident's band for the meal's date before validation" do
       mr = described_class.new(meal: meal, resident: resident)
       mr.valid?
 
-      expect(mr.multiplier).to eq(resident.multiplier)
+      expect(mr.multiplier).to eq(resident.multiplier_on(meal.date))
+      expect(mr.multiplier).to eq(Multiplier::FULL)
+    end
+
+    it "uses the meal's date, not today: a child who is full price by the meal pays full price" do
+      # Turns 12 (the default full-price age) five days before the meal,
+      # so today they are a child and on the meal's day an adult.
+      meal.update!(date: community.today + 10)
+      child = create(:resident, community: community, unit: unit,
+                                birthday: community.today + 5 - 12.years)
+      expect(child).to be_child
+
+      mr = described_class.new(meal: meal, resident: child)
+      mr.valid?
+
+      expect(mr.multiplier).to eq(Multiplier::FULL)
     end
 
     it 'copies a child multiplier of 1' do
@@ -55,8 +70,14 @@ RSpec.describe MealResident do
       mr = described_class.new(meal: meal, resident: child, community: community, multiplier: 2)
 
       expect(mr).not_to be_valid
-      expect(mr.errors[:multiplier]).to include("must be the resident's multiplier at signup (1), not 2")
+      expect(mr.errors[:multiplier]).to include("must be the resident's price for the meal's date (1), not 2")
       expect(mr.multiplier).to eq(2)
+    end
+
+    it 'has no expected multiplier until it has both a resident and a meal' do
+      expect(described_class.new(meal: meal).expected_multiplier).to be_nil
+      expect(described_class.new(resident: resident).expected_multiplier).to be_nil
+      expect(described_class.new(meal: meal, resident: resident).expected_multiplier).to eq(Multiplier::FULL)
     end
 
     it 'reports a missing resident, not a wrong multiplier' do
@@ -68,32 +89,31 @@ RSpec.describe MealResident do
     end
 
     it 'accepts the resident\'s own multiplier when it is given' do
-      mr = described_class.new(meal: meal, resident: resident, community: community, multiplier: resident.multiplier)
+      mr = described_class.new(meal: meal, resident: resident, community: community,
+                               multiplier: resident.multiplier_on(meal.date))
 
       expect(mr).to be_valid
     end
 
     # Regression test for BUG-1: set_multiplier must only run on create, not update.
     # If it runs on update, toggling late/vegetarian silently overwrites the
-    # point-in-time multiplier when the resident's multiplier has since changed.
+    # point-in-time multiplier when the resident's band has since changed.
     it 'preserves the original multiplier when the record is updated' do
       child = create(:resident, community: community, unit: unit, multiplier: 1)
       mr = create(:meal_resident, meal: meal, resident: child, community: community)
       expect(mr.multiplier).to eq(1)
 
-      # Simulate the residents:set_multiplier rake task promoting child to adult
-      child.update_columns(multiplier: 2)
-      child.reload
+      # The birthday is corrected: an adult after all.
+      child.update!(birthday: 30.years.ago.to_date)
 
       # Now update late/vegetarian — the multiplier must NOT change
       mr.update!(late: true)
       expect(mr.reload.multiplier).to eq(1)
     end
 
-    it 'captures the current resident multiplier at creation time' do
-      # A resident who was recently promoted from child (1) to adult (2)
-      # should get multiplier 2 on any NEW meal signups.
-      promoted = create(:resident, community: community, unit: unit, multiplier: 2)
+    it "captures the resident's band as of creation time" do
+      # A resident whose birthday now says adult gets 2 on any NEW signup.
+      promoted = create(:resident, community: community, unit: unit, birthday: 30.years.ago.to_date)
       mr = create(:meal_resident, meal: meal, resident: promoted, community: community)
       expect(mr.multiplier).to eq(2)
     end

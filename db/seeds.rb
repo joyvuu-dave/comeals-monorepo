@@ -74,20 +74,19 @@ Rails.logger.debug { "#{community.admin_users.count} AdminUser created" }
     child_year = ((community.today.year - 10)..(community.today.year - 1)).to_a.sample
     child_birthday = Date.new(child_year, (1..12).to_a.sample, (1..28).to_a.sample)
     Resident.create!(name: "#{Faker::Name.first_name} #{Faker::Name.last_name}",
-                     multiplier: 1, unit: unit,
-                     password: '', birthday: child_birthday)
+                     unit: unit, password: '', birthday: child_birthday)
   end
   adult_year = ((community.today.year - 90)..(community.today.year - 20)).to_a.sample
   adult_birthday = Date.new(adult_year, (1..12).to_a.sample, (1..28).to_a.sample)
   Resident.create!(name: "#{Faker::Name.first_name} #{Faker::Name.last_name}",
-                   multiplier: 2, unit: unit, email: Faker::Internet.email, password: 'password',
+                   unit: unit, email: Faker::Internet.email, password: 'password',
                    birthday: adult_birthday, phone: next_phone.call)
   next unless index.even?
 
   veg_year = ((community.today.year - 90)..(community.today.year - 20)).to_a.sample
   veg_birthday = Date.new(veg_year, (1..12).to_a.sample, (1..28).to_a.sample)
   Resident.create!(name: "#{Faker::Name.first_name} #{Faker::Name.last_name}",
-                   multiplier: 2, unit: unit, email: Faker::Internet.email, password: 'password',
+                   unit: unit, email: Faker::Internet.email, password: 'password',
                    vegetarian: true, birthday: veg_birthday, phone: next_phone.call)
 end
 
@@ -95,12 +94,12 @@ Rails.logger.debug { "#{community.units.count} Units created" }
 
 # Give 3 Residents the same First Name
 first_name = Faker::Name.first_name
-Resident.where(id: Resident.where(multiplier: 2).pluck(:id).shuffle.take(3)).find_each do |resident|
+Resident.where(id: Resident.adult.pluck(:id).shuffle.take(3)).find_each do |resident|
   resident.update!(name: "#{first_name} #{Faker::Name.last_name}")
 end
 
 # Make 1 (adult) Resident have a simple email address and matching name
-Resident.where(multiplier: 2).first.update!(email: 'bowen@email.com', name: 'Bowen Riddle')
+Resident.adult.first.update!(email: 'bowen@email.com', name: 'Bowen Riddle')
 
 Rails.logger.debug { "#{community.residents.count} Residents created" }
 

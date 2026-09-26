@@ -5,7 +5,7 @@
 # needs, and check afterwards that Solid Queue is really running.
 #
 # Since 2026-09-15 every live update is a Solid Queue job (ADR 0007), and
-# the four nightly jobs run from config/recurring.yml. Both need Solid
+# the nightly jobs run from config/recurring.yml. Both need Solid
 # Queue's supervisor, which SOLID_QUEUE_IN_PUMA starts inside the web dyno
 # (config/puma.rb), and the supervisor's processes each hold a database
 # connection, so RAILS_DB_POOL has to be at least 4 (the runbook says

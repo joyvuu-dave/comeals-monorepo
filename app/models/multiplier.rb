@@ -12,25 +12,18 @@
 #
 # MealLedger must NOT read this module. The ledger sums multipliers and
 # divides by the total; it does not know or care that 2 means "one adult".
-# That ignorance is the design: pricing policy lives here and in the
-# nightly residents:set_multiplier task, arithmetic lives in the ledger.
+# That ignorance is the design: pricing policy lives here, in
+# Community#multiplier_for_age and Resident#multiplier_on; arithmetic
+# lives in the ledger.
 # spec/models/multiplier_spec.rb pins this.
 #
-# The database defaults for residents.multiplier and guests.multiplier are
-# FULL, but a schema default cannot reference a Ruby constant, so they are
-# written as the literal 2 in the schema. spec/models/multiplier_spec.rb
-# pins them to this module so they cannot drift.
+# The database default for guests.multiplier is FULL, but a schema default
+# cannot reference a Ruby constant, so it is written as the literal 2 in
+# the schema. spec/models/multiplier_spec.rb pins it to this module so it
+# cannot drift. (residents.multiplier is an ignored column, kept one
+# release for the rollback story; a resident's band is computed.)
 module Multiplier
   FREE = 0
   HALF = 1
   FULL = 2
-
-  BAND_NAMES = { FREE => 'free', HALF => 'half price', FULL => 'full price' }.freeze
-
-  # The price band as words, for logs and messages. A value outside the
-  # three bands (a hand-set 3, shown as "Adult x 1.5") is named by its
-  # number.
-  def self.band_name(value)
-    BAND_NAMES.fetch(value, value.to_s)
-  end
 end

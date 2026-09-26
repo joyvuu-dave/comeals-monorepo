@@ -188,6 +188,12 @@ export function appActions(self) {
         // day ("signed up" becomes "attending"), and nothing writes at
         // midnight to push the change — so the calendar fetches the
         // month again itself.
+        // A birthday moves someone into the adult band with no write
+        // on the server, so nothing pushes it: the hosts list is
+        // fetched again too, if this screen has one.
+        if (self.hostsLoaded) {
+          self.refetchHostsSilently();
+        }
         if (window.Comeals.calendarChannel !== null) {
           self.loadMonthAsync();
         }

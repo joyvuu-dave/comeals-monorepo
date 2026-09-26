@@ -9,26 +9,11 @@ RSpec.describe Multiplier do
     expect(Multiplier::FULL).to eq(2)
   end
 
-  describe '.band_name' do
-    it 'names the three bands' do
-      expect(described_class.band_name(Multiplier::FREE)).to eq('free')
-      expect(described_class.band_name(Multiplier::HALF)).to eq('half price')
-      expect(described_class.band_name(Multiplier::FULL)).to eq('full price')
-    end
-
-    it 'names an out-of-band value by its number' do
-      expect(described_class.band_name(3)).to eq('3')
-    end
-  end
-
   # A schema default cannot reference a Ruby constant, so the database
-  # writes these as the literal 2. This is what keeps them from drifting
-  # away from Multiplier::FULL.
+  # writes it as the literal 2. This is what keeps it from drifting away
+  # from Multiplier::FULL. (residents.multiplier is an ignored column
+  # since 2026-09-26; a resident's band is computed from the birthday.)
   describe 'database column defaults' do
-    it 'pins residents.multiplier to FULL' do
-      expect(Resident.column_defaults.fetch('multiplier')).to eq(Multiplier::FULL)
-    end
-
     it 'pins guests.multiplier to FULL' do
       expect(Guest.column_defaults.fetch('multiplier')).to eq(Multiplier::FULL)
     end

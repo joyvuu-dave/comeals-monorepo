@@ -6,9 +6,18 @@ no jobs and can be removed; the schedule lives in git.
 
 ## What changes
 
-- The four daily jobs (`RefreshBalancesJob` 03:00 UTC, `VerifyLedgerJob`
-  05:00, `SetMultipliersJob` 11:00, `EnsureRotationsJob` 22:30) run from
-  `config/recurring.yml`, by Solid Queue's supervisor inside the web dyno.
+- The three daily jobs (`RefreshBalancesJob` 03:00 UTC, `VerifyLedgerJob`
+  05:00, `EnsureRotationsJob` 22:30) run from `config/recurring.yml`, by
+  Solid Queue's supervisor inside the web dyno. (`SetMultipliersJob` is
+  gone since 2026-09-26: a resident's price band is computed from the
+  birthday. Its Heroku Scheduler entry, `rake residents:set_multiplier`,
+  and its healthchecks.io check, `residents-set-multiplier`, must be
+  deleted at the deploy that carries that change, or the Scheduler entry
+  fails every day and the check reports late. And if that release is ever
+  rolled back, run the old release's `rake residents:set_multiplier` at
+  once: the old code reads the `residents.multiplier` column, which the
+  new code stops writing, so a child created or grown up after the
+  deploy is priced wrong until that task runs.)
 - Every run writes a `job_runs` row and pings the same healthchecks.io
   checks as before, so the "late" alerts keep working unchanged.
 - `RecurringCatchUp` runs at Puma boot and enqueues any job that missed
@@ -32,12 +41,12 @@ steps below are still the record of what happens and why.
 
 Do not delete anything on the Scheduler dashboard until step 6. If Solid
 Queue fails to start, the jobs still run from Scheduler while you fix it;
-deleting first would leave the four jobs silently unrun until
+deleting first would leave the jobs silently unrun until
 healthchecks.io's grace period (1 hour) expires and emails you.
 
 1. Deploy (`bin/deploy`). The migration creates Solid Queue's tables and
    `job_runs` in the primary database. Scheduler is still running the
-   four jobs; nothing about them changes yet.
+   jobs; nothing about them changes yet.
 2. Raise the database pool before starting the supervisor, not after:
    `heroku config:set RAILS_DB_POOL=4 -a comeals-monorepo`. Today's pool
    of 2 is sized for one web request thread plus solid_cache's background
@@ -55,7 +64,7 @@ healthchecks.io's grace period (1 hour) expires and emails you.
 3. Set the config var that starts the supervisor inside Puma:
    `heroku config:set SOLID_QUEUE_IN_PUMA=true -a comeals-monorepo`.
    The dyno restarts; the log shows `SolidQueue-…: Started Supervisor`.
-4. Confirm the catch-up ran: `heroku run rails runner 'puts JobRun.order(:id).last(4).map { |r| [r.name, r.outcome, r.finished_at] }'`.
+4. Confirm the catch-up ran: `heroku run rails runner 'puts JobRun.order(:id).last(3).map { |r| [r.name, r.outcome, r.finished_at] }'`.
    Every job that had never recorded a run is due at boot, so all four
    should have a row within a minute of the restart.
 5. Leave both schedules running for one full day. Each healthchecks.io
@@ -63,10 +72,9 @@ healthchecks.io's grace period (1 hour) expires and emails you.
    The two can fire within seconds of each other at the shared UTC times;
    every job is idempotent, so a double run costs a few queries, not
    correctness — RefreshBalancesJob and VerifyLedgerJob recompute from
-   source either way, SetMultipliersJob only moves a resident that is not
-   already in the right band, and EnsureRotationsJob's own guard makes a
-   second run a no-op once the calendar reaches six months out.
-6. Delete the four jobs on the Heroku Scheduler dashboard
+   source either way, and EnsureRotationsJob's own guard makes a second
+   run a no-op once the calendar reaches six months out.
+6. Delete the jobs on the Heroku Scheduler dashboard
    (`https://dashboard.heroku.com/apps/comeals-monorepo/scheduler`).
 7. The next day, confirm each check received exactly one ping, and that
    `job_runs` has one `ok` row per job.

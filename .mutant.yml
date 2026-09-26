@@ -60,7 +60,6 @@ matcher:
     - NotifyCooksJob*
     - RecurringJob*
     - RefreshBalancesJob*
-    - SetMultipliersJob*
     - VerifyLedgerJob*
     - ApplicationMailer*
     - ReconciliationMailer*

@@ -12,7 +12,6 @@
 #  can_reconcile          :boolean          default(FALSE), not null
 #  email                  :string
 #  keys_valid_since       :datetime         not null
-#  multiplier             :integer          default(2), not null
 #  name                   :string           not null
 #  password_digest        :string           not null
 #  phone                  :string
@@ -48,13 +47,37 @@ class Resident < ApplicationRecord
   # Deliberately excludes password_digest and reset_password_token.
   sig { params(_auth_object: T.untyped).returns(T::Array[String]) }
   def self.ransackable_attributes(_auth_object = nil)
-    %w[id active birthday can_cook created_at email multiplier name phone unit_id updated_at vegetarian]
+    %w[id active birthday can_cook created_at email name phone unit_id updated_at vegetarian]
   end
 
   sig { returns(T.nilable(String)) }
   attr_reader :password
 
-  scope :adult, -> { where(multiplier: Multiplier::FULL..) }
+  # A price band is not stored. It comes from the birthday and the
+  # community's two ages, for a date (Community#multiplier_for_age); a
+  # resident with no birthday is an adult. Attendance snapshots the band
+  # for the meal's date at sign-up (MealResident#set_multiplier), so a
+  # later birthday never changes a past charge. Until 2026-09-26 the band
+  # was a column that a nightly job copied from the birthday, so a
+  # person's price was wrong from their birthday until the next run, and
+  # a sign-up months ahead used the sign-up day's band (#88). The column
+  # stays one release for the rollback story (strong_migrations); nothing
+  # reads or writes it, so after a rollback the old release must run its
+  # rake residents:set_multiplier at once (docs/runbooks/scheduler-cutover.md).
+  self.ignored_columns += %w[multiplier]
+
+  # The same rule as #age_on, in SQL: full-price age reached on the day,
+  # a February 29 birthday counting on March 1 in a non-leap year (the
+  # month-day text compares the way the Ruby does). Pinned against the
+  # Ruby rule for every day of a leap year and a non-leap year in
+  # spec/models/resident_price_band_spec.rb.
+  scope :adult_on, lambda { |date, community: Community.instance|
+    where('residents.birthday IS NULL OR ' \
+          '(EXTRACT(YEAR FROM ?::date) - EXTRACT(YEAR FROM residents.birthday) - ' \
+          "CASE WHEN to_char(?::date, 'MMDD') < to_char(residents.birthday, 'MMDD') THEN 1 ELSE 0 END) >= ?",
+          date, date, community.full_price_age)
+  }
+  scope :adult, -> { adult_on(Community.instance.today) }
   scope :active, -> { where(active: true) }
   # Who can be asked to cook: active adults with can_cook set. The rotation
   # log lists these.
@@ -87,7 +110,6 @@ class Resident < ApplicationRecord
   # one can only be retired, never deleted.
   has_many :mail_deliveries, dependent: :restrict_with_error
 
-  validates :multiplier, numericality: { only_integer: true }
   validates :name, presence: true
 
   # Names must be unique so every screen can tell residents apart (the
@@ -99,17 +121,29 @@ class Resident < ApplicationRecord
   # to create it, usually by the admin adding the second John Smith.
   validate :name_unique_with_helpful_message
 
-  # Birthday is optional for adults: NULL means "adult, no birthday given" —
-  # the nightly multiplier task skips them and the calendar shows nothing.
-  # Children must have one so the task can move them to adult pricing as
-  # they age. 1900-01-01 was the old placeholder for "adult, no birthday";
+  # Birthday is optional: NULL means an adult who gave none, and the
+  # calendar shows nothing for them. A child needs one, so the price
+  # follows their age; the admin form says which the person is (`kind`,
+  # below) so a child without a birthday is refused instead of priced as
+  # an adult. 1900-01-01 was the old placeholder for "adult, no birthday";
   # the exclusion keeps it from coming back through the admin datepicker,
   # and the residents_birthday_not_sentinel CHECK catches writes that skip
   # the model.
-  validates :birthday, presence: { message: 'is required for children — pricing changes as they age' },
-                       if: :child?
   validates :birthday, exclusion: { in: [Date.new(1900, 1, 1)],
                                     message: 'cannot be the old 1900-01-01 placeholder — leave it blank instead' }
+  # A birthday after today would be a negative age, and a negative age is
+  # under every band's floor: the person would eat free (review, 2026-09-26).
+  validate :birthday_not_in_the_future
+
+  # The admin form's statement about the person, "adult" or "child", not
+  # stored: the birthday and the community's ages are the facts, and this
+  # is checked against them on save so the form cannot say one thing and
+  # the birthday another. Blank (the API, a factory, the console) means
+  # no statement, and only the birthday counts.
+  KINDS = T.let(%w[adult child].freeze, T::Array[String])
+  attribute :kind, :string
+  validates :kind, inclusion: { in: KINDS }, allow_nil: true
+  validate :kind_matches_birthday, if: :kind_stated?
 
   VALID_EMAIL_REGEX = T.let(/\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i, Regexp)
   validates :email, presence: true, length: { maximum: 255 },
@@ -123,11 +157,17 @@ class Resident < ApplicationRecord
   after_save :revoke_all_sessions_if_password_changed
   after_save :note_live_update
 
-  # Priced below a full adult share. Children must have a birthday, so the
-  # nightly multiplier task can move them to adult pricing as they age.
+  # Priced below a full adult share today.
   sig { returns(T::Boolean) }
   def child?
-    T.must(multiplier) < Multiplier::FULL
+    multiplier_on(T.must(community).today) < Multiplier::FULL
+  end
+
+  # The price band on a date: what a sign-up for a meal on that date is
+  # charged at. No birthday means an adult.
+  sig { params(date: Date).returns(Integer) }
+  def multiplier_on(date)
+    T.must(community).multiplier_for_age(age_on(date))
   end
 
   # PASSWORD STUFF
@@ -179,7 +219,31 @@ class Resident < ApplicationRecord
 
   sig { void }
   def email_presence
-    errors.add(:email, 'cannot be blank.') if active && can_cook && T.must(multiplier) >= Multiplier::FULL && email.nil?
+    errors.add(:email, 'cannot be blank.') if active && can_cook && !child? && email.nil?
+  end
+
+  sig { void }
+  def birthday_not_in_the_future
+    birthday = self.birthday
+    return if birthday.nil? || birthday <= T.must(community).today
+
+    errors.add(:birthday, 'cannot be after today.')
+  end
+
+  sig { returns(T::Boolean) }
+  def kind_stated?
+    KINDS.include?(kind)
+  end
+
+  sig { void }
+  def kind_matches_birthday
+    if kind == 'child'
+      return errors.add(:birthday, 'is needed for a child, so the price follows their age.') if birthday.nil?
+
+      errors.add(:birthday, 'makes this person an adult. Choose Adult, or check the date.') unless child?
+    elsif birthday.present? && child?
+      errors.add(:birthday, 'makes this person a child. Choose Child, or check the date.')
+    end
   end
 
   sig { void }
@@ -190,13 +254,21 @@ class Resident < ApplicationRecord
   # nil when no birthday is given (an adult who left it blank).
   sig { returns(T.nilable(Integer)) }
   def age
+    age_on(T.must(community).today)
+  end
+
+  # The age on a date, counted the way people count: a year is added on
+  # the birthday itself, and a February 29 birthday is added on March 1
+  # in a year with no February 29. The adult_on scope says the same in
+  # SQL.
+  sig { params(date: Date).returns(T.nilable(Integer)) }
+  def age_on(date)
     birthday = self.birthday
     return nil if birthday.nil?
 
-    now = T.must(community).today
-    had_birthday = now.month > birthday.month ||
-                   (now.month == birthday.month && now.day >= birthday.day)
-    now.year - birthday.year - (had_birthday ? 0 : 1)
+    had_birthday = date.month > birthday.month ||
+                   (date.month == birthday.month && date.day >= birthday.day)
+    date.year - birthday.year - (had_birthday ? 0 : 1)
   end
 
   # Balance is read from the cached resident_balances table (unreconciled preview).
@@ -213,16 +285,15 @@ class Resident < ApplicationRecord
   private
 
   # Columns no screen shows. A change to any other column — name, unit,
-  # active, multiplier, birthday, vegetarian, can_cook, and whatever is
-  # added next — is pushed on the residents channel: the hosts dropdown,
-  # the meal page's sign-up list and every cached calendar month list
-  # residents, so all of them refetch. A list of the shown columns would
-  # go stale the first time a serializer gained one; this list only has
-  # to name what is secret or invisible. One write to a shown column skips
-  # this callback: SetMultipliersJob sets multiplier with update_columns,
-  # and pushes the residents channel itself. The other writes that skip it
+  # active, birthday, vegetarian, can_cook, and whatever is added next —
+  # is pushed on the residents channel: the hosts dropdown, the meal
+  # page's sign-up list and every cached calendar month list residents,
+  # so all of them refetch. A list of the shown columns would go stale
+  # the first time a serializer gained one; this list only has to name
+  # what is secret or invisible. The writes that skip this callback
   # (keys_valid_since, the reset-token columns) touch nothing a screen
-  # shows.
+  # shows. A birthday moves someone into the adult band on its own, with
+  # no write at all, so the SPA refetches the hosts list at midnight.
   UNSHOWN_COLUMNS = T.let(%w[email phone password_digest reset_password_token reset_password_sent_at
                              created_at updated_at].freeze, T::Array[String])
   private_constant :UNSHOWN_COLUMNS

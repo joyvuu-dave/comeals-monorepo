@@ -25,6 +25,8 @@
 #
 
 class Community < ApplicationRecord
+  extend T::Sig
+
   SUPPORTED_TIMEZONES = {
     'Hawaii' => 'Pacific/Honolulu',
     'Alaska' => 'America/Juneau',
@@ -111,8 +113,8 @@ class Community < ApplicationRecord
             },
             allow_nil: true
   # --- Child pricing ages ---
-  # The nightly residents:set_multiplier task reads these two ages and sets
-  # each resident's multiplier from their birthday:
+  # Resident#multiplier_on reads these two ages and a resident's age on
+  # a date (multiplier_for_age, below):
   #
   #   age < free_below_age                    -> Multiplier::FREE
   #   free_below_age <= age < full_price_age  -> Multiplier::HALF
@@ -255,6 +257,20 @@ class Community < ApplicationRecord
     mr_count = MealResident.where(meal_id: unreconciled.select(:id)).count
     g_count = Guest.where(meal_id: unreconciled.select(:id)).count
     ((mr_count + g_count).to_f / meal_count).round(1)
+  end
+
+  # The price band for an age. nil is no birthday, which is an adult.
+  sig { params(age: T.nilable(Integer)).returns(Integer) }
+  def multiplier_for_age(age)
+    return Multiplier::FULL if age.nil?
+
+    if age < T.must(free_below_age)
+      Multiplier::FREE
+    elsif age < T.must(full_price_age)
+      Multiplier::HALF
+    else
+      Multiplier::FULL
+    end
   end
 
   def auto_rotation_length
