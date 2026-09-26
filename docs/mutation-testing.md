@@ -794,3 +794,10 @@ did not change), six workers, 200-second timeout: 1,212 mutations,
   `base_delay:`. The request budget's delay is RetryOnConflict's
   default, so only the batch budget can show it; both examples that use
   the batch budget now pin the first sleep.
+
+Third pass, on the three subjects the answers changed (`LiveUpdate.flush`,
+`LiveUpdate.note`, `SettleAndNotify*`): 295 mutations, 294 killed. The
+one alive was the `base_delay:` drop again: "any sleep in the batch
+range" is also true of the request delay's fifth and sixth doublings, so
+the two batch examples now record every sleep and check the first.
+Fourth pass, `SettleAndNotify*` alone: 111 mutations, 111 killed.

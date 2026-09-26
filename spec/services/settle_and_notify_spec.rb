@@ -109,7 +109,8 @@ RSpec.describe SettleAndNotify do
 
     it 'keeps trying past a request\'s three attempts, waiting the batch delay' do
       settleable_meal(Date.yesterday)
-      allow(RetryOnConflict).to receive(:sleep)
+      sleeps = []
+      allow(RetryOnConflict).to receive(:sleep) { |seconds| sleeps << seconds }
       failures = 0
       allow(Settlement).to receive(:settle!).and_wrap_original do |original, **args|
         failures += 1
@@ -123,7 +124,9 @@ RSpec.describe SettleAndNotify do
 
       expect(reconciliation).to be_persisted
       expect(failures).to eq(7)
-      expect(RetryOnConflict).to have_received(:sleep).with(be_between(base, base * 2)).once
+      # The first wait, not any wait: with the request's delay the fifth
+      # and sixth doublings land in the same range.
+      expect(sleeps.first).to be_between(base, base * 2)
     end
   end
 
@@ -159,6 +162,8 @@ RSpec.describe SettleAndNotify do
 
     it 'gives the nightly refresh the batch budget, so it outlasts the tries a request would make' do
       settleable_meal(Date.yesterday)
+      sleeps = []
+      allow(RetryOnConflict).to receive(:sleep) { |seconds| sleeps << seconds }
       attempts = 0
       allow(BalanceRecalculation).to receive(:call).and_wrap_original do |original, **args|
         attempts += 1
@@ -172,7 +177,7 @@ RSpec.describe SettleAndNotify do
 
       expect(attempts).to eq(described_class::REQUEST.attempts + 2)
       base = described_class::BATCH.base_delay
-      expect(RetryOnConflict).to have_received(:sleep).with(be_between(base, base * 2)).once
+      expect(sleeps.first).to be_between(base, base * 2)
       expect(Rails.error).not_to have_received(:report)
         .with(anything, hash_including(context: { step: 'balance refresh after settlement' }))
     end
