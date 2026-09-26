@@ -42,6 +42,27 @@ RSpec.describe 'Admin meal form: moving a meal to another date' do
     expect(meal_dates_in('2026-06-15')).to include('2026-06-10')
   end
 
+  # The band is the band for the day someone eats, so a moved meal's
+  # attendance is stamped again for the new date. Through the form, so
+  # prosopite watches the per-row reads: goldiloader loads the rows'
+  # residents in one query, and this would fail if it stopped. Six rows,
+  # because prosopite reports a repeat from five queries up.
+  it 'stamps every attendance row with the band for the new date' do
+    community.update!(free_below_age: 5, full_price_age: 12)
+    children = Array.new(6) do |n|
+      create(:resident, community: community, unit: unit, name: "Kid #{n}", birthday: Date.new(2026, 5, 1) - 12.years)
+    end
+    rows = children.map { |r| create(:meal_resident, meal: meal, resident: r, community: community) }
+    expect(rows.map(&:multiplier)).to all(eq(Multiplier::HALF))
+
+    host! 'admin.example.com'
+    sign_in admin_user
+    patch "/meals/#{meal.id}", params: { meal: { date: '2026-06-10' } }
+    expect(response).to redirect_to("/meals/#{meal.id}")
+
+    expect(rows.map { |row| row.reload.multiplier }).to all(eq(Multiplier::FULL))
+  end
+
   it 'refuses to move a reconciled meal' do
     reconciliation = create(:reconciliation, community: community)
     meal.update_columns(reconciliation_id: reconciliation.id)

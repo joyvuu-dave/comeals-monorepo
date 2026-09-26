@@ -255,9 +255,12 @@ class Meal < ApplicationRecord
   sig { void }
   def restamp_attendance_for_new_date
     date = T.must(self.date)
-    meal_residents.includes(:resident).find_each do |row|
-      expected = T.must(row.resident).multiplier_on(date)
-      row.update!(multiplier: expected) unless row.multiplier == expected
+    # No includes(:resident): goldiloader loads the batch's residents in
+    # one query on its own (spec/requests/admin/meal_move_spec.rb moves six
+    # rows under prosopite). A row already at the band writes nothing:
+    # update! skips the UPDATE when no attribute changed.
+    meal_residents.find_each do |row|
+      row.update!(multiplier: T.must(row.resident).multiplier_on(date))
     end
   end
 

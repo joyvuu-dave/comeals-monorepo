@@ -143,7 +143,7 @@ class Resident < ApplicationRecord
   KINDS = T.let(%w[adult child].freeze, T::Array[String])
   attribute :kind, :string
   validates :kind, inclusion: { in: KINDS }, allow_nil: true
-  validate :kind_matches_birthday, if: :kind_stated?
+  validate :kind_matches_birthday, if: :kind
 
   VALID_EMAIL_REGEX = T.let(/\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i, Regexp)
   validates :email, presence: true, length: { maximum: 255 },
@@ -230,18 +230,16 @@ class Resident < ApplicationRecord
     errors.add(:birthday, 'cannot be after today.')
   end
 
-  sig { returns(T::Boolean) }
-  def kind_stated?
-    KINDS.include?(kind)
-  end
-
+  # A kind the inclusion rule above refuses reads as "adult" here, which
+  # adds no birthday sentence; the inclusion error is the whole answer.
   sig { void }
   def kind_matches_birthday
     if kind == 'child'
       return errors.add(:birthday, 'is needed for a child, so the price follows their age.') if birthday.nil?
 
       errors.add(:birthday, 'makes this person an adult. Choose Adult, or check the date.') unless child?
-    elsif birthday.present? && child?
+    elsif child?
+      # A blank birthday is never a child, so no presence test is needed.
       errors.add(:birthday, 'makes this person a child. Choose Child, or check the date.')
     end
   end

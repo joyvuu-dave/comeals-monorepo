@@ -227,7 +227,8 @@ RSpec.describe Resident do
       resident = build(:resident, community: community, unit: unit, kind: 'child', birthday: nil)
 
       expect(resident).not_to be_valid
-      expect(resident.errors[:birthday]).to include('is needed for a child, so the price follows their age.')
+      # The one sentence, not also "makes this person an adult".
+      expect(resident.errors[:birthday]).to eq(['is needed for a child, so the price follows their age.'])
     end
 
     it 'refuses Adult with a birthday that makes a child, and Child with one that makes an adult' do
@@ -259,11 +260,16 @@ RSpec.describe Resident do
       expect(resident.errors[:birthday]).to include('cannot be after today.')
     end
 
+    it 'accepts a birthday of today: a newborn is a child of age zero' do
+      expect(build(:resident, community: community, unit: unit, kind: 'child', birthday: community.today)).to be_valid
+    end
+
     it 'refuses a statement that is neither adult nor child' do
       resident = build(:resident, community: community, unit: unit, kind: 'teen')
 
       expect(resident).not_to be_valid
       expect(resident.errors[:kind]).to be_present
+      expect(resident.errors[:birthday]).to be_empty
     end
 
     it 'rejects the old 1900-01-01 placeholder' do

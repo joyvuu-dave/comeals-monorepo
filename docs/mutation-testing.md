@@ -801,3 +801,43 @@ one alive was the `base_delay:` drop again: "any sleep in the batch
 range" is also true of the request delay's fifth and sixth doublings, so
 the two batch examples now record every sleep and check the first.
 Fourth pass, `SettleAndNotify*` alone: 111 mutations, 111 killed.
+
+### 2026-09-26, the computed price band (#88)
+
+Run after 8bad9ce7, on the four classes it touched, by name (`Resident
+Community MealResident Meal`; a `Meal*` pattern would also take
+`MealLedger` and the rest, and `Class#*` matches nothing): 2,718
+mutations, 2,576 killed, 142 alive, 1 timeout, 33 minutes on six
+workers with a 200-second timeout.
+
+Twenty of the 142 were in code this change added, and each was one of
+three things:
+
+- A missing assertion. A birthday of today (`<=` to `<` in
+  `birthday_not_in_the_future`): a newborn is a child of age zero, now
+  an example. The child-without-birthday sentence stacking with the
+  "makes this person an adult" one when the `return` was dropped: the
+  example now asserts the one sentence, exactly. A bad kind reaching
+  the birthday check: the example asserts no birthday error.
+- Redundant code. `birthday.present? && child?` in
+  `kind_matches_birthday`: a blank birthday is never a child, so the
+  first test did nothing; gone. `kind_stated?` as the `if:` of the
+  validation duplicated the inclusion rule; the validation runs
+  `if: :kind` and returns for a kind the inclusion rule refuses. The
+  `unless row.multiplier == expected` around the re-stamp in
+  `Meal#restamp_attendance_for_new_date`: `update!` with an unchanged
+  value writes nothing, so the guard was a shortcut; gone.
+- A line that did nothing. The `includes(:resident)` in the re-stamp
+  survived every removal even through the admin form under prosopite
+  (`spec/requests/admin/meal_move_spec.rb`, six rows): goldiloader loads
+  the batch's residents in one query on its own, so the preload was
+  redundant. Removed; the request example stays as the pin that the
+  move makes no per-row read.
+
+The other 122 are the ones the 2026-09-12 stage lists above:
+`Community`, 66 (the schedule and dinner-time shape checks, `size` for
+`count`, the preloads, `unreconciled_ave_*`) and `Meal`, 49 (the
+`loaded?` branches, `neighbour_ids`, `total_audits`), plus
+`Resident#name_unique_with_helpful_message`, 7 (`self.x` for `x()`,
+`.present?` for truthiness) and a `self.birthday` for `birthday()` in
+each new method. Not looked at again.
