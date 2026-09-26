@@ -1213,19 +1213,28 @@ Icalendar::Offset::WindowsToIana::WINDOWS_TO_IANA = T.let(T.unsafe(nil), Hash)
 
 # pkg:gem/icalendar#lib/icalendar/parser.rb:8
 class Icalendar::Parser
-  # pkg:gem/icalendar#lib/icalendar/parser.rb:29
+  # pkg:gem/icalendar#lib/icalendar/parser.rb:30
   def initialize(source, strict = T.unsafe(nil), verbose = T.unsafe(nil)); end
 
   # pkg:gem/icalendar#lib/icalendar/parser.rb:9
   def component_class=(_arg0); end
 
-  # pkg:gem/icalendar#lib/icalendar/parser.rb:111
+  # pkg:gem/icalendar#lib/icalendar/parser.rb:113
   def get_wrapper_class(component, fields); end
 
-  # pkg:gem/icalendar#lib/icalendar/parser.rb:45
+  # pkg:gem/icalendar#lib/icalendar/parser.rb:47
   def parse; end
 
-  # pkg:gem/icalendar#lib/icalendar/parser.rb:56
+  # pkg:gem/icalendar#lib/icalendar/parser.rb:11
+  def parse_depth; end
+
+  # pkg:gem/icalendar#lib/icalendar/parser.rb:11
+  def parse_depth=(_arg0); end
+
+  # pkg:gem/icalendar#lib/icalendar/parser.rb:9
+  def parse_depth_limit=(_arg0); end
+
+  # pkg:gem/icalendar#lib/icalendar/parser.rb:58
   def parse_property(component, fields = T.unsafe(nil)); end
 
   # pkg:gem/icalendar#lib/icalendar/parser.rb:10
@@ -1234,7 +1243,7 @@ class Icalendar::Parser
   # pkg:gem/icalendar#lib/icalendar/parser.rb:10
   def strict; end
 
-  # pkg:gem/icalendar#lib/icalendar/parser.rb:128
+  # pkg:gem/icalendar#lib/icalendar/parser.rb:130
   def strict?; end
 
   # pkg:gem/icalendar#lib/icalendar/parser.rb:10
@@ -1243,105 +1252,108 @@ class Icalendar::Parser
   # pkg:gem/icalendar#lib/icalendar/parser.rb:10
   def verbose; end
 
-  # pkg:gem/icalendar#lib/icalendar/parser.rb:132
+  # pkg:gem/icalendar#lib/icalendar/parser.rb:134
   def verbose?; end
 
-  # pkg:gem/icalendar#lib/icalendar/parser.rb:104
+  # pkg:gem/icalendar#lib/icalendar/parser.rb:106
   def wrap_in_array?(klass, value, multi_property); end
 
-  # pkg:gem/icalendar#lib/icalendar/parser.rb:83
+  # pkg:gem/icalendar#lib/icalendar/parser.rb:85
   def wrap_property_value(component, fields, multi_property); end
 
   private
 
-  # pkg:gem/icalendar#lib/icalendar/parser.rb:138
+  # pkg:gem/icalendar#lib/icalendar/parser.rb:140
   def component_class; end
 
-  # pkg:gem/icalendar#lib/icalendar/parser.rb:174
+  # pkg:gem/icalendar#lib/icalendar/parser.rb:184
   def next_fields; end
 
-  # pkg:gem/icalendar#lib/icalendar/parser.rb:144
+  # pkg:gem/icalendar#lib/icalendar/parser.rb:151
   def parse_component(component); end
 
-  # pkg:gem/icalendar#lib/icalendar/parser.rb:201
+  # pkg:gem/icalendar#lib/icalendar/parser.rb:144
+  def parse_depth_limit; end
+
+  # pkg:gem/icalendar#lib/icalendar/parser.rb:211
   def parse_fields(input); end
 
-  # pkg:gem/icalendar#lib/icalendar/parser.rb:167
+  # pkg:gem/icalendar#lib/icalendar/parser.rb:177
   def read_in_data; end
 
   class << self
-    # pkg:gem/icalendar#lib/icalendar/parser.rb:14
+    # pkg:gem/icalendar#lib/icalendar/parser.rb:15
     def clean_bad_wrapping(source); end
   end
 end
 
-# pkg:gem/icalendar#lib/icalendar/parser.rb:194
+# pkg:gem/icalendar#lib/icalendar/parser.rb:204
 Icalendar::Parser::BAD_LINE = T.let(T.unsafe(nil), String)
 
-# pkg:gem/icalendar#lib/icalendar/parser.rb:196
+# pkg:gem/icalendar#lib/icalendar/parser.rb:206
 Icalendar::Parser::BAD_LINE_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/parser.rb:12
+# pkg:gem/icalendar#lib/icalendar/parser.rb:13
 Icalendar::Parser::CLEAN_BAD_WRAPPING_GSUB_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/parser.rb:109
+# pkg:gem/icalendar#lib/icalendar/parser.rb:111
 Icalendar::Parser::GET_WRAPPER_CLASS_GSUB_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/parser.rb:193
+# pkg:gem/icalendar#lib/icalendar/parser.rb:203
 Icalendar::Parser::LINE = T.let(T.unsafe(nil), String)
 
-# pkg:gem/icalendar#lib/icalendar/parser.rb:195
+# pkg:gem/icalendar#lib/icalendar/parser.rb:205
 Icalendar::Parser::LINE_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/parser.rb:187
+# pkg:gem/icalendar#lib/icalendar/parser.rb:197
 Icalendar::Parser::NAME = T.let(T.unsafe(nil), String)
 
-# pkg:gem/icalendar#lib/icalendar/parser.rb:171
+# pkg:gem/icalendar#lib/icalendar/parser.rb:181
 Icalendar::Parser::NEXT_FIELDS_TAB_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/parser.rb:172
+# pkg:gem/icalendar#lib/icalendar/parser.rb:182
 Icalendar::Parser::NEXT_FIELDS_WHITESPACE_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/parser.rb:191
+# pkg:gem/icalendar#lib/icalendar/parser.rb:201
 Icalendar::Parser::PARAM = T.let(T.unsafe(nil), String)
 
-# pkg:gem/icalendar#lib/icalendar/parser.rb:197
+# pkg:gem/icalendar#lib/icalendar/parser.rb:207
 Icalendar::Parser::PARAM_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/parser.rb:142
+# pkg:gem/icalendar#lib/icalendar/parser.rb:149
 Icalendar::Parser::PARSE_COMPONENT_KLASS_NAME_GSUB_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/parser.rb:189
+# pkg:gem/icalendar#lib/icalendar/parser.rb:199
 Icalendar::Parser::PTEXT = T.let(T.unsafe(nil), String)
 
-# pkg:gem/icalendar#lib/icalendar/parser.rb:190
+# pkg:gem/icalendar#lib/icalendar/parser.rb:200
 Icalendar::Parser::PVALUE = T.let(T.unsafe(nil), String)
 
-# pkg:gem/icalendar#lib/icalendar/parser.rb:199
+# pkg:gem/icalendar#lib/icalendar/parser.rb:209
 Icalendar::Parser::PVALUE_GSUB_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/parser.rb:198
+# pkg:gem/icalendar#lib/icalendar/parser.rb:208
 Icalendar::Parser::PVALUE_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/parser.rb:234
+# pkg:gem/icalendar#lib/icalendar/parser.rb:244
 class Icalendar::Parser::ParseError < ::RuntimeError; end
 
-# pkg:gem/icalendar#lib/icalendar/parser.rb:188
+# pkg:gem/icalendar#lib/icalendar/parser.rb:198
 Icalendar::Parser::QSTR = T.let(T.unsafe(nil), String)
 
-# pkg:gem/icalendar#lib/icalendar/parser.rb:192
+# pkg:gem/icalendar#lib/icalendar/parser.rb:202
 Icalendar::Parser::VALUE = T.let(T.unsafe(nil), String)
 
-# pkg:gem/icalendar#lib/icalendar/parser.rb:101
+# pkg:gem/icalendar#lib/icalendar/parser.rb:103
 Icalendar::Parser::WRAP_IN_ARRAY_REGEX_1 = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/parser.rb:102
+# pkg:gem/icalendar#lib/icalendar/parser.rb:104
 Icalendar::Parser::WRAP_IN_ARRAY_REGEX_2 = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/parser.rb:79
+# pkg:gem/icalendar#lib/icalendar/parser.rb:81
 Icalendar::Parser::WRAP_PROPERTY_VALUE_DELIMETER_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/parser.rb:80
+# pkg:gem/icalendar#lib/icalendar/parser.rb:82
 Icalendar::Parser::WRAP_PROPERTY_VALUE_SPLIT_REGEX = T.let(T.unsafe(nil), Regexp)
 
 # pkg:gem/icalendar#lib/icalendar/timezone.rb:7
@@ -1931,17 +1943,17 @@ class Icalendar::Values::Date < ::Icalendar::Value
   # pkg:gem/icalendar#lib/icalendar/values/date.rb:11
   def initialize(value, params = T.unsafe(nil), *args); end
 
-  # pkg:gem/icalendar#lib/icalendar/values/date.rb:32
+  # pkg:gem/icalendar#lib/icalendar/values/date.rb:33
   def <=>(other); end
 
-  # pkg:gem/icalendar#lib/icalendar/values/date.rb:28
+  # pkg:gem/icalendar#lib/icalendar/values/date.rb:29
   def value_ical; end
 end
 
 # pkg:gem/icalendar#lib/icalendar/values/date.rb:9
 Icalendar::Values::Date::FORMAT = T.let(T.unsafe(nil), String)
 
-# pkg:gem/icalendar#lib/icalendar/values/date.rb:40
+# pkg:gem/icalendar#lib/icalendar/values/date.rb:41
 class Icalendar::Values::Date::FormatError < ::ArgumentError; end
 
 # DateOrDateTime can be used to set an attribute to either a Date or a DateTime value.
