@@ -40,6 +40,25 @@ module Storm
         requests.count { |e| Client::MEAL_WRITES.include?(e.action) && e.status == 200 }
       end
 
+      # Every meal write sent, whatever it was answered: written, refused
+      # by a rule, gone, or a conflict.
+      def meal_write_attempts
+        requests.count { |e| Client::MEAL_WRITES.include?(e.action) }
+      end
+
+      # How many clients sent at least one meal write.
+      def clients_that_wrote
+        requests.select { |e| Client::MEAL_WRITES.include?(e.action) }.map(&:client).uniq.size
+      end
+
+      # Writes that put a row in or took one out (attendance, guests,
+      # bills), as opposed to a meal's own columns (close, max, ...). The
+      # ledger is made of these rows, so these are the writes a storm has
+      # to have made for its checks to mean anything.
+      def ok_row_writes
+        requests.count { |e| Client::ROW_WRITES.include?(e.action) && e.status == 200 }
+      end
+
       def settlements
         background.count { |who, outcome, _| who == :settler && outcome_name(outcome) == :settled } +
           requests.count { |e| e.action == :settle && e.status == 201 }

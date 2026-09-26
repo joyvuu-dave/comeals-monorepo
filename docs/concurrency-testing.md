@@ -68,7 +68,17 @@ like production. What must hold:
   final rows, `ledger:verify` passes, a cap holds, the balance refresh is
   stable, and every calendar month reads the same with the cache and
   without it;
-- writes went through and a settlement won while they did.
+- the storm happened: meal writes were sent at eight a second or more
+  in total (the CI runner sends about twenty, a laptop about eighty; in
+  one process the GVL fixes the rate, so more clients means fewer writes
+  each), every client sent at least one, rows were written under them
+  (attendance, guests, bills: one every three seconds at least; the
+  runner writes about forty in fifteen seconds, a laptop hundreds, a
+  run where every write conflicts none), and a settlement won while
+  they did. Each floor follows what its count depends on, so
+  `STORM_CLIENTS` and `STORM_SECONDS` can turn the storm up. The floor
+  used to be five ok writes per client in total, a laptop's number, and
+  the CI runner missed it twice (#86).
 
 Knobs: `STORM_SECONDS`, `STORM_CLIENTS`, `STORM_SEED`, and `STORM_TALLY=1`
 to print the counts. The pool is widened for the group; Postgres allows

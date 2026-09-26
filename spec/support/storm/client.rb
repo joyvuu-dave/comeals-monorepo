@@ -73,6 +73,7 @@ module Storm
     }.freeze
 
     MEAL_WRITES = %i[signup leave toggle add_guest remove_guest bills close reopen max description].freeze
+    ROW_WRITES = %i[signup leave toggle add_guest remove_guest bills].freeze
     RECONCILER_ONLY = %i[preview settle].freeze
 
     attr_reader :log, :meal_sockets

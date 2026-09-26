@@ -73,7 +73,9 @@ namespace :test do
     problems += result.problems
     problems += Storm::Checks.call(plan: plan, transport: transport)
 
-    puts "requests: #{result.requests.size}, ok writes: #{result.ok_writes}, settlements: #{result.settlements}"
+    puts "requests: #{result.requests.size}, meal writes: #{result.meal_write_attempts} " \
+         "from #{result.clients_that_wrote} clients, ok writes: #{result.ok_writes} " \
+         "(#{result.ok_row_writes} rows), settlements: #{result.settlements}"
     result.tally.sort.each { |action, statuses| puts "  #{action}: #{statuses.sort_by { |s, _| s.to_s }.to_h}" }
     puts "background: #{result.background_tally}"
 

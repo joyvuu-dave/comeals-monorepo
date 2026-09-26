@@ -32,7 +32,8 @@ require 'rails_helper'
 #   - the settler, the jobs, and the admin never hit anything but their
 #     expected refusals;
 #   - the rows and the ledger are right after (Storm::Checks);
-#   - the storm actually happened: writes went through, and a settlement
+#   - the storm actually happened: writes were sent at a rate, every
+#     client sent some, rows were written under them, and a settlement
 #     won while they did.
 #
 # Knobs, for turning it up: STORM_SECONDS (15), STORM_CLIENTS (24),
@@ -142,7 +143,9 @@ RSpec.describe 'a request storm against the whole API, with the nightly jobs and
 
   def describe_run(result, reports_tally)
     lines = result.tally.sort.map { |action, statuses| "  #{action}: #{statuses.sort_by { |s, _| s.to_s }.to_h}" }
-    "requests: #{result.requests.size}, ok writes: #{result.ok_writes}, settlements: #{result.settlements}\n" \
+    "requests: #{result.requests.size}, meal writes: #{result.meal_write_attempts} " \
+      "from #{result.clients_that_wrote} clients, ok writes: #{result.ok_writes} " \
+      "(#{result.ok_row_writes} rows), settlements: #{result.settlements}\n" \
       "#{lines.join("\n")}\nbackground: #{result.background_tally}\nreported: #{reports_tally}\n" \
       "#{result.latency.report}"
   end
@@ -167,7 +170,27 @@ RSpec.describe 'a request storm against the whole API, with the nightly jobs and
     end.tally)
     RSpec.configuration.reporter.message(summary) if ENV['STORM_TALLY']
     expect(problems.uniq).to be_empty, "#{problems.uniq.first(30).join("\n")}\n\n#{summary}"
-    expect(result.ok_writes).to be >= clients * 5, summary
+    # The storm happened. Each floor follows what its count depends on,
+    # so the knobs above can turn the storm up without moving it out of
+    # reach (#86: the old floor was five ok writes per client, a laptop's
+    # number, and the CI runner missed it twice with everything else
+    # right).
+    #
+    # Writes per second, not per client: in one process the GVL fixes
+    # the request rate, so more clients means fewer writes each, not
+    # more in all. Eight a second is under half of what the CI runner
+    # sends (about twenty) and a tenth of a laptop.
+    expect(result.meal_write_attempts).to be >= 8 * seconds, summary
+    # Every client got to write, so a thread that spent the run waiting
+    # is noticed.
+    expect(result.clients_that_wrote).to eq(clients), summary
+    # Rows were written, not only meal columns: one attendance, guest or
+    # bill row every three seconds. How many go through depends on how
+    # much the requests overlap, which is the machine: the CI runner
+    # wrote about forty rows in fifteen seconds, a laptop hundreds, and
+    # a run where every write conflicts writes none, which is what this
+    # guards against.
+    expect(result.ok_row_writes).to be >= seconds / 3, summary
     expect(result.settlements).to be >= 1, summary
   end
 end

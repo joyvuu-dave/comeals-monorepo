@@ -539,7 +539,10 @@ check_rspec() {
   else
     fail "$summary"
     local failures
-    failures=$(echo "$output" | sed -n '/^Failures:/,/^Finished/ p' | head -30)
+    # 120 lines, not 30: the storm's failure block is a tally of every
+    # action plus the latency report, and the CI log of #86 ended
+    # mid-tally.
+    failures=$(echo "$output" | sed -n '/^Failures:/,/^Finished/ p' | head -120)
     if [ -n "$failures" ]; then
       echo "$failures"
     else
