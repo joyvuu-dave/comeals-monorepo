@@ -1,35 +1,55 @@
+const dayjs = require("dayjs");
 const { test, expect } = require("../helpers/test");
 const {
+  loadAuthInfo,
   setupAuthenticatedPage,
   FAKE_TODAY,
 } = require("../helpers/integration_setup");
+
+const auth = loadAuthInfo();
+
+// A meal's calendar tile, by its exact text. MealSerializer#title
+// makes it "Dinner", a line break, and the head count (residents plus
+// guests) with a word the server picks by comparing the meal's date
+// with its own today: "attending" for today's meal, "signed up" for a
+// later one, "attended" for an earlier one. So an exact tile also
+// checks that the server and the seed agree on which day is today.
+function mealTile(page, countAndWord) {
+  return page.locator(".rbc-event", {
+    hasText: new RegExp(`^Dinner\\s*${countAndWord}$`),
+  });
+}
+
+function calendarUrl(date) {
+  return new RegExp(`/calendar/all/${date.format("YYYY-MM-DD")}/?$`);
+}
 
 test.describe("Calendar (real backend)", () => {
   test.beforeEach(async ({ page, context }) => {
     await setupAuthenticatedPage(page, context);
   });
 
+  async function openCalendar(page) {
+    await page.goto(`/calendar/all/${FAKE_TODAY}/`);
+    await expect(page.locator(".rbc-calendar")).toBeVisible({
+      timeout: 10000,
+    });
+  }
+
   test("current month calendar loads with real meal data", async ({ page }) => {
-    const today = FAKE_TODAY;
-    await page.goto(`/calendar/all/${today}/`);
-    await page.waitForLoadState("networkidle");
+    await openCalendar(page);
 
-    // Calendar renders
-    await expect(page.locator(".rbc-calendar")).toBeVisible({ timeout: 10000 });
-
-    // Today's meal should appear (as a cook event or meal entry)
-    // Meals without cooks show "Meal: Open", meals with cooks show "Meal: Cook Name"
-    // Today's meal has no bills, so it should show as "Meal: Open" or similar
-    const calendarEvents = page.locator(".rbc-event");
-    await expect(calendarEvents.first()).toBeVisible({ timeout: 10000 });
+    // Today: Jane and Alice. Tomorrow: Jane, Bob, Alice and Jane's
+    // guest. Two days ago: Bob, Alice and Charlie.
+    await expect(mealTile(page, "2 attending")).toBeVisible({
+      timeout: 10000,
+    });
+    await expect(mealTile(page, "4 signed up")).toBeVisible();
+    await expect(mealTile(page, "3 attended")).toBeVisible();
   });
 
   test("community event appears on calendar", async ({ page }) => {
-    const today = FAKE_TODAY;
-    await page.goto(`/calendar/all/${today}/`);
-    await page.waitForLoadState("networkidle");
-
-    await expect(page.locator(".rbc-calendar")).toBeVisible({ timeout: 10000 });
+    await openCalendar(page);
 
     // The seeded "Community Meeting" event should be visible
     await expect(page.locator("text=Community Meeting")).toBeVisible({
@@ -37,38 +57,46 @@ test.describe("Calendar (real backend)", () => {
     });
   });
 
-  test("Next Meal button navigates to meal edit page", async ({ page }) => {
-    const today = FAKE_TODAY;
-    await page.goto(`/calendar/all/${today}/`);
-    await page.waitForLoadState("networkidle");
-    await expect(page.locator(".rbc-calendar")).toBeVisible({ timeout: 10000 });
+  test("Next Meal button opens today's meal", async ({ page }) => {
+    await openCalendar(page);
 
-    // Click "Next Meal" in sidebar
+    // The server's next meal is the first one dated on or after its
+    // today, so a meal dated today counts. The seed has meals two days
+    // ago, today and tomorrow, one on each side of that rule.
     await page.locator("text=Next Meal").click();
-
-    // Should navigate to a meal edit page with a real meal ID
-    await expect(page).toHaveURL(/\/meals\/\d+\/edit\//, { timeout: 10000 });
-
-    // The meal page should load real data (not error)
-    await expect(page.locator("h1")).toBeVisible({ timeout: 10000 });
+    await expect(page).toHaveURL(
+      new RegExp(`/meals/${auth.meals.today.id}/edit/?$`),
+      { timeout: 10000 },
+    );
+    await expect(
+      page.locator('[aria-label="Enter meal description"]'),
+    ).toHaveValue("Pizza and salad", { timeout: 10000 });
   });
 
   test("month navigation works", async ({ page }) => {
-    const today = FAKE_TODAY;
-    await page.goto(`/calendar/all/${today}/`);
-    await page.waitForLoadState("networkidle");
-    await expect(page.locator(".rbc-calendar")).toBeVisible({ timeout: 10000 });
+    const thisMonth = dayjs(FAKE_TODAY);
+    const nextMonth = thisMonth.add(1, "month");
+    const heading = page.locator("h2");
+    await openCalendar(page);
+    await expect(heading).toHaveText(thisMonth.format("MMMM YYYY"));
 
-    // Navigate to next month
     await page.locator('[aria-label="Goto Next Month"]').click();
-    await page.waitForLoadState("networkidle");
+    await expect(page).toHaveURL(calendarUrl(nextMonth));
+    await expect(heading).toHaveText(nextMonth.format("MMMM YYYY"));
+    // The seed puts the first rotation's one meal 40 days after today,
+    // which is next month from the suite's frozen day. Its tile shows
+    // that the real API sent next month's data.
+    await expect(mealTile(page, "0 signed up")).toBeVisible({
+      timeout: 10000,
+    });
+    await expect(page.locator("text=Community Meeting")).toHaveCount(0);
 
-    // Calendar should still render (real API returns data for next month)
-    await expect(page.locator(".rbc-calendar")).toBeVisible({ timeout: 10000 });
-
-    // Navigate back
     await page.locator('[aria-label="Goto Last Month"]').click();
-    await page.waitForLoadState("networkidle");
-    await expect(page.locator(".rbc-calendar")).toBeVisible({ timeout: 10000 });
+    await expect(page).toHaveURL(calendarUrl(thisMonth));
+    await expect(heading).toHaveText(thisMonth.format("MMMM YYYY"));
+    await expect(page.locator("text=Community Meeting")).toBeVisible({
+      timeout: 10000,
+    });
+    await expect(mealTile(page, "2 attending")).toBeVisible();
   });
 });

@@ -80,10 +80,15 @@ test.describe("Authentication (real backend)", () => {
     await setupAuthenticatedPage(page, context);
 
     await page.goto(`/meals/${auth.meals.tomorrow.id}/edit/`);
-    await page.waitForLoadState("networkidle");
 
-    // Should see the meal page, not be redirected to login
-    await expect(page.locator("h1")).toBeVisible({ timeout: 10000 });
-    await expect(page.locator('input[aria-label="email"]')).not.toBeVisible();
+    // The meal page with the meal's own data, not the login page. (The
+    // status heading is no proof: it renders before any meal arrives.)
+    await expect(
+      page.locator('[aria-label="Enter meal description"]'),
+    ).toHaveValue("Pasta night with garlic bread", { timeout: 10000 });
+    await expect(page).toHaveURL(
+      new RegExp(`/meals/${auth.meals.tomorrow.id}/edit/?$`),
+    );
+    await expect(page.locator('input[aria-label="email"]')).toHaveCount(0);
   });
 });
