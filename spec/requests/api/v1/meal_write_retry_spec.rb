@@ -64,4 +64,30 @@ RSpec.describe 'a meal write retried after a conflict', prosopite: false do
     expect(response).to have_http_status(:ok)
     expect(meal.reload.max).to eq(5)
   end
+
+  # Every try is refused after it wrote: the conflict arrives after the
+  # INSERT, inside the lock's transaction, as a SERIALIZABLE refusal often
+  # does. The transaction rolls the row back each time, so the 409's
+  # "Nothing was saved" is true, and a rolled-back write pushes nothing
+  # (LiveUpdate drops the notes of a transaction that rolls back).
+  it 'answers 409, with no row and no push, when every try is refused after it wrote' do
+    token
+    allow(RetryOnConflict).to receive(:sleep)
+    allow_any_instance_of(MealResident).to receive(:update!).and_wrap_original do |update, *args, **kwargs| # rubocop:disable RSpec/AnyInstance -- the controller builds the record
+      update.call(*args, **kwargs)
+      raise ActiveRecord::SerializationFailure, 'could not serialize access due to read/write dependencies'
+    end
+    # The rows above committed and pushed; only the request's pushes count.
+    RSpec::Mocks.space.proxy_for(Pusher).reset
+    allow(Pusher).to receive(:trigger)
+
+    post "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: { token: token, late: false, vegetarian: false }
+
+    expect(response).to have_http_status(:conflict)
+    expect(response.parsed_body['message']).to eq(
+      'Someone else was changing this meal at the same time. Nothing was saved. Try again.'
+    )
+    expect(MealResident.where(meal_id: meal.id, resident_id: resident.id)).not_to exist
+    expect(Pusher).not_to have_received(:trigger)
+  end
 end
