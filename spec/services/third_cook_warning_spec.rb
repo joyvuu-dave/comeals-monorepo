@@ -18,8 +18,18 @@ RSpec.describe ThirdCookWarning do
     create(:bill, meal: short, resident: cooks[0], community: community, amount: BigDecimal('0'))
   end
 
+  # The past meal is in the rotation, and three cooks are new to it, so
+  # every later rule would warn: only the date stops it.
   it 'says nothing for a meal that is over' do
-    expect(described_class.for(create(:meal, community: community, date: Date.yesterday), cooks.map(&:id))).to be_nil
+    past = create(:meal, community: community, rotation: rotation, date: community.today - 1)
+
+    expect(described_class.for(past, cooks.map(&:id))).to be_nil
+  end
+
+  it "says nothing for today's meal, which is not in the future" do
+    todays = create(:meal, community: community, rotation: rotation, date: community.today)
+
+    expect(described_class.for(todays, cooks.map(&:id))).to be_nil
   end
 
   it 'says nothing for two cooks' do
