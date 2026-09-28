@@ -9,6 +9,22 @@ RSpec.describe ReconciliationMailer do
     create(:resident, community: community, unit: unit, name: 'Sarah Chen', email: 'sarah@example.com')
   end
 
+  # The token is a query value. Rails reads "+" in a query as a space,
+  # "&" as the start of the next value, and "#" as the end of the query,
+  # so a token that holds one of them must be written as a %-code, or
+  # the admin reads a different token and asks the reader to log in.
+  let(:token_with_url_characters) { 'a+b&c=d#e/f?g%2B' }
+
+  # Every URL in a mail, from the text part and then from the HTML links.
+  def urls_in(mail)
+    mail.text_part.body.to_s.scan(%r{https?://\S+}) + links_in(html_body(mail)).map(&:last)
+  end
+
+  # The token Rails reads when a browser opens the URL.
+  def token_read_from(url)
+    Rack::Utils.parse_nested_query(URI(url).query)['token']
+  end
+
   describe '#reconciliation_notify_email' do
     let(:reconciliation) { create(:reconciliation, community: community) }
     let(:mail) { described_class.reconciliation_notify_email(resident, reconciliation) }
@@ -42,6 +58,13 @@ RSpec.describe ReconciliationMailer do
 
       expect(cook_mail.text_part.body.to_s.split).to include(url)
       expect(cook_mail.html_part.body.to_s).to include(%(<a href="#{ERB::Util.html_escape(url)}">here</a>))
+    end
+
+    it 'writes the token so that the admin reads back the same token, in both parts' do
+      allow(ENV).to receive(:fetch).and_call_original
+      allow(ENV).to receive(:fetch).with('READ_ONLY_ADMIN_TOKEN', nil).and_return(token_with_url_characters)
+
+      expect(urls_in(mail).map { |url| token_read_from(url) }).to eq([token_with_url_characters] * 2)
     end
 
     it_behaves_like 'an HTML part that is one HTML document'
@@ -91,6 +114,12 @@ RSpec.describe ReconciliationMailer do
 
       expect(html).to include(%(<a href="#{ERB::Util.html_escape(residents_url)}">Residents</a>))
       expect(html).to include(%(<a href="#{ERB::Util.html_escape(units_url)}">Units</a>))
+    end
+
+    it 'writes the token so that the admin reads back the same token, in both parts' do
+      allow(ENV).to receive(:fetch).with('READ_ONLY_ADMIN_TOKEN', nil).and_return(token_with_url_characters)
+
+      expect(urls_in(mail).map { |url| token_read_from(url) }).to eq([token_with_url_characters] * 4)
     end
 
     it_behaves_like 'an HTML part that is one HTML document'
