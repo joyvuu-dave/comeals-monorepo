@@ -123,6 +123,54 @@ RSpec.describe Resident do
     end
   end
 
+  # Every JSON of a resident is built here: the admin's JSON download
+  # (ActiveAdmin calls to_json), any `render json:` of a record, and a
+  # resident nested under another record with include:. The CSV download
+  # leaves out the same columns through ActiveAdmin's filter_attributes;
+  # spec/requests/admin/secret_columns_spec.rb checks both downloads.
+  describe '#serializable_hash' do
+    # Written out, not derived from the columns: a new column must be
+    # added here on purpose, which is the moment to ask whether an admin
+    # download should carry it.
+    let(:shown) do
+      %w[id active birthday can_cook can_reconcile community_id created_at email kind name phone unit_id
+         updated_at vegetarian]
+    end
+    let(:secret) { %w[password_digest reset_password_token reset_password_sent_at keys_valid_since] }
+    let(:resident) do
+      create(:resident, community: community, unit: unit, name: 'Ann Adult').tap do |ann|
+        ann.update_columns(reset_password_token: 'live-reset-token', reset_password_sent_at: Time.current)
+      end
+    end
+
+    it 'leaves out the password digest, the reset token, and their times, and keeps every other attribute' do
+      expect(resident.serializable_hash.keys).to match_array(shown)
+    end
+
+    it 'leaves them out when the caller names them in only:' do
+      expect(resident.serializable_hash(only: [:name] + secret)).to eq('name' => 'Ann Adult')
+    end
+
+    it 'leaves them out when the caller asks for them in methods:' do
+      expect(resident.serializable_hash(only: :name, methods: secret)).to eq('name' => 'Ann Adult')
+    end
+
+    it 'still drops what the caller names in except:' do
+      expect(resident.serializable_hash(except: :email).keys).to match_array(shown - %w[email])
+    end
+
+    it 'is what as_json and to_json give' do
+      expect(resident.as_json.keys).to match_array(shown)
+      expect(JSON.parse(resident.to_json)).to eq(resident.as_json)
+    end
+
+    it 'leaves them out of a resident nested under its unit' do
+      resident
+
+      expect(unit.as_json(include: :residents)['residents'].map(&:keys)).to match([match_array(shown)])
+    end
+  end
+
   # ---------------------------------------------------------------------------
   # Validations
   # ---------------------------------------------------------------------------

@@ -191,6 +191,25 @@ class Resident < ApplicationRecord
     self.password_digest = SCrypt::Password.create(unencrypted_password)
   end
 
+  # Columns no JSON of a resident may carry: the password digest, the
+  # reset token (stored as it is mailed, so whoever reads it can set this
+  # person's password), when that token was made, and the time before
+  # which every session is refused. ActiveAdmin's JSON download calls
+  # to_json, which reads serializable_hash, so leaving them out here
+  # covers it and any other JSON of a resident. The CSV download leaves
+  # out the same columns through config.filter_attributes in
+  # config/initializers/active_admin.rb.
+  SECRET_COLUMNS = T.let(%w[password_digest reset_password_token reset_password_sent_at keys_valid_since].freeze,
+                         T::Array[String])
+  private_constant :SECRET_COLUMNS
+
+  # Removed from the result, not added to options[:except], so a caller's
+  # only: or methods: cannot bring a secret column back.
+  sig { params(options: T.nilable(T::Hash[T.untyped, T.untyped])).returns(T::Hash[String, T.untyped]) }
+  def serializable_hash(options = nil)
+    super.except(*SECRET_COLUMNS)
+  end
+
   # Invalidate every outstanding session on password change. We hit both auth
   # paths because a user might have sessions of either kind — a legacy
   # opaque Key cookie from before the JWT deploy, a JWT issued after, or

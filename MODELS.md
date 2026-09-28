@@ -190,6 +190,11 @@ Resident
 - `keys_valid_since` — JWTs issued before this time stop working. A password
   change sets it to now (and destroys any old Key rows).
 - `reset_password_token` / `reset_password_sent_at` — password reset by email
+- `password_digest`, `reset_password_token`, `reset_password_sent_at` and
+  `keys_valid_since` are never sent out. `Resident#serializable_hash` leaves
+  them out of every JSON of a resident, the admin's JSON download included,
+  and ActiveAdmin's `filter_attributes` (`config/initializers/active_admin.rb`)
+  leaves them out of the CSV download.
 
 **Scopes:**
 

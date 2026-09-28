@@ -166,6 +166,30 @@ ActiveAdmin.setup do |config|
   #
   # config.favicon = 'favicon.ico'
 
+  # == Filtering attributes
+  #
+  # Columns ActiveAdmin leaves out of every CSV download and every default
+  # index, show page and form. The first three are ActiveAdmin's own
+  # defaults. The rest hold a credential, or say when one was made:
+  #
+  #   residents    password_digest, reset_password_token (stored as it is
+  #                mailed, so whoever reads it can set that resident's
+  #                password), reset_password_sent_at, keys_valid_since
+  #   admin_users  reset_password_token, reset_password_sent_at
+  #   keys         token (a legacy API session; no admin page today)
+  #
+  # This list does not reach the JSON download, which ActiveAdmin builds
+  # with to_json. Resident#serializable_hash leaves the same columns out
+  # of that, and Devise does it for AdminUser.
+  # spec/requests/admin/secret_columns_spec.rb fails when a column whose
+  # name says it holds a password, a digest, a token or a secret is
+  # missing here.
+  config.filter_attributes = %i[
+    encrypted_password password password_confirmation
+    password_digest reset_password_token reset_password_sent_at keys_valid_since
+    token
+  ]
+
   # == Meta Tags
   #
   # The admin portal is a private internal tool — keep it out of search
