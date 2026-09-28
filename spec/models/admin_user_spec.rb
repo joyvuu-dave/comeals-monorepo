@@ -149,12 +149,24 @@ RSpec.describe AdminUser do
       expect(described_class.exists?(last.id)).to be true
     end
 
-    it 'allows the same writes while another superuser remains' do
+    # Each write is on a superuser while another one exists, so the
+    # trigger takes its "another superuser remains" lookup. A BEFORE
+    # trigger that returned NULL would skip the row with no error, so each
+    # write is checked for its effect, not only for not raising.
+    it 'lets update_all demote a superuser while another remains, and the row changes' do
       create(:admin_user, community: community, superuser: true)
-      other = create(:admin_user, community: community, superuser: true)
+      demoted = create(:admin_user, community: community, superuser: true)
 
-      expect { described_class.where(id: other.id).update_all(superuser: false) }.not_to raise_error
-      expect { described_class.where(id: other.id).delete_all }.not_to raise_error
+      expect(described_class.where(id: demoted.id).update_all(superuser: false)).to eq(1)
+      expect(demoted.reload.superuser).to be false
+    end
+
+    it 'lets delete_all remove a superuser while another remains, and the row is gone' do
+      create(:admin_user, community: community, superuser: true)
+      removed = create(:admin_user, community: community, superuser: true)
+
+      expect(described_class.where(id: removed.id).delete_all).to eq(1)
+      expect(described_class.exists?(removed.id)).to be false
     end
   end
 
