@@ -24,9 +24,14 @@ module Api
       #
       # The month two weeks after `start` (the middle of the calendar's
       # six weeks), or this month. The chips are dated in that month's
-      # year, and a person born after it has no chip there.
+      # year, and a person born after it has no chip there. A start that
+      # is not a date is a 400, the same answer #calendar gives.
       def birthdays
-        day = params[:start] ? Date.parse(params[:start]) + 2.weeks : Community.instance.today
+        begin
+          day = params[:start] ? Date.parse(params[:start]) + 2.weeks : Community.instance.today
+        rescue ArgumentError, TypeError
+          return render json: { message: 'Invalid date' }, status: :bad_request
+        end
         days = day.all_month
 
         residents = Community.instance.residents.active

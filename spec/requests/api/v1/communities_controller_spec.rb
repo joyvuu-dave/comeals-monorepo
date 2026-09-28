@@ -96,6 +96,16 @@ RSpec.describe 'Communities API' do
       end
     end
 
+    # Before this, Date.parse raised and the answer was a 500.
+    it 'returns 400 for a start that is not a date, or not a string' do
+      ['not-a-date', ['2026-03-01']].each do |start|
+        birthdays(start: start)
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body).to eq('message' => 'Invalid date')
+      end
+    end
+
     # An adult with no birthday must never appear — this is the fix for the
     # old 1900-01-01 placeholder, which put a dozen fake birthdays on Jan 1.
     it 'excludes residents with no birthday' do

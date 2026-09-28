@@ -279,10 +279,10 @@ day. A person born after the last day shown has no card.
 The response carries an `ETag`. Send it back as `If-None-Match` to get
 `304` when nothing changed.
 
-| Method | Path                                          | Returns                                                                                                                                |
-| ------ | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET`  | `/communities/:id/birthdays?start=YYYY-MM-DD` | Birthday cards for the month two weeks after `start` (the calendar's middle), dated in that month's year. Without `start`, this month. |
-| `GET`  | `/communities/:id/hosts`                      | Active adults as `[id, name, unit_name]` triples, sorted by unit. These are the residents who can host a guest or hold a reservation.  |
+| Method | Path                                          | Returns                                                                                                                                                                                           |
+| ------ | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/communities/:id/birthdays?start=YYYY-MM-DD` | Birthday cards for the month two weeks after `start` (the calendar's middle), dated in that month's year. Without `start`, this month. A `start` that is not a date returns `400 "Invalid date"`. |
+| `GET`  | `/communities/:id/hosts`                      | Active adults as `[id, name, unit_name]` triples, sorted by unit. These are the residents who can host a guest or hold a reservation.                                                             |
 
 ## Cooking rotations
 
