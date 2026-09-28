@@ -45,11 +45,15 @@ RSpec.describe RecurringCatchUp do
     expect(described_class.new(now).due).to contain_exactly(RefreshBalancesJob)
   end
 
-  it 'enqueues exactly the due jobs' do
+  # The second matcher counts every job put on the queue, of any class, so
+  # a job that is not due fails it too.
+  it 'enqueues exactly the due jobs, and returns them' do
     succeeded(RefreshBalancesJob, now - 1.hour)
     succeeded(VerifyLedgerJob, now - 1.hour)
 
-    expect { described_class.call(now: now) }.to have_enqueued_job(EnsureRotationsJob).once
-    expect(described_class.call(now: now)).to eq([EnsureRotationsJob])
+    returned = nil
+    expect { returned = described_class.call(now: now) }
+      .to have_enqueued_job(EnsureRotationsJob).once.and have_enqueued_job.once
+    expect(returned).to eq([EnsureRotationsJob])
   end
 end
