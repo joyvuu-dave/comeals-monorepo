@@ -1,7 +1,7 @@
 import { observer } from "mobx-react-lite";
 import { useNavigate } from "react-router";
 import { useStore } from "../../helpers/store_context";
-import dayjs from "dayjs";
+import { communityNow } from "../../helpers/helpers";
 
 // The honest state of a meal load that failed. It floats over the page
 // the same way the ConfirmBar popover does — absolutely positioned
@@ -37,9 +37,7 @@ const LoadStatus = observer(() => {
               type="button"
               className="button"
               onClick={() =>
-                navigate(
-                  `/calendar/all/${dayjs(new Date()).format("YYYY-MM-DD")}`,
-                )
+                navigate(`/calendar/all/${communityNow().format("YYYY-MM-DD")}`)
               }
             >
               Back to calendar

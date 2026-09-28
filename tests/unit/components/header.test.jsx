@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { observable, runInAction } from "mobx";
 import {
@@ -98,17 +98,38 @@ describe("Header", () => {
     expect(screen.getByRole("button", { name: "history" })).toBeInTheDocument();
   });
 
-  it("Calendar goes to today while the meal is still loading", () => {
-    vi.useFakeTimers({ now: new Date(2026, 5, 3, 12, 0, 0) });
-    try {
-      renderHeader(makeStore({ mealLoading: true, meal: null }));
+  // The Calendar button opens today while no meal is on screen. Today
+  // is the community's, not the device's (#114). At 10:30 UTC on June 3
+  // only Kiritimati (UTC+14) is already on June 4, so the device's date
+  // is June 3 wherever this runs.
+  describe("today, when no meal is on screen", () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ now: new Date("2026-06-03T10:30:00Z") });
+      cookies.current = {
+        username: "Jane Smith",
+        timezone: "Pacific/Kiritimati",
+      };
+    });
+
+    afterEach(() => {
+      cookies.current = { username: "Jane Smith" };
+      vi.useRealTimers();
+    });
+
+    it.each([
+      ["while the meal is loading", { mealLoading: true, meal: null }],
+      [
+        "while a meal is loading over the last one",
+        { mealLoading: true, meal: { date: new Date(2026, 0, 15) } },
+      ],
+      ["when there is no meal", { mealLoading: false, meal: null }],
+    ])("Calendar goes to the community's today %s", (_label, state) => {
+      renderHeader(makeStore(state));
       fireEvent.click(screen.getByRole("button", { name: /Calendar/ }));
       expect(screen.getByTestId("location")).toHaveTextContent(
-        "/calendar/all/2026-06-03",
+        "/calendar/all/2026-06-04",
       );
-    } finally {
-      vi.useRealTimers();
-    }
+    });
   });
 
   it("logout signs out and reloads to the login page", () => {

@@ -2,6 +2,9 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { observable, runInAction } from "mobx";
 import { MemoryRouter, Routes, Route, useLocation } from "react-router";
+
+vi.mock("js-cookie", () => import("../mocks/js_cookie.js"));
+import { cookies } from "../mocks/js_cookie.js";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
 import LoadStatus from "../../../app/frontend/src/components/meal/load_status.jsx";
 
@@ -65,12 +68,23 @@ describe("LoadStatus", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("Back to calendar leaves the dead meal page", () => {
-    renderStatus(makeStore({ mealLoadNotFound: true }));
-    fireEvent.click(screen.getByRole("button", { name: "Back to calendar" }));
-    expect(screen.getByTestId("location")).toHaveTextContent(
-      /^\/calendar\/all\/\d{4}-\d{2}-\d{2}$/,
-    );
+  // Today is the community's, not the device's (#114). At 10:30 UTC on
+  // June 3 only Kiritimati (UTC+14) is already on June 4, so the
+  // device's date is June 3 wherever this runs.
+  it("Back to calendar leaves the dead meal page for the community's today", () => {
+    vi.useFakeTimers({ now: new Date("2026-06-03T10:30:00Z") });
+    const timezone = cookies.current.timezone;
+    cookies.current.timezone = "Pacific/Kiritimati";
+    try {
+      renderStatus(makeStore({ mealLoadNotFound: true }));
+      fireEvent.click(screen.getByRole("button", { name: "Back to calendar" }));
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        "/calendar/all/2026-06-04",
+      );
+    } finally {
+      cookies.current.timezone = timezone;
+      vi.useRealTimers();
+    }
   });
 
   it("appears when a load fails after mount", () => {
