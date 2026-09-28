@@ -69,15 +69,28 @@ RSpec.describe 'meal writes that are refused' do
             params: { token: token, bills: [{ resident_id: cook.id, amount: '12.00', no_cost: false }] }
     end
 
+    # The record's own sentences, like every other meal write
+    # (render_write_under_lock), not Rails' "Validation failed: " text.
     it 'answers a validation failure with the validation message' do
       invalid = Bill.new
       invalid.errors.add(:amount, 'must be whole cents')
+      invalid.errors.add(:base, 'This bill belongs to a settled meal.')
       stage(ActiveRecord::RecordInvalid.new(invalid))
 
       submit
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body['message']).to eq('Validation failed: Amount must be whole cents')
+      expect(response.parsed_body['message'])
+        .to eq("Amount must be whole cents\nThis bill belongs to a settled meal.")
+    end
+
+    it 'answers a missing record with its message' do
+      stage(ActiveRecord::RecordNotFound.new("Couldn't find Resident with 'id'=0"))
+
+      submit
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq("Couldn't find Resident with 'id'=0")
     end
 
     it 'answers a refused destroy with the record\'s message' do

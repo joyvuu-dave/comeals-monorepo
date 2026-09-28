@@ -180,9 +180,11 @@ module Api
         return render(**rejection) if rejection
 
         render json: bills_written(warning), status: warning ? :bad_request : :ok
-      rescue ActiveRecord::RecordNotFound, ActiveRecord::RecordInvalid => e
+      rescue ActiveRecord::RecordNotFound => e
         render json: { message: e.message }, status: :bad_request
-      rescue ActiveRecord::RecordNotDestroyed => e
+      rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotDestroyed => e
+        # The record's own sentences, the same as render_write_under_lock,
+        # not RecordInvalid's "Validation failed: ..." text.
         render json: { message: e.record.errors.full_messages.join("\n") }, status: :bad_request
       rescue ActiveRecord::InvalidForeignKey
         render json: { message: 'Invalid cook assignment.' }, status: :bad_request
