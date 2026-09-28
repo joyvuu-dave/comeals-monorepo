@@ -57,7 +57,11 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
       attend(meal, resident)
       refuse_inserts_into('meal_charges')
 
-      expect { settle! }.to raise_error(ActiveRecord::StatementInvalid)
+      # The refusal is the charge lines', so the reconciliation row and the
+      # meal claims were already written when it came.
+      expect { settle! }.to raise_error(
+        ActiveRecord::StatementInvalid, /relation "meal_charges" violates check constraint "spec_refuse_all_inserts"/
+      )
 
       ledger_tables_are_empty
     end
@@ -69,7 +73,12 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
       attend(meal, resident)
       refuse_inserts_into('reconciliation_balances')
 
-      expect { settle! }.to raise_error(ActiveRecord::StatementInvalid)
+      # The refusal is the balances', so the charge lines were already
+      # written when it came.
+      expect { settle! }.to raise_error(
+        ActiveRecord::StatementInvalid,
+        /relation "reconciliation_balances" violates check constraint "spec_refuse_all_inserts"/
+      )
 
       ledger_tables_are_empty
     end
@@ -155,6 +164,15 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
       eater = resident
       cutoff = Date.yesterday - 1
 
+      # An earlier period, settled before the meals below exist, so every
+      # one of them is still open when the preview runs. Settling after
+      # them would claim `billed`, and then the reconciled filter, not the
+      # missing bill, would keep it off the list.
+      first_period = meal_on(cutoff - 6)
+      bill(first_period, resident, 10)
+      attend(first_period, eater)
+      reconciliation = settle!(cutoff: cutoff - 6)
+
       later = meal_on(cutoff)
       attend(later, eater)
       earlier = meal_on(cutoff - 5)
@@ -170,9 +188,12 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
       # build; the filter still has to hold if a repair ever removes one.
       settled = meal_on(cutoff - 4)
       attend(settled, eater)
-      settled.update_column(:reconciliation_id, settle!.id)
+      settled.update_column(:reconciliation_id, reconciliation.id)
 
-      expect(Settlement.preview(cutoff: cutoff).skipped_meals).to eq([earlier, later])
+      preview = Settlement.preview(cutoff: cutoff)
+      expect(preview.skipped_meals).to eq([earlier, later])
+      # `billed` is open and in the period, so only its bill keeps it off.
+      expect(preview.meals).to include(billed)
       expect([billed, nobody_came, after_cutoff, settled]).to all(be_persisted)
     end
 
