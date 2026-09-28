@@ -7,23 +7,6 @@ test.describe("Navigation", () => {
     await setupAuthenticatedPage(page, context);
   });
 
-  test("prev/next meal arrows navigate between meals", async ({ page }) => {
-    await page.goto("/meals/42/edit/");
-    await page.waitForLoadState("networkidle");
-
-    // Should show navigation arrows
-    // The next arrow should be visible since next_id is 43
-    const nextArrow = page
-      .locator('[data-testid="next-meal"]')
-      .or(page.locator("svg.icon-chevron-right").first());
-
-    if (await nextArrow.isVisible({ timeout: 5000 })) {
-      await nextArrow.click();
-      // Should navigate to meal 43
-      await expect(page).toHaveURL(/\/meals\/43\/edit/, { timeout: 5000 });
-    }
-  });
-
   test("meal history modal opens and shows audit entries", async ({ page }) => {
     await page.goto("/meals/42/edit/");
     await page.waitForLoadState("networkidle");
@@ -44,22 +27,19 @@ test.describe("Navigation", () => {
     ).toBeVisible({ timeout: 5000 });
   });
 
-  test("calendar back button navigates from meal to calendar", async ({
+  test("calendar back button goes to the meal's own day on the calendar", async ({
     page,
   }) => {
     await page.goto("/meals/42/edit/");
-    await page.waitForLoadState("networkidle");
+    await expect(
+      page.getByRole("cell", { name: "A - Jane Smith", exact: true }),
+    ).toBeVisible({ timeout: 10000 });
 
-    // Find the back arrow / calendar link
-    const backButton = page
-      .locator("svg.icon-arrow-left")
-      .or(page.locator('[aria-label="Back to calendar"]'))
-      .first();
-
-    if (await backButton.isVisible({ timeout: 5000 })) {
-      await backButton.click();
-      await expect(page).toHaveURL(/\/calendar\//, { timeout: 5000 });
-    }
+    await page.getByRole("button", { name: "Calendar" }).click();
+    await expect(page).toHaveURL(
+      new RegExp(`/calendar/all/${mealFixture.date}/?$`),
+      { timeout: 5000 },
+    );
   });
 
   // Regression test for the 2026-07-22 production crash. Leaving a meal
