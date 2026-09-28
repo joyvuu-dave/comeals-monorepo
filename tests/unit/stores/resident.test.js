@@ -1,8 +1,6 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, onTestFinished, vi } from "vitest";
 
 // Mock external modules before importing stores
-// The default response carries a created_at because toggleAttending's add
-// path reads the server's timestamp from the create response.
 vi.mock("axios", () => import("../mocks/axios.js"));
 
 vi.mock("js-cookie", () => import("../mocks/js_cookie.js"));
@@ -18,15 +16,40 @@ import {
   stage,
   stubAction,
 } from "../helpers/create_data_store.js";
+import toastStore from "../../../app/frontend/src/stores/toast_store.js";
+import contract from "../../fixtures/api_contract.json";
 
-// The attendance actions read created_at from the server's response;
-// give the callable mock that default for the whole file.
+// What the server answers for an attendance add (MealResidentSerializer).
+// The add reads its created_at. It is the file's default answer; the
+// PATCH and DELETE calls ignore their answer.
+const MEAL_RESIDENT = {
+  id: 900,
+  meal_id: 1,
+  resident_id: 10,
+  late: false,
+  vegetarian: false,
+  created_at: "2023-06-15T18:30:00.000Z",
+};
 axios.mockImplementation(() =>
-  Promise.resolve({
-    status: 200,
-    data: { created_at: "2023-06-15T18:30:00.000Z" },
-  }),
+  Promise.resolve({ status: 200, data: MEAL_RESIDENT }),
 );
+
+// What the server answers for a guest add (GuestSerializer). A guest
+// add must be answered with this, or the store cannot put the guest in
+// and runs its failure path instead.
+function guestAnswer(overrides = {}) {
+  return {
+    status: 200,
+    data: {
+      id: 555,
+      meal_id: 1,
+      resident_id: 10,
+      vegetarian: false,
+      created_at: "2023-06-15T18:30:00.000Z",
+      ...overrides,
+    },
+  };
+}
 
 // The real DataStore, with loadDataAsync stubbed: these tests assert
 // that a dead node's ack triggers a refetch, not what the refetch does
@@ -47,12 +70,21 @@ function removeResident(store, id) {
 describe("Resident model", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    toastStore.clearAll();
     window.Comeals = {
       socketId: "test",
       pusher: null,
       mealChannel: null,
       calendarChannel: null,
     };
+  });
+
+  // The answers above stand in for the server, so they must have the
+  // keys it really sends (tests/fixtures/api_contract.json is generated
+  // from the Rails serializers).
+  it("answers adds with the keys the server sends", () => {
+    expect(Object.keys(MEAL_RESIDENT).sort()).toEqual(contract.MealResident);
+    expect(Object.keys(guestAnswer().data).sort()).toEqual(contract.Guest);
   });
 
   // ── guests view ──
@@ -157,56 +189,44 @@ describe("Resident model", () => {
       expect(alice.canRemove).toBe(true);
     });
 
-    it("Scenario 4: returns false when has guests, meal closed, added before closed_at", () => {
-      const attendedTime = new Date(2023, 0, 1, 11, 0, 0);
-      const closedTime = new Date(2023, 0, 1, 12, 0, 0);
+    // The server lets a signup go from a closed meal only when it was
+    // made after the close (ClosedMealAttendanceFreeze). Guests do not
+    // change that.
+    it.each([
+      ["with a guest", 1],
+      ["with no guest", 0],
+    ])(
+      "returns false for a signup made before the close, %s",
+      (_name, guestCount) => {
+        const attendedTime = new Date(2023, 0, 1, 11, 0, 0);
+        const closedTime = new Date(2023, 0, 1, 12, 0, 0);
 
-      const store = createStore({
-        mealProps: { closed: true, closed_at: closedTime.getTime() },
-        residents: [
-          {
-            id: 10,
-            meal_id: 1,
-            name: "Alice",
-            attending: true,
-            attending_at: attendedTime.getTime(),
-          },
-        ],
-        guests: [
-          {
-            id: 100,
-            meal_id: 1,
-            resident_id: 10,
-            created_at: attendedTime.getTime(),
-          },
-        ],
-      });
+        const store = createStore({
+          mealProps: { closed: true, closed_at: closedTime.getTime() },
+          residents: [
+            {
+              id: 10,
+              meal_id: 1,
+              name: "Alice",
+              attending: true,
+              attending_at: attendedTime.getTime(),
+            },
+          ],
+          guests: [
+            {
+              id: 100,
+              meal_id: 1,
+              resident_id: 10,
+              created_at: attendedTime.getTime(),
+            },
+          ].slice(0, guestCount),
+        });
 
-      const alice = store.residents.get("10");
-      expect(alice.canRemove).toBe(false);
-    });
-
-    it("explicit fallthrough: returns false when attending, meal closed, added before closed_at, no guests", () => {
-      const attendedTime = new Date(2023, 0, 1, 11, 0, 0);
-      const closedTime = new Date(2023, 0, 1, 12, 0, 0);
-
-      const store = createStore({
-        mealProps: { closed: true, closed_at: closedTime.getTime() },
-        residents: [
-          {
-            id: 10,
-            meal_id: 1,
-            name: "Alice",
-            attending: true,
-            attending_at: attendedTime.getTime(),
-          },
-        ],
-      });
-
-      const alice = store.residents.get("10");
-      // No guests so scenario 4 does not match, falls through to return false
-      expect(alice.canRemove).toBe(false);
-    });
+        const alice = store.residents.get("10");
+        expect(alice.guestsCount).toBe(guestCount);
+        expect(alice.canRemove).toBe(false);
+      },
+    );
   });
 
   // ── canRemoveGuest view ──
@@ -255,7 +275,7 @@ describe("Resident model", () => {
       expect(alice.canRemoveGuest).toBe(true);
     });
 
-    it("Scenario 4: returns false when has guests, meal closed, guest added before closed_at", () => {
+    it("returns false when every guest was added before closed_at", () => {
       const guestTime = new Date(2023, 0, 1, 11, 0, 0);
       const closedTime = new Date(2023, 0, 1, 12, 0, 0);
 
@@ -276,7 +296,7 @@ describe("Resident model", () => {
       expect(alice.canRemoveGuest).toBe(false);
     });
 
-    it("explicit fallthrough: returns false when guest created_at equals closed_at", () => {
+    it("a guest added exactly at closed_at cannot be removed", () => {
       const guestTime = new Date(2023, 0, 1, 12, 0, 0);
       const closedTime = new Date(2023, 0, 1, 12, 0, 0); // exactly equal
 
@@ -294,7 +314,7 @@ describe("Resident model", () => {
       });
 
       const alice = store.residents.get("10");
-      // guest.created_at <= closed_at so scenario 4 matches -> false
+      // Not strictly after the close, the same rule as the server's.
       expect(alice.canRemoveGuest).toBe(false);
     });
   });
@@ -397,19 +417,10 @@ describe("Resident model", () => {
             attending_at: attendedTime.getTime(),
           },
         ],
-        // Need guests so scenario 4 of canRemove matches
-        guests: [
-          {
-            id: 100,
-            meal_id: 1,
-            resident_id: 10,
-            created_at: attendedTime.getTime(),
-          },
-        ],
       });
 
       const alice = store.residents.get("10");
-      // canRemove is false (scenario 4: has guests, closed, attended before closed)
+      // Signed up before the close.
       expect(alice.canRemove).toBe(false);
       alice.toggleAttending();
       expect(alice.attending).toBe(true); // unchanged
@@ -426,15 +437,42 @@ describe("Resident model", () => {
       expect(store.meal.extras).toBe(4);
     });
 
-    it("increments extras when removing a resident", () => {
+    // The one removal that changes a seat count: someone who joined a
+    // closed meal after it closed backs out (the server allows it,
+    // ClosedMealAttendanceFreeze). An open meal has no seat count.
+    it("increments extras when a resident who joined after the close backs out", async () => {
       const store = createStore({
-        mealProps: { closed: false, extras: 5 },
-        residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
+        mealProps: {
+          closed: true,
+          closed_at: new Date(2023, 0, 1, 12, 0, 0).getTime(),
+          extras: 2,
+        },
+        residents: [
+          {
+            id: 10,
+            meal_id: 1,
+            name: "Alice",
+            attending: true,
+            attending_at: new Date(2023, 0, 1, 13, 0, 0).getTime(),
+          },
+        ],
       });
 
       const alice = store.residents.get("10");
       alice.toggleAttending();
-      expect(store.meal.extras).toBe(6);
+      expect(alice.attending).toBe(false);
+      expect(store.meal.extras).toBe(3);
+      expect(axios).toHaveBeenCalledWith({
+        method: "delete",
+        url: "/api/v1/meals/1/residents/10",
+        withCredentials: true,
+        data: { socket_id: "test" },
+      });
+
+      await new Promise((r) => setTimeout(r, 0));
+      expect(alice.attending).toBe(false);
+      expect(alice.attending_at).toBeNull();
+      expect(store.meal.extras).toBe(3);
     });
 
     it("sets late flag when options.late is true", () => {
@@ -471,21 +509,61 @@ describe("Resident model", () => {
       expect(alice.vegetarian).toBe(true);
     });
 
+    // A plain add carries the profile's veg value to the server.
     it("makes correct API call when adding", () => {
       const store = createStore({
         mealProps: { closed: false },
-        residents: [{ id: 10, meal_id: 1, name: "Alice", attending: false }],
+        residents: [
+          {
+            id: 10,
+            meal_id: 1,
+            name: "Alice",
+            attending: false,
+            vegetarian: true,
+          },
+        ],
       });
 
       const alice = store.residents.get("10");
       alice.toggleAttending();
 
-      expect(axios).toHaveBeenCalledWith(
-        expect.objectContaining({
-          method: "post",
-          url: expect.stringContaining("/api/v1/meals/1/residents/10"),
-        }),
-      );
+      expect(axios).toHaveBeenCalledWith({
+        method: "post",
+        url: "/api/v1/meals/1/residents/10",
+        withCredentials: true,
+        data: { late: false, vegetarian: true, socket_id: "test" },
+      });
+    });
+
+    // The Late and Veg switches sign up someone who is not attending.
+    // The server saves the flags it is sent, so they must be the flags
+    // after the tap, or the screen and the server disagree.
+    it.each([
+      ["toggleLate", { late: true, vegetarian: false }],
+      ["toggleVeg", { late: false, vegetarian: true }],
+    ])("an add from %s sends the flag the tap set", (action, flags) => {
+      const store = createStore({
+        mealProps: { closed: false },
+        residents: [
+          {
+            id: 10,
+            meal_id: 1,
+            name: "Alice",
+            attending: false,
+            late: false,
+            vegetarian: false,
+          },
+        ],
+      });
+
+      store.residents.get("10")[action]();
+
+      expect(axios).toHaveBeenCalledWith({
+        method: "post",
+        url: "/api/v1/meals/1/residents/10",
+        withCredentials: true,
+        data: { ...flags, socket_id: "test" },
+      });
     });
 
     it("makes correct API call when removing", () => {
@@ -535,7 +613,7 @@ describe("Resident model", () => {
       expect(store.meal.extras).toBe(0);
     });
 
-    it("removing from open meal increments extras even when extras is null", () => {
+    it("removing from an open meal leaves extras null", () => {
       // incrementExtras is a no-op when extras is null
       const store = createStore({
         mealProps: { closed: false, extras: null },
@@ -551,8 +629,10 @@ describe("Resident model", () => {
   // ── addGuest boundary ──
 
   describe("addGuest boundary", () => {
-    it("decrements extras when adding a guest to a closed meal", () => {
-      // Guest additions also consume an extras slot
+    it("decrements extras when adding a guest to a closed meal", async () => {
+      // Guest additions also consume an extras slot, and the server's
+      // yes keeps it taken.
+      axios.mockResolvedValueOnce(guestAnswer());
       const store = createStore({
         mealProps: { closed: true, extras: 1 },
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
@@ -560,6 +640,44 @@ describe("Resident model", () => {
       const alice = store.residents.get("10");
       alice.addGuest({ vegetarian: false });
       expect(store.meal.extras).toBe(0);
+
+      await new Promise((r) => setTimeout(r, 0));
+      expect(store.meal.extras).toBe(0);
+      expect(alice.guestsCount).toBe(1);
+    });
+
+    // The guest shows from the server's answer. Without it a person
+    // taps again and makes a second real guest, a second charge.
+    it("a guest the server saved shows, with the server's time", async () => {
+      axios.mockResolvedValueOnce(
+        guestAnswer({
+          id: 555,
+          vegetarian: true,
+          created_at: "2026-01-14T18:00:00Z",
+        }),
+      );
+      const store = createStore({
+        mealProps: { closed: true, closed_at: Date.now(), extras: 2 },
+        residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
+      });
+      const alice = store.residents.get("10");
+      alice.addGuest({ vegetarian: true });
+
+      expect(axios).toHaveBeenCalledWith({
+        method: "post",
+        url: "/api/v1/meals/1/residents/10/guests",
+        withCredentials: true,
+        data: { vegetarian: true, socket_id: "test" },
+      });
+      await new Promise((r) => setTimeout(r, 0));
+
+      const guest = store.guests.get("555");
+      expect(guest.resident_id).toBe(10);
+      expect(guest.vegetarian).toBe(true);
+      expect(guest.created_at).toEqual(new Date("2026-01-14T18:00:00Z"));
+      expect(alice.guestsCount).toBe(1);
+      expect(store.meal.extras).toBe(1);
+      expect(toastStore.toasts).toHaveLength(0);
     });
   });
 
@@ -904,6 +1022,7 @@ describe("Resident model", () => {
     });
 
     it("refetches when the node dies while an add-guest is in flight", async () => {
+      axios.mockResolvedValueOnce(guestAnswer());
       const store = createStore({
         mealProps: { closed: false },
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
@@ -1017,11 +1136,13 @@ describe("Resident model", () => {
     });
 
     it("evicts when adding a guest succeeds", async () => {
+      axios.mockResolvedValueOnce(guestAnswer());
       const store = aliceStore({ attending: true });
       store.residents.get("10").addGuest({ vegetarian: false });
 
       await flush();
       expect(idbKeyval.del).toHaveBeenCalledWith("1");
+      expect(store.guests.has("555")).toBe(true);
     });
 
     it("evicts when removing a guest succeeds", async () => {
@@ -1062,41 +1183,6 @@ describe("Resident model", () => {
     });
   });
 
-  describe("removeGuest removes newest guest first", () => {
-    it("removes the most recently created guest", () => {
-      const store = createStore({
-        mealProps: { closed: false },
-        residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
-        guests: [
-          {
-            id: 100,
-            meal_id: 1,
-            resident_id: 10,
-            created_at: new Date(2023, 0, 1).getTime(),
-          },
-          {
-            id: 101,
-            meal_id: 1,
-            resident_id: 10,
-            created_at: new Date(2023, 0, 2).getTime(),
-          },
-        ],
-      });
-
-      const alice = store.residents.get("10");
-      expect(alice.guestsCount).toBe(2);
-
-      // removeGuest sends DELETE for the newest guest (id 101)
-      alice.removeGuest();
-      expect(axios).toHaveBeenCalledWith(
-        expect.objectContaining({
-          method: "delete",
-          url: expect.stringContaining("/guests/101"),
-        }),
-      );
-    });
-  });
-
   // ── the server refuses ──
 
   describe("when the server refuses", () => {
@@ -1104,13 +1190,39 @@ describe("Resident model", () => {
       response: { data: { message: "Meal has no open spots." } },
     };
 
+    // Reading or writing a node that has left the tree does not throw
+    // here: MobX-State-Tree only warns through console.warn in tests
+    // (the app turns the check off). So a missing isAlive guard shows
+    // only as this warning.
+    function watchDeadNodeUse() {
+      const warn = vi.spyOn(console, "warn");
+      onTestFinished(() => warn.mockRestore());
+      return function expectNoDeadNodeUse() {
+        const deadNodeWarnings = warn.mock.calls.filter((args) =>
+          String(args[0]).includes("mobx-state-tree"),
+        );
+        expect(deadNodeWarnings).toEqual([]);
+      };
+    }
+
     async function settle() {
       await new Promise((r) => setTimeout(r, 0));
     }
 
+    // A seat count exists only on a closed meal (an open meal has
+    // extras null), so the seat tests use one. Alice's rows below were
+    // made after it closed, so she may back out.
+    const CLOSED_AT = new Date(2023, 0, 1, 12, 0, 0).getTime();
+    const AFTER_CLOSE = new Date(2023, 0, 1, 13, 0, 0).getTime();
+    const closedWithSeats = {
+      closed: true,
+      closed_at: CLOSED_AT,
+      extras: 3,
+    };
+
     it("rolls back an add, with the late and veg flags it set", async () => {
       const store = createStore({
-        mealProps: { closed: false, extras: 3 },
+        mealProps: closedWithSeats,
         residents: [
           {
             id: 10,
@@ -1186,9 +1298,16 @@ describe("Resident model", () => {
 
     it("rolls back a removal and gives the late flag back", async () => {
       const store = createStore({
-        mealProps: { closed: false, extras: 3 },
+        mealProps: closedWithSeats,
         residents: [
-          { id: 10, meal_id: 1, name: "Alice", attending: true, late: true },
+          {
+            id: 10,
+            meal_id: 1,
+            name: "Alice",
+            attending: true,
+            attending_at: AFTER_CLOSE,
+            late: true,
+          },
         ],
       });
       axios.mockRejectedValueOnce(refusal);
@@ -1196,6 +1315,7 @@ describe("Resident model", () => {
       const alice = store.residents.get("10");
       alice.toggleAttending();
       expect(alice.attending).toBe(false);
+      expect(store.meal.extras).toBe(4);
       await settle();
 
       expect(alice.attending).toBe(true);
@@ -1245,7 +1365,7 @@ describe("Resident model", () => {
 
     it("gives the seat back when a guest cannot be added", async () => {
       const store = createStore({
-        mealProps: { closed: false, extras: 3 },
+        mealProps: closedWithSeats,
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
       });
       axios.mockRejectedValueOnce(refusal);
@@ -1258,8 +1378,9 @@ describe("Resident model", () => {
     });
 
     it("does nothing more when the node died before the refusal arrived", async () => {
+      const expectNoDeadNodeUse = watchDeadNodeUse();
       const store = createStore({
-        mealProps: { closed: false, extras: 3 },
+        mealProps: closedWithSeats,
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: false }],
       });
       let reject;
@@ -1276,11 +1397,14 @@ describe("Resident model", () => {
       await settle();
 
       expect(store.residents.has("10")).toBe(false);
+      expect(store.meal.extras).toBe(2);
       expect(loadDataAsyncSpy).not.toHaveBeenCalled();
+      expectNoDeadNodeUse();
     });
 
     // The same rule for every write: a node that died while the
-    // request was out cannot be rolled back, and must not throw.
+    // request was out cannot be rolled back, so the refusal must not
+    // touch it.
     function refuseLater() {
       let reject;
       axios.mockImplementationOnce(
@@ -1293,6 +1417,7 @@ describe("Resident model", () => {
     }
 
     it("does nothing more when the node died before a removal was refused", async () => {
+      const expectNoDeadNodeUse = watchDeadNodeUse();
       const store = createStore({
         mealProps: { closed: false },
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
@@ -1305,9 +1430,11 @@ describe("Resident model", () => {
       await settle();
 
       expect(loadDataAsyncSpy).not.toHaveBeenCalled();
+      expectNoDeadNodeUse();
     });
 
     it("does nothing more when the node died before a late toggle was refused", async () => {
+      const expectNoDeadNodeUse = watchDeadNodeUse();
       const store = createStore({
         mealProps: { closed: false },
         residents: [
@@ -1322,9 +1449,11 @@ describe("Resident model", () => {
       await settle();
 
       expect(loadDataAsyncSpy).not.toHaveBeenCalled();
+      expectNoDeadNodeUse();
     });
 
     it("does nothing more when the node died before a veg toggle was refused", async () => {
+      const expectNoDeadNodeUse = watchDeadNodeUse();
       const store = createStore({
         mealProps: { closed: false },
         residents: [
@@ -1345,11 +1474,13 @@ describe("Resident model", () => {
       await settle();
 
       expect(loadDataAsyncSpy).not.toHaveBeenCalled();
+      expectNoDeadNodeUse();
     });
 
     it("does nothing more when the node died before a guest add was refused", async () => {
+      const expectNoDeadNodeUse = watchDeadNodeUse();
       const store = createStore({
-        mealProps: { closed: false, extras: 3 },
+        mealProps: closedWithSeats,
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
       });
       const refuse = refuseLater();
@@ -1361,19 +1492,22 @@ describe("Resident model", () => {
 
       expect(store.meal.extras).toBe(2);
       expect(loadDataAsyncSpy).not.toHaveBeenCalled();
+      expectNoDeadNodeUse();
     });
   });
 
   // ── removeGuest ──
 
   describe("removeGuest", () => {
+    // The newest guest (102) is neither first nor last in the list, nor
+    // the lowest or highest id, so only a sort by created_at finds it.
     function storeWithGuests() {
       return createStore({
         mealProps: { closed: false },
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
         guests: [
           {
-            id: 100,
+            id: 101,
             meal_id: 1,
             resident_id: 10,
             created_at: new Date(2026, 3, 1),
@@ -1385,7 +1519,7 @@ describe("Resident model", () => {
             created_at: new Date(2026, 3, 3),
           },
           {
-            id: 101,
+            id: 103,
             meal_id: 1,
             resident_id: 10,
             created_at: new Date(2026, 3, 2),
@@ -1399,12 +1533,37 @@ describe("Resident model", () => {
 
       store.residents.get("10").removeGuest();
 
-      expect(axios).toHaveBeenCalledWith(
-        expect.objectContaining({
-          method: "delete",
-          url: "/api/v1/meals/1/residents/10/guests/102",
-        }),
-      );
+      expect(axios).toHaveBeenCalledWith({
+        method: "delete",
+        url: "/api/v1/meals/1/residents/10/guests/102",
+        withCredentials: true,
+        data: { socket_id: "test" },
+      });
+    });
+
+    // On a closed meal only a guest added after the close can go, and
+    // its seat comes back once the server says yes.
+    it("removes a guest added after the close and gives the seat back", async () => {
+      const closedAt = new Date(2023, 0, 1, 12, 0, 0);
+      const store = createStore({
+        mealProps: { closed: true, closed_at: closedAt.getTime(), extras: 1 },
+        residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
+        guests: [
+          {
+            id: 100,
+            meal_id: 1,
+            resident_id: 10,
+            created_at: new Date(2023, 0, 1, 13, 0, 0),
+          },
+        ],
+      });
+
+      store.residents.get("10").removeGuest();
+      expect(store.meal.extras).toBe(1);
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(store.guests.has("100")).toBe(false);
+      expect(store.meal.extras).toBe(2);
     });
 
     it("answers false with no guest to remove", () => {

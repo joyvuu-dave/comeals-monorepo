@@ -54,18 +54,7 @@ const Resident = types
         return true;
       }
 
-      // Scenario #4: guests, meal closed, guests added before meal closed
-      if (
-        self.guestsCount > 0 &&
-        self.root.meal.closed &&
-        self.root.meal.closed_at !== null &&
-        Array.from(self.guests).filter(
-          (guest) => guest.created_at <= self.root.meal.closed_at,
-        ).length > 0
-      ) {
-        return false;
-      }
-
+      // Otherwise: every guest was added at or before the close.
       return false;
     },
     get canRemove() {
@@ -90,17 +79,7 @@ const Resident = types
         return true;
       }
 
-      // Scenario #4: guests, meal closed, added before meal closed
-      if (
-        self.guestsCount > 0 &&
-        self.root.meal.closed &&
-        self.attending_at !== null &&
-        self.root.meal.closed_at !== null &&
-        self.attending_at <= self.root.meal.closed_at
-      ) {
-        return false;
-      }
-
+      // Otherwise: signed up at or before the close, guests or not.
       return false;
     },
     // The DataStore at the root of the tree.
