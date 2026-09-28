@@ -95,9 +95,11 @@ RSpec.describe MealResident do
       expect(mr).to be_valid
     end
 
-    # Regression test for BUG-1: set_multiplier must only run on create, not update.
-    # If it runs on update, toggling late/vegetarian silently overwrites the
-    # point-in-time multiplier when the resident's band has since changed.
+    # The band check runs only on create. A later birthday change must not
+    # block editing late or vegetarian on an old sign-up, and must not
+    # change its multiplier. (set_multiplier only fills a missing value,
+    # so it could not change this row on update either; the check that
+    # would break is multiplier_is_the_residents without `on: :create`.)
     it 'preserves the original multiplier when the record is updated' do
       child = create(:resident, community: community, unit: unit, multiplier: 1)
       mr = create(:meal_resident, meal: meal, resident: child, community: community)
@@ -106,9 +108,10 @@ RSpec.describe MealResident do
       # The birthday is corrected: an adult after all.
       child.update!(birthday: 30.years.ago.to_date)
 
-      # Now update late/vegetarian — the multiplier must NOT change
-      mr.update!(late: true)
+      expect(mr.update(late: true)).to be(true)
+      expect(mr.errors).to be_empty
       expect(mr.reload.multiplier).to eq(1)
+      expect(mr.late).to be(true)
     end
 
     it "captures the resident's band as of creation time" do
