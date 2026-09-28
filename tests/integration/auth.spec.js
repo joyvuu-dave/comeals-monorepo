@@ -1,9 +1,4 @@
-const {
-  test,
-  expect,
-  httpFailurePattern,
-  combinePatterns,
-} = require("../helpers/test");
+const { test, expect, httpFailurePattern } = require("../helpers/test");
 const {
   loadAuthInfo,
   stubPusher,
@@ -39,14 +34,12 @@ test.describe("Authentication (real backend)", () => {
   });
 
   test.describe("with wrong credentials", () => {
-    // A real 401 from Rails: the browser logs the failed request and
-    // handle_axios_error logs the server's message.
-    test.use({
-      allowedConsoleErrors: combinePatterns(
-        httpFailurePattern,
-        /^Invalid email or password\.?$/,
-      ),
-    });
+    // Rails answers 400 with a message: "No resident with email ..." for
+    // an email no resident has, and "Incorrect password" for a wrong
+    // password (ResidentsController#token). The login page shows that
+    // message in an error toast. The browser logs the failed request;
+    // the app logs nothing.
+    test.use({ allowedConsoleErrors: httpFailurePattern });
 
     test("login with wrong password shows error", async ({ page }) => {
       const auth = loadAuthInfo();
