@@ -141,14 +141,11 @@ RSpec.describe MealLedger do
       credits = ledger_for(meal).lines.select { |line| line.kind == :credit }
       by_resident = credits.to_h { |line| [line.resident_id, line.amount] }
 
-      # 40/60 does not terminate, so each credit carries a tail some thirty
-      # digits down: 12.00000000000000000000000000000006 and
-      # 5.99999999999999999999999999999994. That is why nothing is rounded
-      # until settlement — the two tails cancel, and the split gives back
-      # exactly what the eaters were charged. Rounding here would not.
-      expect(by_resident[cook_a.id].round(8)).to eq(BigDecimal('12'))
-      expect(by_resident[cook_b.id].round(8)).to eq(BigDecimal('6'))
-      expect(by_resident.values.sum(BigDecimal('0'))).to eq(BigDecimal('18'))
+      # 4 units of multiplier * 4.50 = 18.00 charged, against 60.00 spent.
+      # 18.00 split 40:20 is 12 and 6, whole units with nothing left over.
+      # 'shares a subsidized credit at the ledger grain' below has a
+      # leftover unit.
+      expect(by_resident).to eq(cook_a.id => BigDecimal('12'), cook_b.id => BigDecimal('6'))
     end
 
     it 'makes every amount zero on a meal whose attendees all have multiplier zero' do
@@ -161,6 +158,10 @@ RSpec.describe MealLedger do
 
       ledger = ledger_for(meal)
 
+      # The zero lines exist: a settlement stores them, and a settled meal's
+      # screen reads them (MealCostSummary). `all` alone passes on no lines.
+      expect(ledger.lines.map { |line| [line.kind, line.resident_id] })
+        .to contain_exactly([:credit, cook.id], [:debit, baby.id])
       expect(ledger.lines.map(&:amount)).to all(eq(BigDecimal('0')))
       expect(ledger.lines.map(&:unit_cost)).to all(eq(BigDecimal('0')))
       expect(ledger.balances([cook.id, baby.id]).values).to all(eq(BigDecimal('0')))
@@ -267,6 +268,10 @@ RSpec.describe MealLedger do
       )
     end
 
+    # This rule only makes the order fixed. It moves no money: both guest
+    # lines charge the same host, and a line carries no guest id. So the
+    # guests have different multipliers, and the order is read off the
+    # multiplier each line carries.
     it 'puts the lower guest id first between two guests of one host' do
       cook = resident('Cook')
       host = resident('Host', multiplier: 0)
@@ -276,33 +281,39 @@ RSpec.describe MealLedger do
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('1'))
       create(:meal_resident, meal: meal, resident: host, community: community)
       create(:meal_resident, meal: meal, resident: other, community: community)
-      first_guest = create(:guest, meal: meal, resident: host, multiplier: 1)
+      first_guest = create(:guest, meal: meal, resident: host, multiplier: 2)
       second_guest = create(:guest, meal: meal, resident: host, multiplier: 1)
 
-      # A resident is charged for each guest separately, and both guest lines
-      # carry the host's id, so the ledger's own order is read off the
-      # guest rows: it hands the units out in that order.
-      ledger = ledger_for(meal)
+      # The guests are loaded highest id first, so a sort that ignored the
+      # guest id and kept the order it was given would put them the wrong
+      # way round.
+      loaded = Meal.where(id: meal.id).preload(:bills, :meal_residents).eager_load(:guests)
+                   .order('guests.id DESC').to_a
+      expect(loaded.first.guests.map(&:id)).to eq([second_guest.id, first_guest.id])
+      ledger = described_class.new(loaded)
       guest_lines = ledger.lines.select { |line| line.kind == :guest_debit }
 
       expect(first_guest.id).to be < second_guest.id
-      expect(guest_lines.map(&:amount)).to eq([BigDecimal('-0.33333334'), BigDecimal('-0.33333333')])
+      expect(guest_lines.map(&:multiplier)).to eq([2, 1])
+      expect(guest_lines.map(&:amount)).to eq([BigDecimal('-0.5'), BigDecimal('-0.25')])
       expect(ledger.lines.find { |line| line.kind == :debit && line.resident_id == host.id }.amount)
         .to eq(BigDecimal('0'))
     end
 
+    # $2 across 3 units of multiplier is 0.666666666...: cut to the grain it
+    # is 0.66666666, and rounded it would be 0.66666667.
     it 'cuts the unit cost a screen shows to the grain' do
       cook = resident('Cook')
       eaters = %w[A B C].map { |name| resident("Eater #{name}", multiplier: 1) }
 
       meal = create(:meal, community: community)
-      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('1'))
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('2'))
       eaters.each { |eater| create(:meal_resident, meal: meal, resident: eater, community: community) }
 
       summary = ledger_for(meal).summary_for(meal)
 
-      expect(summary.unit_cost).to eq(BigDecimal('0.33333333'))
-      expect(summary.effective_cost).to eq(BigDecimal('1'))
+      expect(summary.unit_cost).to eq(BigDecimal('0.66666666'))
+      expect(summary.effective_cost).to eq(BigDecimal('2'))
     end
 
     it 'refuses an amount that is not a whole number of units' do

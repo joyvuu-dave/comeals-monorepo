@@ -205,6 +205,27 @@ RSpec.describe MealCostSummary do
       expect(described_class.for(meal).subsidized).to be true
     end
 
+    # Only a free eater ate, so nobody is charged, but the meal still has
+    # lines: a zero credit for the cook and a zero debit for the eater. The
+    # summary reads them, so it shows zeros and what the cook spent, not
+    # nothing. (Whether this meal is "subsidized" is open, #94.)
+    it 'shows zeros, not nothing, for a settled meal only a free eater ate' do
+      meal = create(:meal, community: community)
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      baby = create(:resident, community: community, unit: unit, multiplier: 0)
+      create(:meal_resident, meal: meal, resident: baby, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('25'))
+      settle!(cutoff: Date.yesterday)
+
+      expect(meal.reload.meal_charges.map { |charge| [charge.kind, charge.resident_id, charge.amount] })
+        .to contain_exactly(['credit', cook.id, BigDecimal('0')], ['debit', baby.id, BigDecimal('0')])
+      summary = described_class.for(meal)
+      expect(summary).not_to be_nil
+      expect(summary.total_cost).to eq(BigDecimal('25'))
+      expect(summary.effective_cost).to eq(BigDecimal('0'))
+      expect(summary.unit_cost).to eq(BigDecimal('0'))
+    end
+
     it 'shows the receipts and zero charges for a meal nobody attended' do
       meal = create(:meal, community: community)
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
