@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   render,
   screen,
@@ -6,7 +6,7 @@ import {
   cleanup,
   act,
 } from "@testing-library/react";
-import { observable } from "mobx";
+import { observable, runInAction } from "mobx";
 import { MemoryRouter, Routes, Route, useLocation } from "react-router";
 
 // login.jsx calls Modal.setAppElement("#root") at import time.
@@ -61,8 +61,12 @@ function renderLogin({ store = makeStore(), path = "/" } = {}) {
 describe("ResidentsLogin", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    delete cookies.current.token;
+    cookies.current = { timezone: "America/Los_Angeles" };
     toastStore.clearAll();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("shows the login form when signed out", () => {
@@ -72,11 +76,34 @@ describe("ResidentsLogin", () => {
     expect(screen.getByText("ONLINE")).toBeInTheDocument();
   });
 
-  it("redirects to the calendar when a token cookie exists", () => {
+  it("redirects to today's calendar when a token cookie exists", () => {
+    // 07:30 UTC on March 4 is 23:30 on March 3 in Los Angeles, the
+    // fixture's zone, so a redirect that read the computer's own zone
+    // would pick March 4 on a computer east of Los Angeles.
+    vi.useFakeTimers({
+      toFake: ["Date"],
+      now: new Date("2026-03-04T07:30:00Z"),
+    });
     cookies.current.token = "token-abc";
     renderLogin();
     expect(screen.queryByLabelText("email")).not.toBeInTheDocument();
-    expect(screen.getByTestId("location")).toHaveTextContent(/^\/calendar\//);
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      /^\/calendar\/all\/2026-03-03$/,
+    );
+  });
+
+  // An old build wrote the token cookie as the string "undefined", and
+  // those cookies last twenty years. PrivateRoute treats it as signed
+  // out and sends the visitor here. If this page treated it as signed
+  // in, it would send them back, and the two pages would redirect to
+  // each other forever.
+  it("treats a token cookie holding the word undefined as signed out", () => {
+    cookies.current.token = "undefined";
+    renderLogin({
+      path: { pathname: "/", state: { from: { pathname: "/meals/42/edit" } } },
+    });
+    expect(screen.getByLabelText("email")).toBeInTheDocument();
+    expect(screen.getByTestId("location")).toHaveTextContent(/^\/$/);
   });
 
   function typeCredentials() {
@@ -111,16 +138,42 @@ describe("ResidentsLogin", () => {
   // full page load of the calendar, not a client-side route change
   // (#80).
   describe("a successful login", () => {
+    // Cookie.set here writes to the cookie jar, the way the real
+    // js-cookie does, so the page can read back what the login wrote.
+    function writeCookiesThrough() {
+      Cookie.set.mockImplementation((name, value) => {
+        cookies.current[name] = value;
+      });
+    }
+
+    afterEach(() => {
+      Cookie.set.mockReset();
+    });
+
+    // A first login on a new device has no timezone cookie yet. The
+    // login writes the community's zone, and "today" must be read in
+    // that zone. At 12:00 UTC on March 1 it is already March 2 on
+    // Kiritimati (UTC+14), and still March 1 on any computer in the
+    // Americas or Europe.
     it("writes the session cookies and reloads on today's calendar", async () => {
-      axios.post.mockResolvedValue({ status: 200, data: SESSION });
+      vi.useFakeTimers({
+        toFake: ["Date"],
+        now: new Date("2026-03-01T12:00:00Z"),
+      });
+      delete cookies.current.timezone;
+      writeCookiesThrough();
+      axios.post.mockResolvedValue({
+        status: 200,
+        data: { ...SESSION, timezone: "Pacific/Kiritimati" },
+      });
       const { location, restore } = fakeLocation();
       try {
-        renderLogin();
+        const { store } = renderLogin();
         typeCredentials();
         fireEvent.click(screen.getByRole("button", { name: "Submit" }));
 
         await vi.waitFor(() => {
-          expect(location.href).toMatch(/^\/calendar\/all\/\d{4}-\d{2}-\d{2}$/);
+          expect(location.href).toBe("/calendar/all/2026-03-02");
         });
         const expires = { expires: 7300 };
         expect(Cookie.set).toHaveBeenCalledWith("token", "tok", expires);
@@ -133,10 +186,21 @@ describe("ResidentsLogin", () => {
         );
         expect(Cookie.set).toHaveBeenCalledWith(
           "timezone",
-          "America/Chicago",
+          "Pacific/Kiritimati",
           expires,
         );
         // The loader stays up until the page is replaced.
+        expect(screen.getByRole("button", { name: "Submit" })).toBeDisabled();
+
+        // The token cookie now exists. A render before the page load
+        // must not route to the calendar inside this page (#80).
+        act(() => {
+          runInAction(() => {
+            store.isOnline = false;
+          });
+        });
+        expect(screen.getByText("OFFLINE")).toBeInTheDocument();
+        expect(screen.getByTestId("location")).toHaveTextContent(/^\/$/);
         expect(screen.getByRole("button", { name: "Submit" })).toBeDisabled();
       } finally {
         restore();
