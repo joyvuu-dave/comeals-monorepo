@@ -40,6 +40,15 @@ const AUTH_COOKIES = [
     domain: "localhost",
     path: "/",
   },
+  // A real login stores the community's zone from the token answer
+  // (login.jsx), and the app reads "today" in it. Without the cookie the
+  // app falls back to the browser's own zone.
+  {
+    name: "timezone",
+    value: "America/Los_Angeles",
+    domain: "localhost",
+    path: "/",
+  },
 ];
 
 /**
@@ -116,16 +125,38 @@ async function mockApi(page, options = {}) {
   const history = options.historyData || historyFixture;
   const hosts = options.hosts || hostsFixture;
 
-  // The app refetches /cooks after a close or extras save settles, so the
-  // mock must serve the state those PATCHes wrote — a static fixture would
-  // revert the UI on refetch. Tests that override the closed/max routes to
-  // capture payloads should call route.fallback() so these handlers still
-  // record the state and fulfill.
+  // The app refetches /cooks after a close, extras or bills save
+  // settles, so the mock must serve the state those PATCHes wrote — a
+  // static fixture would revert the UI on refetch. Tests that override
+  // the closed/max/bills routes to capture payloads should call
+  // route.fallback() so these handlers still record the state and
+  // fulfill.
   const mealState = {
     closed: meal.closed,
     closed_at: meal.closed_at,
     max: meal.max,
+    bills: meal.bills,
   };
+
+  // Ids for the rows the write stubs below create, one per row, like
+  // the database's.
+  let nextRowId = 9000;
+
+  // The meal and resident ids in /api/v1/meals/:meal/residents/:resident...
+  function mealAndResident(route) {
+    const match = new URL(route.request().url()).pathname.match(
+      /\/meals\/(\d+)\/residents\/(\d+)/,
+    );
+    return { mealId: Number(match[1]), residentId: Number(match[2]) };
+  }
+
+  function json(route, body) {
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(body),
+    });
+  }
 
   // Meal data (GET /api/v1/meals/*/cooks*)
   await page.route("**/api/v1/meals/*/cooks*", (route) => {
@@ -167,28 +198,48 @@ async function mockApi(page, options = {}) {
     });
   });
 
-  // Resident attendance toggle (POST/DELETE /api/v1/meals/*/residents/*)
+  // Attendance (POST, PATCH, DELETE /api/v1/meals/:m/residents/:r).
+  // The answers are MealsController's: a sign-up gets the saved row
+  // (MealResidentSerializer), and the store keeps its created_at as the
+  // sign-up time, which decides whether a late sign-up on a closed meal
+  // can be undone.
   await page.route("**/api/v1/meals/*/residents/*", (route) => {
-    route.fulfill({ status: 200, body: "{}" });
+    const method = route.request().method();
+    if (method === "POST") {
+      const { mealId, residentId } = mealAndResident(route);
+      const body = route.request().postDataJSON();
+      json(route, {
+        id: nextRowId++,
+        meal_id: mealId,
+        resident_id: residentId,
+        late: body.late,
+        vegetarian: body.vegetarian,
+        created_at: new Date().toISOString(),
+      });
+    } else if (method === "PATCH") {
+      json(route, { message: "MealResident updated." });
+    } else {
+      json(route, { message: "MealResident destroyed." });
+    }
   });
 
-  // Guest operations (POST/DELETE .../guests*)
-  await page.route("**/api/v1/meals/*/residents/*/guests*", (route) => {
+  // Guests (POST .../residents/:r/guests, DELETE .../guests/:id). The
+  // "**" matters: a "*" stops at a slash, so "guests*" never matched a
+  // delete. A new guest belongs to the resident in the URL, with the
+  // vegetarian flag that was sent (GuestSerializer), and a new id each
+  // time, as the store keys guests by id.
+  await page.route("**/api/v1/meals/*/residents/*/guests**", (route) => {
     if (route.request().method() === "POST") {
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          id: 999,
-          meal_id: meal.id,
-          resident_id: 1,
-          name: null,
-          vegetarian: false,
-          created_at: new Date().toISOString(),
-        }),
+      const { mealId, residentId } = mealAndResident(route);
+      json(route, {
+        id: nextRowId++,
+        meal_id: mealId,
+        resident_id: residentId,
+        vegetarian: route.request().postDataJSON().vegetarian,
+        created_at: new Date().toISOString(),
       });
     } else {
-      route.fulfill({ status: 200, body: "{}" });
+      json(route, { message: "Guest was destroyed." });
     }
   });
 
@@ -208,9 +259,29 @@ async function mockApi(page, options = {}) {
     route.fulfill({ status: 200, body: "{}" });
   });
 
-  // Meal bills (PATCH /api/v1/meals/*/bills*)
+  // Meal bills (PATCH /api/v1/meals/*/bills*). Like
+  // MealsController#update_bills: a cook left out of the payload loses
+  // the bill, a row sent without values keeps its stored ones, and the
+  // answer lists every stored bill, which the store shows
+  // (applyBillsAck). The server writes a blank amount as zero.
   await page.route("**/api/v1/meals/*/bills*", (route) => {
-    route.fulfill({ status: 200, body: "{}" });
+    const stored = new Map(mealState.bills.map((b) => [b.resident_id, b]));
+    mealState.bills = route
+      .request()
+      .postDataJSON()
+      .bills.map((row) => {
+        const before = stored.get(row.resident_id) || {
+          amount: "0.0",
+          no_cost: false,
+        };
+        return {
+          resident_id: row.resident_id,
+          amount:
+            row.amount === undefined ? before.amount : row.amount || "0.0",
+          no_cost: row.no_cost === undefined ? before.no_cost : row.no_cost,
+        };
+      });
+    json(route, { message: "Form submitted.", bills: mealState.bills });
   });
 
   // Meal max/extras (PATCH /api/v1/meals/*/max*)
@@ -230,6 +301,7 @@ async function mockApi(page, options = {}) {
           community_id: 1,
           resident_id: 1,
           username: "Jane Smith",
+          timezone: "America/Los_Angeles",
         }),
       });
     } else {
@@ -254,7 +326,7 @@ async function mockApi(page, options = {}) {
       route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ message: "Password reset email sent." }),
+        body: JSON.stringify({ message: "Check your email." }),
       });
     } else {
       route.continue();
@@ -275,7 +347,7 @@ async function mockApi(page, options = {}) {
       route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ message: "Password updated successfully." }),
+        body: JSON.stringify({ message: "Password updated!" }),
       });
     } else {
       route.continue();
@@ -367,11 +439,6 @@ async function mockApi(page, options = {}) {
       contentType: "application/json",
       body: JSON.stringify(1),
     });
-  });
-
-  // Version check (version.txt)
-  await page.route("**/version.txt*", (route) => {
-    route.fulfill({ status: 200, contentType: "text/plain", body: "1.9.0" });
   });
 
   // Slow-backend mode: E2E_API_DELAY=300 npm run test:e2e holds every
