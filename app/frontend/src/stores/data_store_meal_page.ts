@@ -165,15 +165,23 @@ export function mealPageActions(self: MealPageStore) {
             // A newer fetch is out: this answer is older than what
             // that one will bring, so neither cache nor screen gets it.
             if (!self.mealFetches.isCurrent(fetchToken)) return;
-            return kvSet(response.data.id.toString(), response.data).then(
-              function () {
+            return kvSet(response.data.id.toString(), response.data)
+              .catch(function (error: unknown) {
+                // The copy on disk only makes the next visit faster. A
+                // failed write must not keep the answer off the screen
+                // (#111).
+                console.error(
+                  "IndexedDB failed; going on without the copy on disk:",
+                  error,
+                );
+              })
+              .then(function () {
                 if (!self.mealFetches.isCurrent(fetchToken)) return;
                 // Skip stale responses from a previous meal
                 if (self.meal && self.meal.id === response.data.id) {
                   self.loadData(response.data);
                 }
-              },
-            );
+              });
           },
           // Second then-handler on purpose: it fires only when the
           // FETCH rejected. The retry treatment is for network

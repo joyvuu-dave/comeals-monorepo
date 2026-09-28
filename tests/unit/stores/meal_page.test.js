@@ -197,6 +197,29 @@ describe("meal page store", () => {
     });
   });
 
+  // The copy on disk only makes the next visit faster. When IndexedDB
+  // fails (a tab open for weeks can lose it), the fetched meal must
+  // still reach the screen, not leave it on "loading..." (#111).
+  it("shows the fetched meal when the cache write fails, and logs the failure", async () => {
+    const store = createStore();
+    axios.get.mockResolvedValueOnce({
+      status: 200,
+      data: mealPayload({ description: "Fetched" }),
+    });
+    const diskClosed = new Error("IndexedDB is closed");
+    idbKeyval.set.mockRejectedValueOnce(diskClosed);
+
+    store.loadDataAsync();
+    await flush();
+
+    expect(store.meal.description).toBe("Fetched");
+    expect(store.mealLoading).toBe(false);
+    expect(console.error).toHaveBeenCalledWith(
+      "IndexedDB failed; going on without the copy on disk:",
+      diskClosed,
+    );
+  });
+
   describe("two fetches of the meal on the wire", () => {
     // The first answer was current when it arrived, so it went to the
     // cache; a second fetch started during that write. When the write

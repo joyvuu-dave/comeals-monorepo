@@ -56,6 +56,24 @@ const networkInFlight = {};
 // the same request. Past the window, normal stale-while-revalidate.
 const MONTH_FRESH_MS = 5000;
 
+// The copies on disk only make a load faster, and IndexedDB can fail: a
+// tab that stays open for weeks (the shared screen) can lose its
+// connection. So a failed disk call is logged, and the load goes on as
+// if the copy were not there (#111).
+function logDiskError(error) {
+  console.error("IndexedDB failed; going on without the copy on disk:", error);
+}
+
+// A copy that cannot be read counts as a miss (the log returns
+// undefined): the caller fetches, and the fetch writes a fresh copy.
+function readFromDisk(key) {
+  return kvGet(key).catch(logDiskError);
+}
+
+function writeToDisk(key, value) {
+  return kvSet(key, value).catch(logDiskError);
+}
+
 function keyForDate(date) {
   var d = dayjs(date);
   return monthCache.keyFor(
@@ -70,7 +88,7 @@ function keyForDate(date) {
 export function invalidateMonth(communityId, year, month) {
   var key = monthCache.keyFor(communityId, year, month);
   monthCache.remove(key);
-  kvDel(key);
+  kvDel(key).catch(logDiskError);
   monthCache.bumpVersion(key);
 }
 
@@ -82,7 +100,7 @@ export function invalidateMonth(communityId, year, month) {
 // whole. The month on screen is refetched by the caller.
 export function invalidateAllMonths() {
   monthCache.clear();
-  kvClear();
+  kvClear().catch(logDiskError);
 }
 
 // The month on screen is stale (a Pusher update, a reconnect, the day
@@ -127,7 +145,7 @@ export function prefetchMonth(date) {
 
   var versionAtStart = monthCache.versionFor(key);
 
-  kvGet(key).then(function (value) {
+  readFromDisk(key).then(function (value) {
     // Discard if a Pusher invalidation arrived since we started
     if (monthCache.versionFor(key) !== versionAtStart) return;
 
@@ -143,7 +161,7 @@ export function prefetchMonth(date) {
         if (monthCache.versionFor(key) !== versionAtStart) return;
         monthCache.set(key, response.data);
         monthCache.markFresh(key);
-        kvSet(key, response.data);
+        writeToDisk(key, response.data);
       })
       .catch(function () {
         // Prefetch failure is non-critical
@@ -176,7 +194,7 @@ export function loadForNavigation(date, render) {
   }
 
   // Async IndexedDB fallback
-  kvGet(key).then(function (value) {
+  readFromDisk(key).then(function (value) {
     if (value === null || typeof value === "undefined") {
       // User already navigated elsewhere: nothing to fetch here.
       if (!navigations.isCurrent(token)) return;
@@ -230,7 +248,7 @@ function fetchMonth(date, token, render) {
       var key = monthCache.keyFor(respData.id, respData.year, respData.month);
       monthCache.set(key, respData);
       monthCache.markFresh(key);
-      kvSet(key, respData).then(function () {
+      writeToDisk(key, respData).then(function () {
         if (!navigations.isCurrent(token)) return;
         render(respData);
       });

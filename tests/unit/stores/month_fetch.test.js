@@ -13,6 +13,7 @@ import axios from "axios";
 import * as idbKeyval from "idb-keyval";
 import * as monthCache from "../../../app/frontend/src/stores/month_cache.js";
 import {
+  invalidateAllMonths,
   invalidateMonth,
   invalidateMonthForDate,
   loadForNavigation,
@@ -45,6 +46,17 @@ async function flush() {
   }
 }
 
+// What idb-keyval rejects with when the browser has closed the
+// database under a tab that stayed open (#111).
+const DISK_CLOSED = new Error("IndexedDB is closed");
+
+function expectDiskErrorLogged() {
+  expect(console.error).toHaveBeenCalledWith(
+    "IndexedDB failed; going on without the copy on disk:",
+    DISK_CLOSED,
+  );
+}
+
 function serveMonths() {
   axios.get.mockImplementation((url) => {
     const m = url.match(/\/calendar\/(\d{4})-(\d{2})-\d{2}$/);
@@ -60,6 +72,81 @@ describe("month_fetch", () => {
     vi.clearAllMocks();
     monthCache.clear();
     serveMonths();
+  });
+
+  // IndexedDB can fail in a tab that stays open for weeks. The copies on
+  // disk only make a load faster, so every disk call that fails is
+  // logged and the load goes on without the copy (#111).
+  describe("when IndexedDB fails", () => {
+    it("invalidateMonth still drops the RAM copy and the version moves on", async () => {
+      monthCache.set(keyFor(2026, 4), payload(2026, 4));
+      const versionBefore = monthCache.versionFor(keyFor(2026, 4));
+      idbKeyval.del.mockRejectedValueOnce(DISK_CLOSED);
+
+      invalidateMonth(COMMUNITY, "2026", "4");
+      await flush();
+
+      expect(monthCache.get(keyFor(2026, 4))).toBeUndefined();
+      expect(monthCache.versionFor(keyFor(2026, 4))).toBe(versionBefore + 1);
+      expectDiskErrorLogged();
+    });
+
+    it("invalidateAllMonths still empties RAM", async () => {
+      monthCache.set(keyFor(2026, 4), payload(2026, 4));
+      idbKeyval.clear.mockRejectedValueOnce(DISK_CLOSED);
+
+      invalidateAllMonths();
+      await flush();
+
+      expect(monthCache.size()).toBe(0);
+      expectDiskErrorLogged();
+    });
+
+    it("prefetchMonth fetches when the disk read fails", async () => {
+      idbKeyval.get.mockRejectedValueOnce(DISK_CLOSED);
+
+      prefetchMonth("2026-04-15");
+      await flush();
+
+      expect(axios.get).toHaveBeenCalledWith(
+        `/api/v1/communities/${COMMUNITY}/calendar/2026-04-15`,
+      );
+      expect(monthCache.get(keyFor(2026, 4))).toEqual(payload(2026, 4));
+      expectDiskErrorLogged();
+    });
+
+    it("prefetchMonth keeps the fetched month in RAM when the disk write fails", async () => {
+      idbKeyval.set.mockRejectedValueOnce(DISK_CLOSED);
+
+      prefetchMonth("2026-04-15");
+      await flush();
+
+      expect(monthCache.get(keyFor(2026, 4))).toEqual(payload(2026, 4));
+      expectDiskErrorLogged();
+    });
+
+    it("loadForNavigation fetches and draws the month when the disk read fails", async () => {
+      idbKeyval.get.mockRejectedValueOnce(DISK_CLOSED);
+      const render = vi.fn();
+
+      loadForNavigation("2026-04-15", render);
+      await flush();
+
+      expect(render.mock.calls).toEqual([[payload(2026, 4)]]);
+      expectDiskErrorLogged();
+    });
+
+    it("loadForNavigation draws the fetched month when the disk write fails", async () => {
+      idbKeyval.set.mockRejectedValueOnce(DISK_CLOSED);
+      const render = vi.fn();
+
+      loadForNavigation("2026-04-15", render);
+      await flush();
+
+      expect(render.mock.calls).toEqual([[payload(2026, 4)]]);
+      expect(monthCache.get(keyFor(2026, 4))).toEqual(payload(2026, 4));
+      expectDiskErrorLogged();
+    });
   });
 
   describe("invalidateMonthForDate", () => {
