@@ -1,5 +1,8 @@
+const dayjs = require("dayjs");
+const advancedFormat = require("dayjs/plugin/advancedFormat");
 const { test, expect } = require("../helpers/test");
 const {
+  FAKE_TODAY,
   loadAuthInfo,
   setupAuthenticatedPage,
   mealLoaded,
@@ -8,13 +11,15 @@ const {
   mealWritten,
 } = require("../helpers/integration_setup");
 
+dayjs.extend(advancedFormat);
+
 // Every meal-page action against the real backend (plan item 4).
-// The pattern throughout: perform the action, wait for the write to
-// land, reload the page, assert the state came back from the
-// database. Tests restore what they change so the suite can run in
-// any order and repeatedly against one seeding, and preconditions
-// are read from the page rather than assumed, so a half-finished
-// earlier run cannot poison this one.
+// The pattern throughout: perform the action, wait for the server to
+// answer the write, reload the page, assert the state came back from
+// the database. Tests restore what they change so the suite can run
+// in any order and repeatedly against one seeding, and preconditions
+// are read from the page rather than assumed, so a run that stopped
+// half way cannot break the next one.
 
 const auth = loadAuthInfo();
 
@@ -162,10 +167,15 @@ test.describe("Meal actions (real backend)", () => {
     page,
   }) => {
     const mealId = auth.meals.close_test.id;
+    // The status heading says OPEN while the page has no meal yet, so
+    // each check first waits for this meal's own description.
+    const description = page.locator('[aria-label="Enter meal description"]');
+    const status = page.locator("h1");
     await gotoMeal(page, mealId);
-    await expect(page.locator("text=OPEN").first()).toBeVisible({
+    await expect(description).toHaveValue("Close-test casserole", {
       timeout: 10000,
     });
+    await expect(status).toHaveText("OPEN");
 
     // Close. The seeded cook cost means no blank-cost question
     // (bill-entry.spec.js owns that flow). Closing triggers a refetch
@@ -177,9 +187,10 @@ test.describe("Meal actions (real backend)", () => {
     await saved;
     await refetched;
     await reloadMeal(page, mealId);
-    await expect(page.locator("text=CLOSED").first()).toBeVisible({
+    await expect(description).toHaveValue("Close-test casserole", {
       timeout: 10000,
     });
+    await expect(status).toHaveText("CLOSED");
 
     // Reopen.
     refetched = mealLoaded(page, mealId);
@@ -188,9 +199,10 @@ test.describe("Meal actions (real backend)", () => {
     await saved;
     await refetched;
     await reloadMeal(page, mealId);
-    await expect(page.locator("text=OPEN").first()).toBeVisible({
+    await expect(description).toHaveValue("Close-test casserole", {
       timeout: 10000,
     });
+    await expect(status).toHaveText("OPEN");
   });
 
   test("setting extras on a closed meal persists across reload", async ({
@@ -241,11 +253,19 @@ test.describe("Meal actions (real backend)", () => {
 
     const modal = page.locator(".ReactModal__Content--after-open");
     await expect(modal).toBeVisible({ timeout: 10000 });
-    // The seeded past meals give the history real rows; the strict
-    // console-error fixture fails this test if the fetch blew up.
-    await expect(modal.locator("table, ul, li").first()).toBeVisible({
-      timeout: 10000,
-    });
+    // The modal lists this meal's own changes, by first name. The seed
+    // created today's meal and signed Jane and Alice up to it, so those
+    // three rows are always there, whatever the other tests changed on
+    // this meal since.
+    await expect(modal.locator("h1")).toHaveText(
+      dayjs(FAKE_TODAY).format("ddd, MMM Do"),
+      { timeout: 10000 },
+    );
+    for (const action of ["Meal record created", "Jane added", "Alice added"]) {
+      await expect(
+        modal.getByRole("cell", { name: action, exact: true }),
+      ).toBeVisible();
+    }
   });
 
   test("webcal subscribe links carry the community and resident", async ({
