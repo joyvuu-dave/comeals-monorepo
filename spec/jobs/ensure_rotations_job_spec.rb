@@ -7,6 +7,8 @@ require 'rails_helper'
 # pins that the job converges, does nothing when nothing is needed, and
 # fails loudly on an unassigned meal.
 RSpec.describe EnsureRotationsJob do
+  include ActiveSupport::Testing::TimeHelpers
+
   let!(:community) { create(:community) }
 
   it 'creates rotations until meals exist six months out, and records how many' do
@@ -24,6 +26,22 @@ RSpec.describe EnsureRotationsJob do
 
     expect { described_class.perform_now }.not_to change(Rotation, :count)
     expect(JobRun.where(name: 'ensure_rotations').last.details).to eq('rotations_created' => 0)
+  end
+
+  # The job counts six months from the community's today, not the app
+  # zone's. At 09:00 UTC on 2026-01-16 it is January 16 in the app's zone
+  # (Los Angeles) and still January 15 in Honolulu. A meal on July 15 is
+  # six months from Honolulu's today, so nothing is needed; counted from
+  # the app zone's today it would be a day short.
+  it "counts the six months from the community's today" do
+    community.update!(timezone: 'Pacific/Honolulu')
+    travel_to(Time.utc(2026, 1, 16, 9, 0)) do
+      create(:meal, community: community, rotation: create(:rotation, community: community),
+                    date: Date.new(2026, 7, 15))
+      expect(Time.zone.today).to eq(Date.new(2026, 1, 16))
+
+      expect { described_class.perform_now }.not_to change(Rotation, :count)
+    end
   end
 
   it 'fails and records the failure when a meal has no rotation' do
