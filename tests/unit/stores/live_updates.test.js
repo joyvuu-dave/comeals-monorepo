@@ -69,8 +69,9 @@ function mealPayload(id, description) {
     closed_at: null,
     reconciled: false,
     max: null,
-    next_id: null,
-    prev_id: null,
+    // The server's answer at the ends: the meal's own id, never null.
+    next_id: id,
+    prev_id: id,
     residents: [],
     guests: [],
     bills: [],

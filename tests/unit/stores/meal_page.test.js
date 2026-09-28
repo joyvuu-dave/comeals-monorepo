@@ -24,17 +24,20 @@ import {
   stubAction,
 } from "../helpers/create_data_store.js";
 
+// The server sends the meal's own id as next_id and prev_id when there
+// is no meal after or before it (MealFormSerializer), never null.
 function mealPayload(overrides = {}) {
+  const id = overrides.id ?? 1;
   return {
-    id: 1,
+    id,
     date: "2023-06-15",
     description: "",
     closed: false,
     closed_at: null,
     reconciled: false,
     max: null,
-    next_id: null,
-    prev_id: null,
+    next_id: id,
+    prev_id: id,
     residents: [],
     guests: [],
     bills: [],

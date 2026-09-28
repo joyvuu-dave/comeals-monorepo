@@ -1,13 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { observable, runInAction } from "mobx";
-import {
-  MemoryRouter,
-  Routes,
-  Route,
-  useLocation,
-  useNavigate,
-} from "react-router";
+import { MemoryRouter, useLocation } from "react-router";
 
 vi.mock("js-cookie", () => import("../mocks/js_cookie.js"));
 import { cookies } from "../mocks/js_cookie.js";
@@ -35,26 +29,14 @@ function LocationEcho() {
   return <span data-testid="location">{location.pathname}</span>;
 }
 
-// The class version reads history/location props (passed by
-// meals/edit); the hooks version reads the router directly. The bridge
-// hands the class real router-backed props, so the same assertions
-// hold for both.
-function Bridge({ store }) {
-  const navigate = useNavigate();
-  const location = useLocation();
-  return (
-    <StoreContext.Provider value={store}>
-      <Header history={{ push: navigate }} location={location} />
-    </StoreContext.Provider>
-  );
-}
-
+// Header takes no props: it reads the store and the router. The meal
+// page renders it the same way, as a bare <Header />.
 function renderHeader(store) {
   return render(
     <MemoryRouter initialEntries={["/meals/42/edit/"]}>
-      <Routes>
-        <Route path="*" element={<Bridge store={store} />} />
-      </Routes>
+      <StoreContext.Provider value={store}>
+        <Header />
+      </StoreContext.Provider>
       <LocationEcho />
     </MemoryRouter>,
   );
