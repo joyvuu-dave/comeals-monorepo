@@ -138,7 +138,17 @@ RSpec.describe BalanceDisplayHelper do
     it 'shows a non-zero difference in the error style instead of hiding it' do
       html = helper.settlement_totals_tag([BigDecimal('16'), BigDecimal('-8')], 'units')
 
-      expect(html).to include('<div class="balance-owes">Difference: $8.00</div>')
+      expect(html).to include('<div class="balance-owes">Difference: $8.00 more owed to units</div>')
+      expect(html).not_to include('✓')
+    end
+
+    # No screen shows a sign (CLAUDE.md, money rule 11): the direction is
+    # a word, the amount is the size of the difference.
+    it 'shows a difference the other way in the error style, with no minus sign' do
+      html = helper.settlement_totals_tag([BigDecimal('8'), BigDecimal('-16')], 'residents')
+
+      expect(html).to include('<div class="balance-owes">Difference: $8.00 more owed by residents</div>')
+      expect(html).not_to include('-$')
       expect(html).not_to include('✓')
     end
 

@@ -62,7 +62,8 @@ module BalanceDisplayHelper
   # makes the zero-sum check visible. The difference is always zero —
   # settlement verifies it before writing — so a non-zero one is shown in the
   # error color: it means the stored balances no longer match what was
-  # settled, which ledger:verify would also catch.
+  # settled, which ledger:verify would also catch. Like a balance, it says
+  # its direction in words ("$8.00 more owed by units"), never with a sign.
   def settlement_totals_tag(amounts, noun)
     owed_to = amounts.select(&:positive?).sum(BigDecimal('0'))
     owed_by = amounts.select(&:negative?).sum(BigDecimal('0')).abs
@@ -74,7 +75,9 @@ module BalanceDisplayHelper
       if difference.zero?
         tag.div('Difference: $0.00 ✓')
       else
-        tag.div("Difference: #{number_to_currency(difference)}", class: 'balance-owes')
+        more_owed = difference.positive? ? 'to' : 'by'
+        tag.div("Difference: #{number_to_currency(difference.abs)} more owed #{more_owed} #{noun}",
+                class: 'balance-owes')
       end
     ]
     tag.div(safe_join(lines), class: 'settlement-total')
