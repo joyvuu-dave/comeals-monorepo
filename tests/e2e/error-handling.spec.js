@@ -42,6 +42,9 @@ const SERVER_PROBLEM = "The server had a problem. Please try again.";
 
 // The 409 every meal write answers when it loses a race for the meal's
 // lock (MealsController#conflict_rejection).
+// What EventsController#create sends for an event with no title.
+const EVENT_REFUSED = "Title can't be blank";
+
 const MEAL_CONFLICT =
   "Someone else was changing this meal at the same time. Nothing was saved. Try again.";
 const {
@@ -314,15 +317,19 @@ test.describe("Error Handling & Edge Cases", () => {
       });
     }
 
-    test("event create API error shows alert", async ({ page, context }) => {
+    // EventsController#create answers a record it cannot save with 400
+    // and the model's own sentences.
+    test("an event the server refuses shows the server's message", async ({
+      page,
+      context,
+    }) => {
       await setupAuthenticatedPage(page, context);
 
-      // Override events endpoint to return error
       await page.route("**/api/v1/events", (route) => {
         route.fulfill({
-          status: 422,
+          status: 400,
           contentType: "application/json",
-          body: JSON.stringify({ message: "Title is required" }),
+          body: JSON.stringify({ message: EVENT_REFUSED }),
         });
       });
 
@@ -345,9 +352,7 @@ test.describe("Error Handling & Edge Cases", () => {
       // Should show validation error toast
       const toast = page.locator(".toast--error");
       await expect(toast).toBeVisible({ timeout: 5000 });
-      await expect(toast.locator(".toast__message")).toContainText(
-        "Title is required",
-      );
+      await expect(toast.locator(".toast__message")).toHaveText(EVENT_REFUSED);
     });
 
     test("error toast clears when calendar modal is closed", async ({
@@ -356,12 +361,11 @@ test.describe("Error Handling & Edge Cases", () => {
     }) => {
       await setupAuthenticatedPage(page, context);
 
-      // Override events endpoint to return error
       await page.route("**/api/v1/events", (route) => {
         route.fulfill({
-          status: 422,
+          status: 400,
           contentType: "application/json",
-          body: JSON.stringify({ message: "Title is required" }),
+          body: JSON.stringify({ message: EVENT_REFUSED }),
         });
       });
 
@@ -391,41 +395,64 @@ test.describe("Error Handling & Edge Cases", () => {
       });
     });
 
-    test("warning response shows yellow toast, not red", async ({
+    // The one warning the server sends: the bills write answers 400
+    // with type "warning" and saves the bills anyway
+    // (MealsController#update_bills, ThirdCookWarning). The bills store
+    // shows it as an info toast that starts "Cooks saved.", never as an
+    // error or a warning toast.
+    test("a warning from the bills write says the cooks were saved, in an info toast", async ({
       page,
       context,
     }) => {
       await setupAuthenticatedPage(page, context);
 
-      // Override events endpoint to return a warning (type: "warning")
-      await page.route("**/api/v1/events", (route) => {
-        route.fulfill({
+      const warning =
+        "Warning: third cooks should not be added until all meals in the rotation have at least two cooks.";
+      // The bills as the server stored them.
+      let stored = null;
+      await page.route("**/api/v1/meals/*/bills*", (route) => {
+        if (route.request().method() !== "PATCH") return route.fallback();
+        stored = [
+          { resident_id: 1, amount: "25.5", no_cost: false },
+          { resident_id: 2, amount: "0.0", no_cost: false },
+        ];
+        return route.fulfill({
           status: 400,
           contentType: "application/json",
           body: JSON.stringify({
-            message: "Warning: test warning message",
+            message: warning,
             type: "warning",
+            bills: stored,
           }),
         });
       });
-
-      await page.goto("/calendar/all/2026-01-15/");
-      await page.waitForLoadState("networkidle");
-      await expect(page.locator(".rbc-calendar")).toBeVisible({
-        timeout: 10000,
+      // The store fetches the meal again after the answer; the server
+      // then has the saved cooks.
+      await page.route("**/api/v1/meals/42/cooks*", (route) => {
+        if (route.request().method() !== "GET" || stored === null) {
+          return route.fallback();
+        }
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ ...mealFixture, bills: stored }),
+        });
       });
 
-      // Open event creation modal and submit to trigger warning
-      await page.locator("text=Event").first().click();
-      const modal = page.locator(".ReactModal__Content--after-open");
-      await expect(modal).toBeVisible({ timeout: 5000 });
-      await modal.locator("button:has-text('Create')").click();
+      await page.goto("/meals/42/edit/");
+      const cooks = page.locator('[aria-label="Select meal cook"]');
+      await expect(cooks.first()).toHaveValue("1", { timeout: 10000 });
 
-      // Should show warning toast (yellow), not error toast (red)
-      await expect(page.locator(".toast--warning")).toBeVisible({
-        timeout: 5000,
-      });
-      await expect(page.locator(".toast--error")).not.toBeVisible();
+      await cooks.nth(1).selectOption("2");
+
+      const toast = page.locator(".toast--info");
+      await expect(toast.locator(".toast__message")).toHaveText(
+        `Cooks saved. ${warning}`,
+        { timeout: 5000 },
+      );
+      await expect(page.locator(".toast--error")).toHaveCount(0);
+      await expect(page.locator(".toast--warning")).toHaveCount(0);
+      await expect(cooks.nth(1)).toHaveValue("2");
     });
 
     test("network error (no response) shows generic alert", async ({
