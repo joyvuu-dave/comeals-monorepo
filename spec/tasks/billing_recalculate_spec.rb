@@ -47,25 +47,29 @@ RSpec.describe 'billing:recalculate' do
 
   it 'excludes reconciled meals from balance calculations' do
     reconciliation = create(:reconciliation, community: community)
-    resident = create(:resident, community: community, unit: unit, multiplier: 2)
+    cook = create(:resident, community: community, unit: unit, multiplier: 2)
+    eater = create(:resident, community: community, unit: unit, multiplier: 2)
 
-    # Reconciled meal with big bill — should NOT affect balance. Build the
-    # bill first, then set reconciliation_id via update_columns; Bill's
-    # before_save now rejects any save when meal.reconciled?.
+    # A reconciled meal the cook spent $500 on and the eater ate. Counted,
+    # it would move both balances by $500. Build the bill and the
+    # attendance first, then set reconciliation_id via update_columns: a
+    # bill or an attendance row refuses any save once the meal is
+    # reconciled.
     reconciled_meal = create(:meal, community: community)
-    create(:bill, meal: reconciled_meal, resident: resident, community: community, amount: BigDecimal('500'))
+    create(:bill, meal: reconciled_meal, resident: cook, community: community, amount: BigDecimal('500'))
+    create(:meal_resident, meal: reconciled_meal, resident: eater, community: community)
     reconciled_meal.update_columns(reconciliation_id: reconciliation.id)
 
-    # Unreconciled meal — cook and attend = 0 balance
+    # An open meal: the cook spent $30, the eater ate.
     unreconciled_meal = create(:meal, community: community)
-    create(:meal_resident, meal: unreconciled_meal, resident: resident, community: community)
-    create(:bill, meal: unreconciled_meal, resident: resident, community: community,
+    create(:meal_resident, meal: unreconciled_meal, resident: eater, community: community)
+    create(:bill, meal: unreconciled_meal, resident: cook, community: community,
                   amount: BigDecimal('30'))
 
     Rake::Task['billing:recalculate'].invoke
 
-    balance = ResidentBalance.find_by(resident: resident)
-    expect(balance.amount).to eq(BigDecimal('0'))
+    expect(ResidentBalance.find_by(resident: cook).amount).to eq(BigDecimal('30'))
+    expect(ResidentBalance.find_by(resident: eater).amount).to eq(BigDecimal('-30'))
   end
 
   it 'zeroes a child-only meal (zero total multiplier): cook absorbs the cost' do
