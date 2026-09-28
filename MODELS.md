@@ -360,7 +360,6 @@ Meal ----< MealCharge (written at settlement; empty until then)
   the current attendee count. The check runs only when max changes,
   because an admin attendance correction can add a person past it, and the
   meal must still take a menu edit or a reopen then (#93).
-- `start_time` — set on create: 6pm on Sundays, 7pm on other days
 
 **Derived counts (no cached columns):**
 
