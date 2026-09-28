@@ -58,11 +58,13 @@ RSpec.describe 'Admin write authorization' do
 
         expect do
           post '/residents', params: {
-            resident: { name: 'New Person', multiplier: 1, unit_id: unit.id,
+            resident: { name: 'New Person', kind: 'child', unit_id: unit.id,
                         password: '',
                         birthday: 8.years.ago.to_date }
           }
         end.to change(Resident, :count).by(1)
+
+        expect(Resident.find_by(name: 'New Person')).to be_child
       end
     end
 

@@ -13,11 +13,14 @@ require 'rails_helper'
 # These specs POST to each admin create endpoint with the actual fields the
 # admin form submits and verify the resulting record has every attribute set.
 # A missing attribute means the corresponding field is missing from
-# `permit_params` in app/admin/<resource>.rb.
+# `permit_params` in app/admin/<resource>.rb. Each value differs from the
+# column's default, so a dropped field shows up as the default: a boolean
+# is sent as the value it does not start with.
 RSpec.describe 'Admin permit_params smoke tests' do
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
   let(:admin_user) { create(:admin_user, community: community, superuser: true) }
+  let(:zone) { ActiveSupport::TimeZone[community.timezone] }
 
   before do
     host! 'admin.example.com'
@@ -32,6 +35,7 @@ RSpec.describe 'Admin permit_params smoke tests' do
             name: 'Smoke Test Resident',
             birthday: '1990-04-15',
             email: 'smoke@example.com',
+            phone: '510-555-2671',
             password: 'password123',
             vegetarian: true,
             kind: 'adult',
@@ -46,7 +50,11 @@ RSpec.describe 'Admin permit_params smoke tests' do
       expect(resident).not_to be_nil
       expect(resident.name).to eq('Smoke Test Resident')
       expect(resident.birthday).to eq(Date.new(1990, 4, 15))
+      expect(resident.phone).to eq('+15105552671')
       expect(resident.vegetarian).to be true
+      # kind: 'adult' agrees with the birthday, so it cannot show here
+      # whether kind reached the model. resident_form_spec.rb's 'refuses
+      # Adult with a birthday that makes a child' does show it.
       expect(resident).not_to be_child
       expect(resident.unit_id).to eq(unit.id)
       expect(resident.can_cook).to be false
@@ -64,7 +72,7 @@ RSpec.describe 'Admin permit_params smoke tests' do
             description: 'A smoke test event',
             start_date: '2026-05-01 18:00:00',
             end_date: '2026-05-01 20:00:00',
-            allday: false
+            allday: '1'
           }
         }
       end.to change(Event, :count).by(1)
@@ -72,7 +80,9 @@ RSpec.describe 'Admin permit_params smoke tests' do
       event = Event.find_by(title: 'Smoke Event')
       expect(event).not_to be_nil
       expect(event.description).to eq('A smoke test event')
-      expect(event.allday).to be false
+      expect(event.start_date).to eq(zone.local(2026, 5, 1, 18))
+      expect(event.end_date).to eq(zone.local(2026, 5, 1, 20))
+      expect(event.allday).to be true
       expect(event.community_id).to eq(community.id)
     end
   end
@@ -129,11 +139,15 @@ RSpec.describe 'Admin permit_params smoke tests' do
       chr = CommonHouseReservation.last
       expect(chr.resident_id).to eq(resident.id)
       expect(chr.title).to eq('Smoke Booking')
+      expect(chr.start_date).to eq(zone.local(2026, 5, 20, 14))
+      expect(chr.end_date).to eq(zone.local(2026, 5, 20, 16))
       expect(chr.community_id).to eq(community.id)
     end
   end
 
   describe 'POST /meals (admin)' do
+    # The guest is a child: FULL is the column default, so a dropped
+    # multiplier would save a full-price guest without an error.
     it 'persists every form field including nested associations' do
       host = create(:resident, community: community, unit: unit, multiplier: 2)
 
@@ -141,9 +155,9 @@ RSpec.describe 'Admin permit_params smoke tests' do
         post '/meals', params: {
           meal: {
             date: '2026-06-01',
-            closed: false,
+            closed: '0',
             guests_attributes: {
-              '0' => { multiplier: 2, resident_id: host.id, _destroy: '0' }
+              '0' => { multiplier: Multiplier::HALF, resident_id: host.id, _destroy: '0' }
             }
           }
         }
@@ -154,6 +168,18 @@ RSpec.describe 'Admin permit_params smoke tests' do
       expect(meal.community_id).to eq(community.id)
       expect(meal.guests.count).to eq(1)
       expect(meal.guests.first.resident_id).to eq(host.id)
+      expect(meal.guests.first.multiplier).to eq(Multiplier::HALF)
+    end
+
+    # closed defaults to false, and max is kept only on a closed meal
+    # (Meal#conditionally_set_max), so the two are checked together.
+    it 'persists closed and max' do
+      post '/meals', params: { meal: { date: '2026-06-03', closed: '1', max: '5' } }
+
+      meal = Meal.find_by(date: Date.new(2026, 6, 3))
+      expect(meal).not_to be_nil
+      expect(meal.closed).to be true
+      expect(meal.max).to eq(5)
     end
 
     # attendee_ids assignment removes MealResident rows via the through
@@ -183,6 +209,7 @@ RSpec.describe 'Admin permit_params smoke tests' do
         post '/admin_users', params: {
           admin_user: {
             email: 'smoke-admin@example.com',
+            phone: '510-555-2671',
             password: 'newpassword123',
             password_confirmation: 'newpassword123'
           }
@@ -192,6 +219,7 @@ RSpec.describe 'Admin permit_params smoke tests' do
       created = AdminUser.find_by(email: 'smoke-admin@example.com')
       expect(created).not_to be_nil
       expect(created.community_id).to eq(community.id)
+      expect(created.phone).to eq('+15105552671')
       expect(created.valid_password?('newpassword123')).to be true
     end
   end
