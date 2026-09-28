@@ -297,30 +297,9 @@ RSpec.describe Resident do
   describe '#age' do
     include ActiveSupport::Testing::TimeHelpers
 
-    it 'returns correct age for a birthday in the past' do
-      resident = create(:resident, community: community, unit: unit,
-                                   birthday: Date.new(1990, 1, 1))
-
-      expected = Time.zone.today.year - 1990 - (Time.zone.today >= Date.new(Time.zone.today.year, 1, 1) ? 0 : 1)
-      expect(resident.age).to eq(expected)
-    end
-
-    it 'returns age before birthday this year' do
-      # Birthday hasn't happened yet this year
-      future_birthday = Time.zone.today + 30
-      resident = create(:resident, community: community, unit: unit,
-                                   birthday: Date.new(2000, future_birthday.month, future_birthday.day))
-
-      expect(resident.age).to eq(Time.zone.today.year - 2000 - 1)
-    end
-
-    it 'returns age on birthday' do
-      resident = create(:resident, community: community, unit: unit,
-                                   birthday: Date.new(2000, Time.zone.today.month, Time.zone.today.day))
-
-      expect(resident.age).to eq(Time.zone.today.year - 2000)
-    end
-
+    # Every example here fixes the clock. An age read from the real clock
+    # changes with the day the suite runs, and a birthday built from
+    # "today + 30" lands in January from December 2 to December 31.
     it 'returns nil for an adult with no birthday' do
       resident = create(:resident, community: community, unit: unit, birthday: nil)
 
@@ -335,6 +314,27 @@ RSpec.describe Resident do
         end
 
         expect(ages).to eq([26, 26, 25, 26, 25])
+      end
+    end
+
+    it 'counts a January birthday as passed and a late-December one as not, in mid-December' do
+      travel_to Time.zone.local(2026, 12, 15, 12, 0) do
+        ages = [Date.new(2000, 1, 10), Date.new(2000, 12, 20)].map do |birthday|
+          create(:resident, community: community, unit: unit, birthday: birthday).age
+        end
+
+        expect(ages).to eq([26, 25])
+      end
+    end
+
+    it "counts the age on the community's day, not the app time zone's day" do
+      honolulu = create(:community, timezone: 'Pacific/Honolulu')
+      # 2026-12-16 08:30 UTC = 00:30 on Dec 16 in Los Angeles = 22:30 on Dec 15 in Honolulu.
+      travel_to Time.utc(2026, 12, 16, 8, 30) do
+        resident = create(:resident, community: honolulu, unit: create(:unit, community: honolulu),
+                                     birthday: Date.new(2000, 12, 16))
+
+        expect(resident.age).to eq(25)
       end
     end
   end
