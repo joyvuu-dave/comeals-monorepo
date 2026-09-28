@@ -4,6 +4,8 @@ require 'rails_helper'
 require 'rake'
 
 RSpec.describe 'residents:notify' do
+  include ActiveSupport::Testing::TimeHelpers
+
   before(:all) do
     RakeTasks.ensure_loaded
   end
@@ -34,7 +36,7 @@ RSpec.describe 'residents:notify' do
   it 'sends nothing when broadcast email is disabled' do
     stub_const('BROADCAST_EMAIL_ENABLED', false)
     rotation = create_rotation_with_meals(community: community,
-                                          start_date: Time.zone.today + 3.days)
+                                          start_date: community.today + 3.days)
     create(:resident, community: community, unit: unit,
                       can_cook: true, active: true, multiplier: 2)
 
@@ -47,7 +49,7 @@ RSpec.describe 'residents:notify' do
 
   it 'sends signup emails to eligible cooks who have not signed up' do
     rotation = create_rotation_with_meals(community: community,
-                                          start_date: Time.zone.today + 3.days)
+                                          start_date: community.today + 3.days)
 
     eligible = create(:resident, community: community, unit: unit,
                                  can_cook: true, active: true, multiplier: 2)
@@ -62,7 +64,7 @@ RSpec.describe 'residents:notify' do
 
   it 'does not email residents who are already signed up to cook' do
     rotation = create_rotation_with_meals(community: community,
-                                          start_date: Time.zone.today + 3.days)
+                                          start_date: community.today + 3.days)
     meal = rotation.meals.first
 
     signed_up = create(:resident, community: community, unit: unit,
@@ -81,7 +83,7 @@ RSpec.describe 'residents:notify' do
 
   it 'excludes residents who cannot cook or are inactive' do
     create_rotation_with_meals(community: community,
-                               start_date: Time.zone.today + 3.days)
+                               start_date: community.today + 3.days)
 
     cannot_cook = create(:resident, community: community, unit: unit,
                                     can_cook: false, active: true, multiplier: 2)
@@ -98,12 +100,15 @@ RSpec.describe 'residents:notify' do
     expect(recipients).not_to include(child.email)
   end
 
+  # Open means fewer than 2 cooks. A meal with no cook at all is open too:
+  # only the left join keeps it in the list.
   it 'correctly identifies open meals (fewer than 2 cooks)' do
-    open_date = Time.zone.today + 4.days
-    full_date = Time.zone.today + 5.days
+    no_cook_date = community.today + 3.days
+    open_date = community.today + 4.days
+    full_date = community.today + 5.days
     rotation = create_rotation_with_meals(community: community,
-                                          start_date: Time.zone.today + 3.days,
-                                          meal_dates: [open_date, full_date])
+                                          start_date: no_cook_date,
+                                          meal_dates: [full_date, open_date, no_cook_date])
 
     open_meal = rotation.meals.find_by(date: open_date)
     full_meal = rotation.meals.find_by(date: full_date)
@@ -123,11 +128,15 @@ RSpec.describe 'residents:notify' do
 
     email = ActionMailer::Base.deliveries.find { |e| e.to.include?(eligible.email) }
     expect(email).to be_present
+    # The open dates, oldest first, in both parts of the mail.
+    expect(email.text_part.body.to_s.scan(/\d{4}-\d{2}-\d{2}/)).to eq([no_cook_date.to_s, open_date.to_s])
+    expect(email.html_part.body.to_s.scan(%r{<li>(\d{4}-\d{2}-\d{2})</li>}).flatten)
+      .to eq([no_cook_date.to_s, open_date.to_s])
   end
 
   it 'skips rotations that do not start within the next week' do
     rotation = create_rotation_with_meals(community: community,
-                                          start_date: Time.zone.today + 2.weeks)
+                                          start_date: community.today + 2.weeks)
     create(:resident, community: community, unit: unit,
                       can_cook: true, active: true, multiplier: 2)
 
@@ -137,9 +146,28 @@ RSpec.describe 'residents:notify' do
     expect(rotation.reload.residents_notified).to be false
   end
 
+  # The week is counted from the community's today. At 09:00 UTC on
+  # 2026-01-16 it is January 16 in the app's zone (Los Angeles) and still
+  # January 15 in Honolulu. A rotation that starts on January 16 starts
+  # tomorrow for the community, inside the window. Counted from the app
+  # zone's today it starts today, which the window leaves out.
+  it "counts the week from the community's today" do
+    community.update!(timezone: 'Pacific/Honolulu')
+    travel_to(Time.utc(2026, 1, 16, 9, 0)) do
+      rotation = create_rotation_with_meals(community: community, start_date: Date.new(2026, 1, 16))
+      cook = create(:resident, community: community, unit: unit, can_cook: true, active: true, multiplier: 2)
+      expect(Time.zone.today).to eq(Date.new(2026, 1, 16))
+
+      Rake::Task['residents:notify'].invoke
+
+      expect(ActionMailer::Base.deliveries.flat_map(&:to)).to eq([cook.email])
+      expect(rotation.reload.residents_notified).to be true
+    end
+  end
+
   it 'skips eligible cooks who have no email address' do
     rotation = create_rotation_with_meals(community: community,
-                                          start_date: Time.zone.today + 3.days)
+                                          start_date: community.today + 3.days)
 
     with_email = create(:resident, community: community, unit: unit,
                                    can_cook: true, active: true, multiplier: 2)
@@ -157,7 +185,7 @@ RSpec.describe 'residents:notify' do
 
   it 'skips rotations already marked as notified' do
     create_rotation_with_meals(community: community,
-                               start_date: Time.zone.today + 3.days,
+                               start_date: community.today + 3.days,
                                residents_notified: true)
     create(:resident, community: community, unit: unit,
                       can_cook: true, active: true, multiplier: 2)
@@ -179,7 +207,7 @@ RSpec.describe 'residents:notify' do
 
     def rotation_starting_in(days)
       rotation = create(:rotation, community: community)
-      create(:meal, community: community, rotation: rotation, date: Time.zone.today + days)
+      create(:meal, community: community, rotation: rotation, date: community.today + days)
       rotation
     end
 
