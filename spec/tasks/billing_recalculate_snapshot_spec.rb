@@ -46,11 +46,13 @@ RSpec.describe 'billing:recalculate snapshot isolation' do
     alice_mr = create(:meal_resident, meal: meal, resident: alice, community: community)
     bill = create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('50'))
 
-    # Right after the task's bills preload runs, commit an atomic meal edit
-    # from a second connection: Alice out, Bob in, bill corrected to $30.
-    # The task's remaining reads (meal_residents, guests, residents) run
-    # after this commit. Without a shared snapshot the task mixes the two
-    # states and debits Bob $50 for a $30 meal — issue #10's scenario.
+    # Right after the task's first read, the unreconciled meals query,
+    # commit an atomic meal edit from a second connection: Alice out, Bob
+    # in, bill corrected to $30. The meal is already in the list, and every
+    # later read (bills, meal_residents, guests, residents) runs after this
+    # commit, in whatever order the preloads go. Without a shared snapshot
+    # those reads see the edit, or some of them do, and the balances match
+    # no real state of the ledger — issue #10's scenario.
     # The writer is a raw PG connection: the test pool only has one
     # connection, and the edit stands in for a request that already passed
     # the model guards and committed.
@@ -73,7 +75,7 @@ RSpec.describe 'billing:recalculate snapshot isolation' do
 
     triggered = false
     subscriber = ActiveSupport::Notifications.subscribe('sql.active_record') do |event|
-      next if triggered || event.payload[:name] != 'Bill Load'
+      next if triggered || event.payload[:name] != 'Meal Load'
 
       triggered = true
       commit_concurrent_meal_edit.call
