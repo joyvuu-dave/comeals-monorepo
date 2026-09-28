@@ -3,6 +3,15 @@
 require 'rails_helper'
 
 RSpec.describe 'Rack::Attack throttles' do
+  include ActiveSupport::Testing::TimeHelpers
+
+  # Rack::Attack keys each counter by the clock's period (5 minutes for
+  # login, an hour for password resets, a minute for the API). A run that
+  # crossed a period's edge would start the count again and miss the
+  # throttle. So the clock is held one second after an hour starts, which
+  # is the start of a period for every throttle here.
+  before { travel_to(Time.utc(2026, 4, 1, 12, 0, 1)) }
+
   # Test env caches to :null_store (nothing persists), so throttle counters
   # never accumulate. Swap in a real in-memory cache for these specs only.
   let(:memory_cache) { ActiveSupport::Cache::MemoryStore.new }
@@ -13,14 +22,6 @@ RSpec.describe 'Rack::Attack throttles' do
     Rack::Attack.reset!
     example.run
     Rack::Attack.cache.store = original
-  end
-
-  # Simulate a specific client IP. Use 10.x addresses so we're not fighting
-  # any other throttle bucket across examples.
-  def from_ip(_ip, &)
-    yield
-
-    # no-op; IP set via env in each request below
   end
 
   describe 'registered throttles' do

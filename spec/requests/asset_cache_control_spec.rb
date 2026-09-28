@@ -65,17 +65,18 @@ RSpec.describe 'AssetCacheControl' do
 
   describe '/.vite/manifest.json' do
     # The real manifest exists only after a build. Bring one when it is
-    # missing, and leave a real one alone.
+    # missing, leave a real one alone, and never delete it, for the same
+    # reason as index.html above: mutant runs this file in several
+    # processes at once, and one deleting the file would make another's
+    # request miss it. A later build overwrites it.
     let(:manifest) { Rails.public_path.join('.vite/manifest.json') }
-    let!(:wrote_fixture) do
-      next false if manifest.exist?
+
+    before do
+      next if manifest.exist?
 
       manifest.dirname.mkpath
       manifest.write('{"index.html":{"file":"vite-assets/index-spec.js","isEntry":true}}')
-      true
     end
-
-    after { manifest.delete if wrote_fixture }
 
     it 'is served by the static file server with no-cache, so the version banner sees a deploy' do
       get '/.vite/manifest.json'

@@ -16,6 +16,15 @@ require 'rails_helper'
 # real store here is not optional — against null_store every count would read
 # back as nothing and the throttle would never trip, passing vacuously.
 RSpec.describe 'Rack::Attack throttles backed by SolidCache' do
+  include ActiveSupport::Testing::TimeHelpers
+
+  # Rack::Attack keys each counter by the clock's period (5 minutes for
+  # login, an hour for password resets, a minute for the API). A run that
+  # crossed a period's edge would start the count again and miss the
+  # throttle. So the clock is held one second after an hour starts, which
+  # is the start of a period for every throttle here.
+  before { travel_to(Time.utc(2026, 4, 1, 12, 0, 1)) }
+
   # A fresh namespace per example is how these specs isolate from each other.
   # The obvious alternative, Rack::Attack.reset!, does not work here — see the
   # delete_matched example at the bottom of this file.

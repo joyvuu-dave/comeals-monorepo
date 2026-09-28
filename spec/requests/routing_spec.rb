@@ -16,17 +16,12 @@ RSpec.describe 'Routing' do
   end
 
   describe 'ActiveAdmin on admin subdomain' do
-    it 'routes admin subdomain to ActiveAdmin login' do
+    it 'routes admin subdomain to ActiveAdmin login, not the SPA' do
       host! 'admin.example.com'
       get '/login'
       expect(response).to have_http_status(:ok)
       expect(response.body).to include('id="admin_user_email"')
-    end
-
-    it 'routes admin subdomain login to Devise session' do
-      host! 'admin.example.com'
-      get '/login'
-      expect(response).to have_http_status(:ok)
+      expect(response.body).not_to include('<div id="root">')
     end
 
     it 'does not serve ActiveAdmin on the main domain' do

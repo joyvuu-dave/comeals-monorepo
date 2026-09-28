@@ -19,17 +19,8 @@ RSpec.describe 'FallbackController' do
       expect(response.content_type).to start_with('text/html')
       expect(response.body).to include('<div id="root">')
     end
-
-    it 'does not catch /api/ routes' do
-      get '/api/v1/version'
-      expect(response.content_type).to start_with('application/json')
-    end
-
-    it 'does not catch /admin routes on admin subdomain' do
-      host! 'admin.example.com'
-      get '/login'
-      expect(response).to have_http_status(:ok)
-      expect(response.body).not_to include('<div id="root">')
-    end
   end
+
+  # What the catch-all must not answer (an /api/ path, anything on the
+  # admin host) is checked in routing_spec.rb.
 end
