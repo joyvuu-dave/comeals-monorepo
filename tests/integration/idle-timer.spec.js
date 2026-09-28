@@ -15,7 +15,7 @@ const {
 //
 // Every other browser test turns the timer off with disableIdleTimer.
 // These tests check the timer itself, and that the helper really turns
-// it off (#118: for months it did not).
+// it off (#118: the old helper did not).
 
 const auth = loadAuthInfo();
 const mealPath = `/meals/${auth.meals.today.id}/edit/`;
