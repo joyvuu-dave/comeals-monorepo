@@ -139,25 +139,32 @@ test.describe("Meal loading (real backend)", () => {
     await expect(bobCell).not.toHaveClass(/background-green/);
   });
 
+  // The seeded meals near today, in date order: the closed meal two
+  // days ago, today's, tomorrow's.
   test("prev/next navigation works between real meals", async ({ page }) => {
-    await page.goto(`/meals/${auth.meals.today.id}/edit/`);
-    await page.waitForLoadState("networkidle");
-    await expect(page.locator("h1")).toBeVisible({ timeout: 10000 });
-
-    // Click the right chevron arrow to go to the next meal
-    await page.getByRole("button", { name: "Next meal" }).click();
-    await page.waitForLoadState("networkidle");
-
-    // Should now show tomorrow's meal description
     const textarea = page.locator('[aria-label="Enter meal description"]');
-    await expect(textarea).toHaveValue("Pasta night with garlic bread", {
-      timeout: 10000,
-    });
 
-    // URL should have changed to tomorrow's meal ID
-    await expect(page).toHaveURL(
-      new RegExp(`/meals/${auth.meals.tomorrow.id}/edit/`),
+    async function expectMeal(meal, description, label) {
+      await expect(page).toHaveURL(new RegExp(`/meals/${meal.id}/edit/`));
+      await expect(textarea).toHaveValue(description, { timeout: 10000 });
+      await expect(dayLabel(page)).toHaveText(label);
+    }
+
+    await page.goto(`/meals/${auth.meals.today.id}/edit/`);
+    await expectMeal(auth.meals.today, "Pizza and salad", "Today");
+
+    await page.getByRole("button", { name: "Next meal" }).click();
+    await expectMeal(
+      auth.meals.tomorrow,
+      "Pasta night with garlic bread",
+      "Tomorrow",
     );
+
+    await page.getByRole("button", { name: "Previous meal" }).click();
+    await expectMeal(auth.meals.today, "Pizza and salad", "Today");
+
+    await page.getByRole("button", { name: "Previous meal" }).click();
+    await expectMeal(auth.meals.closed, "Tacos and rice", "2 days ago");
   });
 
   test("reconciled meal shows reconciled state", async ({ page }) => {
