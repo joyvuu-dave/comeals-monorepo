@@ -211,7 +211,10 @@ how the flag came to be unmanageable in the first place.
 - `spec/requests/admin/superuser_authorization_spec.rb` — the money-path split
   end to end through routing.
 - `spec/requests/admin/superuser_management_spec.rb` — granting, promoting,
-  demoting, self-demotion, and the last-superuser guard through the UI.
+  demoting, and the self-demotion and self-deletion refusals through the UI.
+- `spec/requests/admin/superuser_demotion_race_spec.rb` — the last-superuser
+  trigger through the UI: two superusers demoting each other at the same
+  moment, the one way admin can reach that rule. One demotion is refused.
 - `spec/requests/admin/read_only_token_spec.rb` — the token path: what it
   reads, what it cannot reach, what it cannot write.
 - `spec/models/admin_user_spec.rb` — the model guards and the database
