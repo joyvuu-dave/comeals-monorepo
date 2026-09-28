@@ -35,7 +35,10 @@
 # the closed-meal freeze's) run earlier, before any before_save, in the
 # same SERIALIZABLE transaction as the write.
 #
-# Pinned by spec/requests/admin/meal_lock_order_spec.rb.
+# Pinned by spec/models/concerns/locks_its_meal_first_spec.rb, which checks
+# the lock statement for every model that includes this (Bill, MealResident,
+# Guest), and by spec/requests/admin/meal_lock_order_spec.rb, which races an
+# admin write against an API write on one meal.
 module LocksItsMealFirst
   extend ActiveSupport::Concern
   extend T::Helpers

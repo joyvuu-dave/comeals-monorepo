@@ -2,8 +2,8 @@
 
 require 'rails_helper'
 
-# Every write to a meal's rows takes the meal's lock first, in the same
-# statement, from the model. The concurrency storm proved the deadlock
+# Every write to a meal's rows (a bill, an attendance row, a guest) takes
+# the meal's lock first, in the same statement, from the model. The concurrency storm proved the deadlock
 # this prevents (docs/concurrency-testing.md); this spec pins the
 # statement itself, because a weaker lock, a missing ORDER BY, or a
 # missing id would still pass every functional example.
@@ -35,65 +35,89 @@ RSpec.describe LocksItsMealFirst do
     statements.index { |(sql, _binds)| sql.start_with?(prefix) }
   end
 
-  it 'locks the meal, with FOR KEY SHARE, before a row is inserted' do
-    statements = statements_during do
-      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('10'))
+  # The same checks for every model that includes the concern. Each
+  # context says how to make one of its rows on a meal, and gives one
+  # change that keeps the row on its meal.
+  shared_examples 'a row that locks its meal first' do |table|
+    it 'locks the meal, with FOR KEY SHARE, before a row is inserted' do
+      statements = statements_during { make_row(meal) }
+
+      lock = statements.index(lock_statement(meal.id))
+      insert = index_of_statement(statements, %(INSERT INTO "#{table}"))
+      expect(lock).not_to be_nil
+      expect(insert).to be > lock
     end
 
-    lock = statements.index(lock_statement(meal.id))
-    insert = index_of_statement(statements, 'INSERT INTO "bills"')
-    expect(lock).not_to be_nil
-    expect(insert).to be > lock
+    it 'locks the meal before a row is updated' do
+      row = make_row(meal)
+
+      statements = statements_during { row.update!(change) }
+
+      lock = statements.index(lock_statement(meal.id))
+      update = index_of_statement(statements, %(UPDATE "#{table}"))
+      expect(lock).not_to be_nil
+      expect(update).to be > lock
+    end
+
+    it 'locks the meal before a row is deleted' do
+      row = make_row(meal)
+
+      statements = statements_during { row.destroy! }
+
+      lock = statements.index(lock_statement(meal.id))
+      delete = index_of_statement(statements, %(DELETE FROM "#{table}"))
+      expect(lock).not_to be_nil
+      expect(delete).to be > lock
+    end
+
+    it 'locks both meals, lowest id first, when a row moves to a meal with a lower id' do
+      earlier = meal
+      later = create(:meal, community: community, date: Date.new(2026, 4, 12))
+      row = make_row(later)
+      expect(earlier.id).to be < later.id
+
+      statements = statements_during { row.update!(meal: earlier) }
+
+      expect(statements).to include(lock_statement(earlier.id, later.id))
+    end
+
+    it 'locks both meals, lowest id first, when a row moves to a meal with a higher id' do
+      row = make_row(meal)
+      later = create(:meal, community: community, date: Date.new(2026, 4, 12))
+
+      statements = statements_during { row.update!(meal: later) }
+
+      expect(statements).to include(lock_statement(meal.id, later.id))
+    end
+
+    it 'asks for the meal once when the row stays on it' do
+      row = make_row(meal)
+
+      statements = statements_during { row.update!(change) }
+
+      expect(statements.count { |(sql, _binds)| sql.include?('FOR KEY SHARE') }).to eq(1)
+      expect(statements).to include(lock_statement(meal.id))
+    end
   end
 
-  it 'locks the meal before a row is updated' do
-    bill = create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('10'))
+  context 'with a bill' do
+    def make_row(on) = create(:bill, meal: on, resident: cook, community: community, amount: BigDecimal('10'))
+    def change = { amount: BigDecimal('12') }
 
-    statements = statements_during { bill.update!(amount: BigDecimal('12')) }
-
-    lock = statements.index(lock_statement(meal.id))
-    update = index_of_statement(statements, 'UPDATE "bills"')
-    expect(lock).not_to be_nil
-    expect(update).to be > lock
+    it_behaves_like 'a row that locks its meal first', 'bills'
   end
 
-  it 'locks the meal before a row is deleted' do
-    bill = create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('10'))
+  context 'with an attendance row' do
+    def make_row(on) = create(:meal_resident, meal: on, resident: cook, community: community)
+    def change = { late: true }
 
-    statements = statements_during { bill.destroy! }
-
-    lock = statements.index(lock_statement(meal.id))
-    delete = index_of_statement(statements, 'DELETE FROM "bills"')
-    expect(lock).not_to be_nil
-    expect(delete).to be > lock
+    it_behaves_like 'a row that locks its meal first', 'meal_residents'
   end
 
-  it 'locks both meals, lowest id first, when a row moves to a meal with a lower id' do
-    earlier = meal
-    later = create(:meal, community: community, date: Date.new(2026, 4, 12))
-    bill = create(:bill, meal: later, resident: cook, community: community, amount: BigDecimal('10'))
-    expect(earlier.id).to be < later.id
+  context 'with a guest' do
+    def make_row(on) = create(:guest, meal: on, resident: cook)
+    def change = { vegetarian: true }
 
-    statements = statements_during { bill.update!(meal: earlier) }
-
-    expect(statements).to include(lock_statement(earlier.id, later.id))
-  end
-
-  it 'locks both meals, lowest id first, when a row moves to a meal with a higher id' do
-    bill = create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('10'))
-    later = create(:meal, community: community, date: Date.new(2026, 4, 12))
-
-    statements = statements_during { bill.update!(meal: later) }
-
-    expect(statements).to include(lock_statement(meal.id, later.id))
-  end
-
-  it 'asks for the meal once when the row stays on it' do
-    bill = create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('10'))
-
-    statements = statements_during { bill.update!(amount: BigDecimal('12')) }
-
-    expect(statements.count { |(sql, _binds)| sql.include?('FOR KEY SHARE') }).to eq(1)
-    expect(statements).to include(lock_statement(meal.id))
+    it_behaves_like 'a row that locks its meal first', 'guests'
   end
 end
