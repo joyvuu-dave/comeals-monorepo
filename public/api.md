@@ -361,8 +361,10 @@ On update, a field left out of the body keeps its stored value.
 
 An event is one day. With `"all_day": true` the hour fields are ignored.
 Without `all_day` on create, it is false; on update, the stored value
-stays. End must be after start. A date that does not exist returns
-`400 "Error: Invalid date"`.
+stays. End must be after start. Each part is a whole number, as a
+number or a string of digits. A date that does not exist (February 30),
+or on a timed event an hour or minute that is missing, blank or out of
+range, returns `400 "Error: Invalid date"`.
 
 ## Guest room reservations
 
@@ -398,8 +400,10 @@ Body:
   "end_hours": 21, "end_minutes": 0 }
 ```
 
-A block that overlaps another returns `400 "Time period is already
-taken"`.
+The date and time parts follow the rules for events: a date that does
+not exist, or an hour or minute that is missing, blank or out of range,
+returns `400 "Error: Invalid date"`. A block that overlaps another
+returns `400 "Time period is already taken"`.
 
 ## Calendar feeds (iCal)
 

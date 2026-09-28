@@ -87,21 +87,38 @@ class ApiController < ActionController::API
 
   # The start/end wire shape the calendar modals send (the frontend's
   # buildStartEndPayload): one day split into parts, plus start and end
-  # times. An all-day event starts at midnight and has no end. Returns
-  # { start_date:, end_date: }, or nil when the parts do not name a
-  # real date — the caller renders the 400.
+  # times. An all-day event starts at midnight and has no end, and its
+  # time parts are not read. Returns { start_date:, end_date: }, or nil
+  # when the parts do not name a real day and, unless all day, a real
+  # hour and minute — the caller renders the 400.
+  #
+  # Each part must be a whole number in its range. Time.zone.local is no
+  # check: it rolls February 30 over to March 2 and hour 24 over to the
+  # next day, and `''.to_i` is 0, so empty time menus were saved as
+  # midnight to midnight (#102).
   def parse_start_end_params(allday: false)
-    year = params[:start_year].to_i
-    month = params[:start_month].to_i
-    day = params[:start_day].to_i
+    year = whole_number_param(:start_year)
+    month = whole_number_param(:start_month, 1..12)
+    day = whole_number_param(:start_day, 1..31)
+    # False for a nil part too, and for February 30.
+    return nil unless Date.valid_date?(year, month, day)
+    return { start_date: Time.zone.local(year, month, day), end_date: nil } if allday
 
-    if allday
-      { start_date: Time.zone.local(year, month, day, 0, 0), end_date: nil }
-    else
-      { start_date: Time.zone.local(year, month, day, params[:start_hours].to_i, params[:start_minutes].to_i),
-        end_date: Time.zone.local(year, month, day, params[:end_hours].to_i, params[:end_minutes].to_i) }
-    end
-  rescue StandardError
+    times = %i[start_hours start_minutes end_hours end_minutes].zip([0..23, 0..59, 0..23, 0..59])
+                                                               .map { |key, range| whole_number_param(key, range) }
+    return nil if times.include?(nil)
+
+    start_hours, start_minutes, end_hours, end_minutes = times
+    { start_date: Time.zone.local(year, month, day, start_hours, start_minutes),
+      end_date: Time.zone.local(year, month, day, end_hours, end_minutes) }
+  end
+
+  # A part of a date or time: a whole number, from a JSON number or a
+  # string of digits ("08" is 8), in the range. nil for anything else.
+  def whole_number_param(key, range = nil)
+    number = Integer(params[key].to_s, 10)
+    number if range.nil? || range.cover?(number)
+  rescue ArgumentError
     nil
   end
 

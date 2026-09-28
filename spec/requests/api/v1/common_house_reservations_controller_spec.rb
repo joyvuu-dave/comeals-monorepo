@@ -56,6 +56,40 @@ RSpec.describe 'Common House Reservations API' do
       expect(CommonHouseReservation.count).to eq(0)
     end
 
+    # Before #102 the parser rolled February 30 over to March 2 and saved
+    # the reservation there.
+    it 'returns 400 for a day that does not exist in its month' do
+      post '/api/v1/common-house-reservations', params: {
+        token: token,
+        resident_id: resident.id, title: 'Never',
+        start_year: 2026, start_month: 2, start_day: 30,
+        start_hours: 14, start_minutes: 0,
+        end_hours: 17, end_minutes: 0
+      }
+
+      expect(CommonHouseReservation.pluck(:start_date, :end_date)).to eq([])
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Error: Invalid date')
+    end
+
+    # Before #102 a blank hour was read as 0, so a reservation with no
+    # times was saved from midnight to midnight. A blank start with a real
+    # end was saved from midnight too.
+    it 'refuses a reservation with no times, the way the form sends it when both time menus are empty' do
+      [{ start_hours: '', start_minutes: '', end_hours: '', end_minutes: '' },
+       { start_hours: '', start_minutes: '', end_hours: 17, end_minutes: 0 }].each do |times|
+        post '/api/v1/common-house-reservations', params: {
+          token: token,
+          resident_id: resident.id, title: 'No times',
+          start_year: 2026, start_month: 5, start_day: 1
+        }.merge(times)
+
+        expect(CommonHouseReservation.pluck(:start_date, :end_date)).to eq([])
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body['message']).to eq('Error: Invalid date')
+      end
+    end
+
     it 'rejects overlapping reservations in the same community' do
       create(:common_house_reservation, community: community, resident: resident,
                                         start_date: Time.zone.local(2026, 5, 1, 14, 0),
@@ -107,6 +141,23 @@ RSpec.describe 'Common House Reservations API' do
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body['message']).to eq('Time period is already taken')
       expect(moving.reload.title).not_to eq('Moved')
+    end
+
+    # The same parser as create (#102).
+    it 'refuses February 30 and blank times, and leaves the reservation as it was' do
+      chr = create(:common_house_reservation, community: community, resident: resident)
+      before = chr.reload.attributes
+
+      [{ start_day: 30, start_hours: 10, start_minutes: 0, end_hours: 12, end_minutes: 0 },
+       { start_day: 1, start_hours: '', start_minutes: '', end_hours: '', end_minutes: '' }].each do |changed|
+        patch "/api/v1/common-house-reservations/#{chr.id}/update", params: {
+          token: token, resident_id: resident.id, title: 'Moved', start_year: 2026, start_month: 2
+        }.merge(changed)
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body).to eq('message' => 'Error: Invalid date')
+        expect(chr.reload.attributes).to eq(before)
+      end
     end
 
     it 'returns 400 for invalid date params instead of 500' do
