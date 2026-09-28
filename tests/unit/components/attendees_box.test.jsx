@@ -18,6 +18,7 @@ stubRandomUUID();
 
 import { DataStore } from "../../../app/frontend/src/stores/data_store.js";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
+import toastStore from "../../../app/frontend/src/stores/toast_store.js";
 import AttendeesBox, {
   AttendeeComponent,
 } from "../../../app/frontend/src/components/meal/attendees_box.jsx";
@@ -170,26 +171,66 @@ describe("AttendeesBox", () => {
     expect(screen.getByLabelText("Remove Guest of Bob Johnson")).toBeDisabled();
   });
 
-  it("freezes every control once the meal is reconciled", () => {
-    renderBox(
-      createDataStore({
-        mealProps: { closed: true, reconciled: true },
-        residents: [
-          {
-            id: 1,
-            meal_id: 1,
-            name: "Jane Smith",
-            attending: true,
-            attending_at: new Date("2026-01-14T18:30:00Z"),
+  // Only the reconciled flag can lock anything here: the meal has seats
+  // left, Jane joined after the close and added her guest after it, and
+  // Bob can still join. With the flag off the same rows are all usable,
+  // so the flag is what locks them.
+  it.each([true, false])(
+    "reconciled %s: the flag alone locks every control in every row",
+    (reconciled) => {
+      renderBox(
+        createDataStore({
+          mealProps: {
+            closed: true,
+            closed_at: new Date("2026-01-14T12:00:00Z"),
+            extras: 2,
+            reconciled: reconciled,
           },
-        ],
-      }),
-    );
+          residents: [
+            {
+              id: 1,
+              meal_id: 1,
+              name: "Jane Smith",
+              attending: true,
+              attending_at: new Date("2026-01-14T13:00:00Z"),
+            },
+            { id: 2, meal_id: 1, name: "Bob Johnson" },
+          ],
+          guests: [
+            {
+              id: 100,
+              meal_id: 1,
+              resident_id: 1,
+              vegetarian: false,
+              created_at: new Date("2026-01-14T14:00:00Z"),
+            },
+          ],
+        }),
+      );
 
-    expect(screen.getByLabelText("Toggle Late for Jane Smith")).toBeDisabled();
-    expect(screen.getByLabelText("Toggle Veg for Jane Smith")).toBeDisabled();
-    expect(screen.getByLabelText("Remove Guest of Jane Smith")).toBeDisabled();
-  });
+      const controls = [
+        screen.getByLabelText("Toggle Late for Jane Smith"),
+        screen.getByLabelText("Toggle Veg for Jane Smith"),
+        screen.getByLabelText("Add Guest of Jane Smith").closest("button"),
+        screen.getByLabelText("Remove Guest of Jane Smith"),
+        screen.getByLabelText("Toggle Late for Bob Johnson"),
+        screen.getByLabelText("Toggle Veg for Bob Johnson"),
+        screen.getByLabelText("Add Guest of Bob Johnson").closest("button"),
+      ];
+      const names = [
+        screen.getByRole("cell", { name: "Jane Smith" }),
+        screen.getByRole("cell", { name: "Bob Johnson" }),
+      ];
+      for (const control of controls) {
+        expect(control.disabled, control.outerHTML).toBe(reconciled);
+      }
+      for (const name of names) {
+        expect(name.style.pointerEvents, name.textContent).toBe(
+          reconciled ? "none" : "",
+        );
+      }
+    },
+  );
 
   it("renders no rows while the store has no meal", () => {
     const store = defaultStore();
@@ -250,7 +291,10 @@ describe("AttendeesBox", () => {
   });
 
   it("the switches and the remove button reach the store", async () => {
+    toastStore.clearAll();
     const store = defaultStore();
+    // Bob is not attending, so his Late switch signs him up.
+    axios.mockResolvedValueOnce(mealResidentAnswer(2));
     renderBox(store);
     const bob = store.residents.get("2");
 
@@ -266,6 +310,13 @@ describe("AttendeesBox", () => {
     await vi.waitFor(() => {
       expect(store.guests.size).toBe(0);
     });
+
+    // The server said yes to all three, so nothing was rolled back.
+    expect(bob.attending).toBe(true);
+    expect(bob.late).toBe(true);
+    expect(bob.vegetarian).toBe(false);
+    expect(bob.attending_at).toEqual(new Date("2026-01-14T13:00:00Z"));
+    expect(toastStore.toasts).toHaveLength(0);
   });
 
   // A closed meal: a resident who signed up before the close cannot
