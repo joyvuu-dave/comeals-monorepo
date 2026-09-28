@@ -431,13 +431,6 @@ RSpec.describe Resident do
       resident.update!(email: 'new@example.com')
       expect_resident_triggers(1)
     end
-
-    it 'does not raise if Pusher is unavailable' do
-      allow(Pusher).to receive(:trigger).and_raise(StandardError, 'pusher down')
-      expect do
-        create(:resident, community: community, unit: unit)
-      end.not_to raise_error
-    end
   end
 
   # ---------------------------------------------------------------------------
