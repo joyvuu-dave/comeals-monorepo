@@ -221,8 +221,12 @@ namespace :test do
     # Two rotations, each with one meal after the seeded ones, so the
     # rotation modal has a second rotation to show: its title must say
     # "Rotation 2" (its place in date order), whatever its database id is.
-    first_rotation = Rotation.create!(meals_attributes: [{ date: 40.days.from_now.to_date }])
+    # The later one is created first, so no id equals its place, even on
+    # a new database where the ids start at 1 (CI): the one 80 days out
+    # gets id 1 and place 2, the one 40 days out id 2 and place 1. With
+    # equal numbers the modal could show the id and no test would see it.
     second_rotation = Rotation.create!(meals_attributes: [{ date: 80.days.from_now.to_date }])
+    first_rotation = Rotation.create!(meals_attributes: [{ date: 40.days.from_now.to_date }])
     Bill.create!(meal: first_rotation.meals.first, resident: jane, amount: BigDecimal('0'))
 
     # Write test context for Playwright to read at test time.
