@@ -68,6 +68,21 @@ function removeResident(store, id) {
   stage(store, () => store.residents.delete(String(id)));
 }
 
+// Reading or writing a node that has left the tree does not throw in
+// tests: MobX-State-Tree only warns through console.warn, and the action
+// still runs (the app turns the check off, index.jsx). So a callback
+// that goes on to use a dead node shows only as this warning.
+function watchDeadNodeUse() {
+  const warn = vi.spyOn(console, "warn");
+  onTestFinished(() => warn.mockRestore());
+  return function expectNoDeadNodeUse() {
+    const deadNodeWarnings = warn.mock.calls.filter((args) =>
+      String(args[0]).includes("mobx-state-tree"),
+    );
+    expect(deadNodeWarnings).toEqual([]);
+  };
+}
+
 describe("Resident model", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -1023,6 +1038,7 @@ describe("Resident model", () => {
     }
 
     it("refetches when the node dies while an attendance add is in flight", async () => {
+      const expectNoDeadNodeUse = watchDeadNodeUse();
       const store = createStore({
         mealProps: { closed: false },
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: false }],
@@ -1034,9 +1050,11 @@ describe("Resident model", () => {
 
       await flush();
       expect(loadDataAsyncSpy).toHaveBeenCalledTimes(1);
+      expectNoDeadNodeUse();
     });
 
     it("refetches when the node dies while an attendance remove is in flight", async () => {
+      const expectNoDeadNodeUse = watchDeadNodeUse();
       const store = createStore({
         mealProps: { closed: false },
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
@@ -1048,9 +1066,11 @@ describe("Resident model", () => {
 
       await flush();
       expect(loadDataAsyncSpy).toHaveBeenCalledTimes(1);
+      expectNoDeadNodeUse();
     });
 
     it("refetches when the node dies while a late update is in flight", async () => {
+      const expectNoDeadNodeUse = watchDeadNodeUse();
       const store = createStore({
         mealProps: { closed: false },
         residents: [
@@ -1064,9 +1084,11 @@ describe("Resident model", () => {
 
       await flush();
       expect(loadDataAsyncSpy).toHaveBeenCalledTimes(1);
+      expectNoDeadNodeUse();
     });
 
     it("refetches when the node dies while a veg update is in flight", async () => {
+      const expectNoDeadNodeUse = watchDeadNodeUse();
       const store = createStore({
         mealProps: { closed: false },
         residents: [
@@ -1086,9 +1108,11 @@ describe("Resident model", () => {
 
       await flush();
       expect(loadDataAsyncSpy).toHaveBeenCalledTimes(1);
+      expectNoDeadNodeUse();
     });
 
     it("refetches when the node dies while an add-guest is in flight", async () => {
+      const expectNoDeadNodeUse = watchDeadNodeUse();
       axios.mockResolvedValueOnce(guestAnswer());
       const store = createStore({
         mealProps: { closed: false },
@@ -1102,11 +1126,16 @@ describe("Resident model", () => {
       await flush();
       expect(loadDataAsyncSpy).toHaveBeenCalledTimes(1);
       // The dropped guest must not be appended by hand — the refetch
-      // brings it back.
+      // brings it back. (Without the return after the refetch, the
+      // callback goes on and throws: a dead node's root is the node
+      // itself, which has no appendGuest. The catch then returns because
+      // the node is dead, so nothing is written and no warning shows.)
       expect(store.guests.size).toBe(0);
+      expectNoDeadNodeUse();
     });
 
     it("refetches when the node dies while a remove-guest is in flight", async () => {
+      const expectNoDeadNodeUse = watchDeadNodeUse();
       const store = createStore({
         mealProps: { closed: false },
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
@@ -1121,9 +1150,11 @@ describe("Resident model", () => {
 
       await flush();
       expect(loadDataAsyncSpy).toHaveBeenCalledTimes(1);
+      expectNoDeadNodeUse();
     });
 
     it("does not refetch when the node stays alive", async () => {
+      const expectNoDeadNodeUse = watchDeadNodeUse();
       const store = createStore({
         mealProps: { closed: false },
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: false }],
@@ -1135,9 +1166,11 @@ describe("Resident model", () => {
       await flush();
       expect(loadDataAsyncSpy).not.toHaveBeenCalled();
       expect(alice.attending).toBe(true);
+      expectNoDeadNodeUse();
     });
 
     it("does not refetch when a request fails on a dead node", async () => {
+      const expectNoDeadNodeUse = watchDeadNodeUse();
       // On failure the server saved nothing; the raced snapshot already
       // matches the server, so a repair fetch is not needed.
       axios.mockRejectedValueOnce({ response: { status: 500 } });
@@ -1153,6 +1186,7 @@ describe("Resident model", () => {
 
       await flush();
       expect(loadDataAsyncSpy).not.toHaveBeenCalled();
+      expectNoDeadNodeUse();
     });
   });
 
@@ -1256,21 +1290,6 @@ describe("Resident model", () => {
     const refusal = {
       response: { data: { message: "Meal has no open spots." } },
     };
-
-    // Reading or writing a node that has left the tree does not throw
-    // here: MobX-State-Tree only warns through console.warn in tests
-    // (the app turns the check off). So a missing isAlive guard shows
-    // only as this warning.
-    function watchDeadNodeUse() {
-      const warn = vi.spyOn(console, "warn");
-      onTestFinished(() => warn.mockRestore());
-      return function expectNoDeadNodeUse() {
-        const deadNodeWarnings = warn.mock.calls.filter((args) =>
-          String(args[0]).includes("mobx-state-tree"),
-        );
-        expect(deadNodeWarnings).toEqual([]);
-      };
-    }
 
     async function settle() {
       await new Promise((r) => setTimeout(r, 0));
