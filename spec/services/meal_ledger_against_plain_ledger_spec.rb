@@ -83,8 +83,10 @@ RSpec.describe MealLedger do
       'two cooks under a cap' => [{ cap: '4', bills: [[1, '70'], [2, '30']], eaters: [[3, 2], [4, 2], [5, 1]] }],
       'a cap that does not bind' => [{ cap: '100', bills: [[1, '30']], eaters: [[2, 2], [3, 2]] }],
       'a cap that binds exactly' => [{ cap: '5', bills: [[1, '20']], eaters: [[2, 2], [3, 2]] }],
+      # The no-cost bill has an amount (the API and admin both allow one),
+      # so a ledger that counted it would get different lines.
       'a cook with a no-cost bill next to a paid one' =>
-        [{ bills: [[1, '40'], [2, '0', true]], eaters: [[3, 2], [4, 2]] }],
+        [{ bills: [[1, '40'], [2, '25', true]], eaters: [[3, 2], [4, 2]] }],
       'a sub-dollar three-way split' => [{ bills: [[1, '1']], eaters: [[2, 2], [3, 2], [4, 2]] }],
       'a host who eats and brings two guests, one unit left over' =>
         [{ bills: [[1, '1']], eaters: [[2, 1], [3, 1]], guests: [[2, 1], [2, 1]] }],
