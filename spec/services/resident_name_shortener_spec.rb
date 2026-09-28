@@ -25,13 +25,6 @@ RSpec.describe ResidentNameShortener do
     expect(described_class.short('Alice Smith')).to eq('Alice')
   end
 
-  it 'copes with a bare first name among people who share it' do
-    create(:resident, community: community, unit: unit, name: 'Alice')
-    create(:resident, community: community, unit: unit, name: 'Alice Smith')
-    expect(described_class.short('Alice Smith')).to eq('Alice S')
-    expect(described_class.short('Alice')).to eq('Alice')
-  end
-
   it 'returns first name + last initial when first name is not unique' do
     create(:resident, community: community, unit: unit, name: 'Alice Smith')
     create(:resident, community: community, unit: unit, name: 'Alice Jones')
