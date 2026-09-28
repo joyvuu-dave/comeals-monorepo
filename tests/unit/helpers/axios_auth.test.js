@@ -31,6 +31,10 @@ import { installAuthInterceptor } from "../../../app/frontend/src/helpers/axios_
 
 describe("installAuthInterceptor", () => {
   beforeEach(() => {
+    // `use` is one mock for the whole file, and every test installs the
+    // interceptor again. Clearing its calls makes the count below mean
+    // "one install registers one interceptor", wherever the test runs.
+    vi.clearAllMocks();
     currentToken = undefined;
     capturedInterceptor = undefined;
     installAuthInterceptor();

@@ -444,18 +444,22 @@ describe("Bill model", () => {
     });
 
     it("does not clear amount when no_cost is toggled off", () => {
+      // The server does not tie no_cost to amount, and an admin can save
+      // both, so a row can load with no cost ticked and an amount.
       const store = createStore({
         residents: [{ id: 10, meal_id: 1, name: "Alice" }],
-        bills: [{ id: "bill-1", resident: 10, no_cost: true, amount: "" }],
+        bills: [{ id: "bill-1", resident: 10, no_cost: true, amount: "25.00" }],
       });
 
       const bill = store.bills.get("bill-1");
       expect(bill.no_cost).toBe(true);
 
-      // Toggle off: no_cost true -> false, should not touch amount
+      // Toggle off: no_cost true -> false, should not touch amount. The
+      // cooks box skips the confirm question for this direction because
+      // it destroys nothing.
       bill.toggleNoCost();
       expect(bill.no_cost).toBe(false);
-      expect(bill.amount).toBe("");
+      expect(bill.amount).toBe("25.00");
     });
   });
 
