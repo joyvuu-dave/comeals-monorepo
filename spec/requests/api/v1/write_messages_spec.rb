@@ -80,13 +80,23 @@ RSpec.describe 'API write responses' do
       expect(response.parsed_body).to eq('meal_id' => nil)
     end
 
+    # with_meal_lock refuses a settled meal too, in the same sentence, but
+    # only after it has waited for the meal's row lock. The before_action
+    # answers first, so a settled meal never waits behind a running write.
+    # So this checks that no row lock was taken, not only the sentence.
     it 'refuses a write on a settled meal before taking the lock, in one sentence' do
       meal.update!(reconciliation: create(:reconciliation, community: community))
+      statements = []
+      record = ->(*, payload) { statements << payload[:sql] }
 
-      patch "/api/v1/meals/#{meal.id}/description", params: { token: token, description: 'Pasta' }
+      ActiveSupport::Notifications.subscribed(record, 'sql.active_record') do
+        patch "/api/v1/meals/#{meal.id}/description", params: { token: token, description: 'Pasta' }
+      end
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body).to eq('message' => 'Change not permitted. Meal has already been reconciled.')
+      expect(statements.grep(/\bFOR (NO KEY )?UPDATE\b/)).to eq([])
+      expect(meal.reload.description).not_to eq('Pasta')
     end
   end
 
