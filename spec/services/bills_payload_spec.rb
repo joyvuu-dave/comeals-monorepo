@@ -48,7 +48,7 @@ RSpec.describe BillsPayload do
         .to eq('Invalid amount: ten. Amounts are whole cents, 0 to 9999.99.')
     end
 
-    it 'accepts a blank amount as zero and the largest whole-cent amount' do
+    it 'accepts a blank amount and the largest whole-cent amount' do
       expect(payload([{ resident_id: cook.id, amount: '' }, { resident_id: other.id, amount: '9999.99' }])).to be_valid
     end
 
@@ -106,6 +106,27 @@ RSpec.describe BillsPayload do
 
       bill = meal.bills.find_by(resident_id: cook.id)
       expect([bill.amount, bill.no_cost]).to eq([BigDecimal('9'), false])
+    end
+
+    # The SPA sends a blank amount when a cook clears the field, and when a
+    # cook turns on no-cost (stores/bill.ts). A blank amount is zero: it
+    # replaces the stored amount, it does not leave it alone.
+    it 'replaces a stored amount with zero when the amount is sent blank' do
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('7'), no_cost: false)
+
+      payload([{ resident_id: cook.id, amount: '', no_cost: false }]).write_to(meal)
+
+      bill = meal.bills.find_by(resident_id: cook.id)
+      expect([bill.amount, bill.no_cost]).to eq([BigDecimal('0'), false])
+    end
+
+    it 'writes zero and the flag when a cook turns on no-cost, which sends a blank amount' do
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('7'), no_cost: false)
+
+      payload([{ resident_id: cook.id, amount: '', no_cost: true }]).write_to(meal)
+
+      bill = meal.bills.find_by(resident_id: cook.id)
+      expect([bill.amount, bill.no_cost]).to eq([BigDecimal('0'), true])
     end
 
     it 'counts a row with only the no_cost flag as touched' do
