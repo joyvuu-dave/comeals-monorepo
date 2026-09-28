@@ -358,9 +358,9 @@ class Community < ApplicationRecord
                  OR (end_date >= :from AND end_date <= :to)
                  OR (start_date < :from AND end_date > :to)) AS events_updated_at,
            (SELECT COUNT(*) FROM common_house_reservations
-              WHERE start_date >= :from AND start_date <= :to) AS common_house_count,
+              WHERE start_date <= :to AND end_date >= :from) AS common_house_count,
            (SELECT MAX(updated_at) FROM common_house_reservations
-              WHERE start_date >= :from AND start_date <= :to) AS common_house_updated_at,
+              WHERE start_date <= :to AND end_date >= :from) AS common_house_updated_at,
            (SELECT COUNT(*) FROM guest_room_reservations WHERE date >= :from AND date <= :to) AS guest_room_count,
            (SELECT MAX(updated_at) FROM guest_room_reservations
               WHERE date >= :from AND date <= :to) AS guest_room_updated_at
@@ -393,7 +393,8 @@ class Community < ApplicationRecord
   #                              meal's updated_at
   #   rotations                  of the meals in the window (color, number)
   #   events                     overlapping the window
-  #   common_house_reservations  starting in the window
+  #   common_house_reservations  overlapping the window (one can last
+  #                              days, and start before it)
   #   guest_room_reservations    in the window
   #
   # A write that skips the model and its timestamps (update_all, psql)

@@ -133,11 +133,20 @@ class CalendarSerializer
              .order(:id)
   end
 
+  # Every booking that overlaps the window, not only those that start in
+  # it. The admin form takes any start and end, so a booking can last
+  # days. One that starts before the window still holds days inside it,
+  # and period_is_free refuses a new booking on those days. The edges are
+  # the ones #events_in_range has: a booking that ends at the window's
+  # first instant, or starts at its last, is in. These two conditions
+  # give the same rows as its three, for any booking that does not end
+  # before it starts (the model refuses one that does).
+  # Community#calendar_cache_version counts the same rows.
   def common_house_reservations_in_range(community)
     community.common_house_reservations
              .includes({ resident: :unit })
-             .where(start_date: window_start..)
              .where(start_date: ..window_end)
+             .where(end_date: window_start..)
              .order(:id)
   end
 

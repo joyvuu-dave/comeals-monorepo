@@ -95,6 +95,68 @@ RSpec.describe Community do
       expect(version).not_to eq(before)
     end
 
+    # The admin form takes any start and end, so a booking can last days.
+    # One that starts the day before the six weeks is on April's calendar,
+    # so each write to it must be a miss for April's stored copy.
+    it 'changes when a common house booking that starts before the six weeks is made, changed or removed' do
+      resident = create(:resident, community: community)
+      before = version
+
+      booking = create(:common_house_reservation, community: community, resident: resident,
+                                                  start_date: Time.zone.local(2026, 3, 28, 18),
+                                                  end_date: Time.zone.local(2026, 4, 3, 10))
+      made = version
+      expect(made).not_to eq(before)
+
+      booking.update!(title: 'Moving day')
+      changed = version
+      expect(changed).not_to eq(made)
+
+      booking.destroy!
+      expect(version).not_to eq(changed)
+    end
+
+    # The version must see exactly the bookings the month shows: one it
+    # misses can be served stale for an hour, and one it counts but the
+    # month leaves out only costs a rebuild. The count and the newest
+    # change are read one by one, because each has its own WHERE. Each
+    # booking is made alone, because two that overlap cannot both be
+    # saved.
+    it 'counts a common house booking exactly when April lists it' do
+      resident = create(:resident, community: community)
+      april = { month: 4, year: 2026, start_date: from.to_s, end_date: to.to_s, month_int_array: [3, 4, 5] }
+
+      bookings = {
+        'ends as the six weeks open' => [[3, 28, 22, 0], [3, 29, 0, 0]],
+        'ends a minute before they open' => [[3, 28, 22, 0], [3, 28, 23, 59]],
+        'starts before them and ends inside' => [[3, 28, 18, 0], [4, 3, 10, 0]],
+        'starts on the last day and ends after' => [[5, 9, 23, 0], [5, 11, 10, 0]],
+        'starts at their last microsecond' => [[5, 9, 23, 59, 59.999999r], [5, 10, 2, 0]],
+        'spans them' => [[3, 20, 12, 0], [5, 20, 12, 0]],
+        'starts as they close' => [[5, 10, 0, 0], [5, 10, 2, 0]]
+      }
+
+      seen = bookings.transform_values do |(start_parts, end_parts)|
+        booking = create(:common_house_reservation, community: community, resident: resident,
+                                                    start_date: Time.zone.local(2026, *start_parts),
+                                                    end_date: Time.zone.local(2026, *end_parts))
+        listed = CalendarSerializer.new(community, params: april).to_h[:common_house_reservations].any?
+        # The common house count and newest change, after the community
+        # day (see the first example for the order).
+        count, newest = version.delete_prefix("#{community.today}-").split('-', -1).values_at(11, 12)
+        newest_is_it = newest == booking.reload.updated_at.utc.strftime('%Y%m%d%H%M%S%6N')
+        booking.destroy!
+        { listed: listed, count: count, newest_is_it: newest_is_it }
+      end
+
+      both = { listed: true, count: '1', newest_is_it: true }
+      neither = { listed: false, count: '0', newest_is_it: false }
+      expect(seen).to eq('ends as the six weeks open' => both, 'ends a minute before they open' => neither,
+                         'starts before them and ends inside' => both, 'starts on the last day and ends after' => both,
+                         'starts at their last microsecond' => both, 'spans them' => both,
+                         'starts as they close' => neither)
+    end
+
     it 'reads the six weeks in the zone of the request, not the machine' do
       Time.use_zone('Asia/Tokyo') do
         before = version

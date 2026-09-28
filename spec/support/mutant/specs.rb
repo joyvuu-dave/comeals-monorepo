@@ -174,7 +174,9 @@ MUTANT_SPEC_ROWS = {
     %w[MealSerializer BillSerializer EventSerializer GuestRoomReservationSerializer
        CommonHouseReservationSerializer ResidentBirthdaySerializer RotationSerializer],
   'spec/models/event_spec.rb' => %w[Event LiveUpdate BelongsToTheCommunity],
-  'spec/models/common_house_reservation_spec.rb' => %w[CommonHouseReservation LiveUpdate BelongsToTheCommunity],
+  # Also asks CalendarSerializer which months list a booking.
+  'spec/models/common_house_reservation_spec.rb' =>
+    %w[CommonHouseReservation LiveUpdate BelongsToTheCommunity CalendarSerializer],
   'spec/models/guest_room_reservation_spec.rb' => %w[GuestRoomReservation LiveUpdate BelongsToTheCommunity],
   'spec/models/rotation_spec.rb' => %w[Rotation LiveUpdate BelongsToTheCommunity],
   'spec/models/meal_spec.rb' => %w[Meal LiveUpdate BelongsToTheCommunity],
@@ -195,6 +197,9 @@ MUTANT_SPEC_ROWS = {
     %w[BalanceDisplayHelper SettlementLinesTable MoneyFieldHelper PhoneDisplayHelper ApplicationHelper
        MealCostSummary],
   'spec/models/community_dinner_start_times_spec.rb' => %w[Community],
+  # Checks the version against the common house bookings
+  # CalendarSerializer lists, edge by edge.
+  'spec/models/community_calendar_cache_spec.rb' => %w[Community CalendarSerializer],
   # Also pins Settlement.preview's cutoff guard, Reconciliation's
   # end-date rule and the default today of Meal.settleable_by.
   'spec/models/community_today_spec.rb' => %w[Community Meal Settlement Reconciliation],

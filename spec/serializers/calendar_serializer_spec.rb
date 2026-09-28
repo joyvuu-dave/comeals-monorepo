@@ -181,7 +181,7 @@ RSpec.describe CalendarSerializer, type: :serializer do
       expect(result[:guest_room_reservations].map { |chip| chip[:start].to_date }).to match_array(inside)
     end
 
-    it 'takes a common house booking by its start, from midnight on the first day to the last minute of the last' do
+    it 'takes a common house booking from midnight on the first day to the last minute of the last' do
       [[3, 31, 23, 50], [4, 1, 0, 0], [4, 30, 23, 50], [5, 1, 0, 0]].each do |month, day, hour, minute|
         start = Time.zone.local(2026, month, day, hour, minute)
         create(:common_house_reservation, community: community, resident: resident,
@@ -192,6 +192,38 @@ RSpec.describe CalendarSerializer, type: :serializer do
 
       starts = result[:common_house_reservations].pluck(:start)
       expect(starts).to contain_exactly(Time.zone.local(2026, 4, 1, 0, 0), Time.zone.local(2026, 4, 30, 23, 50))
+    end
+
+    # The same edges as the event example below. The admin form takes
+    # any start and end, so a booking can last days. Each one here is
+    # made alone, because two that overlap cannot both be saved.
+    # prosopite: false, because the month is built once per booking on
+    # purpose, and that repeats every query of the month.
+    it 'takes a common house booking that ends inside, starts inside, or spans the window, like an event',
+       prosopite: false do
+      bookings = {
+        'ends as the window opens' => [[3, 31, 22, 0], [4, 1, 0, 0]],
+        'ends a minute before it' => [[3, 31, 22, 0], [3, 31, 23, 59]],
+        'starts before it and ends inside' => [[3, 28, 18, 0], [4, 3, 10, 0]],
+        'starts inside and ends after' => [[4, 30, 23, 0], [5, 2, 10, 0]],
+        'starts at its last microsecond' => [[4, 30, 23, 59, 59.999999r], [5, 1, 2, 0]],
+        'spans it' => [[3, 20, 12, 0], [5, 10, 12, 0]],
+        'starts as it closes' => [[5, 1, 0, 0], [5, 1, 2, 0]]
+      }
+
+      taken = bookings.transform_values do |(from, to)|
+        booking = create(:common_house_reservation, community: community, resident: resident,
+                                                    start_date: Time.zone.local(2026, *from),
+                                                    end_date: Time.zone.local(2026, *to))
+        ids = serialize[:common_house_reservations].pluck(:id)
+        booking.destroy!
+        ids.map { |id| id == booking.cache_key_with_version ? :it : id }
+      end
+
+      expect(taken).to eq('ends as the window opens' => [:it], 'ends a minute before it' => [],
+                          'starts before it and ends inside' => [:it], 'starts inside and ends after' => [:it],
+                          'starts at its last microsecond' => [:it], 'spans it' => [:it],
+                          'starts as it closes' => [])
     end
 
     it 'takes an event that starts inside, ends inside, or spans the window, and not one entirely outside' do

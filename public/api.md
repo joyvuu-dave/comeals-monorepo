@@ -279,9 +279,11 @@ GET /communities/:id/calendar/:date
 `birthdays`, `common_house_reservations`, `guest_room_reservations`, and
 `events`. Every card has `id` (a cache key, not a record id), `type`,
 `title`, `start`, `end`, and usually `url` and `color`. Bill cards mark
-which days have a cook. A birthday card is dated in the year of the
-weeks shown, not this year, and names the age the person turns that
-day. A person born after the last day shown has no card.
+which days have a cook. An event or a common house reservation is in
+every grid it overlaps, so one that starts before the first day shown
+and ends inside the grid is in it. A birthday card is dated in the year
+of the weeks shown, not this year, and names the age the person turns
+that day. A person born after the last day shown has no card.
 
 The response carries an `ETag`. Send it back as `If-None-Match` to get
 `304` when nothing changed.

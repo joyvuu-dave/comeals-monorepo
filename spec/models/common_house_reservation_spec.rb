@@ -197,6 +197,40 @@ RSpec.describe CommonHouseReservation do
       # includes the first of its months, so March comes along.
       expect(pushed).to contain_exactly(key(2026, 3), key(2026, 4))
     end
+
+    # A month whose calendar lists the booking must be told, or an open
+    # tab keeps showing that month without it. The months that list it
+    # are asked of CalendarSerializer, with the six weeks
+    # CommunitiesController#calendar uses. Each booking crosses the edge
+    # of a month's six weeks: March's run March 1 to April 11, April's
+    # March 29 to May 9, and May's start on April 26.
+    it 'pushes every month whose calendar lists it' do
+      bookings = {
+        'starts before April' => [[3, 28, 18], [4, 3, 10]],
+        'ends as May opens' => [[4, 25, 22], [4, 26, 0]],
+        'starts on the last day of March' => [[4, 11, 23], [4, 12, 1]]
+      }
+
+      seen = bookings.transform_values do |(start_parts, end_parts)|
+        booking = nil
+        pushed = months_pushed do
+          booking = create(:common_house_reservation, community: community, resident: resident,
+                                                      start_date: Time.zone.local(2026, *start_parts),
+                                                      end_date: Time.zone.local(2026, *end_parts))
+        end
+        listed = (1..7).select do |month|
+          first = Date.new(2026, month, 1).beginning_of_week(:sunday)
+          six_weeks = { start_date: first.to_s, end_date: (first + 41).to_s }
+          CalendarSerializer.new(community, params: six_weeks).common_house_reservations_in_range(community).exists?
+        end
+        booking.destroy!
+        { listed: listed, all_pushed: listed.all? { |month| pushed.include?(key(2026, month)) } }
+      end
+
+      expect(seen).to eq('starts before April' => { listed: [3, 4], all_pushed: true },
+                         'ends as May opens' => { listed: [4, 5], all_pushed: true },
+                         'starts on the last day of March' => { listed: [3, 4], all_pushed: true })
+    end
   end
 
   describe '#start_date_is_before_end_date' do

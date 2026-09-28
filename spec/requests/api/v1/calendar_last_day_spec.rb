@@ -43,4 +43,23 @@ RSpec.describe 'the calendar on the last day of the grid' do
     expect(JSON.parse(calendar_body)['common_house_reservations'].pluck('id'))
       .to eq([reservation.cache_key_with_version])
   end
+
+  # The admin form takes any start and end, so a booking can last days.
+  # One that starts the day before the grid still holds April 2, so the
+  # grid must show it there; it used to be left out, and a person saw a
+  # free day that the server then refused.
+  it 'sends a common house reservation that starts before the first day and ends inside the grid' do
+    reservation = create(:common_house_reservation, community: community, resident: resident,
+                                                    start_date: Time.zone.local(2026, 3, 28, 18),
+                                                    end_date: Time.zone.local(2026, 4, 3, 10))
+
+    expect(JSON.parse(calendar_body)['common_house_reservations'].pluck('id'))
+      .to eq([reservation.cache_key_with_version])
+
+    post '/api/v1/common-house-reservations',
+         params: { token: token, resident_id: resident.id, start_year: 2026, start_month: 4, start_day: 2,
+                   start_hours: 12, start_minutes: 0, end_hours: 13, end_minutes: 0 }
+    expect(response).to have_http_status(:bad_request)
+    expect(response.parsed_body['message']).to eq('Time period is already taken')
+  end
 end
