@@ -301,7 +301,7 @@ describe("ResidentsLogin", () => {
   it("password reset posts the typed email", () => {
     axios.post.mockResolvedValue({
       status: 200,
-      data: { message: "Password reset email sent." },
+      data: { message: "Check your email." },
     });
     renderLogin();
 

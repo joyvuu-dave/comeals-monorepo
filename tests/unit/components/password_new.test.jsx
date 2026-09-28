@@ -92,9 +92,14 @@ describe("ResidentsPasswordNew", () => {
   });
 
   it("a refused password shows the reason and frees the form", async () => {
+    // What ResidentsController#password_new answers when the resident
+    // row itself no longer saves (#105): one line per field, then who
+    // can fix it.
+    const reason =
+      "Your password was not changed:\nName can't be blank\nPlease ask an admin to fix your account.";
     axios.get.mockResolvedValue({ status: 200, data: { name: "Jane Smith" } });
     axios.post.mockRejectedValue({
-      response: { status: 400, data: { message: "Invalid password." } },
+      response: { status: 400, data: { message: reason } },
     });
     renderForm();
 
@@ -103,9 +108,7 @@ describe("ResidentsPasswordNew", () => {
     fireEvent.click(screen.getByRole("button", { name: "Submit" }));
 
     await vi.waitFor(() => {
-      expect(toastStore.toasts.map((t) => t.message)).toEqual([
-        "Invalid password.",
-      ]);
+      expect(toastStore.toasts.map((t) => t.message)).toEqual([reason]);
     });
     expect(screen.getByRole("button", { name: "Submit" })).toBeEnabled();
   });
