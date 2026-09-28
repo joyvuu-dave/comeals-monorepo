@@ -688,6 +688,7 @@ RSpec.describe 'Meals API' do
       }
 
       expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq("Max can't be less than current number of attendees.")
       expect(meal.reload.max).to be_nil
     end
 
