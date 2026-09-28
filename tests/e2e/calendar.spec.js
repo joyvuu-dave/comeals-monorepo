@@ -1,5 +1,6 @@
 const { test, expect } = require("../helpers/test");
 const { setupAuthenticatedPage } = require("../helpers/setup");
+const mealFixture = require("../fixtures/meal.json");
 
 test.describe("Calendar", () => {
   test.beforeEach(async ({ page, context }) => {
@@ -52,11 +53,16 @@ test.describe("Calendar", () => {
     await page.waitForLoadState("networkidle");
     await expect(page.locator(".rbc-calendar")).toBeVisible({ timeout: 10000 });
 
-    // The "Next Meal" sidebar button navigates to the next upcoming meal
+    // The "Next Meal" sidebar button asks the server for the next
+    // meal. The mock answers with the fixture meal's id.
     await page.locator("text=Next Meal").click();
 
-    // Should navigate to the meal edit page
-    await expect(page).toHaveURL(/\/meals\/.*\/edit/, { timeout: 10000 });
+    // The page goes to that meal's own page: the id must come from the
+    // answer's meal_id, so /meals/undefined/edit fails here.
+    await expect(page).toHaveURL(
+      new RegExp(`/meals/${mealFixture.id}/edit/?$`),
+      { timeout: 10000 },
+    );
   });
 
   test("clicking a non-meal event opens modal", async ({ page }) => {

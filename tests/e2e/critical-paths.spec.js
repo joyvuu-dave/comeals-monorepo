@@ -7,6 +7,12 @@ const {
 } = require("../helpers/setup");
 const mealFixture = require("../fixtures/meal.json");
 
+// The number in one of the meal page's count circles (Total, Veg,
+// Late). The circle holds two divs: the label, then the number.
+function circleNumber(page, label) {
+  return page.locator(".info-circle", { hasText: label }).locator("div").nth(1);
+}
+
 test.describe("Critical Paths", () => {
   test("unauthenticated user is redirected to login from protected route", async ({
     page,
@@ -52,10 +58,13 @@ test.describe("Critical Paths", () => {
           id: 10,
           place_value: 3,
           description: "Kitchen cleaning rotation",
+          // Out of order on purpose: the server does not sort this
+          // list (Resident.eligible_cooks has no ORDER BY), the modal
+          // does.
           residents: [
+            { id: 3, display_name: "C - Alice Williams", signed_up: false },
             { id: 1, display_name: "A - Jane Smith", signed_up: true },
             { id: 2, display_name: "B - Bob Johnson", signed_up: false },
-            { id: 3, display_name: "C - Alice Williams", signed_up: false },
           ],
         }),
       });
@@ -86,7 +95,7 @@ test.describe("Critical Paths", () => {
     const bobEntry = modal.locator("li.text-bold", { hasText: "Bob Johnson" });
     await expect(bobEntry).toBeVisible();
 
-    // Residents should be sorted alphabetically
+    // The modal sorts the residents by display name.
     const listItems = modal.locator("li");
     const names = await listItems.allTextContents();
     expect(names).toEqual([
@@ -96,18 +105,30 @@ test.describe("Critical Paths", () => {
     ]);
 
     // API: GET to /rotations/10
-    expect(rotationGetUrl).toContain("/rotations/10");
+    expect(rotationGetUrl).toMatch(/\/api\/v1\/rotations\/10$/);
   });
 
   test("reconciled meal disables all controls", async ({ page, context }) => {
+    // Closed with max 5 and 3 eaters, so 2 seats are left. On an open
+    // or a full meal, other rules already stop a click on a name. Here
+    // only the reconciled rule stops a click from signing someone up.
     const reconciledMeal = {
       ...mealFixture,
       reconciled: true,
       closed: true,
       closed_at: "2026-01-15T20:00:00Z",
+      max: 5,
     };
 
     await setupAuthenticatedPage(page, context, { mealData: reconciledMeal });
+
+    const attendanceWrites = [];
+    await page.route("**/api/v1/meals/*/residents/**", (route) => {
+      attendanceWrites.push(
+        `${route.request().method()} ${route.request().url()}`,
+      );
+      route.fallback();
+    });
 
     await page.goto("/meals/42/edit/");
     await page.waitForLoadState("networkidle");
@@ -117,26 +138,77 @@ test.describe("Critical Paths", () => {
       timeout: 10000,
     });
 
-    // Open/Close button should be disabled
-    const closeButton = page.locator("text=Open / Close Meal");
-    await expect(closeButton).toBeDisabled();
+    // Open/Close button
+    await expect(page.locator("text=Open / Close Meal")).toBeDisabled();
 
-    // Cook select should be disabled
-    const cookSelect = page.locator('[aria-label="Select meal cook"]').first();
-    await expect(cookSelect).toBeDisabled();
+    // The menu
+    await expect(
+      page.locator('[aria-label="Enter meal description"]'),
+    ).toBeDisabled();
 
-    // Cost input should be disabled
-    const costInput = page.locator('[aria-label="Set meal cost"]').first();
-    await expect(costInput).toBeDisabled();
+    // Every cook row: the cook, the cost, and the no-cost switch
+    const cookSelects = page.locator('[aria-label="Select meal cook"]');
+    const cookRowCount = await cookSelects.count();
+    expect(cookRowCount).toBeGreaterThan(0);
+    for (let i = 0; i < cookRowCount; i++) {
+      await expect(cookSelects.nth(i)).toBeDisabled();
+      await expect(
+        page.locator('[aria-label="Set meal cost"]').nth(i),
+      ).toBeDisabled();
+      await expect(
+        page.locator('input[aria-label^="No cost button for"]').nth(i),
+      ).toBeDisabled();
+    }
 
-    // Late switch should be disabled (Alice, id=3, is attending)
-    await expect(page.locator("#late_switch_3")).toBeDisabled();
+    // Every extras choice
+    for (let n = 0; n <= 8; n++) {
+      await expect(
+        page.locator(`[aria-label="Set Extras to ${n}"]`),
+      ).toBeDisabled();
+    }
 
-    // Veg switch should be disabled
-    await expect(page.locator("#veg_switch_1")).toBeDisabled();
+    // Every resident row: late, veg, add guest and remove guest
+    for (const resident of mealFixture.residents) {
+      await expect(page.locator(`#late_switch_${resident.id}`)).toBeDisabled();
+      await expect(page.locator(`#veg_switch_${resident.id}`)).toBeDisabled();
+      await expect(
+        page.locator(
+          `button:has([aria-label="Add Guest of ${resident.name}"])`,
+        ),
+      ).toBeDisabled();
+      await expect(
+        page.locator(`[aria-label="Remove Guest of ${resident.name}"]`),
+      ).toBeDisabled();
+    }
 
-    // Extras radio buttons should be disabled
-    await expect(page.locator('[aria-label="Set Extras to 0"]')).toBeDisabled();
+    // The name cells are how a person signs up or leaves. A <td> has no
+    // disabled state: only the pointer-events rule in attendees_box.jsx
+    // stops the click, and jsdom ignores that rule, so only a real
+    // browser can check it.
+    const bobCell = page.getByRole("cell", {
+      name: "B - Bob Johnson",
+      exact: true,
+    });
+    const janeCell = page.getByRole("cell", {
+      name: "A - Jane Smith",
+      exact: true,
+    });
+    await expect(bobCell).toHaveCSS("pointer-events", "none");
+    await expect(janeCell).toHaveCSS("pointer-events", "none");
+
+    // A real mouse click in the middle of each cell changes nothing and
+    // sends nothing. (locator.click() would refuse to click an element
+    // that does not take pointer events, so this uses the mouse.)
+    for (const cell of [bobCell, janeCell]) {
+      const box = await cell.boundingBox();
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    }
+    await expect(bobCell).not.toHaveClass(/background-green/);
+    await expect(janeCell).toHaveClass(/background-green/);
+    await expect(circleNumber(page, "Total")).toHaveText("3");
+    // Give a request that should not exist time to show up.
+    await page.waitForTimeout(500);
+    expect(attendanceWrites).toEqual([]);
   });
 
   // Closing with a blank cook cost asks instead of blocking: forcing a
@@ -234,11 +306,16 @@ test.describe("Critical Paths", () => {
     let apiUrl = null;
     await setupAuthenticatedPage(page, context);
 
-    // Intercept Jane's resident endpoint (id=1) to capture the DELETE
+    // Intercept Jane's resident endpoint (id=1) to capture the DELETE.
+    // The body is what the server answers.
     await page.route("**/api/v1/meals/*/residents/1", (route) => {
       apiMethod = route.request().method();
       apiUrl = route.request().url();
-      route.fulfill({ status: 200, body: "{}" });
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ message: "MealResident destroyed." }),
+      });
     });
 
     await page.goto("/meals/42/edit/");
@@ -250,34 +327,30 @@ test.describe("Critical Paths", () => {
     });
     await expect(janeCell).toBeVisible({ timeout: 10000 });
 
-    // Before: Jane is attending (green background), Total=3
+    // Before: Jane is attending (green background). Total is Jane,
+    // Alice and Jane's guest; Late is Alice.
     await expect(janeCell).toHaveClass(/background-green/);
-    const totalCircle = page.locator(".info-circle", { hasText: "Total" });
-    await expect(totalCircle).toContainText("3");
+    await expect(circleNumber(page, "Total")).toHaveText("3");
+    await expect(circleNumber(page, "Late")).toHaveText("1");
+    const janeRow = janeCell.locator("xpath=ancestor::tr");
+    const janeCow = janeRow.locator('.badge img[alt="cow-icon"]');
+    await expect(janeCow).toHaveCount(1);
 
     // Click Jane's name to remove attendance
     await janeCell.click();
 
-    // After: Jane not attending (no green), Total decreases
+    // After: Jane is not attending. Her guest still eats: neither the
+    // client nor the server removes a guest when the host leaves. So
+    // Total is Alice plus Jane's guest, 2, and Late is still Alice.
     await expect(janeCell).not.toHaveClass(/background-green/, {
       timeout: 3000,
     });
-    // Total: was 3 (Jane + Alice + 1 guest). After removing Jane, her guest
-    // is also effectively removed from count. New total = Alice (1) = 1.
-    // But the guest might still count... depends on the computed.
-    // At minimum, total should be less than 3.
-    await expect
-      .poll(
-        async () => {
-          const text = await totalCircle.textContent();
-          return parseInt(text.match(/\d+/)?.[0] || "99");
-        },
-        { timeout: 3000 },
-      )
-      .toBeLessThan(3);
+    await expect(circleNumber(page, "Total")).toHaveText("2");
+    await expect(circleNumber(page, "Late")).toHaveText("1");
+    await expect(janeCow).toHaveCount(1);
 
     // API: DELETE (not POST) to remove attendance
     await expect.poll(() => apiMethod, { timeout: 3000 }).toBe("DELETE");
-    expect(apiUrl).toContain("/residents/1");
+    expect(apiUrl).toMatch(/\/api\/v1\/meals\/42\/residents\/1$/);
   });
 });
