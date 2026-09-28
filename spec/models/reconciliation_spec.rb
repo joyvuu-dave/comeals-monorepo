@@ -61,6 +61,21 @@ RSpec.describe Reconciliation do
     end
   end
 
+  describe '#settlement_balances when the ledger it is given does not balance' do
+    # A meal's lines always sum to zero, so this too can only be reached by
+    # replacing a part. The refusal comes from allocate_to_cents, which
+    # knows the reconciliation only by the id this method passes it.
+    it 'refuses to round it, and names the reconciliation' do
+      settleable_meal
+      reconciliation = settle!(cutoff: Date.yesterday)
+      ledger = reconciliation.settlement_ledger
+      allow(ledger).to receive(:balances).and_return({ 1 => BigDecimal('0.01') })
+
+      expect { reconciliation.settlement_balances(ledger) }
+        .to raise_error(RuntimeError, /do not sum to zero for reconciliation #{reconciliation.id}\. Sum: 0\.01\./)
+    end
+  end
+
   describe 'what a settlement claims' do
     it 'assigns unreconciled meals with bills to the new reconciliation' do
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
