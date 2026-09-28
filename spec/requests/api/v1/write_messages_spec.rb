@@ -205,11 +205,21 @@ RSpec.describe 'API write responses' do
       expect(response.parsed_body).to eq('name' => 'Sarah C')
     end
 
-    it 'answers a reset with an unknown token in one word' do
+    # The reset page reads the name first and posts the password later. In
+    # between, the link can be used in another tab or replaced by a newer
+    # request. The person is told the link is no good, in the words the
+    # page shows when it loads with a bad link, so they know to ask for a
+    # new one.
+    it 'answers a reset with an unknown token in the words the reset page uses for a bad link' do
+      get '/api/v1/residents/name/no-such-token'
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq('message' => 'Password reset link is incorrect or expired.')
+
       post '/api/v1/residents/password-reset/no-such-token', params: { password: 'new-secret' }
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq('message' => 'Error.')
+      expect(response.parsed_body).to eq('message' => 'Password reset link is incorrect or expired.')
     end
 
     it 'names the email it could not find' do

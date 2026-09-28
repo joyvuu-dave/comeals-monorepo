@@ -93,6 +93,22 @@ RSpec.describe 'POST /api/v1/residents/password-reset' do
 
       post "/api/v1/residents/password-reset/#{token}", params: { password: 'anotherpassword' }
       expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Password reset link is incorrect or expired.')
+      expect(resident.reload.authenticate('newpassword123')).to eq(resident)
+    end
+
+    # The page loaded with a good link, and then the person asked for a
+    # second link before pressing Submit. The first link no longer matches.
+    it 'refuses a link that a newer reset request replaced' do
+      old_token = resident.reset_password_token
+      request_reset(email: 'sarah@example.com')
+
+      post "/api/v1/residents/password-reset/#{old_token}", params: { password: 'newpassword123' }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Password reset link is incorrect or expired.')
+      expect(resident.reload.reset_password_token).not_to eq(old_token)
+      expect(resident.authenticate('newpassword123')).to be(false)
     end
 
     # Regression test for BUG-4: password reset tokens must expire.

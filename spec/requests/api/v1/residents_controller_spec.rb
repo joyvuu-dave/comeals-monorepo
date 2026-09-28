@@ -102,7 +102,7 @@ RSpec.describe 'Residents API' do
       get '/api/v1/residents/name/bogus-token'
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body['message']).to include('incorrect or expired')
+      expect(response.parsed_body['message']).to eq('Password reset link is incorrect or expired.')
     end
 
     it 'returns 400 for an expired reset token' do
@@ -158,6 +158,7 @@ RSpec.describe 'Residents API' do
       }
 
       expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Password reset link is incorrect or expired.')
     end
   end
 

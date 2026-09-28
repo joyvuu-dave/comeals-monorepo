@@ -6,6 +6,12 @@ module Api
     class ResidentsController < ApiController
       RESET_TOKEN_LIFETIME = 24.hours
 
+      # The answer for a reset token no resident has. The reset page asks
+      # for the name first and then posts the password, and the token can
+      # stop matching in between (used in another tab, or replaced by a
+      # newer reset request), so both answer with the same words.
+      UNKNOWN_RESET_TOKEN = 'Password reset link is incorrect or expired.'
+
       before_action :authenticate, only: [:show_id]
 
       # GET /api/v1/residents/id
@@ -17,9 +23,7 @@ module Api
       def show_name
         resident = Resident.find_by(reset_password_token: params[:token])
 
-        if resident.nil?
-          return render json: { message: 'Password reset link is incorrect or expired.' }, status: :bad_request
-        end
+        return render json: { message: UNKNOWN_RESET_TOKEN }, status: :bad_request if resident.nil?
 
         sent_at = resident.reset_password_sent_at
         if sent_at.nil? || sent_at < RESET_TOKEN_LIFETIME.ago
@@ -79,7 +83,7 @@ module Api
       def password_new
         resident = Resident.find_by(reset_password_token: params[:token])
 
-        return render json: { message: 'Error.' }, status: :bad_request if resident.nil?
+        return render json: { message: UNKNOWN_RESET_TOKEN }, status: :bad_request if resident.nil?
 
         sent_at = resident.reset_password_sent_at
         if sent_at.nil? || sent_at < RESET_TOKEN_LIFETIME.ago
