@@ -23,7 +23,7 @@ RSpec.describe 'meal attendance for a resident who does not exist' do
 
   it 'refuses to add a guest for them' do
     expect do
-      post "/api/v1/meals/#{meal.id}/residents/999999/guests", params: { token: token, multiplier: 2 }
+      post "/api/v1/meals/#{meal.id}/residents/999999/guests", params: { token: token, vegetarian: false }
     end.not_to change(Guest, :count)
 
     expect(response).to have_http_status(:bad_request)

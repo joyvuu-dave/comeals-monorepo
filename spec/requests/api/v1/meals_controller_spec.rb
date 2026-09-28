@@ -14,15 +14,29 @@ RSpec.describe 'Meals API' do
   # with token auth alone — no CSRF token required. This is the safety net for
   # removing `skip_before_action :verify_authenticity_token` from
   # ApplicationController (which only needs to affect ActiveAdmin, not the API).
+  #
+  # The test environment turns forgery protection off for every controller
+  # (config/environments/test.rb), so these examples turn it back on, the
+  # way production runs, as spec/requests/admin/csrf_failure_spec.rb does.
+  # Without that they would pass even if ApiController checked CSRF.
   # ---------------------------------------------------------------------------
   describe 'API write operations work without CSRF tokens' do
     let(:meal) { create(:meal, community: community) }
+
+    around do |example|
+      was = ActionController::Base.allow_forgery_protection
+      ActionController::Base.allow_forgery_protection = true
+      example.run
+    ensure
+      ActionController::Base.allow_forgery_protection = was
+    end
 
     it 'POST (create_meal_resident) succeeds with just an auth token' do
       post "/api/v1/meals/#{meal.id}/residents/#{resident.id}",
            params: { token: token, late: false, vegetarian: false }
 
       expect(response).to have_http_status(:ok)
+      expect(meal.meal_residents.where(resident: resident).count).to eq(1)
     end
 
     it 'PATCH (update_description) succeeds with just an auth token' do
@@ -30,6 +44,7 @@ RSpec.describe 'Meals API' do
             params: { token: token, description: 'Test menu' }
 
       expect(response).to have_http_status(:ok)
+      expect(meal.reload.description).to eq('Test menu')
     end
 
     it 'DELETE (destroy_meal_resident) succeeds with just an auth token' do
@@ -39,6 +54,7 @@ RSpec.describe 'Meals API' do
              params: { token: token }
 
       expect(response).to have_http_status(:ok)
+      expect(meal.meal_residents.where(resident: resident)).not_to exist
     end
   end
 
@@ -209,6 +225,8 @@ RSpec.describe 'Meals API' do
       }
 
       expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Meal has no open spots.')
+      expect(meal.meal_residents.find_by(resident: resident)).to be_nil
     end
 
     it 'allows signup when meal is closed but has open extras spots' do
@@ -445,6 +463,8 @@ RSpec.describe 'Meals API' do
             params: { token: token, late: true }
 
       expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Change not permitted. Meal has already been reconciled.')
+      expect(meal.meal_residents.find_by(resident: resident).late).to be(false)
     end
 
     it 'blocks create_guest on a reconciled meal' do
@@ -491,6 +511,8 @@ RSpec.describe 'Meals API' do
             params: { token: token, closed: true }
 
       expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Change not permitted. Meal has already been reconciled.')
+      expect(meal.reload.closed).to be(false)
     end
   end
 
@@ -505,6 +527,10 @@ RSpec.describe 'Meals API' do
   # ---------------------------------------------------------------------------
   describe 'reconciliation racing the mutation endpoints' do
     let(:meal) { create(:meal, community: community) }
+    # The sentence the re-check under the lock answers with. The model
+    # guards say "reconciled" too, in other words, so the exact sentence is
+    # what shows the re-check did the refusing.
+    let(:reconciled_message) { 'Change not permitted. Meal has already been reconciled.' }
 
     before do
       # end_date predates the meal so creating the reconciliation does not
@@ -525,17 +551,17 @@ RSpec.describe 'Meals API' do
       post "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: { token: token, late: false, vegetarian: false }
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body['message']).to include('reconciled')
+      expect(response.parsed_body['message']).to eq(reconciled_message)
       expect(MealResident.where(meal: meal)).to be_empty
     end
 
     it 'create_guest returns 400 and adds nothing when the meal is swept mid-request' do
       create(:meal_resident, meal: meal, resident: resident, community: community)
 
-      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests", params: { token: token, multiplier: 2 }
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests", params: { token: token, vegetarian: false }
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body['message']).to include('reconciled')
+      expect(response.parsed_body['message']).to eq(reconciled_message)
       expect(Guest.where(meal: meal)).to be_empty
     end
 
@@ -545,7 +571,7 @@ RSpec.describe 'Meals API' do
       delete "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: { token: token }
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body['message']).to include('reconciled')
+      expect(response.parsed_body['message']).to eq(reconciled_message)
       expect(MealResident.exists?(mr.id)).to be true
     end
 
@@ -555,20 +581,21 @@ RSpec.describe 'Meals API' do
       patch "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: { token: token, late: true }
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body['message']).to include('reconciled')
+      expect(response.parsed_body['message']).to eq(reconciled_message)
       expect(mr.reload.late).to be(false)
     end
 
     # set_guest loads through @meal.guests, so inverse_of pins the guest's
-    # meal to the request-start snapshot — without the lock's reload the
-    # model guard structurally cannot see a mid-request sweep.
+    # meal to the request-start snapshot. The guest's own reconciled check
+    # reads the meals table, so it would refuse this too, in its own words;
+    # the exact sentence shows the lock's re-check answered first.
     it 'destroy_guest returns 400 and keeps the guest when the meal is swept mid-request' do
       guest = create(:guest, meal: meal, resident: resident)
 
       delete "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests/#{guest.id}", params: { token: token }
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body['message']).to include('reconciled')
+      expect(response.parsed_body['message']).to eq(reconciled_message)
       expect(Guest.exists?(guest.id)).to be true
     end
 
@@ -578,7 +605,7 @@ RSpec.describe 'Meals API' do
       patch "/api/v1/meals/#{meal.id}/max", params: { token: token, max: 10 }
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body['message']).to include('reconciled')
+      expect(response.parsed_body['message']).to eq(reconciled_message)
       expect(meal.reload.max).to be_nil
     end
 
@@ -586,7 +613,7 @@ RSpec.describe 'Meals API' do
       patch "/api/v1/meals/#{meal.id}/description", params: { token: token, description: 'Late edit' }
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body['message']).to include('reconciled')
+      expect(response.parsed_body['message']).to eq(reconciled_message)
       expect(meal.reload.description).not_to eq('Late edit')
     end
 
@@ -594,7 +621,7 @@ RSpec.describe 'Meals API' do
       patch "/api/v1/meals/#{meal.id}/closed", params: { token: token, closed: true }
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body['message']).to include('reconciled')
+      expect(response.parsed_body['message']).to eq(reconciled_message)
       expect(meal.reload.closed).to be(false)
     end
   end
@@ -661,6 +688,7 @@ RSpec.describe 'Meals API' do
       }
 
       expect(response).to have_http_status(:bad_request)
+      expect(meal.reload.max).to be_nil
     end
 
     # A close request that failed can leave the client sending a cap for a
@@ -732,6 +760,11 @@ RSpec.describe 'Meals API' do
   # that guard is deliberate and spec/services/retry_on_conflict_spec.rb
   # counts the attempts. Here the point is that the refusal arrives as a 409
   # with a message the shared screen can show, never as a 500.
+  #
+  # The stub refuses the lock itself, before the write starts, so the row
+  # checks here only show that nothing is written before the lock. A
+  # refusal after the write, and its rollback, is in
+  # spec/requests/api/v1/meal_write_retry_spec.rb.
   # ---------------------------------------------------------------------------
   describe 'a write refused for a conflict' do
     let(:meal) { create(:meal, community: community) }
@@ -791,8 +824,10 @@ RSpec.describe 'Meals API' do
       expect(response).to have_http_status(:conflict)
     end
 
-    # The models push after commit (LiveUpdate), and a rolled-back write
-    # drops its pushes with it.
+    # The refusal comes before the write here, so this checks that the
+    # conflict answer pushes nothing of its own. That a rolled-back write
+    # drops its pushes is checked in meal_write_retry_spec.rb and
+    # spec/services/live_update_spec.rb.
     it 'sends no Pusher event, because nothing changed' do
       meal
       resident
