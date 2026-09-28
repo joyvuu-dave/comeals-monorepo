@@ -3,64 +3,72 @@
 require 'rails_helper'
 
 # ADR 0002: authentication is the one boundary the API actually keeps. Every
-# write must require a signed-in resident, and so must the two authenticated
-# read endpoints the audit flagged (birthdays, calendar). These are pinned in
-# one place so a stray `only:`/`except:` on a controller's `before_action
-# :authenticate` — which would silently open a write — fails a test.
+# /api/v1 route needs a signed-in resident, except the short list of public
+# routes below. The rest is read from routes.rb, not typed here, so a new
+# route is covered the day it is added, and a stray `only:`/`except:` on a
+# controller's `before_action :authenticate` fails a test.
 #
 # Auth runs before any record lookup, so a nonexistent id still yields 401,
-# never 404. The routes are listed with placeholder ids for that reason.
+# never 404. That is why every placeholder in a path can be filled with 1.
 RSpec.describe 'API authentication boundary' do
-  # method, path — every state-changing route plus the flagged authenticated GETs
-  endpoints = [
-    # Meals: attendance, guests, and the shared meal controls
-    [:post,   '/api/v1/meals/1/residents/1'],
-    [:delete, '/api/v1/meals/1/residents/1'],
-    [:patch,  '/api/v1/meals/1/residents/1'],
-    [:post,   '/api/v1/meals/1/residents/1/guests'],
-    [:delete, '/api/v1/meals/1/residents/1/guests/1'],
-    [:patch,  '/api/v1/meals/1/description'],
-    [:patch,  '/api/v1/meals/1/max'],
-    [:patch,  '/api/v1/meals/1/bills'],
-    [:patch,  '/api/v1/meals/1/closed'],
-    # Events
-    [:post,   '/api/v1/events'],
-    [:patch,  '/api/v1/events/1/update'],
-    [:delete, '/api/v1/events/1/delete'],
-    # Guest room reservations
-    [:post,   '/api/v1/guest-room-reservations'],
-    [:patch,  '/api/v1/guest-room-reservations/1/update'],
-    [:delete, '/api/v1/guest-room-reservations/1/delete'],
-    # Common house reservations
-    [:post,   '/api/v1/common-house-reservations'],
-    [:patch,  '/api/v1/common-house-reservations/1/update'],
-    [:delete, '/api/v1/common-house-reservations/1/delete'],
-    # Session teardown
-    [:delete, '/api/v1/sessions/current'],
-    # Authenticated reads the audit flagged as unpinned
-    [:get,    '/api/v1/communities/1/birthdays'],
-    [:get,    '/api/v1/communities/1/hosts'],
-    [:get,    '/api/v1/communities/1/calendar/2026-01-01'],
-    [:get,    '/api/v1/residents/id'],
-    [:get,    '/api/v1/reconciliations/preview'],
-    [:post,   '/api/v1/reconciliations'],
-    # Single-record reads, listed so the whole read side stays pinned
-    [:get,    '/api/v1/rotations/1'],
-    [:get,    '/api/v1/events/1'],
-    [:get,    '/api/v1/guest-room-reservations/1'],
-    [:get,    '/api/v1/common-house-reservations/1']
-  ]
+  # Anyone may call these with no sign-in: signing in, resetting a
+  # password, the two iCal feeds a calendar app polls, and the version
+  # check. Each is [verb, path] as routes.rb draws it.
+  def self.public_routes
+    [
+      %w[POST /api/v1/residents/token],
+      %w[POST /api/v1/residents/password-reset],
+      %w[POST /api/v1/residents/password-reset/:token],
+      %w[GET /api/v1/residents/name/:token],
+      %w[GET /api/v1/residents/:id/ical],
+      %w[GET /api/v1/communities/:id/ical],
+      %w[GET /api/v1/version]
+    ]
+  end
 
-  endpoints.each do |method, path|
-    describe "#{method.to_s.upcase} #{path}" do
+  def self.api_routes
+    Rails.application.routes.routes.filter_map do |route|
+      path = route.path.spec.to_s.delete_suffix('(.:format)')
+      [route.verb, path] if path.start_with?('/api/v1/')
+    end
+  end
+
+  def filled(path)
+    path.gsub(':date', '2026-01-01').gsub(/:\w+/, '1')
+  end
+
+  it 'names only public routes that exist' do
+    expect(self.class.api_routes).to include(*self.class.public_routes)
+  end
+
+  (api_routes - public_routes).each do |verb, path|
+    describe "#{verb} #{path}" do
       it 'returns 401 with no token' do
-        public_send(method, path)
+        public_send(verb.downcase, filled(path))
         expect(response).to have_http_status(:unauthorized)
       end
 
       it 'returns 401 with a garbage token' do
-        public_send(method, path, params: { token: 'not-a-real-token' })
+        public_send(verb.downcase, filled(path), params: { token: 'not-a-real-token' })
         expect(response).to have_http_status(:unauthorized)
+      end
+    end
+  end
+
+  # The other half of the list: a route named public really is. The iCal
+  # feeds look up their record first, so they get real ids.
+  describe 'the public routes' do
+    let(:community) { create(:community) }
+    let(:resident) { create(:resident, community: community, unit: create(:unit, community: community)) }
+
+    public_routes.each do |verb, path|
+      it "#{verb} #{path} answers without a token" do
+        url = filled(path.sub('/residents/:id/', "/residents/#{resident.id}/")
+                         .sub('/communities/:id/', "/communities/#{community.id}/"))
+
+        public_send(verb.downcase, url)
+
+        expect(response).not_to have_http_status(:unauthorized)
       end
     end
   end
