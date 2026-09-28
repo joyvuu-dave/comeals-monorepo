@@ -114,8 +114,9 @@ RSpec.describe 'the lock order of an admin write against an API write on the sam
     # The API's write stands; the admin was told nothing was saved, and
     # nothing was.
     expect(bill.reload.amount).to eq(BigDecimal('99'))
-    expect(reported).to include(an_instance_of(ActiveRecord::SerializationFailure))
-    expect(reported).not_to include(an_instance_of(ActiveRecord::Deadlocked))
+    # One read of the queue: `reported` empties it. Exactly one report,
+    # and it is the conflict, so no deadlock was reported next to it.
+    expect(reported).to contain_exactly(an_instance_of(ActiveRecord::SerializationFailure))
   end
 
   # The common case: two people editing one meal's different rows. With

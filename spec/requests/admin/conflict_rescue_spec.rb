@@ -47,12 +47,23 @@ RSpec.describe 'Admin conflict rescue' do
                                   'Nothing was saved. Try again.')
     end
 
-    it 'writes nothing' do
-      refuse_the_next_write
+    # A real refusal can come after the INSERT, at any statement of the
+    # transaction. Unit's after_save runs after the INSERT and inside the
+    # save's transaction, so raising there leaves a row for the rollback
+    # to undo. The message says "Nothing was saved", so the row must be
+    # gone by the time the person reads it.
+    it 'writes nothing, even when the refusal comes after the row was inserted' do
+      # rubocop:disable-next RSpec/AnyInstance
+      allow_any_instance_of(Unit).to receive(:note_live_update)
+        .and_raise(ActiveRecord::SerializationFailure, 'could not serialize access')
 
       expect do
         post '/units', params: { unit: { name: 'A-1' } }
       end.not_to change(Unit, :count)
+
+      expect(Unit.exists?(name: 'A-1')).to be(false)
+      expect(flash[:alert]).to eq('Someone else was changing this at the same time. ' \
+                                  'Nothing was saved. Try again.')
     end
 
     it 'goes back to the page the person came from' do
@@ -116,15 +127,27 @@ RSpec.describe 'Admin conflict rescue' do
     expect(flash[:alert]).to match(/nothing was saved/i)
   end
 
-  # The handler is registered from a to_prepare block, which runs again on
-  # every reload in development. rescue_from appends without checking for a
-  # duplicate, so without the guard in the initializer the list would grow on
-  # each reload.
-  it 'registers the handler exactly once' do
-    matching = ActiveAdmin::BaseController.rescue_handlers
-                                          .count { |klass, _| klass == 'ActiveRecord::TransactionRollbackError' }
+  # The handlers are registered from a to_prepare block, which runs again
+  # on every reload in development. rescue_from appends without checking
+  # for a duplicate, so without the guard in the initializer the list would
+  # grow on each reload. The test environment never reloads, so the example
+  # runs the initializer's block a second time itself, the way a reload
+  # would. It runs only that block: the full prepare! would also unload and
+  # reload every ActiveAdmin resource for the rest of the suite.
+  it 'registers each handler exactly once, even when the block runs again' do
+    initializer = 'config/initializers/active_admin_conflict_rescue.rb'
+    block = Rails.application.reloader._prepare_callbacks.map(&:filter).find do |filter|
+      filter.respond_to?(:source_location) && filter.source_location&.first&.end_with?(initializer)
+    end
+    expect(block).not_to be_nil, "no to_prepare block from #{initializer}"
 
-    expect(matching).to eq(1)
+    block.call
+
+    handled = ActiveAdmin::BaseController.rescue_handlers.map(&:first)
+    expect(handled.tally.slice('ActiveRecord::TransactionRollbackError', 'ActiveRecord::LockWaitTimeout',
+                               'ActiveRecord::ConnectionTimeoutError'))
+      .to eq('ActiveRecord::TransactionRollbackError' => 1, 'ActiveRecord::LockWaitTimeout' => 1,
+             'ActiveRecord::ConnectionTimeoutError' => 1)
   end
 
   # The reason the retry is not here. If a future ActiveAdmin stops memoizing
