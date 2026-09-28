@@ -249,16 +249,10 @@ class Resident < ApplicationRecord
     self.email = nil if email == ''
   end
 
-  # nil when no birthday is given (an adult who left it blank).
-  sig { returns(T.nilable(Integer)) }
-  def age
-    age_on(T.must(community).today)
-  end
-
   # The age on a date, counted the way people count: a year is added on
   # the birthday itself, and a February 29 birthday is added on March 1
   # in a year with no February 29. The adult_on scope says the same in
-  # SQL.
+  # SQL. nil when no birthday is given (an adult who left it blank).
   sig { params(date: Date).returns(T.nilable(Integer)) }
   def age_on(date)
     birthday = self.birthday

@@ -29,10 +29,11 @@ RSpec.describe Community, '#today' do
     expect(rotation.touched_meals).to include(meal)
   end
 
-  it 'Resident#age turns a year older on the birthday, in the community zone' do
-    resident = create(:resident, community: community, unit: unit, birthday: Date.new(2016, 4, 10), multiplier: 1)
+  it 'Resident#child? moves to the full price on the twelfth birthday, in the community zone' do
+    community.update!(free_below_age: 5, full_price_age: 12)
+    resident = create(:resident, community: community, unit: unit, birthday: Date.new(2014, 4, 10))
 
-    expect(resident.age).to eq(10)
+    expect(resident).not_to be_child
   end
 
   it 'Community#create_next_rotation starts from the community day' do

@@ -7,6 +7,8 @@ require 'rails_helper'
 # rule (Resident#age_on, #multiplier_on) and the SQL rule the hosts list
 # uses (Resident.adult_on). The day that can split them is February 29.
 RSpec.describe Resident do
+  include ActiveSupport::Testing::TimeHelpers
+
   let(:community) { create(:community, free_below_age: 5, full_price_age: 12) }
   let(:unit) { create(:unit, community: community) }
 
@@ -44,6 +46,29 @@ RSpec.describe Resident do
   end
 
   describe '#age_on' do
+    it 'is nil for an adult with no birthday' do
+      resident = create(:resident, community: community, unit: unit, birthday: nil)
+
+      expect(resident.age_on(Date.new(2026, 6, 15))).to be_nil
+    end
+
+    it 'adds a year on the birthday itself, whether the birthday is in this month or another' do
+      ages = [Date.new(2000, 6, 14), Date.new(2000, 6, 15), Date.new(2000, 6, 16),
+              Date.new(2000, 5, 31), Date.new(2000, 7, 1)].map do |birthday|
+        resident_born(birthday).age_on(Date.new(2026, 6, 15))
+      end
+
+      expect(ages).to eq([26, 26, 25, 26, 25])
+    end
+
+    it 'counts a January birthday as passed and a late-December one as not, in mid-December' do
+      ages = [Date.new(2000, 1, 10), Date.new(2000, 12, 20)].map do |birthday|
+        resident_born(birthday).age_on(Date.new(2026, 12, 15))
+      end
+
+      expect(ages).to eq([26, 25])
+    end
+
     it 'counts a February 29 birthday on March 1 in a year with no February 29' do
       resident = resident_born(Date.new(2020, 2, 29))
 
@@ -90,6 +115,19 @@ RSpec.describe Resident do
       expect(resident_born(community.today - 8.years)).to be_child
       expect(resident_born(community.today - 12.years)).not_to be_child
       expect(create(:resident, community: community, unit: unit, birthday: nil)).not_to be_child
+    end
+
+    it "reads today in the community's zone, not the app's" do
+      honolulu = create(:community, timezone: 'Pacific/Honolulu', free_below_age: 5, full_price_age: 12)
+      # 08:30 UTC on December 16 is 00:30 on the 16th in Los Angeles (the
+      # app zone) and 22:30 on the 15th in Honolulu: the twelfth birthday
+      # has come in the app zone, and not yet for the community.
+      travel_to Time.utc(2026, 12, 16, 8, 30) do
+        resident = create(:resident, community: honolulu, unit: create(:unit, community: honolulu),
+                                     birthday: Date.new(2014, 12, 16))
+
+        expect(resident).to be_child
+      end
     end
   end
 end

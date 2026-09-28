@@ -292,54 +292,6 @@ RSpec.describe Resident do
   end
 
   # ---------------------------------------------------------------------------
-  # Age
-  # ---------------------------------------------------------------------------
-  describe '#age' do
-    include ActiveSupport::Testing::TimeHelpers
-
-    # Every example here fixes the clock. An age read from the real clock
-    # changes with the day the suite runs, and a birthday built from
-    # "today + 30" lands in January from December 2 to December 31.
-    it 'returns nil for an adult with no birthday' do
-      resident = create(:resident, community: community, unit: unit, birthday: nil)
-
-      expect(resident.age).to be_nil
-    end
-
-    it 'turns on the birthday itself, whether the birthday is in this month or another' do
-      travel_to Time.zone.local(2026, 6, 15, 12, 0) do
-        ages = [Date.new(2000, 6, 14), Date.new(2000, 6, 15), Date.new(2000, 6, 16),
-                Date.new(2000, 5, 31), Date.new(2000, 7, 1)].map do |birthday|
-          create(:resident, community: community, unit: unit, birthday: birthday).age
-        end
-
-        expect(ages).to eq([26, 26, 25, 26, 25])
-      end
-    end
-
-    it 'counts a January birthday as passed and a late-December one as not, in mid-December' do
-      travel_to Time.zone.local(2026, 12, 15, 12, 0) do
-        ages = [Date.new(2000, 1, 10), Date.new(2000, 12, 20)].map do |birthday|
-          create(:resident, community: community, unit: unit, birthday: birthday).age
-        end
-
-        expect(ages).to eq([26, 25])
-      end
-    end
-
-    it "counts the age on the community's day, not the app time zone's day" do
-      honolulu = create(:community, timezone: 'Pacific/Honolulu')
-      # 2026-12-16 08:30 UTC = 00:30 on Dec 16 in Los Angeles = 22:30 on Dec 15 in Honolulu.
-      travel_to Time.utc(2026, 12, 16, 8, 30) do
-        resident = create(:resident, community: honolulu, unit: create(:unit, community: honolulu),
-                                     birthday: Date.new(2000, 12, 16))
-
-        expect(resident.age).to eq(25)
-      end
-    end
-  end
-
-  # ---------------------------------------------------------------------------
   # Real-time notifications
   # ---------------------------------------------------------------------------
   describe 'the residents channel (note_live_update)' do
