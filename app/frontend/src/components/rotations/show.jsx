@@ -8,8 +8,18 @@ const styles = {
   },
 };
 
+// What the modal shows before an answer arrives.
+const NOTHING_YET = {
+  placeValue: null,
+  residents: [],
+  description: "",
+  loaded: false,
+  errored: false,
+};
+
 // Render the modal scaffold from the first frame. The residents list
-// fetches in a mount effect; skeleton covers the small latency gap.
+// is fetched in an effect, once for each id; "Loading..." shows until
+// the answer arrives.
 //
 // `id` is the database id from the URL. The number people see is the
 // rotation's `place_value` (its position in date order), which is what
@@ -17,11 +27,18 @@ const styles = {
 // reads "Rotation" alone until then. Showing `id` instead was a bug:
 // the bar said "Rotation 104" and the modal said "Rotation 886".
 function RotationsShow({ id }) {
-  const [placeValue, setPlaceValue] = useState(null);
-  const [residents, setResidents] = useState([]);
-  const [description, setDescription] = useState("");
-  const [loaded, setLoaded] = useState(false);
-  const [errored, setErrored] = useState(false);
+  // Everything the modal shows, with the id it belongs to. The calendar
+  // renders this modal without a key, so a new id in the URL gives this
+  // same component a new id, and nothing of the old id may show for it.
+  // So a new id starts over from NOTHING_YET during the render itself.
+  // React then throws this render away and renders again at once with
+  // that state, before anything is drawn (React's docs call this
+  // "adjusting some state when a prop changes").
+  const [shown, setShown] = useState({ id: id, ...NOTHING_YET });
+  if (shown.id !== id) {
+    setShown({ id: id, ...NOTHING_YET });
+  }
+  const { placeValue, residents, description, loaded, errored } = shown;
 
   useEffect(
     function () {
@@ -35,15 +52,19 @@ function RotationsShow({ id }) {
           var sorted = [...response.data.residents].sort(function (a, b) {
             return a.display_name < b.display_name ? -1 : 1;
           });
-          setPlaceValue(response.data.place_value);
-          setResidents(sorted);
-          setDescription(response.data.description);
-          setLoaded(true);
+          setShown({
+            id: id,
+            placeValue: response.data.place_value,
+            residents: sorted,
+            description: response.data.description,
+            loaded: true,
+            errored: false,
+          });
         })
         .catch(function (error) {
           handleAxiosError(error, { silent: true });
           if (cancelled) return;
-          setErrored(true);
+          setShown({ id: id, ...NOTHING_YET, errored: true });
         });
 
       return function () {

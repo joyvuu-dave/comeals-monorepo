@@ -85,9 +85,10 @@ describe("RotationsShow", () => {
   });
 
   // The calendar renders this modal without a key, so a new id in the
-  // URL gives the same component a new id. The request for the old id
-  // may still be open, and its answer must not replace the new one.
-  describe("when the id changes while a request is open", () => {
+  // URL gives the same component a new id. Nothing of the old id may
+  // show for the new one: not its answer if it arrives late, and not
+  // what it already showed (its number, description, list, or failure).
+  describe("when the id changes", () => {
     function deferredGets() {
       const pending = {};
       axios.get.mockImplementation(
@@ -99,44 +100,146 @@ describe("RotationsShow", () => {
       return pending;
     }
 
+    const ROTATION_10 = {
+      status: 200,
+      data: {
+        id: 10,
+        place_value: 3,
+        description: "Kitchen cleaning",
+        residents: [{ id: 1, display_name: "A - Amy Chu", signed_up: false }],
+      },
+    };
     const ROTATION_11 = {
       status: 200,
       data: {
         id: 11,
         place_value: 4,
         description: "Window cleaning",
-        residents: [],
+        residents: [{ id: 2, display_name: "B - Bob Lee", signed_up: true }],
       },
     };
 
+    function listed(container) {
+      return [...container.querySelectorAll("li")].map((li) => li.textContent);
+    }
+
+    function expectLoadingOnly(container) {
+      expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+        /^Rotation$/,
+      );
+      expect(screen.queryByRole("heading", { level: 2 })).toBeNull();
+      expect(screen.getByText("Loading...")).toBeInTheDocument();
+      expect(
+        screen.queryByText("Failed to load rotation."),
+      ).not.toBeInTheDocument();
+      expect(listed(container)).toEqual([]);
+      expect(container.firstChild).not.toHaveAttribute("data-populated");
+    }
+
+    function expectRotation11(container) {
+      expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+        /^Rotation 4$/,
+      );
+      expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent(
+        /^Window cleaning$/,
+      );
+      expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
+      expect(
+        screen.queryByText("Failed to load rotation."),
+      ).not.toBeInTheDocument();
+      expect(listed(container)).toEqual(["B - Bob Lee"]);
+      expect(container.firstChild).toHaveAttribute("data-populated", "true");
+    }
+
+    it("shows the new id loading, not the old rotation, after the old id answered", async () => {
+      const pending = deferredGets();
+      const { container, rerender } = render(<RotationsShow id="10" />);
+      await act(async () => {
+        pending["/api/v1/rotations/10"].resolve(ROTATION_10);
+      });
+      expect(listed(container)).toEqual(["A - Amy Chu"]);
+
+      rerender(<RotationsShow id="11" />);
+      expectLoadingOnly(container);
+
+      await act(async () => {
+        pending["/api/v1/rotations/11"].resolve(ROTATION_11);
+      });
+      expectRotation11(container);
+    });
+
+    it("shows the new id's rotation without the old id's failure", async () => {
+      const pending = deferredGets();
+      const { container, rerender } = render(<RotationsShow id="10" />);
+      await act(async () => {
+        pending["/api/v1/rotations/10"].reject({ message: "boom" });
+      });
+      expect(screen.getByText("Failed to load rotation.")).toBeInTheDocument();
+
+      rerender(<RotationsShow id="11" />);
+      expectLoadingOnly(container);
+
+      await act(async () => {
+        pending["/api/v1/rotations/11"].resolve(ROTATION_11);
+      });
+      expectRotation11(container);
+    });
+
+    it("shows the new id's failure without the old id's rotation", async () => {
+      const pending = deferredGets();
+      const { container, rerender } = render(<RotationsShow id="10" />);
+      await act(async () => {
+        pending["/api/v1/rotations/10"].resolve(ROTATION_10);
+      });
+
+      rerender(<RotationsShow id="11" />);
+      await act(async () => {
+        pending["/api/v1/rotations/11"].reject({ message: "boom" });
+      });
+
+      expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+        /^Rotation$/,
+      );
+      expect(screen.queryByRole("heading", { level: 2 })).toBeNull();
+      expect(screen.getByText("Failed to load rotation.")).toBeInTheDocument();
+      expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
+      expect(listed(container)).toEqual([]);
+    });
+
+    it("drops the old id's answer when it arrives first", async () => {
+      const pending = deferredGets();
+      const { container, rerender } = render(<RotationsShow id="10" />);
+      rerender(<RotationsShow id="11" />);
+
+      await act(async () => {
+        pending["/api/v1/rotations/10"].resolve(ROTATION_10);
+      });
+      expectLoadingOnly(container);
+
+      await act(async () => {
+        pending["/api/v1/rotations/11"].resolve(ROTATION_11);
+      });
+      expectRotation11(container);
+    });
+
     it("drops the old id's answer when it arrives last", async () => {
       const pending = deferredGets();
-      const { rerender } = render(<RotationsShow id="10" />);
+      const { container, rerender } = render(<RotationsShow id="10" />);
       rerender(<RotationsShow id="11" />);
 
       await act(async () => {
         pending["/api/v1/rotations/11"].resolve(ROTATION_11);
       });
       await act(async () => {
-        pending["/api/v1/rotations/10"].resolve({
-          status: 200,
-          data: {
-            id: 10,
-            place_value: 3,
-            description: "Kitchen cleaning",
-            residents: [],
-          },
-        });
+        pending["/api/v1/rotations/10"].resolve(ROTATION_10);
       });
 
-      expect(screen.getByText("Rotation 4")).toBeInTheDocument();
-      expect(screen.getByText("Window cleaning")).toBeInTheDocument();
-      expect(screen.queryByText("Kitchen cleaning")).not.toBeInTheDocument();
+      expectRotation11(container);
     });
 
     it("drops the old id's failure when it arrives last", async () => {
       const pending = deferredGets();
-      const { rerender } = render(<RotationsShow id="10" />);
+      const { container, rerender } = render(<RotationsShow id="10" />);
       rerender(<RotationsShow id="11" />);
 
       await act(async () => {
@@ -146,10 +249,7 @@ describe("RotationsShow", () => {
         pending["/api/v1/rotations/10"].reject({ message: "boom" });
       });
 
-      expect(screen.getByText("Window cleaning")).toBeInTheDocument();
-      expect(
-        screen.queryByText("Failed to load rotation."),
-      ).not.toBeInTheDocument();
+      expectRotation11(container);
     });
   });
 });
