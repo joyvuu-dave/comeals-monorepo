@@ -21,7 +21,7 @@ class ReconciliationMailer < ApplicationMailer
                          '&subdomain=admin&order=name_asc' \
                          "&token=#{ENV.fetch('READ_ONLY_ADMIN_TOKEN', nil)}" \
                          '&utf8=%E2%9C%93'
-    @unit_balances = "#{root_admin_url}/units?&token=#{ENV.fetch('READ_ONLY_ADMIN_TOKEN', nil)}&utf8=%E2%9C%93"
+    @unit_balances = "#{root_admin_url}/units?token=#{ENV.fetch('READ_ONLY_ADMIN_TOKEN', nil)}&utf8=%E2%9C%93"
 
     mail(to: 'commonhouse@swansway.com', subject: 'Reconciliation Balances')
   end

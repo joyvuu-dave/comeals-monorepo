@@ -40,7 +40,7 @@ RSpec.describe ReconciliationMailer do
 
       cook_mail = described_class.reconciliation_notify_email(cook, reconciliation)
 
-      expect(cook_mail.text_part.body.to_s).to include(url)
+      expect(cook_mail.text_part.body.to_s.split).to include(url)
       expect(cook_mail.html_part.body.to_s).to include(%(<a href="#{ERB::Util.html_escape(url)}">here</a>))
     end
 
@@ -65,7 +65,7 @@ RSpec.describe ReconciliationMailer do
       'http://admin.lvh.me:3000/residents?q%5Bactive_eq%5D=true&commit=Filter&subdomain=admin&order=name_asc' \
         '&token=the-token&utf8=%E2%9C%93'
     end
-    let(:units_url) { 'http://admin.lvh.me:3000/units?&token=the-token&utf8=%E2%9C%93' }
+    let(:units_url) { 'http://admin.lvh.me:3000/units?token=the-token&utf8=%E2%9C%93' }
 
     before do
       allow(ENV).to receive(:fetch).and_call_original
@@ -81,7 +81,9 @@ RSpec.describe ReconciliationMailer do
     end
 
     it 'links the balances under the configured admin root, with the read-only token' do
-      expect(mail.text_part.body.to_s).to include("Residents: #{residents_url}", "Units: #{units_url}")
+      lines = mail.text_part.body.to_s.lines.map(&:chomp)
+
+      expect(lines).to include("Residents: #{residents_url}", "Units: #{units_url}")
     end
 
     it 'names the resident and unit balance links in the HTML part' do
