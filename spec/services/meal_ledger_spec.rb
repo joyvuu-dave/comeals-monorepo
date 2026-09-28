@@ -254,9 +254,14 @@ RSpec.describe MealLedger do
       # guest's host. The attendee line gets it.
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('1'))
-      create(:meal_resident, meal: meal, resident: host, community: community)
       create(:meal_resident, meal: meal, resident: other, community: community)
-      create(:guest, meal: meal, resident: host, multiplier: 1)
+      guest = create(:guest, meal: meal, resident: host, multiplier: 1)
+      # The two rows are in different tables, so their ids come from
+      # different sequences. The host's attendance row gets an id above
+      # the guest's on purpose: ordered by row id alone, the guest line
+      # would come first and get the leftover unit.
+      create(:meal_resident, meal: meal, resident: host, community: community,
+                             id: [MealResident.maximum(:id), guest.id].max + 1)
 
       debits = ledger_for(meal).lines.reject { |line| line.kind == :credit }
       by_kind = debits.to_h { |line| [[line.resident_id, line.kind], line.amount] }

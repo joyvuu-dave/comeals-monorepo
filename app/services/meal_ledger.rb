@@ -247,6 +247,11 @@ class MealLedger
   # an attendee line before a guest line of the same resident, and between
   # two guests of one host the lower guest id.
   #
+  # The last step compares row ids without asking whether both rows are
+  # guests. They are: a resident has at most one attendance row per meal
+  # (a unique index), so two rows that tie on the resident and the kind
+  # are two guests.
+  #
   # A comparison block rather than sort_by, which would build a key array
   # per eater (see lines_for).
   sig { params(meal: Meal).returns(T::Array[T.any(MealResident, Guest)]) }
@@ -255,7 +260,7 @@ class MealLedger
     people.sort do |a, b|
       order = T.must(a.resident_id) <=> T.must(b.resident_id)
       order = kind_rank(a) <=> kind_rank(b) if order.zero?
-      order = T.must(a.id) <=> T.must(b.id) if order.zero? && a.is_a?(Guest)
+      order = T.must(a.id) <=> T.must(b.id) if order.zero?
       order
     end
   end
@@ -312,10 +317,10 @@ class MealLedger
     params(meal: Meal, people: T::Array[T.any(MealResident, Guest)], financials: Financials).returns(T::Array[Line])
   end
   def debit_lines(meal, people, financials)
-    return [] if people.empty?
-
+    # A meal nobody ate has a total multiplier of zero, so it takes the
+    # first branch and gets no line.
     shares = if financials.total_multiplier.zero?
-               people.map { 0 }
+               [0] * people.size
              else
                LargestRemainderSplit.call(financials.effective_units, people.map { |eater| T.must(eater.multiplier) })
              end
