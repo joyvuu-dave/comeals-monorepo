@@ -17,23 +17,33 @@ RSpec.describe 'community:create_rotations' do
     Rake::Task['community:create_rotations'].reenable
   end
 
-  it 'creates rotations until meals exist 6 months out' do
-    # Community needs at least one resident for meal scheduling context
-    create(:resident, community: community, unit: unit)
+  # The loop stops at the first rotation that reaches the horizon. So the
+  # newest rotation has a meal on or after it, and every earlier rotation
+  # ends before it: a longer horizon, or one rotation too many, would put
+  # an earlier rotation's meals past it too.
+  it 'creates rotations until meals exist 6 months out, and stops there' do
+    travel_to(Time.zone.local(2026, 1, 15, 12)) do
+      # Community needs at least one resident for meal scheduling context
+      create(:resident, community: community, unit: unit)
 
-    expect(community.meals.count).to eq(0)
+      expect(community.meals.count).to eq(0)
 
-    Rake::Task['community:create_rotations'].invoke
+      Rake::Task['community:create_rotations'].invoke
 
-    expect(community.rotations.count).to be > 0
-    expect(community.meals.count).to be > 0
-    expect(community.meals.where(date: (Time.zone.today + 6.months)..).count).to be > 0
+      horizon = community.today + 6.months
+      newest = community.rotations.order(:id).last
+      expect(community.rotations.count).to be > 1
+      expect(newest.meals.maximum(:date)).to be >= horizon
+      expect(community.meals.where.not(rotation: newest).maximum(:date)).to be < horizon
+    end
   end
 
-  it 'does not create rotations when meals already extend 6 months out' do
+  # Exactly on the horizon is far enough: the job looks for a meal on or
+  # after today + 6 months.
+  it 'does not create rotations when a meal is already exactly 6 months out' do
     rotation = create(:rotation, community: community)
     create(:meal, community: community, rotation: rotation,
-                  date: Time.zone.today + 7.months)
+                  date: community.today + 6.months)
 
     initial_rotation_count = community.rotations.count
 
