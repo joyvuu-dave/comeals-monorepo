@@ -57,11 +57,13 @@ class BalanceRecalculation
     # runs overlap: each computes from its own consistent snapshot, the
     # single INSERT ... ON CONFLICT UPDATE statement is atomic, and the next
     # daily run corrects whichever result lost the last-writer race).
-    now = Time.current
-    rows = resident_ids.map do |resident_id|
-      { resident_id: resident_id, amount: balances.fetch(resident_id), created_at: now, updated_at: now }
-    end
-    ResidentBalance.upsert_all(rows, unique_by: :resident_id, update_only: %i[amount]) if rows.any?
+    #
+    # Rails fills created_at and updated_at itself. On a conflict it
+    # updates every column given except the unique one, which is only
+    # amount, and moves updated_at only when the amount changed; created_at
+    # stays. An empty list is a no-op without a query.
+    rows = resident_ids.map { |resident_id| { resident_id: resident_id, amount: balances.fetch(resident_id) } }
+    ResidentBalance.upsert_all(rows, unique_by: :resident_id)
     rows.size
   end
 end
