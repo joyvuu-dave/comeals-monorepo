@@ -41,13 +41,13 @@ class Unit < ApplicationRecord
   after_save :note_live_update
 
   # DERIVED DATA
+  # The sum of its residents' cached balances (Resident#balance), so the
+  # unit page and each resident's page always agree.
   # Signed: positive means the community owes this unit, negative means the
   # unit owes the community (the MealLedger sign convention). Show it to a
   # person only through BalanceDisplayHelper#balance_tag, never as a raw
   # signed number.
   def balance
-    return BigDecimal('0') if Meal.unreconciled.none?
-
     residents.reduce(BigDecimal('0')) { |sum, resident| sum + resident.balance }
   end
 

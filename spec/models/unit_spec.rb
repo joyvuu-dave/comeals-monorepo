@@ -26,12 +26,12 @@ RSpec.describe Unit do
   let(:unit) { create(:unit, community: community) }
 
   describe '#balance' do
-    it 'returns 0 when there are no unreconciled meals' do
-      expect(unit.balance).to eq(0)
+    it 'is a BigDecimal 0 for a unit with no residents' do
+      expect(unit.balance).to eq(BigDecimal('0'))
+      expect(unit.balance).to be_a(BigDecimal)
     end
 
     it 'sums resident balances from the resident_balances cache' do
-      create(:meal, community: community)
       resident_a = create(:resident, community: community, unit: unit, multiplier: 2)
       resident_b = create(:resident, community: community, unit: unit, multiplier: 2)
 
@@ -41,16 +41,15 @@ RSpec.describe Unit do
       expect(unit.balance).to eq(BigDecimal('15.50'))
     end
 
-    it 'returns 0 when all meals are reconciled' do
+    it "is the sum of its residents' balances even when no meal is open" do
       reconciliation = create(:reconciliation, community: community)
       meal = create(:meal, community: community)
       resident = create(:resident, community: community, unit: unit)
-      create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('50'))
       meal.update_column(:reconciliation_id, reconciliation.id)
-
       ResidentBalance.create!(resident: resident, amount: BigDecimal('50'))
 
-      expect(unit.balance).to eq(0)
+      expect(unit.balance).to eq(BigDecimal('50'))
+      expect(unit.balance).to eq(resident.balance)
     end
   end
 
