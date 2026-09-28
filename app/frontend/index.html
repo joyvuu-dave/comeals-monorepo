@@ -59,8 +59,9 @@
     </div>
     <script type="module" src="/src/index.jsx"></script>
     <script>
-      // After 5 minutes with no mouse, key, scroll or touch event, go to
-      // "/", which shows a signed-in resident today's calendar.
+      // Five minutes after the last mouse, key, scroll or touch event, go
+      // to "/", which shows a signed-in resident today's calendar. The
+      // first event starts the timer, so a page nobody touches stays.
       function idleTimer() {
         // The browser tests set this flag to turn the timer off
         // (disableIdleTimer in tests/helpers/browser_setup.js). A stub

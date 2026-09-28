@@ -6,7 +6,7 @@
 
 /**
  * Turn off the idle timer in app/frontend/index.html, which sends the
- * page to "/" after 5 minutes with no mouse, key, scroll or touch
+ * page to "/" five minutes after the last mouse, key, scroll or touch
  * event. Call it before the first goto.
  *
  * The timer returns at once when this flag is set. Replacing

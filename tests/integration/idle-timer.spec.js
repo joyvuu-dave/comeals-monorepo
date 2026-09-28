@@ -8,10 +8,11 @@ const {
   disableIdleTimer,
 } = require("../helpers/integration_setup");
 
-// The idle timer in app/frontend/index.html. After 5 minutes with no
-// mouse, key, scroll or touch event, it sends the page to "/", and "/"
-// sends a signed-in resident to today's calendar. So a screen someone
-// walked away from goes back to the calendar.
+// The idle timer in app/frontend/index.html. Five minutes after the
+// last mouse, key, scroll or touch event, it sends the page to "/", and
+// "/" sends a signed-in resident to today's calendar. So a screen
+// someone walked away from goes back to the calendar. The first event
+// starts the timer, which is why each test moves the mouse first.
 //
 // Every other browser test turns the timer off with disableIdleTimer.
 // These tests check the timer itself, and that the helper really turns
