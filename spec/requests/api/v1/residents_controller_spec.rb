@@ -166,15 +166,6 @@ RSpec.describe 'Residents API' do
     let(:unit) { create(:unit, community: community) }
     let(:resident) { create(:resident, community: community, unit: unit, email: 'ann@example.com') }
 
-    it 'answers 400 when the reset token could not be saved' do
-      allow(PasswordReset).to receive(:request).and_return(:save_failed)
-
-      post '/api/v1/residents/password-reset', params: { email: resident.email }
-
-      expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body['message']).to eq('Error. Please try again.')
-    end
-
     # A blank password is a feature the community asked for, not a gap:
     # some residents log in with email alone. The whole path must work.
     it 'accepts a blank new password, and the resident can then log in with email alone' do
@@ -194,15 +185,55 @@ RSpec.describe 'Residents API' do
       expect(response).to have_http_status(:bad_request)
     end
 
-    it 'answers 400 when the resident row itself no longer saves' do
+    # A password has no rule, so it can never be why the save fails. Some
+    # other field on the row is (here a blank name). The answer names that
+    # field and says who can fix it, so the person does not go off to try
+    # other passwords, which would all fail the same way (#105).
+    it 'names the field that stops the save, not the password, and the link works once an admin fixes it' do
       resident.update!(reset_password_token: 'reset-token-791', reset_password_sent_at: Time.current)
       resident.update_columns(name: '')
 
       post '/api/v1/residents/password-reset/reset-token-791', params: { password: 'new one' }
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body['message']).to eq('Invalid password.')
+      expect(response.parsed_body['message'])
+        .to eq("Your password was not changed:\nName can't be blank\nPlease ask an admin to fix your account.")
       expect(resident.reload.reset_password_token).to eq('reset-token-791')
+      expect(resident.authenticate('new one')).to be(false)
+
+      resident.update_columns(name: 'Ann Lee')
+      post '/api/v1/residents/password-reset/reset-token-791', params: { password: 'new one' }
+
+      expect(response).to have_http_status(:ok)
+      expect(resident.reload.authenticate('new one')).to eq(resident)
+    end
+
+    it 'names every field that stops the save, one to a line' do
+      resident.update!(reset_password_token: 'reset-token-792', reset_password_sent_at: Time.current)
+      resident.update_columns(name: '', birthday: community.today + 1)
+
+      post '/api/v1/residents/password-reset/reset-token-792', params: { password: 'new one' }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq(
+        "Your password was not changed:\nName can't be blank\nBirthday cannot be after today.\n" \
+        'Please ask an admin to fix your account.'
+      )
+    end
+
+    # The same row, on the "forgot password" request. The save fails on a
+    # field the person cannot fix from here, so trying again would fail the
+    # same way every time. No link is saved and no mail goes out.
+    it 'names the field that stops the save of a reset link, and sends nothing' do
+      resident.update_columns(name: '')
+
+      expect { post '/api/v1/residents/password-reset', params: { email: resident.email } }
+        .not_to(change { ActionMailer::Base.deliveries.count })
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message'])
+        .to eq("No reset link was sent:\nName can't be blank\nPlease ask an admin to fix your account.")
+      expect(resident.reload.reset_password_token).to be_nil
     end
 
     it 'treats a missing password the same as a blank one' do

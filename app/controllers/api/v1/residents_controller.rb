@@ -71,7 +71,7 @@ module Api
                  },
                  status: :service_unavailable
         else
-          render json: { message: 'Error. Please try again.' }, status: :bad_request
+          refuse_for_the_row(resident, 'No reset link was sent:')
         end
       end
 
@@ -99,7 +99,7 @@ module Api
 
         render json: { message: 'Password updated!' } and return if resident.save
 
-        render json: { message: 'Invalid password.' }, status: :bad_request
+        refuse_for_the_row(resident, 'Your password was not changed:')
       end
 
       # GET api/v1/residents/:id/ical
@@ -131,6 +131,22 @@ module Api
         end
 
         render plain: feed.to_ical, content_type: 'text/calendar'
+      end
+
+      private
+
+      # The resident row did not save, and what this request changed is
+      # never why: a password has no validation (Resident#password=), and
+      # neither does a reset token. Some other field on the row is invalid,
+      # for example a name made blank outside the app, or a stored phone
+      # number that newer Phonelib data rejects. The person cannot fix that
+      # from this page, and trying again fails the same way every time. So
+      # the answer names each field, one to a line like every other API
+      # refusal, and says who can fix it (#105).
+      def refuse_for_the_row(resident, what_happened)
+        reasons = resident.errors.full_messages.join("\n")
+        render json: { message: "#{what_happened}\n#{reasons}\nPlease ask an admin to fix your account." },
+               status: :bad_request
       end
     end
   end
