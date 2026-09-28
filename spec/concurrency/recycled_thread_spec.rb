@@ -138,15 +138,22 @@ RSpec.describe 'thread-local state across requests and jobs on a reused thread',
       end
     end
     threads.each { |thread| expect(thread.join(60)).not_to be_nil, 'a thread did not finish' }
-    # The pushes the requests enqueued, run on a thread that just served
-    # requests, each probed like the jobs above.
+    # The pushes the requests enqueued, run back to back on one new thread,
+    # each probed like the jobs above.
+    live_pushes = adapter.enqueued_jobs.select { |job| job[:job] == LivePushJob }
     Thread.new do
-      adapter.enqueued_jobs.each { |job| ActiveJob::Base.execute(job) if job[:job] == LivePushJob }
+      live_pushes.each { |job| ActiveJob::Base.execute(job) }
     end.join
     unsubscribe(subscribers)
 
     seen = Array.new(events.size) { events.pop }
-    expect(seen.size).to be >= thread_count * requests_per_thread
+    # Every request and every job was probed: one ledger check in every
+    # four steps of each thread, and every push. A request answered 409 is
+    # sent again, so there can be more requests than steps.
+    ledger_checks = thread_count * (requests_per_thread / 4)
+    expect(seen.count { |name, *| name == 'perform_start.active_job' }).to eq(ledger_checks + live_pushes.size)
+    expect(seen.count { |name, *| name == 'start_processing.action_controller' })
+      .to be >= thread_count * requests_per_thread
     dirty = seen.reject { |_, _, attributes, open| attributes.empty? && !open }
     expect(dirty).to be_empty, "state at the start of a request or job:\n#{dirty.first(10).map(&:inspect).join("\n")}"
 
@@ -160,6 +167,41 @@ RSpec.describe 'thread-local state across requests and jobs on a reused thread',
       expect(sockets.compact).to match_array(signups.map { |n| "sock-#{t}-#{n}" })
       expect(sockets.count(&:nil?)).to eq(signups.size)
     end
+  end
+
+  # The jobs in the example above write nothing to Current, and each runs
+  # right after a request that Rails has already cleaned up after, so that
+  # example would pass even if nothing reset Current around a job. This job
+  # fills Current the way a request does. Only the reset around a job (the
+  # reloader ActiveJob wraps execute in) can then keep the next job, and
+  # the next request, on the same thread clean.
+  it 'clears what a job leaves in Current before the next job or request on the same thread' do
+    residents
+    stub_const('CurrentFillingJob', Class.new(ApplicationJob) do
+      def perform
+        Current.socket_id = 'left-by-a-job'
+        Community.instance
+        ResidentNameShortener.short(Resident.first.name)
+      end
+    end)
+    events = Queue.new
+    subscribers = [probe(events, 'start_processing.action_controller'), probe(events, 'perform_start.active_job')]
+
+    left_after_job = Thread.new do
+      ActiveJob::Base.execute(CurrentFillingJob.new.serialize)
+      left = Current.attributes.dup
+      ActiveJob::Base.execute(CurrentFillingJob.new.serialize)
+      request(:get, "/api/v1/communities/#{community.id}/calendar/2026-04-15", residents.first)
+      left
+    end.value
+    unsubscribe(subscribers)
+
+    seen = Array.new(events.size) { events.pop }
+    expect(seen.map(&:first))
+      .to eq(%w[perform_start.active_job perform_start.active_job start_processing.action_controller])
+    expect(seen.map { |_, thread, _, _| thread }.uniq.size).to eq(1)
+    expect(seen.map { |_, _, attributes, open| [attributes, open] }).to all(eq([{}, false]))
+    expect(left_after_job).to eq({})
   end
 
   it 'shortens a renamed resident under the new name on the very next request of the same thread' do
