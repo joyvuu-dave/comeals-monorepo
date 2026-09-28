@@ -26,12 +26,12 @@
 # database happens either. The one admin path that sends mail, the "Send
 # password reset email" button (app/admin/resident.rb), goes through
 # PasswordReset.request, which saves the token and commits before it mails,
-# so a conflict raises before any email. Meal, Bill, MealResident
-# and Guest send their Pusher event from an after_action in
-# Api::V1::MealsController, so admin never sends one. Event, Rotation,
-# CommonHouseReservation and GuestRoomReservation send theirs from
-# after_commit, which does not run on a rollback. So the message can tell the
-# person nothing was saved, and that is true.
+# so a conflict raises before any email. Every model notes its Pusher
+# event in LiveUpdate, which sends it only after the transaction commits
+# (ADR 0007), so a rolled-back write sends none. So the message can tell
+# the person nothing was saved, and that is true
+# (spec/requests/admin/conflict_rescue_spec.rb refuses a write after its
+# INSERT and checks the row is gone).
 #
 # TransactionRollbackError, not SerializationFailure, so this covers a deadlock
 # too. Both are the same problem with the same answer. This matches what
