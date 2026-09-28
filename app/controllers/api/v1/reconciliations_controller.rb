@@ -48,7 +48,7 @@ module Api
       rescue Date::Error, ActionController::ParameterMissing
         render json: { message: 'cutoff must be a date, YYYY-MM-DD' }, status: :bad_request
       rescue ActiveRecord::RecordInvalid => e
-        render json: { message: e.record.errors.full_messages.to_sentence }, status: :bad_request
+        render json: { message: in_the_callers_words(e.record.errors) }, status: :bad_request
       rescue Settlement::Contested, ActiveRecord::TransactionRollbackError, ActiveRecord::LockWaitTimeout
         # Another settlement or a meal write got there first. Nothing was
         # saved; the same request can be sent again.
@@ -58,6 +58,16 @@ module Api
       end
 
       private
+
+      # The caller sends `cutoff`; the row stores it as end_date, and the
+      # row's own full message would say "End date", a name the caller never
+      # sent. So an end_date refusal is named `cutoff`, which gives the same
+      # words preview answers for the same cutoff (Settlement.preview).
+      sig { params(errors: ActiveModel::Errors).returns(String) }
+      def in_the_callers_words(errors)
+        errors.map { |error| error.attribute == :end_date ? "cutoff #{error.message}" : error.full_message }
+              .to_sentence
+      end
 
       # Settling is a money-path write with no undo, and the preview shows
       # every resident's balance. Both are for the person who does the

@@ -77,20 +77,31 @@ RSpec.describe 'POST /api/v1/reconciliations' do
     expect(NotifyCooksJob).not_to have_been_enqueued
   end
 
-  it 'refuses a cutoff that is not in the past, and writes nothing' do
+  # The caller sent `cutoff`, so the answer names `cutoff`, in the same
+  # words the preview answers for the same day. The row's own name for it
+  # (end_date) is not part of the API.
+  it 'refuses a cutoff that is not in the past, in the words the preview uses, and writes nothing' do
     settleable_meal
 
-    expect { settle(Time.zone.today) }.not_to change(Reconciliation, :count)
+    [community.today, community.today + 1].each do |cutoff|
+      get '/api/v1/reconciliations/preview', params: { cutoff: cutoff.iso8601 },
+                                             headers: { 'Authorization' => "Bearer #{token}" }
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body[:message]).to eq('cutoff must be in the past')
 
-    expect(response).to have_http_status(:bad_request)
-    expect(response.parsed_body[:message]).to eq('End date must be in the past')
+      expect { settle(cutoff) }.not_to change(Reconciliation, :count)
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body[:message]).to eq('cutoff must be in the past')
+    end
   end
 
   it 'refuses a period with nothing to settle' do
     settle(Date.yesterday)
 
     expect(response).to have_http_status(:bad_request)
-    expect(response.parsed_body[:message]).to include('must settle at least one meal')
+    expect(response.parsed_body[:message]).to eq('No unreconciled meals with bills on or before this date. ' \
+                                                 'A reconciliation must settle at least one meal.')
   end
 
   it 'refuses a cutoff that is not a date' do
