@@ -68,12 +68,14 @@ async function main() {
   }
   pass("target declares itself staging");
 
-  // 1. Log in as the smoke resident.
+  // 1. Log in as the smoke resident. The app lands on the calendar at
+  // the community's today; step 3 comes back to this page.
   await page.goto(`${BASE}/`, { waitUntil: "load" });
   await page.fill('input[aria-label="email"]', EMAIL);
   await page.fill('input[aria-label="password"]', PASSWORD);
   await page.getByRole("button", { name: "Submit" }).click();
   await page.waitForSelector(".rbc-calendar", { timeout: 15000 });
+  const calendarUrl = page.url();
   pass("smoke resident logs in");
 
   // 2. Attendance toggle on the seeded open meal: on, persisted, off,
@@ -83,40 +85,69 @@ async function main() {
   // row's toggle cells also contain "Smoke Test" in their aria-labels.
   const smokeCell = () =>
     page.locator("td.background-transition", { hasText: "Smoke Test" });
-
-  await page.goto(mealUrl);
-  await smokeCell().waitFor({ timeout: 15000 });
-  const attending = async () =>
-    /background-green/.test((await smokeCell().getAttribute("class")) || "");
-
-  if (await attending()) {
-    throw new Error("smoke resident already attending the seeded meal");
-  }
   const greenSmokeCell = page.locator("td.background-green", {
     hasText: "Smoke Test",
   });
-  await smokeCell().click();
-  await greenSmokeCell.waitFor({ timeout: 10000 });
-  await page.goto(mealUrl);
-  await smokeCell().waitFor({ timeout: 15000 });
-  if (!(await attending())) {
-    throw new Error("attendance toggle did not persist across a reload");
+
+  // A click turns the cell green at once and sends the write after, so
+  // the color proves nothing about the server. Wait for the server's
+  // answer (POST to sign up, DELETE to remove) before reloading.
+  async function toggle(method) {
+    const [response] = await Promise.all([
+      page.waitForResponse(
+        (r) =>
+          r.request().method() === method &&
+          r.url().includes(`/api/v1/meals/${MEAL_ID}/residents/`),
+        { timeout: 10000 },
+      ),
+      smokeCell().click(),
+    ]);
+    if (!response.ok()) {
+      throw new Error(`attendance ${method} returned ${response.status()}`);
+    }
   }
+
+  // Reload the meal page and wait for the server's copy of the meal. The
+  // page first draws the copy it cached before the write, so a check has
+  // to wait for the state it expects, not read the page once.
+  async function reloadMeal() {
+    const loaded = page.waitForResponse(
+      (r) =>
+        r.request().method() === "GET" &&
+        r.url().includes(`/api/v1/meals/${MEAL_ID}/cooks`),
+      { timeout: 15000 },
+    );
+    await page.goto(mealUrl);
+    const response = await loaded;
+    if (!response.ok()) {
+      throw new Error(`meal load returned ${response.status()}`);
+    }
+    await smokeCell().waitFor({ timeout: 15000 });
+  }
+
+  await reloadMeal();
+  if (await greenSmokeCell.count()) {
+    throw new Error("smoke resident already attending the seeded meal");
+  }
+
+  await toggle("POST");
+  await reloadMeal();
+  await greenSmokeCell.waitFor({ timeout: 10000 }).catch(() => {
+    throw new Error("attendance toggle did not persist across a reload");
+  });
   pass("attendance on: saved and persisted");
 
-  await smokeCell().click();
-  await greenSmokeCell.waitFor({ state: "detached", timeout: 10000 });
-  await page.goto(mealUrl);
-  await smokeCell().waitFor({ timeout: 15000 });
-  if (await attending()) {
-    throw new Error("attendance un-toggle did not persist across a reload");
-  }
+  await toggle("DELETE");
+  await reloadMeal();
+  await greenSmokeCell
+    .waitFor({ state: "detached", timeout: 10000 })
+    .catch(() => {
+      throw new Error("attendance un-toggle did not persist across a reload");
+    });
   pass("attendance off: saved and persisted");
 
   // 3. A reservation modal opens and closes cleanly.
-  await page.goto(
-    `${BASE}/calendar/all/${new Date().toISOString().slice(0, 10)}/`,
-  );
+  await page.goto(calendarUrl);
   await page.waitForSelector(".rbc-calendar", { timeout: 15000 });
   await page.locator("text=Common House").first().click();
   await page.waitForSelector("#ch-new-title", { timeout: 10000 });
