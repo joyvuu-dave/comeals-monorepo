@@ -119,16 +119,46 @@ RSpec.describe MealCharge do
       expect(described_class.where(kind: 'credit').pluck(:resident_id)).to eq([cook.id])
     end
 
-    # The tie-out the nightly check relies on. Worth asserting here too,
-    # because if it were ever false the check would only say so at 5am.
+    # The nightly check ties each resident's lines to their stored balance
+    # (LedgerVerification). Worth asserting here too, because if it were
+    # ever false the check would only say so at 5am. The lines are at the
+    # ledger grain and the balances are rounded to cents, so in general
+    # they agree only within a cent. $16 over four units splits into whole
+    # dollars, so here they agree exactly. The whole hash is compared, so a
+    # balance row that is missing or extra fails too.
     it 'adds up, per resident, to the balance that was stored' do
       reconciliation = settle_plain_meal
 
       summed = described_class.for_reconciliation(reconciliation).group(:resident_id).sum(:amount)
+      stored = reconciliation.reconciliation_balances.pluck(:resident_id, :amount).to_h
 
-      reconciliation.reconciliation_balances.each do |balance|
-        expect(summed[balance.resident_id]).to eq(balance.amount)
-      end
+      expect(summed).to eq(cook.id => BigDecimal('8'), eater.id => BigDecimal('-8'))
+      expect(stored).to eq(summed)
+    end
+
+    # $10 over three adults: each is charged a third of $10, and the one
+    # unit of 10^-8 left over goes to the lowest id, the cook. The cook's
+    # lines sum to 10 - 3.33333334. The balances are rounded toward zero
+    # to cents, and those already sum to zero, so no cent moves.
+    it 'adds up to within a cent of each stored balance when a meal does not split into cents' do
+      meal = create(:meal, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('10'))
+      create(:meal_resident, meal: meal, resident: cook, community: community)
+      create(:meal_resident, meal: meal, resident: eater, community: community)
+      other_eater = create(:resident, community: community, unit: unit, multiplier: 2, name: 'Other Eater')
+      create(:meal_resident, meal: meal, resident: other_eater, community: community)
+      expect(cook.id).to be < [eater.id, other_eater.id].min
+      reconciliation = settle!(cutoff: Date.yesterday)
+
+      summed = described_class.for_reconciliation(reconciliation).group(:resident_id).sum(:amount)
+      stored = reconciliation.reconciliation_balances.pluck(:resident_id, :amount).to_h
+
+      expect(summed).to eq(cook.id => BigDecimal('6.66666666'), eater.id => BigDecimal('-3.33333333'),
+                           other_eater.id => BigDecimal('-3.33333333'))
+      expect(stored).to eq(cook.id => BigDecimal('6.66'), eater.id => BigDecimal('-3.33'),
+                           other_eater.id => BigDecimal('-3.33'))
+      expect(summed.keys).to match_array(stored.keys)
+      expect(stored.keys.map { |id| (summed[id] - stored[id]).abs }).to all(be < BigDecimal('0.01'))
     end
   end
 
