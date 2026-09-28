@@ -196,10 +196,16 @@ mutation:
     - send{receiver=send{receiver=const{name=Rails} selector=logger} selector=debug}
   # A mutation that no example fails within this many seconds is
   # reported as timed out, which counts as not killed
-  # (coverage_criteria below). The slowest selected example takes a
-  # few seconds, so a timeout here means a mutation made a loop or a
-  # lock wait that never ends, and that is worth reading.
-  timeout: 120.0
+  # (coverage_criteria below; bin/mutant keeps MUTANT_JOBS away from
+  # mutant, which would turn that off). The limit is for the whole list
+  # of examples a mutation runs, one after another, not for one example.
+  # A mutation no example fails runs the whole list: for a MealLedger
+  # method that is 620 examples, and they took 113 to 118 seconds on six
+  # workers (2026-09-28). So a limit of 120 cut those runs off, and
+  # counted them as kills. With room above the slowest list, a timeout
+  # means a mutation made a loop or a lock wait that never ends, and
+  # that is worth reading.
+  timeout: 300.0
 coverage_criteria:
   test_result: true
   timeout: false

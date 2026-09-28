@@ -20,7 +20,12 @@ export RAILS_ENV=test
 export MUTANT=1
 
 jobs="${MUTANT_JOBS:-4}"
-export MUTANT_JOBS="$jobs"
+# Mutant gets the count as --jobs, below, and must not see MUTANT_JOBS.
+# When that variable is set, mutant 0.17 builds a config from it with
+# the gem's default coverage criteria, where a timeout counts as a kill,
+# and that config overrides `timeout: false` in .mutant.yml
+# (spec/config/mutant_timeout_spec.rb).
+unset MUTANT_JOBS
 
 step "Test database"
 bundle exec rails db:prepare
@@ -48,9 +53,13 @@ if [ ! -f public/index.html ]; then
   printf '<!doctype html><title>Comeals</title><div id="root"></div>\n' > public/index.html
   placeholder_index=public/index.html
 fi
+# An `if`, not `[ ... ] && rm`: a false test as the trap's last command
+# would make the script exit 1 even when mutant killed everything.
 cleanup() {
   drop_workers
-  [ -n "$placeholder_index" ] && rm -f "$placeholder_index"
+  if [ -n "$placeholder_index" ]; then
+    rm -f "$placeholder_index"
+  fi
 }
 trap cleanup EXIT
 
