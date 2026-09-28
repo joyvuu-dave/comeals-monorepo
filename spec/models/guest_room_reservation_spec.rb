@@ -44,6 +44,36 @@ RSpec.describe GuestRoomReservation do
     end
   end
 
+  # The admin form and a task save through the model too. PostgreSQL
+  # gets the year, month and day as written and reads them in the
+  # Gregorian calendar, from November 24, 4714 BC to December 31,
+  # 5874897. Ruby's Date writes days before October 15, 1582 in the
+  # Julian calendar, so it has February 29, 1500, which PostgreSQL
+  # does not.
+  describe 'a day the database cannot store' do
+    def errors_of(date)
+      reservation = build(:guest_room_reservation, date: date)
+      reservation.validate
+      reservation.errors.to_hash
+    end
+
+    it 'is refused under the date, at both ends and for a Julian leap day, and the day next to each is taken' do
+      refused = { date: ['is not a date the database can store'] }
+      days = [Date.new(5_874_898, 1, 1), Date.new(5_874_897, 12, 31), Date.new(-4713, 11, 23, Date::GREGORIAN),
+              Date.new(-4713, 11, 24, Date::GREGORIAN), Date.new(1500, 2, 29), Date.new(1600, 2, 29)]
+
+      expect(days.map { |day| errors_of(day) }).to eq([refused, {}, refused, {}, refused, {}])
+    end
+
+    # Ruby's own Date for November 24, 4714 BC is a Julian day, 38 days
+    # earlier than the Gregorian one, but PostgreSQL gets the same year,
+    # month and day either way.
+    it 'reads the day as written, whichever calendar the Date counts in' do
+      expect(errors_of(Date.new(-4713, 11, 24))).to eq({})
+      expect(errors_of(Date.new(-4713, 11, 23))).to eq(date: ['is not a date the database can store'])
+    end
+  end
+
   describe 'uniqueness of date per community' do
     it 'is invalid when date is already taken for the same community' do
       community = create(:community)

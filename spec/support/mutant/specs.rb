@@ -113,7 +113,7 @@ MUTANT_SPEC_ROWS = {
   'spec/requests/api/v1/meal_cooks_performance_spec.rb' => %w[MealFormSerializer Meal],
   'spec/requests/api/v1/events_controller_spec.rb' => %w[Api::V1::EventsController Event LiveUpdate],
   'spec/requests/api/v1/guest_room_reservations_controller_spec.rb' =>
-    %w[Api::V1::GuestRoomReservationsController GuestRoomReservation],
+    %w[Api::V1::GuestRoomReservationsController GuestRoomReservation StorableTimeValidator],
   'spec/requests/api/v1/common_house_reservations_controller_spec.rb' =>
     %w[Api::V1::CommonHouseReservationsController CommonHouseReservation],
   # GET /rotations/:id renders RotationLogSerializer, not RotationSerializer.
@@ -142,7 +142,7 @@ MUTANT_SPEC_ROWS = {
   'spec/requests/admin/session_persistence_spec.rb' => %w[ApplicationController],
   'spec/requests/admin/reservation_forms_spec.rb' => %w[GuestRoomReservation CommonHouseReservation LiveUpdate],
   'spec/requests/admin/storable_times_spec.rb' =>
-    %w[StorableTimeValidator StorableTime Event CommonHouseReservation],
+    %w[StorableTimeValidator StorableTime Event CommonHouseReservation GuestRoomReservation],
   'spec/requests/admin/admin_logout_spec.rb' => %w[ApplicationController],
   'spec/requests/admin/admin_zone_spec.rb' => %w[ApplicationController],
   'spec/requests/admin/deletion_safeguards_spec.rb' => %w[RefusedDestroyMessage Meal Resident Rotation Unit],
@@ -179,7 +179,8 @@ MUTANT_SPEC_ROWS = {
   # Also asks CalendarSerializer which months list a booking.
   'spec/models/common_house_reservation_spec.rb' =>
     %w[CommonHouseReservation LiveUpdate BelongsToTheCommunity CalendarSerializer StorableTimeValidator],
-  'spec/models/guest_room_reservation_spec.rb' => %w[GuestRoomReservation LiveUpdate BelongsToTheCommunity],
+  'spec/models/guest_room_reservation_spec.rb' =>
+    %w[GuestRoomReservation LiveUpdate BelongsToTheCommunity StorableTimeValidator StorableTime],
   'spec/models/rotation_spec.rb' => %w[Rotation LiveUpdate BelongsToTheCommunity],
   'spec/models/meal_spec.rb' => %w[Meal LiveUpdate BelongsToTheCommunity],
   'spec/models/bill_spec.rb' =>

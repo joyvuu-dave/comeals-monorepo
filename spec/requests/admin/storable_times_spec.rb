@@ -3,9 +3,9 @@
 require 'rails_helper'
 
 # PostgreSQL cannot store a time before midnight UTC on November 24,
-# 4714 BC or after the end of 294276 (StorableTime). The admin forms send
-# each time as five menus, and the year menu offers only years near
-# today, but a request can carry any year. A year like 300000 raised
+# 4714 BC or after the end of 294276 (StorableTime). The event and
+# common house forms send each time as five menus, and the year menu
+# offers only years near today, but a request can carry any year. A year like 300000 raised
 # PG::DatetimeFieldOverflow when the record was saved: an error page
 # instead of the form. The API refuses these times in its own parser
 # (events_controller_spec.rb); this is the admin side of the same
@@ -84,6 +84,21 @@ RSpec.describe 'Admin forms and a time the database cannot store' do
 
       expect(field_errors('common_house_reservation')).to eq('start_date' => refused, 'end_date' => nil)
       expect(booking.reload.attributes).to eq(before)
+    end
+  end
+
+  # The guest room form takes its day as text. A date column holds days
+  # up to December 31, 5874897, and only days of the Gregorian calendar,
+  # which has no February 29, 1500.
+  describe 'guest room' do
+    it 'refuses a day the database cannot store, and says so under the date' do
+      %w[5874898-01-01 1500-02-29].each do |date|
+        post '/guest_room_reservations', params: { guest_room_reservation: { resident_id: resident.id, date: date } }
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body.at_css('#guest_room_reservation_date_input .inline-errors')&.text).to eq(refused)
+      end
+      expect(GuestRoomReservation.count).to eq(0)
     end
   end
 end

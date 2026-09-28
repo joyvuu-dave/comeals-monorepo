@@ -390,7 +390,11 @@ One reservation per day. `resident_id` is the host.
 | `PATCH`  | `/guest-room-reservations/:id/update` | Same body.                                          |
 | `DELETE` | `/guest-room-reservations/:id/delete` | Deletes.                                            |
 
-A day that is already taken returns `400`.
+A day that is already taken returns `400`. So does a day the database
+cannot store, with `"Date is not a date the database can store"`:
+before November 24, 4714 BC (`-4713-11-24`, since year 0 is 1 BC),
+after December 31, 5874897, or a day the Gregorian calendar does not
+have, such as `1500-02-29`.
 
 ## Common house reservations
 

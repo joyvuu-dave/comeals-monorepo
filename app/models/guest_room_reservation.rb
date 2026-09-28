@@ -34,10 +34,19 @@ class GuestRoomReservation < ApplicationRecord
   belongs_to :resident
 
   validates :date, presence: true
-  validates :date, uniqueness: true
+  validates :date, storable_time: true
+  validates :date, uniqueness: { if: :storable_date? }
 
   after_destroy :note_live_update
   after_save :note_live_update
+
+  # The uniqueness query cannot run with a day the database cannot
+  # store: PostgreSQL refuses the whole statement. The storable_time
+  # rule reports that day, and a missing one is left to presence.
+  def storable_date?
+    date = self.date
+    !date.nil? && StorableTime.date?(date)
+  end
 
   # Reservations appear on the calendar; after a date change the old
   # month is stale too. See LiveUpdate.
