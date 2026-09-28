@@ -11,7 +11,8 @@ RSpec.describe 'Communities API' do
   let(:token) { resident.keys.first.token }
 
   describe 'GET /api/v1/communities/:id/hosts' do
-    it 'returns active adult residents ordered by unit' do
+    # The order by unit name is checked in write_messages_spec.rb.
+    it 'returns active adults only, not children or retired residents' do
       adult = create(:resident, community: community, unit: unit, multiplier: 2, active: true)
       child = create(:resident, community: community, unit: unit, multiplier: 1, active: true)
       inactive = create(:resident, community: community, unit: unit, multiplier: 2, active: false,
@@ -20,12 +21,9 @@ RSpec.describe 'Communities API' do
       get "/api/v1/communities/#{community.id}/hosts", params: { token: token }
 
       expect(response).to have_http_status(:ok)
-      body = response.parsed_body
-      host_ids = body.pluck(0)
-      expect(host_ids).to include(resident.id)
-      expect(host_ids).to include(adult.id)
-      expect(host_ids).not_to include(child.id)
-      expect(host_ids).not_to include(inactive.id)
+      host_ids = response.parsed_body.pluck(0)
+      expect(host_ids).to contain_exactly(resident.id, adult.id)
+      expect(host_ids).not_to include(child.id, inactive.id)
     end
 
     it 'returns 401 without a token' do
@@ -202,12 +200,13 @@ RSpec.describe 'Communities API' do
       expect(response.body).to be_empty
     end
 
-    # The full pipeline for a resident change, against a real cache: the
-    # calendar response is cached per month, so a change to a resident or a
-    # unit only shows up because Community#calendar_cache_version is part of
-    # the fetch (#77). The test env cache is a null store, so these swap in
-    # a MemoryStore — without the version they would fail on stale data.
-    describe 'resident or unit changed, against a real cache' do
+    # The full pipeline for a change, against a real cache: the calendar
+    # response is cached per month, so a change to a resident, a unit or a
+    # meal only shows up because Community#calendar_cache_version is part
+    # of the fetch (#77), and LiveUpdate deletes the month after a write.
+    # The test env cache is a null store, so these swap in a MemoryStore —
+    # without the version and the delete they would fail on stale data.
+    describe 'a change, against a real cache' do
       around do |example|
         original_store = Rails.cache
         Rails.cache = ActiveSupport::Cache::MemoryStore.new
@@ -283,22 +282,25 @@ RSpec.describe 'Communities API' do
         expect(response.body).not_to include('Old Unit')
         expect(response.body).to include('New Unit')
       end
-    end
 
-    it 'returns a fresh 200 with new ETag after invalidation' do
-      create(:meal, community: community, date: Date.new(2026, 4, 10))
+      it 'returns a fresh 200 with a new ETag after a meal is added to the cached month' do
+        create(:meal, community: community, date: Date.new(2026, 4, 10))
 
-      get "/api/v1/communities/#{community.id}/calendar/2026-04-15", params: { token: token }
-      first_etag = response.headers['ETag']
+        get "/api/v1/communities/#{community.id}/calendar/2026-04-15", params: { token: token }
+        first_etag = response.headers['ETag']
+        expect(Rails.cache.exist?(community.calendar_cache_key(2026, 4))).to be(true)
 
-      # A write through a model clears the month (LiveUpdate).
-      create(:meal, community: community, date: Date.new(2026, 4, 17))
+        # A write through a model clears the month (LiveUpdate) and
+        # changes its version.
+        added = create(:meal, community: community, date: Date.new(2026, 4, 17))
 
-      get "/api/v1/communities/#{community.id}/calendar/2026-04-15",
-          params: { token: token }, headers: { 'If-None-Match' => first_etag }
+        get "/api/v1/communities/#{community.id}/calendar/2026-04-15",
+            params: { token: token }, headers: { 'If-None-Match' => first_etag }
 
-      expect(response).to have_http_status(:ok)
-      expect(response.headers['ETag']).not_to eq(first_etag)
+        expect(response).to have_http_status(:ok)
+        expect(response.headers['ETag']).not_to eq(first_etag)
+        expect(response.parsed_body['meals'].pluck('url')).to include("/meals/#{added.id}/edit")
+      end
     end
   end
 
