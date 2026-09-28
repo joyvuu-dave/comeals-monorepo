@@ -15,8 +15,11 @@ function Bomb() {
 
 describe("ErrorBoundary", () => {
   // React and the boundary itself both log the caught error. Silence
-  // that inside these tests so the output stays readable.
+  // that inside these tests so the output stays readable. The
+  // notifyError mock is a vi.fn(), which restoreAllMocks leaves alone,
+  // so clear its calls here: each test then sees only its own render.
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
@@ -52,10 +55,8 @@ describe("ErrorBoundary", () => {
         <Bomb />
       </ErrorBoundary>,
     );
-    // React's dev build can replay a caught render error, so the count
-    // may be more than one. What matters is what got reported.
-    expect(notifyError).toHaveBeenCalled();
-    const [error, meta] = notifyError.mock.calls[0];
+    expect(notifyError).toHaveBeenCalledTimes(1);
+    const [error, meta] = notifyError.mock.lastCall;
     expect(error.message).toBe("boom");
     expect(meta.componentStack).toContain("Bomb");
   });

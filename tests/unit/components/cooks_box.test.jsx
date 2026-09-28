@@ -87,6 +87,10 @@ describe("CooksBox", () => {
     expect(
       screen.getByRole("combobox", { name: "Select meal cook" }),
     ).toBeDisabled();
+    expect(
+      screen.getByRole("spinbutton", { name: "Set meal cost" }),
+    ).toBeDisabled();
+    expect(screen.getByRole("checkbox")).toBeDisabled();
   });
 
   it("turning on no-cost over a typed cost asks first instead of erasing", () => {

@@ -72,6 +72,13 @@ describe("MenuBox", () => {
     unmount();
 
     expect(store.setDescriptionOn).toHaveBeenCalledWith(store.meal, "Tacos");
+
+    // The timer the typing started must not fire after unmount and
+    // deliver the same text a second time.
+    act(() => {
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS + 50);
+    });
+    expect(store.setDescriptionOn).toHaveBeenCalledTimes(1);
   });
 
   it("shows the not-saved warning when a save is failing", () => {
