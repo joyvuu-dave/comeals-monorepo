@@ -106,6 +106,8 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
       expect(bill.amount).to eq(BigDecimal('0'))
     end
 
+    # The no_cost row carries money on purpose: the API keeps an amount
+    # next to no_cost, so only leaving the row out keeps the total at 60.
     it 'excludes no_cost bills from total_cost' do
       create(:meal_resident, meal: meal, resident: resident, community: community)
       paying_cook = create(:resident, community: community, unit: unit)
@@ -113,11 +115,13 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
       update_bills(
         meal_id: meal.id,
         bills: [
-          { resident_id: cook.id, amount: '0', no_cost: true },
+          { resident_id: cook.id, amount: '15.00', no_cost: true },
           { resident_id: paying_cook.id, amount: '60.00', no_cost: false }
         ]
       )
 
+      expect(response).to have_http_status(:ok)
+      expect(bill.reload.amount).to eq(BigDecimal('15'))
       meal.reload
       expect(MealCostSummary.for(meal).total_cost).to eq(BigDecimal('60'))
     end
@@ -212,9 +216,10 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
       expect(Bill.exists?(bill.id)).to be true
     end
 
-    # The destroy-path pin above survives on the guard's raise alone; the
-    # upsert path (no bills removed) needs the post-lock reconciled? re-check
-    # to reject cleanly instead of erroring on the before_save guard.
+    # Bill's own reconciled check reads the meals table, so it would refuse
+    # this upsert too, but with its own words ("Validation failed: Meal has
+    # been reconciled."). The exact sentence below is the one the re-check
+    # under the lock gives, so the example shows that re-check answered.
     it 'returns 400 and keeps the amounts when only upserts race the sweep' do
       reconciliation = create(:reconciliation, community: community, end_date: meal.date - 30)
 
@@ -230,12 +235,17 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
       )
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body['message']).to include('reconciled')
+      expect(response.parsed_body['message']).to eq('Change not permitted. Meal has already been reconciled.')
       expect(bill.reload.amount).to eq(BigDecimal('0'))
     end
   end
 
+  # The SPA sends a blank amount when a cook clears the field. The stored
+  # amount starts at $25, so "blank means zero" and "blank means keep the
+  # old amount" give different answers.
   describe 'blank amount' do
+    before { bill.update!(amount: BigDecimal('25')) }
+
     it 'treats empty string amount as zero' do
       update_bills(
         meal_id: meal.id,
@@ -256,6 +266,16 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
       expect(response).to have_http_status(:ok)
       bill.reload
       expect(bill.amount).to eq(BigDecimal('0'))
+    end
+
+    it 'treats an empty amount with no no_cost key as zero' do
+      update_bills(
+        meal_id: meal.id,
+        bills: [{ resident_id: cook.id, amount: '' }]
+      )
+
+      expect(response).to have_http_status(:ok)
+      expect(bill.reload.amount).to eq(BigDecimal('0'))
     end
   end
 
@@ -497,22 +517,31 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
   end
 
   describe 'partial failure in a multi-bill payload' do
-    # Atomicity rests on with_lock's implicit transaction. The bills are
-    # written in payload order, so the first bill has already been updated
-    # when the second one fails validation. The transaction must roll that
-    # write back — a 400 response must mean nothing was saved.
+    # Atomicity rests on with_lock's implicit transaction. BillsPayload
+    # checks every row before the lock, so a bad amount never gets this
+    # far; what can still fail is the write itself. Here the second cook is
+    # deleted after the check (the race the InvalidForeignKey rescue is
+    # for), so their new bill fails after the first cook's bill was already
+    # updated. The transaction must roll that write back — a 400 response
+    # must mean nothing was saved.
     it 'rolls back the earlier bill write when a later bill fails' do
       cook_2 = create(:resident, community: community, unit: unit)
+      allow_any_instance_of(Bill).to receive(:save!).and_wrap_original do |save, *args, **kwargs| # rubocop:disable RSpec/AnyInstance -- BillsPayload builds the record
+        raise ActiveRecord::InvalidForeignKey, 'bills_resident_id_fkey' if save.receiver.resident_id == cook_2.id
+
+        save.call(*args, **kwargs)
+      end
 
       update_bills(
         meal_id: meal.id,
         bills: [
           { resident_id: cook.id, amount: '30.00', no_cost: false },
-          { resident_id: cook_2.id, amount: '-5.00', no_cost: false }
+          { resident_id: cook_2.id, amount: '5.00', no_cost: false }
         ]
       )
 
       expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Invalid cook assignment.')
       expect(bill.reload.amount).to eq(BigDecimal('0'))
       expect(meal.bills.where(resident: cook_2)).not_to exist
     end
