@@ -202,9 +202,61 @@ RSpec.describe Community do
       # Only the attended meal contributes cost: 2 * (16 / 4) = $8.00
       expect(community.unreconciled_ave_cost).to eq('$8.00/adult')
     end
+
+    # An upcoming meal with a sign-up and no receipt would count at $0 and
+    # pull the average down.
+    it 'leaves upcoming meals out' do
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      diner = create(:resident, community: community, unit: unit, multiplier: 2)
+
+      past = create(:meal, community: community)
+      create(:bill, meal: past, resident: cook, community: community, amount: BigDecimal('16'))
+      create(:meal_resident, meal: past, resident: cook, community: community)
+      create(:meal_resident, meal: past, resident: diner, community: community)
+
+      upcoming = create(:meal, community: community, date: community.today + 7)
+      create(:meal_resident, meal: upcoming, resident: diner, community: community)
+
+      # Only the past meal: 2 * (16 / 4) = $8.00
+      expect(community.unreconciled_ave_cost).to eq('$8.00/adult')
+    end
+
+    # A meal dated today counts (the dashboard shows tonight's sign-ups);
+    # one dated tomorrow does not. If it did, its $9 capped cost over a
+    # multiplier of 2 would make the average $8.33.
+    it "counts a meal dated today and leaves out tomorrow's" do
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      diner = create(:resident, community: community, unit: unit, multiplier: 2)
+
+      tonight = create(:meal, community: community, date: community.today)
+      create(:bill, meal: tonight, resident: cook, community: community, amount: BigDecimal('16'))
+      create(:meal_resident, meal: tonight, resident: cook, community: community)
+      create(:meal_resident, meal: tonight, resident: diner, community: community)
+
+      tomorrow = create(:meal, community: community, date: community.today + 1)
+      create(:bill, meal: tomorrow, resident: cook, community: community, amount: BigDecimal('30'))
+      create(:meal_resident, meal: tomorrow, resident: diner, community: community)
+
+      expect(community.unreconciled_ave_cost).to eq('$8.00/adult')
+    end
+
+    it 'rounds a half cent the way BigDecimal and number_to_currency do' do
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      diner = create(:resident, community: community, unit: unit, multiplier: 2)
+
+      meal = create(:meal, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('16.25'))
+      create(:meal_resident, meal: meal, resident: cook, community: community)
+      create(:meal_resident, meal: meal, resident: diner, community: community)
+
+      # 2 * (16.25 / 4) is exactly 8.125, under the 4.50/unit cap.
+      expect(community.unreconciled_ave_cost).to eq('$8.13/adult')
+    end
   end
 
   describe '#unreconciled_ave_number_of_attendees' do
+    include ActiveSupport::Testing::TimeHelpers
+
     it 'returns average attendee count across unreconciled meals' do
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
       diner = create(:resident, community: community, unit: unit, multiplier: 2)
@@ -260,6 +312,54 @@ RSpec.describe Community do
 
       # 1 resident + 1 guest = 2 attendees / 1 meal = 2.0
       expect(community.unreconciled_ave_number_of_attendees).to eq(2.0)
+    end
+
+    # The nightly job keeps six months of upcoming meals, and nobody has
+    # signed up for most of them yet.
+    it 'leaves upcoming meals out' do
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      diner = create(:resident, community: community, unit: unit, multiplier: 2)
+
+      meal1 = create(:meal, community: community)
+      create(:meal_resident, meal: meal1, resident: cook, community: community)
+      create(:meal_resident, meal: meal1, resident: diner, community: community)
+
+      meal2 = create(:meal, community: community)
+      create(:meal_resident, meal: meal2, resident: cook, community: community)
+
+      create(:meal, community: community, date: community.today + 7)
+
+      # Only the two past meals: 3 attendees / 2 meals = 1.5
+      expect(community.unreconciled_ave_number_of_attendees).to eq(1.5)
+    end
+
+    it "counts a meal dated today and leaves out tomorrow's" do
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      diner = create(:resident, community: community, unit: unit, multiplier: 2)
+
+      tonight = create(:meal, community: community, date: community.today)
+      create(:meal_resident, meal: tonight, resident: cook, community: community)
+      create(:meal_resident, meal: tonight, resident: diner, community: community)
+      tomorrow = create(:meal, community: community, date: community.today + 1)
+      create(:meal_resident, meal: tomorrow, resident: diner, community: community)
+
+      expect(community.unreconciled_ave_number_of_attendees).to eq(2.0)
+    end
+
+    # Today is the community's day, not the app's. At 00:30 in Los Angeles
+    # it is still 21:30 on the day before in Honolulu, so a Honolulu meal
+    # dated the Los Angeles date is tomorrow's and is left out.
+    it "reads today in the community's time zone" do
+      travel_to(Time.utc(2026, 8, 24, 7, 30)) do
+        community.update!(timezone: 'Pacific/Honolulu')
+        cook = create(:resident, community: community, unit: unit, multiplier: 2)
+
+        tonight = create(:meal, community: community, date: Date.new(2026, 8, 23))
+        create(:meal_resident, meal: tonight, resident: cook, community: community)
+        create(:meal, community: community, date: Date.new(2026, 8, 24))
+
+        expect(community.unreconciled_ave_number_of_attendees).to eq(1.0)
+      end
     end
   end
 

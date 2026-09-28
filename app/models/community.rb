@@ -236,8 +236,16 @@ class Community < ApplicationRecord
   # skipped by the scope, capped meals count their effective cost, and a
   # zero-multiplier meal charges nobody (its effective cost is zero).
   # An adult is Multiplier::FULL units, hence the multiply.
+  #
+  # Both dashboard averages take the unreconciled meals up to and including
+  # today. The nightly job keeps six months of upcoming meals, and those
+  # have sign-ups but no receipt yet, so they would count at $0 (#98).
+  #
+  # Rounded as a BigDecimal, half up, like number_to_currency: 8.125 shows
+  # as 8.13. format('%.2f') turned it into a Float first and showed 8.12.
   def unreconciled_ave_cost
-    unreconciled = meals.unreconciled.with_attendees.preload(:meal_residents, :guests, :bills).to_a
+    unreconciled = meals.unreconciled.where(date: ..today).with_attendees
+                        .preload(:meal_residents, :guests, :bills).to_a
     total_multiplier = unreconciled.sum(&:multiplier)
     return '--' if total_multiplier.zero?
 
@@ -246,11 +254,12 @@ class Community < ApplicationRecord
       ledger.summary_for(meal).effective_cost
     end
     val = Multiplier::FULL * (total_cost / total_multiplier)
-    "$#{format('%0.02f', val)}/adult"
+    "$#{ActiveSupport::NumberHelper.number_to_rounded(val, precision: 2)}/adult"
   end
 
+  # Dashboard "Attendees per meal", over the same meals as the cost.
   def unreconciled_ave_number_of_attendees
-    unreconciled = meals.unreconciled
+    unreconciled = meals.unreconciled.where(date: ..today)
     meal_count = unreconciled.count
     return '--' if meal_count.zero?
 

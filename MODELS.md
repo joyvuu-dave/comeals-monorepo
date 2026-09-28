@@ -95,12 +95,15 @@ removed the slug.
   `meals_per_rotation` meal dates, starting the day after the last existing
   meal (or today), and creates one Rotation with those meals. It raises if any
   meal has no rotation yet.
-- `unreconciled_ave_cost` — dashboard "cost per adult" over unreconciled
-  meals. It reads `MealLedger#summary_for`, so it cannot disagree with
-  settlement math.
-- `unreconciled_ave_number_of_attendees`, `auto_rotation_length`,
-  `auto_create_rotations` — older helpers for grouping meals that have no
-  rotation.
+- `unreconciled_ave_cost` — dashboard "cost per adult" over the unreconciled
+  meals dated up to and including today. Upcoming meals are left out: they
+  have sign-ups but no receipt yet (#98). It reads `MealLedger#summary_for`,
+  so it cannot disagree with settlement math, and it rounds the BigDecimal
+  half up, like `number_to_currency`.
+- `unreconciled_ave_number_of_attendees` — dashboard "attendees per meal"
+  over the same meals.
+- `auto_rotation_length`, `auto_create_rotations` — older helpers for
+  grouping meals that have no rotation.
 - Clearing the calendar cache and pushing is not the community's job:
   every model a screen shows notes itself in `LiveUpdate` from its own
   `note_live_update` callback, and `LiveUpdate` clears and pushes after the
