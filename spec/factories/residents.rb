@@ -47,6 +47,10 @@ FactoryBot.define do
     # still say `multiplier: 1` for a child, and get an age-appropriate
     # birthday (8 for half price, 3 for free, under the default ages).
     # Adults get none — an adult with no birthday is the normal case.
+    # The price is read on the meal's date, and these ages keep their
+    # band on every date the meal factory picks by itself
+    # (spec/models/factory_price_bands_spec.rb). A spec that dates a
+    # meal years back itself must give its child a birthday too.
     transient do
       multiplier { 2 }
     end
