@@ -649,13 +649,29 @@ RSpec.describe Meal do
       expect(described_class.settleable_by(Date.yesterday)).not_to include(held)
     end
 
-    it 'leaves a meal with no bill, one dated today, and one past the cutoff' do
+    it 'leaves a meal with no bill, and one past the cutoff' do
       no_bill = create(:meal, community: community, date: Date.yesterday - 2)
       create(:meal_resident, meal: no_bill, resident: eater, community: community)
-      today = meal_with('30', eaten: true, date: Time.zone.today)
       later = meal_with('30', eaten: true, date: Date.yesterday)
 
-      expect(described_class.settleable_by(Date.yesterday - 1)).not_to include(no_bill, today, later)
+      expect(described_class.settleable_by(Date.yesterday - 1)).not_to include(no_bill, later)
+    end
+
+    # The cutoff is after today here, so only the today rule can leave
+    # tonight's meal out: its receipts and attendance are not final (#3).
+    it 'leaves out a meal dated today, even when the cutoff is later' do
+      last_night = meal_with('30', eaten: true, date: community.today - 1)
+      meal_with('30', eaten: true, date: community.today)
+
+      expect(described_class.settleable_by(community.today + 1)).to contain_exactly(last_night)
+    end
+
+    it 'takes today from the caller when one is given' do
+      two_nights_ago = meal_with('30', eaten: true, date: community.today - 2)
+      meal_with('30', eaten: true, date: community.today - 1)
+
+      expect(described_class.settleable_by(community.today + 1, today: community.today - 1))
+        .to contain_exactly(two_nights_ago)
     end
   end
 
