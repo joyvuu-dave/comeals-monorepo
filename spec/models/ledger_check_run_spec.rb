@@ -131,9 +131,38 @@ RSpec.describe LedgerCheckRun do
         .to raise_error(ActiveRecord::StatementInvalid, /finished_after_started/)
     end
 
+    # save!(validate: false) skips the model's numericality rule, so only
+    # the CHECK can refuse these.
     it 'refuses a negative mismatch count' do
-      expect { described_class.new(started_at: 2.minutes.ago, finished_at: 1.minute.ago, mismatch_count: -1).save! }
-        .to raise_error(ActiveRecord::RecordInvalid)
+      run = described_class.new(started_at: 2.minutes.ago, finished_at: 1.minute.ago, mismatch_count: -1)
+
+      expect { run.save!(validate: false) }
+        .to raise_error(ActiveRecord::StatementInvalid, /ledger_check_runs_mismatch_count_non_negative/)
+    end
+
+    it 'refuses a negative count of reconciliations checked' do
+      run = described_class.new(started_at: 2.minutes.ago, finished_at: 1.minute.ago, reconciliations_checked: -1)
+
+      expect { run.save!(validate: false) }
+        .to raise_error(ActiveRecord::StatementInvalid, /ledger_check_runs_checked_non_negative/)
+    end
+  end
+
+  describe 'validations' do
+    it 'refuses a negative or fractional count before the database sees it, naming the field' do
+      run = described_class.new(started_at: 2.minutes.ago, finished_at: 1.minute.ago,
+                                mismatch_count: -1, reconciliations_checked: 1.5)
+
+      expect(run).not_to be_valid
+      expect(run.errors[:mismatch_count]).to eq(['must be greater than or equal to 0'])
+      expect(run.errors[:reconciliations_checked]).to eq(['must be an integer'])
+    end
+
+    it 'accepts zero for both counts' do
+      run = described_class.new(started_at: 2.minutes.ago, finished_at: 1.minute.ago,
+                                mismatch_count: 0, reconciliations_checked: 0)
+
+      expect(run).to be_valid
     end
   end
 
