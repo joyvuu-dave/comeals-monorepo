@@ -7,18 +7,23 @@ RSpec.describe ApplicationHelper do
   let(:unit) { create(:unit, community: community) }
 
   describe '#price_category_label' do
-    it 'returns "Child" for multiplier 1' do
-      expect(helper.price_category_label(1)).to eq('Child')
+    it 'returns "Child" for a child at half price' do
+      expect(helper.price_category_label(Multiplier::HALF)).to eq('Child')
     end
 
-    it 'returns "Adult" for multiplier 2' do
-      expect(helper.price_category_label(2)).to eq('Adult')
+    it 'returns "Adult" for full price' do
+      expect(helper.price_category_label(Multiplier::FULL)).to eq('Adult')
     end
 
     it 'returns fractional adult for other multipliers' do
       expect(helper.price_category_label(3)).to eq('Adult x 1.5')
       expect(helper.price_category_label(4)).to eq('Adult x 2')
       expect(helper.price_category_label(5)).to eq('Adult x 2.5')
+    end
+
+    # The community form's words for the age rule: "Children under 5 eat free."
+    it 'names a child who eats free as free, not as a multiple of an adult' do
+      expect(helper.price_category_label(Multiplier::FREE)).to eq('Child (free)')
     end
   end
 
