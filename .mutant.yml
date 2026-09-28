@@ -27,7 +27,11 @@ matcher:
   # (2026-09-08); the rest followed on 2026-09-12. A full run is hours,
   # so bin/mutant is usually given a stage — one directory's worth of
   # subjects — after the `--`; docs/mutation-testing.md lists them.
-  # Current is not here: it only declares attributes.
+  # Current is not here: it only declares attributes. Neither are the
+  # three edit-form serializers (EventFormSerializer,
+  # CommonHouseReservationFormSerializer, GuestRoomReservationFormSerializer),
+  # for the same reason: they have no method to mutate. The request specs
+  # and spec/serializers/api_contract_spec.rb pin their field lists.
   subjects:
     # money
     - MealLedger*

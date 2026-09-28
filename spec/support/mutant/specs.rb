@@ -84,14 +84,18 @@ MUTANT_SPEC_ROWS = {
        Api::V1::ReconciliationsController],
   'spec/requests/api/v1/reconciliations_authorization_spec.rb' => %w[Api::V1::ReconciliationsController],
   'spec/requests/api/v1/residents_ical_spec.rb' => %w[MealIcalFeed Api::V1::ResidentsController],
-  'spec/requests/api/v1/communities_controller_spec.rb' => %w[MealIcalFeed Api::V1::CommunitiesController],
+  'spec/requests/api/v1/communities_controller_spec.rb' =>
+    %w[MealIcalFeed Api::V1::CommunitiesController ResidentBirthdaySerializer CalendarSerializer],
+  'spec/requests/api/v1/calendar_birthday_chips_spec.rb' =>
+    %w[ResidentBirthdaySerializer CalendarSerializer Api::V1::CommunitiesController],
   'spec/requests/api/v1/residents_controller_spec.rb' =>
     %w[JwtAuth ResidentNameShortener PasswordReset Api::V1::ResidentsController],
   'spec/requests/api/v1/sessions_controller_spec.rb' => %w[JwtAuth Api::V1::SessionsController],
   'spec/requests/api/v1/authentication_pinning_spec.rb' => %w[JwtAuth ApiController],
   'spec/requests/api/v1/password_reset_spec.rb' => %w[PasswordReset ResidentMailer Api::V1::ResidentsController],
   'spec/requests/admin/password_reset_button_spec.rb' => %w[PasswordReset],
-  'spec/requests/api/v1/meal_write_retry_spec.rb' => %w[RetryOnConflict Api::V1::MealsController],
+  # Also fails when LiveUpdate pushes before the commit.
+  'spec/requests/api/v1/meal_write_retry_spec.rb' => %w[RetryOnConflict Api::V1::MealsController LiveUpdate],
   'spec/requests/api/v1/calendar_writes_retry_spec.rb' =>
     %w[RetryOnConflict ApiController Api::V1::EventsController Api::V1::GuestRoomReservationsController
        Api::V1::CommonHouseReservationsController],
@@ -104,13 +108,16 @@ MUTANT_SPEC_ROWS = {
   'spec/requests/api/v1/meals_refused_writes_spec.rb' =>
     %w[Api::V1::MealsController ReconciledMealImmutability ClosedMealAttendanceFreeze],
   'spec/requests/api/v1/meals_unknown_resident_spec.rb' => %w[Api::V1::MealsController],
+  # Reopen, a description edit and a new max on a closed meal over its max.
+  'spec/requests/api/v1/meal_over_its_max_spec.rb' => %w[Api::V1::MealsController],
   'spec/requests/api/v1/meal_cooks_performance_spec.rb' => %w[MealFormSerializer Meal],
   'spec/requests/api/v1/events_controller_spec.rb' => %w[Api::V1::EventsController Event LiveUpdate],
   'spec/requests/api/v1/guest_room_reservations_controller_spec.rb' =>
     %w[Api::V1::GuestRoomReservationsController GuestRoomReservation],
   'spec/requests/api/v1/common_house_reservations_controller_spec.rb' =>
     %w[Api::V1::CommonHouseReservationsController CommonHouseReservation],
-  'spec/requests/api/v1/rotations_controller_spec.rb' => %w[Api::V1::RotationsController RotationSerializer],
+  # GET /rotations/:id renders RotationLogSerializer, not RotationSerializer.
+  'spec/requests/api/v1/rotations_controller_spec.rb' => %w[Api::V1::RotationsController RotationLogSerializer],
   'spec/requests/api/v1/site_controller_spec.rb' => %w[Api::V1::SiteController],
   'spec/requests/api/v1/write_messages_spec.rb' =>
     %w[Api::V1::MealsController Api::V1::EventsController Api::V1::CommonHouseReservationsController
@@ -161,11 +168,7 @@ MUTANT_SPEC_ROWS = {
     %w[MealSerializer BillSerializer GuestSerializer MealResidentSerializer EventSerializer
        GuestRoomReservationSerializer CommonHouseReservationSerializer RotationSerializer
        RotationLogSerializer ResidentBirthdaySerializer AuditSerializer ReconciliationPreviewSerializer],
-  'spec/serializers/serializers_spec.rb' =>
-    %w[MealSerializer BillSerializer GuestSerializer MealResidentSerializer EventSerializer
-       GuestRoomReservationSerializer CommonHouseReservationSerializer RotationSerializer
-       RotationLogSerializer ResidentBirthdaySerializer AuditSerializer AuditDescription
-       ResidentNameShortener MealCostSummary],
+  'spec/serializers/serializers_spec.rb' => %w[MealFormSerializer RotationLogSerializer],
   'spec/serializers/calendar_chip_contrast_spec.rb' => %w[RotationSerializer Rotation],
   'spec/serializers/calendar_chips_spec.rb' =>
     %w[MealSerializer BillSerializer EventSerializer GuestRoomReservationSerializer
@@ -192,13 +195,16 @@ MUTANT_SPEC_ROWS = {
     %w[BalanceDisplayHelper SettlementLinesTable MoneyFieldHelper PhoneDisplayHelper ApplicationHelper
        MealCostSummary],
   'spec/models/community_dinner_start_times_spec.rb' => %w[Community],
-  'spec/models/community_today_spec.rb' => %w[Community],
+  # Also pins Settlement.preview's cutoff guard, Reconciliation's
+  # end-date rule and the default today of Meal.settleable_by.
+  'spec/models/community_today_spec.rb' => %w[Community Meal Settlement Reconciliation],
   'spec/models/community_today_outside_requests_spec.rb' => %w[Community],
   'spec/models/rotation_start_date_spec.rb' => %w[Rotation BelongsToTheCommunity],
   'spec/models/admin_user_spec.rb' => %w[AdminUser HasPhoneNumber],
-  'spec/models/meal_charge_spec.rb' => %w[MealCharge AppendOnly],
+  # The tie-out fails when Settlement stores too few balance rows.
+  'spec/models/meal_charge_spec.rb' => %w[MealCharge AppendOnly Settlement],
   'spec/models/ledger_check_run_spec.rb' => %w[LedgerCheckRun AppendOnly],
-  'spec/models/concerns/locks_its_meal_first_spec.rb' => %w[LocksItsMealFirst Bill],
+  'spec/models/concerns/locks_its_meal_first_spec.rb' => %w[LocksItsMealFirst Bill MealResident Guest],
   'spec/models/application_record_ransackable_attributes_spec.rb' => %w[ApplicationRecord],
   'spec/db/settled_meal_triggers_spec.rb' => %w[ReconciledMealImmutability],
   'spec/db/seeds_spec.rb' => %w[Community],
@@ -213,7 +219,9 @@ MUTANT_SPEC_ROWS = {
   'spec/concurrency/process_wide_state_spec.rb' => [],
   'spec/db/meal_write_storm_spec.rb' => [],
   'spec/requests/api/v1/meal_random_actions_spec.rb' => [],
-  'spec/requests/api/v1/calendar_performance_spec.rb' => []
+  'spec/requests/api/v1/calendar_performance_spec.rb' => [],
+  # Proves a database trigger, which mutant does not change.
+  'spec/requests/admin/superuser_demotion_race_spec.rb' => []
 }.freeze
 
 MUTANT_SPECS = MUTANT_SPEC_ROWS.to_h do |path, expressions|
