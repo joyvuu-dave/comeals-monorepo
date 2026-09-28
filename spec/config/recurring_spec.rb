@@ -38,9 +38,18 @@ RSpec.describe 'config/recurring.yml' do # -- a config file
     end
   end
 
+  # Outside CI the test environment loads a class only when something uses
+  # it, and descendants lists only loaded classes. So without eager loading
+  # this example, run alone, checked an empty list, and it never saw a job
+  # that is not on the schedule yet. Unnamed classes a spec builds are left
+  # out.
   it 'gives every recurring job a healthchecks.io slug' do
-    RecurringJob.descendants.each do |job|
-      expect(job::HEALTHCHECK).to be_present
+    Rails.application.eager_load!
+    jobs = RecurringJob.descendants.select(&:name)
+
+    expect(jobs).to include(RefreshBalancesJob, VerifyLedgerJob, EnsureRotationsJob)
+    jobs.each do |job|
+      expect(job::HEALTHCHECK).to be_present, "#{job} has no healthchecks.io slug"
     end
   end
 
