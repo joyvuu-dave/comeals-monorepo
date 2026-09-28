@@ -4,10 +4,11 @@ require 'rails_helper'
 
 # The month payload carries the community's time zone (added 2026-08-25 so
 # a changed zone reaches open tabs). The month is cached under a version
-# read from seven tables plus today's date — and `communities` is not one
-# of them. So the push tells every tab to fetch the month again, and the
-# server answers from the entry built before the change, for up to an
-# hour. Against a real cache, through the API.
+# read from the tables it is drawn from, plus today's date. `communities`
+# was not one of them, so after a zone change the push told every tab to
+# fetch the month again, and the server answered from the entry built
+# before the change, for up to an hour. Fixed in a79b1604: the version
+# now reads communities.updated_at. Against a real cache, through the API.
 RSpec.describe 'the calendar cache after a time zone change' do
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
@@ -42,13 +43,20 @@ RSpec.describe 'the calendar cache after a time zone change' do
     expect(Rails.cache.exist?(community.calendar_cache_key(2026, 3))).to be(false)
   end
 
+  # The `timezone` field is the column, the same whether or not the request
+  # ran in the community zone. An event's start is written out in the
+  # request's zone, so that is what shows the bearer request got the zone.
   it 'reads the community zone for a request signed in with a bearer token too' do
     community.update!(timezone: 'Asia/Tokyo')
+    tokyo = ActiveSupport::TimeZone['Asia/Tokyo']
+    create(:event, community: community, start_date: tokyo.local(2026, 4, 15, 19),
+                   end_date: tokyo.local(2026, 4, 15, 21))
 
     get "/api/v1/communities/#{community.id}/calendar/2026-04-15",
         headers: { 'Authorization' => "Bearer #{JwtAuth.encode(resident)}" }
 
     expect(response).to have_http_status(:ok)
     expect(response.parsed_body['timezone']).to eq('Asia/Tokyo')
+    expect(response.parsed_body['events'].pluck('start')).to eq(['2026-04-15T19:00:00.000+09:00'])
   end
 end

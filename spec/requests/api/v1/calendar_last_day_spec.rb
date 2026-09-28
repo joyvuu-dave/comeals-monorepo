@@ -37,10 +37,10 @@ RSpec.describe 'the calendar on the last day of the grid' do
   end
 
   it 'sends a common house reservation that starts during the last day' do
-    create(:common_house_reservation, community: community, resident: resident,
-                                      start_date: last_day, end_date: last_day + 1.hour)
+    reservation = create(:common_house_reservation, community: community, resident: resident,
+                                                    start_date: last_day, end_date: last_day + 1.hour)
 
-    expect(calendar_body).to include('common_house_reservations')
-    expect(JSON.parse(calendar_body)['common_house_reservations']).not_to be_empty
+    expect(JSON.parse(calendar_body)['common_house_reservations'].pluck('id'))
+      .to eq([reservation.cache_key_with_version])
   end
 end

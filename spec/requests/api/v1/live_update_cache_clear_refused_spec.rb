@@ -8,22 +8,23 @@ require 'rails_helper'
 # raised: the write has committed, and raising here would answer 500 for a
 # change that is in the database."
 #
-# LiveUpdate#push keeps that promise. LiveUpdate#flush's cache clear does
+# LiveUpdate#push kept that promise. LiveUpdate#flush's cache clear did
 # not: `Rails.cache.delete` is a DELETE on solid_cache_entries, in the same
 # SERIALIZABLE session as everything else, and solid_cache's failsafe
 # swallows lock and timeout errors but not ActiveRecord::SerializationFailure
 # (SolidCache::Store::Failsafe::TRANSIENT_ACTIVE_RECORD_ERRORS). So a
-# refused clear raises out of the after-commit callback, into
+# refused clear raised out of the after-commit callback, into
 # RetryOnConflict, which was written for a write that was rolled back: it
-# runs the block again. The guest is already in the database, so the
-# retry writes a second one. When the refusal keeps happening the person
-# sees a 409 that says "Nothing was saved" over three committed guests.
+# ran the block again. The guest was already in the database, so the
+# retry wrote a second one. When the refusal kept happening the person
+# saw a 409 that said "Nothing was saved" over three committed guests.
 #
 # The refusal is simulated with a stub, because making PostgreSQL abort
 # exactly that one DELETE on purpose needs three transactions in a cycle.
 # The error class is the one a SERIALIZABLE session gets.
 #
-# Invariant hunt, 2026-09-21. Red when written: a finding.
+# Invariant hunt, 2026-09-21. Red when written: a finding. Fixed in
+# e945df9c: LiveUpdate#clear rescues the refusal and reports it.
 RSpec.describe 'a refused cache clear after the commit' do
   # No test transaction: RetryOnConflict does not retry while a transaction
   # is open, and in production none is. With the test transaction the

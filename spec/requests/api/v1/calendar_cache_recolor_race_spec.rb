@@ -2,14 +2,16 @@
 
 require 'rails_helper'
 
-# Deleting a rotation recolors the ones after it (Rotation.recolor_community)
-# with update_column: no callback, no updated_at bump. The destroy then
-# deletes the recolored months' cache entries by hand (LiveUpdate.calendar).
-# A delete cannot close the mid-build window (calendar_cache_race_spec.rb):
-# a request already building one of those months stores the old color after
-# the delete, and because the month's version did not change — the version
-# is row count and max updated_at, and update_column moves neither — every
-# later reader gets the stale copy for up to an hour.
+# Deleting a rotation recolors the ones after it (Rotation.recolor_community).
+# The recolor used update_column: no callback, no updated_at bump. The
+# destroy then deleted the recolored months' cache entries by hand
+# (LiveUpdate.calendar). A delete cannot close the mid-build window
+# (calendar_cache_race_spec.rb): a request already building one of those
+# months stored the old color after the delete, and because the month's
+# version did not change — the version is row count and max updated_at,
+# and update_column moves neither — every later reader got the stale copy
+# for up to an hour. Fixed in 1af03179: the recolor saves with update!, so
+# updated_at moves and the version changes.
 RSpec.describe 'the calendar cache after a recolor that lands mid-build' do
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
