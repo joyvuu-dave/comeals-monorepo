@@ -30,8 +30,17 @@ RSpec.describe DropRedundantIndexesAndMakeEmailIndexCaseInsensitive do
     connection.remove_index(:residents, name: :index_residents_on_lower_email)
     connection.execute("UPDATE residents SET email = 'Ann@Example.com' WHERE id = #{bob.id}")
 
-    expect { refuse_duplicates! }
-      .to raise_error(RuntimeError, /ann@example\.com, Ann@Example\.com.*run this migration again/m)
+    # The migration lists each group ORDER BY email, which follows the
+    # database's collation: en_US puts 'ann' first, a C collation puts
+    # 'Ann' first. So the check takes the group in either order.
+    lead = 'residents has emails that differ only by case: '
+    tail = '. Merge or change them, then run this migration again.'
+    expect { refuse_duplicates! }.to raise_error(RuntimeError) { |error|
+      expect(error.message).to start_with(lead)
+      expect(error.message).to end_with(tail)
+      listed = error.message.delete_prefix(lead).delete_suffix(tail)
+      expect(listed.split(', ')).to contain_exactly('ann@example.com', 'Ann@Example.com')
+    }
     expect(ann.reload.email).to eq('ann@example.com')
   end
 end
