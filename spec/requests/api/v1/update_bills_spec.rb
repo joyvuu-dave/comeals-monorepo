@@ -47,7 +47,7 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
       )
     end
 
-    it 'stores amount as BigDecimal with full precision' do
+    it 'stores the amount as a BigDecimal, to the cent' do
       update_bills(
         meal_id: meal.id,
         bills: [{ resident_id: cook.id, amount: '50.01', no_cost: false }]

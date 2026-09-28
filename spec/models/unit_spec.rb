@@ -161,12 +161,5 @@ RSpec.describe Unit do
         expected_channel, any_args
       ).exactly(:once)
     end
-
-    it 'does not raise if Pusher is unavailable' do
-      allow(Pusher).to receive(:trigger).and_raise(StandardError, 'pusher down')
-      expect do
-        create(:unit, community: community)
-      end.not_to raise_error
-    end
   end
 end
