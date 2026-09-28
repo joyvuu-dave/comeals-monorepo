@@ -27,6 +27,16 @@ RSpec.describe 'Admin settlement statement' do
     settle!(cutoff: Date.yesterday)
   end
 
+  # The cells of the line items table in the panel with this title, one
+  # array per row, in the order of the given column headers.
+  def line_rows(title, columns)
+    panel = response.parsed_body.css('.panel').find { |node| node.at_css('h3')&.text&.strip == title }
+    headers = panel.css('thead th').map { |th| th.text.strip }
+    panel.css('tbody tr').map do |tr|
+      headers.zip(tr.css('td').map { |td| td.text.strip }).to_h.values_at(*columns)
+    end
+  end
+
   describe 'the resident page' do
     it 'shows the statement: one section per settlement, one line per charge' do
       reconciliation = settle_plain_meal
@@ -92,17 +102,36 @@ RSpec.describe 'Admin settlement statement' do
 
     it 'shows what a subsidized cook actually spent next to what they were credited' do
       # 4 units of multiplier * 4.50 = 18.00 allowed, against 60.00 spent.
-      meal = create(:meal, community: community)
+      meal = create(:meal, community: community, date: Date.yesterday)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('60'))
       create(:meal_resident, meal: meal, resident: cook, community: community)
       create(:meal_resident, meal: meal, resident: eater, community: community)
+      # A meal under the cap in the same settlement. Its credit line also
+      # stores what the cook spent, so its blank Cook spent cell is what
+      # shows the cell is filled only for a capped credit.
+      plain = create(:meal, community: community, date: Date.yesterday - 1)
+      create(:bill, meal: plain, resident: cook, community: community, amount: BigDecimal('16'))
+      create(:meal_resident, meal: plain, resident: cook, community: community)
+      create(:meal_resident, meal: plain, resident: eater, community: community)
       settle!(cutoff: Date.yesterday)
 
       get "/residents/#{cook.id}"
 
-      expect(response.body).to include('Cook spent')
-      expect(response.body).to include('$60.00')
-      expect(response.body).to include('$18.00')
+      # The page's Bills table also prints $60.00, so the check reads the
+      # statement's own rows.
+      expect(line_rows('Settlement statement', %w[Meal What Amount] + ['Cook spent']))
+        .to contain_exactly([plain.date.to_s, 'Cooked', 'credited $16.00', ''],
+                            [plain.date.to_s, 'Attended', 'charged $8.00', ''],
+                            [meal.date.to_s, 'Cooked', 'credited $18.00', '$60.00'],
+                            [meal.date.to_s, 'Attended', 'charged $9.00', ''])
+
+      # The meal page shows the same line, and a blank for the eater.
+      get "/meals/#{meal.id}"
+
+      expect(line_rows('Settlement line items', %w[Resident What Amount] + ['Cook spent']))
+        .to contain_exactly(['Cook', 'Cooked', 'credited $18.00', '$60.00'],
+                            ['Cook', 'Attended', 'charged $9.00', ''],
+                            ['Eater', 'Attended', 'charged $9.00', ''])
     end
 
     it 'shows nothing but a plain sentence for a resident with no settled history' do

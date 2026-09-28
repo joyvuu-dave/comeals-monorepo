@@ -41,15 +41,17 @@ RSpec.describe 'Admin pages with something to list' do
     expect(response.body).to include("/meals/#{closed.id}")
   end
 
-  it 'lists guests and a bill for nothing on a resident statement' do
+  it 'lists guests and a bill for nothing, with a blank amount, on a resident statement' do
     create(:guest, meal: meal, resident: resident, multiplier: 2)
-    create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('0'))
+    bill = create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('0'))
 
     get "/residents/#{resident.id}"
 
     expect(response).to have_http_status(:ok)
     expect(response.body).to include('Price Category')
     expect(response.body).to include("/meals/#{meal.id}")
+    expect(response.body).to include("/bills/#{bill.id}")
+    expect(response.body).not_to include('$0.00')
   end
 
   it 'lists guests on a meal page' do
@@ -81,11 +83,12 @@ RSpec.describe 'Admin pages with something to list' do
   end
 
   it 'leaves the amount blank for a bill for nothing on the bills index' do
-    create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('0'))
+    bill = create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('0'))
 
     get '/bills'
 
     expect(response).to have_http_status(:ok)
+    expect(response.body).to include("/bills/#{bill.id}")
     expect(response.body).not_to include('$0.00')
   end
 
@@ -129,9 +132,16 @@ RSpec.describe 'Admin pages with something to list' do
 
       get '/meals'
       expect(response).to have_http_status(:ok)
+      row = response.parsed_body.at_css("tr#meal_#{meal.id}")
+      expect(row.at_css('td.col-total_cost').text.strip).to eq('')
+      expect(row.at_css('td.col-unit_cost').text.strip).to eq('')
 
+      # The page still prints the $30 bill in its bills table, so the check
+      # reads the two cost rows only.
       get "/meals/#{meal.id}"
       expect(response).to have_http_status(:ok)
+      expect(response.parsed_body.at_css('tr.row-total_cost td').text.strip).to eq('Empty')
+      expect(response.parsed_body.at_css('tr.row-unit_cost td').text.strip).to eq('Empty')
     end
 
     it 'shows a dash for the cooks on the reconciliation page' do
@@ -140,7 +150,7 @@ RSpec.describe 'Admin pages with something to list' do
       get "/reconciliations/#{settled.id}"
 
       expect(response).to have_http_status(:ok)
-      expect(response.body).to include('—')
+      expect(response.parsed_body.at_css('td.col-cooks').text.strip).to eq('—')
     end
   end
 
