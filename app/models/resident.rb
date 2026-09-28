@@ -43,8 +43,10 @@ class Resident < ApplicationRecord
 
   include HasPhoneNumber
 
-  # Ransack allowlists for ActiveAdmin filtering and sorting.
-  # Deliberately excludes password_digest and reset_password_token.
+  # The columns ActiveAdmin's filters may search. It deliberately leaves
+  # out password_digest and reset_password_token. ActiveAdmin's column
+  # sorting (?order=) does not read this list, so it does not limit what
+  # the index can be sorted by.
   sig { params(_auth_object: T.untyped).returns(T::Array[String]) }
   def self.ransackable_attributes(_auth_object = nil)
     %w[id active birthday can_cook created_at email name phone unit_id updated_at vegetarian]
