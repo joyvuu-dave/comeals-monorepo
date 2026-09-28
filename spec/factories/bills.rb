@@ -30,6 +30,9 @@ FactoryBot.define do
     meal
     resident
     community
-    amount { BigDecimal(Random.rand(9.0..99.0).round(2).to_s) }
+    # A fixed amount, so a run can be repeated. It was a random Float with
+    # no seed, which a failure could not replay, and money is never a
+    # Float. A spec that needs a certain amount passes its own.
+    amount { BigDecimal('20') }
   end
 end

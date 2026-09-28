@@ -28,7 +28,11 @@ FactoryBot.define do
     details { [] }
 
     # Amounts are strings here because that is how LedgerVerification writes
-    # them — JSON numbers are floats, and money never touches one.
+    # them — JSON numbers are floats, and money never touches one. The
+    # shape is LedgerVerification#detail's, including which check found
+    # the difference: 'recompute' here, so `source` is the balance rebuilt
+    # from the source rows (nil when that balance is zero, which is not
+    # stored).
     trait :with_mismatches do
       mismatch_count { 1 }
       details do
@@ -36,6 +40,7 @@ FactoryBot.define do
           {
             'reconciliation_id' => 1,
             'date' => '2026-07-01',
+            'check' => 'recompute',
             'differences' => [
               { 'resident_id' => 1, 'stored' => '40.0', 'source' => '39.0' },
               { 'resident_id' => 2, 'stored' => '-40.0', 'source' => nil }

@@ -38,7 +38,7 @@
 # suite grew. That changes prices: the resident factory counts a child's
 # birthday back from today (8 years for half price), and a price is read
 # on the meal's date, so on a meal more than three years back that child
-# is under 5 and eats free (#117). spec/models/factory_price_bands_spec.rb
+# is under 5 and eats free (#117). spec/models/factories_spec.rb
 # checks the price bands at both ends of this window.
 #
 # Methods, not a constant: factory_bot_rails loads this file again on
