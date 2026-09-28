@@ -7,8 +7,9 @@ require 'rails_helper'
 # Every example here was a live gap before this spec existed. The superuser
 # flag was missing from permit_params, so the form silently dropped it: a
 # superuser could not create another superuser, could not promote anyone, and
-# got a success response either way. Nothing guarded the last superuser, so
-# one click on "Delete" took the community from one superuser to zero.
+# got a success response either way. Nothing guarded the last superuser
+# either, so one click on "Delete" took the community from one superuser to
+# zero; where that rule is proved now is noted above the plain-admin context.
 RSpec.describe 'Admin superuser management' do
   let(:community) { create(:community) }
   let(:me) { create(:admin_user, community: community, superuser: true) }
@@ -114,29 +115,12 @@ RSpec.describe 'Admin superuser management' do
     end
   end
 
-  context 'when only one superuser is left' do
-    before do
-      me # created first, so demoting `spare` is not itself the last-superuser case
-      spare.update!(superuser: false)
-      sign_in me
-    end
-
-    it 'refuses to destroy them and the account survives' do
-      expect do
-        delete "/admin_users/#{me.id}"
-      end.not_to change(AdminUser, :count)
-
-      expect(AdminUser.exists?(me.id)).to be true
-      expect(AdminUser.where(superuser: true).count).to eq(1)
-    end
-
-    it 'never lets the community reach zero superusers through the UI' do
-      delete "/admin_users/#{me.id}"
-      patch "/admin_users/#{me.id}", params: { admin_user: { superuser: false } }
-
-      expect(AdminUser.where(superuser: true).count).to eq(1)
-    end
-  end
+  # A lone superuser can only be removed by themselves, and the two
+  # self-rules above refuse that at any count, before the last-superuser
+  # rule is asked. So one request at a time never reaches that rule. It is
+  # proved in spec/models/admin_user_spec.rb, and through this form in
+  # superuser_demotion_race_spec.rb: two superusers demoting each other at
+  # the same moment, the one way admin can reach it.
 
   context 'when signed in as a plain admin' do
     let(:plain) { create(:admin_user, community: community, superuser: false) }
