@@ -69,6 +69,22 @@ describe("every screen has a golden image", () => {
     expect(Object.keys(GOLDENS).sort()).toEqual(screens().sort());
   });
 
+  it("photographs every screen's golden in the visual spec", () => {
+    // A golden file with no test behind it is never compared, so a
+    // screen whose test was dropped or renamed would pass here forever.
+    const spec = fs.readFileSync(
+      path.join(__dirname, "..", "e2e", "visual.spec.js"),
+      "utf8",
+    );
+    const photographed = [
+      ...spec.matchAll(/toHaveScreenshot\(\s*"([^"]+)\.png"/g),
+    ].map((match) => match[1]);
+    const missing = Object.values(GOLDENS).filter(
+      (golden) => !photographed.includes(golden),
+    );
+    expect(missing).toEqual([]);
+  });
+
   it("has the golden files for every browser and platform", () => {
     const missing = [];
     for (const golden of Object.values(GOLDENS)) {
