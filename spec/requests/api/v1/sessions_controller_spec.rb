@@ -262,15 +262,16 @@ RSpec.describe 'Sessions API' do
       expect(response).to have_http_status(:unauthorized)
     end
 
-    it 'does not destroy sibling Key rows belonging to other devices' do
-      laptop_key = legacy_key
-      phone_key = resident.keys.create!
-
-      delete '/api/v1/sessions/current', headers: legacy_auth(laptop_key)
-
+    # Signing out one device with a JWT must not sign out a device that
+    # still holds a legacy Key. (A Key sign-out leaving the other Keys alone
+    # is the first example in this file.)
+    it 'leaves another device\'s legacy Key working when a JWT session signs out' do
+      delete '/api/v1/sessions/current', headers: jwt_auth(resident)
       expect(response).to have_http_status(:ok)
-      expect(Key.exists?(laptop_key.id)).to be(false)
-      expect(Key.exists?(phone_key.id)).to be(true)
+
+      get '/api/v1/residents/id', headers: legacy_auth(legacy_key)
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq(resident.id)
     end
   end
 end

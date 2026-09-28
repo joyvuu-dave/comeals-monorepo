@@ -22,7 +22,12 @@ RSpec.describe 'Rotations API' do
       expect(body['id']).to eq(rotation.id)
       # The only rotation, so its place in date order is 1.
       expect(body['place_value']).to eq(1)
-      expect(body).to have_key('residents')
+      # The controller passes the rotation's cook ids: the cook with a bill
+      # is signed up, and the resident without one is not.
+      rows = body['residents'].index_by { |row| row['id'] }
+      expect(rows.fetch(cook.id)).to eq('id' => cook.id, 'display_name' => "#{unit.name} - #{cook.name}",
+                                        'signed_up' => true)
+      expect(rows.fetch(resident.id)['signed_up']).to be(false)
     end
 
     it 'returns 404 for nonexistent rotation' do
