@@ -210,5 +210,13 @@ RSpec.describe CommonHouseReservation do
       reservation = build(:common_house_reservation, start_date: 2.hours.ago, end_date: 1.hour.ago)
       expect(reservation).to be_valid
     end
+
+    # The rule refuses only an end before the start, so a booking that ends
+    # when it starts is allowed, the same as an event.
+    it 'is valid when the booking ends at the moment it starts' do
+      moment = Time.zone.local(2026, 4, 12, 14, 0)
+      reservation = build(:common_house_reservation, start_date: moment, end_date: moment)
+      expect(reservation).to be_valid
+    end
   end
 end
