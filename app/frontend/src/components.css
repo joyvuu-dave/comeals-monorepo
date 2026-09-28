@@ -911,15 +911,6 @@ textarea {
   border-right: 1px solid var(--gray-4);
   border-top-right-radius: var(--radius);
 }
-.input-invalid label {
-  color: var(--bright-red) !important;
-}
-.input-invalid input,
-.input-invalid select,
-.input-invalid textarea {
-  border-color: var(--bright-red) !important;
-  color: var(--bright-red) !important;
-}
 
 /*! Switches */
 .switch {
