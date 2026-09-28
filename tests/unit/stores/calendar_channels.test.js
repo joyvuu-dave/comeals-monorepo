@@ -172,6 +172,25 @@ describe("calendar channels through the real Pusher client", () => {
     });
   });
 
+  it("moving from December to January keeps both open, across the year", async () => {
+    const store = DataStore.create({ meals: [] });
+    store.switchMonths("2024-12-15");
+    await flush();
+
+    store.switchMonths("2025-01-15");
+    await flush();
+
+    expect(openNames()).toEqual([
+      monthChannel(2024, 12),
+      monthChannel(2025, 1),
+      monthChannel(2025, 2),
+      RESIDENTS,
+    ]);
+    expect(FakePusher.instance.unsubscribe.mock.calls).toEqual([
+      [monthChannel(2024, 11)],
+    ]);
+  });
+
   it("moving far away closes the three old months and opens the three new ones", async () => {
     const store = await julyOnScreen();
 
