@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { observable } from "mobx";
 
@@ -19,14 +19,10 @@ import axios from "axios";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
 import GuestRoomReservationsEdit from "../../../app/frontend/src/components/guest_room_reservations/edit.jsx";
-
-const RESERVATION = {
-  event: {
-    id: 60,
-    resident_id: 1,
-    date: "2026-01-25T00:00:00",
-  },
-};
+// What GET /api/v1/guest-room-reservations/:id sends, made by the Rails
+// app (rake test:generate_fixtures): resident 1 hosts on January 25,
+// 2026. The date is a plain date, with no time or zone.
+import RESERVATION from "../../fixtures/guest_room_reservation.json";
 
 // What the server answers for an id it does not have
 // (ApiController#not_found_api).
@@ -87,6 +83,13 @@ describe("GuestRoomReservationsEdit", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     axios.get.mockResolvedValue({ status: 200, data: RESERVATION });
+    // The computer's zone is not the community's; a plain date must
+    // still show as the same day.
+    vi.stubEnv("TZ", "UTC");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("fetches the reservation and hydrates the form", async () => {
@@ -102,9 +105,9 @@ describe("GuestRoomReservationsEdit", () => {
     expect(screen.getByDisplayValue("01/25/2026")).toBeInTheDocument();
   });
 
-  it("Update patches the edited reservation", async () => {
+  it("Update patches the edited reservation and clears its month", async () => {
     axios.patch.mockResolvedValue({ status: 200, data: {} });
-    const { handleCloseModal } = renderForm();
+    const { handleCloseModal, store } = renderForm();
 
     await vi.waitFor(() => {
       expect(screen.getByLabelText("Host")).toHaveValue("1");
@@ -119,11 +122,46 @@ describe("GuestRoomReservationsEdit", () => {
     await vi.waitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);
     });
+    // The cached month the stay was in is stale now (issue #37).
+    expect(store.invalidateMonthForDate.mock.calls).toEqual([
+      ["2026-01-25"],
+      [new Date(2026, 0, 25)],
+    ]);
+  });
+
+  // Months far from the one on screen get no live update, so an edit
+  // that moves the stay clears the month it left and the month it
+  // joined.
+  it("an Update that moves the reservation to another month clears both months", async () => {
+    axios.patch.mockResolvedValue({ status: 200, data: {} });
+    const { handleCloseModal, store } = renderForm();
+    await vi.waitFor(() => {
+      expect(screen.getByLabelText("Host")).toHaveValue("1");
+    });
+
+    fireEvent.click(screen.getByLabelText("Day"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Go to the Next Month" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /February 3rd/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+
+    expect(axios.patch).toHaveBeenCalledWith(
+      "/api/v1/guest-room-reservations/60/update",
+      { resident_id: 1, date: "2026-02-03" },
+    );
+    await vi.waitFor(() => {
+      expect(handleCloseModal).toHaveBeenCalledTimes(1);
+    });
+    expect(store.invalidateMonthForDate.mock.calls).toEqual([
+      ["2026-01-25"],
+      [new Date(2026, 1, 3)],
+    ]);
   });
 
   it("Delete asks first, then deletes on confirm", async () => {
     axios.delete.mockResolvedValue({ status: 200, data: {} });
-    const { handleCloseModal } = renderForm();
+    const { handleCloseModal, store } = renderForm();
     await vi.waitFor(() => {
       expect(screen.getByLabelText("Host")).toHaveValue("1");
     });
@@ -142,6 +180,7 @@ describe("GuestRoomReservationsEdit", () => {
     await vi.waitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);
     });
+    expect(store.invalidateMonthForDate.mock.calls).toEqual([["2026-01-25"]]);
   });
 
   // The discard gate (ADR 0006): the form compares its fields to the

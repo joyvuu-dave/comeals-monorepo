@@ -52,11 +52,11 @@ function EventsEdit({ eventId, handleCloseModal, setDirty }) {
           var evt = response.data;
           var sd = toCommunityDayjs(evt.start_date);
           var ed = evt.end_date ? toCommunityDayjs(evt.end_date) : null;
-          // title and description are nullable in the database; a null
-          // value would make the controlled inputs uncontrolled.
+          // title and description are NOT NULL columns (description
+          // defaults to ""), so both are always strings.
           var initial = {
-            title: evt.title || "",
-            description: evt.description || "",
+            title: evt.title,
+            description: evt.description,
             day: sd.format("YYYY-MM-DD"),
             startTime: toTimeString(sd),
             endTime: ed ? toTimeString(ed) : "",

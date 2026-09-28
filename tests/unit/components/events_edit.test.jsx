@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { observable } from "mobx";
 
@@ -19,15 +19,10 @@ import axios from "axios";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
 import EventsEdit from "../../../app/frontend/src/components/events/edit.jsx";
-
-const EVENT = {
-  id: 70,
-  title: "Community Meeting",
-  description: "Monthly community meeting",
-  start_date: "2026-01-28T19:00:00",
-  end_date: "2026-01-28T21:00:00",
-  allday: false,
-};
+// What GET /api/v1/events/:id sends, made by the Rails app
+// (rake test:generate_fixtures): 7 to 9 PM on January 28, 2026, with
+// the community's -08:00 offset.
+import EVENT from "../../fixtures/event.json";
 
 // What the server answers for an id it does not have
 // (ApiController#not_found_api).
@@ -82,6 +77,13 @@ describe("EventsEdit", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     axios.get.mockResolvedValue({ status: 200, data: EVENT });
+    // The computer's zone is not the community's, so a date read in the
+    // computer's zone shows the wrong day and hour on every machine.
+    vi.stubEnv("TZ", "UTC");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("fetches the event and hydrates the form", async () => {
@@ -92,32 +94,85 @@ describe("EventsEdit", () => {
 
     expect(await screen.findByDisplayValue("Community Meeting")).toBeVisible();
     expect(axios.get).toHaveBeenCalledWith("/api/v1/events/70");
-    // No timezone marker on the fixture date, so it reads as 19:00 in
-    // the community's timezone.
+    // Read in the community's zone, not the computer's (UTC here, where
+    // the same instant is 3 AM on January 29).
+    expect(screen.getByLabelText("Description")).toHaveValue(
+      "Monthly community meeting",
+    );
+    expect(screen.getByLabelText("Day")).toHaveDisplayValue("01/28/2026");
     expect(screen.getByLabelText("Start Time")).toHaveDisplayValue("7:00 PM");
+    expect(screen.getByLabelText("End Time")).toHaveDisplayValue("9:00 PM");
+    expect(screen.getByLabelText("All Day")).not.toBeChecked();
     expect(screen.getByRole("button", { name: "Update" })).toBeEnabled();
   });
 
-  it("Update patches the edited fields", async () => {
+  // Only the title changed, so every other field goes back as it came:
+  // an edit must not move the event's day or time.
+  it("Update patches the edited fields and clears the event's month", async () => {
     axios.patch.mockResolvedValue({ status: 200, data: {} });
-    const { handleCloseModal } = renderForm();
+    const { handleCloseModal, store } = renderForm();
 
     const title = await screen.findByDisplayValue("Community Meeting");
     fireEvent.change(title, { target: { value: "Annual Meeting" } });
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
 
+    expect(axios.patch).toHaveBeenCalledWith("/api/v1/events/70/update", {
+      title: "Annual Meeting",
+      description: "Monthly community meeting",
+      start_year: 2026,
+      start_month: 1,
+      start_day: 28,
+      start_hours: "19",
+      start_minutes: "00",
+      end_hours: "21",
+      end_minutes: "00",
+      all_day: false,
+    });
+    await vi.waitFor(() => {
+      expect(handleCloseModal).toHaveBeenCalledTimes(1);
+    });
+    // The cached month the event was in is stale now (issue #37).
+    expect(store.invalidateMonthForDate.mock.calls).toEqual([
+      [EVENT.start_date],
+      [new Date(2026, 0, 28)],
+    ]);
+  });
+
+  // Months far from the one on screen get no live update, so an edit
+  // that moves the event clears the month it left and the month it
+  // joined.
+  it("an Update that moves the event to another month clears both months", async () => {
+    axios.patch.mockResolvedValue({ status: 200, data: {} });
+    const { handleCloseModal, store } = renderForm();
+    await screen.findByDisplayValue("Community Meeting");
+
+    fireEvent.click(screen.getByLabelText("Day"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Go to the Next Month" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /February 3rd/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+
     expect(axios.patch).toHaveBeenCalledWith(
       "/api/v1/events/70/update",
-      expect.objectContaining({ title: "Annual Meeting" }),
+      expect.objectContaining({
+        start_year: 2026,
+        start_month: 2,
+        start_day: 3,
+      }),
     );
     await vi.waitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);
     });
+    expect(store.invalidateMonthForDate.mock.calls).toEqual([
+      [EVENT.start_date],
+      [new Date(2026, 1, 3)],
+    ]);
   });
 
   it("Delete asks first, then deletes on confirm", async () => {
     axios.delete.mockResolvedValue({ status: 200, data: {} });
-    const { handleCloseModal } = renderForm();
+    const { handleCloseModal, store } = renderForm();
     await screen.findByDisplayValue("Community Meeting");
 
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
@@ -135,6 +190,9 @@ describe("EventsEdit", () => {
     await vi.waitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);
     });
+    expect(store.invalidateMonthForDate.mock.calls).toEqual([
+      [EVENT.start_date],
+    ]);
   });
 
   it("a refused delete shows the reason and keeps the form open", async () => {
@@ -243,19 +301,6 @@ describe("EventsEdit", () => {
 
     fireEvent.change(title, { target: { value: "Community Meeting" } });
     expect(setDirty).toHaveBeenLastCalledWith(false);
-  });
-
-  it("hydrates a null title and description as empty strings", async () => {
-    axios.get.mockResolvedValue({
-      status: 200,
-      data: { ...EVENT, title: null, description: null },
-    });
-    renderForm();
-    await vi.waitFor(() => {
-      expect(screen.getByRole("button", { name: "Update" })).toBeEnabled();
-    });
-    expect(screen.getByLabelText("Title")).toHaveValue("");
-    expect(screen.getByLabelText("Description")).toHaveValue("");
   });
 
   it("All Day clears the times; unchecking it leaves them empty", async () => {
