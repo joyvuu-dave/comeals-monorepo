@@ -1,11 +1,22 @@
-const fs = require("fs");
-const path = require("path");
 const {
   test,
   expect,
   httpFailurePattern,
   combinePatterns,
 } = require("../helpers/test");
+// rails500 answers with Rails' own 500 page, what production sends for
+// an exception ApiController does not rescue. NOT_FOUND_MESSAGE is
+// ApiController's answer for a record that is not there.
+const {
+  NOT_FOUND_MESSAGE,
+  NOT_FOUND_LOG,
+  rails500,
+  setupAuthenticatedPage,
+  stubPusher,
+  disableIdleTimer,
+  mockApi,
+} = require("../helpers/setup");
+const mealFixture = require("../fixtures/meal.json");
 
 // Every test here makes the app hit a mocked failure, so the
 // browser's request-failed log lines are the point. A silent caller
@@ -14,46 +25,23 @@ const {
 test.use({
   allowedConsoleErrors: combinePatterns(
     httpFailurePattern,
-    /^not found$/,
+    NOT_FOUND_LOG,
     /^Bad response from server/,
     /^Could not use the meal from the server:/,
     /^Error: no response received from server\.$/,
   ),
 });
 
-// What production really sends for an exception ApiController does not
-// rescue: Rails' own page (production.rb has consider_all_requests_local
-// false), as HTML, with no message in it.
-const RAILS_500_PAGE = fs.readFileSync(
-  path.join(__dirname, "../../public/500.html"),
-  "utf8",
-);
-
-function rails500(route) {
-  return route.fulfill({
-    status: 500,
-    contentType: "text/html; charset=utf-8",
-    body: RAILS_500_PAGE,
-  });
-}
-
 // The words handle_axios_error shows for an error answer with no message.
 const SERVER_PROBLEM = "The server had a problem. Please try again.";
 
-// The 409 every meal write answers when it loses a race for the meal's
-// lock (MealsController#conflict_rejection).
 // What EventsController#create sends for an event with no title.
 const EVENT_REFUSED = "Title can't be blank";
 
+// The 409 every meal write answers when it loses a race for the meal's
+// lock (MealsController#conflict_rejection).
 const MEAL_CONFLICT =
   "Someone else was changing this meal at the same time. Nothing was saved. Try again.";
-const {
-  setupAuthenticatedPage,
-  stubPusher,
-  disableIdleTimer,
-  mockApi,
-} = require("../helpers/setup");
-const mealFixture = require("../fixtures/meal.json");
 
 test.describe("Error Handling & Edge Cases", () => {
   test.describe("API Error Responses", () => {
@@ -252,7 +240,7 @@ test.describe("Error Handling & Edge Cases", () => {
         route.fulfill({
           status: 404,
           contentType: "application/json",
-          body: JSON.stringify({ message: "not found" }),
+          body: JSON.stringify({ message: NOT_FOUND_MESSAGE }),
         }),
       );
 
@@ -528,55 +516,101 @@ test.describe("Error Handling & Edge Cases", () => {
     });
   });
 
+  // At either end of the meal list the server sends the meal's own id
+  // for the missing neighbour (MealFormSerializer#next_id and #prev_id,
+  // pinned by spec/serializers/meal_form_serializer_spec.rb), never
+  // null. So the arrow that points past the end must not take the
+  // page anywhere else, and the other arrow must still work.
   test.describe("Navigation Edge Cases", () => {
-    test("meal with only prev_id navigates backward but not forward", async ({
+    // The ids of the meals the page asked the server for, in order.
+    function mealRequests(page) {
+      const ids = [];
+      page.on("request", (request) => {
+        const match = request.url().match(/\/api\/v1\/meals\/(\d+)\/cooks/);
+        if (match && request.method() === "GET") ids.push(Number(match[1]));
+      });
+      return ids;
+    }
+
+    // The neighbour's own answer, so its page shows its own menu.
+    async function serveMeal(page, meal) {
+      await page.route(`**/api/v1/meals/${meal.id}/cooks*`, (route) =>
+        route.request().method() === "GET"
+          ? route.fulfill({
+              status: 200,
+              contentType: "application/json",
+              body: JSON.stringify(meal),
+            })
+          : route.fallback(),
+      );
+    }
+
+    async function openMeal42(page) {
+      await page.goto("/meals/42/edit/");
+      await expect(page.getByLabel("Enter meal description")).toHaveValue(
+        mealFixture.description,
+        { timeout: 10000 },
+      );
+    }
+
+    test("the last meal: the forward arrow stays on the meal, and the back arrow goes back", async ({
       page,
       context,
     }) => {
-      // Meal with no next meal (last in sequence)
-      const lastMeal = {
+      await setupAuthenticatedPage(page, context, {
+        mealData: { ...mealFixture, prev_id: 41, next_id: mealFixture.id },
+      });
+      await serveMeal(page, {
         ...mealFixture,
-        next_id: null,
+        id: 41,
+        date: "2026-01-13",
+        description: "Soup night",
         prev_id: 41,
-      };
+        next_id: mealFixture.id,
+      });
+      const requested = mealRequests(page);
+      await openMeal42(page);
 
-      await setupAuthenticatedPage(page, context, { mealData: lastMeal });
+      await page.getByRole("button", { name: "Next meal" }).click();
+      await expect(page).toHaveURL(/\/meals\/42\/edit\/?$/);
 
-      await page.goto("/meals/42/edit/");
-      await page.waitForLoadState("networkidle");
-      await expect(
-        page.getByRole("cell", { name: "A - Jane Smith", exact: true }),
-      ).toBeVisible({ timeout: 10000 });
-
-      // Previous arrow should work (prev_id: 41)
-      const prevArrow = page.locator("svg.icon-chevron-left").first();
-      await prevArrow.click();
-      await expect(page).toHaveURL(/\/meals\/41\/edit/, { timeout: 5000 });
+      await page.getByRole("button", { name: "Previous meal" }).click();
+      await expect(page).toHaveURL(/\/meals\/41\/edit\/?$/, { timeout: 5000 });
+      await expect(page.getByLabel("Enter meal description")).toHaveValue(
+        "Soup night",
+      );
+      // The forward tap asked for no meal: the only other request is the
+      // back arrow's.
+      expect(requested).toEqual([42, 41]);
     });
 
-    test("meal with only next_id navigates forward but not backward", async ({
+    test("the first meal: the back arrow stays on the meal, and the forward arrow goes forward", async ({
       page,
       context,
     }) => {
-      // Meal with no previous meal (first in sequence)
-      const firstMeal = {
+      await setupAuthenticatedPage(page, context, {
+        mealData: { ...mealFixture, prev_id: mealFixture.id, next_id: 43 },
+      });
+      await serveMeal(page, {
         ...mealFixture,
+        id: 43,
+        date: "2026-01-17",
+        description: "Tacos",
+        prev_id: mealFixture.id,
         next_id: 43,
-        prev_id: null,
-      };
+      });
+      const requested = mealRequests(page);
+      await openMeal42(page);
 
-      await setupAuthenticatedPage(page, context, { mealData: firstMeal });
+      await page.getByRole("button", { name: "Previous meal" }).click();
+      await expect(page).toHaveURL(/\/meals\/42\/edit\/?$/);
 
-      await page.goto("/meals/42/edit/");
-      await page.waitForLoadState("networkidle");
-      await expect(
-        page.getByRole("cell", { name: "A - Jane Smith", exact: true }),
-      ).toBeVisible({ timeout: 10000 });
-
-      // Next arrow should work (next_id: 43)
-      const nextArrow = page.locator("svg.icon-chevron-right").first();
-      await nextArrow.click();
-      await expect(page).toHaveURL(/\/meals\/43\/edit/, { timeout: 5000 });
+      await page.getByRole("button", { name: "Next meal" }).click();
+      await expect(page).toHaveURL(/\/meals\/43\/edit\/?$/, { timeout: 5000 });
+      await expect(page.getByLabel("Enter meal description")).toHaveValue(
+        "Tacos",
+      );
+      expect(requested).toEqual([42, 43]);
     });
   });
 });
