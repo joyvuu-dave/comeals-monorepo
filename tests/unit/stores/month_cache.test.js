@@ -165,13 +165,24 @@ describe("month cache", () => {
   });
 
   describe("freshness", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     it("a key is fresh only after markFresh and only within the window", () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-07-08T12:00:00Z"));
       monthCache.set("a", { month: 1 });
       expect(monthCache.isFresh("a", 5000)).toBe(false);
+
       monthCache.markFresh("a");
       expect(monthCache.isFresh("a", 5000)).toBe(true);
-      // A window of 0 ms has always expired by the time we ask.
-      expect(monthCache.isFresh("a", -1)).toBe(false);
+
+      // The window is in milliseconds, and its last millisecond counts.
+      vi.advanceTimersByTime(5000);
+      expect(monthCache.isFresh("a", 5000)).toBe(true);
+      vi.advanceTimersByTime(1);
+      expect(monthCache.isFresh("a", 5000)).toBe(false);
     });
 
     it("remove() clears freshness — an invalidated month must refetch", () => {
