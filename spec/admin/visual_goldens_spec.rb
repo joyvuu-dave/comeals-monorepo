@@ -5,9 +5,10 @@ require 'rails_helper'
 # Every admin page has a golden image (tests/admin/visual.spec.js), the
 # way every line of Ruby has a spec. The pages are listed here from the
 # routes, not copied from the visual spec, so a new admin resource or
-# action fails this spec until its goldens exist. A GET route that is not
-# a page of its own is in not_a_page with the reason. The Vitest side of
-# this is tests/unit/screens.test.js.
+# action fails this spec until the visual spec photographs it and its
+# goldens exist. A GET route that is not a page of its own is in
+# not_a_page with the reason. The Vitest side of this is
+# tests/unit/screens.test.js.
 RSpec.describe 'admin visual goldens' do
   let(:goldens_dir) { Rails.root.join('tests/admin/visual.spec.js-snapshots') }
   let(:platforms) { %w[darwin linux] }
@@ -64,6 +65,20 @@ RSpec.describe 'admin visual goldens' do
     end
     expect(missing).to eq([]),
                        "record goldens for #{missing.join(', ')} (see tests/admin/visual.spec.js)"
+  end
+
+  # Playwright never deletes a golden. So a page taken out of the visual
+  # spec's lists keeps its PNG files, the example above stays green, and
+  # nothing photographs that page. This one reads the lists themselves.
+  it 'has every admin page in the visual spec, which photographs each one' do
+    source = Rails.root.join('tests/admin/visual.spec.js').read
+    listed = %w[SIGNED_OUT_PAGES SIGNED_IN_PAGES].flat_map do |list|
+      body = source[/^const #{list} = \[\n(.*?)^\];/m, 1]
+      expect(body).not_to be_nil, "tests/admin/visual.spec.js has no #{list} list"
+      body.to_s.scan(/^\s*\["([^"]+)",/).flatten
+    end
+
+    expect(listed.map { |name| name.tr('_', '-') }).to match_array(golden_names)
   end
 
   it 'has no golden for a page that no longer exists' do
