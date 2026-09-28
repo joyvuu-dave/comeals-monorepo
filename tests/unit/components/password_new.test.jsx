@@ -110,46 +110,79 @@ describe("ResidentsPasswordNew", () => {
     expect(screen.getByRole("button", { name: "Submit" })).toBeEnabled();
   });
 
-  it("a bad or expired link goes back to the login page", async () => {
-    axios.get.mockRejectedValue({
-      response: {
-        status: 400,
-        data: { message: "Password reset link is incorrect or expired." },
-      },
-    });
-    renderForm();
-    expect(await screen.findByText("login page")).toBeInTheDocument();
-  });
+  // The two answers the server gives for a link it will not use
+  // (ResidentsController#show_name). The person lands on the login
+  // page and is told why there.
+  it.each([
+    "Password reset link is incorrect or expired.",
+    "Password reset link has expired. Please request a new one.",
+  ])(
+    "a link the server refuses goes to the login page and says: %s",
+    async (message) => {
+      axios.get.mockRejectedValue({
+        response: { status: 400, data: { message: message } },
+      });
+      renderForm();
+      expect(await screen.findByText("login page")).toBeInTheDocument();
+      expect(
+        toastStore.toasts.map((t) => ({ message: t.message, type: t.type })),
+      ).toEqual([{ message: message, type: "error" }]);
+    },
+  );
 
-  it("a network failure on the name lookup keeps Loading", async () => {
-    axios.get.mockRejectedValue(new Error("Network Error"));
+  // With no answer from the server there is nothing to go on, so the
+  // page stays and says so, instead of "Loading..." forever.
+  it.each([
+    // What axios rejects with when no answer came back.
+    ["a network failure", { request: {}, message: "Network Error" }],
+    // A throw before any request was sent.
+    ["an error before the request", new Error("boom")],
+  ])("%s on the name lookup says so and stays", async (_name, error) => {
+    axios.get.mockRejectedValue(error);
     renderForm();
-    await act(async () => {});
-    expect(screen.getByText("Loading...")).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "Could not load this page. Check your connection and try again.",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
+    expect(
+      screen.queryByPlaceholderText("New Password"),
+    ).not.toBeInTheDocument();
     expect(screen.getByTestId("location")).toHaveTextContent(
       "/reset-password/tok-1/",
     );
+    expect(toastStore.toasts).toHaveLength(0);
   });
 
-  it("answers that land after the form is gone touch nothing", async () => {
-    // The name lookup, resolved late.
+  // React shows no sign when it drops a state update on a page that is
+  // gone, so this only checks that a late name does not throw.
+  it("a name that arrives after the page is gone throws nothing", async () => {
     const name = deferred();
     axios.get.mockReturnValueOnce(name.promise);
     renderForm();
     cleanup();
     await act(async () => name.resolve({ status: 200, data: { name: "J" } }));
     expect(document.body).not.toHaveTextContent("Reset Password");
+  });
 
-    // The name lookup, refused late.
+  it("a refusal that arrives after the page is gone shows nothing", async () => {
     const refusedName = deferred();
     axios.get.mockReturnValueOnce(refusedName.promise);
     renderForm();
     cleanup();
     await act(async () =>
-      refusedName.reject({ response: { status: 400, data: {} } }),
+      refusedName.reject({
+        response: {
+          status: 400,
+          data: { message: "Password reset link is incorrect or expired." },
+        },
+      }),
     );
+    expect(toastStore.toasts).toHaveLength(0);
+  });
 
-    // The password save, resolved late and refused late.
+  it("a save answered after the page is gone shows nothing", async () => {
     axios.get.mockResolvedValue({ status: 200, data: { name: "Jane Smith" } });
     for (const settle of ["resolve", "reject"]) {
       const save = deferred();

@@ -28,6 +28,19 @@ const RESERVATION = {
   },
 };
 
+// What the server answers for an id it does not have
+// (ApiController#not_found_api).
+const NOT_FOUND = {
+  response: {
+    status: 404,
+    data: {
+      message:
+        "The page you were looking for doesn't exist. You may have " +
+        "mistyped the address or the page may have moved.",
+    },
+  },
+};
+
 function makeStore() {
   return observable(
     {
@@ -148,13 +161,18 @@ describe("GuestRoomReservationsEdit", () => {
     expect(setDirty).toHaveBeenLastCalledWith(false);
   });
 
-  it("stays frozen when the reservation fails to load", async () => {
-    axios.get.mockRejectedValue({ response: { status: 404, data: {} } });
+  // The body not_found_api in api_controller.rb always sends. Someone
+  // deleted the reservation, or an old link names one that is gone. The
+  // form stays locked, so no PATCH can go out with empty fields.
+  it("tells the person why when the reservation cannot be loaded", async () => {
+    toastStore.clearAll();
+    axios.get.mockRejectedValue(NOT_FOUND);
     renderForm();
     await vi.waitFor(() => {
-      expect(axios.get).toHaveBeenCalled();
+      expect(toastStore.toasts.map((t) => t.message)).toEqual([
+        NOT_FOUND.response.data.message,
+      ]);
     });
-    await new Promise((r) => setTimeout(r, 0));
     expect(screen.getByRole("button", { name: "Update" })).toBeDisabled();
   });
 
@@ -181,7 +199,14 @@ describe("GuestRoomReservationsEdit", () => {
     expect(screen.getByRole("button", { name: "Update" })).toBeEnabled();
   });
 
+  // A late answer must not reach a form that is gone: no toast over
+  // the calendar, and no second close.
   it("answers that land after the form closed touch nothing", async () => {
+    toastStore.clearAll();
+
+    // The fetch, answered late. React shows no sign when it drops a
+    // state update on a form that is gone, so this part only checks
+    // that nothing throws.
     let deliver;
     axios.get.mockImplementationOnce(
       () =>
@@ -195,6 +220,20 @@ describe("GuestRoomReservationsEdit", () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(document.body).not.toHaveTextContent("01/25/2026");
 
+    // The fetch, refused late.
+    let refuse;
+    axios.get.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          refuse = reject;
+        }),
+    );
+    renderForm();
+    cleanup();
+    refuse(NOT_FOUND);
+    await new Promise((r) => setTimeout(r, 0));
+
+    // The update, resolved late and refused late.
     for (const settle of ["resolve", "reject"]) {
       let finish;
       axios.patch.mockImplementationOnce(
@@ -213,5 +252,6 @@ describe("GuestRoomReservationsEdit", () => {
       await new Promise((r) => setTimeout(r, 0));
       expect(handleCloseModal).not.toHaveBeenCalled();
     }
+    expect(toastStore.toasts).toHaveLength(0);
   });
 });

@@ -12,6 +12,7 @@ function ResidentsPasswordNew() {
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [errored, setErrored] = useState(false);
 
   // The submit handler outlives a navigation away from the page; the
   // mounted flag keeps it from setting state after unmount, like the
@@ -29,10 +30,17 @@ function ResidentsPasswordNew() {
           setReady(true);
         })
         .catch(function (error) {
-          handleAxiosError(error, { silent: true });
           if (!mountedRef.current) return;
           if (error.response) {
+            // The server will not use this link. Show its reason; the
+            // toast stays up on the login page (issue #115).
+            handleAxiosError(error);
             navigate("/");
+          } else {
+            // No answer came back, so say so instead of "Loading..."
+            // forever (issue #115).
+            handleAxiosError(error, { silent: true });
+            setErrored(true);
           }
         });
 
@@ -93,7 +101,12 @@ function ResidentsPasswordNew() {
           </button>
         </form>
       )}
-      {!ready && <h3>Loading...</h3>}
+      {!ready && !errored && <h3>Loading...</h3>}
+      {errored && (
+        <h3 className="text-warning">
+          Could not load this page. Check your connection and try again.
+        </h3>
+      )}
     </div>
   );
 }

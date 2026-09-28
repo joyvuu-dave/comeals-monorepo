@@ -64,7 +64,10 @@ const GuestRoomReservationsEdit = observer(
             setDay(new Date(d.year(), d.month(), d.date()));
           })
           .catch(function (error) {
-            handleAxiosError(error, { silent: true });
+            if (!mountedRef.current) return;
+            // Say why the form stays empty and locked, most often a record
+            // someone else deleted (issue #115).
+            handleAxiosError(error);
           });
       },
       [eventId, mountedRef],

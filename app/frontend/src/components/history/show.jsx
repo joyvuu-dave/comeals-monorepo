@@ -7,6 +7,7 @@ function MealHistoryShow({ id }) {
   const [date, setDate] = useState("loading...");
   const [items, setItems] = useState([]);
   const [ready, setReady] = useState(false);
+  const [errored, setErrored] = useState(false);
 
   useEffect(
     function () {
@@ -18,9 +19,17 @@ function MealHistoryShow({ id }) {
           setItems(response.data.items);
           setDate(toCommunityDayjs(response.data.date).format("ddd, MMM Do"));
           setReady(true);
+          // A failure for the id shown before no longer applies.
+          setErrored(false);
         })
         .catch(function (error) {
           handleAxiosError(error, { silent: true });
+          if (cancelled) return;
+          // Say so, like the rotation modal, instead of "Loading..."
+          // forever (issue #115). A history shown for the id before
+          // is not this meal's.
+          setReady(false);
+          setErrored(true);
         });
 
       return function () {
@@ -65,7 +74,8 @@ function MealHistoryShow({ id }) {
           </table>
         </div>
       )}
-      {!ready && <h3>Loading...</h3>}
+      {!ready && !errored && <h3>Loading...</h3>}
+      {errored && <h3 className="text-warning">Failed to load history.</h3>}
     </div>
   );
 }
