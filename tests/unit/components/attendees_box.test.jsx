@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import { render, screen, fireEvent, act, within } from "@testing-library/react";
 import { stage } from "../helpers/create_data_store.js";
 
 // Mock external modules before importing stores (same set as the
@@ -12,6 +12,7 @@ vi.mock("pusher-js", () => import("../mocks/pusher.js"));
 
 vi.mock("idb-keyval", () => import("../mocks/idb_keyval.js"));
 
+import axios from "axios";
 import { stubRandomUUID } from "../mocks/uuid.js";
 stubRandomUUID();
 
@@ -269,6 +270,39 @@ describe("AttendeesBox", () => {
       expect(
         screen.getByLabelText("Toggle Veg for Bob Johnson"),
       ).toBeDisabled();
+    });
+
+    // The real store and the guest menu together (issue #116): on the
+    // shared screen, Jane's guest menu is open when Bob takes the last
+    // seat. Her menu closes, and a tap on its cow sends nothing.
+    it("an open guest menu closes when someone takes the last seat", async () => {
+      const store = closedStore(1);
+      axios.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          id: 900,
+          meal_id: 1,
+          resident_id: 2,
+          late: false,
+          vegetarian: false,
+          created_at: "2026-01-14T13:00:00Z",
+        },
+      });
+      renderBox(store);
+      const janeAdd = screen.getByLabelText("Add Guest of Jane Smith");
+      const janeMenu = janeAdd.closest(".dropdown");
+      fireEvent.click(janeAdd);
+      expect(janeMenu).toHaveClass("active");
+
+      fireEvent.click(screen.getByRole("cell", { name: "Bob Johnson" }));
+      expect(store.meal.extras).toBe(0);
+      expect(janeMenu).not.toHaveClass("active");
+      expect(janeAdd.closest("button")).toBeDisabled();
+
+      fireEvent.click(within(janeMenu).getByAltText("cow-icon"));
+      await act(async () => {});
+      expect(axios).toHaveBeenCalledTimes(1);
+      expect(store.guests.size).toBe(0);
     });
 
     it("leaves the switches open for someone who can still join", () => {

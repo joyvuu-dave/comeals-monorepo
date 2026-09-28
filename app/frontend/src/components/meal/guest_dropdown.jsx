@@ -11,6 +11,10 @@ const styles = {
 function GuestDropdown({ resident, canAdd, reconciled }) {
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef(null);
+  // No guest can be added: the meal has no seat left, or it is
+  // reconciled. The props can change while the menu is open (a Pusher
+  // refresh), so everything below checks this, not only the button.
+  const blocked = reconciled || !canAdd;
 
   useEffect(function () {
     function handleClickOutside(event) {
@@ -25,8 +29,29 @@ function GuestDropdown({ resident, canAdd, reconciled }) {
     };
   }, []);
 
+  // The menu closes whenever `blocked` changes: an open menu closes
+  // when guests become blocked (issue #116), and it cannot be open
+  // while they are blocked, so it stays closed when they are allowed
+  // again.
+  useEffect(
+    function () {
+      setOpen(false);
+    },
+    [blocked],
+  );
+
+  // The wrapper, not only the button, takes the click: the disabled
+  // button's right margin belongs to the wrapper.
   function handleClick() {
+    if (blocked) return;
     setOpen((prevOpen) => !prevOpen);
+  }
+
+  // A tap can land on the menu in the render before the effect above
+  // closes it.
+  function addGuest(vegetarian) {
+    if (blocked) return;
+    resident.addGuest({ vegetarian: vegetarian });
   }
 
   return (
@@ -41,7 +66,7 @@ function GuestDropdown({ resident, canAdd, reconciled }) {
         key={`dropdown_${resident.id}`}
         className="mar-r-sm"
         style={styles.topButton}
-        disabled={reconciled || !canAdd}
+        disabled={blocked}
       >
         <div
           className="dropdown-add"
@@ -49,10 +74,10 @@ function GuestDropdown({ resident, canAdd, reconciled }) {
         />
       </button>
       <div className="dropdown-menu">
-        <a onClick={() => resident.addGuest({ vegetarian: false })}>
+        <a onClick={() => addGuest(false)}>
           <img src={Cow} className="pointer" alt="cow-icon" />
         </a>
-        <a onClick={() => resident.addGuest({ vegetarian: true })}>
+        <a onClick={() => addGuest(true)}>
           <img src={Carrot} className="pointer" alt="carrot-icon" />
         </a>
       </div>
