@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 vi.mock("axios", () => import("../mocks/axios.js"));
 vi.mock("js-cookie", () => import("../mocks/js_cookie.js"));
@@ -26,6 +26,10 @@ describe("DataStore: the community time zone", () => {
     });
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   function monthPayload(overrides = {}) {
     return {
       meals: [],
@@ -39,16 +43,76 @@ describe("DataStore: the community time zone", () => {
     };
   }
 
+  // The fixture cookie says Los Angeles. The cookie mock keeps what the
+  // store writes, so what the store reads next is the new zone.
   it("adopts the zone the month payload carries", () => {
     const store = createDataStore();
 
     store.loadMonth(monthPayload({ timezone: "America/New_York" }));
 
-    expect(Cookie.set).toHaveBeenCalledWith(
-      "timezone",
-      "America/New_York",
-      expect.anything(),
+    // Twenty years, like the login cookie: without `expires` the zone
+    // would be gone when the browser closes.
+    expect(Cookie.set).toHaveBeenCalledWith("timezone", "America/New_York", {
+      expires: 7300,
+    });
+    expect(Cookie.get("timezone")).toBe("America/New_York");
+  });
+
+  it("moves today to the new zone at once", () => {
+    vi.useFakeTimers();
+    // 23:30 in Los Angeles on July 8 is 02:30 on July 9 in New York.
+    vi.setSystemTime(new Date("2026-07-08T23:30:00-07:00"));
+    const store = createDataStore();
+    expect(store.communityToday).toBe("2026-07-08");
+
+    store.loadMonth(monthPayload({ timezone: "America/New_York" }));
+
+    expect(store.communityToday).toBe("2026-07-09");
+  });
+
+  it("reads the same payload's event times in the new zone", () => {
+    const store = createDataStore();
+
+    // 01:00 UTC is 21:00 the day before in New York (18:00 in Los
+    // Angeles). The zone is adopted before the events are read.
+    store.loadMonth(
+      monthPayload({
+        timezone: "America/New_York",
+        meals: [
+          {
+            title: "Dinner",
+            start: "2026-07-09T01:00:00Z",
+            end: "2026-07-09T02:30:00Z",
+          },
+        ],
+      }),
     );
+
+    const [meal] = store.calendarEvents;
+    expect(meal.start.getDate()).toBe(8);
+    expect(meal.start.getHours()).toBe(21);
+    expect(meal.end.getHours()).toBe(22);
+    expect(meal.end.getMinutes()).toBe(30);
+  });
+
+  it("moves the midnight timer to the new zone's midnight", () => {
+    vi.useFakeTimers();
+    // 20:00 in Los Angeles is 23:00 in New York, both on July 8. New
+    // York's midnight comes three hours before the Los Angeles one the
+    // timer was waiting for, so a timer left on the old zone would keep
+    // July 8 on screen for three hours of July 9.
+    vi.setSystemTime(new Date("2026-07-08T20:00:00-07:00"));
+    const store = createDataStore();
+
+    store.loadMonth(monthPayload({ timezone: "America/New_York" }));
+    expect(store.communityToday).toBe("2026-07-08");
+
+    // The timer fires one second past New York midnight.
+    const toNewYorkMidnight = 60 * 60 * 1000 + 1000;
+    vi.advanceTimersByTime(toNewYorkMidnight - 1);
+    expect(store.communityToday).toBe("2026-07-08");
+    vi.advanceTimersByTime(1);
+    expect(store.communityToday).toBe("2026-07-09");
   });
 
   it("leaves the cookie alone when the payload's zone is the one it has", () => {
@@ -56,10 +120,16 @@ describe("DataStore: the community time zone", () => {
 
     store.loadMonth(monthPayload({ timezone: "America/Los_Angeles" }));
 
-    expect(Cookie.set).not.toHaveBeenCalledWith(
-      "timezone",
-      expect.anything(),
-      expect.anything(),
-    );
+    expect(Cookie.set).not.toHaveBeenCalled();
+  });
+
+  // A month cached in IndexedDB before the payload carried a zone.
+  it("keeps the zone it has when the payload carries none", () => {
+    const store = createDataStore();
+
+    store.loadMonth(monthPayload());
+
+    expect(Cookie.set).not.toHaveBeenCalled();
+    expect(Cookie.get("timezone")).toBe("America/Los_Angeles");
   });
 });

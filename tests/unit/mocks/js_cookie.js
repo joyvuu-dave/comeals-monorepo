@@ -10,7 +10,12 @@
 //   cookies.current = { community_id: "7" };          // whole file
 //   delete cookies.current.token;                     // one test
 //
-// `get` reads the fixture at call time, so changes apply immediately.
+// It acts like the browser's cookie jar: `get` reads the fixture at call
+// time, `set` writes to it and `remove` deletes from it, so a test can
+// check what the app reads after it writes a cookie (the zone a month
+// payload changes, the token logout removes). tests/unit/helpers/
+// render_setup.js puts the file's fixture back after every test, so a
+// write in one test cannot reach the next one.
 import { vi } from "vitest";
 
 export const cookies = {
@@ -28,8 +33,14 @@ export const cookies = {
 
 const Cookie = {
   get: vi.fn((name) => cookies.current[name]),
-  set: vi.fn(),
-  remove: vi.fn(),
+  // The browser keeps every cookie value as a string, and js-cookie reads
+  // it back that way: set("community_id", 7) reads back as "7".
+  set: vi.fn((name, value) => {
+    cookies.current[name] = String(value);
+  }),
+  remove: vi.fn((name) => {
+    delete cookies.current[name];
+  }),
 };
 
 export default Cookie;

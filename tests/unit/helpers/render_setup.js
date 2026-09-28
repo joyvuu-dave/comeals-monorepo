@@ -4,7 +4,28 @@
 // so one test's DOM cannot leak into the next.
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
-import { afterEach, beforeEach, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, vi } from "vitest";
+import Cookie, { cookies } from "../mocks/js_cookie.js";
+
+// The shared cookie jar (tests/unit/mocks/js_cookie.js) lives for the
+// whole file, and its `set` and `remove` change it. So after every test,
+// put back the cookies the file started its tests with: the default
+// fixture, or the one the file set at its top, which has run by the time
+// beforeAll does. mockReset also puts back the jar's own functions if a
+// test replaced one with mockImplementation. A file that does not mock
+// js-cookie never reads this jar, so the reset does nothing there.
+let fileCookies = {};
+
+beforeAll(() => {
+  fileCookies = { ...cookies.current };
+});
+
+afterEach(() => {
+  cookies.current = { ...fileCookies };
+  Cookie.get.mockReset();
+  Cookie.set.mockReset();
+  Cookie.remove.mockReset();
+});
 
 // React warns through console.error when a controlled input gets a null
 // value or flips between controlled and uncontrolled. That happens when
