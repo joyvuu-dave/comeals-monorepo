@@ -21,7 +21,6 @@ function VersionBanner() {
       currentEntryFile = script.getAttribute("src").replace(/^\//, "");
     }
 
-    var cancelled = false;
     var intervalId = setInterval(function () {
       if (!currentEntryFile) {
         return;
@@ -35,7 +34,6 @@ function VersionBanner() {
           return response.json();
         })
         .then(function (manifest) {
-          if (cancelled) return;
           var keys = Object.keys(manifest);
           for (var i = 0; i < keys.length; i++) {
             var entry = manifest[keys[i]];
@@ -51,8 +49,10 @@ function VersionBanner() {
         });
     }, POLL_INTERVAL);
 
+    // A manifest that arrives after unmount needs no guard: React
+    // ignores the state update, and clearing a cleared interval does
+    // nothing.
     return function () {
-      cancelled = true;
       clearInterval(intervalId);
     };
   }, []);

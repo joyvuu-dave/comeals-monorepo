@@ -16,16 +16,37 @@ function addEntryScript(src) {
   return script;
 }
 
+// The shape of a real build's public/.vite/manifest.json, cut down:
+// one entry (index.html), with chunks before and after it whose files
+// never match the page's script. Only the entry counts.
+function manifestNaming(entryFile) {
+  return {
+    "_helpers-C-a_4Q2I.js": {
+      file: "vite-assets/helpers-C-a_4Q2I.js",
+      name: "helpers",
+    },
+    "index.html": {
+      file: entryFile,
+      name: "index",
+      src: "index.html",
+      isEntry: true,
+    },
+    "src/components/calendar/show.jsx": {
+      file: "vite-assets/show-C2edZfga.js",
+      name: "show",
+      src: "src/components/calendar/show.jsx",
+      isDynamicEntry: true,
+    },
+  };
+}
+
 function mockManifest(entryFile) {
   vi.stubGlobal(
     "fetch",
     vi.fn(() =>
       Promise.resolve({
         ok: true,
-        json: () =>
-          Promise.resolve({
-            "index.html": { isEntry: true, file: entryFile },
-          }),
+        json: () => Promise.resolve(manifestNaming(entryFile)),
       }),
     ),
   );
@@ -61,6 +82,42 @@ describe("VersionBanner", () => {
 
     expect(screen.getByText("A new version is available.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Refresh" })).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledWith("/.vite/manifest.json");
+  });
+
+  it("stops polling once it has found a new version", async () => {
+    mockManifest("vite-assets/index-NEW.js");
+    render(<VersionBanner />);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL);
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3 * POLL_INTERVAL);
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("polls every five minutes while the build is current", async () => {
+    mockManifest("vite-assets/index-OLD.js");
+    render(<VersionBanner />);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL - 1);
+    });
+    expect(fetch).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL);
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
   it("stays hidden while the manifest matches the running build", async () => {
@@ -115,34 +172,15 @@ describe("VersionBanner", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("drops a manifest that arrives after unmount", async () => {
-    let deliver;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(() =>
-        Promise.resolve({
-          ok: true,
-          json: () =>
-            new Promise(function (resolve) {
-              deliver = resolve;
-            }),
-        }),
-      ),
-    );
+  it("stops polling when it unmounts", async () => {
+    mockManifest("vite-assets/index-OLD.js");
     const { unmount } = render(<VersionBanner />);
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(POLL_INTERVAL + 1000);
-    });
-    expect(fetch).toHaveBeenCalledTimes(1);
     unmount();
 
     await act(async () => {
-      deliver({
-        "index.html": { isEntry: true, file: "vite-assets/index-NEW.js" },
-      });
+      await vi.advanceTimersByTimeAsync(3 * POLL_INTERVAL);
     });
-    expect(document.body).not.toHaveTextContent("A new version is available.");
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it("Refresh reloads the page", async () => {
