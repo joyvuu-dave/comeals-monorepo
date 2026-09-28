@@ -1,8 +1,9 @@
 /**
  * Shared test setup helpers for Comeals E2E tests.
  *
- * Handles: auth cookies, API mocking, Pusher stubbing, dialog handling,
- * localforage clearing, and clock freezing for visual determinism.
+ * Handles: auth cookies, API mocking, and Pusher stubbing. The idle
+ * timer switch and the cache clearing come from browser_setup.js,
+ * shared with the integration suite.
  */
 
 // All fixtures are generated from the real Rails API by
@@ -17,7 +18,7 @@ const rotationFixture = require("../fixtures/rotation.json");
 const eventFixture = require("../fixtures/event.json");
 const commonHouseReservationFixture = require("../fixtures/common_house_reservation.json");
 const guestRoomReservationFixture = require("../fixtures/guest_room_reservation.json");
-const { disableIdleTimer } = require("./browser_setup");
+const { disableIdleTimer, clearStorage } = require("./browser_setup");
 
 const AUTH_COOKIES = [
   { name: "token", value: "test-token-abc123", domain: "localhost", path: "/" },
@@ -67,19 +68,6 @@ async function stubPusher(page) {
       };
       this.unsubscribe = function () {};
     };
-  });
-}
-
-/**
- * Clear localforage/IndexedDB to prevent stale cached data between tests.
- */
-async function clearStorage(page) {
-  await page.evaluate(async () => {
-    // The IndexedDB cache needs no clearing here: the window.localforage
-    // branch this used to have was dead (the bundle never put localforage
-    // on window), and the app switched to idb-keyval anyway.
-    // Clear sessionStorage (chunk retry flag)
-    sessionStorage.clear();
   });
 }
 

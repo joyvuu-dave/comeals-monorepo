@@ -8,7 +8,7 @@
 
 const fs = require("fs");
 const path = require("path");
-const { disableIdleTimer } = require("./browser_setup");
+const { disableIdleTimer, clearStorage } = require("./browser_setup");
 
 // The suite's frozen "today" — bin/test-integration exports it to the
 // seed task and the Rails server; the browser freezes to the same
@@ -76,18 +76,6 @@ async function stubPusher(page) {
 }
 
 /**
- * Clear localforage/IndexedDB to prevent stale cached data between tests.
- */
-async function clearStorage(page) {
-  await page.evaluate(async () => {
-    if (window.localforage) {
-      await window.localforage.clear();
-    }
-    sessionStorage.clear();
-  });
-}
-
-/**
  * Freeze the browser's Date to the suite's fake "today", matching the
  * frozen Rails server. setFixedTime pins Date/Date.now but leaves
  * timers real, so debounce-driven saves still run.
@@ -108,6 +96,53 @@ async function setupAuthenticatedPage(page, context) {
   await freezeClock(page);
 }
 
+// The meal page fills from GET /cooks after it mounts. A test that
+// clicks or types before that answer arrives races the load: the
+// arriving data overwrites what it did. So every goto and reload of a
+// meal page waits for that GET.
+function mealLoaded(page, mealId) {
+  return page.waitForResponse(
+    (r) =>
+      r.request().method() === "GET" &&
+      r.url().includes(`/api/v1/meals/${mealId}/cooks`) &&
+      r.ok(),
+  );
+}
+
+async function gotoMeal(page, mealId) {
+  const loaded = mealLoaded(page, mealId);
+  await page.goto(`/meals/${mealId}/edit/`);
+  await loaded;
+}
+
+/**
+ * Reload a meal page so it can show only what the server has: empty
+ * the app's IndexedDB copy first (the page draws that copy before the
+ * server answers), then wait for the fresh GET.
+ */
+async function reloadMeal(page, mealId) {
+  await clearStorage(page);
+  const loaded = mealLoaded(page, mealId);
+  await page.reload();
+  await loaded;
+}
+
+/**
+ * Wait for a successful write to one of this meal's endpoints, for
+ * example mealWritten(page, 7, "POST", "residents"). Start the wait
+ * before the click, and await it before a reload: a reload that
+ * cancels the request makes WebKit log a console error, which the
+ * strict fixture in tests/helpers/test.js fails.
+ */
+function mealWritten(page, mealId, method, pathPart) {
+  return page.waitForResponse(
+    (r) =>
+      r.request().method() === method &&
+      r.url().includes(`/api/v1/meals/${mealId}/${pathPart}`) &&
+      r.ok(),
+  );
+}
+
 module.exports = {
   FAKE_TODAY,
   FAKE_NOW,
@@ -117,4 +152,8 @@ module.exports = {
   disableIdleTimer,
   clearStorage,
   setupAuthenticatedPage,
+  mealLoaded,
+  gotoMeal,
+  reloadMeal,
+  mealWritten,
 };

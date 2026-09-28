@@ -2,6 +2,10 @@ const { test, expect } = require("../helpers/test");
 const {
   loadAuthInfo,
   setupAuthenticatedPage,
+  mealLoaded,
+  gotoMeal,
+  reloadMeal,
+  mealWritten,
 } = require("../helpers/integration_setup");
 
 // Every meal-page action against the real backend (plan item 4).
@@ -19,40 +23,9 @@ test.describe("Meal actions (real backend)", () => {
     await setupAuthenticatedPage(page, context);
   });
 
-  // The meal page populates from GET /cooks after mount. Interacting
-  // before that response lands races the load — the arriving data
-  // overwrites what the test typed — so every goto and reload arms a
-  // waiter for that GET and awaits it before the test touches
-  // anything.
-  function armLoad(page, mealId) {
-    return page.waitForResponse(
-      (r) =>
-        r.request().method() === "GET" &&
-        r.url().includes(`/api/v1/meals/${mealId}/cooks`) &&
-        r.ok(),
-    );
-  }
-
-  async function gotoMeal(page, mealId) {
-    const loaded = armLoad(page, mealId);
-    await page.goto(`/meals/${mealId}/edit/`);
-    await loaded;
-  }
-
-  async function reloadMeal(page, mealId) {
-    const loaded = armLoad(page, mealId);
-    await page.reload();
-    await loaded;
-  }
-
   // Waits for a PATCH to this meal's endpoint to succeed.
   function patched(page, mealId, pathPart) {
-    return page.waitForResponse(
-      (r) =>
-        r.request().method() === "PATCH" &&
-        r.url().includes(`/api/v1/meals/${mealId}/${pathPart}`) &&
-        r.ok(),
-    );
+    return mealWritten(page, mealId, "PATCH", pathPart);
   }
 
   test("veg toggle persists across reload", async ({ page }) => {
@@ -198,7 +171,7 @@ test.describe("Meal actions (real backend)", () => {
     // (bill-entry.spec.js owns that flow). Closing triggers a refetch
     // of /cooks; await it so the reload cannot cancel it mid-flight
     // (WebKit logs a cancelled request as a console error).
-    let refetched = armLoad(page, mealId);
+    let refetched = mealLoaded(page, mealId);
     let saved = patched(page, mealId, "closed");
     await page.locator("text=Open / Close Meal").click();
     await saved;
@@ -209,7 +182,7 @@ test.describe("Meal actions (real backend)", () => {
     });
 
     // Reopen.
-    refetched = armLoad(page, mealId);
+    refetched = mealLoaded(page, mealId);
     saved = patched(page, mealId, "closed");
     await page.locator("text=Open / Close Meal").click();
     await saved;
@@ -238,7 +211,7 @@ test.describe("Meal actions (real backend)", () => {
     const target = before === "2" ? "3" : "2";
     const targetBox = page.locator(`[aria-label="Set Extras to ${target}"]`);
 
-    let refetched = armLoad(page, mealId);
+    let refetched = mealLoaded(page, mealId);
     let saved = patched(page, mealId, "max");
     await targetBox.click();
     await saved;
@@ -247,7 +220,7 @@ test.describe("Meal actions (real backend)", () => {
     await expect(targetBox).toBeChecked({ timeout: 10000 });
 
     if (before !== undefined) {
-      refetched = armLoad(page, mealId);
+      refetched = mealLoaded(page, mealId);
       saved = patched(page, mealId, "max");
       await page.locator(`[aria-label="Set Extras to ${before}"]`).click();
       await saved;

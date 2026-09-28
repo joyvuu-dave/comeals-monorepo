@@ -2,7 +2,8 @@ const { test, expect } = require("../helpers/test");
 const {
   loadAuthInfo,
   setupAuthenticatedPage,
-  clearStorage,
+  gotoMeal,
+  reloadMeal,
 } = require("../helpers/integration_setup");
 
 test.describe("Bill entry (real backend)", () => {
@@ -28,8 +29,7 @@ test.describe("Bill entry (real backend)", () => {
   test("entering a bill amount persists across reload", async ({ page }) => {
     // Today's meal has no bills in the seed data
     const mealId = auth.meals.today.id;
-    await page.goto(`/meals/${mealId}/edit/`);
-    await page.waitForLoadState("networkidle");
+    await gotoMeal(page, mealId);
     await expect(page.locator("h1", { hasText: "OPEN" })).toBeVisible({
       timeout: 10000,
     });
@@ -44,10 +44,7 @@ test.describe("Bill entry (real backend)", () => {
     await saved;
 
     // Reload and verify bill persisted
-    await clearStorage(page);
-    await page.reload();
-    await page.waitForLoadState("networkidle");
-    await expect(page.locator("h1")).toBeVisible({ timeout: 10000 });
+    await reloadMeal(page, mealId);
 
     const costInputAfter = page.locator('[aria-label="Set meal cost"]').first();
     await expect(costInputAfter).toHaveValue("65.00", { timeout: 10000 });
@@ -67,8 +64,7 @@ test.describe("Bill entry (real backend)", () => {
     page,
   }) => {
     const mealId = auth.meals.today.id;
-    await page.goto(`/meals/${mealId}/edit/`);
-    await page.waitForLoadState("networkidle");
+    await gotoMeal(page, mealId);
     await expect(page.locator("h1", { hasText: "OPEN" })).toBeVisible({
       timeout: 10000,
     });
@@ -103,18 +99,6 @@ test.describe("Bill entry (real backend)", () => {
     await cleared;
   });
 
-  test("existing bill on tomorrow's meal shows correct amount", async ({
-    page,
-  }) => {
-    // Tomorrow's meal has Jane's $50.00 bill from the seed
-    const mealId = auth.meals.tomorrow.id;
-    await page.goto(`/meals/${mealId}/edit/`);
-    await page.waitForLoadState("networkidle");
-
-    const costInput = page.locator('[aria-label="Set meal cost"]').first();
-    await expect(costInput).toHaveValue("50.00", { timeout: 10000 });
-  });
-
   // Turning on "no cost" over a typed cost erases the cost, so the
   // switch asks first. Every exit except a deliberate Yes — the No
   // button, Escape, a click elsewhere — must leave the cost alone.
@@ -122,9 +106,9 @@ test.describe("Bill entry (real backend)", () => {
     page,
   }) => {
     const mealId = auth.meals.tomorrow.id;
-    await page.goto(`/meals/${mealId}/edit/`);
-    await page.waitForLoadState("networkidle");
+    await gotoMeal(page, mealId);
 
+    // Tomorrow's meal has Jane's $50.00 bill from the seed.
     const costInput = page.locator('[aria-label="Set meal cost"]').first();
     await expect(costInput).toHaveValue("50.00", { timeout: 10000 });
 
@@ -189,8 +173,7 @@ test.describe("Bill entry (real backend)", () => {
 
   test("modifying an existing bill persists", async ({ page }) => {
     const mealId = auth.meals.tomorrow.id;
-    await page.goto(`/meals/${mealId}/edit/`);
-    await page.waitForLoadState("networkidle");
+    await gotoMeal(page, mealId);
 
     // Change Jane's bill from $50.00 to $55.00
     const costInput = page.locator('[aria-label="Set meal cost"]').first();
@@ -200,9 +183,7 @@ test.describe("Bill entry (real backend)", () => {
     await saved;
 
     // Reload and verify
-    await clearStorage(page);
-    await page.reload();
-    await page.waitForLoadState("networkidle");
+    await reloadMeal(page, mealId);
 
     const costInputAfter = page.locator('[aria-label="Set meal cost"]').first();
     await expect(costInputAfter).toHaveValue("55.00", { timeout: 10000 });
@@ -220,8 +201,7 @@ test.describe("Bill entry (real backend)", () => {
     page,
   }) => {
     const mealId = auth.meals.today.id;
-    await page.goto(`/meals/${mealId}/edit/`);
-    await page.waitForLoadState("networkidle");
+    await gotoMeal(page, mealId);
     await expect(page.locator("h1", { hasText: "OPEN" })).toBeVisible({
       timeout: 10000,
     });
@@ -278,9 +258,7 @@ test.describe("Bill entry (real backend)", () => {
     await costInput.fill("12.00");
     await saved;
 
-    await clearStorage(page);
-    await page.reload();
-    await page.waitForLoadState("networkidle");
+    await reloadMeal(page, mealId);
     const costAfter = page.locator('[aria-label="Set meal cost"]').first();
     await expect(costAfter).toBeEnabled({ timeout: 10000 });
     await expect(costAfter).toHaveValue("12.00");
