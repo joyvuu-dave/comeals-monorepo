@@ -70,11 +70,18 @@ Over the limit you get `429` with a `Retry-After` header (seconds) and a
 
 ## Errors
 
-Every error is JSON with one `message` string:
+Every error the API answers on purpose is JSON with one `message`
+string:
 
 ```
 { "message": "Meal has been closed." }
 ```
+
+A `500` from an error the API did not expect has no `message`. Rails
+answers it with its HTML error page, or with
+`{ "status": 500, "error": "Internal Server Error" }` when the request
+accepts only JSON. An error from Heroku's router, in front of the app,
+is an HTML page too.
 
 | Status | Meaning                                                                                                                                              |
 | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |

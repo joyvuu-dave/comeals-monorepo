@@ -624,7 +624,9 @@ After the second run, 759. What was left and what a third pass answered:
   configured root.
 - `ResidentsController`: an email with spaces and capitals, the
   shortened name on the reset page when first names clash, the one-word
-  reset error, and only the resident's own cook slots in their feed.
+  reset error (a sentence since 2026-09-27: "Password reset link is
+  incorrect or expired."), and only the resident's own cook slots in
+  their feed.
 - `MealFormSerializer`: the previous and next meal links, `reconciled`
   as a plain boolean, and one resident row value by value.
 - `AuditSerializer` (new spec): a history row value by value.
@@ -638,7 +640,10 @@ After the second run, 759. What was left and what a third pass answered:
   `reject_if_reconciled` fast path — both "never reject" mutations
   survive because the model guard refuses the same write with a
   message that also says "reconciled"; the fast path is kept for its
-  clearer sentence, which is now pinned.
+  clearer sentence, which is now pinned. (Since 2026-09-27 both are
+  killed: `write_messages_spec.rb` records the request's SQL and
+  expects no `FOR UPDATE`, so a settled meal must be refused before
+  the meal lock is taken.)
 
 After the third pass, 413 on the subjects it touched (the table's
 whole-stage rerun below is the number to quote). What the third pass
@@ -666,7 +671,8 @@ Noise, left: `params.fetch` for `params[]`, `Date.iso8601` for
 `Date.parse`, `.to_i` on a parameter `Time.zone.local` converts
 anyway, `defined?` memo guards, `instance_of?` for `is_a?`, the
 `includes`, `update_bills` (the `BillsPayload` branch replaces it),
-and the `reject_if_reconciled` fast path (above).
+and the `reject_if_reconciled` fast path (above; killed since
+2026-09-27).
 
 The one neutral failure in the third pass was the same placeholder
 page again: a stale one, without the root element, was already there

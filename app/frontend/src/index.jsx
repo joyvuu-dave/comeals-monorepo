@@ -118,8 +118,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // parallel with the calendar chunk (preloaded from index.html).
   // Without this the fetch only starts after the chunk loads and the
   // calendar mounts. The mount's own goToMonth then finds the month
-  // cached, or adopts the still-in-flight request — see
-  // loadMonthAsync — instead of starting the download from zero.
+  // cached, or adopts the still-in-flight request — see revalidate in
+  // stores/month_fetch.js — instead of starting the download from zero.
   // Matched against CALENDAR_PATH itself, so a route change cannot
   // silently strand this prefetch on a stale hand-written pattern.
   const calendarBoot = matchPath(CALENDAR_PATH, window.location.pathname);

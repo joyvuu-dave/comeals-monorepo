@@ -10,10 +10,14 @@ class ApiController < ActionController::API
   # (Api::V1::MealsController#with_meal_lock,
   # #render_retrying_on_conflict). But at SERIALIZABLE any statement can
   # be refused, including ones outside those blocks: a before_action's
-  # lookup, a serializer's query during render, a read action. Nothing
-  # was saved when that happens — a refused transaction writes nothing —
-  # so the honest answer is the same 409, not a 500. Without this the
-  # storm saw both a calendar read and a guest write answer 500
+  # lookup, a read action, a serializer's query during render. In a
+  # before_action or a read nothing was saved — a refused transaction
+  # writes nothing — so the honest answer is the same 409, not a 500.
+  # A render after a write action is different: the write has already
+  # committed, so "Nothing was saved" would be false. No serializer that
+  # a write action renders runs a query today, so this cannot happen now;
+  # a serializer that starts to needs its own answer. Without this rescue
+  # the storm saw both a calendar read and a guest write answer 500
   # (docs/concurrency-testing.md).
   #
   # A rescue, not a retry: by the time this runs the action may already

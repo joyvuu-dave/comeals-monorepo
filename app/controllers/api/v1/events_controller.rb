@@ -12,7 +12,7 @@ module Api
         render json: EventFormSerializer.new(@event)
       end
 
-      # POST /api/v1/events/create
+      # POST /api/v1/events
       #
       # The one create/update difference in parsing: what a missing
       # all_day param means. Create defaults it to false; update keeps

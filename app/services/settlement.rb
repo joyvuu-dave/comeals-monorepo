@@ -29,8 +29,9 @@
 class Settlement
   extend T::Sig
 
-  # Raised by preview for a cutoff that run! would refuse, with the same
-  # words the model's validation uses.
+  # Raised by preview for a cutoff that run! would refuse. Its words are
+  # the ones POST /reconciliations answers for the same cutoff: "cutoff",
+  # then the model validation's message.
   class InvalidCutoff < ArgumentError; end
 
   # Raised when a concurrent settlement claimed one of this settlement's

@@ -50,7 +50,10 @@ the new name in the second.
 Runs in `bin/check`. Many client threads (24 by default) send random
 requests from the whole API through the Rack stack for 15 seconds, while
 a settler, the nightly jobs, and an admin writing through the models
-without the meal lock run beside them. `Rails.cache` and the Rack::Attack
+the way ActiveAdmin does run beside them. The admin takes no
+`with_meal_lock`, but the models take the meal's `FOR KEY SHARE` lock
+first (`LocksItsMealFirst`), and attendance is marked as an admin
+correction, as the admin form marks it. `Rails.cache` and the Rack::Attack
 counters are a real solid_cache in the test database, at SERIALIZABLE,
 like production. What must hold:
 
@@ -151,10 +154,9 @@ Three more, found while fixing those:
 - The calendar read answered 500 when PostgreSQL refused it. A read can
   be refused at SERIALIZABLE too, and the calendar month reads nine
   tables and then writes a cache entry, which makes it a likely pick. It
-  is rebuilt now, and anything that still escapes — a conflict during a
-  render, in a `before_action`, in any read — is answered 409 by
-  `ApiController` instead of 500
-  (`spec/requests/api/v1/calendar_read_conflict_spec.rb`). This one
+  is rebuilt now, and anything that still escapes — a conflict in a
+  `before_action` or in any read — is answered 409 by `ApiController`
+  instead of 500 (`spec/requests/api/v1/calendar_read_conflict_spec.rb`). This one
   predates the branch; the storm finds it about one run in three.
 - The nightly settlement task exited 1 and paged healthchecks.io when a
   reconciler settled from the app at the same moment and claimed the

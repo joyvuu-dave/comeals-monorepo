@@ -193,7 +193,9 @@ Resident
 
 **Scopes:**
 
-- `adult` — multiplier >= `Multiplier::FULL`
+- `adult_on(date)` — no birthday, or `full_price_age` or older on that date,
+  counted from the birthday in SQL the same way `Resident#age_on` counts it
+- `adult` — `adult_on` the community's today
 - `active` — active = true
 - `eligible_cooks` — active adults with `can_cook`
 

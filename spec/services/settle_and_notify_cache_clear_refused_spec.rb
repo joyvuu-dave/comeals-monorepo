@@ -7,16 +7,18 @@ require 'rails_helper'
 # runs forget_cached_meals, which clears the calendar cache through
 # LiveUpdate. SettleAndNotify wraps the whole of Settlement.run! in
 # RetryOnConflict. So a cache clear refused for a serialization conflict
-# after the commit is retried as if the settlement had been rolled back:
-# Settlement.run! runs again, finds every meal already claimed, and its
-# Reconciliation row fails validation. The settlement is in the database,
-# but SettleAndNotify raises, so the running balances are not refreshed
-# and the cook mail is never enqueued (the nightly task fails; the API and
-# the admin form show an error for a period that was settled).
+# after the commit was retried as if the settlement had been rolled back:
+# Settlement.run! ran again, found every meal already claimed, and its
+# Reconciliation row failed validation. The settlement was in the
+# database, but SettleAndNotify raised, so the running balances were not
+# refreshed and the cook mail was never enqueued (the nightly task
+# failed; the API and the admin form showed an error for a period that
+# was settled).
 #
 # The refusal is simulated with a stub; see the request spec for why.
 #
-# Invariant hunt, 2026-09-21. Red when written: a finding.
+# Invariant hunt, 2026-09-21. Red when written: a finding. Fixed in
+# e945df9c: LiveUpdate#clear rescues the refusal and reports it.
 RSpec.describe SettleAndNotify do
   include_context 'with no test transaction'
 
