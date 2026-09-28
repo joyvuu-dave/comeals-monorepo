@@ -373,10 +373,11 @@ Without `all_day` on create, it is false; on update, the stored value
 stays. End must be after start. Each part is a whole number, as a
 number or a string of digits. A date that does not exist (February 30),
 or on a timed event an hour or minute that is missing, blank or out of
-range, returns `400 "Error: Invalid date"`. So does a start or end the
-database cannot store: before midnight UTC on November 24, 4714 BC
-(`start_year` -4713, since year 0 is 1 BC), or after the end of 294276
-in UTC.
+range, returns `400 "Error: Invalid date"`. Days before 1582 are
+counted in the Gregorian calendar too, so February 29, 1500 does not
+exist. A start or end the database cannot store also returns that 400:
+before midnight UTC on November 24, 4714 BC (`start_year` -4713, since
+year 0 is 1 BC), or after the end of 294276 in UTC.
 
 ## Guest room reservations
 

@@ -198,6 +198,25 @@ RSpec.describe 'Events API' do
         expect(Event.count).to eq(3)
       end
 
+      # Days are counted in the Gregorian calendar carried back before
+      # 1582, which Ruby's Time and PostgreSQL both use. Ruby's Date
+      # counts days before October 15, 1582 in the Julian calendar, where
+      # every fourth year is a leap year. So the parser took February 29,
+      # 1500, and Time.zone.local saved it as March 1. It also refused
+      # October 5 to 14, 1582, the ten days the change of calendar left
+      # out of the Julian count.
+      it 'counts days in the Gregorian calendar before 1582 too' do
+        post_event(start_year: 1500, start_month: 2, start_day: 29)
+        expect_refused
+
+        [[1582, 10, 10], [1600, 2, 29]].each do |year, month, day|
+          post_event(start_year: year, start_month: month, start_day: day)
+          expect(response).to have_http_status(:ok)
+        end
+        expect(Event.order(:id).pluck(:start_date))
+          .to eq([Time.zone.local(1582, 10, 10, 19, 0), Time.zone.local(1600, 2, 29, 19, 0)])
+      end
+
       # PostgreSQL stores a timestamp from midnight UTC on November 24,
       # 4714 BC (Ruby's year -4713, because Ruby counts 1 BC as year 0)
       # up to the last microsecond of 294276. A time outside that raised

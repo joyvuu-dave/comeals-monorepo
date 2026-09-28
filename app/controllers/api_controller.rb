@@ -115,8 +115,11 @@ class ApiController < ActionController::API
     year = whole_number_param(:start_year)
     month = whole_number_param(:start_month, 1..12)
     day = whole_number_param(:start_day, 1..31)
-    # False for a nil part too, and for February 30.
-    return nil unless Date.valid_date?(year, month, day)
+    # False for a nil part too, and for February 30. In the Gregorian
+    # calendar even before 1582, as Time.zone.local and PostgreSQL count:
+    # Ruby's Date counts those years in the Julian calendar by default,
+    # which has February 29, 1500 and has no October 10, 1582.
+    return nil unless Date.valid_date?(year, month, day, Date::GREGORIAN)
     return { start_date: Time.zone.local(year, month, day), end_date: nil } if allday
 
     times = %i[start_hours start_minutes end_hours end_minutes].zip([0..23, 0..59, 0..23, 0..59])
