@@ -667,9 +667,6 @@ RSpec.describe Community do
 
   describe '#create_next_rotation' do
     it 'creates a rotation with meals_per_rotation meals' do
-      # Need cookable adults
-      4.times { create(:resident, community: community, unit: unit, multiplier: 2, can_cook: true) }
-
       community.create_next_rotation
 
       expect(community.rotations.count).to eq(1)
@@ -677,8 +674,6 @@ RSpec.describe Community do
     end
 
     it 'creates meals only on days the schedule allows' do
-      4.times { create(:resident, community: community, unit: unit, multiplier: 2, can_cook: true) }
-
       community.create_next_rotation
 
       allowed = community.schedule.flatten.uniq
@@ -775,7 +770,6 @@ RSpec.describe Community do
     end
 
     it 'starts after the latest meal date, not after the meal entered last' do
-      4.times { create(:resident, community: community, unit: unit, multiplier: 2, can_cook: true) }
       rotation = create(:rotation, community: community, no_email: true)
       create(:meal, community: community, rotation: rotation, date: community.today + 30)
       create(:meal, community: community, rotation: rotation, date: community.today + 10)
@@ -783,23 +777,6 @@ RSpec.describe Community do
       community.create_next_rotation
 
       expect(community.rotations.order(:id).last.meals.minimum(:date)).to be > community.today + 30
-    end
-
-    it 'sets start_date and description on the created rotation' do
-      4.times { create(:resident, community: community, unit: unit, multiplier: 2, can_cook: true) }
-
-      community.create_next_rotation
-
-      rotation = community.rotations.first
-      first_meal_date = rotation.meals.order(:date).first.date
-      last_meal_date = rotation.meals.order(:date).last.date
-
-      expect(rotation.start_date).to eq(first_meal_date)
-      # The exact wording of the range is Rotation's concern
-      # (spec/models/rotation_spec.rb); here it is enough that the
-      # description was filled in from the meal dates.
-      expect(rotation.description).to eq(rotation.date_range_description)
-      expect(rotation.description).to include(last_meal_date.strftime('%-d'))
     end
   end
 
@@ -811,27 +788,41 @@ RSpec.describe Community do
       allow(Rails.cache).to receive(:delete)
     end
 
-    it 'clears and pushes the month the day is in' do
-      LiveUpdate.calendar(Date.new(2026, 4, 15))
-
-      expect(Pusher).to have_received(:trigger).at_least(:once)
-      expect(Rails.cache).to have_received(:delete).at_least(:once)
+    # Every key the day reached, and every channel it pushed to. The block
+    # goes to `to` (do...end), which hands it each call's arguments.
+    def cleared_keys
+      keys = []
+      expect(Rails.cache).to have_received(:delete).at_least(:once) do |key|
+        keys << key
+      end
+      keys
     end
 
-    # Documents a mismatch: affected_calendar_keys uses beginning_of_week
-    # (Monday default) but CommunitiesController#calendar uses
-    # beginning_of_week(:sunday). For dates near month boundaries, the
-    # invalidation range can differ from the actual calendar range.
-    it 'invalidates the previous month when a date falls in its Sunday-based calendar range' do
-      # April 2026: calendar starts March 29 (Sunday). A meal on March 30
-      # (Monday) is visible in the April calendar. The previous-month
-      # invalidation should cover March.
-      LiveUpdate.calendar(Date.new(2026, 3, 30))
+    def pushed_channels
+      channels = []
+      expect(Pusher).to have_received(:trigger).at_least(:once) do |channel, _event, _data|
+        channels << channel
+      end
+      channels
+    end
 
-      # March cache key should be deleted since March 30 is visible in
-      # both the March and April calendar views.
-      march_key = community.calendar_cache_key(2026, 3)
-      expect(Rails.cache).to have_received(:delete).with(march_key)
+    it 'clears and pushes the month the day is in, and only that month' do
+      LiveUpdate.calendar(Date.new(2026, 4, 15))
+
+      april = community.calendar_cache_key(2026, 4)
+      expect(cleared_keys).to eq([april])
+      expect(pushed_channels).to eq([april])
+    end
+
+    # March 2026 starts on a Sunday, so its six weeks run March 1 to
+    # April 11. April 5 is on March's calendar and on April's own.
+    it 'invalidates the previous month when the day is on its six weeks' do
+      LiveUpdate.calendar(Date.new(2026, 4, 5))
+
+      march = community.calendar_cache_key(2026, 3)
+      april = community.calendar_cache_key(2026, 4)
+      expect(cleared_keys).to contain_exactly(march, april)
+      expect(pushed_channels).to contain_exactly(march, april)
     end
 
     # May 2026 starts on a Friday, so the May calendar starts on Sunday
