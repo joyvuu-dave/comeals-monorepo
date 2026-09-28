@@ -7,17 +7,29 @@
 // because of the zone of the machine that runs it.
 import { beforeEach, afterEach, expect } from "vitest";
 
-function zoneOffsetMinutes(ms, zone) {
+const minuteFormats = new Map();
+
+// How far the clock in `zone` is ahead of UTC at the instant `ms`, in
+// minutes, straight from Intl. `ms` must be on a whole minute: the
+// format leaves out seconds.
+export function zoneOffsetMinutes(ms, zone) {
+  if (!minuteFormats.has(zone)) {
+    minuteFormats.set(
+      zone,
+      new Intl.DateTimeFormat("en-US", {
+        timeZone: zone,
+        hourCycle: "h23",
+        year: "numeric",
+        month: "numeric",
+        day: "numeric",
+        hour: "numeric",
+        minute: "numeric",
+      }),
+    );
+  }
   const parts = {};
-  new Intl.DateTimeFormat("en-US", {
-    timeZone: zone,
-    hourCycle: "h23",
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-    hour: "numeric",
-    minute: "numeric",
-  })
+  minuteFormats
+    .get(zone)
     .formatToParts(new Date(ms))
     .forEach((part) => {
       parts[part.type] = Number(part.value);

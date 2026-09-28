@@ -97,6 +97,16 @@ function wallClockAt(ms, tz) {
   return dayjs.utc(ms + zoneOffsetMs(ms, tz));
 }
 
+// Milliseconds from the instant `now` until the next midnight in tz:
+// the first instant whose date there is after the date at `now`. That
+// instant is after `now`, so the answer is always more than zero. On
+// a day the clocks change the day is 23 or 25 hours long, and in a zone
+// whose clocks skip midnight the next day starts at 01:00.
+export function msUntilNextMidnight(now, tz) {
+  var tomorrow = wallClockAt(now, tz).startOf("day").add(1, "day");
+  return wallClockToInstant(tomorrow.valueOf(), tz) - now;
+}
+
 // A time from the server, as the community's wall clock (a dayjs from
 // wallClockAt). A string with an offset or a Z names an instant. A
 // string without one ("2026-03-08", "2026-03-08T19:00:00") is already a

@@ -4,10 +4,13 @@
 // composes them.
 import axios from "axios";
 import Cookie from "js-cookie";
-import dayjs from "dayjs";
 
 import { pusherClient, startPusher } from "../helpers/pusher_client";
-import { communityNow } from "../helpers/helpers";
+import {
+  communityNow,
+  getCommunityTimezone,
+  msUntilNextMidnight,
+} from "../helpers/helpers";
 import * as monthData from "./month_fetch";
 
 export function appVolatile() {
@@ -174,13 +177,15 @@ export function appActions(self) {
     // buffer keeps an on-time firing from landing on the old day), roll
     // communityToday over, and schedule the next one. If the tab was
     // asleep and the timer fires late, recompute still lands on the
-    // right day — it always reads the clock fresh.
+    // right day — it always reads the clock fresh. The wait is worked
+    // out in the community's zone without the device's own zone, so it
+    // is right on a device anywhere and is never zero or less (#122).
     scheduleMidnightRecompute() {
       if (self.midnightTimer !== null) {
         clearTimeout(self.midnightTimer);
       }
       var msUntilMidnight =
-        communityNow().add(1, "day").startOf("day").diff(dayjs()) + 1000;
+        msUntilNextMidnight(Date.now(), getCommunityTimezone()) + 1000;
       self.midnightTimer = setTimeout(function () {
         self.recomputeCommunityToday();
         self.scheduleMidnightRecompute();
