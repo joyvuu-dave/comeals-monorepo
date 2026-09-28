@@ -45,6 +45,10 @@ RSpec.describe SettleAndNotify do
   end
 
   it 'settles once, refreshes the balances and enqueues the cook mail when a cache clear after the commit is refused' do
+    # The running balances before the settlement: the open meal is in them.
+    BalanceRecalculation.call(community: community)
+    expect(ResidentBalance.where(resident_id: [cook.id, eater.id]).pluck(:resident_id, :amount).to_h)
+      .to eq(cook.id => BigDecimal('40'), eater.id => BigDecimal('-40'))
     reconciliation = nil
 
     expect do
@@ -53,6 +57,10 @@ RSpec.describe SettleAndNotify do
     end.to change(Reconciliation, :count).by(1)
 
     expect(reconciliation).to be_a(Reconciliation)
+    # Settled, the meal leaves the running balances. Only a refresh after
+    # the settlement's commit writes these zeros.
+    expect(ResidentBalance.where(resident_id: [cook.id, eater.id]).pluck(:resident_id, :amount).to_h)
+      .to eq(cook.id => BigDecimal('0'), eater.id => BigDecimal('0'))
     expect(NotifyCooksJob).to have_been_enqueued.with(reconciliation)
   end
 end
