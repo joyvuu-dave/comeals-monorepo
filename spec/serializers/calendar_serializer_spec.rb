@@ -150,6 +150,26 @@ RSpec.describe CalendarSerializer, type: :serializer do
     end
   end
 
+  # Without ORDER BY, rows come back in the order they happen to be
+  # stored in, and moving a booking to another day stores it again,
+  # after the others. The month's ETag is a digest of the payload, so an
+  # order that moves with no change to what is shown would send the whole
+  # month again.
+  describe 'the order of common house bookings' do
+    it 'is by id, even after the first one is moved to a later day' do
+      first = create(:common_house_reservation, community: community, resident: resident,
+                                                start_date: Time.zone.local(2026, 4, 20, 14, 0),
+                                                end_date: Time.zone.local(2026, 4, 20, 17, 0))
+      second = create(:common_house_reservation, community: community, resident: resident,
+                                                 start_date: Time.zone.local(2026, 4, 10, 14, 0),
+                                                 end_date: Time.zone.local(2026, 4, 10, 17, 0))
+      first.update!(start_date: Time.zone.local(2026, 4, 21, 14, 0), end_date: Time.zone.local(2026, 4, 21, 17, 0))
+
+      expect(serialize[:common_house_reservations].pluck(:id))
+        .to eq([first.cache_key_with_version, second.cache_key_with_version])
+    end
+  end
+
   describe 'guest_room_reservations' do
     it 'includes reservations within the date range' do
       create(:guest_room_reservation, community: community, resident: resident,

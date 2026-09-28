@@ -847,3 +847,42 @@ The other 122 are the ones the 2026-09-12 stage lists above:
 `Resident#name_unique_with_helpful_message`, 7 (`self.x` for `x()`,
 `.present?` for truthiness) and a `self.birthday` for `birthday()` in
 each new method. Not looked at again.
+
+### 2026-09-28, calendar overlap and times the database cannot store
+
+Run on the methods the two calendar fixes changed or added, by name:
+`StorableTime*`, `StorableTimeValidator*`,
+`CalendarSerializer#common_house_reservations_in_range`,
+`ApiController#parse_start_end_params`, `ApiController#start_end_times`,
+`GuestRoomReservation#storable_date?` and
+`CommonHouseReservation#period_is_free`. 551 mutations, 529 killed, 22
+alive, 17 minutes on four workers.
+
+Four were missing assertions, and each now has an example:
+
+- `.order(:id)` dropped from the common house query, or made
+  `.order(nil)`, 2. Nothing had two bookings stored out of id order.
+  `calendar_serializer_spec.rb` now moves the first booking to a later
+  day, which stores its row again after the second, and expects the ids
+  in order. (A title change is not enough: PostgreSQL keeps that row
+  where the index finds it first.)
+- `1..12` to `2..12` for the month. No example took an event in
+  January; one now starts on January 1.
+- `0..23` to `1..23` for the end hour. No example ended an event in
+  the hour after midnight; one now ends at 00:30.
+
+The other 18 change nothing a caller can see:
+
+- `self.start_date`, `self.end_date` and `self.date` for `start_date()`
+  and the rest, 3, and `instance_of?` for `is_a?` in the validator, 1
+  (no Date subclass reaches it: a datetime column gives a
+  TimeWithZone).
+- The preloads of the common house query, 4: goldiloader loads the
+  residents and units in one query without them.
+- In `start_end_times`, 10 that `Date.valid_date?` makes the same: a
+  month of 0 or 13, a day of 0 or 32, and no upper end to either range,
+  are all refused by it anyway. Dropping the `end_date: nil` key of an
+  all-day event leaves `times[:end_date]` nil either way. These, and
+  the month and hour above, were there before these fixes; they show
+  under `start_end_times` because `parse_start_end_params` was split in
+  two.

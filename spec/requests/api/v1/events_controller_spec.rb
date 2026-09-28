@@ -170,7 +170,8 @@ RSpec.describe 'Events API' do
       end
 
       it 'takes the first and last hour and minute of the day, at the start and at the end' do
-        [[0, 0, 23, 59], [0, 59, 1, 0], [23, 0, 23, 30]].each do |start_hours, start_minutes, end_hours, end_minutes|
+        [[0, 0, 23, 59], [0, 0, 0, 30], [0, 59, 1, 0], [23, 0, 23, 30]].each do |start_hours, start_minutes, end_hours,
+                                                                                  end_minutes|
           post_event(start_hours: start_hours, start_minutes: start_minutes, end_hours: end_hours,
                      end_minutes: end_minutes)
           expect(response).to have_http_status(:ok)
@@ -178,24 +179,25 @@ RSpec.describe 'Events API' do
 
         expect(Event.order(:id).pluck(:start_date, :end_date)).to eq(
           [[Time.zone.local(2026, 4, 15, 0, 0), Time.zone.local(2026, 4, 15, 23, 59)],
+           [Time.zone.local(2026, 4, 15, 0, 0), Time.zone.local(2026, 4, 15, 0, 30)],
            [Time.zone.local(2026, 4, 15, 0, 59), Time.zone.local(2026, 4, 15, 1, 0)],
            [Time.zone.local(2026, 4, 15, 23, 0), Time.zone.local(2026, 4, 15, 23, 30)]]
         )
       end
 
-      it 'takes February 29 in a leap year and refuses it in any other, and takes the last day of a month' do
-        [[2028, 2, 29], [2026, 4, 30], [2026, 12, 31]].each do |year, month, day|
+      it 'takes February 29 in a leap year and refuses it in any other, and takes the first and last day of a month' do
+        [[2028, 2, 29], [2026, 4, 30], [2026, 12, 31], [2027, 1, 1]].each do |year, month, day|
           post_event(start_year: year, start_month: month, start_day: day)
           expect(response).to have_http_status(:ok)
         end
         expect(Event.order(:id).pluck(:start_date)).to eq(
           [Time.zone.local(2028, 2, 29, 19, 0), Time.zone.local(2026, 4, 30, 19, 0),
-           Time.zone.local(2026, 12, 31, 19, 0)]
+           Time.zone.local(2026, 12, 31, 19, 0), Time.zone.local(2027, 1, 1, 19, 0)]
         )
 
         post_event(start_month: 2, start_day: 29)
         expect(response).to have_http_status(:bad_request)
-        expect(Event.count).to eq(3)
+        expect(Event.count).to eq(4)
       end
 
       # Days are counted in the Gregorian calendar carried back before
