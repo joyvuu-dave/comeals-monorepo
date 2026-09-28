@@ -1,17 +1,9 @@
-<!DOCTYPE html>
-<html>
-  <head>
-    <meta content='text/html; charset=UTF-8' http-equiv='Content-Type' />
-  </head>
-  <body>
-    <h1>New Rotation Posted</h1>
-    <p>
-      A new meal rotation has just been created for the period <%= @rotation.description %>.
-    </p>
-    <p>
-      <%= link_to 'Sign up', @url %> to cook and attend dinner now.
-    </p>
-    <p>Have a great day!</p>
-    <p>~<%= @community.name %>
-  </body>
-</html>
+<h1>New Rotation Posted</h1>
+<p>
+  A new meal rotation has just been created for the period <%= @rotation.description %>.
+</p>
+<p>
+  <%= link_to 'Sign up', @url %> to cook and attend dinner now.
+</p>
+<p>Have a great day!</p>
+<p>~<%= @community.name %></p>

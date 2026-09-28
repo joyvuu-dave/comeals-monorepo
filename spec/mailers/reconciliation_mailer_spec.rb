@@ -43,6 +43,20 @@ RSpec.describe ReconciliationMailer do
       expect(cook_mail.text_part.body.to_s).to include(url)
       expect(cook_mail.html_part.body.to_s).to include(%(<a href="#{ERB::Util.html_escape(url)}">here</a>))
     end
+
+    it_behaves_like 'an HTML part that is one HTML document'
+
+    # The words are an open question (#106). This pins them as they are,
+    # so that a change to the markup around them cannot drop any.
+    it 'keeps the words and the community name in the HTML part' do
+      expect(html_body(mail).text.squish).to eq(
+        "Semi-Annual Reconciliation It's time once again to reconcile our Common Meals. " \
+        'In preparation, please ensure all your meal costs are accurate. ' \
+        'View all your cooking slots for the last 6 months here. ' \
+        'Meals will be locked and final balances will be sent out in 2 weeks. ' \
+        "Have a great day! ~Swan's Way"
+      )
+    end
   end
 
   describe '#common_house_collection_email' do
@@ -75,6 +89,19 @@ RSpec.describe ReconciliationMailer do
 
       expect(html).to include(%(<a href="#{ERB::Util.html_escape(residents_url)}">Residents</a>))
       expect(html).to include(%(<a href="#{ERB::Util.html_escape(units_url)}">Units</a>))
+    end
+
+    it_behaves_like 'an HTML part that is one HTML document'
+
+    it 'keeps the words and the two links in the HTML part' do
+      body = html_body(mail)
+
+      expect(body.text.squish).to eq(
+        'Resident / Unit Balances for Current Reconciliation ' \
+        "Meal costs have now been locked and it's time collect and distribute $. " \
+        'Here are the final balances. Residents Units ~Admin'
+      )
+      expect(links_in(body)).to eq([['Residents', residents_url], ['Units', units_url]])
     end
   end
 end
