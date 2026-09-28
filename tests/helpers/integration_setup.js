@@ -26,10 +26,9 @@ dayjs.extend(timezone);
 // time in the zone of the machine running the tests, and on a machine
 // at UTC+5 or further east that instant is still the day before in Los
 // Angeles.
+const COMMUNITY_TIMEZONE = "America/Los_Angeles";
 const FAKE_TODAY = process.env.INTEGRATION_FAKE_TODAY || "2026-01-15";
-const FAKE_NOW = dayjs
-  .tz(`${FAKE_TODAY} 12:00`, "America/Los_Angeles")
-  .toDate();
+const FAKE_NOW = dayjs.tz(`${FAKE_TODAY} 12:00`, COMMUNITY_TIMEZONE).toDate();
 
 /**
  * Read auth credentials written by `rake test:seed_integration`.
@@ -62,6 +61,14 @@ async function authenticateContext(context) {
     {
       name: "username",
       value: auth.username,
+      domain: "localhost",
+      path: "/",
+    },
+    // A real login stores the community's zone from the token answer
+    // (login.jsx), and the app reads "today" in it.
+    {
+      name: "timezone",
+      value: COMMUNITY_TIMEZONE,
       domain: "localhost",
       path: "/",
     },
@@ -175,6 +182,7 @@ async function reloadCalendar(page) {
 }
 
 module.exports = {
+  COMMUNITY_TIMEZONE,
   FAKE_TODAY,
   FAKE_NOW,
   loadAuthInfo,
