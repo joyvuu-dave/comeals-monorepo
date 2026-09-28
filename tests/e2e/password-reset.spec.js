@@ -18,10 +18,12 @@ test.describe("Password Reset", () => {
       if (resetMethod === "POST") {
         resetPayload = route.request().postDataJSON();
       }
+      // What ResidentsController#password_reset answers when the mail
+      // goes out.
       route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ message: "Password reset email sent." }),
+        body: JSON.stringify({ message: "Check your email." }),
       });
     });
 
@@ -32,16 +34,16 @@ test.describe("Password Reset", () => {
     await page.locator("#login-email").fill("jane@example.com");
     await page.getByRole("button", { name: "Reset your password" }).click();
 
-    // API: POST with email
+    // API: POST with the email and nothing else
     await expect.poll(() => resetPayload, { timeout: 5000 }).toBeTruthy();
     expect(resetMethod).toBe("POST");
-    expect(resetPayload.email).toBe("jane@example.com");
+    expect(resetPayload).toEqual({ email: "jane@example.com" });
 
-    // Success toast
+    // The server's message, word for word, in a success toast
     const toast = page.locator(".toast--success");
     await expect(toast).toBeVisible({ timeout: 5000 });
-    await expect(toast.locator(".toast__message")).toContainText(
-      "Password reset email sent",
+    await expect(toast.locator(".toast__message")).toHaveText(
+      "Check your email.",
     );
   });
 
@@ -56,7 +58,7 @@ test.describe("Password Reset", () => {
       route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ message: "Password reset email sent." }),
+        body: JSON.stringify({ message: "Check your email." }),
       });
     });
 
@@ -67,8 +69,8 @@ test.describe("Password Reset", () => {
 
     const toast = page.locator(".toast--error");
     await expect(toast).toBeVisible({ timeout: 5000 });
-    await expect(toast.locator(".toast__message")).toContainText(
-      "Email required",
+    await expect(toast.locator(".toast__message")).toHaveText(
+      "Email required.",
     );
     expect(resetRequested).toBe(false);
   });
@@ -83,10 +85,11 @@ test.describe("Password Reset", () => {
       if (passwordMethod === "POST") {
         passwordPayload = route.request().postDataJSON();
       }
+      // What ResidentsController#password_new answers on success.
       route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ message: "Password updated successfully." }),
+        body: JSON.stringify({ message: "Password updated!" }),
       });
     });
 
@@ -105,17 +108,19 @@ test.describe("Password Reset", () => {
     // Submit
     await modal.getByRole("button", { name: "Submit" }).click();
 
-    // API: POST to /residents/password-reset/{token} with password
+    // API: POST to /residents/password-reset/{token} with the password
     await expect.poll(() => passwordPayload, { timeout: 5000 }).toBeTruthy();
     expect(passwordMethod).toBe("POST");
-    expect(passwordPayload.password).toBe("newpassword123");
-    expect(passwordUrl).toContain("test-reset-token");
+    expect(passwordPayload).toEqual({ password: "newpassword123" });
+    expect(passwordUrl).toMatch(
+      /\/api\/v1\/residents\/password-reset\/test-reset-token$/,
+    );
 
-    // Success toast
+    // The server's message, word for word, in a success toast
     const toast = page.locator(".toast--success");
     await expect(toast).toBeVisible({ timeout: 5000 });
-    await expect(toast.locator(".toast__message")).toContainText(
-      "Password updated",
+    await expect(toast.locator(".toast__message")).toHaveText(
+      "Password updated!",
     );
   });
 });
