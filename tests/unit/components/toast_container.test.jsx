@@ -4,21 +4,16 @@ import ToastContainer from "../../../app/frontend/src/components/app/toast_conta
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
 
 // ToastContainer reads the module-level toastStore singleton, so each
-// test starts by emptying it.
-function clearToasts() {
-  toastStore.toasts
-    .slice()
-    .forEach((toast) => toastStore.removeToast(toast.id));
-}
-
+// test starts by emptying it. Toasts are shown the way the app shows
+// them: replaceAll, one at a time.
 describe("ToastContainer", () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    clearToasts();
+    toastStore.clearAll();
   });
 
   afterEach(() => {
-    clearToasts();
+    toastStore.clearAll();
     vi.useRealTimers();
   });
 
@@ -30,7 +25,7 @@ describe("ToastContainer", () => {
   it("shows a toast as an alert with its message and type", () => {
     render(<ToastContainer />);
     act(() => {
-      toastStore.addToast("Saved.", "success");
+      toastStore.replaceAll("Saved.", "success");
     });
 
     const toast = screen.getByRole("alert");
@@ -41,7 +36,7 @@ describe("ToastContainer", () => {
   it("the dismiss button removes the toast", () => {
     render(<ToastContainer />);
     act(() => {
-      toastStore.addToast("Saved.", "success");
+      toastStore.replaceAll("Saved.", "success");
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
@@ -58,7 +53,7 @@ describe("ToastContainer", () => {
   ])("a $type toast dismisses itself after $ms ms", ({ type, ms }) => {
     render(<ToastContainer />);
     act(() => {
-      toastStore.addToast("Hello.", type);
+      toastStore.replaceAll("Hello.", type);
     });
 
     act(() => {
@@ -72,20 +67,78 @@ describe("ToastContainer", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("an error toast stays longer than a success toast", () => {
+  // A replaced toast's timer still runs. When it fires it removes only
+  // its own toast (by id), so the toast on screen keeps its full time.
+  it("a replaced toast's timer does not remove the toast that took its place", () => {
     render(<ToastContainer />);
     act(() => {
-      toastStore.addToast("It worked.", "success");
-      toastStore.addToast("It failed.", "error");
+      toastStore.replaceAll("It worked.", "success");
+    });
+    act(() => {
+      vi.advanceTimersByTime(3000);
+    });
+    act(() => {
+      toastStore.replaceAll("It failed.", "error");
     });
 
+    // The success toast's timer fires at 5000 ms.
     act(() => {
-      vi.advanceTimersByTime(5000);
+      vi.advanceTimersByTime(2000);
     });
     expect(screen.getByRole("alert")).toHaveTextContent("It failed.");
 
+    // The error toast has its own 15 seconds, counted from when it came.
     act(() => {
-      vi.advanceTimersByTime(10000);
+      vi.advanceTimersByTime(15000 - 2000 - 1);
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent("It failed.");
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("a toast that replaced a longer one goes on its own time", () => {
+    render(<ToastContainer />);
+    act(() => {
+      toastStore.replaceAll("It failed.", "error");
+    });
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    act(() => {
+      toastStore.replaceAll("It worked.", "success");
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(5000 - 1);
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent("It worked.");
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  // The same message again is a new toast, with a new timer.
+  it("the same message shown again stays up for its full time", () => {
+    render(<ToastContainer />);
+    act(() => {
+      toastStore.replaceAll("Saved.", "success");
+    });
+    act(() => {
+      vi.advanceTimersByTime(4000);
+    });
+    act(() => {
+      toastStore.replaceAll("Saved.", "success");
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(5000 - 1);
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent("Saved.");
+    act(() => {
+      vi.advanceTimersByTime(1);
     });
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
@@ -97,7 +150,7 @@ describe("ToastContainer", () => {
   it("a toast of an unknown type dismisses itself after 5 seconds", () => {
     render(<ToastContainer />);
     act(() => {
-      toastStore.addToast("Hm.", "notice");
+      toastStore.replaceAll("Hm.", "notice");
     });
 
     act(() => {

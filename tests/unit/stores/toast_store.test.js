@@ -1,50 +1,64 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
 
+// The app shows one toast at a time: every caller uses replaceAll, the
+// toast container removes a toast by id (its timer, or the dismiss
+// button), and the calendar clears them all.
 describe("toastStore", () => {
   beforeEach(() => {
     toastStore.clearAll();
   });
 
-  it("adds a toast and hands back its id", () => {
-    const id = toastStore.addToast("Saved.", "info");
+  it("replaceAll shows one toast and hands back its id", () => {
+    const id = toastStore.replaceAll("Saved.", "success");
 
-    expect(id).toBeGreaterThan(0);
-    expect(toastStore.toasts.map((t) => t.message)).toEqual(["Saved."]);
+    expect(toastStore.toasts).toEqual([
+      { id: id, message: "Saved.", type: "success" },
+    ]);
   });
 
-  it("does not add the same message and type twice", () => {
-    toastStore.addToast("Saved.", "info");
-    const again = toastStore.addToast("Saved.", "info");
+  it("replaceAll takes the place of the toast on screen", () => {
+    toastStore.replaceAll("One", "info");
+    toastStore.replaceAll("Two", "error");
 
-    expect(again).toBeUndefined();
-    expect(toastStore.toasts).toHaveLength(1);
+    expect(toastStore.toasts.map((t) => [t.message, t.type])).toEqual([
+      ["Two", "error"],
+    ]);
   });
 
-  it("keeps the same message when its type differs", () => {
-    toastStore.addToast("Saved.", "info");
-    toastStore.addToast("Saved.", "error");
+  // A new id is what makes the container start a new timer, so the same
+  // message shown again stays up for its full time.
+  it("gives the same message a new id each time", () => {
+    const first = toastStore.replaceAll("Saved.", "success");
+    const second = toastStore.replaceAll("Saved.", "success");
 
-    expect(toastStore.toasts.map((t) => t.type)).toEqual(["info", "error"]);
+    expect(second).not.toBe(first);
+    expect(toastStore.toasts.map((t) => t.id)).toEqual([second]);
   });
 
-  it("removes one toast by id and leaves the rest", () => {
-    const first = toastStore.addToast("One", "info");
-    toastStore.addToast("Two", "info");
+  it("removeToast removes the toast with that id", () => {
+    const id = toastStore.replaceAll("Saved.", "success");
 
-    toastStore.removeToast(first);
+    toastStore.removeToast(id);
+
+    expect(toastStore.toasts).toEqual([]);
+  });
+
+  // The timer of a toast that was replaced still fires, with the old id.
+  it("removeToast with a replaced toast's id leaves the new toast", () => {
+    const old = toastStore.replaceAll("One", "info");
+    toastStore.replaceAll("Two", "info");
+
+    toastStore.removeToast(old);
 
     expect(toastStore.toasts.map((t) => t.message)).toEqual(["Two"]);
   });
 
-  it("replaceAll leaves exactly one toast", () => {
-    toastStore.addToast("One", "info");
-    toastStore.addToast("Two", "info");
+  it("clearAll removes the toast", () => {
+    toastStore.replaceAll("Saved.", "success");
 
-    toastStore.replaceAll("Only this", "error");
+    toastStore.clearAll();
 
-    expect(toastStore.toasts.map((t) => [t.message, t.type])).toEqual([
-      ["Only this", "error"],
-    ]);
+    expect(toastStore.toasts).toEqual([]);
   });
 });

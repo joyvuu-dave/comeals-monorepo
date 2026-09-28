@@ -1,27 +1,14 @@
 import { makeAutoObservable } from "mobx";
 
+// The toasts on screen. The app shows one at a time: every caller uses
+// replaceAll. ToastContainer removes a toast by id when its timer fires
+// or its dismiss button is pressed.
 class ToastStore {
   toasts = [];
   _nextId = 0;
 
   constructor() {
     makeAutoObservable(this);
-  }
-
-  addToast(message, type) {
-    var isDuplicate = this.toasts.some(function (t) {
-      return t.message === message && t.type === type;
-    });
-    if (isDuplicate) return;
-
-    var id = ++this._nextId;
-    this.toasts.push({
-      id: id,
-      message: message,
-      type: type,
-      timestamp: Date.now(),
-    });
-    return id;
   }
 
   removeToast(id) {
@@ -36,9 +23,7 @@ class ToastStore {
 
   replaceAll(message, type) {
     var id = ++this._nextId;
-    this.toasts = [
-      { id: id, message: message, type: type, timestamp: Date.now() },
-    ];
+    this.toasts = [{ id: id, message: message, type: type }];
     return id;
   }
 }
