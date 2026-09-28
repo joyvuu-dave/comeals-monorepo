@@ -118,20 +118,28 @@ class Meal < ApplicationRecord
   has_many :attendees, through: :meal_residents, source: :resident, dependent: :destroy
 
   validates :date, presence: true
+  # Checked only when max changes. A closed meal can hold more eaters than
+  # its max: the admin attendance page adds a person past the open spots
+  # (admin_correction). A write that leaves max alone, like a menu edit, is
+  # not about max and is not refused for it (#93). The message has no
+  # "Max" of its own: full_messages puts the attribute name in front.
   validates :max,
             numericality: {
               greater_than_or_equal_to: :attendees_count,
-              message: "Max can't be less than current number of attendees."
+              message: "can't be less than current number of attendees."
             },
-            allow_nil: true
+            allow_nil: true,
+            if: :will_save_change_to_max?
 
   validates :date, uniqueness: true
 
   # Reconciled meals are immutable (accounting principle: no edits to a closed
   # ledger). Settlement inputs are frozen; an unreconciled meal can still be
   # reconciled (reconciliation_id nil -> id happens via update_all anyway).
+  # Before validation, so a reopen clears max before the max check reads
+  # it: a meal over its max can always be reopened (#93).
+  before_validation :conditionally_set_max
   before_save :reject_frozen_changes_if_reconciled
-  before_save :conditionally_set_max
   before_save :conditionally_set_closed_at
   before_create :set_cap
   # Both destroy guards are prepended: the has_many declarations above

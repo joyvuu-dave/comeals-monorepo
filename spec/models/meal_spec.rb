@@ -79,7 +79,26 @@ RSpec.describe Meal do
       meal.closed = true
       meal.max = 0
       expect(meal).not_to be_valid
-      expect(meal.errors[:max]).to be_present
+      expect(meal.errors.full_messages).to eq(["Max can't be less than current number of attendees."])
+    end
+
+    # An admin attendance correction skips the open-spots check, so a closed
+    # meal can hold more eaters than its max. A write that leaves max alone
+    # is not about max and must not be refused for it.
+    it 'checks max only when max changes' do
+      meal = create(:meal, community: community)
+      meal.update!(closed: true, max: 0)
+      resident = create(:resident, community: community, unit: unit, multiplier: 2)
+      create(:meal_resident, meal: meal, resident: resident, community: community, admin_correction: true)
+      meal.reload
+
+      meal.description = 'Soup'
+      expect(meal).to be_valid
+      meal.max = 0
+      meal.description = 'Stew'
+      expect(meal).to be_valid
+      meal.max = 1
+      expect(meal).to be_valid
     end
 
     it 'allows max to be nil' do
@@ -132,6 +151,25 @@ RSpec.describe Meal do
 
         meal.update!(closed: false)
         expect(meal.reload.max).to be_nil
+      end
+
+      # Before the max check, not after it: a closed meal can hold more
+      # eaters than its max (an admin attendance correction), and a reopen
+      # is the write that clears the stale max, even when the same save
+      # also sends a max (the admin form sends the field it shows).
+      it 'clears max before the max check, so a meal over its max reopens' do
+        meal = create(:meal, community: community)
+        meal.update!(closed: true, max: 1)
+        2.times do
+          resident = create(:resident, community: community, unit: unit, multiplier: 2)
+          create(:meal_resident, meal: meal, resident: resident, community: community, admin_correction: true)
+        end
+        meal.reload
+
+        meal.closed = false
+        meal.max = 0
+        expect(meal.save).to be(true)
+        expect(meal.reload).to have_attributes(closed: false, max: nil)
       end
     end
 

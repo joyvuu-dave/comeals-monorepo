@@ -356,7 +356,10 @@ Meal ----< MealCharge (written at settlement; empty until then)
 - `closed` / `closed_at` — closing freezes attendance. `closed_at` is set
   when `closed` flips to true and cleared when it flips back.
 - `max` — extra spots allowed after close. Always NULL while the meal is
-  open. Cannot be less than the current attendee count.
+  open: a reopen clears it before validation. A new max cannot be less than
+  the current attendee count. The check runs only when max changes,
+  because an admin attendance correction can add a person past it, and the
+  meal must still take a menu edit or a reopen then (#93).
 - `start_time` — set on create: 6pm on Sundays, 7pm on other days
 
 **Derived counts (no cached columns):**

@@ -3,9 +3,10 @@
 require 'rails_helper'
 
 # What the meal endpoints answer when the model, or the database under it,
-# refuses a write. Each is a 400 that carries the reason, never a 500. The
-# refusals are staged: today no validation on these rows can fail through
-# the API's own checks, and the database exceptions below only happen in a
+# refuses a write. Each is a 400 that carries the reason, never a 500. A
+# max below the headcount is a real refusal. The others are staged: today
+# no validation on the attendance rows or the bills can fail through the
+# API's own checks, and the database exceptions below only happen in a
 # race the checks cannot see (a cook deleted between the lookup and the
 # insert). The rescue clauses exist for exactly those cases, so the
 # examples raise them on purpose and pin what the client gets.
@@ -16,29 +17,18 @@ RSpec.describe 'meal writes that are refused' do
   let(:token) { resident.keys.first.token }
   let(:meal) { create(:meal, community: community, date: Date.tomorrow) }
 
-  describe 'a meal that no longer passes validation' do
-    # A closed meal whose max fell below its headcount, the way a hand edit
-    # in psql could leave it.
+  describe 'a max below the headcount' do
     before do
       create(:meal_resident, meal: meal, resident: resident, community: community)
       meal.update!(closed: true)
-      meal.update_columns(max: 0)
     end
 
-    it 'refuses a new description and says why' do
-      patch "/api/v1/meals/#{meal.id}/description", params: { token: token, description: 'Soup' }
+    it 'refuses it and says why, naming max once' do
+      patch "/api/v1/meals/#{meal.id}/max", params: { token: token, max: 0 }
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body['message']).to include("Max can't be less than current number of attendees.")
-      expect(meal.reload.description).not_to eq('Soup')
-    end
-
-    it 'refuses to reopen and says why' do
-      patch "/api/v1/meals/#{meal.id}/closed", params: { token: token, closed: false }
-
-      expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body['message']).to include("Max can't be less than current number of attendees.")
-      expect(meal.reload.closed).to be(true)
+      expect(response.parsed_body['message']).to eq("Max can't be less than current number of attendees.")
+      expect(meal.reload.max).to be_nil
     end
   end
 
