@@ -114,9 +114,10 @@ function connect(Pusher) {
   // Pusher public key + cluster from env vars (VITE_PUSHER_KEY,
   // VITE_PUSHER_CLUSTER). Local dev: the untracked .env file. CI has
   // no .env, so anything there that needs a key must set one itself.
+  // No TLS option: pusher-js 8 always uses TLS unless forceTLS is
+  // false. (It has no `encrypted` option; this call used to pass one.)
   real = new Pusher(import.meta.env.VITE_PUSHER_KEY, {
     cluster: import.meta.env.VITE_PUSHER_CLUSTER,
-    encrypted: true,
   });
   const pending = queue.splice(0);
   pending.forEach(function (fn) {
