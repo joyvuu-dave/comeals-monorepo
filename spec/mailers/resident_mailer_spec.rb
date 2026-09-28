@@ -87,7 +87,7 @@ RSpec.describe ResidentMailer do
   end
 
   describe '#new_rotation_email' do
-    let(:rotation) { create(:rotation, community: community) }
+    let(:rotation) { rotation_with_meals(Date.new(2026, 4, 1), Date.new(2026, 5, 12)) }
     let(:mail) { described_class.new_rotation_email(resident, rotation, community) }
 
     it 'sends to the resident email' do
@@ -100,6 +100,18 @@ RSpec.describe ResidentMailer do
 
     it 'includes the community name' do
       expect(mail.body.encoded).to include('Swan')
+    end
+
+    it 'names the period the new rotation covers, in both parts' do
+      sentence = 'A new meal rotation has just been created for the period Apr 1 – May 12, 2026.'
+
+      expect(Nokogiri::HTML(mail.html_part.body.decoded).text.squish).to include(sentence)
+      expect(mail.text_part.body.decoded).to include(sentence)
+    end
+
+    it 'underlines the title of the text part with = signs and nothing else' do
+      expect(mail.text_part.body.decoded.lines.first(2).map(&:chomp))
+        .to eq(['New Rotation Posted', '=' * 'New Rotation Posted'.length])
     end
 
     it 'links to the configured app root' do
