@@ -231,12 +231,20 @@ RSpec.describe Rotation do
       rotations = Array.new(5) { create(:rotation, community: community, no_email: true) }
       create(:meal, community: community, rotation: rotations[0], date: Date.new(2027, 4, 15))
       create(:meal, community: community, rotation: rotations[4], date: Date.new(2027, 8, 15))
+      # Number the rotations by their meal dates now, so the destroy does
+      # not renumber the August rotation: a renumbered rotation pushes its
+      # months too (set_place_value), and then this example could not tell
+      # which of the two pushed August.
+      rotations.first.set_place_value
+      expect(rotations[4].reload.place_value).to eq(2)
       pushed = []
       RSpec::Mocks.space.proxy_for(Pusher).reset
       allow(Pusher).to receive(:trigger) { |channel, *| pushed << channel }
 
       rotations[2].destroy!
 
+      expect(rotations[4].reload.place_value).to eq(2)
+      expect(rotations[4].color).to eq(Rotation::COLORS[3])
       expect(pushed).to include(community.calendar_cache_key(2027, 8))
       expect(pushed).not_to include(community.calendar_cache_key(2027, 4))
     end
