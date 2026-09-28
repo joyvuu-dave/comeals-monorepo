@@ -252,18 +252,23 @@ RSpec.describe LiveUpdate do
       expect(calls.map(&:first)).not_to include("community-#{community.id}-residents")
     end
 
+    # April 28, 2026 is on two month grids, April's and May's, so there are
+    # two entries and two pushes. Each push records what both entries hold
+    # at that moment: a push before a clear, or a clear and a push per
+    # entry in turn, would see a 'stale' one, and no push at all would
+    # record nothing.
     it 'clears every calendar entry before it pushes anything' do
       store = ActiveSupport::Cache::MemoryStore.new
       allow(Rails).to receive(:cache).and_return(store)
-      key = community.calendar_cache_key(2026, 4)
-      store.write(key, 'stale')
-      seen_at_push = nil
-      allow(Pusher).to receive(:trigger) { |*| seen_at_push = store.read(key) }
+      keys = [community.calendar_cache_key(2026, 4), community.calendar_cache_key(2026, 5)]
+      keys.each { |key| store.write(key, 'stale') }
+      reads = []
+      allow(Pusher).to receive(:trigger) { |*| reads << keys.map { |key| store.read(key) } }
 
-      described_class.batch { described_class.calendar(Date.new(2026, 4, 15)) }
+      described_class.batch { described_class.calendar(Date.new(2026, 4, 28)) }
 
-      expect(seen_at_push).to be_nil
-      expect(store.read(key)).to be_nil
+      expect(reads).to eq([[nil, nil], [nil, nil]])
+      expect(keys.map { |key| store.read(key) }).to eq([nil, nil])
     end
 
     it 'hands each push to LivePushJob with the channel, the data and the options' do
