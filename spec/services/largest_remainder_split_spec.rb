@@ -43,10 +43,14 @@ RSpec.describe LargestRemainderSplit do
     end
 
     it 'never gives a leftover unit to a share whose exact share is whole' do
-      # 5 across 2, 1, 1: exact 2.5, 1.25, 1.25. Whole units 2, 1, 1; the
-      # one leftover goes to the first (lost .5), never to a share that
-      # lost nothing.
+      # 2 across 2, 1, 1: exact 1, 0.5, 0.5. The first share is whole and
+      # comes first in tie order, but it lost nothing, so the one leftover
+      # unit goes to the second share.
+      expect(described_class.call(2, [2, 1, 1])).to eq([1, 1, 0])
+      # 5 across 2, 1, 1: exact 2.5, 1.25, 1.25, so no share is whole. The
+      # first lost the most (0.5) and gets the leftover.
       expect(described_class.call(5, [2, 1, 1])).to eq([3, 1, 1])
+      # 4 across 2, 1, 1: every share is whole and nothing is left over.
       expect(described_class.call(4, [2, 1, 1])).to eq([2, 1, 1])
     end
 
