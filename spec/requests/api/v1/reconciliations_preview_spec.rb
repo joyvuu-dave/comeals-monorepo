@@ -115,6 +115,20 @@ RSpec.describe 'GET /api/v1/reconciliations/preview' do
       expect(body[:meals].pluck(:id)).to eq([empty.id])
     end
 
+    it 'does not say a meal it claims will not be settled, for a $0 cook slot nobody ate' do
+      meal = create(:meal, community: community, date: Date.yesterday)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('0'))
+
+      body = preview
+      settle!(cutoff: Date.yesterday)
+
+      aggregate_failures do
+        expect(body[:meals].pluck(:id)).to eq([meal.id])
+        expect(meal.reload).to be_reconciled
+        expect(body[:warnings].pluck(:kind)).to eq(%w[zero_bill_not_flagged])
+      end
+    end
+
     it 'flags a meal people ate that no cook billed — a meal the settlement would leave behind' do
       billed = create(:meal, community: community, date: Date.yesterday - 1)
       create(:bill, meal: billed, resident: cook, community: community, amount: BigDecimal('20'))

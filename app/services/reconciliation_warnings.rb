@@ -12,11 +12,13 @@
 # kind it does not know by its title and body, which is how new kinds get
 # added without a client release.
 #
-# Two inputs, because the most important warning is about meals that are
-# NOT in the settlement. `meals` are the ones the settlement would claim;
-# `skipped` are the ones it would leave behind because people ate and no
-# cook billed (Settlement::Preview#skipped_meals). A warning's meal_id can
-# therefore name a meal that is not in the preview's meal list.
+# Three inputs, because the most important warnings are about meals that
+# are NOT in the settlement. `meals` are the ones the settlement would
+# claim. `skipped` are the ones it would leave behind because people ate
+# and no cook billed (Settlement::Preview#skipped_meals). `held` are the
+# ones it would hold back because a cook entered money and nobody ate
+# (Settlement::Preview#held_meals). A warning's meal_id can therefore name
+# a meal that is not in the preview's meal list.
 #
 # The meals must come with bills (and their residents), meal_residents,
 # and guests preloaded — Settlement.preview does that.
@@ -48,18 +50,17 @@ class ReconciliationWarnings
     meal.bills.select { |bill| bill.amount.positive? && !bill.no_cost }
   end
 
+  # A meal the settlement claims gets one kind of warning: a $0 bill not
+  # marked no-cost. A claimed meal nobody ate has only $0 or no-cost bills
+  # (Meal.settleable_by), so it settles with no effect, and saying it "will
+  # not be settled" would be false (#96). A meal with money on a bill and
+  # nobody to charge is not claimed; it is held, and warned about above.
   def warnings_for(meal)
-    attendees = meal.meal_residents.size + meal.guests.size
-    real_bills = meal.bills.reject(&:no_cost)
-
-    warnings = []
-    real_bills.each { |bill| warnings << bill_with_no_attendees(meal, bill) } if attendees.zero?
-    real_bills.select { |bill| bill.amount.zero? }.each { |bill| warnings << zero_bill_not_flagged(meal, bill) }
-    warnings
+    meal.bills.reject(&:no_cost).select { |bill| bill.amount.zero? }.map { |bill| zero_bill_not_flagged(meal, bill) }
   end
 
-  # A cook spent money on a meal nobody ate. The cook absorbs it: no line
-  # is written, so the bill is lost unless someone adds the attendance.
+  # A cook spent money on a meal nobody ate. The settlement holds the meal
+  # back rather than write no lines and take the cook's money for good.
   def bill_with_no_attendees(meal, bill)
     warning('bill_with_no_attendees', meal, bill,
             severity: 'warning',
