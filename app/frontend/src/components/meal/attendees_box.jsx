@@ -50,6 +50,9 @@ export const AttendeeComponent = observer(({ resident }) => {
   const meatGuestsCount = guests.filter(
     (guest) => guest.vegetarian === false,
   ).length;
+  // Nobody can join a closed meal with no seat left, so a tap on this
+  // row does nothing (Resident#toggleAttending has the same rule).
+  const cannotJoin = meal.closed && !resident.attending && meal.extras < 1;
 
   return (
     <tr>
@@ -62,7 +65,9 @@ export const AttendeeComponent = observer(({ resident }) => {
         }
         style={Object.assign(
           {},
-          ((resident.attending && !resident.canRemove) || meal.reconciled) &&
+          ((resident.attending && !resident.canRemove) ||
+            meal.reconciled ||
+            cannotJoin) &&
             (resident.attending
               ? styles.disabledAttending
               : styles.disabledPlain),
@@ -92,10 +97,7 @@ export const AttendeeComponent = observer(({ resident }) => {
             className="switch"
             checked={resident.late}
             onChange={() => resident.toggleLate()}
-            disabled={
-              meal.reconciled ||
-              (meal.closed && !resident.attending && meal.extras < 1)
-            }
+            disabled={meal.reconciled || cannotJoin}
             aria-label={`Toggle Late for ${resident.name}`}
           />
           <label htmlFor={`late_switch_${resident.id}`} />
@@ -112,7 +114,7 @@ export const AttendeeComponent = observer(({ resident }) => {
             disabled={
               meal.reconciled ||
               (meal.closed && resident.attending && !resident.canRemove) ||
-              (meal.closed && !resident.attending && meal.extras < 1)
+              cannotJoin
             }
             aria-label={`Toggle Veg for ${resident.name}`}
           />

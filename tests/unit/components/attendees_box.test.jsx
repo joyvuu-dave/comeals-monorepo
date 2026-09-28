@@ -41,6 +41,22 @@ function createDataStore(opts = {}) {
   return store;
 }
 
+// What the server answers for an attendance add, in the shape
+// MealResidentSerializer sends; the store reads its created_at.
+function mealResidentAnswer(residentId) {
+  return {
+    status: 200,
+    data: {
+      id: 900 + residentId,
+      meal_id: 1,
+      resident_id: residentId,
+      late: false,
+      vegetarian: false,
+      created_at: "2026-01-14T13:00:00Z",
+    },
+  };
+}
+
 function renderBox(store) {
   return render(
     <StoreContext.Provider value={store}>
@@ -128,6 +144,21 @@ describe("AttendeesBox", () => {
     const bob = screen.getByRole("cell", { name: "Bob Johnson" });
     fireEvent.click(bob);
     expect(bob).toHaveClass("background-green");
+  });
+
+  // An open meal has no seat count (extras is null), and anyone can
+  // join it.
+  it("leaves every control usable for someone not attending an open meal", () => {
+    const store = defaultStore();
+    renderBox(store);
+    expect(store.meal.extras).toBeNull();
+    const bob = screen.getByRole("cell", { name: "Bob Johnson" });
+    expect(bob.getAttribute("style")).toBeNull();
+    expect(screen.getByLabelText("Toggle Late for Bob Johnson")).toBeEnabled();
+    expect(screen.getByLabelText("Toggle Veg for Bob Johnson")).toBeEnabled();
+    expect(
+      screen.getByLabelText("Add Guest of Bob Johnson").closest("button"),
+    ).toBeEnabled();
   });
 
   it("disables the remove-guest button for residents without guests", () => {
@@ -277,17 +308,7 @@ describe("AttendeesBox", () => {
     // seat. Her menu closes, and a tap on its cow sends nothing.
     it("an open guest menu closes when someone takes the last seat", async () => {
       const store = closedStore(1);
-      axios.mockResolvedValueOnce({
-        status: 200,
-        data: {
-          id: 900,
-          meal_id: 1,
-          resident_id: 2,
-          late: false,
-          vegetarian: false,
-          created_at: "2026-01-14T13:00:00Z",
-        },
-      });
+      axios.mockResolvedValueOnce(mealResidentAnswer(2));
       renderBox(store);
       const janeAdd = screen.getByLabelText("Add Guest of Jane Smith");
       const janeMenu = janeAdd.closest(".dropdown");
@@ -311,6 +332,58 @@ describe("AttendeesBox", () => {
         screen.getByLabelText("Toggle Late for Bob Johnson"),
       ).toBeEnabled();
       expect(screen.getByLabelText("Toggle Veg for Bob Johnson")).toBeEnabled();
+    });
+
+    // A tap on the name of someone who cannot join does nothing, so the
+    // cell looks locked, by the same rule as that row's switches. A
+    // closed meal with no seat count (extras null) has no seat left.
+    it.each([0, null])(
+      "dims the name of someone who cannot join (extras %s), like their switches",
+      (extras) => {
+        renderBox(closedStore(extras));
+        const bob = screen.getByRole("cell", { name: "Bob Johnson" });
+        expect(bob.style.color).toBe("var(--gray-11)");
+        expect(bob.style.cursor).toBe("not-allowed");
+        expect(bob.style.pointerEvents).toBe("none");
+        expect(bob.style.filter).toBe("");
+        expect(
+          screen.getByLabelText("Toggle Late for Bob Johnson"),
+        ).toBeDisabled();
+      },
+    );
+
+    // The rule is only for someone who is not attending. Jane signed up
+    // before the close and cannot back out, but can still say she is
+    // late; Carol joined after the close and can still change anything.
+    it("does not lock anything more for people already attending", () => {
+      const store = closedStore(0);
+      stage(store, () => {
+        store.residents.put({
+          id: 3,
+          meal_id: 1,
+          name: "Carol Diaz",
+          attending: true,
+          attending_at: new Date("2026-01-14T13:00:00Z"),
+        });
+      });
+      renderBox(store);
+      expect(screen.getByLabelText("Toggle Late for Jane Smith")).toBeEnabled();
+      const carol = screen.getByRole("cell", { name: "Carol Diaz" });
+      expect(carol.getAttribute("style")).toBeNull();
+      expect(screen.getByLabelText("Toggle Late for Carol Diaz")).toBeEnabled();
+      expect(screen.getByLabelText("Toggle Veg for Carol Diaz")).toBeEnabled();
+    });
+
+    it("leaves the name of someone who can still join looking tappable", async () => {
+      const store = closedStore(1);
+      axios.mockResolvedValueOnce(mealResidentAnswer(2));
+      renderBox(store);
+      const bob = screen.getByRole("cell", { name: "Bob Johnson" });
+      expect(bob.getAttribute("style")).toBeNull();
+      fireEvent.click(bob);
+      await act(async () => {});
+      expect(bob).toHaveClass("background-green");
+      expect(store.residents.get("2").attending).toBe(true);
     });
   });
 
