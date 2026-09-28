@@ -157,10 +157,19 @@ describe("app plumbing", () => {
   });
 
   describe("at midnight", () => {
+    // The clock is pinned: the timer fires one second past the next
+    // community midnight, so a test that started on the real clock in
+    // the last hour before midnight Pacific saw two midnights in 25
+    // hours and failed (#117).
+    const NOON_PACIFIC = new Date("2026-07-08T12:00:00-07:00");
+    const TO_FIRST_FIRING = 12 * 60 * 60 * 1000 + 1000;
+    const DAY = 24 * 60 * 60 * 1000;
+
     // A birthday moves someone into the adult band with no write on the
     // server, so nothing pushes it: the hosts list is fetched again.
     it("refetches the hosts list when one was loaded", () => {
       vi.useFakeTimers();
+      vi.setSystemTime(NOON_PACIFIC);
       const store = createDataStore();
       stage(store, () => {
         store.hostsLoadedAt = Date.now();
@@ -170,26 +179,33 @@ describe("app plumbing", () => {
       stubAction(store, "recomputeCommunityToday");
 
       store.scheduleMidnightRecompute();
-      vi.advanceTimersByTime(25 * 60 * 60 * 1000);
+      vi.advanceTimersByTime(TO_FIRST_FIRING - 1);
+      expect(refetch).not.toHaveBeenCalled();
 
+      vi.advanceTimersByTime(1);
       expect(refetch).toHaveBeenCalledTimes(1);
+
+      // The timer schedules the next midnight, which refetches again.
+      vi.advanceTimersByTime(DAY);
+      expect(refetch).toHaveBeenCalledTimes(2);
       clearTimeout(store.midnightTimer);
-      vi.useRealTimers();
     });
 
     it("leaves the hosts list alone when none was loaded", () => {
       vi.useFakeTimers();
+      vi.setSystemTime(NOON_PACIFIC);
       const store = createDataStore();
       const refetch = stubAction(store, "refetchHostsSilently");
       stubAction(store, "loadMonthAsync");
-      stubAction(store, "recomputeCommunityToday");
+      const recompute = stubAction(store, "recomputeCommunityToday");
 
       store.scheduleMidnightRecompute();
-      vi.advanceTimersByTime(25 * 60 * 60 * 1000);
+      vi.advanceTimersByTime(TO_FIRST_FIRING + DAY);
 
+      // Two midnights passed, and neither one fetched hosts.
+      expect(recompute).toHaveBeenCalledTimes(2);
       expect(refetch).not.toHaveBeenCalled();
       clearTimeout(store.midnightTimer);
-      vi.useRealTimers();
     });
   });
 
