@@ -135,6 +135,15 @@ unchanged, as do `settled_meal_triggers_spec.rb` and `whole_cents_check_spec.rb`
 The pessimistic locks and the immutability triggers from ADR 0003 behave
 identically under SERIALIZABLE. That was the most likely thing to break.
 
+_Correction, 2026-09-28: those nine examples send their racing write on a raw
+libpq session, which never gets the `variables:` block, so that write ran at
+READ COMMITTED, like psql. They show the locks and the trigger still stop a
+write that skips the models. They do not show what a SERIALIZABLE model write
+does in the same race. The file now has an example for that path ("a model
+write from a second Rails connection"): the write's FOR KEY SHARE on the meal
+waits for the settlement, and the write is then cancelled as a serialization
+failure, before the trigger decides anything._
+
 One limit on this evidence: 1058 of those examples run single-connection under
 transactional fixtures, where an abort essentially cannot happen. They show
 nothing broke structurally, and nothing more. Everything learned about real

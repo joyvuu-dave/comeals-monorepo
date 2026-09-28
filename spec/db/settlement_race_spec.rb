@@ -30,6 +30,13 @@ require 'rails_helper'
 #      re-parent waits too. A DELETE takes no foreign-key lock on the parent at
 #      all, so this lookup is the only thing that can stop it.
 #
+# The racing writes below are raw SQL on a libpq session of their own: no
+# model, no lock of its own, the way psql or a task with update_all writes.
+# That session never gets config/database.yml's `variables:`, so it runs at
+# READ COMMITTED, as psql does. Admin writes through the models at
+# SERIALIZABLE, and LocksItsMealFirst takes the meal's lock before the row;
+# 'a model write from a second Rails connection' races that path.
+#
 # See docs/adr/0003-concurrency-on-the-money-path.md.
 RSpec.describe 'settlement race against unlocked write paths' do
   # These examples need a second session's statement to be genuinely in
@@ -100,6 +107,22 @@ RSpec.describe 'settlement race against unlocked write paths' do
       sleep 0.02
     end
     :timeout
+  end
+
+  # Waits for some other backend to be blocked on a lock while running a
+  # statement that looks like `sql_fragment`.
+  def wait_for_blocked_session(observer, sql_fragment)
+    200.times do
+      blocked = observer.exec_params(
+        'SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() ' \
+        "AND pid <> pg_backend_pid() AND wait_event_type = 'Lock' AND query LIKE $1",
+        ["%#{sql_fragment}%"]
+      ).getvalue(0, 0).to_i.positive?
+      return true if blocked
+
+      sleep 0.02
+    end
+    false
   end
 
   # Runs a real settlement and yields inside it, once assign_meals has claimed
@@ -183,7 +206,7 @@ RSpec.describe 'settlement race against unlocked write paths' do
   end
 
   describe 'a write that races the claiming UPDATE' do
-    it 'refuses an admin-style bill insert' do
+    it 'refuses a raw SQL bill insert' do
       expect_racing_write_refused(
         'INSERT INTO bills (meal_id, resident_id, community_id, amount, no_cost, created_at, updated_at) ' \
         'VALUES ($1, $2, $3, $4, false, now(), now())',
@@ -191,7 +214,7 @@ RSpec.describe 'settlement race against unlocked write paths' do
       )
     end
 
-    it 'refuses an admin-style attendance insert' do
+    it 'refuses a raw SQL attendance insert' do
       expect_racing_write_refused(
         'INSERT INTO meal_residents (meal_id, resident_id, community_id, multiplier, ' \
         'late, vegetarian, created_at, updated_at) ' \
@@ -200,7 +223,7 @@ RSpec.describe 'settlement race against unlocked write paths' do
       )
     end
 
-    it 'refuses an admin-style guest insert' do
+    it 'refuses a raw SQL guest insert' do
       expect_racing_write_refused(
         'INSERT INTO guests (meal_id, resident_id, multiplier, late, vegetarian, created_at, updated_at) ' \
         'VALUES ($1, $2, $3, false, false, now(), now())',
@@ -217,31 +240,73 @@ RSpec.describe 'settlement race against unlocked write paths' do
   # a balance computed from a row that no longer existed: a cook credited for a
   # deleted bill, a resident charged with no attendance row to show for it.
   #
-  # Both admin paths that reach this are real buttons, not just psql:
-  # app/admin/meal_resident.rb exposes destroy (issue #25's attendance
-  # corrections) and app/admin/bill.rb allows destroy.
+  # These are raw SQL, like the inserts above. Admin can delete a bill or an
+  # attendance row too (app/admin/bill.rb, app/admin/meal_resident.rb), but
+  # it deletes through the models, which take the meal's lock first and run
+  # at SERIALIZABLE; the model example further down races that path.
   describe 'a write that deletes a child row while the settlement claims it' do
-    it 'refuses an admin-style bill delete' do
+    it 'refuses a raw SQL bill delete' do
       expect_racing_write_refused('DELETE FROM bills WHERE id = $1', [doomed_bill.id])
     end
 
-    it 'refuses an admin-style attendance delete' do
+    it 'refuses a raw SQL attendance delete' do
       expect_racing_write_refused('DELETE FROM meal_residents WHERE id = $1', [doomed_attendance.id])
     end
 
-    it 'refuses an admin-style guest delete' do
+    it 'refuses a raw SQL guest delete' do
       expect_racing_write_refused('DELETE FROM guests WHERE id = $1', [doomed_guest.id])
     end
 
-    # app/admin/bill.rb permits :meal_id, so the form can move a bill between
-    # meals. Moving one OFF the settling meal removes it from the ledger just
-    # as a delete would, and it is the OLD.meal_id lookup that has to catch it —
-    # the NEW lookup only sees the unlocked destination.
-    it 'refuses moving a bill off the meal being settled' do
+    # Moving a bill OFF the settling meal removes it from the ledger just as
+    # a delete would, and it is the OLD.meal_id lookup that has to catch it —
+    # the NEW lookup only sees the unlocked destination. (app/admin/bill.rb
+    # permits :meal_id, so admin can move a bill too, through the model.)
+    it 'refuses a raw SQL move of a bill off the meal being settled' do
       expect_racing_write_refused(
         'UPDATE bills SET meal_id = $1 WHERE id = $2',
         [other_meal.id, doomed_bill.id]
       )
+    end
+  end
+
+  # The path admin takes: a model write on its own Rails connection, so at
+  # SERIALIZABLE, with LocksItsMealFirst asking for the meal FOR KEY SHARE
+  # before the row. That lock waits for the settlement's FOR UPDATE. When
+  # the settlement commits, the meal row has changed since this write's
+  # snapshot, and the database cancels the write as a serialization
+  # failure (ReconciledMealImmutability's header says the same). Admin
+  # shows "try again", and a second try is refused by the model in words.
+  describe 'a model write from a second Rails connection, the way admin writes' do
+    it 'waits for the settlement, is cancelled, and is refused in words when sent again' do
+      with_sessions do |_writer, observer|
+        writer = nil
+        blocked = false
+
+        reconciliation = settle_yielding_after('Guest Load') do
+          writer = Thread.new do
+            Thread.current.report_on_exception = false
+            ActiveRecord::Base.connection_pool.with_connection do
+              Bill.create!(meal: Meal.find(meal.id), resident: latecomer, amount: BigDecimal('25'))
+            end
+          end
+          blocked = wait_for_blocked_session(observer, 'FOR KEY SHARE')
+        end
+        error = begin
+          writer.value
+          nil
+        rescue StandardError => e
+          e
+        end
+
+        expect(stored_balances(reconciliation)).to eq(balances_from_source(reconciliation))
+        expect(blocked).to be(true)
+        expect(error).to be_a(ActiveRecord::SerializationFailure)
+        expect(Bill.where(meal_id: meal.id, resident_id: latecomer.id)).to be_empty
+
+        again = Bill.new(meal: Meal.find(meal.id), resident: latecomer, amount: BigDecimal('25'))
+        expect(again.save).to be(false)
+        expect(again.errors[:base]).to eq([ReconciledMealImmutability::MESSAGE])
+      end
     end
   end
 
@@ -269,22 +334,6 @@ RSpec.describe 'settlement race against unlocked write paths' do
   end
 
   describe 'two settlements racing each other' do
-    # Waits for some other backend to be blocked on a lock while running a
-    # statement that looks like `sql_fragment`.
-    def wait_for_blocked_session(observer, sql_fragment)
-      200.times do
-        blocked = observer.exec_params(
-          'SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() ' \
-          "AND pid <> pg_backend_pid() AND wait_event_type = 'Lock' AND query LIKE $1",
-          ["%#{sql_fragment}%"]
-        ).getvalue(0, 0).to_i.positive?
-        return true if blocked
-
-        sleep 0.02
-      end
-      false
-    end
-
     # Only one of the two settlements may survive, and it must own every
     # swept meal. That is the money-level guarantee, and it holds at both
     # isolation levels — but which side dies, and how, does not:
@@ -338,6 +387,10 @@ RSpec.describe 'settlement race against unlocked write paths' do
         # Exactly one side lost. Not both, which would settle nothing, and
         # not neither, which would settle the same meals twice.
         expect([main_error, rival_error].compact.size).to eq(1)
+        # And it lost to the race, not to some other error: a cancellation
+        # at SERIALIZABLE, or the compare-and-swap at READ COMMITTED.
+        expect([main_error, rival_error].compact.first)
+          .to be_a(ActiveRecord::SerializationFailure).or be_a(Settlement::Contested)
 
         survivor = Reconciliation.sole
         expect(meal.reload.reconciliation_id).to eq(survivor.id)
@@ -375,6 +428,7 @@ RSpec.describe 'settlement race against unlocked write paths' do
     it 'can safely re-run a cancelled settlement, which is then refused for having nothing to settle' do
       with_sessions do |_writer, observer|
         rival = nil
+        blocked = false
 
         main_error = begin
           settle_yielding_after('Meal Update All') do
@@ -382,17 +436,26 @@ RSpec.describe 'settlement race against unlocked write paths' do
               Thread.current.report_on_exception = false
               ActiveRecord::Base.connection_pool.with_connection { create(:reconciliation, community: community) }
             end
-            wait_for_blocked_session(observer, 'FOR UPDATE')
+            blocked = wait_for_blocked_session(observer, 'FOR UPDATE')
           end
           nil
         rescue StandardError => e
           e
         end
-        rival.join
+        rival_error = begin
+          rival.value
+          nil
+        rescue StandardError => e
+          e
+        end
 
-        # At READ COMMITTED the rival is the side that loses, so there is no
-        # cancelled settlement to retry and nothing here to prove.
-        skip 'this run cancelled the rival, not the settlement' if main_error.nil?
+        # The race really happened, and SSI cancelled this settlement, not
+        # the rival: every Rails session runs at SERIALIZABLE (ADR 0005). A
+        # run where the rival never blocked, or where it lost instead,
+        # fails here rather than passing with nothing retried.
+        expect(blocked).to be(true)
+        expect(main_error).to be_a(ActiveRecord::SerializationFailure)
+        expect(rival_error).to be_nil
 
         retried = begin
           RetryOnConflict.call do

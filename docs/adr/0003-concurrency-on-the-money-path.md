@@ -204,6 +204,12 @@ Both together do close it, and this combination was verified end to end:
 
 With both in place the admin insert blocks on the settlement and then fails
 loudly with the trigger's exception. Silent loss becomes a visible error.
+(That was at READ COMMITTED. Since ADR 0005 every Rails session runs at
+SERIALIZABLE, and since `LocksItsMealFirst` an admin write asks for the meal's
+lock before its row, so in this race an admin write is now cancelled as a
+serialization failure before the trigger decides. A raw SQL write, as from
+psql, still gets the trigger's exception. `spec/db/settlement_race_spec.rb`
+checks both.)
 
 **This fix shipped on 2026-07-27** (issue #43). Part 1 is in
 `Settlement#assign_meals` (it was `Reconciliation#assign_meals` until
