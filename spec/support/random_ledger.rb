@@ -34,7 +34,7 @@ module RandomLedger
     # Cooks may also eat (cook ids drawn from everyone, eaters included).
     RESIDENTS.sample(rng.rand(0..3), random: rng).each_with_index do |id, row|
       no_cost = rng.rand < 0.15
-      amount = no_cost ? BigDecimal('0') : BigDecimal(rng.rand(0..cents_max)) / 100
+      amount = no_cost ? no_cost_amount(rng, index, row, cents_max) : BigDecimal(rng.rand(0..cents_max)) / 100
       meal.bills.build(id: (index * 100) + row + 1, resident_id: id, amount: amount, no_cost: no_cost)
     end
     # The rows built above are all there are. Without this, Rails reads
@@ -42,6 +42,16 @@ module RandomLedger
     # rows, one per meal, which prosopite reports as an N+1 in the ledger.
     %i[meal_residents guests bills].each { |name| meal.association(name).loaded! }
     meal
+  end
+
+  # A no-cost bill keeps an amount, as a real one can (the API saves both
+  # fields), so the no-cost rule has to be what leaves it out. With a $0
+  # amount the ledger came out the same whether or not no_cost was
+  # honored. The amount comes from a generator of its own, seeded from the
+  # ledger's seed and the bill's place, so the draws above, and so every
+  # seed's ledger, are what they were before (2026-09-28).
+  def self.no_cost_amount(rng, index, row, cents_max)
+    BigDecimal(Random.new((rng.seed * 100_000) + (index * 10) + row).rand(0..cents_max)) / 100
   end
 
   def self.meals(seed, cents_max: 999_999)
