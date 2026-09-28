@@ -1,18 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
-import { observable } from "mobx";
-import {
-  MemoryRouter,
-  Routes,
-  Route,
-  useLocation,
-  useNavigate,
-} from "react-router";
+import { MemoryRouter, Routes, Route, useLocation } from "react-router";
 
 vi.mock("axios", () => import("../mocks/axios.js"));
 
 import axios from "axios";
-import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
+import toastStore from "../../../app/frontend/src/stores/toast_store.js";
 import SideBar from "../../../app/frontend/src/components/calendar/side_bar.jsx";
 
 function LocationEcho() {
@@ -20,26 +13,13 @@ function LocationEcho() {
   return <span data-testid="location">{location.pathname}</span>;
 }
 
-// The class version reads history/location props (passed by
-// calendar/show); the hooks version reads the router directly. The
-// bridge hands the class real router-backed props, so the same
-// assertions hold for both.
-function Bridge({ store }) {
-  const navigate = useNavigate();
-  const location = useLocation();
-  return (
-    <StoreContext.Provider value={store}>
-      <SideBar history={{ push: navigate }} location={location} />
-    </StoreContext.Provider>
-  );
-}
-
+// SideBar takes no props and reads no store: it reads the path from the
+// router. calendar/show renders it the same way, as a bare <SideBar />.
 function renderBar() {
-  const store = observable({});
   render(
     <MemoryRouter initialEntries={["/calendar/all/2026-01-15/"]}>
       <Routes>
-        <Route path="*" element={<Bridge store={store} />} />
+        <Route path="*" element={<SideBar />} />
       </Routes>
       <LocationEcho />
     </MemoryRouter>,
@@ -49,25 +29,32 @@ function renderBar() {
 describe("SideBar", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    toastStore.clearAll();
   });
 
-  it("opens each reservation form under the current calendar path", () => {
-    renderBar();
+  it.each([
+    {
+      button: "Guest Room",
+      form: "guest room",
+      path: "guest-room-reservations/new",
+    },
+    {
+      button: "Common House",
+      form: "common house",
+      path: "common-house-reservations/new",
+    },
+    { button: "Event", form: "event", path: "events/new" },
+  ])(
+    "$button opens the $form form under the current calendar path",
+    ({ button, path }) => {
+      renderBar();
 
-    fireEvent.click(screen.getByRole("button", { name: "Guest Room" }));
-    expect(screen.getByTestId("location")).toHaveTextContent(
-      "/calendar/all/2026-01-15/guest-room-reservations/new",
-    );
-  });
-
-  it("opens the common house form and the event form", () => {
-    renderBar();
-
-    fireEvent.click(screen.getByRole("button", { name: "Common House" }));
-    expect(screen.getByTestId("location")).toHaveTextContent(
-      "/calendar/all/2026-01-15/common-house-reservations/new",
-    );
-  });
+      fireEvent.click(screen.getByRole("button", { name: button }));
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        new RegExp(`^/calendar/all/2026-01-15/${path}$`),
+      );
+    },
+  );
 
   it("Next Meal asks the server which meal is next and goes there", async () => {
     axios.get.mockResolvedValue({ status: 200, data: { meal_id: 42 } });
@@ -78,22 +65,18 @@ describe("SideBar", () => {
 
     await vi.waitFor(() => {
       expect(screen.getByTestId("location")).toHaveTextContent(
-        "/meals/42/edit",
+        /^\/meals\/42\/edit$/,
       );
     });
   });
 
-  it("opens the event form", () => {
-    renderBar();
-
-    fireEvent.click(screen.getByRole("button", { name: "Event" }));
-    expect(screen.getByTestId("location")).toHaveTextContent(
-      "/calendar/all/2026-01-15/events/new",
-    );
-  });
-
-  it("Next Meal stays put when the server has no answer", async () => {
-    axios.get.mockRejectedValue({ response: { status: 404, data: {} } });
+  // The server's answer when no meal is on the calendar from today on
+  // (MealsController#next): a 400 with a null meal id and no message.
+  // The button asks handleAxiosError to stay silent, so nothing shows.
+  it("Next Meal stays on the calendar when no meal is scheduled", async () => {
+    axios.get.mockRejectedValue({
+      response: { status: 400, data: { meal_id: null } },
+    });
     renderBar();
 
     fireEvent.click(screen.getByRole("button", { name: "Next Meal" }));
@@ -102,7 +85,8 @@ describe("SideBar", () => {
     });
     await act(async () => {});
     expect(screen.getByTestId("location")).toHaveTextContent(
-      "/calendar/all/2026-01-15/",
+      /^\/calendar\/all\/2026-01-15\/$/,
     );
+    expect(toastStore.toasts).toHaveLength(0);
   });
 });

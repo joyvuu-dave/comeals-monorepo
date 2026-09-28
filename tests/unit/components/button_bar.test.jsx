@@ -1,14 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { observable } from "mobx";
-import {
-  MemoryRouter,
-  Routes,
-  Route,
-  useLocation,
-  useNavigate,
-} from "react-router";
-import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
+import { MemoryRouter, Routes, Route, useLocation } from "react-router";
 import ButtonBar from "../../../app/frontend/src/components/meal/button_bar.jsx";
 
 function LocationEcho() {
@@ -16,26 +8,13 @@ function LocationEcho() {
   return <span data-testid="location">{location.pathname}</span>;
 }
 
-// The class version reads history/location props (passed by Header);
-// the hooks version reads the router directly. The bridge hands the
-// class real router-backed props, so the same assertions hold for
-// both.
-function Bridge({ store }) {
-  const navigate = useNavigate();
-  const location = useLocation();
-  return (
-    <StoreContext.Provider value={store}>
-      <ButtonBar history={{ push: navigate }} location={location} />
-    </StoreContext.Provider>
-  );
-}
-
+// ButtonBar takes no props and reads no store: it reads the path from
+// the router. Header renders it the same way, as a bare <ButtonBar />.
 function renderBar(path) {
-  const store = observable({});
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route path="*" element={<Bridge store={store} />} />
+        <Route path="*" element={<ButtonBar />} />
       </Routes>
       <LocationEcho />
     </MemoryRouter>,
