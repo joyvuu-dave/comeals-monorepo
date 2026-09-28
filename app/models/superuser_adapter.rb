@@ -65,11 +65,17 @@ class SuperuserAdapter < ActiveAdmin::AuthorizationAdapter
   CREATE_ACTIONS = %i[new create].freeze
 
   def authorized?(action, subject = nil)
+    # No user means we cannot tell who is asking, so the answer is no, the
+    # same as for a subject we cannot identify (below). Inside an admin
+    # request this never happens: Devise signs the admin in, or the token
+    # finds its account, before anything asks here. A console or a job can
+    # still ask with no user.
+    return false if user.nil?
     return token_authorized?(action, subject) if Current.read_only_admin_token
 
     return false if creating_a_second_community?(action, subject)
     return true if READ_ACTIONS.include?(action)
-    return true if user&.superuser?
+    return true if user.superuser?
 
     # Rotations are open to any admin — except destroy. Destroying a rotation
     # deletes its meals (Rotation's dependent: :destroy), and Meal writes are

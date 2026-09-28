@@ -36,10 +36,26 @@ RSpec.describe SuperuserAdapter do
     end
   end
 
+  # Inside an admin request the user is never nil, because Devise signs the
+  # admin in first. A console or a job can still ask with no user. The
+  # adapter cannot tell who is asking then, so it refuses everything, the
+  # same way it refuses a write on a subject it cannot identify.
   describe 'no user at all' do
-    it 'is not a superuser, so the money path is closed and the rest is open' do
-      expect(adapter_for(nil).authorized?(:update, Bill)).to be false
-      expect(adapter_for(nil).authorized?(:update, Event)).to be true
+    it 'may not read anything, not even the dashboard' do
+      expect(adapter_for(nil).authorized?(:read)).to be false
+      expect(adapter_for(nil).authorized?(:read, Event)).to be false
+    end
+
+    it 'may not write anything, money or not' do
+      expect_writes(nil, %w[Bill Event Resident Rotation], allowed: false)
+    end
+
+    it 'may not read on a token request either' do
+      Current.read_only_admin_token = true
+
+      expect(adapter_for(nil).authorized?(:read, Bill)).to be false
+    ensure
+      Current.read_only_admin_token = nil
     end
   end
 
