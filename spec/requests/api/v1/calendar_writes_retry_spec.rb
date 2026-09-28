@@ -23,9 +23,11 @@ RSpec.describe 'a calendar write refused for a conflict' do
 
   before { allow(RetryOnConflict).to receive(:sleep) }
 
-  # The database refuses the first write of the given kind, the way a
-  # serialization failure arrives: from inside the save, after the values
-  # are assigned.
+  # The database refuses the first save or destroy. The stub raises before
+  # the real method runs, so no SQL runs on the refused try. A create or an
+  # update has already assigned the new values to the record by then, as a
+  # real refusal would leave them, so the retry saves a record that still
+  # holds the values the refused try assigned.
   def refuse_first(klass, method)
     refused = false
     allow_any_instance_of(klass).to receive(method).and_wrap_original do |original, *args| # rubocop:disable RSpec/AnyInstance -- the controller loads the record
@@ -49,7 +51,7 @@ RSpec.describe 'a calendar write refused for a conflict' do
 
   it 'updates the event on the second try' do
     event = create(:event, community: community, title: 'Before')
-    refuse_first(Event, :update)
+    refuse_first(Event, :save)
 
     patch "/api/v1/events/#{event.id}/update", params: { token: token, title: 'After', **times }
 
@@ -86,8 +88,13 @@ RSpec.describe 'a calendar write refused for a conflict' do
     expect(CommonHouseReservation.where(title: 'Party').count).to eq(1)
   end
 
-  it 'answers 409 and writes nothing when the conflict does not go away' do
-    allow_any_instance_of(CommonHouseReservation).to receive(:save) # rubocop:disable RSpec/AnyInstance -- the refusal happens inside one request
+  # The refusal comes from the reservation's after_save, after the INSERT
+  # and inside the save's transaction, on every try. So each try really
+  # writes a row, and the count shows each one was rolled back. prosopite
+  # is off: each retry runs the "is this period free?" query again on
+  # purpose, and that is not an N+1.
+  it 'answers 409 and writes nothing when the conflict does not go away', prosopite: false do
+    allow_any_instance_of(CommonHouseReservation).to receive(:note_live_update) # rubocop:disable RSpec/AnyInstance -- the refusal happens inside one request
       .and_raise(ActiveRecord::SerializationFailure, 'could not serialize access')
 
     post '/api/v1/common-house-reservations',
