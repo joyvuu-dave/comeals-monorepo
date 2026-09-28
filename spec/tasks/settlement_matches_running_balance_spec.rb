@@ -20,17 +20,15 @@ require Rails.root.join('spec/support/oracle/plain_ledger')
 # settled balance is rounded to cents by largest-remainder allocation. So
 # the two cannot be compared directly. Instead each example asserts:
 #
-#   - the exact tie: running balances, put through the settlement's own
-#     allocate_to_cents, equal the stored settled balances row for row;
+#   - the running tie: the rake task's stored running balances equal the
+#     plain ledger's, exactly. Every line is a whole number of 10^-8
+#     dollars (ADR 0008), so what the task computes is what the DECIMAL(16,8)
+#     column stores, and there is nothing to allow for;
+#   - the exact tie: those running balances, put through the settlement's
+#     own allocate_to_cents, equal the stored settled balances row for row;
 #   - the loose tie: each stored settled balance is within one cent of the
-#     rake task's stored running balance, which is the guarantee
-#     largest-remainder allocation actually makes.
-#
-# The exact tie runs against the plain ledger rather than the rake task's
-# output. resident_balances.amount is DECIMAL(16,8), and truncating there
-# could in principle change which resident wins a residual penny. The plain
-# ledger returns the untruncated BigDecimal, so the exact assertion has no
-# rounding in its path.
+#     running balance, which is the guarantee largest-remainder allocation
+#     actually makes.
 RSpec.describe 'settlement and running-balance arithmetic agree', type: :task do
   before(:all) do
     RakeTasks.ensure_loaded
@@ -41,19 +39,26 @@ RSpec.describe 'settlement and running-balance arithmetic agree', type: :task do
   end
 
   # Computes every running balance, settles every eligible meal, and asserts
-  # the two agree. Order matters: both running-balance paths read
-  # Meal.unreconciled, so they must run before the reconciliation claims the
-  # meals.
+  # the two agree. Order matters: the rake task reads Meal.unreconciled, so
+  # it must run before the settlement claims the meals.
   #
-  # Reconciliation.create! is used directly rather than the :reconciliation
-  # factory. That factory's before(:create) hook builds its own unit, cook,
-  # meal and bill, which would add a meal to the settlement that neither
-  # running-balance path was asked about.
-  # The plain ledger over every meal of the community: at this point none
-  # is settled, so that is exactly what the running balance covers.
+  # The settlement runs through settle! (spec/support/settle.rb), not the
+  # :reconciliation factory. That factory's before(:create) hook builds its
+  # own unit, cook, meal and bill, which would add a meal to the settlement
+  # that neither running-balance path was asked about.
+  #
+  # The plain ledger is given every meal of the community: at this point
+  # none is settled, so that is exactly what the running balance covers.
   def running_balances(community, residents)
     rows = community.meals.preload(:bills, :meal_residents, :guests)
     PlainLedger.balances(rows.map { |meal| RandomLedger.plain(meal) }, residents.map(&:id))
+  end
+
+  # The rake task's stored running balances equal the plain ledger's,
+  # exactly, for every resident.
+  def expect_running_tie(residents, stored_running, running)
+    expect(residents.to_h { |r| [r.id, stored_running.fetch(r.id, BigDecimal('0'))] })
+      .to eq(residents.to_h { |r| [r.id, running.fetch(r.id, BigDecimal('0'))] })
   end
 
   def expect_settlement_to_match_running_balances(community)
@@ -63,6 +68,7 @@ RSpec.describe 'settlement and running-balance arithmetic agree', type: :task do
     Rake::Task['billing:recalculate'].reenable
     Rake::Task['billing:recalculate'].invoke
     stored_running = ResidentBalance.pluck(:resident_id, :amount).to_h
+    expect_running_tie(residents, stored_running, running)
 
     reconciliation = settle!(cutoff: Date.yesterday)
     settled = reconciliation.reconciliation_balances.pluck(:resident_id, :amount).to_h
@@ -192,7 +198,7 @@ RSpec.describe 'settlement and running-balance arithmetic agree', type: :task do
     eater = resident('Eater')
     held = create(:meal, community: community, date: Date.yesterday - 1)
     create(:bill, meal: held, resident: cook, community: community, amount: BigDecimal('25'))
-    eaten = create(:meal, community: community)
+    eaten = create(:meal, community: community, date: Date.yesterday)
     create(:bill, meal: eaten, resident: cook, community: community, amount: BigDecimal('20'))
     create(:meal_resident, meal: eaten, resident: eater, community: community)
 
