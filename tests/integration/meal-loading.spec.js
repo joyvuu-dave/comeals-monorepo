@@ -4,6 +4,11 @@ const {
   setupAuthenticatedPage,
 } = require("../helpers/integration_setup");
 
+// The date box's relative day: "Today", "Tomorrow", "2 days ago".
+function dayLabel(page) {
+  return page.locator("h3.text-black");
+}
+
 test.describe("Meal loading (real backend)", () => {
   let auth;
 
@@ -24,6 +29,11 @@ test.describe("Meal loading (real backend)", () => {
     // Description matches seed data
     const textarea = page.locator('[aria-label="Enter meal description"]');
     await expect(textarea).toHaveValue("Pasta night with garlic bread");
+
+    // The day label compares the meal's date (from the server) with the
+    // browser's "today" in the community's zone. The two only agree if
+    // the browser's frozen clock is the server's frozen instant.
+    await expect(dayLabel(page)).toHaveText("Tomorrow");
 
     // All seeded residents visible (names include unit prefix from real serializer)
     // Use exact: true to avoid matching late/veg/guest cells that also contain the name
@@ -78,6 +88,7 @@ test.describe("Meal loading (real backend)", () => {
     const textarea = page.locator('[aria-label="Enter meal description"]');
     await expect(textarea).toHaveValue("Tacos and rice");
     await expect(textarea).toBeDisabled();
+    await expect(dayLabel(page)).toHaveText("2 days ago");
 
     // Bob attending, Jane NOT attending
     const janeCell = page.getByRole("cell", {
@@ -106,6 +117,7 @@ test.describe("Meal loading (real backend)", () => {
 
     const textarea = page.locator('[aria-label="Enter meal description"]');
     await expect(textarea).toHaveValue("Pizza and salad");
+    await expect(dayLabel(page)).toHaveText("Today");
 
     // Jane and Alice attending
     const janeCell = page.getByRole("cell", {

@@ -8,14 +8,28 @@
 
 const fs = require("fs");
 const path = require("path");
+const dayjs = require("dayjs");
+const utc = require("dayjs/plugin/utc");
+const timezone = require("dayjs/plugin/timezone");
 const { expect } = require("./test");
 const { disableIdleTimer, clearStorage } = require("./browser_setup");
 
-// The suite's frozen "today" — bin/test-integration exports it to the
-// seed task and the Rails server; the browser freezes to the same
-// instant in setupAuthenticatedPage. Noon avoids day-boundary edges.
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+// The suite's frozen "today". bin/test-integration exports it to the
+// seed task and the Rails server, and the server freezes at noon of
+// that day in its own zone (config/initializers/integration_fake_time.rb;
+// config.time_zone and the seeded community are both Los Angeles).
+// setupAuthenticatedPage freezes the browser to the same instant. It is
+// built in that zone on purpose: `new Date("...T12:00:00")` reads the
+// time in the zone of the machine running the tests, and on a machine
+// at UTC+5 or further east that instant is still the day before in Los
+// Angeles.
 const FAKE_TODAY = process.env.INTEGRATION_FAKE_TODAY || "2026-01-15";
-const FAKE_NOW = new Date(`${FAKE_TODAY}T12:00:00`);
+const FAKE_NOW = dayjs
+  .tz(`${FAKE_TODAY} 12:00`, "America/Los_Angeles")
+  .toDate();
 
 /**
  * Read auth credentials written by `rake test:seed_integration`.
