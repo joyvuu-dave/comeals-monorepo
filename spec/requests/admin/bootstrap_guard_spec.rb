@@ -112,19 +112,9 @@ RSpec.describe 'Admin bootstrap guard' do
       expect(response).to have_http_status(:ok)
     end
 
-    # /communities/new is refused post-bootstrap, but by the authorization
-    # adapter, not by this guard. See spec/requests/admin/community_creation_spec.rb.
-    it 'blocks a second Community' do
-      expect do
-        post '/communities', params: {
-          community: {
-            name: 'Second Community',
-            cap: '2.50',
-            timezone: 'America/New_York'
-          }
-        }
-      end.not_to change(Community, :count)
-    end
+    # A second Community is refused post-bootstrap, but by the authorization
+    # adapter, not by this guard: spec/requests/admin/community_creation_spec.rb
+    # ('denies POST /communities') checks the refusal and its message.
   end
 
   describe 'Devise sign-in paths' do
