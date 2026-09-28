@@ -17,32 +17,75 @@ import { createDataStore, stage } from "../helpers/create_data_store.js";
 
 // The full wire shape /meals/:id/cooks returns, every field at its
 // blank default. Tests override only what they exercise, so a wire
-// format change is one edit here instead of two dozen literals.
+// format change is one edit here instead of two dozen literals. The
+// server never sends a null next_id or prev_id: the first and the last
+// meal point at themselves (MealFormSerializer).
 function mealPayload(overrides = {}) {
+  const id = overrides.id ?? 1;
   return {
-    id: 1,
+    id,
     date: "2023-06-15",
     description: "",
     closed: false,
     closed_at: null,
     reconciled: false,
     max: null,
-    next_id: null,
-    prev_id: null,
+    next_id: id,
+    prev_id: id,
     residents: [],
     guests: [],
     bills: [],
     ...overrides,
   };
 }
+
+// One resident row as /meals/:id/cooks sends it.
+function residentRow(id, name, overrides = {}) {
+  return {
+    id,
+    meal_id: 1,
+    name,
+    attending: false,
+    attending_at: null,
+    late: false,
+    vegetarian: false,
+    can_cook: true,
+    active: true,
+    ...overrides,
+  };
+}
+
+// The bill rows the store shows, by who cooks. A padding row has no cook.
+function billFor(store, residentId) {
+  return Array.from(store.bills.values()).find(
+    (b) => b.resident !== null && b.resident.id === residentId,
+  );
+}
+function blankRows(store) {
+  return Array.from(store.bills.values()).filter((b) => b.resident === null);
+}
+
 import { prefetchMonth } from "../../../app/frontend/src/stores/month_fetch.js";
+import * as monthCache from "../../../app/frontend/src/stores/month_cache.js";
+import { pusherClient } from "../../../app/frontend/src/helpers/pusher_client.js";
 import * as idbKeyval from "idb-keyval";
 import axios from "axios";
+import Cookie from "js-cookie";
+import { cookies } from "../mocks/js_cookie.js";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
-import {
-  communityNow,
-  SAVE_DEBOUNCE_MS,
-} from "../../../app/frontend/src/helpers/helpers.js";
+import { SAVE_DEBOUNCE_MS } from "../../../app/frontend/src/helpers/helpers.js";
+
+// Replace the Pusher client's subscribe and unsubscribe for one test, so
+// it can see the channel names. pusherClient is module state that lives
+// for the whole file, so these are spies the top-level afterEach puts
+// back, not plain assignments that would stay for every later test.
+function stubPusherChannels() {
+  vi.spyOn(pusherClient, "subscribe").mockImplementation((name) => ({
+    bind: vi.fn(),
+    name,
+  }));
+  vi.spyOn(pusherClient, "unsubscribe").mockImplementation(() => {});
+}
 
 describe("DataStore", () => {
   beforeEach(() => {
@@ -61,6 +104,22 @@ describe("DataStore", () => {
       configurable: true,
     });
     window.alert = vi.fn();
+    // The month cache is module state: without this, a month one test
+    // loaded would still be cached for the next one.
+    monthCache.clear();
+  });
+
+  // A test that replaces a shared mock's behavior (mockImplementation,
+  // mockRejectedValue, a Once that was never used) must not hand it to
+  // the tests after it. clearAllMocks above wipes only recorded calls;
+  // mockReset also puts back the default each mock file defines.
+  afterEach(() => {
+    [axios, axios.get, axios.delete, idbKeyval.get, idbKeyval.set].forEach(
+      (mock) => mock.mockReset(),
+    );
+    [pusherClient.subscribe, pusherClient.unsubscribe].forEach((fn) => {
+      if (vi.isMockFunction(fn)) fn.mockRestore();
+    });
   });
 
   // ── attendeesCount ──
@@ -370,17 +429,39 @@ describe("DataStore", () => {
       expect(store.canAdd).toBe(true);
     });
 
-    it("flips from true to false when the last extra seat is taken", () => {
+    it("flips from true to false when the last extra seat is taken", async () => {
       const store = createDataStore({
         mealProps: { closed: true, extras: 1 },
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: false }],
       });
       expect(store.canAdd).toBe(true);
+      toastStore.clearAll();
+      // What POST /meals/1/residents/10 answers (MealResidentSerializer).
+      axios.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          id: 500,
+          meal_id: 1,
+          resident_id: 10,
+          late: false,
+          vegetarian: false,
+          created_at: "2023-06-15T17:00:00Z",
+        },
+      });
 
       const alice = store.residents.get("10");
       alice.toggleAttending();
       expect(store.meal.extras).toBe(0);
       expect(store.canAdd).toBe(false);
+
+      // The server saved it: the seat stays taken.
+      await vi.waitFor(() => {
+        expect(alice.attending_at).toEqual(new Date("2023-06-15T17:00:00Z"));
+      });
+      expect(alice.attending).toBe(true);
+      expect(store.meal.extras).toBe(0);
+      expect(store.canAdd).toBe(false);
+      expect(toastStore.toasts).toEqual([]);
     });
   });
 
@@ -388,49 +469,31 @@ describe("DataStore", () => {
 
   describe("loadData", () => {
     it("displays wire amounts losslessly (0 becomes blank, others zero-pad to two decimals)", () => {
-      const store = createDataStore({
-        mealProps: { closed: false },
-        residents: [{ id: 10, meal_id: 1, name: "Alice" }],
-      });
+      const store = createDataStore({ mealProps: { closed: false } });
 
-      const data = mealPayload({
-        description: "Pasta night",
-        next_id: 2,
-        residents: [
-          {
-            id: 10,
-            meal_id: 1,
-            name: "Alice",
-            attending: true,
-            attending_at: null,
-            late: false,
-            vegetarian: false,
-            can_cook: true,
-            active: true,
-          },
-        ],
-        bills: [
-          { id: "b1", resident_id: 10, amount: "25.5", no_cost: false },
-          { id: "b2", resident_id: null, amount: "0", no_cost: false },
-        ],
-      });
-
-      store.loadData(data);
-
-      const bills = Array.from(store.bills.values());
-      // Should have at least 3 bills (2 from data + 1 blank to reach min of 3)
-      expect(bills.length).toBeGreaterThanOrEqual(3);
-
-      // Rails drops trailing zeros ("25.5" for $25.50); the display pads
-      // them back with string edits — never through a float
-      const billWithAmount = bills.find((b) => b.amount === "25.50");
-      expect(billWithAmount).toBeTruthy();
-
-      // Bill with amount 0 should have empty string
-      const billWithZero = bills.find(
-        (b) => b.amount === "" && b.resident === null,
+      store.loadData(
+        mealPayload({
+          description: "Pasta night",
+          next_id: 2,
+          residents: [
+            residentRow(10, "Alice", { attending: true }),
+            residentRow(11, "Bob"),
+          ],
+          bills: [
+            { resident_id: 10, amount: "25.5", no_cost: false },
+            { resident_id: 11, amount: "0", no_cost: false },
+          ],
+        }),
       );
-      expect(billWithZero).toBeTruthy();
+
+      // Two cooks plus one blank row, to show three.
+      expect(store.bills.size).toBe(3);
+      expect(blankRows(store)).toHaveLength(1);
+      // Rails drops trailing zeros ("25.5" for $25.50); the display pads
+      // them back with string edits, never through a float.
+      expect(billFor(store, 10).amount).toBe("25.50");
+      // Zero means "not filled in yet", so it shows blank.
+      expect(billFor(store, 11).amount).toBe("");
     });
 
     it("sorts residents alphabetically by name", () => {
@@ -485,65 +548,33 @@ describe("DataStore", () => {
       const store = createDataStore();
 
       const data = mealPayload({
-        bills: [{ id: "b1", resident_id: null, amount: "10", no_cost: false }],
+        residents: [residentRow(10, "Alice")],
+        bills: [{ resident_id: 10, amount: "10", no_cost: false }],
       });
 
       store.loadData(data);
 
       // 1 bill from data + 2 blanks = 3
       expect(store.bills.size).toBe(3);
+      expect(billFor(store, 10).amount).toBe("10.00");
+      expect(blankRows(store).map((b) => b.amount)).toEqual(["", ""]);
     });
 
     it("does not create blank bills when 3 or more exist", () => {
-      const store = createDataStore({
-        residents: [
-          { id: 10, meal_id: 1, name: "Alice" },
-          { id: 11, meal_id: 1, name: "Bob" },
-          { id: 12, meal_id: 1, name: "Charlie" },
-        ],
-      });
+      const store = createDataStore();
 
       const data = mealPayload({
         residents: [
-          {
-            id: 10,
-            meal_id: 1,
-            name: "Alice",
-            attending: false,
-            attending_at: null,
-            late: false,
-            vegetarian: false,
-            can_cook: true,
-            active: true,
-          },
-          {
-            id: 11,
-            meal_id: 1,
-            name: "Bob",
-            attending: false,
-            attending_at: null,
-            late: false,
-            vegetarian: false,
-            can_cook: true,
-            active: true,
-          },
-          {
-            id: 12,
-            meal_id: 1,
-            name: "Charlie",
-            attending: false,
-            attending_at: null,
-            late: false,
-            vegetarian: false,
-            can_cook: true,
-            active: true,
-          },
+          residentRow(10, "Alice"),
+          residentRow(11, "Bob"),
+          residentRow(12, "Charlie"),
+          residentRow(13, "Dana"),
         ],
         bills: [
-          { id: "b1", resident_id: 10, amount: "10", no_cost: false },
-          { id: "b2", resident_id: 11, amount: "20", no_cost: false },
-          { id: "b3", resident_id: 12, amount: "30", no_cost: false },
-          { id: "b4", resident_id: null, amount: "5", no_cost: false },
+          { resident_id: 10, amount: "10", no_cost: false },
+          { resident_id: 11, amount: "20", no_cost: false },
+          { resident_id: 12, amount: "30", no_cost: false },
+          { resident_id: 13, amount: "5", no_cost: false },
         ],
       });
 
@@ -551,17 +582,20 @@ describe("DataStore", () => {
 
       // 4 bills, no blanks needed
       expect(store.bills.size).toBe(4);
+      expect(blankRows(store)).toHaveLength(0);
     });
 
     it("sets meal properties from data", () => {
       const store = createDataStore();
 
+      // The first meal: the server points prev_id at the meal itself.
       const data = mealPayload({
         description: "Taco Tuesday",
         closed: true,
         closed_at: "2023-06-15T18:00:00Z",
         reconciled: true,
         next_id: 2,
+        prev_id: 1,
       });
 
       store.loadData(data);
@@ -570,7 +604,7 @@ describe("DataStore", () => {
       expect(store.meal.closed).toBe(true);
       expect(store.meal.reconciled).toBe(true);
       expect(store.meal.nextId).toBe(2);
-      expect(store.meal.prevId).toBeNull();
+      expect(store.meal.prevId).toBe(1);
     });
 
     it("sets extras based on max minus attendees when max is provided", () => {
@@ -684,7 +718,7 @@ describe("DataStore", () => {
             active: true,
           },
         ],
-        bills: [{ id: "b1", resident_id: 10, amount: "15", no_cost: false }],
+        bills: [{ resident_id: 10, amount: "15", no_cost: false }],
       });
 
       store.loadData(data);
@@ -721,7 +755,6 @@ describe("DataStore", () => {
             resident_id: 10,
             created_at: "2023-06-15T17:00:00Z",
             vegetarian: true,
-            name: null,
           },
         ],
       });
@@ -748,7 +781,8 @@ describe("DataStore", () => {
         reconciled: false,
         max: null,
         next_id: id + 1,
-        prev_id: id - 1,
+        // The first meal points at itself (MealFormSerializer).
+        prev_id: Math.max(id - 1, 1),
         residents: [
           {
             id: 10,
@@ -811,62 +845,44 @@ describe("DataStore", () => {
       expect(ref3.late).toBe(true);
     });
 
-    it("loadDataAsync skips stale responses from a previous meal", async () => {
-      const store = createDataStore({
-        mealProps: { id: 1 },
-      });
-
-      // Set up a second meal so we can switch to it
-      stage(store, () => {
-        store.meals.push({ id: 2 });
-      });
-
-      // Load initial data for meal 1
+    it("loadDataAsync drops a meal-1 answer that lands after the switch to meal 2", async () => {
+      const store = createDataStore({ mealProps: { id: 1 } });
       store.loadData(makeMealData(1, { attending: true }));
-      expect(store.residents.get("10").attending).toBe(true);
 
-      // Simulate: loadDataAsync fires a request for meal 1
-      // but user navigates to meal 2 before response arrives
-      const meal1Response = {
-        status: 200,
-        data: makeMealData(1, { attending: false, late: true }),
-      };
-      axios.get.mockResolvedValueOnce(meal1Response);
-      idbKeyval.set.mockResolvedValueOnce();
-
-      // Switch to meal 2 and load its data
-      stage(store, () => {
-        store.meal = 2;
-      });
-      store.loadData(makeMealData(2, { attending: false }));
-      expect(store.meal.id).toBe(2);
-      expect(store.meal.description).toBe("Meal 2");
-
-      // Now trigger loadDataAsync (which will get the stale meal 1 response)
+      // A refetch of meal 1 goes out, and its answer is slow.
+      let answerMeal1;
+      axios.get.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            answerMeal1 = resolve;
+          }),
+      );
       store.loadDataAsync();
+      expect(axios.get).toHaveBeenCalledWith("/api/v1/meals/1/cooks");
 
-      // Wait for the axios + localforage promise chain to resolve
+      // The person moves to meal 2 before it answers. Meal 2's IndexedDB
+      // read has not finished either, so meal 2 has no data yet.
+      idbKeyval.get.mockImplementationOnce(() => new Promise(() => {}));
+      store.switchMeals(2);
+
+      // Now meal 1's answer lands.
+      const meal1 = makeMealData(1, { attending: false, late: true });
+      answerMeal1({ status: 200, data: meal1 });
       await vi.waitFor(() => {
-        expect(idbKeyval.set).toHaveBeenCalled();
+        expect(idbKeyval.set).toHaveBeenCalledWith("1", meal1);
       });
-
-      // Flush microtasks
       await new Promise((r) => setTimeout(r, 0));
 
-      // State should still show meal 2 data — the stale meal 1 response was skipped
+      // It is cached under meal 1, but it does not reach meal 2's screen.
       expect(store.meal.id).toBe(2);
-      expect(store.meal.description).toBe("Meal 2");
+      expect(store.meal.description).toBe("");
+      expect(store.residents.size).toBe(0);
     });
 
     it("loadMonth does not clobber meal Pusher subscription", async () => {
       const store = createDataStore({ mealProps: { id: 1 } });
 
-      // Override subscribe to return identifiable channel objects
-      window.Comeals.pusher.subscribe = vi.fn((name) => ({
-        bind: vi.fn(),
-        name: name,
-      }));
-      window.Comeals.pusher.unsubscribe = vi.fn();
+      stubPusherChannels();
 
       const mealData = mealPayload({
         description: "Meal",
@@ -907,14 +923,14 @@ describe("DataStore", () => {
       // Load initial data for meal 1
       store.loadData(makeMealData(1));
 
-      // Set up localforage to return cached data for meal 2
+      // Set up IndexedDB to return cached data for meal 2
       const meal2Data = makeMealData(2, { attending: true });
       idbKeyval.get.mockResolvedValueOnce(meal2Data);
 
-      // switchMeals to meal 2 starts the async localforage lookup
+      // switchMeals to meal 2 starts the async IndexedDB lookup
       store.switchMeals(2);
 
-      // Before localforage resolves, user navigates to meal 3. switchMeals
+      // Before IndexedDB resolves, user navigates to meal 3. switchMeals
       // pruned the pre-pushed stub for meal 3 (issue #38), so recreate it
       // the way switchMeals would.
       stage(store, () => {
@@ -923,7 +939,7 @@ describe("DataStore", () => {
       });
       store.loadData(makeMealData(3, { late: true }));
 
-      // Now let localforage resolve (for the stale meal 2 request)
+      // Now let IndexedDB resolve (for the stale meal 2 request)
       await new Promise((r) => setTimeout(r, 0));
 
       // State should still show meal 3 data — the stale meal 2 callback was skipped
@@ -1001,8 +1017,9 @@ describe("DataStore", () => {
     it("switchMonths skips a stale IndexedDB read if user already navigated away", async () => {
       const store = createDataStore();
 
-      // Year 2024 so the module-level monthCache, which survives across
-      // tests, holds no keys from the loadMonthAsync test above.
+      // Year 2024 so no adjacent-month prefetch the loadMonthAsync test
+      // above started (month_fetch keeps them as module state) can
+      // answer for these months.
       const julyKey = "community-test-community-id-calendar-2024-7";
       const julyCached = makeCalendarData(
         7,
@@ -1074,7 +1091,8 @@ describe("DataStore", () => {
         reconciled: false,
         max: null,
         next_id: id + 1,
-        prev_id: id - 1,
+        // The first meal points at itself (MealFormSerializer).
+        prev_id: Math.max(id - 1, 1),
         residents: [],
         guests: [],
         bills: [],
@@ -1115,11 +1133,7 @@ describe("DataStore", () => {
 
     it("teardownMealPage unsubscribes the meal channel, nulls the meal, and prunes the nodes", () => {
       const store = createDataStore();
-      window.Comeals.pusher.subscribe = vi.fn((name) => ({
-        bind: vi.fn(),
-        name,
-      }));
-      window.Comeals.pusher.unsubscribe = vi.fn();
+      stubPusherChannels();
 
       store.loadData(mealData(1));
       expect(window.Comeals.mealChannel.name).toBe("meal-1");
@@ -1162,9 +1176,7 @@ describe("DataStore", () => {
           created_at: "2023-06-15T10:00:00Z",
         },
       ];
-      data.bills = [
-        { id: "b1", resident_id: 10, amount: "25.50", no_cost: false },
-      ];
+      data.bills = [{ resident_id: 10, amount: "25.5", no_cost: false }];
       store.loadData(data);
 
       expect(store.residents.size).toBe(1);
@@ -1204,11 +1216,7 @@ describe("DataStore", () => {
 
     it("teardownCalendarPage unsubscribes the calendar and adjacent-month channels", () => {
       const store = createDataStore();
-      window.Comeals.pusher.subscribe = vi.fn((name) => ({
-        bind: vi.fn(),
-        name,
-      }));
-      window.Comeals.pusher.unsubscribe = vi.fn();
+      stubPusherChannels();
 
       store.loadMonth(calendarData());
       // The residents channel is not the calendar page's: it stays for
@@ -1268,9 +1276,7 @@ describe("DataStore", () => {
           created_at: "2023-06-15T10:00:00Z",
         },
       ];
-      data.bills = [
-        { id: "b1", resident_id: 10, amount: "25.50", no_cost: false },
-      ];
+      data.bills = [{ resident_id: 10, amount: "25.5", no_cost: false }];
       store.loadData(data);
 
       store.switchMeals(2);
@@ -1311,11 +1317,6 @@ describe("DataStore", () => {
 
     afterEach(() => {
       vi.useRealTimers();
-      // mockRejectedValue sets an implementation that clearAllMocks
-      // does not undo; put the default back for later tests.
-      axios.get.mockImplementation(() =>
-        Promise.resolve({ status: 200, data: {} }),
-      );
     });
 
     function cooksCallsFor(mealId) {
@@ -1365,11 +1366,13 @@ describe("DataStore", () => {
       const store = createDataStore();
       store.loadData(mealPayload());
       expect(store.mealLoading).toBe(false);
+      toastStore.clearAll();
 
       axios.get.mockRejectedValue({ request: {} });
       store.loadDataAsync();
       await vi.advanceTimersByTimeAsync(0);
 
+      expect(toastStore.toasts).toEqual([]);
       expect(store.mealLoadFailed).toBe(false);
       await vi.advanceTimersByTimeAsync(60000);
       expect(cooksCallsFor(1).length).toBe(1);
@@ -1399,12 +1402,43 @@ describe("DataStore", () => {
       axios.get.mockImplementation(() =>
         Promise.resolve({ status: 200, data: {} }),
       );
+      const timersBefore = vi.getTimerCount();
       store.switchMeals(2);
       expect(store.mealLoadFailed).toBe(false);
+      // The retry timer itself is cleared, not only ignored when it fires.
+      expect(vi.getTimerCount()).toBe(timersBefore - 1);
 
       // The old meal's pending retry never fires.
       await vi.advanceTimersByTimeAsync(60000);
       expect(cooksCallsFor(1).length).toBe(1);
+    });
+
+    // A retry timer left running would fire into the meal once the
+    // person comes back to it: an extra fetch, and mealRetryTimer set to
+    // null while the new load's own timer is still pending.
+    it("an old retry does not fire after going away and back to the meal", async () => {
+      const store = createDataStore();
+      axios.get.mockRejectedValue({ request: {} });
+      store.loadDataAsync();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.mealLoadFailed).toBe(true); // meal 1's retry is due at 2s
+
+      store.goToMeal(2);
+      await vi.advanceTimersByTimeAsync(0);
+      // Back to meal 1, whose new load hangs on a slow network.
+      axios.get.mockImplementation((url) =>
+        url === "/api/v1/meals/1/cooks"
+          ? new Promise(() => {})
+          : Promise.reject({ request: {} }),
+      );
+      store.goToMeal(1);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(cooksCallsFor(1).length).toBe(2);
+
+      await vi.advanceTimersByTimeAsync(2000);
+
+      // The first try and the new load: nothing from the old timer.
+      expect(cooksCallsFor(1).length).toBe(2);
     });
 
     it("teardownMealPage cancels the retry and clears the failure", async () => {
@@ -1415,8 +1449,10 @@ describe("DataStore", () => {
       await vi.advanceTimersByTimeAsync(0);
       expect(store.mealLoadFailed).toBe(true);
 
+      const timersBefore = vi.getTimerCount();
       store.teardownMealPage();
       expect(store.mealLoadFailed).toBe(false);
+      expect(vi.getTimerCount()).toBe(timersBefore - 1);
 
       await vi.advanceTimersByTimeAsync(60000);
       expect(cooksCallsFor(1).length).toBe(1);
@@ -1486,9 +1522,9 @@ describe("DataStore", () => {
     it("preserves null closed_at instead of creating epoch Date (Regression test for BUG-1)", () => {
       const store = createDataStore();
 
-      const data = mealPayload({
-        closed: true,
-      });
+      // An open meal: the server sends no closed_at. (A closed meal
+      // always has one: CHECK meals_closed_at_matches_closed.)
+      const data = mealPayload({ closed: false, closed_at: null });
 
       store.loadData(data);
       expect(store.meal.closed_at).toBeNull();
@@ -1566,19 +1602,18 @@ describe("DataStore", () => {
               active: true,
             },
           ],
-          bills: [
-            { id: "bill-1", resident_id: 10, amount: "25.00", no_cost: false },
-          ],
+          bills: [{ resident_id: 10, amount: "25.0", no_cost: false }],
         }),
       });
 
       store.submitBills();
 
       // Wait for the catch handler to fire and verify final toast state
+      // One info toast that carries the server's warning text.
       await vi.waitFor(() => {
-        expect(toastStore.toasts).toHaveLength(1);
-        expect(toastStore.toasts[0].type).toBe("info");
-        expect(toastStore.toasts[0].message).toContain("Cooks saved.");
+        expect(toastStore.toasts.map((t) => [t.type, t.message])).toEqual([
+          ["info", "Cooks saved. Warning: third cooks should not be added."],
+        ]);
       });
     });
 
@@ -1628,6 +1663,11 @@ describe("DataStore", () => {
       expect(() => store.loadMonth(data)).not.toThrow();
       expect(store.calendarEvents.length).toBe(1);
       expect(store.monthLoading).toBe(false);
+      // The warning is the only sign the server sent a broken month.
+      expect(spy).toHaveBeenCalledWith(
+        "loadMonth: missing event arrays from API:",
+        "bills, rotations, birthdays, common_house_reservations, guest_room_reservations, events",
+      );
       spy.mockRestore();
     });
 
@@ -1639,6 +1679,31 @@ describe("DataStore", () => {
 
       expect(() => store.loadMonth(data)).not.toThrow();
       expect(store.calendarEvents.length).toBe(0);
+      expect(spy).toHaveBeenCalledWith(
+        "loadMonth: missing event arrays from API:",
+        "meals, bills, rotations, birthdays, common_house_reservations, guest_room_reservations, events",
+      );
+      spy.mockRestore();
+    });
+
+    it("does not warn when every array is there, even an empty one", () => {
+      const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const store = createDataStore();
+
+      store.loadMonth({
+        id: 1,
+        year: 2023,
+        month: 6,
+        meals: [],
+        bills: [],
+        rotations: [],
+        birthdays: [],
+        common_house_reservations: [],
+        guest_room_reservations: [],
+        events: [],
+      });
+
+      expect(spy).not.toHaveBeenCalled();
       spy.mockRestore();
     });
   });
@@ -1665,8 +1730,8 @@ describe("DataStore", () => {
           },
         ],
         bills: [
-          { id: "b1", resident_id: 10, amount: "15", no_cost: false },
-          { id: "b2", resident_id: 999, amount: "20", no_cost: false },
+          { resident_id: 10, amount: "15", no_cost: false },
+          { resident_id: 999, amount: "20", no_cost: false },
         ],
       });
 
@@ -1674,12 +1739,15 @@ describe("DataStore", () => {
       expect(() => store.loadData(data)).not.toThrow();
 
       // Valid bill with resident 10 should be loadable and accessible
-      const bills = Array.from(store.bills.values());
-      const validBill = bills.find(
-        (b) => b.resident !== null && b.resident.id === 10,
+      expect(billFor(store, 10).amount).toBe("15.00");
+      // The bill for the unknown resident is left out, and says so. The
+      // padding row that made three is still there.
+      expect(store.bills.size).toBe(2);
+      expect(blankRows(store)).toHaveLength(1);
+      expect(spy).toHaveBeenCalledWith(
+        "Skipping bill with unknown resident reference:",
+        999,
       );
-      expect(validBill).toBeTruthy();
-      expect(validBill.amount).toBe("15.00");
       spy.mockRestore();
     });
   });
@@ -1699,7 +1767,7 @@ describe("DataStore", () => {
       expect(store.meal.extras).toBeNull();
     });
 
-    it("handles max=0 (capacity set to exactly the current attendees)", () => {
+    it("sets extras to 0 when max equals the number of attendees", () => {
       const store = createDataStore();
       const data = mealPayload({
         closed: true,
@@ -1736,6 +1804,26 @@ describe("DataStore", () => {
       expect(store.canAdd).toBe(false);
     });
 
+    // A closed meal with a cap of zero and nobody signed up is valid on
+    // the server (max >= attendees). Zero is a cap, not "no cap".
+    it("handles max=0 on a closed meal with no attendees", () => {
+      const store = createDataStore();
+
+      store.loadData(
+        mealPayload({
+          closed: true,
+          closed_at: "2023-06-15T18:00:00Z",
+          max: 0,
+          residents: [residentRow(10, "Alice")],
+        }),
+      );
+
+      expect(store.meal.extras).toBe(0);
+      expect(store.meal.max).toBe(0);
+      expect(store.extras).toBe(0);
+      expect(store.canAdd).toBe(false);
+    });
+
     it("handles bill with amount zero correctly (displays as empty string)", () => {
       const store = createDataStore({
         residents: [{ id: 10, meal_id: 1, name: "Alice" }],
@@ -1754,7 +1842,7 @@ describe("DataStore", () => {
             active: true,
           },
         ],
-        bills: [{ id: "b1", resident_id: 10, amount: "0", no_cost: false }],
+        bills: [{ resident_id: 10, amount: "0", no_cost: false }],
       });
 
       store.loadData(data);
@@ -1781,32 +1869,6 @@ describe("DataStore", () => {
 
       expect(store.meal.closed).toBe(true);
       expect(toastStore.toasts.length).toBe(0);
-    });
-
-    it("closes when cook has no_cost flag set", () => {
-      const store = createDataStore({
-        mealProps: { closed: false },
-        residents: [{ id: 10, meal_id: 1, name: "Alice", can_cook: true }],
-        bills: [{ id: "bill-1", resident: 10, amount: "", no_cost: true }],
-      });
-
-      store.toggleClosed();
-
-      expect(store.meal.closed).toBe(true);
-    });
-
-    it("closes when cook has amount filled in", () => {
-      const store = createDataStore({
-        mealProps: { closed: false },
-        residents: [{ id: 10, meal_id: 1, name: "Alice", can_cook: true }],
-        bills: [
-          { id: "bill-1", resident: 10, amount: "25.00", no_cost: false },
-        ],
-      });
-
-      store.toggleClosed();
-
-      expect(store.meal.closed).toBe(true);
     });
   });
 
@@ -1978,8 +2040,8 @@ describe("DataStore", () => {
         closed_at: null,
         reconciled: false,
         max: null,
-        next_id: null,
-        prev_id: null,
+        next_id: 1,
+        prev_id: 1,
         residents: [
           {
             id: 10,
@@ -2030,8 +2092,8 @@ describe("DataStore", () => {
       const store = createDataStore({ mealProps: { closed: false } });
       store.loadData(
         mealDataWithBills([
-          { id: "b1", resident_id: 10, amount: "12.34", no_cost: false },
-          { id: "b2", resident_id: 11, amount: "", no_cost: false },
+          { resident_id: 10, amount: "12.34", no_cost: false },
+          { resident_id: 11, amount: "0.0", no_cost: false },
         ]),
       );
 
@@ -2059,8 +2121,8 @@ describe("DataStore", () => {
       const store = createDataStore({ mealProps: { closed: false } });
       store.loadData(
         mealDataWithBills([
-          { id: "b1", resident_id: 10, amount: "12.345", no_cost: false },
-          { id: "b2", resident_id: 11, amount: "", no_cost: false },
+          { resident_id: 10, amount: "12.345", no_cost: false },
+          { resident_id: 11, amount: "0.0", no_cost: false },
         ]),
       );
 
@@ -2159,7 +2221,7 @@ describe("DataStore", () => {
               active: true,
             },
           ],
-          bills: [{ id: "b1", resident_id: 11, amount: "", no_cost: false }],
+          bills: [{ resident_id: 11, amount: "0.0", no_cost: false }],
         }),
       );
       return store;
@@ -2203,7 +2265,9 @@ describe("DataStore", () => {
       // cook list to meal 2, which the server treats as the complete
       // list for meal 2.
       expect(store.bills.size).toBe(0);
+      // The flush consumed the timer: nothing more fires later.
       vi.advanceTimersByTime(SAVE_DEBOUNCE_MS * 2);
+      expect(billsPatchCalls(1).length).toBe(1);
       expect(billsPatchCalls(2).length).toBe(0);
     });
 
@@ -2287,19 +2351,30 @@ describe("DataStore", () => {
     it("ignores an ack row for a cook who is not on screen", async () => {
       const store = storeWithCookBill();
       const bill = bobsBill(store);
+      toastStore.clearAll();
+      // The unknown cook comes first: skipping it must not stop the rows
+      // after it from being applied.
       axios.mockResolvedValueOnce({
         status: 200,
         data: {
           message: "Form submitted.",
-          bills: [{ resident_id: 99, amount: "12.34", no_cost: false }],
+          bills: [
+            { resident_id: 99, amount: "7.00", no_cost: false },
+            { resident_id: 11, amount: "12.34", no_cost: false },
+          ],
         },
       });
 
       bill.setAmount("5.50");
       vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+      axios.get.mockClear();
       await vi.advanceTimersByTimeAsync(0);
 
-      expect(bill.amount).toBe("5.50");
+      expect(bill.amount).toBe("12.34");
+      expect(bill.touched).toBe(false);
+      // A clean ack: no error toast, and no refetch to repair it.
+      expect(toastStore.toasts).toEqual([]);
+      expect(axios.get).not.toHaveBeenCalled();
     });
 
     // Regression from issue #30's fix. Typing "1", pausing past the
@@ -2428,29 +2503,6 @@ describe("DataStore", () => {
       expect(billsPatchCalls().length).toBe(0);
     });
 
-    it("flushes a pending debounced save before switching meals", () => {
-      const store = storeWithCookBill();
-      const bill = bobsBill(store);
-
-      bill.setAmount("5");
-      // Navigate away before the debounce fires. The save must go to the
-      // meal the edit was typed on.
-      store.switchMeals(2);
-
-      const calls = billsPatchCalls(1);
-      expect(calls.length).toBe(1);
-      expect(calls[0][0].data.bills).toContainEqual({
-        resident_id: 11,
-        amount: "5",
-        no_cost: false,
-      });
-
-      // The flush consumed the timer — nothing more fires later.
-      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
-      expect(billsPatchCalls(1).length).toBe(1);
-      expect(billsPatchCalls(2).length).toBe(0);
-    });
-
     // The client that knows, invalidates (issue #37): bill saves send
     // socketId, so the sender gets no Pusher echo and the cached meal
     // payload keeps the old bills until evicted.
@@ -2526,6 +2578,35 @@ describe("DataStore", () => {
   });
 
   describe("toggleClosed settle-refetch", () => {
+    it("sends the new state to the meal's closed endpoint", () => {
+      const store = createDataStore({ mealProps: { closed: false } });
+      window.Comeals.socketId = "socket-1";
+
+      store.toggleClosed();
+
+      expect(axios).toHaveBeenCalledTimes(1);
+      expect(axios).toHaveBeenCalledWith({
+        method: "patch",
+        url: "/api/v1/meals/1/closed",
+        withCredentials: true,
+        data: { closed: true, socket_id: "socket-1" },
+      });
+    });
+
+    it("sends closed: false to reopen a closed meal", () => {
+      const store = createDataStore({
+        mealProps: {
+          closed: true,
+          closed_at: new Date("2023-06-15T18:00:00Z"),
+        },
+      });
+
+      store.toggleClosed();
+
+      expect(store.meal.closed).toBe(false); // optimistic write
+      expect(axios.mock.calls[0][0].data.closed).toBe(false);
+    });
+
     it("refetches on success instead of stamping closed_at from the client clock", async () => {
       const store = createDataStore({
         mealProps: { closed: false, closed_at: null },
@@ -2615,15 +2696,47 @@ describe("DataStore", () => {
     });
 
     it("rejects string data (error response from API)", () => {
-      const spy = vi.spyOn(console, "error").mockImplementation(() => {});
       const store = createDataStore();
-      var result = store.loadMonth("error: unauthorized");
-      expect(result).toBe(true);
+      stubPusherChannels();
+      store.loadMonth({
+        id: 1,
+        year: 2023,
+        month: 6,
+        meals: [{ title: "Dinner", start: "2023-06-15T18:30:00" }],
+        bills: [],
+        rotations: [],
+        birthdays: [],
+        common_house_reservations: [],
+        guest_room_reservations: [],
+        events: [],
+      });
+      const version = store.calendarEventsVersion;
+      const subscribes = pusherClient.subscribe.mock.calls.length;
+      const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+      stage(store, () => {
+        store.monthLoading = true;
+      });
+
+      store.loadMonth("error: unauthorized");
+
+      // The month already on screen stays, with no new channels for a
+      // month that never loaded; only the loading state ends.
+      expect(store.calendarEvents.map((e) => e.title)).toEqual(["Dinner"]);
+      expect(store.calendarEventsVersion).toBe(version);
+      expect(pusherClient.subscribe.mock.calls.length).toBe(subscribes);
       expect(store.monthLoading).toBe(false);
+      expect(spy).toHaveBeenCalledWith(
+        "Error loading month data.",
+        "error: unauthorized",
+      );
       spy.mockRestore();
     });
 
-    it("converts event dates to fake-local Dates in the community timezone", () => {
+    it("reads naive times and dates as wall-clock values in the community timezone", () => {
+      // A community east of UTC, far from any test machine: a naive
+      // string read as a local or UTC instant and then moved into this
+      // zone would land hours off.
+      cookies.current.timezone = "Asia/Tokyo";
       const store = createDataStore();
       const data = {
         id: 1,
@@ -2633,22 +2746,28 @@ describe("DataStore", () => {
           {
             title: "Dinner",
             start: "2023-06-15T18:30:00",
-            end: "2023-06-15T19:30:00",
+            end: "2023-06-15T19:45:00",
           },
         ],
         bills: [],
         rotations: [],
-        birthdays: [],
+        // A birthday is a date with no time.
+        birthdays: [{ title: "Ann", start: "2023-06-15", end: "2023-06-15" }],
         common_house_reservations: [],
         guest_room_reservations: [],
         events: [],
       };
 
       store.loadMonth(data);
-      var event = store.calendarEvents[0];
-      expect(event.start).toBeInstanceOf(Date);
-      expect(event.end).toBeInstanceOf(Date);
-      expect(event.title).toBe("Dinner");
+      const [meal, birthday] = store.calendarEvents;
+      const wallClock = (d) => [d.getDate(), d.getHours(), d.getMinutes()];
+
+      expect(meal.title).toBe("Dinner");
+      expect(wallClock(meal.start)).toEqual([15, 18, 30]);
+      expect(wallClock(meal.end)).toEqual([15, 19, 45]);
+      expect(birthday.title).toBe("Ann");
+      expect(wallClock(birthday.start)).toEqual([15, 0, 0]);
+      expect(wallClock(birthday.end)).toEqual([15, 0, 0]);
     });
 
     it("converts offset date strings to correct community-tz dates", () => {
@@ -2741,10 +2860,15 @@ describe("DataStore", () => {
     });
 
     it("reads a naive wire string as a community-timezone date", () => {
+      // The first of a month, in a community west of every test machine
+      // (UTC-11): read as a UTC or local instant, it would be September
+      // 30 there, and the wrong month would be evicted.
+      cookies.current.timezone = "Pacific/Pago_Pago";
       const store = createDataStore();
 
-      store.invalidateMonthForDate("2026-10-05");
+      store.invalidateMonthForDate("2026-10-01");
 
+      expect(idbKeyval.del).toHaveBeenCalledTimes(1);
       expect(idbKeyval.del).toHaveBeenCalledWith(
         "community-test-community-id-calendar-2026-10",
       );
@@ -2786,19 +2910,6 @@ describe("DataStore", () => {
       });
       return calls()[calls().length - 1][1];
     }
-
-    afterEach(async () => {
-      // Restore the default cookie fixture for tests that override it.
-      const Cookie = (await import("js-cookie")).default;
-      Cookie.get.mockImplementation(
-        (name) =>
-          ({
-            token: "test-token",
-            community_id: "test-community-id",
-            timezone: "America/Los_Angeles",
-          })[name],
-      );
-    });
 
     it("does not refetch on the first connection at page load", async () => {
       createDataStore();
@@ -2844,13 +2955,12 @@ describe("DataStore", () => {
     // the 401 would raise the "you've been signed out" banner for a
     // person who is not signed in. Same guard as the `online` handler.
     it("skips the refetch when the community_id cookie is gone", async () => {
-      const Cookie = (await import("js-cookie")).default;
       createDataStore();
       const handler = await stateChangeHandler();
       handler({ previous: "connecting", current: "connected" }); // page load
-      Cookie.get.mockImplementation((name) =>
-        name === "timezone" ? "America/Los_Angeles" : undefined,
-      );
+      // Logged out in another tab. The setup file puts the cookie back
+      // after the test.
+      delete cookies.current.community_id;
       axios.get.mockClear();
 
       handler({ previous: "unavailable", current: "connected" });
@@ -2888,8 +2998,13 @@ describe("DataStore", () => {
     });
 
     it("initializes to today's date in the community timezone", () => {
+      vi.useFakeTimers();
+      // 03:00 UTC on July 9 is still July 8 in Los Angeles.
+      vi.setSystemTime(new Date("2026-07-09T03:00:00Z"));
+
       const store = createDataStore();
-      expect(store.communityToday).toBe(communityNow().format("YYYY-MM-DD"));
+
+      expect(store.communityToday).toBe("2026-07-08");
     });
 
     // Regression (#36): "today" was read straight from the clock during
@@ -2967,43 +3082,34 @@ describe("DataStore", () => {
     // the interceptor's microtask ran. The DELETE dispatched with no auth,
     // the server 401'd, and legacy Key rows were never destroyed. The fix
     // reads the cookie synchronously and passes the header explicitly.
-    it("sends DELETE /api/v1/sessions/current with an Authorization header before clearing cookies", async () => {
-      const Cookie = (await import("js-cookie")).default;
-      axios.delete = vi.fn(() => Promise.resolve({ status: 200 }));
-
+    it("sends DELETE /api/v1/sessions/current with an Authorization header before clearing cookies", () => {
       const store = createDataStore();
+
       store.logout();
 
+      // The cookie mock acts like the browser's cookie jar, so a token
+      // read after the removes would find nothing and send no DELETE.
       expect(axios.delete).toHaveBeenCalledTimes(1);
-      const [url, config] = axios.delete.mock.calls[0];
-      expect(url).toBe("/api/v1/sessions/current");
-      expect(config).toEqual({
+      expect(axios.delete).toHaveBeenCalledWith("/api/v1/sessions/current", {
         headers: { Authorization: "Bearer test-token" },
       });
-      expect(Cookie.remove).toHaveBeenCalledWith("token", { path: "/" });
+      ["token", "community_id", "resident_id", "username", "timezone"].forEach(
+        (name) => {
+          expect(Cookie.remove).toHaveBeenCalledWith(name, { path: "/" });
+          expect(Cookie.get(name)).toBeUndefined();
+        },
+      );
     });
 
-    it("skips the server call when no token cookie is present", async () => {
-      const Cookie = (await import("js-cookie")).default;
-      // Target `token` specifically — createDataStore also reads `timezone`
-      // now (via getCommunityTimezone), so a blanket `mockImplementationOnce`
-      // would consume against the wrong key.
-      Cookie.get.mockImplementation((name) =>
-        name === "token"
-          ? undefined
-          : name === "community_id"
-            ? "test-community-id"
-            : name === "timezone"
-              ? "America/Los_Angeles"
-              : undefined,
-      );
-      axios.delete = vi.fn(() => Promise.resolve({ status: 200 }));
+    it("skips the server call when no token cookie is present", () => {
+      delete cookies.current.token;
 
       const store = createDataStore();
       store.logout();
 
       expect(axios.delete).not.toHaveBeenCalled();
       expect(Cookie.remove).toHaveBeenCalledWith("token", { path: "/" });
+      expect(Cookie.get("community_id")).toBeUndefined();
     });
   });
 
@@ -3142,8 +3248,9 @@ describe("DataStore", () => {
     // index.jsx calls prefetchMonth() before React mounts, so the
     // month download runs in parallel with the calendar chunk. These
     // tests pin the two dedupe rules that keep the mount-time load
-    // from repeating the request. Months are unique per test because
-    // the month cache is module state shared across this file.
+    // from repeating the request. Months are unique per test because a
+    // prefetch still in flight is module state (month_fetch.js) that
+    // the next test could adopt.
 
     function monthPayload(year, month, title) {
       return {
@@ -3164,7 +3271,7 @@ describe("DataStore", () => {
       return axios.get.mock.calls.filter((c) => c[0].includes(fragment)).length;
     }
 
-    it("loadMonthAsync adopts an in-flight prefetch instead of duplicating the request", async () => {
+    it("goToMonth adopts an in-flight prefetch instead of duplicating the request", async () => {
       const store = createDataStore();
 
       // A prefetch whose response we control: it stays on the wire
@@ -3227,8 +3334,6 @@ describe("DataStore", () => {
       // Warm the cache WITHOUT marking it fresh, the state of any
       // month that was not just downloaded (e.g. warmed from
       // IndexedDB on a repeat visit).
-      const monthCache =
-        await import("../../../app/frontend/src/stores/month_cache.js");
       const key = monthCache.keyFor("test-community-id", "2030", "7");
       monthCache.set(key, monthPayload(2030, 7, "stale"));
 
