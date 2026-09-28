@@ -8,6 +8,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { expect } = require("./test");
 const { disableIdleTimer, clearStorage } = require("./browser_setup");
 
 // The suite's frozen "today" — bin/test-integration exports it to the
@@ -143,6 +144,22 @@ function mealWritten(page, mealId, method, pathPart) {
   );
 }
 
+/**
+ * Reload the calendar so it can show only what the server has, and
+ * wait until this month's tiles are drawn. Right after a reload the
+ * month is not drawn yet, so a check that a tile is gone would pass
+ * at once, whatever the server did. One GET brings every tile of a
+ * month, and the seed always puts the "Community Meeting" event on the
+ * frozen day, so once that tile shows, the whole month is on screen.
+ */
+async function reloadCalendar(page) {
+  await clearStorage(page);
+  await page.reload();
+  await expect(
+    page.locator(".rbc-event", { hasText: "Community Meeting" }),
+  ).toBeVisible({ timeout: 10000 });
+}
+
 module.exports = {
   FAKE_TODAY,
   FAKE_NOW,
@@ -156,4 +173,5 @@ module.exports = {
   gotoMeal,
   reloadMeal,
   mealWritten,
+  reloadCalendar,
 };

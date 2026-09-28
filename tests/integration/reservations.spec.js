@@ -1,6 +1,7 @@
 const { test, expect } = require("../helpers/test");
 const {
   setupAuthenticatedPage,
+  reloadCalendar,
   FAKE_TODAY,
 } = require("../helpers/integration_setup");
 
@@ -40,36 +41,48 @@ test.describe("Reservations (real backend)", () => {
     });
   }
 
+  // The record id from an open edit modal's URL
+  // (/calendar/all/<date>/<kind>/edit/<id>/).
+  function openRecordId(page) {
+    const id = new URL(page.url()).pathname.split("/").filter(Boolean).pop();
+    expect(id).toMatch(/^\d+$/);
+    return id;
+  }
+
+  // Fill a new common house form the server would accept: a resident,
+  // a title, the 15th, 2-4 pm. The seeded Book Club holds 10-12 on
+  // this day, and the server refuses overlapping reservations.
+  async function fillNewCommonHouse(modal, title) {
+    await modal.locator("#ch-new-resident").selectOption({ index: 1 });
+    await modal.locator("#ch-new-title").fill(title);
+    await modal.locator("input[readonly]").click();
+    await modal.locator(".rdp-root .rdp-day_button", { hasText: "15" }).click();
+    await modal.locator("#ch-new-start-time").selectOption("14:00");
+    await modal.locator("#ch-new-end-time").selectOption("16:00");
+  }
+
   test("common house lifecycle: create, edit, delete, each persisted", async ({
     page,
   }) => {
     await openCalendar(page);
 
-    // CREATE — resident + title; day and times keep their defaults.
+    // CREATE — the form starts with no resident and no day.
     await page.locator("text=Common House").first().click();
     const modal = page.locator(".ReactModal__Content--after-open");
     await expect(modal.locator("#ch-new-resident")).toBeVisible({
       timeout: 5000,
     });
-    await modal.locator("#ch-new-resident").selectOption({ index: 1 });
-    await modal.locator("#ch-new-title").fill("Lifecycle Test Meetup");
-    // The real backend requires a day and times.
-    await modal.locator("input[readonly]").click();
-    await modal.locator(".rdp-root .rdp-day_button", { hasText: "15" }).click();
-    // 2-4 pm: the seeded Book Club holds 10-12 on this day, and the
-    // server refuses overlapping reservations with a 400.
-    await modal.locator("#ch-new-start-time").selectOption("14:00");
-    await modal.locator("#ch-new-end-time").selectOption("16:00");
+    await fillNewCommonHouse(modal, "Lifecycle Test Meetup");
     const created = response(page, "POST", "/api/v1/common-house-reservations");
     await modal.locator("button:has-text('Create')").click();
     await created;
     await modalClosed(page);
 
-    await page.reload();
+    await reloadCalendar(page);
     // The tile title is multiline (time range, "Common House", the
     // title, the resident) — find it by the unique title line.
     const tile = page.locator('.rbc-event:has-text("Lifecycle Test Meetup")');
-    await expect(tile).toBeVisible({ timeout: 10000 });
+    await expect(tile).toBeVisible();
 
     // EDIT — retitle through the tile's modal.
     await tile.click();
@@ -78,20 +91,24 @@ test.describe("Reservations (real backend)", () => {
       "Lifecycle Test Meetup",
       { timeout: 10000 },
     );
+    const reservationId = openRecordId(page);
     await editModal.locator("#ch-edit-title").fill("Renamed Test Meetup");
     const updated = response(
       page,
       "PATCH",
-      "/api/v1/common-house-reservations",
+      `/api/v1/common-house-reservations/${reservationId}/update`,
     );
     await editModal.locator("button:has-text('Update')").click();
     await updated;
     await modalClosed(page);
 
-    await page.reload();
+    await reloadCalendar(page);
     await expect(
       page.locator('.rbc-event:has-text("Renamed Test Meetup")'),
-    ).toBeVisible({ timeout: 10000 });
+    ).toBeVisible();
+    await expect(
+      page.locator('.rbc-event:has-text("Lifecycle Test Meetup")'),
+    ).toHaveCount(0);
 
     // DELETE — through the armed confirm dialog.
     await page.locator('.rbc-event:has-text("Renamed Test Meetup")').click();
@@ -108,16 +125,18 @@ test.describe("Reservations (real backend)", () => {
     const deleted = response(
       page,
       "DELETE",
-      "/api/v1/common-house-reservations",
+      `/api/v1/common-house-reservations/${reservationId}/delete`,
     );
     await confirmOverlay.locator('.button-warning:has-text("Delete")').click();
     await deleted;
     await modalClosed(page);
 
-    await page.reload();
+    // reloadCalendar waits for the month to be drawn, so a tile that
+    // is still there would be found.
+    await reloadCalendar(page);
     await expect(
       page.locator('.rbc-event:has-text("Renamed Test Meetup")'),
-    ).toBeHidden({ timeout: 10000 });
+    ).toHaveCount(0);
   });
 
   test("guest room lifecycle: create, edit, delete, each persisted", async ({
@@ -142,13 +161,13 @@ test.describe("Reservations (real backend)", () => {
     await created;
     await modalClosed(page);
 
-    await page.reload();
+    await reloadCalendar(page);
     // The tile is "Guest Room" plus the host; scope by unit so the
     // seeded reservation (Bob, Unit B) never matches.
     const tile = page.locator(
       '.rbc-event:has-text("Guest Room"):has-text("Unit C")',
     );
-    await expect(tile).toBeVisible({ timeout: 10000 });
+    await expect(tile).toBeVisible();
 
     // EDIT — hand the reservation to Jane.
     await tile.click();
@@ -156,19 +175,25 @@ test.describe("Reservations (real backend)", () => {
     await expect(editModal.locator("#guest-room-edit-host")).toBeVisible({
       timeout: 10000,
     });
+    const reservationId = openRecordId(page);
     await editModal
       .locator("#guest-room-edit-host")
       .selectOption({ label: "A - Jane Smith" });
-    const updated = response(page, "PATCH", "/api/v1/guest-room-reservations");
+    const updated = response(
+      page,
+      "PATCH",
+      `/api/v1/guest-room-reservations/${reservationId}/update`,
+    );
     await editModal.locator("button:has-text('Update')").click();
     await updated;
     await modalClosed(page);
 
-    await page.reload();
+    await reloadCalendar(page);
     const janeTile = page.locator(
       '.rbc-event:has-text("Guest Room"):has-text("Unit A")',
     );
-    await expect(janeTile).toBeVisible({ timeout: 10000 });
+    await expect(janeTile).toBeVisible();
+    await expect(tile).toHaveCount(0);
 
     // DELETE — through the armed confirm dialog.
     await janeTile.click();
@@ -182,34 +207,62 @@ test.describe("Reservations (real backend)", () => {
       timeout: 5000,
     });
     await page.waitForTimeout(500);
-    const deleted = response(page, "DELETE", "/api/v1/guest-room-reservations");
+    const deleted = response(
+      page,
+      "DELETE",
+      `/api/v1/guest-room-reservations/${reservationId}/delete`,
+    );
     await confirmOverlay.locator('.button-warning:has-text("Delete")').click();
     await deleted;
     await modalClosed(page);
 
-    await page.reload();
-    await expect(janeTile).toBeHidden({ timeout: 10000 });
+    // reloadCalendar waits for the month to be drawn, so a tile that
+    // is still there would be found.
+    await reloadCalendar(page);
+    await expect(janeTile).toHaveCount(0);
   });
 
   test("discarding a dirty reservation form creates nothing", async ({
     page,
   }) => {
+    const posts = [];
+    page.on("request", (r) => {
+      if (
+        r.method() === "POST" &&
+        r.url().includes("/api/v1/common-house-reservations")
+      ) {
+        posts.push(r.url());
+      }
+    });
     await openCalendar(page);
 
+    // A form the server would accept, so a Discard that sent it would
+    // really create a reservation.
     await page.locator("text=Common House").first().click();
     const modal = page.locator(".ReactModal__Content--after-open").first();
-    await modal.locator("#ch-new-title").fill("Never Reserved");
+    await expect(modal.locator("#ch-new-resident")).toBeVisible({
+      timeout: 5000,
+    });
+    await fillNewCommonHouse(modal, "Never Reserved");
 
+    // Dismissing a dirty form asks first.
     await modal.locator(".close-button").click();
     const confirmOverlay = page.locator(".ReactModal__Overlay").last();
     await expect(
       confirmOverlay.locator("text=Discard your changes?"),
     ).toBeVisible({ timeout: 5000 });
+    // Discard ignores clicks for its first 400 ms.
+    await page.waitForTimeout(450);
     await confirmOverlay.locator('button:has-text("Discard")').click();
 
-    await page.reload();
+    // Discard closes the form, back on the calendar, and sends nothing.
+    await modalClosed(page);
+    await expect(page).toHaveURL(new RegExp(`/calendar/all/${FAKE_TODAY}/?$`));
+    expect(posts).toEqual([]);
+
+    await reloadCalendar(page);
     await expect(
       page.locator('.rbc-event:has-text("Never Reserved")'),
-    ).toBeHidden({ timeout: 10000 });
+    ).toHaveCount(0);
   });
 });
