@@ -45,6 +45,7 @@ function residentRow(id, name, overrides = {}) {
     id,
     meal_id: 1,
     name,
+    short_name: name,
     attending: false,
     attending_at: null,
     late: false,
@@ -74,6 +75,9 @@ import Cookie from "js-cookie";
 import { cookies } from "../mocks/js_cookie.js";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
 import { SAVE_DEBOUNCE_MS } from "../../../app/frontend/src/helpers/helpers.js";
+// The server's real answer for GET /meals/42/cooks, written by
+// rake test:generate_fixtures from MealFormSerializer.
+import mealFixture from "../../fixtures/meal.json";
 
 // Replace the Pusher client's subscribe and unsubscribe for one test, so
 // it can see the channel names. pusherClient is module state that lives
@@ -468,6 +472,35 @@ describe("DataStore", () => {
   // ── loadData transformation ──
 
   describe("loadData", () => {
+    it("loads the server's real meal answer", () => {
+      const store = createDataStore({ mealProps: { id: 42 } });
+
+      store.loadData(mealFixture);
+
+      expect(store.meal.description).toBe("Pasta night with garlic bread");
+      expect(store.meal.nextId).toBe(43);
+      expect(store.meal.prevId).toBe(41);
+      expect(store.meal.extras).toBeNull();
+      expect(store.meal.closed_at).toBeNull();
+      const date = store.meal.date;
+      expect([date.getFullYear(), date.getMonth(), date.getDate()]).toEqual([
+        2026, 0, 15,
+      ]);
+      expect(Array.from(store.residents.values()).map((r) => r.name)).toEqual([
+        "A - Jane Smith",
+        "B - Bob Johnson",
+        "C - Alice Williams",
+      ]);
+      expect(store.residents.get("1").attending_at).toEqual(
+        new Date("2026-01-14T18:30:00.000-08:00"),
+      );
+      expect(store.guests.size).toBe(1);
+      expect(billFor(store, 1).amount).toBe("25.50");
+      expect(blankRows(store)).toHaveLength(2);
+      expect(store.attendeesCount).toBe(3);
+      expect(store.mealLoading).toBe(false);
+    });
+
     it("displays wire amounts losslessly (0 becomes blank, others zero-pad to two decimals)", () => {
       const store = createDataStore({ mealProps: { closed: false } });
 
