@@ -70,10 +70,15 @@ RSpec.describe BugsnagErrorSubscriber do
   # because the cost of getting it wrong is a test suite that reports its
   # own deliberate failures to production error tracking.
   describe 'wiring in the test environment' do
+    # Through the public API: a report through Rails.error reaches no
+    # Bugsnag call. (It used to read Rails' private @subscribers list with
+    # an empty list as the default, so a renamed variable would pass.)
     it 'is not subscribed to Rails.error' do
-      subscribers = Rails.error.instance_variable_get(:@subscribers) || []
+      allow(Bugsnag).to receive(:notify)
 
-      expect(subscribers.map(&:class)).not_to include(described_class)
+      Rails.error.report(RuntimeError.new('a spec reports this on purpose'), handled: true)
+
+      expect(Bugsnag).not_to have_received(:notify)
     end
 
     it 'leaves Bugsnag without an API key' do
