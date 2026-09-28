@@ -333,6 +333,13 @@ until the next night. So `SettleAndNotify` now retries as a batch job can:
 ten attempts, waiting from a quarter second up to about a minute. The
 request paths keep three quick attempts and a 409._
 
+_Changed 2026-09-28: the storm's settler keeps `BATCH`'s ten attempts but
+waits less between them, because with the full waits the settlement always
+landed after the last write. The storm now checks that the settler won
+while the writers were writing. Its second phase no longer checks the
+settlement for the writers: they write to the settled meal, half of them
+without the meal lock, and the models must refuse every write._
+
 ## Alternatives considered
 
 - **Raise the thread count and rely on `SERIALIZABLE` plus retry.** Rejected:

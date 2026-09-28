@@ -4,28 +4,34 @@ require 'rails_helper'
 require Rails.root.join('spec/support/oracle/plain_ledger')
 
 # Several threads write to one meal at once, the way several phones do at
-# dinner time, while another thread settles it. Each writer takes the meal
-# row lock and re-checks the settlement under it, exactly as
-# Api::V1::MealsController#with_meal_lock does, and retries a serialization
-# failure the same way (RetryOnConflict). The settlement is the real one.
+# dinner time, while another thread settles it. The settlement is the real
+# one (SettleAndNotify), with short retries.
 #
-# Two phases. In the first the writers and the settler run together; the
-# settler keeps trying until it wins. If the storm ends before it has won,
-# the meal is given a bill and an eater and settled once more, so every run
-# reaches the second phase: the same writers against the settled meal,
-# where every write must be refused and nothing may change.
+# Two phases. In the first the writers and the settler run together. Each
+# writer takes the meal row lock and re-checks the settlement under it,
+# exactly as Api::V1::MealsController#with_meal_lock does, and retries a
+# serialization failure the same way (RetryOnConflict). The settler tries
+# until it wins. Once the writers have done their rounds, one of them makes
+# sure the meal can be settled, and they all wait for the settler and then
+# write a few times more, so every run has writes on both sides of the
+# settlement. The second phase sends the same kinds of writes to the
+# settled meal, but the writers no longer check the settlement themselves,
+# and half of them take no meal lock, the way admin writes: the models must
+# refuse every write, and nothing may change.
 #
 # What must hold at the end:
 #   - every action ended in one of the outcomes the API knows how to
 #     answer: written, refused by a rule, refused because settled, nothing
 #     to do, or a conflict; never another exception, never a lock timeout;
 #   - the storm finished (no deadlock);
+#   - the settler settled the meal in phase 1, and phase 1 writes then met
+#     the settled meal;
 #   - the rows are sound and the ledger over them agrees with the plain
 #     ledger and sums to zero;
 #   - the stored charges equal the ledger over the final rows, which is
 #     only true if no write got through after the settlement;
-#   - the rows after the second phase are the rows right after the
-#     settlement;
+#   - in phase 2 no write went through, the models refused some, and the
+#     rows are the rows right after the settlement;
 #   - ledger:verify passes.
 #
 # spec/db/settlement_race_spec.rb pins one interleaving exactly, with two
@@ -54,71 +60,93 @@ RSpec.describe 'a write storm against one meal, with a settlement in it' do
   end
   let(:meal) { create(:meal, community: community, date: Date.yesterday) }
 
-  # --- one write, the way the API does it -----------------------------------
+  # --- one write -------------------------------------------------------------
 
-  # Returns the outcome. The block gets the locked meal and returns true
-  # (written), false (refused by a validation or a destroy guard) or nil
-  # (nothing to do).
-  def locked_write(meal_id)
+  # How a write reaches the meal. :api is the way the API writes
+  # (Api::V1::MealsController#with_meal_lock): the meal row lock, then a
+  # settled meal is refused before anything is written. :unchecked takes
+  # the lock but leaves the settled check to the models. :unlocked takes
+  # no lock and checks nothing itself, the way admin writes through the
+  # models. Phase 2 uses the last two, so that the app, not this helper,
+  # has to refuse each write.
+  #
+  # Returns the outcome. The block gets the meal and returns the record it
+  # wrote or tried to write, true (several rows written, see write_bills)
+  # or nil (nothing to do).
+  def meal_write(meal_id, how)
     RetryOnConflict.call do
       Meal.transaction do
-        meal = Meal.lock.find(meal_id)
-        next :refused_settled if meal.reconciled?
+        meal = how == :unlocked ? Meal.find(meal_id) : Meal.lock.find(meal_id)
+        next :refused_settled if how == :api && meal.reconciled?
 
-        case yield(meal)
-        when true then :ok
-        when false then :refused
-        else :noop
-        end
+        outcome_of(yield(meal))
       end
     end
+  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotDestroyed => e
+    settled_refusal?(e.record) ? :refused_settled : [:error, "#{e.class}: #{e.message}"]
   rescue ActiveRecord::TransactionRollbackError
     :conflict
   rescue ActiveRecord::LockWaitTimeout
     :lock_timeout
+  rescue ActiveRecord::StatementInvalid => e
+    return :refused_by_trigger if e.message.include?('is reconciled and its ledger rows are immutable')
+
+    [:error, "#{e.class}: #{e.message}"]
   rescue StandardError => e
     [:error, "#{e.class}: #{e.message}"]
   end
 
-  # true when the row went, false when a guard refused, nil when there was none.
-  def destroyed(row)
-    return nil if row.nil?
+  def outcome_of(result)
+    case result
+    when nil then :noop
+    when true then :ok
+    else
+      return :ok if result.errors.empty?
 
-    row.destroy != false
-  end
-
-  def write(meal_id, action, rng)
-    case action
-    when :set_bills then write_bills(meal_id, rng)
-    when :close then locked_write(meal_id) { |meal| meal.update(closed: true) }
-    when :reopen then locked_write(meal_id) { |meal| meal.update(closed: false) }
-    else write_person(meal_id, action, residents.sample(random: rng), rng)
+      settled_refusal?(result) ? :refused_settled : :refused
     end
   end
 
-  def write_person(meal_id, action, resident, rng)
+  def settled_refusal?(record) = record.errors[:base].include?(ReconciledMealImmutability::MESSAGE)
+
+  # The row after its destroy (its errors say why, when a guard refused),
+  # or nil when there was none.
+  def destroyed(row) = row&.tap(&:destroy)
+
+  def write(meal_id, action, rng, how = :api)
+    case action
+    when :set_bills then write_bills(meal_id, rng, how)
+    when :close then meal_write(meal_id, how) { |meal| meal.tap { |m| m.update(closed: true) } }
+    when :reopen then meal_write(meal_id, how) { |meal| meal.tap { |m| m.update(closed: false) } }
+    else write_person(meal_id, action, residents.sample(random: rng), rng, how)
+    end
+  end
+
+  def write_person(meal_id, action, resident, rng, how)
     case action
     when :signup
-      locked_write(meal_id) do |meal|
+      meal_write(meal_id, how) do |meal|
         row = meal.meal_residents.find_or_initialize_by(resident_id: resident.id)
         row.late = rng.rand < 0.3
-        row.save
+        row.tap(&:save)
       end
     when :leave
-      locked_write(meal_id) { |meal| destroyed(meal.meal_residents.find_by(resident_id: resident.id)) }
+      meal_write(meal_id, how) { |meal| destroyed(meal.meal_residents.find_by(resident_id: resident.id)) }
     when :add_guest
-      locked_write(meal_id) { |meal| Guest.new(meal_id: meal.id, resident_id: resident.id, vegetarian: false).save }
+      meal_write(meal_id, how) do |meal|
+        Guest.new(meal_id: meal.id, resident_id: resident.id, vegetarian: false).tap(&:save)
+      end
     when :remove_guest
-      locked_write(meal_id) { |meal| destroyed(meal.guests.order(:id).first) }
+      meal_write(meal_id, how) { |meal| destroyed(meal.guests.order(:id).first) }
     end
   end
 
   # The core of Api::V1::MealsController#update_bills: cooks left out go,
   # the rest are written.
-  def write_bills(meal_id, rng)
+  def write_bills(meal_id, rng, how)
     cooks = residents.sample(rng.rand(1..3), random: rng)
     amounts = cooks.to_h { |c| [c.id, BigDecimal(rng.rand(0..999_999)) / 100] }
-    locked_write(meal_id) do |meal|
+    meal_write(meal_id, how) do |meal|
       meal.bills.where.not(resident_id: cooks.map(&:id)).find_each(&:destroy!)
       amounts.each do |id, amount|
         meal.bills.find_or_initialize_by(resident_id: id).update!(amount: amount, no_cost: false)
@@ -129,24 +157,78 @@ RSpec.describe 'a write storm against one meal, with a settlement in it' do
 
   def actions = %i[signup signup signup leave leave add_guest remove_guest set_bills set_bills close reopen]
 
+  # Phase 2 leaves out close and reopen: `closed` is not settled data, so
+  # a settled meal may still be closed or reopened.
+  def settled_actions = actions - %i[close reopen]
+
   # --- the storm --------------------------------------------------------------
 
-  def run_writers(meal_id, seed, rounds, log)
+  # Four writer threads, each with its own seeded dice and its own
+  # connection.
+  def writer_threads(seed)
     Array.new(4) do |t|
       Thread.new do
         Thread.current.report_on_exception = false
         rng = Random.new((seed * 100) + t)
-        ActiveRecord::Base.connection_pool.with_connection do
-          rounds.times do |i|
-            action = actions.sample(random: rng)
-            outcome = write(meal_id, action, rng)
-            log << [t, i, action, outcome]
-            sleep(rng.rand * 0.002)
-          end
-        end
+        ActiveRecord::Base.connection_pool.with_connection { yield t, rng }
       end
     end
   end
+
+  # Phase 1. Each writer writes `rounds` times, the way the API does, while
+  # the settler tries to settle. Then it waits for the settler to finish
+  # and writes writes_after_settler times more, so every run has writes on
+  # both sides of the settlement. It waits without writing: a writer that
+  # kept writing could make the settler lose try after try.
+  #
+  # Before that wait, once every writer has done its rounds, the first
+  # writer reopens the meal and signs someone up. A closed meal refuses a
+  # sign-up, and a meal with a receipt and nobody who ate is held back
+  # from settlement, so without this the storm could end with a meal no
+  # settlement may take, and the settler would give up.
+  def run_writers(meal_id, seed, rounds, log, settler)
+    rounds_done = Concurrent::AtomicFixnum.new(0)
+    writer_threads(seed) do |t, rng|
+      rounds.times { |i| log << write_once(meal_id, [t, i], actions.sample(random: rng), rng) }
+      rounds_done.increment
+      if t.zero?
+        sleep(0.005) until rounds_done.value == 4
+        log << write_once(meal_id, [t, rounds], :reopen, rng)
+        log << write_once(meal_id, [t, rounds + 1], :signup, rng)
+      end
+      sleep(0.005) while settler.alive?
+      writes_after_settler.times do |i|
+        log << write_once(meal_id, [t, rounds + 2 + i], actions.sample(random: rng), rng)
+      end
+    end
+  end
+
+  def writes_after_settler = 3
+
+  # Phase 2, against the settled meal. Half the writers take the meal lock
+  # and half do not, and none checks the settlement itself, so each write
+  # has to be refused by the models (or by the triggers behind them).
+  def run_settled_writers(meal_id, seed, rounds, log)
+    writer_threads(seed) do |t, rng|
+      how = t.even? ? :unchecked : :unlocked
+      rounds.times { |i| log << write_once(meal_id, [t, i], settled_actions.sample(random: rng), rng, how) }
+    end
+  end
+
+  def write_once(meal_id, (thread, index), action, rng, how = :api)
+    entry = [thread, index, action, write(meal_id, action, rng, how)]
+    sleep(rng.rand * 0.002)
+    entry
+  end
+
+  # The real entry point, with the nightly task's ten tries
+  # (SettleAndNotify::BATCH) but shorter waits between them. BATCH waits
+  # from a quarter second up, which is longer than the writers' rounds
+  # take, so with it the settlement always landed after the last write and
+  # phase 1 never raced it. The waits are SettleAndNotify's own spec's job;
+  # the number of tries is checked here: giving up is not rescued, so it
+  # is an :error outcome, and the storm asserts there are none.
+  def storm_retries = SettleAndNotify::Retries.new(attempts: SettleAndNotify::BATCH.attempts, base_delay: 0.01)
 
   def run_settler(seed, log)
     Thread.new do
@@ -156,12 +238,12 @@ RSpec.describe 'a write storm against one meal, with a settlement in it' do
         # Not before the writers have done a good part of their work, so
         # phase 1 always has writes on both sides of the settlement.
         sleep(0.005) until log.size >= 40 + rng.rand(20)
-        # The real entry point, with its own patient retries. Giving up
-        # (ActiveRecord::TransactionRollbackError) is not rescued: it would
-        # be an :error outcome, and the storm asserts there are none. With
-        # the request defaults it happened in two of five storms.
-        40.times do
-          reconciliation = SettleAndNotify.call(cutoff: Date.yesterday)
+        # Up to 200 settlements, about five seconds: the writers make the
+        # meal settleable at the latest once their rounds are done (see
+        # run_writers). Until then a settlement may be refused for having
+        # nothing to settle, or contested, and is tried again.
+        200.times do
+          reconciliation = SettleAndNotify.call(cutoff: Date.yesterday, retries: storm_retries)
           log << [:settler, 0, :settle, [:settled, reconciliation.id]]
           break
         rescue ActiveRecord::RecordInvalid, Settlement::Contested
@@ -180,15 +262,6 @@ RSpec.describe 'a write storm against one meal, with a settlement in it' do
     end
   end
 
-  def settle_for_sure(meal_id)
-    return if Meal.find(meal_id).reconciled?
-
-    write(meal_id, :set_bills, Random.new(1))
-    locked_write(meal_id) { |m| m.update(closed: false) }
-    locked_write(meal_id) { |m| m.meal_residents.find_or_initialize_by(resident_id: residents.first.id).save }
-    SettleAndNotify.call(cutoff: Date.yesterday)
-  end
-
   # --- the checks -------------------------------------------------------------
 
   def snapshot(meal_id)
@@ -200,7 +273,7 @@ RSpec.describe 'a write storm against one meal, with a settlement in it' do
   end
 
   def expect_outcomes_clean(log, label)
-    fine = %i[ok refused refused_settled noop conflict]
+    fine = %i[ok refused refused_settled refused_by_trigger noop conflict]
     bad = log.reject do |_, _, _, outcome|
       fine.include?(outcome) || (outcome.is_a?(Array) && outcome.first == :settled)
     end
@@ -238,23 +311,37 @@ RSpec.describe 'a write storm against one meal, with a settlement in it' do
       meal_id = meal.id
       log = Queue.new
 
-      writers = run_writers(meal_id, seed, 25, log)
       settler = run_settler(seed, log)
+      writers = run_writers(meal_id, seed, 25, log, settler)
       join_all(writers + [settler], "storm #{seed}, phase 1")
       first = Array.new(log.size) { log.pop }
       expect_outcomes_clean(first, "storm #{seed}, phase 1")
       expect_ledger_sound(meal_id, "storm #{seed}, phase 1")
+      # The settler settled the meal while the writers were at it, and
+      # writes then met the settled meal. A run where the settler never
+      # won, or won after the last write, fails here.
+      settled_by = first.select { |thread, *| thread == :settler }.map(&:last)
+      expect(settled_by).to eq([[:settled, Meal.find(meal_id).reconciliation_id]]),
+                            "storm #{seed}, phase 1: the settler did not settle the meal: #{settled_by}"
+      after_settlement = first.count { |*, outcome| outcome == :refused_settled }
+      expect(after_settlement).to be >= 4 * writes_after_settler,
+                                  "storm #{seed}, phase 1: only #{after_settlement} writes met the settled meal"
 
-      settle_for_sure(meal_id)
       expect(Meal.find(meal_id)).to be_reconciled
       settled_rows = snapshot(meal_id)
 
-      writers = run_writers(meal_id, seed + 1000, 10, log)
+      writers = run_settled_writers(meal_id, seed + 1000, 10, log)
       join_all(writers, "storm #{seed}, phase 2")
       second = Array.new(log.size) { log.pop }
       expect_outcomes_clean(second, "storm #{seed}, phase 2")
-      expect(second.map(&:last).uniq).to eq([:refused_settled]),
-                                         "storm #{seed}, phase 2: outcomes #{second.map(&:last).tally}"
+      # Refused by the models (or the triggers), nothing to do (a leave for
+      # someone not signed up, a guest removal with no guests), or a
+      # conflict after the retries, which writes nothing either. Never
+      # written.
+      outcomes = second.map(&:last)
+      unwritten = %i[refused_settled refused_by_trigger noop conflict]
+      expect(outcomes - unwritten).to be_empty, "storm #{seed}, phase 2: #{outcomes.tally}"
+      expect(outcomes).to include(:refused_settled)
       expect(snapshot(meal_id)).to eq(settled_rows), "storm #{seed}, phase 2: the settled rows changed"
       expect_ledger_sound(meal_id, "storm #{seed}, phase 2")
       tally = first.map(&:last).map { |o| o.is_a?(Array) ? o.first : o }.tally
