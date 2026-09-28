@@ -87,6 +87,45 @@ export interface Guest {
 }
 
 // ---------------------------------------------------------------------------
+// Calendar edit forms — the record a modal edits
+// ---------------------------------------------------------------------------
+
+// Response of GET /api/v1/events/:id
+// Mirrors EventFormSerializer. The form reads all but the timestamps.
+export interface EventForm {
+  id: number;
+  title: string;
+  description: string;
+  start_date: string;
+  // null for an all-day event.
+  end_date: string | null;
+  allday: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// Response of GET /api/v1/common-house-reservations/:id, which is
+// { event: CommonHouseReservationForm }.
+// Mirrors CommonHouseReservationFormSerializer.
+export interface CommonHouseReservationForm {
+  id: number;
+  resident_id: number;
+  title: string | null;
+  start_date: string;
+  end_date: string;
+}
+
+// Response of GET /api/v1/guest-room-reservations/:id, which is
+// { event: GuestRoomReservationForm }.
+// Mirrors GuestRoomReservationFormSerializer.
+export interface GuestRoomReservationForm {
+  id: number;
+  resident_id: number;
+  // "YYYY-MM-DD"
+  date: string;
+}
+
+// ---------------------------------------------------------------------------
 // Acknowledgements
 // ---------------------------------------------------------------------------
 

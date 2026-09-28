@@ -19,7 +19,10 @@ RSpec.describe 'API contract (tests/fixtures/api_contract.json)', type: :seriali
 
   # Every fixture entry must be asserted below; a new entry without a matching
   # test here should fail loudly, not pass silently.
-  let(:covered) { %w[MealForm MealFormBill MealFormResident MealFormGuest MealResident Guest] }
+  let(:covered) do
+    %w[MealForm MealFormBill MealFormResident MealFormGuest MealResident Guest
+       EventForm CommonHouseReservationForm GuestRoomReservationForm]
+  end
 
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
@@ -82,6 +85,36 @@ RSpec.describe 'API contract (tests/fixtures/api_contract.json)', type: :seriali
       result = GuestSerializer.new(guest).to_h
 
       expect(keys_of(result)).to eq(contract.fetch('Guest').sort)
+    end
+  end
+
+  # The three calendar edit forms (#103). The two reservations come under
+  # an "event" key, which the SPA reads.
+  describe 'GET /api/v1/events/:id' do
+    it 'matches EventForm' do
+      result = EventFormSerializer.new(create(:event, community: community)).to_h
+
+      expect(keys_of(result)).to eq(contract.fetch('EventForm').sort)
+    end
+  end
+
+  describe 'GET /api/v1/common-house-reservations/:id' do
+    it 'matches CommonHouseReservationForm, under "event"' do
+      reservation = create(:common_house_reservation, community: community, resident: resident)
+      serializer = CommonHouseReservationFormSerializer.new(reservation)
+
+      expect(JSON.parse(serializer.serialize).keys).to eq(['event'])
+      expect(keys_of(serializer.to_h)).to eq(contract.fetch('CommonHouseReservationForm').sort)
+    end
+  end
+
+  describe 'GET /api/v1/guest-room-reservations/:id' do
+    it 'matches GuestRoomReservationForm, under "event"' do
+      reservation = create(:guest_room_reservation, community: community, resident: resident)
+      serializer = GuestRoomReservationFormSerializer.new(reservation)
+
+      expect(JSON.parse(serializer.serialize).keys).to eq(['event'])
+      expect(keys_of(serializer.to_h)).to eq(contract.fetch('GuestRoomReservationForm').sort)
     end
   end
 end

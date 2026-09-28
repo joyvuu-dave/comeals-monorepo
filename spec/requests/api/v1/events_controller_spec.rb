@@ -9,12 +9,32 @@ RSpec.describe 'Events API' do
   let(:token) { resident.keys.first.token }
 
   describe 'GET /api/v1/events/:id' do
-    it 'returns the event' do
-      event = create(:event, community: community)
+    # Before #103 show rendered the record itself, not a serializer, so
+    # every column went out, community_id included. The keys are the ones
+    # public/api.md lists; the edit form reads all but the timestamps.
+    it 'returns the event\'s fields that public/api.md lists, value by value, and no other column' do
+      event = create(:event, community: community, title: 'Work party', description: 'Bring gloves', allday: false,
+                             start_date: Time.zone.local(2026, 9, 5, 9, 0),
+                             end_date: Time.zone.local(2026, 9, 5, 12, 30))
 
       get "/api/v1/events/#{event.id}", params: { token: token }
 
       expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq(
+        'id' => event.id, 'title' => 'Work party', 'description' => 'Bring gloves', 'allday' => false,
+        'start_date' => '2026-09-05T09:00:00.000-07:00', 'end_date' => '2026-09-05T12:30:00.000-07:00',
+        'created_at' => event.created_at.as_json, 'updated_at' => event.updated_at.as_json
+      )
+    end
+
+    it 'returns an all-day event with no end' do
+      event = create(:event, community: community, allday: true, start_date: Time.zone.local(2026, 9, 5, 0, 0),
+                             end_date: nil)
+
+      get "/api/v1/events/#{event.id}", params: { token: token }
+
+      expect(response.parsed_body).to include('allday' => true, 'start_date' => '2026-09-05T00:00:00.000-07:00',
+                                              'end_date' => nil)
     end
 
     it 'returns 404 for nonexistent event' do

@@ -15,7 +15,10 @@ import { describe, expect, it } from "vitest";
 
 import contractJson from "../fixtures/api_contract.json";
 import type {
+  CommonHouseReservationForm,
+  EventForm,
   Guest,
+  GuestRoomReservationForm,
   MealForm,
   MealFormBill,
   MealFormGuest,
@@ -30,6 +33,28 @@ function keysOf<T>(manifest: { [K in keyof T]-?: true }): string[] {
 }
 
 const manifests: Record<string, string[]> = {
+  CommonHouseReservationForm: keysOf<CommonHouseReservationForm>({
+    id: true,
+    resident_id: true,
+    title: true,
+    start_date: true,
+    end_date: true,
+  }),
+  EventForm: keysOf<EventForm>({
+    id: true,
+    title: true,
+    description: true,
+    start_date: true,
+    end_date: true,
+    allday: true,
+    created_at: true,
+    updated_at: true,
+  }),
+  GuestRoomReservationForm: keysOf<GuestRoomReservationForm>({
+    id: true,
+    resident_id: true,
+    date: true,
+  }),
   Guest: keysOf<Guest>({
     id: true,
     meal_id: true,

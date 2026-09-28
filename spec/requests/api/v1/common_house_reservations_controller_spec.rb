@@ -9,16 +9,29 @@ RSpec.describe 'Common House Reservations API' do
   let(:token) { resident.keys.first.token }
 
   describe 'GET /api/v1/common-house-reservations/:id' do
-    it 'returns the reservation event' do
-      chr = create(:common_house_reservation, community: community, resident: resident)
+    # Before #103 show rendered the record itself, not a serializer, so
+    # every column went out, community_id and the timestamps included.
+    # Residents are served by CommunitiesController#hosts, not inlined here.
+    it 'returns, under "event", the fields the edit form reads, value by value, and no other column' do
+      chr = create(:common_house_reservation, community: community, resident: resident, title: 'Book club',
+                                              start_date: Time.zone.local(2026, 9, 5, 19, 0),
+                                              end_date: Time.zone.local(2026, 9, 5, 21, 0))
 
       get "/api/v1/common-house-reservations/#{chr.id}", params: { token: token }
 
       expect(response).to have_http_status(:ok)
-      body = response.parsed_body
-      expect(body).to have_key('event')
-      # Residents are served by CommunitiesController#hosts, not inlined here.
-      expect(body).not_to have_key('residents')
+      expect(response.parsed_body).to eq(
+        'event' => { 'id' => chr.id, 'resident_id' => resident.id, 'title' => 'Book club',
+                     'start_date' => '2026-09-05T19:00:00.000-07:00', 'end_date' => '2026-09-05T21:00:00.000-07:00' }
+      )
+    end
+
+    it 'sends a reservation with no title as null' do
+      chr = create(:common_house_reservation, community: community, resident: resident, title: nil)
+
+      get "/api/v1/common-house-reservations/#{chr.id}", params: { token: token }
+
+      expect(response.parsed_body['event']).to include('title' => nil)
     end
 
     it 'returns 404 for nonexistent reservation' do

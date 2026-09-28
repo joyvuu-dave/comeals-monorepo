@@ -9,7 +9,7 @@ module Api
 
       # GET /api/v1/events/:id
       def show
-        render json: @event
+        render json: EventFormSerializer.new(@event)
       end
 
       # POST /api/v1/events/create

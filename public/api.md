@@ -340,12 +340,12 @@ bill's amount, use the meal form and `PATCH /meals/:meal_id/bills`.
 An event is a note on the calendar with a title, a start, and either an
 end or the `all_day` flag.
 
-| Method   | Path                 | Returns                                                                                   |
-| -------- | -------------------- | ----------------------------------------------------------------------------------------- |
-| `GET`    | `/events/:id`        | The record: `id`, `title`, `description`, `start_date`, `end_date`, `allday`, timestamps. |
-| `POST`   | `/events`            | Creates. Body below.                                                                      |
-| `PATCH`  | `/events/:id/update` | Updates. Same body.                                                                       |
-| `DELETE` | `/events/:id/delete` | Deletes.                                                                                  |
+| Method   | Path                 | Returns                                                                                                           |
+| -------- | -------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/events/:id`        | `id`, `title`, `description`, `start_date`, `end_date` (null when all day), `allday`, `created_at`, `updated_at`. |
+| `POST`   | `/events`            | Creates. Body below.                                                                                              |
+| `PATCH`  | `/events/:id/update` | Updates. Same body.                                                                                               |
+| `DELETE` | `/events/:id/delete` | Deletes.                                                                                                          |
 
 Create and update body:
 
@@ -370,12 +370,12 @@ range, returns `400 "Error: Invalid date"`.
 
 One reservation per day. `resident_id` is the host.
 
-| Method   | Path                                  | Returns                                              |
-| -------- | ------------------------------------- | ---------------------------------------------------- |
-| `GET`    | `/guest-room-reservations/:id`        | `{ "event": { "id", "resident_id", "date", ... } }`. |
-| `POST`   | `/guest-room-reservations`            | Body `{ "resident_id": 12, "date": "2026-09-05" }`.  |
-| `PATCH`  | `/guest-room-reservations/:id/update` | Same body.                                           |
-| `DELETE` | `/guest-room-reservations/:id/delete` | Deletes.                                             |
+| Method   | Path                                  | Returns                                             |
+| -------- | ------------------------------------- | --------------------------------------------------- |
+| `GET`    | `/guest-room-reservations/:id`        | `{ "event": { "id", "resident_id", "date" } }`.     |
+| `POST`   | `/guest-room-reservations`            | Body `{ "resident_id": 12, "date": "2026-09-05" }`. |
+| `PATCH`  | `/guest-room-reservations/:id/update` | Same body.                                          |
+| `DELETE` | `/guest-room-reservations/:id/delete` | Deletes.                                            |
 
 A day that is already taken returns `400`.
 
@@ -384,12 +384,12 @@ A day that is already taken returns `400`.
 A block of time in the common house on one day. `resident_id` is who
 booked it. `title` is optional.
 
-| Method   | Path                                    | Returns                                                                         |
-| -------- | --------------------------------------- | ------------------------------------------------------------------------------- |
-| `GET`    | `/common-house-reservations/:id`        | `{ "event": { "id", "resident_id", "title", "start_date", "end_date", ... } }`. |
-| `POST`   | `/common-house-reservations`            | Body below.                                                                     |
-| `PATCH`  | `/common-house-reservations/:id/update` | Same body.                                                                      |
-| `DELETE` | `/common-house-reservations/:id/delete` | Deletes.                                                                        |
+| Method   | Path                                    | Returns                                                                    |
+| -------- | --------------------------------------- | -------------------------------------------------------------------------- |
+| `GET`    | `/common-house-reservations/:id`        | `{ "event": { "id", "resident_id", "title", "start_date", "end_date" } }`. |
+| `POST`   | `/common-house-reservations`            | Body below.                                                                |
+| `PATCH`  | `/common-house-reservations/:id/update` | Same body.                                                                 |
+| `DELETE` | `/common-house-reservations/:id/delete` | Deletes.                                                                   |
 
 Body:
 
