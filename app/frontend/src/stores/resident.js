@@ -149,7 +149,10 @@ const Resident = types
         self.late = !self.late;
       }
 
-      // Toggle Veg if Necessary
+      // Toggle Veg if Necessary. A resident who is not attending shows
+      // their profile's veg value, so the switch can start on; a
+      // refused add puts this value back (issue #109).
+      const previousVeg = self.vegetarian;
       if (options.toggleVeg) {
         self.vegetarian = !self.vegetarian;
       }
@@ -198,9 +201,10 @@ const Resident = types
               self.setLate(false);
             }
 
-            // If they were clicking veg to add, unckeck veg
+            // If they were clicking veg to add, put back the veg value
+            // from before the tap.
             if (options.toggleVeg) {
-              self.setVeg(false);
+              self.setVeg(previousVeg);
             }
 
             handleAxiosError(error);

@@ -1136,6 +1136,54 @@ describe("Resident model", () => {
       expect(store.meal.extras).toBe(3);
     });
 
+    // A resident who is not attending shows their profile's veg value
+    // (MealFormSerializer), so the veg switch can start on. A refused
+    // add must put back that value, not always false (issue #109).
+    // Here someone else took the last seat first.
+    function vegetarianNotAttending() {
+      return createStore({
+        mealProps: { closed: true, closed_at: Date.now(), extras: 1 },
+        residents: [
+          {
+            id: 10,
+            meal_id: 1,
+            name: "Alice",
+            attending: false,
+            late: false,
+            vegetarian: true,
+          },
+        ],
+      });
+    }
+
+    it("rolls back an add made from the veg switch to the veg value from before the tap", async () => {
+      const store = vegetarianNotAttending();
+      axios.mockRejectedValueOnce(refusal);
+
+      const alice = store.residents.get("10");
+      alice.toggleVeg();
+      expect(alice.attending).toBe(true);
+      expect(alice.vegetarian).toBe(false);
+      await settle();
+
+      expect(alice.attending).toBe(false);
+      expect(alice.vegetarian).toBe(true);
+      expect(store.meal.extras).toBe(1);
+    });
+
+    it("leaves the profile's veg value alone when an add made from the name is refused", async () => {
+      const store = vegetarianNotAttending();
+      axios.mockRejectedValueOnce(refusal);
+
+      const alice = store.residents.get("10");
+      alice.toggleAttending();
+      expect(alice.vegetarian).toBe(true);
+      await settle();
+
+      expect(alice.attending).toBe(false);
+      expect(alice.vegetarian).toBe(true);
+    });
+
     it("rolls back a removal and gives the late flag back", async () => {
       const store = createStore({
         mealProps: { closed: false, extras: 3 },
