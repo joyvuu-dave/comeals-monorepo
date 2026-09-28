@@ -59,7 +59,14 @@
     </div>
     <script type="module" src="/src/index.jsx"></script>
     <script>
+      // After 5 minutes with no mouse, key, scroll or touch event, go to
+      // "/", which shows a signed-in resident today's calendar.
       function idleTimer() {
+        // The browser tests set this flag to turn the timer off
+        // (disableIdleTimer in tests/helpers/browser_setup.js). A stub
+        // put on window.idleTimer cannot do it: this declaration
+        // replaces the stub before the call below runs.
+        if (window.__COMEALS_NO_IDLE_TIMER__) return;
         var t;
         window.onmousemove = resetTimer;
         window.onmousedown = resetTimer;

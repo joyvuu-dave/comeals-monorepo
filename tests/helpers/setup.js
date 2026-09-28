@@ -17,6 +17,7 @@ const rotationFixture = require("../fixtures/rotation.json");
 const eventFixture = require("../fixtures/event.json");
 const commonHouseReservationFixture = require("../fixtures/common_house_reservation.json");
 const guestRoomReservationFixture = require("../fixtures/guest_room_reservation.json");
+const { disableIdleTimer } = require("./browser_setup");
 
 const AUTH_COOKIES = [
   { name: "token", value: "test-token-abc123", domain: "localhost", path: "/" },
@@ -66,16 +67,6 @@ async function stubPusher(page) {
       };
       this.unsubscribe = function () {};
     };
-  });
-}
-
-/**
- * Disable the idle timer that redirects after 5 minutes of inactivity.
- * Must be called before navigating to the app.
- */
-async function disableIdleTimer(page) {
-  await page.addInitScript(() => {
-    window.idleTimer = function () {};
   });
 }
 

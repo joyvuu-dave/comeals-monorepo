@@ -8,6 +8,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { disableIdleTimer } = require("./browser_setup");
 
 // The suite's frozen "today" — bin/test-integration exports it to the
 // seed task and the Rails server; the browser freezes to the same
@@ -75,15 +76,6 @@ async function stubPusher(page) {
 }
 
 /**
- * Disable the idle timer that redirects after 5 minutes of inactivity.
- */
-async function disableIdleTimer(page) {
-  await page.addInitScript(() => {
-    window.idleTimer = function () {};
-  });
-}
-
-/**
  * Clear localforage/IndexedDB to prevent stale cached data between tests.
  */
 async function clearStorage(page) {
@@ -118,7 +110,9 @@ async function setupAuthenticatedPage(page, context) {
 
 module.exports = {
   FAKE_TODAY,
+  FAKE_NOW,
   loadAuthInfo,
+  authenticateContext,
   stubPusher,
   disableIdleTimer,
   clearStorage,
