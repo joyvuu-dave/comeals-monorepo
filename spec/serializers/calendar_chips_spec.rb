@@ -170,7 +170,7 @@ RSpec.describe 'the calendar chips', type: :serializer do
       expect(chip(reservation)).to eq(
         id: reservation.cache_key_with_version, type: 'CommonHouseReservation',
         title: " 2:00pm -  4:00pm\nCommon House\nBook club\nCal - Unit B7",
-        start: Time.zone.local(2026, 4, 15, 14, 1), end: Time.zone.local(2026, 4, 15, 16, 1),
+        start: Time.zone.local(2026, 4, 15, 14, 0), end: Time.zone.local(2026, 4, 15, 16, 0),
         url: "common-house-reservations/edit/#{reservation.id}", description: "Common House\nCal - Unit B7",
         color: '#bc357e'
       )
@@ -182,6 +182,18 @@ RSpec.describe 'the calendar chips', type: :serializer do
                                                       end_date: Time.zone.local(2026, 4, 15, 16, 0))
 
       expect(chip(reservation)[:title]).to eq(" 2:00pm -  4:00pm\nCommon House\nCal - Unit B7")
+    end
+
+    # Before #104 both ends were sent one minute late, so a booking that
+    # ends at midnight ended at 00:01 on the chip, and the month view drew
+    # it on the next day too.
+    it 'starts and ends the chip at the booking\'s own times, like a timed event' do
+      reservation = create(:common_house_reservation, community: community, resident: resident, title: 'Late',
+                                                      start_date: Time.zone.local(2026, 4, 15, 22, 0),
+                                                      end_date: Time.zone.local(2026, 4, 16, 0, 0))
+
+      expect(chip(reservation)).to include(start: Time.zone.local(2026, 4, 15, 22, 0),
+                                           end: Time.zone.local(2026, 4, 16, 0, 0))
     end
   end
 

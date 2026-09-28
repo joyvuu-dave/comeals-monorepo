@@ -59,12 +59,17 @@ class CommonHouseReservationSerializer
     "Common House\n#{ResidentNameShortener.short(reservation.resident.name)} - Unit #{reservation.resident.unit.name}"
   end
 
+  # The booking's own times, like a timed event's chip. Only the chips
+  # for a whole day (a meal, a cook, a guest room night, an all-day
+  # event) start a minute into it. Before #104 this timed chip was a
+  # minute late at both ends too, so a booking that ends at midnight
+  # was drawn on the next day as well.
   def start(reservation)
-    reservation.start_date + 1.minute
+    reservation.start_date
   end
 
   def end(reservation)
-    reservation.end_date + 1.minute
+    reservation.end_date
   end
 
   def url(reservation)

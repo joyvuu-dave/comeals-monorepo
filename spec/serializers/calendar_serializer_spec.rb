@@ -190,7 +190,7 @@ RSpec.describe CalendarSerializer, type: :serializer do
 
       result = serialize
 
-      starts = result[:common_house_reservations].map { |chip| chip[:start] - 1.minute }
+      starts = result[:common_house_reservations].pluck(:start)
       expect(starts).to contain_exactly(Time.zone.local(2026, 4, 1, 0, 0), Time.zone.local(2026, 4, 30, 23, 50))
     end
 
