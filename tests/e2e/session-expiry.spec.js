@@ -65,7 +65,7 @@ test.describe("Session Expiry", () => {
     ).not.toBeVisible();
   });
 
-  test("does NOT show session-expired banner when offline", async ({
+  test("does NOT show session-expired banner when the network fails", async ({
     page,
     context,
   }) => {
@@ -80,15 +80,23 @@ test.describe("Session Expiry", () => {
       route.abort("connectionfailed");
     });
 
+    // The month fetch handles its failure by logging this line
+    // (handleAxiosError, silent). Waiting for it proves the aborted
+    // request happened and went through the error path. The 401 check
+    // runs earlier on that path, in the axios response interceptor, so
+    // if this error were going to raise the banner, it would show now.
+    const handled = page.waitForEvent(
+      "console",
+      (message) =>
+        message.text() === "Error: no response received from server.",
+    );
     await page.goto("/calendar/all/2026-01-15/");
-
-    // Wait a moment for any async error handling
-    await page.waitForTimeout(2000);
+    await handled;
 
     // No session-expired banner (this is a network error, not auth)
     await expect(
-      page.locator("text=Heads up — you've been signed out"),
-    ).not.toBeVisible();
+      page.getByText("Heads up — you've been signed out"),
+    ).toHaveCount(0);
   });
 
   test("clicking 'Log in' clears session and redirects to login page", async ({
