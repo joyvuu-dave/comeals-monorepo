@@ -21,15 +21,18 @@ module Api
       end
 
       # GET /api/v1/communities/:id/birthdays
+      #
+      # The month two weeks after `start` (the middle of the calendar's
+      # six weeks), or this month. The chips are dated in that month's
+      # year, and a person born after it has no chip there.
       def birthdays
-        month_int = if params[:start]
-                      (Date.parse(params[:start]) + 2.weeks).month
-                    else
-                      Community.instance.today.month
-                    end
+        day = params[:start] ? Date.parse(params[:start]) + 2.weeks : Community.instance.today
+        days = day.all_month
 
-        residents = Community.instance.residents.active.where('extract(month from birthday) = ?', month_int)
-        render json: ResidentBirthdaySerializer.new(residents)
+        residents = Community.instance.residents.active
+                             .where('extract(month from birthday) = ?', day.month)
+                             .where(birthday: ..days.last)
+        render json: ResidentBirthdaySerializer.new(residents, params: { days: days })
       end
 
       # GET /api/v1/communities/:id/hosts

@@ -272,15 +272,17 @@ GET /communities/:id/calendar/:date
 `birthdays`, `common_house_reservations`, `guest_room_reservations`, and
 `events`. Every card has `id` (a cache key, not a record id), `type`,
 `title`, `start`, `end`, and usually `url` and `color`. Bill cards mark
-which days have a cook.
+which days have a cook. A birthday card is dated in the year of the
+weeks shown, not this year, and names the age the person turns that
+day. A person born after the last day shown has no card.
 
 The response carries an `ETag`. Send it back as `If-None-Match` to get
 `304` when nothing changed.
 
-| Method | Path                                          | Returns                                                                                                                               |
-| ------ | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET`  | `/communities/:id/birthdays?start=YYYY-MM-DD` | Birthday cards for the month two weeks after `start` (the calendar's middle). Without `start`, this month.                            |
-| `GET`  | `/communities/:id/hosts`                      | Active adults as `[id, name, unit_name]` triples, sorted by unit. These are the residents who can host a guest or hold a reservation. |
+| Method | Path                                          | Returns                                                                                                                                |
+| ------ | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/communities/:id/birthdays?start=YYYY-MM-DD` | Birthday cards for the month two weeks after `start` (the calendar's middle), dated in that month's year. Without `start`, this month. |
+| `GET`  | `/communities/:id/hosts`                      | Active adults as `[id, name, unit_name]` triples, sorted by unit. These are the residents who can host a guest or hold a reservation.  |
 
 ## Cooking rotations
 

@@ -67,7 +67,8 @@ class CalendarSerializer
 
   attribute :birthdays do |community|
     T.bind(self, CalendarSerializer)
-    ResidentBirthdaySerializer.new(birthdays_in_range(community)).to_h
+    days = Date.parse(start_date)..Date.parse(end_date)
+    ResidentBirthdaySerializer.new(birthdays_in_range(community), params: { days: days }).to_h
   end
 
   attribute :common_house_reservations do |community|
@@ -123,9 +124,12 @@ class CalendarSerializer
     Rotation.where(id: rotation_ids).order(:id).preload(:meals).to_a
   end
 
+  # Born by the last day on screen: paged back to a year before
+  # someone was born, their birthday has no chip.
   def birthdays_in_range(community)
     community.residents.active
              .where('extract(month from birthday) in (?)', params.fetch(:month_int_array))
+             .where(birthday: ..end_date)
              .order(:id)
   end
 

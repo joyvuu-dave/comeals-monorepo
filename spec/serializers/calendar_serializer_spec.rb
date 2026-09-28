@@ -3,6 +3,8 @@
 require 'rails_helper'
 
 RSpec.describe CalendarSerializer, type: :serializer do
+  include ActiveSupport::Testing::TimeHelpers
+
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
   let(:resident) { create(:resident, community: community, unit: unit, birthday: Date.new(1990, 4, 15)) }
@@ -86,6 +88,34 @@ RSpec.describe CalendarSerializer, type: :serializer do
       resident.update!(active: false, can_cook: false, email: nil)
       result = serialize
       expect(result[:birthdays].length).to eq(0)
+    end
+
+    # The December 2026 grid: November 29, 2026 to January 9, 2027. The
+    # clock is in September, so "this year" would put the January chip
+    # a year early, off the grid (#101).
+    it 'dates each birthday in the year its month has in the window, across New Year' do
+      travel_to Time.zone.local(2026, 9, 27, 12, 0) do
+        options.merge!(month: 12, start_date: '2026-11-29', end_date: '2027-01-09', month_int_array: [11, 12, 1])
+        [Date.new(1990, 11, 30), Date.new(1990, 12, 31), Date.new(1990, 1, 3)].each do |birthday|
+          create(:resident, community: community, unit: unit, birthday: birthday)
+        end
+
+        expect(serialize[:birthdays].pluck(:start))
+          .to eq([Date.new(2026, 11, 30), Date.new(2026, 12, 31), Date.new(2027, 1, 3)])
+      end
+    end
+
+    # A person has no birthday chip before they were born. Born on the
+    # last day of the window counts as born by then.
+    it 'takes no birthday of someone born after the last day of the window' do
+      travel_to Time.zone.local(2026, 9, 27, 12, 0) do
+        baby = create(:resident, community: community, unit: unit, birthday: Date.new(2026, 4, 30))
+
+        expect(serialize[:birthdays].pluck(:id, :start)).to eq([[baby.cache_key_with_version, Date.new(2026, 4, 30)]])
+
+        options.merge!(year: 2025, start_date: '2025-04-01', end_date: '2025-04-30')
+        expect(serialize[:birthdays]).to eq([])
+      end
     end
   end
 

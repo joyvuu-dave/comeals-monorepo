@@ -3,6 +3,8 @@
 require 'rails_helper'
 
 RSpec.describe 'Communities API' do
+  include ActiveSupport::Testing::TimeHelpers
+
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
   let(:resident) { create(:resident, community: community, unit: unit) }
@@ -33,35 +35,65 @@ RSpec.describe 'Communities API' do
   end
 
   describe 'GET /api/v1/communities/:id/birthdays' do
-    it 'returns residents with birthdays in the target month' do
-      march_bday = create(:resident, community: community, unit: unit,
-                                     birthday: Date.new(1990, 3, 15))
-      create(:resident, community: community, unit: unit,
-                        birthday: Date.new(1985, 7, 20))
-
-      get "/api/v1/communities/#{community.id}/birthdays", params: {
-        token: token, start: '2026-03-01'
-      }
-
-      expect(response).to have_http_status(:ok)
-      body = response.parsed_body
-      names = body.pluck('title')
-      expect(names.join).to include(march_bday.name.split[0])
+    def birthdays(params = {})
+      get "/api/v1/communities/#{community.id}/birthdays", params: { token: token }.merge(params)
+      response.parsed_body
     end
 
-    it 'uses this month when no start date is given' do
-      today = community.today
-      create(:resident, community: community, unit: unit, name: 'Born Now',
-                        birthday: Date.new(1990, today.month, 1))
-      create(:resident, community: community, unit: unit, name: 'Born Later',
-                        birthday: Date.new(1990, (today.month % 12) + 1, 1))
+    # Two weeks after February 20 is March 6. One week after is still
+    # February.
+    it 'returns residents with birthdays in the month two weeks after start' do
+      march_bday = create(:resident, community: community, unit: unit, name: 'Mae March',
+                                     birthday: Date.new(1990, 3, 15))
+      create(:resident, community: community, unit: unit, birthday: Date.new(1985, 2, 20))
 
-      get "/api/v1/communities/#{community.id}/birthdays", params: { token: token }
+      body = birthdays(start: '2026-02-20')
 
       expect(response).to have_http_status(:ok)
-      titles = response.parsed_body.pluck('title').join
-      expect(titles).to include('Born')
-      expect(titles).not_to include('Later')
+      expect(body.pluck('id', 'title', 'start'))
+        .to eq([[march_bday.cache_key_with_version, "Mae's B-day!", '2026-03-15']])
+    end
+
+    # The clock is in December, so next month is also next year.
+    it 'uses this month and this year when no start date is given' do
+      travel_to Time.zone.local(2026, 12, 20, 12, 0) do
+        token
+        born_now = create(:resident, community: community, unit: unit, name: 'Born Now',
+                                     birthday: Date.new(1990, 12, 5))
+        create(:resident, community: community, unit: unit, name: 'Born Later', birthday: Date.new(1990, 1, 5))
+
+        body = birthdays
+
+        expect(response).to have_http_status(:ok)
+        expect(body.pluck('id', 'start')).to eq([[born_now.cache_key_with_version, '2026-12-05']])
+      end
+    end
+
+    # The month two weeks after a start of December 27, 2026 is January
+    # 2027. Viewed in September 2026, the chip is still dated 2027, and
+    # the child's chip names the age turned that day (8), not today's (7).
+    it 'dates the chips in the year of that month, not this year, with the age turned that day' do
+      travel_to Time.zone.local(2026, 9, 27, 12, 0) do
+        token
+        create(:resident, community: community, unit: unit, name: 'Ivy Jan', birthday: Date.new(2019, 1, 5))
+
+        body = birthdays(start: '2026-12-27')
+
+        expect(body.pluck('title', 'start')).to eq([["Ivy's 8th B-day!", '2027-01-05']])
+      end
+    end
+
+    # A person has no birthday chip in a month before they were born.
+    # Born on the last day of the month counts as born by then.
+    it 'leaves out someone born after the month, and keeps someone born on its last day' do
+      travel_to Time.zone.local(2026, 9, 27, 12, 0) do
+        token
+        baby = create(:resident, community: community, unit: unit, name: 'Tia New', birthday: Date.new(2026, 3, 31))
+
+        expect(birthdays(start: '2025-03-16')).to eq([])
+        expect(birthdays(start: '2026-03-15').pluck('id', 'start'))
+          .to eq([[baby.cache_key_with_version, '2026-03-31']])
+      end
     end
 
     # An adult with no birthday must never appear — this is the fix for the
@@ -93,21 +125,19 @@ RSpec.describe 'Communities API' do
     end
 
     # Birthdays in the calendar response must appear on the actual birthday
-    # date, not shifted. This tests the full pipeline: controller → serializer.
-    it 'returns birthdays on the correct date (not shifted by a day)' do
-      create(:resident, community: community, unit: unit,
-                        birthday: Date.new(1990, 4, 20))
+    # date: not shifted by a day, and in the year of the month on screen,
+    # not this year (#101). The clock is in 2027 on purpose. This tests the
+    # full pipeline: controller → serializer.
+    it 'returns birthdays on the birthday, in the year of the month on screen' do
+      travel_to Time.zone.local(2027, 2, 1, 12, 0) do
+        token
+        create(:resident, community: community, unit: unit, birthday: Date.new(1990, 4, 20))
 
-      get "/api/v1/communities/#{community.id}/calendar/2026-04-15", params: { token: token }
+        get "/api/v1/communities/#{community.id}/calendar/2026-04-15", params: { token: token }
 
-      expect(response).to have_http_status(:ok)
-      body = response.parsed_body
-      birthdays = body['birthdays']
-      expect(birthdays).not_to be_empty
-
-      bday_start = birthdays.first['start']
-      # The birthday should be April 20, not April 21
-      expect(bday_start).to include('2026-04-20')
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body['birthdays'].pluck('start')).to eq(['2026-04-20'])
+      end
     end
 
     # Regression: malformed date params must return 400, not crash with 500.
@@ -118,24 +148,31 @@ RSpec.describe 'Communities API' do
       expect(response.parsed_body['message']).to eq('Invalid date')
     end
 
-    it 'includes January birthdays when viewing January calendar (year boundary)' do
-      create(:resident, community: community, unit: unit, birthday: Date.new(1990, 1, 15))
+    # The clock is in September 2026, so neither month on screen is in
+    # this year. The months are picked by number, and the January and
+    # December grids each reach into the other year.
+    it 'dates a January birthday in the January on screen (year boundary)' do
+      travel_to Time.zone.local(2026, 9, 27, 12, 0) do
+        token
+        create(:resident, community: community, unit: unit, birthday: Date.new(1990, 1, 15))
 
-      get "/api/v1/communities/#{community.id}/calendar/2026-01-15", params: { token: token }
+        get "/api/v1/communities/#{community.id}/calendar/2027-01-15", params: { token: token }
 
-      expect(response).to have_http_status(:ok)
-      body = response.parsed_body
-      expect(body['birthdays']).not_to be_empty
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body['birthdays'].pluck('start')).to eq(['2027-01-15'])
+      end
     end
 
-    it 'includes December birthdays when viewing December calendar (year boundary)' do
-      create(:resident, community: community, unit: unit, birthday: Date.new(1990, 12, 20))
+    it 'dates a December birthday in the December on screen (year boundary)' do
+      travel_to Time.zone.local(2026, 9, 27, 12, 0) do
+        token
+        create(:resident, community: community, unit: unit, birthday: Date.new(1990, 12, 20))
 
-      get "/api/v1/communities/#{community.id}/calendar/2025-12-15", params: { token: token }
+        get "/api/v1/communities/#{community.id}/calendar/2025-12-15", params: { token: token }
 
-      expect(response).to have_http_status(:ok)
-      body = response.parsed_body
-      expect(body['birthdays']).not_to be_empty
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body['birthdays'].pluck('start')).to eq(['2025-12-20'])
+      end
     end
 
     it 'sets an ETag and returns 304 when If-None-Match matches' do

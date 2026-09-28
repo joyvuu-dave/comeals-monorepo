@@ -185,36 +185,104 @@ RSpec.describe 'the calendar chips', type: :serializer do
     end
   end
 
+  # The chip goes on the birthday in the year of the days on screen, and
+  # names the age the person turns that day (#101). The clock is April
+  # 10, 2026, so "today's year" and "today's age" would give other
+  # answers in every example below.
   describe ResidentBirthdaySerializer do
     include_context 'with a fixed calendar day'
 
-    def chip(resident)
-      described_class.new(resident).to_h
+    # The six weeks the calendar shows for April 2026.
+    let(:april_2026) { Date.new(2026, 3, 29)..Date.new(2026, 5, 9) }
+
+    def chip(resident, days = april_2026)
+      described_class.new(resident, params: { days: days }).to_h
     end
 
-    it 'draws a child\'s birthday with the age, on this year\'s date' do
+    def born(name, birthday)
+      create(:resident, community: community, unit: unit, name: name, birthday: birthday)
+    end
+
+    it 'draws a child\'s birthday with the age they turn that day' do
       child = create(:resident, community: community, unit: unit, name: 'Dee Park', multiplier: 1,
                                 birthday: Date.new(2016, 4, 20))
 
       expect(chip(child)).to eq(
-        id: child.cache_key_with_version, type: 'Birthday', title: "Dee's 9th B-day!",
-        description: "Dee's 9th Birthday!", start: Date.new(2026, 4, 20), end: Date.new(2026, 4, 20),
+        id: child.cache_key_with_version, type: 'Birthday', title: "Dee's 10th B-day!",
+        description: "Dee's 10th Birthday!", start: Date.new(2026, 4, 20), end: Date.new(2026, 4, 20),
         color: '#7335bc'
       )
     end
 
-    it 'leaves the age out from 22 on' do
-      adult = create(:resident, community: community, unit: unit, name: 'Eve Ruiz', birthday: Date.new(2004, 4, 9))
-      turning = create(:resident, community: community, unit: unit, name: 'Fay Tan', birthday: Date.new(2004, 4, 11))
+    it 'says the same age on the same chip before, on and after the birthday' do
+      child = born('Dee Park', Date.new(2016, 4, 20))
 
-      expect(chip(adult)).to include(title: "Eve's B-day!", description: "Eve's Birthday!")
-      expect(chip(turning)).to include(title: "Fay's 21st B-day!", description: "Fay's 21st Birthday!")
+      titles = [Time.zone.local(2026, 4, 19, 12, 0), Time.zone.local(2026, 4, 20, 12, 0),
+                Time.zone.local(2026, 4, 21, 12, 0)].map do |now|
+        travel_to(now)
+        chip(child)[:title]
+      end
+
+      expect(titles).to eq(["Dee's 10th B-day!"] * 3)
     end
 
-    it 'puts a February 29 birthday on the 28th in a year without one' do
-      leapling = create(:resident, community: community, unit: unit, name: 'Gus Vo', birthday: Date.new(2000, 2, 29))
+    it 'shows the age up to 21, and leaves it out from 22 on' do
+      twenty_one = born('Hal Kim', Date.new(2005, 4, 11))
+      turning = born('Fay Tan', Date.new(2004, 4, 11))
+      adult = born('Eve Ruiz', Date.new(2004, 4, 9))
 
-      expect(chip(leapling)).to include(start: Date.new(2026, 2, 28), end: Date.new(2026, 2, 28))
+      expect(chip(twenty_one)).to include(title: "Hal's 21st B-day!", description: "Hal's 21st Birthday!")
+      expect(chip(turning)).to include(title: "Fay's B-day!", description: "Fay's Birthday!")
+      expect(chip(adult)).to include(title: "Eve's B-day!", description: "Eve's Birthday!")
+    end
+
+    it 'dates each chip in the year its month has on a grid that crosses New Year' do
+      november = born('Ann Lee', Date.new(1990, 11, 30))
+      december = born('Bo Chu', Date.new(1990, 12, 31))
+      january = born('Cy Dunn', Date.new(1990, 1, 3))
+      december_2026 = Date.new(2026, 11, 29)..Date.new(2027, 1, 9)
+
+      expect([november, december, january].map { |resident| chip(resident, december_2026)[:start] })
+        .to eq([Date.new(2026, 11, 30), Date.new(2026, 12, 31), Date.new(2027, 1, 3)])
+
+      january_2027 = Date.new(2026, 12, 27)..Date.new(2027, 2, 6)
+      expect([december, january].map { |resident| chip(resident, january_2027)[:start] })
+        .to eq([Date.new(2026, 12, 31), Date.new(2027, 1, 3)])
+    end
+
+    it 'counts the age from the year on screen, a year back or ahead of today' do
+      child = born('Dee Park', Date.new(2016, 4, 20))
+
+      expect(chip(child, Date.new(2025, 3, 30)..Date.new(2025, 5, 10))).to include(
+        title: "Dee's 9th B-day!", start: Date.new(2025, 4, 20), end: Date.new(2025, 4, 20)
+      )
+      expect(chip(child, Date.new(2027, 3, 28)..Date.new(2027, 5, 8))).to include(
+        title: "Dee's 11th B-day!", start: Date.new(2027, 4, 20), end: Date.new(2027, 4, 20)
+      )
+    end
+
+    # Feb 29 on the February grids of 2026 (no Feb 29), 2027 (none) and
+    # 2028 (a leap year). In the years without one the chip goes on the
+    # 28th and still names the age turned that year: Resident#age_on
+    # adds the year on March 1, so it would name one less.
+    it 'puts a February 29 birthday on the 28th in a year without one, with the age turned that year' do
+      leapling = born('Gus Vo', Date.new(2000, 2, 29))
+      child = born('Kim Oh', Date.new(2016, 2, 29))
+
+      expect(chip(leapling, Date.new(2026, 2, 1)..Date.new(2026, 3, 14)))
+        .to include(start: Date.new(2026, 2, 28), end: Date.new(2026, 2, 28))
+      expect(chip(child, Date.new(2027, 1, 31)..Date.new(2027, 3, 13)))
+        .to include(title: "Kim's 11th B-day!", start: Date.new(2027, 2, 28), end: Date.new(2027, 2, 28))
+      expect(chip(child, Date.new(2028, 1, 30)..Date.new(2028, 3, 11)))
+        .to include(title: "Kim's 12th B-day!", start: Date.new(2028, 2, 29), end: Date.new(2028, 2, 29))
+    end
+
+    # Without the days it cannot know the year, and it must not guess
+    # this year: that guess was the bug.
+    it 'refuses to draw a chip without the days on screen' do
+      child = born('Dee Park', Date.new(2016, 4, 20))
+
+      expect { described_class.new(child).to_h }.to raise_error(KeyError, /days/)
     end
   end
 
