@@ -32,6 +32,9 @@ matcher:
   # CommonHouseReservationFormSerializer, GuestRoomReservationFormSerializer),
   # for the same reason: they have no method to mutate. The request specs
   # and spec/serializers/api_contract_spec.rb pin their field lists.
+  # spec/config/mutant_subjects_spec.rb checks this list against the
+  # classes in app/ and lib/, so a new class cannot be left out of every
+  # stage without a failing spec.
   subjects:
     # money
     - MealLedger*
@@ -40,6 +43,7 @@ matcher:
     - BalanceRecalculation*
     # services
     - AuditDescription*
+    - BillsPayload*
     - DateRangeDescription*
     - Healthcheck*
     - JwtAuth*
@@ -61,6 +65,7 @@ matcher:
     # jobs, mailers, helpers, lib
     - ApplicationJob*
     - EnsureRotationsJob*
+    - LivePushJob*
     - NotifyCooksJob*
     - RecurringJob*
     - RefreshBalancesJob*
@@ -76,6 +81,7 @@ matcher:
     - SettlementLinesTable*
     - AssetCacheControl*
     - DatabasePoolCheck*
+    - DeployConfigCheck*
     - BugsnagErrorSubscriber*
     # models and concerns
     - ApplicationRecord*
