@@ -25,14 +25,38 @@ RSpec.describe ReconciliationMailer do
       expect(mail.body.encoded).to include('Swan')
     end
 
-    it 'includes a link to view bills' do
-      expect(mail.body.encoded).to include('bills')
-      expect(mail.body.encoded).to include(reconciliation.id.to_s)
+    # The link shows this cook's bills in this settlement, so the URL
+    # carries both ids. The cook is whichever of two residents does not
+    # share its id with the reconciliation, so a link built from the wrong
+    # id cannot pass by chance.
+    it "links to the cook's own bills in that settlement, in both parts" do
+      allow(ENV).to receive(:fetch).and_call_original
+      allow(ENV).to receive(:fetch).with('READ_ONLY_ADMIN_TOKEN', nil).and_return('the-token')
+      candidates = Array.new(2) { create(:resident, community: community, unit: unit) }
+      cook = candidates.find { |candidate| candidate.id != reconciliation.id }
+      url = 'http://admin.lvh.me:3000/bills?order=meals.date_desc' \
+            "&q%5Bmeal_reconciliation_id_eq%5D=#{reconciliation.id}&q%5Bresident_id_eq%5D=#{cook.id}" \
+            '&subdomain=admin&token=the-token&utf8=%E2%9C%93'
+
+      cook_mail = described_class.reconciliation_notify_email(cook, reconciliation)
+
+      expect(cook_mail.text_part.body.to_s).to include(url)
+      expect(cook_mail.html_part.body.to_s).to include(%(<a href="#{ERB::Util.html_escape(url)}">here</a>))
     end
   end
 
   describe '#common_house_collection_email' do
     let(:mail) { described_class.common_house_collection_email }
+    let(:residents_url) do
+      'http://admin.lvh.me:3000/residents?q%5Bactive_eq%5D=true&commit=Filter&subdomain=admin&order=name_asc' \
+        '&token=the-token&utf8=%E2%9C%93'
+    end
+    let(:units_url) { 'http://admin.lvh.me:3000/units?&token=the-token&utf8=%E2%9C%93' }
+
+    before do
+      allow(ENV).to receive(:fetch).and_call_original
+      allow(ENV).to receive(:fetch).with('READ_ONLY_ADMIN_TOKEN', nil).and_return('the-token')
+    end
 
     it 'sends to the common house email' do
       expect(mail.to).to eq(['commonhouse@swansway.com'])
@@ -43,15 +67,14 @@ RSpec.describe ReconciliationMailer do
     end
 
     it 'links the balances under the configured admin root, with the read-only token' do
-      allow(ENV).to receive(:fetch).and_call_original
-      allow(ENV).to receive(:fetch).with('READ_ONLY_ADMIN_TOKEN', nil).and_return('the-token')
-
-      expect(mail.body.encoded).to include('http://admin.lvh.me:3000/units?&amp;token=the-token')
+      expect(mail.text_part.body.to_s).to include("Residents: #{residents_url}", "Units: #{units_url}")
     end
 
-    it 'includes links to resident and unit balances' do
-      expect(mail.body.encoded).to include('Residents')
-      expect(mail.body.encoded).to include('Units')
+    it 'names the resident and unit balance links in the HTML part' do
+      html = mail.html_part.body.to_s
+
+      expect(html).to include(%(<a href="#{ERB::Util.html_escape(residents_url)}">Residents</a>))
+      expect(html).to include(%(<a href="#{ERB::Util.html_escape(units_url)}">Units</a>))
     end
   end
 end
