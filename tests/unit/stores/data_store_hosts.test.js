@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 vi.mock("axios", () => import("../mocks/axios.js"));
 vi.mock("js-cookie", () => import("../mocks/js_cookie.js"));
@@ -9,6 +9,8 @@ stubRandomUUID();
 
 import axios from "axios";
 import { createDataStore, stage } from "../helpers/create_data_store.js";
+import { pusherClient } from "../../../app/frontend/src/helpers/pusher_client.js";
+import toastStore from "../../../app/frontend/src/stores/toast_store.js";
 
 // The hosts cache (data_store_hosts.js): the adult-residents list the
 // reservation modals show. The interesting behavior is concurrency —
@@ -29,10 +31,14 @@ describe("hosts cache", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    window.Comeals = {
-      pusher: { subscribe: vi.fn(() => ({ bind: vi.fn() })) },
-    };
     store = createDataStore();
+  });
+
+  afterEach(() => {
+    axios.get.mockReset();
+    if (vi.isMockFunction(pusherClient.subscribe)) {
+      pusherClient.subscribe.mockRestore();
+    }
   });
 
   it("ensureHosts fetches once and names the tuple fields", async () => {
@@ -98,24 +104,38 @@ describe("hosts cache", () => {
     expect(axios.get).toHaveBeenCalledTimes(2);
   });
 
-  it("a failed refetch keeps the previously loaded list", async () => {
+  // The refetch runs in the background (a Pusher update, a reconnect,
+  // midnight), so a network failure must not put a toast on the shared
+  // screen: the next update or reconnect fetches again.
+  it("a failed refetch keeps the previously loaded list, silently", async () => {
     mockHostsResponse();
     await store.ensureHosts();
+    toastStore.clearAll();
 
     const consoleError = vi
       .spyOn(console, "error")
       .mockImplementation(() => {});
-    axios.get.mockRejectedValueOnce(new Error("network down"));
+    // What axios rejects with when no answer came back.
+    axios.get.mockRejectedValueOnce({ request: {} });
     const result = await store.refetchHostsSilently();
 
-    expect(result.slice()).toHaveLength(2);
-    expect(store.hosts.slice()).toHaveLength(2);
+    const loaded = [
+      { id: 1, name: "Jane Smith", unitName: "A" },
+      { id: 2, name: "Bob Johnson", unitName: "B" },
+    ];
+    expect(result.slice()).toEqual(loaded);
+    expect(store.hosts.slice()).toEqual(loaded);
+    expect(store.hostsLoaded).toBe(true);
+    expect(toastStore.toasts).toEqual([]);
+    expect(consoleError).toHaveBeenCalledWith(
+      "Error: no response received from server.",
+    );
     consoleError.mockRestore();
   });
 
   it("subscribes the residents channel once and refetches on update", async () => {
     const bind = vi.fn();
-    window.Comeals.pusher.subscribe = vi.fn(() => ({ bind }));
+    vi.spyOn(pusherClient, "subscribe").mockImplementation(() => ({ bind }));
     // No meal on screen: the residents channel also refetches the meal
     // page and the calendar when they are up (live_updates.test.js).
     stage(store, () => {
@@ -130,13 +150,16 @@ describe("hosts cache", () => {
     );
     expect(bind).toHaveBeenCalledWith("update", expect.any(Function));
 
-    // The bound handler refreshes the cache.
+    // The bound handler refreshes the cache. It returns nothing to wait
+    // on, so wait for the new list itself.
     mockHostsResponse([[9, "New Person", "B"]]);
     const handler = bind.mock.calls[0][1];
-    await handler();
-    expect(store.hosts.slice()).toEqual([
-      { id: 9, name: "New Person", unitName: "B" },
-    ]);
+    handler();
+    await vi.waitFor(() => {
+      expect(store.hosts.slice()).toEqual([
+        { id: 9, name: "New Person", unitName: "B" },
+      ]);
+    });
 
     // A second successful fetch does not resubscribe.
     await store.refetchHostsSilently();

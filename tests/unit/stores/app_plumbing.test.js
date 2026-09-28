@@ -16,6 +16,7 @@ stubRandomUUID();
 
 import axios from "axios";
 import { destroy } from "mobx-state-tree";
+import { pusherClient } from "../../../app/frontend/src/helpers/pusher_client.js";
 import {
   createDataStore,
   stage,
@@ -73,6 +74,11 @@ describe("app plumbing", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllEnvs();
+    // The month-channel tests spy on the Pusher client, which is module
+    // state that lives for the whole file.
+    [pusherClient.subscribe, pusherClient.unsubscribe].forEach((fn) => {
+      if (vi.isMockFunction(fn)) fn.mockRestore();
+    });
   });
 
   it("keeps the socket id once the connection says connected", async () => {
@@ -248,18 +254,21 @@ describe("app plumbing", () => {
     });
     expect(Cookie.remove).toHaveBeenCalledWith("token", { path: "/" });
     expect(Cookie.remove).toHaveBeenCalledWith("community_id", { path: "/" });
+    // The cookie mock acts like the browser's jar: the session is gone.
+    expect(Cookie.get("token")).toBeUndefined();
+    expect(Cookie.get("community_id")).toBeUndefined();
   });
 
   describe("the month channel", () => {
     function storeWithChannels() {
       const store = createDataStore();
       const channels = new Map();
-      window.Comeals.pusher.subscribe = vi.fn((name) => {
+      vi.spyOn(pusherClient, "subscribe").mockImplementation((name) => {
         const channel = { name, bind: vi.fn() };
         channels.set(name, channel);
         return channel;
       });
-      window.Comeals.pusher.unsubscribe = vi.fn();
+      vi.spyOn(pusherClient, "unsubscribe").mockImplementation(() => {});
       return { store, channels };
     }
 
