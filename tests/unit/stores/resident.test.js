@@ -11,6 +11,7 @@ vi.mock("idb-keyval", () => import("../mocks/idb_keyval.js"));
 
 import axios from "axios";
 import * as idbKeyval from "idb-keyval";
+import { getSnapshot } from "mobx-state-tree";
 import {
   createDataStore,
   stage,
@@ -623,6 +624,72 @@ describe("Resident model", () => {
       alice.toggleAttending();
       expect(alice.attending).toBe(false);
       expect(store.meal.extras).toBeNull(); // increment was a no-op
+    });
+  });
+
+  // ── a reconciled meal ──
+
+  // A settled meal's sign-ups and guests are final. The screen locks
+  // its controls, but the name cell is locked only by the CSS rule
+  // pointer-events: none, and a click sent to the cell itself (a screen
+  // reader's activate action, or a script) does not go through that
+  // rule. So every action checks the meal and sends nothing. A meal can
+  // be settled while it is still open (Meal.settleable_by does not look
+  // at closed), so both states are here. In the closed one Alice signed
+  // up after the close and there are seats left, so only the settlement
+  // stops each action.
+  describe("on a reconciled meal", () => {
+    const CLOSED_AT = new Date(2023, 0, 1, 12, 0, 0).getTime();
+    const AFTER_CLOSE = new Date(2023, 0, 1, 13, 0, 0).getTime();
+    const signedUp = { attending: true, attending_at: AFTER_CLOSE };
+    const notSignedUp = { attending: false };
+
+    describe.each([
+      ["open", { closed: false, reconciled: true }],
+      [
+        "closed with seats left",
+        { closed: true, closed_at: CLOSED_AT, extras: 3, reconciled: true },
+      ],
+    ])("that is %s", (_, mealProps) => {
+      it.each([
+        ["a sign-up from the name", notSignedUp, (a) => a.toggleAttending()],
+        ["a removal from the name", signedUp, (a) => a.toggleAttending()],
+        [
+          "the late switch of someone signed up",
+          signedUp,
+          (a) => a.toggleLate(),
+        ],
+        ["the veg switch of someone signed up", signedUp, (a) => a.toggleVeg()],
+        [
+          "the late switch of someone not signed up",
+          notSignedUp,
+          (a) => a.toggleLate(),
+        ],
+        [
+          "the veg switch of someone not signed up",
+          notSignedUp,
+          (a) => a.toggleVeg(),
+        ],
+        ["a guest add", signedUp, (a) => a.addGuest({ vegetarian: true })],
+        ["a guest removal", signedUp, (a) => a.removeGuest()],
+      ])("sends nothing and changes nothing for %s", async (_, alice, act) => {
+        const store = createStore({
+          mealProps,
+          residents: [{ id: 10, meal_id: 1, name: "Alice", ...alice }],
+          // A guest added after the close, so the closed meal would let
+          // Alice remove it.
+          guests: [
+            { id: 100, meal_id: 1, resident_id: 10, created_at: AFTER_CLOSE },
+          ],
+        });
+        const before = getSnapshot(store);
+
+        act(store.residents.get("10"));
+        await new Promise((r) => setTimeout(r, 0));
+
+        expect(axios).not.toHaveBeenCalled();
+        expect(getSnapshot(store)).toEqual(before);
+      });
     });
   });
 

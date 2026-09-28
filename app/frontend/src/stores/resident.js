@@ -105,6 +105,14 @@ const Resident = types
       return val;
     },
     toggleAttending(options = { late: false, toggleVeg: false }) {
+      // A settled meal's sign-ups are final. The screen locks the name
+      // cell only with pointer-events: none, which a click sent to the
+      // cell itself (a screen reader, a script) does not go through, so
+      // this action and the four below check the meal themselves.
+      if (self.root.meal.reconciled) {
+        return;
+      }
+
       // Scenario #1: Meal is closed, you're not attending
       //              there are no extras -- can't add yourself
       if (
@@ -215,6 +223,9 @@ const Resident = types
       }
     },
     toggleLate() {
+      if (self.root.meal.reconciled) {
+        return;
+      }
       if (self.attending === false) {
         self.toggleAttending({ late: true });
         return;
@@ -243,6 +254,9 @@ const Resident = types
         });
     },
     toggleVeg() {
+      if (self.root.meal.reconciled) {
+        return;
+      }
       if (self.attending === false) {
         self.toggleAttending({ toggleVeg: true });
         return;
@@ -271,6 +285,9 @@ const Resident = types
         });
     },
     addGuest(options = { vegetarian: false }) {
+      if (self.root.meal.reconciled) {
+        return;
+      }
       // Captured while alive; see toggleAttending.
       const store = getRoot(self);
       const mealId = self.meal_id;
@@ -302,7 +319,7 @@ const Resident = types
         });
     },
     removeGuest() {
-      if (!self.canRemoveGuest) {
+      if (self.root.meal.reconciled || !self.canRemoveGuest) {
         return false;
       }
 

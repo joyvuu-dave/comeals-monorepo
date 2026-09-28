@@ -243,6 +243,42 @@ describe("AttendeesBox", () => {
     },
   );
 
+  // pointer-events: none stops a mouse. It does not stop a click event
+  // sent to the cell itself, the way a screen reader's activate action
+  // or a script sends one. jsdom does not apply pointer-events at all,
+  // so this click reaches the handler, and the store must refuse it.
+  it("sends nothing for a click sent straight to a name on a reconciled meal", () => {
+    renderBox(
+      createDataStore({
+        mealProps: {
+          closed: true,
+          closed_at: new Date("2026-01-14T12:00:00Z"),
+          extras: 2,
+          reconciled: true,
+        },
+        residents: [
+          {
+            id: 1,
+            meal_id: 1,
+            name: "Jane Smith",
+            attending: true,
+            attending_at: new Date("2026-01-14T13:00:00Z"),
+          },
+          { id: 2, meal_id: 1, name: "Bob Johnson" },
+        ],
+      }),
+    );
+    const jane = screen.getByRole("cell", { name: "Jane Smith" });
+    const bob = screen.getByRole("cell", { name: "Bob Johnson" });
+
+    fireEvent.click(jane);
+    fireEvent.click(bob);
+
+    expect(axios).not.toHaveBeenCalled();
+    expect(jane).toHaveClass("background-green");
+    expect(bob).not.toHaveClass("background-green");
+  });
+
   it("renders no rows while the store has no meal", () => {
     const store = defaultStore();
     renderBox(store);

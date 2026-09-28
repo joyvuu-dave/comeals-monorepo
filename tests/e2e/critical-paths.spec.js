@@ -203,6 +203,12 @@ test.describe("Critical Paths", () => {
       const box = await cell.boundingBox();
       await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
     }
+    // A click event sent to the cell itself (a screen reader's activate
+    // action, or a script) does not go through pointer-events. The
+    // store refuses that one.
+    for (const cell of [bobCell, janeCell]) {
+      await cell.dispatchEvent("click");
+    }
     await expect(bobCell).not.toHaveClass(/background-green/);
     await expect(janeCell).toHaveClass(/background-green/);
     await expect(circleNumber(page, "Total")).toHaveText("3");
