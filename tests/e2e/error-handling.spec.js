@@ -1,3 +1,5 @@
+const fs = require("fs");
+const path = require("path");
 const {
   test,
   expect,
@@ -6,15 +8,41 @@ const {
 } = require("../helpers/test");
 
 // Every test here makes the app hit a mocked failure, so the
-// browser's request-failed log lines are the point, and
-// handle_axios_error logs each mocked message below verbatim.
+// browser's request-failed log lines are the point. A silent caller
+// (the meal load) logs the server's message verbatim, and
+// handle_axios_error logs any error answer that has no message.
 test.use({
   allowedConsoleErrors: combinePatterns(
     httpFailurePattern,
-    /^(boom|not found|Server error: could not update|Cannot close meal right now|Title is required|Warning: test warning message)$/,
+    /^not found$/,
+    /^Bad response from server/,
     /^Error: no response received from server\.$/,
   ),
 });
+
+// What production really sends for an exception ApiController does not
+// rescue: Rails' own page (production.rb has consider_all_requests_local
+// false), as HTML, with no message in it.
+const RAILS_500_PAGE = fs.readFileSync(
+  path.join(__dirname, "../../public/500.html"),
+  "utf8",
+);
+
+function rails500(route) {
+  return route.fulfill({
+    status: 500,
+    contentType: "text/html; charset=utf-8",
+    body: RAILS_500_PAGE,
+  });
+}
+
+// The words handle_axios_error shows for an error answer with no message.
+const SERVER_PROBLEM = "The server had a problem. Please try again.";
+
+// The 409 every meal write answers when it loses a race for the meal's
+// lock (MealsController#conflict_rejection).
+const MEAL_CONFLICT =
+  "Someone else was changing this meal at the same time. Nothing was saved. Try again.";
 const {
   setupAuthenticatedPage,
   stubPusher,
@@ -25,18 +53,19 @@ const mealFixture = require("../fixtures/meal.json");
 
 test.describe("Error Handling & Edge Cases", () => {
   test.describe("API Error Responses", () => {
-    test("attendance toggle API error reverts background and shows alert", async ({
+    // The server's refusal carries its own sentence, and the toast shows
+    // it word for word.
+    test("an attendance refusal reverts the cell and shows the server's message", async ({
       page,
       context,
     }) => {
       await setupAuthenticatedPage(page, context);
 
-      // Override resident endpoint to return 500 error
       await page.route("**/api/v1/meals/*/residents/2*", (route) => {
         route.fulfill({
-          status: 500,
+          status: 409,
           contentType: "application/json",
-          body: JSON.stringify({ message: "Server error: could not update" }),
+          body: JSON.stringify({ message: MEAL_CONFLICT }),
         });
       });
 
@@ -55,14 +84,40 @@ test.describe("Error Handling & Edge Cases", () => {
       // Click to toggle attending (will optimistically turn green, then revert)
       await bobCell.click();
 
-      // Should show error toast
       const toast = page.locator(".toast--error");
       await expect(toast).toBeVisible({ timeout: 5000 });
-      await expect(toast.locator(".toast__message")).toContainText(
-        "Server error",
-      );
+      await expect(toast.locator(".toast__message")).toHaveText(MEAL_CONFLICT);
 
       // Background should revert to NOT green (state rolled back)
+      await expect(bobCell).not.toHaveClass(/background-green/, {
+        timeout: 3000,
+      });
+    });
+
+    // An exception the API does not rescue answers with Rails' 500 page,
+    // which has no message. The tap must still say it failed (#108).
+    test("an attendance write that hits Rails' 500 page reverts the cell and says the server had a problem", async ({
+      page,
+      context,
+    }) => {
+      await setupAuthenticatedPage(page, context);
+      await page.route("**/api/v1/meals/*/residents/2*", rails500);
+
+      await page.goto("/meals/42/edit/");
+      await page.waitForLoadState("networkidle");
+
+      const bobCell = page.getByRole("cell", {
+        name: "B - Bob Johnson",
+        exact: true,
+      });
+      await expect(bobCell).toBeVisible({ timeout: 10000 });
+      await expect(bobCell).not.toHaveClass(/background-green/);
+
+      await bobCell.click();
+
+      const toast = page.locator(".toast--error");
+      await expect(toast).toBeVisible({ timeout: 5000 });
+      await expect(toast.locator(".toast__message")).toHaveText(SERVER_PROBLEM);
       await expect(bobCell).not.toHaveClass(/background-green/, {
         timeout: 3000,
       });
@@ -84,11 +139,7 @@ test.describe("Error Handling & Edge Cases", () => {
         if (route.request().method() !== "GET") return route.fallback();
         if (failuresLeft > 0) {
           failuresLeft -= 1;
-          return route.fulfill({
-            status: 500,
-            contentType: "application/json",
-            body: JSON.stringify({ message: "boom" }),
-          });
+          return rails500(route);
         }
         return route.fallback();
       });
@@ -126,11 +177,7 @@ test.describe("Error Handling & Edge Cases", () => {
         if (route.request().method() !== "GET") return route.fallback();
         cooksRequests += 1;
         if (!healthy) {
-          return route.fulfill({
-            status: 500,
-            contentType: "application/json",
-            body: JSON.stringify({ message: "boom" }),
-          });
+          return rails500(route);
         }
         return route.fallback();
       });
@@ -180,42 +227,54 @@ test.describe("Error Handling & Edge Cases", () => {
       await expect(page).toHaveURL(/\/calendar\//, { timeout: 5000 });
     });
 
-    test("close meal API error reverts status and shows alert", async ({
-      page,
-      context,
-    }) => {
-      await setupAuthenticatedPage(page, context);
+    // A refused close shows the server's sentence; a close that hits
+    // Rails' 500 page, which has no message, still says it failed (#108).
+    // Either way the refetch after the answer puts OPEN back.
+    for (const [label, answer, words] of [
+      [
+        "a refusal shows the server's message",
+        (route) =>
+          route.fulfill({
+            status: 409,
+            contentType: "application/json",
+            body: JSON.stringify({ message: MEAL_CONFLICT }),
+          }),
+        MEAL_CONFLICT,
+      ],
+      [
+        "Rails' 500 page says the server had a problem",
+        rails500,
+        SERVER_PROBLEM,
+      ],
+    ]) {
+      test(`closing the meal: ${label}, and the status goes back to OPEN`, async ({
+        page,
+        context,
+      }) => {
+        await setupAuthenticatedPage(page, context);
+        await page.route("**/api/v1/meals/*/closed*", answer);
 
-      // Override closed endpoint to return error
-      await page.route("**/api/v1/meals/*/closed*", (route) => {
-        route.fulfill({
-          status: 500,
-          contentType: "application/json",
-          body: JSON.stringify({ message: "Cannot close meal right now" }),
+        await page.goto("/meals/42/edit/");
+        await page.waitForLoadState("networkidle");
+
+        // Before: OPEN
+        await expect(page.locator("h1", { hasText: "OPEN" })).toBeVisible({
+          timeout: 10000,
+        });
+
+        // Try to close
+        await page.locator("text=Open / Close Meal").click();
+
+        const toast = page.locator(".toast--error");
+        await expect(toast).toBeVisible({ timeout: 5000 });
+        await expect(toast.locator(".toast__message")).toHaveText(words);
+
+        // Status should revert to OPEN
+        await expect(page.locator("h1", { hasText: "OPEN" })).toBeVisible({
+          timeout: 5000,
         });
       });
-
-      await page.goto("/meals/42/edit/");
-      await page.waitForLoadState("networkidle");
-
-      // Before: OPEN
-      await expect(page.locator("h1", { hasText: "OPEN" })).toBeVisible({
-        timeout: 10000,
-      });
-
-      // Try to close
-      await page.locator("text=Open / Close Meal").click();
-
-      // Should show error toast
-      await expect(page.locator(".toast--error")).toBeVisible({
-        timeout: 5000,
-      });
-
-      // Status should revert to OPEN
-      await expect(page.locator("h1", { hasText: "OPEN" })).toBeVisible({
-        timeout: 5000,
-      });
-    });
+    }
 
     test("event create API error shows alert", async ({ page, context }) => {
       await setupAuthenticatedPage(page, context);

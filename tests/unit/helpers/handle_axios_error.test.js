@@ -41,15 +41,55 @@ describe("handleAxiosError", () => {
     });
   });
 
-  it("logs a response with no message and reports an error", () => {
-    const error = { response: { data: {} } };
+  // Only the errors ApiController rescues carry a message. Any other
+  // exception gets Rails' own page (public/500.html), and a Heroku
+  // router error gets Heroku's page, so the person who tapped would see
+  // nothing unless the helper says something itself (#108).
+  describe("a response with no message", () => {
+    it.each([
+      [
+        "Rails' public 500 page",
+        500,
+        "<!doctype html><html><head><title>We're sorry, but something went wrong (500)</title></head></html>",
+      ],
+      [
+        "a Heroku router error page",
+        503,
+        "<!DOCTYPE html><html><head><title>Application Error</title></head></html>",
+      ],
+      [
+        "Rails' JSON error body",
+        500,
+        { status: 500, error: "Internal Server Error" },
+      ],
+      ["an empty body", 502, ""],
+      ["no body at all", 502, undefined],
+    ])(
+      "shows a plain error toast for %s, and logs it",
+      (_label, status, data) => {
+        const error = { response: { status, data } };
 
-    expect(handleAxiosError(error)).toBe("error");
-    expect(toastStore.toasts).toHaveLength(0);
-    expect(console.error).toHaveBeenCalledWith(
-      "Bad response from server",
-      error,
+        expect(handleAxiosError(error)).toBe("error");
+        expect(toastStore.toasts.map((t) => [t.message, t.type])).toEqual([
+          ["The server had a problem. Please try again.", "error"],
+        ]);
+        expect(console.error).toHaveBeenCalledWith(
+          "Bad response from server",
+          error,
+        );
+      },
     );
+
+    it("only logs when silent", () => {
+      const error = { response: { status: 500, data: "<html>500</html>" } };
+
+      expect(handleAxiosError(error, { silent: true })).toBe("error");
+      expect(toastStore.toasts).toHaveLength(0);
+      expect(console.error).toHaveBeenCalledWith(
+        "Bad response from server",
+        error,
+      );
+    });
   });
 
   describe("a request that got no response", () => {
