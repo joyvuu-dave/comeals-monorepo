@@ -172,8 +172,12 @@ RSpec.describe Event do
       expect(event.errors[:base]).to include('Start time must occur before end time')
     end
 
-    it 'is valid when start_date is before end_date' do
-      event = build(:event, start_date: 2.hours.ago, end_date: 1.hour.ago, allday: false)
+    # The rule refuses only an end before the start. An event that ends
+    # when it starts is allowed; the case where start is before end is
+    # checked under #end_date_or_allday.
+    it 'is valid when the event ends at the moment it starts' do
+      moment = Time.zone.local(2026, 4, 15, 16, 0)
+      event = build(:event, start_date: moment, end_date: moment, allday: false)
       expect(event).to be_valid
     end
 
@@ -190,9 +194,13 @@ RSpec.describe Event do
       expect(event.errors[:base]).to be_empty
     end
 
-    it 'skips validation when end_date is blank' do
-      event = build(:event, start_date: 1.hour.ago, end_date: nil, allday: true)
-      expect(event).to be_valid
+    # Not all day, so only the blank-end guard keeps the comparison from
+    # running on nil; the one message is the one #end_date_or_allday adds.
+    it 'skips the comparison when end_date is blank' do
+      event = build(:event, start_date: 1.hour.ago, end_date: nil, allday: false)
+
+      expect { event.valid? }.not_to raise_error
+      expect(event.errors[:base]).to eq(['Event must end or be all day'])
     end
   end
 end
