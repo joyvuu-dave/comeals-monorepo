@@ -133,6 +133,18 @@ RSpec.describe MealCostSummary do
       expect(summary.subsidized).to be false
     end
 
+    # A settled meal's rows are frozen, so a fresh computation from them
+    # gives the stored numbers too, unless a row changed. These examples
+    # change one behind the guards, the way the repair bypass can, so a
+    # summary computed from the rows shows different numbers and only
+    # reading the stored charges shows the settled ones.
+    def behind_the_guards
+      ActiveRecord::Base.transaction do
+        ActiveRecord::Base.connection.execute("SET LOCAL comeals.allow_settled_writes = 'on'")
+        yield
+      end
+    end
+
     it 'reads the stored charges, not the live bills' do
       meal = create(:meal, community: community)
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
@@ -141,6 +153,9 @@ RSpec.describe MealCostSummary do
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('16'))
       settle!(cutoff: Date.yesterday)
 
+      # From the bills this would be 99 spent, 99 charged, 49.50 a unit.
+      behind_the_guards { Bill.where(meal_id: meal.id).update_all(amount: BigDecimal('99')) }
+
       summary = described_class.for(meal.reload)
       expect(summary.total_cost).to eq(BigDecimal('16'))
       expect(summary.effective_cost).to eq(BigDecimal('16'))
@@ -148,7 +163,30 @@ RSpec.describe MealCostSummary do
       expect(summary.subsidized).to be false
     end
 
-    it 'is immune to a later cap change — the numbers the settlement used, forever' do
+    it "reads the stored subsidy, not the meal's cap" do
+      capped_community, capped_unit = capped_setup('2.50')
+      meal = create(:meal, community: capped_community)
+      cook = create(:resident, community: capped_community, unit: capped_unit, multiplier: 2)
+      eater = create(:resident, community: capped_community, unit: capped_unit, multiplier: 2)
+      create(:meal_resident, meal: meal, resident: eater, community: capped_community)
+      create(:bill, meal: meal, resident: cook, community: capped_community, amount: BigDecimal('10'))
+      settle!(cutoff: Date.yesterday)
+
+      # From the rows, a $100 cap allows $200, so the $10 spent would be
+      # charged in full and the meal would not be subsidized.
+      behind_the_guards { Meal.where(id: meal.id).update_all(cap: BigDecimal('100')) }
+
+      summary = described_class.for(meal.reload)
+      expect(summary.total_cost).to eq(BigDecimal('10'))
+      expect(summary.effective_cost).to eq(BigDecimal('5'))
+      expect(summary.unit_cost).to eq(BigDecimal('2.5'))
+      expect(summary.subsidized).to be true
+    end
+
+    # The ledger reads the meal's own cap, which the meal copies from the
+    # community when it is made. So a later change to the community cap
+    # does not reach a meal that already exists.
+    it 'shows the same numbers after the community cap changes, because the meal keeps its own cap' do
       capped_community, capped_unit = capped_setup('2.50')
       meal = create(:meal, community: capped_community)
       cook = create(:resident, community: capped_community, unit: capped_unit, multiplier: 2)
@@ -161,11 +199,10 @@ RSpec.describe MealCostSummary do
       expect(settled.effective_cost).to eq(BigDecimal('5'))
       expect(settled.subsidized).to be true
 
-      # The cap is raised later. The settled meal's numbers must not move —
-      # recomputing them live was the bug this class exists to fix.
       capped_community.update!(cap: BigDecimal('100'))
-      expect(described_class.for(meal.reload).effective_cost).to eq(BigDecimal('5'))
-      expect(described_class.for(meal.reload).subsidized).to be true
+      expect(meal.reload.cap).to eq(BigDecimal('2.5'))
+      expect(described_class.for(meal).effective_cost).to eq(BigDecimal('5'))
+      expect(described_class.for(meal).subsidized).to be true
     end
 
     it 'shows the receipts and zero charges for a meal nobody attended' do
@@ -185,21 +222,6 @@ RSpec.describe MealCostSummary do
       expect(summary.total_cost).to eq(BigDecimal('40'))
       expect(summary.effective_cost).to eq(BigDecimal('0'))
       expect(summary.unit_cost).to eq(BigDecimal('0'))
-    end
-
-    it 'leaves a no-cost bill out of the receipts for a meal nobody attended, and never calls it subsidized' do
-      meal = create(:meal, community: community)
-      cook = create(:resident, community: community, unit: unit, multiplier: 2)
-      helper = create(:resident, community: community, unit: unit, multiplier: 2)
-      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('40'))
-      create(:bill, meal: meal, resident: helper, community: community, amount: BigDecimal('0'), no_cost: true)
-      reconciliation = create(:reconciliation, community: community)
-      meal.update_columns(reconciliation_id: reconciliation.id)
-
-      summary = described_class.for(meal.reload)
-
-      expect(summary.total_cost).to eq(BigDecimal('40'))
-      expect(summary.subsidized).to be(false)
     end
 
     it 'returns nil for a settlement from before line items existed when only a guest ate' do

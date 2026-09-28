@@ -5,12 +5,15 @@
 # feeds the ledger.
 #
 # A settled meal reads its stored meal_charges — the numbers the
-# settlement actually used. Recomputing them live would apply today's
-# community cap to a meal settled under an older one, and the screen
-# would quietly disagree with the ledger. A meal settled before
-# 2026-08-02 has no charges on purpose (the backfill decision in
-# docs/money-path-observability.md); `for` returns nil there, and the
-# screen shows nothing rather than a number nobody vouched for.
+# settlement actually used. The meal's rows are frozen (its cap too: a
+# meal copies the community cap when it is made), but the ledger's rules
+# are not. ADR 0008 changed how a share is split, so a meal settled
+# before that change can compute to different lines today, and a screen
+# that computed them would quietly disagree with the ledger. A meal
+# settled before 2026-08-02 has no charges on purpose (the backfill
+# decision in docs/money-path-observability.md); `for` returns nil
+# there, and the screen shows nothing rather than a number nobody
+# vouched for.
 #
 # An open meal computes through MealLedger, the one place the money
 # arithmetic lives. Callers that show many meals should preload

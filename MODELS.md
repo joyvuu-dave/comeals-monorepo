@@ -945,8 +945,9 @@ largest-remainder method, so the rounded balances sum to exactly zero.
 - `Reconciliation#settlement_balances` — the one place that rounds to cents.
 - `MealCostSummary` (`app/services/meal_cost_summary.rb`) — what a meal cost,
   for a screen. An open meal is computed through `MealLedger`. A settled
-  meal reads its stored `meal_charges`, so today's cap is never applied to a
-  meal settled under an older one. A settled meal with attendance but no
+  meal reads its stored `meal_charges`, so the screen shows what the
+  settlement charged even after the ledger's rules change (ADR 0008 changed
+  how a share is split). A settled meal with attendance but no
   lines (settled before 2026-08-02) returns nil and the screen shows nothing.
 - `spec/support/oracle/plain_ledger.rb` — the test oracle, not production:
   a second copy of the arithmetic written from this file and CLAUDE.md by
