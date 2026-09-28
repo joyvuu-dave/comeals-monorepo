@@ -661,8 +661,9 @@ test.describe("Read-only token", () => {
     // a signed-out visitor to the login page.
     await page.goto(`/admin_users?token=${READ_ONLY_TOKEN}`);
     await expect(page).toHaveURL(/\/login$/);
+    // Devise's words, without its "or sign up": the admin has no sign-up.
     await expect(alert(page)).toHaveText(
-      "You need to sign in or sign up before continuing.",
+      "You need to sign in before continuing.",
     );
 
     // Nor is any write.
@@ -673,5 +674,8 @@ test.describe("Read-only token", () => {
   test("a wrong token is just a signed-out visitor", async ({ page }) => {
     await page.goto("/bills?token=wrong");
     await expect(page).toHaveURL(/\/login$/);
+    await expect(alert(page)).toHaveText(
+      "You need to sign in before continuing.",
+    );
   });
 });
