@@ -104,7 +104,10 @@ RSpec.describe 'Admin password reset button' do
       expect { post "/residents/#{resident.id}/send_password_reset", params: { token: token } }
         .not_to(change { ActionMailer::Base.deliveries.count })
 
-      expect(response).to have_http_status(:redirect)
+      # The dashboard, with the refusal message: a token that did not sign
+      # in at all also redirects, to /login.
+      expect(response).to redirect_to('http://admin.example.com/')
+      expect(flash[:error]).to eq('You are not authorized to perform this action.')
       expect(resident.reload.reset_password_token).to be_nil
     end
   end
