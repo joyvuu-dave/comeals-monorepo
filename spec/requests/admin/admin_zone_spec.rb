@@ -9,6 +9,8 @@ require 'rails_helper'
 # With the community in New York, "18:00" saved as 18:00 Pacific — 21:00
 # for the people the reservation is for (time hunt, 2026-08-26).
 RSpec.describe 'Admin forms and the community zone' do
+  include ActiveSupport::Testing::TimeHelpers
+
   let(:community) { create(:community, timezone: 'America/New_York') }
   let(:unit) { create(:unit, community: community) }
   let(:admin_user) { create(:admin_user, community: community, superuser: true) }
@@ -40,14 +42,20 @@ RSpec.describe 'Admin forms and the community zone' do
     expect(event.end_date).to eq(new_york.local(2026, 3, 8, 12, 0))
   end
 
+  # The page also prints created_at and updated_at, so the check reads the
+  # two date rows, not the whole page. The clock is fixed so that those
+  # two rows cannot print 15:00 or 18:00 by chance either.
   it 'shows a stored time in the community zone' do
-    reservation = create(:common_house_reservation, community: community, resident: resident,
-                                                    start_date: new_york.local(2026, 4, 12, 18),
-                                                    end_date: new_york.local(2026, 4, 12, 21))
+    reservation = travel_to(Time.utc(2026, 4, 1, 12)) do
+      create(:common_house_reservation, community: community, resident: resident,
+                                        start_date: new_york.local(2026, 4, 12, 18),
+                                        end_date: new_york.local(2026, 4, 12, 21))
+    end
 
     get "/common_house_reservations/#{reservation.id}"
 
-    expect(response.body).to include('18:00')
-    expect(response.body).not_to include('15:00')
+    row = ->(name) { response.parsed_body.at_css("tr.row-#{name} td").text.strip }
+    expect(row.call('start_date')).to eq('April 12, 2026 18:00')
+    expect(row.call('end_date')).to eq('April 12, 2026 21:00')
   end
 end

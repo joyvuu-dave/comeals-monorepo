@@ -53,7 +53,9 @@ RSpec.describe 'Admin community form: times and zone' do
 
     expect(community.reload.dinner_start_times.first).to eq('17:30')
     expect(ical).to include('DTSTART;TZID=America/Los_Angeles:20260405T173000')
-    expect(ical).not_to include('T180000')
+    # The meal's date is in the check: DTSTAMP holds the real clock time,
+    # so a bare 'T180000' would fail a run during the second 18:00:00 UTC.
+    expect(ical).not_to include('20260405T180000')
   end
 
   it 'a new time zone keeps the wall-clock time and moves the zone in the iCal feed' do
