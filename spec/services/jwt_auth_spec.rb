@@ -38,11 +38,19 @@ RSpec.describe JwtAuth do
         expect(described_class.authenticate('not.a.jwt')).to be_nil
       end
 
+      # The claims are good: signed with HS256 and our secret they are
+      # accepted. So only the algorithm refuses the other two. iat keeps its
+      # fraction of a second, as encode does. A whole-second iat falls
+      # before the keys_valid_since the resident's create just set, and
+      # that alone refused the token here, with or without an algorithm
+      # check (2026-09-27, #119).
       it 'rejects a token signed with another algorithm, or with none at all' do
-        payload = { 'resident_id' => resident.id, 'iat' => Time.current.to_i, 'iss' => described_class::ISSUER }
-        unsigned = JWT.encode(payload, nil, 'none')
-        other_algorithm = JWT.encode(payload, described_class.send(:secret), 'HS512')
+        claims = { 'resident_id' => resident.id, 'iat' => Time.current.to_f, 'iss' => described_class::ISSUER }
+        ours = JWT.encode(claims, described_class.send(:secret), 'HS256')
+        unsigned = JWT.encode(claims, nil, 'none')
+        other_algorithm = JWT.encode(claims, described_class.send(:secret), 'HS512')
 
+        expect(described_class.authenticate(ours)).to eq(resident)
         expect(described_class.authenticate(unsigned)).to be_nil
         expect(described_class.authenticate(other_algorithm)).to be_nil
       end
@@ -54,10 +62,14 @@ RSpec.describe JwtAuth do
         expect(described_class.authenticate(tampered)).to be_nil
       end
 
+      # The same claims signed with our secret are accepted, so only the
+      # signature refuses the foreign token.
       it 'rejects a token signed with the wrong secret' do
-        foreign_token = JWT.encode({ resident_id: resident.id, iat: Time.current.to_i, iss: 'comeals' },
-                                   'different-secret', 'HS256')
+        claims = { resident_id: resident.id, iat: Time.current.to_f, iss: 'comeals' }
+        ours = JWT.encode(claims, described_class.send(:secret), 'HS256')
+        foreign_token = JWT.encode(claims, 'different-secret', 'HS256')
 
+        expect(described_class.authenticate(ours)).to eq(resident)
         expect(described_class.authenticate(foreign_token)).to be_nil
       end
 
@@ -167,9 +179,11 @@ RSpec.describe JwtAuth do
 
     describe 'payload hygiene' do
       it 'rejects a token missing the iat claim entirely' do
-        # `claims['iat'].to_f` would become 0.0 (1970) — falls below any
-        # keys_valid_since. Still, make this a first-class rejection path
-        # rather than relying on the 1970 accident.
+        # Decode does not require iat, so the token gets past the signature
+        # check. Then a missing iat reads as nil.to_f, which is 0.0, a time
+        # in 1970. That is before every keys_valid_since (the column is NOT
+        # NULL and defaults to the time the row was made), so the
+        # keys_valid_since check is what refuses it.
         token = JWT.encode(
           { resident_id: resident.id, iss: 'comeals' },
           described_class.send(:secret), 'HS256'
