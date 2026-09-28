@@ -1,5 +1,5 @@
 const { test, expect } = require("../helpers/test");
-const { setupAuthenticatedPage } = require("../helpers/setup");
+const { FROZEN_NOW, setupAuthenticatedPage } = require("../helpers/setup");
 
 // The calendar month sweep: render every month of 2024-2028 and check
 // the grid's structure against plain arithmetic. Five years covers
@@ -69,7 +69,7 @@ test("every month of 2024-2028 renders the correct grid", async ({
   test.setTimeout(240000);
 
   await setupAuthenticatedPage(page, context);
-  await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+  await page.clock.setFixedTime(FROZEN_NOW);
   await page.goto("/calendar/all/2024-01-15/");
   await expect(page.locator(".rbc-calendar")).toBeVisible({ timeout: 10000 });
 

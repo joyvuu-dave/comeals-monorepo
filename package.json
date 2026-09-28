@@ -59,7 +59,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "npx playwright test",
-    "test:e2e:update": "npx playwright test --update-snapshots",
+    "test:e2e:update": "npx playwright test --update-snapshots=all",
     "test:integration": "bin/test-integration",
     "bench:modals": "PLAYWRIGHT_INCLUDE_ALL=1 npx playwright test tests/e2e/perf-modals.spec.js",
     "pwa:screenshots": "PLAYWRIGHT_INCLUDE_ALL=1 npx playwright test tests/e2e/pwa-screenshots.spec.js",

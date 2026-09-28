@@ -5,12 +5,18 @@ const {
   combinePatterns,
 } = require("../helpers/test");
 const {
+  FROZEN_NOW,
+  NOT_FOUND_MESSAGE,
+  NOT_FOUND_LOG,
+  rails500,
   setupAuthenticatedPage,
   stubPusher,
   disableIdleTimer,
   mockApi,
 } = require("../helpers/setup");
 const mealFixture = require("../fixtures/meal.json");
+const calendarFixture = require("../fixtures/calendar.json");
+const rotationFixture = require("../fixtures/rotation.json");
 
 /**
  * Visual regression tests.
@@ -20,16 +26,23 @@ const mealFixture = require("../fixtures/meal.json");
  * On subsequent runs, new screenshots are diffed against the golden.
  *
  * After a dependency upgrade, if a visual test fails:
- *   - If the change is EXPECTED (library updated its styling): update the golden
- *     with `npx playwright test --update-snapshots`
+ *   - If the change is EXPECTED (library updated its styling): refresh
+ *     the goldens with `bin/update-snapshots` (every golden) or
+ *     `bin/update-snapshots <name> ...` (only those), then look at each
+ *     changed PNG before committing it.
  *   - If the change is UNEXPECTED: you caught a regression!
  *
  * Baselines exist per platform: -darwin for local runs, -linux for CI.
- * `npm run test:e2e:update` refreshes the darwin set; run
- * `bin/update-linux-snapshots` (Docker) to refresh the linux set in the
- * same sitting — never by letting CI fail and downloading its artifact.
+ * bin/update-snapshots deletes the goldens first and records both sets:
+ * darwin here, linux in Docker (bin/update-linux-snapshots). A plain
+ * `--update-snapshots` rewrites only a golden whose comparison fails, so
+ * a golden that is stale but still inside the 0.1% budget keeps showing
+ * the old screen (#62). `npm run test:e2e:update` passes
+ * `--update-snapshots=all` for that reason. Never refresh the linux set
+ * by letting CI fail and downloading its artifact.
  *
- * Time is frozen to 2026-01-15 12:00 for deterministic screenshots.
+ * Time is frozen to noon on 2026-01-15 in Los Angeles (FROZEN_NOW in
+ * tests/helpers/setup.js) for deterministic screenshots.
  */
 test.describe("Visual Baselines", () => {
   test("login page", async ({ page }) => {
@@ -38,7 +51,7 @@ test.describe("Visual Baselines", () => {
     await mockApi(page);
 
     // Freeze time for determinism
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
 
     await page.goto("/");
     await page.waitForLoadState("networkidle");
@@ -57,7 +70,7 @@ test.describe("Visual Baselines", () => {
     await setupAuthenticatedPage(page, context);
 
     // Freeze time for determinism
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
 
     await page.goto("/calendar/all/2026-01-15/");
     await page.waitForLoadState("networkidle");
@@ -72,28 +85,204 @@ test.describe("Visual Baselines", () => {
   });
 
   // Months that can only render correctly if the date math is right:
-  // the two daylight-saving transitions and a leap February. These need
+  // the two daylight-saving switches and a leap February. These need
   // the community's timezone because a UTC viewer has no DST — without
   // it these goldens could not show a DST bug (the November escape).
   // The whole suite is pinned to that timezone in playwright.config.js.
+  //
+  // Each month gets its own calendar answer with chips on the hard day:
+  // a meal, its cook, an evening event, a birthday, and a rotation that
+  // starts that day and runs two more. The January fixture has no chip
+  // in these months, so without them the goldens showed empty grids and
+  // could not catch a chip drawn on the wrong day.
   test.describe("calendar edge months", () => {
-    for (const [name, date] of [
-      ["calendar-november-dst", "2026-11-15"],
-      ["calendar-march-dst", "2026-03-15"],
-      ["calendar-february-leap", "2028-02-15"],
-    ]) {
-      test(name, async ({ page, context }) => {
-        await setupAuthenticatedPage(page, context);
-        await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    // The calendar answer for the month of the edge's day, shaped like
+    // the fixture's, with every chip on that day and a rotation to
+    // rotationEnd.
+    function edgeMonthCalendar(edge) {
+      const { day, dinner, evening } = edge;
+      const [year, month] = day.split("-").map(Number);
+      const [meal] = calendarFixture.meals;
+      const [bill] = calendarFixture.bills;
+      const [rotation] = calendarFixture.rotations;
+      const [birthday] = calendarFixture.birthdays;
+      const [event] = calendarFixture.events;
+      return {
+        ...calendarFixture,
+        month,
+        year,
+        meals: [
+          {
+            ...meal,
+            id: "meals/501",
+            title: "Dinner\n4 signed up",
+            start: dinner,
+            end: dinner,
+            url: "/meals/501/edit",
+          },
+        ],
+        bills: [
+          {
+            ...bill,
+            id: "bills/601",
+            title: "Cook\nBob - Unit B",
+            start: dinner,
+            end: dinner,
+            url: "/meals/501/edit",
+            description: "Cook:  Bob - Unit B",
+          },
+        ],
+        rotations: [
+          {
+            ...rotation,
+            id: "rotations/701",
+            title: "Rotation 9",
+            start: dinner,
+            end: edge.rotationEnd,
+            url: "rotations/show/701",
+          },
+        ],
+        birthdays: [
+          {
+            ...birthday,
+            id: "residents/2",
+            title: "Bob's B-day!",
+            description: "Bob's Birthday!",
+            start: day,
+            end: day,
+          },
+        ],
+        common_house_reservations: [],
+        guest_room_reservations: [],
+        events: [
+          {
+            ...event,
+            id: "events/801",
+            title: " 7:00pm -  9:00pm\nEvent\nPotluck",
+            description: "Event\nPotluck",
+            start: evening[0],
+            end: evening[1],
+            url: "events/edit/801",
+          },
+        ],
+      };
+    }
 
-        await page.goto(`/calendar/all/${date}/`);
+    // The header cell of `day` in the grid. An off-range day (from the
+    // next month) has its own class.
+    function dayCell(page, day, { offRange = false } = {}) {
+      const cells = offRange
+        ? ".rbc-date-cell.rbc-off-range"
+        : ".rbc-date-cell:not(.rbc-off-range)";
+      return page.locator(cells, {
+        hasText: new RegExp(`^${day.slice(8)}$`),
+      });
+    }
+
+    // The chip with `text` starts in the column of `first` and ends in
+    // the column of `last`, in their week's row. Half a pixel of slack
+    // for the chip's own margin; a chip a day off is 150 pixels off.
+    async function expectChipOn(page, text, first, last = first) {
+      const chip = page.locator(".rbc-event", { hasText: text });
+      await expect(chip).toHaveCount(1);
+      const chipBox = await chip.boundingBox();
+      const firstBox = await first.boundingBox();
+      const lastBox = await last.boundingBox();
+      const week = await first
+        .locator("xpath=ancestor::div[contains(@class, 'rbc-month-row')]")
+        .boundingBox();
+      expect(chipBox.x).toBeGreaterThanOrEqual(firstBox.x - 0.5);
+      expect(chipBox.x).toBeLessThan(firstBox.x + firstBox.width);
+      expect(chipBox.x + chipBox.width).toBeGreaterThan(lastBox.x);
+      expect(chipBox.x + chipBox.width).toBeLessThanOrEqual(
+        lastBox.x + lastBox.width + 0.5,
+      );
+      expect(chipBox.y).toBeGreaterThan(week.y);
+      expect(chipBox.y + chipBox.height).toBeLessThan(week.y + week.height);
+    }
+
+    // Times are written out with the offset in force at that hour, the
+    // way the server writes them, not computed here: dayjs.tz in Node
+    // gets the hour after midnight on a switch day wrong on a machine
+    // east of Los Angeles.
+    for (const edge of [
+      // Clocks go back at 2am: a 25-hour day, the first Sunday of
+      // November, which is also the first cell of the grid.
+      {
+        name: "calendar-november-dst",
+        day: "2026-11-01",
+        dinner: "2026-11-01T00:01:00.000-07:00",
+        evening: [
+          "2026-11-01T19:00:00.000-08:00",
+          "2026-11-01T21:00:00.000-08:00",
+        ],
+        rotationEndDay: "2026-11-03",
+        rotationEnd: "2026-11-03T23:59:00.000-08:00",
+      },
+      // Clocks go forward at 2am: a 23-hour day.
+      {
+        name: "calendar-march-dst",
+        day: "2026-03-08",
+        dinner: "2026-03-08T00:01:00.000-08:00",
+        evening: [
+          "2026-03-08T19:00:00.000-07:00",
+          "2026-03-08T21:00:00.000-07:00",
+        ],
+        rotationEndDay: "2026-03-10",
+        rotationEnd: "2026-03-10T23:59:00.000-07:00",
+      },
+      // February 29, with the rotation running into March, which shows
+      // as the grid's last week.
+      {
+        name: "calendar-february-leap",
+        day: "2028-02-29",
+        dinner: "2028-02-29T00:01:00.000-08:00",
+        evening: [
+          "2028-02-29T19:00:00.000-08:00",
+          "2028-02-29T21:00:00.000-08:00",
+        ],
+        rotationEndDay: "2028-03-02",
+        rotationEnd: "2028-03-02T23:59:00.000-08:00",
+        rotationEndsNextMonth: true,
+      },
+    ]) {
+      test(edge.name, async ({ page, context }) => {
+        await setupAuthenticatedPage(page, context, {
+          calendarData: edgeMonthCalendar(edge),
+        });
+        await page.clock.setFixedTime(FROZEN_NOW);
+
+        await page.goto(`/calendar/all/${edge.day}/`);
         await page.waitForLoadState("networkidle");
         await expect(page.locator(".rbc-calendar")).toBeVisible({
           timeout: 10000,
         });
+        await expect(
+          page.locator(".rbc-event", { hasText: "Potluck" }),
+        ).toBeVisible({ timeout: 10000 });
+
+        // Guard the story before diffing pixels: every chip is on the
+        // hard day, and the rotation covers it and the two days after.
+        const hardDay = dayCell(page, edge.day);
+        for (const text of [
+          "4 signed up",
+          "Bob - Unit B",
+          "Potluck",
+          "Bob's B-day!",
+        ]) {
+          await expectChipOn(page, text, hardDay);
+        }
+        await expectChipOn(
+          page,
+          "Rotation 9",
+          hardDay,
+          dayCell(page, edge.rotationEndDay, {
+            offRange: Boolean(edge.rotationEndsNextMonth),
+          }),
+        );
         await page.waitForTimeout(1000);
 
-        await expect(page).toHaveScreenshot(`${name}.png`, {
+        await expect(page).toHaveScreenshot(`${edge.name}.png`, {
           fullPage: true,
         });
       });
@@ -104,7 +293,7 @@ test.describe("Visual Baselines", () => {
     await setupAuthenticatedPage(page, context);
 
     // Freeze time for determinism
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
 
     await page.goto("/meals/42/edit/");
     await page.waitForLoadState("networkidle");
@@ -124,7 +313,7 @@ test.describe("Visual Baselines", () => {
     await setupAuthenticatedPage(page, context);
 
     // Freeze time for determinism
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
 
     await page.goto("/calendar/all/2026-01-15/");
     await page.waitForLoadState("networkidle");
@@ -149,7 +338,7 @@ test.describe("Visual Baselines", () => {
     await setupAuthenticatedPage(page, context);
 
     // Freeze time for determinism
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
 
     await page.goto("/calendar/all/2026-01-15/");
     await page.waitForLoadState("networkidle");
@@ -183,7 +372,7 @@ test.describe("Visual Baselines", () => {
 
   test("event edit form", async ({ page, context }) => {
     await setupAuthenticatedPage(page, context);
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
 
     // The modal opens straight from the URL; mockApi serves event 70.
     await page.goto("/calendar/all/2026-01-15/events/edit/70/");
@@ -202,7 +391,7 @@ test.describe("Visual Baselines", () => {
 
   test("delete confirmation modal", async ({ page, context }) => {
     await setupAuthenticatedPage(page, context);
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
 
     await page.goto("/calendar/all/2026-01-15/events/edit/70/");
     await page.waitForLoadState("networkidle");
@@ -228,7 +417,7 @@ test.describe("Visual Baselines", () => {
 
   test("common house reservation form", async ({ page, context }) => {
     await setupAuthenticatedPage(page, context);
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
 
     await page.goto("/calendar/all/2026-01-15/common-house-reservations/new/");
     await page.waitForLoadState("networkidle");
@@ -247,7 +436,7 @@ test.describe("Visual Baselines", () => {
 
   test("common house reservation edit form", async ({ page, context }) => {
     await setupAuthenticatedPage(page, context);
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
 
     // mockApi serves reservation 50 ("Book Club").
     await page.goto(
@@ -269,7 +458,7 @@ test.describe("Visual Baselines", () => {
 
   test("guest room reservation form", async ({ page, context }) => {
     await setupAuthenticatedPage(page, context);
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
 
     await page.goto("/calendar/all/2026-01-15/guest-room-reservations/new/");
     await page.waitForLoadState("networkidle");
@@ -288,7 +477,7 @@ test.describe("Visual Baselines", () => {
 
   test("guest room reservation edit form", async ({ page, context }) => {
     await setupAuthenticatedPage(page, context);
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
 
     // mockApi serves reservation 60 with resident_id 1 (Jane).
     await page.goto(
@@ -310,7 +499,7 @@ test.describe("Visual Baselines", () => {
 
   test("rotation modal", async ({ page, context }) => {
     await setupAuthenticatedPage(page, context);
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
 
     await page.goto("/calendar/all/2026-01-15/rotations/show/10/");
     await page.waitForLoadState("networkidle");
@@ -328,9 +517,68 @@ test.describe("Visual Baselines", () => {
     });
   });
 
+  // The fixture's residents have both signed up to cook. A resident who
+  // has not is drawn bold and italic, not struck through.
+  test("rotation modal with a resident not signed up yet", async ({
+    page,
+    context,
+  }) => {
+    await setupAuthenticatedPage(page, context);
+    await page.clock.setFixedTime(FROZEN_NOW);
+    await page.route("**/api/v1/rotations/*", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ...rotationFixture,
+          residents: rotationFixture.residents.map((resident) =>
+            resident.id === 2 ? { ...resident, signed_up: false } : resident,
+          ),
+        }),
+      }),
+    );
+
+    await page.goto("/calendar/all/2026-01-15/rotations/show/10/");
+    const modal = page.locator(".ReactModal__Content--after-open");
+    await expect(modal.locator("text=Jan 15–17, 2026")).toBeVisible({
+      timeout: 10000,
+    });
+    await expect(
+      modal.locator("li", { hasText: "B - Bob Johnson" }),
+    ).toHaveClass("text-bold text-italic");
+    await expect(
+      modal.locator("li", { hasText: "A - Jane Smith" }),
+    ).toHaveClass("text-muted");
+    await page.waitForTimeout(500);
+
+    await expect(page).toHaveScreenshot("rotation-modal-not-signed-up.png", {
+      fullPage: true,
+    });
+  });
+
+  // The modal before its rotation arrives: the request is held open.
+  test("rotation modal loading", async ({ page, context }) => {
+    await setupAuthenticatedPage(page, context);
+    await page.clock.setFixedTime(FROZEN_NOW);
+    await holdRoute(page, "**/api/v1/rotations/*", "GET");
+
+    const request = page.waitForRequest("**/api/v1/rotations/10");
+    await page.goto("/calendar/all/2026-01-15/rotations/show/10/");
+    await request;
+    const modal = page.locator(".ReactModal__Content--after-open");
+    await expect(
+      modal.getByRole("heading", { name: "Loading..." }),
+    ).toBeVisible({ timeout: 10000 });
+    await page.waitForTimeout(500);
+
+    await expect(page).toHaveScreenshot("rotation-modal-loading.png", {
+      fullPage: true,
+    });
+  });
+
   test("meal history modal", async ({ page, context }) => {
     await setupAuthenticatedPage(page, context);
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
 
     await page.goto("/meals/42/edit/");
     await page.waitForLoadState("networkidle");
@@ -351,11 +599,37 @@ test.describe("Visual Baselines", () => {
     });
   });
 
+  // The history modal before its list arrives: the request is held open.
+  test("meal history modal loading", async ({ page, context }) => {
+    await setupAuthenticatedPage(page, context);
+    await page.clock.setFixedTime(FROZEN_NOW);
+    await holdRoute(page, "**/api/v1/meals/*/history*", "GET");
+
+    await page.goto("/meals/42/edit/");
+    await page.waitForLoadState("networkidle");
+    await expect(
+      page.getByRole("cell", { name: "A - Jane Smith", exact: true }),
+    ).toBeVisible({ timeout: 10000 });
+
+    const request = page.waitForRequest("**/api/v1/meals/42/history");
+    await page.locator("text=history").first().click();
+    await request;
+    const modal = page.locator(".ReactModal__Content--after-open");
+    await expect(
+      modal.getByRole("heading", { name: "Loading..." }),
+    ).toBeVisible({ timeout: 5000 });
+    await page.waitForTimeout(500);
+
+    await expect(page).toHaveScreenshot("meal-history-loading.png", {
+      fullPage: true,
+    });
+  });
+
   test("password reset page", async ({ page }) => {
     await stubPusher(page);
     await disableIdleTimer(page);
     await mockApi(page);
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
 
     await page.goto("/reset-password/test-reset-token/");
     await page.waitForLoadState("networkidle");
@@ -396,7 +670,7 @@ test.describe("Visual Baselines", () => {
         ),
       },
     });
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
 
     await page.goto("/meals/42/edit/");
     await page.waitForLoadState("networkidle");
@@ -449,7 +723,7 @@ test.describe("Visual Baselines", () => {
         ],
       },
     });
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
 
     await page.goto("/meals/42/edit/");
     await page.waitForLoadState("networkidle");
@@ -470,7 +744,7 @@ test.describe("Visual Baselines", () => {
 
   test("guest dropdown open", async ({ page, context }) => {
     await setupAuthenticatedPage(page, context);
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
 
     await page.goto("/meals/42/edit/");
     await page.waitForLoadState("networkidle");
@@ -497,7 +771,7 @@ test.describe("Visual Baselines", () => {
     await stubPusher(page);
     await disableIdleTimer(page);
     await mockApi(page);
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
 
     await page.goto("/");
     await page.waitForLoadState("networkidle");
@@ -524,7 +798,7 @@ test.describe("Visual Baselines", () => {
 
     test("session expired banner", async ({ page, context }) => {
       await setupAuthenticatedPage(page, context);
-      await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+      await page.clock.setFixedTime(FROZEN_NOW);
 
       // A 401 from the calendar fetch raises the signed-out banner.
       await page.route("**/api/v1/communities/*/calendar/*", (route) => {
@@ -569,7 +843,7 @@ test.describe("Visual Baselines", () => {
       });
     });
 
-    await page.clock.install({ time: new Date("2026-01-15T12:00:00") });
+    await page.clock.install({ time: FROZEN_NOW });
     await page.goto("/");
     await page.waitForLoadState("networkidle");
     await expect(page.locator('input[aria-label="email"]')).toBeVisible({
@@ -603,7 +877,7 @@ test.describe("Visual Baselines", () => {
   // Offline: the browser's own event flips the header's ONLINE word.
   test("calendar offline", async ({ page, context }) => {
     await setupAuthenticatedPage(page, context);
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
 
     await page.goto("/calendar/all/2026-01-15/");
     await page.waitForLoadState("networkidle");
@@ -621,7 +895,7 @@ test.describe("Visual Baselines", () => {
 
   test("meal page offline", async ({ page, context }) => {
     await setupAuthenticatedPage(page, context);
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
 
     await page.goto("/meals/42/edit/");
     await page.waitForLoadState("networkidle");
@@ -640,7 +914,7 @@ test.describe("Visual Baselines", () => {
     await stubPusher(page);
     await disableIdleTimer(page);
     await mockApi(page);
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
 
     await page.goto("/");
     await page.waitForLoadState("networkidle");
@@ -660,7 +934,7 @@ test.describe("Visual Baselines", () => {
   // The picker over an edit form: the reservation's day is marked.
   test("day picker with a chosen day", async ({ page, context }) => {
     await setupAuthenticatedPage(page, context);
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
 
     await page.goto("/calendar/all/2026-01-15/events/edit/70/");
     await page.waitForLoadState("networkidle");
@@ -683,7 +957,7 @@ test.describe("Visual Baselines", () => {
   // until the server answers.
   test("event form submitting", async ({ page, context }) => {
     await setupAuthenticatedPage(page, context);
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
     await holdRoute(page, "**/api/v1/events", "POST");
 
     await page.goto("/calendar/all/2026-01-15/events/new/");
@@ -703,7 +977,7 @@ test.describe("Visual Baselines", () => {
 
   test("common house form submitting", async ({ page, context }) => {
     await setupAuthenticatedPage(page, context);
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
     await holdRoute(page, "**/api/v1/common-house-reservations", "POST");
 
     await page.goto("/calendar/all/2026-01-15/common-house-reservations/new/");
@@ -725,7 +999,7 @@ test.describe("Visual Baselines", () => {
 
   test("guest room form submitting", async ({ page, context }) => {
     await setupAuthenticatedPage(page, context);
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
     await holdRoute(page, "**/api/v1/guest-room-reservations", "POST");
 
     await page.goto("/calendar/all/2026-01-15/guest-room-reservations/new/");
@@ -747,7 +1021,7 @@ test.describe("Visual Baselines", () => {
 
   test("event edit updating", async ({ page, context }) => {
     await setupAuthenticatedPage(page, context);
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
     await holdRoute(page, "**/api/v1/events/**", "PATCH");
 
     await page.goto("/calendar/all/2026-01-15/events/edit/70/");
@@ -770,7 +1044,7 @@ test.describe("Visual Baselines", () => {
 
   test("event edit deleting", async ({ page, context }) => {
     await setupAuthenticatedPage(page, context);
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
     await holdRoute(page, "**/api/v1/events/**", "DELETE");
 
     await page.goto("/calendar/all/2026-01-15/events/edit/70/");
@@ -813,7 +1087,7 @@ test.describe("Visual Baselines", () => {
         })),
       },
     });
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
 
     await page.goto("/meals/42/edit/");
     await page.waitForLoadState("networkidle");
@@ -833,8 +1107,9 @@ test.describe("Visual Baselines", () => {
     });
   });
 
-  // A closed meal with no seat left: the switches of someone not signed
-  // up are locked, and a cook who has not entered a cost shows "pending".
+  // A closed meal with no seat left: the name and switches of someone not
+  // signed up are locked, and a cook who has not entered a cost shows
+  // "pending".
   test("closed meal with no seats left", async ({ page, context }) => {
     await setupAuthenticatedPage(page, context, {
       mealData: {
@@ -849,7 +1124,7 @@ test.describe("Visual Baselines", () => {
         ],
       },
     });
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
 
     await page.goto("/meals/42/edit/");
     await page.waitForLoadState("networkidle");
@@ -859,6 +1134,14 @@ test.describe("Visual Baselines", () => {
     await expect(
       page.getByLabel("Toggle Late for B - Bob Johnson"),
     ).toBeDisabled();
+    // Bob is not signed up and there is no seat for him, so his name is
+    // locked too: no pointer, and the not-allowed cursor.
+    const bobCell = page.getByRole("cell", {
+      name: "B - Bob Johnson",
+      exact: true,
+    });
+    await expect(bobCell).toHaveAttribute("style", /cursor: not-allowed/);
+    await expect(bobCell).toHaveAttribute("style", /pointer-events: none/);
     await expect(page.getByPlaceholder("pending")).toBeVisible();
     await page.waitForTimeout(500);
 
@@ -880,7 +1163,7 @@ test.describe("Visual Baselines", () => {
         ],
       },
     });
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
 
     await page.goto("/meals/42/edit/");
     await page.waitForLoadState("networkidle");
@@ -902,7 +1185,7 @@ test.describe("Visual Baselines", () => {
   // Turning "no cost" on over a typed cost asks first.
   test("no-cost confirm bar", async ({ page, context }) => {
     await setupAuthenticatedPage(page, context);
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
 
     await page.goto("/meals/42/edit/");
     await page.waitForLoadState("networkidle");
@@ -928,7 +1211,7 @@ test.describe("Visual Baselines", () => {
     await stubPusher(page);
     await disableIdleTimer(page);
     await mockApi(page);
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
     await holdRoute(page, "**/api/v1/residents/token", "POST");
 
     await page.goto("/");
@@ -948,7 +1231,7 @@ test.describe("Visual Baselines", () => {
     await stubPusher(page);
     await disableIdleTimer(page);
     await mockApi(page);
-    await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+    await page.clock.setFixedTime(FROZEN_NOW);
     await holdRoute(page, "**/api/v1/residents/password-reset/*", "POST");
 
     await page.goto("/reset-password/test-reset-token/");
@@ -966,27 +1249,25 @@ test.describe("Visual Baselines", () => {
     });
   });
 
-  // The looks a failing server produces. The browser logs each failed
-  // request, and the app logs the server's message.
+  // The looks a failing server produces, with the answers the server
+  // really gives: Rails' own 500 page for an error the API does not
+  // rescue, and ApiController's sentence for a record that is not there.
+  // The browser logs each failed request, and the app logs what it got.
   test.describe("with a failing backend", () => {
     test.use({
       allowedConsoleErrors: combinePatterns(
         httpFailurePattern,
-        /^(boom|not found)$/,
+        /^Bad response from server/,
+        NOT_FOUND_LOG,
+        /^Could not use the meal from the server:/,
         /^Error: no response received from server\.$/,
       ),
     });
 
     test("meal load failing", async ({ page, context }) => {
       await setupAuthenticatedPage(page, context);
-      await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
-      await page.route("**/api/v1/meals/42/cooks*", (route) =>
-        route.fulfill({
-          status: 500,
-          contentType: "application/json",
-          body: JSON.stringify({ message: "boom" }),
-        }),
-      );
+      await page.clock.setFixedTime(FROZEN_NOW);
+      await page.route("**/api/v1/meals/42/cooks*", rails500);
 
       await page.goto("/meals/42/edit/");
       await expect(page.getByText("Trouble loading this meal.")).toBeVisible({
@@ -1001,12 +1282,12 @@ test.describe("Visual Baselines", () => {
 
     test("meal not found", async ({ page, context }) => {
       await setupAuthenticatedPage(page, context);
-      await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
+      await page.clock.setFixedTime(FROZEN_NOW);
       await page.route("**/api/v1/meals/999/cooks*", (route) =>
         route.fulfill({
           status: 404,
           contentType: "application/json",
-          body: JSON.stringify({ message: "not found" }),
+          body: JSON.stringify({ message: NOT_FOUND_MESSAGE }),
         }),
       );
 
@@ -1021,16 +1302,40 @@ test.describe("Visual Baselines", () => {
       });
     });
 
-    test("menu not saved", async ({ page, context }) => {
+    // A 200 the page cannot use (#110): a bug, not a network state, so
+    // the notice offers the way back and nothing retries.
+    test("meal answer the page cannot use", async ({ page, context }) => {
       await setupAuthenticatedPage(page, context);
-      await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
-      await page.route("**/api/v1/meals/*/description*", (route) =>
+      await page.clock.setFixedTime(FROZEN_NOW);
+      await page.route("**/api/v1/meals/42/cooks*", (route) =>
         route.fulfill({
-          status: 500,
+          status: 200,
           contentType: "application/json",
-          body: JSON.stringify({ message: "boom" }),
+          body: "{}",
         }),
       );
+
+      await page.goto("/meals/42/edit/");
+      await expect(page.getByRole("alert")).toHaveText(
+        /Something went wrong showing this meal\./,
+        { timeout: 10000 },
+      );
+      await expect(
+        page.getByRole("button", { name: "Back to calendar" }),
+      ).toBeVisible();
+      await page.waitForTimeout(500);
+
+      await expect(page).toHaveScreenshot("meal-load-broken.png", {
+        fullPage: true,
+      });
+    });
+
+    // Rails' page has no message, so the toast says the server had a
+    // problem, and the menu says it will try again.
+    test("menu not saved", async ({ page, context }) => {
+      await setupAuthenticatedPage(page, context);
+      await page.clock.setFixedTime(FROZEN_NOW);
+      await page.route("**/api/v1/meals/*/description*", rails500);
 
       await page.goto("/meals/42/edit/");
       await page.waitForLoadState("networkidle");
@@ -1040,6 +1345,9 @@ test.describe("Visual Baselines", () => {
       await expect(page.getByRole("status")).toHaveText(/Not saved/, {
         timeout: 10000,
       });
+      await expect(page.locator(".toast--error .toast__message")).toHaveText(
+        "The server had a problem. Please try again.",
+      );
       await page.waitForTimeout(500);
 
       await expect(page).toHaveScreenshot("menu-not-saved.png", {
@@ -1049,14 +1357,8 @@ test.describe("Visual Baselines", () => {
 
     test("rotation failed to load", async ({ page, context }) => {
       await setupAuthenticatedPage(page, context);
-      await page.clock.setFixedTime(new Date("2026-01-15T12:00:00"));
-      await page.route("**/api/v1/rotations/*", (route) =>
-        route.fulfill({
-          status: 500,
-          contentType: "application/json",
-          body: JSON.stringify({ message: "boom" }),
-        }),
-      );
+      await page.clock.setFixedTime(FROZEN_NOW);
+      await page.route("**/api/v1/rotations/*", rails500);
 
       await page.goto("/calendar/all/2026-01-15/rotations/show/10/");
       await expect(page.getByText("Failed to load rotation.")).toBeVisible({
@@ -1065,6 +1367,55 @@ test.describe("Visual Baselines", () => {
       await page.waitForTimeout(500);
 
       await expect(page).toHaveScreenshot("rotation-failed.png", {
+        fullPage: true,
+      });
+    });
+
+    test("meal history failed to load", async ({ page, context }) => {
+      await setupAuthenticatedPage(page, context);
+      await page.clock.setFixedTime(FROZEN_NOW);
+      await page.route("**/api/v1/meals/*/history*", rails500);
+
+      await page.goto("/meals/42/edit/");
+      await page.waitForLoadState("networkidle");
+      const historyLink = page.locator("text=history").first();
+      await expect(historyLink).toBeVisible({ timeout: 10000 });
+      await historyLink.click();
+
+      const modal = page.locator(".ReactModal__Content--after-open");
+      await expect(modal.getByText("Failed to load history.")).toBeVisible({
+        timeout: 5000,
+      });
+      await expect(modal.getByText("Loading...")).toHaveCount(0);
+      await page.waitForTimeout(500);
+
+      await expect(page).toHaveScreenshot("meal-history-failed.png", {
+        fullPage: true,
+      });
+    });
+
+    // No answer at all for the reset link's name: the page says so
+    // instead of "Loading..." forever, and stays (#115).
+    test("password reset page with no answer", async ({ page }) => {
+      await stubPusher(page);
+      await disableIdleTimer(page);
+      await mockApi(page);
+      await page.clock.setFixedTime(FROZEN_NOW);
+      await page.route("**/api/v1/residents/name/*", (route) =>
+        route.abort("failed"),
+      );
+
+      await page.goto("/reset-password/test-reset-token/");
+      const modal = page.locator(".ReactModal__Content--after-open");
+      await expect(
+        modal.getByText(
+          "Could not load this page. Check your connection and try again.",
+        ),
+      ).toBeVisible({ timeout: 10000 });
+      await expect(page).toHaveURL(/\/reset-password\/test-reset-token\/?$/);
+      await page.waitForTimeout(500);
+
+      await expect(page).toHaveScreenshot("password-reset-failed.png", {
         fullPage: true,
       });
     });

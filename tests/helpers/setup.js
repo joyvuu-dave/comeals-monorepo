@@ -18,7 +18,44 @@ const rotationFixture = require("../fixtures/rotation.json");
 const eventFixture = require("../fixtures/event.json");
 const commonHouseReservationFixture = require("../fixtures/common_house_reservation.json");
 const guestRoomReservationFixture = require("../fixtures/guest_room_reservation.json");
+const fs = require("fs");
+const path = require("path");
 const { disableIdleTimer, clearStorage } = require("./browser_setup");
+
+// The mocked suite's frozen "now": noon on 2026-01-15 in the community's
+// zone. The offset is written out because this runs in Node, and a time
+// with no offset is read in the zone of the machine running the tests.
+// playwright.config.js pins only the browser's zone. Without the offset,
+// a Mac in Chicago froze at 10:00 in Los Angeles, the Linux container at
+// 04:00, and a machine in Tokyo at 19:00 the day before, where the
+// fixture meal reads "Tomorrow".
+const FROZEN_NOW = new Date("2026-01-15T12:00:00-08:00");
+
+// What production sends for an exception ApiController does not rescue:
+// Rails' own page (production.rb has consider_all_requests_local false),
+// as HTML, with no message in it. A mocked 500 with a JSON message is an
+// answer the server never gives.
+const RAILS_500_PAGE = fs.readFileSync(
+  path.join(__dirname, "../../public/500.html"),
+  "utf8",
+);
+
+function rails500(route) {
+  return route.fulfill({
+    status: 500,
+    contentType: "text/html; charset=utf-8",
+    body: RAILS_500_PAGE,
+  });
+}
+
+// ApiController#not_found_api: the 404 for a record that is not there.
+// A silent caller logs it as it is, so a test that expects it lets
+// NOT_FOUND_LOG through its allowedConsoleErrors.
+const NOT_FOUND_MESSAGE =
+  "The page you were looking for doesn't exist. You may have mistyped the address or the page may have moved.";
+const NOT_FOUND_LOG = new RegExp(
+  `^${NOT_FOUND_MESSAGE.replace(/[.]/g, "\\.")}$`,
+);
 
 const AUTH_COOKIES = [
   { name: "token", value: "test-token-abc123", domain: "localhost", path: "/" },
@@ -469,6 +506,10 @@ async function setupAuthenticatedPage(page, context, options = {}) {
 }
 
 module.exports = {
+  FROZEN_NOW,
+  NOT_FOUND_MESSAGE,
+  NOT_FOUND_LOG,
+  rails500,
   stubPusher,
   disableIdleTimer,
   clearStorage,

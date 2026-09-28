@@ -1,6 +1,6 @@
 const path = require("path");
 const { test, expect } = require("../helpers/test");
-const { setupAuthenticatedPage } = require("../helpers/setup");
+const { FROZEN_NOW, setupAuthenticatedPage } = require("../helpers/setup");
 
 /**
  * Regenerates the PWA manifest screenshots in public/.
@@ -15,12 +15,11 @@ const { setupAuthenticatedPage } = require("../helpers/setup");
 
 const PUBLIC_DIR = path.resolve(__dirname, "../../public");
 const TARGET_URL = "/calendar/all/2026-01-15/";
-const FROZEN_TIME = new Date("2026-01-15T12:00:00");
 
 async function captureCalendar(page, context, { width, height, outputFile }) {
   await page.setViewportSize({ width, height });
   await setupAuthenticatedPage(page, context);
-  await page.clock.setFixedTime(FROZEN_TIME);
+  await page.clock.setFixedTime(FROZEN_NOW);
 
   await page.goto(TARGET_URL);
   await page.waitForLoadState("networkidle");
