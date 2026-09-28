@@ -25,14 +25,19 @@ RSpec.describe JobRun do
     described_class.create!(name: name, started_at: finished_at - 1.second, finished_at: finished_at, outcome: outcome)
   end
 
+  # Two successes, so the answer must be the newer one; a newer failure,
+  # so failures must be left out; and a success of a job nobody asked
+  # about, so the names must filter.
   it 'answers when a job last succeeded, ignoring failures' do
+    run!(finished_at: 3.days.ago)
     run!(finished_at: 2.days.ago)
     run!(finished_at: 1.hour.ago, outcome: 'failed')
+    run!(name: 'rotations_notify', finished_at: 1.minute.ago)
 
     last = described_class.last_success_at(%w[refresh_balances verify_ledger])
 
+    expect(last.keys).to eq(['refresh_balances'])
     expect(last.fetch('refresh_balances')).to be_within(1.second).of(2.days.ago)
-    expect(last).not_to have_key('verify_ledger')
   end
 
   it 'refuses an update at the database' do
@@ -48,7 +53,13 @@ RSpec.describe JobRun do
   end
 
   it 'refuses an unknown outcome' do
-    expect { run!(outcome: 'maybe') }.to raise_error(ActiveRecord::RecordInvalid)
+    expect { run!(outcome: 'maybe') }.to raise_error(ActiveRecord::RecordInvalid, /Outcome is not included in the list/)
+  end
+
+  it 'refuses an unknown outcome at the database too, when the model is skipped' do
+    run = described_class.new(name: 'x', started_at: 1.minute.ago, finished_at: Time.current, outcome: 'maybe')
+
+    expect { run.save!(validate: false) }.to raise_error(ActiveRecord::StatementInvalid, /job_runs_outcome_known/)
   end
 
   it 'refuses a finish before its start' do

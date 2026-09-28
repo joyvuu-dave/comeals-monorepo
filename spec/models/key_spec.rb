@@ -31,11 +31,16 @@ RSpec.describe Key do
       expect(key.token.length).to be > 20
     end
 
-    it 'generates unique tokens across keys' do
-      r1 = create(:resident, community: community, unit: unit)
-      r2 = create(:resident, community: community, unit: unit)
+    # The login fallback looks a person up by token alone
+    # (ApiController#resolve_current_session), so one token must never
+    # belong to two people. The model has no uniqueness rule; the unique
+    # index is what holds it.
+    it 'refuses a second key with a token that is already taken, at the database' do
+      taken = create(:resident, community: community, unit: unit).keys.first.token
+      other = create(:resident, community: community, unit: unit)
 
-      expect(r1.keys.first.token).not_to eq(r2.keys.first.token)
+      expect { described_class.create!(identity: other, token: taken) }
+        .to raise_error(ActiveRecord::RecordNotUnique, /index_keys_on_token/)
     end
   end
 
@@ -48,7 +53,9 @@ RSpec.describe Key do
       expect(key.identity).to eq(resident)
     end
 
-    it 'allows a resident to hold multiple concurrent sessions' do
+    # No code makes Key rows any more, but a person may still hold old
+    # pre-JWT tokens from more than one device.
+    it 'allows a resident to hold several legacy pre-JWT keys' do
       resident = create(:resident, community: community, unit: unit)
       resident.keys.create!
       resident.keys.create!
