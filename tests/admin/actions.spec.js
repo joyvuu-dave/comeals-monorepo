@@ -51,6 +51,11 @@ const panel = (page, title) =>
   page
     .locator(".panel")
     .filter({ has: page.getByRole("heading", { name: title, exact: true }) });
+// A table row inside a panel, by the exact text of one of its cells.
+const row = (container, name) =>
+  container.locator("tbody tr").filter({
+    has: container.page().getByRole("cell", { name, exact: true }),
+  });
 
 test.describe("Meals", () => {
   reseedBeforeGroup();
@@ -137,13 +142,26 @@ test.describe("Settlement", () => {
       "Reconciliation was successfully created.",
     );
     await expect(page.locator(".row-number_of_meals td")).toHaveText("1");
-    // Bob cooked and Alice ate; the words come from BalanceDisplayHelper,
-    // never a sign.
+    // Bob cooked ($20) and he and Alice ate, two units each. The cap of
+    // $4.50 a unit makes the cost $18.00, so each eater is charged
+    // $9.00 and Bob is credited $18.00. The words come from
+    // BalanceDisplayHelper, never a sign, and each must sit on its own
+    // person's row: a swap is the worst display bug this app can have.
     const balances = panel(page, "Settlement Balances");
-    await expect(balances).toContainText("Bob Baker");
-    await expect(balances).toContainText("is owed");
-    await expect(balances).toContainText("Alice Cook");
-    await expect(balances).toContainText("owes");
+    await expect(balances.locator("tbody tr")).toHaveCount(2);
+    await expect(row(balances, "Bob Baker").locator("td").last()).toHaveText(
+      "is owed $9.00",
+    );
+    await expect(row(balances, "Alice Cook").locator("td").last()).toHaveText(
+      "owes $9.00",
+    );
+    // Alice lives in unit A, Bob in unit B.
+    const units = panel(page, "Unit Balances");
+    await expect(units.locator("tbody tr")).toHaveCount(2);
+    await expect(row(units, "A").locator("td").last()).toHaveText("owes $9.00");
+    await expect(row(units, "B").locator("td").last()).toHaveText(
+      "is owed $9.00",
+    );
     await expect(panel(page, "Meals")).toContainText("2026-01-17");
   });
 
@@ -169,12 +187,31 @@ test.describe("Settlement", () => {
     await page.goto("/reconciliations/1");
 
     await expect(page.locator(".row-number_of_meals td")).toHaveText("1");
+    // Meal 3: Alice cooked ($75). Alice and Bob ate at two units each,
+    // Carol (a child) at one, and Bob's guest at two: 7 units. The $4.50
+    // cap makes the cost $31.50, so Alice is credited $31.50 and charged
+    // $9.00, Bob is charged $9.00 and $9.00 for his guest, and Carol
+    // $4.50.
     const residents = panel(page, "Settlement Balances");
     await expect(residents.locator("tbody tr")).toHaveCount(3);
-    await expect(residents).toContainText("Alice Cook");
-    await expect(residents).toContainText("is owed");
+    await expect(row(residents, "Alice Cook").locator("td").last()).toHaveText(
+      "is owed $22.50",
+    );
+    await expect(row(residents, "Bob Baker").locator("td").last()).toHaveText(
+      "owes $18.00",
+    );
+    await expect(row(residents, "Carol Baker").locator("td").last()).toHaveText(
+      "owes $4.50",
+    );
+    // Alice lives in unit A; Bob and Carol in unit B.
     const units = panel(page, "Unit Balances");
     await expect(units.locator("tbody tr")).toHaveCount(2);
+    await expect(row(units, "A").locator("td").last()).toHaveText(
+      "is owed $22.50",
+    );
+    await expect(row(units, "B").locator("td").last()).toHaveText(
+      "owes $22.50",
+    );
     const meals = panel(page, "Meals");
     await expect(meals).toContainText("2026-01-10");
     await expect(meals).toContainText("Alice Cook");
@@ -193,10 +230,17 @@ test.describe("Settlement", () => {
     });
     await expect(heading).toHaveCount(1);
     await expect(heading).toContainText("Jan 10, 2026");
-    await expect(heading).toContainText("settled:");
-    await expect(heading).toContainText("is owed");
-    await expect(statement).toContainText("credited");
-    await expect(statement).toContainText("charged");
+    await expect(heading).toContainText("settled: is owed $22.50");
+    // Her two lines for meal 3 (another settlement in this group can add
+    // lines for other meals): credited for cooking, charged for eating.
+    const lines = statement.locator("tbody tr", { hasText: "2026-01-10" });
+    await expect(lines).toHaveCount(2);
+    await expect(lines.filter({ hasText: "Cooked" })).toContainText(
+      "credited $31.50",
+    );
+    await expect(lines.filter({ hasText: "Attended" })).toContainText(
+      "charged $9.00",
+    );
   });
 });
 
