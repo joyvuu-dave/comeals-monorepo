@@ -251,16 +251,32 @@ RSpec.describe 'settled-meal database triggers' do
         SELECT tgname FROM pg_trigger WHERE NOT tgisinternal ORDER BY tgname
       SQL
 
+      # By name, so a dump that lost one of them fails here too.
       expect(trigger_names).to include(
         'bills_reject_settled_write',
         'meal_residents_reject_settled_write',
         'guests_reject_settled_write',
         'meals_protect_settled',
+        'meal_charges_protect',
+        'meal_charges_sum_zero',
+        'reconciliation_balances_protect_settled',
+        'reconciliation_balances_sum_zero',
         # From 20260408000002. Lost from the dev database once (a schema.rb
         # rebuild cannot carry triggers — the drift that motivated the
         # structure.sql switch), so pin it here with the rest.
         'prevent_community_delete'
       )
+    end
+
+    it 'carries exactly the triggers db/structure.sql creates, so a new one is checked too' do
+      dumped = Rails.root.join('db/structure.sql').read
+                    .scan(/^CREATE (?:CONSTRAINT )?TRIGGER (\w+) /).flatten
+      trigger_names = ActiveRecord::Base.connection.select_values(<<~SQL.squish)
+        SELECT tgname FROM pg_trigger WHERE NOT tgisinternal ORDER BY tgname
+      SQL
+
+      expect(dumped).not_to be_empty
+      expect(trigger_names).to match_array(dumped)
     end
   end
 
