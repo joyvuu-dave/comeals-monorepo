@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 // Mock external modules before importing stores
 vi.mock("axios", () => import("../mocks/axios.js"));
@@ -166,6 +166,11 @@ describe("Meal model", () => {
       expect(store.meal.extras).toBe(0);
     });
 
+    // Negative extras shows only for a moment: between an optimistic add
+    // (or a rolled-back remove) and the server's answer, which refuses a
+    // join with no open seat, and the refetch after it. Clamping at 0
+    // would be wrong: max = extras + attendees must stay the same while
+    // the optimistic change and its rollback run.
     it("decrements from 0 to -1", () => {
       const store = createStore({ extras: 0 });
       store.meal.decrementExtras();
@@ -176,6 +181,39 @@ describe("Meal model", () => {
   // ── setExtras settle-refetch ──
 
   describe("setExtras settle-refetch", () => {
+    // The store keeps seats left (extras); the server wants the cap
+    // (max = extras + attendees). With nobody attending the two are
+    // equal, so these use one resident and one guest.
+    const alice = { id: 10, meal_id: 1, name: "Alice", attending: true };
+    const guest = { id: 100, meal_id: 1, resident_id: 10, created_at: 0 };
+
+    it("sends the cap, not the seats left", () => {
+      const store = createStore({ extras: 5 }, [alice], [guest]);
+
+      store.meal.setExtras("3");
+
+      expect(axios).toHaveBeenCalledTimes(1);
+      expect(axios).toHaveBeenCalledWith({
+        method: "patch",
+        url: "/api/v1/meals/1/max",
+        withCredentials: true,
+        data: { max: 5, socket_id: "test" },
+      });
+    });
+
+    it("sends a null cap to clear it", () => {
+      const store = createStore({ extras: 5 }, [alice], [guest]);
+
+      store.meal.setExtras(null);
+
+      expect(axios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "/api/v1/meals/1/max",
+          data: { max: null, socket_id: "test" },
+        }),
+      );
+    });
+
     it("refetches after a successful save and clears the pending flag", async () => {
       const store = createStore({ extras: 5 });
 
@@ -292,18 +330,6 @@ describe("Meal model", () => {
     });
   });
 
-  // ── decrementExtras boundary ──
-
-  describe("decrementExtras boundary", () => {
-    it("can go negative (reflects overcapacity when attendees exceed max)", () => {
-      const store = createStore({ extras: 0 });
-      store.meal.decrementExtras();
-      expect(store.meal.extras).toBe(-1);
-      store.meal.decrementExtras();
-      expect(store.meal.extras).toBe(-2);
-    });
-  });
-
   // ── description save pipeline (issue #35) ──
 
   describe("description save pipeline", () => {
@@ -319,6 +345,7 @@ describe("Meal model", () => {
       expect(axios).toHaveBeenCalledTimes(1);
       expect(store.meal.descriptionDirty).toBe(false);
       expect(store.meal.descriptionNotSaved).toBe(false);
+      expect(store.meal.descriptionSaveInFlight).toBe(false);
     });
 
     it("keeps the text, stays dirty, and shows the marker when the save fails", async () => {
@@ -394,7 +421,27 @@ describe("Meal model", () => {
 
   // A meal switch prunes the node a save was started on. The callbacks
   // must notice and do nothing: no write to a dead node, no refetch.
+  // In tests MobX-State-Tree only warns when an action runs on a dead
+  // node, and the action still runs, so each test checks for that
+  // warning. (kill() itself makes MobX warn about a write outside an
+  // action; that one is the test's own setup.)
   describe("a save that settles after the node is gone", () => {
+    let warn;
+
+    beforeEach(() => {
+      warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      warn.mockRestore();
+    });
+
+    function deadNodeWarnings() {
+      return warn.mock.calls.filter(([message]) =>
+        String(message).includes("no longer part of a state tree"),
+      );
+    }
+
     function deferred() {
       let resolve;
       let reject;
@@ -424,10 +471,12 @@ describe("Meal model", () => {
 
       meal.setDescription("Tacos");
       kill(store);
+      expect(isAlive(meal)).toBe(false);
       request.resolve({ status: 200, data: {} });
       await settle();
 
-      expect(isAlive(meal)).toBe(false);
+      expect(deadNodeWarnings()).toEqual([]);
+      expect(toastStore.toasts).toEqual([]);
       expect(loadDataAsyncMock).not.toHaveBeenCalled();
     });
 
@@ -442,6 +491,7 @@ describe("Meal model", () => {
       await settle();
 
       expect(toastStore.toasts.map((t) => t.message)).toEqual(["No."]);
+      expect(deadNodeWarnings()).toEqual([]);
       expect(loadDataAsyncMock).not.toHaveBeenCalled();
     });
 
@@ -455,6 +505,7 @@ describe("Meal model", () => {
       request.resolve({ status: 200, data: {} });
       await settle();
 
+      expect(deadNodeWarnings()).toEqual([]);
       expect(loadDataAsyncMock).not.toHaveBeenCalled();
     });
 
@@ -468,6 +519,7 @@ describe("Meal model", () => {
       request.resolve({ status: 200, data: {} });
       await settle();
 
+      expect(deadNodeWarnings()).toEqual([]);
       expect(loadDataAsyncMock).not.toHaveBeenCalled();
     });
   });
