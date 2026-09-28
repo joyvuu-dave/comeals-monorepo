@@ -402,16 +402,21 @@ describe("meal page store", () => {
     it("a second failure while a retry is pending replaces the timer and doubles the wait", () => {
       vi.useFakeTimers();
       const store = createStore();
+      const loadDataAsync = stubAction(store, "loadDataAsync");
 
       store.scheduleMealRetry(1);
-      const first = store.mealRetryTimer;
       expect(store.mealRetryDelayMs).toBe(2000);
-
       store.scheduleMealRetry(1);
-
-      expect(store.mealRetryTimer).not.toBe(first);
       expect(store.mealRetryDelayMs).toBe(4000);
-      store.cancelMealRetry();
+
+      // The first timer is gone: nothing fires at 2 seconds. If it
+      // fired, it would fetch once too often and drop the handle of the
+      // second timer, which nothing could then cancel.
+      vi.advanceTimersByTime(2000);
+      expect(loadDataAsync).not.toHaveBeenCalled();
+      // Only the second one fires, at 4 seconds.
+      vi.advanceTimersByTime(2000);
+      expect(loadDataAsync).toHaveBeenCalledTimes(1);
     });
 
     it("a timer that fires after the meal changed, or after data arrived, does nothing", () => {

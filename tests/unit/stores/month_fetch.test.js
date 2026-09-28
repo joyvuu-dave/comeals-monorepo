@@ -12,6 +12,7 @@ vi.mock("idb-keyval", () => import("../mocks/idb_keyval.js"));
 import axios from "axios";
 import * as idbKeyval from "idb-keyval";
 import * as monthCache from "../../../app/frontend/src/stores/month_cache.js";
+import toastStore from "../../../app/frontend/src/stores/toast_store.js";
 import {
   invalidateAllMonths,
   invalidateMonth,
@@ -57,6 +58,12 @@ function expectDiskErrorLogged() {
   );
 }
 
+// What axios rejects with when the request got no answer (offline, a
+// dropped connection): the error carries the request, and no response.
+function noAnswer() {
+  return Object.assign(new Error("Network Error"), { request: {} });
+}
+
 function serveMonths() {
   axios.get.mockImplementation((url) => {
     const m = url.match(/\/calendar\/(\d{4})-(\d{2})-\d{2}$/);
@@ -71,6 +78,7 @@ describe("month_fetch", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     monthCache.clear();
+    toastStore.clearAll();
     serveMonths();
   });
 
@@ -197,8 +205,8 @@ describe("month_fetch", () => {
       expect(axios.get).toHaveBeenCalledTimes(1);
     });
 
-    it("caches nothing when the fetch fails, and does not throw", async () => {
-      axios.get.mockRejectedValueOnce(new Error("offline"));
+    it("caches nothing when the fetch gets no answer, and does not throw", async () => {
+      axios.get.mockRejectedValueOnce(noAnswer());
 
       prefetchMonth("2026-04-15");
       await flush();
@@ -221,17 +229,19 @@ describe("month_fetch", () => {
       expect(monthCache.get(keyFor(2026, 4))).toEqual(payload(2026, 4));
     });
 
-    it("renders nothing, and does not throw, when the fetch fails", async () => {
-      axios.get.mockRejectedValueOnce(new Error("offline"));
+    // A background fetch: the failure is logged (handle_axios_error's
+    // own tests check the words), never shown as a toast.
+    it("renders and caches nothing, and shows no toast, when the fetch gets no answer", async () => {
+      axios.get.mockRejectedValueOnce(noAnswer());
       const render = vi.fn();
 
       loadForNavigation("2026-04-15", render);
       await flush();
 
       expect(render).not.toHaveBeenCalled();
-      expect(console.error).toHaveBeenCalledWith(
-        "Error: could not submit form.",
-      );
+      expect(monthCache.get(keyFor(2026, 4))).toBeUndefined();
+      expect(idbKeyval.set).not.toHaveBeenCalled();
+      expect(toastStore.toasts).toHaveLength(0);
     });
   });
 
