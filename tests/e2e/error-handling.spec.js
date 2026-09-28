@@ -16,6 +16,7 @@ test.use({
     httpFailurePattern,
     /^not found$/,
     /^Bad response from server/,
+    /^Could not use the meal from the server:/,
     /^Error: no response received from server\.$/,
   ),
 });
@@ -199,6 +200,43 @@ test.describe("Error Handling & Edge Cases", () => {
         page.getByRole("cell", { name: "A - Jane Smith", exact: true }),
       ).toBeVisible({ timeout: 2500 });
       await expect(page.getByText("Trouble loading this meal.")).toHaveCount(0);
+    });
+
+    // An answer the page cannot use is a bug, not a network state: the
+    // page must not say "loading..." forever, and must not retry it
+    // (#110).
+    test("a meal answer the page cannot use shows a notice and a way back, and nothing retries", async ({
+      page,
+      context,
+    }) => {
+      await setupAuthenticatedPage(page, context);
+
+      let cooksRequests = 0;
+      await page.route("**/api/v1/meals/42/cooks*", (route) => {
+        if (route.request().method() !== "GET") return route.fallback();
+        cooksRequests += 1;
+        // A 200 with no id in it.
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: "{}",
+        });
+      });
+
+      await page.goto("/meals/42/edit/");
+      const notice = page.getByRole("alert");
+      await expect(notice).toHaveText(
+        /Something went wrong showing this meal\./,
+        { timeout: 5000 },
+      );
+      await expect(page.getByText("Trouble loading this meal.")).toHaveCount(0);
+
+      // The first automatic retry would come at 2s. None comes.
+      await page.waitForTimeout(2500);
+      expect(cooksRequests).toBe(1);
+
+      await page.getByRole("button", { name: "Back to calendar" }).click();
+      await expect(page).toHaveURL(/\/calendar\//, { timeout: 5000 });
     });
 
     test("a meal that does not exist shows a message and a way back", async ({

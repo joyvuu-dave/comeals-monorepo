@@ -15,6 +15,7 @@ function makeStore(overrides = {}) {
     {
       mealLoadFailed: false,
       mealLoadNotFound: false,
+      mealLoadBroken: false,
       retryMealLoadNow: vi.fn(),
       ...overrides,
     },
@@ -85,6 +86,44 @@ describe("LoadStatus", () => {
       cookies.current.timezone = timezone;
       vi.useRealTimers();
     }
+  });
+
+  // An answer the page could not use is a bug, not a network state, so
+  // nothing retries it (#110): the same alert and way back as a 404.
+  it("an answer the page could not use: an alert with a way back, no retry", () => {
+    renderStatus(makeStore({ mealLoadBroken: true }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Something went wrong showing this meal.",
+    );
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Retry now" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Back to calendar" }));
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      /^\/calendar\/all\/\d{4}-\d{2}-\d{2}$/,
+    );
+  });
+
+  // Two flags can be up at once: a later fetch (a reconnect) can fail
+  // after an earlier answer set a different one. The notice shows one.
+  it("a 404 wins over a running retry", () => {
+    renderStatus(makeStore({ mealLoadNotFound: true, mealLoadFailed: true }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "This meal could not be found.",
+    );
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("a running retry wins over an answer that could not be used", () => {
+    renderStatus(makeStore({ mealLoadBroken: true, mealLoadFailed: true }));
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Trouble loading this meal. Retrying…",
+    );
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("appears when a load fails after mount", () => {

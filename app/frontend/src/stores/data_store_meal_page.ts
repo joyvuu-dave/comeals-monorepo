@@ -16,6 +16,7 @@ import { api } from "../helpers/api";
 import { toCommunityDayjs } from "../helpers/helpers";
 import { toDisplayAmountString } from "../helpers/money";
 import handleAxiosError from "../helpers/handle_axios_error";
+import { notifyError } from "../helpers/bugsnag";
 import createVersionGuard from "../helpers/version_guard";
 import { MealForm } from "../types/api";
 import Bill from "./bill";
@@ -46,6 +47,7 @@ export interface MealPageStore extends ReturnType<typeof mealPageVolatile> {
   settleClosed(): void;
   loadDataAsync(): void;
   handleMealLoadError(error: unknown, mealId: number): void;
+  handleMealProcessingError(error: unknown, mealId: number): void;
   scheduleMealRetry(mealId: number): void;
   onMealRetryTimer(mealId: number): void;
   cancelMealRetry(): void;
@@ -77,6 +79,10 @@ export function mealPageVolatile() {
     // The wait used for the last scheduled retry, or null when the
     // backoff is at its starting point.
     mealRetryDelayMs: null as number | null,
+    // The first load of the meal on screen got an answer the page could
+    // not use. That is a bug, not a network state, so nothing retries;
+    // LoadStatus says so and offers the way back (#110).
+    mealLoadBroken: false,
     // Stale-response guard for meal fetches. Two fetches of the same
     // meal can be on the wire at once (a Pusher update during a
     // reconnect refetch), and the responses can land in either order;
@@ -194,8 +200,7 @@ export function mealPageActions(self: MealPageStore) {
           },
         )
         .catch(function (error: unknown) {
-          // A processing failure keeps its old silent behavior.
-          handleAxiosError(error, { silent: true });
+          self.handleMealProcessingError(error, mealIdAtFetch);
         });
     },
     // A meal fetch failed. Only the FIRST load of the meal on screen
@@ -214,6 +219,18 @@ export function mealPageActions(self: MealPageStore) {
       }
       self.mealLoadFailed = true;
       self.scheduleMealRetry(mealId);
+    },
+    // Processing an answer threw. It is a bug, so it goes to Bugsnag,
+    // and it must not loop retries. If the meal on screen was still on
+    // its first load, the page would say "loading..." forever, so it
+    // says what happened instead.
+    handleMealProcessingError(error: unknown, mealId: number) {
+      console.error("Could not use the meal from the server:", error);
+      notifyError(error);
+      if (!self.meal || self.meal.id !== mealId) return;
+      if (!self.mealLoading) return;
+      self.cancelMealRetry();
+      self.mealLoadBroken = true;
     },
     scheduleMealRetry(mealId: number) {
       if (self.mealRetryTimer !== null) {
@@ -256,6 +273,7 @@ export function mealPageActions(self: MealPageStore) {
       self.mealRetryDelayMs = null;
       self.mealLoadFailed = false;
       self.mealLoadNotFound = false;
+      self.mealLoadBroken = false;
     },
     preLoadData() {
       self.clearBills();

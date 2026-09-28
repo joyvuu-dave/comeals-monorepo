@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, act, waitFor } from "@testing-library/react";
 
 // meal/date_box.jsx calls Modal.setAppElement("#root") at import time.
 vi.hoisted(() => {
@@ -90,5 +90,40 @@ describe("MealsEdit", () => {
       screen.getByRole("button", { name: "logout Jane Smith" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "history" })).toBeInTheDocument();
+  });
+
+  // When the first answer for a meal cannot be used, the page used to
+  // say "loading..." forever with no notice, the state commit e75aa87c
+  // set out to end (#110). The real page, with the real store: the
+  // notice is LoadStatus's alert, and it offers the way back.
+  it("a first load whose answer cannot be used shows a notice instead of loading forever", async () => {
+    // A 200 the store cannot process: it has no id.
+    axios.get.mockImplementation(() =>
+      Promise.resolve({ status: 200, data: {} }),
+    );
+    const store = DataStore.create({
+      meals: [],
+    });
+    renderPage(store);
+
+    await waitFor(() =>
+      expect(axios.get).toHaveBeenCalledWith("/api/v1/meals/42/cooks"),
+    );
+    // Let the answer be processed, and the page render what follows.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Something went wrong showing this meal.",
+    );
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Back to calendar" }),
+    ).toBeInTheDocument();
+    // Nothing retries on its own.
+    expect(
+      axios.get.mock.calls.filter(([url]) => url.endsWith("/cooks")),
+    ).toHaveLength(1);
   });
 });

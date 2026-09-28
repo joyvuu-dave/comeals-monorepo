@@ -8,12 +8,16 @@ vi.mock("axios", () => import("../mocks/axios.js"));
 vi.mock("js-cookie", () => import("../mocks/js_cookie.js"));
 vi.mock("pusher-js", () => import("../mocks/pusher.js"));
 vi.mock("idb-keyval", () => import("../mocks/idb_keyval.js"));
+vi.mock("../../../app/frontend/src/helpers/bugsnag.js", () => ({
+  notifyError: vi.fn(),
+}));
 
 import { stubRandomUUID } from "../mocks/uuid.js";
 stubRandomUUID();
 
 import axios from "axios";
 import * as idbKeyval from "idb-keyval";
+import { notifyError } from "../../../app/frontend/src/helpers/bugsnag.js";
 import {
   createDataStore,
   stage,
@@ -218,6 +222,86 @@ describe("meal page store", () => {
       "IndexedDB failed; going on without the copy on disk:",
       diskClosed,
     );
+  });
+
+  // An answer the page cannot use (processing it throws) is a bug, not
+  // a network state: it goes to Bugsnag and nothing retries it. On the
+  // first load the page would say "loading..." forever, so it is marked
+  // broken for LoadStatus instead (#110).
+  describe("an answer the page cannot use", () => {
+    // A 200 with no id: reading response.data.id throws.
+    const unusable = { status: 200, data: {} };
+
+    it("on the first load: marks the load broken, logs it, and reports it", async () => {
+      const store = createStore();
+      axios.get.mockResolvedValueOnce(unusable);
+
+      store.loadDataAsync();
+      await flush();
+
+      expect(store.mealLoadBroken).toBe(true);
+      expect(store.mealLoading).toBe(true);
+      const [reported] = notifyError.mock.calls[0];
+      expect(reported).toBeInstanceOf(TypeError);
+      expect(notifyError.mock.calls).toEqual([[reported]]);
+      expect(console.error).toHaveBeenCalledWith(
+        "Could not use the meal from the server:",
+        reported,
+      );
+    });
+
+    it("stops a pending retry: nothing fetches on its own after that", () => {
+      vi.useFakeTimers();
+      const store = createStore();
+      const loadDataAsync = stubAction(store, "loadDataAsync");
+      store.handleMealLoadError({ response: { status: 500 } }, 1);
+      expect(store.mealLoadFailed).toBe(true);
+
+      store.handleMealProcessingError(new TypeError("no id"), 1);
+      vi.advanceTimersByTime(60000);
+
+      expect(store.mealLoadBroken).toBe(true);
+      expect(store.mealLoadFailed).toBe(false);
+      expect(store.mealRetryTimer).toBeNull();
+      expect(loadDataAsync).not.toHaveBeenCalled();
+    });
+
+    it("with data already on screen: reports it, and shows no notice", () => {
+      const store = createStore();
+      stage(store, () => {
+        store.mealLoading = false;
+      });
+      const error = new TypeError("no id");
+
+      store.handleMealProcessingError(error, 1);
+
+      expect(store.mealLoadBroken).toBe(false);
+      expect(notifyError).toHaveBeenCalledWith(error);
+    });
+
+    it("for a meal no longer on screen, or with no meal: reports it, and shows no notice", () => {
+      const store = createStore();
+
+      store.handleMealProcessingError(new TypeError("no id"), 999);
+      stage(store, () => {
+        store.meal = null;
+      });
+      store.handleMealProcessingError(new TypeError("no id"), 1);
+
+      expect(store.mealLoadBroken).toBe(false);
+      expect(notifyError).toHaveBeenCalledTimes(2);
+    });
+
+    it("the notice goes when the screen moves to another meal", async () => {
+      const store = createStore();
+      stubAction(store, "loadDataAsync");
+      store.handleMealProcessingError(new TypeError("no id"), 1);
+      expect(store.mealLoadBroken).toBe(true);
+
+      store.switchMeals(2);
+
+      expect(store.mealLoadBroken).toBe(false);
+    });
   });
 
   describe("two fetches of the meal on the wire", () => {
