@@ -58,19 +58,29 @@ RSpec.describe 'a read refused for a conflict' do
     )
   end
 
-  # The refusal that escapes a write action's own rescue, because it
-  # happens during the render — after with_meal_lock has returned and its
-  # rescue is behind us. The row is written by then, so this one really
-  # did save something; the answer still has to be a conflict a client can
-  # act on rather than a 500.
-  it 'answers 409 when a conflict escapes a write action during the render' do
+  # A write action's own rescue is inside with_meal_lock, so a refusal in
+  # a before_action (here the resident lookup) escapes it. Nothing has
+  # been written at that point, so "Nothing was saved" is true, and the
+  # answer is the same 409. (A refusal during the render, after the lock
+  # has committed the row, is not tested here: the row is saved by then,
+  # and the serializers these actions render run no query.)
+  it 'answers 409 when a write action is refused before it writes' do
     meal = create(:meal, community: community)
-    allow_any_instance_of(MealResidentSerializer).to receive(:to_json) # rubocop:disable RSpec/AnyInstance -- the render builds its own
-      .and_raise(ActiveRecord::SerializationFailure, 'could not serialize access')
+    allow(Resident).to receive(:exists?).and_raise(ActiveRecord::SerializationFailure, 'could not serialize access')
+    allow(Rails.error).to receive(:report).and_call_original
 
-    post "/api/v1/meals/#{meal.id}/residents/#{resident.id}",
-         params: { token: token, late: false, vegetarian: false }
+    expect do
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}",
+           params: { token: token, late: false, vegetarian: false }
+    end.not_to change(MealResident, :count)
 
     expect(response).to have_http_status(:conflict)
+    expect(response.parsed_body['message']).to eq(
+      'Someone else was changing this at the same time. Nothing was saved. Try again.'
+    )
+    expect(Rails.error).to have_received(:report).with(
+      an_instance_of(ActiveRecord::SerializationFailure),
+      handled: true, severity: :warning, context: { controller: 'meals', action: 'create_meal_resident' }
+    )
   end
 end
