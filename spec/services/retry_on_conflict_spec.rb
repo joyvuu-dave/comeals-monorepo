@@ -127,9 +127,6 @@ RSpec.describe RetryOnConflict do
       expect(delays.last).to be > delays.first
     end
 
-    # Counting retries is the point. An error tracker sees a crash; it never
-    # sees the retry that stopped one, and "how often is this firing" is the
-    # number that says whether the change is behaving.
     it 'waits a random length between the delay and twice the delay, doubling each time' do
       delays = []
       allow(described_class).to receive(:sleep) { |seconds| delays << seconds }
@@ -143,6 +140,9 @@ RSpec.describe RetryOnConflict do
       expect(delays[2]).to be_between(4.0, 8.0)
     end
 
+    # Counting retries is the point. An error tracker sees a crash; it never
+    # sees the retry that stopped one, and "how often is this firing" is the
+    # number that says whether the change is behaving.
     it 'says which attempt failed and how many there are, so a retry that fires constantly can be seen' do
       allow(Rails.error).to receive(:report)
       suppress(ActiveRecord::SerializationFailure) do
