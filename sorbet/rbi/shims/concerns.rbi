@@ -26,6 +26,9 @@ module ClosedMealAttendanceFreeze
 
   sig { returns(T.nilable(Integer)) }
   def meal_id_in_database; end
+
+  sig { returns(T::Boolean) }
+  def multiplier_changed?; end
 end
 
 module LocksItsMealFirst

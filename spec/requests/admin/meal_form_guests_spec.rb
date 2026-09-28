@@ -65,6 +65,30 @@ RSpec.describe 'Admin meal form: nested guests' do
     expect(response.body).to include('Meal has been closed.')
   end
 
+  it 'refuses a new price for a guest who was on the meal before it closed, and says why' do
+    guest = create(:guest, meal: meal, resident: host, multiplier: 2)
+    meal.update!(closed: true)
+
+    submit('0' => { id: guest.id, multiplier: 1, resident_id: host.id, _destroy: '0' })
+
+    expect(guest.reload.multiplier).to eq(2)
+    expect(response.body).to include('Meal has been closed.')
+  end
+
+  # The form sends every guest back with the price it shows, so a save that
+  # changes something else on a closed meal must not be read as a new price.
+  it 'saves a new max on a closed meal when each guest comes back with the same price' do
+    guest = create(:guest, meal: meal, resident: host, multiplier: 1)
+    meal.update!(closed: true)
+
+    same_price = { id: guest.id, multiplier: 1, resident_id: host.id, _destroy: '0' }
+    patch "/meals/#{meal.id}", params: { meal: { max: 5, guests_attributes: { '0' => same_price } } }
+
+    expect(response).to redirect_to("/meals/#{meal.id}")
+    expect(meal.reload.max).to eq(5)
+    expect(guest.reload.multiplier).to eq(1)
+  end
+
   it 'removes a guest who was added as an extra after the meal closed' do
     meal.update!(closed: true, max: 3)
     guest = create(:guest, meal: meal, resident: host)

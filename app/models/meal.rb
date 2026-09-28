@@ -252,6 +252,12 @@ class Meal < ApplicationRecord
   # takes the band for the new date (Resident#multiplier_on). A settled
   # meal cannot move (FROZEN_WHEN_RECONCILED), so a settled charge never
   # changes. Guests keep theirs: a guest's band is what the admin set.
+  #
+  # A closed meal is stamped again too. Its freeze refuses a new price for
+  # the people who were on it when it closed (ClosedMealAttendanceFreeze),
+  # because a person changing a price moves every other eater's share. A
+  # move is not that: the band follows the date by rule, and only an admin
+  # moves a meal. So each row goes through as an admin correction.
   sig { void }
   def restamp_attendance_for_new_date
     date = T.must(self.date)
@@ -260,6 +266,7 @@ class Meal < ApplicationRecord
     # rows under prosopite). A row already at the band writes nothing:
     # update! skips the UPDATE when no attribute changed.
     meal_residents.find_each do |row|
+      row.admin_correction = true
       row.update!(multiplier: T.must(row.resident).multiplier_on(date))
     end
   end

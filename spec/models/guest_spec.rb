@@ -185,10 +185,63 @@ RSpec.describe Guest do
     end
 
     it 'does not run for an update that keeps the meal' do
-      guest = create(:guest, meal: meal, resident: resident)
+      guest = create(:guest, meal: meal, resident: resident, late: false)
       meal.update_columns(closed: true, closed_at: DateTime.now + 1.hour)
 
+      expect(guest.update(late: true)).to be(true)
+      expect(guest.reload.late).to be(true)
+    end
+  end
+
+  # A guest's price is part of the headcount a closed meal freezes: moving
+  # it from Adult to Child changes Meal#multiplier, so every other eater
+  # pays more, the same as removing the guest would.
+  describe 'a price change on a closed meal' do
+    it 'refuses it for a guest who was on the meal before it closed' do
+      guest = create(:guest, meal: meal, resident: resident, multiplier: 2)
+      meal.update_columns(closed: true, closed_at: DateTime.now + 1.hour)
+
+      expect(guest.update(multiplier: 1)).to be(false)
+      expect(guest.errors[:base]).to eq(['Meal has been closed.'])
+      expect(guest.reload.multiplier).to eq(2)
+    end
+
+    it 'allows it while the meal is open' do
+      guest = create(:guest, meal: meal, resident: resident, multiplier: 2)
+
       expect(guest.update(multiplier: 1)).to be(true)
+      expect(guest.reload.multiplier).to eq(1)
+    end
+
+    # An extra may leave a closed meal, so it may change its price too.
+    it 'allows it for a guest added as an extra after the meal closed' do
+      meal.update_columns(closed: true, closed_at: 1.hour.ago, max: 5)
+      guest = create(:guest, meal: meal, resident: resident, multiplier: 2)
+
+      expect(guest.update(multiplier: 1)).to be(true)
+      expect(guest.reload.multiplier).to eq(1)
+    end
+
+    it 'lets an admin correction change the price of a guest who was on the meal before it closed' do
+      guest = create(:guest, meal: meal, resident: resident, multiplier: 2)
+      meal.update_columns(closed: true, closed_at: DateTime.now + 1.hour)
+      guest.admin_correction = true
+
+      expect(guest.update(multiplier: 1)).to be(true)
+      expect(guest.reload.multiplier).to eq(1)
+    end
+
+    # A move is judged by the move rule alone: on the new meal the guest is
+    # an addition, and an addition may come with any price. The new meal
+    # closes after the guest was made, so to the removal rule the guest
+    # would look like one of that meal's original headcount.
+    it 'judges a move with a new price as a move' do
+      guest = create(:guest, meal: meal, resident: resident, multiplier: 2)
+      other_meal = create(:meal, community: community, date: meal.date + 1)
+      other_meal.update_columns(closed: true, closed_at: DateTime.now + 1.hour, max: 5)
+
+      expect(guest.update(meal: other_meal, multiplier: 1)).to be(true)
+      expect(guest.reload).to have_attributes(meal_id: other_meal.id, multiplier: 1)
     end
   end
 

@@ -919,6 +919,22 @@ RSpec.describe Meal do
       expect(child_row.reload.multiplier).to eq(Multiplier::HALF)
     end
 
+    # A closed meal refuses a new price for the people who were on it when
+    # it closed (ClosedMealAttendanceFreeze, #92). A move is not a person
+    # choosing a price: the band follows the date, the same as on an open
+    # meal. So the move stamps the rows again and is saved.
+    it 'gives every attendance row the band for the new date when a closed meal moves, too' do
+      meal = create(:meal, community: community, date: community.today + 2)
+      child = create(:resident, community: community, unit: unit, birthday: community.today + 5 - 12.years)
+      row = create(:meal_resident, meal: meal, resident: child, community: community)
+      meal.update!(closed: true)
+
+      expect(meal.update(date: community.today + 10)).to be(true)
+
+      expect(meal.reload.date).to eq(community.today + 10)
+      expect(row.reload.multiplier).to eq(Multiplier::FULL)
+    end
+
     it 'leaves the rows alone when the date did not change' do
       meal = create(:meal, community: community, date: community.today + 2)
       child = create(:resident, community: community, unit: unit, birthday: community.today + 5 - 12.years)

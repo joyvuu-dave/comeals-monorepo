@@ -15,7 +15,11 @@
 #     rules apply. Nothing in the app moves a row on purpose, but the
 #     admin meal form once let a hand-made request do it (lock hunt,
 #     2026-09-21), and a console session can still ask for one and gets
-#     the same answer.
+#     the same answer;
+#   * a price change (multiplier) follows the removal rule. Moving a guest
+#     from Adult to Child lowers Meal#multiplier, so every other eater pays
+#     more, the same as when the guest leaves (#92). The admin meal form
+#     offers a price for every guest.
 #
 # An open meal always has max nil (Meal#conditionally_set_max), so max
 # only ever constrains closed meals.
@@ -32,9 +36,10 @@ module ClosedMealAttendanceFreeze
 
   # The one sanctioned bypass (issue #25): an admin correcting the record
   # to match reality. Set per row by the ActiveAdmin attendance controller,
-  # never persisted, never assignable through the API (its controllers
-  # assign only late/vegetarian). Reconciled meals still refuse —
-  # ReconciledMealImmutability runs first and has no bypass.
+  # and by Meal#restamp_attendance_for_new_date when an admin moves a meal
+  # to another date. Never persisted, never assignable through the API (its
+  # controllers assign only late/vegetarian). Reconciled meals still
+  # refuse — ReconciledMealImmutability runs first and has no bypass.
   attr_accessor :admin_correction
 
   included do
@@ -42,6 +47,7 @@ module ClosedMealAttendanceFreeze
 
     validate :meal_has_open_spots, on: :create
     validate :move_keeps_both_meals_rules, on: :update
+    validate :price_change_is_allowed, on: :update
     before_destroy :record_can_be_removed
   end
 
@@ -70,6 +76,19 @@ module ClosedMealAttendanceFreeze
 
     message = refusal_to_join(T.must(meal))
     errors.add(:base, message) if message
+  end
+
+  # A move is left to move_keeps_both_meals_rules: on the new meal the row
+  # is an addition, and an addition may have any price.
+  def price_change_is_allowed
+    return unless multiplier_changed?
+    return if meal_id_changed?
+    # Scenario: Admin attendance correction — the freeze does not apply
+    return if admin_correction
+    return if can_leave?(T.must(meal))
+
+    # Scenario: Meal is closed, record was added before meal was closed
+    errors.add(:base, 'Meal has been closed.')
   end
 
   def record_can_be_removed

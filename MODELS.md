@@ -415,7 +415,9 @@ MealResident ----> Community
   row's creation (`Resident#multiplier_on`), copied in when none is given
   (`set_multiplier`) and refused when a different one is given
   (`multiplier_is_the_residents`). A later birthday or a changed age rule
-  never changes a past charge. Required; CHECK
+  never changes a past charge. The one thing that changes it is an admin
+  moving the meal to another date: every row then gets the band for the
+  new date (`Meal#restamp_attendance_for_new_date`). Required; CHECK
   `meal_residents_multiplier_non_negative`.
 - `late` — arrived late
 - `vegetarian`
@@ -436,12 +438,17 @@ single-column `meal_id` index was dropped; the composite covers it.
   meal closed
 - Can be moved to another meal only if it could leave the old meal and join
   the new one under the rules above: a move is a removal and an addition
+- Can change its price (`multiplier`) on a closed meal only if it could be
+  removed: a lower price raises every other eater's share, the same as a
+  removal (#92)
 - A reconciled meal refuses all of it (`ReconciledMealImmutability`, included
   first so it runs first), and the `meal_residents_reject_settled_write`
   trigger enforces the same rule for writes that skip callbacks
 - The one bypass is `admin_correction`, set per row by the ActiveAdmin
   attendance page so an admin can make the record match what happened. It
-  does not apply to reconciled meals.
+  does not apply to reconciled meals. `Meal#restamp_attendance_for_new_date`
+  sets it too, so a closed meal an admin moves to another date takes the
+  bands for the new date.
 
 Audited, linked to the meal.
 
