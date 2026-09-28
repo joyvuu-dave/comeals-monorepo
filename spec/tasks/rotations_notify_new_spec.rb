@@ -48,7 +48,7 @@ RSpec.describe 'rotations:notify_new', type: :task do
   end
 
   it 'sends new-rotation emails for rotations not yet notified' do
-    create(:resident, community: community, unit: unit, active: true)
+    resident = create(:resident, community: community, unit: unit, active: true)
     meal = create(:meal, community: community)
     attrs = [{ date: meal.date + 100.days }]
     rotation = Rotation.create!(meals_attributes: attrs)
@@ -59,10 +59,10 @@ RSpec.describe 'rotations:notify_new', type: :task do
 
     rotation.reload
     expect(rotation.new_rotation_notified_at).to be_present
-    new_emails = ActionMailer::Base.deliveries.count do |m|
+    new_emails = ActionMailer::Base.deliveries.select do |m|
       m.subject == 'New Rotation Posted'
     end
-    expect(new_emails).to be >= 1
+    expect(new_emails.map(&:to)).to eq([[resident.email]])
   end
 
   it 'skips rotations that are already notified' do
@@ -80,11 +80,13 @@ RSpec.describe 'rotations:notify_new', type: :task do
     expect(ActionMailer::Base.deliveries.size).to eq(initial_count)
   end
 
+  # The inactive resident has an address, so only the active filter keeps
+  # them out; the child has none, so only the address filter does.
   it 'skips inactive residents and residents without email' do
     create(:resident, community: community, unit: unit,
                       active: true, email: 'active@test.com')
     create(:resident, community: community, unit: unit,
-                      active: false, can_cook: false, email: nil)
+                      active: false, can_cook: false, email: 'gone@test.com')
     create(:resident, community: community, unit: unit,
                       active: true, multiplier: 1, email: nil)
 
@@ -99,8 +101,7 @@ RSpec.describe 'rotations:notify_new', type: :task do
       m.subject == 'New Rotation Posted'
     end
     recipients = new_rotation_emails.flat_map(&:to)
-    expect(recipients).to include('active@test.com')
-    expect(recipients).not_to include(nil)
+    expect(recipients).to contain_exactly('active@test.com')
   end
 
   it 'suppresses notification for rotations created with no_email' do
