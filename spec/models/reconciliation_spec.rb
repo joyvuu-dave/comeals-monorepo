@@ -150,12 +150,16 @@ RSpec.describe Reconciliation do
       expect(balances.values.sum(BigDecimal('0'))).to eq(BigDecimal('0'))
     end
 
-    it 'produces exact zero sum even when all shares have the same fractional part' do
-      # Worst case for allocation: all participants have identical remainders,
-      # forcing the algorithm to tie-break. This also confirms the zero-sum
-      # guarantee holds when every entry needs rounding.
+    it 'takes the leftover cent from the eater who got the leftover unit at the ledger grain' do
+      # $1 over three adult eaters is a third each. At the ledger grain the
+      # one unit of 10^-8 left over goes to the lowest id, so the first
+      # eater's share is -0.33333334 and the other two are -0.33333333.
+      # Rounded toward zero, all three are -0.33, which sum to -0.99
+      # against the cook's +1.00, so one cent must move. It is taken from
+      # the balance that lost the most in the rounding: the first eater.
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
       eaters = Array.new(3) { create(:resident, community: community, unit: unit, multiplier: 2) }
+      expect(eaters.map(&:id)).to eq(eaters.map(&:id).sort)
 
       meal = create(:meal, community: community)
       eaters.each { |e| create(:meal_resident, meal: meal, resident: e, community: community) }
@@ -167,10 +171,8 @@ RSpec.describe Reconciliation do
       balances = reconciliation.settlement_balances
 
       expect(balances[cook.id]).to eq(BigDecimal('1'))
-      eater_amounts = eaters.map { |e| balances[e.id] }
-      # Two eaters get -0.34, one gets -0.33, totaling -1.00
-      expect(eater_amounts.count(BigDecimal('-0.34'))).to eq(1)
-      expect(eater_amounts.count(BigDecimal('-0.33'))).to eq(2)
+      expect(eaters.map { |e| balances[e.id] })
+        .to eq([BigDecimal('-0.34'), BigDecimal('-0.33'), BigDecimal('-0.33')])
       expect(balances.values.sum(BigDecimal('0'))).to eq(BigDecimal('0'))
     end
   end
@@ -427,14 +429,16 @@ RSpec.describe Reconciliation do
     end
 
     it 'rounds balances at the ledger grain that sum to zero' do
-      # $10 across three people at the grain: 3.33333334, 3.33333333, and
-      # 3.33333333, which is what LargestRemainderSplit hands out.
+      # Two people are owed about $3.33 each and one owes about $6.67, at
+      # the ledger grain, and the three sum to exactly zero. Rounded toward
+      # zero to cents they are 3.33, 3.33 and -6.66, which already sum to
+      # zero, so no cent moves.
       third = BigDecimal('3.33333333')
       exact = { 1 => third + BigDecimal('0.00000001'), 2 => third, 3 => BigDecimal('-6.66666667') }
 
       balances = Settlement.allocate_to_cents(exact, reconciliation_id: reconciliation.id)
 
-      expect(balances.values.sum(BigDecimal('0'))).to eq(BigDecimal('0'))
+      expect(balances).to eq(1 => BigDecimal('3.33'), 2 => BigDecimal('3.33'), 3 => BigDecimal('-6.66'))
     end
   end
 
@@ -726,9 +730,11 @@ RSpec.describe Reconciliation do
       legacy = build(:reconciliation, community: community, end_date: Date.yesterday)
       legacy.mark_settling!
       legacy.save!(validate: false)
+      legacy.reload
 
-      expect(legacy.reload.number_of_meals).to eq(0)
-      expect(legacy.settlement_balances.values.sum(BigDecimal('0'))).to eq(BigDecimal('0'))
+      expect(legacy.number_of_meals).to eq(0)
+      expect(legacy).to be_valid
+      expect(legacy.errors[:base]).to be_empty
     end
   end
 
@@ -829,31 +835,6 @@ RSpec.describe Reconciliation do
       expect(balances[eater.id]).to eq(BigDecimal('-60'))
     end
 
-    it 'uses largest-remainder allocation so rounded balances sum to exactly zero' do
-      cook = create(:resident, community: community, unit: unit, multiplier: 2)
-      eater1 = create(:resident, community: community, unit: unit, multiplier: 2)
-      eater2 = create(:resident, community: community, unit: unit, multiplier: 2)
-
-      meal = create(:meal, community: community)
-      create(:meal_resident, meal: meal, resident: eater1, community: community)
-      create(:meal_resident, meal: meal, resident: eater2, community: community)
-      # $0.05 / 4 total multiplier = $0.0125 per unit × 2 multiplier = $0.025 per eater
-      # Each eater's exact share is -$0.025 (half-cent boundary).
-      # Largest-remainder allocates the extra penny to one eater, ensuring zero sum.
-      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('0.05'))
-      meal.reload
-
-      reconciliation = settle!(cutoff: Date.yesterday)
-      balances = reconciliation.settlement_balances
-
-      expect(balances[cook.id]).to eq(BigDecimal('0.05'))
-      # One eater absorbs the extra penny; the other does not.
-      eater_balances = [balances[eater1.id], balances[eater2.id]].sort
-      expect(eater_balances).to eq([BigDecimal('-0.03'), BigDecimal('-0.02')])
-      # Books balance exactly — no residual.
-      expect(balances.values.sum(BigDecimal('0'))).to eq(BigDecimal('0'))
-    end
-
     it 'allocates residual pennies deterministically (lowest ID absorbs first)' do
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
       eater1 = create(:resident, community: community, unit: unit, multiplier: 2)
@@ -862,14 +843,20 @@ RSpec.describe Reconciliation do
       meal = create(:meal, community: community)
       create(:meal_resident, meal: meal, resident: eater1, community: community)
       create(:meal_resident, meal: meal, resident: eater2, community: community)
+      # $0.05 / 4 total multiplier = $0.0125 per unit x 2 multiplier = $0.025
+      # per eater, exactly, at the ledger grain. Rounded toward zero, each is
+      # -0.02, and the cook +0.05, so one cent must move, and the two eaters
+      # lost the same amount in the rounding.
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('0.05'))
       meal.reload
 
       reconciliation = settle!(cutoff: Date.yesterday)
       balances = reconciliation.settlement_balances
 
-      # Both eaters have identical fractional remainders. Tie-break: lowest ID absorbs.
+      # The tie goes to the lowest id. The three exact values also make the
+      # books sum to exactly zero.
       lower_id_eater, higher_id_eater = [eater1, eater2].sort_by(&:id)
+      expect(balances[cook.id]).to eq(BigDecimal('0.05'))
       expect(balances[lower_id_eater.id]).to eq(BigDecimal('-0.03'))
       expect(balances[higher_id_eater.id]).to eq(BigDecimal('-0.02'))
     end
@@ -991,10 +978,12 @@ RSpec.describe Reconciliation do
       balances = reconciliation.settlement_balances
 
       expect(balances[cook.id]).to eq(BigDecimal('1'))
-      eater_amounts = eaters.map { |e| balances[e.id] }
-      # Exactly 2 eaters pay -0.15, the other 5 pay -0.14
-      expect(eater_amounts.count(BigDecimal('-0.15'))).to eq(2)
-      expect(eater_amounts.count(BigDecimal('-0.14'))).to eq(5)
+      # At the ledger grain the two units of 10^-8 left over go to the two
+      # lowest ids, so those two lost the most in the rounding and pay the
+      # two cents: -0.15 each, and the other five -0.14.
+      expect(eaters.map(&:id)).to eq(eaters.map(&:id).sort)
+      expect(eaters.take(2).map { |e| balances[e.id] }).to all(eq(BigDecimal('-0.15')))
+      expect(eaters.drop(2).map { |e| balances[e.id] }).to all(eq(BigDecimal('-0.14')))
       expect(balances.values.sum(BigDecimal('0'))).to eq(BigDecimal('0'))
     end
   end
