@@ -49,7 +49,7 @@ the new name in the second.
 
 Runs in `bin/check`. Many client threads (24 by default) send random
 requests from the whole API through the Rack stack for 15 seconds, while
-a settler, the four nightly jobs, and an admin writing through the models
+a settler, the nightly jobs, and an admin writing through the models
 without the meal lock run beside them. `Rails.cache` and the Rack::Attack
 counters are a real solid_cache in the test database, at SERIALIZABLE,
 like production. What must hold:
