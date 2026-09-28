@@ -40,7 +40,10 @@ RSpec.describe Community, '#today' do
 
     rotation = community.create_next_rotation
 
-    expect(rotation.meals.first.date).to be >= Date.new(2026, 4, 10)
+    # Every day is a meal day and April 10 is not a holiday, so the one
+    # meal is on the community's today itself: not the app zone's 9th,
+    # and not the 11th either.
+    expect(rotation.meals.sole.date).to eq(Date.new(2026, 4, 10))
   end
 
   it 'MealSerializer says "attending" about a dinner on the community day' do
