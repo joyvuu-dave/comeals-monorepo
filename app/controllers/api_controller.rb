@@ -100,7 +100,18 @@ class ApiController < ActionController::API
   # check: it rolls February 30 over to March 2 and hour 24 over to the
   # next day, and `''.to_i` is 0, so empty time menus were saved as
   # midnight to midnight (#102).
+  #
+  # Then each time must be one the database can store (StorableTime).
+  # The year has no range of its own, and a year like 300000 reached the
+  # database, which raised PG::DatetimeFieldOverflow: a 500.
   def parse_start_end_params(allday: false)
+    times = start_end_times(allday)
+    return nil if times.nil?
+
+    times if times.values.compact.all? { |time| StorableTime.timestamp?(time) }
+  end
+
+  def start_end_times(allday)
     year = whole_number_param(:start_year)
     month = whole_number_param(:start_month, 1..12)
     day = whole_number_param(:start_day, 1..31)

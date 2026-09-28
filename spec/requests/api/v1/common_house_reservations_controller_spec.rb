@@ -103,6 +103,40 @@ RSpec.describe 'Common House Reservations API' do
       end
     end
 
+    # The same edges as an event (events_controller_spec.rb says why these
+    # minutes): PostgreSQL cannot store a time before midnight UTC on
+    # November 24, 4714 BC or after the last microsecond of 294276. Before,
+    # the overlap check read the database with the time and raised
+    # PG::DatetimeFieldOverflow, a 500.
+    it 'refuses a time the database cannot store, one minute past each end, and takes the minute inside' do
+      outside_and_inside = [
+        [{ start_year: 294_276, start_month: 12, start_day: 31, start_hours: 15, start_minutes: 0 },
+         { end_hours: 16, end_minutes: 0 }, { end_hours: 15, end_minutes: 59 }],
+        [{ start_year: -4713, start_month: 11, start_day: 23, end_hours: 17, end_minutes: 0 },
+         { start_hours: 16, start_minutes: 7 }, { start_hours: 16, start_minutes: 8 }]
+      ]
+      outside_and_inside.each do |day, outside, inside|
+        [[outside, :bad_request], [inside, :ok]].each do |times, status|
+          post '/api/v1/common-house-reservations',
+               params: { token: token, resident_id: resident.id }.merge(day, times)
+
+          expect(response).to have_http_status(status)
+        end
+        expect(response.parsed_body).to eq('message' => 'Common House Reservation has been created')
+      end
+
+      post '/api/v1/common-house-reservations', params: {
+        token: token, resident_id: resident.id, start_year: 300_000, start_month: 1, start_day: 1,
+        start_hours: 14, start_minutes: 0, end_hours: 17, end_minutes: 0
+      }
+      expect(response.parsed_body).to eq('message' => 'Error: Invalid date')
+
+      expect(CommonHouseReservation.order(:id).pluck(:start_date, :end_date)).to eq(
+        [[Time.utc(294_276, 12, 31, 23, 0), Time.utc(294_276, 12, 31, 23, 59)],
+         [Time.utc(-4713, 11, 24, 0, 0, 58), Time.utc(-4713, 11, 24, 0, 52, 58)]]
+      )
+    end
+
     it 'rejects overlapping reservations in the same community' do
       create(:common_house_reservation, community: community, resident: resident,
                                         start_date: Time.zone.local(2026, 5, 1, 14, 0),
@@ -166,6 +200,22 @@ RSpec.describe 'Common House Reservations API' do
         patch "/api/v1/common-house-reservations/#{chr.id}/update", params: {
           token: token, resident_id: resident.id, title: 'Moved', start_year: 2026, start_month: 2
         }.merge(changed)
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body).to eq('message' => 'Error: Invalid date')
+        expect(chr.reload.attributes).to eq(before)
+      end
+    end
+
+    it 'refuses a year the database cannot store, at either end, and leaves the reservation as it was' do
+      chr = create(:common_house_reservation, community: community, resident: resident)
+      before = chr.reload.attributes
+
+      [300_000, -5000].each do |year|
+        patch "/api/v1/common-house-reservations/#{chr.id}/update", params: {
+          token: token, resident_id: resident.id, title: 'Moved', start_year: year, start_month: 5, start_day: 1,
+          start_hours: 10, start_minutes: 0, end_hours: 12, end_minutes: 0
+        }
 
         expect(response).to have_http_status(:bad_request)
         expect(response.parsed_body).to eq('message' => 'Error: Invalid date')

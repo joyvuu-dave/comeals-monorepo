@@ -198,6 +198,64 @@ RSpec.describe 'Events API' do
         expect(Event.count).to eq(3)
       end
 
+      # PostgreSQL stores a timestamp from midnight UTC on November 24,
+      # 4714 BC (Ruby's year -4713, because Ruby counts 1 BC as year 0)
+      # up to the last microsecond of 294276. A time outside that raised
+      # PG::DatetimeFieldOverflow on save, a 500. The community is in Los
+      # Angeles, so both ends fall inside a local day: 16:00 on December
+      # 31, 294276 is already 294277 in UTC, and before 1883 Los Angeles
+      # kept local mean time, 7:52:58 behind UTC, so 16:07 on November 23,
+      # 4714 BC is still before the first instant and 16:08 is after it.
+      def last_storable_day
+        { start_year: 294_276, start_month: 12, start_day: 31 }
+      end
+
+      def first_storable_day
+        { start_year: -4713, start_month: 11, start_day: 23 }
+      end
+
+      it 'refuses an end one minute past the last instant, and a start one minute before the first' do
+        post_event(**last_storable_day, start_hours: 15, start_minutes: 0, end_hours: 16, end_minutes: 0)
+        expect_refused
+
+        post_event(**first_storable_day, start_hours: 16, start_minutes: 7, end_hours: 17, end_minutes: 0)
+        expect_refused
+      end
+
+      it 'takes the last minute before the last instant, and the first minute after the first' do
+        post_event(**last_storable_day, start_hours: 15, start_minutes: 0, end_hours: 15, end_minutes: 59)
+        expect(response).to have_http_status(:ok)
+        post_event(**first_storable_day, start_hours: 16, start_minutes: 8, end_hours: 17, end_minutes: 0)
+        expect(response).to have_http_status(:ok)
+
+        expect(Event.order(:id).pluck(:start_date, :end_date)).to eq(
+          [[Time.utc(294_276, 12, 31, 23, 0), Time.utc(294_276, 12, 31, 23, 59)],
+           [Time.utc(-4713, 11, 24, 0, 0, 58), Time.utc(-4713, 11, 24, 0, 52, 58)]]
+        )
+      end
+
+      it 'refuses years far outside, and a year with more digits than any time has' do
+        [300_000, -5000, 10**30, -(10**30)].each do |year|
+          post_event(start_year: year)
+
+          expect_refused
+        end
+      end
+
+      # An all-day event starts at local midnight, so a day is refused
+      # when its midnight is outside, even if part of it is inside.
+      it 'refuses an all-day event on a day whose midnight is outside, and takes the day next to it' do
+        { [294_276, 12, 31] => :ok, [294_277, 1, 1] => :bad_request,
+          [-4713, 11, 24] => :ok, [-4713, 11, 23] => :bad_request }.each do |(year, month, day), status|
+          post_event(all_day: true, start_year: year, start_month: month, start_day: day)
+
+          expect(response).to have_http_status(status)
+        end
+
+        expect(Event.order(:id).pluck(:start_date))
+          .to eq([Time.utc(294_276, 12, 31, 8, 0), Time.utc(-4713, 11, 24, 7, 52, 58)])
+      end
+
       # The SPA sends a JSON body: the day parts as numbers, the hours and
       # minutes as strings, "08" with its zero. api.md shows them all as
       # numbers.
@@ -357,6 +415,20 @@ RSpec.describe 'Events API' do
        { start_day: 1, start_hours: '', start_minutes: '', end_hours: '', end_minutes: '' }].each do |changed|
         patch "/api/v1/events/#{event.id}/update", params: {
           token: token, title: 'Moved', all_day: false, start_year: 2026, start_month: 2
+        }.merge(changed)
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body).to eq('message' => 'Error: Invalid date')
+        expect(event.reload.attributes).to eq(before)
+      end
+    end
+
+    it 'refuses a year the database cannot store, at either end, and leaves the event as it was' do
+      before = event.reload.attributes
+      [{ all_day: true, start_year: 300_000 }, { all_day: false, start_year: -5000 }].each do |changed|
+        patch "/api/v1/events/#{event.id}/update", params: {
+          token: token, title: 'Moved', start_month: 5, start_day: 1,
+          start_hours: 18, start_minutes: 0, end_hours: 20, end_minutes: 0
         }.merge(changed)
 
         expect(response).to have_http_status(:bad_request)
