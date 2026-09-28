@@ -1,4 +1,12 @@
-import { describe, it, expect, beforeEach, afterAll } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  afterAll,
+  vi,
+} from "vitest";
 import dayjs from "dayjs";
 import advancedFormat from "dayjs/plugin/advancedFormat";
 import Cookie from "js-cookie";
@@ -340,23 +348,70 @@ describe.each(["America/Chicago", "UTC", "Asia/Tokyo"])(
 );
 
 describe("communityNow", () => {
-  it("produces a dayjs anchored to the community tz", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-08T10:00:00Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("reads the community's clock", () => {
     setCommunityTimezone("Europe/Berlin");
-    const now = communityNow();
-    // Offset in minutes from UTC. CET = +60, CEST = +120.
-    expect([60, 120]).toContain(now.utcOffset());
+    expect(communityNow().format("YYYY-MM-DD HH:mm")).toBe("2026-07-08 12:00");
   });
 
   it("reflects a cookie change without needing a reimport", () => {
     setCommunityTimezone("America/Los_Angeles");
-    const la = communityNow();
-    // PST = -480, PDT = -420
-    expect([-480, -420]).toContain(la.utcOffset());
+    expect(communityNow().format("YYYY-MM-DD HH:mm")).toBe("2026-07-08 03:00");
 
     setCommunityTimezone("Australia/Sydney");
-    const syd = communityNow();
-    // AEST = +600, AEDT = +660
-    expect([600, 660]).toContain(syd.utcOffset());
+    expect(communityNow().format("YYYY-MM-DD HH:mm")).toBe("2026-07-08 20:00");
+  });
+});
+
+// "Now" must read the community's clock on every device. A device-local
+// Date cannot hold a time that the device's own clock skips, so a clock
+// built as one was an hour off in that hour, and in Greenland a day off.
+describe.each([
+  "America/Chicago",
+  "America/New_York",
+  "America/Los_Angeles",
+  "UTC",
+  "Asia/Tokyo",
+  "Europe/Berlin",
+  "Europe/London",
+  "America/Nuuk",
+  "Pacific/Honolulu",
+])("communityNow on a device in %s", (deviceZone) => {
+  useDeviceZone(deviceZone);
+
+  beforeEach(() => {
+    setCommunityTimezone("America/Los_Angeles");
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each([
+    // Greenland's clocks skip from 23:00 to midnight that night.
+    ["2026-03-28T23:30:00-07:00", "2026-03-28 23:30"],
+    // London's skip from 01:00 to 02:00 on Mar 29, Berlin's from 02:00
+    // to 03:00.
+    ["2026-03-29T01:30:00-07:00", "2026-03-29 01:30"],
+    ["2026-03-29T02:30:00-07:00", "2026-03-29 02:30"],
+    // The community's own changes.
+    ["2026-03-08T01:59:00-08:00", "2026-03-08 01:59"],
+    ["2026-03-08T03:00:00-07:00", "2026-03-08 03:00"],
+    ["2026-11-01T01:30:00-07:00", "2026-11-01 01:30"],
+    ["2026-11-01T01:30:00-08:00", "2026-11-01 01:30"],
+    ["2026-11-01T23:59:00-08:00", "2026-11-01 23:59"],
+  ])("at %s reads %s", (instant, wallClock) => {
+    vi.setSystemTime(new Date(instant));
+    expect(communityNow().format("YYYY-MM-DD HH:mm")).toBe(wallClock);
   });
 });
 

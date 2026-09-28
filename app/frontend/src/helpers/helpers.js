@@ -124,11 +124,12 @@ export function toCommunityDayjs(dateString) {
     : wall;
 }
 
-// "Now" in the community's timezone. Prefer this over dayjs() whenever the
-// value is user-visible — a resident travelling out of tz must see the same
+// "Now" in the community's timezone, as its wall clock (a dayjs from
+// wallClockAt). Prefer this over dayjs() whenever the value is
+// user-visible — a resident travelling out of tz must see the same
 // meal-day rollover as anyone at home.
 export function communityNow() {
-  return dayjs().tz(getCommunityTimezone());
+  return wallClockAt(Date.now(), getCommunityTimezone());
 }
 
 // The value space is a compile-time constant (~56 15-minute slots, 8am–10pm),

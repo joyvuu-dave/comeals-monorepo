@@ -116,6 +116,19 @@ describe.each([
     );
   });
 
+  // In Greenland this is the hour the device's own clock skips.
+  it("knows today at 23:30 on Mar 28, and rolls over at midnight", () => {
+    startAt("2026-03-28T23:30:00-07:00");
+    expect(store.communityToday).toBe("2026-03-28");
+
+    expectRolloverAt(
+      "2026-03-29T00:00:00-07:00",
+      "2026-03-28",
+      "2026-03-29",
+      1,
+    );
+  });
+
   it("rolls over at the community's midnight on the nights Europe and Greenland change their clocks", () => {
     // 17:00 in Los Angeles is midnight UTC, an hour before those changes.
     startAt("2026-03-28T17:00:00-07:00");
