@@ -312,13 +312,36 @@ describe("MainCalendar", () => {
     );
   });
 
+  // Each clock below is on a different date in the community's zone
+  // than in UTC, so a Today button that read the computer's own zone
+  // would go to the wrong day. One zone alone is not enough: a
+  // computer set to the community's zone gets the same date either
+  // way. The Los Angeles case catches that on a computer east of Los
+  // Angeles, and the Tokyo case on a computer west of Tokyo.
   describe("the today button", () => {
+    const fixtureTimezone = cookies.current.timezone;
+
     afterEach(() => {
       vi.useRealTimers();
+      cookies.current.timezone = fixtureTimezone;
     });
 
     it("goes to today's date in the community's zone", () => {
-      // 20:00 UTC is noon in Los Angeles, the fixture's zone.
+      // 07:30 UTC on March 4 is 23:30 on March 3 in Los Angeles.
+      vi.useFakeTimers({
+        toFake: ["Date"],
+        now: new Date("2026-03-04T07:30:00Z"),
+      });
+      renderCalendar();
+      fireEvent.click(screen.getByRole("button", { name: "today" }));
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        /^\/calendar\/all\/2026-03-03$/,
+      );
+    });
+
+    it("goes to today's date in a community east of UTC", () => {
+      // 20:00 UTC on March 3 is 05:00 on March 4 in Tokyo.
+      cookies.current.timezone = "Asia/Tokyo";
       vi.useFakeTimers({
         toFake: ["Date"],
         now: new Date("2026-03-03T20:00:00Z"),
@@ -326,14 +349,15 @@ describe("MainCalendar", () => {
       renderCalendar();
       fireEvent.click(screen.getByRole("button", { name: "today" }));
       expect(screen.getByTestId("location")).toHaveTextContent(
-        "/calendar/all/2026-03-03",
+        /^\/calendar\/all\/2026-03-04$/,
       );
     });
 
     it("does nothing when the calendar already shows today", () => {
+      // 07:30 UTC on January 16 is 23:30 on January 15 in Los Angeles.
       vi.useFakeTimers({
         toFake: ["Date"],
-        now: new Date("2026-01-15T20:00:00Z"),
+        now: new Date("2026-01-16T07:30:00Z"),
       });
       renderCalendar();
       fireEvent.click(screen.getByRole("button", { name: "today" }));
@@ -414,7 +438,10 @@ describe("MainCalendar", () => {
       expect(chipFor("Plain").style.color).toBe("rgb(255, 255, 255)");
     });
 
-    it("washes out an event that already happened", () => {
+    // Only a chip that links somewhere and starts before the community's
+    // today (2026-01-15 here) is washed out. A chip with no link (a
+    // holiday or a birthday) keeps its full color on any day.
+    it("washes out an event that already happened, and nothing else", () => {
       renderCalendar({
         store: makeStore({
           calendarEvents: [
@@ -426,11 +453,47 @@ describe("MainCalendar", () => {
               color: "#4caf50",
               url: "/meals/40/edit",
             },
+            {
+              id: "last-night",
+              title: "Last night",
+              start: new Date(2026, 0, 14, 23, 0),
+              end: new Date(2026, 0, 14, 23, 30),
+              color: "#4caf50",
+              url: "/meals/41/edit",
+            },
+            {
+              id: "midnight",
+              title: "Midnight",
+              start: new Date(2026, 0, 15, 0, 0),
+              end: new Date(2026, 0, 15, 1, 0),
+              color: "#4caf50",
+              url: "/events/9/edit",
+            },
+            {
+              id: "tomorrow",
+              title: "Tomorrow",
+              start: new Date(2026, 0, 16, 18, 0),
+              end: new Date(2026, 0, 16, 19, 0),
+              color: "#4caf50",
+              url: "/meals/43/edit",
+            },
+            {
+              id: "no-url",
+              title: "No link",
+              start: new Date(2026, 0, 10, 0, 0),
+              end: new Date(2026, 0, 10, 23, 59),
+              color: "#4caf50",
+            },
           ],
         }),
       });
       expect(chipFor("Past").style.filter).toBe("saturate(35%)");
       expect(chipFor("Past").style.color).toBe("rgb(0, 0, 0)");
+      expect(chipFor("Last night").style.filter).toBe("saturate(35%)");
+      expect(chipFor("Midnight").style.filter).toBe("");
+      expect(chipFor("Tomorrow").style.filter).toBe("");
+      expect(chipFor("No link").style.filter).toBe("");
+      expect(chipFor("No link").style.color).toBe("rgb(0, 0, 0)");
     });
   });
 
