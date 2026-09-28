@@ -25,6 +25,15 @@ RSpec.describe 'Read-only admin token' do
     allow(ENV).to receive(:fetch).with('READ_ONLY_ADMIN_ID', nil).and_return(token_account.id.to_s)
   end
 
+  # ActiveAdmin refuses with a redirect to the dashboard and a flash error
+  # (superuser_authorization_spec.rb does the same). Naming the target
+  # matters: a token that did not sign in at all is also a redirect, to
+  # /login, and must not pass as a refusal.
+  def expect_denied
+    expect(response).to redirect_to('http://admin.example.com/')
+    expect(flash[:error]).to eq('You are not authorized to perform this action.')
+  end
+
   describe 'what it can read' do
     it 'reads bills, which is what the reconciliation email links to' do
       get '/bills', params: { token: token }
@@ -61,7 +70,7 @@ RSpec.describe 'Read-only admin token' do
       expect(response.body).to include('Attended')
     end
 
-    it 'reads any resident\'s balances, not only the emailed one' do
+    it 'reads any resident\'s page, not only the emailed one' do
       unit = create(:unit, community: community, name: 'Elm')
       other = create(:resident, community: community, unit: unit, name: 'Someone Else')
 
@@ -73,15 +82,10 @@ RSpec.describe 'Read-only admin token' do
   end
 
   describe 'what it cannot reach' do
-    def expect_denied
-      expect(response).to have_http_status(:redirect)
-      expect(AdminUser.where(email: 'sneaky@example.com')).not_to exist
-    end
-
     it 'cannot enumerate admin accounts' do
       get '/admin_users', params: { token: token }
 
-      expect(response).to have_http_status(:redirect)
+      expect_denied
     end
 
     it 'cannot read community settings' do
@@ -97,14 +101,18 @@ RSpec.describe 'Read-only admin token' do
     end
   end
 
+  # Each write below is one the account behind the token could make if it
+  # signed in: the params are valid, so only the token rule refuses them.
   describe 'what it cannot write' do
     it 'cannot create an event, even though the account behind it is a superuser' do
       expect do
         post '/events', params: {
           token: token,
-          event: { title: 'Sneaky', start_date: 1.day.from_now }
+          event: { title: 'Sneaky', start_date: 1.day.from_now, end_date: 1.day.from_now + 2.hours }
         }
       end.not_to change(Event, :count)
+
+      expect_denied
     end
 
     it 'cannot destroy an event' do
@@ -115,6 +123,7 @@ RSpec.describe 'Read-only admin token' do
       end.not_to change(Event, :count)
 
       expect(Event.exists?(event.id)).to be true
+      expect_denied
     end
 
     it 'cannot create an admin account' do
@@ -128,15 +137,28 @@ RSpec.describe 'Read-only admin token' do
           }
         }
       end.not_to change(AdminUser, :count)
+
+      expect_denied
     end
 
+    # Reconciliation is on the token's read list, so this is the money
+    # write a widened token rule would let through first. The meal is one
+    # a signed-in superuser would settle.
     it 'cannot create a reconciliation' do
+      cook = create(:resident, community: community, unit: create(:unit, community: community))
+      meal = create(:meal, community: community, date: 1.day.ago.to_date)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('25'))
+      create(:meal_resident, meal: meal, resident: cook, community: community)
+
       expect do
         post '/reconciliations', params: {
           token: token,
           reconciliation: { end_date: 1.day.ago.to_date }
         }
       end.not_to change(Reconciliation, :count)
+
+      expect_denied
+      expect(meal.reload.reconciliation_id).to be_nil
     end
   end
 
