@@ -44,7 +44,7 @@
  *   2. git checkout feature-branch; re-run; diff the JSON files
  */
 
-const { test } = require("../helpers/test");
+const { test, expect } = require("../helpers/test");
 const fs = require("fs");
 const path = require("path");
 const { setupAuthenticatedPage } = require("../helpers/setup");
@@ -162,8 +162,15 @@ function summarize(timings) {
  * waitFor: async () => void
  *   Waits for the post-condition that marks "done." Timing ends
  *   immediately after this returns.
+ *
+ * opened: RegExp
+ *   The URL the click must open. Checked after the timer stops, so it
+ *   does not change the timings, but a click on the wrong element
+ *   fails the run instead of saving another modal's timings under this
+ *   scenario's name. (The New and Edit forms both set data-populated,
+ *   so the wait selectors alone cannot tell them apart.)
  */
-async function bench({ setupIteration, action, waitFor }) {
+async function bench({ page, setupIteration, action, waitFor, opened }) {
   const timings = [];
   for (let i = 0; i < ITERATIONS + WARMUP; i++) {
     await setupIteration();
@@ -171,9 +178,27 @@ async function bench({ setupIteration, action, waitFor }) {
     await action();
     await waitFor();
     const t1 = Date.now();
+    await expect(page).toHaveURL(opened);
     if (i >= WARMUP) timings.push(t1 - t0);
   }
   return timings;
+}
+
+// The URL of each modal (the routes in calendar/show.jsx).
+const OPENED = {
+  guestRoomEdit: /\/guest-room-reservations\/edit\/\d+\/?$/,
+  commonHouseEdit: /\/common-house-reservations\/edit\/\d+\/?$/,
+  eventEdit: /\/events\/edit\/\d+\/?$/,
+  guestRoomNew: /\/guest-room-reservations\/new\/?$/,
+  commonHouseNew: /\/common-house-reservations\/new\/?$/,
+  eventNew: /\/events\/new\/?$/,
+};
+
+// The guest room reservation's tile on the calendar. `text=Guest Room`
+// finds the sidebar's "Guest Room" button first, because the sidebar
+// comes before the calendar grid, and that button opens the New form.
+function guestRoomTile(page) {
+  return page.locator(".rbc-event", { hasText: "Guest Room" }).first();
 }
 
 /**
@@ -308,21 +333,27 @@ test.describe(`Modal open perf @ ${LATENCY_MS}ms injected latency`, () => {
     await gotoCalendarFresh(page);
 
     const scaffoldTimings = await bench({
+      page,
       setupIteration: () => gotoCalendarFresh(page),
-      action: () => page.locator("text=Guest Room").first().click(),
+      action: () => guestRoomTile(page).click(),
       waitFor: () => page.waitForSelector(SCAFFOLD),
+      opened: OPENED.guestRoomEdit,
     });
 
     const formVisibleTimings = await bench({
+      page,
       setupIteration: () => gotoCalendarFresh(page),
-      action: () => page.locator("text=Guest Room").first().click(),
+      action: () => guestRoomTile(page).click(),
       waitFor: () => page.waitForSelector(FORM_VISIBLE),
+      opened: OPENED.guestRoomEdit,
     });
 
     const populatedTimings = await bench({
+      page,
       setupIteration: () => gotoCalendarFresh(page),
-      action: () => page.locator("text=Guest Room").first().click(),
+      action: () => guestRoomTile(page).click(),
       waitFor: () => page.waitForSelector(POPULATED_WITH_DATA),
+      opened: OPENED.guestRoomEdit,
     });
 
     results["Guest Room Edit"] = {
@@ -336,21 +367,27 @@ test.describe(`Modal open perf @ ${LATENCY_MS}ms injected latency`, () => {
     await gotoCalendarFresh(page);
 
     const scaffoldTimings = await bench({
+      page,
       setupIteration: () => gotoCalendarFresh(page),
       action: () => page.locator("text=Book Club").first().click(),
       waitFor: () => page.waitForSelector(SCAFFOLD),
+      opened: OPENED.commonHouseEdit,
     });
 
     const formVisibleTimings = await bench({
+      page,
       setupIteration: () => gotoCalendarFresh(page),
       action: () => page.locator("text=Book Club").first().click(),
       waitFor: () => page.waitForSelector(FORM_VISIBLE),
+      opened: OPENED.commonHouseEdit,
     });
 
     const populatedTimings = await bench({
+      page,
       setupIteration: () => gotoCalendarFresh(page),
       action: () => page.locator("text=Book Club").first().click(),
       waitFor: () => page.waitForSelector(POPULATED_WITH_DATA),
+      opened: OPENED.commonHouseEdit,
     });
 
     results["Common House Edit"] = {
@@ -364,21 +401,27 @@ test.describe(`Modal open perf @ ${LATENCY_MS}ms injected latency`, () => {
     await gotoCalendarFresh(page);
 
     const scaffoldTimings = await bench({
+      page,
       setupIteration: () => gotoCalendarFresh(page),
       action: () => page.locator("text=Community Meeting").first().click(),
       waitFor: () => page.waitForSelector(SCAFFOLD),
+      opened: OPENED.eventEdit,
     });
 
     const formVisibleTimings = await bench({
+      page,
       setupIteration: () => gotoCalendarFresh(page),
       action: () => page.locator("text=Community Meeting").first().click(),
       waitFor: () => page.waitForSelector(FORM_VISIBLE),
+      opened: OPENED.eventEdit,
     });
 
     const populatedTimings = await bench({
+      page,
       setupIteration: () => gotoCalendarFresh(page),
       action: () => page.locator("text=Community Meeting").first().click(),
       waitFor: () => page.waitForSelector(POPULATED_WITH_DATA),
+      opened: OPENED.eventEdit,
     });
 
     results["Event Edit"] = {
@@ -394,24 +437,30 @@ test.describe(`Modal open perf @ ${LATENCY_MS}ms injected latency`, () => {
     await gotoCalendarFresh(page);
 
     const scaffoldTimings = await bench({
+      page,
       setupIteration: () => gotoCalendarFresh(page),
       action: () =>
         page.getByRole("button", { name: "Guest Room", exact: true }).click(),
       waitFor: () => page.waitForSelector(SCAFFOLD),
+      opened: OPENED.guestRoomNew,
     });
 
     const formVisibleTimings = await bench({
+      page,
       setupIteration: () => gotoCalendarFresh(page),
       action: () =>
         page.getByRole("button", { name: "Guest Room", exact: true }).click(),
       waitFor: () => page.waitForSelector(FORM_VISIBLE),
+      opened: OPENED.guestRoomNew,
     });
 
     const populatedTimings = await bench({
+      page,
       setupIteration: () => gotoCalendarFresh(page),
       action: () =>
         page.getByRole("button", { name: "Guest Room", exact: true }).click(),
       waitFor: () => page.waitForSelector(POPULATED_WITH_DATA),
+      opened: OPENED.guestRoomNew,
     });
 
     results["Guest Room New"] = {
@@ -425,24 +474,30 @@ test.describe(`Modal open perf @ ${LATENCY_MS}ms injected latency`, () => {
     await gotoCalendarFresh(page);
 
     const scaffoldTimings = await bench({
+      page,
       setupIteration: () => gotoCalendarFresh(page),
       action: () =>
         page.getByRole("button", { name: "Common House", exact: true }).click(),
       waitFor: () => page.waitForSelector(SCAFFOLD),
+      opened: OPENED.commonHouseNew,
     });
 
     const formVisibleTimings = await bench({
+      page,
       setupIteration: () => gotoCalendarFresh(page),
       action: () =>
         page.getByRole("button", { name: "Common House", exact: true }).click(),
       waitFor: () => page.waitForSelector(FORM_VISIBLE),
+      opened: OPENED.commonHouseNew,
     });
 
     const populatedTimings = await bench({
+      page,
       setupIteration: () => gotoCalendarFresh(page),
       action: () =>
         page.getByRole("button", { name: "Common House", exact: true }).click(),
       waitFor: () => page.waitForSelector(POPULATED_WITH_DATA),
+      opened: OPENED.commonHouseNew,
     });
 
     results["Common House New"] = {
@@ -456,18 +511,22 @@ test.describe(`Modal open perf @ ${LATENCY_MS}ms injected latency`, () => {
     await gotoCalendarFresh(page);
 
     const scaffoldTimings = await bench({
+      page,
       setupIteration: () => gotoCalendarFresh(page),
       action: () =>
         page.getByRole("button", { name: "Event", exact: true }).click(),
       waitFor: () => page.waitForSelector(SCAFFOLD),
+      opened: OPENED.eventNew,
     });
 
     // Event New has no data dependency, so populated = form-visible.
     const populatedTimings = await bench({
+      page,
       setupIteration: () => gotoCalendarFresh(page),
       action: () =>
         page.getByRole("button", { name: "Event", exact: true }).click(),
       waitFor: () => page.waitForSelector(POPULATED_EVENT_NEW),
+      opened: OPENED.eventNew,
     });
 
     results["Event New"] = {
@@ -492,14 +551,17 @@ test.describe(`Modal open perf @ ${LATENCY_MS}ms injected latency`, () => {
   test("Guest Room — Edit (warm cache)", async ({ page }) => {
     await gotoCalendarFresh(page);
     // Prime the hosts cache by opening + closing once.
-    await page.locator("text=Guest Room").first().click();
+    await guestRoomTile(page).click();
     await page.waitForSelector(POPULATED_WITH_DATA);
+    await expect(page).toHaveURL(OPENED.guestRoomEdit);
     await closeModal(page);
 
     const populatedTimings = await bench({
+      page,
       setupIteration: () => closeIfOpen(page),
-      action: () => page.locator("text=Guest Room").first().click(),
+      action: () => guestRoomTile(page).click(),
       waitFor: () => page.waitForSelector(POPULATED_WITH_DATA),
+      opened: OPENED.guestRoomEdit,
     });
 
     results["Guest Room Edit (warm)"] = {
@@ -514,9 +576,11 @@ test.describe(`Modal open perf @ ${LATENCY_MS}ms injected latency`, () => {
     await closeModal(page);
 
     const populatedTimings = await bench({
+      page,
       setupIteration: () => closeIfOpen(page),
       action: () => page.locator("text=Book Club").first().click(),
       waitFor: () => page.waitForSelector(POPULATED_WITH_DATA),
+      opened: OPENED.commonHouseEdit,
     });
 
     results["Common House Edit (warm)"] = {
@@ -531,10 +595,12 @@ test.describe(`Modal open perf @ ${LATENCY_MS}ms injected latency`, () => {
     await closeModal(page);
 
     const populatedTimings = await bench({
+      page,
       setupIteration: () => closeIfOpen(page),
       action: () =>
         page.getByRole("button", { name: "Guest Room", exact: true }).click(),
       waitFor: () => page.waitForSelector(POPULATED_WITH_DATA),
+      opened: OPENED.guestRoomNew,
     });
 
     results["Guest Room New (warm)"] = {
@@ -551,10 +617,12 @@ test.describe(`Modal open perf @ ${LATENCY_MS}ms injected latency`, () => {
     await closeModal(page);
 
     const populatedTimings = await bench({
+      page,
       setupIteration: () => closeIfOpen(page),
       action: () =>
         page.getByRole("button", { name: "Common House", exact: true }).click(),
       waitFor: () => page.waitForSelector(POPULATED_WITH_DATA),
+      opened: OPENED.commonHouseNew,
     });
 
     results["Common House New (warm)"] = {
