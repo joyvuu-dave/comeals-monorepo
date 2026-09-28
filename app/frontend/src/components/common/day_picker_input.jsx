@@ -41,8 +41,10 @@ function DayPickerInputWrapper({
     onDayChange(date);
   }
 
+  // With no day chosen the input is empty; the placeholder attribute
+  // shows the hint without looking like a chosen day.
   function formatValue() {
-    if (!value) return placeholder || "";
+    if (!value) return "";
     return dayjs(value).format("MM/DD/YYYY");
   }
 

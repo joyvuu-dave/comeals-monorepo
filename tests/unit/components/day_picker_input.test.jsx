@@ -8,13 +8,20 @@ describe("DayPickerInput", () => {
     expect(screen.getByDisplayValue("01/15/2026")).toBeInTheDocument();
   });
 
-  it("shows the placeholder text when there is no value", () => {
-    // The component puts the placeholder into the input's value, not
-    // only the placeholder attribute. Pinned as-is.
+  // A placeholder is only a hint: in the value it would look like a
+  // chosen day, and a screen reader would read it as the value.
+  it("shows the placeholder as a hint, not as the value, when there is no value", () => {
     render(<DayPickerInput id="day" placeholder="Pick a day" />);
-    expect(screen.getByPlaceholderText("Pick a day")).toHaveDisplayValue(
-      "Pick a day",
-    );
+    const input = screen.getByPlaceholderText("Pick a day");
+    expect(input).toHaveDisplayValue("");
+    expect(input).toHaveAttribute("placeholder", "Pick a day");
+  });
+
+  it("is empty with no value and no placeholder", () => {
+    render(<DayPickerInput id="day" />);
+    const input = screen.getByRole("textbox");
+    expect(input).toHaveDisplayValue("");
+    expect(input).toHaveAttribute("placeholder", "");
   });
 
   it("opens the picker on click and reports the chosen day", () => {
