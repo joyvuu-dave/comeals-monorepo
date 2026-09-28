@@ -5,6 +5,7 @@ require 'rake'
 
 RSpec.describe 'reconciliations:create' do
   include ActiveJob::TestHelper
+  include ActiveSupport::Testing::TimeHelpers
 
   # The cook mail is a job (NotifyCooksJob). Run it inline so these examples
   # see the whole of what a settlement does.
@@ -49,7 +50,30 @@ RSpec.describe 'reconciliations:create' do
 
     Rake::Task['reconciliations:create'].invoke
 
-    expect(Reconciliation.last.end_date).to eq(Date.yesterday)
+    expect(Reconciliation.last.end_date).to eq(community.yesterday)
+  end
+
+  # The task runs in the app's zone, Los Angeles. At 05:30 UTC on
+  # 2026-04-10 it is April 10 in New York and still April 9 in Los
+  # Angeles. A New York community's yesterday is April 9, and that
+  # evening's meal is over for everyone who ate it. Date.yesterday would
+  # say April 8 and leave the meal open.
+  it "settles through the community's yesterday, not the app zone's" do
+    travel_to(Time.utc(2026, 4, 10, 5, 30)) do
+      new_york = create(:community, timezone: 'America/New_York')
+      new_york_unit = create(:unit, community: new_york)
+      cook = create(:resident, community: new_york, unit: new_york_unit, multiplier: 2)
+      eater = create(:resident, community: new_york, unit: new_york_unit, multiplier: 2)
+      meal = create(:meal, community: new_york, date: Date.new(2026, 4, 9))
+      create(:bill, meal: meal, resident: cook, community: new_york, amount: BigDecimal('40'))
+      create(:meal_resident, meal: meal, resident: eater, community: new_york)
+      expect(Date.yesterday).to eq(Date.new(2026, 4, 8))
+
+      Rake::Task['reconciliations:create'].invoke
+
+      expect(Reconciliation.pluck(:end_date)).to eq([Date.new(2026, 4, 9)])
+      expect(meal.reload.reconciliation).to eq(Reconciliation.last)
+    end
   end
 
   it 'persists settlement balances' do
@@ -83,7 +107,7 @@ RSpec.describe 'reconciliations:create' do
     # tonight's meal at $0.
     cook = create(:resident, community: community, unit: unit, multiplier: 2)
     eater = create(:resident, community: community, unit: unit, multiplier: 2)
-    tonight = create(:meal, community: community, date: Time.zone.today)
+    tonight = create(:meal, community: community, date: community.today)
     create(:bill, meal: tonight, resident: cook, community: community, amount: BigDecimal('0'))
     create(:meal_resident, meal: tonight, resident: eater, community: community)
 
@@ -183,23 +207,6 @@ RSpec.describe 'reconciliations:create' do
     expect { Rake::Task['reconciliations:create'].invoke }.not_to raise_error
 
     expect(delivered).to eq([second])
-    expect(Rails.logger).to have_received(:error).with(/reconciliation_notify_email failed/)
-  end
-
-  it 'handles email delivery failures gracefully' do
-    cook = create(:resident, community: community, unit: unit, multiplier: 2)
-    meal = create(:meal, community: community, date: Date.yesterday)
-    create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('40'))
-    create(:meal_resident, meal: meal, resident: cook, community: community)
-
-    mail_double = instance_double(ActionMailer::MessageDelivery)
-    allow(ReconciliationMailer).to receive(:reconciliation_notify_email).and_return(mail_double)
-    allow(mail_double).to receive(:deliver_now).and_raise(Net::ReadTimeout)
-    allow(Rails.logger).to receive(:error)
-
-    # Should not raise — emails fail gracefully
-    expect { Rake::Task['reconciliations:create'].invoke }.not_to raise_error
-
     expect(Rails.logger).to have_received(:error).with(/reconciliation_notify_email failed/)
   end
 end
