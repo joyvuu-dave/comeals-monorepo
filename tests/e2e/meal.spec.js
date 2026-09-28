@@ -1,5 +1,23 @@
 const { test, expect } = require("../helpers/test");
 const { setupAuthenticatedPage } = require("../helpers/setup");
+const mealFixture = require("../fixtures/meal.json");
+
+// The number in one of the meal page's count circles (Total, Veg,
+// Late). The circle holds two divs: the label, then the number.
+// toHaveText on it is exact, where toContainText("3") on the circle
+// would also match 13.
+function circleNumber(page, label) {
+  return page.locator(".info-circle", { hasText: label }).locator("div").nth(1);
+}
+
+// A write answered the way the server answers it (MealsController).
+function fulfillJson(route, body) {
+  return route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify(body),
+  });
+}
 
 test.describe("Meal Editing", () => {
   test.beforeEach(async ({ page, context }) => {
@@ -47,14 +65,11 @@ test.describe("Meal Editing", () => {
 
     // --- Info circles (computed values) ---
     // Fixture: Jane attending + Alice attending + 1 guest = 3 total
-    const totalCircle = page.locator(".info-circle", { hasText: "Total" });
-    await expect(totalCircle).toContainText("3");
+    await expect(circleNumber(page, "Total")).toHaveText("3");
     // Fixture: no vegetarian attendees (Bob is veg but not attending)
-    const vegCircle = page.locator(".info-circle", { hasText: "Veg" });
-    await expect(vegCircle).toContainText("0");
+    await expect(circleNumber(page, "Veg")).toHaveText("0");
     // Fixture: Alice is late = 1 late
-    const lateCircle = page.locator(".info-circle", { hasText: "Late" });
-    await expect(lateCircle).toContainText("1");
+    await expect(circleNumber(page, "Late")).toHaveText("1");
 
     // --- Late/Veg switch initial states ---
     // Alice (id=3) is late -- her switch should be checked
@@ -94,7 +109,15 @@ test.describe("Meal Editing", () => {
       if (apiMethod === "POST") {
         apiPayload = route.request().postDataJSON();
       }
-      route.fulfill({ status: 200, body: "{}" });
+      // The server answers a sign-up with the new MealResident row.
+      fulfillJson(route, {
+        id: 900,
+        meal_id: 42,
+        resident_id: 2,
+        late: false,
+        vegetarian: true,
+        created_at: "2026-01-15T10:00:00.000-08:00",
+      });
     });
 
     await page.goto("/meals/42/edit/");
@@ -108,20 +131,24 @@ test.describe("Meal Editing", () => {
 
     // Before: Bob not attending, Total=3, Veg=0
     await expect(bobCell).not.toHaveClass(/background-green/);
-    const totalCircle = page.locator(".info-circle", { hasText: "Total" });
-    await expect(totalCircle).toContainText("3");
+    await expect(circleNumber(page, "Total")).toHaveText("3");
+    await expect(circleNumber(page, "Veg")).toHaveText("0");
 
     // Click to toggle attending (Bob is not attending -> adds him)
     await bobCell.click();
 
     // After: Bob attending (green), Total=4, Veg=1 (Bob is vegetarian)
     await expect(bobCell).toHaveClass(/background-green/, { timeout: 3000 });
-    await expect(totalCircle).toContainText("4", { timeout: 3000 });
-    const vegCircle = page.locator(".info-circle", { hasText: "Veg" });
-    await expect(vegCircle).toContainText("1", { timeout: 3000 });
+    await expect(circleNumber(page, "Total")).toHaveText("4");
+    await expect(circleNumber(page, "Veg")).toHaveText("1");
 
     // API: POST to add attendance (not DELETE), with late/vegetarian in payload
     await expect.poll(() => apiMethod, { timeout: 3000 }).toBe("POST");
+    expect(Object.keys(apiPayload).sort()).toEqual([
+      "late",
+      "socket_id",
+      "vegetarian",
+    ]);
     expect(apiPayload.vegetarian).toBe(true);
     expect(apiPayload.late).toBe(false);
   });
@@ -134,7 +161,7 @@ test.describe("Meal Editing", () => {
       if (route.request().method() === "PATCH") {
         patchData = route.request().postDataJSON();
       }
-      route.fulfill({ status: 200, body: "{}" });
+      fulfillJson(route, { message: "MealResident updated." });
     });
 
     await page.goto("/meals/42/edit/");
@@ -146,18 +173,20 @@ test.describe("Meal Editing", () => {
     // Before: Jane not late, late count = 1 (only Alice)
     const lateSwitch = page.locator("#late_switch_1");
     await expect(lateSwitch).not.toBeChecked();
-    const lateCircle = page.locator(".info-circle", { hasText: "Late" });
-    await expect(lateCircle).toContainText("1");
+    await expect(circleNumber(page, "Late")).toHaveText("1");
 
     // Toggle late via the label (clicking hidden input with force doesn't fire React onChange)
     await page.locator('label[for="late_switch_1"]').click();
 
     // After: Jane is now late, switch is checked, late count = 2
     await expect(lateSwitch).toBeChecked({ timeout: 3000 });
-    await expect(lateCircle).toContainText("2", { timeout: 3000 });
+    await expect(circleNumber(page, "Late")).toHaveText("2");
 
-    // API should have been called with late: true
-    expect(patchData).toBeTruthy();
+    // The store flips the switch before it sends the request, so the
+    // request can reach the route after the checks above pass: wait
+    // for it. The body carries late and the socket id, nothing else.
+    await expect.poll(() => patchData, { timeout: 3000 }).toBeTruthy();
+    expect(Object.keys(patchData).sort()).toEqual(["late", "socket_id"]);
     expect(patchData.late).toBe(true);
   });
 
@@ -169,7 +198,7 @@ test.describe("Meal Editing", () => {
       if (route.request().method() === "PATCH") {
         patchData = route.request().postDataJSON();
       }
-      route.fulfill({ status: 200, body: "{}" });
+      fulfillJson(route, { message: "MealResident updated." });
     });
 
     await page.goto("/meals/42/edit/");
@@ -181,18 +210,19 @@ test.describe("Meal Editing", () => {
     // Before: Jane not veg, veg count = 0
     const vegSwitch = page.locator("#veg_switch_1");
     await expect(vegSwitch).not.toBeChecked();
-    const vegCircle = page.locator(".info-circle", { hasText: "Veg" });
-    await expect(vegCircle).toContainText("0");
+    await expect(circleNumber(page, "Veg")).toHaveText("0");
 
     // Toggle veg via the label
     await page.locator('label[for="veg_switch_1"]').click();
 
     // After: Jane is now veg, switch is checked, veg count = 1
     await expect(vegSwitch).toBeChecked({ timeout: 3000 });
-    await expect(vegCircle).toContainText("1", { timeout: 3000 });
+    await expect(circleNumber(page, "Veg")).toHaveText("1");
 
-    // API should have been called with vegetarian: true
-    expect(patchData).toBeTruthy();
+    // Wait for the request (the switch flips before it is sent). The
+    // body carries vegetarian and the socket id, nothing else.
+    await expect.poll(() => patchData, { timeout: 3000 }).toBeTruthy();
+    expect(Object.keys(patchData).sort()).toEqual(["socket_id", "vegetarian"]);
     expect(patchData.vegetarian).toBe(true);
   });
 
@@ -200,7 +230,7 @@ test.describe("Meal Editing", () => {
     let descriptionPayload = null;
     await page.route("**/api/v1/meals/*/description*", (route) => {
       descriptionPayload = route.request().postDataJSON();
-      route.fulfill({ status: 200, body: "{}" });
+      fulfillJson(route, { message: "Description updated." });
     });
 
     await page.goto("/meals/42/edit/");
@@ -251,27 +281,30 @@ test.describe("Meal Editing", () => {
     await expect(textarea).toBeDisabled({ timeout: 3000 });
     await expect(page.locator("text=Extras")).toBeVisible();
 
-    // API called with closed: true
-    expect(closedPayload).toBeTruthy();
+    // API called with closed: true. The store shows CLOSED before it
+    // sends the request, so wait for it.
+    await expect.poll(() => closedPayload, { timeout: 3000 }).toBeTruthy();
+    expect(Object.keys(closedPayload).sort()).toEqual(["closed", "socket_id"]);
     expect(closedPayload.closed).toBe(true);
   });
 
-  test("add a guest opens dropdown and fires API call", async ({ page }) => {
+  test("add a guest sends the POST and shows the new guest at once", async ({
+    page,
+  }) => {
     let guestPostData = null;
+    let guestPostUrl = null;
     await page.route("**/api/v1/meals/*/residents/*/guests*", (route) => {
       if (route.request().method() === "POST") {
         guestPostData = route.request().postDataJSON();
+        guestPostUrl = route.request().url();
       }
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          id: 999,
-          meal_id: 42,
-          resident_id: 1,
-          vegetarian: false,
-          created_at: new Date().toISOString(),
-        }),
+      // The server answers with the new Guest row (GuestSerializer).
+      fulfillJson(route, {
+        id: 999,
+        meal_id: 42,
+        resident_id: 1,
+        vegetarian: false,
+        created_at: "2026-01-15T10:00:00.000-08:00",
       });
     });
 
@@ -284,9 +317,13 @@ test.describe("Meal Editing", () => {
     });
     await expect(janeCell).toBeVisible({ timeout: 10000 });
 
-    // Before: Jane has 1 guest (1 cow badge icon)
+    // Before: Jane has 1 omnivore guest; Total is 3
     const janeRow = janeCell.locator("xpath=ancestor::tr");
-    await expect(janeRow.locator('.badge img[alt="cow-icon"]')).toHaveCount(1);
+    const janeCowBadge = janeRow.locator(".badge", {
+      has: page.locator('img[alt="cow-icon"]'),
+    });
+    await expect(janeCowBadge).toHaveText("1");
+    await expect(circleNumber(page, "Total")).toHaveText("3");
 
     // Click add guest button to open dropdown
     const addGuestButton = janeRow.locator(".dropdown-add");
@@ -302,9 +339,20 @@ test.describe("Meal Editing", () => {
     // Click cow icon to add non-veg guest
     await dropdownMenu.locator("img[alt='cow-icon']").click();
 
-    // API should have been called with vegetarian: false
+    // API: a POST for Jane's guests with vegetarian: false
     await expect.poll(() => guestPostData, { timeout: 3000 }).toBeTruthy();
+    expect(guestPostUrl).toMatch(/\/api\/v1\/meals\/42\/residents\/1\/guests$/);
+    expect(Object.keys(guestPostData).sort()).toEqual([
+      "socket_id",
+      "vegetarian",
+    ]);
     expect(guestPostData.vegetarian).toBe(false);
+
+    // The screen shows the new guest without a reload: Jane's badge
+    // says 2, Total is 4, and Veg is still 0.
+    await expect(janeCowBadge).toHaveText("2");
+    await expect(circleNumber(page, "Total")).toHaveText("4");
+    await expect(circleNumber(page, "Veg")).toHaveText("0");
   });
 
   test("remove guest button exists and is enabled for resident with guests", async ({
@@ -344,33 +392,83 @@ test.describe("Meal Editing", () => {
     await expect(bobRemove).toBeDisabled();
   });
 
-  test("set cook and cost persists in the UI and fires API call", async ({
+  test("set cost, then a cook: each bills PATCH carries only what was changed", async ({
     page,
   }) => {
-    let billsPayload = null;
+    // A small stand-in for the server: it keeps the stored bills, writes
+    // amount and no_cost only for rows that carry them (BillsPayload),
+    // and answers like MealsController#update_bills with the rows as
+    // stored. A blank amount is stored as zero.
+    const stored = new Map(
+      mealFixture.bills.map((b) => [
+        b.resident_id,
+        { amount: b.amount, no_cost: b.no_cost },
+      ]),
+    );
+    const billsPayloads = [];
     await page.route("**/api/v1/meals/*/bills*", (route) => {
-      if (route.request().method() === "PATCH") {
-        billsPayload = route.request().postDataJSON();
+      if (route.request().method() !== "PATCH") return route.fallback();
+      const body = route.request().postDataJSON();
+      billsPayloads.push(body);
+      const next = new Map();
+      for (const row of body.bills) {
+        const old = stored.get(row.resident_id) || {
+          amount: "0.0",
+          no_cost: false,
+        };
+        next.set(
+          row.resident_id,
+          "amount" in row
+            ? {
+                amount: row.amount === "" ? "0.0" : row.amount,
+                no_cost: row.no_cost,
+              }
+            : old,
+        );
       }
-      route.fulfill({ status: 200, body: "{}" });
+      stored.clear();
+      next.forEach((v, k) => stored.set(k, v));
+      fulfillJson(route, {
+        message: "Form submitted.",
+        bills: [...stored].map(([resident_id, v]) => ({ resident_id, ...v })),
+      });
     });
 
     await page.goto("/meals/42/edit/");
     await page.waitForLoadState("networkidle");
 
     // First cook select is pre-populated with Jane (value="1") and cost=25.50
-    const cookSelect = page.locator('[aria-label="Select meal cook"]').first();
-    await expect(cookSelect).toHaveValue("1", { timeout: 10000 });
+    const cookSelects = page.locator('[aria-label="Select meal cook"]');
+    await expect(cookSelects.first()).toHaveValue("1", { timeout: 10000 });
     const costInput = page.locator('[aria-label="Set meal cost"]').first();
     await expect(costInput).toHaveValue("25.50");
 
-    // Change cost to 35.00
+    // Change Jane's cost to 35.00. The PATCH lists the one cook, with
+    // the amount typed and no_cost off.
+    const firstAnswer = page.waitForResponse(
+      (r) => r.url().includes("/api/v1/meals/42/bills") && r.status() === 200,
+    );
     await costInput.fill("35.00");
+    await firstAnswer;
+    expect(billsPayloads).toHaveLength(1);
+    expect(billsPayloads[0].id).toBe(42);
+    expect(billsPayloads[0].bills).toEqual([
+      { resident_id: 1, amount: "35.00", no_cost: false },
+    ]);
+    // After the server's answer the field shows what was stored.
     await expect(costInput).toHaveValue("35.00");
 
-    // API should be called with updated bills
-    await expect.poll(() => billsPayload, { timeout: 3000 }).toBeTruthy();
-    expect(billsPayload.bills).toBeDefined();
+    // Pick Bob as the second cook. The server's answer to the first
+    // save marked Jane's row as saved, so this PATCH lists her without
+    // an amount: a resend of 35.00 could overwrite a newer cost that
+    // someone else saved in between.
+    await cookSelects.nth(1).selectOption("2");
+    await expect.poll(() => billsPayloads.length, { timeout: 3000 }).toBe(2);
+    expect(billsPayloads[1].bills).toEqual([
+      { resident_id: 1 },
+      { resident_id: 2, amount: "", no_cost: false },
+    ]);
+    await expect(cookSelects.nth(1)).toHaveValue("2");
   });
 
   test("guest icons (image assets) load correctly via Vite", async ({
@@ -481,40 +579,48 @@ test.describe("Meal Editing", () => {
     ).toBeVisible();
   });
 
-  test("prev/next meal arrows navigate and fire API calls", async ({
+  test("prev/next meal arrows load each meal's own data and neighbors", async ({
     page,
   }) => {
-    const apiCalls = [];
+    // Every meal gets its own neighbors and its own menu, the way the
+    // server sends them. With one shared payload, meal 43 would say
+    // prev_id 41 like meal 42, and a stale prev_id could not be told
+    // from the right one.
+    const fetchedIds = [];
     await page.route("**/api/v1/meals/*/cooks*", (route) => {
-      const url = route.request().url();
-      apiCalls.push(url);
-      // Extract meal ID from URL and return fixture with matching id
-      const mealId = Number(url.match(/\/meals\/(\d+)\//)[1]);
-      const mealFixture = require("../fixtures/meal.json");
-      const data = { ...mealFixture, id: mealId };
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify(data),
+      const mealId = Number(
+        route
+          .request()
+          .url()
+          .match(/\/meals\/(\d+)\//)[1],
+      );
+      fetchedIds.push(mealId);
+      fulfillJson(route, {
+        ...mealFixture,
+        id: mealId,
+        prev_id: mealId - 1,
+        next_id: mealId + 1,
+        description: `Menu ${mealId}`,
       });
     });
 
     await page.goto("/meals/42/edit/");
     await page.waitForLoadState("networkidle");
-    await expect(
-      page.getByRole("cell", { name: "A - Jane Smith", exact: true }),
-    ).toBeVisible({ timeout: 10000 });
+    const menu = page.locator('[aria-label="Enter meal description"]');
+    await expect(menu).toHaveValue("Menu 42", { timeout: 10000 });
 
-    // Next arrow should be visible (fixture has next_id: 43)
-    // Click next
-    const nextArrow = page.locator("svg.icon-chevron-right").first();
-    await nextArrow.click();
-    await expect(page).toHaveURL(/\/meals\/43\/edit/, { timeout: 5000 });
+    // Next goes to meal 43, which loads its own data.
+    await page.getByRole("button", { name: "Next meal" }).click();
+    await expect(page).toHaveURL(/\/meals\/43\/edit\/?$/, { timeout: 5000 });
+    await expect(menu).toHaveValue("Menu 43");
+    await expect(menu).toBeEnabled();
 
-    // Prev arrow should navigate back (fixture has prev_id: 41)
-    await page.waitForLoadState("networkidle");
-    const prevArrow = page.locator("svg.icon-chevron-left").first();
-    await prevArrow.click();
-    await expect(page).toHaveURL(/\/meals\/41\/edit/, { timeout: 5000 });
+    // Prev on meal 43 uses meal 43's own prev_id: back to 42, not 41.
+    await page.getByRole("button", { name: "Previous meal" }).click();
+    await expect(page).toHaveURL(/\/meals\/42\/edit\/?$/, { timeout: 5000 });
+    await expect(menu).toHaveValue("Menu 42");
+
+    // Each page fetched its meal from the server, in order.
+    expect(fetchedIds).toEqual([42, 43, 42]);
   });
 });
