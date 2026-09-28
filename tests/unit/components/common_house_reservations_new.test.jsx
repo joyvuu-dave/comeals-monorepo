@@ -82,29 +82,72 @@ describe("CommonHouseReservationsNew", () => {
     expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
   });
 
+  // The day is picked two months after the calendar's month, so a form
+  // that cleared the month on screen (params.date) instead of the new
+  // reservation's month would fail here (issue #37).
   it("submitting posts the reservation", async () => {
     axios.post.mockResolvedValue({ status: 200, data: {} });
-    const { handleCloseModal } = renderForm();
+    const { store, handleCloseModal } = renderForm();
 
     fireEvent.change(screen.getByLabelText("Resident"), {
       target: { value: "1" },
     });
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "Book Club" },
+    });
+    fireEvent.click(document.getElementById("ch-new-day"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Go to the Next Month" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Go to the Next Month" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /March 20/ }));
     fireEvent.change(screen.getByLabelText("Start Time"), {
       target: { value: "19:00" },
+    });
+    fireEvent.change(screen.getByLabelText("End Time"), {
+      target: { value: "21:15" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
     expect(axios.post).toHaveBeenCalledWith(
       "/api/v1/common-house-reservations",
-      expect.objectContaining({
+      {
         resident_id: "1",
+        start_year: 2026,
+        start_month: 3,
+        start_day: 20,
         start_hours: "19",
         start_minutes: "00",
-      }),
+        end_hours: "21",
+        end_minutes: "15",
+        title: "Book Club",
+      },
     );
+    // Success clears the new reservation's month from the cache and
+    // closes the modal.
     await vi.waitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);
     });
+    expect(store.invalidateMonthForDate).toHaveBeenCalledTimes(1);
+    expect(store.invalidateMonthForDate).toHaveBeenCalledWith(
+      new Date(2026, 2, 20),
+    );
+  });
+
+  // The picker offers days up to six months after the calendar's day
+  // (2026-01-15 here), and no later.
+  it("the day picker stops six months after the calendar's day", () => {
+    renderForm();
+    fireEvent.click(document.getElementById("ch-new-day"));
+    for (let i = 0; i < 6; i++) {
+      fireEvent.click(
+        screen.getByRole("button", { name: "Go to the Next Month" }),
+      );
+    }
+    expect(screen.getByRole("button", { name: /July 15/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /July 16/ })).toBeDisabled();
   });
 
   // The discard gate (ADR 0006): an untouched New form is clean, so
@@ -125,17 +168,19 @@ describe("CommonHouseReservationsNew", () => {
     expect(setDirty).toHaveBeenLastCalledWith(false);
   });
 
+  // An empty form has no day, and the server answers that before it
+  // looks at any other field (ApiController#parse_start_end_params).
   it("a refused create shows the reason and keeps the form open", async () => {
     toastStore.clearAll();
     axios.post.mockRejectedValue({
-      response: { status: 400, data: { message: "Those hours are taken" } },
+      response: { status: 400, data: { message: "Error: Invalid date" } },
     });
     const { handleCloseModal } = renderForm();
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
     await vi.waitFor(() => {
       expect(toastStore.toasts.map((t) => t.message)).toEqual([
-        "Those hours are taken",
+        "Error: Invalid date",
       ]);
     });
     expect(handleCloseModal).not.toHaveBeenCalled();

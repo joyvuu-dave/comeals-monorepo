@@ -72,26 +72,55 @@ describe("GuestRoomReservationsNew", () => {
     expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
   });
 
+  // The day is picked two months after the calendar's month, so a form
+  // that cleared the month on screen (params.date) instead of the new
+  // reservation's month would fail here (issue #37).
   it("submitting posts the chosen host and day", async () => {
     axios.post.mockResolvedValue({ status: 200, data: {} });
-    const { handleCloseModal } = renderForm();
+    const { store, handleCloseModal } = renderForm();
 
     fireEvent.change(screen.getByLabelText("Host"), { target: { value: "2" } });
 
     // Pick a day through the picker so the payload's date comes from
     // real day selection.
     fireEvent.click(document.getElementById("guest-room-new-day"));
-    fireEvent.click(screen.getByRole("button", { name: /January 20/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Go to the Next Month" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Go to the Next Month" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /March 20/ }));
 
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
     expect(axios.post).toHaveBeenCalledWith("/api/v1/guest-room-reservations", {
       resident_id: "2",
-      date: "2026-01-20",
+      date: "2026-03-20",
     });
+    // Success clears the new reservation's month from the cache and
+    // closes the modal.
     await vi.waitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);
     });
+    expect(store.invalidateMonthForDate).toHaveBeenCalledTimes(1);
+    expect(store.invalidateMonthForDate).toHaveBeenCalledWith(
+      new Date(2026, 2, 20),
+    );
+  });
+
+  // The picker offers days up to six months after the calendar's day
+  // (2026-01-15 here), and no later.
+  it("the day picker stops six months after the calendar's day", () => {
+    renderForm();
+    fireEvent.click(document.getElementById("guest-room-new-day"));
+    for (let i = 0; i < 6; i++) {
+      fireEvent.click(
+        screen.getByRole("button", { name: "Go to the Next Month" }),
+      );
+    }
+    expect(screen.getByRole("button", { name: /July 15/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /July 16/ })).toBeDisabled();
   });
 
   // The discard gate (ADR 0006): an untouched New form is clean, so

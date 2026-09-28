@@ -71,6 +71,9 @@ describe("EventsNew", () => {
     expect(screen.getByLabelText("Start Time")).toHaveDisplayValue("");
   });
 
+  // The day is picked two months after the calendar's month, so a form
+  // that cleared the month on screen (params.date) instead of the new
+  // event's month would fail here (issue #37).
   it("submitting posts the form to the community's events", async () => {
     axios.post.mockResolvedValue({ status: 200, data: {} });
     const { store, handleCloseModal } = renderForm();
@@ -78,26 +81,58 @@ describe("EventsNew", () => {
     fireEvent.change(screen.getByLabelText("Title"), {
       target: { value: "Movie Night" },
     });
+    fireEvent.click(document.getElementById("event-new-day"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Go to the Next Month" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Go to the Next Month" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /March 20/ }));
     fireEvent.change(screen.getByLabelText("Start Time"), {
       target: { value: "18:00" },
     });
+    fireEvent.change(screen.getByLabelText("End Time"), {
+      target: { value: "20:30" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
-    expect(axios.post).toHaveBeenCalledWith(
-      "/api/v1/events",
-      expect.objectContaining({
-        title: "Movie Night",
-        start_hours: "18",
-        start_minutes: "00",
-        all_day: false,
-      }),
-    );
+    expect(axios.post).toHaveBeenCalledWith("/api/v1/events", {
+      title: "Movie Night",
+      description: "",
+      start_year: 2026,
+      start_month: 3,
+      start_day: 20,
+      start_hours: "18",
+      start_minutes: "00",
+      end_hours: "20",
+      end_minutes: "30",
+      all_day: false,
+    });
 
-    // Success invalidates the month cache and closes the modal.
+    // Success clears the new event's month from the cache and closes
+    // the modal.
     await vi.waitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);
     });
-    expect(store.invalidateMonthForDate).toHaveBeenCalled();
+    expect(store.invalidateMonthForDate).toHaveBeenCalledTimes(1);
+    expect(store.invalidateMonthForDate).toHaveBeenCalledWith(
+      new Date(2026, 2, 20),
+    );
+  });
+
+  // The picker offers days up to six months after the calendar's day
+  // (2026-01-15 here), and no later.
+  it("the day picker stops six months after the calendar's day", () => {
+    renderForm();
+    fireEvent.click(document.getElementById("event-new-day"));
+    for (let i = 0; i < 6; i++) {
+      fireEvent.click(
+        screen.getByRole("button", { name: "Go to the Next Month" }),
+      );
+    }
+    expect(screen.getByRole("button", { name: /July 15/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /July 16/ })).toBeDisabled();
   });
 
   it("the close icon closes the modal", () => {
@@ -140,17 +175,19 @@ describe("EventsNew", () => {
     expect(screen.getByLabelText("Start Time")).toBeEnabled();
   });
 
+  // An empty form has no day, and the server answers that before it
+  // looks at any other field (ApiController#parse_start_end_params).
   it("a refused create shows the reason and keeps the form open", async () => {
     toastStore.clearAll();
     axios.post.mockRejectedValue({
-      response: { status: 400, data: { message: "Title can't be blank" } },
+      response: { status: 400, data: { message: "Error: Invalid date" } },
     });
     const { handleCloseModal } = renderForm();
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
     await vi.waitFor(() => {
       expect(toastStore.toasts.map((t) => t.message)).toEqual([
-        "Title can't be blank",
+        "Error: Invalid date",
       ]);
     });
     expect(handleCloseModal).not.toHaveBeenCalled();
