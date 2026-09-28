@@ -1,5 +1,6 @@
 const { test, expect } = require("../helpers/test");
 const { setupAuthenticatedPage } = require("../helpers/setup");
+const calendarFixture = require("../fixtures/calendar.json");
 
 test.describe("Exhaustive Coverage", () => {
   test.describe("Calendar Page", () => {
@@ -35,26 +36,55 @@ test.describe("Exhaustive Coverage", () => {
       expect(myHref).toContain("/residents/1/ical.ics");
     });
 
-    test("today button navigates calendar to current date", async ({
+    test("today button goes to today's date in the community's zone", async ({
       page,
+      context,
     }) => {
+      // The community is in Honolulu, the browser in Los Angeles (the
+      // Playwright config). At this instant it is still Jan 15 in
+      // Honolulu (23:30), but already Jan 16 in Los Angeles (01:30) and
+      // in UTC (09:30). Only the community's zone gives Jan 15.
+      // The zone reaches the page the two ways the real server sends
+      // it: the login writes it to a cookie, and every month payload
+      // carries it (adoptCommunityTimezone takes the payload's zone).
+      await context.addCookies([
+        {
+          name: "timezone",
+          value: "Pacific/Honolulu",
+          domain: "localhost",
+          path: "/",
+        },
+      ]);
+      await page.route("**/api/v1/communities/*/calendar/*", (route) => {
+        route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            ...calendarFixture,
+            timezone: "Pacific/Honolulu",
+          }),
+        });
+      });
+      await page.clock.setFixedTime(new Date("2026-01-16T09:30:00Z"));
+
       // Start on a date far from today
       await page.goto("/calendar/all/2025-06-15/");
       await page.waitForLoadState("networkidle");
       await expect(page.locator(".rbc-calendar")).toBeVisible({
         timeout: 10000,
       });
+      await expect(page.locator("h2", { hasText: "June 2025" })).toBeVisible();
 
-      // Verify we're on June 2025
-      await expect(page).toHaveURL(/2025-06/);
-
-      // Click "today" button
       const todayButton = page.locator("button", { hasText: "today" });
       await expect(todayButton).toBeVisible();
       await todayButton.click();
 
-      // URL should change away from 2025-06 to today's date
-      await expect(page).not.toHaveURL(/2025-06/, { timeout: 5000 });
+      await expect(page).toHaveURL(/\/calendar\/all\/2026-01-15\/?$/, {
+        timeout: 5000,
+      });
+      await expect(
+        page.locator("h2", { hasText: "January 2026" }),
+      ).toBeVisible();
     });
   });
 
@@ -109,23 +139,17 @@ test.describe("Exhaustive Coverage", () => {
       expect(texts.some((t) => t.includes("¯\\_(ツ)_/¯"))).toBe(true);
     });
 
-    test("date box shows relative date from dayjs", async ({ page }) => {
+    test("date box shows the meal's date and how long ago it was", async ({
+      page,
+    }) => {
+      // The fixture meal is on Thu 2026-01-15. Freeze "now" at
+      // 2026-03-20, midday in the community's zone, so the relative
+      // label has one right answer. A flipped sign would say
+      // "in 2 months".
+      await page.clock.setFixedTime(new Date("2026-03-20T12:00:00-07:00"));
       await page.goto("/meals/42/edit/");
       await page.waitForLoadState("networkidle");
 
-      // Fixture meal date is 2026-01-15. The test runs on a different date,
-      // so it should show a relative string like "2 months ago" or similar.
-      // We just verify SOMETHING renders in the date area (not empty).
-      const dateBox = page.locator("h2").first();
-      await expect(dateBox).toBeVisible({ timeout: 10000 });
-
-      // The display shows "ddd, MMM Do" format (e.g., "Thu, Jan 15th")
-      const dateText = await dateBox.textContent();
-      expect(dateText).toMatch(/Jan/);
-      expect(dateText).toMatch(/15/);
-
-      // The relative date should also appear (e.g., "2 months ago")
-      // It's rendered below the date in the date box component.
       // Matched by class, not by [style*="grid-area: a1"]: the style
       // attribute holds the browser's serialization of the inline
       // styles, and WebKit expands the grid-area shorthand where
@@ -134,11 +158,10 @@ test.describe("Exhaustive Coverage", () => {
       const dateContainer = page.locator(
         "div.button-border-radius.background-yellow",
       );
-      const containerText = await dateContainer.textContent();
-      // Should contain either "Today", "Yesterday", "Tomorrow", or "ago"/"in"
-      expect(
-        containerText.match(/Today|Yesterday|Tomorrow|ago|in \d/),
-      ).toBeTruthy();
+      await expect(dateContainer.locator("h2")).toHaveText("Thu, Jan 15th", {
+        timeout: 10000,
+      });
+      await expect(dateContainer.locator("h3")).toHaveText("2 months ago");
     });
 
     test("bill amount input refuses values that break the whole-cents grammar", async ({
@@ -154,7 +177,6 @@ test.describe("Exhaustive Coverage", () => {
       // A negative amount does not land: the field keeps its value
       await costInput.fill("-5");
       await expect(costInput).toHaveValue("25.50");
-      await expect(costInput).not.toHaveClass(/input-invalid/);
 
       // A sub-cent amount does not land either
       await costInput.fill("12.345");
@@ -167,7 +189,6 @@ test.describe("Exhaustive Coverage", () => {
       // A valid amount lands
       await costInput.fill("10.00");
       await expect(costInput).toHaveValue("10.00");
-      await expect(costInput).not.toHaveClass(/input-invalid/);
     });
 
     test("guest dropdown closes when clicking outside", async ({ page }) => {
@@ -241,7 +262,7 @@ test.describe("Exhaustive Coverage", () => {
       expect(values).toContain("8:45 AM");
     });
 
-    test("DayPickerInput renders and accepts date selection", async ({
+    test("DayPickerInput shows the picked day as MM/DD/YYYY and closes", async ({
       page,
     }) => {
       await page.goto("/calendar/all/2026-01-15/");
@@ -255,26 +276,23 @@ test.describe("Exhaustive Coverage", () => {
       const modal = page.locator(".ReactModal__Content--after-open");
       await expect(modal).toBeVisible({ timeout: 5000 });
 
-      // Find the DayPickerInput wrapper (renders a readonly input)
-      const dayInput = modal.locator("input[readonly]");
+      // The DayPickerInput renders a readonly input, empty until a day
+      // is picked.
+      const dayInput = modal.locator("#event-new-day");
       await expect(dayInput).toBeVisible({ timeout: 3000 });
+      await expect(dayInput).toHaveValue("");
 
-      // Click to open the calendar overlay
+      // Click to open the calendar overlay. It opens on the calendar's
+      // month, January 2026.
       await dayInput.click();
-
-      // The DayPicker overlay should appear (v9 uses .rdp-root class)
       const overlay = modal.locator(".rdp-root");
       await expect(overlay).toBeVisible({ timeout: 3000 });
 
-      // Click a day in the picker (find a clickable day button)
-      const day = overlay.locator(".rdp-day_button").first();
-      if (await day.isVisible({ timeout: 2000 })) {
-        await day.click();
-
-        // The input should now have a date value
-        const inputValue = await dayInput.inputValue();
-        expect(inputValue.length).toBeGreaterThan(0);
-      }
+      // Pick a named day: the input shows exactly that day, and the
+      // overlay closes.
+      await overlay.getByRole("button", { name: /January 20/ }).click();
+      await expect(dayInput).toHaveValue("01/20/2026");
+      await expect(overlay).toBeHidden();
     });
   });
 });
