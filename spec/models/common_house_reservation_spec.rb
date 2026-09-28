@@ -52,6 +52,37 @@ RSpec.describe CommonHouseReservation do
     end
   end
 
+  # The admin forms and a task save through the model, not the API's
+  # parser, so the model refuses a time the database cannot store
+  # (StorableTime). Before, the overlap check sent the time to
+  # PostgreSQL, which refused the query: a 500.
+  describe 'a time the database cannot store' do
+    let(:first) { StorableTime::TIMESTAMPS.begin }
+    let(:last) { StorableTime::TIMESTAMPS.end - Rational(1, 1_000_000) }
+    let(:refused) { ['is not a date the database can store'] }
+
+    def errors_of(reservation)
+      reservation.validate
+      reservation.errors.to_hash
+    end
+
+    it 'refuses a start a second before the first instant, or an end a second after the last, under that time' do
+      expect(errors_of(build(:common_house_reservation, start_date: first - 1.second, end_date: first + 1.hour)))
+        .to eq(start_date: refused)
+      expect(errors_of(build(:common_house_reservation, start_date: last - 1.hour, end_date: last + 1.second)))
+        .to eq(end_date: refused)
+    end
+
+    it 'takes the first and the last instant, and still checks the overlap there' do
+      taken = create(:common_house_reservation, start_date: last - 1.hour, end_date: last)
+
+      expect(errors_of(build(:common_house_reservation, start_date: first, end_date: first + 1.hour))).to eq({})
+      expect(errors_of(build(:common_house_reservation, resident: taken.resident,
+                                                        start_date: last - 30.minutes, end_date: last)))
+        .to eq(base: ['Time period is already taken'])
+    end
+  end
+
   describe '#period_is_free' do
     it 'is invalid when overlapping with an existing reservation in the same community' do
       community = create(:community)

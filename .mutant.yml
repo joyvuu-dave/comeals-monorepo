@@ -107,6 +107,7 @@ matcher:
     - ResidentBalance*
     - Rotation*
     - StorableTime*
+    - StorableTimeValidator*
     - Unit*
     - AppendOnly*
     - BelongsToTheCommunity*

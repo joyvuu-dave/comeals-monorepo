@@ -34,6 +34,7 @@ class Event < ApplicationRecord
 
   validates :title, presence: true
   validates :start_date, presence: true
+  validates :start_date, :end_date, storable_time: true
 
   validate :end_date_or_allday
   validate :start_date_is_before_end_date

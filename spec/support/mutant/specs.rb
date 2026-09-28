@@ -141,6 +141,8 @@ MUTANT_SPEC_ROWS = {
   'spec/requests/admin/bootstrap_guard_spec.rb' => %w[ApplicationController],
   'spec/requests/admin/session_persistence_spec.rb' => %w[ApplicationController],
   'spec/requests/admin/reservation_forms_spec.rb' => %w[GuestRoomReservation CommonHouseReservation LiveUpdate],
+  'spec/requests/admin/storable_times_spec.rb' =>
+    %w[StorableTimeValidator StorableTime Event CommonHouseReservation],
   'spec/requests/admin/admin_logout_spec.rb' => %w[ApplicationController],
   'spec/requests/admin/admin_zone_spec.rb' => %w[ApplicationController],
   'spec/requests/admin/deletion_safeguards_spec.rb' => %w[RefusedDestroyMessage Meal Resident Rotation Unit],
@@ -173,10 +175,10 @@ MUTANT_SPEC_ROWS = {
   'spec/serializers/calendar_chips_spec.rb' =>
     %w[MealSerializer BillSerializer EventSerializer GuestRoomReservationSerializer
        CommonHouseReservationSerializer ResidentBirthdaySerializer RotationSerializer],
-  'spec/models/event_spec.rb' => %w[Event LiveUpdate BelongsToTheCommunity],
+  'spec/models/event_spec.rb' => %w[Event LiveUpdate BelongsToTheCommunity StorableTimeValidator],
   # Also asks CalendarSerializer which months list a booking.
   'spec/models/common_house_reservation_spec.rb' =>
-    %w[CommonHouseReservation LiveUpdate BelongsToTheCommunity CalendarSerializer],
+    %w[CommonHouseReservation LiveUpdate BelongsToTheCommunity CalendarSerializer StorableTimeValidator],
   'spec/models/guest_room_reservation_spec.rb' => %w[GuestRoomReservation LiveUpdate BelongsToTheCommunity],
   'spec/models/rotation_spec.rb' => %w[Rotation LiveUpdate BelongsToTheCommunity],
   'spec/models/meal_spec.rb' => %w[Meal LiveUpdate BelongsToTheCommunity],

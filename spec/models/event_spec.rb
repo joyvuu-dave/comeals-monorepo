@@ -45,6 +45,32 @@ RSpec.describe Event do
     end
   end
 
+  # The admin forms and a task save through the model, not the API's
+  # parser, so the model refuses a time the database cannot store
+  # (StorableTime). Before, PostgreSQL refused it on save: a 500.
+  describe 'a time the database cannot store' do
+    let(:first) { StorableTime::TIMESTAMPS.begin }
+    let(:last) { StorableTime::TIMESTAMPS.end - Rational(1, 1_000_000) }
+    let(:refused) { ['is not a date the database can store'] }
+
+    def errors_of(event)
+      event.validate
+      event.errors.to_hash
+    end
+
+    it 'refuses a start a second before the first instant, or an end a second after the last, under that time' do
+      expect(errors_of(build(:event, start_date: first - 1.second, end_date: first + 1.hour)))
+        .to eq(start_date: refused)
+      expect(errors_of(build(:event, start_date: last - 1.hour, end_date: last + 1.second)))
+        .to eq(end_date: refused)
+    end
+
+    it 'takes the first and the last instant, and an all-day event with no end' do
+      expect(errors_of(build(:event, start_date: first, end_date: last))).to eq({})
+      expect(errors_of(build(:event, allday: true, start_date: first, end_date: nil))).to eq({})
+    end
+  end
+
   describe '#end_date_or_allday' do
     it 'is invalid without end_date when allday is false' do
       event = build(:event, end_date: nil, allday: false)

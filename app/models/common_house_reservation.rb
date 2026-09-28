@@ -37,6 +37,7 @@ class CommonHouseReservation < ApplicationRecord
 
   validates :start_date, presence: true
   validates :end_date, presence: true
+  validates :start_date, :end_date, storable_time: true
 
   validate :period_is_free
   validate :start_date_is_before_end_date
@@ -44,7 +45,14 @@ class CommonHouseReservation < ApplicationRecord
   after_destroy :note_live_update
   after_save :note_live_update
 
+  # The query below cannot run with a time the database cannot store:
+  # PostgreSQL refuses the whole statement. The storable_time rule above
+  # reports such a time, and a missing one is left to the presence rules.
   def period_is_free
+    start_date = self.start_date
+    end_date = self.end_date
+    return unless start_date && end_date && StorableTime.timestamp?(start_date) && StorableTime.timestamp?(end_date)
+
     errors.add(:base, 'Time period is already taken') if CommonHouseReservation
                                                          .where.not(id: id)
                                                          .where(start_date: ...end_date)
