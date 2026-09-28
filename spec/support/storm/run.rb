@@ -9,10 +9,12 @@ module Storm
   #     in a loop;
   #   - the nightly jobs, run the way Solid Queue runs them
   #     (ActiveJob::Base.execute, under the executor);
-  #   - an admin, writing attendance and bills through the models without
-  #     the meal lock, the way ActiveAdmin does (ADR 0003: the database
-  #     triggers are what make that safe, and this is where that is put
-  #     under load).
+  #   - an admin, writing attendance and bills through the models the way
+  #     ActiveAdmin does: without with_meal_lock, but with the meal's
+  #     FOR KEY SHARE lock that the models take first (LocksItsMealFirst),
+  #     and with attendance marked as an admin correction, which may change
+  #     a closed meal (ADR 0003: the locks and the database triggers are
+  #     what make that safe, and this is where that is put under load).
   #
   # Everything a thread does is logged; nothing is asserted here. The
   # Result carries the client entries, the background log, and the
@@ -186,8 +188,8 @@ module Storm
       Rails.application.executor.wrap do
         Current.socket_id = nil
         case rng.rand(3)
-        when 0 then MealResident.create!(meal_id: meal.id, resident_id: resident.id)
-        when 1 then MealResident.find_by(meal_id: meal.id, resident_id: resident.id)&.destroy!
+        when 0 then admin_add(meal, resident)
+        when 1 then admin_remove(meal, resident)
         else Bill.find_or_initialize_by(meal_id: meal.id, resident_id: resident.id)
                  .update!(amount: BigDecimal(rng.rand(0..9999)) / 100, no_cost: false)
         end
@@ -202,6 +204,25 @@ module Storm
     rescue StandardError => e
       @problems << "admin: #{e.class}: #{e.message}"
       :error
+    end
+
+    # The admin attendance form marks its rows as a correction
+    # (app/admin/meal_resident.rb), so the closed-meal freeze lets it add
+    # or remove on a closed meal, which is the usual real case: a meal is
+    # corrected after dinner, while a settlement may be claiming it.
+    def admin_add(meal, resident)
+      row = MealResident.new(meal_id: meal.id, resident_id: resident.id)
+      row.admin_correction = true
+      row.save!
+      @plan.admin_rows << row.id
+    end
+
+    def admin_remove(meal, resident)
+      row = MealResident.find_by(meal_id: meal.id, resident_id: resident.id)
+      return if row.nil?
+
+      row.admin_correction = true
+      row.destroy!
     end
   end
 end

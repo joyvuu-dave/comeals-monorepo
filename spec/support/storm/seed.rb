@@ -9,7 +9,10 @@
 # plants the same rows from a rake task, where FactoryBot is not loaded.
 module Storm
   class Seed
-    Plan = Struct.new(:community, :residents, :tokens, :meals, keyword_init: true) do
+    # admin_rows: the ids of the attendance rows the storm's admin added
+    # (Run#admin_write). An admin correction may put a closed meal over its
+    # max, so Checks#check_cap leaves those rows out of the count.
+    Plan = Struct.new(:community, :residents, :tokens, :meals, :admin_rows, keyword_init: true) do
       def reconcilers
         residents.select(&:can_reconcile?)
       end
@@ -45,7 +48,8 @@ module Storm
       dates = (1..PAST_MEALS).map { |n| today - n } + (1..FUTURE_MEALS).map { |n| today + n }
       meals = dates.map { |date| Meal.create!(date: date, rotation: rotation) }
       Plan.new(community: community, residents: residents,
-               tokens: residents.to_h { |r| [r.id, JwtAuth.encode(r)] }, meals: meals)
+               tokens: residents.to_h { |r| [r.id, JwtAuth.encode(r)] }, meals: meals,
+               admin_rows: Concurrent::Set.new)
     end
 
     private

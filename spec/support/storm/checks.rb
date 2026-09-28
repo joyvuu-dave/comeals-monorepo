@@ -58,10 +58,14 @@ module Storm
       net
     end
 
+    # The API never takes a closed meal past its max. An admin correction
+    # may (Run#admin_add), so the rows the admin added are left out of the
+    # count.
     def check_cap(rows)
       label = "meal #{rows.id}"
-      over = rows.max && rows.attendees_count > rows.max
-      problem(label, "holds #{rows.attendees_count} with a cap of #{rows.max}") if over
+      by_admin = rows.meal_residents.count { |row| @plan.admin_rows.include?(row.id) }
+      over = rows.max && rows.attendees_count - by_admin > rows.max
+      problem(label, "holds #{rows.attendees_count} (#{by_admin} added by an admin) with a cap of #{rows.max}") if over
       problem(label, "is open with a cap of #{rows.max}") if !rows.closed? && rows.max
     end
 
