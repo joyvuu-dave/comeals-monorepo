@@ -150,6 +150,36 @@ RSpec.describe 'a request storm against the whole API, with the nightly jobs and
       "#{result.latency.report}"
   end
 
+  # A client deletes only the calendar rows it read back as its own. It
+  # finds them by what the calendar shows, and client 0 is "Storm 0"
+  # there, not "Storm Client 0". Until 2026-09-28 it looked for the full
+  # name, so eight of the 24 clients never sent a guest room or common
+  # house delete: each one quietly became a create.
+  it 'lets a client find its own calendar rows by what the calendar shows, and delete them' do
+    plan = Storm::Seed.plant(clients: clients)
+    resident = plan.residents.first
+    day = plan.meals.first.date
+    guest_room = GuestRoomReservation.create!(resident: resident, date: day)
+    two_pm = Time.zone.local(day.year, day.month, day.day, 14)
+    common_house = CommonHouseReservation.create!(resident: resident, title: 'storm-chr-0-1',
+                                                  start_date: two_pm, end_date: two_pm + 1.hour)
+    client = Storm::Client.new(index: 0, plan: plan, transport: transport, rng: Random.new(seed), deadline: 0)
+    headers = { 'Authorization' => "Bearer #{plan.tokens.fetch(resident.id)}" }
+    status, month = transport.call(:get, "/api/v1/communities/#{plan.community.id}/calendar/#{day.iso8601}",
+                                   headers, nil, '10.9.9.9')
+    expect(status).to eq(200)
+    expect(JSON.parse(month).fetch('guest_room_reservations').sole['title']).to include("\nStorm 0 - Unit ")
+
+    client.send(:remember_calendar, month)
+    client.step(:guest_room_delete)
+    client.step(:common_house_delete)
+
+    expect(client.log.map { |entry| [entry.action, entry.status, entry.problem] })
+      .to eq([[:guest_room_delete, 200, nil], [:common_house_delete, 200, nil]])
+    expect(GuestRoomReservation.exists?(guest_room.id)).to be(false)
+    expect(CommonHouseReservation.exists?(common_house.id)).to be(false)
+  end
+
   it "answers every request the way the API promises, keeps every request's state to itself, " \
      'and the books are right after' do
     plan = Storm::Seed.plant(clients: clients)

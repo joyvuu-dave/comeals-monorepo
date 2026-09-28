@@ -66,10 +66,14 @@ module Storm
       max: MEAL_WRITE, description: MEAL_WRITE,
       cooks: READ, history: READ, calendar: READ, next_meal: READ, whoami: READ, ical: READ,
       hosts: READ, birthdays: READ, rotation: READ, login: READ,
-      event_create: [200, 400], event_delete: READ,
+      # This client's own events and previews can never be refused: an
+      # event always has a title and ends an hour after it starts, and the
+      # preview asks for yesterday. So a 400 for either is a problem. A
+      # guest room or a common house booking can be taken already.
+      event_create: READ, event_delete: READ,
       guest_room_create: [200, 400], guest_room_delete: READ,
       common_house_create: [200, 400], common_house_delete: READ,
-      preview: [200, 400], settle: [201, 400, 409]
+      preview: READ, settle: [201, 400, 409]
     }.freeze
 
     MEAL_WRITES = %i[signup leave toggle add_guest remove_guest bills close reopen max description].freeze
@@ -265,14 +269,27 @@ module Storm
 
     # The ids of this client's own calendar rows, from the month it just
     # read, so it can delete them later. Only its own: another client's
-    # rows are theirs to delete.
+    # rows are theirs to delete. Events and common house bookings carry
+    # the title this client gave them. A guest room carries only the
+    # resident's name as the calendar shows it (own_name_line).
     def remember_calendar(response)
       month = JSON.parse(response)
-      mine = "Storm Client #{@index} "
       @events = row_ids(month.fetch('events')) { |e| e['title'].include?("storm-event-#{@index}-") }
-      @guest_rooms = row_ids(month.fetch('guest_room_reservations')) { |r| r['title'].include?(mine) }
-      @common_houses = row_ids(month.fetch('common_house_reservations')) { |r| r['title'].include?(mine) }
+      @guest_rooms = row_ids(month.fetch('guest_room_reservations')) { |r| r['title'].include?(own_name_line) }
+      @common_houses = row_ids(month.fetch('common_house_reservations')) do |r|
+        r['title'].include?("storm-chr-#{@index}-")
+      end
       true
+    end
+
+    # The calendar shows a resident by the short name, on a line of its
+    # own before the unit. It is not the full name: "Storm Client 0" is
+    # "Storm 0" there, because no one else's name ends in 0, and a client
+    # that looked for its full name never found its rows and never sent a
+    # delete. Every resident in the storm is a client, so the plan has
+    # every name the app shortens against.
+    def own_name_line
+      @own_name_line ||= "\n#{ResidentNameShortener.new(@plan.residents.map(&:name)).short(@resident.name)} - Unit "
     end
 
     # A calendar row's id is "events/80-20260911150149946146" (the SPA's
