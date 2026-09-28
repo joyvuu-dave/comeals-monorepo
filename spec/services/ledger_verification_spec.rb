@@ -244,19 +244,26 @@ RSpec.describe LedgerVerification do
     # that largest-remainder allocation is allowed to move a balance, and no
     # more — otherwise it would either cry wolf every night or miss real drift.
     it 'does not complain about ordinary cent rounding' do
-      cook_c = create(:resident, community: community, unit: unit, multiplier: 2, name: 'Third')
+      eaters = [eater] + %w[Second Third].map do |name|
+        create(:resident, community: community, unit: unit, multiplier: 2, name: name)
+      end
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('100'))
-      [cook, eater, cook_c].each do |person|
-        create(:meal_resident, meal: meal, resident: person, community: community)
-      end
+      eaters.each { |person| create(:meal_resident, meal: meal, resident: person, community: community) }
       settle!(cutoff: Date.yesterday)
 
-      # 100 split three ways does not divide evenly, so allocation really did
-      # move pennies here — this example is worthless if it did not.
+      # The cook does not eat. $100 across three eaters: one owes 33.33333334
+      # and two owe 33.33333333. Cut toward zero to cents, the balances are
+      # +100.00 and three -33.33, which sum to +0.01, so allocation must move
+      # one cent: the eater who lost the most gets -33.34. That balance is
+      # 0.00666666 from its lines, and the check must allow it. This example
+      # is worthless if no cent moved.
       sums = MealCharge.group(:resident_id).sum(:amount)
       stored = ReconciliationBalance.pluck(:resident_id, :amount).to_h
-      expect(stored.any? { |id, amount| amount != sums[id] }).to be(true)
+      expect(stored.values.sort).to eq([BigDecimal('-33.34'), BigDecimal('-33.33'), BigDecimal('-33.33'),
+                                        BigDecimal('100')])
+      moved = stored.key(BigDecimal('-33.34'))
+      expect(sums[moved]).to eq(BigDecimal('-33.33333334'))
 
       expect(described_class.call).to be_passed
     end
