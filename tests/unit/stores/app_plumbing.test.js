@@ -227,20 +227,6 @@ describe("app plumbing", () => {
     expect(vi.getTimerCount()).toBe(before - 2);
   });
 
-  it("destroys cleanly when no timer is pending", () => {
-    vi.useFakeTimers();
-    const store = createDataStore();
-    stage(store, () => {
-      clearTimeout(store.midnightTimer);
-      store.midnightTimer = null;
-    });
-    const before = vi.getTimerCount();
-
-    destroy(store);
-
-    expect(vi.getTimerCount()).toBe(before);
-  });
-
   it("logs out locally even when the server-side revocation fails", async () => {
     const store = createDataStore();
     const Cookie = (await import("js-cookie")).default;

@@ -200,14 +200,11 @@ export function appActions(self) {
       }, msUntilMidnight);
     },
     // Clears every subsystem's timer — MST allows one beforeDestroy
-    // per model, so it lives here.
+    // per model, so it lives here. clearTimeout(null) does nothing, so a
+    // timer that is not pending needs no check.
     beforeDestroy() {
-      if (self.midnightTimer !== null) {
-        clearTimeout(self.midnightTimer);
-      }
-      if (self.mealRetryTimer !== null) {
-        clearTimeout(self.mealRetryTimer);
-      }
+      clearTimeout(self.midnightTimer);
+      clearTimeout(self.mealRetryTimer);
     },
     setAuthExpired(value) {
       self.authExpired = value;
