@@ -64,14 +64,33 @@ RSpec.describe 'meal charges sum-zero trigger on a re-parented line' do
     expect(credit.reload.meal_id).to eq(first_meal.id)
   end
 
-  it 'refuses a move of several lines, judging both meals' do
+  # The meal a line left is checked first, so in the two examples above
+  # that meal alone refuses the commit. This one puts a copy of the moved
+  # line back on the meal it left, so that meal still sums to zero, and
+  # only the check of the meal the line moved to can refuse it.
+  it 'refuses a move that leaves only the meal the line went to unbalanced' do
+    credit = MealCharge.find_by!(meal_id: first_meal.id, kind: 'credit')
+    copy = credit.attributes.except('id').merge('meal_id' => first_meal.id)
+
+    expect do
+      repair do
+        MealCharge.where(id: credit.id).update_all(meal_id: second_meal.id)
+        MealCharge.insert_all!([copy])
+      end
+    end.to raise_error(ActiveRecord::StatementInvalid, /meal #{second_meal.id} refused: its stored lines sum to 80\b/)
+
+    expect(credit.reload.meal_id).to eq(first_meal.id)
+    expect([sum_for(first_meal), sum_for(second_meal)]).to eq([BigDecimal('0'), BigDecimal('0')])
+  end
+
+  it 'refuses a move of several lines that leaves the meal they left unbalanced' do
     # Move both debits together: the meal they left keeps only its credit
-    # (+80), and the meal they went to is long by the same (-80). Whichever
-    # id the trigger visits first, the commit is refused.
+    # (+80), and the meal they went to is long by the same (-80). The meal
+    # they left is checked first, and refuses the commit.
     lines = MealCharge.where(meal_id: first_meal.id, kind: 'debit')
 
     expect { repair { lines.update_all(meal_id: second_meal.id) } }
-      .to raise_error(ActiveRecord::StatementInvalid, /refused: its stored lines sum to/)
+      .to raise_error(ActiveRecord::StatementInvalid, /meal #{first_meal.id} refused: its stored lines sum to 80\b/)
 
     expect([sum_for(first_meal), sum_for(second_meal)]).to eq([BigDecimal('0'), BigDecimal('0')])
   end
