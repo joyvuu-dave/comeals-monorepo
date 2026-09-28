@@ -75,8 +75,9 @@ export function zoneOffsetMs(ms, tz) {
 // single instant. A time that happens twice, in the hour repeated when
 // the clocks go back, gives the first one. A time that never happens,
 // in the hour skipped when the clocks go forward, moves forward by the
-// skip: 02:30 becomes 03:30. Rails' Time.zone.local on the server does
-// the same with both.
+// skip: 02:30 becomes 03:30. For a zone whose clocks move a whole hour,
+// as Los Angeles's do, Rails' Time.zone.local on the server gives the
+// same answers.
 export function wallClockToInstant(wall, tz) {
   // The zone's offset a day before and a day after: the offsets on the
   // two sides of any change near this time.
