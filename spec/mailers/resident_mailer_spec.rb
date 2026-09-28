@@ -26,8 +26,9 @@ RSpec.describe ResidentMailer do
       expect(mail.body.encoded).to include('abc123token')
     end
 
-    it 'links to the reset page under the configured app root' do
-      expect(mail.body.encoded).to include('http://localhost:3036/reset-password/abc123token')
+    it 'links to the reset page under the configured app root, in the text part' do
+      expect(mail.text_part.body.decoded.lines.map(&:chomp))
+        .to include('To reset your password, follow this link: http://localhost:3036/reset-password/abc123token.')
     end
 
     it 'greets the resident by name' do
@@ -65,8 +66,8 @@ RSpec.describe ResidentMailer do
       expect(mail.subject).to eq('Sign up to Cook')
     end
 
-    it 'links to the configured app root' do
-      expect(mail.body.encoded).to include('http://localhost:3036')
+    it 'gives the address of the app in the text part' do
+      expect(mail.text_part.body.decoded.lines.map(&:chomp)).to include('Sign up now: http://localhost:3036.')
     end
 
     # The open dates are the point of this mail. They go in one list, and
@@ -139,8 +140,9 @@ RSpec.describe ResidentMailer do
         .to eq(['New Rotation Posted', '=' * 'New Rotation Posted'.length])
     end
 
-    it 'links to the configured app root' do
-      expect(mail.body.encoded).to include('http://localhost:3036')
+    it 'links to the configured app root in the text part' do
+      expect(mail.text_part.body.decoded.lines.map(&:chomp))
+        .to include('Sign up to cook and attend dinner now: http://localhost:3036.')
     end
 
     it_behaves_like 'an HTML part that is one HTML document'
