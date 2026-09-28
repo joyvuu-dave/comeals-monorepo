@@ -139,12 +139,23 @@ describe("AttendeesBox", () => {
     expect(bobRow.querySelector(".badge img")).not.toBeInTheDocument();
   });
 
-  it("clicking a name toggles attendance optimistically", () => {
-    renderBox(defaultStore());
+  it("clicking a name toggles attendance optimistically", async () => {
+    toastStore.clearAll();
+    const store = defaultStore();
+    axios.mockResolvedValueOnce(mealResidentAnswer(2));
+    renderBox(store);
 
     const bob = screen.getByRole("cell", { name: "Bob Johnson" });
     fireEvent.click(bob);
     expect(bob).toHaveClass("background-green");
+
+    // The server's yes keeps it, with the server's sign-up time.
+    await act(async () => {});
+    expect(bob).toHaveClass("background-green");
+    expect(store.residents.get("2").attending_at).toEqual(
+      new Date("2026-01-14T13:00:00Z"),
+    );
+    expect(toastStore.toasts).toHaveLength(0);
   });
 
   // An open meal has no seat count (extras is null), and anyone can
