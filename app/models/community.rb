@@ -80,7 +80,10 @@ class Community < ApplicationRecord
   end
 
   validate :enforce_singleton, on: :create
-  before_destroy { throw :abort }
+  # Prepended, so the refusal runs before the dependent: :destroy cascades
+  # below, wherever this line sits. Inside an outer transaction a cascade
+  # that ran first would stay deleted (#26), as on Meal and Rotation.
+  before_destroy(prepend: true) { throw :abort }
 
   # When the singleton is first created, link any orphan admin users (those
   # created in `rails c` during bootstrap before a community existed) to this

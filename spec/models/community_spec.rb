@@ -50,6 +50,22 @@ RSpec.describe Community do
       expect(community.destroy).to be false
       expect(described_class.count).to eq(1)
     end
+
+    # The refusal must run before the dependent: :destroy cascades. Inside
+    # an outer transaction (a console session, a rake task) destroy joins
+    # it, and when the refusal comes after the cascade, the swallowed
+    # rollback leaves the children deleted (#26). An empty unit is a child
+    # the cascade can delete.
+    it 'refuses before deleting anything, inside an outer transaction' do
+      empty_unit = create(:unit, community: community)
+
+      described_class.transaction do
+        expect(community.destroy).to be false
+      end
+
+      expect(Unit.exists?(empty_unit.id)).to be true
+      expect(described_class.count).to eq(1)
+    end
   end
 
   describe 'timezone' do

@@ -40,6 +40,8 @@ There is exactly one community row, forever. A unique index on
 `singleton_guard`, which is always 0, makes a second row impossible, and
 `Community#enforce_singleton` refuses a second create. `before_destroy` and
 the `prevent_community_delete` database trigger both refuse to delete the row.
+The `before_destroy` is `prepend: true`, so it refuses before the dependent
+cascades delete anything (#26).
 `Community.instance` is how the rest of the app reads it. Controllers do not
 scope queries by community — see ADR 0002 and CLAUDE.md.
 
