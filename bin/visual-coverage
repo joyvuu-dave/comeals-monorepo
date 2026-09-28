@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# The screen-state measure: how much of the components' branches the
-# visual suite's goldens show. Builds the SPA with istanbul counters into
+# The screen-state measure: how much of the components' markup branches
+# rendered while the visual suite ran. A branch counts when it rendered at
+# any moment of a test, not only when a screenshot was taken, so a
+# "Loading..." line that shows before the data arrives counts too. A
+# component file that no visual test loads fails the run. Builds the SPA
+# with istanbul counters into
 # tmp/visual-coverage/build (vite.config.mjs), runs tests/e2e/visual.spec.js
 # against it on Chromium with the screenshot checks off
 # (playwright.config.js), collects the counters each page hands out

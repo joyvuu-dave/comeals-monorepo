@@ -97,12 +97,18 @@ themselves. Roughly 30–40 new tests, all doubled across both engines.
   `tests/admin/seed.rb` (2026-09-08). The admin goldens for Linux come
   from `bin/update-linux-snapshots` too: Rails runs on the host and the
   container's browser reaches it.
-- Every screen _state_ has a golden too, measured rather than counted
-  by hand: `bin/visual-coverage` builds the SPA with istanbul counters,
-  runs the visual suite against it with the screenshot checks off, and
-  reports the share of the components' markup branches (the `? :` and
-  `&&` inside the JSX) that ran. 100% since 2026-09-08, held there by
-  `tests/helpers/visual_coverage_report.js`; bin/check and CI run it.
+- Every screen _state_ is drawn during the visual suite, measured rather
+  than counted by hand: `bin/visual-coverage` builds the SPA with istanbul
+  counters, runs the visual suite against it with the screenshot checks
+  off, and reports the share of the components' markup branches (the
+  `? :` and `&&` inside the JSX, including inside a `.map()` that draws
+  rows) that rendered. 100% since 2026-09-08, held there by
+  `tests/helpers/visual_coverage_report.js`; bin/check and CI run it. A
+  branch counts when it rendered at any moment of a test, so a state
+  that shows only before the data arrives counts without a golden of its
+  own; the rotation and history modals' "Loading..." looks have goldens
+  (2026-09-28), the other loading looks do not. A component file that no
+  visual test loads fails the run.
 - Tests for `data_store_hosts.js` — 6% covered, and it is the in-flight /
   stale-response cache feeding the reservation forms.
 
