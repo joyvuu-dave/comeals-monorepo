@@ -11,12 +11,57 @@ import { mark } from "../helpers/nav_trace";
 
 export function calendarVolatile() {
   return {
-    // Pusher subscriptions for adjacent months (cache invalidation only).
+    // The Pusher channels of the two months next to the one on screen.
     adjacentChannels: [],
   };
 }
 
+function monthChannelName(communityId, month) {
+  return `community-${communityId}-calendar-${month.format("YYYY")}-${month.format("M")}`;
+}
+
 export function calendarActions(self) {
+  // Whether a channel is the one for the month on screen. Read when a
+  // handler fires: the month on screen changes as soon as a navigation
+  // starts (switchMonths), before its answer arrives.
+  function isOnScreen(name) {
+    return (
+      name ===
+      monthChannelName(Cookie.get("community_id"), dayjs(self.currentDate))
+    );
+  }
+
+  // Open one month's channel. A month can move between roles (the month
+  // on screen, a neighbour) while its channel stays open, so the
+  // handlers check the role when they fire, not when they are bound.
+  function subscribeMonth(communityId, month) {
+    var name = monthChannelName(communityId, month);
+    var channel = window.Comeals.pusher.subscribe(name);
+    // The month changed on the server. The month on screen is fetched
+    // again. A neighbour's copies are only dropped, so the next visit
+    // fetches it.
+    channel.bind("update", function () {
+      if (isOnScreen(name)) {
+        self.loadMonthAsync();
+      } else {
+        monthData.invalidateMonth(
+          communityId,
+          month.format("YYYY"),
+          month.format("M"),
+        );
+      }
+    });
+    // Pusher confirmed the subscription. A push sent before this reached
+    // no one, and the month on screen may have been read before it, so
+    // it is fetched once more (#112). A neighbour is not: that would
+    // drop the prefetch made a moment ago, and a visit more than 5
+    // seconds after a prefetch fetches the month again anyway.
+    channel.bind("pusher:subscription_succeeded", function () {
+      if (isOnScreen(name)) self.loadMonthAsync();
+    });
+    return channel;
+  }
+
   return {
     // The month on screen can no longer be trusted (a Pusher update, a
     // reconnect, the day changing): drop its copies and fetch it again.
@@ -130,64 +175,50 @@ export function calendarActions(self) {
 
       self.monthLoading = false;
 
-      // Unsubscribe from previous month
-      if (window.Comeals.calendarChannel !== null) {
-        window.Comeals.pusher.unsubscribe(window.Comeals.calendarChannel.name);
-      }
-
-      // Subscribe to changes of this month
-      var subscribeString = `community-${Cookie.get(
-        "community_id",
-      )}-calendar-${dayjs(self.currentDate).format("YYYY")}-${dayjs(
-        self.currentDate,
-      ).format("M")}`;
-      window.Comeals.calendarChannel =
-        window.Comeals.pusher.subscribe(subscribeString);
-
-      window.Comeals.calendarChannel.bind("update", function () {
-        self.loadMonthAsync();
-      });
+      self.watchMonthChannels();
 
       // Names on chips and birthdays come from residents and units,
       // which have their own channel.
       self.ensureResidentsChannel();
 
-      // Clean up previous adjacent month subscriptions
-      self.adjacentChannels.forEach(function (ch) {
-        window.Comeals.pusher.unsubscribe(ch.name);
-      });
-      self.adjacentChannels = [];
-
-      // Subscribe to adjacent months for real-time cache invalidation.
-      // When data changes in a neighboring month, evict it from both
-      // caches so the next navigation fetches fresh data from the API.
-      var communityId = Cookie.get("community_id");
-      var current = dayjs(self.currentDate);
-      [current.subtract(1, "month"), current.add(1, "month")].forEach(
-        function (adj) {
-          var adjYear = adj.format("YYYY");
-          var adjMonth = adj.format("M");
-          var channelName =
-            "community-" +
-            communityId +
-            "-calendar-" +
-            adjYear +
-            "-" +
-            adjMonth;
-
-          var channel = window.Comeals.pusher.subscribe(channelName);
-          channel.bind("update", function () {
-            monthData.invalidateMonth(communityId, adjYear, adjMonth);
-          });
-          self.adjacentChannels.push(channel);
-        },
-      );
-
       // Prefetch adjacent months for instant navigation
+      var current = dayjs(self.currentDate);
       monthData.prefetchMonth(
         current.subtract(1, "month").format("YYYY-MM-DD"),
       );
       monthData.prefetchMonth(current.add(1, "month").format("YYYY-MM-DD"));
+    },
+    // Keep this page subscribed to the month on screen and its two
+    // neighbours. A channel that is open under a name still wanted stays
+    // open as it is, whatever its role was. pusherClient hands every
+    // caller the same channel for a name, so closing the old neighbours
+    // closed the month that had just come on screen (#112). And a
+    // channel closed and opened again on every refetch would miss any
+    // push sent in between, and fetch again on every confirmation.
+    watchMonthChannels() {
+      var communityId = Cookie.get("community_id");
+      var current = dayjs(self.currentDate);
+      var open = new Map();
+      [window.Comeals.calendarChannel]
+        .concat(self.adjacentChannels)
+        .forEach(function (channel) {
+          if (channel !== null) open.set(channel.name, channel);
+        });
+      var channels = [
+        current,
+        current.subtract(1, "month"),
+        current.add(1, "month"),
+      ].map(function (month) {
+        var name = monthChannelName(communityId, month);
+        var channel = open.get(name);
+        open.delete(name);
+        return channel || subscribeMonth(communityId, month);
+      });
+      open.forEach(function (_channel, name) {
+        window.Comeals.pusher.unsubscribe(name);
+      });
+      window.Comeals.calendarChannel = channels[0];
+      self.adjacentChannels = channels.slice(1);
     },
     clearCalendarEvents() {
       self.calendarEvents.clear();

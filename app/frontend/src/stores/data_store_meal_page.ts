@@ -53,6 +53,7 @@ export interface MealPageStore extends ReturnType<typeof mealPageVolatile> {
   cancelMealRetry(): void;
   preLoadData(): void;
   loadData(data: MealForm): void;
+  watchMealChannel(mealId: number): void;
   clearResidents(): void;
   clearBills(): void;
   clearGuests(): void;
@@ -376,21 +377,35 @@ export function mealPageActions(self: MealPageStore) {
       self.mealLoading = false;
       self.cancelMealRetry();
 
-      // Unsubscribe from previous meal
-      if (window.Comeals.mealChannel !== null) {
-        window.Comeals.pusher.unsubscribe(window.Comeals.mealChannel.name);
-      }
-
-      // Subscribe to changes of this meal
-      window.Comeals.mealChannel = window.Comeals.pusher.subscribe(
-        `meal-${meal.id}`,
-      );
-      window.Comeals.mealChannel.bind("update", function () {
-        self.loadDataAsync();
-      });
+      self.watchMealChannel(meal.id);
 
       // The sign-up list is every resident; they have their own channel.
       self.ensureResidentsChannel();
+    },
+    // Keep this page subscribed to the meal on screen. A refetch of the
+    // same meal keeps the channel it has: closing it and opening it
+    // again would miss any push sent in between, and every new
+    // subscription fetches once more when Pusher confirms it, so it
+    // would never stop.
+    watchMealChannel(mealId: number) {
+      const name = `meal-${mealId}`;
+      const open = window.Comeals.mealChannel;
+      if (open !== null && open.name === name) return;
+      if (open !== null) {
+        window.Comeals.pusher.unsubscribe(open.name);
+      }
+      const channel = window.Comeals.pusher.subscribe(name);
+      window.Comeals.mealChannel = channel;
+      // The meal changed on the server: fetch it again.
+      channel.bind("update", function () {
+        self.loadDataAsync();
+      });
+      // Pusher confirmed the subscription. A push sent before this
+      // reached no one, and the meal on screen may have been read before
+      // it, so it is fetched once more (#112).
+      channel.bind("pusher:subscription_succeeded", function () {
+        self.loadDataAsync();
+      });
     },
     clearResidents() {
       self.residents.clear();

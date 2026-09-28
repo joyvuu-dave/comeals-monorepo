@@ -16,13 +16,15 @@
 //    or unit, whose names are on every screen. The event name is always
 //    "update".
 // 4. The client subscribes to the month on screen and refetches on
-//    "update" (data_store_calendar.js loadMonth), dropping its copies
-//    first so a fetch that was already on the wire cannot bring back
-//    the old month (month_fetch.js refetch). It also subscribes to the
-//    two neighbouring months and only evicts them from the client
-//    caches, so the next navigation fetches fresh. On the residents
-//    channel it drops every cached month and meal and refetches what
-//    is on screen (data_store_app.js handleResidentsUpdate).
+//    "update" (data_store_calendar.js watchMonthChannels), dropping its
+//    copies first so a fetch that was already on the wire cannot bring
+//    back the old month (month_fetch.js refetch). It also subscribes to
+//    the two neighbouring months and only evicts them from the client
+//    caches, so the next navigation fetches fresh. A month's channel
+//    stays open while the month is on screen or next to it, and its
+//    handler checks which one when it fires. On the residents channel
+//    it drops every cached month and meal and refetches what is on
+//    screen (data_store_app.js handleResidentsUpdate).
 // 5. The browser that caused the change is excluded from the meal-page
 //    push: the server passes the client's socket_id, so a tap never
 //    triggers its own refetch.
@@ -30,7 +32,13 @@
 //    so every reconnect and every browser "online" event refetches
 //    (data_store_app.js handleReconnect). Midnight refetches the month
 //    too: the chips' words depend on the day and nothing pushes then.
-// 7. With no VITE_PUSHER_KEY the client never connects and the app runs
+// 7. A push reaches this client only after Pusher has confirmed its
+//    subscription, and a channel opens only when the first answer for
+//    its month or meal is drawn. So when Pusher confirms the channel
+//    of the month or meal on screen ("pusher:subscription_succeeded"),
+//    the client fetches it once more (#112). pusher-js subscribes every
+//    channel again after a reconnect, so this also runs then.
+// 8. With no VITE_PUSHER_KEY the client never connects and the app runs
 //    without live updates; nothing else changes.
 //
 // This file is only the transport. It loads pusher-js outside the main

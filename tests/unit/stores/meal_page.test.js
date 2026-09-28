@@ -147,18 +147,71 @@ describe("meal page store", () => {
     ]);
   });
 
-  it("refetches the meal when its channel says update", () => {
-    const store = createStore();
-    store.loadData(mealPayload());
-    const loadDataAsync = stubAction(store, "loadDataAsync");
+  describe("the meal's channel", () => {
+    function handlersFor(name, event) {
+      return channels
+        .get(name)
+        .bind.mock.calls.filter(([bound]) => bound === event);
+    }
 
-    const channel = channels.get("meal-1");
-    const update = channel.bind.mock.calls.find(
-      ([event]) => event === "update",
-    );
-    update[1]();
+    it("refetches the meal when its channel says update", () => {
+      const store = createStore();
+      store.loadData(mealPayload());
+      const loadDataAsync = stubAction(store, "loadDataAsync");
 
-    expect(loadDataAsync).toHaveBeenCalledTimes(1);
+      const update = handlersFor("meal-1", "update");
+      expect(update).toHaveLength(1);
+      update[0][1]();
+
+      expect(loadDataAsync).toHaveBeenCalledTimes(1);
+    });
+
+    // A push sent before Pusher confirmed the subscription reached no
+    // one, and the meal on screen may have been read before that (#112).
+    it("fetches the meal once more when Pusher confirms the subscription", () => {
+      const store = createStore();
+      store.loadData(mealPayload());
+      const loadDataAsync = stubAction(store, "loadDataAsync");
+
+      const confirmed = handlersFor("meal-1", "pusher:subscription_succeeded");
+      expect(confirmed).toHaveLength(1);
+      confirmed[0][1]();
+
+      expect(loadDataAsync).toHaveBeenCalledTimes(1);
+    });
+
+    // Closing the channel and opening it again on every refetch would
+    // miss a push sent in between, and each new subscription's
+    // confirmation would fetch again, and again.
+    it("stays open, and is opened once, while the same meal is fetched again", () => {
+      const store = createStore();
+
+      store.loadData(mealPayload({ description: "First" }));
+      store.loadData(mealPayload({ description: "Second" }));
+
+      expect(window.Comeals.pusher.subscribe.mock.calls).toEqual([
+        ["meal-1"],
+        [`community-test-community-id-residents`],
+      ]);
+      expect(window.Comeals.pusher.unsubscribe).not.toHaveBeenCalled();
+      expect(window.Comeals.mealChannel.name).toBe("meal-1");
+    });
+
+    it("is closed when the next meal's answer lands, and that meal's is opened", async () => {
+      const store = createStore();
+      store.loadData(mealPayload());
+      stubAction(store, "loadDataAsync");
+      store.switchMeals(2);
+      await flush();
+
+      store.loadData(mealPayload({ id: 2 }));
+
+      expect(window.Comeals.pusher.unsubscribe.mock.calls).toEqual([
+        ["meal-1"],
+      ]);
+      expect(window.Comeals.mealChannel.name).toBe("meal-2");
+      expect(handlersFor("meal-2", "update")).toHaveLength(1);
+    });
   });
 
   describe("switching meals", () => {

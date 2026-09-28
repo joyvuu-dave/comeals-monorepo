@@ -88,6 +88,26 @@ function fireUpdate(name) {
   call[1]();
 }
 
+// What Pusher does, and nothing more: a push reaches a channel only if
+// this client subscribed to it, and a subscription is confirmed with
+// "pusher:subscription_succeeded". A push to a channel nobody opened
+// is lost.
+function pushTo(name) {
+  runHandlers(name, "update");
+}
+
+function confirmSubscription(name) {
+  runHandlers(name, "pusher:subscription_succeeded");
+}
+
+function runHandlers(name, event) {
+  const channel = channels.get(name);
+  if (!channel) return;
+  channel.bind.mock.calls
+    .filter(([bound]) => bound === event)
+    .forEach(([, handler]) => handler());
+}
+
 const RESIDENTS_CHANNEL = `community-${COMMUNITY}-residents`;
 
 function calendarRequests(year, month) {
@@ -225,12 +245,16 @@ describe("live updates in the store", () => {
     });
   });
 
-  describe("an update for the month on screen", () => {
-    it("drops a response that was already on the wire before the change", async () => {
+  describe("a reconnect while the month's first fetch is on the wire", () => {
+    it("drops the response that was already on the wire", async () => {
       // The boot-time prefetch of July is slow. While it is on the wire
-      // someone changes July on the server, and the push arrives. The
-      // prefetch's answer was read before the change: rendering it
-      // would show the old month with nothing left to correct it.
+      // the connection drops and comes back. Pusher does not replay a
+      // push sent while it was down, so the reconnect fetches the month
+      // again (data_store_app.js handleReconnect). The prefetch's answer
+      // may have been read before a change: rendering it would show the
+      // old month with nothing left to correct it. (No push can reach
+      // July yet: its channel opens only when the first answer is
+      // drawn.)
       const requests = [];
       axios.get.mockImplementation((url) => {
         if (!/\/calendar\/2024-07-15$/.test(url)) {
@@ -255,9 +279,7 @@ describe("live updates in the store", () => {
       // starting a second request.
       expect(requests).toHaveLength(1);
 
-      // The push. What the store does here is what a real "update" on
-      // the July channel does (data_store_calendar.js).
-      store.loadMonthAsync();
+      store.handleReconnect();
       await flush();
 
       // Now the old answer lands.
@@ -267,12 +289,92 @@ describe("live updates in the store", () => {
         "July, old",
       );
 
-      // And the fresh fetch the push caused lands.
+      // And the fresh fetch the reconnect caused lands.
       expect(requests).toHaveLength(2);
       requests[1]({ status: 200, data: calendarData(2024, 7, "July, new") });
       await vi.waitFor(() => {
         expect(store.calendarEvents[0].title).toBe("July, new");
       });
+    });
+  });
+
+  // A channel opens only when the first answer is drawn, so a push sent
+  // while that answer is on the wire reaches no one. Pusher's
+  // confirmation of the new subscription fetches once more (#112).
+  describe("a change made while the month's first fetch is on the wire", () => {
+    it("is shown once Pusher confirms the month's channel", async () => {
+      const JULY = `community-${COMMUNITY}-calendar-2024-7`;
+      // Hold the first July answer; serve every later request as usual.
+      let firstJuly = null;
+      const serve = axios.get.getMockImplementation();
+      axios.get.mockImplementation((url) => {
+        if (firstJuly === null && /\/calendar\/2024-07-15$/.test(url)) {
+          return new Promise((resolve) => {
+            firstJuly = resolve;
+          });
+        }
+        return serve(url);
+      });
+
+      const store = createStore();
+      stage(store, () => {
+        store.meal = null;
+      });
+      store.switchMonths("2024-07-15");
+      await flush();
+      expect(firstJuly).not.toBeNull();
+
+      // The server has read July for that answer. Now someone changes
+      // July, and the server pushes July's channel.
+      const julyAsRead = payloads.get("2024-7");
+      payloads.set("2024-7", calendarData(2024, 7, "July, changed"));
+      pushTo(JULY);
+
+      // The answer read before the change lands, and Pusher confirms
+      // every subscription the page made.
+      firstJuly({ status: 200, data: julyAsRead });
+      await flush();
+      expect(store.calendarEvents[0].title).toBe("July");
+      confirmSubscription(JULY);
+      await flush();
+
+      expect(store.calendarEvents[0].title).toBe("July, changed");
+    });
+  });
+
+  describe("a change made while the meal's first fetch is on the wire", () => {
+    it("is shown once Pusher confirms the meal's channel", async () => {
+      // Hold the first answer for meal 1; serve every later request as
+      // usual.
+      let firstAnswer = null;
+      const serve = axios.get.getMockImplementation();
+      axios.get.mockImplementation((url) => {
+        if (firstAnswer === null && /\/meals\/1\/cooks$/.test(url)) {
+          return new Promise((resolve) => {
+            firstAnswer = resolve;
+          });
+        }
+        return serve(url);
+      });
+
+      const store = createStore();
+      store.loadDataAsync();
+      await flush();
+      expect(firstAnswer).not.toBeNull();
+
+      // The server has read the meal for that answer. Now someone
+      // changes it, and the server pushes the meal's channel.
+      const asRead = meals.get("1");
+      meals.set("1", mealPayload(1, "Menu v2"));
+      pushTo("meal-1");
+
+      firstAnswer({ status: 200, data: asRead });
+      await flush();
+      expect(store.meal.description).toBe("Menu v1");
+      confirmSubscription("meal-1");
+      await flush();
+
+      expect(store.meal.description).toBe("Menu v2");
     });
   });
 
