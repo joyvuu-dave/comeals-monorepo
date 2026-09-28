@@ -7,7 +7,10 @@ import {
   generateTimes,
   getCommunityTimezone,
   toCommunityDayjs,
+  wallClockToInstant,
+  zoneOffsetMs,
 } from "../../../app/frontend/src/helpers/helpers.js";
+import { useDeviceZone } from "./device_zone.js";
 
 dayjs.extend(advancedFormat);
 
@@ -180,6 +183,161 @@ describe("toCommunityDayjs", () => {
     expect(d.date()).toBe(11);
   });
 });
+
+// What a community time reads as must not depend on the device's own
+// zone (#123). Each block runs on one device zone, set by the test
+// itself. Los Angeles, the community: clocks go forward on Mar 8, 2026
+// at 2am and back on Nov 1, 2026 at 2am.
+describe.each([
+  // Central and Eastern: dayjs.tz put a time after midnight on a switch
+  // day an hour early, and the spring-forward Sunday on the Saturday.
+  "America/Chicago",
+  "America/New_York",
+  // The community's own zone, and the zone CI runs in.
+  "America/Los_Angeles",
+  "UTC",
+  // East of UTC, with and without DST.
+  "Asia/Tokyo",
+  "Europe/Berlin",
+  // On UTC in winter: dayjs.tz read an offset of 0 as "no offset" and
+  // put a Saturday dinner in October an hour late.
+  "Europe/London",
+  // Its clocks skip from 23:00 to midnight on Saturday, Mar 28, 2026, so
+  // a device-local Date cannot hold 23:30 that night.
+  "America/Nuuk",
+  "Pacific/Honolulu",
+])("toCommunityDayjs on a device in %s", (deviceZone) => {
+  useDeviceZone(deviceZone);
+
+  beforeEach(() => {
+    setCommunityTimezone("America/Los_Angeles");
+  });
+
+  it.each([
+    ["2026-03-07T23:30:00", "2026-03-07 23:30"],
+    ["2026-03-08", "2026-03-08 00:00"],
+    ["2026-03-08T00:30:00", "2026-03-08 00:30"],
+    ["2026-03-08T01:59:00", "2026-03-08 01:59"],
+    ["2026-03-08T03:00:00", "2026-03-08 03:00"],
+    ["2026-03-08T19:00:00", "2026-03-08 19:00"],
+    ["2026-03-28T23:30:00", "2026-03-28 23:30"],
+    ["2026-10-24T19:00:00", "2026-10-24 19:00"],
+    ["2026-10-31T23:30:00", "2026-10-31 23:30"],
+    ["2026-11-01", "2026-11-01 00:00"],
+    ["2026-11-01T01:30:00", "2026-11-01 01:30"],
+    ["2026-11-01T02:30:00", "2026-11-01 02:30"],
+    ["2026-11-01T19:00:00", "2026-11-01 19:00"],
+  ])("reads the wall-clock time %s as %s", (input, wallClock) => {
+    expect(toCommunityDayjs(input).format("YYYY-MM-DD HH:mm")).toBe(wallClock);
+  });
+
+  it.each([
+    ["2026-03-08T08:00:00Z", "2026-03-08 00:00"],
+    ["2026-03-08T09:59:00Z", "2026-03-08 01:59"],
+    ["2026-03-08T10:00:00Z", "2026-03-08 03:00"],
+    ["2026-03-29T06:30:00Z", "2026-03-28 23:30"],
+    ["2026-10-25T02:00:00Z", "2026-10-24 19:00"],
+    // The hour that happens twice: first in daylight time, then in
+    // standard time.
+    ["2026-11-01T08:30:00Z", "2026-11-01 01:30"],
+    ["2026-11-01T09:30:00Z", "2026-11-01 01:30"],
+    ["2026-11-01T02:00:00.000-05:00", "2026-11-01 00:00"],
+  ])("reads the instant %s as %s", (input, wallClock) => {
+    expect(toCommunityDayjs(input).format("YYYY-MM-DD HH:mm")).toBe(wallClock);
+  });
+
+  // The server never sends a time that the clocks skip (it saves one an
+  // hour later, the way Time.zone.local moves it). This keeps what the
+  // app did before on a device in the community's own zone: the time
+  // moves forward by the skip.
+  it("moves 02:30 on the spring-forward day to 03:30", () => {
+    expect(
+      toCommunityDayjs("2026-03-08T02:30:00").format("YYYY-MM-DD HH:mm"),
+    ).toBe("2026-03-08 03:30");
+  });
+
+  it("gives the meal page and the history modal the right day", () => {
+    const d = toCommunityDayjs("2026-03-08");
+    expect([d.year(), d.month(), d.date(), d.hour(), d.minute()]).toEqual([
+      2026, 2, 8, 0, 0,
+    ]);
+    expect(d.format("ddd, MMM Do")).toBe("Sun, Mar 8th");
+  });
+
+  it("gives back an invalid dayjs for a string it cannot read", () => {
+    expect(toCommunityDayjs("not a date").isValid()).toBe(false);
+    expect(toCommunityDayjs("not a date Z").isValid()).toBe(false);
+  });
+});
+
+// The two zone functions under the time helpers. Every expected instant
+// below was read from the zone's rules (Intl), with the offset written
+// out, and each block runs on devices east and west of the zones.
+describe.each(["America/Chicago", "UTC", "Asia/Tokyo"])(
+  "zone math on a device in %s",
+  (deviceZone) => {
+    useDeviceZone(deviceZone);
+
+    function instantOf(wallClock, zone) {
+      return new Date(
+        wallClockToInstant(Date.parse(`${wallClock}Z`), zone),
+      ).toISOString();
+    }
+
+    it.each([
+      // An ordinary time.
+      ["America/Los_Angeles", "2026-01-15T12:00", "2026-01-15T20:00:00.000Z"],
+      // Los Angeles, clocks forward at 02:00 on Mar 8: the hour before,
+      // the skipped hour (moved forward by the skip), the hour after.
+      ["America/Los_Angeles", "2026-03-08T01:30", "2026-03-08T09:30:00.000Z"],
+      ["America/Los_Angeles", "2026-03-08T02:30", "2026-03-08T10:30:00.000Z"],
+      ["America/Los_Angeles", "2026-03-08T03:30", "2026-03-08T10:30:00.000Z"],
+      // Clocks back at 02:00 on Nov 1: 01:30 happens twice, and the
+      // first one (daylight time) is the answer.
+      ["America/Los_Angeles", "2026-11-01T00:30", "2026-11-01T07:30:00.000Z"],
+      ["America/Los_Angeles", "2026-11-01T01:30", "2026-11-01T08:30:00.000Z"],
+      ["America/Los_Angeles", "2026-11-01T02:30", "2026-11-01T10:30:00.000Z"],
+      // Havana skips its midnight (00:00 to 01:00 on Mar 8), and repeats
+      // 00:00 to 01:00 on Nov 1.
+      ["America/Havana", "2026-03-08T00:00", "2026-03-08T05:00:00.000Z"],
+      ["America/Havana", "2026-11-01T00:30", "2026-11-01T04:30:00.000Z"],
+      // Beirut goes back from 00:00 to 23:00 on Oct 24: midnight comes
+      // after the repeated hour, and 23:30 is first the one before it.
+      ["Asia/Beirut", "2026-10-25T00:00", "2026-10-24T22:00:00.000Z"],
+      ["Asia/Beirut", "2026-10-24T23:30", "2026-10-24T20:30:00.000Z"],
+      // Lord Howe moves its clocks by half an hour.
+      ["Australia/Lord_Howe", "2026-10-04T02:15", "2026-10-03T15:45:00.000Z"],
+      ["Australia/Lord_Howe", "2026-04-05T01:45", "2026-04-04T14:45:00.000Z"],
+      // A quarter-hour offset, and no DST.
+      ["Asia/Kathmandu", "2026-06-01T12:00", "2026-06-01T06:15:00.000Z"],
+    ])("wallClockToInstant: %s %s is %s", (zone, wallClock, instant) => {
+      expect(instantOf(wallClock, zone)).toBe(instant);
+    });
+
+    it.each([
+      ["2026-03-08T09:59:59.999Z", -8 * 60],
+      ["2026-03-08T10:00:00.000Z", -7 * 60],
+      ["2026-11-01T08:59:59.999Z", -7 * 60],
+      ["2026-11-01T09:00:00.000Z", -8 * 60],
+      // Before 1970 the count of milliseconds is negative.
+      ["1969-12-31T23:59:59.500Z", -8 * 60],
+    ])(
+      "zoneOffsetMs in Los Angeles at %s is %i minutes",
+      (instant, minutes) => {
+        expect(zoneOffsetMs(Date.parse(instant), "America/Los_Angeles")).toBe(
+          minutes * 60 * 1000,
+        );
+      },
+    );
+
+    it("keeps the milliseconds of a time from the server", () => {
+      setCommunityTimezone("America/Los_Angeles");
+      expect(
+        toCommunityDayjs("2026-05-11T23:00:00.500Z").format("HH:mm:ss.SSS"),
+      ).toBe("16:00:00.500");
+    });
+  },
+);
 
 describe("communityNow", () => {
   it("produces a dayjs anchored to the community tz", () => {

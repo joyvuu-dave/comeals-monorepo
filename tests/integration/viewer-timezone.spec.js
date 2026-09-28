@@ -1,7 +1,6 @@
 const dayjs = require("dayjs");
-const utc = require("dayjs/plugin/utc");
-const timezone = require("dayjs/plugin/timezone");
 const { test, expect } = require("../helpers/test");
+const { zonedInstant } = require("../helpers/zoned_time");
 const {
   COMMUNITY_TIMEZONE,
   FAKE_TODAY,
@@ -11,9 +10,6 @@ const {
   disableIdleTimer,
   gotoMeal,
 } = require("../helpers/integration_setup");
-
-dayjs.extend(utc);
-dayjs.extend(timezone);
 
 // A resident whose phone is set to London. Every other browser test
 // runs the browser in the community's own zone, where the browser's
@@ -27,18 +23,20 @@ test.use({ timezoneId: "Europe/London" });
 
 const auth = loadAuthInfo();
 const today = dayjs(FAKE_TODAY);
-const lateEvening = dayjs.tz(`${FAKE_TODAY} 23:30`, COMMUNITY_TIMEZONE);
+const lateEvening = zonedInstant(`${FAKE_TODAY}T23:30`, COMMUNITY_TIMEZONE);
+// "YYYY-MM-DD" in London, from Intl (en-CA writes dates that way).
+const londonDay = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Europe/London",
+}).format(lateEvening);
 
 test.describe("A viewer in another time zone (real backend)", () => {
   test.beforeEach(async ({ page, context }) => {
     // The browser really is on the next day, or this file tests nothing.
-    expect(lateEvening.tz("Europe/London").format("YYYY-MM-DD")).toBe(
-      today.add(1, "day").format("YYYY-MM-DD"),
-    );
+    expect(londonDay).toBe(today.add(1, "day").format("YYYY-MM-DD"));
     await authenticateContext(context);
     await stubPusher(page);
     await disableIdleTimer(page);
-    await page.clock.setFixedTime(lateEvening.toDate());
+    await page.clock.setFixedTime(lateEvening);
   });
 
   test("today's meal is labeled Today", async ({ page }) => {

@@ -8,14 +8,9 @@
 
 const fs = require("fs");
 const path = require("path");
-const dayjs = require("dayjs");
-const utc = require("dayjs/plugin/utc");
-const timezone = require("dayjs/plugin/timezone");
 const { expect } = require("./test");
 const { disableIdleTimer, clearStorage } = require("./browser_setup");
-
-dayjs.extend(utc);
-dayjs.extend(timezone);
+const { zonedInstant } = require("./zoned_time");
 
 // The suite's frozen "today". bin/test-integration exports it to the
 // seed task and the Rails server, and the server freezes at noon of
@@ -25,10 +20,10 @@ dayjs.extend(timezone);
 // built in that zone on purpose: `new Date("...T12:00:00")` reads the
 // time in the zone of the machine running the tests, and on a machine
 // at UTC+5 or further east that instant is still the day before in Los
-// Angeles.
+// Angeles. zonedInstant finds it without the machine's zone at all.
 const COMMUNITY_TIMEZONE = "America/Los_Angeles";
 const FAKE_TODAY = process.env.INTEGRATION_FAKE_TODAY || "2026-01-15";
-const FAKE_NOW = dayjs.tz(`${FAKE_TODAY} 12:00`, COMMUNITY_TIMEZONE).toDate();
+const FAKE_NOW = zonedInstant(`${FAKE_TODAY}T12:00`, COMMUNITY_TIMEZONE);
 
 /**
  * Read auth credentials written by `rake test:seed_integration`.

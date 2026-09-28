@@ -17,16 +17,101 @@ export function getCommunityTimezone() {
   return dayjs.tz.guess();
 }
 
-// dayjs.tz(string, tz) interprets naive strings (no offset) as the
-// target timezone — correct.  But for strings with offset info it
-// stamps the UTC value as the target timezone instead of converting.
-// For those we need dayjs(string).tz(tz).
+var DAY_MS = 24 * 60 * 60 * 1000;
+
+// Zone math here uses Intl, which knows each zone's rules, and plain
+// UTC arithmetic. It never goes through the device's own zone. dayjs's
+// timezone plugin does: it builds and reads times as Dates in the
+// device's zone, so on a device in another zone it can be an hour off
+// near a DST change, on either zone's change (#122, #123).
+
+// One Intl.DateTimeFormat per zone: building one is slow, and the
+// calendar reads every chip's times through here.
+var wallClockFormats = new Map();
+
+function wallClockFormat(tz) {
+  var format = wallClockFormats.get(tz);
+  if (format === undefined) {
+    format = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "numeric",
+      minute: "numeric",
+      second: "numeric",
+      fractionalSecondDigits: 3,
+    });
+    wallClockFormats.set(tz, format);
+  }
+  return format;
+}
+
+// How far the wall clock in tz is ahead of UTC at the instant ms, in
+// milliseconds (negative west of UTC).
+export function zoneOffsetMs(ms, tz) {
+  var parts = {};
+  wallClockFormat(tz)
+    .formatToParts(new Date(ms))
+    .forEach(function (part) {
+      parts[part.type] = Number(part.value);
+    });
+  var wall = Date.UTC(
+    parts.year,
+    parts.month - 1,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    parts.second,
+    parts.fractionalSecond,
+  );
+  return wall - ms;
+}
+
+// The instant at which the wall clock in tz shows the time `wall`, where
+// `wall` is that time's fields counted as if they were UTC
+// (dayjs.utc("2026-03-08T19:00").valueOf()). Two kinds of time have no
+// single instant. A time that happens twice, in the hour repeated when
+// the clocks go back, gives the first one. A time that never happens,
+// in the hour skipped when the clocks go forward, moves forward by the
+// skip: 02:30 becomes 03:30. Rails' Time.zone.local on the server does
+// the same with both.
+export function wallClockToInstant(wall, tz) {
+  // The zone's offset a day before and a day after: the offsets on the
+  // two sides of any change near this time.
+  var before = zoneOffsetMs(wall - DAY_MS, tz);
+  var after = zoneOffsetMs(wall + DAY_MS, tz);
+  var first = wall - before;
+  if (zoneOffsetMs(first, tz) === before) return first;
+  var second = wall - after;
+  if (zoneOffsetMs(second, tz) === after) return second;
+  return first;
+}
+
+// A dayjs in UTC mode whose fields are the wall clock in tz at the
+// instant ms. UTC has no DST, so its fields, and what it formats, are
+// the same on every device. Its own instant is not ms: use it to show a
+// time, never to compare one with the clock.
+function wallClockAt(ms, tz) {
+  return dayjs.utc(ms + zoneOffsetMs(ms, tz));
+}
+
+// A time from the server, as the community's wall clock (a dayjs from
+// wallClockAt). A string with an offset or a Z names an instant. A
+// string without one ("2026-03-08", "2026-03-08T19:00:00") is already a
+// wall-clock time in the community's zone. A string dayjs cannot read
+// gives back an invalid dayjs.
 export function toCommunityDayjs(dateString) {
   var tz = getCommunityTimezone();
   if (/Z|[+-]\d{2}:?\d{2}\s*$/.test(dateString)) {
-    return dayjs(dateString).tz(tz);
+    var at = dayjs(dateString);
+    return at.isValid() ? wallClockAt(at.valueOf(), tz) : at;
   }
-  return dayjs.tz(dateString, tz);
+  var wall = dayjs.utc(dateString);
+  return wall.isValid()
+    ? wallClockAt(wallClockToInstant(wall.valueOf(), tz), tz)
+    : wall;
 }
 
 // "Now" in the community's timezone. Prefer this over dayjs() whenever the
