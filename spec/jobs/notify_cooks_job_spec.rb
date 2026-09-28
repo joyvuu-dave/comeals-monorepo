@@ -45,16 +45,31 @@ RSpec.describe NotifyCooksJob do
   end
 
   it 'does not record a send that failed, so the next run tries that cook again' do
+    mailed = []
+    failing = cooks[1]
     allow(ReconciliationMailer).to receive(:reconciliation_notify_email) do |cook, _|
       mail = instance_double(ActionMailer::MessageDelivery)
-      allow(mail).to receive(:deliver_now) { raise Net::ReadTimeout if cook == cooks[1] }
+      allow(mail).to receive(:deliver_now) do
+        raise Net::ReadTimeout if cook == failing
+
+        mailed << cook
+      end
       mail
     end
     allow(Rails.logger).to receive(:error)
 
     described_class.perform_now(reconciliation)
 
+    expect(mailed).to contain_exactly(cooks[0], cooks[2])
     expect(MailDelivery.where(about: reconciliation).pluck(:resident_id)).to contain_exactly(cooks[0].id, cooks[2].id)
+
+    # The mail server works again. The next run mails only the cook whose
+    # send failed.
+    failing = nil
+    described_class.perform_now(reconciliation)
+
+    expect(mailed.drop(2)).to eq([cooks[1]])
+    expect(MailDelivery.where(about: reconciliation).pluck(:resident_id)).to match_array(cooks.map(&:id))
   end
 
   it 'asks for another run when the per-run cap cut the list short' do
