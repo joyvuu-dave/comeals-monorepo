@@ -170,6 +170,63 @@ RSpec.describe CalendarSerializer, type: :serializer do
     end
   end
 
+  # The same for every other list. In each, the first row is made on a
+  # later day than the second and then saved again, so neither the date
+  # nor the place it is stored in puts it first; only the id does.
+  describe 'the order of every other list' do
+    it 'is by id for meals, cook slots and guest room bookings' do
+      cook = create(:resident, community: community, unit: unit)
+      first_meal = create(:meal, community: community, date: Date.new(2026, 4, 20))
+      second_meal = create(:meal, community: community, date: Date.new(2026, 4, 10))
+      first_bill = create(:bill, meal: first_meal, resident: cook, community: community)
+      second_bill = create(:bill, meal: second_meal, resident: cook, community: community)
+      first_room = create(:guest_room_reservation, community: community, resident: resident,
+                                                   date: Date.new(2026, 4, 20))
+      second_room = create(:guest_room_reservation, community: community, resident: resident,
+                                                    date: Date.new(2026, 4, 10))
+      first_meal.update!(date: Date.new(2026, 4, 21))
+      first_bill.update!(resident: resident)
+      first_room.update!(date: Date.new(2026, 4, 21))
+
+      result = serialize
+
+      # find with a list of ids keeps the list's order.
+      expect(result[:meals].pluck(:id))
+        .to eq(Meal.find([first_meal.id, second_meal.id]).map(&:cache_key_with_version))
+      expect(result[:bills].pluck(:id))
+        .to eq(Bill.find([first_bill.id, second_bill.id]).map(&:cache_key_with_version))
+      expect(result[:guest_room_reservations].pluck(:id))
+        .to eq(GuestRoomReservation.find([first_room.id, second_room.id]).map(&:cache_key_with_version))
+    end
+
+    it 'is by id for events, rotations and birthdays' do
+      first_event = create(:event, community: community, start_date: Time.zone.local(2026, 4, 20, 18, 0),
+                                   end_date: Time.zone.local(2026, 4, 20, 20, 0))
+      second_event = create(:event, community: community, start_date: Time.zone.local(2026, 4, 10, 18, 0),
+                                    end_date: Time.zone.local(2026, 4, 10, 20, 0))
+      first_rotation = create(:rotation, community: community)
+      second_rotation = create(:rotation, community: community)
+      create(:meal, community: community, rotation: second_rotation, date: Date.new(2026, 4, 10))
+      create(:meal, community: community, rotation: first_rotation, date: Date.new(2026, 4, 20))
+      resident
+      second_birthday = create(:resident, community: community, unit: unit, birthday: Date.new(1992, 4, 2))
+      first_event.update!(start_date: Time.zone.local(2026, 4, 21, 18, 0),
+                          end_date: Time.zone.local(2026, 4, 21, 20, 0))
+      first_rotation.update!(color: '#123456')
+      resident.update!(name: 'Renamed Later')
+
+      result = serialize
+
+      # find with a list of ids keeps the list's order.
+      expect(result[:events].pluck(:id))
+        .to eq(Event.find([first_event.id, second_event.id]).map(&:cache_key_with_version))
+      expect(result[:rotations].pluck(:id))
+        .to eq(Rotation.find([first_rotation.id, second_rotation.id]).map(&:cache_key_with_version))
+      expect(result[:birthdays].pluck(:id))
+        .to eq(Resident.find([resident.id, second_birthday.id]).map(&:cache_key_with_version))
+    end
+  end
+
   describe 'guest_room_reservations' do
     it 'includes reservations within the date range' do
       create(:guest_room_reservation, community: community, resident: resident,
@@ -253,6 +310,12 @@ RSpec.describe CalendarSerializer, type: :serializer do
                                    end_date: Time.zone.local(2026, 4, 1, 0, 0))
       spans = create(:event, community: community, start_date: Time.zone.local(2026, 3, 20, 12, 0),
                              end_date: Time.zone.local(2026, 5, 10, 12, 0))
+      # The window's last instant is in it, at either end of an event.
+      last_instant = Time.zone.local(2026, 4, 30, 23, 59, 59.999999r)
+      starts_at_last = create(:event, community: community, start_date: last_instant,
+                                      end_date: Time.zone.local(2026, 5, 1, 2, 0))
+      ends_at_last = create(:event, community: community, start_date: Time.zone.local(2026, 3, 31, 22, 0),
+                                    end_date: last_instant)
       create(:event, community: community, start_date: Time.zone.local(2026, 3, 31, 20, 0),
                      end_date: Time.zone.local(2026, 3, 31, 23, 59))
       create(:event, community: community, start_date: Time.zone.local(2026, 5, 1, 0, 0),
@@ -261,7 +324,7 @@ RSpec.describe CalendarSerializer, type: :serializer do
       result = serialize
 
       expect(result[:events].pluck(:id))
-        .to match_array([starts_inside, ends_inside, spans].map(&:cache_key_with_version))
+        .to match_array([starts_inside, ends_inside, spans, starts_at_last, ends_at_last].map(&:cache_key_with_version))
     end
 
     it 'takes birthdays in the listed months only, lowest id first' do
