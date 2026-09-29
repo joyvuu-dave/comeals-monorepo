@@ -160,11 +160,15 @@ RSpec.describe Resident do
   describe 'name uniqueness' do
     let(:other_unit) { create(:unit, community: community, name: 'B7') }
 
-    it 'reports a blank name once, without looking for a clash' do
-      resident = build(:resident, community: community, unit: unit, name: '')
+    # A missing name matters most: the clash query downcases the name,
+    # and nil has no downcase.
+    it 'reports a blank or missing name once, without looking for a clash' do
+      ['', nil].each do |name|
+        resident = build(:resident, community: community, unit: unit, name: name)
 
-      expect(resident).not_to be_valid
-      expect(resident.errors[:name]).to eq(["can't be blank"])
+        expect(resident).not_to be_valid
+        expect(resident.errors[:name]).to eq(["can't be blank"])
+      end
     end
 
     it 'refuses a duplicate name and says who the clash is with and what to do' do
