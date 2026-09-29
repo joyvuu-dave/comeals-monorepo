@@ -57,12 +57,12 @@ class Event < ApplicationRecord
   end
 
   # Events appear on the calendar: every month from start to end, and,
-  # after a date change, every month of the old range too. See
+  # after a date change, every month of the old range too. An end that
+  # did not change is read as it is now, so when nothing moved the old
+  # range is the new one, and LiveUpdate notes each month once. See
   # LiveUpdate.
   def note_live_update
     LiveUpdate.calendar_range(start_date, end_date)
-    return unless saved_change_to_start_date? || saved_change_to_end_date?
-
     LiveUpdate.calendar_range(saved_changes.dig('start_date', 0) || start_date,
                               saved_changes.dig('end_date', 0) || end_date)
   end

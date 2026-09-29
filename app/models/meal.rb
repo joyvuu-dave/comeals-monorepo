@@ -210,8 +210,9 @@ class Meal < ApplicationRecord
   def note_live_update
     LiveUpdate.meal(id)
     LiveUpdate.calendar(date)
+    # nil unless the date moved; LiveUpdate.calendar notes nothing for nil.
     old_date = saved_changes.dig('date', 0)
-    LiveUpdate.calendar(old_date) if old_date
+    LiveUpdate.calendar(old_date)
 
     return unless destroyed? || previously_new_record? || old_date
 
