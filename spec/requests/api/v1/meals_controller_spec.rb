@@ -127,7 +127,7 @@ RSpec.describe 'Meals API' do
       }
 
       expect(response).to have_http_status(:ok)
-      expect(meal.meal_residents.find_by(resident: resident)).to be_present
+      expect(meal.meal_residents.find_by(resident: resident)).to have_attributes(late: false, vegetarian: false)
 
       body = response.parsed_body
       expect(body).to have_key('id')
@@ -162,6 +162,16 @@ RSpec.describe 'Meals API' do
       mr = meal.meal_residents.find_by(resident: resident)
       expect(mr.late).to be(true)
       expect(mr.vegetarian).to be(true)
+    end
+
+    # The SPA posts JSON, with late and vegetarian as true and false.
+    it 'takes late and vegetarian as the JSON booleans the SPA sends' do
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}",
+           params: { token: token, late: true, vegetarian: false }.to_json,
+           headers: { 'CONTENT_TYPE' => 'application/json' }
+
+      expect(response).to have_http_status(:ok)
+      expect(meal.meal_residents.find_by(resident: resident)).to have_attributes(late: true, vegetarian: false)
     end
 
     it 'is idempotent — re-signing up updates instead of erroring' do
@@ -311,7 +321,7 @@ RSpec.describe 'Meals API' do
 
       expect(response).to have_http_status(:ok)
       expect(meal.guests.count).to eq(1)
-      expect(meal.guests.first.resident).to eq(resident)
+      expect(meal.guests.first).to have_attributes(resident: resident, vegetarian: false)
 
       body = response.parsed_body
       expect(body).to have_key('id')
@@ -334,6 +344,18 @@ RSpec.describe 'Meals API' do
       }
 
       expect(meal.guests.first.vegetarian).to be(true)
+    end
+
+    # The SPA posts JSON, with vegetarian as true or false.
+    it 'takes vegetarian as the JSON boolean the SPA sends' do
+      [true, false].each do |vegetarian|
+        post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests",
+             params: { token: token, vegetarian: vegetarian }.to_json,
+             headers: { 'CONTENT_TYPE' => 'application/json' }
+        expect(response).to have_http_status(:ok)
+      end
+
+      expect(meal.guests.order(:id).pluck(:vegetarian)).to eq([true, false])
     end
 
     it 'rejects guest when meal is closed without max' do
@@ -713,6 +735,15 @@ RSpec.describe 'Meals API' do
             headers: { 'CONTENT_TYPE' => 'application/json' }
 
       expect(response).to have_http_status(:ok)
+      expect(meal.reload.max).to be_nil
+    end
+
+    # A form-encoded body has no null: an empty max is how it clears one.
+    it 'allows clearing max while the meal is open with an empty value' do
+      patch "/api/v1/meals/#{meal.id}/max", params: { token: token, max: '' }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq('message' => 'Meal max value updated.')
       expect(meal.reload.max).to be_nil
     end
   end
