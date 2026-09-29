@@ -75,12 +75,11 @@ class AdminUser < ApplicationRecord
   # run first otherwise, so a swallowed inner rollback can leave partial
   # writes behind. A database trigger backstops both paths — see
   # 20260728120000_refuse_removing_the_last_superuser.rb.
+  #
+  # superuser? and superuser_changed?(from:, to:) are the methods Rails
+  # makes for the superuser column.
   before_update :refuse_demoting_last_superuser, prepend: true
   before_destroy :refuse_destroying_last_superuser, prepend: true
-
-  def superuser?
-    superuser
-  end
 
   # Admin users have no name column. Audit history displays the audit
   # user's name (AuditSerializer), so show the email — it says who acted.
@@ -107,11 +106,6 @@ class AdminUser < ApplicationRecord
                       'community would have no one able to settle reconciliations or grant ' \
                       'admin access.')
     throw(:abort)
-  end
-
-  def superuser_changed?(from:, to:)
-    superuser_previously_was = attribute_was(:superuser)
-    superuser_previously_was == from && superuser == to
   end
 
   def other_superuser_exists?
