@@ -448,7 +448,7 @@ class Community < ApplicationRecord
 
   def normalize_schedule_week(week)
     days = week.reject { |day| day.to_s.strip.empty? }
-               .map { |day| day.is_a?(Integer) ? day : Integer(day.to_s, exception: false) }
+               .map { |day| Integer(day.to_s, exception: false) }
                .uniq
     days.all?(Integer) ? days.sort : days
   end
