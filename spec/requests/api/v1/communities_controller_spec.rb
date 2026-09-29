@@ -52,8 +52,10 @@ RSpec.describe 'Communities API' do
         .to eq([[march_bday.cache_key_with_version, "Mae's B-day!", '2026-03-15']])
     end
 
-    # The clock is in December, so next month is also next year.
-    it 'uses this month and this year when no start date is given' do
+    # The clock is in December, so next month is also next year. A start
+    # with no value (`?start`, no `=`) counts as no start, as api.md's
+    # "Without start" reads; an empty `?start=` is not a date (below).
+    it 'uses this month and this year when no start date is given, or a start with no value' do
       travel_to Time.zone.local(2026, 12, 20, 12, 0) do
         token
         born_now = create(:resident, community: community, unit: unit, name: 'Born Now',
@@ -64,6 +66,9 @@ RSpec.describe 'Communities API' do
 
         expect(response).to have_http_status(:ok)
         expect(body.pluck('id', 'start')).to eq([[born_now.cache_key_with_version, '2026-12-05']])
+
+        expect(birthdays(start: nil)).to eq(body)
+        expect(response).to have_http_status(:ok)
       end
     end
 
@@ -96,7 +101,7 @@ RSpec.describe 'Communities API' do
 
     # Before this, Date.parse raised and the answer was a 500.
     it 'returns 400 for a start that is not a date, or not a string' do
-      ['not-a-date', ['2026-03-01']].each do |start|
+      ['not-a-date', '', ['2026-03-01']].each do |start|
         birthdays(start: start)
 
         expect(response).to have_http_status(:bad_request)
