@@ -117,6 +117,15 @@ RSpec.describe AdminUser do
       expect(plain.update(email: 'moved@example.com')).to be true
       expect { plain.destroy }.to change(described_class, :count).by(-1)
     end
+
+    # Bootstrap ends with this step, so the demotion guard must look only
+    # at a change from true to false.
+    it 'promotes the first superuser while no superuser exists yet' do
+      plain = create(:admin_user, community: community, superuser: false)
+
+      expect(plain.update(superuser: true)).to be true
+      expect(plain.reload.superuser).to be true
+    end
   end
 
   # The model guards give a readable error in the UI. The trigger is what
