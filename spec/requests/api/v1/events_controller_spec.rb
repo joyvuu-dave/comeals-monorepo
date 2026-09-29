@@ -128,6 +128,10 @@ RSpec.describe 'Events API' do
         post '/api/v1/events', params: { token: token, title: 'Parts', all_day: false }.merge(parts, changed)
       end
 
+      def post_event_without(key)
+        post '/api/v1/events', params: { token: token, title: 'Parts', all_day: false }.merge(parts).except(key)
+      end
+
       def expect_refused
         expect(response).to have_http_status(:bad_request)
         expect(response.parsed_body).to eq('message' => 'Error: Invalid date')
@@ -140,19 +144,31 @@ RSpec.describe 'Events API' do
         expect_refused
       end
 
-      it 'refuses each time part left out, blank, or not a whole number' do
-        %i[start_hours start_minutes end_hours end_minutes].product([nil, '', '7pm', '19.5']).each do |key, value|
-          post_event(key => value)
-
+      # A part sent with no value (nil) still has its key in the body; a
+      # part left out has none, and must get the same 400, not a 500.
+      it 'refuses each time part left out, sent with no value, blank, or not a whole number' do
+        bad_values = [nil, '', '7pm', '19.5']
+        %i[start_hours start_minutes end_hours end_minutes].each do |key|
+          post_event_without(key)
           expect_refused
+
+          bad_values.each do |value|
+            post_event(key => value)
+            expect_refused
+          end
         end
       end
 
-      it 'refuses a day, month or year left out, blank, or not a whole number' do
-        %i[start_year start_month start_day].product([nil, '', 'May', '1.5']).each do |key, value|
-          post_event(key => value)
-
+      it 'refuses a day, month or year left out, sent with no value, blank, or not a whole number' do
+        bad_values = [nil, '', 'May', '1.5']
+        %i[start_year start_month start_day].each do |key|
+          post_event_without(key)
           expect_refused
+
+          bad_values.each do |value|
+            post_event(key => value)
+            expect_refused
+          end
         end
       end
 
@@ -293,6 +309,17 @@ RSpec.describe 'Events API' do
           .to eq([[Time.zone.local(2026, 4, 15, 8, 5), Time.zone.local(2026, 4, 15, 9, 30)]] * 2)
       end
 
+      # The SPA's event forms send all_day as a JSON true or false, not
+      # the text "true".
+      it 'makes an all-day event from the JSON true the SPA sends' do
+        post '/api/v1/events', params: { token: token, title: 'JSON', all_day: true }.merge(parts).to_json,
+                               headers: { 'CONTENT_TYPE' => 'application/json' }
+
+        expect(response).to have_http_status(:ok)
+        expect(Event.last).to have_attributes(allday: true, start_date: Time.zone.local(2026, 4, 15, 0, 0),
+                                              end_date: nil)
+      end
+
       it 'ignores the time parts of an all-day event, even blank ones' do
         post_event(all_day: true, start_hours: '', start_minutes: '', end_hours: '', end_minutes: '')
 
@@ -367,6 +394,17 @@ RSpec.describe 'Events API' do
       expect(response).to have_http_status(:ok)
       event.reload
       expect(event).to have_attributes(allday: true, start_date: Time.zone.local(2026, 5, 1, 0, 0), end_date: nil)
+    end
+
+    it 'turns a timed event into an all-day one from the JSON true the SPA sends' do
+      patch "/api/v1/events/#{event.id}/update",
+            params: { token: token, title: 'Work Day', all_day: true,
+                      start_year: 2026, start_month: 5, start_day: 1 }.to_json,
+            headers: { 'CONTENT_TYPE' => 'application/json' }
+
+      expect(response).to have_http_status(:ok)
+      expect(event.reload).to have_attributes(allday: true, start_date: Time.zone.local(2026, 5, 1, 0, 0),
+                                              end_date: nil)
     end
 
     it 'turns an all-day event into a timed one when all_day is false' do
