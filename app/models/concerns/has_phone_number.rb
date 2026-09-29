@@ -38,11 +38,10 @@ module HasPhoneNumber
     phone = self.phone
     if phone.blank?
       self.phone = nil
-      return
+    else
+      parsed = Phonelib.parse(phone)
+      self.phone = parsed.e164 if parsed.valid?
     end
-
-    parsed = Phonelib.parse(phone)
-    self.phone = parsed.e164 if parsed.valid?
   end
 
   def phone_must_be_a_real_number
