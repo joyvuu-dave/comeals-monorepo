@@ -176,11 +176,15 @@ RSpec.describe 'the calendar chips', type: :serializer do
       )
     end
 
-    it 'leaves the title line out when there is no title' do
+    # The SPA's form sends an empty title as "", which is stored as it is.
+    it 'leaves the title line out when there is no title, or an empty one' do
       reservation = create(:common_house_reservation, community: community, resident: resident, title: nil,
                                                       start_date: Time.zone.local(2026, 4, 15, 14, 0),
                                                       end_date: Time.zone.local(2026, 4, 15, 16, 0))
 
+      expect(chip(reservation)[:title]).to eq(" 2:00pm -  4:00pm\nCommon House\nCal - Unit B7")
+
+      reservation.update!(title: '')
       expect(chip(reservation)[:title]).to eq(" 2:00pm -  4:00pm\nCommon House\nCal - Unit B7")
     end
 
@@ -305,10 +309,13 @@ RSpec.describe 'the calendar chips', type: :serializer do
       described_class.new(rotation).to_h
     end
 
+    # The meals are made out of date order, and neither the first nor
+    # the last one made is the earliest or the latest.
     it 'spans the first meal to the end of the last meal\'s day, loaded or not' do
       rotation = create(:rotation, community: community, no_email: true)
-      create(:meal, community: community, rotation: rotation, date: Date.new(2026, 4, 19))
+      create(:meal, community: community, rotation: rotation, date: Date.new(2026, 4, 12))
       create(:meal, community: community, rotation: rotation, date: Date.new(2026, 4, 5))
+      create(:meal, community: community, rotation: rotation, date: Date.new(2026, 4, 19))
       expected = {
         id: rotation.reload.cache_key_with_version, type: 'Rotation', start: Time.zone.local(2026, 4, 5, 0, 1),
         end: Time.zone.local(2026, 4, 19, 23, 59), color: rotation.color, title: 'Rotation 1',
