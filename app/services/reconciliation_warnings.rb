@@ -31,7 +31,7 @@ class ReconciliationWarnings
     new(meals, skipped: skipped, held: held).call
   end
 
-  def initialize(meals, skipped: [], held: [])
+  def initialize(meals, skipped:, held:)
     @meals = meals
     @skipped = skipped
     @held = held
