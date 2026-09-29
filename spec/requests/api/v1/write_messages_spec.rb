@@ -117,6 +117,17 @@ RSpec.describe 'API write responses' do
       expect(response).to have_http_status(:ok)
       expect(Event.last.start_date.utc).to eq(Time.utc(2026, 4, 16, 10, 0))
     end
+
+    # The wrapper runs the action inside the zone and must not run it a
+    # second time after. A sign-in check after the wrapper hid that for
+    # most actions; the community feed has none, so a second run would
+    # render twice and answer 500.
+    it 'runs an action with no sign-in check once for a signed-in request' do
+      get "/api/v1/communities/#{community.id}/ical", params: { token: token }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body.scan('BEGIN:VCALENDAR').size).to eq(1)
+    end
   end
 
   describe 'the calendar month' do
