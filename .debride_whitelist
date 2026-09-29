@@ -15,6 +15,7 @@ audited_user
 csrf_failed
 authenticate_admin_user_custom!
 suppress_notification_if_no_email
+serializable_hash
 # ActiveModel::EachValidator#validate calls it for each attribute
 # (StorableTimeValidator):
 validate_each
