@@ -51,6 +51,17 @@ RSpec.describe MealFormSerializer do
       # Should appear exactly once, not duplicated by the OR
       expect(resident_ids.count(resident.id)).to eq(1)
     end
+
+    # Saving a row again stores it after the others, so without the
+    # ORDER BY it would come back last.
+    it 'lists them by id, even after the first one is saved again' do
+      first = create(:resident, community: community, unit: unit)
+      second = create(:resident, community: community, unit: unit)
+      meal = create(:meal, community: community)
+      first.update!(name: 'Saved Again')
+
+      expect(described_class.new(meal).residents(meal).map(&:id)).to eq([first.id, second.id])
+    end
   end
 
   describe 'the links to the meals before and after' do
@@ -62,6 +73,19 @@ RSpec.describe MealFormSerializer do
       expect(described_class.new(middle).to_h).to include(prev_id: first.id, next_id: last.id, reconciled: false)
       expect(described_class.new(first).to_h).to include(prev_id: first.id, next_id: middle.id)
       expect(described_class.new(last).to_h).to include(prev_id: middle.id, next_id: last.id)
+    end
+
+    # Made out of date order. Of the meals after April 10, the one made
+    # first is April 30; of the meals before May 10, the one made last is
+    # April 20. Going by date gives April 20 and April 30.
+    it 'goes by date, not by the order the meals were made' do
+      april30 = create(:meal, community: community, date: Date.new(2026, 4, 30))
+      april10 = create(:meal, community: community, date: Date.new(2026, 4, 10))
+      may10 = create(:meal, community: community, date: Date.new(2026, 5, 10))
+      april20 = create(:meal, community: community, date: Date.new(2026, 4, 20))
+
+      expect(described_class.new(april10).to_h).to include(next_id: april20.id)
+      expect(described_class.new(may10).to_h).to include(prev_id: april30.id)
     end
 
     it 'says a settled meal is reconciled with a plain true' do
