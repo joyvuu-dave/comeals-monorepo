@@ -25,12 +25,12 @@ work and is usually run one stage at a time, each stage being the
 subjects of one part of the app. The stages, and roughly what each
 costs on six workers:
 
-| Stage                                 | Subjects                                                        | Mutations | Time                                               |
-| ------------------------------------- | --------------------------------------------------------------- | --------- | -------------------------------------------------- |
-| money                                 | `MealLedger* Settlement* Reconciliation* BalanceRecalculation*` | 2,080     | 2h10 (a survivor runs 600 to 800 examples)         |
-| services, jobs, mailers, helpers, lib | the classes under those directories, minus money                | 7,664     | 2h40 (some subjects run request specs)             |
-| models and concerns                   | `app/models/**`, minus money                                    | 5,874     | about 1h (11 loops that never end wait 5 min each) |
-| controllers and serializers           | `app/controllers/**`, `app/serializers/**`                      | 6,719     | about 1h20; request specs are slow per mutation    |
+| Stage                                 | Subjects                                                        | Mutations | Time                                                         |
+| ------------------------------------- | --------------------------------------------------------------- | --------- | ------------------------------------------------------------ |
+| money                                 | `MealLedger* Settlement* Reconciliation* BalanceRecalculation*` | 2,080     | 2h10 (a survivor runs 600 to 800 examples)                   |
+| services, jobs, mailers, helpers, lib | the classes under those directories, minus money                | 7,664     | 2h40 (some subjects run request specs)                       |
+| models and concerns                   | `app/models/**`, minus money                                    | 5,874     | about 1h (11 loops that never end wait 5 min each)           |
+| controllers and serializers           | `app/controllers/**`, `app/serializers/**`                      | 6,651     | 2h20 (an `ApiController` survivor runs 450 request examples) |
 
 The exact subject list for a stage is the matching block of
 `.mutant.yml`; pass it after `--`. It is not part of `bin/check`. Run
@@ -705,7 +705,8 @@ description and the hours of a created event, and a 400 with two
 problems on one body each pinned. Update keeps 7, create 11, all
 `.fetch` for `[]`, `.to_str` for `.to_s`, and an `all_day` default that
 reads the same when the key is absent. Nothing on the controller and
-serializer list is a missing assertion now.
+serializer list is a missing assertion now. (That was not so: the
+controllers and serializers stage of 2026-09-27 found 120.)
 
 ### 2026-09-21, the ledger grain (ADR 0008)
 
@@ -880,7 +881,10 @@ Four were missing assertions, and each now has an example:
   `calendar_serializer_spec.rb` now moves the first booking to a later
   day, which stores its row again after the second, and expects the ids
   in order. (A title change is not enough: PostgreSQL keeps that row
-  where the index finds it first.)
+  where the index finds it first. And a move is not always enough
+  either: the new row can land before the second one. Since 2026-09-29
+  the spec also reads the statement; see the controllers and
+  serializers stage of 2026-09-27.)
 - `1..12` to `2..12` for the month. No example took an event in
   January; one now starts on January 1.
 - `0..23` to `1..23` for the end hour. No example ended an event in
@@ -1406,3 +1410,281 @@ uncovered:
 Run 4 reran those three methods: the two noise survivors are all that
 is left. The whole suite afterwards: 2,858 examples, no failure, 100%
 of lines and branches.
+
+**Controllers and serializers stage.** The `# controllers and
+serializers` block of `.mutant.yml`, passed as it is. This branch
+changed `ApiController`'s date parser (`start_end_times` and the new
+`whole_number_param`; the 2026-09-28 entry above), the birthdays
+endpoint, the bills write's refusal, the settlement refusal's words,
+the password reset answers, `SuperuserAdapter#authorized?`, the
+calendar's birthday and common house queries, the common house chip's
+times and `ResidentBirthdaySerializer`, and added the three edit-form
+serializers, which have no method to mutate.
+`ResidentBirthdaySerializer`, `SuperuserAdapter#authorized?`,
+`ReconciliationsController#in_the_callers_words` and
+`ResidentsController#refuse_for_the_row` had no survivor.
+
+| Run                                                                                   | Subjects | Mutations | Killed | Alive | Timeouts                                        | Time                                  |
+| ------------------------------------------------------------------------------------- | -------- | --------- | ------ | ----- | ----------------------------------------------- | ------------------------------------- |
+| 1                                                                                     | 183      | 6,651     | 6,293  | 358   | 2, counted as alive                             | 2h19                                  |
+| 2, the 36 methods the answers changed                                                 | 36       | 2,620     | 2,451  | 169   | 32, counted as alive; 30 while the laptop slept | 2h17 on the clock, about 50 min awake |
+| 3, the three methods that timed out, and the three serializers whose examples changed | 36       | 1,144     | 1,093  | 51    | 0                                               | 19 min                                |
+| 4, the two serializers whose examples changed after run 3                             | 19       | 535       | 512    | 23    | 0                                               | 10 min                                |
+
+Most of the time goes to `ApiController`. Every API request spec runs
+its filters and rescues, so each of its methods selects 450 examples,
+and a survivor runs all of them. The first 400 mutations, most of them
+in `ApiController`, went at 0.2 a second; the rest at about 1.
+
+Run 1, 358 alive, by kind:
+
+- Missing assertions (120), each now with an example that fails on it
+  (checked by making each change by hand). Most are in code this branch
+  did not change: the 2026-09-13 entry ends "Nothing on the controller
+  and serializer list is a missing assertion now", and it was wrong.
+  - `ResidentsController` (28). `token` (12): the sign-in answer's
+    `username` and `timezone`, which the SPA keeps in its login cookie,
+    were not checked; the example now checks the whole answer against
+    the shape `public/api.md` shows. An email sent as a list
+    (`email[]=...`) is a 400, not a 500, only because of the `.to_s`,
+    at sign-in and at reset. `password_reset` (7): that, an email with
+    spaces or capitals, and a blank one. `ical` (9): the Attend half of
+    the resident's feed. Only this resident's sign-ups; a day someone
+    else cooks is still listed; a day the resident cooks does not end
+    the list (`next` for `break`); and the Attend event's description.
+  - The two reservation controllers (21). The common house create
+    refusal was checked by status only, so any body passed (8). No
+    example had two problems at once, so joining them with no line
+    break passed in every create and update of both (12), and so did
+    dropping `resident_id` from the common house update (1). Each now
+    has an example with an unknown resident and a taken time or day.
+  - `CalendarSerializer` (15). The `ORDER BY id` of the meals, cook
+    slots, guest room bookings, events, rotations and birthdays (13).
+    `birthdays_in_range` is a method this branch changed. The first
+    answer made each list's first row on a later day and saved it
+    again, the way the 2026-09-28 entry did it for common house
+    bookings; run 2 showed that this does not pin an `ORDER BY` (below),
+    and the example now reads the statement that reads each list. And
+    an event that starts or ends at the window's last instant (2).
+  - `AuditSerializer#describer` (13). Its examples serialized one Meal
+    row, which names no resident, so building the describer from
+    nothing, from one row, or once a row all passed. One example now
+    names a bill's cook, and one serializes a meal's whole history,
+    where prosopite fails the example if the lookups run once a row
+    (#84).
+  - `CommunitiesController` (13). `calendar` (5): the year the payload
+    names, at both ends of a year; January 2027's six weeks start on
+    December 27, 2026. `cached_month` (7): the one-hour life of the
+    cached month (CLAUDE.md, money rule 8), and the days the cache
+    version is read for, which only `calendar_cache_race_spec.rb`
+    shows; its row names the controller now. `birthdays` (1), a method
+    this branch changed: `params.key?(:start)` for `params[:start]`.
+    They differ for `?start` with no value, which is no start, as
+    api.md's "Without `start`" says.
+  - `MealsController` (7). Sign-ups and guests with `late` and
+    `vegetarian` false were checked only for a row, so storing true
+    passed (6); two examples now also post JSON with true and false,
+    the way the SPA sends them. And an empty `max` on an open meal,
+    which clears the cap (1).
+  - `ApiController` and `ApplicationController` (6).
+    `whole_number_param` (1), new on this branch: the "left out"
+    examples sent each part with a nil value, so its key was still in
+    the body; they now also leave the key out. `set_community_timezone`
+    (1): without the `return`, the wrapper ran the action in the zone
+    and then again. A sign-in check after the wrapper stopped the second
+    run for most actions, but the community feed has none, so a
+    signed-in request to it rendered twice and failed. `csrf_failed`
+    (2): the session is reset, so an admin whose request did not come
+    from their own page is signed out. `read_only_admin_token?` (2): an
+    empty token is no key, even when the config var is empty.
+  - `MealFormSerializer` (6): the previous and next links by date, not
+    by the order the meals were made (4), and the residents by id (2),
+    which the example now also checks in the statement, for the reason
+    in run 2 below.
+  - `FallbackController#index` (5): the page is sent with disposition
+    `inline`. `send_file`'s own default is `attachment`, which makes a
+    browser save the app as a file.
+  - `EventsController` (3): every all-day example sent the text
+    "true", and the SPA's forms send a JSON `true`, which only the
+    `.to_s` turns into "true". (The 2026-09-13 entry counted `.to_str`
+    for `.to_s` as noise; with a JSON `true` it is not.)
+  - The chips (3): a common house title of `""`, which the SPA's form
+    sends for no title (1), and a rotation's first and last day with
+    its meals made out of date order (2). The first answer to the second
+    was not enough; see run 2.
+- Redundant code, removed (20). `.limit(1)` before `pick` in
+  `MealFormSerializer#next_id` and `#prev_id` (10), as in
+  `Meal#neighbour_ids` on 2026-09-12. `and return` at the end of
+  `ApiController#not_authenticated_api` and `#not_found_api` (6): it
+  returns from the helper, which is ending anyway, not from the action.
+  `klass.respond_to?(:ancestors)` in `SuperuserAdapter#model_name` (4):
+  every class has ancestors.
+- Redundant code, left for the owner (19). This branch did not change
+  these methods.
+  - `ApiController#set_community_timezone`, the check for a token
+    before reading the zone (10). With no token there is no resident,
+    so no zone, and the action runs in the app zone either way.
+    Removing it would also leave the memo in `bearer_token_from_header`
+    with one reader, where its comment says two.
+  - `ApplicationController#use_community_timezone`, the return for no
+    zone (6). `Time.use_zone(nil)` keeps the app zone, so the method
+    does the same without it. It says in code what happens before the
+    community exists.
+  - `ApiController#current_api_key`, its call to
+    `resolve_current_session` (2). Its one caller runs after
+    `authenticate`, which has resolved the session already.
+  - `MealsController#bills_written`, the `reload` (1).
+    `BillsPayload#write_to` leaves `meal.bills` loaded with the rows it
+    wrote. The comment gives the reason to read the table again anyway.
+- Answered on 2026-09-28 (10): the ranges in
+  `ApiController#start_end_times` that `Date.valid_date?` makes the
+  same.
+- Loops that never end (2): `CommunitiesController#calendar` with the
+  grid's last day dropped, an endless range.
+- Missing assertions answered after run 3 (14): the preload of the
+  rotations' meals in `CalendarSerializer#rotations_in_range` (2) and
+  the `loaded?` branches of `RotationSerializer#start` and `#end` (12),
+  below.
+- Noise (173), changes no caller can see:
+  - `.fetch` for `[]` on the params, the parsed times and the
+    serializer params (49). A route segment is always there; a missing
+    body key raises `ParameterMissing`, which Rails answers 400.
+  - The memos in `ApiController` (20): the `defined?` guards and the
+    memo flag of `bearer_token_from_header` and
+    `resolve_current_session` (15); `.presence` on the token, the
+    `@current_api_key = nil` that is nil already, and the `if token`
+    before `Key.find_by` (5), since `keys.token` is NOT NULL and an
+    empty token matches no key.
+  - `ApiController#set_community_timezone` (5): `.presence` on the zone
+    and the `ActiveSupport::TimeZone[tz]` check (3), since the column
+    only takes a supported zone; the inner `if` made always true or
+    dropped (2), since `Time.use_zone(nil)` keeps the app zone.
+  - `Date.iso8601` and the other parsers for `Date.parse` (8), as on
+    2026-09-12.
+  - `CommunitiesController#calendar`'s grid arithmetic (9): `+ 41` and
+    `+ 20` for `.days` (a Date adds days), 19 or 21 days for 20 (the
+    grid starts at most six days before the 1st, so the month and year
+    are the same), `.uniq` on the month list (a repeat in `IN` finds
+    the same rows), and `...` for `..` (the grid's last day is never
+    the 1st of a month). And the six `stale?` rewrites (6): Rack::ETag
+    and Rack::ConditionalGet, in every Rails app's middleware, answer
+    the same 304 with the same private Cache-Control; the call only
+    skips encoding the JSON on a match. `cached_month` with the
+    serializer params as the start (1): the first date in their text
+    is the start date, and `Time.zone.parse` reads that one.
+  - The query shapes of the calendar and the meal form (23): the
+    `includes` and `joins` (18; goldiloader loads the same rows, and a
+    `where` on `meals` joins the table anyway), the `IN` list and
+    `to_a` rewrites of `rotations_in_range` (4; a `pluck` with no column
+    puts the rotation ids in a longer list, and finds a wrong rotation
+    only when its id equals another number in a meal row), and `..` for
+    `...` before the window's first instant (1; the first clause takes
+    that event).
+  - `MealFormSerializer#next_id` and `#prev_id` (9): the same-day
+    clause and the id as a second sort key, which the unique index on
+    `meals.date` makes unreachable, as in `Meal#neighbour_ids`.
+  - `ResidentsController#ical` (8): `.to_set` (an Array's `include?`
+    answers the same), `resident` for `resident.id` (Rails reads the
+    id) and the `includes`.
+  - `BillSerializer` (8): `bill.date` and `bill.unit`, which `Bill`
+    delegates to the same records.
+  - `MealsController` (8): `AuditSerializer` without `.to_h` (Alba
+    writes the same JSON), the join in `render_write_under_lock`, which
+    no API write can reach with two problems (the settled-meal refusal
+    comes before the lock), the `return` before the socket id in
+    `set_meal` (the render already stops the chain), and in
+    `update_bills` a nil status for `:ok` and the error for its
+    message, which is how Rails writes an error in JSON.
+  - `EventsController#create`'s `all_day` default (4), as on 2026-09-13.
+  - `ReconciliationsController` (3): `.iso8601` on a Date, which JSON
+    writes the same way, and the error for its message.
+  - The rest (12): `.present?` for truthiness on a record and on a max
+    (2); `.to_s` and `.to_str` on the configured read-only admin id
+    (2); `layout: false` on the plain 404 (2), since there is no
+    application layout; the `type:` of the app page (3), which
+    `send_file` and Rails set to text/html from the file's name
+    anyway; `instance_of?(Class)` in `SuperuserAdapter#model_name` (1);
+    `beginning_of_day` in `CalendarSerializer#window_start` (1), which
+    `Time.zone.parse` already gives for a date; and `+ 1` for
+    `+ 1.day` in the rotation chip's end (1).
+
+Run 2 reran the 36 methods whose code or examples the answers to run 1
+changed. The laptop slept with its lid closed for 90 minutes of it, and
+every mutation that was running then went past the 300-second limit:
+30 of the 32 timeouts, in `EventsController#update` and both
+`GuestRoomReservationsController` actions, each after 930 to 1,070
+seconds with only a few examples run. Run 3 reran those three methods,
+and all 30 were killed. The other two timeouts are the endless range
+of run 1.
+
+Run 2, 169 alive, by kind:
+
+- Missing assertions the answers to run 1 did not pin (3), each now
+  with an example that fails on it (checked by making each change by
+  hand).
+  - `CalendarSerializer#rotations_in_range`, the `ORDER BY` dropped or
+    made `order(nil)` (2). The example made the first rotation, saved
+    it again and expected it first. Alone, it failed on this change.
+    Inside mutant's list of 86 examples it passed, and so did the whole
+    suite run in file order. With no `ORDER BY` the rows come back in
+    the order PostgreSQL stored them, and a row saved again is not
+    always stored after the others: PostgreSQL puts the new version in
+    the first free slot of its page, and a slot that an earlier
+    example's row left free can come first. A resident is also written
+    again right after it is made:
+    `Resident#revoke_all_sessions_if_password_changed` sets
+    `keys_valid_since` when the first password is set. Making the row
+    with the higher id first did no better: the cook slots came back in
+    the order of their meals, and the birthdays example passed once and
+    failed once on the same code. No set of rows can show that a list
+    is ordered every time, so the example now reads the statements the
+    serializer runs, and expects every one that reads a list (the common
+    house bookings too) to end with `ORDER BY` its id.
+    `MealFormSerializer#residents` had the same kind of example, which
+    run 2 happened to kill; it reads the statement now too.
+  - `RotationSerializer#end`, `last` for `max_by(&:date)` (1). The meals
+    were made so that neither the first nor the last one made was an
+    end, but with three meals one of them has to be, and the last one
+    made was the latest. The example now has four, and loads them in
+    the order they were made (`eager_load` with `ORDER BY meals.id`),
+    since with no order they come back in the order PostgreSQL stored
+    them.
+- Timeouts while the laptop slept (30), killed in run 3.
+- Loops that never end (2), the same two as in run 1.
+- Redundant code left for the owner (10), in `set_community_timezone`,
+  as in run 1.
+- Noise (124), all of kinds listed for run 1, in the same methods.
+
+Run 3 showed that the new order example had lost two kills that the
+examples it replaced made by chance: the preload of the rotations'
+meals, dropped or made `preload(nil)`. Those examples had two
+rotations, and without the preload each rotation's chip asks for the
+MIN and the MAX of its meals' dates, which prosopite fails as a query
+once a row. So the run 1 list above counted them as noise wrongly
+(goldiloader does not help: the chip checks `loaded?` and never reads
+the meals). The order example now makes two of every row. It also
+finds a list's statements by the table and the list's `WHERE`, not by
+the columns selected, so it does not depend on how a list preloads.
+
+The same reasoning answers the `loaded?` branches of
+`RotationSerializer#start` and `#end` (12), which the 2026-09-12 entry
+counted as noise because both ways give the same chip. They do, and
+the branch is there for the reads: the calendar preloads the meals,
+and a chip on its own should not load every meal of its rotation to
+find two dates. A new example in `calendar_chips_spec.rb` expects no
+query for a rotation whose meals are loaded, and the meals still not
+loaded after the chip of one whose meals are not. Every change to the
+branch fails one of the two.
+
+Run 4 reran the two serializers whose examples changed after run 3.
+Its 23 alive are noise from the list above: the `includes` and `joins`
+of the calendar lists (16), the `IN` list and `to_a` rewrites of
+`rotations_in_range` (4), `..` before the window's first instant in
+`events_in_range` (1), `beginning_of_day` in `window_start` (1) and
+`+ 1` for `+ 1.day` in the rotation chip's end (1).
+
+What is left alive in this stage, then: the redundant code left for
+the owner (19 mutations, in `set_community_timezone` and three other
+methods this branch did not change), the endless range (2), and the
+noise. The whole suite afterwards: 2,884 examples, no failure, 100% of
+lines and branches.

@@ -175,15 +175,15 @@ RSpec.describe CalendarSerializer, type: :serializer do
   # The same for every other list, and for common house bookings again.
   #
   # With no ORDER BY, the order the rows come back in depends on where
-  # PostgreSQL stored them and on the plan it picks, so no set of rows can
-  # show that a list is ordered every time. Rows made in the wrong order,
-  # or saved again, come back in id order anyway when a slot that an
-  # earlier example's row left free puts them there, and a callback that
-  # writes a row again right after it is made (a resident's session
-  # stamp) moves it too. That is how mutant saw the rotations' ORDER BY
-  # dropped with no example failing, although the example failed on its
-  # own. So this reads the statements: the one that reads each list must
-  # end with ORDER BY its id.
+  # PostgreSQL stored them and on the plan it picks, so no set of rows
+  # can show that a list is ordered every time. Rows made in the wrong
+  # order, or saved again, still come back in id order when PostgreSQL
+  # stores them in slots that an earlier example's rows left free. A
+  # callback that writes a row again right after it is made (a
+  # resident's keys_valid_since) moves it too. That is how mutant saw the
+  # rotations' ORDER BY dropped with no example failing, although the
+  # example failed when it ran alone. So this reads the statements: each
+  # one that reads a list must end with ORDER BY its id.
   describe 'the order of every other list' do
     # Two of each, so prosopite also fails the example if a chip reads
     # the database once for each row: a rotation's chip reads the first
