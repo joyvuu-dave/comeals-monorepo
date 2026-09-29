@@ -48,11 +48,14 @@ RSpec.describe 'billing:recalculate snapshot isolation' do
 
     # Right after the task's first read, the unreconciled meals query,
     # commit an atomic meal edit from a second connection: Alice out, Bob
-    # in, bill corrected to $30. The meal is already in the list, and every
-    # later read (bills, meal_residents, guests, residents) runs after this
-    # commit, in whatever order the preloads go. Without a shared snapshot
-    # those reads see the edit, or some of them do, and the balances match
-    # no real state of the ledger — issue #10's scenario.
+    # in with a guest, bill corrected to $30. The meal is already in the
+    # list, and every later read (bills, meal_residents, guests, residents)
+    # runs after this commit, in whatever order the preloads go. Without a
+    # shared snapshot those reads see the edit, or some of them do, and the
+    # balances match no real state of the ledger — issue #10's scenario.
+    # The edit changes each of the three tables the task preloads, because
+    # a table that is not preloaded is read later, by the ledger, outside
+    # the snapshot (mutant, 2026-09-28: dropping the guests preload passed).
     # The writer is a raw PG connection: the test pool only has one
     # connection, and the edit stands in for a request that already passed
     # the model guards and committed.
@@ -69,6 +72,11 @@ RSpec.describe 'billing:recalculate snapshot isolation' do
           'INSERT INTO meal_residents (community_id, meal_id, resident_id, multiplier, ' \
           'created_at, updated_at) VALUES ($1, $2, $3, $4, now(), now())',
           [community.id, meal.id, bob.id, 2]
+        )
+        conn.exec_params(
+          'INSERT INTO guests (meal_id, resident_id, multiplier, created_at, updated_at) ' \
+          'VALUES ($1, $2, $3, now(), now())',
+          [meal.id, bob.id, 2]
         )
       end
     end
@@ -90,6 +98,7 @@ RSpec.describe 'billing:recalculate snapshot isolation' do
 
     expect(triggered).to be(true)
     expect(bill.reload.amount).to eq(BigDecimal('30'))
+    expect(meal.guests.pluck(:resident_id)).to eq([bob.id])
 
     balances = ResidentBalance.where(resident: [cook, alice, bob]).index_by(&:resident_id)
     # The task's snapshot began before the edit committed, so every balance
