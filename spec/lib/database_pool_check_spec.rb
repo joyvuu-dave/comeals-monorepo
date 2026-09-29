@@ -40,5 +40,17 @@ RSpec.describe DatabasePoolCheck do
 
       expect { described_class.verify! }.to raise_error(/too small for 40 Puma thread/)
     end
+
+    # Rails reads a negative max_connections in database.yml as no limit:
+    # the config gives nil, and the pool opens as many connections as the
+    # threads ask for. A pool with no limit is never too small.
+    it 'passes a pool with no limit' do
+      config = instance_double(ActiveRecord::DatabaseConfigurations::HashConfig, max_connections: nil)
+      allow(ActiveRecord::Base).to receive(:connection_db_config).and_return(config)
+      allow(ENV).to receive(:fetch).and_call_original
+      allow(ENV).to receive(:fetch).with('RAILS_MAX_THREADS', 1).and_return('40')
+
+      expect { described_class.verify! }.not_to raise_error
+    end
   end
 end

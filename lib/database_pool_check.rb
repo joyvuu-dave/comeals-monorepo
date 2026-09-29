@@ -44,8 +44,12 @@ module DatabasePoolCheck
   sig { void }
   def self.verify!
     # max_connections, not pool: pool is deprecated in Rails 8.1 and gone
-    # in 8.2.
-    call(pool: ActiveRecord::Base.connection_db_config.max_connections || 0,
-         threads: ENV.fetch('RAILS_MAX_THREADS', 1).to_i)
+    # in 8.2. It is nil when database.yml gives a negative number, which
+    # Rails reads as no limit, and a pool with no limit is never too small.
+    # This used to count it as 0 and refuse to boot.
+    pool = ActiveRecord::Base.connection_db_config.max_connections
+    return if pool.nil?
+
+    call(pool: pool, threads: ENV.fetch('RAILS_MAX_THREADS', 1).to_i)
   end
 end
