@@ -10,6 +10,8 @@ require 'rails_helper'
 # before the change, for up to an hour. Fixed in a79b1604: the version
 # now reads communities.updated_at. Against a real cache, through the API.
 RSpec.describe 'the calendar cache after a time zone change' do
+  include ActiveSupport::Testing::TimeHelpers
+
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
   let(:resident) { create(:resident, community: community, unit: unit) }
@@ -41,6 +43,15 @@ RSpec.describe 'the calendar cache after a time zone change' do
 
     expect(Rails.cache.exist?(community.calendar_cache_key(2026, 4))).to be(true)
     expect(Rails.cache.exist?(community.calendar_cache_key(2026, 3))).to be(false)
+  end
+
+  # CLAUDE.md, money rule 8: the month is cached for one hour.
+  it 'keeps the month for one hour' do
+    travel_to(Time.zone.local(2026, 4, 15, 12, 0)) { month_timezone }
+    key = community.calendar_cache_key(2026, 4)
+
+    travel_to(Time.zone.local(2026, 4, 15, 12, 59)) { expect(Rails.cache.exist?(key)).to be(true) }
+    travel_to(Time.zone.local(2026, 4, 15, 13, 1)) { expect(Rails.cache.exist?(key)).to be(false) }
   end
 
   # The `timezone` field is the column, the same whether or not the request

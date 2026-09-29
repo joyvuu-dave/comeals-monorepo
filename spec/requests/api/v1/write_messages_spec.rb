@@ -133,6 +133,17 @@ RSpec.describe 'API write responses' do
         .to contain_exactly('2026-03-29', '2026-05-09')
     end
 
+    # The example above is a month in the middle of a year. January's
+    # six weeks start in December, and December's end in January, so
+    # the year has to come from the middle of the six weeks too.
+    it 'names the month and the year of the middle of the six weeks at both ends of a year' do
+      { '2027-01-15' => [1, 2027], '2026-12-15' => [12, 2026] }.each do |date, month_and_year|
+        get "/api/v1/communities/#{community.id}/calendar/#{date}", params: { token: token }
+
+        expect(response.parsed_body.values_at('month', 'year')).to eq(month_and_year)
+      end
+    end
+
     it 'leaves retired residents out of the birthdays' do
       april = create(:resident, community: community, unit: unit, birthday: Date.new(1990, 4, 15))
       create(:resident, community: community, unit: unit, birthday: Date.new(1991, 4, 16), active: false,

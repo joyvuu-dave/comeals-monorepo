@@ -73,7 +73,9 @@ MUTANT_SPEC_ROWS = {
   'spec/requests/api/v1/live_update_contract_spec.rb' =>
     %w[Settlement LiveUpdate Meal Rotation Bill MealResident Guest Resident Unit Community
        Event GuestRoomReservation CommonHouseReservation NotesMealLiveUpdate],
-  'spec/requests/api/v1/calendar_cache_race_spec.rb' => %w[LiveUpdate Community],
+  # Also the only spec that fails when the controller reads the version
+  # for the wrong days.
+  'spec/requests/api/v1/calendar_cache_race_spec.rb' => %w[LiveUpdate Community Api::V1::CommunitiesController],
   'spec/requests/api/v1/calendar_cache_recolor_race_spec.rb' => %w[LiveUpdate Rotation],
   'spec/requests/api/v1/settled_meal_cache_spec.rb' => %w[Settlement LiveUpdate],
   'spec/requests/api/v1/stale_meal_form_cache_spec.rb' => %w[LiveUpdate],
