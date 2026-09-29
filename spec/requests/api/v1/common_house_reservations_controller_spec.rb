@@ -151,6 +151,25 @@ RSpec.describe 'Common House Reservations API' do
       }
 
       expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq('message' => 'Time period is already taken')
+      expect(CommonHouseReservation.count).to eq(1)
+    end
+
+    it 'lists every problem, one per line, when there is more than one' do
+      create(:common_house_reservation, community: community, resident: resident,
+                                        start_date: Time.zone.local(2026, 5, 1, 14, 0),
+                                        end_date: Time.zone.local(2026, 5, 1, 17, 0))
+
+      post '/api/v1/common-house-reservations', params: {
+        token: token,
+        resident_id: 0, title: 'Conflict',
+        start_year: 2026, start_month: 5, start_day: 1,
+        start_hours: 15, start_minutes: 0,
+        end_hours: 18, end_minutes: 0
+      }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq('message' => "Resident must exist\nTime period is already taken")
     end
   end
 
@@ -188,6 +207,26 @@ RSpec.describe 'Common House Reservations API' do
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body['message']).to eq('Time period is already taken')
       expect(moving.reload.title).not_to eq('Moved')
+    end
+
+    it 'lists every problem, one per line, when there is more than one, and changes nothing' do
+      taken = Time.zone.local(2026, 5, 2, 14, 0)
+      create(:common_house_reservation, community: community, resident: resident,
+                                        start_date: taken, end_date: taken + 2.hours)
+      moving = create(:common_house_reservation, community: community, resident: resident,
+                                                 start_date: taken + 5.hours, end_date: taken + 6.hours)
+
+      patch "/api/v1/common-house-reservations/#{moving.id}/update", params: {
+        token: token,
+        resident_id: 0, title: 'Moved',
+        start_year: 2026, start_month: 5, start_day: 2,
+        start_hours: 15, start_minutes: 0,
+        end_hours: 16, end_minutes: 0
+      }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq("Resident must exist\nTime period is already taken")
+      expect(moving.reload).to have_attributes(resident_id: resident.id, start_date: taken + 5.hours)
     end
 
     # The same parser as create (#102).

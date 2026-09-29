@@ -48,6 +48,17 @@ RSpec.describe 'Guest Room Reservations API' do
       }
 
       expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq('message' => 'Date has already been taken')
+    end
+
+    it 'lists every problem, one per line, when there is more than one' do
+      create(:guest_room_reservation, community: community, resident: resident, date: Date.new(2026, 6, 1))
+
+      post '/api/v1/guest-room-reservations',
+           params: { token: token, resident_id: 0, date: '2026-06-01' }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq('message' => "Resident must exist\nDate has already been taken")
     end
   end
 
@@ -109,6 +120,18 @@ RSpec.describe 'Guest Room Reservations API' do
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body['message']).to eq('Date has already been taken')
       expect(moving.reload.date).to eq(Date.new(2026, 6, 2))
+    end
+
+    it 'lists every problem, one per line, when there is more than one' do
+      create(:guest_room_reservation, community: community, resident: resident, date: Date.new(2026, 6, 1))
+      moving = create(:guest_room_reservation, community: community, resident: resident, date: Date.new(2026, 6, 2))
+
+      patch "/api/v1/guest-room-reservations/#{moving.id}/update",
+            params: { token: token, resident_id: 0, date: '2026-06-01' }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq("Resident must exist\nDate has already been taken")
+      expect(moving.reload).to have_attributes(date: Date.new(2026, 6, 2), resident_id: resident.id)
     end
   end
 
