@@ -151,10 +151,12 @@ RSpec.describe CalendarSerializer, type: :serializer do
   end
 
   # Without ORDER BY, rows come back in the order they happen to be
-  # stored in, and moving a booking to another day stores it again,
-  # after the others. The month's ETag is a digest of the payload, so an
-  # order that moves with no change to what is shown would send the whole
-  # month again.
+  # stored in. Moving a booking to another day stores it again, often
+  # after the others, and then only the ORDER BY puts the first one
+  # first. (Not always after: the next group says why, and checks the
+  # statement for every list.) The month's ETag is a digest of the
+  # payload, so an order that moves with no change to what is shown would
+  # send the whole month again.
   describe 'the order of common house bookings' do
     it 'is by id, even after the first one is moved to a later day' do
       first = create(:common_house_reservation, community: community, resident: resident,
@@ -170,60 +172,46 @@ RSpec.describe CalendarSerializer, type: :serializer do
     end
   end
 
-  # The same for every other list. In each, the first row is made on a
-  # later day than the second and then saved again, so neither the date
-  # nor the place it is stored in puts it first; only the id does.
+  # The same for every other list, and for common house bookings again.
+  #
+  # With no ORDER BY, the order the rows come back in depends on where
+  # PostgreSQL stored them and on the plan it picks, so no set of rows can
+  # show that a list is ordered every time. Rows made in the wrong order,
+  # or saved again, come back in id order anyway when a slot that an
+  # earlier example's row left free puts them there, and a callback that
+  # writes a row again right after it is made (a resident's session
+  # stamp) moves it too. That is how mutant saw the rotations' ORDER BY
+  # dropped with no example failing, although the example failed on its
+  # own. So this reads the statements: the one that reads each list must
+  # end with ORDER BY its id.
   describe 'the order of every other list' do
-    it 'is by id for meals, cook slots and guest room bookings' do
-      cook = create(:resident, community: community, unit: unit)
-      first_meal = create(:meal, community: community, date: Date.new(2026, 4, 20))
-      second_meal = create(:meal, community: community, date: Date.new(2026, 4, 10))
-      first_bill = create(:bill, meal: first_meal, resident: cook, community: community)
-      second_bill = create(:bill, meal: second_meal, resident: cook, community: community)
-      first_room = create(:guest_room_reservation, community: community, resident: resident,
-                                                   date: Date.new(2026, 4, 20))
-      second_room = create(:guest_room_reservation, community: community, resident: resident,
-                                                    date: Date.new(2026, 4, 10))
-      first_meal.update!(date: Date.new(2026, 4, 21))
-      first_bill.update!(resident: resident)
-      first_room.update!(date: Date.new(2026, 4, 21))
+    it 'is asked of PostgreSQL by id, in the statement that reads the list' do
+      rotation = create(:rotation, community: community)
+      meal = create(:meal, community: community, rotation: rotation, date: Date.new(2026, 4, 10))
+      create(:bill, meal: meal, resident: resident, community: community)
+      create(:guest_room_reservation, community: community, resident: resident, date: Date.new(2026, 4, 10))
+      create(:common_house_reservation, community: community, resident: resident,
+                                        start_date: Time.zone.local(2026, 4, 20, 14, 0),
+                                        end_date: Time.zone.local(2026, 4, 20, 17, 0))
+      create(:event, community: community, start_date: Time.zone.local(2026, 4, 10, 18, 0),
+                     end_date: Time.zone.local(2026, 4, 10, 20, 0))
+      statements = []
+      callback = ->(*, payload) { statements << payload[:sql] }
+      ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') { serialize }
 
-      result = serialize
-
-      # find with a list of ids keeps the list's order.
-      expect(result[:meals].pluck(:id))
-        .to eq(Meal.find([first_meal.id, second_meal.id]).map(&:cache_key_with_version))
-      expect(result[:bills].pluck(:id))
-        .to eq(Bill.find([first_bill.id, second_bill.id]).map(&:cache_key_with_version))
-      expect(result[:guest_room_reservations].pluck(:id))
-        .to eq(GuestRoomReservation.find([first_room.id, second_room.id]).map(&:cache_key_with_version))
-    end
-
-    it 'is by id for events, rotations and birthdays' do
-      first_event = create(:event, community: community, start_date: Time.zone.local(2026, 4, 20, 18, 0),
-                                   end_date: Time.zone.local(2026, 4, 20, 20, 0))
-      second_event = create(:event, community: community, start_date: Time.zone.local(2026, 4, 10, 18, 0),
-                                    end_date: Time.zone.local(2026, 4, 10, 20, 0))
-      first_rotation = create(:rotation, community: community)
-      second_rotation = create(:rotation, community: community)
-      create(:meal, community: community, rotation: second_rotation, date: Date.new(2026, 4, 10))
-      create(:meal, community: community, rotation: first_rotation, date: Date.new(2026, 4, 20))
-      resident
-      second_birthday = create(:resident, community: community, unit: unit, birthday: Date.new(1992, 4, 2))
-      first_event.update!(start_date: Time.zone.local(2026, 4, 21, 18, 0),
-                          end_date: Time.zone.local(2026, 4, 21, 20, 0))
-      first_rotation.update!(color: '#123456')
-      resident.update!(name: 'Renamed Later')
-
-      result = serialize
-
-      # find with a list of ids keeps the list's order.
-      expect(result[:events].pluck(:id))
-        .to eq(Event.find([first_event.id, second_event.id]).map(&:cache_key_with_version))
-      expect(result[:rotations].pluck(:id))
-        .to eq(Rotation.find([first_rotation.id, second_rotation.id]).map(&:cache_key_with_version))
-      expect(result[:birthdays].pluck(:id))
-        .to eq(Resident.find([resident.id, second_birthday.id]).map(&:cache_key_with_version))
+      reads = {
+        'meals' => /\ASELECT "meals"\.\* FROM "meals" WHERE "meals"\."community_id" = /,
+        'bills' => /\ASELECT "bills"\."id" AS t0_r0, .* FROM "bills" INNER JOIN "meals" /,
+        'rotations' => /\ASELECT .* FROM "rotations" WHERE "rotations"\."id" /,
+        'residents' => /\ASELECT .* FROM "residents" WHERE .*extract\(month from birthday\)/,
+        'common_house_reservations' => /\ASELECT .* FROM "common_house_reservations" WHERE /,
+        'guest_room_reservations' => /\ASELECT .* FROM "guest_room_reservations" WHERE /,
+        'events' => /\ASELECT .* FROM "events" WHERE /
+      }
+      reads.each do |table, reads_the_list|
+        expect(statements.grep(reads_the_list))
+          .to contain_exactly(match(/ ORDER BY "?#{table}"?\."?id"?( ASC)?\z/))
+      end
     end
   end
 

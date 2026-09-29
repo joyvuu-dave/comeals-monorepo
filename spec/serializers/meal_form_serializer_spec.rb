@@ -52,15 +52,15 @@ RSpec.describe MealFormSerializer do
       expect(resident_ids.count(resident.id)).to eq(1)
     end
 
-    # Saving a row again stores it after the others, so without the
-    # ORDER BY it would come back last.
-    it 'lists them by id, even after the first one is saved again' do
-      first = create(:resident, community: community, unit: unit)
-      second = create(:resident, community: community, unit: unit)
+    # With no ORDER BY, the rows come back in the order PostgreSQL
+    # stored them, which no set of rows can pin: a row saved again can
+    # land in a slot an earlier example's row left free, before the
+    # others (spec/serializers/calendar_serializer_spec.rb, "the order of
+    # every other list"). So this reads the statement.
+    it 'asks for them by id' do
       meal = create(:meal, community: community)
-      first.update!(name: 'Saved Again')
 
-      expect(described_class.new(meal).residents(meal).map(&:id)).to eq([first.id, second.id])
+      expect(described_class.new(meal).residents(meal).to_sql).to end_with(' ORDER BY "residents"."id" ASC')
     end
   end
 

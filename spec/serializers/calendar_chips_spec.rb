@@ -310,12 +310,18 @@ RSpec.describe 'the calendar chips', type: :serializer do
     end
 
     # The meals are made out of date order, and neither the first nor
-    # the last one made is the earliest or the latest.
+    # the last one made is the earliest or the latest. That takes four:
+    # with three, the first or the last one made is one of the two ends.
+    # The loaded meals are read in the order they were made. With no
+    # ORDER BY they come back in the order PostgreSQL stored them, which
+    # an earlier example's rows can change, and mutant saw taking the
+    # last meal for the latest pass that way.
     it 'spans the first meal to the end of the last meal\'s day, loaded or not' do
       rotation = create(:rotation, community: community, no_email: true)
       create(:meal, community: community, rotation: rotation, date: Date.new(2026, 4, 12))
       create(:meal, community: community, rotation: rotation, date: Date.new(2026, 4, 5))
       create(:meal, community: community, rotation: rotation, date: Date.new(2026, 4, 19))
+      create(:meal, community: community, rotation: rotation, date: Date.new(2026, 4, 15))
       expected = {
         id: rotation.reload.cache_key_with_version, type: 'Rotation', start: Time.zone.local(2026, 4, 5, 0, 1),
         end: Time.zone.local(2026, 4, 19, 23, 59), color: rotation.color, title: 'Rotation 1',
@@ -323,8 +329,9 @@ RSpec.describe 'the calendar chips', type: :serializer do
       }
 
       expect(chip(Rotation.find(rotation.id))).to eq(expected)
-      loaded = Rotation.preload(:meals).find(rotation.id)
+      loaded = Rotation.eager_load(:meals).order('meals.id').find(rotation.id)
       expect(loaded.meals).to be_loaded
+      expect(loaded.meals.map { |meal| meal.date.day }).to eq([12, 5, 19, 15])
       expect(chip(loaded)).to eq(expected)
     end
 
