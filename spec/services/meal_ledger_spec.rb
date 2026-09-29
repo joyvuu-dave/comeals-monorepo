@@ -289,20 +289,49 @@ RSpec.describe MealLedger do
       first_guest = create(:guest, meal: meal, resident: host, multiplier: 2)
       second_guest = create(:guest, meal: meal, resident: host, multiplier: 1)
 
-      # The guests are loaded highest id first, so a sort that ignored the
-      # guest id and kept the order it was given would put them the wrong
-      # way round.
-      loaded = Meal.where(id: meal.id).preload(:bills, :meal_residents).eager_load(:guests)
-                   .order('guests.id DESC').to_a
-      expect(loaded.first.guests.map(&:id)).to eq([second_guest.id, first_guest.id])
-      ledger = described_class.new(loaded)
-      guest_lines = ledger.lines.select { |line| line.kind == :guest_debit }
-
+      # The guests are loaded both ways round. A sort that ignored the guest
+      # id and kept the order it was given would get one of the two wrong,
+      # and so would a comparison that read only one guest's id.
       expect(first_guest.id).to be < second_guest.id
-      expect(guest_lines.map(&:multiplier)).to eq([2, 1])
-      expect(guest_lines.map(&:amount)).to eq([BigDecimal('-0.5'), BigDecimal('-0.25')])
-      expect(ledger.lines.find { |line| line.kind == :debit && line.resident_id == host.id }.amount)
-        .to eq(BigDecimal('0'))
+      { 'guests.id DESC' => [second_guest, first_guest], 'guests.id ASC' => [first_guest, second_guest] }
+        .each do |order, as_loaded|
+        loaded = Meal.where(id: meal.id).preload(:bills, :meal_residents).eager_load(:guests).order(order).to_a
+        expect(loaded.first.guests).to eq(as_loaded)
+        ledger = described_class.new(loaded)
+        guest_lines = ledger.lines.select { |line| line.kind == :guest_debit }
+
+        expect(guest_lines.map(&:multiplier)).to eq([2, 1]), "guests loaded #{order}"
+        expect(guest_lines.map(&:amount)).to eq([BigDecimal('-0.5'), BigDecimal('-0.25')])
+        expect(ledger.lines.find { |line| line.kind == :debit && line.resident_id == host.id }.amount)
+          .to eq(BigDecimal('0'))
+      end
+    end
+
+    # Three cooks spent $1 each on a meal capped at $0.50 for its one child,
+    # so they share $0.50: 16,666,666 units each, and 2 units left over. The
+    # leftover units go to the two lowest resident ids. The bills are
+    # entered highest id first, so a ledger that kept the bills in the order
+    # it loaded them would give the units to the wrong cooks.
+    it 'gives the leftover units of a shared credit to the lowest cook ids, whatever order the bills came in' do
+      cooks = %w[A B C].map { |name| resident("Cook #{name}") }
+      child = resident('Child', multiplier: 1)
+      expect(cooks.map(&:id)).to eq(cooks.map(&:id).sort)
+
+      meal = create(:meal, community: community)
+      meal.update!(cap: BigDecimal('0.5'))
+      cooks.reverse_each do |cook|
+        create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('1'))
+      end
+      create(:meal_resident, meal: meal, resident: child, community: community)
+      expect(meal.bills.order(:id).map(&:resident_id)).to eq(cooks.map(&:id).reverse)
+
+      credits = ledger_for(meal).lines.select { |line| line.kind == :credit }
+
+      expect(credits.to_h { |line| [line.resident_id, line.amount] }).to eq(
+        cooks[0].id => BigDecimal('0.16666667'),
+        cooks[1].id => BigDecimal('0.16666667'),
+        cooks[2].id => BigDecimal('0.16666666')
+      )
     end
 
     # $2 across 3 units of multiplier is 0.666666666...: cut to the grain it
@@ -321,9 +350,10 @@ RSpec.describe MealLedger do
       expect(summary.effective_cost).to eq(BigDecimal('2'))
     end
 
+    # The refusal names the amount in plain digits.
     it 'refuses an amount that is not a whole number of units' do
       expect { described_class.units(BigDecimal('0.000000001')) }
-        .to raise_error(ArgumentError, /not a whole number of 10\^-8 dollars/)
+        .to raise_error(ArgumentError, '0.000000001 is not a whole number of 10^-8 dollars')
       expect(described_class.units(BigDecimal('12.34'))).to eq(1_234_000_000)
     end
   end

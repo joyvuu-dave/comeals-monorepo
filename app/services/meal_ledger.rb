@@ -317,12 +317,15 @@ class MealLedger
     params(meal: Meal, people: T::Array[T.any(MealResident, Guest)], financials: Financials).returns(T::Array[Line])
   end
   def debit_lines(meal, people, financials)
-    # A meal nobody ate has a total multiplier of zero, so it takes the
-    # first branch and gets no line.
+    # When the total multiplier is zero, every eater's multiplier is zero
+    # (a CHECK on both tables refuses a negative one), so every share is
+    # zero: the weights are the shares. A meal nobody ate takes this branch
+    # too, with no weights and so no line.
+    weights = people.map { |eater| T.must(eater.multiplier) }
     shares = if financials.total_multiplier.zero?
-               [0] * people.size
+               weights
              else
-               LargestRemainderSplit.call(financials.effective_units, people.map { |eater| T.must(eater.multiplier) })
+               LargestRemainderSplit.call(financials.effective_units, weights)
              end
 
     Array.new(people.size) do |index|
