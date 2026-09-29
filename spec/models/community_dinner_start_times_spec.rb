@@ -39,6 +39,17 @@ RSpec.describe Community do
       community.dinner_start_times = 'seven'
       expect(community).not_to be_valid
       expect(community.errors[:dinner_start_times]).to include(/must be seven times/)
+
+      community.dinner_start_times = 1900
+      expect(community).not_to be_valid
+      expect(community.errors[:dinner_start_times]).to include(/must be seven times/)
+    end
+
+    it 'refuses seven numbers where seven HH:MM times belong' do
+      community.dinner_start_times = [1900] * 7
+
+      expect(community).not_to be_valid
+      expect(community.errors[:dinner_start_times]).to include(/must be seven times/)
     end
 
     it 'refuses a time that is not HH:MM on a 24-hour clock' do

@@ -583,8 +583,16 @@ RSpec.describe Community do
 
     it 'reports rather than raises on uncoercible form input' do
       community.schedule = { '0' => %w[banana 0] }
+      expect(community.schedule).to eq([[nil, 0]])
       expect(community).not_to be_valid
       expect(community.errors[:schedule]).to include('days must be 0 (Sunday) through 6 (Saturday)')
+    end
+
+    it 'reads a day as it is written, so 2.5 is refused and not cut down to Tuesday' do
+      community.schedule = [[2.5]]
+      expect(community.schedule).to eq([[nil]])
+      expect(community).not_to be_valid
+      expect(community.errors[:schedule]).to eq(['days must be 0 (Sunday) through 6 (Saturday)'])
     end
 
     it 'keeps a value that is not a list of weeks for the validation to report' do
@@ -592,9 +600,31 @@ RSpec.describe Community do
       expect(community).not_to be_valid
       expect(community.errors[:schedule]).to include('must have between 1 and 6 weeks')
 
+      # Six letters, so the length alone does not refuse it.
+      community.schedule = 'Monday'
+      expect(community.schedule).to eq('Monday')
+      expect(community).not_to be_valid
+      expect(community.errors[:schedule]).to eq(['must have between 1 and 6 weeks'])
+
       community.schedule = { '0' => 'Monday' }
+      expect(community.schedule).to eq(['Monday'])
       expect(community).not_to be_valid
       expect(community.errors[:schedule]).to include('days must be 0 (Sunday) through 6 (Saturday)')
+    end
+
+    # The writer turns every day into a whole number or nil, so these
+    # shapes can only come from a write that skips it (the console, psql).
+    # The validation still has to report them when the record is saved.
+    it 'refuses a day stored as a decimal' do
+      community[:schedule] = [[3.0]]
+      expect(community).not_to be_valid
+      expect(community.errors[:schedule]).to eq(['days must be 0 (Sunday) through 6 (Saturday)'])
+    end
+
+    it 'reports a list inside a week once, not also as a schedule with no meal day' do
+      community[:schedule] = [[[]]]
+      expect(community).not_to be_valid
+      expect(community.errors[:schedule]).to eq(['days must be 0 (Sunday) through 6 (Saturday)'])
     end
 
     it 'refuses a meals_per_rotation outside 1 to 100' do
@@ -662,6 +692,19 @@ RSpec.describe Community do
       expect(first.meals.order(:date).pluck(:date)).to eq([Date.new(2026, 5, 1), Date.new(2026, 5, 3)])
       expect(second.meals.pluck(:date)).to eq([Date.new(2026, 5, 5)])
       expect(community.rotations.where(new_rotation_notified_at: nil)).to be_empty
+    end
+
+    it 'leaves a meal that already has a rotation in it' do
+      4.times { create(:resident, community: community, unit: unit, multiplier: 2, can_cook: true) }
+      rotation = create(:rotation, community: community, no_email: true)
+      assigned = create(:meal, community: community, rotation: rotation, date: Date.new(2026, 5, 1))
+      unassigned = create(:meal, community: community, date: Date.new(2026, 5, 3))
+
+      community.auto_create_rotations
+
+      expect(assigned.reload.rotation_id).to eq(rotation.id)
+      expect(unassigned.reload.rotation_id).not_to eq(rotation.id)
+      expect(community.rotations.count).to eq(2)
     end
   end
 
