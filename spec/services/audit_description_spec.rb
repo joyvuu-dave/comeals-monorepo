@@ -260,6 +260,14 @@ RSpec.describe AuditDescription do
       audit = instance_double(Audited::Audit, auditable_type: 'Rotation', action: 'update', audited_changes: {})
       expect(described_class.describe(audit)).to eq('Rotation, update')
     end
+
+    # Only a guest row is read as a guest. A created row of another type
+    # that carries a vegetarian flag, as a resident's does, is not one.
+    it 'does not read a created row of another type as a guest' do
+      audit = instance_double(Audited::Audit, auditable_type: 'Resident', action: 'create', auditable_id: 1,
+                                              audited_changes: { 'vegetarian' => true })
+      expect(described_class.describe(audit)).to eq('Resident, create')
+    end
   end
 
   # The audited gem writes create, update and destroy. The parser still has
@@ -377,6 +385,80 @@ RSpec.describe AuditDescription do
         row = audit('Guest', 'create', { 'resident_id' => resident.id })
         expect(described_class.describe(row)).to eq('Guest, create')
       end
+    end
+  end
+
+  # A describer loads, before it describes anything, the resident each
+  # update row's bill or attendance row points at: from the row while it
+  # exists, from its create audit once it is gone (#84). These pin what
+  # it reads, and from where.
+  describe 'what a describer reads first' do
+    let(:other) { create(:resident, community: community, unit: unit) }
+
+    def bill_update(cook, from:, to:)
+      bill = create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal(from))
+      bill.update!(amount: BigDecimal(to))
+      [bill, bill.audits.find_by!(action: 'update')]
+    end
+
+    it 'reads only the residents when no row updates a bill or an attendance row' do
+      create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('30'))
+      create(:meal_resident, meal: meal, resident: other, community: community)
+      rows = Audited::Audit.where(auditable_type: %w[Meal Bill MealResident]).to_a
+      expect(rows.map(&:action).uniq).to eq(['create'])
+
+      expect(count_queries { described_class.for(rows) }).to eq(1)
+    end
+
+    it 'reads no audit trail when every row the updates name still exists' do
+      bill_update(resident, from: '30', to: '50')
+      attendance = create(:meal_resident, meal: meal, resident: other, community: community, late: false)
+      attendance.update!(late: true)
+      rows = Audited::Audit.where(action: 'update', auditable_type: %w[Bill MealResident]).to_a
+      statements = []
+      recorder = ->(*, event) { statements << event[:sql] unless event[:name] == 'SCHEMA' || event[:cached] }
+
+      ActiveSupport::Notifications.subscribed(recorder, 'sql.active_record') { described_class.for(rows) }
+
+      # The bills, the attendance rows, the residents. The first two read
+      # only the rows the updates name, never the whole table.
+      expect(statements.size).to eq(3)
+      expect(statements.first(2)).to all(match(/WHERE "(bills|meal_residents)"\."id" (=|IN)/))
+    end
+
+    # Ids are counted per table, so a gone bill can share its id with an
+    # attendance row. Only the bill's own create audit names its cook.
+    it "reads a gone row's resident from a create audit of its own type" do
+      bill, audit = bill_update(resident, from: '30', to: '50')
+      bill.destroy!
+      Audited::Audit.create!(auditable_type: 'MealResident', auditable_id: bill.id, action: 'create',
+                             audited_changes: { 'resident_id' => other.id })
+
+      expect(described_class.describe(audit)).to eq("Bill for #{name} changed from $30.00 to $50.00")
+    end
+
+    # A row deleted outside the app has no destroy audit, so its last audit
+    # is an update, which does not name the resident.
+    it "reads a gone row's resident from its create audit, not a later one" do
+      bill, audit = bill_update(resident, from: '30', to: '50')
+      Bill.where(id: bill.id).delete_all
+
+      expect(described_class.describe(audit)).to eq("Bill for #{name} changed from $30.00 to $50.00")
+    end
+
+    # The bill's cook is changed without an audit, so its create audit
+    # names someone else. A gone bill beside it makes the describer read
+    # the audit trail at all.
+    it "reads a live row's resident from the row, not from its create audit" do
+      bill, audit = bill_update(resident, from: '30', to: '50')
+      bill.update_columns(resident_id: other.id)
+      gone, gone_audit = bill_update(create(:resident, community: community, unit: unit), from: '10', to: '20')
+      gone.destroy!
+
+      describer = described_class.for([audit, gone_audit])
+
+      expect(describer.describe(audit))
+        .to eq("Bill for #{ResidentNameShortener.short(other.name)} changed from $30.00 to $50.00")
     end
   end
 end

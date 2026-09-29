@@ -61,15 +61,12 @@ class AuditDescription
 
   # The resident id each update row's record points at, by record id:
   # from the record while it exists, and from the record's own create
-  # audit once it is gone. A record neither has is left out.
+  # audit once it is gone. A record neither has is left out. Rails runs
+  # no query for an empty id list, so an empty list needs no shortcut.
   def cook_ids(model, rows, auditable_type)
     ids = rows.filter_map { |row| row.auditable_id if row.auditable_type == auditable_type && row.action == 'update' }
-    return {} if ids.empty?
-
     from_records = model.where(id: ids).pluck(:id, :resident_id).to_h
     gone = ids - from_records.keys
-    return from_records if gone.empty?
-
     from_trail = Audited::Audit.where(auditable_type: auditable_type, auditable_id: gone, action: 'create')
                                .to_h { |audit| [audit.auditable_id, audit.audited_changes['resident_id']] }
     from_records.merge(from_trail)
