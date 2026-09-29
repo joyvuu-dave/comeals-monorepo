@@ -15,7 +15,12 @@ RSpec.describe 'Residents API' do
   # POST /api/v1/residents/token (login)
   # ---------------------------------------------------------------------------
   describe 'POST /api/v1/residents/token' do
-    it 'returns a JWT and community info on valid credentials' do
+    # The shape public/api.md shows. The SPA keeps the name and the zone
+    # in its login cookie: the name for the header, the zone for every
+    # time it shows.
+    it 'returns a JWT and community info on valid credentials, in the shape api.md shows' do
+      resident.update!(name: 'Alice Walker')
+
       post '/api/v1/residents/token', params: {
         email: 'alice@example.com',
         password: 'correctpassword'
@@ -25,8 +30,8 @@ RSpec.describe 'Residents API' do
       body = response.parsed_body
       # The returned token is a JWT that authenticates as this resident.
       expect(JwtAuth.authenticate(body['token'])).to eq(resident)
-      expect(body['community_id']).to eq(community.id)
-      expect(body['resident_id']).to eq(resident.id)
+      expect(body.except('token')).to eq('community_id' => community.id, 'resident_id' => resident.id,
+                                         'username' => 'Alice', 'timezone' => 'America/Los_Angeles')
     end
 
     it 'is case-insensitive on email' do
@@ -56,6 +61,15 @@ RSpec.describe 'Residents API' do
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body['message']).to include('No resident with email')
+    end
+
+    # A form or query string can send email[]=... . It is not an email,
+    # and it must get the same 400 as one nobody has, not a 500.
+    it 'returns 400 with an email sent as a list' do
+      post '/api/v1/residents/token', params: { email: ['alice@example.com'], password: 'correctpassword' }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to start_with('No resident with email')
     end
 
     it 'returns 400 with blank email' do

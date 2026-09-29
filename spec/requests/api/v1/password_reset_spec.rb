@@ -33,6 +33,14 @@ RSpec.describe 'POST /api/v1/residents/password-reset' do
       expect { request_reset(email: 'sarah@example.com') }
         .to change { ActionMailer::Base.deliveries.count }.by(1)
     end
+
+    # The same reading of an email as sign-in (write_messages_spec.rb).
+    it 'finds the resident by email with spaces trimmed and case ignored' do
+      ['  Sarah@Example.com', 'SARAH@example.COM  '].each do |email|
+        expect { request_reset(email: email) }.to change { ActionMailer::Base.deliveries.count }.by(1)
+        expect(response.parsed_body['message']).to eq('Check your email.')
+      end
+    end
   end
 
   describe 'email delivery failure' do
@@ -148,6 +156,23 @@ RSpec.describe 'POST /api/v1/residents/password-reset' do
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body['message']).to eq('Email required.')
+    end
+
+    it 'returns 400 when email is sent blank' do
+      request_reset(email: '')
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Email required.')
+    end
+
+    # A form or query string can send email[]=... . It is not an email,
+    # and it must get the same 400 as one nobody has, not a 500.
+    it 'returns 400 when email is sent as a list' do
+      request_reset(email: ['sarah@example.com'])
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('No resident with that email address.')
+      expect(resident.reload.reset_password_token).to be_nil
     end
 
     it 'returns 400 when no resident matches the email' do
