@@ -226,6 +226,37 @@ RSpec.describe MealCostSummary do
       expect(summary.unit_cost).to eq(BigDecimal('0'))
     end
 
+    # A no-cost bill writes no credit line, so the lines are the eaters'
+    # zero debits alone, and the sums over the credits add up nothing.
+    it 'shows zeros for a settled no-cost meal people ate, which has debit lines and no credit' do
+      meal = create(:meal, community: community)
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      eater = create(:resident, community: community, unit: unit, multiplier: 2)
+      create(:meal_resident, meal: meal, resident: eater, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('0'), no_cost: true)
+      settle!(cutoff: Date.yesterday)
+
+      expect(meal.reload.meal_charges.map { |charge| [charge.kind, charge.resident_id, charge.amount] })
+        .to eq([['debit', eater.id, BigDecimal('0')]])
+      summary = described_class.for(meal)
+      expect([summary.total_cost, summary.effective_cost, summary.unit_cost]).to all(be_a(BigDecimal))
+      expect([summary.total_cost, summary.effective_cost, summary.unit_cost]).to all(be_zero)
+      expect(summary.subsidized).to be false
+    end
+
+    it 'shows zeros for a settled meal nobody ate whose only bill is no-cost' do
+      meal = create(:meal, community: community)
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('0'), no_cost: true)
+      settle!(cutoff: Date.yesterday)
+
+      expect(meal.reload.reconciliation_id).not_to be_nil
+      expect(meal.meal_charges).to be_empty
+      summary = described_class.for(meal)
+      expect(summary.total_cost).to be_a(BigDecimal)
+      expect(summary.total_cost).to be_zero
+    end
+
     it 'shows the receipts and zero charges for a meal nobody attended' do
       meal = create(:meal, community: community)
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
