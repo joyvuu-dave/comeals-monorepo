@@ -130,6 +130,30 @@ RSpec.describe LedgerVerification do
       expect { described_class.call }
         .to raise_error(described_class::MismatchError, /1 of 1 reconciliation.*#{reconciliation.id}/m)
     end
+
+    # A third eater's balance is left alone, so a finding that listed
+    # every resident, and not only the ones whose amounts differ, fails.
+    it 'lists only the residents whose balance differs' do
+      other = create(:resident, community: community, unit: unit, multiplier: 2, name: 'Other')
+      meal = create(:meal, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('90'))
+      [cook, eater, other].each { |person| create(:meal_resident, meal: meal, resident: person, community: community) }
+      reconciliation = settle!(cutoff: Date.yesterday)
+      behind_the_guards do
+        ReconciliationBalance.where(reconciliation_id: reconciliation.id, resident_id: cook.id)
+                             .update_all(amount: BigDecimal('61'))
+        ReconciliationBalance.where(reconciliation_id: reconciliation.id, resident_id: eater.id)
+                             .update_all(amount: BigDecimal('-31'))
+      end
+
+      suppress(described_class::MismatchError) { described_class.call }
+
+      detail = LedgerCheckRun.recent.first.details.find { |d| d['check'] == 'recompute' }
+      expect(detail['differences']).to eq([
+                                            { 'resident_id' => cook.id, 'stored' => '61.0', 'source' => '60.0' },
+                                            { 'resident_id' => eater.id, 'stored' => '-31.0', 'source' => '-30.0' }
+                                          ])
+    end
   end
 
   describe 'source data that was changed after settlement' do
