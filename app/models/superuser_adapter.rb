@@ -127,7 +127,7 @@ class SuperuserAdapter < ActiveAdmin::AuthorizationAdapter
   # nil) returns nil and is handled by the caller.
   def model_name(subject)
     klass = subject.is_a?(Class) ? subject : subject.class
-    return nil unless klass.respond_to?(:ancestors) && klass.ancestors.include?(ActiveRecord::Base)
+    return nil unless klass.ancestors.include?(ActiveRecord::Base)
 
     klass.name
   end

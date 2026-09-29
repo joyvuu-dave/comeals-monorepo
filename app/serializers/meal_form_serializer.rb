@@ -118,13 +118,13 @@ class MealFormSerializer
   def next_id(meal)
     # Next meal by date, or self if this is the last meal
     Meal.where('date > ? OR (date = ? AND id > ?)', meal.date, meal.date, meal.id)
-        .order(:date, :id).limit(1).pick(:id) || meal.id
+        .order(:date, :id).pick(:id) || meal.id
   end
 
   def prev_id(meal)
     # Previous meal by date, or self if this is the first meal
     Meal.where('date < ? OR (date = ? AND id < ?)', meal.date, meal.date, meal.id)
-        .order(date: :desc, id: :desc).limit(1).pick(:id) || meal.id
+        .order(date: :desc, id: :desc).pick(:id) || meal.id
   end
 
   # All active residents (for the signup dropdown) plus any inactive

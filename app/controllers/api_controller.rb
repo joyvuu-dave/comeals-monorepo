@@ -77,14 +77,13 @@ class ApiController < ActionController::API
 
   def not_authenticated_api
     render json: { message: 'You are not authenticated. Please try signing in and then try again.' },
-           status: :unauthorized and return
+           status: :unauthorized
   end
 
   def not_found_api
     msg = "The page you were looking for doesn't exist. You may have " \
           'mistyped the address or the page may have moved.'
-    render json: { message: msg },
-           status: :not_found and return
+    render json: { message: msg }, status: :not_found
   end
 
   private
