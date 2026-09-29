@@ -207,6 +207,23 @@ RSpec.describe CommonHouseReservation do
       expect(pushed).to include(key(2026, 3), key(2026, 4), key(2026, 7))
     end
 
+    # The new range can be months the old one never reached. March 2026
+    # starts on a Sunday, so its calendar begins on March 1: February 28
+    # is not on it, and only the new end tells March. May 15 is on April's
+    # and May's calendars, and February 1 is on January's.
+    it 'pushes the months it moves into as well as the ones it leaves' do
+      reservation = create(:common_house_reservation, community: community, resident: resident,
+                                                      start_date: Time.zone.local(2026, 5, 15, 14, 0),
+                                                      end_date: Time.zone.local(2026, 5, 15, 16, 0))
+
+      pushed = months_pushed do
+        reservation.update!(start_date: Time.zone.local(2026, 2, 28, 18, 0),
+                            end_date: Time.zone.local(2026, 3, 1, 10, 0))
+      end
+
+      expect(pushed).to contain_exactly(key(2026, 1), key(2026, 2), key(2026, 3), key(2026, 4), key(2026, 5))
+    end
+
     it 'pushes every month it spans when something else about it changes' do
       reservation = create(:common_house_reservation, community: community, resident: resident,
                                                       start_date: Time.zone.local(2026, 3, 15, 14, 0),
