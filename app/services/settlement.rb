@@ -94,8 +94,10 @@ class Settlement
   def self.preview(cutoff:, community: Community.instance)
     raise InvalidCutoff, 'cutoff must be in the past' unless cutoff < community.today
 
-    meals = Meal.settleable_by(cutoff, today: community.today).order(:date).preload({ bills: :resident },
-                                                                                    :meal_residents, :guests).to_a
+    # settleable_by reads today from the one community itself, the same
+    # value as community.today (mutant showed passing it changed nothing,
+    # 2026-09-28: the check above already keeps today out of the period).
+    meals = Meal.settleable_by(cutoff).order(:date).preload({ bills: :resident }, :meal_residents, :guests).to_a
     ledger = MealLedger.new(meals)
     raw = ledger.balances(community.residents.pluck(:id))
     Preview.new(cutoff: cutoff, meals: meals, ledger: ledger,

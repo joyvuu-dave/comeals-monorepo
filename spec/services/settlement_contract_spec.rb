@@ -201,6 +201,91 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
       community
       expect { Settlement.preview(cutoff: Time.zone.today) }.to raise_error(Settlement::InvalidCutoff)
     end
+
+    it 'leaves out a meal after the cutoff, even one whose day is over' do
+      cook = resident
+      inside = meal_on(Date.yesterday - 3)
+      bill(inside, cook, 20)
+      attend(inside, cook)
+      past_cutoff = meal_on(Date.yesterday - 1)
+      bill(past_cutoff, cook, 20)
+      attend(past_cutoff, cook)
+
+      expect(Settlement.preview(cutoff: Date.yesterday - 2).meals).to eq([inside])
+    end
+
+    # The later meal is entered first, so its row comes first in the table.
+    it 'lists the meals it would settle oldest first' do
+      cook = resident
+      later = meal_on(Date.yesterday - 1)
+      bill(later, cook, 20)
+      attend(later, cook)
+      earlier = meal_on(Date.yesterday - 2)
+      bill(earlier, cook, 20)
+      attend(earlier, cook)
+
+      expect(Settlement.preview(cutoff: Date.yesterday).meals).to eq([earlier, later])
+    end
+
+    it 'lists the held meals: in the period, open, money on a receipt and nobody who ate, oldest first' do
+      cook = resident
+      eater = resident
+      cutoff = Date.yesterday - 1
+
+      # An earlier period, settled before the meals below exist.
+      first_period = meal_on(cutoff - 6)
+      bill(first_period, cook, 10)
+      attend(first_period, eater)
+      reconciliation = settle!(cutoff: cutoff - 6)
+
+      later = meal_on(cutoff)
+      bill(later, cook, 25)
+      earlier = meal_on(cutoff - 5)
+      bill(earlier, cook, 30)
+
+      eaten = meal_on(cutoff - 2)
+      bill(eaten, cook, 20)
+      attend(eaten, eater)
+      no_money = meal_on(cutoff - 3)
+      bill(no_money, cook, 0)
+      after_cutoff = meal_on(cutoff + 1)
+      bill(after_cutoff, cook, 40)
+      # Settled before 2026-09-10, when a receipt nobody ate was still
+      # swept (MealCostSummary's spec has the same shape). A settlement
+      # holds it back now, so the row is set the way those old ones are.
+      settled = meal_on(cutoff - 4)
+      bill(settled, cook, 15)
+      settled.update_column(:reconciliation_id, reconciliation.id)
+
+      preview = Settlement.preview(cutoff: cutoff)
+      expect(preview.held_meals).to eq([earlier, later])
+      expect(preview.meals).to contain_exactly(eaten, no_money)
+    end
+
+    # The preview refuses a cutoff that is not in the past before it asks
+    # for either list, so there the filter changes nothing. Asked directly,
+    # each list still follows settleable_by's rule that a day that is not
+    # over is never in a period.
+    it 'never lists a meal of today as skipped, whatever the cutoff' do
+      today = community.today
+      yesterday = meal_on(today - 1)
+      attend(yesterday, resident)
+      tonight = meal_on(today)
+      attend(tonight, resident)
+
+      expect(Settlement.skipped_by(today, today: today)).to eq([yesterday])
+    end
+
+    it 'never lists a meal of today as held, whatever the cutoff' do
+      cook = resident
+      today = community.today
+      yesterday = meal_on(today - 1)
+      bill(yesterday, cook, 25)
+      tonight = meal_on(today)
+      bill(tonight, cook, 25)
+
+      expect(Settlement.held_by(today, today: today)).to eq([yesterday])
+    end
   end
 
   describe 'what gets written' do
