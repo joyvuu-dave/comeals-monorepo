@@ -431,4 +431,33 @@ RSpec.describe LedgerVerification do
       expect(run.error).to include('connection lost')
     end
   end
+
+  # The check reads a reconciliation's balances and its lines in separate
+  # queries. A repair rewrites both in one transaction, so if one committed
+  # between two of those reads, a correct ledger could look wrong. So the
+  # whole check reads from one snapshot. now() is the time its transaction
+  # started, so one value for every reconciliation means one transaction.
+  # The group commits for real: inside the test transaction, the snapshot
+  # would be a savepoint and prove nothing.
+  describe 'the snapshot it reads from' do
+    include_context 'with no test transaction'
+
+    it 'reads every reconciliation in one read-only transaction' do
+      settle
+      settle
+      seen = []
+      allow(MealCharge).to receive(:for_reconciliation).and_wrap_original do |original, reconciliation|
+        seen << ActiveRecord::Base.connection.select_rows(
+          "SELECT now()::text, current_setting('transaction_read_only')"
+        ).first
+        original.call(reconciliation)
+      end
+
+      expect(described_class.call).to be_passed
+
+      expect(seen.size).to eq(2)
+      expect(seen.uniq.size).to eq(1)
+      expect(seen.first.last).to eq('on')
+    end
+  end
 end
