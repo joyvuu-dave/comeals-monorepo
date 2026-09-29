@@ -15,12 +15,18 @@ audited_user
 csrf_failed
 authenticate_admin_user_custom!
 suppress_notification_if_no_email
+# ActiveModel::EachValidator#validate calls it for each attribute
+# (StorableTimeValidator):
+validate_each
 # Named in before_action / rescue_from / config lines debride does not read:
 require_reconciler
 render_conflict
 render_overloaded
 redirect_after_conflict
 refused_destroy_path
+# Named in an `if:` option, which debride does not read
+# (GuestRoomReservation's uniqueness rule):
+storable_date?
 # ActiveAdmin DSL blocks that override a controller method:
 find_resource
 scoped_collection
