@@ -36,6 +36,20 @@ RSpec.describe RecurringCatchUp do
     expect(described_class.new(now).due).to contain_exactly(RefreshBalancesJob)
   end
 
+  # config/recurring.yml can also hold a command entry, a line of Ruby that
+  # Solid Queue runs itself (clear_finished_jobs is one). A mistyped entry
+  # could have a blank class or be a plain value. None is a job to catch up.
+  it 'leaves out an entry with no job class' do
+    allow(Rails.application).to receive(:config_for).with(:recurring).and_return(
+      refresh_balances: { class: 'RefreshBalancesJob', schedule: '0 3 * * * UTC' },
+      clear_finished_jobs: { command: 'SolidQueue::Job.clear_finished_in_batches', schedule: '12 * * * * UTC' },
+      blank_class: { class: '', schedule: '0 4 * * * UTC' },
+      not_a_table: 'RefreshBalancesJob'
+    )
+
+    expect(described_class.new(now).due).to contain_exactly(RefreshBalancesJob)
+  end
+
   it 'does not count a failed run as a success' do
     JobRun.create!(name: 'refresh_balances', started_at: now - 2.hours, finished_at: now - 2.hours + 1,
                    outcome: 'failed', error: 'boom')
