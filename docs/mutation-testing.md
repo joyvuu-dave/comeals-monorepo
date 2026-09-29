@@ -27,7 +27,7 @@ costs on six workers:
 
 | Stage                                 | Subjects                                                        | Mutations | Time                                            |
 | ------------------------------------- | --------------------------------------------------------------- | --------- | ----------------------------------------------- |
-| money                                 | `MealLedger* Settlement* Reconciliation* BalanceRecalculation*` | 1,858     | 1h45 (the race specs are slow)                  |
+| money                                 | `MealLedger* Settlement* Reconciliation* BalanceRecalculation*` | 2,080     | 2h10 (a survivor runs 600 to 800 examples)      |
 | services, jobs, mailers, helpers, lib | the classes under those directories, minus money                | 6,860     | about 45 min                                    |
 | models and concerns                   | `app/models/**`, minus money                                    | 5,378     | about 40 min                                    |
 | controllers and serializers           | `app/controllers/**`, `app/serializers/**`                      | 6,719     | about 1h20; request specs are slow per mutation |
@@ -266,7 +266,10 @@ Reconciliation: `count` to `size` (2), `to_a` to `to_ary` and the
 preload and `with_attendees` removals in `settlement_ledger` (9), the
 `T.cast` type arguments in `unit_balances` (2), `self.end_date` to
 `end_date()`, `errors[:end_date].any?` to `errors.any?`, and the
-default-argument rewrites of `settlement_balances` (4). Settlement has
+default-argument rewrites of `settlement_balances` (4). (Only one of
+those four was a default argument. Two dropped the reconciliation id
+it passes to `allocate_to_cents`, and are killed since 2026-09-28; one
+dropped the start value of a sum.) Settlement has
 no survivor. This is the first run whose kills on Settlement mean
 something (the earlier ones had the neutral failure).
 
@@ -700,7 +703,7 @@ guard in `Settlement` and the exact line-item check in
 `LedgerVerification`. Only the changed subjects, on six workers: 23
 methods, 1,367 mutations, 1,350 killed, 17 alive, 106 timeouts, 1h07.
 Timeouts count as kills in mutant's total; they were not looked at one
-by one.
+by one. (They should not have: see 2026-09-27 for why they did.)
 
 Ten of the 17 were one neutral failure: `MealLedger#initialize`, whose
 sig refuses a relation, and the "runtime type checks" group that proves
@@ -746,8 +749,9 @@ with the type checks moved out, one alive (the `T.let` line above).
 Run after the fixes of the 2026-09-21 hunt merged: `LiveUpdate*`,
 `Settlement*`, `SettleAndNotify*`, `ClosedMealAttendanceFreeze*`,
 `ReconciledMealImmutability*` and `SetMultipliersJob*`, on six
-workers: 50 subjects, 2,198 mutations, 2,029 killed, 169 alive, 97 of
-them timeouts, 1h43.
+workers: 50 subjects, 2,198 mutations, 2,029 killed (97 of them by
+timeout, which mutant counted as kills; see 2026-09-27), 169 alive,
+1h43.
 
 Most of the 169 were one spec group. The fix for the refused cache
 clear added a `describe '.flush'` group with a single example, and
@@ -886,3 +890,150 @@ The other 18 change nothing a caller can see:
   the month and hour above, were there before these fixes; they show
   under `start_end_times` because `parse_start_end_params` was split in
   two.
+
+### 2026-09-27, the test review fixes
+
+The branch with the fixes from the test review of 2026-09-27, run stage
+by stage on 2026-09-28, on six workers.
+
+**Money stage.** `MealLedger* Settlement* Reconciliation*
+BalanceRecalculation*`. The branch changed only a comment in these
+classes, but it changed many of the specs mutant runs for them, and the
+factories.
+
+| Run                                                      | Subjects | Mutations | Killed | Alive | Timeouts              | Time |
+| -------------------------------------------------------- | -------- | --------- | ------ | ----- | --------------------- | ---- |
+| 1                                                        | 51       | 2,132     | 2,080  | 52    | 140, counted as kills | 2h11 |
+| 2, timeouts counted as alive, a 300-second limit         | 51       | 2,080     | 1,967  | 113   | 0                     | 2h11 |
+| 3, the 15 methods the answers to run 2 changed or pinned | 15       | 904       | 869    | 35    | 0                     | 1h00 |
+
+**Timeouts were counted as kills.** `.mutant.yml` says a mutation that
+reaches the time limit counts as not killed (`coverage_criteria`,
+`timeout: false`). Mutant 0.17 (in the Gemfile since 2026-09-17) drops
+that setting whenever `MUTANT_JOBS` is in its environment: it reads the
+variable into a config that carries the gem's own criteria, where a
+timeout counts as a kill, and that config is merged over the file's.
+`bin/mutant` exported `MUTANT_JOBS` on every run. So from 2026-09-17
+every timeout was a kill, which is what the 2026-09-21 and 2026-09-25
+entries above report. In run 1, every one of the 140 timeouts had passed
+every example it reached; none had failed one. For 34 of the 51
+subjects the unmutated code timed out too (34 of the 140). The time
+limit caused them: a mutation that no example fails runs its whole list
+of examples, one after another, and for a `MealLedger` method that list
+is 620 examples, which took 113 to 118 seconds on six workers, against a
+limit of 120.
+
+`bin/mutant` now passes the count only as `--jobs` and unsets the
+variable, the limit is 300 seconds, and `spec/config/mutant_timeout_spec.rb`
+runs `bin/mutant` with stand-ins for `bundle`, `createdb` and `dropdb`
+to check it. The same spec found that `bin/mutant` exited 1 even when
+mutant killed everything (the last command of its exit trap was a
+`[ ... ] && rm` whose test was false); that is fixed too. Run 2 had no
+timeout, and 61 more survivors than run 1: the ones the timeouts had
+hidden.
+
+Run 1, 52 alive, by kind:
+
+- Missing assertions (13), each now with an example that fails on it.
+  `MealLedger#eaters`: dropping the rule that an attendee line comes
+  before a guest line of the same resident (4). The example gave the
+  attendance row the lower id, so the sort met it first anyway; the row
+  now gets the higher id. `BalanceRecalculation#call`: dropping
+  `with_attendees` or `joins(:bills)` (3), which only change which meals
+  are read (a meal with no bill or nobody who ate gives only zero
+  lines), and the four rewrites of `update_only` (4), three of which let
+  each run overwrite `created_at`. `spec/services/balance_recalculation_spec.rb`
+  is new. `Reconciliation#settlement_balances`: the reconciliation id it
+  passes to `allocate_to_cents`, which only a refusal's message shows
+  (2). The 2026-09-10 entry counted these two among "the
+  default-argument rewrites".
+- Redundant code, removed (18). `MealLedger#eaters`: `a.is_a?(Guest)`
+  before comparing ids (5); two rows that tie on the resident and the
+  kind are two guests, because a resident has one attendance row per
+  meal. `MealLedger#debit_lines`: the early return for a meal nobody ate
+  (6), which the zero-multiplier branch already covers, and
+  `people.map { 0 }` (1), which could become `0`, and `0[index]` is 0.
+  `BalanceRecalculation#call`: the hand-set `created_at` and
+  `updated_at` (2) and the `if rows.any?` guard (4), since `upsert_all`
+  fills the timestamps and returns without a query for an empty list.
+  With them gone, `update_only: [:amount]` was what Rails does anyway,
+  and it went too.
+- A missing assertion answered after run 2 (2): `BalanceRecalculation#call`
+  without the `guests` preload, below.
+- Noise (19): `instance_of?` for `is_a?` in `MealLedger#debit_lines`
+  (1); `to_a` to `to_ary` in `BalanceRecalculation#call` (1); the other
+  17 `Reconciliation` survivors, as listed on 2026-09-10.
+
+Run 2, 113 alive, by kind:
+
+- Missing assertions (34), each now with an example that fails on it.
+  `MealLedger#cooks`, the sort by resident id (2): every example entered
+  the bills in resident id order; now three cooks share a capped credit,
+  with their bills entered highest id first. `MealLedger#eaters`,
+  comparing only one guest's id (2): the guests are now loaded both ways
+  round. `MealLedger.units`, the amount in the refusal (4).
+  `Settlement.preview`: the cutoff (1), the order the preview API reads
+  its earliest and latest dates from (2), and the name "preview" in a
+  refusal (3). `Settlement.held_by`: the cutoff (2), open meals only
+  (1), the order (2), and the rule that today is never in a period (3).
+  `Settlement.skipped_by`: the same rule (3), which the 2026-09-08 entry
+  left as redundant because the preview's own cutoff check covers it;
+  each list is now also asked directly, with a cutoff of today.
+  `Settlement#assign_meals`: which rows the lock takes, and in what
+  order (3); the example records the SQL.
+  `Settlement#forget_cached_meals`: pushing every meal instead of the
+  settled ones, leaving the asking browser out, and pushing a month once
+  per meal instead of once (3). `Settlement#persist_balances!`: reading
+  the meals a second time for the balances (1).
+  `BalanceRecalculation#call`: the `guests` preload (2); the snapshot
+  spec's concurrent edit now adds a guest, which only a read outside the
+  snapshot sees. The preview, held and skipped examples are in
+  `settlement_contract_spec.rb`; the lock, ledger, push and refusal
+  examples are in the new `spec/services/settlement_spec.rb`.
+- Redundant code, removed (5): `today:` passed from `Settlement.preview`
+  to `settleable_by` (2), the same value the scope reads itself;
+  `Settlement#settle!` returning the reconciliation, which no caller
+  used (2); `[0] * people.size` in `MealLedger#debit_lines` (1), which
+  could become `0 * people.size`. The weights are the shares when every
+  multiplier is zero.
+- Needs an owner decision, left (1): `MealLedger#financials_for` with
+  `total_units: -1` for `0` in the zero-multiplier return. Issue #94 says
+  that value is wrong (the summary should show what the cooks spent) and
+  asks what "subsidized" means there.
+- Noise (73):
+  - `MealLedger` (12). `units`: `to_s` or the bare amount for
+    `to_s('F')` (2), because ActiveSupport makes a BigDecimal's `to_s`
+    plain digits too, and `.to_int` or `Integer()` for `.to_i` (2). The
+    lines: `multiplier: nil` on a credit and `bill_amount: nil` on a
+    debit dropped (2); a T::Struct fills a nilable field that is left
+    out with nil. `instance_of?` for `is_a?` in `debit_lines` and
+    `kind_rank` (2): no class inherits from Guest. `kind_rank` with 2 or
+    167 for a guest, or -1 for an attendee (3): the order only needs the
+    guest above the attendee. The `T.let` line of `initialize` (1).
+  - `Settlement.preview` (10), `.held_by` (3) and `.skipped_by` (6):
+    `to_a` to `to_ary`, and every preload removed (goldiloader loads the
+    same rows in one query anyway).
+  - `Settlement.skipped_by`, `order(nil)` (1; in run 3 also the order
+    dropped). The example that checks the order fails on both under
+    plain `rspec`, but not in a mutant worker, where each run starts
+    from truncated tables and PostgreSQL returns these rows in date
+    order anyway (the caveat of 2026-09-08).
+  - `Settlement.allocate_to_cents` (17): the 14 equivalents listed on
+    2026-09-08 and 2026-09-09, the default of `reconciliation_id` (1),
+    which only the specs leave out, and a nil id in the message of the
+    second guard (2), which only a broken first guard can reach.
+  - Other `Settlement` methods (7): a sum's start value in
+    `assert_balanced_input!`; `<` in `assert_candidates_cover_pennies!`;
+    `raw > 0` for `raw >= 0` in `truncate_toward_zero`, because zero cut
+    either way is zero; the `T.let` line of `initialize`; `pluck` with no
+    column in `assign_meals`, because the lock is the rows it takes and
+    the result is not read; the `.to_s` in `persist_charges!`; the nested
+    transaction in `write_ledger!`.
+  - `Reconciliation` (16), as listed on 2026-09-10 (the one left in
+    `settlement_balances` is a sum's start value).
+  - `BalanceRecalculation#call`, `to_a` to `to_ary` (1).
+
+Run 3 reran the 15 methods whose code or examples the answers changed.
+Its 35 alive are the noise above that belongs to those methods (34) and
+the one left for #94. The whole suite afterwards: 2,818 examples, no
+failure, 100% of lines and branches.
