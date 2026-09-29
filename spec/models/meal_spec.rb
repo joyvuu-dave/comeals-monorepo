@@ -889,6 +889,25 @@ RSpec.describe Meal do
       expect(audits.first.auditable).to eq(meal)
       expect(audits.first.audited_changes).to include('description')
     end
+
+    # Two writes in two transactions can take their ids in one order and
+    # their times in the other. The time decides; the id only breaks a
+    # tie. The bill's audit comes first in the list the sort starts from
+    # (associated_audits, then audits), and it has the higher id.
+    it 'orders by the time of each write, and puts the higher id first in a tie' do
+      meal = create(:meal, community: community)
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      meal.update!(description: 'Soup')
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('10'))
+      soup = meal.audits.reorder(:id).last
+      bill = meal.associated_audits.reorder(:id).last
+
+      soup.update_column(:created_at, bill.created_at + 1.second)
+      expect(meal.reload.total_audits.first(2)).to eq([soup, bill])
+
+      soup.update_column(:created_at, bill.created_at)
+      expect(meal.reload.total_audits.first(2)).to eq([bill, soup])
+    end
   end
 
   # The meal page links to the previous and the next meal, so a meal that
@@ -932,6 +951,30 @@ RSpec.describe Meal do
       pushed = meal_pages_pushed { gone.destroy! }
 
       expect(pushed).to contain_exactly("meal-#{gone.id}", "meal-#{april5.id}", "meal-#{april10.id}")
+    end
+
+    it 'tells the meal on the next day, not the one after it' do
+      pushed = meal_pages_pushed { create(:meal, community: community, date: Date.new(2026, 4, 9)) }
+
+      created = described_class.find_by!(date: Date.new(2026, 4, 9))
+      expect(pushed).to contain_exactly("meal-#{created.id}", "meal-#{april5.id}", "meal-#{april10.id}")
+    end
+
+    it 'tells the meal on the day before only as the meal before' do
+      pushed = meal_pages_pushed { create(:meal, community: community, date: Date.new(2026, 4, 6)) }
+
+      created = described_class.find_by!(date: Date.new(2026, 4, 6))
+      expect(pushed).to contain_exactly("meal-#{created.id}", "meal-#{april5.id}", "meal-#{april10.id}")
+    end
+
+    # April 15 is entered after April 20, so it has the higher id.
+    it 'tells the next meal by date, whatever order the meals were entered in' do
+      april15 = create(:meal, community: community, date: Date.new(2026, 4, 15))
+
+      pushed = meal_pages_pushed { create(:meal, community: community, date: Date.new(2026, 4, 12)) }
+
+      created = described_class.find_by!(date: Date.new(2026, 4, 12))
+      expect(pushed).to contain_exactly("meal-#{created.id}", "meal-#{april10.id}", "meal-#{april15.id}")
     end
 
     it 'tells only the meal before when there is none after' do
