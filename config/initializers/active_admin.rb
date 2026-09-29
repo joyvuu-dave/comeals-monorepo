@@ -1,6 +1,8 @@
 # typed: false
 # frozen_string_literal: true
 
+require_relative '../../lib/admin_order_clause'
+
 ActiveAdmin.setup do |config|
   # == Site Title
   #
@@ -311,8 +313,8 @@ ActiveAdmin.setup do |config|
 
   # == Sorting
   #
-  # By default ActiveAdmin::OrderClause is used for sorting logic
-  # You can inherit it with own class and inject it for all resources
-  #
-  # config.order_clause = MyOrderClause
+  # An index may be sorted only by a column its model lists in
+  # ransackable_attributes, or by a key its page declares with order_by.
+  # ActiveAdmin's own OrderClause accepts any column. See the class.
+  config.order_clause = AdminOrderClause
 end

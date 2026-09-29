@@ -194,7 +194,10 @@ Resident
   `keys_valid_since` are never sent out. `Resident#serializable_hash` leaves
   them out of every JSON of a resident, the admin's JSON download included,
   and ActiveAdmin's `filter_attributes` (`config/initializers/active_admin.rb`)
-  leaves them out of the CSV download.
+  leaves them out of the CSV download. No admin index can be filtered or
+  sorted by them either: they are not in `Resident.ransackable_attributes`,
+  and both Ransack's filters and `AdminOrderClause`
+  (`lib/admin_order_clause.rb`, for `?order=`) read that list.
 
 **Scopes:**
 

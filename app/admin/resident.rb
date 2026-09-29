@@ -16,6 +16,10 @@ ActiveAdmin.register Resident do
   # CONFIG
   filter :active
   config.sort_order = 'name_asc'
+  # The Balance column sorts by the joined balance row (scoped_collection
+  # below). AdminOrderClause allows a key on another table only when the
+  # page declares it here, and the block writes the SQL for it.
+  order_by('resident_balances.amount') { |clause| "resident_balances.amount #{clause.order}" }
 
   # ACTIONS
   # Destroy is allowed. The model refuses to delete a resident who has ledger

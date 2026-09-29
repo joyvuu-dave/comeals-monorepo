@@ -197,7 +197,8 @@ MUTANT_SPEC_ROWS = {
   'spec/models/unit_spec.rb' => %w[Unit LiveUpdate BelongsToTheCommunity],
   'spec/requests/admin/all_pages_spec.rb' =>
     %w[BalanceDisplayHelper SettlementLinesTable MoneyFieldHelper ScheduleWeekLabelHelper PhoneDisplayHelper
-       ApplicationHelper SuperuserAdapter],
+       ApplicationHelper SuperuserAdapter AdminOrderClause],
+  'spec/requests/admin/sort_order_spec.rb' => %w[AdminOrderClause],
   'spec/requests/admin/pages_with_data_spec.rb' =>
     %w[BalanceDisplayHelper SettlementLinesTable MoneyFieldHelper PhoneDisplayHelper ApplicationHelper
        MealCostSummary],

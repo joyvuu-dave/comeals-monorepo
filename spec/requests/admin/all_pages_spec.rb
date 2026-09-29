@@ -111,7 +111,8 @@ RSpec.describe 'Admin pages' do
   end
 
   ADMIN_PAGE_RESOURCES.each do |model, config|
-    (config[:pages] - config.fetch(:unrendered, [])).each do |page|
+    rendered = config[:pages] - config.fetch(:unrendered, [])
+    rendered.each do |page|
       it "renders #{model} #{page}" do
         record = instance_exec(&config[:record])
         base = "/#{model.underscore.pluralize}"
@@ -126,6 +127,36 @@ RSpec.describe 'Admin pages' do
         expect(response).to have_http_status(:ok), "GET #{path} returned #{response.status}"
         expect(response.body).to include('id="active_admin_content"')
       end
+    end
+
+    # Every sortable column header links to ?order=<key>_<asc|desc>.
+    # AdminOrderClause replaces a key the page does not allow with the
+    # page's default order, so a header whose key is refused would do
+    # nothing when clicked. Follow each link and check that the page marks
+    # that header as sorted, in that direction.
+    next unless rendered.include?(:index)
+
+    it "sorts the #{model} index by each column it offers to sort by" do
+      instance_exec(&config[:record])
+      path = "/#{model.underscore.pluralize}"
+      get path
+      keys = sort_keys(response.body).values
+      expect(keys).not_to be_empty, "#{path} offers no column to sort by"
+
+      keys.each do |key|
+        column, direction = key.match(/\A(.+)_(asc|desc)\z/).captures
+        get path, params: { order: key }
+
+        header = sort_keys(response.body).find { |_, linked| linked.sub(/_(asc|desc)\z/, '') == column }&.first
+        expect(header&.[]('class')).to include("sorted-#{direction}"), "#{path}?order=#{key} did not sort by it"
+      end
+    end
+  end
+
+  # Each sortable header, with the order key its link asks for.
+  def sort_keys(body)
+    Nokogiri::HTML(body).css('th.sortable').index_with do |header|
+      Rack::Utils.parse_query(URI(header.at_css('a')['href']).query)['order']
     end
   end
 

@@ -71,9 +71,10 @@ attributes and has no method to mutate.
 Two kinds of node are skipped (`ignore_patterns` in `.mutant.yml`):
 `T.must(...)` and `T.let(...)`. Both are no-ops at runtime, so the
 mutation "remove the call" can never fail a test, and every one would
-be a survivor that means nothing. And every model's admin search
-whitelist (`ransackable_attributes`) is ignored by name: the spec for
-those checks the rule, that every name is a column, not the list.
+be a survivor that means nothing. And every model's admin search and
+sort list (`ransackable_attributes`) is ignored by name: the spec for
+those checks the rule, that every name is a column and none is a
+secret, not the list.
 
 ## Which examples run for a subject
 

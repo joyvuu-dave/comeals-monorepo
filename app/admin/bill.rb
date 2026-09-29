@@ -12,6 +12,12 @@ ActiveAdmin.register Bill do
   }, include_blank: true
   config.current_filters = false
   config.sort_order = 'meals.date_desc'
+  # Three index columns sort by a column of a joined table (scoped_collection
+  # below joins them). AdminOrderClause allows a key on another table only
+  # when the page declares it here, and each block writes the SQL for it.
+  order_by('meals.date') { |clause| "meals.date #{clause.order}" }
+  order_by('residents.name') { |clause| "residents.name #{clause.order}" }
+  order_by('units.name') { |clause| "units.name #{clause.order}" }
 
   controller do
     before_action { @page_title = 'Cooking Slots' }

@@ -43,10 +43,10 @@ class Resident < ApplicationRecord
 
   include HasPhoneNumber
 
-  # The columns ActiveAdmin's filters may search. It deliberately leaves
-  # out password_digest and reset_password_token. ActiveAdmin's column
-  # sorting (?order=) does not read this list, so it does not limit what
-  # the index can be sorted by.
+  # The columns the admin index may be filtered and sorted by
+  # (AdminOrderClause reads this list for ?order=). It deliberately leaves
+  # out password_digest, reset_password_token, reset_password_sent_at and
+  # keys_valid_since.
   sig { params(_auth_object: T.untyped).returns(T::Array[String]) }
   def self.ransackable_attributes(_auth_object = nil)
     %w[id active birthday can_cook created_at email name phone unit_id updated_at vegetarian]
