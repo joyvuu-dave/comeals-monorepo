@@ -86,4 +86,43 @@ RSpec.describe 'AssetCacheControl' do
       expect(response.headers).not_to have_key('x-runtime'), 'the static server, not a controller, should answer'
     end
   end
+
+  # The middleware on its own, around a stand-in app, for answers the real
+  # stack does not give on demand. The request examples above also never
+  # run #initialize: Rails builds the middleware once, at boot.
+  describe 'around a stand-in app' do
+    def answer(path, status, headers)
+      app = ->(_env) { [status, headers, ['body']] }
+      AssetCacheControl.new(app).call(Rack::MockRequest.env_for(path))
+    end
+
+    let(:year) { 'public, max-age=31536000, immutable' }
+
+    it "passes the app's answer on, with the header added" do
+      expect(answer('/assets/app-Ab12Cd34.js', 200, { 'content-type' => 'text/javascript' }))
+        .to eq([200, { 'content-type' => 'text/javascript', 'cache-control' => year }, ['body']])
+    end
+
+    # During a deploy an old dyno can answer 404 for a new asset. Cached for
+    # a year, that answer would outlive the deploy that mends it.
+    it 'does not mark an error under the asset paths as cacheable' do
+      expect(answer('/assets/app-Ab12Cd34.js', 404, { 'content-type' => 'text/javascript' })[1])
+        .not_to have_key('cache-control')
+      expect(answer('/vite-assets/app-Ab12Cd34.js', 500, { 'content-type' => 'text/javascript' })[1])
+        .not_to have_key('cache-control')
+    end
+
+    it 'leaves an error at a path that must be revalidated alone' do
+      expect(answer('/service-worker.js', 404, {})[1]).not_to have_key('cache-control')
+    end
+
+    it 'does not cache the app page when its content type names a charset' do
+      expect(answer('/assets/gone-Ab12Cd34.js', 200, { 'content-type' => 'text/html; charset=utf-8' })[1])
+        .not_to have_key('cache-control')
+    end
+
+    it 'caches an asset whose answer names no content type' do
+      expect(answer('/assets/app-Ab12Cd34.js', 200, {})[1]).to eq({ 'cache-control' => year })
+    end
+  end
 end
