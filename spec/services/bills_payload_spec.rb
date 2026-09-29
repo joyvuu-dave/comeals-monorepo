@@ -66,6 +66,17 @@ RSpec.describe BillsPayload do
       expect(payload([{ resident_id: cook.id.to_s, amount: '1' }])).to be_valid
     end
 
+    it 'has no cook ids when the payload is not a list' do
+      expect(described_class.parse('').cook_ids).to eq([])
+    end
+
+    # A row with no resident_id names no resident, touched or not, so it
+    # gets the unknown-cook sentence rather than a 500.
+    it 'refuses a row without a cook id as an unknown cook' do
+      expect(payload([{ amount: '1' }]).error).to eq('Resident not found.')
+      expect(payload([{}]).error).to eq('Resident not found.')
+    end
+
     it 'takes an amount sent as a number, not only as text' do
       payload([{ resident_id: cook.id, amount: 12 }]).write_to(meal)
 
@@ -127,6 +138,41 @@ RSpec.describe BillsPayload do
 
       bill = meal.bills.find_by(resident_id: cook.id)
       expect([bill.amount, bill.no_cost]).to eq([BigDecimal('0'), true])
+    end
+
+    it 'writes the rows when the cook ids are the strings a request sends' do
+      create(:bill, meal: meal, resident: other, community: community, amount: BigDecimal('3'))
+
+      payload([{ resident_id: cook.id.to_s, amount: '5' }, { resident_id: other.id.to_s }]).write_to(meal)
+
+      rows = meal.bills.reload.to_h { |b| [b.resident_id, b.amount] }
+      expect(rows).to eq(cook.id => BigDecimal('5'), other.id => BigDecimal('3'))
+    end
+
+    # The bill is added through another copy of the meal, the way a write
+    # that committed before the lock was taken would be. The meal's own
+    # list was read before that, and is out of date.
+    it 'reads the stored bills afresh, not a list the meal read before' do
+      meal.bills.to_a
+      create(:bill, meal: Meal.find(meal.id), resident: cook, community: community, amount: BigDecimal('7'))
+
+      payload([{ resident_id: cook.id }]).write_to(meal)
+
+      expect(Bill.where(meal: meal).pluck(:resident_id, :amount)).to eq([[cook.id, BigDecimal('7')]])
+    end
+
+    # Saving an unchanged bill writes nothing, but it still runs the
+    # callbacks, and the first of them locks the meal (LocksItsMealFirst).
+    it "does not save an untouched cook's stored bill again" do
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('7'))
+      statements = []
+      record = ->(*, event) { statements << event[:sql] }
+
+      ActiveSupport::Notifications.subscribed(record, 'sql.active_record') do
+        payload([{ resident_id: cook.id }]).write_to(meal)
+      end
+
+      expect(statements.grep(/\bFOR (KEY SHARE|NO KEY UPDATE|UPDATE|SHARE)\b|\A\s*(INSERT|UPDATE|DELETE)\b/i)).to eq([])
     end
 
     it 'counts a row with only the no_cost flag as touched' do
