@@ -18,6 +18,22 @@ RSpec.describe MealSchedule do
     end
   end
 
+  # The admin schedule grid prints this number (ScheduleWeekLabelHelper),
+  # so it must be a whole number, not a fraction of a week.
+  describe 'weeks since the epoch' do
+    it 'is a whole number of weeks, rounded down' do
+      expect(described_class.weeks_since_epoch(Date.new(2000, 1, 8))).to be(0)
+      expect(described_class.weeks_since_epoch(Date.new(2000, 1, 12))).to be(1)
+      expect(described_class.weeks_since_epoch(Date.new(2000, 1, 1))).to be(-1)
+    end
+
+    it 'reads a time as its date' do
+      evening = ActiveSupport::TimeZone['America/Los_Angeles'].local(2000, 1, 16, 20, 0)
+
+      expect(described_class.weeks_since_epoch(evening)).to be(2)
+    end
+  end
+
   describe '#week_index' do
     it 'counts weeks from the epoch around the cycle' do
       schedule = described_class.new(weeks: [[0], [1], [2]])
@@ -132,6 +148,23 @@ RSpec.describe MealSchedule do
                                       '— the schedule [[4], [1]] looks broken')
     end
 
+    # The same limit day by day: every day is a meal day, and holidays
+    # refuse each day before the first free one. For one date in a
+    # one-week cycle the scan looks at 374 days, the start day and the
+    # 373 after it.
+    it 'finds a date on the last day the scan looks at, and gives up one day later' do
+      schedule = described_class.new(weeks: [[0, 1, 2, 3, 4, 5, 6]])
+      from = Date.new(2026, 8, 2)
+      last_day = from + 373
+
+      allow(Holidays).to receive(:holiday?) { |date| date < last_day }
+      expect(schedule.upcoming_dates(from: from, count: 1)).to eq [last_day]
+
+      allow(Holidays).to receive(:holiday?) { |date| date <= last_day }
+      expect { schedule.upcoming_dates(from: from, count: 1) }
+        .to raise_error(RuntimeError, /\AScanned 374 days from 2026-08-02 and found only 0 of 1 /)
+    end
+
     it 'returns dates, not times, when asked from a time' do
       schedule = described_class.new(weeks: [[4]])
 
@@ -160,6 +193,15 @@ RSpec.describe MealSchedule do
       expect(dates).to eq [Date.new(2026, 12, 11), Date.new(2026, 12, 18)]
       expect(dates).to all(be_an_instance_of(Date))
     end
+
+    # 20:00 on Thursday December 17 in Los Angeles is already Friday in
+    # UTC. The range ends on the Thursday, so Friday December 18 is out.
+    it 'ends on the date of an evening end time, not on the next day in UTC' do
+      schedule = described_class.new(weeks: [[5]])
+      evening = ActiveSupport::TimeZone['America/Los_Angeles'].local(2026, 12, 17, 20, 0)
+
+      expect(schedule.dates_between(Date.new(2026, 12, 11), evening)).to eq [Date.new(2026, 12, 11)]
+    end
   end
 
   describe 'construction guards' do
@@ -173,6 +215,9 @@ RSpec.describe MealSchedule do
         .to raise_error(ArgumentError, 'cycle must be 1 to 6 weeks, got nil')
       expect { described_class.new(weeks: 'Mondays') }
         .to raise_error(ArgumentError, 'cycle must be 1 to 6 weeks, got "Mondays"')
+      # Six letters, so its length alone does not refuse it.
+      expect { described_class.new(weeks: 'Sunday') }
+        .to raise_error(ArgumentError, 'cycle must be 1 to 6 weeks, got "Sunday"')
     end
 
     it 'refuses a cycle outside 1..6 weeks' do
