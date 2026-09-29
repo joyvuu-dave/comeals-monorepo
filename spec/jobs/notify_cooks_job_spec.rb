@@ -57,10 +57,14 @@ RSpec.describe NotifyCooksJob do
       mail
     end
     allow(Rails.logger).to receive(:error)
+    allow(Rails.error).to receive(:report)
 
     described_class.perform_now(reconciliation)
 
     expect(mailed).to contain_exactly(cooks[0], cooks[2])
+    # The report names this mail, so the alert says which mail failed.
+    expect(Rails.error).to have_received(:report)
+      .with(an_instance_of(Net::ReadTimeout), hash_including(context: { mailer: 'reconciliation_notify_email' })).once
     expect(MailDelivery.where(about: reconciliation).pluck(:resident_id)).to contain_exactly(cooks[0].id, cooks[2].id)
 
     # The mail server works again. The next run mails only the cook whose

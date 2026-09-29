@@ -25,6 +25,5 @@ class NotifyCooksJob < ApplicationJob
     # Over the cap: the rest are still owed a mail. Ask for another run
     # rather than waiting for a person to notice.
     self.class.perform_later(reconciliation) if result.skipped.positive?
-    result
   end
 end
