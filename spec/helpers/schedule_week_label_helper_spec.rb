@@ -84,4 +84,15 @@ RSpec.describe ScheduleWeekLabelHelper do
       end
     end
   end
+
+  # The admin form can render an unsaved bootstrap draft, which has no zone
+  # yet. A sentence, not '#schedule_week_rows', so mutant runs it for the
+  # private current_sunday too (docs/mutation-testing.md, rule 2).
+  describe 'a community with no zone yet' do
+    it "counts this week in the app's zone" do
+      travel_to Time.utc(2026, 8, 9, 2) do
+        expect(helper.schedule_week_rows(Community.new, 1)).to eq([{ slot: 0, label: 'Week of Aug 2 (this week)' }])
+      end
+    end
+  end
 end
