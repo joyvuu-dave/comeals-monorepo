@@ -1689,3 +1689,36 @@ the owner (19 mutations, in `set_community_timezone` and three other
 methods this branch did not change), the endless range (2), and the
 noise. The whole suite afterwards: 2,884 examples, no failure, 100% of
 lines and branches.
+
+### 2026-09-29, secret columns and the admin sort order
+
+Run on the three classes the security branch changed, by name
+(`Resident AdminOrderClause ApplicationRecord`): six workers, 120-second
+timeout, 20 subjects, 562 mutations, 553 killed, 9 alive, 11 minutes.
+
+Nothing survived in the code the branch added or changed:
+`AdminOrderClause` (61 mutations), `Resident#serializable_hash` (13) and
+`ApplicationRecord.ransackable_associations` (6).
+
+The nine alive are all in Resident methods the branch did not touch:
+
+- `self.birthday` for `birthday()` in `age_on` and
+  `birthday_not_in_the_future`, and `self.name` for `name()` in
+  `name_unique_with_helpful_message`: the same call written another
+  way. Noise.
+- `name_unique_with_helpful_message`, 6: every way of removing
+  `return if name.blank?`. The 2026-09-26 entry counted these as noise,
+  but they are a missing assertion. The example "reports a blank name
+  once, without looking for a clash" builds a resident named `''`, and
+  an empty name finds no clash with the guard or without it. With a
+  `nil` name the next line calls `nil.downcase` and raises. An example
+  with `name: nil` would kill all six. Left for the owner of
+  `spec/models/resident_spec.rb`.
+
+The one timeout was not a mutation. It was the neutral run of
+`Resident#age`, the method with nothing changed: its 122 selected
+examples all passed, but together took longer than 120 seconds on a
+busy worker. The Resident selection is now close to that limit, so a
+Resident mutation that no early example kills can time out before its
+last example runs. Give a Resident run a longer limit (`-t 200` before
+the expressions, as on 2026-09-26).
