@@ -185,32 +185,35 @@ RSpec.describe CalendarSerializer, type: :serializer do
   # own. So this reads the statements: the one that reads each list must
   # end with ORDER BY its id.
   describe 'the order of every other list' do
-    it 'is asked of PostgreSQL by id, in the statement that reads the list' do
-      rotation = create(:rotation, community: community)
-      meal = create(:meal, community: community, rotation: rotation, date: Date.new(2026, 4, 10))
-      create(:bill, meal: meal, resident: resident, community: community)
-      create(:guest_room_reservation, community: community, resident: resident, date: Date.new(2026, 4, 10))
-      create(:common_house_reservation, community: community, resident: resident,
-                                        start_date: Time.zone.local(2026, 4, 20, 14, 0),
-                                        end_date: Time.zone.local(2026, 4, 20, 17, 0))
-      create(:event, community: community, start_date: Time.zone.local(2026, 4, 10, 18, 0),
-                     end_date: Time.zone.local(2026, 4, 10, 20, 0))
+    # Two of each, so prosopite also fails the example if a chip reads
+    # the database once for each row: a rotation's chip reads the first
+    # and last date of its meals unless the list preloaded them.
+    it 'is asked of PostgreSQL by id, in every statement that reads the list' do
+      [10, 20].each do |day|
+        meal = create(:meal, community: community, rotation: create(:rotation, community: community),
+                             date: Date.new(2026, 4, day))
+        create(:bill, meal: meal, resident: resident, community: community)
+        create(:guest_room_reservation, community: community, resident: resident, date: Date.new(2026, 4, day))
+        create(:common_house_reservation, community: community, resident: resident,
+                                          start_date: Time.zone.local(2026, 4, day, 14, 0),
+                                          end_date: Time.zone.local(2026, 4, day, 17, 0))
+        create(:event, community: community, start_date: Time.zone.local(2026, 4, day, 18, 0),
+                       end_date: Time.zone.local(2026, 4, day, 20, 0))
+      end
+      create(:resident, community: community, unit: unit, birthday: Date.new(1992, 4, 2))
       statements = []
       callback = ->(*, payload) { statements << payload[:sql] }
       ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') { serialize }
 
-      reads = {
-        'meals' => /\ASELECT "meals"\.\* FROM "meals" WHERE "meals"\."community_id" = /,
-        'bills' => /\ASELECT "bills"\."id" AS t0_r0, .* FROM "bills" INNER JOIN "meals" /,
-        'rotations' => /\ASELECT .* FROM "rotations" WHERE "rotations"\."id" /,
-        'residents' => /\ASELECT .* FROM "residents" WHERE .*extract\(month from birthday\)/,
-        'common_house_reservations' => /\ASELECT .* FROM "common_house_reservations" WHERE /,
-        'guest_room_reservations' => /\ASELECT .* FROM "guest_room_reservations" WHERE /,
-        'events' => /\ASELECT .* FROM "events" WHERE /
-      }
+      reads = %w[meals common_house_reservations guest_room_reservations events].index_with do |table|
+        /FROM "#{table}" WHERE "#{table}"\."community_id" = /
+      end
+      reads.merge!('bills' => /FROM "bills" .*WHERE "bills"\."community_id" = /,
+                   'rotations' => /FROM "rotations" WHERE "rotations"\."id" /,
+                   'residents' => /FROM "residents" WHERE .*extract\(month from birthday\)/)
       reads.each do |table, reads_the_list|
         expect(statements.grep(reads_the_list))
-          .to contain_exactly(match(/ ORDER BY "?#{table}"?\."?id"?( ASC)?\z/))
+          .to include(anything).and all(match(/ ORDER BY "?#{table}"?\."?id"?( ASC)?\z/))
       end
     end
   end

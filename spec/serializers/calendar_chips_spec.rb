@@ -335,6 +335,28 @@ RSpec.describe 'the calendar chips', type: :serializer do
       expect(chip(loaded)).to eq(expected)
     end
 
+    # The two ways to the dates give the same chip, so only the reads
+    # tell them apart. The calendar preloads every rotation's meals, and
+    # a chip that asked for MIN and MAX anyway would read twice a
+    # rotation. A chip on its own must not load every meal of its
+    # rotation to find two dates.
+    it 'reads the dates from loaded meals with no query, and otherwise without loading the meals' do
+      rotation = create(:rotation, community: community, no_email: true)
+      create(:meal, community: community, rotation: rotation, date: Date.new(2026, 4, 5))
+      create(:meal, community: community, rotation: rotation, date: Date.new(2026, 4, 19))
+      loaded = Rotation.preload(:meals).find(rotation.id)
+      unloaded = Rotation.find(rotation.id)
+      statements = []
+      callback = ->(*, payload) { statements << payload[:sql] }
+
+      ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') { chip(loaded) }
+      expect(statements).to be_empty
+
+      expect(chip(unloaded))
+        .to include(start: Time.zone.local(2026, 4, 5, 0, 1), end: Time.zone.local(2026, 4, 19, 23, 59))
+      expect(unloaded.meals).not_to be_loaded
+    end
+
     it 'has no start or end without meals' do
       rotation = create(:rotation, community: community, no_email: true)
 
