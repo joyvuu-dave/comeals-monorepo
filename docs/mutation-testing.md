@@ -28,7 +28,7 @@ costs on six workers:
 | Stage                                 | Subjects                                                        | Mutations | Time                                            |
 | ------------------------------------- | --------------------------------------------------------------- | --------- | ----------------------------------------------- |
 | money                                 | `MealLedger* Settlement* Reconciliation* BalanceRecalculation*` | 2,080     | 2h10 (a survivor runs 600 to 800 examples)      |
-| services, jobs, mailers, helpers, lib | the classes under those directories, minus money                | 6,860     | about 45 min                                    |
+| services, jobs, mailers, helpers, lib | the classes under those directories, minus money                | 7,664     | 2h40 (some subjects run request specs)          |
 | models and concerns                   | `app/models/**`, minus money                                    | 5,378     | about 40 min                                    |
 | controllers and serializers           | `app/controllers/**`, `app/serializers/**`                      | 6,719     | about 1h20; request specs are slow per mutation |
 
@@ -129,6 +129,14 @@ Mutant prints a diff for each one. Three kinds:
    keeps coming back, add an `ignore_patterns` entry with a comment
    saying why, the way the Sorbet calls are ignored. Do not ignore a
    whole method to make a report clean.
+
+A timeout counts as a survivor too (`coverage_criteria` in
+`.mutant.yml`). Rerun its subject alone before reading it: under load a
+slow kill can reach the limit. If it times out again, look at the
+mutation. Some make a loop that never ends (`while true`, a counter that
+never moves, `sleep` with no argument). Every example that reaches that
+loop hangs, which is a failure mutant cannot count. Say so in the
+results; it is not a missing assertion. Any other timeout is a finding.
 
 A survivor on the money path is never "fine as it is": every method
 there is on the path to a number on a settlement statement. Elsewhere
@@ -1037,3 +1045,178 @@ Run 3 reran the 15 methods whose code or examples the answers changed.
 Its 35 alive are the noise above that belongs to those methods (34) and
 the one left for #94. The whole suite afterwards: 2,818 examples, no
 failure, 100% of lines and branches.
+
+**Services, jobs, mailers, helpers and lib stage.** The `# services`
+and `# jobs, mailers, helpers, lib` blocks of `.mutant.yml`. This
+branch added `BillsPayload`, `LivePushJob` and `DeployConfigCheck` to
+those blocks; none of the three had been in a stage run before.
+`LivePushJob` and `DeployConfigCheck` had no survivor.
+
+| Run                                                 | Subjects | Mutations | Killed | Alive | Timeouts             | Time   |
+| --------------------------------------------------- | -------- | --------- | ------ | ----- | -------------------- | ------ |
+| 1                                                   | 151      | 7,664     | 7,290  | 374   | 22, counted as alive | 2h40   |
+| 2, the four methods with timeouts, alone            | 4        | 328       | 292    | 36    | the same 22          | 21 min |
+| 3, the 11 classes and 4 methods the answers changed | 70       | 3,310     | 3,229  | 81    | 1, the endless range | 40 min |
+
+The stage took 2h40, not the 45 minutes the table at the top used to
+say. The time goes to the subjects whose example lists include request
+specs. Each `AuditDescription` method has 105 examples, most of them
+from the meals request spec, and the first 1,100 mutations took about
+15 seconds each, kills included; some later ones took up to 50. The
+rest of the stage ran at about 2 mutations a second. Why the same
+subjects took 46 minutes on 2026-09-12 was not looked into.
+
+Run 1, 374 alive, by kind:
+
+- Missing assertions (71), each now with an example that fails on it
+  (checked by making each change by hand).
+  - `AuditDescription#cook_ids` (13). The describer that reads a meal's
+    history in one query per table came with #84, three days after the
+    last stage run, so its survivors were new. New examples in
+    `audit_description_spec.rb`: a list with no update to a bill or an
+    attendance row reads only the residents; when every updated row
+    still exists it reads those rows by id, never the whole table, and
+    no audit trail; a gone row's resident comes from a create audit of
+    its own type, and from the create audit, not a later update; a live
+    row's resident comes from the row, not its create audit.
+  - `AuditDescription#describe` (4): a created row of another type that
+    carries a vegetarian flag is not described as a guest.
+  - `BillsPayload` (9): an invalid payload has no cook ids; a row with no
+    `resident_id`, touched or not, is an unknown cook, not a `KeyError`;
+    `write_to` takes cook ids as the strings a request sends (every
+    service example passed integers); it reads the stored bills again,
+    not a list the meal read before; and it does not save an untouched
+    cook's bill again, which would run its callbacks and lock the meal.
+  - `LedgerVerification` (10). `differences_between` (9): every mismatch
+    example changed every resident's balance, so nothing showed that a
+    resident whose amounts agree is left out; a third eater now keeps
+    hers. `call` (1): dropping `SnapshotRead` survived. A group without
+    a test transaction now records `now()` and `transaction_read_only`
+    as each reconciliation is read, and expects one read-only
+    transaction for both.
+  - `AssetCacheControl` (14). The 2026-09-12 entry called its 16
+    survivors `.fetch` and `&&`-to-`||` rewrites; 14 were not. The
+    request examples only see answers the real stack gives, and never
+    run `initialize`, which Rails runs once at boot. New examples wrap
+    a stand-in app: an error under `/assets/` or `/vite-assets/` is not
+    marked cacheable for a year, an error at a revalidated path is left
+    alone, the app page with a charset is not cached, and an answer with
+    no content type is.
+  - `RecurringCatchUp#tasks` (6): the filter on `config/recurring.yml`
+    skips a command entry, a blank class and a value that is not a
+    table, but the real file has only a command entry. The example
+    stubs one of each.
+  - `MealCostSummary` (3): a settled no-cost meal people ate (zero
+    debits, no credit line) and one nobody ate (no lines) both sum an
+    empty list. Without the `BigDecimal` start value the sum is Integer
+    0, which the `Summary` struct refuses.
+  - `ScheduleWeekLabelHelper` (3). `current_sunday` (2): the admin form
+    renders the unsaved bootstrap draft, which has no zone, and
+    `ActiveSupport::TimeZone[nil]` raises, so the `.to_s` is needed; no
+    example had a draft. `schedule_grid_data` (1): dropping the last
+    `to_json` survived because the app's `JSON.parse` is Oj's
+    (`config/initializers/oj.rb`), and Oj hands an Array back unchanged,
+    so parsing could not tell text from an Array. The example now
+    expects a String, as it did for the week labels.
+  - `PacedDelivery::SessionDelivery#deliver!` (2): the SMTP session's
+    message was matched with `anything`; it is now the encoded text.
+  - `Healthcheck.ping_uri` (1): the examples compared `uri.to_s`, which
+    a string passes; they compare with `URI(...)`.
+  - `NotifyCooksJob#perform` (1): the mailer name only shows in a
+    failure report, which no example checked.
+  - `DatabasePoolCheck.verify!` (5), which was a bug. Rails reads a
+    negative `max_connections` as no limit and gives nil; `verify!`
+    counted that as a pool of 0 and refused to boot. It passes now.
+- Redundant code, removed (24). `AuditDescription#cook_ids`: the two
+  early returns for an empty list (12); Rails runs no query for an
+  empty id list. `ScheduleWeekLabelHelper#schedule_week_rows`: the
+  return for zero weeks (6); `Array.new(0)` builds no row, so the modulo
+  never runs. `ReconciliationWarnings#initialize`: the defaults (4);
+  only `.for` calls `new`, and it passes both. `NotifyCooksJob#perform`:
+  the result at the end (2), which nothing reads.
+- Loops that never end (22), the same 22 when rerun alone.
+  `EnsureRotationsJob#run` (8): the `while` condition always true, or
+  no rotation created inside it. `RetryOnConflict.call` (9): the
+  attempt count that never grows, no `raise` at the last attempt, and
+  `sleep` or `sleep(nil)`, which sleep forever. `LiveUpdate.calendar_range`
+  (4) and `ScheduleWeekLabelHelper#schedule_grid_data` (1): a month
+  loop or a range with no end. In the real code the rotation loop ends:
+  `meals_per_rotation` is at least 1 (a CHECK) and
+  `MealSchedule#upcoming_dates` raises on a schedule it cannot fill, so
+  each pass adds a later meal.
+- Noise (257):
+  - `AuditDescription` (98). In the `describe_*` methods (87), the kinds
+    listed on 2026-09-12, and three it did not name: the
+    `action == 'update'` checks after create and destroy have returned
+    (the audited gem writes no other action), a `return` before the
+    same fallback the method ends with, and `present?` rewrites on a
+    change the gem always stores as a two-element array. `named_resident_ids` (7): nil or
+    repeated ids, and rows of other types, change the `IN` list but not
+    which residents are found. `initialize` (2): `to_a`.
+    `name_or_unknown` (1): `present?` for truthiness on a record.
+    `cook_ids` (1): `.fetch('resident_id')` on a create audit, which
+    always has one.
+  - `LedgerVerification` (26): the kinds listed on 2026-09-12 and
+    2026-09-21 (`to_s('F')`, the sorts and `order(:id)`, a sum's start
+    value, the `if` around log lines), plus `date.to_s` in `detail` (the
+    JSON column stores a Date as the same text) and `"#{error}"` for
+    `"#{error.message}"`.
+  - `MealIcalFeed` (25) and `SnapshotRead` (4), as on 2026-09-12.
+  - `JwtAuth` (18). ruby-jwt 3.3 signs and accepts only HS256 when no
+    algorithm is named, the same as `ALGORITHM`, so dropping it in
+    `encode` or `decode` changes nothing (4; checked with a token signed
+    HS512). The key's length and salt (6): a token is made and read by
+    the same key. The blank-token return in `authenticate` (6):
+    `JWT.decode` refuses a nil or blank token with a `DecodeError`,
+    which `decode` rescues; kept, so the auth code says it. `.fetch` and
+    `Time.zone.at` (2).
+  - `PacedDelivery` (13): `.to_a`, `.fetch`, `.key?`, the `if` around the
+    cap's log line, and `message.delivery_method` for
+    `message.message.delivery_method` (ActionMailer hands the call to the
+    Mail object).
+  - `EnsureRotationsJob#run` (8): the `if` around the log line.
+  - `BillsPayload` (7): `instance_of?` for `is_a?` (2); the `@residents`
+    declaration (1), which nothing reads before `unknown_cook` sets it;
+    leaving `amount: nil` or `no_cost: nil` out of a `T::Struct` (2);
+    `.fetch('amount')` on the one path where the key is always there
+    (1); `Integer()` for `.to_i` (1).
+  - `Healthcheck` (7): the `if` around a log line and `instance_of?` in
+    `ping` (5); the `else ''` in `ping_uri` (2).
+  - `ResidentNameShortener` (7): the dropped `else nil`, `.to_s` on a
+    side that is always a String, `slice(0)` and ActiveSupport's
+    `String#at(0)` for `[0]`, `eql?` for `!=`.
+  - `RecurringCatchUp` (7): the `now:` default (4), `.fetch` (2), and
+    `instance_of?` for `is_a?` (1): the file's entries are plain Hashes.
+  - `ApplicationHelper#price_category_label` (5): the `precision:`.
+    Multipliers are whole numbers, so half of one has at most one
+    decimal, and every precision of 1 or more prints the same.
+  - `RecurringJob` (5): `::HEALTHCHECK` for `const_get`, `"#{e}"` for
+    `"#{e.message}"`, the class for its name in a message, and
+    truthiness or `instance_of?` for `is_a?(Hash)` (every job returns a
+    Hash, and a failed one nil).
+  - `MealCostSummary` (4): `MealLedger.new([])` or `[nil]` for `[meal]`
+    (`summary_for` reads only the meal it is given), and `to_a`.
+  - `RetryOnConflict.call` (4): `==`, `eql?` or `equal?` for `>=` (the
+    count goes up by one from zero), and `self.rand`.
+  - `ReconciliationWarnings#warning` (3): `.fetch` for `[]`. Keywords
+    would need six parameters, over RuboCop's limit.
+  - `BugsnagErrorSubscriber#report` (3): `:error` in the list gives
+    `'error'`, and so does the fallback.
+  - `MoneyFieldHelper#money_field_value` (3): `round(1)` for `round(2)`
+    (both paths then print a two-decimal amount the same way), `to_s`
+    for `to_s('F')`, and `self.number_to_rounded`.
+  - `BalanceDisplayHelper#settlement_totals_tag` (2) and
+    `MailDeliveryFailure.report` (2): a sum's start value, and nil for
+    `''` inside a string.
+  - `ThirdCookWarning` (2): `.sort` on the stored cooks, because the
+    unique index on `(meal_id, resident_id)` returns them in resident
+    order even when they were entered in reverse (checked), and `eql?`.
+  - `AssetCacheControl#call` (2): `env.fetch('PATH_INFO')`.
+  - `DatabasePoolCheck.verify!` (1): `Integer()` for `.to_i`.
+  - `LiveUpdate.calendar_range` (1): `<` for `<=`, as on 2026-09-25.
+
+Run 3 reran the 11 classes and the 4 `AuditDescription` methods whose
+code or examples the answers changed. Its 81 alive are the noise above
+that belongs to those subjects (80) and the range with no end in
+`schedule_grid_data` (1). The whole suite afterwards: 2,841 examples,
+no failure, 100% of lines and branches.
