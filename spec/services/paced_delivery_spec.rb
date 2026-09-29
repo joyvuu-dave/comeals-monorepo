@@ -169,7 +169,10 @@ RSpec.describe PacedDelivery do
       expect(Net::SMTP).to have_received(:new).once.with('smtp.gmail.com', 587)
       expect(smtp).to have_received(:start).once.with('comeals.com', 'u', 'p', :plain)
       expect(session).to have_received(:send_message).exactly(3).times
-      expect(session).to have_received(:send_message).with(anything, 'admin@comeals.com', [cooks.first.email]).once
+      # The session gets the whole encoded message, headers and all.
+      expect(session).to have_received(:send_message)
+        .with(a_string_including("To: #{cooks.first.email}", 'Subject: Reset your password'),
+              'admin@comeals.com', [cooks.first.email]).once
       expect(described_class).to have_received(:pause).exactly(2).times
     end
 
