@@ -32,7 +32,7 @@ RSpec.describe ScheduleWeekLabelHelper do
 
     # Only reachable through forged params (an empty schedule fails
     # validation), but the form re-render must show the errors, not divide
-    # by zero.
+    # by zero. With no weeks no row is built, so no modulo runs.
     it 'returns no rows for a zero-length schedule' do
       expect(helper.schedule_week_rows(community, 0)).to eq([])
     end
@@ -68,11 +68,15 @@ RSpec.describe ScheduleWeekLabelHelper do
       end
     end
 
+    # be_a(String) is the check that the value is JSON text: the app's
+    # JSON.parse is Oj's (config/initializers/oj.rb), and it hands an Array
+    # back unchanged, so parsing alone would pass an Array too.
     it 'ships one label and one note per possible week, as JSON strings' do
       travel_to Date.new(2026, 8, 7) do
         data = helper.schedule_grid_data(community)
 
         expect(data['data-week-labels']).to be_a(String)
+        expect(data['data-repeat-notes']).to be_a(String)
         expect(JSON.parse(data['data-week-labels']).size).to eq(MealSchedule::MAX_WEEKS)
         expect(JSON.parse(data['data-repeat-notes']).size).to eq(MealSchedule::MAX_WEEKS)
         expect(JSON.parse(data['data-repeat-notes']).last)

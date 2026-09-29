@@ -27,13 +27,12 @@ module ScheduleWeekLabelHelper
   # is { slot:, label: } — `slot` is the row's index in the stored schedule,
   # `label` names the calendar week that slot currently maps to. Empty for a
   # zero-length schedule (only reachable through forged params; the form
-  # re-render must show the validation errors, not crash).
+  # re-render must show the validation errors, not crash). No row is built
+  # then, so the modulo below never runs.
   # `community` may be the unsaved bootstrap draft, which has no time zone
   # yet, or a re-rendered form carrying a zone name that failed validation;
   # then the app zone is the only zone there is.
   def schedule_week_rows(community, weeks_count)
-    return [] if weeks_count.zero?
-
     sunday = current_sunday(community)
     current = MealSchedule.weeks_since_epoch(sunday)
     Array.new(weeks_count) do |delta|
