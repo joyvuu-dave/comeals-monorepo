@@ -109,8 +109,12 @@ survivor and each pinned by `spec/config/mutant_selection_spec.rb`:
    method. Nothing described by a sentence is added to it, and nothing
    from a mapped file either, because a row tags examples at class
    level. So every example that proves a method goes inside that
-   method's group, and a file that describes the class and has method
-   groups gets no row.
+   method's group. A row that names the class turns its file's method
+   groups into class-level examples too, so if a file with no row has a
+   group for the same method, the mapped file's group never runs for
+   it. Such a row names those methods one by one
+   (`Community#affected_calendar_keys`), and the guard spec fails when
+   one is missed.
 3. A concern is proved through the models that include it, so a model
    spec's row names every concern the model includes.
 

@@ -201,8 +201,12 @@ MUTANT_SPEC_ROWS = {
        MealCostSummary],
   'spec/models/community_dinner_start_times_spec.rb' => %w[Community],
   # Checks the version against the common house bookings
-  # CalendarSerializer lists, edge by edge.
-  'spec/models/community_calendar_cache_spec.rb' => %w[Community CalendarSerializer],
+  # CalendarSerializer lists, edge by edge. Its two groups are Community
+  # methods, named one by one: with plain Community here they would be
+  # class-level groups, and the '#affected_calendar_keys' group in
+  # community_spec.rb would be that method's whole test set.
+  'spec/models/community_calendar_cache_spec.rb' =>
+    %w[Community#affected_calendar_keys Community#calendar_cache_version CalendarSerializer],
   # Also pins Settlement.preview's cutoff guard, Reconciliation's
   # end-date rule and the default today of Meal.settleable_by.
   'spec/models/community_today_spec.rb' => %w[Community Meal Settlement Reconciliation],

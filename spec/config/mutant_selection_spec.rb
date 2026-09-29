@@ -62,6 +62,35 @@ RSpec.describe 'the mutant spec selection' do
     expect(wrong).to be_empty
   end
 
+  # A row gives every example in its file the row's names, so a
+  # '#method' group in a file with a row that names the class is a
+  # class-level group for mutant. If a file with no row has a group of
+  # the same name, that group is the method's whole test set (the most
+  # specific match wins), and the mapped file's group never runs for the
+  # method. On 2026-09-29 this hid the four '#affected_calendar_keys'
+  # examples of community_calendar_cache_spec.rb behind the five in
+  # community_spec.rb, and five mutations of that method survived.
+  # Only a group directly under RSpec.describe counts: a nested one reads
+  # "Class sentence #method", and mutant takes the class from that.
+  it 'keeps a method group in a mapped file from being hidden by a group of the same name in a file with no row' do
+    method_groups = lambda do |path|
+      klass = described_class_of(path)
+      next [] if klass.nil?
+
+      groups = Rails.root.join(path).read.scan(/^  describe '([#.][a-z_?!=]+)[ ']/).flatten.uniq
+      groups.map { |group| "#{klass}#{group}" }
+    end
+    spec_paths = Rails.root.glob('spec/**/*_spec.rb').map { |file| file.relative_path_from(Rails.root).to_s }
+    unmapped = spec_paths.reject { |path| MUTANT_SPECS.key?(path) }.flat_map(&method_groups)
+
+    hidden = MUTANT_SPECS.flat_map do |path, expressions|
+      next [] unless expressions.include?(described_class_of(path))
+
+      method_groups.call(path).select { |method| unmapped.include?(method) }.map { |method| "#{path}: #{method}" }
+    end
+    expect(hidden).to be_empty
+  end
+
   it 'adds the base controller to every request spec that has a row' do
     api = MUTANT_SPECS.select { |path, expressions| path.start_with?('spec/requests/api/v1/') && expressions.any? }
     admin = MUTANT_SPECS.select { |path, expressions| path.start_with?('spec/requests/admin/') && expressions.any? }
