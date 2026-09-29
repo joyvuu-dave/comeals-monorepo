@@ -10,6 +10,13 @@ RSpec.describe 'FallbackController' do
       expect(response.content_type).to start_with('text/html')
       expect(response.body).to include('<div id="root">')
     end
+
+    # send_file's own default is "attachment", which makes a browser
+    # save the app as a file instead of opening it.
+    it 'serves the page to be shown, not saved' do
+      get '/'
+      expect(response.headers['Content-Disposition']).to start_with('inline')
+    end
   end
 
   describe 'GET /*path (SPA catch-all)' do

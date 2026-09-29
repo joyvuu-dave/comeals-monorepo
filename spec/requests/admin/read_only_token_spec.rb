@@ -172,5 +172,14 @@ RSpec.describe 'Read-only admin token' do
       get '/bills'
       expect(response).to redirect_to('/login')
     end
+
+    # A config var set to an empty string must not make an empty token
+    # a key. Only a token that is present can match.
+    it 'redirects an empty token to sign in, even when the configured token is empty too' do
+      allow(ENV).to receive(:[]).with('READ_ONLY_ADMIN_TOKEN').and_return('')
+
+      get '/bills', params: { token: '' }
+      expect(response).to redirect_to('/login')
+    end
   end
 end
