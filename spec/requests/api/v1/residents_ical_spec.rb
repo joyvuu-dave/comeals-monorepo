@@ -71,6 +71,28 @@ RSpec.describe 'Residents iCal API' do
       expect(attend_events).to eq(0)
     end
 
+    # The feed is one resident's: their cook slots, and their own sign-ups
+    # on the days they do not cook. A day someone else cooks is still one
+    # they attend, and a skipped day must not end the list.
+    it "lists only this resident's sign-ups, skips only the days they cook, and links each to its meal" do
+      other = create(:resident, community: community, unit: unit)
+      sunday_meal.update!(description: 'Roast')
+      weekday_meal.update!(description: 'Soup night')
+      thursday_meal = create(:meal, community: community, date: Date.new(2026, 4, 9))
+      create(:bill, meal: sunday_meal, resident: resident, community: community)
+      create(:meal_resident, meal: sunday_meal, resident: resident, community: community)
+      create(:bill, meal: weekday_meal, resident: other, community: community)
+      create(:meal_resident, meal: weekday_meal, resident: resident, community: community)
+      create(:meal_resident, meal: thursday_meal, resident: other, community: community)
+
+      get "/api/v1/residents/#{resident.id}/ical"
+
+      unfolded = response.body.gsub(/\r?\n[ \t]/, '')
+      expect(unfolded.scan(/^SUMMARY:(.+?)\r?$/).flatten).to eq(['Cook Common Dinner', 'Attend Common Dinner'])
+      expect(unfolded).to include('DESCRIPTION:Soup night\\n\\n\\n\\nView here: ' \
+                                  "http://localhost:3036/meals/#{weekday_meal.id}/edit")
+    end
+
     it 'uses 18:00 start for Sunday meals and 19:00 for weekday meals' do
       create(:bill, meal: sunday_meal, resident: resident, community: community)
       create(:meal_resident, meal: weekday_meal, resident: resident, community: community)
