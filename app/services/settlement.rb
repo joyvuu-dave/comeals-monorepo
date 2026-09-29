@@ -10,9 +10,10 @@
 # fails, none of it happened — there is never a reconciliation row without
 # its ledger, and never a claimed meal without a reconciliation.
 #
-#   Settlement.run!(cutoff: community.yesterday)   # the rake task, the API
-#   Settlement.new(reconciliation).settle!    # a built row (the admin form,
-#                                             # the factory)
+#   Settlement.run!(cutoff: cutoff)           # the seeds
+#   Settlement.settle!(cutoff: cutoff)        # SettleAndNotify: the rake
+#                                             # task, the API, the admin form
+#   Settlement.new(reconciliation).settle!    # a built row (the factory)
 #   Settlement.new(reconciliation).rewrite!   # repair only: rewrite the
 #                                             # ledger of an existing row
 #                                             # (docs/runbooks/settled-data-repair.md)
@@ -137,7 +138,9 @@ class Settlement
   # not in the past, or no meal to settle), and RuntimeError when a
   # concurrent settlement claimed a meal first; both roll everything back.
   # Does nothing after the commit; the caller runs forget_cached_meals.
-  sig { returns(Reconciliation) }
+  # Returns nothing: every caller already holds the row, as
+  # `reconciliation`.
+  sig { void }
   def settle!
     reconciliation.mark_settling!
 
@@ -146,8 +149,6 @@ class Settlement
       assign_meals
       write_ledger!
     end
-
-    reconciliation
   end
 
   # Repair only. Writes the line items and balances for a reconciliation
