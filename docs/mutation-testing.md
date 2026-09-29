@@ -25,12 +25,12 @@ work and is usually run one stage at a time, each stage being the
 subjects of one part of the app. The stages, and roughly what each
 costs on six workers:
 
-| Stage                                 | Subjects                                                        | Mutations | Time                                            |
-| ------------------------------------- | --------------------------------------------------------------- | --------- | ----------------------------------------------- |
-| money                                 | `MealLedger* Settlement* Reconciliation* BalanceRecalculation*` | 2,080     | 2h10 (a survivor runs 600 to 800 examples)      |
-| services, jobs, mailers, helpers, lib | the classes under those directories, minus money                | 7,664     | 2h40 (some subjects run request specs)          |
-| models and concerns                   | `app/models/**`, minus money                                    | 5,378     | about 40 min                                    |
-| controllers and serializers           | `app/controllers/**`, `app/serializers/**`                      | 6,719     | about 1h20; request specs are slow per mutation |
+| Stage                                 | Subjects                                                        | Mutations | Time                                               |
+| ------------------------------------- | --------------------------------------------------------------- | --------- | -------------------------------------------------- |
+| money                                 | `MealLedger* Settlement* Reconciliation* BalanceRecalculation*` | 2,080     | 2h10 (a survivor runs 600 to 800 examples)         |
+| services, jobs, mailers, helpers, lib | the classes under those directories, minus money                | 7,664     | 2h40 (some subjects run request specs)             |
+| models and concerns                   | `app/models/**`, minus money                                    | 5,874     | about 1h (11 loops that never end wait 5 min each) |
+| controllers and serializers           | `app/controllers/**`, `app/serializers/**`                      | 6,719     | about 1h20; request specs are slow per mutation    |
 
 The exact subject list for a stage is the matching block of
 `.mutant.yml`; pass it after `--`. It is not part of `bin/check`. Run
@@ -827,8 +827,7 @@ Fourth pass, `SettleAndNotify*` alone: 111 mutations, 111 killed.
 ### 2026-09-26, the computed price band (#88)
 
 Run after 8bad9ce7, on the four classes it touched, by name (`Resident
-Community MealResident Meal`; a `Meal*` pattern would also take
-`MealLedger` and the rest, and `Class#*` matches nothing): 2,718
+Community MealResident Meal`; `Class#*` matches nothing): 2,718
 mutations, 2,576 killed, 142 alive, 1 timeout, 33 minutes on six
 workers with a 200-second timeout.
 
@@ -1224,3 +1223,186 @@ code or examples the answers changed. Its 81 alive are the noise above
 that belongs to those subjects (80) and the range with no end in
 `schedule_grid_data` (1). The whole suite afterwards: 2,841 examples,
 no failure, 100% of lines and branches.
+
+**Models and concerns stage.** The `# models and concerns` block of
+`.mutant.yml`, passed as it is. In mutant 0.17 a pattern like `Meal*`
+takes `Meal` and names under `Meal::` only, not `MealLedger` or
+`MealSerializer` (`lib/mutant/expression/namespace.rb`; run 1 took no
+subject from either). This branch changed `Community`'s dashboard
+averages and cache version, `Meal`'s max rule and date move,
+`ClosedMealAttendanceFreeze`'s price rule, `Unit#balance` and the
+reservation checks, and added `StorableTime` and
+`StorableTimeValidator` (the 2026-09-28 entry above).
+`ClosedMealAttendanceFreeze#price_change_is_allowed`, `Unit#balance`,
+`Meal#restamp_attendance_for_new_date` and `StorableTime` had no
+survivor.
+
+| Run                                                     | Subjects | Mutations | Killed | Alive | Timeouts             | Time   |
+| ------------------------------------------------------- | -------- | --------- | ------ | ----- | -------------------- | ------ |
+| 1                                                       | 135      | 5,874     | 5,639  | 235   | 11, counted as alive | 1h01   |
+| 2, the three methods with timeouts, alone               | 3        | 241       | 225    | 16    | the same 11          | 11 min |
+| 3, the eight classes the answers changed                | 77       | 3,409     | 3,290  | 119   | the same 11          | 42 min |
+| 4, the three methods whose examples changed after run 3 | 3        | 154       | 152    | 2     | 0                    | 20 s   |
+
+Run 1, 235 alive, by kind:
+
+- Examples the selection kept out (5). `Community#affected_calendar_keys`
+  survived `41` to `40` or `42`, `..` to `...`, `>>` to `<<`, and no
+  `to_date`, although `community_calendar_cache_spec.rb` checks each
+  edge. This branch gave that file a row naming `Community`, so it
+  also runs for `CalendarSerializer`. The row made its
+  `'#affected_calendar_keys'` group a class-level group, and the group
+  of the same name in `community_spec.rb`, a file with no row, became
+  the method's whole test set: 5 examples, none on the last day of a
+  month's six weeks. The row now names
+  `Community#affected_calendar_keys` and
+  `Community#calendar_cache_version`, and the guard spec fails on this
+  case (rule 2 above). All five are killed in run 3.
+- Missing assertions (41), each now with an example that fails on it
+  (checked by making each change by hand).
+  - `Community` (16). The schedule writer and its check, `schedule=`
+    (3), `normalize_schedule_week` (3) and `schedule_shape` (4): a
+    six-letter string such as `'Monday'` passes the length check, so
+    dropping either `is_a?(Array)` made it raise instead of report; a
+    week that is not a list, and a day that cannot be read, stay as
+    written for the validation to report, and nothing checked the
+    value; 2.5 must not be read as Tuesday (`Integer(2.5)` is 2); a day
+    stored as a decimal, and a list inside a week, which only a write
+    that skips the writer can leave, and the second must give one
+    error, not two. `dinner_start_times_shape` (5): a number, or seven
+    numbers, where seven `HH:MM` times belong (`Regexp#match?` raises on
+    a number). `auto_create_rotations` (1): a meal that already has a
+    rotation stays in it.
+  - `Meal` (12). `neighbour_ids` (5): the 2026-09-12 entry called its
+    survivors rewrites the unique date index makes equal, and five of
+    them are not. The examples had meals several days apart, entered
+    in date order, so the query for the next meal could start two days
+    on or one day back, or pick by id, and every example passed. New
+    examples put a meal on the day before and the day after, and enter
+    the next meal by date after a later one. `total_audits` (7): its
+    comment says the time of each write decides the order and the id
+    breaks a tie, but the example only checked that the times came out
+    in order, which sorting by id alone also does. The new example
+    gives the later write the lower id, and then gives two writes the
+    same time.
+  - `Resident#name_unique_with_helpful_message` (6): the blank-name
+    example used `''`, which the clash query reads without trouble, so
+    dropping the blank guard survived; with `nil` the query calls
+    `nil.downcase`. The 2026-09-26 entry named these as `self.x` and
+    `.present?` rewrites; only one of the seven is.
+  - `MealSchedule` (7). `weeks_since_epoch` (2) could return a fraction
+    of a week (the schedule still worked, because `Array#[]` cuts a
+    fraction down, but the admin grid prints the number) or refuse a
+    time. `dates_between` (1) could compare a Date with an evening end
+    time, which is already the next day in UTC. The constructor (1):
+    `'Mondays'` is refused by its length alone; `'Sunday'` is six
+    letters. `upcoming_dates` (3): the message pins the scan limit but
+    not where the count starts, so starting it at -1, 1 or 167
+    survived; an example now finds a date on the last day the scan
+    looks at, and gives up one day later.
+- Redundant code, removed (25). `AdminUser#superuser?` and
+  `#superuser_changed?(from:, to:)` (3): Rails makes both for the
+  column. `Event#note_live_update` and
+  `CommonHouseReservation#note_live_update` (12): the return when
+  neither end moved; the old range is then the new one, and
+  `LiveUpdate` keeps its dates in a set. `Meal#note_live_update` (2):
+  the `if` before noting the old date; `LiveUpdate.calendar` notes
+  nothing for nil, the way `GuestRoomReservation` already calls it.
+  `Community#normalize_schedule_week` (6): the `is_a?(Integer)` branch,
+  since `Integer(day.to_s)` gives an Integer day back unchanged (five
+  mutations of the branch, and `to_str` for `to_s`, which only String
+  days reached; it is killed now). `HasPhoneNumber#normalize_phone` (2): the
+  `return` after a blank phone is cleared, since Phonelib finds nil
+  invalid; the method is one if/else now.
+- Loops that never end (11), the same 11 when rerun alone.
+  `MealSchedule#upcoming_dates` (9): the scan-limit check removed, or
+  its counter stopped or turned back. `MealSchedule#dates_between` and
+  `Community#dinner_start_times=` (1 each): a range with no end.
+- Answered in earlier entries, in code this branch did not change
+  (76): `Holidays.easter?` (11), the `loaded?` branches of
+  `Meal#attendees_count` and `#multiplier` (22), `Rotation` (30),
+  `ClosedMealAttendanceFreeze#attendees_in_database` (6),
+  `ReconciledMealImmutability#previous_meal_reconciled?` (3), and the
+  `self.x` and `instance_of?` rewrites of the 2026-09-28 entry (4). One
+  `Rotation` reason needs to be more exact: dropping the whole push
+  from `recolor_remaining_rotations` survives because
+  `recolor_community` saves each rotation it recolors with `update!`,
+  and each save pushes that rotation's months (`Rotation#note_live_update`).
+  So the method's own push sends those months a second time. It could
+  be removed; this branch did not change `Rotation`, so it is left for
+  the owner.
+- Noise (77), changes no caller can see:
+  - `self.x` for `x()` (13), `instance_of?` for `is_a?` (9), `size` or
+    `length` for `count` (9), and `.fetch` or `.at` for `[]` (5), the
+    kinds listed on 2026-09-12.
+  - `Community#unreconciled_ave_cost` (10), a method this branch
+    changed: `to_ary` (1), the preloads (7; goldiloader loads the same
+    rows in one query), a sum's start value (1), and dropping
+    `with_attendees` (1). A meal nobody ate has an effective cost of
+    zero (the zero-multiplier return of `MealLedger#financials_for`),
+    so reading it adds zero to both sums. The example "excludes bills
+    from meals with no attendees" starts to fail on this mutation if
+    #94 changes what that return gives.
+  - `Community#unreconciled_ave_number_of_attendees` (4 besides the
+    `count` rewrites): `where(meal_id: meals)` for
+    `where(meal_id: meals.select(:id))`, and `select(nil)`; Rails
+    selects the id for a relation used as a value either way.
+  - `Community#calendar_cache_version` (3): `beginning_of_day` on a
+    date string, which `Time.zone.parse` already reads as midnight (the
+    one caller passes the month grid's first day); `today` for
+    `today.to_s` and a nested array, since `join` calls `to_s` and
+    flattens.
+  - `Community#backfill_orphan_admin_users` (1): dropping
+    `where(community_id: nil)`. It runs once, when the one community is
+    created, and before that no admin can have a community.
+  - `Community#cap` and `Meal#cap` (2): `super` for `read_attribute(:cap)`,
+    the same read.
+  - `Community#dinner_start_at` (2): the hour and minute as text;
+    `Time.utc` reads `"19"` as 19 and `"08"` as 8 (checked).
+  - `Community#normalize_schedule_week` (3): `lstrip` or `rstrip` for
+    `strip`, and `all?` for `all?(Integer)`, since every day is then an
+    Integer or nil.
+  - `Meal#conditionally_set_closed_at` (4): `closed` for `closed == true`
+    on a NOT NULL boolean, and clearing `closed_at` on a meal that was
+    already open, where the CHECK `meals_closed_at_matches_closed`
+    keeps it nil anyway.
+  - `Meal#neighbour_ids` (7): the rewrites the unique date index does
+    make equal (the bound at `day` itself, a second sort key after the
+    date), and `where.not(id: nil)`: the meal can only be its own old
+    date's neighbour when no meal lies between, and then the call for
+    the new date tells the same meal.
+  - `Meal#total_audits` (1): `[created_at, audit]`, since Rails compares
+    two records by id.
+  - `MealSchedule.weeks_since_epoch` (2): `to_int` and `Integer()` for
+    `to_i`.
+  - `Event#end_date_or_allday` (1): `end_date` for `end_date.present?`.
+  - `HasPhoneNumber#normalize_phone` (1): `parsed` for `parsed.e164`;
+    the column is written as `parsed.to_s`, which Phonelib makes the
+    E.164 text (checked).
+
+Run 3 reran the eight classes whose code or examples the answers
+changed. Its 119 alive are the noise above that belongs to them (77,
+with the two `self.x` rewrites of `period_is_free`), the `loaded?`
+branches of `Meal` (22), the 11 loops, and 9 that the changes
+uncovered:
+
+- `CommonHouseReservation#note_live_update` (5) and
+  `Event#note_live_update` (1). With the return gone, the second call
+  covers a save that does not move the dates, so the first call
+  matters only after a move, and every move example stayed inside the
+  old range. A new example in each spec moves the booking or event
+  from May 15 to an overnight stretch from February 28 to March 1.
+  March 2026 starts on a Sunday, so its calendar begins on March 1,
+  and only the new end tells March.
+- `AdminUser#refuse_demoting_last_superuser` (3). Rails's
+  `superuser_changed?` takes its keywords as options, where the
+  removed method required them, so dropping both survived: the guard
+  would then refuse any change to the flag while no other superuser
+  exists, including the promotion that ends bootstrap. A new example
+  promotes the first superuser. The other two, `from: true` alone and
+  `to: false` alone, are noise: on a NOT NULL boolean a change from
+  true is a change to false.
+
+Run 4 reran those three methods: the two noise survivors are all that
+is left. The whole suite afterwards: 2,858 examples, no failure, 100%
+of lines and branches.
