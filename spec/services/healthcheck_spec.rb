@@ -105,13 +105,13 @@ RSpec.describe Healthcheck do
     it 'builds the success URL with auto-create' do
       uri = described_class.ping_uri('test-key', 'some-job', nil)
 
-      expect(uri.to_s).to eq('https://hc-ping.com/test-key/some-job?create=1')
+      expect(uri).to eq(URI('https://hc-ping.com/test-key/some-job?create=1'))
     end
 
     it 'builds the fail URL with auto-create' do
       uri = described_class.ping_uri('test-key', 'some-job', 'fail')
 
-      expect(uri.to_s).to eq('https://hc-ping.com/test-key/some-job/fail?create=1')
+      expect(uri).to eq(URI('https://hc-ping.com/test-key/some-job/fail?create=1'))
     end
   end
 end
