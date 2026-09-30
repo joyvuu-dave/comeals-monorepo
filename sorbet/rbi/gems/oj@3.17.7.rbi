@@ -828,7 +828,7 @@ class String
   include ::Comparable
 
   # pkg:gem/oj#lib/oj/mimic.rb:289
-  def to_json_raw(*_arg0); end
+  def to_json_raw(*); end
 
   # pkg:gem/oj#lib/oj/mimic.rb:283
   def to_json_raw_object; end
