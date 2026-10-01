@@ -96,7 +96,7 @@ module SimpleCov
 
     # @api private
     #
-    # pkg:gem/simplecov#lib/simplecov/exit_handling.rb:72
+    # pkg:gem/simplecov#lib/simplecov/exit_handling.rb:74
     def exit_status_from_exception; end
 
     # pkg:gem/simplecov#lib/simplecov.rb:36
@@ -175,14 +175,14 @@ module SimpleCov
     # accepts it. test_unit sets status 0 on success, so SUCCESS must also be
     # treated as "not a previous error".
     #
-    # pkg:gem/simplecov#lib/simplecov/exit_handling.rb:86
+    # pkg:gem/simplecov#lib/simplecov/exit_handling.rb:88
     def previous_error?(error_exit_status); end
 
     # @api private. The history entry is recorded on the same successful-run
     # condition `.last_run.json` uses, so a run that failed its thresholds
     # becomes neither the drop baseline nor a data point in the trend.
     #
-    # pkg:gem/simplecov#lib/simplecov/exit_handling.rb:127
+    # pkg:gem/simplecov#lib/simplecov/exit_handling.rb:129
     def process_result(result); end
 
     # pkg:gem/simplecov#lib/simplecov.rb:22
@@ -197,19 +197,19 @@ module SimpleCov
     # times out the merged total is partial, and comparing it against the
     # thresholds would surface a spurious violation about the missing slice.
     #
-    # pkg:gem/simplecov#lib/simplecov/exit_handling.rb:108
+    # pkg:gem/simplecov#lib/simplecov/exit_handling.rb:110
     def ready_to_process_results?; end
 
     # @api private -- the notice alone; the status it accompanies is the
     # caller's to answer with.
     #
-    # pkg:gem/simplecov#lib/simplecov/exit_handling.rb:94
+    # pkg:gem/simplecov#lib/simplecov/exit_handling.rb:96
     def report_previous_error; end
 
     # @api private -- answers the status it was handed, explaining it first when
     # it is a coverage failure worth explaining.
     #
-    # pkg:gem/simplecov#lib/simplecov/exit_handling.rb:115
+    # pkg:gem/simplecov#lib/simplecov/exit_handling.rb:117
     def report_processing_failure(exit_status); end
 
     # pkg:gem/simplecov#lib/simplecov/result_processing.rb:29
@@ -218,7 +218,7 @@ module SimpleCov
     # pkg:gem/simplecov#lib/simplecov.rb:22
     def result?(*, **, &); end
 
-    # pkg:gem/simplecov#lib/simplecov/exit_handling.rb:149
+    # pkg:gem/simplecov#lib/simplecov/exit_handling.rb:151
     def result_exit_status(result); end
 
     # `tracker` carries the last count and the time it last changed across poll
@@ -239,13 +239,13 @@ module SimpleCov
     # The one side effect left to the caller is ending the process, which is
     # what makes this whole path answerable from inside a test.
     #
-    # pkg:gem/simplecov#lib/simplecov/exit_handling.rb:49
+    # pkg:gem/simplecov#lib/simplecov/exit_handling.rb:51
     def run_exit_tasks(error_exit_status = T.unsafe(nil)); end
 
     # @api private -- the exiting adapter over `run_exit_tasks`, called from the
     # at_exit block (which pre-captures the status, see there) and by `collate`.
     #
-    # pkg:gem/simplecov#lib/simplecov/exit_handling.rb:64
+    # pkg:gem/simplecov#lib/simplecov/exit_handling.rb:66
     def run_exit_tasks!(error_exit_status = T.unsafe(nil)); end
 
     # pkg:gem/simplecov#lib/simplecov.rb:50
@@ -257,7 +257,7 @@ module SimpleCov
     # mutant:disable -- a pid is an Integer, and Integers answer ==, eql? and
     # equal? alike for the same value.
     #
-    # pkg:gem/simplecov#lib/simplecov/exit_handling.rb:138
+    # pkg:gem/simplecov#lib/simplecov/exit_handling.rb:140
     def started_in_this_process?; end
 
     # pkg:gem/simplecov#lib/simplecov.rb:22
@@ -267,7 +267,7 @@ module SimpleCov
     # because two equal Integers are equal through every spelling of the
     # comparison.
     #
-    # pkg:gem/simplecov#lib/simplecov/exit_handling.rb:145
+    # pkg:gem/simplecov#lib/simplecov/exit_handling.rb:147
     def successful?(status); end
 
     # @api private
@@ -316,7 +316,7 @@ module SimpleCov
     # supplies it, so a new limit only has to be added to the Data definition
     # and the checks.
     #
-    # pkg:gem/simplecov#lib/simplecov/exit_handling.rb:158
+    # pkg:gem/simplecov#lib/simplecov/exit_handling.rb:160
     def build_coverage_limits; end
 
     # pkg:gem/simplecov#lib/simplecov/result_processing.rb:181

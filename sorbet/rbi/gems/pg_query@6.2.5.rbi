@@ -2671,6 +2671,18 @@ class PgQuery::ParserResult
   # pkg:gem/pg_query#lib/pg_query/filter_columns.rb:95
   def conditions_from_join_clauses(from_clause); end
 
+  # Determines whether a RangeVar refers to a CTE rather than to a relation.
+  #
+  # Only plain (SELECT-style) references can resolve to a CTE: a CTE is not a
+  # valid target for DML (INSERT/UPDATE/DELETE/COPY) or DDL, so those always
+  # name a real relation even when a CTE in the same statement shares the name.
+  #
+  # pkg:gem/pg_query#lib/pg_query/parse.rb:398
+  def cte_reference?(rangevar, type); end
+
+  # pkg:gem/pg_query#lib/pg_query/parse.rb:460
+  def cte_self_reference?(node, cte_name); end
+
   # Parses the query and finds table and function references
   #
   # Note we use ".to_ary" on arrays from the Protobuf library before
@@ -2679,7 +2691,36 @@ class PgQuery::ParserResult
   # pkg:gem/pg_query#lib/pg_query/parse.rb:100
   def load_objects!; end
 
-  # pkg:gem/pg_query#lib/pg_query/parse.rb:377
+  # A non-recursive CTE is not visible inside its own definition, so a
+  # reference to its own name there resolves to a real relation:
+  #
+  #   WITH users AS (SELECT * FROM users) SELECT * FROM users
+  #                              ^^^^^ the table          ^^^^^ the CTE
+  #
+  # Records the locations of those self-references so they are not mistaken
+  # for CTE references. Locations uniquely identify a RangeVar occurrence,
+  # which keeps the outer (genuine) CTE reference above excluded.
+  #
+  # pkg:gem/pg_query#lib/pg_query/parse.rb:415
+  def record_cte_self_references!(with_clause); end
+
+  # pkg:gem/pg_query#lib/pg_query/parse.rb:425
+  def record_self_references_for_cte!(cte); end
+
+  # Depth-first scan of a CTE definition for unqualified RangeVars matching
+  # the CTE's own name.
+  #
+  # This deliberately avoids #walk!, which yields every node and iterates all
+  # of PgQuery::Node's oneof fields. Following the oneof directly via #inner
+  # keeps this proportional to the nodes actually present.
+  #
+  # pkg:gem/pg_query#lib/pg_query/parse.rb:438
+  def record_self_references_in(node, cte_name); end
+
+  # pkg:gem/pg_query#lib/pg_query/parse.rb:451
+  def record_self_references_in_message(message, cte_name); end
+
+  # pkg:gem/pg_query#lib/pg_query/parse.rb:380
   def statements_and_cte_names_for_with_clause(with_clause); end
 
   private
@@ -2690,13 +2731,13 @@ class PgQuery::ParserResult
   # pkg:gem/pg_query#lib/pg_query/truncate.rb:59
   def find_possible_truncations; end
 
-  # pkg:gem/pg_query#lib/pg_query/fingerprint.rb:132
+  # pkg:gem/pg_query#lib/pg_query/fingerprint.rb:138
   def fingerprint_list(values, hash, parent_node_name, parent_field_name); end
 
   # pkg:gem/pg_query#lib/pg_query/fingerprint.rb:71
   def fingerprint_node(node, hash, parent_node_name = T.unsafe(nil), parent_field_name = T.unsafe(nil)); end
 
-  # pkg:gem/pg_query#lib/pg_query/fingerprint.rb:153
+  # pkg:gem/pg_query#lib/pg_query/fingerprint.rb:159
   def fingerprint_tree(hash); end
 
   # pkg:gem/pg_query#lib/pg_query/fingerprint.rb:38
