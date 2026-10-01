@@ -7,3 +7,10 @@
 --ignore=spec/
 --parser=prism
 --enable-experimental-requires-ancestor
+# rdoc 8.1.0 gives these three classes the parent RDoc::Markup::Element.
+# Sorbet's own built-in rdoc RBI still gives them Object, and Sorbet
+# refuses a class whose parent differs between two definitions (#130).
+# Remove these lines once Sorbet's built-in RBI has the new parent.
+--suppress-payload-superclass-redefinition-for=RDoc::Markup::List
+--suppress-payload-superclass-redefinition-for=RDoc::Markup::ListItem
+--suppress-payload-superclass-redefinition-for=RDoc::Markup::Raw
