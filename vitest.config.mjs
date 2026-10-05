@@ -27,6 +27,11 @@ export default defineConfig({
       // the Ruby side to. A branch the app cannot reach is not a reason
       // to lower these: change the code so the branch is gone. bin/check
       // and CI run test:coverage, so a drop below 100 fails the check.
+      // A test that renders a component another file loads with
+      // React.lazy must mock that file (tests/unit/components/
+      // date_box.test.jsx shows how): the lazily loaded copy reports a
+      // wrapper offset of 0, and the v8 merge can apply that offset to
+      // the file's real coverage, which loses branches at random (#128).
       thresholds: {
         statements: 100,
         branches: 100,

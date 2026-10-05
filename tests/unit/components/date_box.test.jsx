@@ -10,6 +10,17 @@ vi.hoisted(() => {
   document.body.appendChild(root);
 });
 
+// DateBox loads the history modal's content with React.lazy. Here a
+// stand-in shows which meal it asked for; the real component has its own
+// tests (history_show.test.jsx). Loading the real one here also broke the
+// coverage gate at random (#128): a module loaded through a dynamic
+// import reports a wrapper offset of 0, and vitest's v8 merge keeps the
+// offset of whichever coverage file it reads last, so history/show.jsx's
+// branches were mapped 209 characters off on about half the runs.
+vi.mock("../../../app/frontend/src/components/history/show.jsx", () => ({
+  default: ({ id }) => <p>History of meal {id}</p>,
+}));
+
 import dayjs from "dayjs";
 import advancedFormat from "dayjs/plugin/advancedFormat";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
@@ -112,9 +123,10 @@ describe("DateBox", () => {
     );
   });
 
-  it("opens the history modal on the history path", () => {
+  it("opens the history modal for the meal on the history path", async () => {
     renderBox(makeStore(), "/meals/42/edit/history/");
     expect(screen.getByLabelText("History Modal")).toBeInTheDocument();
+    expect(await screen.findByText("History of meal 42")).toBeInTheDocument();
   });
 
   it("the previous arrow navigates back, and a null next id never navigates", () => {
