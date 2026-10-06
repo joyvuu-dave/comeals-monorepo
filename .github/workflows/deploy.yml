@@ -328,7 +328,7 @@ jobs:
           # (deploy:verify_config); this asks the app whether every
           # process kind then really came up. The old release does not
           # need the supervisor, so rolling back restores live updates.
-          if ! heroku run bin/rake deploy:verify_solid_queue -a "$PROD_APP"; then
+          if ! heroku run --exit-code bin/rake deploy:verify_solid_queue -a "$PROD_APP"; then
             echo "Solid Queue is not running on production. Rolling back."
             heroku rollback -a "$PROD_APP"
             exit 1

@@ -394,14 +394,14 @@ deploy_maintenance() {
 
 post_deploy_tasks() {
   info "Clearing the cache..."
-  if heroku run bin/rails runner 'Rails.cache.clear' -a "$APP"; then
+  if heroku run --exit-code bin/rails runner 'Rails.cache.clear' -a "$APP"; then
     ok "Cache flushed"
   else
     warn "Cache flush failed — stale entries may persist until naturally invalidated"
   fi
 
   info "Running billing:recalculate..."
-  if heroku run bin/rake billing:recalculate -a "$APP"; then
+  if heroku run --exit-code bin/rake billing:recalculate -a "$APP"; then
     ok "Billing recalculated"
   else
     warn "billing:recalculate failed — balances may be stale until next daily run"
@@ -532,7 +532,7 @@ check_solid_queue() {
 
   local attempt
   for attempt in 1 2; do
-    if heroku run bin/rake deploy:verify_solid_queue -a "$APP"; then
+    if heroku run --exit-code bin/rake deploy:verify_solid_queue -a "$APP"; then
       ok "Solid Queue is running (supervisor, dispatcher, worker, scheduler)"
       return 0
     fi
