@@ -34,8 +34,9 @@ RSpec.describe '.mutant.yml subjects' do # -- a config file
   # opens the Api and V1 modules first, so its name is joined from those.
   def class_in(source)
     names = source.scan(/^\s*(?:class|module) ([A-Z][A-Za-z0-9:]*)/).flatten
-    namespace = names.take_while { |name| %w[Api V1].include?(name) }
-    (namespace + [names.find { |name| %w[Api V1].exclude?(name) }]).compact.join('::')
+    wrappers = %w[Api V1]
+    namespace = names.take_while { |name| wrappers.include?(name) }
+    (namespace + [names.find { |name| wrappers.exclude?(name) }]).compact.join('::')
   end
 
   it 'lists every class in app/ and lib/ that has a method' do
