@@ -58,5 +58,5 @@ plugin :tmp_restart
 # missed its last tick while the dyno was down is enqueued (RecurringCatchUp).
 if ENV['SOLID_QUEUE_IN_PUMA'].present?
   plugin :solid_queue
-  on_booted { RecurringCatchUp.call }
+  after_booted { RecurringCatchUp.call }
 end
