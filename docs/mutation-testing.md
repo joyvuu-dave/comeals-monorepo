@@ -1693,32 +1693,24 @@ lines and branches.
 ### 2026-09-29, secret columns and the admin sort order
 
 Run on the three classes the security branch changed, by name
-(`Resident AdminOrderClause ApplicationRecord`): six workers, 120-second
-timeout, 20 subjects, 562 mutations, 553 killed, 9 alive, 11 minutes.
+(`Resident AdminOrderClause ApplicationRecord`). The first run was on a
+`bin/mutant` that still counted a timeout as a kill; this is the rerun
+of 2026-10-06, after the branch was rebased onto the test review fixes
+and the fixed `bin/mutant` (a timeout counts as alive, 300-second
+limit): six workers, 19 subjects, 552 mutations, 549 killed, 3 alive,
+no timeout, 8 minutes.
 
 Nothing survived in the code the branch added or changed:
-`AdminOrderClause` (61 mutations), `Resident#serializable_hash` (13) and
-`ApplicationRecord.ransackable_associations` (6).
+`AdminOrderClause`, `Resident#serializable_hash` and
+`ApplicationRecord.ransackable_associations`.
 
-The nine alive are all in Resident methods the branch did not touch:
+The three alive are in Resident methods the branch did not touch, and
+each is `self.x` written as `x()`, the same call: `self.birthday` in
+`age_on` and `birthday_not_in_the_future`, and `self.name` in
+`name_unique_with_helpful_message`. Noise.
 
-- `self.birthday` for `birthday()` in `age_on` and
-  `birthday_not_in_the_future`, and `self.name` for `name()` in
-  `name_unique_with_helpful_message`: the same call written another
-  way. Noise.
-- `name_unique_with_helpful_message`, 6: every way of removing
-  `return if name.blank?`. The 2026-09-26 entry counted these as noise,
-  but they are a missing assertion. The example "reports a blank name
-  once, without looking for a clash" builds a resident named `''`, and
-  an empty name finds no clash with the guard or without it. With a
-  `nil` name the next line calls `nil.downcase` and raises. An example
-  with `name: nil` would kill all six. Left for the owner of
-  `spec/models/resident_spec.rb`.
-
-The one timeout was not a mutation. It was the neutral run of
-`Resident#age`, the method with nothing changed: its 122 selected
-examples all passed, but together took longer than 120 seconds on a
-busy worker. The Resident selection is now close to that limit, so a
-Resident mutation that no early example kills can time out before its
-last example runs. Give a Resident run a longer limit (`-t 200` before
-the expressions, as on 2026-09-26).
+The first run also had six survivors in
+`name_unique_with_helpful_message`: every way of removing
+`return if name.blank?`, because its example used only an empty name.
+The test review fixes added `nil` to that example, and the rerun kills
+all six.
