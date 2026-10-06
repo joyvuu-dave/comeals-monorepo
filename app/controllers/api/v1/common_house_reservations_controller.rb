@@ -20,7 +20,7 @@ module Api
       #   start_hours, start_minutes, end_hours, end_minutes, title }
       def create
         times = parse_start_end_params
-        return render_invalid_date unless times
+        return render_start_end_refused(times) if times.is_a?(String)
 
         chr = CommonHouseReservation.new(resident_id: params[:resident_id], start_date: times[:start_date],
                                          end_date: times[:end_date], title: params[:title])
@@ -36,7 +36,7 @@ module Api
       # PATCH /api/v1/common-house-reservations/:id/update
       def update
         times = parse_start_end_params
-        return render_invalid_date unless times
+        return render_start_end_refused(times) if times.is_a?(String)
 
         render_retrying_on_conflict do
           if @chr.update(start_date: times[:start_date], end_date: times[:end_date], resident_id: params[:resident_id],

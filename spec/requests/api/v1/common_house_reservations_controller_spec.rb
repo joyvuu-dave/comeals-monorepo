@@ -85,21 +85,61 @@ RSpec.describe 'Common House Reservations API' do
       expect(response.parsed_body['message']).to eq('Error: Invalid date')
     end
 
-    # Before #102 a blank hour was read as 0, so a reservation with no
-    # times was saved from midnight to midnight. A blank start with a real
-    # end was saved from midnight too.
-    it 'refuses a reservation with no times, the way the form sends it when both time menus are empty' do
-      [{ start_hours: '', start_minutes: '', end_hours: '', end_minutes: '' },
-       { start_hours: '', start_minutes: '', end_hours: 17, end_minutes: 0 }].each do |times|
+    # People post notices this way ("Movie night is cancelled tonight").
+    # The form sends '' for each part of an empty time menu; a direct API
+    # call may leave the parts out. Midnight exists on both daylight saving
+    # days in the community's zone, so those days get midnight too.
+    it 'saves a reservation with both time menus empty from midnight to midnight' do
+      days = [[2026, 5, 1], [2026, 3, 8], [2026, 11, 1]]
+      days.each do |year, month, day|
         post '/api/v1/common-house-reservations', params: {
-          token: token,
-          resident_id: resident.id, title: 'No times',
+          token: token, resident_id: resident.id, title: 'Movie night is cancelled tonight',
+          start_year: year, start_month: month, start_day: day,
+          start_hours: '', start_minutes: '', end_hours: '', end_minutes: ''
+        }
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body).to eq('message' => 'Common House Reservation has been created')
+      end
+      post '/api/v1/common-house-reservations', params: {
+        token: token, resident_id: resident.id, start_year: 2026, start_month: 5, start_day: 2
+      }
+      expect(response).to have_http_status(:ok)
+
+      expect(CommonHouseReservation.order(:id).pluck(:start_date, :end_date)).to eq(
+        (days + [[2026, 5, 2]]).map { |day| [Time.zone.local(*day), Time.zone.local(*day)] }
+      )
+    end
+
+    # It ends when it starts, so the overlap check finds nothing to clash
+    # with: a booking that evening, and a second notice, are both taken.
+    it 'lets a reservation with no times share its day with an evening booking and another one with no times' do
+      no_times = { start_hours: '', start_minutes: '', end_hours: '', end_minutes: '' }
+      [no_times, { start_hours: 19, start_minutes: 0, end_hours: 21, end_minutes: 0 }, no_times].each do |times|
+        post '/api/v1/common-house-reservations', params: {
+          token: token, resident_id: resident.id, start_year: 2026, start_month: 5, start_day: 1
+        }.merge(times)
+
+        expect(response).to have_http_status(:ok)
+      end
+      expect(CommonHouseReservation.count).to eq(3)
+    end
+
+    # Before, a blank time was read as midnight, so a blank start with a
+    # real end booked the common house from midnight.
+    it 'refuses a reservation with one time menu empty, and says to pick both' do
+      [{ start_hours: '', start_minutes: '', end_hours: 17, end_minutes: 0 },
+       { start_hours: 14, start_minutes: 0, end_hours: '', end_minutes: '' },
+       { end_hours: 17, end_minutes: 0 },
+       { start_hours: 14, start_minutes: 0 }].each do |times|
+        post '/api/v1/common-house-reservations', params: {
+          token: token, resident_id: resident.id, title: 'One time',
           start_year: 2026, start_month: 5, start_day: 1
         }.merge(times)
 
         expect(CommonHouseReservation.pluck(:start_date, :end_date)).to eq([])
         expect(response).to have_http_status(:bad_request)
-        expect(response.parsed_body['message']).to eq('Error: Invalid date')
+        expect(response.parsed_body).to eq('message' => 'Pick both a start and an end time.')
       end
     end
 
@@ -230,20 +270,34 @@ RSpec.describe 'Common House Reservations API' do
     end
 
     # The same parser as create (#102).
-    it 'refuses February 30 and blank times, and leaves the reservation as it was' do
+    it 'refuses February 30 and one empty time menu, and leaves the reservation as it was' do
       chr = create(:common_house_reservation, community: community, resident: resident)
       before = chr.reload.attributes
 
-      [{ start_day: 30, start_hours: 10, start_minutes: 0, end_hours: 12, end_minutes: 0 },
-       { start_day: 1, start_hours: '', start_minutes: '', end_hours: '', end_minutes: '' }].each do |changed|
+      [[{ start_day: 30, start_hours: 10, start_minutes: 0, end_hours: 12, end_minutes: 0 }, 'Error: Invalid date'],
+       [{ start_day: 1, start_hours: 10, start_minutes: 0, end_hours: '', end_minutes: '' },
+        'Pick both a start and an end time.']].each do |changed, message|
         patch "/api/v1/common-house-reservations/#{chr.id}/update", params: {
           token: token, resident_id: resident.id, title: 'Moved', start_year: 2026, start_month: 2
         }.merge(changed)
 
         expect(response).to have_http_status(:bad_request)
-        expect(response.parsed_body).to eq('message' => 'Error: Invalid date')
+        expect(response.parsed_body).to eq('message' => message)
         expect(chr.reload.attributes).to eq(before)
       end
+    end
+
+    it 'moves a reservation to midnight to midnight when both time menus are emptied' do
+      chr = create(:common_house_reservation, community: community, resident: resident)
+
+      patch "/api/v1/common-house-reservations/#{chr.id}/update", params: {
+        token: token, resident_id: resident.id, title: 'Cancelled', start_year: 2026, start_month: 3, start_day: 8,
+        start_hours: '', start_minutes: '', end_hours: '', end_minutes: ''
+      }
+
+      expect(response.parsed_body).to eq('message' => 'Common House Reservation has been updated')
+      expect(chr.reload).to have_attributes(start_date: Time.zone.local(2026, 3, 8),
+                                            end_date: Time.zone.local(2026, 3, 8), title: 'Cancelled')
     end
 
     it 'refuses a year the database cannot store, at either end, and leaves the reservation as it was' do

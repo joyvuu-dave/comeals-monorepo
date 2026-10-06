@@ -370,10 +370,14 @@ On update, a field left out of the body keeps its stored value.
 
 An event is one day. With `"all_day": true` the hour fields are ignored.
 Without `all_day` on create, it is false; on update, the stored value
-stays. End must be after start. Each part is a whole number, as a
-number or a string of digits. A date that does not exist (February 30),
-or on a timed event an hour or minute that is missing, blank or out of
-range, returns `400 "Error: Invalid date"`. Days before 1582 are
+stays. End must not be before start. When both times are empty (all
+four hour and minute fields left out or `""`), a timed event runs from
+midnight to midnight. When only one of the two times is empty, it
+returns `400 "Pick both a start and an end time."`. Each part is a
+whole number, as a number or a string of digits. A date that does not
+exist (February 30), or on a timed event an hour or minute that is out
+of range or not a whole number, or blank while the other half of its
+time is given, returns `400 "Error: Invalid date"`. Days before 1582 are
 counted in the Gregorian calendar too, so February 29, 1500 does not
 exist. A start or end the database cannot store also returns that 400:
 before midnight UTC on November 24, 4714 BC (`start_year` -4713, since
@@ -417,10 +421,13 @@ Body:
   "end_hours": 21, "end_minutes": 0 }
 ```
 
-The date and time parts follow the rules for events: a date that does
-not exist, an hour or minute that is missing, blank or out of range, or
-a time the database cannot store, returns `400 "Error: Invalid date"`. A block that overlaps another
-returns `400 "Time period is already taken"`.
+The date and time parts follow the rules for timed events: both times
+empty means midnight to midnight, one time empty returns
+`400 "Pick both a start and an end time."`, and a date that does not
+exist, a bad hour or minute, or a time the database cannot store,
+returns `400 "Error: Invalid date"`. A block from midnight to midnight
+ends when it starts, so it overlaps nothing. A block that overlaps
+another returns `400 "Time period is already taken"`.
 
 ## Calendar feeds (iCal)
 

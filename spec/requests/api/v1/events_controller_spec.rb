@@ -102,20 +102,28 @@ RSpec.describe 'Events API' do
       expect(response.parsed_body['message']).to eq('Error: Invalid date')
     end
 
-    # Before #102 a blank hour was read as 0, so a timed event with no
-    # times was saved from midnight to midnight.
-    it 'refuses a timed event with no times, the way the form sends it when both time menus are empty' do
-      post '/api/v1/events', params: {
-        token: token,
-        title: 'No times', all_day: false,
-        start_year: 2026, start_month: 4, start_day: 15,
-        start_hours: '', start_minutes: '',
-        end_hours: '', end_minutes: ''
-      }
+    # The form sends '' for each part of an empty time menu; a direct API
+    # call may leave the parts out. Midnight exists on both daylight saving
+    # days in the community's zone, so those days get midnight too.
+    it 'saves a timed event with both time menus empty from midnight to midnight' do
+      days = [[2026, 4, 15], [2026, 3, 8], [2026, 11, 1]]
+      days.each do |year, month, day|
+        post '/api/v1/events', params: {
+          token: token, title: 'No times', all_day: false,
+          start_year: year, start_month: month, start_day: day,
+          start_hours: '', start_minutes: '', end_hours: '', end_minutes: ''
+        }
 
-      expect(Event.pluck(:start_date, :end_date)).to eq([])
-      expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body['message']).to eq('Error: Invalid date')
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body).to eq('message' => 'Event has been created')
+      end
+      post '/api/v1/events',
+           params: { token: token, title: 'No times', start_year: 2026, start_month: 4, start_day: 16 }
+      expect(response).to have_http_status(:ok)
+
+      expect(Event.order(:id).pluck(:start_date, :end_date, :allday)).to eq(
+        (days + [[2026, 4, 16]]).map { |day| [Time.zone.local(*day), Time.zone.local(*day), false] }
+      )
     end
 
     describe 'the date and time parts (#102)' do
@@ -138,10 +146,20 @@ RSpec.describe 'Events API' do
         expect(Event.count).to eq(0)
       end
 
-      it 'refuses a blank start time with a real end time' do
-        post_event(start_hours: '', start_minutes: '')
+      # Before, a blank time was read as midnight, so a blank start with a
+      # real end was saved from midnight.
+      it 'refuses one time menu empty, blank or left out, and says to pick both' do
+        [%i[start_hours start_minutes], %i[end_hours end_minutes]].each do |hours, minutes|
+          post_event(hours => '', minutes => '')
+          expect(response.parsed_body).to eq('message' => 'Pick both a start and an end time.')
 
-        expect_refused
+          post '/api/v1/events',
+               params: { token: token, title: 'Parts', all_day: false }.merge(parts).except(hours, minutes)
+          expect(response.parsed_body).to eq('message' => 'Pick both a start and an end time.')
+        end
+
+        expect(response).to have_http_status(:bad_request)
+        expect(Event.count).to eq(0)
       end
 
       # A part sent with no value (nil) still has its key in the body; a
@@ -468,18 +486,30 @@ RSpec.describe 'Events API' do
     end
 
     # The same parser as create (#102).
-    it 'refuses February 30 and blank times, and leaves the event as it was' do
+    it 'refuses February 30 and one empty time menu, and leaves the event as it was' do
       before = event.reload.attributes
-      [{ start_day: 30, start_hours: 18, start_minutes: 0, end_hours: 20, end_minutes: 0 },
-       { start_day: 1, start_hours: '', start_minutes: '', end_hours: '', end_minutes: '' }].each do |changed|
+      [[{ start_day: 30, start_hours: 18, start_minutes: 0, end_hours: 20, end_minutes: 0 }, 'Error: Invalid date'],
+       [{ start_day: 1, start_hours: '', start_minutes: '', end_hours: 20, end_minutes: 0 },
+        'Pick both a start and an end time.']].each do |changed, message|
         patch "/api/v1/events/#{event.id}/update", params: {
           token: token, title: 'Moved', all_day: false, start_year: 2026, start_month: 2
         }.merge(changed)
 
         expect(response).to have_http_status(:bad_request)
-        expect(response.parsed_body).to eq('message' => 'Error: Invalid date')
+        expect(response.parsed_body).to eq('message' => message)
         expect(event.reload.attributes).to eq(before)
       end
+    end
+
+    it 'moves a timed event to midnight to midnight when both time menus are emptied' do
+      patch "/api/v1/events/#{event.id}/update", params: {
+        token: token, title: 'Moved', all_day: false, start_year: 2026, start_month: 11, start_day: 1,
+        start_hours: '', start_minutes: '', end_hours: '', end_minutes: ''
+      }
+
+      expect(response.parsed_body).to eq('message' => 'Event has been updated')
+      expect(event.reload).to have_attributes(start_date: Time.zone.local(2026, 11, 1),
+                                              end_date: Time.zone.local(2026, 11, 1), allday: false)
     end
 
     it 'refuses a year the database cannot store, at either end, and leaves the event as it was' do

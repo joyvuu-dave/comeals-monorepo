@@ -1714,3 +1714,26 @@ The first run also had six survivors in
 `return if name.blank?`, because its example used only an empty name.
 The test review fixes added `nil` to that example, and the rerun kills
 all six.
+
+### 2026-10-06, empty time menus
+
+Run on the methods the empty-times change added or touched, by name:
+`ApiController#parse_start_end_params`, `#start_end_times`,
+`#timed_start_end`, `#empty_time?` and `#render_start_end_refused`,
+and `create` and `update` in `EventsController` and
+`CommonHouseReservationsController`. Four workers, 9 subjects, 1,006
+mutations, 971 killed, 35 alive, no timeout, 31 minutes.
+`timed_start_end`, `empty_time?` and `render_start_end_refused` had no
+survivor.
+
+All 35 are kinds answered before:
+
+- `instance_of?` for `is_a?` on the parser's answer, 5: in
+  `parse_start_end_params` and its four callers. The parser answers a
+  Hash or one of its two message constants, never a subclass of String.
+- In `start_end_times`, the 10 of 2026-09-28: the month and day ranges
+  that `Date.valid_date?` makes the same, and the dropped
+  `end_date: nil` key of an all-day event.
+- `.fetch` for `[]`, 16: on the parsed times, whose two keys are always
+  there, and on `title`, `description`, `all_day` and `resident_id`.
+- `EventsController#create`'s `all_day` default, 4, as on 2026-09-13.

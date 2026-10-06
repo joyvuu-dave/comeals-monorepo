@@ -20,7 +20,7 @@ module Api
       def create
         allday = params.key?(:all_day) ? params[:all_day].to_s == 'true' : false
         times = parse_start_end_params(allday: allday)
-        return render_invalid_date unless times
+        return render_start_end_refused(times) if times.is_a?(String)
 
         event = Event.new(start_date: times[:start_date], end_date: times[:end_date], title: params[:title],
                           description: params[:description] || '', allday: allday)
@@ -42,7 +42,7 @@ module Api
       def update
         allday = params.key?(:all_day) ? params[:all_day].to_s == 'true' : @event.allday
         times = parse_start_end_params(allday: allday)
-        return render_invalid_date unless times
+        return render_start_end_refused(times) if times.is_a?(String)
 
         description = params.key?(:description) ? params[:description] : @event.description
         title = params.key?(:title) ? params[:title] : @event.title

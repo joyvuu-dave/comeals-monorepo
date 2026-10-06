@@ -88,26 +88,36 @@ class ApiController < ActionController::API
 
   private
 
+  INVALID_DATE = 'Error: Invalid date'
+  PICK_BOTH_TIMES = 'Pick both a start and an end time.'
+  private_constant :INVALID_DATE, :PICK_BOTH_TIMES
+
   # The start/end wire shape the calendar modals send (the frontend's
   # buildStartEndPayload): one day split into parts, plus start and end
-  # times. An all-day event starts at midnight and has no end, and its
-  # time parts are not read. Returns { start_date:, end_date: }, or nil
-  # when the parts do not name a real day and, unless all day, a real
-  # hour and minute — the caller renders the 400.
+  # times. Returns { start_date:, end_date: }, or the message of the 400
+  # as a String.
   #
-  # Each part must be a whole number in its range. Time.zone.local is no
-  # check: it rolls February 30 over to March 2 and hour 24 over to the
-  # next day, and `''.to_i` is 0, so empty time menus were saved as
-  # midnight to midnight (#102).
+  # - An all-day event starts at midnight and has no end, and its time
+  #   parts are not read.
+  # - With both time menus empty, the entry runs from midnight to
+  #   midnight. People post notices this way ("Movie night is cancelled
+  #   tonight"), and such an entry blocks no booking, because it ends
+  #   when it starts.
+  # - With one time menu empty, the answer is PICK_BOTH_TIMES. A blank
+  #   time used to be read as midnight, so this booked from midnight.
+  # - Otherwise each part must be a whole number in its range.
+  #   Time.zone.local is no check: it rolls February 30 over to March 2
+  #   and hour 24 over to the next day (#102).
   #
   # Then each time must be one the database can store (StorableTime).
   # The year has no range of its own, and a year like 300000 reached the
   # database, which raised PG::DatetimeFieldOverflow: a 500.
   def parse_start_end_params(allday: false)
     times = start_end_times(allday)
-    return nil if times.nil?
+    return times if times.is_a?(String)
+    return INVALID_DATE unless times.values.compact.all? { |time| StorableTime.timestamp?(time) }
 
-    times if times.values.compact.all? { |time| StorableTime.timestamp?(time) }
+    times
   end
 
   def start_end_times(allday)
@@ -118,16 +128,34 @@ class ApiController < ActionController::API
     # calendar even before 1582, as Time.zone.local and PostgreSQL count:
     # Ruby's Date counts those years in the Julian calendar by default,
     # which has February 29, 1500 and has no October 10, 1582.
-    return nil unless Date.valid_date?(year, month, day, Date::GREGORIAN)
-    return { start_date: Time.zone.local(year, month, day), end_date: nil } if allday
+    return INVALID_DATE unless Date.valid_date?(year, month, day, Date::GREGORIAN)
 
+    midnight = Time.zone.local(year, month, day)
+    return { start_date: midnight, end_date: nil } if allday
+
+    start_empty = empty_time?(:start_hours, :start_minutes)
+    end_empty = empty_time?(:end_hours, :end_minutes)
+    return { start_date: midnight, end_date: midnight } if start_empty && end_empty
+    return PICK_BOTH_TIMES if start_empty || end_empty
+
+    timed_start_end(year, month, day)
+  end
+
+  def timed_start_end(year, month, day)
     times = %i[start_hours start_minutes end_hours end_minutes].zip([0..23, 0..59, 0..23, 0..59])
                                                                .map { |key, range| whole_number_param(key, range) }
-    return nil if times.include?(nil)
+    return INVALID_DATE if times.include?(nil)
 
     start_hours, start_minutes, end_hours, end_minutes = times
     { start_date: Time.zone.local(year, month, day, start_hours, start_minutes),
       end_date: Time.zone.local(year, month, day, end_hours, end_minutes) }
+  end
+
+  # An empty time menu: the form sends '' for its hour and its minute,
+  # and a direct API call may leave both out. One of the two blank is
+  # not an empty menu; whole_number_param refuses that part.
+  def empty_time?(hours_key, minutes_key)
+    params[hours_key].to_s.empty? && params[minutes_key].to_s.empty?
   end
 
   # A part of a date or time: a whole number, from a JSON number or a
@@ -139,8 +167,9 @@ class ApiController < ActionController::API
     nil
   end
 
-  def render_invalid_date
-    render json: { message: 'Error: Invalid date' }, status: :bad_request
+  # The 400 for start/end parts parse_start_end_params refused.
+  def render_start_end_refused(message)
+    render json: { message: message }, status: :bad_request
   end
 
   # Nothing here may touch the database: there is no connection to be had,
