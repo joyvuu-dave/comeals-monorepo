@@ -337,12 +337,38 @@ disable_maintenance() {
   MAINTENANCE_ENABLED=false
 }
 
+# git push exits 0 even when the release phase fails (bin/staging-rehearsal
+# saw this on 2026-08-17). Ask Heroku what the newest release did, and stop
+# before the web dyno comes back up. Wait while the release is still pending.
+check_release_status() {
+  local status="" tries=0
+  while [ "$tries" -lt 36 ]; do
+    status=$(heroku releases -a "$APP" --json | python3 -c \
+      "import json,sys; print(json.load(sys.stdin)[0]['status'])")
+    if [ "$status" != "pending" ]; then
+      break
+    fi
+    tries=$((tries + 1))
+    sleep 5
+  done
+  if [ "$status" != "succeeded" ]; then
+    fail "The release phase did not succeed (status: $status). Its output:"
+    heroku releases:output -a "$APP" | tail -30
+    if [ "$MAINTENANCE_ENABLED" = true ]; then
+      info "Maintenance stays on and web stays at 0. Do not scale web up until you know which migrations ran: the old code may not work on the new schema."
+    fi
+    exit 1
+  fi
+  ok "Release phase succeeded"
+}
+
 deploy_push() {
   step "Deploying ($APP)"
 
   info "Pushing main to Heroku..."
   git push heroku main --force
-  ok "Code pushed — release phase complete"
+  ok "Code pushed"
+  check_release_status
 
   post_deploy_tasks
 }
@@ -356,7 +382,8 @@ deploy_maintenance() {
 
   info "Pushing main to Heroku (release phase runs migrations)..."
   git push heroku main --force
-  ok "Code pushed and migrations complete"
+  ok "Code pushed"
+  check_release_status
 
   post_deploy_tasks
 
