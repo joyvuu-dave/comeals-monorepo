@@ -56,7 +56,14 @@ plugin :tmp_restart
 # single-server deployment, and it is what lets the schedule in
 # config/recurring.yml run without a worker dyno. After boot, any job that
 # missed its last tick while the dyno was down is enqueued (RecurringCatchUp).
-if ENV['SOLID_QUEUE_IN_PUMA'].present?
+#
+# Plain Ruby only in this file: Heroku runs `bundle exec puma -C
+# config/puma.rb`, which reads it before Rails is loaded, so a Rails
+# method such as `present?` crashes every boot there (while `rails
+# server` on the laptop works). "Set" means the same as in the release
+# phase's check (DeployConfigCheck.present?). spec/config/puma_config_spec.rb
+# loads this file the way Heroku does.
+unless ENV['SOLID_QUEUE_IN_PUMA'].to_s.strip.empty?
   plugin :solid_queue
   after_booted { RecurringCatchUp.call }
 end
