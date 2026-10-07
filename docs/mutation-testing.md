@@ -1737,3 +1737,13 @@ All 35 are kinds answered before:
 - `.fetch` for `[]`, 16: on the parsed times, whose two keys are always
   there, and on `title`, `description`, `all_day` and `resident_id`.
 - `EventsController#create`'s `all_day` default, 4, as on 2026-09-13.
+
+### 2026-10-07, a retired cook's bill (#91)
+
+Run on the one Ruby method the #91 fix changed,
+`MealFormSerializer#residents`. Four workers, 58 mutations, 56 killed,
+2 alive, no timeout, 25 seconds.
+
+Both alive are the `.includes(:unit)`: removed, or `includes(nil)`.
+goldiloader loads the units in one query without it, as on 2026-09-26
+and in the calendar's query shapes. Noise.

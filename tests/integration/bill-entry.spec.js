@@ -287,4 +287,103 @@ test.describe("Bill entry (real backend)", () => {
       .selectOption("");
     await cleared;
   });
+
+  // Writes a meal's list of cooks straight to the API, as Jane.
+  async function writeBills(request, mealId, bills) {
+    const response = await request.patch(`/api/v1/meals/${mealId}/bills`, {
+      headers: { Authorization: `Bearer ${auth.token}` },
+      data: { bills },
+    });
+    expect(response.status(), await response.text()).toBe(200);
+  }
+
+  // One cook's row in the cooks box: the row whose menu has this
+  // resident picked.
+  function cookRow(page, residentId) {
+    return page.locator(".confirm-bar-anchor").filter({
+      has: page.locator(
+        `[aria-label="Select meal cook"] option[value="${residentId}"]:checked`,
+      ),
+    });
+  }
+
+  // #91. Diana cooked tomorrow's meal, did not eat, and is retired. The
+  // server lists her in the meal form because she has a bill
+  // (MealFormSerializer#residents). When it did not, the page could not
+  // show her bill, and the next save of another cook's cost left her
+  // out of the list of cooks. The server deletes the bill of a cook
+  // left out of that list (BillsPayload#write_to), so her $40 was lost.
+  test("a retired cook who did not eat keeps her bill when another cook's cost is saved", async ({
+    page,
+    request,
+  }) => {
+    const mealId = auth.meals.tomorrow.id;
+    const jane = auth.resident_id;
+    const diana = auth.diana_id;
+
+    // Give Diana a $40 bill. Jane's row in this list has no amount, so
+    // the server keeps her $50.00 from the seed.
+    await writeBills(request, mealId, [
+      { resident_id: jane },
+      { resident_id: diana, amount: "40.00", no_cost: false },
+    ]);
+
+    try {
+      await gotoMeal(page, mealId);
+      const janeCost = cookRow(page, jane).locator(
+        '[aria-label="Set meal cost"]',
+      );
+      const dianaCost = cookRow(page, diana).locator(
+        '[aria-label="Set meal cost"]',
+      );
+
+      // Her bill shows in her own row, with her name and her cost.
+      await expect(
+        cookRow(page, diana).locator(
+          '[aria-label="Select meal cook"] option:checked',
+        ),
+      ).toHaveText("C - Diana Prince", { timeout: 10000 });
+      await expect(dianaCost).toHaveValue("40.00");
+      await expect(janeCost).toHaveValue("50.00");
+
+      // Only her own row's menu offers her.
+      await expect(
+        page.locator(
+          `[aria-label="Select meal cook"] option[value="${diana}"]`,
+        ),
+      ).toHaveCount(1);
+
+      // She is not on the sign-up list. Jane's name shows first, so the
+      // list is drawn and the check below is not passing on an empty
+      // page.
+      await expect(
+        page.getByRole("cell", { name: "A - Jane Smith", exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("cell", { name: "C - Diana Prince", exact: true }),
+      ).toHaveCount(0);
+
+      // Change Jane's cost and wait for the save.
+      const saved = billSaved(page, mealId, "55.00");
+      await janeCost.fill("55.00");
+      expect((await saved).status()).toBe(200);
+
+      // After a reload, the page shows only what the server kept.
+      await reloadMeal(page, mealId);
+      await expect(janeCost).toHaveValue("55.00", { timeout: 10000 });
+      await expect(dianaCost).toHaveValue("40.00");
+      await expect(
+        page.getByRole("cell", { name: "A - Jane Smith", exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("cell", { name: "C - Diana Prince", exact: true }),
+      ).toHaveCount(0);
+    } finally {
+      // Put the seed back: Jane's $50.00, and no bill for Diana. The
+      // chromium and webkit runs share one database.
+      await writeBills(request, mealId, [
+        { resident_id: jane, amount: "50.00", no_cost: false },
+      ]);
+    }
+  });
 });

@@ -471,6 +471,99 @@ test.describe("Meal Editing", () => {
     await expect(cookSelects.nth(1)).toHaveValue("2");
   });
 
+  // #91: Carol cooked this open meal, did not eat, and was retired
+  // afterwards. The server lists her in the meal form because she has a
+  // bill (MealFormSerializer). Her bill shows in her row of the cooks
+  // box, no other row offers her, she is not on the sign-up list, and a
+  // save of Jane's cost names both cooks. The server deletes the bill of
+  // a cook left out of that list (BillsPayload#write_to), so naming her
+  // is what keeps her $40.
+  test("a retired cook who did not eat keeps her bill when another cook's cost is saved", async ({
+    page,
+  }) => {
+    const carol = {
+      id: 4,
+      meal_id: 42,
+      name: "D - Carol Davis",
+      short_name: "Carol Davis",
+      attending: false,
+      attending_at: null,
+      late: false,
+      vegetarian: false,
+      can_cook: true,
+      active: false,
+    };
+    const meal = {
+      ...mealFixture,
+      bills: [
+        ...mealFixture.bills,
+        { resident_id: 4, amount: "40.0", no_cost: false },
+      ],
+      residents: [...mealFixture.residents, carol],
+    };
+    await page.route("**/api/v1/meals/*/cooks*", (route) => {
+      if (route.request().method() !== "GET") return route.fallback();
+      fulfillJson(route, meal);
+    });
+    const billsPayloads = [];
+    await page.route("**/api/v1/meals/*/bills*", (route) => {
+      if (route.request().method() !== "PATCH") return route.fallback();
+      billsPayloads.push(route.request().postDataJSON());
+      fulfillJson(route, {
+        message: "Form submitted.",
+        bills: [
+          { resident_id: 1, amount: "35.0", no_cost: false },
+          { resident_id: 4, amount: "40.0", no_cost: false },
+        ],
+      });
+    });
+
+    await page.goto("/meals/42/edit/");
+    await page.waitForLoadState("networkidle");
+
+    // Her bill shows in the second row, with her name and her cost.
+    const cookSelects = page.getByRole("combobox", {
+      name: "Select meal cook",
+    });
+    const costInputs = page.getByRole("spinbutton", { name: "Set meal cost" });
+    await expect(cookSelects.nth(1)).toHaveValue("4", { timeout: 10000 });
+    await expect(cookSelects.nth(1).locator("option:checked")).toHaveText(
+      "D - Carol Davis",
+    );
+    await expect(costInputs.nth(1)).toHaveValue("40.00");
+
+    // No other row offers her.
+    await expect(cookSelects).toHaveCount(3);
+    await expect(cookSelects.nth(0).locator('option[value="4"]')).toHaveCount(
+      0,
+    );
+    await expect(cookSelects.nth(2).locator('option[value="4"]')).toHaveCount(
+      0,
+    );
+
+    // She is not on the sign-up list; the people who are still show.
+    await expect(
+      page.getByRole("cell", { name: "A - Jane Smith", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("cell", { name: "D - Carol Davis", exact: true }),
+    ).toHaveCount(0);
+
+    // Change Jane's cost. The save names Carol too, without values, so
+    // the server keeps her stored $40.
+    const answer = page.waitForResponse(
+      (r) => r.url().includes("/api/v1/meals/42/bills") && r.status() === 200,
+    );
+    await costInputs.first().fill("35.00");
+    await answer;
+    expect(billsPayloads).toHaveLength(1);
+    expect(billsPayloads[0].bills).toEqual([
+      { resident_id: 1, amount: "35.00", no_cost: false },
+      { resident_id: 4 },
+    ]);
+    await expect(costInputs.nth(1)).toHaveValue("40.00");
+  });
+
   test("guest icons (image assets) load correctly via Vite", async ({
     page,
   }) => {

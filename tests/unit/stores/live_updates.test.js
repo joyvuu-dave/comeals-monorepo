@@ -219,7 +219,7 @@ describe("live updates in the store", () => {
 
     it("is subscribed by the meal page, and an update refetches the meal", async () => {
       const store = createStore();
-      store.loadData(mealPayload(1, "Menu v1"));
+      store.loadData(mealPayload(1, "Menu v1"), "server");
       expect(channels.has(RESIDENTS_CHANNEL)).toBe(true);
 
       meals.set("1", mealPayload(1, "Menu v2"));
@@ -232,8 +232,8 @@ describe("live updates in the store", () => {
 
     it("is one subscription, however many pages load", async () => {
       const store = createStore();
-      store.loadData(mealPayload(1, "Menu v1"));
-      store.loadData(mealPayload(1, "Menu v1"));
+      store.loadData(mealPayload(1, "Menu v1"), "server");
+      store.loadData(mealPayload(1, "Menu v1"), "server");
       store.switchMonths("2024-07-15");
       await vi.waitFor(() => {
         expect(store.calendarEvents[0].title).toBe("July");
@@ -412,7 +412,7 @@ describe("live updates in the store", () => {
       // A reconnect refetch and a Pusher refetch can overlap, and HTTP
       // gives no order: the first request's answer may come last.
       const store = createStore();
-      store.loadData(mealPayload(1, "Menu v1"));
+      store.loadData(mealPayload(1, "Menu v1"), "server");
 
       const requests = [];
       axios.get.mockImplementation(

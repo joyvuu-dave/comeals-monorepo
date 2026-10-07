@@ -15,7 +15,7 @@ interface BillRoot {
   saveBills(): void;
 }
 
-// A cook picked from the sign-up list: a Resident node, or "" for the
+// A cook picked from the row's cook menu: a Resident node, or "" for the
 // blank option.
 type ResidentChoice = "" | Instance<typeof Resident>;
 
@@ -34,6 +34,13 @@ const Bill = types
   // recreates every bill node, which resets touched to false.
   .volatile(() => ({
     touched: false,
+    // The cook this row had when the meal was loaded, or null for a
+    // blank row. The row's cook menu keeps offering this cook even after
+    // someone picks another name in the row, so a wrong tap can be undone
+    // for a cook no other row offers: one who was retired after cooking
+    // (#91). loadData sets it on every row it makes, and the next load
+    // makes new rows.
+    loadedCookId: null as number | null,
   }))
   // Two views blocks: MobX-State-Tree types `self` inside a block without
   // the views that block defines, so a view another view reads goes first.
@@ -67,6 +74,10 @@ const Bill = types
     },
   }))
   .actions((self) => ({
+    // loadData calls this once on each row it makes.
+    rememberLoadedCook() {
+      self.loadedCookId = self.resident_id === "" ? null : self.resident_id;
+    },
     setResident(val: ResidentChoice) {
       self.touched = true;
       if (val === "") {

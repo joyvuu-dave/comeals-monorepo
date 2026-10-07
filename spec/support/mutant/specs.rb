@@ -112,7 +112,14 @@ MUTANT_SPEC_ROWS = {
   'spec/requests/api/v1/meals_unknown_resident_spec.rb' => %w[Api::V1::MealsController],
   # Reopen, a description edit and a new max on a closed meal over its max.
   'spec/requests/api/v1/meal_over_its_max_spec.rb' => %w[Api::V1::MealsController],
-  'spec/requests/api/v1/meal_cooks_performance_spec.rb' => %w[MealFormSerializer Meal],
+  # #residents is named too, so its query limit runs for that method
+  # (see the next row for why a class entry alone does not reach it).
+  'spec/requests/api/v1/meal_cooks_performance_spec.rb' => %w[MealFormSerializer MealFormSerializer#residents Meal],
+  # A method entry, not the class: meal_form_serializer_spec.rb has a
+  # '#residents' group, and mutant runs only the examples of the most
+  # exact expression it finds. A class entry here would never run for
+  # #residents.
+  'spec/requests/api/v1/meal_form_retired_cook_spec.rb' => %w[MealFormSerializer#residents],
   'spec/requests/api/v1/events_controller_spec.rb' => %w[Api::V1::EventsController Event LiveUpdate],
   'spec/requests/api/v1/guest_room_reservations_controller_spec.rb' =>
     %w[Api::V1::GuestRoomReservationsController GuestRoomReservation StorableTimeValidator],

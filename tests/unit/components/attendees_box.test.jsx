@@ -117,6 +117,161 @@ describe("AttendeesBox", () => {
     expect(bob).not.toHaveClass("background-green");
   });
 
+  // A retired resident is in the meal form only because they ate or
+  // because they cooked (MealFormSerializer, #91). The sign-up list
+  // shows them only when they are signed up for this meal: a retired
+  // cook who did not eat must not show as someone to sign up.
+  it("lists a retired resident only when signed up for this meal", () => {
+    renderBox(
+      createDataStore({
+        residents: [
+          { id: 1, meal_id: 1, name: "Jane Smith" },
+          {
+            id: 4,
+            meal_id: 1,
+            name: "Rita Retired",
+            active: false,
+            attending: true,
+            attending_at: new Date("2026-01-14T18:30:00Z"),
+          },
+          { id: 5, meal_id: 1, name: "Carol Cook", active: false },
+        ],
+      }),
+    );
+
+    expect(screen.getByRole("cell", { name: "Jane Smith" })).toBeVisible();
+    expect(screen.getByRole("cell", { name: "Rita Retired" })).toBeVisible();
+    expect(
+      screen.queryByRole("cell", { name: "Carol Cook" }),
+    ).not.toBeInTheDocument();
+  });
+
+  // The tests below load the meal the way the page does, with loadData,
+  // because the list reads what the load saw.
+  describe("a retired resident tapped off by mistake", () => {
+    // One resident row as the meal form sends it.
+    function residentRow(id, name, overrides = {}) {
+      return {
+        id,
+        meal_id: 1,
+        name,
+        short_name: name,
+        attending: false,
+        attending_at: null,
+        late: false,
+        vegetarian: false,
+        can_cook: true,
+        active: true,
+        ...overrides,
+      };
+    }
+
+    // The meal form as the server sends it (MealFormSerializer). Jane is
+    // active. Rita is retired, and signed up for this meal unless the
+    // test says otherwise. Carol is retired and did not eat: the form
+    // lists her only because she cooked (#91).
+    function mealForm({ ritaAttending = true, guests = [] } = {}) {
+      return {
+        id: 1,
+        date: "2026-01-14",
+        description: "",
+        closed: false,
+        closed_at: null,
+        reconciled: false,
+        max: null,
+        next_id: 1,
+        prev_id: 1,
+        residents: [
+          residentRow(1, "Jane Smith"),
+          residentRow(4, "Rita Retired", {
+            active: false,
+            attending: ritaAttending,
+            attending_at: ritaAttending ? "2026-01-14T18:30:00Z" : null,
+          }),
+          residentRow(5, "Carol Cook", { active: false }),
+        ],
+        guests,
+        bills: [{ resident_id: 5, amount: "40", no_cost: false }],
+      };
+    }
+
+    function loadedStore(form) {
+      const store = createDataStore({ mealProps: { closed: false } });
+      store.loadData(form, "server");
+      return store;
+    }
+
+    // Nobody can sign up a retired resident who is not on the list. So
+    // if a wrong tap took the row away, the mistake could not be undone
+    // from this page, and their guest's remove button would go with it.
+    it("keeps the row after a tap takes them off, so a second tap signs them up again", async () => {
+      const store = loadedStore(
+        mealForm({
+          guests: [
+            {
+              id: 100,
+              meal_id: 1,
+              resident_id: 4,
+              vegetarian: false,
+              created_at: "2026-01-14T18:40:00Z",
+            },
+          ],
+        }),
+      );
+      renderBox(store);
+
+      fireEvent.click(screen.getByRole("cell", { name: "Rita Retired" }));
+      await act(async () => {});
+
+      expect(store.residents.get("4").attending).toBe(false);
+      const rita = screen.getByRole("cell", { name: "Rita Retired" });
+      expect(rita).not.toHaveClass("background-green");
+      expect(
+        screen.getByLabelText("Remove Guest of Rita Retired"),
+      ).toBeEnabled();
+
+      axios.mockResolvedValueOnce(mealResidentAnswer(4));
+      fireEvent.click(rita);
+      await act(async () => {});
+
+      expect(rita).toHaveClass("background-green");
+      expect(store.residents.get("4").attending).toBe(true);
+      expect(axios).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          method: "post",
+          url: "/api/v1/meals/1/residents/4",
+        }),
+      );
+      // Carol was not signed up when the meal was loaded, so she is not
+      // on the list.
+      expect(
+        screen.queryByRole("cell", { name: "Carol Cook" }),
+      ).not.toBeInTheDocument();
+    });
+
+    // The row stays only until the next load. A load where they are not
+    // signed up shows the list without them.
+    it("drops the row at the next load if they are no longer signed up", async () => {
+      const store = loadedStore(mealForm());
+      renderBox(store);
+
+      fireEvent.click(screen.getByRole("cell", { name: "Rita Retired" }));
+      await act(async () => {});
+      expect(
+        screen.getByRole("cell", { name: "Rita Retired" }),
+      ).toBeInTheDocument();
+
+      act(() => {
+        store.loadData(mealForm({ ritaAttending: false }), "server");
+      });
+
+      expect(
+        screen.queryByRole("cell", { name: "Rita Retired" }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByRole("cell", { name: "Jane Smith" })).toBeVisible();
+    });
+  });
+
   it("shows switch states and guest badges from the store", () => {
     renderBox(defaultStore());
 

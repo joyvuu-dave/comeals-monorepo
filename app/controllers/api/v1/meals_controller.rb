@@ -109,7 +109,8 @@ module Api
       # Built fresh on every request, on purpose. This page used to be
       # cached under meal-<id>, and the cache was cleared only when the
       # meal itself was written or settled. But the page also holds the
-      # sign-up list (every resident's name, unit, active flag) and the
+      # residents list (the name, unit and active flag of each resident it
+      # shows, for the sign-up list and the cook menus) and the
       # ids of the meals before and after this one, and nothing cleared
       # the entry when a resident was retired or renamed or when the next
       # rotation was created — so the page showed old data for up to a

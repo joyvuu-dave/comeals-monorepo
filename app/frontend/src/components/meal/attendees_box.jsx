@@ -34,6 +34,18 @@ const styles = {
   },
 };
 
+// Who the sign-up list shows: every active resident, and a retired one
+// only when signed up for this meal. The meal form also lists a retired
+// cook who did not eat, because of their bill (#91). They must not show
+// here as someone to sign up.
+// A retired resident who was signed up when the meal was loaded stays
+// on the list until the next load, even after a tap takes them off.
+// Nobody can sign up a retired resident who is not on the list, so
+// without this a wrong tap could not be undone.
+function onSignUpList(resident) {
+  return resident.active || resident.attending || resident.attendingAtLoad;
+}
+
 // Exported for its own test: the dead-node case below cannot be
 // staged through the table, whose rows unmount with their nodes.
 export const AttendeeComponent = observer(({ resident }) => {
@@ -163,9 +175,11 @@ const AttendeesBox = observer(() => {
           </tr>
         </thead>
         <tbody>
-          {Array.from(store.residents.values()).map((resident) => (
-            <AttendeeComponent key={resident.id} resident={resident} />
-          ))}
+          {Array.from(store.residents.values())
+            .filter(onSignUpList)
+            .map((resident) => (
+              <AttendeeComponent key={resident.id} resident={resident} />
+            ))}
         </tbody>
       </table>
     </div>

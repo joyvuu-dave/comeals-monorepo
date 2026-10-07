@@ -15,6 +15,11 @@ import toastStore from "./toast_store";
 
 type BillNode = Instance<typeof Bill>;
 
+// What a person sees when a bills save is refused because the meal has a
+// bill the page does not show (#91).
+const BILLS_INCOMPLETE_MESSAGE =
+  "One cook's cost on this meal is not shown on this page, so nothing was saved. Please reload the page.";
+
 // The warning the bills endpoint answers with when a cook-scheduling guard
 // refused part of the write but the rest was saved. Read by shape, not by
 // class: the response is what the server put in the body, whatever object
@@ -31,6 +36,9 @@ function warningIn(error: unknown): BillsAck | null {
 export interface BillsStore extends ReturnType<typeof billsVolatile> {
   meal: { id: number } | null;
   bills: { values(): IterableIterator<BillNode> };
+  // Set by loadData (data_store_meal_page.ts) when the meal has a bill
+  // the page cannot show.
+  billsIncomplete: boolean;
   loadDataAsync(): void;
   flushBillsSave(): void;
   submitBills(): void;
@@ -97,6 +105,15 @@ export function billsActions(self: BillsStore) {
       // No meal, nothing to save to. The timer above is already
       // cancelled, so a save that outlived the meal page ends here.
       if (!self.meal) {
+        return;
+      }
+
+      // The meal has a bill this page does not show (#91). A save lists
+      // every cook, and the server deletes the bill of a cook left out,
+      // so any save from this page would delete that bill. Nothing is
+      // sent. A reload gets the full list from the server.
+      if (self.billsIncomplete) {
+        toastStore.replaceAll(BILLS_INCOMPLETE_MESSAGE, "error");
         return;
       }
 

@@ -15,6 +15,22 @@ const styles = {
   },
 };
 
+// The cooks a row's menu offers: every active resident who can cook,
+// the row's cook now, and the row's cook when the meal was loaded. A
+// cook who was retired, or whose "can cook" was turned off, after
+// cooking keeps their bill (#91), and only their own row offers them.
+// Their row offers them even after someone picks another name there by
+// mistake, so the person can pick them again. Otherwise the next save
+// would leave them out, and the server would delete their bill.
+function cookChoices(residents, bill) {
+  return Array.from(residents.values()).filter(
+    (resident) =>
+      resident.id === bill.resident_id ||
+      resident.id === bill.loadedCookId ||
+      (resident.active === true && resident.can_cook === true),
+  );
+}
+
 const BillEdit = observer(({ bill }) => {
   const store = useStore();
   // Turning on "no cost" erases a typed cost, and on a shared screen
@@ -43,13 +59,11 @@ const BillEdit = observer(({ bill }) => {
           <option value={""} key={-1}>
             ¯\_(ツ)_/¯
           </option>
-          {Array.from(store.residents.values())
-            .filter((resident) => resident.can_cook === true)
-            .map((resident) => (
-              <option value={resident.id} key={resident.id}>
-                {resident.name}
-              </option>
-            ))}
+          {cookChoices(store.residents, bill).map((resident) => (
+            <option value={resident.id} key={resident.id}>
+              {resident.name}
+            </option>
+          ))}
         </select>
         <div className="input-group">
           <span className="input-addon">$</span>

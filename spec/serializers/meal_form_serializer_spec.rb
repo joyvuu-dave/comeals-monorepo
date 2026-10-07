@@ -16,7 +16,7 @@ RSpec.describe MealFormSerializer do
       expect(resident_ids).to include(active_resident.id)
     end
 
-    it 'excludes inactive residents who did NOT attend' do
+    it 'leaves out a retired resident who neither ate nor cooked at this meal' do
       inactive_nonattendee = create(:resident, community: community, unit: unit, active: false,
                                                multiplier: 2)
       meal = create(:meal, community: community)
@@ -50,6 +50,90 @@ RSpec.describe MealFormSerializer do
 
       # Should appear exactly once, not duplicated by the OR
       expect(resident_ids.count(resident.id)).to eq(1)
+    end
+
+    # The page can show a bill only when its cook is in this list, and a
+    # bills save removes the bill of any cook the save leaves out
+    # (BillsPayload#write_to). So a cook missing from this list could lose
+    # their bill on the next save (#91). The request spec that reads the
+    # form and saves from it, from start to end:
+    # spec/requests/api/v1/meal_form_retired_cook_spec.rb.
+    # The meal is read again with none of its rows loaded: the serializer
+    # must load the bills and sign-ups itself when no one has.
+    it 'names every cook who has a bill on the meal, even a retired one who did not eat' do
+      meal = create(:meal, community: community)
+      cook = create(:resident, community: community, unit: unit)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('40'))
+      cook.update!(active: false)
+      not_preloaded = Meal.find(meal.id)
+
+      form = described_class.new(not_preloaded).to_h
+
+      expect(form[:residents].pluck(:id)).to include(*form[:bills].pluck(:resident_id))
+    end
+
+    # A no-cost bill moves no money, but it is the record of who cooked.
+    it 'names a retired cook whose bill is a no-cost bill' do
+      meal = create(:meal, community: community)
+      cook = create(:resident, community: community, unit: unit)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('0'), no_cost: true)
+      cook.update!(active: false)
+
+      resident_ids = described_class.new(meal).residents(meal).pluck(:id)
+
+      expect(resident_ids).to include(cook.id)
+    end
+
+    # The controller reads the meal with its bills and sign-ups first
+    # (MealsController#set_meal), and this list later, in another
+    # statement. The page is not read in one transaction, so a save can
+    # commit between the two reads. The delete below stands for that
+    # save. The list must come from the rows the meal already holds, or a
+    # cook in `bills` can be missing from `residents`.
+    it 'names every cook in bills when a bill is removed after the bills were read' do
+      meal = create(:meal, community: community)
+      cook = create(:resident, community: community, unit: unit)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('40'))
+      cook.update!(active: false)
+
+      loaded = Meal.includes(:bills, :meal_residents, :guests).find(meal.id)
+      Bill.where(meal_id: meal.id).delete_all
+
+      form = described_class.new(loaded).to_h
+
+      expect(form[:bills].pluck(:resident_id)).to eq([cook.id])
+      expect(form[:residents].pluck(:id)).to include(cook.id)
+    end
+
+    # The same for sign-ups: the attending flags come from the sign-ups
+    # the meal already holds, so the list must come from them too.
+    # Otherwise a retired resident marked as attending in the rows read
+    # first has no row in the list at all.
+    it 'lists a retired eater when the sign-up is removed after the sign-ups were read' do
+      meal = create(:meal, community: community)
+      eater = create(:resident, community: community, unit: unit)
+      create(:meal_resident, meal: meal, resident: eater, community: community)
+      eater.update!(active: false)
+
+      loaded = Meal.includes(:bills, :meal_residents, :guests).find(meal.id)
+      MealResident.where(meal_id: meal.id).delete_all
+
+      rows = described_class.new(loaded).to_h[:residents]
+
+      expect(rows.select { |row| row[:attending] }.pluck(:id)).to eq([eater.id])
+    end
+
+    it 'leaves out a retired resident who ate or cooked only at another meal' do
+      meal = create(:meal, community: community)
+      other_meal = create(:meal, community: community)
+      retired = create(:resident, community: community, unit: unit)
+      create(:meal_resident, meal: other_meal, resident: retired, community: community)
+      create(:bill, meal: other_meal, resident: retired, community: community)
+      retired.update!(active: false)
+
+      resident_ids = described_class.new(meal).residents(meal).pluck(:id)
+
+      expect(resident_ids).not_to include(retired.id)
     end
 
     # With no ORDER BY, the rows come back in the order PostgreSQL

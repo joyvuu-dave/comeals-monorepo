@@ -475,7 +475,7 @@ describe("DataStore", () => {
     it("loads the server's real meal answer", () => {
       const store = createDataStore({ mealProps: { id: 42 } });
 
-      store.loadData(mealFixture);
+      store.loadData(mealFixture, "server");
 
       expect(store.meal.description).toBe("Pasta night with garlic bread");
       expect(store.meal.nextId).toBe(43);
@@ -517,6 +517,7 @@ describe("DataStore", () => {
             { resident_id: 11, amount: "0", no_cost: false },
           ],
         }),
+        "server",
       );
 
       // Two cooks plus one blank row, to show three.
@@ -570,7 +571,7 @@ describe("DataStore", () => {
         ],
       });
 
-      store.loadData(data);
+      store.loadData(data, "server");
 
       // Residents should be sorted: Alice, Bob, Charlie
       const names = Array.from(store.residents.values()).map((r) => r.name);
@@ -585,7 +586,7 @@ describe("DataStore", () => {
         bills: [{ resident_id: 10, amount: "10", no_cost: false }],
       });
 
-      store.loadData(data);
+      store.loadData(data, "server");
 
       // 1 bill from data + 2 blanks = 3
       expect(store.bills.size).toBe(3);
@@ -611,7 +612,7 @@ describe("DataStore", () => {
         ],
       });
 
-      store.loadData(data);
+      store.loadData(data, "server");
 
       // 4 bills, no blanks needed
       expect(store.bills.size).toBe(4);
@@ -631,7 +632,7 @@ describe("DataStore", () => {
         prev_id: 1,
       });
 
-      store.loadData(data);
+      store.loadData(data, "server");
 
       expect(store.meal.description).toBe("Taco Tuesday");
       expect(store.meal.closed).toBe(true);
@@ -693,7 +694,7 @@ describe("DataStore", () => {
         ],
       });
 
-      store.loadData(data);
+      store.loadData(data, "server");
 
       // max=10, attending=2, guests=1 => extras = 10 - 3 = 7
       expect(store.meal.extras).toBe(7);
@@ -718,7 +719,7 @@ describe("DataStore", () => {
         ],
       });
 
-      store.loadData(data);
+      store.loadData(data, "server");
 
       expect(store.meal.extras).toBeNull();
     });
@@ -728,7 +729,7 @@ describe("DataStore", () => {
 
       const data = mealPayload();
 
-      store.loadData(data);
+      store.loadData(data, "server");
       expect(store.mealLoading).toBe(false);
     });
 
@@ -754,7 +755,7 @@ describe("DataStore", () => {
         bills: [{ resident_id: 10, amount: "15", no_cost: false }],
       });
 
-      store.loadData(data);
+      store.loadData(data, "server");
 
       const bills = Array.from(store.bills.values());
       const aliceBill = bills.find((b) => b.resident !== null);
@@ -792,7 +793,7 @@ describe("DataStore", () => {
         ],
       });
 
-      store.loadData(data);
+      store.loadData(data, "server");
 
       expect(store.guests.size).toBe(1);
       const guest = store.guests.get("200");
@@ -845,7 +846,7 @@ describe("DataStore", () => {
       expect(isAlive(oldResident)).toBe(true);
 
       // Load new data (simulates navigating to a different meal)
-      store.loadData(makeMealData(1, { attending: false }));
+      store.loadData(makeMealData(1, { attending: false }), "server");
 
       // Old reference is dead
       expect(isAlive(oldResident)).toBe(false);
@@ -859,18 +860,18 @@ describe("DataStore", () => {
     it("successive loadData calls replace nodes each time", () => {
       const store = createDataStore();
 
-      store.loadData(makeMealData(1, { attending: true }));
+      store.loadData(makeMealData(1, { attending: true }), "server");
       const ref1 = store.residents.get("10");
       expect(isAlive(ref1)).toBe(true);
 
-      store.loadData(makeMealData(1, { attending: false }));
+      store.loadData(makeMealData(1, { attending: false }), "server");
       expect(isAlive(ref1)).toBe(false);
 
       const ref2 = store.residents.get("10");
       expect(isAlive(ref2)).toBe(true);
       expect(ref2.attending).toBe(false);
 
-      store.loadData(makeMealData(1, { late: true }));
+      store.loadData(makeMealData(1, { late: true }), "server");
       expect(isAlive(ref2)).toBe(false);
 
       const ref3 = store.residents.get("10");
@@ -880,7 +881,7 @@ describe("DataStore", () => {
 
     it("loadDataAsync drops a meal-1 answer that lands after the switch to meal 2", async () => {
       const store = createDataStore({ mealProps: { id: 1 } });
-      store.loadData(makeMealData(1, { attending: true }));
+      store.loadData(makeMealData(1, { attending: true }), "server");
 
       // A refetch of meal 1 goes out, and its answer is slow.
       let answerMeal1;
@@ -920,7 +921,7 @@ describe("DataStore", () => {
       const mealData = mealPayload({
         description: "Meal",
       });
-      store.loadData(mealData);
+      store.loadData(mealData, "server");
       expect(window.Comeals.mealChannel.name).toBe("meal-1");
 
       const calendarData = {
@@ -954,7 +955,7 @@ describe("DataStore", () => {
       });
 
       // Load initial data for meal 1
-      store.loadData(makeMealData(1));
+      store.loadData(makeMealData(1), "server");
 
       // Set up IndexedDB to return cached data for meal 2
       const meal2Data = makeMealData(2, { attending: true });
@@ -970,7 +971,7 @@ describe("DataStore", () => {
         store.meals.push({ id: 3 });
         store.meal = 3;
       });
-      store.loadData(makeMealData(3, { late: true }));
+      store.loadData(makeMealData(3, { late: true }), "server");
 
       // Now let IndexedDB resolve (for the stale meal 2 request)
       await new Promise((r) => setTimeout(r, 0));
@@ -1160,7 +1161,7 @@ describe("DataStore", () => {
       expect(store.monthLoading).toBe(false);
       expect(store.mealLoading).toBe(true);
 
-      store.loadData(mealData(1));
+      store.loadData(mealData(1), "server");
       expect(store.mealLoading).toBe(false);
     });
 
@@ -1168,7 +1169,7 @@ describe("DataStore", () => {
       const store = createDataStore();
       stubPusherChannels();
 
-      store.loadData(mealData(1));
+      store.loadData(mealData(1), "server");
       expect(window.Comeals.mealChannel.name).toBe("meal-1");
       const oldNode = store.meals.find((m) => m.id === 1);
 
@@ -1210,7 +1211,7 @@ describe("DataStore", () => {
         },
       ];
       data.bills = [{ resident_id: 10, amount: "25.5", no_cost: false }];
-      store.loadData(data);
+      store.loadData(data, "server");
 
       expect(store.residents.size).toBe(1);
       expect(store.guests.size).toBe(1);
@@ -1271,7 +1272,7 @@ describe("DataStore", () => {
 
     it("switchMeals prunes the meal nodes it leaves behind", () => {
       const store = createDataStore();
-      store.loadData(mealData(1));
+      store.loadData(mealData(1), "server");
       const oldNode = store.meals.find((m) => m.id === 1);
 
       store.switchMeals(2);
@@ -1310,7 +1311,7 @@ describe("DataStore", () => {
         },
       ];
       data.bills = [{ resident_id: 10, amount: "25.5", no_cost: false }];
-      store.loadData(data);
+      store.loadData(data, "server");
 
       store.switchMeals(2);
 
@@ -1397,7 +1398,7 @@ describe("DataStore", () => {
 
     it("a background refetch failure stays silent", async () => {
       const store = createDataStore();
-      store.loadData(mealPayload());
+      store.loadData(mealPayload(), "server");
       expect(store.mealLoading).toBe(false);
       toastStore.clearAll();
 
@@ -1500,7 +1501,7 @@ describe("DataStore", () => {
       await vi.advanceTimersByTimeAsync(2000); // retry #1 fails; wait is now 4s
       expect(cooksCallsFor(1).length).toBe(2);
 
-      store.loadData(mealPayload());
+      store.loadData(mealPayload(), "server");
       expect(store.mealLoadFailed).toBe(false);
 
       // A later failure starts the backoff from the base again.
@@ -1559,7 +1560,7 @@ describe("DataStore", () => {
       // always has one: CHECK meals_closed_at_matches_closed.)
       const data = mealPayload({ closed: false, closed_at: null });
 
-      store.loadData(data);
+      store.loadData(data, "server");
       expect(store.meal.closed_at).toBeNull();
     });
 
@@ -1571,7 +1572,7 @@ describe("DataStore", () => {
         closed_at: "2023-06-15T18:00:00Z",
       });
 
-      store.loadData(data);
+      store.loadData(data, "server");
       expect(store.meal.closed_at).toBeInstanceOf(Date);
       expect(store.meal.closed_at.getTime()).toBe(
         new Date("2023-06-15T18:00:00Z").getTime(),
@@ -1741,46 +1742,115 @@ describe("DataStore", () => {
     });
   });
 
-  // ── BUG-6: dangling bill reference ──
+  // ── BUG-6 and #91: a bill whose cook is not in the residents list ──
 
   describe("loadData bill reference integrity", () => {
-    it("does not crash when bill references non-existent resident (Regression test for BUG-6)", () => {
+    const RELOAD_MESSAGE =
+      "One cook's cost on this meal is not shown on this page, so nothing was saved. Please reload the page.";
+
+    function billsPatches() {
+      return axios.mock.calls.filter(
+        ([config]) =>
+          config &&
+          config.method === "patch" &&
+          config.url === "/api/v1/meals/1/bills",
+      );
+    }
+
+    // Alice has a bill and is listed. Cook 999 has a bill but no row in
+    // residents. The server lists every cook who has a bill
+    // (MealFormSerializer), so this should never happen.
+    function mealWithHiddenCook() {
+      return mealPayload({
+        residents: [residentRow(10, "Alice")],
+        bills: [
+          { resident_id: 10, amount: "15", no_cost: false },
+          { resident_id: 999, amount: "40", no_cost: false },
+        ],
+      });
+    }
+
+    // The page cannot show the bill, because its row needs a resident to
+    // point at. It keeps working, and shows three rows as always.
+    it("keeps working when a bill's cook is not in the residents list (BUG-6)", () => {
       const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
       const store = createDataStore();
 
-      const data = mealPayload({
-        residents: [
-          {
-            id: 10,
-            meal_id: 1,
-            name: "Alice",
-            attending: false,
-            attending_at: null,
-            late: false,
-            vegetarian: false,
-            can_cook: true,
-            active: true,
-          },
-        ],
-        bills: [
-          { resident_id: 10, amount: "15", no_cost: false },
-          { resident_id: 999, amount: "20", no_cost: false },
-        ],
-      });
+      expect(() =>
+        store.loadData(mealWithHiddenCook(), "server"),
+      ).not.toThrow();
 
-      // loadData should not throw
-      expect(() => store.loadData(data)).not.toThrow();
-
-      // Valid bill with resident 10 should be loadable and accessible
       expect(billFor(store, 10).amount).toBe("15.00");
-      // The bill for the unknown resident is left out, and says so. The
-      // padding row that made three is still there.
-      expect(store.bills.size).toBe(2);
-      expect(blankRows(store)).toHaveLength(1);
+      expect(store.bills.size).toBe(3);
+      expect(blankRows(store)).toHaveLength(2);
       expect(spy).toHaveBeenCalledWith(
-        "Skipping bill with unknown resident reference:",
-        999,
+        "Bills will not save: these cooks have a bill but are not in the residents list:",
+        [999],
       );
+      spy.mockRestore();
+    });
+
+    // A bills save lists every cook, and the server deletes the bill of
+    // a cook left out (BillsPayload#write_to). So a save from this page
+    // would delete cook 999's bill. Nothing is sent, and the person is
+    // told to reload (#91).
+    it("refuses a save of another cook's cost: nothing is sent, and the toast says to reload", () => {
+      const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      toastStore.clearAll();
+      const store = createDataStore({ mealProps: { closed: false } });
+      store.loadData(mealWithHiddenCook(), "server");
+
+      billFor(store, 10).setAmount("16");
+      store.submitBills();
+
+      expect(billsPatches()).toHaveLength(0);
+      expect(store.billsSaveInFlight).toBe(false);
+      expect(toastStore.toasts.map((t) => [t.type, t.message])).toEqual([
+        ["error", RELOAD_MESSAGE],
+      ]);
+      spy.mockRestore();
+    });
+
+    // The reload brings the server's list, which names the retired cook
+    // (inactive, did not eat). Saves go through again, and a save of
+    // another cook's cost names both cooks, so the server keeps the
+    // retired cook's bill.
+    it("sends saves again once a reload lists every cook, naming the retired cook too", () => {
+      const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const store = createDataStore({ mealProps: { closed: false } });
+      store.loadData(mealWithHiddenCook(), "server");
+
+      store.loadData(
+        mealPayload({
+          residents: [
+            residentRow(10, "Alice"),
+            residentRow(999, "Carol", { active: false }),
+          ],
+          bills: mealWithHiddenCook().bills,
+        }),
+        "server",
+      );
+      billFor(store, 10).setAmount("16");
+      store.submitBills();
+
+      expect(billsPatches()).toHaveLength(1);
+      expect(billsPatches()[0][0].data.bills).toEqual([
+        { resident_id: 10, amount: "16", no_cost: false },
+        { resident_id: 999 },
+      ]);
+      spy.mockRestore();
+    });
+
+    // billsIncomplete is about the bill rows on screen. Switching meals
+    // clears those rows, so it clears the flag too.
+    it("clears billsIncomplete when the page switches to another meal", () => {
+      const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const store = createDataStore({ mealProps: { closed: false } });
+      store.loadData(mealWithHiddenCook(), "server");
+
+      store.switchMeals(2);
+
+      expect(store.billsIncomplete).toBe(false);
       spy.mockRestore();
     });
   });
@@ -1792,7 +1862,7 @@ describe("DataStore", () => {
       const store = createDataStore();
       const data = mealPayload();
 
-      store.loadData(data);
+      store.loadData(data, "server");
       expect(store.residents.size).toBe(0);
       expect(store.guests.size).toBe(0);
       expect(store.bills.size).toBe(3); // 3 blank bills created
@@ -1832,7 +1902,7 @@ describe("DataStore", () => {
         ],
       });
 
-      store.loadData(data);
+      store.loadData(data, "server");
       expect(store.meal.extras).toBe(0); // max=2, attendees=2
       expect(store.canAdd).toBe(false);
     });
@@ -1849,6 +1919,7 @@ describe("DataStore", () => {
           max: 0,
           residents: [residentRow(10, "Alice")],
         }),
+        "server",
       );
 
       expect(store.meal.extras).toBe(0);
@@ -1878,7 +1949,7 @@ describe("DataStore", () => {
         bills: [{ resident_id: 10, amount: "0", no_cost: false }],
       });
 
-      store.loadData(data);
+      store.loadData(data, "server");
       const bill = Array.from(store.bills.values()).find(
         (b) => b.resident !== null,
       );
@@ -2128,6 +2199,7 @@ describe("DataStore", () => {
           { resident_id: 10, amount: "12.34", no_cost: false },
           { resident_id: 11, amount: "0.0", no_cost: false },
         ]),
+        "server",
       );
 
       const bobsBill = Array.from(store.bills.values()).find(
@@ -2157,6 +2229,7 @@ describe("DataStore", () => {
           { resident_id: 10, amount: "12.345", no_cost: false },
           { resident_id: 11, amount: "0.0", no_cost: false },
         ]),
+        "server",
       );
 
       const alicesBill = Array.from(store.bills.values()).find(
@@ -2256,6 +2329,7 @@ describe("DataStore", () => {
           ],
           bills: [{ resident_id: 11, amount: "0.0", no_cost: false }],
         }),
+        "server",
       );
       return store;
     }
@@ -3157,7 +3231,7 @@ describe("DataStore", () => {
       await new Promise((r) => setTimeout(r, 0));
       expect(store.meal.descriptionDirty).toBe(true);
 
-      store.loadData(mealPayload({ description: "server text" }));
+      store.loadData(mealPayload({ description: "server text" }), "server");
 
       expect(store.meal.description).toBe("typed text");
     });
@@ -3169,7 +3243,7 @@ describe("DataStore", () => {
       await new Promise((r) => setTimeout(r, 0));
       expect(store.meal.descriptionDirty).toBe(false);
 
-      store.loadData(mealPayload({ description: "server text" }));
+      store.loadData(mealPayload({ description: "server text" }), "server");
 
       expect(store.meal.description).toBe("server text");
     });

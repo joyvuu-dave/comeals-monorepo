@@ -19,6 +19,14 @@ const Resident = types
     can_cook: true,
     active: true,
   })
+  .volatile(() => ({
+    // Whether this resident was signed up for the meal when the meal was
+    // loaded. The sign-up list keeps showing a retired resident who was
+    // signed up then, even after a tap takes them off, so a wrong tap can
+    // be undone with a second tap (#91). loadData sets it on every row it
+    // makes, and the next load makes new rows.
+    attendingAtLoad: false,
+  }))
   .views((self) => ({
     get plainName() {
       return self.short_name !== "" ? self.short_name : self.name;
@@ -88,6 +96,10 @@ const Resident = types
     },
   }))
   .actions((self) => ({
+    // loadData calls this once on each row it makes.
+    rememberAttendingAtLoad() {
+      self.attendingAtLoad = self.attending;
+    },
     setAttending(val) {
       self.attending = val;
       return val;

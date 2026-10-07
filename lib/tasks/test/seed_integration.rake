@@ -68,7 +68,10 @@ namespace :test do
       birthday: Date.new(2015, 5, 1)
     )
 
-    Resident.create!(
+    # Retired, with no bill and no sign-up here. The retired-cook test
+    # in bill-entry.spec.js gives her a bill through the API, and takes
+    # it away again, so it needs her id.
+    diana = Resident.create!(
       name: 'Diana Prince', email: 'diana@test.com', password: 'password',
       unit: unit_c,
       can_cook: true, vegetarian: false,
@@ -239,6 +242,7 @@ namespace :test do
                             username: jane.name,
                             bob_email: bob.email,
                             bob_password: 'password',
+                            diana_id: diana.id,
                             rotations: {
                               first: { id: first_rotation.id, place_value: first_rotation.reload.place_value },
                               second: { id: second_rotation.id, place_value: second_rotation.reload.place_value }

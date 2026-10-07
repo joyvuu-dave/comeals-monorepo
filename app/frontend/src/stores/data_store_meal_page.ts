@@ -26,6 +26,10 @@ import Resident from "./resident";
 
 type MealNode = Instance<typeof Meal>;
 
+// Where the meal data handed to loadData came from: the server's answer,
+// or the copy of an earlier answer saved on the device (IndexedDB).
+type MealFormSource = "server" | "device";
+
 // What this file reads and writes on the DataStore it is composed into
 // (data_store.js, still JavaScript): its own volatile fields, the meal on
 // screen and its rows, the loading flags, two actions from other
@@ -52,7 +56,7 @@ export interface MealPageStore extends ReturnType<typeof mealPageVolatile> {
   onMealRetryTimer(mealId: number): void;
   cancelMealRetry(): void;
   preLoadData(): void;
-  loadData(data: MealForm): void;
+  loadData(data: MealForm, source: MealFormSource): void;
   watchMealChannel(mealId: number): void;
   clearResidents(): void;
   clearBills(): void;
@@ -89,6 +93,12 @@ export function mealPageVolatile() {
     // reconnect refetch), and the responses can land in either order;
     // only the newest fetch's response may reach the screen.
     mealFetches: createVersionGuard(),
+    // The meal has a bill whose cook is not in the residents list, so
+    // the page cannot show that bill (#91). While this is true,
+    // submitBills sends nothing: a save lists every cook, and the
+    // server deletes the bill of a cook left out. loadData sets it, and
+    // clearBills sets it back to false with the rows.
+    billsIncomplete: false,
   };
 }
 
@@ -186,7 +196,7 @@ export function mealPageActions(self: MealPageStore) {
                 if (!self.mealFetches.isCurrent(fetchToken)) return;
                 // Skip stale responses from a previous meal
                 if (self.meal && self.meal.id === response.data.id) {
-                  self.loadData(response.data);
+                  self.loadData(response.data, "server");
                 }
               });
           },
@@ -281,7 +291,7 @@ export function mealPageActions(self: MealPageStore) {
       self.clearResidents();
       self.clearGuests();
     },
-    loadData(data: MealForm) {
+    loadData(data: MealForm, source: MealFormSource) {
       self.preLoadData();
       const meal = self.meal;
       if (!meal) return;
@@ -325,19 +335,51 @@ export function mealPageActions(self: MealPageStore) {
 
       // Assign Residents
       residents.forEach((resident) => {
-        self.residents.put({
-          ...resident,
-          attending_at:
-            resident.attending_at === null
-              ? null
-              : new Date(resident.attending_at),
-        });
+        self.residents
+          .put({
+            ...resident,
+            attending_at:
+              resident.attending_at === null
+                ? null
+                : new Date(resident.attending_at),
+          })
+          .rememberAttendingAtLoad();
       });
 
       // Assign Guests
       data.guests.forEach((guest) => {
         self.guests.put({ ...guest, created_at: new Date(guest.created_at) });
       });
+
+      // A bill's row points at its cook's resident row, so a bill whose
+      // cook is not in the residents list cannot be shown. The page shows
+      // the other bills and refuses every bills save until a load lists
+      // every cook (#91). The server lists every cook who has a bill
+      // (MealFormSerializer), so in the server's answer this is a bug,
+      // and it is reported. In the copy saved on the device it is not
+      // reported: a copy saved before the server listed every cook can
+      // still be on the device, and the server's answer is fetched right
+      // after it.
+      const cookListed = (bill: { resident_id: number }) =>
+        self.residents.has(String(bill.resident_id));
+      const shownBills = data.bills.filter(cookListed);
+      const hiddenCookIds = data.bills
+        .filter((bill) => !cookListed(bill))
+        .map((bill) => bill.resident_id);
+      self.billsIncomplete = hiddenCookIds.length > 0;
+      if (self.billsIncomplete) {
+        console.warn(
+          "Bills will not save: these cooks have a bill but are not in the residents list:",
+          hiddenCookIds,
+        );
+        if (source === "server") {
+          notifyError(
+            new Error(
+              `Meal ${meal.id} has bills whose cooks are not in its residents list: ${hiddenCookIds.join(", ")}`,
+            ),
+          );
+        }
+      }
 
       // Assign Bills. The wire's resident_id becomes the `resident`
       // reference. Zero displays as blank ("not filled in yet"); any other
@@ -346,7 +388,7 @@ export function mealPageActions(self: MealPageStore) {
       // display value must not exist at all, so it can never reach the
       // ledger. Three rows are always shown, so blanks fill the rest.
       // (types.identifier requires string ids.)
-      const bills: SnapshotIn<typeof Bill>[] = data.bills.map((bill) => ({
+      const bills: SnapshotIn<typeof Bill>[] = shownBills.map((bill) => ({
         id: String(newId()),
         resident: bill.resident_id,
         amount: toDisplayAmountString(bill.amount),
@@ -356,20 +398,8 @@ export function mealPageActions(self: MealPageStore) {
       for (let i = 0; i < extra; i += 1) {
         bills.push({ id: String(newId()) });
       }
-
-      // Put bills into the map, skipping any with dangling resident references
       bills.forEach((bill) => {
-        if (
-          bill.resident != null &&
-          !self.residents.has(String(bill.resident))
-        ) {
-          console.warn(
-            "Skipping bill with unknown resident reference:",
-            bill.resident,
-          );
-          return;
-        }
-        self.bills.put(bill);
+        self.bills.put(bill).rememberLoadedCook();
       });
 
       // Change loading state. A landed load also ends any retry state:
@@ -379,7 +409,9 @@ export function mealPageActions(self: MealPageStore) {
 
       self.watchMealChannel(meal.id);
 
-      // The sign-up list is every resident; they have their own channel.
+      // A change to a resident (a new name, retired, can no longer cook)
+      // changes the sign-up list and the cook menus. The server sends
+      // those changes on the residents channel, not the meal's.
       self.ensureResidentsChannel();
     },
     // Keep this page subscribed to the meal on screen. A refetch of the
@@ -412,6 +444,7 @@ export function mealPageActions(self: MealPageStore) {
     },
     clearBills() {
       self.bills.clear();
+      self.billsIncomplete = false;
     },
     clearGuests() {
       self.guests.clear();
@@ -473,7 +506,7 @@ export function mealPageActions(self: MealPageStore) {
           if (value === null || typeof value === "undefined") {
             self.loadDataAsync();
           } else {
-            self.loadData(value as MealForm);
+            self.loadData(value as MealForm, "device");
             self.loadDataAsync();
           }
         })

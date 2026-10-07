@@ -18,6 +18,7 @@ stubRandomUUID();
 import axios from "axios";
 import * as idbKeyval from "idb-keyval";
 import { notifyError } from "../../../app/frontend/src/helpers/bugsnag.js";
+import toastStore from "../../../app/frontend/src/stores/toast_store.js";
 import {
   createDataStore,
   stage,
@@ -128,7 +129,7 @@ describe("meal page store", () => {
       store.meal = null;
     });
 
-    store.loadData(mealPayload({ residents: [resident()] }));
+    store.loadData(mealPayload({ residents: [resident()] }), "server");
 
     expect(store.residents.size).toBe(0);
   });
@@ -143,11 +144,127 @@ describe("meal page store", () => {
           resident({ id: 1, name: "Sam" }),
         ],
       }),
+      "server",
     );
 
     expect(Array.from(store.residents.values()).map((r) => r.id)).toEqual([
       2, 1,
     ]);
+  });
+
+  // The server lists every cook who has a bill (MealFormSerializer), so
+  // a bill whose cook is not in the residents list is a bug (#91). The
+  // page refuses bills saves while it lasts, and the bug is reported.
+  describe("a bill whose cook is not in the residents list", () => {
+    it("is reported once per load, naming the meal and every such cook", () => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const store = createStore();
+
+      store.loadData(
+        mealPayload({
+          residents: [resident({ id: 10 })],
+          bills: [
+            { resident_id: 10, amount: "15.0", no_cost: false },
+            { resident_id: 998, amount: "0.0", no_cost: true },
+            { resident_id: 999, amount: "40.0", no_cost: false },
+          ],
+        }),
+        "server",
+      );
+
+      expect(notifyError).toHaveBeenCalledTimes(1);
+      const [reported] = notifyError.mock.calls[0];
+      expect(reported).toBeInstanceOf(Error);
+      expect(reported.message).toBe(
+        "Meal 1 has bills whose cooks are not in its residents list: 998, 999",
+      );
+    });
+
+    it("is not reported when every cook is listed", () => {
+      const store = createStore();
+
+      store.loadData(
+        mealPayload({
+          residents: [resident({ id: 10 })],
+          bills: [{ resident_id: 10, amount: "15.0", no_cost: false }],
+        }),
+        "server",
+      );
+
+      expect(notifyError).not.toHaveBeenCalled();
+    });
+
+    // Meal 2 as an older server sent it: cook 999 has a bill but no row
+    // in residents. Copies like this stay on devices after the deploy
+    // that lists every cook (#91).
+    function meal2WithHiddenCook() {
+      return mealPayload({
+        id: 2,
+        residents: [resident({ id: 10 })],
+        bills: [
+          { resident_id: 10, amount: "15.0", no_cost: false },
+          { resident_id: 999, amount: "40.0", no_cost: false },
+        ],
+      });
+    }
+
+    function billsPatches() {
+      return axios.mock.calls.filter(([config]) => config.method === "patch");
+    }
+
+    // Saves the bills right away and answers with what the person sees.
+    function toastsAfterASave(store) {
+      toastStore.clearAll();
+      store.submitBills();
+      return toastStore.toasts.map((toast) => [toast.type, toast.message]);
+    }
+
+    const RELOAD_MESSAGE =
+      "One cook's cost on this meal is not shown on this page, so nothing was saved. Please reload the page.";
+
+    // The copy on the device is not a bug in the server's answer: an old
+    // copy is expected for a while after the deploy, and the server's
+    // answer comes right after it. So it is not reported. Saves are
+    // still refused while it is on screen.
+    it("is not reported when it is in the copy saved on the device, but saves are still refused", async () => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const store = createStore();
+      idbKeyval.get.mockResolvedValueOnce(meal2WithHiddenCook());
+      // The server's answer does not come in this test.
+      stubAction(store, "loadDataAsync");
+
+      store.switchMeals(2);
+      await flush();
+
+      expect(store.meal.id).toBe(2);
+      expect(store.bills.size).toBe(3);
+      expect(notifyError).not.toHaveBeenCalled();
+      expect(store.billsIncomplete).toBe(true);
+      expect(toastsAfterASave(store)).toEqual([["error", RELOAD_MESSAGE]]);
+      expect(billsPatches()).toHaveLength(0);
+    });
+
+    it("is reported once when the server's answer has it, after the copy on the device had it too", async () => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const store = createStore();
+      idbKeyval.get.mockResolvedValueOnce(meal2WithHiddenCook());
+      axios.get.mockResolvedValueOnce({
+        status: 200,
+        data: meal2WithHiddenCook(),
+      });
+
+      store.switchMeals(2);
+      await flush();
+
+      expect(axios.get).toHaveBeenCalledTimes(1);
+      expect(notifyError).toHaveBeenCalledTimes(1);
+      expect(notifyError.mock.calls[0][0].message).toBe(
+        "Meal 2 has bills whose cooks are not in its residents list: 999",
+      );
+      expect(store.billsIncomplete).toBe(true);
+      expect(toastsAfterASave(store)).toEqual([["error", RELOAD_MESSAGE]]);
+      expect(billsPatches()).toHaveLength(0);
+    });
   });
 
   describe("the meal's channel", () => {
@@ -159,7 +276,7 @@ describe("meal page store", () => {
 
     it("refetches the meal when its channel says update", () => {
       const store = createStore();
-      store.loadData(mealPayload());
+      store.loadData(mealPayload(), "server");
       const loadDataAsync = stubAction(store, "loadDataAsync");
 
       const update = handlersFor("meal-1", "update");
@@ -173,7 +290,7 @@ describe("meal page store", () => {
     // one, and the meal on screen may have been read before that (#112).
     it("fetches the meal once more when Pusher confirms the subscription", () => {
       const store = createStore();
-      store.loadData(mealPayload());
+      store.loadData(mealPayload(), "server");
       const loadDataAsync = stubAction(store, "loadDataAsync");
 
       const confirmed = handlersFor("meal-1", "pusher:subscription_succeeded");
@@ -189,8 +306,8 @@ describe("meal page store", () => {
     it("stays open, and is opened once, while the same meal is fetched again", () => {
       const store = createStore();
 
-      store.loadData(mealPayload({ description: "First" }));
-      store.loadData(mealPayload({ description: "Second" }));
+      store.loadData(mealPayload({ description: "First" }), "server");
+      store.loadData(mealPayload({ description: "Second" }), "server");
 
       expect(window.Comeals.pusher.subscribe.mock.calls).toEqual([
         ["meal-1"],
@@ -202,12 +319,12 @@ describe("meal page store", () => {
 
     it("is closed when the next meal's answer lands, and that meal's is opened", async () => {
       const store = createStore();
-      store.loadData(mealPayload());
+      store.loadData(mealPayload(), "server");
       stubAction(store, "loadDataAsync");
       store.switchMeals(2);
       await flush();
 
-      store.loadData(mealPayload({ id: 2 }));
+      store.loadData(mealPayload({ id: 2 }), "server");
 
       expect(window.Comeals.pusher.unsubscribe.mock.calls).toEqual([
         ["meal-1"],
