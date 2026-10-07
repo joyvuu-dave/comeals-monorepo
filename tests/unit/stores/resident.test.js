@@ -96,8 +96,9 @@ describe("Resident model", () => {
   });
 
   // The answers above stand in for the server, so they must have the
-  // keys it really sends (tests/fixtures/api_contract.json is generated
-  // from the Rails serializers).
+  // keys it really sends (tests/fixtures/api_contract.json is written by
+  // hand, and spec/serializers/api_contract_spec.rb checks it against
+  // the Rails serializers).
   it("answers adds with the keys the server sends", () => {
     expect(Object.keys(MEAL_RESIDENT).sort()).toEqual(contract.MealResident);
     expect(Object.keys(guestAnswer().data).sort()).toEqual(contract.Guest);

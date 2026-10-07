@@ -11,6 +11,13 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
   let(:cook) { create(:resident, community: community, unit: unit) }
   let!(:bill) { create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('0')) }
 
+  # The server's words for a write to a settled meal, from the contract
+  # file the Vitest tests read too (docs/adr/0001-typescript-at-the-api-boundary.md).
+  let(:reconciled_rejection) do
+    JSON.parse(Rails.root.join('tests/fixtures/api_contract.json').read)
+        .fetch('messages').fetch('reconciled_rejection')
+  end
+
   def update_bills(meal_id:, bills:, token: self.token)
     patch "/api/v1/meals/#{meal_id}/bills", params: {
       meal_id: meal_id,
@@ -134,14 +141,20 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
       meal.update!(reconciliation: reconciliation)
     end
 
-    it 'returns 400 with an error message' do
+    # The meal page reads this exact sentence to tell a settled meal from
+    # the other 400s. A save for a meal the person has left then says
+    # that meal was settled (#107). The sentence comes from the contract
+    # file. If the server's words change, this example fails until the
+    # contract file changes, and then tests/unit/api_contract.test.ts
+    # fails until the constant in data_store_bills.ts changes.
+    it 'returns 400 with the exact sentence the meal page reads' do
       update_bills(
         meal_id: meal.id,
         bills: [{ resident_id: cook.id, amount: '50.00', no_cost: false }]
       )
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body['message']).to include('reconciled')
+      expect(response.parsed_body).to eq('message' => reconciled_rejection)
     end
 
     it 'does not modify the bill' do
@@ -218,8 +231,9 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
 
     # Bill's own reconciled check reads the meals table, so it would refuse
     # this upsert too, but with its own words ("Validation failed: Meal has
-    # been reconciled."). The exact sentence below is the one the re-check
-    # under the lock gives, so the example shows that re-check answered.
+    # been reconciled."). The exact sentence below, reconciled_rejection,
+    # is the one the re-check under the lock gives, so the example shows
+    # that re-check answered.
     it 'returns 400 and keeps the amounts when only upserts race the sweep' do
       reconciliation = create(:reconciliation, community: community, end_date: meal.date - 30)
 
@@ -235,7 +249,7 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
       )
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body['message']).to eq('Change not permitted. Meal has already been reconciled.')
+      expect(response.parsed_body['message']).to eq(reconciled_rejection)
       expect(bill.reload.amount).to eq(BigDecimal('0'))
     end
   end

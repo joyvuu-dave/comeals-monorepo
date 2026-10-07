@@ -12,6 +12,12 @@ require 'rails_helper'
 # Scope: serializer-backed response shapes only. Ack/BillsAck are inline
 # controller hashes with no serializer to drift.
 #
+# The fixture's "messages" entry is not a field list. It holds the exact
+# words of server answers the SPA compares, and the request spec for each
+# answer checks them. For reconciled_rejection, that is
+# spec/requests/api/v1/update_bills_spec.rb. So the field-list check
+# below leaves "messages" out.
+#
 # These serialize real records (not serializer._attributes introspection) so
 # adapter behavior — key names as actually rendered — is what's asserted.
 RSpec.describe 'API contract (tests/fixtures/api_contract.json)', type: :serializer do
@@ -33,8 +39,8 @@ RSpec.describe 'API contract (tests/fixtures/api_contract.json)', type: :seriali
     hash.keys.map(&:to_s).sort
   end
 
-  it 'covers every entry in the contract fixture' do
-    expect(covered).to match_array(contract.keys)
+  it 'covers every field list in the contract fixture' do
+    expect(covered).to match_array(contract.except('messages').keys)
   end
 
   describe 'GET /api/v1/meals/:meal_id/cooks' do

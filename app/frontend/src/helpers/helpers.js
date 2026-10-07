@@ -1,10 +1,13 @@
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
+import advancedFormat from "dayjs/plugin/advancedFormat";
 import Cookie from "js-cookie";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
+// For "Do" ("6th") in mealDayLabel.
+dayjs.extend(advancedFormat);
 
 // The community's IANA timezone (e.g. "America/Los_Angeles", "Europe/Berlin")
 // is written to a cookie at login from community.timezone on the backend. Read
@@ -131,6 +134,14 @@ export function toCommunityDayjs(dateString) {
 // meal-day rollover as anyone at home.
 export function communityNow() {
   return wallClockAt(Date.now(), getCommunityTimezone());
+}
+
+// A meal's day the way the date box on the meal page shows it, for
+// example "Tue, Oct 6th". loadData builds a meal's date as a local Date
+// whose year, month and day are the community's day, so it is read here
+// as a local date.
+export function mealDayLabel(date) {
+  return dayjs(date).format("ddd, MMM Do");
 }
 
 // The value space is a compile-time constant (~56 15-minute slots, 8am–10pm),

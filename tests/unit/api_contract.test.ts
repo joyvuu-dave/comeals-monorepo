@@ -3,7 +3,10 @@
 // fixture, tests/fixtures/api_contract.json.
 // See docs/adr/0001-typescript-at-the-api-boundary.md.
 //
-// Two enforcement layers:
+// The fixture also holds, under "messages", the exact words of server
+// answers the SPA compares. The last describe below checks them.
+//
+// Two enforcement layers for the field lists:
 //   - Compile time: each manifest literal below must list exactly the keys of
 //     its interface — the mapped type `{ [K in keyof T]-?: true }` rejects
 //     both missing and extra keys — so `npm run typecheck` fails when
@@ -25,8 +28,11 @@ import type {
   MealFormResident,
   MealResident,
 } from "../../app/frontend/src/types/api";
+import { SETTLED_MEAL_REFUSAL } from "../../app/frontend/src/stores/data_store_bills";
 
-const contract: Record<string, string[]> = contractJson;
+const { messages, ...shapes } = contractJson;
+const contract: Record<string, string[]> = shapes;
+const contractMessages: Record<string, string> = messages;
 
 function keysOf<T>(manifest: { [K in keyof T]-?: true }): string[] {
   return Object.keys(manifest).sort();
@@ -118,6 +124,29 @@ describe("types/api.ts matches tests/fixtures/api_contract.json", () => {
   for (const [name, keys] of Object.entries(manifests)) {
     it(`${name} keys match the fixture`, () => {
       expect(keys).toEqual([...contract[name]].sort());
+    });
+  }
+});
+
+// The server's answer to some refusals has no field that tells them
+// apart, so the SPA compares the words. Each is a constant in the app,
+// and it must be the same as the fixture. The comment on each line names
+// the spec that checks the server sends these words.
+const messageConstants: Record<string, string> = {
+  // spec/requests/api/v1/update_bills_spec.rb
+  reconciled_rejection: SETTLED_MEAL_REFUSAL,
+};
+
+describe("the words the SPA compares match tests/fixtures/api_contract.json", () => {
+  it("covers every message in the contract fixture", () => {
+    expect(Object.keys(messageConstants).sort()).toEqual(
+      Object.keys(contractMessages).sort(),
+    );
+  });
+
+  for (const [name, words] of Object.entries(messageConstants)) {
+    it(`${name} is the same as the fixture`, () => {
+      expect(words).toBe(contractMessages[name]);
     });
   }
 });

@@ -47,6 +47,7 @@ That's the deliberate trade — ~50% of TS's safety for ~10% of the cost.
 **Operational rules:**
 
 - When a Rails serializer changes, the matching interface in `types/api.ts` must change in the same PR. This is enforced mechanically, not by discipline: `spec/serializers/api_contract_spec.rb` (Rails side) and `tests/unit/api_contract.test.ts` (TS side, plus a compile-time manifest check) both assert against `tests/fixtures/api_contract.json`, so drift on either side fails `bin/check`. Changing a serializer's fields means updating the fixture, which forces the interface update — and vice versa.
+- The fixture also holds, under `messages`, the exact words of server answers the SPA compares, because those answers have no other field that tells them apart. Today there is one: the refusal of a write to a settled meal (`reconciled_rejection`). Its request spec (`spec/requests/api/v1/update_bills_spec.rb`) checks that the server sends these words, and `tests/unit/api_contract.test.ts` checks that the SPA's constant is the same. App code keeps its own copy of the words and does not import the fixture.
 - `MoneyString` values are parsed (`new BigNumber(...)` or similar) at the point of use, never coerced with `+` or `Number(...)`.
 - Do not flip `checkJs` on globally. If a specific `.js` file is worth checking, opt it in with a `// @ts-check` header.
 

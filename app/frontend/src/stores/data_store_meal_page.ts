@@ -46,7 +46,7 @@ export interface MealPageStore extends ReturnType<typeof mealPageVolatile> {
   mealLoadFailed: boolean;
   mealLoadNotFound: boolean;
   closedPending: boolean;
-  flushPendingBillsSave(): void;
+  saveBillsBeforeLeaving(): void;
   ensureResidentsChannel(): void;
   settleClosed(): void;
   loadDataAsync(): void;
@@ -94,10 +94,11 @@ export function mealPageVolatile() {
     // only the newest fetch's response may reach the screen.
     mealFetches: createVersionGuard(),
     // The meal has a bill whose cook is not in the residents list, so
-    // the page cannot show that bill (#91). While this is true,
-    // submitBills sends nothing: a save lists every cook, and the
-    // server deletes the bill of a cook left out. loadData sets it, and
-    // clearBills sets it back to false with the rows.
+    // the page cannot show that bill (#91). While this is true, no
+    // bills save is built from the rows (data_store_bills.ts): a save
+    // lists every cook, and the server deletes the bill of a cook left
+    // out. loadData sets it, and clearBills sets it back to false with
+    // the rows.
     billsIncomplete: false,
   };
 }
@@ -459,10 +460,11 @@ export function mealPageActions(self: MealPageStore) {
       self.meals.push(obj);
     },
     switchMeals(id: number) {
-      // A bill edit still sitting in the debounce window belongs to the
-      // meal we are leaving. Send it now, while the meal id and the bill
-      // rows it was typed on are still current.
-      self.flushPendingBillsSave();
+      // A bill edit not sent yet belongs to the meal we are leaving,
+      // whether it is in the debounce window or waiting for a save in
+      // flight to be answered. Build its save now, while the meal id and
+      // the bill rows it was typed on are still current (#107).
+      self.saveBillsBeforeLeaving();
 
       if (typeof self.meals.find((item) => item.id === id) === "undefined") {
         self.addMeal({ id });
@@ -486,8 +488,9 @@ export function mealPageActions(self: MealPageStore) {
       // edit made in that window was sent to the NEW meal id with the
       // OLD meal's cook list as the payload. The server deletes cooks
       // left out of that list, so one keystroke during a slow load
-      // could rewrite the new meal's bills. The flush above already
-      // captured any pending edit, so clearing here cannot lose one.
+      // could rewrite the new meal's bills. saveBillsBeforeLeaving
+      // above already built a save of any edit not sent yet, so
+      // clearing here cannot lose one.
       self.clearBills();
       self.clearResidents();
       self.clearGuests();
@@ -527,10 +530,10 @@ export function mealPageActions(self: MealPageStore) {
     // last meal's channel stayed live forever: every edit to that meal
     // triggered a full background store rebuild from the calendar.
     teardownMealPage() {
-      // A bill edit still in the debounce window belongs to the meal we
-      // are leaving. Send it while the meal and its bill rows are still
-      // current — the same flush switchMeals does.
-      self.flushPendingBillsSave();
+      // A bill edit not sent yet belongs to the meal we are leaving.
+      // Build its save while the meal and its bill rows are still
+      // current — the same step switchMeals takes first.
+      self.saveBillsBeforeLeaving();
 
       if (window.Comeals.mealChannel !== null) {
         window.Comeals.pusher.unsubscribe(window.Comeals.mealChannel.name);
@@ -550,8 +553,8 @@ export function mealPageActions(self: MealPageStore) {
       // behind crashed the meal page on its next mount: the first render
       // showed them before goToMeal ran, and a row read
       // store.meal.reconciled on the null meal (production, 2026-07-22).
-      // The flush above already captured its payload, so clearing here
-      // cannot lose an edit.
+      // saveBillsBeforeLeaving above already built a save of any edit
+      // not sent yet, so clearing here cannot lose one.
       self.clearBills();
       self.clearResidents();
       self.clearGuests();

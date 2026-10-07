@@ -8,6 +8,7 @@ import {
   useParams,
 } from "react-router";
 import { useStore } from "../../helpers/store_context";
+import { mealDayLabel } from "../../helpers/helpers";
 import { MEAL_HISTORY_PATH } from "../../routes";
 import dayjs from "dayjs";
 import Modal from "react-modal";
@@ -138,7 +139,7 @@ const DateBox = observer(() => {
       return "";
     }
 
-    return dayjs(store.meal.date).format("ddd, MMM Do");
+    return mealDayLabel(store.meal.date);
   }
 
   return (

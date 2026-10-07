@@ -14,6 +14,7 @@ import {
   communityNow,
   generateTimes,
   getCommunityTimezone,
+  mealDayLabel,
   toCommunityDayjs,
   wallClockToInstant,
   zoneOffsetMs,
@@ -368,6 +369,16 @@ describe("communityNow", () => {
 
     setCommunityTimezone("Australia/Sydney");
     expect(communityNow().format("YYYY-MM-DD HH:mm")).toBe("2026-07-08 20:00");
+  });
+});
+
+// The meal page's date box shows a meal's day this way, and so does a
+// message about a bills save for a meal the person has left (#107).
+describe("mealDayLabel", () => {
+  it("shows the weekday, the month, and the day with its ending", () => {
+    expect(mealDayLabel(new Date(2026, 9, 6))).toBe("Tue, Oct 6th");
+    expect(mealDayLabel(new Date(2026, 9, 1))).toBe("Thu, Oct 1st");
+    expect(mealDayLabel(new Date(2026, 9, 22))).toBe("Thu, Oct 22nd");
   });
 });
 

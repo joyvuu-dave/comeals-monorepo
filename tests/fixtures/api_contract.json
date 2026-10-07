@@ -53,5 +53,8 @@
     "meal_id",
     "resident_id",
     "vegetarian"
-  ]
+  ],
+  "messages": {
+    "reconciled_rejection": "Change not permitted. Meal has already been reconciled."
+  }
 }
