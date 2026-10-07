@@ -67,6 +67,11 @@ RSpec.describe ReconciliationMailer do
       expect(urls_in(mail).map { |url| token_read_from(url) }).to eq([token_with_url_characters] * 2)
     end
 
+    it 'underlines the title of the text part with = signs and nothing else' do
+      expect(mail.text_part.body.decoded.lines.first(2).map(&:chomp))
+        .to eq(['Semi-Annual Reconciliation', '=' * 'Semi-Annual Reconciliation'.length])
+    end
+
     it_behaves_like 'an HTML part that is one HTML document'
 
     # The words are an open question (#106). This pins them as they are,
@@ -122,6 +127,20 @@ RSpec.describe ReconciliationMailer do
       expect(urls_in(mail).map { |url| token_read_from(url) }).to eq([token_with_url_characters] * 4)
     end
 
+    it 'says that meal costs are locked and it is time to collect, in both parts' do
+      sentence = "Meal costs have now been locked and it's time to collect and distribute $. " \
+                 'Here are the final balances.'
+
+      expect(html_body(mail).text.squish).to include(sentence)
+      expect(mail.text_part.body.decoded.lines.map(&:chomp)).to include(sentence)
+    end
+
+    it 'underlines the title of the text part with = signs and nothing else' do
+      title = 'Resident / Unit Balances for Current Reconciliation'
+
+      expect(mail.text_part.body.decoded.lines.first(2).map(&:chomp)).to eq([title, '=' * title.length])
+    end
+
     it_behaves_like 'an HTML part that is one HTML document'
 
     it 'keeps the words and the two links in the HTML part' do
@@ -129,7 +148,7 @@ RSpec.describe ReconciliationMailer do
 
       expect(body.text.squish).to eq(
         'Resident / Unit Balances for Current Reconciliation ' \
-        "Meal costs have now been locked and it's time collect and distribute $. " \
+        "Meal costs have now been locked and it's time to collect and distribute $. " \
         'Here are the final balances. Residents Units ~Admin'
       )
       expect(links_in(body)).to eq([['Residents', residents_url], ['Units', units_url]])
