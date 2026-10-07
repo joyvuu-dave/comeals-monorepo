@@ -123,6 +123,32 @@ describe("DateBox", () => {
     );
   });
 
+  // At the first and the last meal the server sends the meal's own id
+  // for the missing neighbour, never null (MealFormSerializer, #113).
+  // That arrow is disabled and a tap stays on the meal. The other arrow
+  // still works.
+  it.each([
+    ["last", "Next meal", "Previous meal", { prevId: 41, nextId: 42 }],
+    ["first", "Previous meal", "Next meal", { prevId: 42, nextId: 43 }],
+  ])(
+    "the %s meal's outward arrow is disabled when the neighbour id is the meal's own",
+    (_end, arrowName, otherArrowName, ids) => {
+      const store = makeStore();
+      Object.assign(store.meal, ids);
+      renderBox(store);
+
+      expect(
+        screen.getByRole("button", { name: otherArrowName }),
+      ).toHaveAttribute("aria-disabled", "false");
+      const arrow = screen.getByRole("button", { name: arrowName });
+      expect(arrow).toHaveAttribute("aria-disabled", "true");
+      fireEvent.click(arrow);
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        /^\/meals\/42\/edit\/$/,
+      );
+    },
+  );
+
   it("opens the history modal for the meal on the history path", async () => {
     renderBox(makeStore(), "/meals/42/edit/history/");
     expect(screen.getByLabelText("History Modal")).toBeInTheDocument();

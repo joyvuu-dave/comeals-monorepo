@@ -176,6 +176,10 @@ GET /meals/:meal_id/cooks
 - `guests` lists guests. Each guest belongs to a resident, the host.
 - `closed`, `max`, and `reconciled` are the meal's state. See "Rules"
   below.
+- `next_id` and `prev_id` are the ids of the meals just after and just
+  before this one, by date. They are never `null`. At the last meal,
+  `next_id` is the meal's own `id`. At the first meal, `prev_id` is the
+  meal's own `id`.
 
 ### Sign up and cancel
 

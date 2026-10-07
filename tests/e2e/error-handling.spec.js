@@ -519,8 +519,9 @@ test.describe("Error Handling & Edge Cases", () => {
   // At either end of the meal list the server sends the meal's own id
   // for the missing neighbour (MealFormSerializer#next_id and #prev_id,
   // pinned by spec/serializers/meal_form_serializer_spec.rb), never
-  // null. So the arrow that points past the end must not take the
-  // page anywhere else, and the other arrow must still work.
+  // null. So the arrow that points past the end is disabled, a tap on
+  // it must not take the page anywhere else, and the other arrow must
+  // still work (#113).
   test.describe("Navigation Edge Cases", () => {
     // The ids of the meals the page asked the server for, in order.
     function mealRequests(page) {
@@ -571,8 +572,21 @@ test.describe("Error Handling & Edge Cases", () => {
       const requested = mealRequests(page);
       await openMeal42(page);
 
-      await page.getByRole("button", { name: "Next meal" }).click();
+      const next = page.getByRole("button", { name: "Next meal" });
+      await expect(next).toBeDisabled();
+      await expect(
+        page.getByRole("button", { name: "Previous meal" }),
+      ).toBeEnabled();
+      // force: a plain click would wait for the arrow to be enabled,
+      // and it never is. A tap on it must still do nothing: before the
+      // fix it opened the same meal again, which added a history entry,
+      // so Back needed an extra press.
+      const historyBefore = await page.evaluate(() => window.history.length);
+      await next.click({ force: true });
       await expect(page).toHaveURL(/\/meals\/42\/edit\/?$/);
+      expect(await page.evaluate(() => window.history.length)).toBe(
+        historyBefore,
+      );
 
       await page.getByRole("button", { name: "Previous meal" }).click();
       await expect(page).toHaveURL(/\/meals\/41\/edit\/?$/, { timeout: 5000 });
@@ -602,8 +616,21 @@ test.describe("Error Handling & Edge Cases", () => {
       const requested = mealRequests(page);
       await openMeal42(page);
 
-      await page.getByRole("button", { name: "Previous meal" }).click();
+      const previous = page.getByRole("button", { name: "Previous meal" });
+      await expect(previous).toBeDisabled();
+      await expect(
+        page.getByRole("button", { name: "Next meal" }),
+      ).toBeEnabled();
+      // force: a plain click would wait for the arrow to be enabled,
+      // and it never is. A tap on it must still do nothing: before the
+      // fix it opened the same meal again, which added a history entry,
+      // so Back needed an extra press.
+      const historyBefore = await page.evaluate(() => window.history.length);
+      await previous.click({ force: true });
       await expect(page).toHaveURL(/\/meals\/42\/edit\/?$/);
+      expect(await page.evaluate(() => window.history.length)).toBe(
+        historyBefore,
+      );
 
       await page.getByRole("button", { name: "Next meal" }).click();
       await expect(page).toHaveURL(/\/meals\/43\/edit\/?$/, { timeout: 5000 });

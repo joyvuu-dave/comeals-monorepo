@@ -236,10 +236,13 @@ button:focus {
   cursor: pointer;
 }
 
+/* Dimmed like a[disabled] below, because the cursor alone does not
+   show on a touch screen (#113). */
 .arrow[disabled] {
   color: initial;
   cursor: not-allowed;
   background-color: initial;
+  opacity: 0.5;
 }
 
 .title {

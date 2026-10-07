@@ -75,15 +75,21 @@ const DateBox = observer(() => {
     navigate(`${location.pathname.split("/history")[0]}`);
   }
 
-  // A null prevId/nextId never navigates: a half-loaded meal has
-  // no neighbors yet, and pushing /meals/null/edit is a stuck
-  // loading page that survives refresh (issue #38).
+  // True when there is no meal to go to on that side. At the first and
+  // the last meal the server sends the meal's own id for the missing
+  // side (MealFormSerializer), never null (#113). A half-loaded meal
+  // has null, and pushing /meals/null/edit is a stuck loading page
+  // that survives refresh (issue #38).
+  function noNeighbor(neighborId) {
+    return neighborId === null || neighborId === store.meal.id;
+  }
+
   function prevDisabled() {
-    return store.mealLoading || !store.meal || store.meal.prevId === null;
+    return store.mealLoading || !store.meal || noNeighbor(store.meal.prevId);
   }
 
   function nextDisabled() {
-    return store.mealLoading || !store.meal || store.meal.nextId === null;
+    return store.mealLoading || !store.meal || noNeighbor(store.meal.nextId);
   }
 
   function handlePrevClick() {
