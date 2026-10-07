@@ -9,7 +9,8 @@
 # only the cooks without one, so a job that stopped part way (dyno restart,
 # the per-run cap) picks up where it stopped when Solid Queue runs it
 # again. One run per reconciliation at a time, so two workers cannot mail
-# the same cook at once.
+# the same cook at once. The reconciliations:send_cooking_slot_email task
+# queues this job instead of sending, so this limit covers it too.
 class NotifyCooksJob < ApplicationJob
   MAILER = 'reconciliation_notify_email'
 

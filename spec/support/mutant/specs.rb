@@ -60,8 +60,10 @@ MUTANT_SPEC_ROWS = {
   # The preview, create, settled-meal-cache and live-update request specs
   # prove Settlement too; their rows are in the second block, with the
   # controllers and LiveUpdate they also prove.
-  'spec/tasks/reconciliations_email_spec.rb' =>
-    %w[Reconciliation PacedDelivery ReconciliationMailer MailDeliveryFailure],
+  # The task queues NotifyCooksJob, and two examples run it with the
+  # mailer stubbed, so the file proves the job and the paced sender, not
+  # the mailer.
+  'spec/tasks/reconciliations_email_spec.rb' => %w[NotifyCooksJob PacedDelivery MailDelivery],
   'spec/requests/admin/reconciliation_show_spec.rb' => %w[Reconciliation BalanceDisplayHelper MealCostSummary],
   'spec/requests/admin/resident_statement_spec.rb' =>
     %w[Reconciliation BalanceDisplayHelper SettlementLinesTable MealCostSummary],

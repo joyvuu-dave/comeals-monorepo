@@ -1003,24 +1003,6 @@ RSpec.describe Reconciliation do
     end
   end
 
-  describe '#unique_cooks' do
-    it 'names a cook once, however many meals they cooked in the period' do
-      unit = create(:unit, community: community)
-      cook = create(:resident, community: community, unit: unit, multiplier: 1)
-      eater = create(:resident, community: community, unit: unit, multiplier: 1)
-      2.times do |days_ago|
-        meal = create(:meal, community: community, date: Date.yesterday - days_ago)
-        create(:meal_resident, meal: meal, resident: eater, community: community)
-        create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('10'))
-      end
-
-      reconciliation = settle!(cutoff: Date.yesterday)
-
-      expect(reconciliation.cooks.count).to eq(2)
-      expect(reconciliation.unique_cooks).to eq([cook])
-    end
-  end
-
   describe '#unit_balances' do
     it 'groups settlement balances by unit and sums to exactly zero' do
       unit_a = create(:unit, community: community, name: 'Unit A')

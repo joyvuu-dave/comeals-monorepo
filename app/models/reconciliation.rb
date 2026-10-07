@@ -67,11 +67,6 @@ class Reconciliation < ApplicationRecord
     meals.count
   end
 
-  sig { returns(T::Array[Resident]) }
-  def unique_cooks
-    cooks.uniq
-  end
-
   # The period this settlement covers: the dates of the meals it swept.
   # Neither date column is the start of that period — `date` is the day the
   # settlement ran and `end_date` is the sweep cutoff — so a "date to

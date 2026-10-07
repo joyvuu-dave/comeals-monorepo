@@ -26,15 +26,17 @@ RSpec.describe ReconciliationMailer do
   end
 
   describe '#reconciliation_notify_email' do
-    let(:reconciliation) { create(:reconciliation, community: community) }
+    # The cutoff has a one-digit day, so a date written with a leading zero
+    # ("Sep 03") or with the full month name ("September 3") shows here.
+    let(:reconciliation) { create(:reconciliation, community: community, end_date: Date.new(2026, 9, 3)) }
     let(:mail) { described_class.reconciliation_notify_email(resident, reconciliation) }
 
     it 'sends to the resident email' do
       expect(mail.to).to eq(['sarah@example.com'])
     end
 
-    it 'has the correct subject' do
-      expect(mail.subject).to eq("Meal Reconciliation #{reconciliation.id}")
+    it 'names the cutoff date in the subject' do
+      expect(mail.subject).to eq('Common meals settled through Sep 3, 2026')
     end
 
     it 'includes the community name' do
@@ -57,7 +59,7 @@ RSpec.describe ReconciliationMailer do
       cook_mail = described_class.reconciliation_notify_email(cook, reconciliation)
 
       expect(cook_mail.text_part.body.to_s.split).to include(url)
-      expect(cook_mail.html_part.body.to_s).to include(%(<a href="#{ERB::Util.html_escape(url)}">here</a>))
+      expect(links_in(html_body(cook_mail))).to eq([['the meals you cooked', url]])
     end
 
     it 'writes the token so that the admin reads back the same token, in both parts' do
@@ -69,19 +71,57 @@ RSpec.describe ReconciliationMailer do
 
     it 'underlines the title of the text part with = signs and nothing else' do
       expect(mail.text_part.body.decoded.lines.first(2).map(&:chomp))
-        .to eq(['Semi-Annual Reconciliation', '=' * 'Semi-Annual Reconciliation'.length])
+        .to eq(['Common Meals Settled', '=' * 'Common Meals Settled'.length])
     end
 
     it_behaves_like 'an HTML part that is one HTML document'
 
-    # The words are an open question (#106). This pins them as they are,
-    # so that a change to the markup around them cannot drop any.
-    it 'keeps the words and the community name in the HTML part' do
+    # The one sender, NotifyCooksJob, mails a cook after the settlement has
+    # committed: SettleAndNotify queues it after settling, and the
+    # send_cooking_slot_email task queues it for Reconciliation.last, which
+    # is already settled. So the cook's meals are already locked
+    # (CLAUDE.md, money rule 7). The mail must not ask for changes that the
+    # app will now refuse, or say the lock is still to come (#106).
+    it 'does not ask the cook to fix costs of meals the settlement has already locked' do
+      [mail.text_part, mail.html_part].each do |part|
+        body = part.body.decoded.squish
+        expect(body).not_to include('ensure all your meal costs are accurate')
+        expect(body).not_to include('will be locked')
+      end
+    end
+
+    # The owner chose these words (#106). Each test pins every word of one
+    # part, so a change to the template cannot drop or change any.
+    it 'says the meals through the cutoff are settled and final, in the text part' do
+      allow(ENV).to receive(:fetch).and_call_original
+      allow(ENV).to receive(:fetch).with('READ_ONLY_ADMIN_TOKEN', nil).and_return('the-token')
+      url = 'http://admin.lvh.me:3000/bills?order=meals.date_desc' \
+            "&q%5Bmeal_reconciliation_id_eq%5D=#{reconciliation.id}&q%5Bresident_id_eq%5D=#{resident.id}" \
+            '&subdomain=admin&token=the-token&utf8=%E2%9C%93'
+
+      # rstrip: the text layout adds a blank line after the template.
+      expect(mail.text_part.body.decoded.rstrip.lines.map(&:chomp)).to eq(
+        [
+          'Common Meals Settled',
+          '====================',
+          '',
+          'The common meals in this settlement, through Sep 3, 2026, are now settled. ' \
+          'Their costs are final and can no longer be changed.',
+          '',
+          "Here are the meals you cooked in this settlement, and what you spent on each: #{url}",
+          '',
+          'Have a great day!',
+          "~Swan's Way"
+        ]
+      )
+    end
+
+    it 'says the meals through the cutoff are settled and final, in the HTML part' do
       expect(html_body(mail).text.squish).to eq(
-        "Semi-Annual Reconciliation It's time once again to reconcile our Common Meals. " \
-        'In preparation, please ensure all your meal costs are accurate. ' \
-        'View all your cooking slots for the last 6 months here. ' \
-        'Meals will be locked and final balances will be sent out in 2 weeks. ' \
+        'Common Meals Settled ' \
+        'The common meals in this settlement, through Sep 3, 2026, are now settled. ' \
+        'Their costs are final and can no longer be changed. ' \
+        'Here are the meals you cooked in this settlement, and what you spent on each. ' \
         "Have a great day! ~Swan's Way"
       )
     end

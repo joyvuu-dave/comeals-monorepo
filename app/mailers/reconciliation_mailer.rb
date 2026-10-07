@@ -2,9 +2,13 @@
 # frozen_string_literal: true
 
 class ReconciliationMailer < ApplicationMailer
+  # Sent to each cook after a settlement has committed, so the meals in
+  # it are already locked (#106). The date in the mail is end_date, the
+  # settlement's cutoff.
   def reconciliation_notify_email(resident, reconciliation)
     @resident = resident
     @community = @resident.community
+    @settled_through = T.must(reconciliation.end_date).strftime('%b %-d, %Y')
     @url = "#{root_admin_url}/bills?" \
            'order=meals.date_desc' \
            "&q%5Bmeal_reconciliation_id_eq%5D=#{reconciliation.id}" \
@@ -12,7 +16,7 @@ class ReconciliationMailer < ApplicationMailer
            '&subdomain=admin' \
            "&token=#{read_only_token}" \
            '&utf8=%E2%9C%93'
-    mail(to: @resident.email, subject: "Meal Reconciliation #{reconciliation.id}")
+    mail(to: @resident.email, subject: "Common meals settled through #{@settled_through}")
   end
 
   def common_house_collection_email

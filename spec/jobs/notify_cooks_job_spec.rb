@@ -87,6 +87,17 @@ RSpec.describe NotifyCooksJob do
     expect(MailDelivery.where(about: reconciliation).count).to eq(3)
   end
 
+  # SettleAndNotify and the reconciliations:send_cooking_slot_email task
+  # both queue this job. Solid Queue runs one job per key at a time and
+  # holds the next one back until the first ends, so the two cannot mail
+  # the same cook at the same moment. The test queue adapter does not
+  # apply the limit, so this example pins the settings instead.
+  it 'runs one job per reconciliation at a time, and holds the next one back until it ends' do
+    expect(described_class.new(reconciliation).concurrency_key).to eq("NotifyCooksJob/#{reconciliation.id}")
+    expect(described_class.concurrency_limit).to eq(1)
+    expect(described_class.concurrency_on_conflict).to eq(:block)
+  end
+
   it 'has nothing to do for a reconciliation whose cooks were all mailed' do
     cooks.each do |cook|
       MailDelivery.record!(mailer: 'reconciliation_notify_email', about: reconciliation, resident: cook)

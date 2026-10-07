@@ -1773,3 +1773,20 @@ two messages. A sign-up with neither flag now does, and its example
 expects both lines. Run alone, the method had 31 mutations, and all 31
 were killed. Of the API request specs, only that example fails when the
 join is changed to `join` by hand.
+
+### 2026-10-07, the cook email after a settlement (#106)
+
+Run on `ReconciliationMailer#reconciliation_notify_email`, the one Ruby
+method the #106 change rewrote, and on `NotifyCooksJob*` and
+`MailDelivery*`, because the examples mutant runs for them changed. The
+`reconciliations:send_cooking_slot_email` task now queues
+`NotifyCooksJob` instead of sending the mail itself, so the row for its
+spec names the job, `PacedDelivery` and `MailDelivery`. It no longer
+names `Reconciliation`, whose one method the task used
+(`unique_cooks`) is removed, or the mailer, which every example of that
+spec stubs. The task body itself is not mutated.
+
+Four workers, 4 subjects, 157 mutations, 157 killed, nothing alive, no
+timeout, 2 minutes. The mailer method alone: 32 mutations, 32 killed.
+Both runs went while other worktrees ran `bin/check`; with no timeout
+and nothing alive, that load changed no result.
