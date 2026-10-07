@@ -122,6 +122,48 @@ RSpec.describe MealResident do
     end
   end
 
+  # Issue #121. Both columns are NOT NULL. The model refuses a nil with a
+  # sentence, so every path (API, admin, a task) gets a readable error
+  # instead of the database's NotNullViolation.
+  describe 'the late and vegetarian flags' do
+    it 'refuses a nil late with a sentence' do
+      mr = described_class.new(meal: meal, resident: resident, late: nil, vegetarian: false)
+
+      expect(mr).not_to be_valid
+      expect(mr.errors.full_messages).to eq(['Late must be true or false'])
+    end
+
+    it 'refuses a nil vegetarian with a sentence' do
+      mr = described_class.new(meal: meal, resident: resident, late: false, vegetarian: nil)
+
+      expect(mr).not_to be_valid
+      expect(mr.errors.full_messages).to eq(['Vegetarian must be true or false'])
+    end
+
+    it 'accepts true and false for each flag' do
+      [true, false].product([true, false]).each do |late, vegetarian|
+        mr = described_class.new(meal: meal, resident: resident, late: late, vegetarian: vegetarian)
+
+        expect(mr).to be_valid, "late: #{late}, vegetarian: #{vegetarian}: #{mr.errors.full_messages}"
+      end
+    end
+
+    it 'takes the column default, false, when nothing sets the flags, as the admin create does' do
+      mr = described_class.new(meal: meal, resident: resident)
+
+      expect(mr).to have_attributes(late: false, vegetarian: false)
+      expect(mr).to be_valid
+    end
+
+    it 'refuses a nil on an update and keeps the stored row' do
+      mr = create(:meal_resident, meal: meal, resident: resident, community: community, late: true, vegetarian: true)
+
+      expect(mr.update(late: nil)).to be(false)
+      expect(mr.errors.full_messages).to eq(['Late must be true or false'])
+      expect(mr.reload).to have_attributes(late: true, vegetarian: true)
+    end
+  end
+
   describe '#meal_has_open_spots' do
     it 'allows signup when meal is open' do
       meal.update_columns(closed: false)

@@ -48,4 +48,9 @@ class Guest < ApplicationRecord
   include NotesMealLiveUpdate
 
   validates :multiplier, numericality: { only_integer: true }
+  # Both columns are NOT NULL. Without this a nil (a guest sent without
+  # vegetarian) reached the database and the API answered 500 (#121).
+  # Nothing writes late today. It is checked anyway, because its column
+  # refuses a nil too.
+  validates :vegetarian, :late, inclusion: { in: [true, false], message: 'must be true or false' }
 end

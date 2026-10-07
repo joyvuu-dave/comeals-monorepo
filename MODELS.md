@@ -174,7 +174,10 @@ Resident
   System" below.
 - `active` — false for residents who moved away or died
 - `can_cook` — eligible for the cooking rotation
-- `vegetarian` — the default copied onto new attendance rows
+- `vegetarian` — the starting value of the veg switch on the meal page,
+  for a resident who is not signed up (`MealFormSerializer#vegetarian`).
+  The SPA sends the switch's value on sign-up; the server does not copy
+  this column onto the attendance row.
 - `birthday` — two uses: the calendar shows it, and the price band is
   computed from it for the day of each meal (`multiplier_on`). Optional:
   NULL means an adult who gave none, and the calendar shows nothing. A
@@ -436,8 +439,10 @@ MealResident ----> Community
   moving the meal to another date: every row then gets the band for the
   new date (`Meal#restamp_attendance_for_new_date`). Required; CHECK
   `meal_residents_multiplier_non_negative`.
-- `late` — arrived late
-- `vegetarian`
+- `late` — arrived late. Required: true or false. A nil (a flag left out
+  of a sign-up, or sent as `""`) is refused with "must be true or false"
+  (#121).
+- `vegetarian` — required: true or false, the same as `late`.
 
 **Indexes:** `index_meal_residents_on_meal_id_and_resident_id` (unique; one
 row per resident per meal) and `index_meal_residents_on_resident_id`. The
@@ -484,7 +489,10 @@ Guest ----> Resident (the host)
 **Key fields:** `multiplier` (default 2, CHECK
 `guests_multiplier_non_negative`), `late`, `vegetarian`, `meal_id`,
 `resident_id`, timestamps. There is no `name` column and no `community_id`
-column; a guest reaches the community through its host.
+column; a guest reaches the community through its host. `late` and
+`vegetarian` are required: true or false. A nil is refused with "must be
+true or false" (#121). Nothing in the app writes a guest's `late` today:
+the API and the admin form leave it at the column default, false.
 
 **Indexes:** `index_guests_on_meal_id`, `index_guests_on_resident_id`.
 

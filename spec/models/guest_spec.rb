@@ -32,6 +32,49 @@ RSpec.describe Guest do
   let(:meal) { create(:meal, community: community) }
   let(:resident) { create(:resident, community: community, unit: unit, multiplier: 2) }
 
+  # Issue #121. Both columns are NOT NULL. The model refuses a nil with a
+  # sentence, so every path (API, admin, a task) gets a readable error
+  # instead of the database's NotNullViolation. Nothing writes a guest's
+  # late today, but its column refuses a nil too, so the model checks it.
+  describe 'the vegetarian and late flags' do
+    it 'refuses a nil vegetarian with a sentence' do
+      guest = described_class.new(meal: meal, resident: resident, vegetarian: nil)
+
+      expect(guest).not_to be_valid
+      expect(guest.errors.full_messages).to eq(['Vegetarian must be true or false'])
+    end
+
+    it 'refuses a nil late with a sentence' do
+      guest = described_class.new(meal: meal, resident: resident, late: nil)
+
+      expect(guest).not_to be_valid
+      expect(guest.errors.full_messages).to eq(['Late must be true or false'])
+    end
+
+    it 'accepts true and false for each flag' do
+      [true, false].product([true, false]).each do |late, vegetarian|
+        guest = described_class.new(meal: meal, resident: resident, late: late, vegetarian: vegetarian)
+
+        expect(guest).to be_valid, "late: #{late}, vegetarian: #{vegetarian}: #{guest.errors.full_messages}"
+      end
+    end
+
+    it 'takes the column default, false, when nothing sets the flags, as the admin meal form does' do
+      guest = described_class.new(meal: meal, resident: resident)
+
+      expect(guest).to have_attributes(late: false, vegetarian: false)
+      expect(guest).to be_valid
+    end
+
+    it 'refuses a nil on an update and keeps the stored row' do
+      guest = create(:guest, meal: meal, resident: resident, vegetarian: true)
+
+      expect(guest.update(vegetarian: nil)).to be(false)
+      expect(guest.errors.full_messages).to eq(['Vegetarian must be true or false'])
+      expect(guest.reload.vegetarian).to be(true)
+    end
+  end
+
   describe '#meal_has_open_spots' do
     it 'allows guest when meal is open' do
       meal.update_columns(closed: false, max: nil)

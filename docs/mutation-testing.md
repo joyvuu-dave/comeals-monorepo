@@ -1591,8 +1591,9 @@ Run 1, 358 alive, by kind:
     delegates to the same records.
   - `MealsController` (8): `AuditSerializer` without `.to_h` (Alba
     writes the same JSON), the join in `render_write_under_lock`, which
-    no API write can reach with two problems (the settled-meal refusal
-    comes before the lock), the `return` before the socket id in
+    no API write could then reach with two problems (the settled-meal
+    refusal comes before the lock; #121 changed this, see 2026-10-07),
+    the `return` before the socket id in
     `set_meal` (the render already stops the chain), and in
     `update_bills` a nil status for `:ok` and the error for its
     message, which is how Rails writes an error in JSON.
@@ -1747,3 +1748,28 @@ Run on the one Ruby method the #91 fix changed,
 Both alive are the `.includes(:unit)`: removed, or `includes(nil)`.
 goldiloader loads the units in one query without it, as on 2026-09-26
 and in the calendar's query shapes. Noise.
+
+### 2026-10-07, a sign-up or a guest without a flag (#121)
+
+Run on what the #121 fix touched, by name: `MealResident`, `Guest`,
+`Api::V1::MealsController#create_meal_resident` and `#create_guest`.
+Four workers, 5 subjects, 194 mutations, 192 killed, 2 alive, no
+timeout, 5 minutes 30 seconds.
+
+The fix itself is one `validates ... inclusion:` line in each model.
+Mutant changes methods, and a `validates` call in the class body is not
+inside a method, so mutant never changes it. `Guest` has no method of
+its own, so it gave no subject at all. The two lines were checked by
+hand instead: with both removed, 13 of the new examples fail.
+
+Both alive are `params.fetch(:resident_id)` for `params[:resident_id]`,
+one in each action. `:resident_id` is part of the route's path, so
+every request that reaches the action has it, and `fetch` never
+raises. The `.fetch` for `[]` kind, as on 2026-10-06. Noise.
+
+The controllers stage of 2026-09-27 left the `join("\n")` in
+`render_write_under_lock` alive, because no API write could fail with
+two messages. A sign-up with neither flag now does, and its example
+expects both lines. Run alone, the method had 31 mutations, and all 31
+were killed. Of the API request specs, only that example fails when the
+join is changed to `join` by hand.

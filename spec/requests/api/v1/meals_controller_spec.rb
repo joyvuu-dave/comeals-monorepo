@@ -189,6 +189,80 @@ RSpec.describe 'Meals API' do
       expect(meal.meal_residents.find_by(resident: resident).late).to be(true)
     end
 
+    # Issue #121. A flag that is left out is refused, not stored as false.
+    # Before MealResident checked the flags, the nil reached the NOT NULL
+    # column and the answer was a 500.
+    it 'refuses a sign-up without late or vegetarian with a 400, and saves nothing' do
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: { token: token }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq("Late must be true or false\nVegetarian must be true or false")
+      expect(meal.meal_residents.where(resident: resident)).not_to exist
+    end
+
+    it 'refuses a sign-up that leaves out one flag, and names that flag' do
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: { token: token, late: false }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Vegetarian must be true or false')
+      expect(meal.meal_residents.where(resident: resident)).not_to exist
+    end
+
+    it 'refuses a JSON null flag the same way' do
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}",
+           params: { token: token, late: nil, vegetarian: false }.to_json,
+           headers: { 'CONTENT_TYPE' => 'application/json' }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Late must be true or false')
+      expect(meal.meal_residents.where(resident: resident)).not_to exist
+    end
+
+    # The flag that was sent is not saved either: the row is refused as a
+    # whole, so late stays true.
+    it 'refuses a re-signup that leaves a flag out, and keeps the stored row' do
+      create(:meal_resident, meal: meal, resident: resident, community: community, late: true, vegetarian: true)
+
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: { token: token, late: false }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Vegetarian must be true or false')
+      expect(meal.meal_residents.where(resident: resident).sole).to have_attributes(late: true, vegetarian: true)
+    end
+
+    # Rails reads a boolean column this way: an empty string is nil, so it
+    # is refused like a missing flag.
+    it 'refuses an empty flag, which Rails reads as nil' do
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: { token: token, late: '', vegetarian: false }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Late must be true or false')
+      expect(meal.meal_residents.where(resident: resident)).not_to exist
+    end
+
+    # This pins what Rails does today; nothing in this app chose it. #138
+    # asks whether to refuse these values instead. Rails reads a boolean
+    # column as false only for its own list of false words: "0", "f",
+    # "false" and "off", each all lower case or all upper case. Every other
+    # value is true, so "maybe", "no" and even "False" sign up as true.
+    it 'reads a flag that is not a boolean the way Rails does: anything but a false word is true' do
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}",
+           params: { token: token, late: 'maybe', vegetarian: 'no' }
+
+      expect(response).to have_http_status(:ok)
+      expect(meal.meal_residents.find_by(resident: resident)).to have_attributes(late: true, vegetarian: true)
+    end
+
+    # Python's requests sends "False" for a form post with
+    # data={"late": False}, and that signs up as true.
+    it 'reads a false word as false in upper case, but as true in mixed case' do
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}",
+           params: { token: token, late: 'False', vegetarian: 'FALSE' }
+
+      expect(response).to have_http_status(:ok)
+      expect(meal.meal_residents.find_by(resident: resident)).to have_attributes(late: true, vegetarian: false)
+    end
+
     it 'attributes the audit row to the authenticated resident' do
       post "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: {
         token: token, late: false, vegetarian: false
@@ -305,6 +379,19 @@ RSpec.describe 'Meals API' do
       expect(meal_resident.late).to be(true)
       expect(meal_resident.vegetarian).to be(true)
     end
+
+    # A change may leave a flag out (the SPA sends one flag at a time), but
+    # it may not empty one: Rails reads "" as nil, and before MealResident
+    # checked the flags that nil reached the NOT NULL column as a 500.
+    it 'refuses an empty flag with a 400 and keeps the stored flags' do
+      meal_resident.update!(late: true, vegetarian: true)
+
+      patch "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: { token: token, late: '' }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Late must be true or false')
+      expect(meal_resident.reload).to have_attributes(late: true, vegetarian: true)
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -356,6 +443,26 @@ RSpec.describe 'Meals API' do
       end
 
       expect(meal.guests.order(:id).pluck(:vegetarian)).to eq([true, false])
+    end
+
+    # Issue #121, the guest half. Before Guest checked the flag, the nil
+    # reached the NOT NULL column and the answer was a 500.
+    it 'refuses a guest without vegetarian with a 400, and saves nothing' do
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests", params: { token: token }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Vegetarian must be true or false')
+      expect(meal.guests.count).to eq(0)
+    end
+
+    # Pins what Rails does today, as for a sign-up: anything but one of
+    # Rails' false words is true. #138 asks whether to refuse these values.
+    it 'reads a vegetarian flag that is not a boolean the way Rails does' do
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests",
+           params: { token: token, vegetarian: 'maybe' }
+
+      expect(response).to have_http_status(:ok)
+      expect(meal.guests.sole.vegetarian).to be(true)
     end
 
     it 'rejects guest when meal is closed without max' do

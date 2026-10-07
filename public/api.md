@@ -187,13 +187,27 @@ GET /meals/:meal_id/cooks
 
 ### Sign up and cancel
 
-| Method   | Path                                                      | Body                                     | What it does                                                                                           |
-| -------- | --------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `POST`   | `/meals/:meal_id/residents/:resident_id`                  | `{ "late": false, "vegetarian": false }` | Signs the resident up. If already signed up, updates `late` and `vegetarian` instead. Returns the row. |
-| `PATCH`  | `/meals/:meal_id/residents/:resident_id`                  | `{ "late": ..., "vegetarian": ... }`     | Changes `late` or `vegetarian` for a signup.                                                           |
-| `DELETE` | `/meals/:meal_id/residents/:resident_id`                  |                                          | Cancels the signup.                                                                                    |
-| `POST`   | `/meals/:meal_id/residents/:resident_id/guests`           | `{ "vegetarian": false }`                | Adds one guest hosted by that resident. Returns the guest, including its `id`.                         |
-| `DELETE` | `/meals/:meal_id/residents/:resident_id/guests/:guest_id` |                                          | Removes that guest.                                                                                    |
+| Method   | Path                                                      | Body                                     | What it does                                                                                                                    |
+| -------- | --------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `POST`   | `/meals/:meal_id/residents/:resident_id`                  | `{ "late": false, "vegetarian": false }` | Signs the resident up. Both flags are required. If already signed up, updates `late` and `vegetarian` instead. Returns the row. |
+| `PATCH`  | `/meals/:meal_id/residents/:resident_id`                  | `{ "late": ..., "vegetarian": ... }`     | Changes `late` or `vegetarian` for a signup.                                                                                    |
+| `DELETE` | `/meals/:meal_id/residents/:resident_id`                  |                                          | Cancels the signup.                                                                                                             |
+| `POST`   | `/meals/:meal_id/residents/:resident_id/guests`           | `{ "vegetarian": false }`                | Adds one guest hosted by that resident. `vegetarian` is required. Returns the guest, including its `id`.                        |
+| `DELETE` | `/meals/:meal_id/residents/:resident_id/guests/:guest_id` |                                          | Removes that guest.                                                                                                             |
+
+Send each flag as `true` or `false`. A refused flag answers `400`, and
+nothing is saved. The `message` names each refused flag, one per line:
+`"Late must be true or false"`, `"Vegetarian must be true or false"`.
+
+- On a sign-up and on a guest, a flag that is missing, `null` or `""`
+  is refused. This holds for a re-signup too, and the stored signup does
+  not change.
+- On a `PATCH`, a missing flag is fine: it changes only the flags it
+  sends. A flag sent as `null` or `""` is refused.
+
+Other values are not refused. `false`, `0`, and the strings `"false"`,
+`"0"`, `"f"` and `"off"` (all lower case or all upper case) read as
+false. Anything else reads as true, even `"no"` and `"False"`.
 
 Any resident can sign up, cancel, or add guests for any other resident.
 The app is a shared screen in the common house, and the API is the same.

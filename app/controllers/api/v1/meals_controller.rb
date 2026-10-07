@@ -51,6 +51,10 @@ module Api
       # find_or_create_by(resident_id:, late:, vegetarian:). This means
       # re-signing up with different late/vegetarian values updates the
       # existing signup instead of erroring on the unique index.
+      #
+      # Both flags are required, on a re-signup too. A missing one is nil,
+      # and MealResident refuses a nil flag, so the answer is a 400 and the
+      # stored row is unchanged (#121).
       sig { void }
       def create_meal_resident
         render_write_under_lock do
@@ -82,7 +86,8 @@ module Api
 
       # POST /api/v1/meals/:meal_id/residents/:resident_id/guests { vegetarian }
       # Uses pessimistic locking to prevent concurrent guest additions from
-      # exceeding meal.max.
+      # exceeding meal.max. vegetarian is required: Guest refuses a nil
+      # flag, so a request without it is a 400 (#121).
       sig { void }
       def create_guest
         render_write_under_lock do
