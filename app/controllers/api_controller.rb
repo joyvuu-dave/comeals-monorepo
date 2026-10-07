@@ -101,8 +101,9 @@ class ApiController < ActionController::API
   #   parts are not read.
   # - With both time menus empty, the entry runs from midnight to
   #   midnight. People post notices this way ("Movie night is cancelled
-  #   tonight"), and such an entry blocks no booking, because it ends
-  #   when it starts.
+  #   tonight"). Such an entry ends when it starts, so it overlaps only a
+  #   common house booking that runs past midnight, and only admin can
+  #   make one of those.
   # - With one time menu empty, the answer is PICK_BOTH_TIMES. A blank
   #   time used to be read as midnight, so this booked from midnight.
   # - Otherwise each part must be a whole number in its range.
@@ -112,6 +113,30 @@ class ApiController < ActionController::API
   # Then each time must be one the database can store (StorableTime).
   # The year has no range of its own, and a year like 300000 reached the
   # database, which raised PG::DatetimeFieldOverflow: a 500.
+  #
+  # A local time that the clock skips or shows twice on a daylight saving
+  # night is read by the rule in RFC 5545, section 3.3.5 (#125):
+  #
+  # - A time the clock skips is read with the UTC offset from before the
+  #   skip. In America/Los_Angeles, 02:30 on 2026-03-08 does not happen;
+  #   it is read as 02:30 PST, which is 03:30 PDT.
+  # - A time the clock shows twice is the first of the two. 01:30 on
+  #   2026-11-01 is 01:30 PDT (UTC-7), not the 01:30 PST an hour later.
+  #
+  # Time.zone.local gives these answers, so there is no code for it here.
+  # Its own rule is different: it moves a skipped time one hour later, and
+  # of a time shown twice it takes the one in daylight saving time, or the
+  # later one when both or neither are. The two rules agree when the clock
+  # skips exactly one hour, or goes back from daylight saving time to
+  # standard time. Every clock change since 1972 in the zones in
+  # Community::SUPPORTED_TIMEZONES is one of those, and
+  # events_controller_spec.rb checks each one. Some earlier changes were
+  # not: in Los Angeles, 12:00 to 12:07 on 1883-11-18 happened twice, and
+  # 12:05 that day is saved as the second one, not the first.
+  #
+  # So a start in the skipped hour can move past its end (02:30 to 03:00
+  # becomes 03:30 to 03:00), and the model refuses that with "Start time
+  # must occur before end time".
   def parse_start_end_params(allday: false)
     times = start_end_times(allday)
     return times if times.is_a?(String)

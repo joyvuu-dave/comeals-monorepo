@@ -391,6 +391,19 @@ exist. A start or end the database cannot store also returns that 400:
 before midnight UTC on November 24, 4714 BC (`start_year` -4713, since
 year 0 is 1 BC), or after the end of 294276 in UTC.
 
+Times are read in the community's time zone. A time that the clock
+skips when daylight saving time starts is read with the UTC offset from
+before the skip: in America/Los_Angeles, 02:30 on 2026-03-08 is saved
+as 03:30 PDT. So a start of 02:30 with an end of 03:00 that day returns
+`400 "Start time must occur before end time"`. A time that the clock
+shows twice when daylight saving time ends is the first of the two:
+01:30 on 2026-11-01 is saved as 01:30 PDT (UTC-7). This is the rule in
+RFC 5545, section 3.3.5, and it holds for every clock change since 1972.
+Some earlier changes were not a one-hour skip or the end of daylight
+saving time, and a time near one of those can be read another way: 12:05
+on 1883-11-18 in Los Angeles happened twice, and it is saved as the
+second one.
+
 ## Guest room reservations
 
 One reservation per day. `resident_id` is the host.
@@ -433,9 +446,19 @@ The date and time parts follow the rules for timed events: both times
 empty means midnight to midnight, one time empty returns
 `400 "Pick both a start and an end time."`, and a date that does not
 exist, a bad hour or minute, or a time the database cannot store,
-returns `400 "Error: Invalid date"`. A block from midnight to midnight
-ends when it starts, so it overlaps nothing. A block that overlaps
-another returns `400 "Time period is already taken"`.
+returns `400 "Error: Invalid date"`. A time on a daylight saving night
+is read the same way as for an event: 02:30 on 2026-03-08 is saved as
+03:30 PDT, and 01:30 on 2026-11-01 is the first 01:30, in PDT. A block
+that overlaps another returns `400 "Time period is already taken"`.
+
+A block that ends when it starts is saved and returns 200, but it holds
+no time. It overlaps only a block that starts before its time and ends
+after it. Both times empty gives such a block at midnight. Only a
+booking that runs past midnight can overlap it, and only admin can make
+one. A start and an end that are the same, such as 14:00 to 14:00, give
+such a block too, and so does 02:30 to 03:30 on 2026-03-08, which is
+saved as 03:30 to 03:30. A booking from 03:00 to 03:30 that day can
+still be made; one from 03:00 to 04:00 overlaps it.
 
 ## Calendar feeds (iCal)
 

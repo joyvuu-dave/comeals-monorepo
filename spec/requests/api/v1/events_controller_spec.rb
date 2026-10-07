@@ -347,6 +347,131 @@ RSpec.describe 'Events API' do
       end
     end
 
+    # A local time the clock skips or shows twice is read by the rule in
+    # RFC 5545, section 3.3.5 (#125). The community is in Los Angeles. On
+    # 2026-03-08 the clock goes from 01:59 PST to 03:00 PDT, so 02:30 does
+    # not happen. It is read with the offset from before the gap, UTC-8,
+    # and 02:30 PST is 03:30 PDT. On 2026-11-01 the clock goes from 01:59
+    # PDT back to 01:00 PST, so 01:30 happens twice, and the first one,
+    # PDT (UTC-7), is saved. The expected times are in UTC, so they do not
+    # depend on the zone the spec runs in.
+    describe 'a time on a daylight saving night (#125)' do
+      let(:spring_forward) { { start_year: 2026, start_month: 3, start_day: 8 } }
+      let(:fall_back) { { start_year: 2026, start_month: 11, start_day: 1 } }
+
+      def post_event(**parts)
+        post '/api/v1/events', params: { token: token, title: 'Night', all_day: false }.merge(parts)
+      end
+
+      it 'saves a start or an end in the spring-forward gap an hour later, at 03:30 PDT' do
+        post_event(**spring_forward, start_hours: 2, start_minutes: 30, end_hours: 4, end_minutes: 0)
+        expect(response).to have_http_status(:ok)
+        post_event(**spring_forward, start_hours: 1, start_minutes: 0, end_hours: 2, end_minutes: 30)
+        expect(response).to have_http_status(:ok)
+
+        # 03:30 PDT is 10:30 UTC, 04:00 PDT is 11:00 UTC, 01:00 PST is 09:00 UTC.
+        expect(Event.order(:id).pluck(:start_date, :end_date)).to eq(
+          [[Time.utc(2026, 3, 8, 10, 30), Time.utc(2026, 3, 8, 11, 0)],
+           [Time.utc(2026, 3, 8, 9, 0), Time.utc(2026, 3, 8, 10, 30)]]
+        )
+      end
+
+      it 'saves a start or an end that happens twice on the fall-back night as the first one, in PDT' do
+        post_event(**fall_back, start_hours: 1, start_minutes: 30, end_hours: 1, end_minutes: 45)
+        expect(response).to have_http_status(:ok)
+        post_event(**fall_back, start_hours: 0, start_minutes: 30, end_hours: 1, end_minutes: 30)
+        expect(response).to have_http_status(:ok)
+
+        # 01:30 PDT is 08:30 UTC. The second 01:30, in PST, would be 09:30 UTC.
+        expect(Event.order(:id).pluck(:start_date, :end_date)).to eq(
+          [[Time.utc(2026, 11, 1, 8, 30), Time.utc(2026, 11, 1, 8, 45)],
+           [Time.utc(2026, 11, 1, 7, 30), Time.utc(2026, 11, 1, 8, 30)]]
+        )
+      end
+
+      it 'starts an all-day event at midnight on both nights, because midnight happens once on each' do
+        [spring_forward, fall_back].each do |day|
+          post_event(**day, all_day: true)
+          expect(response).to have_http_status(:ok)
+        end
+
+        # Midnight PST on 2026-03-08 is 08:00 UTC; midnight PDT on 2026-11-01 is 07:00 UTC.
+        expect(Event.order(:id).pluck(:start_date, :end_date, :allday)).to eq(
+          [[Time.utc(2026, 3, 8, 8, 0), nil, true], [Time.utc(2026, 11, 1, 7, 0), nil, true]]
+        )
+      end
+
+      # A start in the gap moves an hour later, and an end after the gap
+      # does not move, so the two can meet or cross. 02:30 to 03:00 becomes
+      # 03:30 to 03:00, and the model refuses an end before its start.
+      # 02:30 to 03:30 becomes 03:30 to 03:30, an event with no length,
+      # which the model takes, the same as midnight to midnight.
+      it 'refuses a start in the gap that moves past its end, and takes one that moves onto its end' do
+        post_event(**spring_forward, start_hours: 2, start_minutes: 30, end_hours: 3, end_minutes: 0)
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body).to eq('message' => 'Start time must occur before end time')
+        expect(Event.count).to eq(0)
+
+        post_event(**spring_forward, start_hours: 2, start_minutes: 30, end_hours: 3, end_minutes: 30)
+        expect(response).to have_http_status(:ok)
+        expect(Event.pluck(:start_date, :end_date)).to eq([[Time.utc(2026, 3, 8, 10, 30)] * 2])
+      end
+
+      # The examples above check Los Angeles in 2026, through the API. The
+      # API reads a time with Time.zone.local, and its rule is not written
+      # the way the RFC writes it (ApiController#parse_start_end_params
+      # says how). The next two examples check where the two rules give
+      # the same answer, and pin one place where they do not. Inside a
+      # clock change, the RFC reads a skipped time with the UTC offset from
+      # before the change. Of a time shown twice it takes the first, which
+      # is also the one with the offset from before the change. This
+      # checks each change at the first, middle and last whole minute that
+      # the clock skips or shows twice.
+      def reads_at_clock_changes(zone_name, from, to)
+        zone = ActiveSupport::TimeZone[zone_name]
+        TZInfo::Timezone.get(zone_name).transitions_up_to(to, from).flat_map do |change|
+          offset_before = change.previous_offset.observed_utc_offset
+          edges = [offset_before, change.offset.observed_utc_offset].map { |offset| change.timestamp_value + offset }
+          first, past_last = edges.sort
+          [first.ceildiv(60), (first + past_last) / 120, (past_last - 1) / 60].uniq.map do |minute|
+            wall = Time.at(minute * 60).utc
+            { wall: "#{zone_name} #{wall.strftime('%F %R')}",
+              read: zone.local(wall.year, wall.month, wall.day, wall.hour, wall.min).utc,
+              rfc: Time.at((minute * 60) - offset_before).utc }
+          end
+        end
+      end
+
+      it 'reads a time the RFC way at every clock change from 1972 to 2100, in every zone a community can use' do
+        reads = Community::SUPPORTED_TIMEZONES.values.flat_map do |zone_name|
+          reads_at_clock_changes(zone_name, Time.utc(1972), Time.utc(2101))
+        end
+
+        expect(reads.pluck(:wall)).to include(
+          'America/Los_Angeles 2026-03-08 02:30', 'America/Los_Angeles 2026-11-01 01:30'
+        )
+        expect(reads.reject { |read| read[:read] == read[:rfc] }).to eq([])
+      end
+
+      # At noon on 1883-11-18, Los Angeles moved its clocks from local sun
+      # time (UTC-7:52:58) back to PST (UTC-8), so 12:00 to 12:07 happened
+      # twice. The RFC says 12:05 is the first one, 19:57:58 UTC. This
+      # pins the difference that ApiController#parse_start_end_params
+      # writes down: if it starts to fail, that comment and public/api.md
+      # are out of date.
+      it 'saves a time shown twice in 1883 as the second one, which is not the RFC answer' do
+        post_event(start_year: 1883, start_month: 11, start_day: 18,
+                   start_hours: 12, start_minutes: 5, end_hours: 13, end_minutes: 0)
+
+        expect(response).to have_http_status(:ok)
+        expect(Event.last.start_date).to eq(Time.utc(1883, 11, 18, 20, 5))
+        expect(reads_at_clock_changes('America/Los_Angeles', Time.utc(1883), Time.utc(1884))).to include(
+          { wall: 'America/Los_Angeles 1883-11-18 12:03', read: Time.utc(1883, 11, 18, 20, 3),
+            rfc: Time.utc(1883, 11, 18, 19, 55, 58) }
+        )
+      end
+    end
+
     it 'creates an all-day event' do
       post '/api/v1/events', params: {
         token: token,
@@ -510,6 +635,34 @@ RSpec.describe 'Events API' do
       expect(response.parsed_body).to eq('message' => 'Event has been updated')
       expect(event.reload).to have_attributes(start_date: Time.zone.local(2026, 11, 1),
                                               end_date: Time.zone.local(2026, 11, 1), allday: false)
+    end
+
+    # The same rule as create (#125): 02:30 on 2026-03-08 is 03:30 PDT,
+    # and 01:30 on 2026-11-01 is the first 01:30, in PDT.
+    it 'moves an event into the spring-forward gap an hour later, and onto the first 01:30 of the fall-back night' do
+      [[{ start_month: 3, start_day: 8, start_hours: 2, start_minutes: 30, end_hours: 4, end_minutes: 0 },
+        [Time.utc(2026, 3, 8, 10, 30), Time.utc(2026, 3, 8, 11, 0)]],
+       [{ start_month: 11, start_day: 1, start_hours: 1, start_minutes: 30, end_hours: 1, end_minutes: 45 },
+        [Time.utc(2026, 11, 1, 8, 30), Time.utc(2026, 11, 1, 8, 45)]]].each do |parts, saved|
+        patch "/api/v1/events/#{event.id}/update", params: { token: token, all_day: false, start_year: 2026 }
+          .merge(parts)
+
+        expect(response.parsed_body).to eq('message' => 'Event has been updated')
+        expect(event.reload.attributes.values_at('start_date', 'end_date')).to eq(saved)
+      end
+    end
+
+    it 'refuses a start in the spring-forward gap that moves past its end, and leaves the event as it was' do
+      before = event.reload.attributes
+
+      patch "/api/v1/events/#{event.id}/update", params: {
+        token: token, all_day: false, start_year: 2026, start_month: 3, start_day: 8,
+        start_hours: 2, start_minutes: 30, end_hours: 3, end_minutes: 0
+      }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq('message' => 'Start time must occur before end time')
+      expect(event.reload.attributes).to eq(before)
     end
 
     it 'refuses a year the database cannot store, at either end, and leaves the event as it was' do

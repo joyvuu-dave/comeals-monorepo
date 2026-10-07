@@ -125,6 +125,23 @@ RSpec.describe 'Common House Reservations API' do
       expect(CommonHouseReservation.count).to eq(3)
     end
 
+    # The API's start and end are on one day, but a booking made in admin
+    # can run past midnight, and a reservation with no times at that
+    # midnight overlaps it.
+    it 'refuses a reservation with no times at a midnight that a booking made in admin runs past' do
+      create(:common_house_reservation, community: community, resident: resident,
+                                        start_date: Time.zone.local(2026, 5, 1, 22, 0),
+                                        end_date: Time.zone.local(2026, 5, 2, 2, 0))
+
+      post '/api/v1/common-house-reservations', params: {
+        token: token, resident_id: resident.id, start_year: 2026, start_month: 5, start_day: 2
+      }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq('message' => 'Time period is already taken')
+      expect(CommonHouseReservation.count).to eq(1)
+    end
+
     # Before, a blank time was read as midnight, so a blank start with a
     # real end booked the common house from midnight.
     it 'refuses a reservation with one time menu empty, and says to pick both' do
@@ -175,6 +192,86 @@ RSpec.describe 'Common House Reservations API' do
         [[Time.utc(294_276, 12, 31, 23, 0), Time.utc(294_276, 12, 31, 23, 59)],
          [Time.utc(-4713, 11, 24, 0, 0, 58), Time.utc(-4713, 11, 24, 0, 52, 58)]]
       )
+    end
+
+    # The same rule as an event (events_controller_spec.rb says it in
+    # full): RFC 5545, section 3.3.5 (#125). 02:30 on 2026-03-08 does not
+    # happen in Los Angeles and is read as 03:30 PDT; 01:30 on 2026-11-01
+    # happens twice and is the first one, in PDT. The expected times are
+    # in UTC.
+    describe 'a time on a daylight saving night (#125)' do
+      let(:spring_forward) { { start_year: 2026, start_month: 3, start_day: 8 } }
+      let(:fall_back) { { start_year: 2026, start_month: 11, start_day: 1 } }
+
+      def post_reservation(**parts)
+        post '/api/v1/common-house-reservations', params: { token: token, resident_id: resident.id }.merge(parts)
+      end
+
+      it 'saves a start or an end in the spring-forward gap an hour later, at 03:30 PDT' do
+        post_reservation(**spring_forward, start_hours: 2, start_minutes: 30, end_hours: 4, end_minutes: 0)
+        expect(response).to have_http_status(:ok)
+        post_reservation(**spring_forward, start_hours: 0, start_minutes: 0, end_hours: 2, end_minutes: 30)
+        expect(response).to have_http_status(:ok)
+
+        # 03:30 PDT is 10:30 UTC, 04:00 PDT is 11:00 UTC, midnight PST is 08:00 UTC.
+        expect(CommonHouseReservation.order(:id).pluck(:start_date, :end_date)).to eq(
+          [[Time.utc(2026, 3, 8, 10, 30), Time.utc(2026, 3, 8, 11, 0)],
+           [Time.utc(2026, 3, 8, 8, 0), Time.utc(2026, 3, 8, 10, 30)]]
+        )
+      end
+
+      it 'saves a start or an end that happens twice on the fall-back night as the first one, in PDT' do
+        post_reservation(**fall_back, start_hours: 1, start_minutes: 30, end_hours: 1, end_minutes: 45)
+        expect(response).to have_http_status(:ok)
+        post_reservation(**fall_back, start_hours: 0, start_minutes: 30, end_hours: 1, end_minutes: 30)
+        expect(response).to have_http_status(:ok)
+
+        # 01:30 PDT is 08:30 UTC. The second 01:30, in PST, would be 09:30 UTC.
+        expect(CommonHouseReservation.order(:id).pluck(:start_date, :end_date)).to eq(
+          [[Time.utc(2026, 11, 1, 8, 30), Time.utc(2026, 11, 1, 8, 45)],
+           [Time.utc(2026, 11, 1, 7, 30), Time.utc(2026, 11, 1, 8, 30)]]
+        )
+      end
+
+      # A start in the gap moves an hour later, and an end after the gap
+      # does not move. 02:30 to 03:00 becomes 03:30 to 03:00, and the model
+      # refuses an end before its start. 02:30 to 03:30 becomes 03:30 to
+      # 03:30, which ends when it starts, the same as midnight to midnight.
+      it 'refuses a start in the gap that moves past its end, and takes one that moves onto its end' do
+        post_reservation(**spring_forward, start_hours: 2, start_minutes: 30, end_hours: 3, end_minutes: 0)
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body).to eq('message' => 'Start time must occur before end time')
+        expect(CommonHouseReservation.count).to eq(0)
+
+        post_reservation(**spring_forward, start_hours: 2, start_minutes: 30, end_hours: 3, end_minutes: 30)
+        expect(response).to have_http_status(:ok)
+        expect(CommonHouseReservation.pluck(:start_date, :end_date)).to eq([[Time.utc(2026, 3, 8, 10, 30)] * 2])
+      end
+
+      # A block that ends when it starts holds no time, at any hour, not
+      # only at midnight. It overlaps only a booking that starts before it
+      # and ends after it. public/api.md says this with these times.
+      it 'takes a block that ends when it starts, and refuses only a booking that runs over its time' do
+        post_reservation(**spring_forward, start_hours: 2, start_minutes: 30, end_hours: 3, end_minutes: 30)
+        expect(response).to have_http_status(:ok)
+        post_reservation(start_year: 2026, start_month: 5, start_day: 1,
+                         start_hours: 14, start_minutes: 0, end_hours: 14, end_minutes: 0)
+        expect(response).to have_http_status(:ok)
+        # 03:30 PDT is 10:30 UTC; 14:00 PDT is 21:00 UTC.
+        expect(CommonHouseReservation.order(:id).pluck(:start_date, :end_date)).to eq(
+          [[Time.utc(2026, 3, 8, 10, 30)] * 2, [Time.utc(2026, 5, 1, 21, 0)] * 2]
+        )
+
+        post_reservation(**spring_forward, start_hours: 3, start_minutes: 0, end_hours: 4, end_minutes: 0)
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body).to eq('message' => 'Time period is already taken')
+
+        [[3, 0, 3, 30], [3, 30, 4, 0]].each do |start_hours, start_minutes, end_hours, end_minutes|
+          post_reservation(**spring_forward, start_hours:, start_minutes:, end_hours:, end_minutes:)
+          expect(response).to have_http_status(:ok)
+        end
+        expect(CommonHouseReservation.count).to eq(4)
+      end
     end
 
     it 'rejects overlapping reservations in the same community' do
@@ -298,6 +395,38 @@ RSpec.describe 'Common House Reservations API' do
       expect(response.parsed_body).to eq('message' => 'Common House Reservation has been updated')
       expect(chr.reload).to have_attributes(start_date: Time.zone.local(2026, 3, 8),
                                             end_date: Time.zone.local(2026, 3, 8), title: 'Cancelled')
+    end
+
+    # The same rule as create (#125): 02:30 on 2026-03-08 is 03:30 PDT,
+    # and 01:30 on 2026-11-01 is the first 01:30, in PDT.
+    it 'moves a reservation into the spring-forward gap an hour later, and onto the first 01:30 of the fall-back ' \
+       'night' do
+      chr = create(:common_house_reservation, community: community, resident: resident)
+
+      [[{ start_month: 3, start_day: 8, start_hours: 2, start_minutes: 30, end_hours: 4, end_minutes: 0 },
+        [Time.utc(2026, 3, 8, 10, 30), Time.utc(2026, 3, 8, 11, 0)]],
+       [{ start_month: 11, start_day: 1, start_hours: 1, start_minutes: 30, end_hours: 1, end_minutes: 45 },
+        [Time.utc(2026, 11, 1, 8, 30), Time.utc(2026, 11, 1, 8, 45)]]].each do |parts, saved|
+        patch "/api/v1/common-house-reservations/#{chr.id}/update",
+              params: { token: token, resident_id: resident.id, start_year: 2026 }.merge(parts)
+
+        expect(response.parsed_body).to eq('message' => 'Common House Reservation has been updated')
+        expect(chr.reload.attributes.values_at('start_date', 'end_date')).to eq(saved)
+      end
+    end
+
+    it 'refuses a start in the spring-forward gap that moves past its end, and leaves the reservation as it was' do
+      chr = create(:common_house_reservation, community: community, resident: resident)
+      before = chr.reload.attributes
+
+      patch "/api/v1/common-house-reservations/#{chr.id}/update", params: {
+        token: token, resident_id: resident.id, start_year: 2026, start_month: 3, start_day: 8,
+        start_hours: 2, start_minutes: 30, end_hours: 3, end_minutes: 0
+      }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq('message' => 'Start time must occur before end time')
+      expect(chr.reload.attributes).to eq(before)
     end
 
     it 'refuses a year the database cannot store, at either end, and leaves the reservation as it was' do
