@@ -65,7 +65,7 @@ healthchecks.io's grace period (1 hour) expires and emails you.
    `heroku config:set SOLID_QUEUE_IN_PUMA=true -a comeals-monorepo`.
    The dyno restarts; the log shows `SolidQueue-…: Started Supervisor`.
 4. Confirm the catch-up ran: `heroku run rails runner 'puts JobRun.order(:id).last(3).map { |r| [r.name, r.outcome, r.finished_at] }'`.
-   Every job that had never recorded a run is due at boot, so all four
+   Every job that had never recorded a run is due at boot, so all three
    should have a row within a minute of the restart.
 5. Leave both schedules running for one full day. Each healthchecks.io
    check should receive two pings per day (Scheduler's and Solid Queue's).

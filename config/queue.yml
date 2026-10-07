@@ -1,8 +1,10 @@
 # Solid Queue processes. One dispatcher (moves scheduled jobs to ready) and
-# one worker with one thread: the jobs are four daily tasks that take
-# seconds, and one at a time is the point (RecurringJob limits concurrency
-# per job anyway). Polling every 5 seconds keeps the database quiet; a job
-# starting five seconds late does not matter here.
+# one worker with one thread. The worker runs the three daily tasks in
+# config/recurring.yml, which take seconds, and one at a time is the point
+# for them (RecurringJob limits concurrency per job anyway). It also runs
+# every live update (LivePushJob, ADR 0007). Polling every 5 seconds keeps
+# the database quiet, but it means a change can reach other open screens
+# up to about 5 seconds late.
 #
 # In production the supervisor runs inside Puma (config/puma.rb,
 # SOLID_QUEUE_IN_PUMA), so there is no worker dyno. To move the jobs to
