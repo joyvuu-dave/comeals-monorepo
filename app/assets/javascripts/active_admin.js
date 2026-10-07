@@ -131,6 +131,36 @@ $(function () {
     refreshPreview();
   }
 
+  // The rotation menu on the New Meal form (app/admin/meal.rb). Each
+  // option carries the dates of its rotation's first and last meal
+  // (RotationChoicesHelper). When the date changes, choose the one
+  // rotation whose dates contain it. When no rotation does (a date
+  // between two rotations, or after the last one), or more than one
+  // does, leave the menu blank, so the admin must choose: the server
+  // refuses a meal with no rotation. Nothing happens when the page
+  // loads: the menu keeps what the server sent, which is blank on a new
+  // form and the admin's own choice on a form shown again with an error.
+  // The date field and the data attributes are both YYYY-MM-DD, so
+  // comparing them as strings compares the dates.
+  if ($("#meal_rotation_id").length) {
+    var $rotationMenu = $("#meal_rotation_id");
+    $("#meal_date").on("input change", function () {
+      var date = this.value;
+      var containing = $rotationMenu.find("option").filter(function () {
+        var first = this.getAttribute("data-first-date");
+        var last = this.getAttribute("data-last-date");
+        return (
+          /^\d{4}-\d{2}-\d{2}$/.test(date) &&
+          first !== null &&
+          last !== null &&
+          first <= date &&
+          date <= last
+        );
+      });
+      $rotationMenu.val(containing.length === 1 ? containing.val() : "");
+    });
+  }
+
   // Say which login this is, and point residents at theirs. The
   // resident app lives on this same host minus the admin subdomain —
   // true in production (comeals.com) and in dev (lvh.me:3000).

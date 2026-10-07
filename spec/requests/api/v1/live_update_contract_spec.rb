@@ -233,6 +233,106 @@ RSpec.describe 'live updates: every write reaches the screen that shows it' do
     end
   end
 
+  describe "a rotation's chip runs from its first meal to its last" do
+    # So a meal made, deleted or moved at either end of a rotation changes
+    # the chip on every month that shows the rotation, also a month whose
+    # six weeks do not hold the meal's date (#144). The six weeks of each
+    # month used here, Sunday to Saturday:
+    #
+    #   January 2027    Dec 27 to Feb 6
+    #   February 2027   Jan 31 to Mar 13
+    #   April 2027      Mar 28 to May 8
+    #   September 2027  Aug 29 to Oct 9
+    #
+    # The rotation has meals on Jan 20 and Feb 3, so January and February
+    # show it. A meal on Sep 15 is in a rotation of its own (the factory
+    # makes one), so September shows only that rotation.
+    let(:rotation) { create(:rotation, community: community) }
+
+    before do
+      create(:meal, community: community, rotation: rotation, date: Date.new(2027, 1, 20))
+      create(:meal, community: community, rotation: rotation, date: Date.new(2027, 2, 3))
+      create(:meal, community: community, date: Date.new(2027, 9, 15))
+    end
+
+    def watch_pushes
+      RSpec::Mocks.space.proxy_for(Pusher).reset
+      allow(Pusher).to receive(:trigger)
+    end
+
+    def month_channel(year, month)
+      calendar_channel(Date.new(year, month, 1))
+    end
+
+    # January's chip now ends on Mar 10, and Mar 10 is not in January's
+    # six weeks.
+    it 'a new meal after its last meal pushes every month that shows the rotation, and no other' do
+      watch_pushes
+
+      create(:meal, community: community, rotation: rotation, date: Date.new(2027, 3, 10))
+
+      expect_pushed(month_channel(2027, 1))
+      expect_not_pushed(month_channel(2027, 9))
+    end
+
+    # January's chip now ends on Feb 3.
+    it 'a deleted last meal pushes every month that showed the rotation' do
+      last = create(:meal, community: community, rotation: rotation, date: Date.new(2027, 3, 10))
+      watch_pushes
+
+      last.destroy!
+
+      expect_pushed(month_channel(2027, 1))
+    end
+
+    # February's chip now starts on Jan 20, and Nov 11 is not in
+    # February's six weeks.
+    it 'a deleted first meal pushes every month that shows the rotation' do
+      first = create(:meal, community: community, rotation: rotation, date: Date.new(2026, 11, 11))
+      watch_pushes
+
+      first.destroy!
+
+      expect_pushed(month_channel(2027, 2))
+    end
+
+    # January's chip now ends on Mar 10 instead of Feb 8. Neither date is
+    # in January's six weeks.
+    it 'a last meal moved later pushes every month that shows the rotation' do
+      last = create(:meal, community: community, rotation: rotation, date: Date.new(2027, 2, 8))
+      watch_pushes
+
+      last.update!(date: Date.new(2027, 3, 10))
+
+      expect_pushed(month_channel(2027, 1))
+    end
+
+    # No form or task moves a meal to another rotation; the console can.
+    # Both rotations' chips change: the old one now ends on Feb 3 on
+    # January's calendar, and the new one now starts on Mar 10 on April's.
+    it 'a meal moved to another rotation pushes the months of both rotations' do
+      last = create(:meal, community: community, rotation: rotation, date: Date.new(2027, 3, 10))
+      other = create(:rotation, community: community)
+      create(:meal, community: community, rotation: other, date: Date.new(2027, 4, 14))
+      watch_pushes
+
+      last.update!(rotation: other)
+
+      expect_pushed(month_channel(2027, 1))
+      expect_pushed(month_channel(2027, 4))
+    end
+
+    it 'a meal edit that keeps its date and rotation pushes only its own months' do
+      last = create(:meal, community: community, rotation: rotation, date: Date.new(2027, 2, 8))
+      watch_pushes
+
+      last.update!(closed: true)
+
+      expect_pushed(month_channel(2027, 2))
+      expect_not_pushed(month_channel(2027, 1))
+    end
+  end
+
   describe 'events and reservations that cross months' do
     it 'an event that spans three months pushes the middle month' do
       RSpec::Mocks.space.proxy_for(Pusher).reset

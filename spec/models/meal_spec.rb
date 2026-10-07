@@ -15,7 +15,7 @@
 #  updated_at        :datetime         not null
 #  community_id      :bigint           not null
 #  reconciliation_id :bigint
-#  rotation_id       :bigint
+#  rotation_id       :bigint           not null
 #
 # Indexes
 #
@@ -51,6 +51,16 @@ RSpec.describe Meal do
       meal.date = nil
       expect(meal).not_to be_valid
       expect(meal.errors[:date]).to be_present
+    end
+
+    # Every meal belongs to a rotation (#100). The admin New Meal form
+    # shows this sentence when the rotation menu is left blank. The
+    # database refuses a meal with no rotation too
+    # (spec/db/meals_rotation_required_spec.rb).
+    it 'requires a rotation, and says so in plain words' do
+      meal = build(:meal, community: community, rotation: nil)
+      expect(meal).not_to be_valid
+      expect(meal.errors.full_messages).to eq(['Rotation must be chosen. Every meal belongs to a rotation.'])
     end
 
     it 'points at the one community without being told' do
@@ -747,12 +757,6 @@ RSpec.describe Meal do
       create(:meal, community: community, rotation: rotation) # no bills
 
       expect(meal.another_meal_in_this_rotation_has_less_than_two_cooks?).to be true
-    end
-
-    it 'returns false when meal has no rotation, even beside other unassigned meals without cooks' do
-      create(:meal, community: community, rotation: nil)
-      meal = create(:meal, community: community, rotation: nil)
-      expect(meal.another_meal_in_this_rotation_has_less_than_two_cooks?).to be false
     end
 
     it 'looks only at meals in the same rotation' do

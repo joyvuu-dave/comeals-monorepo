@@ -24,6 +24,10 @@
 #   Model                      Version sees it through        Push
 #   -------------------------  -----------------------------  -----------------------------
 #   Meal                       meals.updated_at               Meal#note_live_update
+#   Meal outside the six       the count and newest           Meal#note_rotation_months
+#   weeks, in a rotation the   updated_at of every meal of    (every month from the
+#   month shows (made, moved   those rotations (a chip runs   rotation's first meal to
+#   or deleted)                from first to last meal)       its last, #144)
 #   Bill, MealResident, Guest  meals.updated_at (touch: true) NotesMealLiveUpdate
 #   Rotation                   rotations.updated_at           Rotation#note_live_update
 #   Event                      events.updated_at              Event#note_live_update
@@ -119,8 +123,7 @@ class CalendarSerializer
   end
 
   def rotations_in_range(community)
-    rotation_ids = meals_in_range(community).where.not(rotation_id: nil)
-                                            .pluck(:rotation_id).uniq
+    rotation_ids = meals_in_range(community).pluck(:rotation_id).uniq
     Rotation.where(id: rotation_ids).order(:id).preload(:meals).to_a
   end
 

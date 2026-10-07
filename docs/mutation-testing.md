@@ -1790,3 +1790,76 @@ Four workers, 4 subjects, 157 mutations, 157 killed, nothing alive, no
 timeout, 2 minutes. The mailer method alone: 32 mutations, 32 killed.
 Both runs went while other worktrees ran `bin/check`; with no timeout
 and nothing alive, that load changed no result.
+
+### 2026-10-07, a rotation for every meal (#100, #144)
+
+Run on what the #100 branch added or changed, by name:
+`RotationChoicesHelper*`, `Meal#note_live_update`,
+`Meal#note_rotation_months`, `Community#calendar_cache_version` and
+`CalendarSerializer#rotations_in_range`. Six workers, 6 subjects, 428
+mutations, 399 killed, 29 alive, no timeout, 12 minutes. Before this
+run, the review of the branch ran the helper alone and found the two
+`Arel.sql` wrappers alive. They were removed: `pluck` and `pick` take a
+`MIN()` or `MAX()` with an `AS` name without one.
+
+- Missing assertions (11), each now with an example that fails on it
+  (checked by making each change by hand).
+  - `RotationChoicesHelper#rotation_choices`, the id dropped from the
+    `ORDER BY` (1). The example made two rotations with no place number
+    and expected the newer one first. With equal place numbers,
+    PostgreSQL returns the rows in whatever order its grouping finds
+    them, so it passed without the id. It reads the statement now, as
+    the order example of `rotations_in_range` does (2026-09-27).
+  - The chip months in `Meal#note_live_update` and
+    `#note_rotation_months` (10): the old rotation read as the new one
+    or dropped, the query without its `WHERE`, and the first meal's
+    date dropped or replaced. Each example checked only that January
+    was pushed, and each wrote a meal in early February. A range that
+    reaches February notes February 1, which is on January's grid, so a
+    range with a wrong end still pushed January. The writes are on
+    March 10 now, a deleted first meal checks the other end of the
+    range, and a meal on September 15 in another rotation checks that
+    the query reads only the meal's own rotations.
+- Redundant code, removed (12). The meal's own dates were noted twice:
+  `note_live_update` noted the old date, and `note_rotation_months`
+  put both dates in its range. The range now holds only the meals the
+  rotations have after the write. A month that showed the rotation only
+  because of this meal holds one of the meal's dates, and the two
+  `LiveUpdate.calendar` calls in `note_live_update` note those. The
+  `.compact` on the rotation ids went too: every meal has a rotation,
+  so a nil in the list matches no meal.
+- Noise answered before (6), all in the 2026-09-27 entry: the 3 in
+  `calendar_cache_version`, and the `IN` list and `to_a` rewrites of
+  `rotations_in_range` (3).
+
+Run 2, on the three subjects the answers changed
+(`RotationChoicesHelper*` and the two `Meal` methods): 4 subjects, 252
+mutations, all killed, no timeout, 5 minutes.
+
+### 2026-10-07, every method the #100 branch changed
+
+The entry above ran on the methods the branch added. This run adds the
+three it changed by removing code for a meal with no rotation:
+`Meal#another_meal_in_this_rotation_has_less_than_two_cooks?`,
+`Community#create_next_rotation` and `EnsureRotationsJob#run`. With the
+five subjects from above: six workers, 9 subjects, 558 mutations, 536
+killed, 22 alive, 8 of them timeouts, 20 minutes. Nothing survived in
+`RotationChoicesHelper`, the three `Meal` methods or
+`create_next_rotation`. Every alive mutation is a kind answered before:
+
+- `EnsureRotationsJob#run` (16): the 8 loops that never end (the 8
+  timeouts) and the 8 rewrites of the `if` around the log line, both as
+  in the 2026-09-27 entry. Run alone, the job had the same 16 alive and
+  the same 8 timeouts (59 mutations, 10 minutes). The branch removed the
+  job's check for a meal with no rotation, and the loop still ends for
+  the reason given there: each pass adds meals after the last one.
+- `Community#calendar_cache_version` (3) and
+  `CalendarSerializer#rotations_in_range` (3): the same 6 as in the
+  entry above. The dropped `.uniq` is one of the `IN` list rewrites.
+
+Mutant cannot reach two parts of the change. `belongs_to :rotation`
+runs in the class body, and `app/admin/meal.rb` is an ActiveAdmin
+block, not a class. Six changes were made there by hand, and each one
+failed a spec: `optional: true` on the `belongs_to`; `rotation_id`
+permitted on every action, or on none; the rotation menu on every form,
+or on none; and the menu with no blank choice.

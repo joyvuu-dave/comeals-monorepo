@@ -95,8 +95,7 @@ removed the slug.
 - `meal_schedule` — a `MealSchedule` built from `schedule`
 - `create_next_rotation` — asks `meal_schedule` for the next
   `meals_per_rotation` meal dates, starting the day after the last existing
-  meal (or today), and creates one Rotation with those meals. It raises if any
-  meal has no rotation yet.
+  meal (or today), and creates one Rotation with those meals.
 - `unreconciled_ave_cost` — dashboard "cost per adult" over the unreconciled
   meals dated up to and including today. Upcoming meals are left out: they
   have sign-ups but no receipt yet (#98). It reads `MealLedger#summary_for`,
@@ -104,8 +103,6 @@ removed the slug.
   half up, like `number_to_currency`.
 - `unreconciled_ave_number_of_attendees` — dashboard "attendees per meal"
   over the same meals.
-- `auto_rotation_length`, `auto_create_rotations` — older helpers for
-  grouping meals that have no rotation.
 - Clearing the calendar cache and pushing is not the community's job:
   every model a screen shows notes itself in `LiveUpdate` from its own
   `note_live_update` callback, and `LiveUpdate` clears and pushes after the
@@ -358,7 +355,7 @@ A dinner on one date.
 ```
 Meal ----> Community
 Meal ----> Reconciliation (optional; NULL = unreconciled)
-Meal ----> Rotation (optional; the cooking schedule group)
+Meal ----> Rotation (required; the cooking schedule group)
 Meal ----< Bill (1-3 cooks is typical)
 Meal ----< MealResident (8-25 attendees is typical)
 Meal ----< Guest (0-5 visitors is typical)
@@ -368,6 +365,11 @@ Meal ----< MealCharge (written at settlement; empty until then)
 **Key fields:**
 
 - `date` — unique (`index_meals_on_date`)
+- `rotation_id` — required by the model and by NOT NULL (#100). The nightly
+  job makes each rotation with its meals. A one-off meal from the admin New
+  Meal form goes in the rotation the admin picks; the form chooses the
+  rotation whose first-to-last meal dates contain the date, and asks the
+  admin when no rotation does (`RotationChoicesHelper`).
 - `description` — menu text
 - `cap` DECIMAL(12,8) — copied from `community.cap` when the meal is created.
   NULL means no cap. CHECK `meals_cap_positive_or_null`.
@@ -745,10 +747,11 @@ Rotation ----< Meal
 
 **Key fields:**
 
-- `description` — generated date range of its meals ("2026-01-05 to
-  2026-02-16"), set after save
+- `description` — the date range of its meals ("Jan 5 – Feb 16, 2026",
+  `DateRangeDescription`), read from the meals every time. Not a column.
 - `color` — one of the 5 `COLORS`, cycling from the previous rotation's color
-- `start_date` — date of its first meal, set after save
+- `start_date` — the date of its first meal, read from the meals every
+  time. Not a column.
 - `place_value` — position in date order, renumbered after create and destroy
 - `residents_notified` — `rake residents:notify` has sent the signup reminder
   for this rotation

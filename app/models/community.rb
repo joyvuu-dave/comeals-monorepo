@@ -285,30 +285,12 @@ class Community < ApplicationRecord
     end
   end
 
-  def auto_rotation_length
-    residents.adult.where(can_cook: true).size / 2
-  end
-
-  def auto_create_rotations
-    unassigned = meals.where(rotation_id: nil).order(:date)
-    rotation = T.let(nil, T.nilable(Rotation))
-    unassigned.each do |meal|
-      rotation = rotations.create!(no_email: true) if rotation.nil?
-      meal.update!(rotation_id: rotation.id)
-      rotation = nil if rotation.meals.count == auto_rotation_length
-    end
-  end
-
   # Create the next rotation: the next meals_per_rotation dates the schedule
   # produces, starting the day after the last existing meal (or today).
   # Which dates those are is entirely MealSchedule's answer — its fixed epoch
   # makes the cycle phase arithmetic, so nothing here needs to look at past
   # meals to know which week of the cycle comes next.
   def create_next_rotation
-    if meals.where(rotation_id: nil).any?
-      raise "Currently #{meals.where(rotation_id: nil).count} Meals not assigned to Rotations"
-    end
-
     day_after_last_meal = meals.order(:date).last&.date&.tomorrow
     start = [today, day_after_last_meal].compact.max
     dates = meal_schedule.upcoming_dates(from: start, count: meals_per_rotation)
@@ -349,6 +331,12 @@ class Community < ApplicationRecord
               WHERE id IN (SELECT rotation_id FROM meals WHERE date >= :from AND date <= :to)) AS rotations_count,
            (SELECT MAX(updated_at) FROM rotations
               WHERE id IN (SELECT rotation_id FROM meals WHERE date >= :from AND date <= :to)) AS rotations_updated_at,
+           (SELECT COUNT(*) FROM meals
+              WHERE rotation_id IN (SELECT rotation_id FROM meals WHERE date >= :from AND date <= :to))
+             AS rotation_meals_count,
+           (SELECT MAX(updated_at) FROM meals
+              WHERE rotation_id IN (SELECT rotation_id FROM meals WHERE date >= :from AND date <= :to))
+             AS rotation_meals_updated_at,
            (SELECT COUNT(*) FROM events
               WHERE (start_date >= :from AND start_date <= :to)
                  OR (end_date >= :from AND end_date <= :to)
@@ -392,6 +380,11 @@ class Community < ApplicationRecord
   #                              true`, so any write to them moves the
   #                              meal's updated_at
   #   rotations                  of the meals in the window (color, number)
+  #   meals of those rotations   every one, whatever its date: a rotation's
+  #                              chip runs from its first meal to its
+  #                              last, so a meal made, moved or deleted
+  #                              outside the window can still change the
+  #                              chip in it (#144)
   #   events                     overlapping the window
   #   common_house_reservations  overlapping the window (one can last
   #                              days, and start before it)

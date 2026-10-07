@@ -17,6 +17,7 @@ class ActiveAdmin::Devise::UnlocksController
     include ::BalanceDisplayHelper
     include ::MoneyFieldHelper
     include ::PhoneDisplayHelper
+    include ::RotationChoicesHelper
     include ::ScheduleWeekLabelHelper
     include ::DeviseHelper
     include ::ApplicationController::HelperMethods

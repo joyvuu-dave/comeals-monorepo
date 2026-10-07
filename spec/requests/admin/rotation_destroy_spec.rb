@@ -49,15 +49,16 @@ RSpec.describe 'Admin rotation destroy' do
     it 'cannot replace a rotation\'s meals, so its existing meals survive' do
       rotation = create(:rotation, community: community)
       existing = create(:meal, community: community, rotation: rotation, date: Date.current + 30)
-      loose = create(:meal, community: community, rotation: nil, date: Date.current + 40)
+      other_rotation = create(:rotation, community: community)
+      elsewhere = create(:meal, community: community, rotation: other_rotation, date: Date.current + 40)
 
       expect do
-        patch "/rotations/#{rotation.id}", params: { rotation: { meal_ids: [loose.id] } }
+        patch "/rotations/#{rotation.id}", params: { rotation: { meal_ids: [elsewhere.id] } }
       end.to raise_error(ActionController::RoutingError)
 
       expect(Meal.exists?(existing.id)).to be(true)
       expect(existing.reload.rotation_id).to eq(rotation.id)
-      expect(loose.reload.rotation_id).to be_nil
+      expect(elsewhere.reload.rotation_id).to eq(other_rotation.id)
     end
   end
 end

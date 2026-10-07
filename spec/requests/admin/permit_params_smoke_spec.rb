@@ -146,6 +146,8 @@ RSpec.describe 'Admin permit_params smoke tests' do
   end
 
   describe 'POST /meals (admin)' do
+    let(:rotation) { create(:rotation, community: community) }
+
     # The guest is a child: FULL is the column default, so a dropped
     # multiplier would save a full-price guest without an error.
     it 'persists every form field including nested associations' do
@@ -155,6 +157,7 @@ RSpec.describe 'Admin permit_params smoke tests' do
         post '/meals', params: {
           meal: {
             date: '2026-06-01',
+            rotation_id: rotation.id,
             closed: '0',
             guests_attributes: {
               '0' => { multiplier: Multiplier::HALF, resident_id: host.id, _destroy: '0' }
@@ -166,6 +169,7 @@ RSpec.describe 'Admin permit_params smoke tests' do
       meal = Meal.find_by(date: Date.new(2026, 6, 1))
       expect(meal).not_to be_nil
       expect(meal.community_id).to eq(community.id)
+      expect(meal.rotation_id).to eq(rotation.id)
       expect(meal.guests.count).to eq(1)
       expect(meal.guests.first.resident_id).to eq(host.id)
       expect(meal.guests.first.multiplier).to eq(Multiplier::HALF)
@@ -174,7 +178,7 @@ RSpec.describe 'Admin permit_params smoke tests' do
     # closed defaults to false, and max is kept only on a closed meal
     # (Meal#conditionally_set_max), so the two are checked together.
     it 'persists closed and max' do
-      post '/meals', params: { meal: { date: '2026-06-03', closed: '1', max: '5' } }
+      post '/meals', params: { meal: { date: '2026-06-03', rotation_id: rotation.id, closed: '1', max: '5' } }
 
       meal = Meal.find_by(date: Date.new(2026, 6, 3))
       expect(meal).not_to be_nil
@@ -192,6 +196,7 @@ RSpec.describe 'Admin permit_params smoke tests' do
       post '/meals', params: {
         meal: {
           date: '2026-06-02',
+          rotation_id: rotation.id,
           closed: false,
           attendee_ids: [eater.id.to_s]
         }

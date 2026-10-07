@@ -31,11 +31,11 @@ test.describe("Rotation modal (real backend)", () => {
     page,
   }) => {
     const rotation = auth.rotations.second;
-    expect(rotation.place_value).toBe(2);
+    expect(rotation.place_value).toBe(3);
     expect(rotation.id).not.toBe(rotation.place_value);
 
     const modal = await openRotation(page, rotation);
-    await expect(modal.locator("h1")).toHaveText("Rotation 2", {
+    await expect(modal.locator("h1")).toHaveText("Rotation 3", {
       timeout: 10000,
     });
 
@@ -55,11 +55,11 @@ test.describe("Rotation modal (real backend)", () => {
     page,
   }) => {
     const rotation = auth.rotations.first;
-    expect(rotation.place_value).toBe(1);
+    expect(rotation.place_value).toBe(2);
     expect(rotation.id).not.toBe(rotation.place_value);
 
     const modal = await openRotation(page, rotation);
-    await expect(modal.locator("h1")).toHaveText("Rotation 1", {
+    await expect(modal.locator("h1")).toHaveText("Rotation 2", {
       timeout: 10000,
     });
     await expect(modal.locator("li")).toHaveText([

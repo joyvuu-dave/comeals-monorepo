@@ -939,7 +939,7 @@ CREATE TABLE public.meals (
     description text DEFAULT ''::text NOT NULL,
     max integer,
     reconciliation_id bigint,
-    rotation_id bigint,
+    rotation_id bigint NOT NULL,
     updated_at timestamp without time zone NOT NULL,
     CONSTRAINT meals_cap_positive_or_null CHECK (((cap IS NULL) OR (cap > (0)::numeric))),
     CONSTRAINT meals_closed_at_matches_closed CHECK ((closed = (closed_at IS NOT NULL)))
@@ -3102,6 +3102,8 @@ ALTER TABLE ONLY public.bills
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261007153100'),
+('20261007153000'),
 ('20260917130000'),
 ('20260917120000'),
 ('20260915120000'),

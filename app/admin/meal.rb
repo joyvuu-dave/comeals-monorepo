@@ -11,8 +11,15 @@ ActiveAdmin.register Meal do
   # meal by construction, and permitting the key let a hand-made request
   # move an existing guest to another meal past the closed-meal freeze
   # (lock hunt, 2026-09-21; the freeze refuses a move now too).
-  permit_params :date, :closed, :max,
-                guests_attributes: %i[id multiplier resident_id _destroy]
+  # rotation_id only on create (#100): every meal belongs to a rotation,
+  # and the New Meal form asks which one. A meal keeps the rotation it
+  # was made in, so the edit form has no menu and an update ignores the
+  # key.
+  permit_params do
+    permitted = [:date, :closed, :max, { guests_attributes: %i[id multiplier resident_id _destroy] }]
+    permitted.unshift(:rotation_id) if params[:action] == 'create'
+    permitted
+  end
 
   # CONFIG
   filter :reconciliation_id_null, as: :select, collection: [['Yes', false], ['No', true]], include_blank: false,
@@ -168,6 +175,13 @@ ActiveAdmin.register Meal do
   form do |f|
     f.inputs do
       f.input :date, as: :datepicker
+      # Only on the New Meal form, which makes one-off meals (#100). The
+      # options and the script that picks one by date: RotationChoicesHelper.
+      if f.object.new_record?
+        f.input :rotation, collection: rotation_choices, include_blank: 'Choose a rotation',
+                           hint: 'When the date is inside a rotation, that rotation is chosen for you. ' \
+                                 'For a date between two rotations, or after the last one, choose one yourself.'
+      end
       f.input :closed
       f.input :max if f.object.closed
     end

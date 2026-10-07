@@ -60,14 +60,72 @@ const row = (container, name) =>
 test.describe("Meals", () => {
   reseedBeforeGroup();
 
-  test("creates a meal", async ({ page }) => {
+  // The New Meal form's rotation menu (#100). The seed has two
+  // rotations: rotation 2 ("Rotation 1") with meals on 2026-01-10 and
+  // 2026-01-17, and rotation 1 ("Rotation 2") with meals on 2027-02-02
+  // and 2027-02-04. The script in active_admin.js chooses the rotation
+  // whose dates contain the date typed.
+  test("picks the rotation by date and creates a meal", async ({ page }) => {
     await login(page);
     await page.goto("/meals/new");
-    await page.fill("#meal_date", "2027-03-01");
+    const rotationMenu = page.locator("#meal_rotation_id");
+    await expect(rotationMenu).toHaveValue("");
+    // A day before rotation 1's first meal: nothing is chosen.
+    await page.fill("#meal_date", "2027-02-01");
+    await expect(rotationMenu).toHaveValue("");
+    // Pick the 3rd in the datepicker, the way an admin does. A key press
+    // makes the datepicker read the typed date and show February 2027.
+    await page.locator("#meal_date").press("End");
+    await page
+      .locator(".ui-datepicker:visible")
+      .getByRole("link", { name: "3", exact: true })
+      .click();
+    await expect(page.locator("#meal_date")).toHaveValue("2027-02-03");
+    await expect(rotationMenu).toHaveValue("1");
     await page.click('input[type="submit"]');
 
     await expect(notice(page)).toHaveText("Meal was successfully created.");
-    await expect(page.locator(".row-date td")).toHaveText("March 01, 2027");
+    await expect(page.locator(".row-date td")).toHaveText("February 03, 2027");
+    // The rotation's page lists the new meal.
+    await page.goto("/rotations/1");
+    await expect(
+      page.getByRole("link", { name: "2027-02-03", exact: true }),
+    ).toBeVisible();
+  });
+
+  // A gap date is one between two rotations, or after the last one.
+  test("asks for a rotation for a gap date", async ({ page }) => {
+    await login(page);
+    await page.goto("/meals/new");
+    const rotationMenu = page.locator("#meal_rotation_id");
+    // Inside rotation 1 first, so the menu has a choice to clear.
+    await page.fill("#meal_date", "2027-02-03");
+    await expect(rotationMenu).toHaveValue("1");
+    // After the last rotation.
+    await page.fill("#meal_date", "2027-03-01");
+    await expect(rotationMenu).toHaveValue("");
+    // Between the two rotations.
+    await page.fill("#meal_date", "2026-06-01");
+    await expect(rotationMenu).toHaveValue("");
+
+    // Saved with no rotation: refused, with the reason.
+    await page.click('input[type="submit"]');
+    await expect(page).toHaveURL(/\/meals$/);
+    await expect(page.locator(".errors")).toContainText(
+      "Rotation must be chosen. Every meal belongs to a rotation.",
+    );
+
+    // The admin chooses one, and the meal saves.
+    await page.selectOption("#meal_rotation_id", {
+      label: "Rotation 1: Jan 10–17, 2026",
+    });
+    await page.click('input[type="submit"]');
+    await expect(notice(page)).toHaveText("Meal was successfully created.");
+    await expect(page.locator(".row-date td")).toHaveText("June 01, 2026");
+    await page.goto("/rotations/2");
+    await expect(
+      page.getByRole("link", { name: "2026-06-01", exact: true }),
+    ).toBeVisible();
   });
 
   test("moves a meal to another date", async ({ page }) => {
@@ -488,7 +546,9 @@ test.describe("Rotations", () => {
     await expect(alert(page)).toContainText(
       "Only an untouched upcoming rotation can be deleted.",
     );
-    await expect(page.locator("tbody tr")).toHaveCount(1);
+    // Both seeded rotations are still listed.
+    await expect(page.locator("tbody tr")).toHaveCount(2);
+    await expect(page.locator("tr#rotation_1")).toHaveCount(1);
   });
 });
 

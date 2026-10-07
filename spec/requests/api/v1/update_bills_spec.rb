@@ -721,13 +721,15 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
       expect(response.parsed_body['message']).to eq('Form submitted.')
     end
 
-    it 'does not warn for future meal with no rotation' do
-      no_rotation_meal = create(:meal, community: community, date: 3.weeks.from_now)
-      create(:bill, meal: no_rotation_meal, resident: cook_1, community: community, amount: BigDecimal('0'))
-      create(:bill, meal: no_rotation_meal, resident: cook_2, community: community, amount: BigDecimal('0'))
+    # No other meal in the rotation can be short of cooks.
+    it 'does not warn for a future meal that is the only one in its rotation' do
+      lone_meal = create(:meal, community: community, date: 3.weeks.from_now,
+                                rotation: create(:rotation, community: community))
+      create(:bill, meal: lone_meal, resident: cook_1, community: community, amount: BigDecimal('0'))
+      create(:bill, meal: lone_meal, resident: cook_2, community: community, amount: BigDecimal('0'))
 
       update_bills(
-        meal_id: no_rotation_meal.id,
+        meal_id: lone_meal.id,
         bills: [
           { resident_id: cook_1.id, amount: '10.00', no_cost: false },
           { resident_id: cook_2.id, amount: '10.00', no_cost: false },

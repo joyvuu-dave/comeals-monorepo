@@ -42,7 +42,7 @@ module Storm
       Current.reset
       units = Array.new(4) { |i| Unit.create!(name: "Storm Unit #{i}") }
       residents = Array.new(@clients) { |i| resident(i, units[i % units.size]) }
-      # EnsureRotationsJob refuses to run while a meal has no rotation.
+      # Every meal belongs to a rotation (NOT NULL on meals.rotation_id).
       rotation = Rotation.create!(no_email: true)
       today = community.today
       dates = (1..PAST_MEALS).map { |n| today - n } + (1..FUTURE_MEALS).map { |n| today + n }

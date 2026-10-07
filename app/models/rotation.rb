@@ -32,15 +32,16 @@ class Rotation < ApplicationRecord
     %w[id color created_at place_value residents_notified updated_at]
   end
 
-  # no_email suppresses the new-rotation notification for auto-created
-  # rotations (see Community#auto_create_rotations). When set, the
-  # after_create callback marks the rotation as already notified so the
-  # rotations:notify_new rake task skips it.
+  # no_email suppresses the new-rotation notification, for rotations
+  # nobody should be mailed about (the ones db/seeds.rb makes). When set,
+  # the after_create callback marks the rotation as already notified so
+  # the rotations:notify_new rake task skips it.
   attr_accessor :no_email
 
-  # dependent: :destroy, not :nullify. A rotation that leaves its meals behind
-  # orphans them, and community:create_rotations refuses to run while a meal
-  # has no rotation — so a plain nullify quietly broke the nightly task.
+  # dependent: :destroy, not :nullify. Every meal belongs to a rotation
+  # (NOT NULL on meals.rotation_id, #100), so a nullify would fail. Before
+  # that, a nullify left meals with no rotation, and the nightly task
+  # stopped until someone fixed them.
   # The guards below only let the cascade run when every meal is untouched,
   # so it can never delete a meal that carries any ledger data.
   has_many :meals, dependent: :destroy

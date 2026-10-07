@@ -52,10 +52,10 @@ RSpec.describe Community do
       parts = version.delete_prefix("#{community.today}-").split('-', -1)
 
       # The newest change of the community, then a count and a newest
-      # change for residents, units, meals, rotations, events, common
-      # house and guest room.
-      expect(parts.length).to eq(15)
-      expect(parts.values_at(1, 3, 5, 7, 9, 11, 13)).to all(match(/\A\d+\z/))
+      # change for residents, units, meals, rotations, every meal of
+      # those rotations, events, common house and guest room.
+      expect(parts.length).to eq(17)
+      expect(parts.values_at(1, 3, 5, 7, 9, 11, 13, 15)).to all(match(/\A\d+\z/))
       expect(parts[3]).to eq('1')
     end
 
@@ -74,6 +74,8 @@ RSpec.describe Community do
       expect(version).to include(meal.reload.updated_at.utc.strftime('%Y%m%d%H%M%S%6N'))
     end
 
+    # The factory gives each meal a rotation of its own, so `outside` is
+    # in a rotation April does not show.
     it 'changes when a meal in the six weeks changes, and not when one outside does' do
       inside = create(:meal, community: community, date: Date.new(2026, 4, 10))
       outside = create(:meal, community: community, date: Date.new(2026, 6, 10))
@@ -84,6 +86,26 @@ RSpec.describe Community do
 
       inside.touch
       expect(version).not_to eq(before)
+    end
+
+    # A rotation's chip runs from its first meal to its last, so a meal of
+    # a rotation April shows changes April's chip wherever its date is
+    # (#144). June 10 is outside April's six weeks.
+    it 'changes when a meal of a rotation in the six weeks is made, moved or deleted outside them' do
+      rotation = create(:rotation, community: community)
+      create(:meal, community: community, rotation: rotation, date: Date.new(2026, 4, 10))
+      before = version
+
+      outside = create(:meal, community: community, rotation: rotation, date: Date.new(2026, 6, 10))
+      made = version
+      expect(made).not_to eq(before)
+
+      outside.update!(date: Date.new(2026, 6, 17))
+      moved = version
+      expect(moved).not_to eq(made)
+
+      outside.destroy!
+      expect(version).not_to eq(moved)
     end
 
     it 'counts an event on the last day of the six weeks, whatever the hour' do
@@ -143,7 +165,7 @@ RSpec.describe Community do
         listed = CalendarSerializer.new(community, params: april).to_h[:common_house_reservations].any?
         # The common house count and newest change, after the community
         # day (see the first example for the order).
-        count, newest = version.delete_prefix("#{community.today}-").split('-', -1).values_at(11, 12)
+        count, newest = version.delete_prefix("#{community.today}-").split('-', -1).values_at(13, 14)
         newest_is_it = newest == booking.reload.updated_at.utc.strftime('%Y%m%d%H%M%S%6N')
         booking.destroy!
         { listed: listed, count: count, newest_is_it: newest_is_it }

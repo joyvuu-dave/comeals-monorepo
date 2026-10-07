@@ -16,7 +16,7 @@
 #  updated_at        :datetime         not null
 #  community_id      :bigint           not null
 #  reconciliation_id :bigint
-#  rotation_id       :bigint
+#  rotation_id       :bigint           not null
 #
 # Indexes
 #

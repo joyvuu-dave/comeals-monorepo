@@ -68,11 +68,10 @@ def seed_people
   [community, cook, bob, carol]
 end
 
-# A meal with a bill and everyone in `eaters` at the table, then closed.
+# A bill on `meal` and everyone in `eaters` at the table, then closed.
 # Attendance goes on before the close: a closed meal refuses new rows.
-def seed_closed_meal(date:, cook:, amount:, eaters:, guest_of: nil)
+def seed_closed_meal(meal:, cook:, amount:, eaters:, guest_of: nil)
   community = cook.community
-  meal = FactoryBot.create(:meal, community: community, date: date)
   FactoryBot.create(:bill, community: community, meal: meal, resident: cook, amount: amount)
   eaters.each do |resident|
     FactoryBot.create(:meal_resident, community: community, meal: meal, resident: resident)
@@ -90,15 +89,23 @@ def seed_meals(community, cook, bob, carol)
   # Bill id 1, attached to meal 1.
   FactoryBot.create(:bill, community: community, meal: Meal.find(1), resident: cook, amount: BigDecimal('75'))
 
+  # Meals 3 (2026-01-10) and 4 (2026-01-17), in rotation 2. Every meal
+  # belongs to a rotation, and a rotation made with its meals is numbered
+  # by their dates: rotation 2 is "Rotation 1" and rotation 1 is
+  # "Rotation 2". The New Meal form's rotation menu then has a gap
+  # between the two (actions.spec.js picks a date in it).
+  community.rotations.create!(no_email: true,
+                              meals_attributes: [{ date: Date.new(2026, 1, 10) }, { date: Date.new(2026, 1, 17) }])
+
   # A settled period: meal 3, with a bill over the cap, three eaters and a
   # guest, swept by reconciliation 1 (dated SEED_NOW).
-  seed_closed_meal(date: Date.new(2026, 1, 10), cook: cook, amount: BigDecimal('75'),
+  seed_closed_meal(meal: Meal.find(3), cook: cook, amount: BigDecimal('75'),
                    eaters: [cook, bob, carol], guest_of: bob)
   Settlement.run!(cutoff: Date.new(2026, 1, 15))
 
   # Meal 4: closed but not yet settled, so the dashboard's "closed meals"
   # panel and the averages have something to count.
-  seed_closed_meal(date: Date.new(2026, 1, 17), cook: bob, amount: BigDecimal('20'),
+  seed_closed_meal(meal: Meal.find(4), cook: bob, amount: BigDecimal('20'),
                    eaters: [cook, bob])
   BalanceRecalculation.call(community: community)
 end

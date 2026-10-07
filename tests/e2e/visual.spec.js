@@ -507,7 +507,7 @@ test.describe("Visual Baselines", () => {
     const modal = page.locator(".ReactModal__Content--after-open");
     await expect(modal).toBeVisible({ timeout: 10000 });
     // The fixture rotation's description is its meals' date range.
-    await expect(modal.locator("text=Jan 15–17, 2026")).toBeVisible({
+    await expect(modal.locator("text=Jan 13–17, 2026")).toBeVisible({
       timeout: 5000,
     });
     await page.waitForTimeout(500);
@@ -540,7 +540,7 @@ test.describe("Visual Baselines", () => {
 
     await page.goto("/calendar/all/2026-01-15/rotations/show/10/");
     const modal = page.locator(".ReactModal__Content--after-open");
-    await expect(modal.locator("text=Jan 15–17, 2026")).toBeVisible({
+    await expect(modal.locator("text=Jan 13–17, 2026")).toBeVisible({
       timeout: 10000,
     });
     await expect(

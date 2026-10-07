@@ -52,20 +52,6 @@ RSpec.describe 'community:create_rotations' do
     expect(community.rotations.count).to eq(initial_rotation_count)
   end
 
-  it 'raises when a meal is not assigned to a rotation' do
-    # A meal with no rotation would make the catch-up loop spin forever,
-    # so the task must fail loudly instead of creating anything.
-    create(:meal, community: community, rotation: nil)
-    allow(Healthcheck).to receive(:ping)
-
-    expect { Rake::Task['community:create_rotations'].invoke }
-      .to raise_error(/not.*assigned to a rotation/)
-
-    expect(community.rotations.count).to eq(0)
-    expect(Healthcheck).to have_received(:ping)
-      .with('community-create-rotations', state: 'fail')
-  end
-
   it 'creates meals that skip holidays' do
     # Pin "today" to a date that puts both holidays comfortably inside the
     # 6-month window with adjacent meal-day Sundays still in the future.

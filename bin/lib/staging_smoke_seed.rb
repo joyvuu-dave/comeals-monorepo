@@ -32,6 +32,11 @@ resident.save!
 date = ((Date.current + 120)..(Date.current + 150)).find { |d| !Meal.exists?(date: d) }
 abort 'Refusing: no free meal date between +120 and +150 days' if date.nil?
 
-meal = Meal.create!(date: date, community: community)
+# Every meal belongs to a rotation. The smoke does not read it, so the
+# meal takes the rotation of the meal just before it.
+rotation = Meal.where(date: ...date).order(date: :desc).first&.rotation
+abort "Refusing: no meal before #{date} to take a rotation from" if rotation.nil?
+
+meal = Meal.create!(date: date, community: community, rotation: rotation)
 
 puts "SMOKE_MEAL_ID=#{meal.id}"

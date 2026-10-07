@@ -103,10 +103,17 @@ Resident.adult.first.update!(email: 'bowen@email.com', name: 'Bowen Riddle')
 
 Rails.logger.debug { "#{community.residents.count} Residents created" }
 
-# Meals (will be reconciled)
-community.meal_schedule.dates_between(26.weeks.ago.to_date, 8.weeks.ago.to_date).each do |date|
-  Meal.create!(date: date)
+# Every meal belongs to a rotation (#100), so meals are made the way the
+# nightly job makes them (Community#create_next_rotation): each rotation
+# with its meals, meals_per_rotation at a time.
+create_rotations = lambda do |dates|
+  dates.each_slice(community.meals_per_rotation) do |rotation_dates|
+    Rotation.create!(no_email: true, meals_attributes: rotation_dates.map { |date| { date: date } })
+  end
 end
+
+# Meals (will be reconciled)
+create_rotations.call(community.meal_schedule.dates_between(26.weeks.ago.to_date, 8.weeks.ago.to_date))
 
 Rails.logger.debug { "#{community.meals.count} Meals created" }
 
@@ -188,9 +195,7 @@ Settlement.run!(cutoff: 8.weeks.ago.to_date)
 Rails.logger.debug { "#{community.reconciliations.count} Reconciliation created" }
 
 # Meals (will not be reconciled)
-community.meal_schedule.dates_between(7.weeks.ago.to_date, 26.weeks.from_now.to_date).each do |date|
-  Meal.create!(date: date)
-end
+create_rotations.call(community.meal_schedule.dates_between(7.weeks.ago.to_date, 26.weeks.from_now.to_date))
 
 # MealResidents & Guests for the unreconciled batch. Skip reconciled meals
 # because MealResident/Guest enforce immutability via before_save callbacks
@@ -274,10 +279,6 @@ Meal.all.each_with_index do |meal, index|
 end
 
 Rails.logger.debug { "#{community.meals.count} Meals created (#{community.meals.unreconciled.count} unreconciled)" }
-
-# Create Rotations
-community.auto_create_rotations
-
 Rails.logger.debug { "#{community.rotations.count} Rotations created" }
 
 # Event

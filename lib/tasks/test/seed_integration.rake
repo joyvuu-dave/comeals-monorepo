@@ -79,11 +79,27 @@ namespace :test do
     )
 
     # ------------------------------------------------------------------
+    # ROTATIONS
+    # ------------------------------------------------------------------
+    # Every meal belongs to a rotation. The meals below share one; two
+    # more rotations, each with one meal after them, give the rotation
+    # modal rotations to show: its title must say "Rotation 2" (the
+    # rotation's place in date order), whatever its database id is. The
+    # rotations are made in an order that gives no rotation an id equal
+    # to its place, even on a new database where the ids start at 1 (CI):
+    # the one 80 days out gets id 1 and place 3, the seeded meals' id 2
+    # and place 1, and the one 40 days out id 3 and place 2. With equal
+    # numbers the modal could show the id and no test would see it.
+    second_rotation = Rotation.create!(meals_attributes: [{ date: 80.days.from_now.to_date }])
+    seeded_rotation = Rotation.create!
+
+    # ------------------------------------------------------------------
     # RECONCILED MEAL (60 days ago)
     # ------------------------------------------------------------------
     reconciled_meal = Meal.create!(
       date: 60.days.ago.to_date,
-      description: 'Stir fry vegetables'
+      description: 'Stir fry vegetables',
+      rotation: seeded_rotation
     )
     [jane, bob, alice, charlie].each do |r|
       MealResident.create!(
@@ -106,7 +122,8 @@ namespace :test do
       date: 2.days.ago.to_date,
       description: 'Tacos and rice',
       closed: true,
-      max: 5
+      max: 5,
+      rotation: seeded_rotation
     )
     [bob, alice, charlie].each do |r|
       MealResident.create!(
@@ -123,7 +140,8 @@ namespace :test do
     # ------------------------------------------------------------------
     today_meal = Meal.create!(
       date: Community.instance.today,
-      description: 'Pizza and salad'
+      description: 'Pizza and salad',
+      rotation: seeded_rotation
     )
     [jane, alice].each do |r|
       MealResident.create!(
@@ -136,7 +154,8 @@ namespace :test do
     # ------------------------------------------------------------------
     tomorrow_meal = Meal.create!(
       date: Date.tomorrow,
-      description: 'Pasta night with garlic bread'
+      description: 'Pasta night with garlic bread',
+      rotation: seeded_rotation
     )
     [jane, bob, alice].each do |r|
       MealResident.create!(
@@ -161,7 +180,8 @@ namespace :test do
     # close test is not about (bill-entry.spec.js covers that ask).
     close_test_meal = Meal.create!(
       date: 3.days.from_now.to_date,
-      description: 'Close-test casserole'
+      description: 'Close-test casserole',
+      rotation: seeded_rotation
     )
     [jane, bob].each do |r|
       MealResident.create!(
@@ -179,7 +199,8 @@ namespace :test do
     # The description integration test uses this meal: it starts blank,
     # the test types into it, checks persistence, and blanks it again.
     future_meal = Meal.create!(
-      date: 7.days.from_now.to_date
+      date: 7.days.from_now.to_date,
+      rotation: seeded_rotation
     )
 
     # ------------------------------------------------------------------
@@ -221,14 +242,8 @@ namespace :test do
     puts "  Jane ID:    #{jane.id}"
     puts "  Community:  #{community.id}"
 
-    # Two rotations, each with one meal after the seeded ones, so the
-    # rotation modal has a second rotation to show: its title must say
-    # "Rotation 2" (its place in date order), whatever its database id is.
-    # The later one is created first, so no id equals its place, even on
-    # a new database where the ids start at 1 (CI): the one 80 days out
-    # gets id 1 and place 2, the one 40 days out id 2 and place 1. With
-    # equal numbers the modal could show the id and no test would see it.
-    second_rotation = Rotation.create!(meals_attributes: [{ date: 80.days.from_now.to_date }])
+    # The rotation 40 days out (see ROTATIONS above). It is made last,
+    # so its creation renumbers all three by date.
     first_rotation = Rotation.create!(meals_attributes: [{ date: 40.days.from_now.to_date }])
     Bill.create!(meal: first_rotation.meals.first, resident: jane, amount: BigDecimal('0'))
 

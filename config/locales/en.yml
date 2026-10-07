@@ -38,3 +38,14 @@ en:
       # JavaScript that reparsed already-rendered dates in the browser,
       # which depended on the viewer's timezone.
       admin: "%a, %b %-d %Y"
+  activerecord:
+    errors:
+      models:
+        meal:
+          attributes:
+            rotation:
+              # A required belongs_to says "must exist" by default, which
+              # reads as if the rotation were missing from the database.
+              # The admin New Meal form shows this when the rotation menu
+              # is left blank (#100).
+              required: "must be chosen. Every meal belongs to a rotation."

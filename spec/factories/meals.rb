@@ -15,7 +15,7 @@
 #  updated_at        :datetime         not null
 #  community_id      :bigint           not null
 #  reconciliation_id :bigint
-#  rotation_id       :bigint
+#  rotation_id       :bigint           not null
 #
 # Indexes
 #
@@ -54,5 +54,10 @@ FactoryBot.define do
   factory :meal do
     community
     sequence(:date) { |n| DefaultMealDate.for(n) }
+    # Every meal belongs to a rotation (#100). A meal made here gets a new
+    # rotation of its own unless the spec passes one, so it is never in
+    # another meal's rotation by chance: a spec about the meals of one
+    # rotation passes that rotation to each meal.
+    rotation { association :rotation, community: community }
   end
 end

@@ -647,67 +647,6 @@ RSpec.describe Community do
     end
   end
 
-  describe '#auto_rotation_length' do
-    it 'calculates half the number of cookable adults' do
-      4.times { create(:resident, community: community, unit: unit, multiplier: 2, can_cook: true) }
-      2.times { create(:resident, community: community, unit: unit, multiplier: 1, can_cook: true) }
-      # 4 adults (multiplier >= 2) who can cook, divided by 2 = 2
-      expect(community.auto_rotation_length).to eq(2)
-    end
-
-    it 'leaves out adults who cannot cook' do
-      6.times { create(:resident, community: community, unit: unit, multiplier: 2, can_cook: true) }
-      2.times { create(:resident, community: community, unit: unit, multiplier: 2, can_cook: false) }
-
-      expect(community.auto_rotation_length).to eq(3)
-    end
-  end
-
-  describe '#auto_create_rotations' do
-    it 'groups unassigned meals into rotations based on auto_rotation_length' do
-      # Need cookable adults for auto_rotation_length to be > 0
-      4.times { create(:resident, community: community, unit: unit, multiplier: 2, can_cook: true) }
-      # auto_rotation_length = 4/2 = 2
-
-      create(:meal, community: community, date: Date.new(2026, 5, 1))
-      create(:meal, community: community, date: Date.new(2026, 5, 3))
-      create(:meal, community: community, date: Date.new(2026, 5, 5))
-
-      community.auto_create_rotations
-
-      # 3 meals with rotation_length 2 = 2 rotations (2 + 1)
-      expect(community.rotations.count).to eq(2)
-      expect(Meal.where(community: community, rotation_id: nil).count).to eq(0)
-    end
-
-    it 'fills the rotations in date order, whatever order the meals were entered, and does not email about them' do
-      4.times { create(:resident, community: community, unit: unit, multiplier: 2, can_cook: true) }
-      create(:meal, community: community, date: Date.new(2026, 5, 5))
-      create(:meal, community: community, date: Date.new(2026, 5, 1))
-      create(:meal, community: community, date: Date.new(2026, 5, 3))
-
-      community.auto_create_rotations
-
-      first, second = community.rotations.order(:id).to_a
-      expect(first.meals.order(:date).pluck(:date)).to eq([Date.new(2026, 5, 1), Date.new(2026, 5, 3)])
-      expect(second.meals.pluck(:date)).to eq([Date.new(2026, 5, 5)])
-      expect(community.rotations.where(new_rotation_notified_at: nil)).to be_empty
-    end
-
-    it 'leaves a meal that already has a rotation in it' do
-      4.times { create(:resident, community: community, unit: unit, multiplier: 2, can_cook: true) }
-      rotation = create(:rotation, community: community, no_email: true)
-      assigned = create(:meal, community: community, rotation: rotation, date: Date.new(2026, 5, 1))
-      unassigned = create(:meal, community: community, date: Date.new(2026, 5, 3))
-
-      community.auto_create_rotations
-
-      expect(assigned.reload.rotation_id).to eq(rotation.id)
-      expect(unassigned.reload.rotation_id).not_to eq(rotation.id)
-      expect(community.rotations.count).to eq(2)
-    end
-  end
-
   describe '#create_next_rotation' do
     it 'creates a rotation with meals_per_rotation meals' do
       community.create_next_rotation
@@ -795,21 +734,6 @@ RSpec.describe Community do
           alternating.each_cons(2) { |a, b| expect(a).not_to eq(b) }
         end
       end
-    end
-
-    it 'raises when unassigned meals exist' do
-      create(:meal, community: community)
-
-      expect { community.create_next_rotation }.to raise_error(RuntimeError, /not assigned to Rotations/)
-    end
-
-    it 'says how many meals are unassigned when it refuses' do
-      create(:meal, community: community, date: Date.new(2026, 5, 1))
-      create(:meal, community: community, date: Date.new(2026, 5, 2))
-      create(:meal, community: community, date: Date.new(2026, 5, 3), rotation: create(:rotation, community: community))
-
-      expect { community.create_next_rotation }
-        .to raise_error(RuntimeError, 'Currently 2 Meals not assigned to Rotations')
     end
 
     it 'starts after the latest meal date, not after the meal entered last' do

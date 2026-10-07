@@ -106,7 +106,7 @@ RSpec.describe 'rotations:notify_new', type: :task do
 
   it 'suppresses notification for rotations created with no_email' do
     create(:resident, community: community, unit: unit, active: true)
-    # Simulate auto_create_rotations behavior
+    # db/seeds.rb makes its rotations this way.
     rotation = Rotation.create!(no_email: true)
 
     # no_email sets new_rotation_notified_at immediately

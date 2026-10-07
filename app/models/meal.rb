@@ -16,7 +16,7 @@
 #  updated_at        :datetime         not null
 #  community_id      :bigint           not null
 #  reconciliation_id :bigint
-#  rotation_id       :bigint
+#  rotation_id       :bigint           not null
 #
 # Indexes
 #
@@ -102,7 +102,11 @@ class Meal < ApplicationRecord
   end
 
   belongs_to :reconciliation, optional: true
-  belongs_to :rotation, optional: true
+  # Required (#100). The calendar and the rotation emails show each meal
+  # in its rotation, and a meal with no rotation once stopped the nightly
+  # EnsureRotationsJob. NOT NULL on the column refuses writes that skip
+  # the model. The message is in config/locales/en.yml.
+  belongs_to :rotation
 
   # Settlement line items exist only on reconciled meals, which already refuse
   # destroy (the prepended guard below). restrict_with_error is the readable
@@ -205,7 +209,8 @@ class Meal < ApplicationRecord
   # of the meals on either side by date when this meal is new, gone, or
   # moved: their next_id and prev_id (MealFormSerializer) point past it.
   # That is how the last meal's "next" arrow wakes up when the nightly
-  # job adds the next rotation.
+  # job adds the next rotation. Every month that shows this meal's
+  # rotation can be stale too (#note_rotation_months).
   sig { void }
   def note_live_update
     LiveUpdate.meal(id)
@@ -213,10 +218,39 @@ class Meal < ApplicationRecord
     # nil unless the date moved; LiveUpdate.calendar notes nothing for nil.
     old_date = saved_changes.dig('date', 0)
     LiveUpdate.calendar(old_date)
+    # nil unless the meal moved to another rotation. No form or task does
+    # that; the console can.
+    old_rotation_id = saved_changes.dig('rotation_id', 0)
 
-    return unless destroyed? || previously_new_record? || old_date
+    return unless destroyed? || previously_new_record? || old_date || old_rotation_id
 
     [date, old_date].compact.each { |day| neighbour_ids(day).each { |neighbour| LiveUpdate.meal(neighbour) } }
+    note_rotation_months(old_rotation_id)
+  end
+
+  # A rotation's chip on the calendar runs from its first meal to its
+  # last (RotationSerializer), and a month shows the chip when one of the
+  # rotation's meals is in the month's six weeks. So a meal that is new,
+  # deleted, moved, or put in another rotation can change the chip on a
+  # month far from its own date: a new meal after a rotation's last meal
+  # makes the chip longer on every month that shows the rotation (#144).
+  #
+  # This notes every day from the first to the last meal the rotation has
+  # now, after this write (both rotations, when the meal changed
+  # rotation). That covers every month that still shows the rotation. A
+  # month that showed it only because of this meal, at its old date or
+  # before it was deleted, holds that date, and the LiveUpdate.calendar
+  # calls in #note_live_update note it. Community#calendar_cache_version
+  # counts the same meals.
+  sig { params(old_rotation_id: T.nilable(Integer)).void }
+  def note_rotation_months(old_rotation_id)
+    # Each date needs a name: unnamed, Postgres calls the MAX column
+    # "max", and pick then reads it with the type of meals.max, an
+    # integer. old_rotation_id is usually nil, and nil matches no meal:
+    # every meal has a rotation.
+    first, last = Meal.where(rotation_id: [rotation_id, old_rotation_id])
+                      .pick('MIN(meals.date) AS first_meal_date', 'MAX(meals.date) AS last_meal_date')
+    LiveUpdate.calendar_range(first, last)
   end
 
   # The meals just before and just after `day`, other than this one.
@@ -330,8 +364,6 @@ class Meal < ApplicationRecord
   # HELPERS
   sig { returns(T::Boolean) }
   def another_meal_in_this_rotation_has_less_than_two_cooks?
-    return false if rotation_id.nil?
-
     Meal.where(rotation_id: rotation_id).where.not(id: id)
         .left_joins(:bills)
         .group(:id)

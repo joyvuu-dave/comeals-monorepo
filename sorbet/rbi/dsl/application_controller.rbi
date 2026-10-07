@@ -21,6 +21,7 @@ class ApplicationController
     include ::BalanceDisplayHelper
     include ::MoneyFieldHelper
     include ::PhoneDisplayHelper
+    include ::RotationChoicesHelper
     include ::ScheduleWeekLabelHelper
     include ::DeviseHelper
   end

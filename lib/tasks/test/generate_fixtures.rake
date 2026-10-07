@@ -82,8 +82,9 @@ namespace :test do
 
       # Meal 41 is in the past on the frozen "today" (2026-01-15); 42 is
       # today's meal; 43 is upcoming. 41 and 43 exist mostly so meal 42
-      # has real prev/next ids.
-      Meal.create!(id: 41, date: Date.new(2026, 1, 13))
+      # has real prev/next ids. Every meal belongs to a rotation, so all
+      # three are in this one.
+      Meal.create!(id: 41, date: Date.new(2026, 1, 13), rotation: rotation)
       meal42 = Meal.create!(
         id: 42, date: Date.new(2026, 1, 15),
         description: 'Pasta night with garlic bread', rotation: rotation
