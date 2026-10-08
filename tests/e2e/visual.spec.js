@@ -776,14 +776,295 @@ test.describe("Visual Baselines", () => {
     await page.goto("/");
     await page.waitForLoadState("networkidle");
 
-    // Reset with an empty email raises the error toast. Error toasts
-    // stay for 15 seconds, so the screenshot cannot race the dismiss.
+    // Reset with an empty email raises the error toast. An error stays
+    // until a person closes it, so the screenshot cannot race a timer.
     await page.getByRole("button", { name: "Reset your password" }).click();
     const toast = page.locator(".toast--error");
     await expect(toast).toBeVisible({ timeout: 5000 });
     await page.waitForTimeout(500);
 
     await expect(toast).toHaveScreenshot("toast-error.png");
+  });
+
+  // Messages stack up, newest on top, up to three at once (#137). On a
+  // phone, where most residents open the app. Each write the meal page
+  // makes here fails with its own words, the words the server or the
+  // app really uses: the same words twice make one message, not two.
+  test.describe("message stack", () => {
+    test.use({
+      viewport: { width: 375, height: 667 },
+      allowedConsoleErrors: combinePatterns(
+        httpFailurePattern,
+        /^Bad response from server/,
+        /^Error: no response received from server\.$/,
+      ),
+    });
+
+    // MealsController#conflict_rejection.
+    const MEAL_CONFLICT =
+      "Someone else was changing this meal at the same time. Nothing was saved. Try again.";
+    // MealsController#reconciled_rejection.
+    const SETTLED = "Change not permitted. Meal has already been reconciled.";
+    // MealsController#verify_resident_exists.
+    const NOT_FOUND = "Resident not found.";
+    // ThirdCookWarning.
+    const THIRD_COOK =
+      "Warning: third cooks should not be added until all meals in the rotation have at least two cooks.";
+
+    function refuse(status, message) {
+      return (route) =>
+        route.fulfill({
+          status,
+          contentType: "application/json",
+          body: JSON.stringify({ message }),
+        });
+    }
+
+    async function openMeal(page, context, options = {}) {
+      await setupAuthenticatedPage(page, context, options);
+      await page.clock.setFixedTime(FROZEN_NOW);
+      // Registered after mockApi, so these win.
+      await page.route(
+        "**/api/v1/meals/*/residents/2",
+        refuse(409, MEAL_CONFLICT),
+      );
+      await page.route("**/api/v1/meals/*/residents/1", refuse(400, SETTLED));
+      await page.route("**/api/v1/meals/*/residents/3", refuse(400, NOT_FOUND));
+      await page.route("**/api/v1/meals/*/description*", rails500);
+      await page.route("**/api/v1/meals/*/residents/1/guests", (route) =>
+        route.abort("connectionfailed"),
+      );
+      await page.goto("/meals/42/edit/");
+      await page.waitForLoadState("networkidle");
+      await expect(
+        page.getByRole("cell", { name: "A - Jane Smith", exact: true }),
+      ).toBeVisible({ timeout: 10000 });
+    }
+
+    const messages = (page) => page.locator(".toast__message");
+
+    // The taps scroll the page by an amount that depends on the fonts,
+    // and the page shows between the messages. The top of the meal page
+    // is what a person sees first.
+    async function scrollToTop(page) {
+      await page.evaluate(() => window.scrollTo(0, 0));
+    }
+
+    // Each step makes one write fail, and waits until its message shows
+    // on top.
+    async function tapResident(page, name, words) {
+      await page.getByRole("cell", { name, exact: true }).click();
+      await expect(messages(page).first()).toHaveText(words);
+    }
+
+    async function signUpBob(page) {
+      await tapResident(page, "B - Bob Johnson", MEAL_CONFLICT);
+    }
+
+    async function signOffJane(page) {
+      await tapResident(page, "A - Jane Smith", SETTLED);
+    }
+
+    async function signOffAlice(page) {
+      await tapResident(page, "C - Alice Williams", NOT_FOUND);
+    }
+
+    async function changeMenu(page) {
+      await page
+        .getByLabel("Enter meal description")
+        .fill("Pasta night with garlic bread and salad");
+      await expect(messages(page).first()).toHaveText(
+        "The server had a problem. Please try again.",
+        { timeout: 10000 },
+      );
+    }
+
+    async function addGuestForJane(page) {
+      const janeRow = page
+        .getByRole("cell", { name: "A - Jane Smith", exact: true })
+        .locator("xpath=ancestor::tr");
+      await janeRow.locator(".dropdown-add").click();
+      await janeRow.locator(".dropdown-menu img[alt='cow-icon']").click();
+      await expect(messages(page).first()).toHaveText(
+        "Error: no response received from server.",
+      );
+    }
+
+    // An error under a message that is not one. The info message closes
+    // itself after 5 seconds, so the screenshot follows at once.
+    test("two messages", async ({ page, context }) => {
+      await openMeal(page, context, { billsWarning: THIRD_COOK });
+      await signUpBob(page);
+      await page.getByLabel("Select meal cook").nth(1).selectOption("2");
+      await expect(messages(page).first()).toHaveText(
+        `Cooks saved. ${THIRD_COOK}`,
+      );
+
+      await expect(messages(page)).toHaveText([
+        `Cooks saved. ${THIRD_COOK}`,
+        MEAL_CONFLICT,
+      ]);
+      await scrollToTop(page);
+      await expect(page.locator(".toast-container")).toHaveScreenshot(
+        "message-stack-two.png",
+      );
+    });
+
+    test("three messages", async ({ page, context }) => {
+      await openMeal(page, context);
+      await signUpBob(page);
+      await signOffJane(page);
+      await changeMenu(page);
+      await scrollToTop(page);
+      await page.waitForTimeout(500);
+
+      await expect(messages(page)).toHaveText([
+        "The server had a problem. Please try again.",
+        SETTLED,
+        MEAL_CONFLICT,
+      ]);
+      await expect(page.getByRole("button", { name: /more/ })).toHaveCount(0);
+      await expect(page.locator(".toast-container")).toHaveScreenshot(
+        "message-stack-three.png",
+      );
+    });
+
+    // Five errors: the newest three show, and a line under them says
+    // there are two more. The whole screen, to show how much of the
+    // meal page the stack covers on a phone.
+    test("more messages than show", async ({ page, context }) => {
+      await openMeal(page, context);
+      await signUpBob(page);
+      await signOffJane(page);
+      await signOffAlice(page);
+      await changeMenu(page);
+      await addGuestForJane(page);
+      await scrollToTop(page);
+      await page.waitForTimeout(500);
+
+      await expect(messages(page)).toHaveText([
+        "Error: no response received from server.",
+        "The server had a problem. Please try again.",
+        NOT_FOUND,
+      ]);
+      await expect(
+        page.getByRole("button", { name: "Show 2 more messages" }),
+      ).toBeVisible();
+      await expect(page).toHaveScreenshot("message-stack-more.png");
+
+      // Tapped, the line shows every message.
+      await page.getByRole("button", { name: "Show 2 more messages" }).click();
+      await expect(messages(page)).toHaveText([
+        "Error: no response received from server.",
+        "The server had a problem. Please try again.",
+        NOT_FOUND,
+        SETTLED,
+        MEAL_CONFLICT,
+      ]);
+      await page.waitForTimeout(500);
+      await expect(page).toHaveScreenshot("message-stack-all.png");
+    });
+
+    // The stack sits at the bottom of the screen, so the top keeps the
+    // navigation a person needs. On a phone that is "← Calendar", the
+    // meal's date and its arrows (#137). The whole screen, to show both.
+    test("the stack at the bottom of a phone's screen", async ({
+      page,
+      context,
+    }) => {
+      await openMeal(page, context);
+      await signUpBob(page);
+      await scrollToTop(page);
+      await page.waitForTimeout(500);
+
+      await expect(messages(page)).toHaveText([MEAL_CONFLICT]);
+      await expect(page).toHaveScreenshot("message-stack-phone.png");
+    });
+
+    // The person leaves a meal while its costs are being saved, and both
+    // tries of the save get no answer. The second try may have been
+    // written, so the message says the costs may not have been saved,
+    // and names the meal, because the person is no longer on it (#137).
+    test("may not have been saved, for a meal the person left", async ({
+      page,
+      context,
+    }) => {
+      await setupAuthenticatedPage(page, context);
+      await page.clock.setFixedTime(FROZEN_NOW);
+      let answerTheSave;
+      const onTheCalendar = new Promise((resolve) => {
+        answerTheSave = resolve;
+      });
+      await page.route("**/api/v1/meals/42/bills*", async (route) => {
+        await onTheCalendar;
+        await route.abort("connectionfailed");
+      });
+      await page.goto("/meals/42/edit/");
+      const cost = page
+        .getByRole("spinbutton", { name: "Set meal cost" })
+        .first();
+      await expect(cost).toHaveValue("25.50", { timeout: 10000 });
+      const sent = page.waitForRequest(
+        (r) =>
+          r.method() === "PATCH" && r.url().includes("/api/v1/meals/42/bills"),
+      );
+      await cost.fill("30.00");
+      await sent;
+
+      await page.getByRole("button", { name: "Calendar" }).click();
+      await expect(page.locator(".rbc-calendar")).toBeVisible({
+        timeout: 10000,
+      });
+      answerTheSave();
+      await expect(messages(page)).toHaveText([
+        "The cooks and costs you entered for Thu, Jan 15th may not have been saved. Please open that meal and check them.",
+      ]);
+      await page.waitForTimeout(500);
+
+      await expect(page.locator(".toast-container")).toHaveScreenshot(
+        "message-maybe-not-saved.png",
+      );
+    });
+  });
+
+  // A calendar form's own error shows inside the form, under its title,
+  // and not in the stack of messages, which is drawn under the open form
+  // (#137).
+  test.describe("a form's own error", () => {
+    // The refused create makes the browser log a request failure.
+    test.use({ allowedConsoleErrors: httpFailurePattern });
+
+    test("event form with its own error", async ({ page, context }) => {
+      await setupAuthenticatedPage(page, context);
+      await page.clock.setFixedTime(FROZEN_NOW);
+      // What EventsController#create sends for an event with no title.
+      await page.route("**/api/v1/events", (route) =>
+        route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({ message: "Title can't be blank" }),
+        }),
+      );
+
+      await page.goto("/calendar/all/2026-01-15/");
+      await page.waitForLoadState("networkidle");
+      await expect(page.locator(".rbc-calendar")).toBeVisible({
+        timeout: 10000,
+      });
+      await page.locator("text=Event").first().click();
+      const modal = page.locator(".ReactModal__Content--after-open");
+      await expect(modal).toBeVisible({ timeout: 5000 });
+      await modal.getByRole("button", { name: "Create" }).click();
+      await expect(modal.locator(".form-message__text")).toHaveText(
+        "Title can't be blank",
+      );
+      await expect(page.locator(".toast")).toHaveCount(0);
+      await page.waitForTimeout(500);
+
+      await expect(page).toHaveScreenshot("event-form-error.png", {
+        fullPage: true,
+      });
+    });
   });
 
   test.describe("with a 401 backend", () => {
@@ -1392,9 +1673,10 @@ test.describe("Visual Baselines", () => {
       const textarea = page.getByLabel("Enter meal description");
       await expect(textarea).toBeEnabled({ timeout: 10000 });
       await textarea.fill("Pasta night with garlic bread and salad");
-      await expect(page.getByRole("status")).toHaveText(/Not saved/, {
-        timeout: 10000,
-      });
+      // The menu's own status line, not the messages' polite region.
+      await expect(
+        page.getByRole("status").filter({ hasText: "Not saved" }),
+      ).toBeVisible({ timeout: 10000 });
       await expect(page.locator(".toast--error .toast__message")).toHaveText(
         "The server had a problem. Please try again.",
       );

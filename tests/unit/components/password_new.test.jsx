@@ -12,6 +12,7 @@ vi.mock("axios", () => import("../mocks/axios.js"));
 
 import axios from "axios";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
+import { messagesShown } from "../helpers/form_messages.js";
 import ResidentsPasswordNew from "../../../app/frontend/src/components/residents/password_new.jsx";
 
 function LocationEcho() {
@@ -91,7 +92,10 @@ describe("ResidentsPasswordNew", () => {
     ]);
   });
 
-  it("a refused password shows the reason and frees the form", async () => {
+  // The form is in a dialog, and the stack of messages is drawn under
+  // an open dialog, so the reason shows inside the form, under its
+  // title (#137).
+  it("a refused password shows the reason inside the form and frees the form", async () => {
     // What ResidentsController#password_new answers when the resident
     // row itself no longer saves (#105): one line per field, then who
     // can fix it.
@@ -108,9 +112,40 @@ describe("ResidentsPasswordNew", () => {
     fireEvent.click(screen.getByRole("button", { name: "Submit" }));
 
     await vi.waitFor(() => {
-      expect(toastStore.toasts.map((t) => t.message)).toEqual([reason]);
+      expect(messagesShown()).toEqual({ form: [reason], stack: [] });
     });
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Your password was not changed:",
+    );
     expect(screen.getByRole("button", { name: "Submit" })).toBeEnabled();
+  });
+
+  // A try that works closes the dialog, and the reasons earlier tries
+  // got go with it.
+  it("a password saved after a refusal takes the refusal away with the form", async () => {
+    axios.get.mockResolvedValue({ status: 200, data: { name: "Jane Smith" } });
+    axios.post.mockRejectedValueOnce({ request: {} });
+    axios.post.mockResolvedValueOnce({
+      status: 200,
+      data: { message: "Password updated!" },
+    });
+    renderForm();
+    const input = await screen.findByPlaceholderText("New Password");
+    fireEvent.change(input, { target: { value: "hunter2hunter2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+    await vi.waitFor(() => {
+      expect(messagesShown().form).toEqual([
+        "Error: no response received from server.",
+      ]);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+
+    expect(await screen.findByText("login page")).toBeInTheDocument();
+    expect(messagesShown()).toEqual({
+      form: [],
+      stack: ["Password updated!"],
+    });
   });
 
   // The two answers the server gives for a link it will not use

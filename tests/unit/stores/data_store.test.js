@@ -73,7 +73,7 @@ import * as idbKeyval from "idb-keyval";
 import axios from "axios";
 import Cookie from "js-cookie";
 import { cookies } from "../mocks/js_cookie.js";
-import toastStore from "../../../app/frontend/src/stores/toast_store.js";
+import toastStore from "../../../app/frontend/src/stores/toast_store";
 import { SAVE_DEBOUNCE_MS } from "../../../app/frontend/src/helpers/helpers.js";
 // The server's real answer for GET /meals/42/cooks, written by
 // rake test:generate_fixtures from MealFormSerializer.
@@ -2336,6 +2336,11 @@ describe("DataStore", () => {
       "The cooks and costs you entered for Thu, Jun 15th were not saved, because that meal has already been settled.";
     const MEAL_1_NOT_SAVED =
       "The cooks and costs you entered for Thu, Jun 15th were not saved. Please open that meal and enter them again.";
+    // The words when the second try of the save for meal 1 got no answer
+    // from the app (no answer, or a 5xx page with no message) after the
+    // person left it, so it may have been written (#137).
+    const MEAL_1_MAYBE =
+      "The cooks and costs you entered for Thu, Jun 15th may not have been saved. Please open that meal and check them.";
     // The words a person sees when the second try of a save for the meal
     // on screen got no answer from the app (no answer, or a 5xx page with
     // no message), so it may have been written.
@@ -2417,21 +2422,21 @@ describe("DataStore", () => {
           },
         },
         MAYBE_NOT_SAVED,
-        MEAL_1_NOT_SAVED,
+        MEAL_1_MAYBE,
         2,
       ],
       [
         "the server never answers (no network)",
         { request: {} },
         MAYBE_NOT_SAVED,
-        MEAL_1_NOT_SAVED,
+        MEAL_1_MAYBE,
         2,
       ],
       [
         "the request is never sent",
         new Error("Network Error"),
         MAYBE_NOT_SAVED,
-        MEAL_1_NOT_SAVED,
+        MEAL_1_MAYBE,
         2,
       ],
     ];
@@ -3107,12 +3112,10 @@ describe("DataStore", () => {
       ]);
     });
 
-    // The app shows one message at a time, and a new one replaces the
-    // one on screen. So when a second meal the person left fails while
-    // the message about the first is still showing, one message names
-    // both. Otherwise the person would never see the first. It uses the
-    // general words even though one meal was settled: they are true of
-    // both meals.
+    // When a second meal the person left fails while the message about
+    // the first still shows, one message names both, so every meal that
+    // was not saved is in one place. It uses the general words even
+    // though one meal was settled: they are true of both meals.
     it("names every meal the person left in one message when a second fails while the first message still shows", async () => {
       const store = storeWithCookBill();
       await leaveMeals1And2(store, STALE, SETTLED);
@@ -3194,8 +3197,10 @@ describe("DataStore", () => {
 
     // One outage fails the waiting save for meal 1 and then, right after
     // it, the save for the meal on screen, meal 2. Each is sent twice
-    // (decision 7 of #135), one after the other. The message must still
-    // name meal 1, so meal 2 joins it instead of replacing it.
+    // (decision 7 of #135), one after the other. The message still names
+    // meal 1, and the words about meal 2 go on top of it (#137). Meal
+    // 2's second try got no answer, so it may have been written, and
+    // its words say so.
     it("still names a meal the person left when the save for the meal on screen fails right after it", async () => {
       const store = storeWithCookBill();
       answerMealFetches();
@@ -3217,37 +3222,25 @@ describe("DataStore", () => {
         "/api/v1/meals/2/bills",
         "/api/v1/meals/2/bills",
       ]);
-      expect(toastsOnScreen()).toEqual([["error", MEALS_1_AND_2_NOT_SAVED]]);
+      expect(toastsOnScreen()).toEqual([
+        ["error", MAYBE_NOT_SAVED],
+        ["error", MEAL_1_MAYBE],
+      ]);
     });
 
-    it.each([
-      [
-        "the person closed it",
-        () => toastStore.removeToast(toastStore.toasts[0].id),
-      ],
-      [
-        "another message replaced it",
-        () =>
-          toastStore.replaceAll(
-            "Someone else was changing this at the same time. Nothing was saved. Try again.",
-            "error",
-          ),
-      ],
-    ])(
-      "names only the new meal when the message about the first meal is gone because %s",
-      async (_label, removeTheMessage) => {
-        const store = storeWithCookBill();
-        const rejectMeal2 = await failMeal1ThenLeaveMeal2(store);
+    // Only the person can close the message: it is an error (#137).
+    it("names only the new meal when the person closed the message about the first meal", async () => {
+      const store = storeWithCookBill();
+      const rejectMeal2 = await failMeal1ThenLeaveMeal2(store);
 
-        removeTheMessage();
-        rejectMeal2(STALE);
-        await vi.advanceTimersByTimeAsync(0);
+      toastStore.remove(toastStore.toasts[0].id);
+      rejectMeal2(STALE);
+      await vi.advanceTimersByTimeAsync(0);
 
-        expect(toastStore.toasts.map((t) => t.message)).toEqual([
-          "The cooks and costs you entered for Fri, Jun 16th were not saved. Please open that meal and enter them again.",
-        ]);
-      },
-    );
+      expect(toastStore.toasts.map((t) => t.message)).toEqual([
+        "The cooks and costs you entered for Fri, Jun 16th were not saved. Please open that meal and enter them again.",
+      ]);
+    });
 
     // A save that works later does not change the message or close it
     // (see billsNotSaved in data_store_bills.ts). Here meals 1 and 2
@@ -3414,57 +3407,10 @@ describe("DataStore", () => {
       expect(toastsOnScreen()).toEqual([["error", MEAL_1_NOT_SAVED]]);
     });
 
-    // A message that says a save failed is never replaced by one that
-    // says a save worked: the failure is still true, and the person may
-    // not have read it yet. So while it shows, a bills save that comes
-    // back saved with a warning is only logged. Here the warning is
-    // about meal 2, which the person left too.
-    it.each([THIRD_COOK_ADDED, THIRD_COOK_SWITCHED])(
-      "logs the warning when a meal the person left is saved with a warning while the message about a meal not saved shows: %s",
-      async (warning) => {
-        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-        const store = storeWithCookBill();
-        await leaveMeals1And2(store, STALE, savedWithWarning(warning));
-
-        expect(toastsOnScreen()).toEqual([["error", MEAL_1_NOT_SAVED]]);
-        expect(warn).toHaveBeenCalledWith(
-          `Cooks saved for Fri, Jun 16th. ${warning}`,
-        );
-        warn.mockRestore();
-      },
-    );
-
-    // The same rule holds for the meal on screen. Meal 1 was not saved,
-    // and the person types a cost on meal 2, which is saved with a
-    // warning. The message about meal 1 stays.
-    it("logs the warning when the meal on screen is saved with a warning while the message about a meal not saved shows", async () => {
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-      const store = storeWithCookBill();
-      answerMealFetches();
-      const answerFirst = queueAnEditBehindASave(store);
-      axios.mockRejectedValueOnce(STALE); // meal 1's $50 save
-      store.switchMeals(2);
-      await vi.advanceTimersByTimeAsync(0); // meal 2's rows load
-      toastStore.clearAll();
-      answerFirst({ status: 200, data: {} });
-      await vi.advanceTimersByTimeAsync(0);
-      expect(toastsOnScreen()).toEqual([["error", MEAL_1_NOT_SAVED]]);
-
-      axios.mockRejectedValueOnce(savedWithWarning(THIRD_COOK_ADDED));
-      bobsBill(store).setAmount("8");
-      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
-      await vi.advanceTimersByTimeAsync(0);
-
-      expect(billsPatchCalls(2).length).toBe(1);
-      expect(toastsOnScreen()).toEqual([["error", MEAL_1_NOT_SAVED]]);
-      expect(warn).toHaveBeenCalledWith(`Cooks saved. ${THIRD_COOK_ADDED}`);
-      warn.mockRestore();
-    });
-
     // A save that comes back with a warning was saved, and like any save
-    // that works, it does not take its meal off the message.
+    // that works, it does not take its meal off the message. The warning
+    // shows on top of it.
     it("does not take a meal off the message when a later save for that meal is saved with a warning", async () => {
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       const store = storeWithCookBill();
       await leaveMeals1And2(store, STALE, SETTLED);
 
@@ -3472,11 +3418,10 @@ describe("DataStore", () => {
       meal1Save.reject(savedWithWarning(THIRD_COOK_ADDED));
       await vi.advanceTimersByTimeAsync(0);
 
-      expect(toastsOnScreen()).toEqual([["error", MEALS_1_AND_2_NOT_SAVED]]);
-      expect(warn).toHaveBeenCalledWith(
-        `Cooks saved for Thu, Jun 15th. ${THIRD_COOK_ADDED}`,
-      );
-      warn.mockRestore();
+      expect(toastsOnScreen()).toEqual([
+        ["info", `Cooks saved for Thu, Jun 15th. ${THIRD_COOK_ADDED}`],
+        ["error", MEALS_1_AND_2_NOT_SAVED],
+      ]);
     });
 
     // Two saves for meal 1 fail after the person left it: the $5 save
@@ -3607,6 +3552,380 @@ describe("DataStore", () => {
         ]);
       },
     );
+
+    // #137: messages stack up, so a later message never takes the place
+    // of the "not saved" message, which may be the only sign that a
+    // meal's costs were lost.
+    describe("when the message about a meal not saved shows (#137)", () => {
+      // What the server answers a meal write that lost a race for the
+      // meal's lock (MealsController#conflict_rejection).
+      const MEAL_CONFLICT =
+        "Someone else was changing this meal at the same time. Nothing was saved. Try again.";
+
+      // The person left meal 1 with $50 waiting behind the $5 save, and
+      // is on meal 2. The $5 save works and the $50 save is refused, so
+      // the message names meal 1.
+      async function meal1NotSaved(store) {
+        answerMealFetches();
+        const answerFirst = queueAnEditBehindASave(store);
+        axios.mockRejectedValueOnce(STALE); // meal 1's $50 save
+        store.switchMeals(2);
+        await vi.advanceTimersByTimeAsync(0); // meal 2's rows load
+        toastStore.clearAll();
+        answerFirst({ status: 200, data: {} });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(toastsOnScreen()).toEqual([["error", MEAL_1_NOT_SAVED]]);
+      }
+
+      // The test the issue asks for.
+      it("still names the meal after a sign-up on the meal on screen fails", async () => {
+        const store = storeWithCookBill();
+        await meal1NotSaved(store);
+
+        axios.mockRejectedValueOnce({
+          response: { status: 409, data: { message: MEAL_CONFLICT } },
+        });
+        store.residents.get("11").toggleAttending();
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(toastsOnScreen()).toEqual([
+          ["error", MEAL_CONFLICT],
+          ["error", MEAL_1_NOT_SAVED],
+        ]);
+      });
+
+      // The message is still on screen under the newer one, so a meal
+      // that fails next joins it, and the joined message goes on top.
+      it("adds the next meal that fails to it, even under a newer message, and puts it on top", async () => {
+        const store = storeWithCookBill();
+        await meal1NotSaved(store);
+        axios.mockRejectedValueOnce({
+          response: { status: 409, data: { message: MEAL_CONFLICT } },
+        });
+        store.residents.get("11").toggleAttending();
+        await vi.advanceTimersByTimeAsync(0);
+
+        const meal2Save = await leaveWithASaveInFlight(store, 2, "8", 3);
+        meal2Save.reject(STALE);
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(toastsOnScreen()).toEqual([
+          ["error", MEALS_1_AND_2_NOT_SAVED],
+          ["error", MEAL_CONFLICT],
+        ]);
+      });
+
+      // The person tapped "Show 1 more message" to see every message.
+      // The message about meals not saved grows, and every message
+      // still shows.
+      it("keeps every message showing when it grows after the person showed them all", async () => {
+        const store = storeWithCookBill();
+        await meal1NotSaved(store);
+        ["Error A", "Error B", "Error C"].forEach((words) =>
+          toastStore.show(words, "error"),
+        );
+        toastStore.showAll();
+
+        const meal2Save = await leaveWithASaveInFlight(store, 2, "8", 3);
+        meal2Save.reject(STALE);
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(toastsOnScreen()[0]).toEqual(["error", MEALS_1_AND_2_NOT_SAVED]);
+        expect(toastStore.shown).toHaveLength(4);
+      });
+
+      // A save that worked with a warning is news too. It shows on top,
+      // and the message about meal 1 stays under it.
+      it.each([THIRD_COOK_ADDED, THIRD_COOK_SWITCHED])(
+        "shows a warning about a meal the person left on top of it: %s",
+        async (warning) => {
+          const store = storeWithCookBill();
+          await leaveMeals1And2(store, STALE, savedWithWarning(warning));
+
+          expect(toastsOnScreen()).toEqual([
+            ["info", `Cooks saved for Fri, Jun 16th. ${warning}`],
+            ["error", MEAL_1_NOT_SAVED],
+          ]);
+        },
+      );
+
+      it("shows a warning about the meal on screen on top of it", async () => {
+        const store = storeWithCookBill();
+        await meal1NotSaved(store);
+
+        axios.mockRejectedValueOnce(savedWithWarning(THIRD_COOK_ADDED));
+        bobsBill(store).setAmount("8");
+        vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(billsPatchCalls(2).length).toBe(1);
+        expect(toastsOnScreen()).toEqual([
+          ["info", `Cooks saved. ${THIRD_COOK_ADDED}`],
+          ["error", MEAL_1_NOT_SAVED],
+        ]);
+      });
+
+      // A failed save of the meal on screen gets the words it gets on
+      // its own, in its own message: the person can see which meal it
+      // is about. After no answer from the app those words say the
+      // costs may not have been saved, which "were not saved" could not
+      // say (#135).
+      it.each(SAVE_FAILURES)(
+        "shows a failed save of the meal on screen in its own message: %s",
+        async (_label, error, wordsOnScreen, _wordsAfterLeaving, tries) => {
+          const store = storeWithCookBill();
+          await meal1NotSaved(store);
+
+          failNextSaves(error, tries);
+          bobsBill(store).setAmount("8");
+          vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+          await vi.advanceTimersByTimeAsync(0);
+
+          expect(billsPatchCalls(2).length).toBe(tries);
+          expect(toastsOnScreen()).toEqual([
+            ["error", wordsOnScreen],
+            ["error", MEAL_1_NOT_SAVED],
+          ]);
+        },
+      );
+    });
+
+    // #137, decision 7 of #135. When the second try of a save got no
+    // answer from the app, that try may have been written, so "were not
+    // saved" could be false. Those meals get their own message, which
+    // says the costs may not have been saved and asks the person to
+    // check them. Meals that were surely not saved keep the "were not
+    // saved" message. The two kinds are never in one sentence.
+    describe("when a save for a meal the person left may have been written", () => {
+      const MEAL_2_MAYBE =
+        "The cooks and costs you entered for Fri, Jun 16th may not have been saved. Please open that meal and check them.";
+      const MEALS_1_AND_2_MAYBE =
+        "The cooks and costs you entered for Thu, Jun 15th and Fri, Jun 16th may not have been saved. Please open those meals and check them.";
+      const MEAL_2_NOT_SAVED =
+        "The cooks and costs you entered for Fri, Jun 16th were not saved. Please open that meal and enter them again.";
+      // Both tries of a save got no answer.
+      const NO_ANSWER = [NO_NETWORK, NO_NETWORK];
+
+      // The stack is one object for the whole app.
+      beforeEach(() => {
+        toastStore.clearAll();
+      });
+
+      // Each try of a save fails with the next of these errors. With no
+      // errors, the save works.
+      function answerTries(errors) {
+        if (errors.length === 0) {
+          axios.mockResolvedValueOnce({ status: 200, data: {} });
+        }
+        errors.forEach((error) => axios.mockRejectedValueOnce(error));
+      }
+
+      // The person leaves meal 1 with $50 waiting behind the $5 save,
+      // types $8 on meal 2, and leaves meal 2 for meal 3. Then the $5
+      // save works, and the tries of the saves for meals 1 and 2 are
+      // answered with these errors.
+      async function leaveMeals1And2Failing(store, meal1Errors, meal2Errors) {
+        answerMealFetches();
+        const answerFirst = queueAnEditBehindASave(store);
+        answerTries(meal1Errors);
+        answerTries(meal2Errors);
+        store.switchMeals(2);
+        await vi.advanceTimersByTimeAsync(0); // meal 2's rows load
+        bobsBill(store).setAmount("8");
+        vi.advanceTimersByTime(SAVE_DEBOUNCE_MS); // waits for meal 1's save
+        store.switchMeals(3);
+        await vi.advanceTimersByTimeAsync(0);
+        toastStore.clearAll();
+        answerFirst({ status: 200, data: {} });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(billsPatchCalls(1).length).toBe(
+          1 + Math.max(1, meal1Errors.length),
+        );
+        expect(billsPatchCalls(2).length).toBe(Math.max(1, meal2Errors.length));
+      }
+
+      it("names every such meal in one message", async () => {
+        const store = storeWithCookBill();
+        await leaveMeals1And2Failing(store, NO_ANSWER, NO_ANSWER);
+
+        expect(toastsOnScreen()).toEqual([["error", MEALS_1_AND_2_MAYBE]]);
+      });
+
+      it("keeps a meal's place in the message when a later save for it may have been written too", async () => {
+        const store = storeWithCookBill();
+        await leaveMeals1And2Failing(store, NO_ANSWER, NO_ANSWER);
+
+        const meal1Save = await leaveWithASaveInFlight(store, 1, "60", 3);
+        failNextSaves(NO_NETWORK, 1); // the second try
+        meal1Save.reject(NO_NETWORK);
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(billsPatchCalls(1).length).toBe(5);
+        expect(toastsOnScreen()).toEqual([["error", MEALS_1_AND_2_MAYBE]]);
+      });
+
+      it.each([
+        [
+          "meal 1 surely was not saved and meal 2 may have been",
+          [STALE],
+          NO_ANSWER,
+          [
+            ["error", MEAL_2_MAYBE],
+            ["error", MEAL_1_NOT_SAVED],
+          ],
+        ],
+        [
+          "meal 1 may have been saved and meal 2 surely was not",
+          NO_ANSWER,
+          [STALE],
+          [
+            ["error", MEAL_2_NOT_SAVED],
+            ["error", MEAL_1_MAYBE],
+          ],
+        ],
+      ])(
+        "keeps the two kinds in two messages when %s",
+        async (_label, meal1Errors, meal2Errors, messages) => {
+          const store = storeWithCookBill();
+          await leaveMeals1And2Failing(store, meal1Errors, meal2Errors);
+
+          expect(toastsOnScreen()).toEqual(messages);
+        },
+      );
+
+      // A meal is named in one of the two messages, never in both. "Were
+      // not saved" asks for more: the person enters the costs again,
+      // which takes in checking them.
+      it("moves a meal to the were-not-saved message when a later save for it surely was not saved", async () => {
+        const store = storeWithCookBill();
+        await leaveMeals1And2Failing(store, NO_ANSWER, NO_ANSWER);
+
+        const meal1Save = await leaveWithASaveInFlight(store, 1, "60", 3);
+        meal1Save.reject(STALE);
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(toastsOnScreen()).toEqual([
+          ["error", MEAL_1_NOT_SAVED],
+          ["error", MEAL_2_MAYBE],
+        ]);
+      });
+
+      it("takes the may-not-have-been-saved message away when its only meal moves", async () => {
+        const store = storeWithCookBill();
+        await leaveMeals1And2Failing(store, NO_ANSWER, []);
+        expect(toastsOnScreen()).toEqual([["error", MEAL_1_MAYBE]]);
+
+        const meal1Save = await leaveWithASaveInFlight(store, 1, "60", 3);
+        meal1Save.reject(STALE);
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(toastsOnScreen()).toEqual([["error", MEAL_1_NOT_SAVED]]);
+      });
+
+      it("keeps a meal in the were-not-saved message when a later save for it may have been written", async () => {
+        const store = storeWithCookBill();
+        await leaveMeals1And2Failing(store, [STALE], []);
+        expect(toastsOnScreen()).toEqual([["error", MEAL_1_NOT_SAVED]]);
+
+        const meal1Save = await leaveWithASaveInFlight(store, 1, "60", 3);
+        failNextSaves(NO_NETWORK, 1); // the second try
+        meal1Save.reject(NO_NETWORK);
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(billsPatchCalls(1).length).toBe(4);
+        expect(toastsOnScreen()).toEqual([["error", MEAL_1_NOT_SAVED]]);
+      });
+
+      it("names only the new meal when the person closed the message about the first", async () => {
+        const store = storeWithCookBill();
+        await leaveMeals1And2Failing(store, NO_ANSWER, []);
+        toastStore.remove(toastStore.toasts[0].id);
+
+        const meal2Save = await leaveWithASaveInFlight(store, 2, "9", 3);
+        failNextSaves(NO_NETWORK, 1); // the second try
+        meal2Save.reject(NO_NETWORK);
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(toastsOnScreen()).toEqual([["error", MEAL_2_MAYBE]]);
+      });
+
+      // The meal's own message says "Check them when the meal shows
+      // again", which is about the meal on screen. Once the person
+      // leaves the meal, the message names it.
+      describe("when the person leaves the meal its own message is about", () => {
+        // Bob's $5 save for meal 1, on screen, gets no answer twice.
+        async function maybeNotSavedOnScreen(store) {
+          answerMealFetches();
+          failNextSaves(NO_NETWORK, 2);
+          bobsBill(store).setAmount("5");
+          vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+          await vi.advanceTimersByTimeAsync(0);
+          expect(toastsOnScreen()[0]).toEqual(["error", MAYBE_NOT_SAVED]);
+        }
+
+        it.each([
+          ["for another meal", (store) => store.switchMeals(2)],
+          ["for the calendar", (store) => store.teardownMealPage()],
+        ])(
+          "puts the message that names the meal in its place, when the person leaves %s",
+          async (_label, leave) => {
+            const store = storeWithCookBill();
+            await maybeNotSavedOnScreen(store);
+
+            leave(store);
+            await vi.advanceTimersByTimeAsync(0);
+
+            expect(toastsOnScreen()).toEqual([["error", MEAL_1_MAYBE]]);
+          },
+        );
+
+        it("adds the meal to the message that names other meals", async () => {
+          const store = storeWithCookBill();
+          await leaveMeals1And2Failing(store, [], NO_ANSWER);
+          expect(toastsOnScreen()).toEqual([["error", MEAL_2_MAYBE]]);
+          store.switchMeals(1);
+          await vi.advanceTimersByTimeAsync(0); // meal 1's rows load
+          await maybeNotSavedOnScreen(store);
+          expect(toastsOnScreen()).toEqual([
+            ["error", MAYBE_NOT_SAVED],
+            ["error", MEAL_2_MAYBE],
+          ]);
+
+          store.switchMeals(3);
+          await vi.advanceTimersByTimeAsync(0);
+
+          expect(toastsOnScreen()).toEqual([
+            [
+              "error",
+              "The cooks and costs you entered for Fri, Jun 16th and Thu, Jun 15th may not have been saved. Please open those meals and check them.",
+            ],
+          ]);
+        });
+
+        it("names nothing when the person closed the message before leaving", async () => {
+          const store = storeWithCookBill();
+          await maybeNotSavedOnScreen(store);
+          toastStore.remove(toastStore.toasts[0].id);
+
+          store.switchMeals(2);
+          await vi.advanceTimersByTimeAsync(0);
+
+          expect(toastsOnScreen()).toEqual([]);
+        });
+
+        it("names the meal once, when the person leaves the next meal too", async () => {
+          const store = storeWithCookBill();
+          await maybeNotSavedOnScreen(store);
+          store.switchMeals(2);
+          await vi.advanceTimersByTimeAsync(0);
+
+          store.switchMeals(3);
+          await vi.advanceTimersByTimeAsync(0);
+
+          expect(toastsOnScreen()).toEqual([["error", MEAL_1_MAYBE]]);
+        });
+      });
+    });
   });
 
   describe("toggleClosed settle-refetch", () => {

@@ -2,12 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 
 vi.mock("axios", () => import("../mocks/axios.js"));
-vi.mock("../../../app/frontend/src/helpers/handle_axios_error.js", () => ({
-  default: vi.fn(),
-}));
 
 import axios from "axios";
-import handleAxiosError from "../../../app/frontend/src/helpers/handle_axios_error.js";
 import useDeleteFlow from "../../../app/frontend/src/components/modal_form/use_delete_flow.js";
 
 // The edit modals drive the whole flow through their Delete buttons
@@ -21,6 +17,8 @@ function renderFlow(overrides = {}) {
     loadingAction: null,
     setLoadingAction: vi.fn(),
     mountedRef: { current: true },
+    // The form's own way to show a failure (use_form_messages.ts).
+    showError: vi.fn(),
     onDeleted: vi.fn(),
     ...overrides,
   };
@@ -62,14 +60,14 @@ describe("useDeleteFlow", () => {
     expect(hook.result.current.confirmProps.isOpen).toBe(false);
   });
 
-  it("a failed delete clears the loading state and reports the error", async () => {
+  it("a failed delete clears the loading state and shows the error as the form's own", async () => {
     const error = { response: { status: 400, data: { message: "No." } } };
     axios.delete.mockRejectedValueOnce(error);
     const { props, hook } = renderFlow();
 
     await act(async () => hook.result.current.confirmProps.onConfirm());
     expect(props.setLoadingAction).toHaveBeenLastCalledWith(null);
-    expect(handleAxiosError).toHaveBeenCalledWith(error);
+    expect(props.showError).toHaveBeenCalledWith(error);
     expect(props.onDeleted).not.toHaveBeenCalled();
   });
 
@@ -99,6 +97,6 @@ describe("useDeleteFlow", () => {
     await act(async () => hook.result.current.confirmProps.onConfirm());
     mountedRef.current = false;
     await act(async () => fail({ response: { status: 500, data: {} } }));
-    expect(handleAxiosError).not.toHaveBeenCalled();
+    expect(props.showError).not.toHaveBeenCalled();
   });
 });

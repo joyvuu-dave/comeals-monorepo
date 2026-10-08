@@ -73,6 +73,11 @@ test.describe("Password Reset", () => {
       "Email required.",
     );
     expect(resetRequested).toBe(false);
+
+    // The page made this check itself, so the error goes as soon as the
+    // email box holds an email, without waiting to be closed (#137).
+    await page.locator('input[aria-label="email"]').fill("jane@example.com");
+    await expect(toast).toHaveCount(0);
   });
 
   test("set new password sends POST with password", async ({ page }) => {

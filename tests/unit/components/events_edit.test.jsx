@@ -17,6 +17,7 @@ cookies.current = { timezone: "America/Los_Angeles" };
 
 import axios from "axios";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
+import { messagesShown } from "../helpers/form_messages.js";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
 import EventsEdit from "../../../app/frontend/src/components/events/edit.jsx";
 // What GET /api/v1/events/:id sends, made by the Rails app
@@ -208,9 +209,10 @@ describe("EventsEdit", () => {
     armAndClick(buttons[buttons.length - 1]);
 
     await vi.waitFor(() => {
-      expect(toastStore.toasts.map((t) => t.message)).toEqual([
-        "This event already happened.",
-      ]);
+      expect(messagesShown()).toEqual({
+        form: ["This event already happened."],
+        stack: [],
+      });
     });
     expect(handleCloseModal).not.toHaveBeenCalled();
     expect(screen.getByDisplayValue("Community Meeting")).toBeInTheDocument();
@@ -326,9 +328,10 @@ describe("EventsEdit", () => {
     axios.get.mockRejectedValue(NOT_FOUND);
     renderForm();
     await vi.waitFor(() => {
-      expect(toastStore.toasts.map((t) => t.message)).toEqual([
-        NOT_FOUND.response.data.message,
-      ]);
+      expect(messagesShown()).toEqual({
+        form: [NOT_FOUND.response.data.message],
+        stack: [],
+      });
     });
     expect(screen.getByRole("button", { name: "Update" })).toBeDisabled();
   });
@@ -343,9 +346,10 @@ describe("EventsEdit", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
     await vi.waitFor(() => {
-      expect(toastStore.toasts.map((t) => t.message)).toEqual([
-        "Title can't be blank",
-      ]);
+      expect(messagesShown()).toEqual({
+        form: ["Title can't be blank"],
+        stack: [],
+      });
     });
     expect(handleCloseModal).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Update" })).toBeEnabled();

@@ -1,11 +1,12 @@
 import { useState } from "react";
 import axios from "axios";
-import handleAxiosError from "../../helpers/handle_axios_error";
 
 // The delete flow every edit modal shares: Delete opens a ConfirmModal
 // (the armMs guard stops an accidental double-tap, ADR 0006), a
 // confirmed delete sends the request, and `onDeleted` runs on success
-// to invalidate the month and close the form.
+// to invalidate the month and close the form. A failed delete shows
+// through `showError`, the form's own (use_form_messages.ts), so the
+// message goes when the form closes.
 //
 // Returns `requestDelete` for the header's Delete button and
 // `confirmProps` to spread onto a <ConfirmModal />.
@@ -15,6 +16,7 @@ export default function useDeleteFlow({
   loadingAction,
   setLoadingAction,
   mountedRef,
+  showError,
   onDeleted,
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -37,7 +39,7 @@ export default function useDeleteFlow({
       .catch(function (error) {
         if (!mountedRef.current) return;
         setLoadingAction(null);
-        handleAxiosError(error);
+        showError(error);
       });
   }
 

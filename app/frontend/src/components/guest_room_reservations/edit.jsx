@@ -4,11 +4,12 @@ import dayjs from "dayjs";
 import axios from "axios";
 import { observer } from "mobx-react-lite";
 import { useStore } from "../../helpers/store_context";
-import handleAxiosError from "../../helpers/handle_axios_error";
+import useFormMessages from "../../helpers/use_form_messages";
 import ConfirmModal from "../app/confirm_modal";
 import useDirtyReport from "../../helpers/use_dirty_report";
 import useMountedRef from "../../helpers/use_mounted_ref";
 import ModalFormHeader from "../modal_form/header";
+import FormMessages from "../modal_form/form_messages";
 import ModalFormFooter from "../modal_form/footer";
 import useDeleteFlow from "../modal_form/use_delete_flow";
 
@@ -32,6 +33,10 @@ const GuestRoomReservationsEdit = observer(
     const [loadingAction, setLoadingAction] = useState(null);
 
     const mountedRef = useMountedRef();
+
+    const formMessages = useFormMessages();
+
+    const showError = formMessages.showError;
 
     // The values the fetch hydrated, normalized for comparison. The form
     // fields are set FROM this object, so the dirty check below can
@@ -67,10 +72,10 @@ const GuestRoomReservationsEdit = observer(
             if (!mountedRef.current) return;
             // Say why the form stays empty and locked, most often a record
             // someone else deleted (issue #115).
-            handleAxiosError(error);
+            showError(error);
           });
       },
-      [eventId, mountedRef],
+      [eventId, mountedRef, showError],
     );
 
     function handleSubmit(e) {
@@ -99,7 +104,7 @@ const GuestRoomReservationsEdit = observer(
         .catch(function (error) {
           if (!mountedRef.current) return;
           setLoadingAction(null);
-          handleAxiosError(error);
+          showError(error);
         });
     }
 
@@ -109,6 +114,7 @@ const GuestRoomReservationsEdit = observer(
       loadingAction: loadingAction,
       setLoadingAction: setLoadingAction,
       mountedRef: mountedRef,
+      showError: showError,
       onDeleted: function () {
         // The client that knows, invalidates (issue #37).
         store.invalidateMonthForDate(event.date);
@@ -140,6 +146,10 @@ const GuestRoomReservationsEdit = observer(
         <ModalFormHeader
           title="Edit Guest Room Reservation"
           onClose={handleCloseModal}
+        />
+        <FormMessages
+          messages={formMessages.messages}
+          close={formMessages.close}
         />
         <fieldset data-populated={populated ? "true" : undefined}>
           <form onSubmit={handleSubmit}>

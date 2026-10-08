@@ -5,10 +5,11 @@ import dayjs from "dayjs";
 import axios from "axios";
 import { observer } from "mobx-react-lite";
 import { useStore } from "../../helpers/store_context";
-import handleAxiosError from "../../helpers/handle_axios_error";
+import useFormMessages from "../../helpers/use_form_messages";
 import useDirtyReport from "../../helpers/use_dirty_report";
 import useMountedRef from "../../helpers/use_mounted_ref";
 import ModalFormHeader from "../modal_form/header";
+import FormMessages from "../modal_form/form_messages";
 import TimeSelect from "../modal_form/time_select";
 import { buildStartEndPayload } from "../modal_form/payload";
 
@@ -29,6 +30,8 @@ const CommonHouseReservationsNew = observer(
     const [endTime, setEndTime] = useState("");
     const [loading, setLoading] = useState(false);
     const mountedRef = useMountedRef();
+    const formMessages = useFormMessages();
+    const showError = formMessages.showError;
 
     // Hosts cache: kick off fetch if empty; no-op if already loaded.
     useEffect(
@@ -62,7 +65,7 @@ const CommonHouseReservationsNew = observer(
         .catch(function (error) {
           if (!mountedRef.current) return;
           setLoading(false);
-          handleAxiosError(error);
+          showError(error);
         });
     }
 
@@ -83,6 +86,10 @@ const CommonHouseReservationsNew = observer(
         <ModalFormHeader
           title="New Common House Reservation"
           onClose={handleCloseModal}
+        />
+        <FormMessages
+          messages={formMessages.messages}
+          close={formMessages.close}
         />
         {/* `data-populated` reflects whether the data needed to fully use
           the form (the residents list) is available. Present at first

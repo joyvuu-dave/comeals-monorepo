@@ -6,11 +6,12 @@ import timezone from "dayjs/plugin/timezone";
 import DayPickerInputWrapper from "../common/day_picker_input";
 import { useStore } from "../../helpers/store_context";
 import { toCommunityDayjs } from "../../helpers/helpers";
-import handleAxiosError from "../../helpers/handle_axios_error";
+import useFormMessages from "../../helpers/use_form_messages";
 import ConfirmModal from "../app/confirm_modal";
 import useDirtyReport from "../../helpers/use_dirty_report";
 import useMountedRef from "../../helpers/use_mounted_ref";
 import ModalFormHeader from "../modal_form/header";
+import FormMessages from "../modal_form/form_messages";
 import ModalFormFooter from "../modal_form/footer";
 import TimeSelect from "../modal_form/time_select";
 import { buildStartEndPayload, toTimeString } from "../modal_form/payload";
@@ -37,6 +38,10 @@ function EventsEdit({ eventId, handleCloseModal, setDirty }) {
   const [loadingAction, setLoadingAction] = useState(null);
 
   const mountedRef = useMountedRef();
+
+  const formMessages = useFormMessages();
+
+  const showError = formMessages.showError;
 
   // The values the fetch hydrated, normalized for comparison. The form
   // fields are set FROM this object, so the dirty check below can
@@ -76,10 +81,10 @@ function EventsEdit({ eventId, handleCloseModal, setDirty }) {
           if (!mountedRef.current) return;
           // Say why the form stays empty and locked, most often a record
           // someone else deleted (issue #115).
-          handleAxiosError(error);
+          showError(error);
         });
     },
-    [eventId, mountedRef],
+    [eventId, mountedRef, showError],
   );
 
   function handleSubmit(e) {
@@ -107,7 +112,7 @@ function EventsEdit({ eventId, handleCloseModal, setDirty }) {
       .catch(function (error) {
         if (!mountedRef.current) return;
         setLoadingAction(null);
-        handleAxiosError(error);
+        showError(error);
       });
   }
 
@@ -117,6 +122,7 @@ function EventsEdit({ eventId, handleCloseModal, setDirty }) {
     loadingAction: loadingAction,
     setLoadingAction: setLoadingAction,
     mountedRef: mountedRef,
+    showError: showError,
     onDeleted: function () {
       // The client that knows, invalidates (issue #37).
       store.invalidateMonthForDate(event.start_date);
@@ -144,6 +150,10 @@ function EventsEdit({ eventId, handleCloseModal, setDirty }) {
   return (
     <div>
       <ModalFormHeader title="Edit Event" onClose={handleCloseModal} />
+      <FormMessages
+        messages={formMessages.messages}
+        close={formMessages.close}
+      />
       <fieldset data-populated={loaded ? "true" : undefined}>
         <form onSubmit={handleSubmit}>
           <label htmlFor="event-edit-title">Title</label>

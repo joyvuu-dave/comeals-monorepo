@@ -7,12 +7,21 @@ import toastStore from "../stores/toast_store";
 // response.data is HTML or has no `message`.
 var SERVER_PROBLEM = "The server had a problem. Please try again.";
 
-// Show a failed request to the person as a toast, in place of any toast
-// on screen, or only log it when `options.silent` is true. Returns the
-// id of the toast it showed, or null when it showed none. A caller keeps
-// the id to tell later whether that toast is still on screen.
+// Where a message goes when the caller names no other place: the stack
+// of messages. Hands back the message's id.
+function showInStack(message, type) {
+  return toastStore.show(message, type);
+}
+
+// Show a failed request to the person, or only log it when
+// `options.silent` is true. The message goes on top of the stack of
+// messages, and its id is handed back. A calendar form passes
+// `options.show`, its own way to show a message inside the form
+// (use_form_messages.ts), and the message goes there instead (#137).
+// Hands back what `show` hands back, or null when silent.
 export default function handleAxiosError(error, options) {
   var silent = options && options.silent;
+  var show = (options && options.show) || showInStack;
   if (error.response) {
     var data = error.response.data;
     if (data && data.message) {
@@ -21,26 +30,23 @@ export default function handleAxiosError(error, options) {
         return null;
       }
       var toastType = data.type === "warning" ? "warning" : "error";
-      return toastStore.replaceAll(data.message, toastType);
+      return show(data.message, toastType);
     } else {
       console.error("Bad response from server", error);
       if (silent) return null;
-      return toastStore.replaceAll(SERVER_PROBLEM, "error");
+      return show(SERVER_PROBLEM, "error");
     }
   } else if (error.request) {
     if (silent) {
       console.error("Error: no response received from server.");
       return null;
     }
-    return toastStore.replaceAll(
-      "Error: no response received from server.",
-      "error",
-    );
+    return show("Error: no response received from server.", "error");
   } else {
     if (silent) {
       console.error("Error: could not submit form.");
       return null;
     }
-    return toastStore.replaceAll("Error: could not submit form.", "error");
+    return show("Error: could not submit form.", "error");
   }
 }

@@ -431,11 +431,14 @@ table td {
   flex-wrap: wrap;
 }
 
+/* Over the rows and their menus (.dropdown-menu is 100), and under the
+   stack of messages, a yes/no question and the banners (see the list
+   in toast.css). */
 .sticky-header {
   position: -webkit-sticky;
   position: sticky;
   top: 0;
-  z-index: 9999;
+  z-index: 9995;
 }
 
 /*
@@ -446,7 +449,9 @@ apart so a missed No cannot hit it.
 
 The bar is a popover: absolutely positioned under its anchor, floating
 over whatever is below. Nothing on the page moves when it opens — a
-question must never shift the content someone is about to click.
+question must never shift the content someone is about to click. It is
+over the stack of messages too, so a message that comes while the
+question is open cannot cover Yes or No (see the list in toast.css).
 */
 .confirm-bar-anchor {
   position: relative;
@@ -468,7 +473,7 @@ question must never shift the content someone is about to click.
   right: 0;
   text-align: left;
   top: calc(100% + 2px);
-  z-index: 30;
+  z-index: 9997;
 }
 .confirm-bar-question {
   font-size: 1.125rem;

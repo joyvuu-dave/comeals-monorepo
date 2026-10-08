@@ -1,12 +1,107 @@
+/* The stack of messages (toast_container.jsx). From the bottom layer
+   to the top:
+
+     9995  a table's header that stays at the top while the table
+           scrolls (.sticky-header, styles.css)
+     9996  the stack of messages
+     9997  a yes/no question on the page (.confirm-bar, styles.css)
+     9998  the signed-out banner (.app-banner--error, components.css)
+     9999  the new-version banner (.app-banner--info)
+    10000  a dialog: a calendar form, the reset-password form, a
+           meal's history (.ReactModal__Overlay--after-open,
+           styles.css)
+    10001  a confirm dialog (confirm_modal.jsx)
+
+   So the stack never covers a banner, a question or a form (#137). A
+   message under a dialog shows again when the dialog closes. It stays
+   over the rest of the page, the table headers too.
+
+   The stack sits at the bottom of the screen at every width, because
+   the top of the screen holds the navigation a person needs. The stack
+   keeps its order, newest on top, and the "more" line is last, at the
+   bottom edge.
+
+   It grows up from the bottom, and stops 11rem (176px) from the top of
+   the screen. A taller stack scrolls inside its box, opened with the
+   "more" line or not: on a short screen, such as a small phone on its
+   side, three messages are enough to reach that line.
+
+   From 825px wide the app uses its wide layout (styles.css), and there
+   the stack covers none of the controls at the top of a page. The
+   stack sits at the right, and the meal's date and its arrows are at
+   the left. The controls at the right all end less than 176px from the
+   top: "Open / Close Meal" ends at 105px, "history" and "logout" at
+   36px, and the calendar's "today" and month arrows at 84px.
+
+   Below 825px the app puts its parts in one column, and there the
+   176px keeps only the top of the meal page uncovered: "← Calendar"
+   and "history" end 36px from the top, the meal's arrows end at 133px,
+   and the date under them ends at 164px, at every width from 320 to
+   824px. Other controls are lower on the screen, and the stack covers
+   them until the person scrolls them above it. On the meal page "Open
+   / Close Meal" is 258 to 294px from the top. On the calendar "today"
+   and the month arrows are 638 to 674px from the top, under the
+   Reserve, Add and Goto boxes, so on a 375x667 phone one message
+   covers them. The room under the page (below) is what lets the person
+   scroll them above the stack.
+
+   A box that scrolls cuts off what spills past its edges, which here is
+   the messages' shadows, so the padding gives the shadows room, and the
+   negative margin keeps the messages where they were. The box sizes
+   include the padding (box-sizing: border-box in components.css), so
+   the padding is added to them. A message slides in from the right,
+   and overflow-x keeps that from showing a scroll bar for a moment.
+
+   On an iPhone, 100vh is the height with Safari's toolbar hidden. While
+   the toolbar shows, a person sees less than that, and a stack sized
+   from 100vh could come closer than 176px to the top of what they see.
+   100dvh is the height a person can see now. A browser that does not
+   know dvh skips that line and keeps the 100vh one.
+
+   With both left and right set, the box is as wide as the screen less
+   its margins, up to its max-width: 24rem for the messages, and the
+   padding on each side. So on a screen narrower than 416px (24rem and
+   16px on each side) the messages fill the width, less 16px on each
+   side. On a wider screen margin-left: auto takes up the rest, so the
+   stack sits at the right, 24rem wide.
+
+   The box has no overscroll-behavior: contain, on purpose. With it,
+   the mouse wheel over the stack did not scroll the page in Chrome,
+   even when the stack had nothing of its own to scroll, and on a wide
+   screen the stack sits over the page. Without it, a wheel past the end
+   of an opened stack scrolls the page, as browsers do by default.
+
+   left is 8px, not 16px. The box has 8px of padding, and its margin of
+   -8px moves its top, right and bottom edges out by 8px, so the
+   messages stay 16px from those edges of the screen. The left margin is
+   auto instead, and auto is 0 when the box fills the screen's width. So
+   left itself is 8px less, and the messages start 16px from the left
+   edge too. */
 .toast-container {
   position: fixed;
-  top: var(--space-4);
+  bottom: var(--space-4);
   right: var(--space-4);
-  z-index: 10002;
+  left: var(--space-2);
+  z-index: 9996;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  max-width: min(24rem, calc(100vw - 2rem));
+  max-width: calc(24rem + 2 * var(--space-2));
+  max-height: calc(100vh - 11rem - var(--space-2));
+  max-height: calc(100dvh - 11rem - var(--space-2));
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: var(--space-2);
+  margin: calc(-1 * var(--space-2));
+  margin-left: auto;
+}
+
+/* Room under the page as tall as the stack and its margins, while
+   messages show (toast_container.jsx sets the value), so a person can
+   scroll the end of the page above the stack. With no messages there is
+   no room, and the page is as it was. */
+body {
+  padding-bottom: var(--message-stack-room, 0px);
 }
 
 .toast {
@@ -61,6 +156,77 @@
 
 .toast__dismiss:hover {
   opacity: 1;
+}
+
+/* The line under the stack when more messages wait behind it. A gray
+   button the width of the messages, so it reads as part of the stack
+   and as something to tap. */
+.toast-more {
+  width: 100%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+/* A calendar form's own messages, inside the form under its title
+   (form_messages.tsx). They look like the messages in the stack, but
+   sit in the form, so they fade in instead of sliding in from the
+   right: a slide would go past the form's edge. */
+.form-messages {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.form-message {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius);
+  color: var(--white);
+  font-size: 0.95rem;
+  line-height: 1.4;
+  animation: form-message-fade-in 0.25s ease-out;
+}
+
+.form-message--error {
+  background-color: var(--brand-red);
+}
+
+.form-message--warning {
+  background-color: var(--hasana-yellow);
+  color: var(--gray-19);
+}
+
+.form-message__text {
+  flex: 1;
+  white-space: pre-line;
+}
+
+.form-message__dismiss {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: var(--space-2);
+  margin: -0.5rem -0.5rem -0.5rem 0;
+  opacity: 0.8;
+}
+
+.form-message__dismiss:hover {
+  opacity: 1;
+}
+
+@keyframes form-message-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes toast-slide-in {

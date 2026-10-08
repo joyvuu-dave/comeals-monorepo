@@ -27,7 +27,6 @@ import RotationsShow from "../rotations/show";
 import ConfirmModal from "../app/confirm_modal";
 
 import WebcalLinks from "./webcal_links";
-import toastStore from "../../stores/toast_store";
 import { Calendar, dateFnsLocalizer } from "react-big-calendar";
 import { format, parse, startOfWeek, getDay } from "date-fns";
 import { enUS } from "date-fns/locale";
@@ -286,8 +285,9 @@ const MainCalendar = observer(() => {
     modalDirtyRef.current = value;
   }, []);
 
+  // The form's own messages go with it (use_form_messages.ts). Any
+  // other message stays (#137).
   const closeModal = useCallback(function () {
-    toastStore.clearAll();
     modalDirtyRef.current = false;
     setDiscardConfirmOpen(false);
     navigateRef.current(

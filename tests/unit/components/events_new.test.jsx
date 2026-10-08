@@ -7,6 +7,7 @@ vi.mock("axios", () => import("../mocks/axios.js"));
 
 import axios from "axios";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
+import { messagesShown } from "../helpers/form_messages.js";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
 import { CALENDAR_PATH } from "../../../app/frontend/src/routes.js";
 import EventsNew from "../../../app/frontend/src/components/events/new.jsx";
@@ -186,9 +187,10 @@ describe("EventsNew", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
     await vi.waitFor(() => {
-      expect(toastStore.toasts.map((t) => t.message)).toEqual([
-        "Error: Invalid date",
-      ]);
+      expect(messagesShown()).toEqual({
+        form: ["Error: Invalid date"],
+        stack: [],
+      });
     });
     expect(handleCloseModal).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();

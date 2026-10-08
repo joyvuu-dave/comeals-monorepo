@@ -11,7 +11,7 @@ stubRandomUUID();
 import axios from "axios";
 import * as idbKeyval from "idb-keyval";
 import { notifyError } from "../../../app/frontend/src/helpers/bugsnag.js";
-import toastStore from "../../../app/frontend/src/stores/toast_store.js";
+import toastStore from "../../../app/frontend/src/stores/toast_store";
 import { createDataStore, stubAction } from "../helpers/create_data_store.js";
 import { BOB, CAROL, billsServer, editsSent } from "../helpers/bills_server.js";
 import { SAVE_DEBOUNCE_MS } from "../../../app/frontend/src/helpers/helpers.js";
@@ -276,6 +276,107 @@ describe("one cook picked in two rows", () => {
     ]);
   });
 
+  // #137: the page made this check itself, not the server. So the
+  // message is the one error that does not wait for the person to close
+  // it: it goes as soon as the page sees the cause fixed.
+  describe("once the rows no longer show the cook twice", () => {
+    const MEAL_1_NOT_SAVED =
+      "The cooks and costs you entered for Thu, Jun 15th were not saved. Please open that meal and enter them again.";
+
+    // Bob is picked in the loaded row and in a second one, and the
+    // refusal shows. Returns the second row.
+    async function bobInTwoRows(store) {
+      const second = blankRow(store);
+      second.setResident(store.residents.get(String(BOB)));
+      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+      expect(toastsOnScreen()).toEqual([["error", TWO_ROWS]]);
+      return second;
+    }
+
+    it.each([
+      ["another cook", (store) => store.residents.get(String(CAROL))],
+      ["no cook", () => ""],
+    ])(
+      "takes the message away as soon as one of the rows shows %s",
+      async (_label, pick) => {
+        const store = createStore();
+        const second = await bobInTwoRows(store);
+
+        second.setResident(pick(store));
+
+        expect(toastsOnScreen()).toEqual([]);
+      },
+    );
+
+    it("keeps the message while both rows still show the cook, and takes it away once they do not", async () => {
+      const store = createStore();
+      const second = await bobInTwoRows(store);
+
+      second.setAmount("5");
+      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+      expect(toastsOnScreen()).toEqual([["error", TWO_ROWS]]);
+
+      second.setResident(store.residents.get(String(CAROL)));
+      expect(toastsOnScreen()).toEqual([]);
+    });
+
+    it("takes the message away when another cook is in two rows now, and then names that cook", async () => {
+      const store = createStore();
+      const second = await bobInTwoRows(store);
+      const third = blankRow(store);
+      third.setResident(store.residents.get(String(CAROL)));
+
+      second.setResident(store.residents.get(String(CAROL)));
+      expect(toastsOnScreen()).toEqual([]);
+      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+
+      expect(toastsOnScreen()).toEqual([
+        [
+          "error",
+          "Carol is picked in two rows, so nothing was saved. Pick another cook in one of them.",
+        ],
+      ]);
+    });
+
+    it("takes away only its own message", async () => {
+      const store = createStore();
+      toastStore.show(MEAL_1_NOT_SAVED, "error");
+      const second = blankRow(store);
+      second.setResident(store.residents.get(String(BOB)));
+      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+      expect(toastsOnScreen()).toEqual([
+        ["error", TWO_ROWS],
+        ["error", MEAL_1_NOT_SAVED],
+      ]);
+
+      second.setResident("");
+
+      expect(toastsOnScreen()).toEqual([["error", MEAL_1_NOT_SAVED]]);
+    });
+
+    // The rows go with the meal. The message that names the meal says
+    // its costs were not saved.
+    it("takes the message away when the person leaves the meal", async () => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const store = createStore();
+      await bobInTwoRows(store);
+
+      store.goToMeal(2);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(toastsOnScreen()).toEqual([["error", MEAL_1_NOT_SAVED]]);
+    });
+
+    it("takes the message away when the meal's rows are built again from the server", async () => {
+      const store = createStore();
+      await bobInTwoRows(store);
+
+      store.loadData(server.mealForm(1), "server");
+
+      expect(toastsOnScreen()).toEqual([]);
+    });
+  });
+
   // The person left the meal, so the words name it, the same as any
   // other save for a meal left that was not saved (#107).
   it("names the meal when the person leaves it like that", async () => {
@@ -298,8 +399,8 @@ describe("one cook picked in two rows", () => {
   // The refusal leaves no wait before a save and no queued save, but the
   // rows still show edits the server does not have. Leaving the meal
   // clears the rows, so the message names the meal even when the
-  // refusal's own message has closed by then.
-  it("names the meal when the person leaves it after the refusal's message closed", async () => {
+  // person closed the refusal's own message by then.
+  it("names the meal when the person leaves it after closing the refusal's message", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const store = createStore();
     const [first, second] = blankRows(store);
@@ -308,7 +409,7 @@ describe("one cook picked in two rows", () => {
     second.setResident(store.residents.get(String(BOB)));
     await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
     expect(toastsOnScreen()).toEqual([["error", TWO_ROWS]]);
-    toastStore.removeToast(toastStore.toasts[0].id); // its timer closed it
+    toastStore.remove(toastStore.toasts[0].id); // the person closed it
 
     store.goToMeal(2);
     await vi.advanceTimersByTimeAsync(0);
@@ -323,10 +424,9 @@ describe("one cook picked in two rows", () => {
   });
 
   // A "not saved" message about a meal the person left may be the only
-  // sign that its costs were lost. So while it shows, this refusal joins
-  // it, the same way a failed save for the meal on screen does (#107),
-  // and the refusal's own words are only logged.
-  it("joins the message about a meal the person left that was not saved, and does not replace it", async () => {
+  // sign that its costs were lost. The refusal's own words go on top of
+  // it, and it stays under them (#137).
+  it("shows its words on top of the message about a meal the person left that was not saved", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.spyOn(console, "error").mockImplementation(() => {});
     const store = createStore();
@@ -349,12 +449,13 @@ describe("one cook picked in two rows", () => {
 
     expect(axios).toHaveBeenCalledTimes(1);
     expect(toastsOnScreen()).toEqual([
+      ["error", TWO_ROWS],
       [
         "error",
-        "The cooks and costs you entered for Thu, Jun 15th and Fri, Jun 16th were not saved. Please open those meals and enter them again.",
+        "The cooks and costs you entered for Thu, Jun 15th were not saved. Please open that meal and enter them again.",
       ],
     ]);
-    expect(warn).toHaveBeenCalledWith(TWO_ROWS);
+    expect(warn).not.toHaveBeenCalledWith(TWO_ROWS);
   });
 });
 
@@ -553,14 +654,13 @@ describe("a save that failed in a way that may not be final", () => {
       },
     );
 
-    // A message that says a save failed is never replaced by one that
-    // says a save worked. Here Carol's $50 waits behind Bob's $5. Bob's
-    // save gets no answer twice, and Carol's is written with the
-    // third-cook warning.
-    it("keeps the words on screen when a save sent after it comes back with a warning", async () => {
+    // A message that says a save failed stays when a message that says
+    // a save worked comes after it (#137). Here Carol's $50 waits behind
+    // Bob's $5. Bob's save gets no answer twice, and Carol's is written
+    // with the third-cook warning.
+    it("keeps the words on screen, under the warning, when a save sent after it comes back with a warning", async () => {
       const THIRD_COOK =
         "Warning: third cooks should not be added until all meals in the rotation have at least two cooks.";
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       vi.spyOn(console, "error").mockImplementation(() => {});
       const store = createStore();
       await typeCost(store, BOB, "5");
@@ -587,11 +687,15 @@ describe("a save that failed in a way that may not be final", () => {
       });
       await vi.advanceTimersByTimeAsync(0);
 
-      expect(toastsOnScreen()).toEqual([["error", MAYBE_NOT_SAVED]]);
-      expect(warn).toHaveBeenCalledWith(`Cooks saved. ${THIRD_COOK}`);
+      expect(toastsOnScreen()).toEqual([
+        ["info", `Cooks saved. ${THIRD_COOK}`],
+        ["error", MAYBE_NOT_SAVED],
+      ]);
     });
   });
 
+  // The second try got no answer, so it may have been written, and the
+  // words say the costs may not have been saved (#137).
   it("names the meal when the second try for a meal the person left fails too", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const store = createStore();
@@ -602,6 +706,26 @@ describe("a save that failed in a way that may not be final", () => {
     await server.failSave({ request: {} });
     expect(toastsOnScreen()).toEqual([]);
     await server.failSave({ request: {} });
+
+    expect(toastsOnScreen()).toEqual([
+      [
+        "error",
+        "The cooks and costs you entered for Thu, Jun 15th may not have been saved. Please open that meal and check them.",
+      ],
+    ]);
+  });
+
+  // The second try got the app's own words, so nothing was written
+  // (see billsSaveFailed).
+  it("says the costs were not saved when the second try for a meal the person left gets the app's own words", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const store = createStore();
+    await typeCost(store, BOB, "5");
+    store.goToMeal(2);
+    await vi.advanceTimersByTimeAsync(0);
+
+    await server.failSave({ request: {} });
+    await server.failSave(PLAIN_CONFLICT);
 
     expect(toastsOnScreen()).toEqual([
       [
@@ -729,11 +853,11 @@ describe("a save the server refused", () => {
     expect(rowOf(store, BOB).amount).toBe("9.00");
   });
 
-  // A message that says a save failed is never replaced by one that says
-  // a save worked: the failure is still true, and the person may not
-  // have read it yet. Here Carol's $50 waits behind Bob's $5. Bob's save
-  // is refused as stale, and Carol's is written with the third-cook
-  // warning.
+  // A message that says a save failed stays when one that says a save
+  // worked comes after it: the failure is still true, and the person
+  // may not have read it yet (#137). Here Carol's $50 waits behind Bob's
+  // $5. Bob's save is refused as stale, and Carol's is written with the
+  // third-cook warning.
   describe("when a save sent after it comes back with a warning", () => {
     const THIRD_COOK =
       "Warning: third cooks should not be added until all meals in the rotation have at least two cooks.";
@@ -770,29 +894,28 @@ describe("a save the server refused", () => {
       return stale.data.message;
     }
 
-    it("keeps the stale words on screen, and only logs the warning", async () => {
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    it("shows the warning on top of the stale words, which stay", async () => {
       const store = createStore();
 
       const staleWords = await staleThenWarning(store);
 
-      expect(toastsOnScreen()).toEqual([["error", staleWords]]);
-      expect(warn).toHaveBeenCalledWith(`Cooks saved. ${THIRD_COOK}`);
+      expect(toastsOnScreen()).toEqual([
+        ["info", `Cooks saved. ${THIRD_COOK}`],
+        ["error", staleWords],
+      ]);
       expect(notifyError).not.toHaveBeenCalled();
     });
 
-    it("shows the warning once the stale words are gone", async () => {
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    it("shows the warning alone when the person closed the stale words first", async () => {
       const store = createStore();
 
       await staleThenWarning(store, () =>
-        toastStore.removeToast(toastStore.toasts[0].id),
+        toastStore.remove(toastStore.toasts[0].id),
       );
 
       expect(toastsOnScreen()).toEqual([
         ["info", `Cooks saved. ${THIRD_COOK}`],
       ]);
-      expect(warn).not.toHaveBeenCalled();
     });
   });
 

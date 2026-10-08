@@ -8,6 +8,7 @@ const {
 // an exception ApiController does not rescue. NOT_FOUND_MESSAGE is
 // ApiController's answer for a record that is not there.
 const {
+  FROZEN_NOW,
   NOT_FOUND_MESSAGE,
   NOT_FOUND_LOG,
   rails500,
@@ -337,13 +338,17 @@ test.describe("Error Handling & Edge Cases", () => {
       await expect(submitButton).toBeVisible();
       await submitButton.click();
 
-      // Should show validation error toast
-      const toast = page.locator(".toast--error");
-      await expect(toast).toBeVisible({ timeout: 5000 });
-      await expect(toast.locator(".toast__message")).toHaveText(EVENT_REFUSED);
+      // The form's own error shows inside the form, under its title, and
+      // not in the stack of messages (#137).
+      const error = modal.locator(".form-message--error");
+      await expect(error).toBeVisible({ timeout: 5000 });
+      await expect(error.locator(".form-message__text")).toHaveText(
+        EVENT_REFUSED,
+      );
+      await expect(page.locator(".toast")).toHaveCount(0);
     });
 
-    test("error toast clears when calendar modal is closed", async ({
+    test("a form's own error goes with the form when it closes", async ({
       page,
       context,
     }) => {
@@ -369,18 +374,671 @@ test.describe("Error Handling & Edge Cases", () => {
       await expect(modal).toBeVisible({ timeout: 5000 });
       await modal.locator("button:has-text('Create')").click();
 
-      // Error toast should appear
-      await expect(page.locator(".toast--error")).toBeVisible({
+      await expect(modal.locator(".form-message--error")).toBeVisible({
         timeout: 5000,
       });
 
       // Close the modal via X button
       await modal.locator(".close-button").click();
 
-      // Toast should be cleared
-      await expect(page.locator(".toast--error")).not.toBeVisible({
-        timeout: 3000,
+      await expect(modal).not.toBeVisible();
+      await expect(page.locator(".form-message")).toHaveCount(0);
+      await expect(page.locator(".toast")).toHaveCount(0);
+    });
+
+    // #137. The person leaves a meal while its costs are still being
+    // saved, and the save fails. On the calendar, the message that names
+    // the meal is the only sign the costs were lost. A calendar form's
+    // own error shows inside the form, the stack is drawn under the
+    // open form, and closing the form leaves the message about the meal.
+    test.describe("the message about a meal not saved", () => {
+      // A refusal that is final, so the save is not sent again. The
+      // store logs the server's words for a meal the person left.
+      const REFUSED = "Invalid cook assignment.";
+      test.use({
+        allowedConsoleErrors: combinePatterns(
+          httpFailurePattern,
+          /^Invalid cook assignment\.$/,
+        ),
       });
+
+      // True when a tap in the middle of the stack's top message lands on
+      // that message, and not on something drawn over it. A new message
+      // slides in from the right edge, so this waits until it is in
+      // place.
+      async function stackOnTop(page) {
+        return page.evaluate(async () => {
+          const toast = window.document.querySelector(".toast");
+          await Promise.all(toast.getAnimations().map((a) => a.finished));
+          const box = toast.getBoundingClientRect();
+          const hit = window.document.elementFromPoint(
+            box.left + box.width / 2,
+            box.top + box.height / 2,
+          );
+          return toast.contains(hit);
+        });
+      }
+
+      test("stays under a form's own error, under the open form, and after the form closes", async ({
+        page,
+        context,
+      }) => {
+        const NOT_SAVED =
+          "The cooks and costs you entered for Thu, Jan 15th were not saved. Please open that meal and enter them again.";
+        await setupAuthenticatedPage(page, context);
+
+        // The bills save waits until the person is on the calendar, then
+        // the server refuses it.
+        let answerTheSave;
+        const onTheCalendar = new Promise((resolve) => {
+          answerTheSave = resolve;
+        });
+        await page.route("**/api/v1/meals/42/bills*", async (route) => {
+          await onTheCalendar;
+          await route.fulfill({
+            status: 400,
+            contentType: "application/json",
+            body: JSON.stringify({ message: REFUSED }),
+          });
+        });
+        await page.route("**/api/v1/events", (route) => {
+          route.fulfill({
+            status: 400,
+            contentType: "application/json",
+            body: JSON.stringify({ message: EVENT_REFUSED }),
+          });
+        });
+
+        await page.goto("/meals/42/edit/");
+        const cost = page
+          .getByRole("spinbutton", { name: "Set meal cost" })
+          .first();
+        await expect(cost).toHaveValue("25.50", { timeout: 10000 });
+        const sent = page.waitForRequest(
+          (r) =>
+            r.method() === "PATCH" &&
+            r.url().includes("/api/v1/meals/42/bills"),
+        );
+        await cost.fill("30.00");
+        await sent;
+
+        await page.getByRole("button", { name: "Calendar" }).click();
+        await expect(page.locator(".rbc-calendar")).toBeVisible({
+          timeout: 10000,
+        });
+        answerTheSave();
+        const messages = page.locator(".toast__message");
+        await expect(messages).toHaveText([NOT_SAVED]);
+        expect(await stackOnTop(page)).toBe(true);
+
+        // The form's error shows inside the form. The stack keeps the
+        // message about the meal, under the open form.
+        await page.locator("text=Event").first().click();
+        const modal = page.locator(".ReactModal__Content--after-open");
+        await expect(modal).toBeVisible({ timeout: 5000 });
+        await modal.locator("button:has-text('Create')").click();
+        await expect(modal.locator(".form-message__text")).toHaveText(
+          EVENT_REFUSED,
+        );
+        await expect(messages).toHaveText([NOT_SAVED]);
+        expect(await stackOnTop(page)).toBe(false);
+        // While the form is open, react-modal hides #root from screen
+        // readers with aria-hidden. The form's error is inside the
+        // dialog, and the stack is drawn outside #root, so aria-hidden
+        // hides neither.
+        await expect(page.locator("#root")).toHaveAttribute(
+          "aria-hidden",
+          "true",
+        );
+        await expect(modal.getByRole("alert")).toContainText(EVENT_REFUSED);
+        await expect(page.getByRole("alert")).toHaveCount(2);
+
+        // The stack is under the form, so the form's X can be tapped.
+        await modal.locator(".close-button").click();
+        await expect(modal).not.toBeVisible();
+        await expect(page.locator(".form-message")).toHaveCount(0);
+        await expect(messages).toHaveText([NOT_SAVED]);
+        expect(await stackOnTop(page)).toBe(true);
+      });
+    });
+
+    // The stack sits at the bottom of the screen at every width, because
+    // the top of the screen holds the navigation (toast.css). On a screen
+    // narrower than 416px it is as wide as the screen less its margins.
+    // On a wider screen it sits at the right, 24rem wide.
+    test.describe("where the stack sits", () => {
+      test.use({
+        allowedConsoleErrors: combinePatterns(
+          httpFailurePattern,
+          /^Bad response from server/,
+          /^Error: no response received from server\.$/,
+        ),
+      });
+
+      // What the server sends for each write these tests make fail.
+      // MealsController#reconciled_rejection and
+      // MealsController#verify_resident_exists.
+      const SETTLED = "Change not permitted. Meal has already been reconciled.";
+      const NOT_FOUND = "Resident not found.";
+
+      const messages = (page) => page.locator(".toast__message");
+
+      function refuse(status, message) {
+        return (route) =>
+          route.fulfill({
+            status,
+            contentType: "application/json",
+            body: JSON.stringify({ message }),
+          });
+      }
+
+      // A new message slides in from the right edge. This waits until
+      // every message is in its place.
+      async function settled(page) {
+        await page.evaluate(async () => {
+          const toasts = Array.from(window.document.querySelectorAll(".toast"));
+          await Promise.all(
+            toasts
+              .flatMap((toast) => toast.getAnimations())
+              .map((a) => a.finished),
+          );
+        });
+      }
+
+      // True when a tap in the middle of this element lands on it, and
+      // not on something drawn over it.
+      async function tappable(locator) {
+        return locator.evaluate((element) => {
+          const box = element.getBoundingClientRect();
+          const hit = window.document.elementFromPoint(
+            box.left + box.width / 2,
+            box.top + box.height / 2,
+          );
+          return element.contains(hit);
+        });
+      }
+
+      // Five writes on the meal page fail, each with its own words, so
+      // three messages show, with a line for two more. The taps happen
+      // on the screen given here, where the stack does not get in their
+      // way. Each test then gives the screen the size it checks.
+      async function fiveErrors(page, screen) {
+        await page.setViewportSize(screen);
+        await page.route(
+          "**/api/v1/meals/*/residents/2",
+          refuse(409, MEAL_CONFLICT),
+        );
+        await page.route("**/api/v1/meals/*/residents/1", refuse(400, SETTLED));
+        await page.route(
+          "**/api/v1/meals/*/residents/3",
+          refuse(400, NOT_FOUND),
+        );
+        await page.route("**/api/v1/meals/*/description*", rails500);
+        await page.route("**/api/v1/meals/*/residents/1/guests", (route) =>
+          route.abort("connectionfailed"),
+        );
+        await page.goto("/meals/42/edit/");
+        await page.waitForLoadState("networkidle");
+        for (const [name, words] of [
+          ["B - Bob Johnson", MEAL_CONFLICT],
+          ["A - Jane Smith", SETTLED],
+          ["C - Alice Williams", NOT_FOUND],
+        ]) {
+          await page.getByRole("cell", { name, exact: true }).click();
+          await expect(messages(page).first()).toHaveText(words);
+        }
+        await page
+          .getByLabel("Enter meal description")
+          .fill("Pasta night with garlic bread and salad");
+        await expect(messages(page).first()).toHaveText(SERVER_PROBLEM, {
+          timeout: 10000,
+        });
+        const janeRow = page
+          .getByRole("cell", { name: "A - Jane Smith", exact: true })
+          .locator("xpath=ancestor::tr");
+        await janeRow.locator(".dropdown-add").click();
+        await janeRow.locator(".dropdown-menu img[alt='cow-icon']").click();
+        await expect(messages(page).first()).toHaveText(
+          "Error: no response received from server.",
+        );
+      }
+
+      async function showAllFive(page) {
+        await page
+          .getByRole("button", { name: "Show 2 more messages" })
+          .click();
+        await expect(messages(page)).toHaveCount(5);
+      }
+
+      for (const [label, viewport, width] of [
+        [
+          "at the bottom on a narrow phone, as wide as the screen less its margins",
+          { width: 375, height: 667 },
+          null,
+        ],
+        [
+          "at the bottom right on a wide screen, 24rem wide",
+          { width: 1280, height: 720 },
+          24 * 16,
+        ],
+      ]) {
+        test(label, async ({ page, context }) => {
+          await page.setViewportSize(viewport);
+          await setupAuthenticatedPage(page, context);
+          await page.route(
+            "**/api/v1/meals/*/residents/2*",
+            refuse(409, MEAL_CONFLICT),
+          );
+          await page.goto("/meals/42/edit/");
+          await page.waitForLoadState("networkidle");
+          await page
+            .getByRole("cell", { name: "B - Bob Johnson", exact: true })
+            .click();
+
+          // The message a person sees. The stack's own box is a little
+          // bigger: it has room around the messages for their shadows
+          // (toast.css).
+          const message = page.locator(".toast");
+          await expect(message).toBeVisible({ timeout: 5000 });
+          await settled(page);
+          const box = await message.boundingBox();
+          // The part of the window the page draws in, without a scroll
+          // bar.
+          const screen = await page.evaluate(() => ({
+            width: window.document.documentElement.clientWidth,
+            height: window.document.documentElement.clientHeight,
+          }));
+          const gap = 16; // var(--space-4)
+          expect(box.y + box.height).toBeCloseTo(screen.height - gap, 0);
+          expect(box.x + box.width).toBeCloseTo(screen.width - gap, 0);
+          expect(box.width).toBeCloseTo(width ?? screen.width - 2 * gap, 0);
+        });
+      }
+
+      // The stack is a box that scrolls, and on a wide screen it sits
+      // over the bottom right of the page. The mouse wheel over it must
+      // still scroll the page, even when the stack has nothing of its
+      // own to scroll. Chrome did not, while the stack had
+      // overscroll-behavior: contain.
+      test("on a wide screen, the mouse wheel over the stack scrolls the page", async ({
+        page,
+        context,
+      }) => {
+        await page.setViewportSize({ width: 1280, height: 720 });
+        await setupAuthenticatedPage(page, context);
+        await page.route(
+          "**/api/v1/meals/*/residents/2*",
+          refuse(409, MEAL_CONFLICT),
+        );
+        await page.goto("/meals/42/edit/");
+        await page.waitForLoadState("networkidle");
+        await page
+          .getByRole("cell", { name: "B - Bob Johnson", exact: true })
+          .click();
+        const message = page.locator(".toast");
+        await expect(message).toBeVisible({ timeout: 5000 });
+        await settled(page);
+        await page.evaluate(() => window.scrollTo(0, 0));
+
+        const box = await message.boundingBox();
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        await page.mouse.wheel(0, 200);
+        await expect
+          .poll(() => page.evaluate(() => window.scrollY))
+          .toBeGreaterThan(0);
+      });
+
+      // On a wide screen the stack covers none of the controls at the
+      // top of a page, even with all five messages showing: on the meal
+      // page "Open / Close Meal", "history" and "logout", and on the
+      // calendar "today", the month arrows and "logout".
+      test("on a wide screen, the stack covers none of the controls at the top of a page", async ({
+        page,
+        context,
+      }) => {
+        await setupAuthenticatedPage(page, context);
+        await fiveErrors(page, { width: 1280, height: 1400 });
+        await page.setViewportSize({ width: 1280, height: 720 });
+        await showAllFive(page);
+
+        async function expectClear(controls) {
+          await page.evaluate(() => window.scrollTo(0, 0));
+          await settled(page);
+          const stack = await page.locator(".toast-container").boundingBox();
+          for (const control of controls) {
+            const box = await control.boundingBox();
+            expect(stack.y).toBeGreaterThanOrEqual(box.y + box.height);
+            expect(await tappable(control)).toBe(true);
+          }
+        }
+
+        await expectClear([
+          page.getByRole("button", { name: "Open / Close Meal" }),
+          page.getByRole("button", { name: "history" }),
+          page.getByRole("button", { name: /^logout/ }),
+        ]);
+
+        await page.getByRole("button", { name: "Calendar" }).click();
+        await expect(page.locator(".rbc-calendar")).toBeVisible({
+          timeout: 10000,
+        });
+        await expect(messages(page)).toHaveCount(5);
+        await expectClear([
+          page.getByRole("button", { name: "today" }),
+          page.getByRole("button", { name: "Goto Last Month" }),
+          page.getByRole("button", { name: "Goto Next Month" }),
+          page.getByRole("button", { name: /^logout/ }),
+        ]);
+      });
+
+      // An error stays until a person closes it, so the stack can sit
+      // over the end of a page for a long time. While messages show, the
+      // page has room at its bottom as tall as the stack, so the last
+      // sign-up row and the last week of the calendar can be scrolled
+      // above the stack and tapped.
+      for (const [label, viewport, tapScreen] of [
+        [
+          "on a phone",
+          { width: 375, height: 667 },
+          { width: 375, height: 667 },
+        ],
+        [
+          "on a wide screen",
+          { width: 1280, height: 720 },
+          { width: 1280, height: 1400 },
+        ],
+      ]) {
+        test(`${label}, the end of each page can be scrolled above the stack`, async ({
+          page,
+          context,
+        }) => {
+          await setupAuthenticatedPage(page, context);
+          await fiveErrors(page, tapScreen);
+          await page.setViewportSize(viewport);
+          await showAllFive(page);
+
+          // Scrolled to its end, the page's last part is above the stack.
+          // A tap near the bottom right corner of the part that shows
+          // lands on it: before the scroll, the stack was over that spot.
+          // The room follows the stack's height at the browser's next
+          // frame after the stack changes (toast_container.jsx), so the
+          // check tries again until the room has caught up.
+          async function expectAboveStack(part) {
+            await settled(page);
+            await expect(async () => {
+              await page.evaluate(() =>
+                window.scrollTo(
+                  0,
+                  window.document.documentElement.scrollHeight,
+                ),
+              );
+              const stack = await page
+                .locator(".toast-container")
+                .boundingBox();
+              const box = await part.boundingBox();
+              expect(box.y + box.height).toBeLessThanOrEqual(stack.y);
+            }).toPass({ timeout: 5000 });
+            const tapped = await part.evaluate((element) => {
+              const box = element.getBoundingClientRect();
+              const right = Math.min(
+                box.right,
+                window.document.documentElement.clientWidth,
+              );
+              const hit = window.document.elementFromPoint(
+                right - 10,
+                box.bottom - 10,
+              );
+              return element.contains(hit);
+            });
+            expect(tapped).toBe(true);
+          }
+
+          // Alice is last on the sign-up list.
+          await expectAboveStack(
+            page
+              .getByRole("cell", { name: "C - Alice Williams", exact: true })
+              .locator("xpath=ancestor::tr"),
+          );
+
+          await page.getByRole("button", { name: "Calendar" }).click();
+          await expect(page.locator(".rbc-calendar")).toBeVisible({
+            timeout: 10000,
+          });
+          await expect(messages(page)).toHaveCount(5);
+          await expectAboveStack(page.locator(".rbc-month-row").last());
+        });
+      }
+
+      // A banner sits at the top of the screen and the stack at the
+      // bottom, so neither covers the other: a person can tap the
+      // banner's button and close the message. The new-version banner
+      // stays until someone taps Refresh, and an error stays until a
+      // person closes it.
+      async function expectBothTappable(page, banner, words) {
+        await expect(banner).toBeVisible({ timeout: 10000 });
+        await expect(messages(page)).toHaveText([words]);
+        await settled(page);
+        expect(await tappable(banner.getByRole("button"))).toBe(true);
+        expect(await tappable(page.locator(".toast__dismiss"))).toBe(true);
+
+        await page.locator(".toast__dismiss").click();
+        await expect(messages(page)).toHaveCount(0);
+      }
+
+      test("on a wide screen, the new-version banner's button and the stack's X can both be tapped", async ({
+        page,
+        context,
+      }) => {
+        await page.setViewportSize({ width: 1280, height: 720 });
+        await setupAuthenticatedPage(page, context);
+        // A manifest that names another build, so the banner shows at
+        // its first look, five minutes after the page loads.
+        await page.route("**/.vite/manifest.json", (route) =>
+          route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              "index.html": {
+                isEntry: true,
+                file: "vite-assets/index-NEWBUILD.js",
+              },
+            }),
+          }),
+        );
+        await page.route(
+          "**/api/v1/meals/*/residents/2*",
+          refuse(409, MEAL_CONFLICT),
+        );
+        await page.clock.install({ time: FROZEN_NOW });
+        await page.goto("/meals/42/edit/");
+        const bob = page.getByRole("cell", {
+          name: "B - Bob Johnson",
+          exact: true,
+        });
+        await expect(bob).toBeVisible({ timeout: 10000 });
+        await page.clock.fastForward(5 * 60 * 1000 + 1000);
+        await expect(page.locator(".app-banner--info")).toBeVisible({
+          timeout: 10000,
+        });
+
+        await bob.click();
+
+        await expectBothTappable(
+          page,
+          page.locator(".app-banner--info"),
+          MEAL_CONFLICT,
+        );
+      });
+
+      test("on a wide screen, the signed-out banner's button and the stack's X can both be tapped", async ({
+        page,
+        context,
+      }) => {
+        // ApiController#authenticate's answer once the session is gone.
+        const SIGNED_OUT = "You are not authenticated.";
+        await page.setViewportSize({ width: 1280, height: 720 });
+        await setupAuthenticatedPage(page, context);
+        await page.route(
+          "**/api/v1/meals/*/residents/2*",
+          refuse(401, SIGNED_OUT),
+        );
+        await page.goto("/meals/42/edit/");
+        await page.waitForLoadState("networkidle");
+
+        await page
+          .getByRole("cell", { name: "B - Bob Johnson", exact: true })
+          .click();
+
+        await expectBothTappable(
+          page,
+          page.locator(".app-banner--error"),
+          SIGNED_OUT,
+        );
+      });
+
+      // A yes/no question on the page is drawn over the stack, so a
+      // message that comes while the question is open cannot cover its
+      // Yes or its No. Here three writes fail while the question is
+      // open, and their messages reach up over it. On a phone the close
+      // question ("Close the meal anyway?") is low enough on the screen
+      // for that. On a wide screen the stack stops below the close
+      // question, but the questions in the cooks box are lower, and the
+      // stack reaches them. This test uses the one that asks to erase
+      // Jane's $25.50, which the page asks when a person turns on "no
+      // cost" for her.
+      for (const [label, viewport, ask] of [
+        [
+          "on a phone, the close question",
+          { width: 375, height: 480 },
+          (page) =>
+            page.getByRole("button", { name: "Open / Close Meal" }).click(),
+        ],
+        [
+          "on a wide screen, the question that erases a cost",
+          { width: 1280, height: 600 },
+          // The switch is drawn by its label, so the label is what a
+          // person taps.
+          (page) =>
+            page.locator('label[for^="no_cost_switch-"]').first().click(),
+        ],
+      ]) {
+        test(`${label}, a yes/no question on the page is drawn over the stack`, async ({
+          page,
+          context,
+        }) => {
+          await page.setViewportSize(viewport);
+          // A cook with no cost yet, so the close button asks first.
+          // Jane's $25.50 is in the fixture.
+          await setupAuthenticatedPage(page, context, {
+            mealData: {
+              ...mealFixture,
+              bills: [
+                ...mealFixture.bills,
+                {
+                  id: 202,
+                  meal_id: 42,
+                  resident_id: 2,
+                  amount: "",
+                  no_cost: false,
+                },
+              ],
+            },
+          });
+          let answerTheWrites;
+          const questionOpen = new Promise((resolve) => {
+            answerTheWrites = resolve;
+          });
+          for (const [resident, status, words] of [
+            [2, 409, MEAL_CONFLICT],
+            [1, 400, SETTLED],
+            [3, 400, NOT_FOUND],
+          ]) {
+            await page.route(
+              `**/api/v1/meals/*/residents/${resident}`,
+              async (route) => {
+                await questionOpen;
+                await refuse(status, words)(route);
+              },
+            );
+          }
+          await page.goto("/meals/42/edit/");
+          await page.waitForLoadState("networkidle");
+          for (const name of [
+            "B - Bob Johnson",
+            "A - Jane Smith",
+            "C - Alice Williams",
+          ]) {
+            await page.getByRole("cell", { name, exact: true }).click();
+          }
+          await page.evaluate(() => window.scrollTo(0, 0));
+
+          await ask(page);
+          const question = page.locator(".confirm-bar");
+          await expect(question).toBeVisible();
+          answerTheWrites();
+          await expect(messages(page)).toHaveCount(3);
+          await settled(page);
+
+          // The stack reaches over the middle of each answer, so this
+          // test shows something only while the two overlap.
+          const stack = await page.locator(".toast-container").boundingBox();
+          for (const answer of ["Yes", "No"]) {
+            const button = question.getByRole("button", { name: answer });
+            const box = await button.boundingBox();
+            const middle = {
+              x: box.x + box.width / 2,
+              y: box.y + box.height / 2,
+            };
+            expect(middle.x).toBeGreaterThan(stack.x);
+            expect(middle.x).toBeLessThan(stack.x + stack.width);
+            expect(middle.y).toBeGreaterThan(stack.y);
+            expect(middle.y).toBeLessThan(stack.y + stack.height);
+            expect(await tappable(button)).toBe(true);
+          }
+          await question.getByRole("button", { name: "No" }).click();
+          await expect(question).toBeHidden();
+        });
+      }
+
+      // On a phone the stack sits at the bottom, and grows up. It must
+      // stop before the top of the meal page: "← Calendar", the meal's
+      // arrows and its date. A taller stack scrolls inside its own box.
+      // Five errors: three show with a line for two more, and a tap on
+      // the line shows all five.
+      for (const [label, viewport] of [
+        ["on a phone", { width: 375, height: 480 }],
+        ["on a short phone on its side", { width: 568, height: 320 }],
+      ]) {
+        test(`${label}, the stack stays under the meal's date and arrows`, async ({
+          page,
+          context,
+        }) => {
+          await setupAuthenticatedPage(page, context);
+          await fiveErrors(page, { width: viewport.width, height: 667 });
+          await page.setViewportSize(viewport);
+
+          async function expectTopClear() {
+            await page.evaluate(() => window.scrollTo(0, 0));
+            await settled(page);
+            const stack = await page.locator(".toast-container").boundingBox();
+            const date = await page.locator("h3").first().boundingBox();
+            for (const control of [
+              page.getByRole("button", { name: "Calendar" }),
+              page.getByRole("button", { name: "Previous meal" }),
+              page.getByRole("button", { name: "Next meal" }),
+            ]) {
+              const box = await control.boundingBox();
+              expect(stack.y).toBeGreaterThanOrEqual(box.y + box.height);
+              expect(await tappable(control)).toBe(true);
+            }
+            expect(stack.y).toBeGreaterThanOrEqual(date.y + date.height);
+          }
+
+          await expectTopClear();
+          await showAllFive(page);
+          await expectTopClear();
+        });
+      }
     });
 
     // The one warning the server sends: the bills write answers 400
@@ -399,6 +1057,11 @@ test.describe("Error Handling & Edge Cases", () => {
       await page.goto("/meals/42/edit/");
       const cooks = page.locator('[aria-label="Select meal cook"]');
       await expect(cooks.first()).toHaveValue("1", { timeout: 10000 });
+      // A screen reader says a message that is not an error through a
+      // polite region that is on the page before the message comes
+      // (toast_container.jsx).
+      const polite = page.locator(".visually-hidden[role='status']");
+      await expect(polite).toHaveText("");
 
       const answered = page.waitForResponse(
         (r) =>
@@ -416,6 +1079,7 @@ test.describe("Error Handling & Edge Cases", () => {
       await expect(page.locator(".toast--error")).toHaveCount(0);
       await expect(page.locator(".toast--warning")).toHaveCount(0);
       await expect(cooks.nth(1)).toHaveValue("2");
+      await expect(polite).toHaveText(`Cooks saved. ${warning}`);
     });
 
     // Another page saved Jane's cost after this page loaded the meal

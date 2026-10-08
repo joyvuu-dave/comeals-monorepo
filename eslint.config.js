@@ -206,6 +206,12 @@ module.exports = [
   ...tseslint.config({
     files: ["**/*.{ts,tsx}"],
     extends: [...tseslint.configs.recommended],
+    // The same hook rules as the .js/.jsx source files, so a hook
+    // written in TypeScript (helpers/use_form_messages.ts) is checked
+    // too.
+    plugins: {
+      "react-hooks": reactHooks,
+    },
     languageOptions: {
       globals: {
         ...globals.browser,
@@ -214,6 +220,8 @@ module.exports = [
     },
     rules: {
       "no-console": ["warn", { allow: ["error", "warn"] }],
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn",
     },
   }),
 

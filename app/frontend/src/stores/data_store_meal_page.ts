@@ -49,6 +49,7 @@ export interface MealPageStore extends ReturnType<typeof mealPageVolatile> {
   // data_store_bills.ts: bumped on every bill edit.
   billsEdits: ReturnType<typeof createVersionGuard>;
   saveBillsBeforeLeaving(): void;
+  dropFixedCookInTwoRows(): void;
   billsPendingFor(mealId: number): boolean;
   ensureResidentsChannel(): void;
   settleClosed(): void;
@@ -542,8 +543,12 @@ export function mealPageActions(self: MealPageStore) {
     clearResidents() {
       self.residents.clear();
     },
+    // The rows go with the meal on screen, or are built again. A message
+    // that a cook is picked in two of them is about rows that are gone
+    // (data_store_bills.ts, #137).
     clearBills() {
       self.bills.clear();
+      self.dropFixedCookInTwoRows();
     },
     clearGuests() {
       self.guests.clear();

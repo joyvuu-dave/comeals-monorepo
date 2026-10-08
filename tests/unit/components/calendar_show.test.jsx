@@ -1,7 +1,19 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  cleanup,
+  act,
+} from "@testing-library/react";
 import { observable } from "mobx";
-import { MemoryRouter, Routes, Route, useLocation } from "react-router";
+import {
+  MemoryRouter,
+  Routes,
+  Route,
+  useLocation,
+  useNavigate,
+} from "react-router";
 
 // calendar/show.jsx calls Modal.setAppElement("#root") at import time.
 vi.hoisted(() => {
@@ -26,6 +38,9 @@ import { StoreContext } from "../../../app/frontend/src/helpers/store_context.js
 import { CALENDAR_PATH } from "../../../app/frontend/src/routes.js";
 import MainCalendar from "../../../app/frontend/src/components/calendar/show.jsx";
 import { fakeLocation } from "../helpers/fake_location.js";
+import handleAxiosError from "../../../app/frontend/src/helpers/handle_axios_error.js";
+import toastStore from "../../../app/frontend/src/stores/toast_store";
+import { messagesShown } from "../helpers/form_messages.js";
 
 // index.jsx registers this plugin at app startup; the "Do" ordinal in
 // the header date needs it.
@@ -75,18 +90,29 @@ function LocationEcho() {
   return <span data-testid="location">{location.pathname}</span>;
 }
 
+// The browser's back button.
+function BackButton() {
+  const navigate = useNavigate();
+  return <button onClick={() => navigate(-1)}>Browser back</button>;
+}
+
+// `before` is the page the person was on before `path`, for a test that
+// goes back to it.
 function renderCalendar({
   store = makeStore(),
   path = "/calendar/all/2026-01-15/",
+  before = null,
 } = {}) {
+  const entries = before === null ? [path] : [before, path];
   render(
     <StoreContext.Provider value={store}>
-      <MemoryRouter initialEntries={[path]}>
+      <MemoryRouter initialEntries={entries} initialIndex={entries.length - 1}>
         <Routes>
           <Route path={CALENDAR_PATH} element={<MainCalendar />} />
           <Route path="/meals/*" element={null} />
         </Routes>
         <LocationEcho />
+        <BackButton />
       </MemoryRouter>
     </StoreContext.Provider>,
   );
@@ -296,6 +322,86 @@ describe("MainCalendar", () => {
       expect(
         screen.queryByText("Discard your changes?"),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  // #137: a form's own messages show inside the form, and the stack
+  // keeps every other message, such as the one that names a meal whose
+  // costs were not saved. Closing the form, however it closes, takes
+  // its own messages with it and leaves the stack as it was.
+  describe("messages when a form closes", () => {
+    const NOT_SAVED =
+      "The cooks and costs you entered for Thu, Jan 15th were not saved. Please open that meal and enter them again.";
+    const REFUSED = "Title can't be blank";
+
+    beforeEach(() => {
+      toastStore.clearAll();
+    });
+
+    afterEach(() => {
+      toastStore.clearAll();
+    });
+
+    // A message from elsewhere is in the stack, then the form's Create
+    // is refused. The refusal shows inside the form, not in the stack.
+    async function formRefused() {
+      const axios = (await import("axios")).default;
+      axios.post.mockRejectedValueOnce({
+        response: { status: 422, data: { message: REFUSED } },
+      });
+      act(() => {
+        handleAxiosError({ response: { data: { message: NOT_SAVED } } });
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Create" }));
+      await vi.waitFor(() => {
+        expect(messagesShown()).toEqual({
+          form: [REFUSED],
+          stack: [NOT_SAVED],
+        });
+      });
+    }
+
+    it("closing the form takes away its own message and nothing else", async () => {
+      renderCalendar({ path: "/calendar/all/2026-01-15/events/new" });
+      await formRefused();
+
+      fireEvent.click(screen.getByLabelText("Close"));
+
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        /^\/calendar\/all\/2026-01-15$/,
+      );
+      expect(messagesShown()).toEqual({ form: [], stack: [NOT_SAVED] });
+    });
+
+    it("a Create that works after a refusal takes away the refusal", async () => {
+      renderCalendar({ path: "/calendar/all/2026-01-15/events/new" });
+      await formRefused();
+      const axios = (await import("axios")).default;
+      axios.post.mockResolvedValueOnce({ status: 200, data: {} });
+
+      fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+      await vi.waitFor(() => {
+        expect(screen.getByTestId("location")).toHaveTextContent(
+          /^\/calendar\/all\/2026-01-15$/,
+        );
+      });
+      expect(messagesShown()).toEqual({ form: [], stack: [NOT_SAVED] });
+    });
+
+    // The back button closes the form without the X, and the form's
+    // message is just as much about a form that is gone.
+    it("going back from the form takes away its own message and nothing else", async () => {
+      renderCalendar({
+        before: "/calendar/all/2026-01-15/",
+        path: "/calendar/all/2026-01-15/events/new",
+      });
+      await formRefused();
+
+      fireEvent.click(screen.getByRole("button", { name: "Browser back" }));
+
+      expect(screen.queryByText("New Event")).not.toBeInTheDocument();
+      expect(messagesShown()).toEqual({ form: [], stack: [NOT_SAVED] });
     });
   });
 

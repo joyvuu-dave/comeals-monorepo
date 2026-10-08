@@ -298,6 +298,154 @@ describe("ResidentsLogin", () => {
     expect(toastStore.toasts[0].type).toBe("error");
   });
 
+  // #137: "Email required." comes from a check the page makes itself,
+  // so it is the one error that does not wait for the person to close
+  // it. It goes as soon as the email box holds an email. The server's
+  // errors stay until the person closes them, except that a password
+  // reset that works takes away the errors the earlier tries got: the
+  // page sees then that their cause is fixed.
+  describe("errors the page sees fixed", () => {
+    // A test that fails before it uses every answer it queued must not
+    // hand the rest to the tests after it.
+    afterEach(() => {
+      axios.post.mockReset();
+    });
+
+    function messages() {
+      return toastStore.toasts.map((t) => t.message);
+    }
+
+    function typeEmail(value) {
+      fireEvent.change(screen.getByLabelText("email"), {
+        target: { value: value },
+      });
+    }
+
+    function tapReset() {
+      fireEvent.click(
+        screen.getByRole("button", { name: "Reset your password" }),
+      );
+    }
+
+    function tapSubmit() {
+      fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+    }
+
+    it("takes Email required. away once the email box holds an email", () => {
+      renderLogin();
+      tapReset();
+      expect(messages()).toEqual(["Email required."]);
+
+      typeEmail("j");
+
+      expect(messages()).toEqual([]);
+    });
+
+    it("keeps Email required. while the email box holds only spaces", () => {
+      renderLogin();
+      tapReset();
+
+      typeEmail("   ");
+
+      expect(messages()).toEqual(["Email required."]);
+    });
+
+    // The server answers a sign-in with no email with the same words.
+    // The page now asks first, the same way the reset button does, so
+    // the message is the page's own and goes the same way.
+    it("sign-in without an email says Email required. and does not POST", () => {
+      renderLogin();
+      fireEvent.change(screen.getByLabelText("password"), {
+        target: { value: "secret" },
+      });
+
+      tapSubmit();
+
+      expect(axios.post).not.toHaveBeenCalled();
+      expect(messages()).toEqual(["Email required."]);
+      expect(toastStore.toasts[0].type).toBe("error");
+      expect(screen.getByRole("button", { name: "Submit" })).toBeEnabled();
+
+      typeEmail("jane@example.com");
+      expect(messages()).toEqual([]);
+    });
+
+    it("does not take a server error away when the person types", async () => {
+      axios.post.mockRejectedValue({
+        response: { status: 400, data: { message: "Incorrect password" } },
+      });
+      renderLogin();
+      typeCredentials();
+      tapSubmit();
+      await vi.waitFor(() => {
+        expect(messages()).toEqual(["Incorrect password"]);
+      });
+
+      typeEmail("jane@example.org");
+
+      expect(messages()).toEqual(["Incorrect password"]);
+    });
+
+    it("a password reset that works takes away the errors the earlier tries got", async () => {
+      axios.post
+        .mockRejectedValueOnce({
+          response: {
+            status: 400,
+            data: { message: "No resident with that email address." },
+          },
+        })
+        .mockRejectedValueOnce({ request: {} })
+        .mockResolvedValueOnce({
+          status: 200,
+          data: { message: "Check your email." },
+        });
+      renderLogin();
+      tapReset();
+      typeEmail("jane@example.org");
+      tapReset();
+      await vi.waitFor(() => {
+        expect(messages()).toEqual(["No resident with that email address."]);
+      });
+      typeEmail("jane@example.com");
+      tapReset();
+      await vi.waitFor(() => {
+        expect(messages()).toEqual([
+          "Error: no response received from server.",
+          "No resident with that email address.",
+        ]);
+      });
+
+      tapReset();
+
+      await vi.waitFor(() => {
+        expect(messages()).toEqual(["Check your email."]);
+      });
+    });
+
+    it("a password reset that works leaves the other messages alone", async () => {
+      axios.post
+        .mockRejectedValueOnce({
+          response: { status: 400, data: { message: "Incorrect password" } },
+        })
+        .mockResolvedValueOnce({
+          status: 200,
+          data: { message: "Check your email." },
+        });
+      renderLogin();
+      typeCredentials();
+      tapSubmit();
+      await vi.waitFor(() => {
+        expect(messages()).toEqual(["Incorrect password"]);
+      });
+
+      tapReset();
+
+      await vi.waitFor(() => {
+        expect(messages()).toEqual(["Check your email.", "Incorrect password"]);
+      });
+    });
+  });
+
   it("password reset posts the typed email", () => {
     axios.post.mockResolvedValue({
       status: 200,

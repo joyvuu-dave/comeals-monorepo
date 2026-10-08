@@ -4,10 +4,11 @@ import DayPickerInputWrapper from "../common/day_picker_input";
 import dayjs from "dayjs";
 import axios from "axios";
 import { useStore } from "../../helpers/store_context";
-import handleAxiosError from "../../helpers/handle_axios_error";
+import useFormMessages from "../../helpers/use_form_messages";
 import useDirtyReport from "../../helpers/use_dirty_report";
 import useMountedRef from "../../helpers/use_mounted_ref";
 import ModalFormHeader from "../modal_form/header";
+import FormMessages from "../modal_form/form_messages";
 import TimeSelect from "../modal_form/time_select";
 import { buildStartEndPayload } from "../modal_form/payload";
 
@@ -23,6 +24,8 @@ function EventsNew({ handleCloseModal, setDirty }) {
   const [allDay, setAllDay] = useState(false);
   const [loading, setLoading] = useState(false);
   const mountedRef = useMountedRef();
+  const formMessages = useFormMessages();
+  const showError = formMessages.showError;
 
   function handleSubmit(e) {
     e.preventDefault();
@@ -48,7 +51,7 @@ function EventsNew({ handleCloseModal, setDirty }) {
       .catch(function (error) {
         if (!mountedRef.current) return;
         setLoading(false);
-        handleAxiosError(error);
+        showError(error);
       });
   }
 
@@ -67,6 +70,10 @@ function EventsNew({ handleCloseModal, setDirty }) {
   return (
     <div>
       <ModalFormHeader title="New Event" onClose={handleCloseModal} />
+      <FormMessages
+        messages={formMessages.messages}
+        close={formMessages.close}
+      />
       <fieldset>
         <form onSubmit={handleSubmit}>
           <label htmlFor="event-new-title">Title</label>

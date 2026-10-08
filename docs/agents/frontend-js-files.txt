@@ -64,4 +64,3 @@ app/frontend/src/stores/guest.js
 app/frontend/src/stores/month_cache.js
 app/frontend/src/stores/month_fetch.js
 app/frontend/src/stores/resident.js
-app/frontend/src/stores/toast_store.js

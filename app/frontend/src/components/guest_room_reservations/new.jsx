@@ -5,10 +5,11 @@ import dayjs from "dayjs";
 import axios from "axios";
 import { observer } from "mobx-react-lite";
 import { useStore } from "../../helpers/store_context";
-import handleAxiosError from "../../helpers/handle_axios_error";
+import useFormMessages from "../../helpers/use_form_messages";
 import useDirtyReport from "../../helpers/use_dirty_report";
 import useMountedRef from "../../helpers/use_mounted_ref";
 import ModalFormHeader from "../modal_form/header";
+import FormMessages from "../modal_form/form_messages";
 
 // No `ready` gate: render the full form from the first frame. The host
 // select is reactively bound to `store.hosts` (populated on mount via
@@ -23,6 +24,8 @@ const GuestRoomReservationsNew = observer(({ handleCloseModal, setDirty }) => {
   const [day, setDay] = useState(null);
   const [loading, setLoading] = useState(false);
   const mountedRef = useMountedRef();
+  const formMessages = useFormMessages();
+  const showError = formMessages.showError;
 
   // Hosts cache: kick off fetch if empty; no-op if already loaded.
   useEffect(
@@ -55,7 +58,7 @@ const GuestRoomReservationsNew = observer(({ handleCloseModal, setDirty }) => {
       .catch(function (error) {
         if (!mountedRef.current) return;
         setLoading(false);
-        handleAxiosError(error);
+        showError(error);
       });
   }
 
@@ -69,6 +72,10 @@ const GuestRoomReservationsNew = observer(({ handleCloseModal, setDirty }) => {
       <ModalFormHeader
         title="New Guest Room Reservation"
         onClose={handleCloseModal}
+      />
+      <FormMessages
+        messages={formMessages.messages}
+        close={formMessages.close}
       />
       {/* `data-populated` reflects whether the data needed to fully use
           the form (the host list) is available. Present at first paint

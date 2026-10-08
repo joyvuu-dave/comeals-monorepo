@@ -17,6 +17,7 @@ cookies.current = { timezone: "America/Los_Angeles" };
 
 import axios from "axios";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
+import { messagesShown } from "../helpers/form_messages.js";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
 import CommonHouseReservationsEdit from "../../../app/frontend/src/components/common_house_reservations/edit.jsx";
 // What GET /api/v1/common-house-reservations/:id sends, made by the
@@ -311,9 +312,10 @@ describe("CommonHouseReservationsEdit", () => {
     axios.get.mockRejectedValue(NOT_FOUND);
     renderForm();
     await vi.waitFor(() => {
-      expect(toastStore.toasts.map((t) => t.message)).toEqual([
-        NOT_FOUND.response.data.message,
-      ]);
+      expect(messagesShown()).toEqual({
+        form: [NOT_FOUND.response.data.message],
+        stack: [],
+      });
     });
     expect(screen.getByRole("button", { name: "Update" })).toBeDisabled();
   });
@@ -328,9 +330,10 @@ describe("CommonHouseReservationsEdit", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
     await vi.waitFor(() => {
-      expect(toastStore.toasts.map((t) => t.message)).toEqual([
-        "Those hours are taken",
-      ]);
+      expect(messagesShown()).toEqual({
+        form: ["Those hours are taken"],
+        stack: [],
+      });
     });
     expect(handleCloseModal).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Update" })).toBeEnabled();

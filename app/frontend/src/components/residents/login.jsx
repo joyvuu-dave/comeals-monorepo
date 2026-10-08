@@ -53,6 +53,35 @@ const ResidentsLogin = observer(() => {
     };
   }, []);
 
+  // The id of the "Email required." message this page showed, or null.
+  // It comes from a check the page makes itself, so it goes as soon as
+  // the email box holds an email, without waiting for the person to
+  // close it (#137).
+  const emailRequiredRef = useRef(null);
+  // The ids of the errors that tries of "Reset your password" got. A try
+  // that works shows that their cause is fixed, so it takes them away.
+  const resetErrorsRef = useRef([]);
+
+  useEffect(
+    function () {
+      if (emailRequiredRef.current === null || email.trim() === "") return;
+      toastStore.remove(emailRequiredRef.current);
+      emailRequiredRef.current = null;
+    },
+    [email],
+  );
+
+  // The email with the spaces around it taken off, or null after saying
+  // that an email is required. The server checks the same thing, with
+  // the same words; asking first saves a trip to the server, and makes
+  // the message one the page can take away.
+  function emailOrSayRequired() {
+    const trimmedEmail = email.trim();
+    if (trimmedEmail !== "") return trimmedEmail;
+    emailRequiredRef.current = toastStore.show("Email required.", "error");
+    return null;
+  }
+
   const modalOpen =
     params.modal === RESET_PASSWORD_MODAL &&
     typeof params.token !== "undefined";
@@ -62,11 +91,8 @@ const ResidentsLogin = observer(() => {
   }
 
   function handleResetPassword() {
-    const trimmedEmail = (email || "").trim();
-    if (!trimmedEmail) {
-      toastStore.replaceAll("Email required.", "error");
-      return;
-    }
+    const trimmedEmail = emailOrSayRequired();
+    if (trimmedEmail === null) return;
 
     setLoading(true);
     axios
@@ -74,17 +100,22 @@ const ResidentsLogin = observer(() => {
       .then(function (response) {
         if (!mountedRef.current) return;
         setLoading(false);
-        toastStore.replaceAll(response.data.message, "success");
+        resetErrorsRef.current.forEach(function (id) {
+          toastStore.remove(id);
+        });
+        resetErrorsRef.current = [];
+        toastStore.show(response.data.message, "success");
       })
       .catch(function (error) {
         if (!mountedRef.current) return;
         setLoading(false);
-        handleAxiosError(error);
+        resetErrorsRef.current.push(handleAxiosError(error));
       });
   }
 
   function handleSubmit(e) {
     e.preventDefault();
+    if (emailOrSayRequired() === null) return;
     setLoading(true);
 
     axios

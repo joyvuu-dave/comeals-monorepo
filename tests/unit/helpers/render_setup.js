@@ -7,6 +7,14 @@ import { cleanup } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, vi } from "vitest";
 import Cookie, { cookies } from "../mocks/js_cookie.js";
 
+// jsdom does not scroll, so it has no scrollIntoView. A calendar form
+// scrolls its own messages into view (form_messages.tsx), and every
+// test that makes a form's request fail would throw without this. A
+// test that checks the scroll spies on it.
+if (typeof Element.prototype.scrollIntoView !== "function") {
+  Element.prototype.scrollIntoView = function () {};
+}
+
 // The shared cookie jar (tests/unit/mocks/js_cookie.js) lives for the
 // whole file, and its `set` and `remove` change it. So after every test,
 // put back the cookies the file started its tests with: the default

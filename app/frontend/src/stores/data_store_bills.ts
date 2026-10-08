@@ -19,16 +19,27 @@ import toastStore from "./toast_store";
 
 type BillNode = Instance<typeof Bill>;
 
-// One meal the "not saved" message names.
-interface MealNotSaved {
+// One meal a message about a meal the person left names.
+interface MealNamed {
   mealId: number;
   // The meal's day as the date box shows it ("Tue, Oct 6th").
   mealDay: string;
+}
+
+// One meal the "not saved" message names.
+interface MealNotSaved extends MealNamed {
   // True when the server refused a save for this meal because the meal
   // was settled. It stays true when a later save for the meal fails for
   // another reason: a 409 or a lost network does not mean the meal is
   // open again.
   settled: boolean;
+}
+
+// A message in the stack that names meals, and the meals it names, in
+// the order they first failed. `meals` is never empty.
+interface MessageNamingMeals<M extends MealNamed> {
+  toastId: number;
+  meals: M[];
 }
 
 // The message about bills saves the server did not store, for meals the
@@ -47,6 +58,19 @@ function notSavedMessage(meals: MealNotSaved[]): string {
   return `The cooks and costs you entered for ${mealDay} were not saved. Please open that meal and enter them again.`;
 }
 
+// The message about bills saves for meals the person left whose second
+// try got no answer from the app (see noAnswerFromApp, #137). That try
+// may have been written, so the words do not say the costs were not
+// saved. Kept apart from the "not saved" message: the two kinds are
+// never in one sentence. `meals` is never empty.
+function maybeNotSavedMessage(meals: MealNamed[]): string {
+  if (meals.length > 1) {
+    const mealDays = meals.map((meal) => meal.mealDay).join(" and ");
+    return `The cooks and costs you entered for ${mealDays} may not have been saved. Please open those meals and check them.`;
+  }
+  return `The cooks and costs you entered for ${meals[0].mealDay} may not have been saved. Please open that meal and check them.`;
+}
+
 // What a person sees when the second try of a save for the meal on
 // screen got no answer from the app (see noAnswerFromApp), whatever the
 // first try got. The second try may have been written, so the words do
@@ -60,6 +84,17 @@ const MAYBE_NOT_SAVED =
 // cook.
 function cookInTwoRowsMessage(name: string): string {
   return `${name} is picked in two rows, so nothing was saved. Pick another cook in one of them.`;
+}
+
+// The message with this id, if it is still in the stack of messages. A
+// message behind the "more" line is in the stack too: one tap shows it.
+// Once the person closed it, the message is gone, and so is what the
+// page kept about it.
+function inStack<T extends { toastId: number }>(message: T | null): T | null {
+  if (message === null) return null;
+  return toastStore.toasts.some((toast) => toast.id === message.toastId)
+    ? message
+    : null;
 }
 
 // The words the server answers a write to a settled meal with
@@ -167,6 +202,8 @@ export interface BillsStore extends ReturnType<typeof billsVolatile> {
   sendBillsSave(save: BillsSave): void;
   billsSaveFailed(save: BillsSave, error: unknown): void;
   showBillsNotSaved(meal: MealNotSaved): void;
+  showBillsMaybeNotSaved(meal: MealNamed): void;
+  dropFixedCookInTwoRows(): void;
   applyBillsAck(data: BillsAck | undefined, save: BillsSave): void;
   settleBillsSave(): void;
 }
@@ -192,39 +229,38 @@ export function billsVolatile() {
     // to the meal it was built from, oldest first.
     billsSavesForMealsLeft: [] as BillsSave[],
     // The message on screen about saves for meals the person left that
-    // were not saved (#107): the toast's id, and the meals it names, in
-    // the order they first failed. The app shows one message at a time,
-    // and a new one replaces the one on screen. So while this message
-    // still shows, the next such failure adds its meal to it, and the
-    // person sees every meal. A meal that fails again keeps its place.
-    // A save that works later does not change the message or close it,
-    // because it may not hold the cost that was lost: a save sends only
-    // what changed after the save before it was built, and the meal on
-    // screen loads again from the server after its save fails. So the
-    // message can name a meal whose costs were saved by then. If they
-    // were, the person opens that meal and finds them there. Once the
-    // message is gone (closed by the person, closed by its timer,
-    // cleared when a calendar form closes, or replaced by a message from
-    // anywhere else in the app, #137), this list means nothing, and the
-    // next failure starts a new one. A failed save for the meal on
-    // screen joins this message while it shows, so one outage that
-    // fails several saves in a row names every meal. So does a save of
-    // the meal on screen that the page could not build (one cook in two
-    // rows).
-    billsNotSaved: null as { toastId: number; meals: MealNotSaved[] } | null,
-    // The id of the message about a failed save of the meal on screen
-    // (billsSaveFailed). When the save's second try got no answer from
-    // the app (noAnswerFromApp), whatever the first try got, the message
-    // says the costs may not have been saved. Otherwise it is the
-    // server's words. A save for a meal the person left gets the "not
-    // saved" message that names the meal instead (billsNotSaved), and so
-    // does a save of the meal on screen while that message shows; this
-    // id is not set for those. Null before the first such message.
-    // While it still shows, a save that comes back with a warning does
-    // not replace it, the same as for the "not saved" message. Toast ids
-    // are never used twice, so once the message is gone, this id matches
-    // no toast.
-    billsFailedToastId: null as number | null,
+    // were not saved (#107): the message's id, and the meals it names,
+    // in the order they first failed. While this message is still in
+    // the stack of messages, the next such failure adds its meal to it,
+    // and the message moves to the top, so one message names every meal.
+    // A meal that fails again keeps its place. A save that works later
+    // does not change the message or close it, because it may not hold
+    // the cost that was lost: a save sends only what changed after the
+    // save before it was built, and the meal on screen loads again from
+    // the server after its save fails. So the message can name a meal
+    // whose costs were saved by then. If they were, the person opens
+    // that meal and finds them there. The message is an error, so it
+    // stays until the person closes it, whatever other messages come
+    // after it (#137). Once it is closed, this list means nothing, and
+    // the next failure starts a new message.
+    billsNotSaved: null as MessageNamingMeals<MealNotSaved> | null,
+    // The message about saves for meals the person left whose second try
+    // got no answer from the app, so they may have been written (#137):
+    // the message's id, and the meals it names. It grows and moves the
+    // same way as billsNotSaved. A meal is named in this message or in
+    // billsNotSaved, never in both. The "not saved" one asks for more
+    // (enter the costs again, which takes in checking them), so a meal
+    // in both kinds goes there.
+    billsMaybeNotSaved: null as MessageNamingMeals<MealNamed> | null,
+    // The "may not have been saved" message about the meal on screen
+    // (MAYBE_NOT_SAVED), and that meal. Its words are about the meal on
+    // screen, so when the person leaves the meal while it is still in
+    // the stack, the message that names the meal takes its place.
+    billsMaybeOnScreen: null as ({ toastId: number } & MealNamed) | null,
+    // The message that a cook is picked in two rows of the meal on
+    // screen, and that cook. The page made this check itself, so once
+    // the rows no longer show the cook twice, the message goes (#137).
+    billsCookInTwoRows: null as { toastId: number; cookId: number } | null,
     // Bumped on every bill edit. A meal fetch captures it: its answer is
     // not used if a bill was edited after it was sent (holdMealAnswer in
     // data_store_meal_page.ts).
@@ -233,24 +269,32 @@ export function billsVolatile() {
 }
 
 export function billsActions(self: BillsStore) {
-  // True while the message with this id is on screen.
-  function onScreen(toastId: number | null): boolean {
-    return toastStore.toasts.some((toast) => toast.id === toastId);
+  // Show these words on top of the stack, in place of the earlier
+  // message if it is still in the stack, and hand back the new
+  // message's id.
+  function showInPlaceOf(earlier: { toastId: number } | null, words: string) {
+    return earlier === null
+      ? toastStore.show(words, "error")
+      : toastStore.replace(earlier.toastId, words, "error");
   }
 
-  // The "not saved" message, or null when it is not on screen (see
-  // billsNotSaved).
-  function notSavedOnScreen() {
-    const shown = self.billsNotSaved;
-    if (shown === null) return null;
-    return onScreen(shown.toastId) ? shown : null;
-  }
-
-  // Show the "not saved" message that names these meals, in place of
-  // any message on screen. `meals` is never empty.
-  function showMealsNotSaved(meals: MealNotSaved[]) {
-    const toastId = toastStore.replaceAll(notSavedMessage(meals), "error");
-    self.billsNotSaved = { toastId, meals };
+  // Take this meal out of the "may not have been saved" message, if it
+  // names it: a save for the meal surely was not saved, and the "not
+  // saved" message names it now (see billsMaybeNotSaved). With no meal
+  // left to name, the message goes.
+  function unnameMaybe(mealId: number) {
+    const maybe = inStack(self.billsMaybeNotSaved);
+    if (!maybe?.meals.some((named) => named.mealId === mealId)) return;
+    const meals = maybe.meals.filter((named) => named.mealId !== mealId);
+    if (meals.length === 0) {
+      toastStore.remove(maybe.toastId);
+      self.billsMaybeNotSaved = null;
+      return;
+    }
+    self.billsMaybeNotSaved = {
+      toastId: showInPlaceOf(maybe, maybeNotSavedMessage(meals)),
+      meals,
+    };
   }
 
   // Check the answer to a save that was written (applyBillsAck). The
@@ -276,11 +320,7 @@ export function billsActions(self: BillsStore) {
   // `leaving` is true when the person is leaving the meal. A refusal
   // then names the meal, because by the time it shows, another meal or
   // the calendar is on screen. It uses the same words as any other save
-  // for a meal the person left that was not saved. A refusal on the meal
-  // on screen does the same while the "not saved" message shows, so it
-  // does not replace that message, which may be the only sign that a
-  // meal's costs were lost. It joins the message, the same way a failed
-  // save for the meal on screen does (billsSaveFailed).
+  // for a meal the person left that was not saved.
   function billsSaveOfRows(leaving: boolean): BillsSave | null {
     // No meal on screen, so nothing to save to.
     const meal = self.meal;
@@ -295,11 +335,14 @@ export function billsActions(self: BillsStore) {
     const built = billEditsOf(rows);
     if (built.kind === "cookInTwoRows") {
       const words = cookInTwoRowsMessage(built.cook.plainName);
-      if (leaving || notSavedOnScreen() !== null) {
+      if (leaving) {
         console.warn(words);
         self.showBillsNotSaved({ mealId: meal.id, mealDay, settled: false });
       } else {
-        toastStore.replaceAll(words, "error");
+        self.billsCookInTwoRows = {
+          toastId: toastStore.show(words, "error"),
+          cookId: built.cook.id,
+        };
       }
       return null;
     }
@@ -323,6 +366,7 @@ export function billsActions(self: BillsStore) {
     // wire and each pause produces one request instead of one per keystroke.
     saveBills() {
       self.billsEdits.bump();
+      self.dropFixedCookInTwoRows();
       if (self.billsSaveTimer !== null) {
         clearTimeout(self.billsSaveTimer);
       }
@@ -357,6 +401,17 @@ export function billsActions(self: BillsStore) {
     // bases already hold what the save in flight sent, so this save's
     // `from` is that save's `to`.
     saveBillsBeforeLeaving() {
+      // The "may not have been saved" message about this meal says to
+      // check the costs "when the meal shows again", which is about the
+      // meal on screen. The person is leaving it, so the message that
+      // names the meal takes its place (#137).
+      const maybeOnScreen = inStack(self.billsMaybeOnScreen);
+      self.billsMaybeOnScreen = null;
+      if (maybeOnScreen !== null) {
+        toastStore.remove(maybeOnScreen.toastId);
+        self.showBillsMaybeNotSaved(maybeOnScreen);
+      }
+
       const unsent =
         self.billsSaveTimer !== null ||
         self.billsSaveQueued ||
@@ -444,17 +499,9 @@ export function billsActions(self: BillsStore) {
         const words =
           (mealLeft ? `Cooks saved for ${save.mealDay}.` : "Cooks saved.") +
           (msg ? " " + msg : "");
-        // A message that says a save failed is never replaced by one
-        // that says a save worked: the failure is still true, and the
-        // person may not have read it yet. So while the "not saved"
-        // message shows, or the message about a failed save of the meal
-        // on screen, a warning is only logged, whichever meal it is
-        // about.
-        if (notSavedOnScreen() !== null || onScreen(self.billsFailedToastId)) {
-          console.warn(words);
-        } else {
-          toastStore.replaceAll(words, "info");
-        }
+        // It goes on top of any message about a save that failed, which
+        // stays under it (#137).
+        toastStore.show(words, "info");
         checkAnswer(warning, save);
         self.settleBillsSave();
         return;
@@ -468,20 +515,22 @@ export function billsActions(self: BillsStore) {
         return;
       }
 
-      if (mealLeft || notSavedOnScreen() !== null) {
-        // The server's words are only logged. For a meal the person
-        // left they do not say which meal they are about. For the meal
-        // on screen, showing them would replace the message about a
-        // meal left, and one outage fails both saves in a row, so the
-        // meal on screen joins that message instead.
+      if (mealLeft) {
+        // The server's words are only logged: they do not say which
+        // meal they are about.
         handleAxiosError(error, { silent: true });
         // Every failure is shown, even when a newer save for this meal
-        // waits behind this one (see billsNotSaved).
-        self.showBillsNotSaved({
-          mealId: save.mealId,
-          mealDay: save.mealDay,
-          settled: answerIn(error)?.message === SETTLED_MEAL_REFUSAL,
-        });
+        // waits behind this one (see billsNotSaved). Only a second try
+        // gets no answer from the app here, as below.
+        const meal = { mealId: save.mealId, mealDay: save.mealDay };
+        if (noAnswerFromApp(error)) {
+          self.showBillsMaybeNotSaved(meal);
+        } else {
+          self.showBillsNotSaved({
+            ...meal,
+            settled: answerIn(error)?.message === SETTLED_MEAL_REFUSAL,
+          });
+        }
       } else if (noAnswerFromApp(error)) {
         // The second try got no answer from the app, so it may have been
         // written, whatever the first try got. Only a second try gets
@@ -493,12 +542,13 @@ export function billsActions(self: BillsStore) {
         // try was finished before the second was read, and if it had
         // been written, the second would have been answered as replayed.
         handleAxiosError(error, { silent: true });
-        self.billsFailedToastId = toastStore.replaceAll(
-          MAYBE_NOT_SAVED,
-          "error",
-        );
+        self.billsMaybeOnScreen = {
+          toastId: toastStore.show(MAYBE_NOT_SAVED, "error"),
+          mealId: save.mealId,
+          mealDay: save.mealDay,
+        };
       } else {
-        self.billsFailedToastId = handleAxiosError(error);
+        handleAxiosError(error);
       }
       // A 422 means this page sent one key with two different saves.
       if (responseIn(error)?.status === 422) {
@@ -518,23 +568,69 @@ export function billsActions(self: BillsStore) {
       if (!mealLeft) self.loadMealAgain();
       self.settleBillsSave();
     },
-    // A save was not saved: for a meal the person left, or for the meal
-    // on screen while this message shows. Show the message that names
-    // it, with the meals the message on screen already names
+    // A save for a meal the person left was not saved. Show the message
+    // that names it, with the meals the message on screen already names
     // if that message still shows (see billsNotSaved). A meal the
     // message already names keeps its place, and keeps the settled words
     // once a save for it was refused as settled (see MealNotSaved).
     showBillsNotSaved(meal: MealNotSaved) {
-      const earlier = notSavedOnScreen()?.meals ?? [];
-      showMealsNotSaved(
-        earlier.some((named) => named.mealId === meal.mealId)
-          ? earlier.map((named) =>
-              named.mealId === meal.mealId
-                ? { ...meal, settled: named.settled || meal.settled }
-                : named,
-            )
-          : [...earlier, meal],
+      unnameMaybe(meal.mealId);
+      const earlier = inStack(self.billsNotSaved);
+      const named = earlier?.meals ?? [];
+      const meals = named.some((other) => other.mealId === meal.mealId)
+        ? named.map((other) =>
+            other.mealId === meal.mealId
+              ? { ...meal, settled: other.settled || meal.settled }
+              : other,
+          )
+        : [...named, meal];
+      self.billsNotSaved = {
+        toastId: showInPlaceOf(earlier, notSavedMessage(meals)),
+        meals,
+      };
+    },
+    // A save for a meal the person left may have been written: its
+    // second try got no answer from the app. Show the message that says
+    // so and names it, with the meals that message already names if it
+    // is still in the stack (see billsMaybeNotSaved). A meal the "not
+    // saved" message names goes there instead.
+    showBillsMaybeNotSaved(meal: MealNamed) {
+      if (
+        inStack(self.billsNotSaved)?.meals.some(
+          (named) => named.mealId === meal.mealId,
+        )
+      ) {
+        self.showBillsNotSaved({
+          mealId: meal.mealId,
+          mealDay: meal.mealDay,
+          settled: false,
+        });
+        return;
+      }
+      const earlier = inStack(self.billsMaybeNotSaved);
+      const named = earlier?.meals ?? [];
+      const meals = named.some((other) => other.mealId === meal.mealId)
+        ? named
+        : [...named, { mealId: meal.mealId, mealDay: meal.mealDay }];
+      self.billsMaybeNotSaved = {
+        toastId: showInPlaceOf(earlier, maybeNotSavedMessage(meals)),
+        meals,
+      };
+    },
+    // The rows on screen changed: an edit, or the rows were cleared or
+    // built again. If the message that a cook is picked in two rows is
+    // still in the stack, and the rows no longer show that cook twice,
+    // the page sees the cause fixed, so the message goes (#137). If
+    // another cook is in two rows now, the next save says so.
+    dropFixedCookInTwoRows() {
+      const shown = self.billsCookInTwoRows;
+      if (shown === null) return;
+      const rows = Array.from(self.bills.values()).filter(
+        (bill) => bill.resident_id === shown.cookId,
       );
+      if (rows.length > 1) return;
+      toastStore.remove(shown.toastId);
+      self.billsCookInTwoRows = null;
     },
     // The answer to a save that was written. It changes no row: the
     // rows' bases moved when the save was built, and a row may already

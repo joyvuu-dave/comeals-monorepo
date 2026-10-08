@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import axios from "axios";
 import handleAxiosError from "../../helpers/handle_axios_error";
+import useFormMessages from "../../helpers/use_form_messages";
 import toastStore from "../../stores/toast_store";
+import FormMessages from "../modal_form/form_messages";
 
 function ResidentsPasswordNew() {
   const { token } = useParams();
@@ -13,6 +15,11 @@ function ResidentsPasswordNew() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [errored, setErrored] = useState(false);
+  // The form is in a dialog, and the stack of messages is drawn under an
+  // open dialog, so a refused password shows inside the form (#137).
+  // When a try works, the dialog closes, and the reasons earlier tries
+  // got go with it.
+  const formMessages = useFormMessages();
 
   // The submit handler outlives a navigation away from the page; the
   // mounted flag keeps it from setting state after unmount, like the
@@ -62,13 +69,13 @@ function ResidentsPasswordNew() {
       .then(function (response) {
         if (!mountedRef.current) return;
         setLoading(false);
-        toastStore.replaceAll(response.data.message, "success");
+        toastStore.show(response.data.message, "success");
         navigate("/");
       })
       .catch(function (error) {
         if (!mountedRef.current) return;
         setLoading(false);
-        handleAxiosError(error);
+        formMessages.showError(error);
       });
   }
 
@@ -78,6 +85,10 @@ function ResidentsPasswordNew() {
         <form onSubmit={handleSubmit}>
           <fieldset className="w-100">
             <legend>Reset Password for {name}</legend>
+            <FormMessages
+              messages={formMessages.messages}
+              close={formMessages.close}
+            />
             <label className="w-75" htmlFor="new-password">
               <input
                 id="new-password"
