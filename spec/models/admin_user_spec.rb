@@ -221,4 +221,20 @@ RSpec.describe AdminUser do
       let(:record) { build(:admin_user, community: community) }
     end
   end
+
+  # Issue #139. Every true/false column is NOT NULL. Without this check a
+  # nil (the admin box sent as "" by a request made by hand, which Rails
+  # reads as nil) reached the database as a 500. The model refuses it
+  # with a sentence, so the form shows an error.
+  describe 'the superuser column' do
+    it 'refuses a nil with a sentence, and keeps the stored value' do
+      record = create(:admin_user, community: community, superuser: false)
+      stored = record.superuser
+      record.superuser = nil
+
+      expect(record.save).to be(false)
+      expect(record.errors.full_messages).to eq(['Superuser must be true or false'])
+      expect(record.reload.superuser).to eq(stored)
+    end
+  end
 end

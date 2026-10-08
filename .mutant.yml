@@ -63,6 +63,7 @@ matcher:
     - SettleAndNotify*
     - SnapshotRead*
     - ThirdCookWarning*
+    - TrueOrFalse*
     # jobs, mailers, helpers, lib
     - ApplicationJob*
     - EnsureRotationsJob*

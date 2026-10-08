@@ -384,4 +384,20 @@ RSpec.describe Rotation do
       expect(early.errors[:base].to_sentence).to include('Delete the newest rotation first')
     end
   end
+
+  # Issue #139. Every true/false column is NOT NULL, and without this
+  # check a nil would reach the database as a 500. Only the residents:notify
+  # task writes this column, with true. The model refuses a nil anyway,
+  # with a sentence.
+  describe 'the residents_notified column' do
+    it 'refuses a nil with a sentence, and keeps the stored value' do
+      record = create(:rotation, community: community)
+      stored = record.residents_notified
+      record.residents_notified = nil
+
+      expect(record.save).to be(false)
+      expect(record.errors.full_messages).to eq(['Residents notified must be true or false'])
+      expect(record.reload.residents_notified).to eq(stored)
+    end
+  end
 end

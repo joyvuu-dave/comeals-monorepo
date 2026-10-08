@@ -113,6 +113,12 @@ class Resident < ApplicationRecord
   has_many :mail_deliveries, dependent: :restrict_with_error
 
   validates :name, presence: true
+  # Each is NOT NULL. Without this a nil (a box sent as "" by a request
+  # made by hand; Rails reads "" as nil) reached the database, and the
+  # admin form answered 500 (#139). Now the form says "must be true or
+  # false".
+  validates :active, :can_cook, :vegetarian, :can_reconcile,
+            inclusion: { in: [true, false], message: TrueOrFalse::MESSAGE }
 
   # Names must be unique so every screen can tell residents apart (the
   # calendar, the audit log, and the mailers all show bare names). The

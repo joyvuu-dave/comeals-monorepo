@@ -55,7 +55,10 @@ saw.
 Amounts are text, compared as numbers: `"5"`, `"5.0"` and `"5.00"` are
 the same, and `""` is 0. A JSON number is refused with 400. `no_cost` is
 `true` or `false`, or the text `"true"` or `"false"` in a form-encoded
-body, and anything else is refused.
+body, and anything else is refused. (Amended 2026-10-08: `no_cost` now
+follows the rule of every true/false value the API reads, `TrueOrFalse`
+(#138). It also takes `1`, `0`, `"1"` and `"0"`, and a refusal says
+"No cost must be true or false".)
 
 ### The rules under the meal lock
 

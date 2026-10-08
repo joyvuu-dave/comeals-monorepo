@@ -81,7 +81,7 @@ RSpec.describe BillsPayload do
     let(:list_error) { 'edits must be a list of changes.' }
     let(:op_error) { "Each edit's op must be add, change or remove." }
     let(:sides_error) { "'from' and 'to' each need amount and no_cost." }
-    let(:no_cost_error) { 'no_cost must be true or false.' }
+    let(:no_cost_error) { 'No cost must be true or false' }
 
     def amount_error(shown)
       "Invalid amount: #{shown}. Amounts are text with whole cents, 0 to 9999.99, like \"25.50\"."
@@ -148,14 +148,23 @@ RSpec.describe BillsPayload do
       expect(error_of(adding(cook, values({ value: '1' })))).to eq(amount_error('{"value":"1"}'))
     end
 
+    # The rule of every true/false value the API reads (TrueOrFalse, #138).
     it 'refuses a no_cost that is not true or false' do
-      [nil, 'yes', 1, '1', 'TRUE', ''].each do |flag|
+      [nil, 'yes', 2, 'False', 'TRUE', 'f', ''].each do |flag|
         expect(error_of(adding(cook, values('1', no_cost: flag)))).to eq(no_cost_error), flag.inspect
       end
     end
 
     it 'takes no_cost as the text a form-encoded body sends' do
       payload = edits(adding(cook, values('', no_cost: 'true')), adding(other, values('3', no_cost: 'false')))
+
+      expect(payload).to be_valid
+      expect(payload.write_to(meal, stored)).to be_nil
+      expect(rows).to eq(cook.id => [BigDecimal('0'), true], other.id => [BigDecimal('3'), false])
+    end
+
+    it 'takes no_cost 1 and 0, as numbers and as text' do
+      payload = edits(adding(cook, values('', no_cost: 1)), adding(other, values('3', no_cost: '0')))
 
       expect(payload).to be_valid
       expect(payload.write_to(meal, stored)).to be_nil
@@ -432,12 +441,12 @@ RSpec.describe BillsPayload do
       expect(payload.fingerprint).to eq(Digest::SHA256.hexdigest(JSON.generate(asked)))
     end
 
-    it 'is the same for amounts written another way, ids sent as text, and a socket id or token',
+    it 'is the same for amounts and no_cost written another way, ids sent as text, and a socket id or token',
        prosopite: false do
       expect(fingerprint(edits: [change])).to eq(fingerprint(
                                                    edits: [{ op: 'change', resident_id: cook.id.to_s,
                                                              from: { amount: '5', no_cost: 'false' },
-                                                             to: { amount: '7', no_cost: false } }],
+                                                             to: { amount: '7', no_cost: 0 } }],
                                                    socket_id: '1.2', token: 'abc'
                                                  ))
     end

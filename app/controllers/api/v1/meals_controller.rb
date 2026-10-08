@@ -62,14 +62,17 @@ module Api
       # re-signing up with different late/vegetarian values updates the
       # existing signup instead of erroring on the unique index.
       #
-      # Both flags are required, on a re-signup too. A missing one is nil,
-      # and MealResident refuses a nil flag, so the answer is a 400 and the
-      # stored row is unchanged (#121).
+      # Both flags are required, on a re-signup too (#121), and each must
+      # be a value TrueOrFalse takes (#138). Otherwise the answer is a 400,
+      # and the stored row is unchanged.
       sig { void }
       def create_meal_resident
+        flags = TrueOrFalse.from_params(params, %i[late vegetarian], required: true)
+        return render_refused(flags) if flags.is_a?(String)
+
         render_write_under_lock do
           meal_resident = meal.meal_residents.find_or_initialize_by(resident_id: params[:resident_id])
-          meal_resident.update!(late: params[:late], vegetarian: params[:vegetarian])
+          meal_resident.update!(flags)
           { json: MealResidentSerializer.new(meal_resident) }
         end
       end
@@ -86,23 +89,31 @@ module Api
       end
 
       # PATCH /api/v1/meals/:meal_id/residents/:resident_id { late, vegetarian }
+      # A flag left out keeps its stored value (the SPA sends one at a
+      # time). A flag sent must be a value TrueOrFalse takes (#121, #138).
       sig { void }
       def update_meal_resident
+        flags = TrueOrFalse.from_params(params, %i[late vegetarian], required: false)
+        return render_refused(flags) if flags.is_a?(String)
+
         render_write_under_lock do
-          meal_resident.update!(meal_resident_params)
+          meal_resident.update!(flags)
           { json: { message: 'MealResident updated.' } }
         end
       end
 
       # POST /api/v1/meals/:meal_id/residents/:resident_id/guests { vegetarian }
       # Uses pessimistic locking to prevent concurrent guest additions from
-      # exceeding meal.max. vegetarian is required: Guest refuses a nil
-      # flag, so a request without it is a 400 (#121).
+      # exceeding meal.max. vegetarian is required (#121), and must be a
+      # value TrueOrFalse takes (#138); otherwise the answer is a 400.
       sig { void }
       def create_guest
+        flags = TrueOrFalse.from_params(params, %i[vegetarian], required: true)
+        return render_refused(flags) if flags.is_a?(String)
+
         render_write_under_lock do
           # multiplier omitted intentionally — DB default of 2 applies (adult guest).
-          guest = Guest.new(meal_id: meal.id, resident_id: params[:resident_id], vegetarian: params[:vegetarian])
+          guest = Guest.new(meal_id: meal.id, resident_id: params[:resident_id], vegetarian: flags.fetch(:vegetarian))
           guest.save!
           { json: GuestSerializer.new(guest) }
         end
@@ -220,10 +231,16 @@ module Api
       end
 
       # PATCH /api/v1/meals/:meal_id/closed { closed }
+      # closed is required, and must be a value TrueOrFalse takes. Before
+      # #138 "no" closed the meal, and before #139 a missing closed was a
+      # 500.
       sig { void }
       def update_closed
+        flags = TrueOrFalse.from_params(params, %i[closed], required: true)
+        return render_refused(flags) if flags.is_a?(String)
+
         render_write_under_lock do
-          meal.update!(closed: params[:closed])
+          meal.update!(closed: flags.fetch(:closed))
           { json: { message: 'Meal closed value updated.' } }
         end
       end
@@ -362,11 +379,6 @@ module Api
         Rails.logger.info("Refused a bills save in the old format for meal #{meal.id}: " \
                           'the page was loaded before #135.')
         render json: { message: payload.error, type: 'outdated' }, status: :bad_request
-      end
-
-      sig { returns(ActionController::Parameters) }
-      def meal_resident_params
-        params.permit(:late, :vegetarian)
       end
 
       sig { void }

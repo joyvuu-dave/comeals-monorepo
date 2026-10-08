@@ -60,7 +60,7 @@ class MealResident < ApplicationRecord
   # Both columns are NOT NULL. Without this a nil (a flag left out of a
   # sign-up, or sent as "") reached the database and the API answered 500
   # (#121). A flag left out is refused, not read as false.
-  validates :late, :vegetarian, inclusion: { in: [true, false], message: 'must be true or false' }
+  validates :late, :vegetarian, inclusion: { in: [true, false], message: TrueOrFalse::MESSAGE }
   validate :multiplier_is_the_residents, on: :create
 
   # The multiplier is the resident's price band for the meal's date, as

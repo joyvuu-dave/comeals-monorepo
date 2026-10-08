@@ -33,6 +33,10 @@ class Event < ApplicationRecord
   end
 
   validates :title, presence: true
+  # NOT NULL, so without this a nil would reach the database as a 500
+  # (#139). Nothing sends one today: the API reads all_day as true or
+  # false (TrueOrFalse), and the admin box sends 0 or 1.
+  validates :allday, inclusion: { in: [true, false], message: TrueOrFalse::MESSAGE }
   validates :start_date, presence: true
   validates :start_date, :end_date, storable_time: true
 

@@ -100,6 +100,25 @@ RSpec.describe 'Admin resident form' do
     expect(resident.reload.birthday).to be_nil
   end
 
+  # Issue #139. The check boxes always send "0" or "1", so only a request
+  # made by hand sends "". Rails reads "" as nil, and before Resident
+  # checked its true/false columns the nil reached the NOT NULL column as
+  # a 500.
+  it 'refuses an empty vegetarian, active, can_cook or can_reconcile, and says so next to the box' do
+    resident.update!(vegetarian: true, active: true, can_cook: true, can_reconcile: true)
+    host! 'admin.example.com'
+    sign_in admin_user
+
+    %i[vegetarian active can_cook can_reconcile].each do |column|
+      patch "/residents/#{resident.id}", params: { resident: { column => '' } }
+
+      expect(response).to have_http_status(:ok), column.to_s
+      expect(response.parsed_body.at_css("#resident_#{column}_input .inline-errors")&.text)
+        .to eq('must be true or false'), column.to_s
+    end
+    expect(resident.reload).to have_attributes(vegetarian: true, active: true, can_cook: true, can_reconcile: true)
+  end
+
   it 'removes an adult\'s birthday from the resident page' do
     resident.update!(birthday: 30.years.ago.to_date)
     host! 'admin.example.com'

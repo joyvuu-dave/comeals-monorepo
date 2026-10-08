@@ -209,4 +209,21 @@ RSpec.describe Bill do
       expect(bill.reload.meal_id).to eq(meal.id)
     end
   end
+
+  # Issue #139. Every true/false column is NOT NULL. Without this check a
+  # nil (a no_cost sent as "" in the bills format before #135, which Rails
+  # reads as nil) reached the database, and the API answered 500. The
+  # model refuses it with a sentence, so every path gets a readable error.
+  describe 'the no_cost column' do
+    it 'refuses a nil with a sentence, and keeps the stored value' do
+      record = create(:bill, community: community, meal: create(:meal, community: community),
+                             resident: create(:resident, community: community, unit: unit))
+      stored = record.no_cost
+      record.no_cost = nil
+
+      expect(record.save).to be(false)
+      expect(record.errors.full_messages).to eq(['No cost must be true or false'])
+      expect(record.reload.no_cost).to eq(stored)
+    end
+  end
 end

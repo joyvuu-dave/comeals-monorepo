@@ -245,4 +245,20 @@ RSpec.describe Event do
       expect(event.errors[:base]).to eq(['Event must end or be all day'])
     end
   end
+
+  # Issue #139. Every true/false column is NOT NULL, and without this
+  # check a nil would reach the database as a 500. Nothing sends a nil today:
+  # the API reads all_day as true or false, and the admin box sends 0 or
+  # 1. The model refuses it anyway, with a sentence.
+  describe 'the allday column' do
+    it 'refuses a nil with a sentence, and keeps the stored value' do
+      record = create(:event)
+      stored = record.allday
+      record.allday = nil
+
+      expect(record.save).to be(false)
+      expect(record.errors.full_messages).to eq(['Allday must be true or false'])
+      expect(record.reload.allday).to eq(stored)
+    end
+  end
 end

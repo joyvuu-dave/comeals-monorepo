@@ -52,5 +52,5 @@ class Guest < ApplicationRecord
   # vegetarian) reached the database and the API answered 500 (#121).
   # Nothing writes late today. It is checked anyway, because its column
   # refuses a nil too.
-  validates :vegetarian, :late, inclusion: { in: [true, false], message: 'must be true or false' }
+  validates :vegetarian, :late, inclusion: { in: [true, false], message: TrueOrFalse::MESSAGE }
 end

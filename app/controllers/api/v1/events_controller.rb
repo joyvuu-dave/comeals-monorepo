@@ -16,11 +16,16 @@ module Api
       #
       # The one create/update difference in parsing: what a missing
       # all_day param means. Create defaults it to false; update keeps
-      # the event's stored value.
+      # the event's stored value. An all_day that is sent must be a value
+      # TrueOrFalse takes (#138). Before, only the text "true" was true,
+      # so "1" made a timed event, and so did "True" and "yes".
       def create
-        allday = params.key?(:all_day) ? params[:all_day].to_s == 'true' : false
+        flags = TrueOrFalse.from_params(params, %i[all_day], required: false)
+        return render_refused(flags) if flags.is_a?(String)
+
+        allday = flags.fetch(:all_day, false)
         times = parse_start_end_params(allday: allday)
-        return render_start_end_refused(times) if times.is_a?(String)
+        return render_refused(times) if times.is_a?(String)
 
         event = Event.new(start_date: times[:start_date], end_date: times[:end_date], title: params[:title],
                           description: params[:description] || '', allday: allday)
@@ -40,9 +45,12 @@ module Api
       # no presence validation, so passing a missing param through as nil
       # used to raise from the database and return a 500 (#69).
       def update
-        allday = params.key?(:all_day) ? params[:all_day].to_s == 'true' : @event.allday
+        flags = TrueOrFalse.from_params(params, %i[all_day], required: false)
+        return render_refused(flags) if flags.is_a?(String)
+
+        allday = flags.fetch(:all_day, @event.allday)
         times = parse_start_end_params(allday: allday)
-        return render_start_end_refused(times) if times.is_a?(String)
+        return render_refused(times) if times.is_a?(String)
 
         description = params.key?(:description) ? params[:description] : @event.description
         title = params.key?(:title) ? params[:title] : @event.title

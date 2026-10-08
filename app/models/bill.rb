@@ -71,6 +71,10 @@ class Bill < ApplicationRecord
   validates :amount, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: BigDecimal('9999.99') }
   validate :amount_in_whole_cents
   validates :resident_id, uniqueness: { scope: :meal_id }
+  # NOT NULL. Without this a nil (a no_cost sent as "" in the bills
+  # format before #135, which Rails reads as nil) reached the database,
+  # and the API answered 500 (#139). Now it is refused with a sentence.
+  validates :no_cost, inclusion: { in: [true, false], message: TrueOrFalse::MESSAGE }
 
   sig { void }
   def amount_in_whole_cents

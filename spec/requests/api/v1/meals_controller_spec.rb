@@ -240,27 +240,66 @@ RSpec.describe 'Meals API' do
       expect(meal.meal_residents.where(resident: resident)).not_to exist
     end
 
-    # This pins what Rails does today; nothing in this app chose it. #138
-    # asks whether to refuse these values instead. Rails reads a boolean
-    # column as false only for its own list of false words: "0", "f",
-    # "false" and "off", each all lower case or all upper case. Every other
-    # value is true, so "maybe", "no" and even "False" sign up as true.
-    it 'reads a flag that is not a boolean the way Rails does: anything but a false word is true' do
+    # Issue #138. A flag is true, false, 1 or 0, or the same as text:
+    # "true", "false", "1", "0". Anything else is refused. Rails reads a
+    # boolean column as false only for its own false words, and every
+    # other value as true, so "no", "maybe" and even "False" (what
+    # Python's requests sends for data={"late": False}) signed someone up
+    # as late, with a 200.
+    it 'refuses a sign-up with late "False" and vegetarian "Off", and saves nothing' do
       post "/api/v1/meals/#{meal.id}/residents/#{resident.id}",
-           params: { token: token, late: 'maybe', vegetarian: 'no' }
+           params: { token: token, late: 'False', vegetarian: 'Off' }
 
-      expect(response).to have_http_status(:ok)
-      expect(meal.meal_residents.find_by(resident: resident)).to have_attributes(late: true, vegetarian: true)
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq("Late must be true or false\nVegetarian must be true or false")
+      expect(meal.meal_residents.where(resident: resident)).not_to exist
     end
 
-    # Python's requests sends "False" for a form post with
-    # data={"late": False}, and that signs up as true.
-    it 'reads a false word as false in upper case, but as true in mixed case' do
+    it 'refuses a sign-up with a hash and an array as flags' do
       post "/api/v1/meals/#{meal.id}/residents/#{resident.id}",
-           params: { token: token, late: 'False', vegetarian: 'FALSE' }
+           params: { token: token, late: { a: '1' }, vegetarian: ['true'] }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq("Late must be true or false\nVegetarian must be true or false")
+      expect(meal.meal_residents.where(resident: resident)).not_to exist
+    end
+
+    it 'refuses every other word for true or false, in any case' do
+      %w[no maybe yes TRUE FALSE t f on off].each do |word|
+        post "/api/v1/meals/#{meal.id}/residents/#{resident.id}",
+             params: { token: token, late: word, vegetarian: false }
+
+        expect(response).to have_http_status(:bad_request), word
+        expect(response.parsed_body['message']).to eq('Late must be true or false'), word
+      end
+      expect(meal.meal_residents.where(resident: resident)).not_to exist
+    end
+
+    it 'refuses a re-signup with a flag that is not true or false, and keeps the stored row' do
+      create(:meal_resident, meal: meal, resident: resident, community: community, late: false, vegetarian: false)
+
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}",
+           params: { token: token, late: 'no', vegetarian: true }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Late must be true or false')
+      expect(meal.meal_residents.where(resident: resident).sole).to have_attributes(late: false, vegetarian: false)
+    end
+
+    it 'takes "1" and "0", the text a form sends, as true and false' do
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: { token: token, late: '1', vegetarian: '0' }
 
       expect(response).to have_http_status(:ok)
       expect(meal.meal_residents.find_by(resident: resident)).to have_attributes(late: true, vegetarian: false)
+    end
+
+    it 'takes 1 and 0 as JSON numbers' do
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}",
+           params: { token: token, late: 0, vegetarian: 1 }.to_json,
+           headers: { 'CONTENT_TYPE' => 'application/json' }
+
+      expect(response).to have_http_status(:ok)
+      expect(meal.meal_residents.find_by(resident: resident)).to have_attributes(late: false, vegetarian: true)
     end
 
     it 'attributes the audit row to the authenticated resident' do
@@ -392,6 +431,63 @@ RSpec.describe 'Meals API' do
       expect(response.parsed_body['message']).to eq('Late must be true or false')
       expect(meal_resident.reload).to have_attributes(late: true, vegetarian: true)
     end
+
+    it 'refuses a JSON null flag with a 400 and keeps the stored flags' do
+      meal_resident.update!(late: true, vegetarian: true)
+
+      patch "/api/v1/meals/#{meal.id}/residents/#{resident.id}",
+            params: { token: token, vegetarian: nil }.to_json,
+            headers: { 'CONTENT_TYPE' => 'application/json' }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Vegetarian must be true or false')
+      expect(meal_resident.reload).to have_attributes(late: true, vegetarian: true)
+    end
+
+    # Issue #138: Rails would read "no" as true.
+    it 'refuses a change with late "no", and keeps the stored flags' do
+      meal_resident.update!(late: false, vegetarian: false)
+
+      patch "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: { token: token, late: 'no' }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Late must be true or false')
+      expect(meal_resident.reload).to have_attributes(late: false, vegetarian: false)
+    end
+
+    # Before #138 the change kept only plain values, so a hash was dropped
+    # without a word and the answer was a 200.
+    it 'refuses a flag sent as a hash, and keeps the stored flags' do
+      meal_resident.update!(late: false, vegetarian: false)
+
+      patch "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: { token: token, late: { a: '1' } }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Late must be true or false')
+      expect(meal_resident.reload).to have_attributes(late: false, vegetarian: false)
+    end
+
+    # The SPA sends one flag at a time.
+    it 'changes only the flag it sends, and keeps the other' do
+      meal_resident.update!(late: false, vegetarian: true)
+
+      patch "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: { token: token, late: '1' }
+
+      expect(response).to have_http_status(:ok)
+      expect(meal_resident.reload).to have_attributes(late: true, vegetarian: true)
+    end
+
+    it 'takes 1 and 0, as JSON numbers and as text, and JSON true and false' do
+      [[{ late: 1, vegetarian: 0 }, [true, false]], [{ late: '0', vegetarian: '1' }, [false, true]],
+       [{ late: true, vegetarian: false }, [true, false]]].each do |flags, (late, vegetarian)|
+        patch "/api/v1/meals/#{meal.id}/residents/#{resident.id}",
+              params: { token: token, **flags }.to_json,
+              headers: { 'CONTENT_TYPE' => 'application/json' }
+
+        expect(response).to have_http_status(:ok), flags.inspect
+        expect(meal_resident.reload).to have_attributes(late: late, vegetarian: vegetarian)
+      end
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -455,14 +551,34 @@ RSpec.describe 'Meals API' do
       expect(meal.guests.count).to eq(0)
     end
 
-    # Pins what Rails does today, as for a sign-up: anything but one of
-    # Rails' false words is true. #138 asks whether to refuse these values.
-    it 'reads a vegetarian flag that is not a boolean the way Rails does' do
-      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests",
-           params: { token: token, vegetarian: 'maybe' }
+    # Issue #138, as for a sign-up: Rails would read these as true.
+    it 'refuses a guest with vegetarian "False", and saves nothing' do
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests", params: { token: token, vegetarian: 'False' }
 
-      expect(response).to have_http_status(:ok)
-      expect(meal.guests.sole.vegetarian).to be(true)
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Vegetarian must be true or false')
+      expect(meal.guests.count).to eq(0)
+    end
+
+    it 'refuses a guest with vegetarian "maybe" or "", and saves nothing' do
+      ['maybe', ''].each do |value|
+        post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests", params: { token: token, vegetarian: value }
+
+        expect(response).to have_http_status(:bad_request), value.inspect
+        expect(response.parsed_body['message']).to eq('Vegetarian must be true or false')
+      end
+      expect(meal.guests.count).to eq(0)
+    end
+
+    it 'takes vegetarian 1 and 0, as JSON numbers and as text' do
+      [1, 0, '1', '0'].each do |vegetarian|
+        post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests",
+             params: { token: token, vegetarian: vegetarian }.to_json,
+             headers: { 'CONTENT_TYPE' => 'application/json' }
+        expect(response).to have_http_status(:ok), vegetarian.inspect
+      end
+
+      expect(meal.guests.order(:id).pluck(:vegetarian)).to eq([true, false, true, false])
     end
 
     it 'rejects guest when meal is closed without max' do
@@ -886,6 +1002,62 @@ RSpec.describe 'Meals API' do
       expect(meal.closed).to be(false)
       expect(meal.closed_at).to be_nil
       expect(meal.max).to be_nil
+    end
+
+    # Issue #138: Rails would read "no" as true, and close the meal.
+    it 'refuses a close request with closed "no", and leaves the meal open' do
+      patch "/api/v1/meals/#{meal.id}/closed", params: { token: token, closed: 'no' }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Closed must be true or false')
+      expect(meal.reload).to have_attributes(closed: false, closed_at: nil)
+    end
+
+    it 'refuses a reopen request with closed "False", and leaves the meal closed' do
+      meal.update!(closed: true, max: 5)
+
+      patch "/api/v1/meals/#{meal.id}/closed", params: { token: token, closed: 'False' }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Closed must be true or false')
+      expect(meal.reload).to have_attributes(closed: true, max: 5)
+    end
+
+    # Issue #139. Rails reads a missing value and "" as nil, and before
+    # this the nil reached the NOT NULL column as a 500.
+    it 'refuses a close request without closed with a 400, not a 500' do
+      patch "/api/v1/meals/#{meal.id}/closed", params: { token: token }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Closed must be true or false')
+      expect(meal.reload.closed).to be(false)
+    end
+
+    it 'refuses a close request with closed "" with a 400, not a 500' do
+      patch "/api/v1/meals/#{meal.id}/closed", params: { token: token, closed: '' }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Closed must be true or false')
+      expect(meal.reload.closed).to be(false)
+    end
+
+    it 'refuses closed sent as JSON null with a 400, not a 500' do
+      patch "/api/v1/meals/#{meal.id}/closed", params: { token: token, closed: nil }.to_json,
+                                               headers: { 'CONTENT_TYPE' => 'application/json' }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Closed must be true or false')
+      expect(meal.reload.closed).to be(false)
+    end
+
+    it 'takes 1 and 0, as JSON numbers and as text, and the JSON true and false the SPA sends' do
+      [[1, true], [0, false], ['1', true], ['0', false], [true, true], [false, false]].each do |closed, stored|
+        patch "/api/v1/meals/#{meal.id}/closed", params: { token: token, closed: closed }.to_json,
+                                                 headers: { 'CONTENT_TYPE' => 'application/json' }
+
+        expect(response).to have_http_status(:ok), closed.inspect
+        expect(meal.reload.closed).to be(stored), closed.inspect
+      end
     end
   end
 

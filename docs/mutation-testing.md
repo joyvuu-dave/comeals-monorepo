@@ -2008,3 +2008,38 @@ workers, 76 mutations, 74 killed, 2 alive, no timeout, 35 seconds.
 
 Both alive are the `.includes(:unit)` again: removed, or
 `includes(nil)`. Noise, as on 2026-10-07.
+
+### 2026-10-08, strict true/false values (#138, #139)
+
+Run on what the #138 and #139 branch added or changed, by name:
+`TrueOrFalse*`; the four actions of `Api::V1::MealsController` that
+read a flag (`create_meal_resident`, `update_meal_resident`,
+`create_guest`, `update_closed`); `create` and `update` in
+`EventsController`, which read `all_day`, and in
+`CommonHouseReservationsController`, whose refused times now go through
+the renamed `render_refused`; `BillsPayload#side`, which reads
+`no_cost`; and `ApiController#render_refused`. Four workers, 13
+subjects, 1,164 mutations, 1,136 killed, 28 alive, no timeout, 43
+minutes. The three `TrueOrFalse` methods and `render_refused` had no
+survivor.
+
+The nine model checks of #139 are each a `validates ... inclusion:`
+line in the class body, which mutant never changes (as on 2026-10-07
+for #121). They were checked by hand instead. With the `Meal`, `Event`
+and `AdminUser` lines removed, the three examples of
+`spec/requests/admin/empty_true_or_false_box_spec.rb` fail with
+`PG::NotNullViolation`.
+
+All 28 alive are kinds answered before. Noise:
+
+- `instance_of?` for `is_a?` (11): on the answer of
+  `TrueOrFalse.from_params` in the six actions that read a flag, on the
+  parser's answer in the four `create` and `update` actions, and on the
+  amount in `BillsPayload#side`. `from_params` answers a Hash or a
+  String it built with `join`, never a subclass of String.
+- `.fetch` for `[]` (17): on `resident_id`, `title` and `description`
+  in the params (7), where a route segment is always there and a
+  missing body key raises `ParameterMissing`, which Rails answers 400,
+  as on 2026-09-27; on the parsed times (8), whose two keys are always
+  there; and on `amount` and `no_cost` in `BillsPayload#side` (2),
+  where the line before checks that both keys are there.

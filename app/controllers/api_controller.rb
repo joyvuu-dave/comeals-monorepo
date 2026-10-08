@@ -192,8 +192,10 @@ class ApiController < ActionController::API
     nil
   end
 
-  # The 400 for start/end parts parse_start_end_params refused.
-  def render_start_end_refused(message)
+  # The 400 for a request refused before anything is written: start/end
+  # parts that parse_start_end_params refused, or a true/false value that
+  # TrueOrFalse refused.
+  def render_refused(message)
     render json: { message: message }, status: :bad_request
   end
 

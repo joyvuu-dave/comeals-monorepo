@@ -1029,6 +1029,18 @@ The protect and reject triggers all step aside when the session setting
 **Audits.** Meal, Bill, MealResident, Guest, and Reconciliation write to the
 `audits` table (the `audited` gem). Child rows are linked to their meal.
 
+**True/false columns.** Every true/false column is NOT NULL, and its model
+refuses a nil with "must be true or false" (`TrueOrFalse::MESSAGE`), so a
+value left out or sent as `""` (Rails reads `""` as nil) is a form error
+in admin and a 400 in the API, not a 500: `meals.closed`, `bills.no_cost`,
+`residents.active`, `can_cook`, `vegetarian` and `can_reconcile`,
+`meal_residents.late` and `vegetarian`, `guests.late` and `vegetarian`,
+`events.allday`, `rotations.residents_notified`, `admin_users.superuser`
+(#121, #139). The API reads a true/false value from a request by one
+rule, `TrueOrFalse` (`app/services/true_or_false.rb`): it takes `true`,
+`false`, `1`, `0`, `"true"`, `"false"`, `"1"` and `"0"`, and refuses
+everything else (#138). Rails would read `"no"` or `"False"` as true.
+
 **Money columns.** A single input — `bills.amount`, `communities.cap`,
 `meals.cap`, `meal_charges.bill_amount` — is DECIMAL(12,8); one input is
 capped at $9,999.99, so four digits before the point is enough. A sum —

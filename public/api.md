@@ -112,6 +112,29 @@ endpoint returns one resident's feed.
 - Events and common house reservations take their start and end as
   separate parts (see those sections), not as one timestamp.
 
+## True and false
+
+Every true/false value the API reads follows one rule: `late` and
+`vegetarian` on a sign-up, a change and a guest, `closed` on a meal,
+`no_cost` in a bills save, and `all_day` on an event.
+
+- Taken as true: `true`, `1`, `"true"`, `"1"`.
+- Taken as false: `false`, `0`, `"false"`, `"0"`.
+- Everything else is refused with `400`, and nothing is saved:
+  `null`, `""`, `"no"`, `"off"`, `"f"`, other spellings like `"True"`
+  and `"FALSE"`, `1.0`, a list, an object. Text must be exactly
+  `"true"`, `"false"`, `"1"` or `"0"`.
+
+A JSON body can send `true` and `false`. A form-encoded body sends every
+value as text, so send `"true"` and `"false"`, or `"1"` and `"0"`. Python's
+`requests` sends `False` as the text `"False"` in a form post, and that is
+refused. Send JSON (`json=`), or send the text `"false"` yourself.
+
+The `message` of the `400` names the value: `"<Name> must be true or
+false"`, for example `"Late must be true or false"`. When more than one
+value is refused, it names each, one per line. Which values may be left
+out is in each section below.
+
 ## Two shapes of meal data
 
 There are two ways to read a meal, and they return different things:
@@ -199,19 +222,16 @@ GET /meals/:meal_id/cooks
 | `POST`   | `/meals/:meal_id/residents/:resident_id/guests`           | `{ "vegetarian": false }`                | Adds one guest hosted by that resident. `vegetarian` is required. Returns the guest, including its `id`.                        |
 | `DELETE` | `/meals/:meal_id/residents/:resident_id/guests/:guest_id` |                                          | Removes that guest.                                                                                                             |
 
-Send each flag as `true` or `false`. A refused flag answers `400`, and
-nothing is saved. The `message` names each refused flag, one per line:
-`"Late must be true or false"`, `"Vegetarian must be true or false"`.
+Each flag is true or false, as "True and false" above says. A refused
+flag answers `400`, and nothing is saved. The `message` names each
+refused flag, one per line: `"Late must be true or false"`,
+`"Vegetarian must be true or false"`.
 
-- On a sign-up and on a guest, a flag that is missing, `null` or `""`
-  is refused. This holds for a re-signup too, and the stored signup does
-  not change.
+- On a sign-up and on a guest, a flag that is missing is refused too.
+  This holds for a re-signup, and the stored signup does not change.
 - On a `PATCH`, a missing flag is fine: it changes only the flags it
-  sends. A flag sent as `null` or `""` is refused.
-
-Other values are not refused. `false`, `0`, and the strings `"false"`,
-`"0"`, `"f"` and `"off"` (all lower case or all upper case) read as
-false. Anything else reads as true, even `"no"` and `"False"`.
+  sends, and the other keeps its stored value. A flag that is sent is
+  checked the same way.
 
 Any resident can sign up, cancel, or add guests for any other resident.
 The app is a shared screen in the common house, and the API is the same.
@@ -222,7 +242,7 @@ The token only records who made the change in the history.
 | Method  | Path                          | Body                         | What it does                                                           |
 | ------- | ----------------------------- | ---------------------------- | ---------------------------------------------------------------------- |
 | `PATCH` | `/meals/:meal_id/description` | `{ "description": "Tacos" }` | Sets the menu text.                                                    |
-| `PATCH` | `/meals/:meal_id/closed`      | `{ "closed": true }`         | Closes or reopens the meal.                                            |
+| `PATCH` | `/meals/:meal_id/closed`      | `{ "closed": true }`         | Closes or reopens the meal. `closed` is required.                      |
 | `PATCH` | `/meals/:meal_id/max`         | `{ "max": 30 }`              | Sets a cap on a closed meal. `null` removes it. `400` on an open meal. |
 | `PATCH` | `/meals/:meal_id/bills`       | see below                    | Adds, changes or removes cooks and their costs.                        |
 
@@ -273,9 +293,10 @@ Rules for `amount`:
 - Amounts are compared as numbers, so `"5"`, `"5.0"` and `"5.00"` are
   the same bill.
 
-`no_cost` is `true` or `false` (in a form-encoded body, the text
-`"true"` or `"false"`). `no_cost: true` means the cook spent nothing,
-and their bill is skipped when the cost is split.
+`no_cost` is true or false, as "True and false" above says; otherwise
+the answer is `400 "No cost must be true or false"`. `no_cost: true`
+means the cook spent nothing, and their bill is skipped when the cost is
+split.
 
 Every bills save needs an `Idempotency-Key` header, as the IETF draft
 "The Idempotency-Key HTTP Header Field" describes. It lets you send a
@@ -506,7 +527,9 @@ On update, a field left out of the body keeps its stored value.
 
 An event is one day. With `"all_day": true` the hour fields are ignored.
 Without `all_day` on create, it is false; on update, the stored value
-stays. End must not be before start. When both times are empty (all
+stays. An `all_day` that is sent is true or false, as "True and false"
+above says; otherwise the answer is `400 "All day must be true or
+false"`. End must not be before start. When both times are empty (all
 four hour and minute fields left out or `""`), a timed event runs from
 midnight to midnight. When only one of the two times is empty, it
 returns `400 "Pick both a start and an end time."`. Each part is a

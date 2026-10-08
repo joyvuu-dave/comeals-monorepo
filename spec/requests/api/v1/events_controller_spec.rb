@@ -74,6 +74,45 @@ RSpec.describe 'Events API' do
       expect(Event.last.allday).to be(false)
     end
 
+    # Issue #138. all_day follows the rule of every true/false value the
+    # API reads. Before, only the text "true" was true: "1" made a timed
+    # event, and so did every other value, "True" and "yes" included.
+    describe 'all_day' do
+      let(:day) { { start_year: 2026, start_month: 4, start_day: 20 } }
+      let(:times) { { start_hours: 19, start_minutes: 0, end_hours: 21, end_minutes: 0 } }
+
+      it 'refuses all_day "True", "yes", "" or a list, and saves nothing' do
+        ['True', 'yes', '', ['true']].each do |all_day|
+          post '/api/v1/events', params: { token: token, title: 'Work Day', all_day: all_day }.merge(day, times)
+
+          expect(response).to have_http_status(:bad_request), all_day.inspect
+          expect(response.parsed_body).to eq('message' => 'All day must be true or false')
+        end
+        expect(Event.count).to eq(0)
+      end
+
+      it 'refuses all_day sent as JSON null, and saves nothing' do
+        post '/api/v1/events', params: { token: token, title: 'Work Day', all_day: nil }.merge(day, times).to_json,
+                               headers: { 'CONTENT_TYPE' => 'application/json' }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body).to eq('message' => 'All day must be true or false')
+        expect(Event.count).to eq(0)
+      end
+
+      it 'takes all_day 1 and 0, as JSON numbers and as text' do
+        [1, '1', 0, '0'].each do |all_day|
+          body = { token: token, title: 'Work Day', all_day: all_day }.merge(day, times)
+          post '/api/v1/events', params: body.to_json, headers: { 'CONTENT_TYPE' => 'application/json' }
+
+          expect(response).to have_http_status(:ok), all_day.inspect
+        end
+        expect(Event.order(:id).pluck(:allday, :end_date))
+          .to eq([[true, nil], [true, nil],
+                  [false, Time.zone.local(2026, 4, 20, 21, 0)], [false, Time.zone.local(2026, 4, 20, 21, 0)]])
+      end
+    end
+
     it 'returns 400 for a month that does not exist' do
       post '/api/v1/events', params: {
         token: token,
@@ -596,6 +635,52 @@ RSpec.describe 'Events API' do
       expect(event.title).to eq('Work party')
       expect(event.description).to eq('Bring gloves')
       expect(event.start_date.hour).to eq(18)
+    end
+
+    it 'keeps the stored all_day when the body leaves it out' do
+      event.update!(allday: true, start_date: Time.zone.local(2026, 5, 1, 0, 0), end_date: nil)
+
+      patch "/api/v1/events/#{event.id}/update", params: {
+        token: token, start_year: 2026, start_month: 5, start_day: 2
+      }
+
+      expect(response).to have_http_status(:ok)
+      expect(event.reload).to have_attributes(allday: true, start_date: Time.zone.local(2026, 5, 2, 0, 0),
+                                              end_date: nil)
+    end
+
+    # Issue #138: before, "no" was read as false and the event became a
+    # timed one, with a 200.
+    it 'refuses all_day "no" or "", and leaves the event as it was' do
+      event.update!(allday: true, start_date: Time.zone.local(2026, 5, 1, 0, 0), end_date: nil)
+      before = event.reload.attributes
+
+      ['no', ''].each do |all_day|
+        patch "/api/v1/events/#{event.id}/update", params: {
+          token: token, title: 'Moved', all_day: all_day,
+          start_year: 2026, start_month: 5, start_day: 2,
+          start_hours: 18, start_minutes: 0, end_hours: 20, end_minutes: 0
+        }
+
+        expect(response).to have_http_status(:bad_request), all_day.inspect
+        expect(response.parsed_body).to eq('message' => 'All day must be true or false')
+      end
+      expect(event.reload.attributes).to eq(before)
+    end
+
+    it 'takes all_day "1" as true and 0 as false' do
+      patch "/api/v1/events/#{event.id}/update", params: {
+        token: token, all_day: '1', start_year: 2026, start_month: 5, start_day: 1
+      }
+      expect(response).to have_http_status(:ok)
+      expect(event.reload).to have_attributes(allday: true, end_date: nil)
+
+      patch "/api/v1/events/#{event.id}/update", params: {
+        token: token, all_day: 0, start_year: 2026, start_month: 5, start_day: 1,
+        start_hours: 18, start_minutes: 0, end_hours: 20, end_minutes: 0
+      }.to_json, headers: { 'CONTENT_TYPE' => 'application/json' }
+      expect(response).to have_http_status(:ok)
+      expect(event.reload).to have_attributes(allday: false, end_date: Time.zone.local(2026, 5, 1, 20, 0))
     end
 
     it 'still refuses an empty title sent on purpose' do

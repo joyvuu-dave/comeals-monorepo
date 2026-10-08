@@ -66,6 +66,9 @@ class Rotation < ApplicationRecord
   after_commit :recolor_remaining_rotations, on: :destroy
   after_create_commit :suppress_notification_if_no_email
   validates :color, presence: true
+  # NOT NULL, so without this a nil would reach the database as a 500
+  # (#139). Only the residents:notify task writes it, with true.
+  validates :residents_notified, inclusion: { in: [true, false], message: TrueOrFalse::MESSAGE }
 
   accepts_nested_attributes_for :meals
 

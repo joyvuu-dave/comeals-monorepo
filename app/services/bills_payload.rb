@@ -54,15 +54,16 @@
 #                                      "Invalid amount: X. Amounts are text
 #                                      with whole cents, 0 to 9999.99, like
 #                                      \"25.50\"."
-#       - a no_cost that is not true or false
-#                                      "no_cost must be true or false."
+#       - a no_cost that TrueOrFalse does not take
+#                                      "No cost must be true or false"
 #   - the same cook twice              "Duplicate cook in edits: resident #N."
 #   - a cook who is not a resident, or a resident_id that is not a whole
 #     number                           "Resident not found."
 #
 # A side sent as null is a side left out. A resident_id is a number, or
-# a string of digits (a form-encoded body sends every value as text, and
-# so sends no_cost as the text "true" or "false").
+# a string of digits (a form-encoded body sends every value as text).
+# no_cost follows the rule of every true/false value the API reads
+# (TrueOrFalse, #138): true, false, 1 or 0, or the same as text.
 #
 # Amounts are text, never a JSON number: Rails reads a JSON number as a
 # Float, so 25.499999999999999 would arrive as 25.5 and pass the grammar
@@ -75,8 +76,6 @@ class BillsPayload
 
   WHOLE_CENTS_AMOUNT = T.let(/\A\d{1,4}(\.\d{1,2})?\z/, Regexp)
   RESIDENT_ID = T.let(/\A\d+\z/, Regexp)
-  NO_COST = T.let({ true => true, false => false, 'true' => true, 'false' => false }.freeze,
-                  T::Hash[T.untyped, T::Boolean])
 
   OUTDATED = T.let('Nothing was saved, because this page is out of date. ' \
                    'Please reload the page and enter the costs again.', String)
@@ -295,8 +294,8 @@ class BillsPayload
     amount = amount(raw['amount'])
     return amount if amount.is_a?(String)
 
-    no_cost = NO_COST[raw['no_cost']]
-    return 'no_cost must be true or false.' if no_cost.nil?
+    no_cost = TrueOrFalse.read(raw['no_cost'])
+    return TrueOrFalse.refusal(:no_cost) if no_cost.nil?
 
     Values.new(amount: amount, no_cost: no_cost)
   end

@@ -225,6 +225,37 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
       expect(bill.reload.amount).to eq(BigDecimal('15'))
       expect(MealCostSummary.for(meal.reload).total_cost).to eq(BigDecimal('60'))
     end
+
+    # Issue #138. no_cost follows the rule of every true/false value the
+    # API reads, with the same words. Rails would read "False" as true,
+    # and the meal's cost would drop by the bill.
+    it 'refuses no_cost "False", and writes nothing' do
+      save_edits([changing(cook, seen, values('12.00', no_cost: 'False'))])
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('No cost must be true or false')
+      expect(bill.reload).to have_attributes(amount: BigDecimal('0'), no_cost: false)
+    end
+
+    # Issue #139: in the old format a no_cost of "" reached the NOT NULL
+    # column as nil, a 500.
+    it 'refuses no_cost "" with a 400, not a 500, and writes nothing' do
+      save_edits([changing(cook, seen, values('12.00', no_cost: ''))])
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('No cost must be true or false')
+      expect(bill.reload).to have_attributes(amount: BigDecimal('0'), no_cost: false)
+    end
+
+    it 'takes 1 and 0, as JSON numbers and as text, as true and false' do
+      added = new_cook
+
+      save_edits([changing(cook, values('0.0', no_cost: 0), values('', no_cost: 1)),
+                  adding(added, values('4.50', no_cost: '0'))])
+
+      expect(response).to have_http_status(:ok)
+      expect(meal.bills.reload.to_h { |b| [b.resident_id, b.no_cost] }).to eq(cook.id => true, added.id => false)
+    end
   end
 
   # One save from a page that has not loaded the meal again since another

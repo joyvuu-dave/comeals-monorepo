@@ -612,4 +612,24 @@ RSpec.describe Resident do
       let(:record) { build(:resident, community: community, unit: unit) }
     end
   end
+
+  # Issue #139. Every true/false column is NOT NULL. Without this check a
+  # nil (a value left out, or sent as "", which Rails reads as nil)
+  # reached the database, and admin answered 500. The model refuses it
+  # with a sentence, so admin shows a form error.
+  describe 'the true/false columns' do
+    { active: 'Active must be true or false', can_cook: 'Can cook must be true or false',
+      vegetarian: 'Vegetarian must be true or false',
+      can_reconcile: 'Can reconcile must be true or false' }.each do |column, sentence|
+      it "refuses a nil #{column} with a sentence, and keeps the stored value" do
+        record = create(:resident, community: community, unit: unit)
+        stored = record.public_send(column)
+        record.public_send("#{column}=", nil)
+
+        expect(record.save).to be(false)
+        expect(record.errors.full_messages).to eq([sentence])
+        expect(record.reload.public_send(column)).to eq(stored)
+      end
+    end
+  end
 end

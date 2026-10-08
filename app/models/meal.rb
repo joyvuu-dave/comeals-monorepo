@@ -122,6 +122,10 @@ class Meal < ApplicationRecord
   has_many :attendees, through: :meal_residents, source: :resident, dependent: :destroy
 
   validates :date, presence: true
+  # NOT NULL. Without this a nil (closed left out of PATCH /closed, or
+  # sent as "", which Rails reads as nil) reached the database, and the
+  # API answered 500 (#139). Now it is refused with a sentence.
+  validates :closed, inclusion: { in: [true, false], message: TrueOrFalse::MESSAGE }
   # Checked only when max changes. A closed meal can hold more eaters than
   # its max: the admin attendance page adds a person past the open spots
   # (admin_correction). A write that leaves max alone, like a menu edit, is

@@ -1047,4 +1047,20 @@ RSpec.describe Meal do
       expect(row.reload.multiplier).to eq(7)
     end
   end
+
+  # Issue #139. Every true/false column is NOT NULL. Without this check a
+  # nil (closed left out of PATCH /closed, or sent as "", which Rails reads
+  # as nil) reached the database, and the API answered 500. The model
+  # refuses it with a sentence, so every path gets a readable error.
+  describe 'the closed column' do
+    it 'refuses a nil with a sentence, and keeps the stored value' do
+      record = create(:meal, community: community)
+      stored = record.closed
+      record.closed = nil
+
+      expect(record.save).to be(false)
+      expect(record.errors.full_messages).to eq(['Closed must be true or false'])
+      expect(record.reload.closed).to eq(stored)
+    end
+  end
 end

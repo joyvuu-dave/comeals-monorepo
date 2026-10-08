@@ -106,7 +106,8 @@ MUTANT_SPEC_ROWS = {
   'spec/requests/api/v1/calendar_read_conflict_spec.rb' =>
     %w[RetryOnConflict ApiController Api::V1::CommunitiesController],
   'spec/requests/api/v1/pool_exhaustion_spec.rb' => %w[ApiController],
-  'spec/requests/api/v1/update_bills_spec.rb' => %w[BillsPayload ThirdCookWarning Api::V1::MealsController Bill],
+  'spec/requests/api/v1/update_bills_spec.rb' =>
+    %w[BillsPayload ThirdCookWarning Api::V1::MealsController Bill TrueOrFalse],
   # Two pages on one meal, the second saving from a form read before the
   # first page's save (#135).
   'spec/requests/api/v1/two_pages_bills_spec.rb' => %w[BillsPayload Api::V1::MealsController],
@@ -116,7 +117,8 @@ MUTANT_SPEC_ROWS = {
     %w[IdempotencyKeyHeader BillsPayload BillsSaveKey Api::V1::MealsController],
   'spec/requests/api/v1/bills_idempotency_key_race_spec.rb' => %w[Api::V1::MealsController],
   'spec/requests/api/v1/meals_controller_spec.rb' =>
-    %w[Api::V1::MealsController AuditDescription MealFormSerializer MealCostSummary Meal MealResident Guest],
+    %w[Api::V1::MealsController AuditDescription MealFormSerializer MealCostSummary Meal MealResident Guest
+       TrueOrFalse],
   'spec/requests/api/v1/meals_refused_writes_spec.rb' =>
     %w[Api::V1::MealsController ReconciledMealImmutability ClosedMealAttendanceFreeze],
   'spec/requests/api/v1/meals_unknown_resident_spec.rb' => %w[Api::V1::MealsController],
@@ -133,7 +135,7 @@ MUTANT_SPEC_ROWS = {
   'spec/requests/api/v1/meal_form_retired_cook_spec.rb' => %w[MealFormSerializer#residents BillsPayload],
   # A method entry, for the same reason as the row above.
   'spec/requests/api/v1/meal_form_retired_host_spec.rb' => %w[MealFormSerializer#residents],
-  'spec/requests/api/v1/events_controller_spec.rb' => %w[Api::V1::EventsController Event LiveUpdate],
+  'spec/requests/api/v1/events_controller_spec.rb' => %w[Api::V1::EventsController Event LiveUpdate TrueOrFalse],
   'spec/requests/api/v1/guest_room_reservations_controller_spec.rb' =>
     %w[Api::V1::GuestRoomReservationsController GuestRoomReservation StorableTimeValidator],
   'spec/requests/api/v1/common_house_reservations_controller_spec.rb' =>

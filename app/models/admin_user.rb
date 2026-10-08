@@ -59,6 +59,10 @@ class AdminUser < ApplicationRecord
   belongs_to :community, optional: true
   before_validation { self.community ||= Community.first }
 
+  # NOT NULL. Without this a nil (the box sent as "" by a request made by
+  # hand, which Rails reads as nil) reached the database as a 500 (#139).
+  validates :superuser, inclusion: { in: [true, false], message: TrueOrFalse::MESSAGE }
+
   # No has_many :through sugar here on purpose. This is a
   # single-community app: an admin's "units" are just
   # Community.instance.units, and nine pass-through associations
