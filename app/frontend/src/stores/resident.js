@@ -20,12 +20,15 @@ const Resident = types
     active: true,
   })
   .volatile(() => ({
-    // Whether this resident was signed up for the meal when the meal was
-    // loaded. The sign-up list keeps showing a retired resident who was
-    // signed up then, even after a tap takes them off, so a wrong tap can
-    // be undone with a second tap (#91). loadData sets it on every row it
-    // makes, and the next load makes new rows.
+    // What this resident had on the meal when the meal was loaded. The
+    // sign-up list keeps showing a retired resident who was signed up
+    // then, or had a guest then, even after a tap takes them off or
+    // removes their last guest. So a wrong tap can be undone: a second
+    // tap signs them up again, or adds the guest again (#91, #134).
+    // loadData sets these on every row it makes, and the next load makes
+    // new rows.
     attendingAtLoad: false,
+    guestsCountAtLoad: 0,
   }))
   .views((self) => ({
     get plainName() {
@@ -96,9 +99,11 @@ const Resident = types
     },
   }))
   .actions((self) => ({
-    // loadData calls this once on each row it makes.
-    rememberAttendingAtLoad() {
+    // loadData calls this once on each row it makes, after it has put
+    // the meal's guests.
+    rememberAtLoad() {
       self.attendingAtLoad = self.attending;
+      self.guestsCountAtLoad = self.guestsCount;
     },
     setAttending(val) {
       self.attending = val;
@@ -122,6 +127,16 @@ const Resident = types
       // cell itself (a screen reader, a script) does not go through, so
       // this action and the four below check the meal themselves.
       if (self.root.meal.reconciled) {
+        return;
+      }
+
+      // A retired resident can be signed up only when they were signed
+      // up when the meal was loaded, so a wrong tap that took them off
+      // can be undone (#91). A retired host who is on the sign-up list
+      // only because of a guest cannot be signed up (#134). The screen
+      // locks that row's name and switches, and this check stops a
+      // click sent straight to the name cell.
+      if (!self.active && !self.attending && !self.attendingAtLoad) {
         return;
       }
 

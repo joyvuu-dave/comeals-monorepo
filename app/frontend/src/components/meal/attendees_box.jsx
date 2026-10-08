@@ -35,15 +35,27 @@ const styles = {
 };
 
 // Who the sign-up list shows: every active resident, and a retired one
-// only when signed up for this meal. The meal form also lists a retired
-// cook who did not eat, because of their bill (#91). They must not show
-// here as someone to sign up.
-// A retired resident who was signed up when the meal was loaded stays
-// on the list until the next load, even after a tap takes them off.
-// Nobody can sign up a retired resident who is not on the list, so
+// only when signed up for this meal or when they have a guest on it.
+// The meal form also lists a retired cook who did not eat, because of
+// their bill (#91). They must not show here as someone to sign up.
+// A guest shows only in its host's row, so a retired host's row must
+// show while they have a guest here, or nobody could see or remove that
+// guest (#134). A host can add a guest without signing up. That row is
+// not there so the host can be signed up, and they cannot be (see
+// cannotJoin below).
+// A retired resident who was signed up, or had a guest, when the meal
+// was loaded stays on the list until the next load, even after a tap
+// takes them off or removes their last guest. Nobody can sign up a
+// retired resident who is not on the list, or add a guest for them, so
 // without this a wrong tap could not be undone.
 function onSignUpList(resident) {
-  return resident.active || resident.attending || resident.attendingAtLoad;
+  return (
+    resident.active ||
+    resident.attending ||
+    resident.attendingAtLoad ||
+    resident.guestsCount > 0 ||
+    resident.guestsCountAtLoad > 0
+  );
 }
 
 // Exported for its own test: the dead-node case below cannot be
@@ -62,9 +74,15 @@ export const AttendeeComponent = observer(({ resident }) => {
   const meatGuestsCount = guests.filter(
     (guest) => guest.vegetarian === false,
   ).length;
-  // Nobody can join a closed meal with no seat left, so a tap on this
-  // row does nothing (Resident#toggleAttending has the same rule).
-  const cannotJoin = meal.closed && !resident.attending && meal.extras < 1;
+  // A tap on this row's name or switches does nothing when the resident
+  // cannot join, so they look locked. Resident#toggleAttending has the
+  // same two rules. Nobody can join a closed meal with no seat left. A
+  // retired resident can join only when they were signed up when the
+  // meal was loaded, so a wrong tap can be undone (#91). So a retired
+  // host on the list only because of a guest cannot join (#134).
+  const cannotJoin =
+    (meal.closed && !resident.attending && meal.extras < 1) ||
+    (!resident.active && !resident.attending && !resident.attendingAtLoad);
 
   return (
     <tr>

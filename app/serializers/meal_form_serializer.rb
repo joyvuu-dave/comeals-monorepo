@@ -128,21 +128,27 @@ class MealFormSerializer
   end
 
   # Every active resident (for the sign-up list), plus anyone signed up
-  # for this meal, plus anyone who has a bill on it, retired or not. A
-  # retired resident has moved out or died. Without the second part, a
-  # retired resident would be missing from old meals they ate at. Without
-  # the third, a retired cook who did not eat would be missing, and the
-  # page can show and change a bill only when its cook is in this list.
-  # That holds for a no-cost bill too: it moves no money, but it records
-  # who cooked. (Before #135 a bills save also removed the bill of any
-  # cook it left out, so a missing cook lost their bill on the next save,
-  # #91. A save now names only the cooks it changes.)
-  # The ids come from the sign-ups and bills the meal already holds, not
-  # from a new read of those tables. The controller loads them first, in
-  # another statement, and the page is not read in one transaction. So a
-  # save can commit between the two reads. A new read here could then
-  # leave out a cook that `bills` still lists, or a resident that the
-  # attending flags still mark as eating.
+  # for this meal, plus anyone who has a bill on it, plus anyone who has
+  # a guest on it, retired or not. A retired resident has moved out or
+  # died. Without the second part, a retired resident would be missing
+  # from old meals they ate at. Without the third, a retired cook who did
+  # not eat would be missing, and the page can show and change a bill
+  # only when its cook is in this list. That holds for a no-cost bill
+  # too: it moves no money, but it records who cooked. (Before #135 a
+  # bills save also removed the bill of any cook it left out, so a
+  # missing cook lost their bill on the next save, #91. A save now names
+  # only the cooks it changes.) Without the fourth, a retired host who
+  # did not eat would be missing (a host can add a guest without signing
+  # up). The page shows a guest only in its host's row, so that guest
+  # would be counted and charged to the host, but no row would show it,
+  # and nobody could remove it from the page (#134).
+  # The ids come from the sign-ups, bills and guests the meal already
+  # holds, not from a new read of those tables. The controller loads them
+  # first, in another statement, and the page is not read in one
+  # transaction. So a save can commit between the two reads. A new read
+  # here could then leave out a cook that `bills` still lists, a host that
+  # `guests` still lists, or a resident that the attending flags still
+  # mark as eating.
   # Ordered by :id for the same reason CalendarSerializer orders every
   # collection: without ORDER BY, Postgres may return rows in any order,
   # and this JSON is also captured verbatim as a test fixture
@@ -151,6 +157,7 @@ class MealFormSerializer
     Resident.where(active: true)
             .or(Resident.where(id: meal.meal_residents.map(&:resident_id)))
             .or(Resident.where(id: meal.bills.map(&:resident_id)))
+            .or(Resident.where(id: meal.guests.map(&:resident_id)))
             .includes(:unit)
             .order(:id)
   end

@@ -709,6 +709,104 @@ describe("Resident model", () => {
     });
   });
 
+  // ── a retired resident ──
+
+  // A retired resident has moved out or died. The sign-up list shows
+  // one who is not signed up only for two reasons: they have a guest
+  // on the meal (#134), or they were signed up when the meal was loaded
+  // and a tap took them off (#91). Only the second may be signed up, so
+  // the wrong tap can be undone. The screen locks the name and the
+  // switches in the first case, but a click sent to the name cell
+  // itself gets past pointer-events: none, so the action checks too.
+  describe("a retired resident", () => {
+    it.each([
+      ["the name", (a) => a.toggleAttending()],
+      ["the late switch", (a) => a.toggleLate()],
+      ["the veg switch", (a) => a.toggleVeg()],
+    ])(
+      "is not signed up from %s when they were not signed up at load",
+      async (_, act) => {
+        const store = createStore({
+          mealProps: { closed: false },
+          residents: [{ id: 10, meal_id: 1, name: "Alice", active: false }],
+          guests: [
+            { id: 100, meal_id: 1, resident_id: 10, created_at: Date.now() },
+          ],
+        });
+        const alice = store.residents.get("10");
+        alice.rememberAtLoad();
+        const before = getSnapshot(store);
+
+        act(alice);
+        await new Promise((r) => setTimeout(r, 0));
+
+        expect(axios).not.toHaveBeenCalled();
+        expect(getSnapshot(store)).toEqual(before);
+      },
+    );
+
+    // The rule stops only a sign-up. Alice's row was not made by
+    // loadData, so nothing was remembered at load.
+    it("can always be taken off when signed up", () => {
+      const store = createStore({
+        mealProps: { closed: false },
+        residents: [
+          {
+            id: 10,
+            meal_id: 1,
+            name: "Alice",
+            active: false,
+            attending: true,
+          },
+        ],
+      });
+      const alice = store.residents.get("10");
+
+      alice.toggleAttending();
+
+      expect(alice.attending).toBe(false);
+      expect(axios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: "delete",
+          url: "/api/v1/meals/1/residents/10",
+        }),
+      );
+    });
+
+    it("is signed up again after a tap took them off, when they were signed up at load", async () => {
+      const store = createStore({
+        mealProps: { closed: false },
+        residents: [
+          {
+            id: 10,
+            meal_id: 1,
+            name: "Alice",
+            active: false,
+            attending: true,
+            attending_at: new Date("2023-06-15T18:00:00.000Z"),
+          },
+        ],
+      });
+      const alice = store.residents.get("10");
+      alice.rememberAtLoad();
+
+      alice.toggleAttending();
+      await new Promise((r) => setTimeout(r, 0));
+      expect(alice.attending).toBe(false);
+
+      alice.toggleAttending();
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(alice.attending).toBe(true);
+      expect(axios).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          method: "post",
+          url: "/api/v1/meals/1/residents/10",
+        }),
+      );
+    });
+  });
+
   // ── addGuest boundary ──
 
   describe("addGuest boundary", () => {

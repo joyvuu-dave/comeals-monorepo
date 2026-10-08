@@ -16,7 +16,7 @@ RSpec.describe MealFormSerializer do
       expect(resident_ids).to include(active_resident.id)
     end
 
-    it 'leaves out a retired resident who neither ate nor cooked at this meal' do
+    it 'leaves out a retired resident who did not eat, cook or have a guest at this meal' do
       inactive_nonattendee = create(:resident, community: community, unit: unit, active: false,
                                                multiplier: 2)
       meal = create(:meal, community: community)
@@ -122,12 +122,47 @@ RSpec.describe MealFormSerializer do
       expect(rows.select { |row| row[:attending] }.pluck(:id)).to eq([eater.id])
     end
 
-    it 'leaves out a retired resident who ate or cooked only at another meal' do
+    # The page shows a guest only in its host's row. So a host missing
+    # from this list has a guest that counts and is charged to them, but
+    # no row shows it, and nobody can remove it from the page (#134). A
+    # host can add a guest without signing up, and then be retired.
+    it 'names the host of every guest, even a retired host who did not eat' do
+      meal = create(:meal, community: community)
+      host = create(:resident, community: community, unit: unit)
+      create(:guest, meal: meal, resident: host)
+      host.update!(active: false)
+      not_preloaded = Meal.find(meal.id)
+
+      form = described_class.new(not_preloaded).to_h
+
+      expect(form[:guests].pluck(:resident_id)).to eq([host.id])
+      expect(form[:residents].pluck(:id)).to include(host.id)
+    end
+
+    # The same as for bills and sign-ups above: `guests` comes from the
+    # guests the meal already holds, so the list must come from them too.
+    it 'names the host of every guest in guests when the guest is removed after the guests were read' do
+      meal = create(:meal, community: community)
+      host = create(:resident, community: community, unit: unit)
+      create(:guest, meal: meal, resident: host)
+      host.update!(active: false)
+
+      loaded = Meal.includes(:bills, :meal_residents, :guests).find(meal.id)
+      Guest.where(meal_id: meal.id).delete_all
+
+      form = described_class.new(loaded).to_h
+
+      expect(form[:guests].pluck(:resident_id)).to eq([host.id])
+      expect(form[:residents].pluck(:id)).to include(host.id)
+    end
+
+    it 'leaves out a retired resident who ate, cooked or had a guest only at another meal' do
       meal = create(:meal, community: community)
       other_meal = create(:meal, community: community)
       retired = create(:resident, community: community, unit: unit)
       create(:meal_resident, meal: other_meal, resident: retired, community: community)
       create(:bill, meal: other_meal, resident: retired, community: community)
+      create(:guest, meal: other_meal, resident: retired)
       retired.update!(active: false)
 
       resident_ids = described_class.new(meal).residents(meal).pluck(:id)

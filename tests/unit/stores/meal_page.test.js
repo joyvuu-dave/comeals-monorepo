@@ -279,6 +279,96 @@ describe("meal page store", () => {
     });
   });
 
+  // The server lists the host of every guest (MealFormSerializer,
+  // #134). The page shows a guest only in its host's row, so a guest
+  // whose host is not in the residents list is counted in the totals,
+  // but no row shows it and nobody can remove it. In the server's answer
+  // that is a bug, and it is reported. In the copy saved on the device
+  // it is not: a copy saved before the server listed every host can
+  // still be on the device, and the server's answer comes right after.
+  describe("a guest whose host is not in the residents list", () => {
+    function guest(id, residentId) {
+      return {
+        id,
+        meal_id: 1,
+        resident_id: residentId,
+        vegetarian: false,
+        created_at: "2023-06-15T18:00:00.000Z",
+      };
+    }
+
+    const WARNING =
+      "These hosts have a guest but are not in the residents list, so the page does not show their guests:";
+
+    it("is reported once per load, naming the meal and each such host once", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const store = createStore();
+
+      store.loadData(
+        mealPayload({
+          max: 10,
+          residents: [resident({ id: 10 })],
+          guests: [
+            guest(100, 10),
+            guest(101, 999),
+            guest(102, 998),
+            guest(103, 999),
+          ],
+        }),
+        "server",
+      );
+
+      expect(warn).toHaveBeenCalledWith(WARNING, [999, 998]);
+      expect(notifyError).toHaveBeenCalledTimes(1);
+      const [reported] = notifyError.mock.calls[0];
+      expect(reported).toBeInstanceOf(Error);
+      expect(reported.message).toBe(
+        "Meal 1 has guests whose hosts are not in its residents list: 999, 998",
+      );
+      // The guests still count: the server charges them to their hosts.
+      expect(store.guests.size).toBe(4);
+      expect(store.meal.extras).toBe(6);
+    });
+
+    it("is not reported when every host is listed", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const store = createStore();
+
+      store.loadData(
+        mealPayload({
+          residents: [resident({ id: 10 })],
+          guests: [guest(100, 10)],
+        }),
+        "server",
+      );
+
+      expect(warn).not.toHaveBeenCalled();
+      expect(notifyError).not.toHaveBeenCalled();
+    });
+
+    it("is not reported when it is in the copy saved on the device", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const store = createStore();
+      idbKeyval.get.mockResolvedValueOnce(
+        mealPayload({
+          id: 2,
+          residents: [resident({ id: 10 })],
+          guests: [{ ...guest(100, 999), meal_id: 2 }],
+        }),
+      );
+      // The server's answer does not come in this test.
+      stubAction(store, "loadDataAsync");
+
+      store.switchMeals(2);
+      await flush();
+
+      expect(store.meal.id).toBe(2);
+      expect(store.guests.size).toBe(1);
+      expect(warn).toHaveBeenCalledWith(WARNING, [999]);
+      expect(notifyError).not.toHaveBeenCalled();
+    });
+  });
+
   describe("the meal's channel", () => {
     function handlersFor(name, event) {
       return channels

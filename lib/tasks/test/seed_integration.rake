@@ -68,9 +68,10 @@ namespace :test do
       birthday: Date.new(2015, 5, 1)
     )
 
-    # Retired, with no bill and no sign-up here. The retired-cook test
-    # in bill-entry.spec.js gives her a bill through the API, and takes
-    # it away again, so it needs her id.
+    # Retired, with no bill, no sign-up and no guest here. The
+    # retired-cook test in bill-entry.spec.js gives her a bill through the
+    # API, and the retired-host test in meal-actions.spec.js gives her a
+    # guest. Each takes it away again, so they need her id.
     diana = Resident.create!(
       name: 'Diana Prince', email: 'diana@test.com', password: 'password',
       unit: unit_c,

@@ -1997,3 +1997,14 @@ Run 1, 59 alive, by kind:
 Run 2 reran every subject whose examples changed. Its 25 alive are the
 noise above, less the one in `ThirdCookWarning`. The whole suite
 afterwards: 3,079 examples, no failure, 100% of lines and branches.
+
+### 2026-10-08, a retired host's guest (#134)
+
+Run on `MealFormSerializer#residents` again, the one Ruby method the
+#134 fix changed, after it began to list the host of every guest. 15
+examples selected, among them the new request spec
+(`meal_form_retired_host_spec.rb`, which has its own row). Four
+workers, 76 mutations, 74 killed, 2 alive, no timeout, 35 seconds.
+
+Both alive are the `.includes(:unit)` again: removed, or
+`includes(nil)`. Noise, as on 2026-10-07.

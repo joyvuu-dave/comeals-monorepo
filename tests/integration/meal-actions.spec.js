@@ -105,6 +105,89 @@ test.describe("Meal actions (real backend)", () => {
       .toBe(initialBadges);
   });
 
+  // #134. Diana is retired. A host can add a guest without signing up,
+  // and here she has one on the future meal, added through the API. The
+  // server lists her in the meal form because of the guest
+  // (MealFormSerializer#residents). The page shows her row while she has
+  // a guest there, so the guest can be seen and removed. The row is not
+  // there to sign her up, and nobody can. After the next load, with no
+  // guest and no sign-up, she is off the list again.
+  test("a retired host's guest shows in her row and can be removed", async ({
+    page,
+    request,
+  }) => {
+    const mealId = auth.meals.future.id;
+    const diana = auth.diana_id;
+    const headers = { Authorization: `Bearer ${auth.token}` };
+    const dianaCell = page.getByRole("cell", {
+      name: "C - Diana Prince",
+      exact: true,
+    });
+    const dianaRow = dianaCell.locator("xpath=ancestor::tr");
+
+    const added = await request.post(
+      `/api/v1/meals/${mealId}/residents/${diana}/guests`,
+      { headers, data: { vegetarian: false } },
+    );
+    expect(added.status(), await added.text()).toBe(200);
+    const guestId = (await added.json()).id;
+
+    try {
+      await gotoMeal(page, mealId);
+      await expect(dianaCell).toBeVisible({ timeout: 10000 });
+      await expect(dianaCell).not.toHaveClass(/background-green/);
+      await expect(dianaRow.locator(".badge img[alt='cow-icon']")).toHaveCount(
+        1,
+      );
+      await expect(
+        dianaRow.getByLabel("Toggle Late for C - Diana Prince"),
+      ).toBeDisabled();
+      await expect(
+        dianaRow.getByLabel("Toggle Veg for C - Diana Prince"),
+      ).toBeDisabled();
+      await expect(dianaCell).toHaveCSS("pointer-events", "none");
+
+      const removed = mealWritten(
+        page,
+        mealId,
+        "DELETE",
+        `residents/${diana}/guests/${guestId}`,
+      );
+      await dianaRow
+        .locator('[aria-label="Remove Guest of C - Diana Prince"]')
+        .click();
+      await removed;
+
+      // The row stays until the next load, so a wrong tap could be
+      // undone by adding the guest again.
+      await expect(dianaRow.locator(".badge img")).toHaveCount(0);
+      await expect(dianaCell).toBeVisible();
+
+      // Jane's name shows first, so the list is drawn and the check
+      // below is not passing on an empty page.
+      await reloadMeal(page, mealId);
+      await expect(
+        page.getByRole("cell", { name: "A - Jane Smith", exact: true }),
+      ).toBeVisible({ timeout: 10000 });
+      await expect(dianaCell).toHaveCount(0);
+    } finally {
+      // Remove any guest of hers the page did not remove. The chromium
+      // and webkit runs share one database.
+      const form = await request.get(`/api/v1/meals/${mealId}/cooks`, {
+        headers,
+      });
+      const left = (await form.json()).guests.filter(
+        (guest) => guest.resident_id === diana,
+      );
+      for (const guest of left) {
+        await request.delete(
+          `/api/v1/meals/${mealId}/residents/${diana}/guests/${guest.id}`,
+          { headers },
+        );
+      }
+    }
+  });
+
   test("selecting a cook persists across reload", async ({ page }) => {
     const mealId = auth.meals.tomorrow.id;
     await gotoMeal(page, mealId);

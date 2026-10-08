@@ -131,6 +131,8 @@ MUTANT_SPEC_ROWS = {
   # #residents. BillsPayload is named because the save from the form is
   # what must leave the retired cook's bill alone.
   'spec/requests/api/v1/meal_form_retired_cook_spec.rb' => %w[MealFormSerializer#residents BillsPayload],
+  # A method entry, for the same reason as the row above.
+  'spec/requests/api/v1/meal_form_retired_host_spec.rb' => %w[MealFormSerializer#residents],
   'spec/requests/api/v1/events_controller_spec.rb' => %w[Api::V1::EventsController Event LiveUpdate],
   'spec/requests/api/v1/guest_room_reservations_controller_spec.rb' =>
     %w[Api::V1::GuestRoomReservationsController GuestRoomReservation StorableTimeValidator],

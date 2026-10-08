@@ -397,21 +397,56 @@ export function mealPageActions(self: MealPageStore) {
 
       // Assign Residents
       residents.forEach((resident) => {
-        self.residents
-          .put({
-            ...resident,
-            attending_at:
-              resident.attending_at === null
-                ? null
-                : new Date(resident.attending_at),
-          })
-          .rememberAttendingAtLoad();
+        self.residents.put({
+          ...resident,
+          attending_at:
+            resident.attending_at === null
+              ? null
+              : new Date(resident.attending_at),
+        });
       });
 
       // Assign Guests
       data.guests.forEach((guest) => {
         self.guests.put({ ...guest, created_at: new Date(guest.created_at) });
       });
+
+      // Each resident's sign-up and guest count as loaded, which the
+      // sign-up list reads (attendees_box.jsx). After the guests, so the
+      // count includes them.
+      self.residents.forEach((resident) => {
+        resident.rememberAtLoad();
+      });
+
+      // A guest shows only in its host's row, so a guest whose host is
+      // not in the residents list is counted above but shown in no row,
+      // and nobody can remove it from the page (#134). The server lists
+      // the host of every guest (MealFormSerializer), so in the server's
+      // answer this is a bug, and it is reported. In the copy saved on
+      // the device it is not reported, for the same reason as the bills
+      // below: a copy saved before the server listed every host can
+      // still be on the device, and the server's answer comes right
+      // after it.
+      const hiddenHostIds = [
+        ...new Set(
+          data.guests
+            .map((guest) => guest.resident_id)
+            .filter((hostId) => !self.residents.has(String(hostId))),
+        ),
+      ];
+      if (hiddenHostIds.length > 0) {
+        console.warn(
+          "These hosts have a guest but are not in the residents list, so the page does not show their guests:",
+          hiddenHostIds,
+        );
+        if (source === "server") {
+          notifyError(
+            new Error(
+              `Meal ${meal.id} has guests whose hosts are not in its residents list: ${hiddenHostIds.join(", ")}`,
+            ),
+          );
+        }
+      }
 
       // A bill's row points at its cook's resident row, so a bill whose
       // cook is not in the residents list cannot be shown (#91). The page

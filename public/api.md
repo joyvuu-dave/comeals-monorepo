@@ -172,13 +172,16 @@ GET /meals/:meal_id/cooks
   a decimal string in dollars. `no_cost: true` means the cook spent
   nothing, and that bill is skipped when the cost is split.
 - `residents` lists every active resident, plus anyone no longer active
-  who is signed up for this meal or has a bill on it. So every cook in
-  `bills` is in `residents`. Each row has an `attending` flag. `name` is
-  `"<unit> - <name>"`. A client should show a resident in its sign-up
-  list only when `active` or `attending` is true, and should let a
-  resident who is not `active` be chosen as a cook only for the bill they
-  already have.
-- `guests` lists guests. Each guest belongs to a resident, the host.
+  who is signed up for this meal, has a bill on it, or has a guest on it.
+  So every cook in `bills` and every host in `guests` is in `residents`.
+  Each row has an `attending` flag. `name` is `"<unit> - <name>"`. A
+  client should show a resident in its sign-up list only when `active` or
+  `attending` is true or the resident has a guest on this meal. It should
+  not let anyone sign up a resident who is not `active`, except to undo
+  taking them off this meal. It should let a resident who is not `active`
+  be chosen as a cook only for the bill they already have.
+- `guests` lists guests. Each guest belongs to a resident, the host. A
+  host does not have to be signed up for the meal.
 - `closed`, `max`, and `reconciled` are the meal's state. See "Rules"
   below.
 - `next_id` and `prev_id` are the ids of the meals just after and just
