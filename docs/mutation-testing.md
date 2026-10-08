@@ -2043,3 +2043,77 @@ All 28 alive are kinds answered before. Noise:
   as on 2026-09-27; on the parsed times (8), whose two keys are always
   there; and on `amount` and `no_cost` in `BillsPayload#side` (2),
   where the line before checks that both keys are there.
+
+### 2026-10-08, an end equal to its start (#141)
+
+Run on the three Ruby methods the #141 change added or changed, by
+name: `Community#midnight?`, and `start_date_is_before_end_date` in
+`Event` and in `CommonHouseReservation`. Run 1 also took the other
+methods of those two models, and run 3 the two API controllers, because
+the change rewrote examples that run for them. One request example is
+gone: it saved two bookings that end when they start, at 03:30 and at
+14:00, and such bookings are now refused. The new admin spec,
+`spec/requests/admin/end_equal_to_start_spec.rb`, is described by a
+sentence, so mutant did not run it until it got a row; the row names
+`Event` and `CommonHouseReservation`. Four workers, 300-second limit.
+
+| Run                                                                               | Subjects | Mutations | Killed | Alive | Timeouts | Time   |
+| --------------------------------------------------------------------------------- | -------- | --------- | ------ | ----- | -------- | ------ |
+| 1, the three methods and the rest of `Event*` and `CommonHouseReservation*`       | 7        | 431       | 422    | 9     | 0        | 3 min  |
+| 2, the three methods, after the new example                                       | 3        | 201       | 197    | 4     | 0        | 76 s   |
+| 3, `Api::V1::EventsController*` and `Api::V1::CommonHouseReservationsController*` | 10       | 717       | 692    | 25    | 0        | 15 min |
+| 4, the three methods and the two new `times_set_or_changed?`, after old rows      | 5        | 274       | 270    | 4     | 0        | 129 s  |
+
+Run 1, 9 alive:
+
+- Missing assertions in `Community#midnight?` (2): the day read from
+  the time in the zone it came in (`day = time`), or in UTC
+  (`in_time_zone(nil)`). Every example had a community in Los Angeles
+  or New York, and in each one the date of the time as given, and its
+  date in UTC, were the same as its date in the community's zone. So
+  both changes gave the right answer. A new example puts the community
+  in Berlin, where midnight is the evening before in UTC, and asks about
+  its midnights as UTC times, on an ordinary day and on both days the
+  clocks change. It fails on each change (checked by making each one by
+  hand).
+- Noise answered before (7): `self.start_date` and `self.end_date`
+  written as `start_date()` and `end_date()`, in both
+  `start_date_is_before_end_date` methods and in `period_is_free` (6),
+  and `end_date` for `end_date.present?` in `Event#end_date_or_allday`
+  (1), as on 2026-09-27.
+
+Run 2's 4 alive are the `self.x` rewrites of the two
+`start_date_is_before_end_date` methods. `Community#midnight?` had none.
+
+Run 3's 25 alive are all kinds answered on 2026-10-06: `instance_of?`
+for `is_a?` on the parser's answer (4), `EventsController#create`'s
+`all_day` default (4), and `.fetch` for `[]` (17). Two of the 17 are
+new only because this run took `set_resource`: `params[:id]` there is
+part of the route's path, so every request that reaches the action has
+it, like `:resident_id` on 2026-10-07. Without the removed example, no
+other mutation of the two controllers or of `period_is_free` lived.
+
+The whole suite afterwards: 3,169 examples, 100% of lines and branches.
+One example failed, because the worktree had no built
+`public/index.html`; with the placeholder page `bin/mutant` writes, it
+passes.
+
+Run 4 came after a second change. Production has four rows from before
+#141 that end when they start, not at midnight: events 143, 489 and
+1056, and booking 1117. Both edit forms send the stored times back with
+every save, so the rule as first built refused even a new title on
+them. Now the equal-times part runs only when a save sets or changes
+the times (`times_set_or_changed?`), and for an event also when
+all day is turned off. An end before its start is still refused on
+every save. New examples save each kind of old row with a new title, in
+the model, through the API and through the admin form; refuse a move to
+other equal times; take a later end; refuse a change of only the start,
+or only the end, that makes the two equal; refuse turning all day off on
+an event whose times are equal; and refuse any save of a row that ends
+before it starts. Run 4's 4 alive are the `self.start_date` and
+`self.end_date` rewrites of the two `start_date_is_before_end_date`
+methods, as in run 2. `Community#midnight?` and both
+`times_set_or_changed?` methods had none.
+
+The whole suite after run 4: 3,184 examples, no failure, 100% of lines
+and branches, with the placeholder `public/index.html`.

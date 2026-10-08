@@ -165,6 +165,42 @@ RSpec.describe 'Events API' do
       )
     end
 
+    # An event that ends when it starts lasts zero minutes (#141). Both menus
+    # empty, above, is the one exception. The days are an ordinary one and
+    # both daylight saving days.
+    it 'refuses an end equal to its start, and takes an end one minute later' do
+      days = [[2026, 4, 15], [2026, 3, 8], [2026, 11, 1]]
+      days.each do |year, month, day|
+        times = { token: token, title: 'Same time', all_day: false, start_year: year, start_month: month,
+                  start_day: day, start_hours: 14, start_minutes: 0, end_hours: 14 }
+
+        post '/api/v1/events', params: times.merge(end_minutes: 0)
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body).to eq('message' => 'Start time must occur before end time')
+
+        post '/api/v1/events', params: times.merge(end_minutes: 1)
+        expect(response).to have_http_status(:ok)
+      end
+
+      expect(Event.order(:id).pluck(:start_date, :end_date)).to eq(
+        days.map { |day| [Time.zone.local(*day, 14, 0), Time.zone.local(*day, 14, 1)] }
+      )
+    end
+
+    # The time menus run from 08:00 to 22:00, but the edit form fills them
+    # from the stored times, so saving a notice again sends 00:00 to 00:00
+    # (the update example below). So picked 00:00 to 00:00 must save the
+    # same row as both menus empty.
+    it 'takes 00:00 to 00:00 picked on purpose, the same as both menus empty' do
+      post '/api/v1/events', params: {
+        token: token, title: 'Picked midnight', all_day: false, start_year: 2026, start_month: 3, start_day: 8,
+        start_hours: 0, start_minutes: 0, end_hours: 0, end_minutes: 0
+      }
+
+      expect(response).to have_http_status(:ok)
+      expect(Event.pluck(:start_date, :end_date)).to eq([[Time.zone.local(2026, 3, 8)] * 2])
+    end
+
     describe 'the date and time parts (#102)' do
       let(:parts) do
         { start_year: 2026, start_month: 4, start_day: 15,
@@ -443,17 +479,21 @@ RSpec.describe 'Events API' do
       # A start in the gap moves an hour later, and an end after the gap
       # does not move, so the two can meet or cross. 02:30 to 03:00 becomes
       # 03:30 to 03:00, and the model refuses an end before its start.
-      # 02:30 to 03:30 becomes 03:30 to 03:30, an event with no length,
-      # which the model takes, the same as midnight to midnight.
-      it 'refuses a start in the gap that moves past its end, and takes one that moves onto its end' do
-        post_event(**spring_forward, start_hours: 2, start_minutes: 30, end_hours: 3, end_minutes: 0)
-        expect(response).to have_http_status(:bad_request)
-        expect(response.parsed_body).to eq('message' => 'Start time must occur before end time')
+      # 02:30 to 03:30 becomes 03:30 to 03:30, an event that ends when it
+      # starts, and the model refuses that too (#141). 02:30 to 03:31 is
+      # one minute long.
+      it 'refuses a start in the gap that moves past its end or onto it, and takes one that stays before it' do
+        [[3, 0], [3, 30]].each do |end_hours, end_minutes|
+          post_event(**spring_forward, start_hours: 2, start_minutes: 30, end_hours:, end_minutes:)
+          expect(response).to have_http_status(:bad_request)
+          expect(response.parsed_body).to eq('message' => 'Start time must occur before end time')
+        end
         expect(Event.count).to eq(0)
 
-        post_event(**spring_forward, start_hours: 2, start_minutes: 30, end_hours: 3, end_minutes: 30)
+        post_event(**spring_forward, start_hours: 2, start_minutes: 30, end_hours: 3, end_minutes: 31)
         expect(response).to have_http_status(:ok)
-        expect(Event.pluck(:start_date, :end_date)).to eq([[Time.utc(2026, 3, 8, 10, 30)] * 2])
+        expect(Event.pluck(:start_date, :end_date))
+          .to eq([[Time.utc(2026, 3, 8, 10, 30), Time.utc(2026, 3, 8, 10, 31)]])
       end
 
       # The examples above check Los Angeles in 2026, through the API. The
@@ -711,15 +751,95 @@ RSpec.describe 'Events API' do
       end
     end
 
+    # On an ordinary day and on both daylight saving days.
     it 'moves a timed event to midnight to midnight when both time menus are emptied' do
-      patch "/api/v1/events/#{event.id}/update", params: {
-        token: token, title: 'Moved', all_day: false, start_year: 2026, start_month: 11, start_day: 1,
-        start_hours: '', start_minutes: '', end_hours: '', end_minutes: ''
-      }
+      [[2026, 4, 15], [2026, 3, 8], [2026, 11, 1]].each do |year, month, day|
+        patch "/api/v1/events/#{event.id}/update", params: {
+          token: token, title: 'Moved', all_day: false, start_year: year, start_month: month, start_day: day,
+          start_hours: '', start_minutes: '', end_hours: '', end_minutes: ''
+        }
 
+        expect(response.parsed_body).to eq('message' => 'Event has been updated')
+        expect(event.reload).to have_attributes(start_date: Time.zone.local(year, month, day),
+                                                end_date: Time.zone.local(year, month, day), allday: false)
+      end
+    end
+
+    # The edit form fills its time menus from the stored times, and for a
+    # notice those are 00:00 and 00:00. The menus show empty, because 00:00
+    # is not on the list, but Update still sends "00" for each part, as
+    # JSON. So the API must take 00:00 to 00:00 picked, or no one could
+    # save a notice again (#141). On an ordinary day and both daylight
+    # saving days.
+    it 'saves a notice again the way the edit form sends it, as 00:00 to 00:00, and keeps the same row' do
+      [[2026, 4, 15], [2026, 3, 8], [2026, 11, 1]].each do |year, month, day|
+        midnight = Time.zone.local(year, month, day)
+        event.update!(title: 'No movie', description: 'Cancelled', allday: false, start_date: midnight,
+                      end_date: midnight)
+        before = event.reload.attributes
+
+        patch "/api/v1/events/#{event.id}/update",
+              params: { token: token, title: 'No movie', description: 'Cancelled', start_year: year,
+                        start_month: month, start_day: day, start_hours: '00', start_minutes: '00',
+                        end_hours: '00', end_minutes: '00', all_day: false }.to_json,
+              headers: { 'CONTENT_TYPE' => 'application/json' }
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body).to eq('message' => 'Event has been updated')
+        expect(event.reload.attributes).to eq(before)
+      end
+    end
+
+    # The same rule as create (#141), on an ordinary day and both daylight
+    # saving days.
+    it 'refuses an end equal to its start and leaves the event as it was, and takes an end one minute later' do
+      [[2026, 4, 15], [2026, 3, 8], [2026, 11, 1]].each do |year, month, day|
+        before = event.reload.attributes
+        times = { start_year: year, start_month: month, start_day: day, start_hours: 14, start_minutes: 0,
+                  end_hours: 14 }
+
+        patch "/api/v1/events/#{event.id}/update",
+              params: { token: token, title: 'Moved', all_day: false, end_minutes: 0 }.merge(times)
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body).to eq('message' => 'Start time must occur before end time')
+        expect(event.reload.attributes).to eq(before)
+
+        patch "/api/v1/events/#{event.id}/update",
+              params: { token: token, title: 'Moved', all_day: false, end_minutes: 1 }.merge(times)
+        expect(response.parsed_body).to eq('message' => 'Event has been updated')
+        expect(event.reload).to have_attributes(start_date: Time.zone.local(year, month, day, 14, 0),
+                                                end_date: Time.zone.local(year, month, day, 14, 1))
+      end
+    end
+
+    # Production has three events from before #141 that end when they
+    # start, not at midnight (143, 489 and 1056). The edit form sends the
+    # stored times back, so a new title must still save. A move to other
+    # times that end when they start is refused, and a later end saves.
+    # The times here are those of event 1056: 08:00 to 08:00 on 2022-07-26.
+    it 'saves a new title on an event from before #141 that ends when it starts, not at midnight' do
+      moment = Time.zone.local(2022, 7, 26, 8, 0)
+      event.update_columns(title: 'WM Bulk Pick-up', allday: false, start_date: moment, end_date: moment)
+      form = { token: token, description: '', all_day: false, start_year: 2022, start_month: 7, start_day: 26,
+               start_hours: '08', start_minutes: '00', end_hours: '08', end_minutes: '00' }
+
+      patch "/api/v1/events/#{event.id}/update", params: form.merge(title: 'WM Bulk Pick-up moved').to_json,
+                                                 headers: { 'CONTENT_TYPE' => 'application/json' }
+      expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to eq('message' => 'Event has been updated')
-      expect(event.reload).to have_attributes(start_date: Time.zone.local(2026, 11, 1),
-                                              end_date: Time.zone.local(2026, 11, 1), allday: false)
+      expect(event.reload).to have_attributes(title: 'WM Bulk Pick-up moved', start_date: moment, end_date: moment)
+
+      patch "/api/v1/events/#{event.id}/update",
+            params: form.merge(start_hours: '14', end_hours: '14').to_json,
+            headers: { 'CONTENT_TYPE' => 'application/json' }
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq('message' => 'Start time must occur before end time')
+      expect(event.reload).to have_attributes(start_date: moment, end_date: moment)
+
+      patch "/api/v1/events/#{event.id}/update", params: form.merge(end_hours: '09').to_json,
+                                                 headers: { 'CONTENT_TYPE' => 'application/json' }
+      expect(response.parsed_body).to eq('message' => 'Event has been updated')
+      expect(event.reload).to have_attributes(start_date: moment, end_date: moment + 1.hour)
     end
 
     # The same rule as create (#125): 02:30 on 2026-03-08 is 03:30 PDT,
@@ -737,17 +857,20 @@ RSpec.describe 'Events API' do
       end
     end
 
-    it 'refuses a start in the spring-forward gap that moves past its end, and leaves the event as it was' do
+    # 02:30 to 03:30 becomes 03:30 to 03:30, which ends when it starts (#141).
+    it 'refuses a start in the spring-forward gap that moves past its end or onto it, and leaves the event as it was' do
       before = event.reload.attributes
 
-      patch "/api/v1/events/#{event.id}/update", params: {
-        token: token, all_day: false, start_year: 2026, start_month: 3, start_day: 8,
-        start_hours: 2, start_minutes: 30, end_hours: 3, end_minutes: 0
-      }
+      [[3, 0], [3, 30]].each do |end_hours, end_minutes|
+        patch "/api/v1/events/#{event.id}/update", params: {
+          token: token, all_day: false, start_year: 2026, start_month: 3, start_day: 8,
+          start_hours: 2, start_minutes: 30, end_hours:, end_minutes:
+        }
 
-      expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq('message' => 'Start time must occur before end time')
-      expect(event.reload.attributes).to eq(before)
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body).to eq('message' => 'Start time must occur before end time')
+        expect(event.reload.attributes).to eq(before)
+      end
     end
 
     it 'refuses a year the database cannot store, at either end, and leaves the event as it was' do

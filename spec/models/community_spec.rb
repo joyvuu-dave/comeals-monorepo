@@ -119,6 +119,58 @@ RSpec.describe Community do
     end
   end
 
+  # An event or a common house booking may be set to end when it starts
+  # only at midnight (#141). The community is in Los Angeles, and the days
+  # are an ordinary one and both daylight saving days.
+  describe '#midnight?' do
+    let(:days) { [[2026, 4, 15], [2026, 3, 8], [2026, 11, 1]] }
+
+    it 'is true at midnight in the community zone' do
+      expect(days.map { |day| community.midnight?(Time.zone.local(*day)) }).to eq([true] * 3)
+    end
+
+    it 'is false a second before or after midnight, and at noon' do
+      moments = days.flat_map do |day|
+        midnight = Time.zone.local(*day)
+        [midnight - 1.second, midnight + 1.second, Time.zone.local(*day, 12, 0)]
+      end
+
+      expect(moments.map { |moment| community.midnight?(moment) }).to eq([false] * 9)
+    end
+
+    # The same instants as a plain Time in UTC: midnight PDT is 07:00 UTC,
+    # midnight PST is 08:00 UTC.
+    it 'compares the instant, so a time in another zone or a plain Time gives the same answer' do
+      moments = [Time.utc(2026, 4, 15, 7, 0), Time.utc(2026, 3, 8, 8, 0), Time.utc(2026, 11, 1, 7, 0),
+                 Time.zone.local(2026, 3, 8).in_time_zone('Asia/Tokyo'), Time.utc(2026, 3, 8, 0, 0)]
+
+      expect(moments.map { |moment| community.midnight?(moment) }).to eq([true, true, true, true, false])
+    end
+
+    # The app's own zone is Los Angeles. A task or a job has no zone of its
+    # own, so the method must read the community's.
+    it 'reads midnight in the community zone, not the app zone' do
+      community.update!(timezone: 'America/New_York')
+      new_york = ActiveSupport::TimeZone['America/New_York']
+
+      expect(days.map { |day| community.midnight?(new_york.local(*day)) }).to eq([true] * 3)
+      expect(days.map { |day| community.midnight?(Time.zone.local(*day)) }).to eq([false] * 3)
+    end
+
+    # In a zone ahead of UTC, midnight there is the evening before in UTC,
+    # so the day must be read in the community zone, not in the zone the
+    # time comes in. Berlin is UTC+1 in winter and UTC+2 in summer, and its
+    # clocks change on 2026-03-29 and 2026-10-25, at 02:00 and 03:00, after
+    # midnight.
+    it 'reads the day in the community zone when that zone is ahead of UTC' do
+      community.update!(timezone: 'Europe/Berlin')
+      midnights = [Time.utc(2026, 4, 14, 22, 0), Time.utc(2026, 3, 28, 23, 0), Time.utc(2026, 10, 24, 22, 0)]
+
+      expect(midnights.map { |moment| community.midnight?(moment) }).to eq([true] * 3)
+      expect(community.midnight?(Time.utc(2026, 4, 15, 0, 0))).to be(false)
+    end
+  end
+
   describe '#unreconciled_ave_cost' do
     it 'returns average cost per adult for unreconciled meals' do
       cook = create(:resident, community: community, unit: unit, multiplier: 2)

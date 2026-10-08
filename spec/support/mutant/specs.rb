@@ -170,6 +170,7 @@ MUTANT_SPEC_ROWS = {
   'spec/requests/admin/reservation_forms_spec.rb' => %w[GuestRoomReservation CommonHouseReservation LiveUpdate],
   'spec/requests/admin/storable_times_spec.rb' =>
     %w[StorableTimeValidator StorableTime Event CommonHouseReservation GuestRoomReservation],
+  'spec/requests/admin/end_equal_to_start_spec.rb' => %w[Event CommonHouseReservation],
   'spec/requests/admin/admin_logout_spec.rb' => %w[ApplicationController],
   'spec/requests/admin/admin_zone_spec.rb' => %w[ApplicationController],
   'spec/requests/admin/deletion_safeguards_spec.rb' => %w[RefusedDestroyMessage Meal Resident Rotation Unit],

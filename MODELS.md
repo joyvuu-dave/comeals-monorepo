@@ -792,8 +792,13 @@ Event ----> Community
 ```
 
 **Key fields:** `title` (required), `description`, `start_date` (required),
-`end_date`, `allday`. An event must have an `end_date` or be all day, and
-must not end before it starts.
+`end_date`, `allday`. An event must have an `end_date` or be all day. A
+timed event must end after it starts. An end before the start is
+refused on every save. An end equal to the start is refused only when a
+save sets or changes the times, or turns all day off (#141), so events
+saved before that rule that end when they start (three in a copy of
+production from September 2026) can still be saved with a new title. The one exception is midnight to midnight in
+the community's zone, which is how a notice is saved.
 
 ### GuestRoomReservation
 
@@ -809,7 +814,12 @@ GuestRoomReservation ----> Resident
 ### CommonHouseReservation
 
 A common area booking. Refuses a time period that overlaps another
-reservation, and must not end before it starts.
+reservation. A booking must end after it starts. An end before the
+start is refused on every save. An end equal to the start is refused
+only when a save sets or changes the times (#141), so bookings
+saved before that rule that end when they start (one in a copy of
+production from September 2026) can still be saved with a new title. The one exception is midnight to midnight in the
+community's zone, which is how a notice is saved.
 
 ```
 CommonHouseReservation ----> Community

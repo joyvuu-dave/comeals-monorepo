@@ -125,6 +125,43 @@ RSpec.describe 'Common House Reservations API' do
       expect(CommonHouseReservation.count).to eq(3)
     end
 
+    # A booking that ends when it starts lasts zero minutes, so it would stop no
+    # one from booking that afternoon (#141). Both menus empty, above, is
+    # the one exception. The days are an ordinary one and both daylight
+    # saving days.
+    it 'refuses an end equal to its start, and takes an end one minute later' do
+      days = [[2026, 5, 1], [2026, 3, 8], [2026, 11, 1]]
+      days.each do |year, month, day|
+        times = { token: token, resident_id: resident.id, title: 'Same time', start_year: year, start_month: month,
+                  start_day: day, start_hours: 14, start_minutes: 0, end_hours: 14 }
+
+        post '/api/v1/common-house-reservations', params: times.merge(end_minutes: 0)
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body).to eq('message' => 'Start time must occur before end time')
+
+        post '/api/v1/common-house-reservations', params: times.merge(end_minutes: 1)
+        expect(response).to have_http_status(:ok)
+      end
+
+      expect(CommonHouseReservation.order(:id).pluck(:start_date, :end_date)).to eq(
+        days.map { |day| [Time.zone.local(*day, 14, 0), Time.zone.local(*day, 14, 1)] }
+      )
+    end
+
+    # The time menus run from 08:00 to 22:00, but the edit form fills them
+    # from the stored times, so saving a notice again sends 00:00 to 00:00
+    # (the update example below). So picked 00:00 to 00:00 must save the
+    # same row as both menus empty.
+    it 'takes 00:00 to 00:00 picked on purpose, the same as both menus empty' do
+      post '/api/v1/common-house-reservations', params: {
+        token: token, resident_id: resident.id, start_year: 2026, start_month: 3, start_day: 8,
+        start_hours: 0, start_minutes: 0, end_hours: 0, end_minutes: 0
+      }
+
+      expect(response).to have_http_status(:ok)
+      expect(CommonHouseReservation.pluck(:start_date, :end_date)).to eq([[Time.zone.local(2026, 3, 8)] * 2])
+    end
+
     # The API's start and end are on one day, but a booking made in admin
     # can run past midnight, and a reservation with no times at that
     # midnight overlaps it.
@@ -236,41 +273,20 @@ RSpec.describe 'Common House Reservations API' do
       # A start in the gap moves an hour later, and an end after the gap
       # does not move. 02:30 to 03:00 becomes 03:30 to 03:00, and the model
       # refuses an end before its start. 02:30 to 03:30 becomes 03:30 to
-      # 03:30, which ends when it starts, the same as midnight to midnight.
-      it 'refuses a start in the gap that moves past its end, and takes one that moves onto its end' do
-        post_reservation(**spring_forward, start_hours: 2, start_minutes: 30, end_hours: 3, end_minutes: 0)
-        expect(response).to have_http_status(:bad_request)
-        expect(response.parsed_body).to eq('message' => 'Start time must occur before end time')
+      # 03:30, which ends when it starts, and the model refuses that too
+      # (#141). 02:30 to 03:31 is one minute long.
+      it 'refuses a start in the gap that moves past its end or onto it, and takes one that stays before it' do
+        [[3, 0], [3, 30]].each do |end_hours, end_minutes|
+          post_reservation(**spring_forward, start_hours: 2, start_minutes: 30, end_hours:, end_minutes:)
+          expect(response).to have_http_status(:bad_request)
+          expect(response.parsed_body).to eq('message' => 'Start time must occur before end time')
+        end
         expect(CommonHouseReservation.count).to eq(0)
 
-        post_reservation(**spring_forward, start_hours: 2, start_minutes: 30, end_hours: 3, end_minutes: 30)
+        post_reservation(**spring_forward, start_hours: 2, start_minutes: 30, end_hours: 3, end_minutes: 31)
         expect(response).to have_http_status(:ok)
-        expect(CommonHouseReservation.pluck(:start_date, :end_date)).to eq([[Time.utc(2026, 3, 8, 10, 30)] * 2])
-      end
-
-      # A block that ends when it starts holds no time, at any hour, not
-      # only at midnight. It overlaps only a booking that starts before it
-      # and ends after it. public/api.md says this with these times.
-      it 'takes a block that ends when it starts, and refuses only a booking that runs over its time' do
-        post_reservation(**spring_forward, start_hours: 2, start_minutes: 30, end_hours: 3, end_minutes: 30)
-        expect(response).to have_http_status(:ok)
-        post_reservation(start_year: 2026, start_month: 5, start_day: 1,
-                         start_hours: 14, start_minutes: 0, end_hours: 14, end_minutes: 0)
-        expect(response).to have_http_status(:ok)
-        # 03:30 PDT is 10:30 UTC; 14:00 PDT is 21:00 UTC.
-        expect(CommonHouseReservation.order(:id).pluck(:start_date, :end_date)).to eq(
-          [[Time.utc(2026, 3, 8, 10, 30)] * 2, [Time.utc(2026, 5, 1, 21, 0)] * 2]
-        )
-
-        post_reservation(**spring_forward, start_hours: 3, start_minutes: 0, end_hours: 4, end_minutes: 0)
-        expect(response).to have_http_status(:bad_request)
-        expect(response.parsed_body).to eq('message' => 'Time period is already taken')
-
-        [[3, 0, 3, 30], [3, 30, 4, 0]].each do |start_hours, start_minutes, end_hours, end_minutes|
-          post_reservation(**spring_forward, start_hours:, start_minutes:, end_hours:, end_minutes:)
-          expect(response).to have_http_status(:ok)
-        end
-        expect(CommonHouseReservation.count).to eq(4)
+        expect(CommonHouseReservation.pluck(:start_date, :end_date))
+          .to eq([[Time.utc(2026, 3, 8, 10, 30), Time.utc(2026, 3, 8, 10, 31)]])
       end
     end
 
@@ -384,17 +400,100 @@ RSpec.describe 'Common House Reservations API' do
       end
     end
 
+    # On an ordinary day and on both daylight saving days.
     it 'moves a reservation to midnight to midnight when both time menus are emptied' do
       chr = create(:common_house_reservation, community: community, resident: resident)
 
-      patch "/api/v1/common-house-reservations/#{chr.id}/update", params: {
-        token: token, resident_id: resident.id, title: 'Cancelled', start_year: 2026, start_month: 3, start_day: 8,
-        start_hours: '', start_minutes: '', end_hours: '', end_minutes: ''
-      }
+      [[2026, 5, 1], [2026, 3, 8], [2026, 11, 1]].each do |year, month, day|
+        patch "/api/v1/common-house-reservations/#{chr.id}/update", params: {
+          token: token, resident_id: resident.id, title: 'Cancelled', start_year: year, start_month: month,
+          start_day: day, start_hours: '', start_minutes: '', end_hours: '', end_minutes: ''
+        }
 
+        expect(response.parsed_body).to eq('message' => 'Common House Reservation has been updated')
+        expect(chr.reload).to have_attributes(start_date: Time.zone.local(year, month, day),
+                                              end_date: Time.zone.local(year, month, day), title: 'Cancelled')
+      end
+    end
+
+    # The edit form fills its time menus from the stored times, and for a
+    # notice those are 00:00 and 00:00. The menus show empty, because 00:00
+    # is not on the list, but Update still sends "00" for each part, as
+    # JSON. So the API must take 00:00 to 00:00 picked, or no one could
+    # save a notice again (#141). On an ordinary day and both daylight
+    # saving days.
+    it 'saves a notice again the way the edit form sends it, as 00:00 to 00:00, and keeps the same row' do
+      chr = create(:common_house_reservation, community: community, resident: resident)
+
+      [[2026, 5, 1], [2026, 3, 8], [2026, 11, 1]].each do |year, month, day|
+        midnight = Time.zone.local(year, month, day)
+        chr.update!(title: 'No movie', start_date: midnight, end_date: midnight)
+        before = chr.reload.attributes
+
+        patch "/api/v1/common-house-reservations/#{chr.id}/update",
+              params: { token: token, resident_id: resident.id, start_year: year, start_month: month,
+                        start_day: day, start_hours: '00', start_minutes: '00', end_hours: '00',
+                        end_minutes: '00', title: 'No movie' }.to_json,
+              headers: { 'CONTENT_TYPE' => 'application/json' }
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body).to eq('message' => 'Common House Reservation has been updated')
+        expect(chr.reload.attributes).to eq(before)
+      end
+    end
+
+    # The same rule as create (#141), on an ordinary day and both daylight
+    # saving days.
+    it 'refuses an end equal to its start and leaves the reservation as it was, and takes an end one minute later' do
+      chr = create(:common_house_reservation, community: community, resident: resident)
+
+      [[2026, 5, 1], [2026, 3, 8], [2026, 11, 1]].each do |year, month, day|
+        before = chr.reload.attributes
+        times = { token: token, resident_id: resident.id, title: 'Moved', start_year: year, start_month: month,
+                  start_day: day, start_hours: 14, start_minutes: 0, end_hours: 14 }
+
+        patch "/api/v1/common-house-reservations/#{chr.id}/update", params: times.merge(end_minutes: 0)
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body).to eq('message' => 'Start time must occur before end time')
+        expect(chr.reload.attributes).to eq(before)
+
+        patch "/api/v1/common-house-reservations/#{chr.id}/update", params: times.merge(end_minutes: 1)
+        expect(response.parsed_body).to eq('message' => 'Common House Reservation has been updated')
+        expect(chr.reload).to have_attributes(start_date: Time.zone.local(year, month, day, 14, 0),
+                                              end_date: Time.zone.local(year, month, day, 14, 1))
+      end
+    end
+
+    # Production has one booking from before #141 that ends when it starts,
+    # not at midnight (1117). The edit form sends the stored times back, so
+    # a new title must still save. A move to other times that end when
+    # they start is refused, and a later end saves. The times here are
+    # those of booking 1117: 17:30 to 17:30 on 2023-12-11.
+    it 'saves a new title on a booking from before #141 that ends when it starts, not at midnight' do
+      moment = Time.zone.local(2023, 12, 11, 17, 30)
+      chr = create(:common_house_reservation, community: community, resident: resident, title: 'Finance Committee')
+      chr.update_columns(start_date: moment, end_date: moment)
+      form = { token: token, resident_id: resident.id, start_year: 2023, start_month: 12, start_day: 11,
+               start_hours: '17', start_minutes: '30', end_hours: '17', end_minutes: '30' }
+
+      patch "/api/v1/common-house-reservations/#{chr.id}/update",
+            params: form.merge(title: 'Finance Committee [Zoom]').to_json,
+            headers: { 'CONTENT_TYPE' => 'application/json' }
+      expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to eq('message' => 'Common House Reservation has been updated')
-      expect(chr.reload).to have_attributes(start_date: Time.zone.local(2026, 3, 8),
-                                            end_date: Time.zone.local(2026, 3, 8), title: 'Cancelled')
+      expect(chr.reload).to have_attributes(title: 'Finance Committee [Zoom]', start_date: moment, end_date: moment)
+
+      patch "/api/v1/common-house-reservations/#{chr.id}/update",
+            params: form.merge(start_hours: '14', end_hours: '14').to_json,
+            headers: { 'CONTENT_TYPE' => 'application/json' }
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq('message' => 'Start time must occur before end time')
+      expect(chr.reload).to have_attributes(start_date: moment, end_date: moment)
+
+      patch "/api/v1/common-house-reservations/#{chr.id}/update", params: form.merge(end_hours: '18').to_json,
+                                                                  headers: { 'CONTENT_TYPE' => 'application/json' }
+      expect(response.parsed_body).to eq('message' => 'Common House Reservation has been updated')
+      expect(chr.reload).to have_attributes(start_date: moment, end_date: moment + 1.hour)
     end
 
     # The same rule as create (#125): 02:30 on 2026-03-08 is 03:30 PDT,
@@ -415,18 +514,22 @@ RSpec.describe 'Common House Reservations API' do
       end
     end
 
-    it 'refuses a start in the spring-forward gap that moves past its end, and leaves the reservation as it was' do
+    # 02:30 to 03:30 becomes 03:30 to 03:30, which ends when it starts (#141).
+    it 'refuses a start in the spring-forward gap that moves past its end or onto it, and leaves the reservation ' \
+       'as it was' do
       chr = create(:common_house_reservation, community: community, resident: resident)
       before = chr.reload.attributes
 
-      patch "/api/v1/common-house-reservations/#{chr.id}/update", params: {
-        token: token, resident_id: resident.id, start_year: 2026, start_month: 3, start_day: 8,
-        start_hours: 2, start_minutes: 30, end_hours: 3, end_minutes: 0
-      }
+      [[3, 0], [3, 30]].each do |end_hours, end_minutes|
+        patch "/api/v1/common-house-reservations/#{chr.id}/update", params: {
+          token: token, resident_id: resident.id, start_year: 2026, start_month: 3, start_day: 8,
+          start_hours: 2, start_minutes: 30, end_hours:, end_minutes:
+        }
 
-      expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq('message' => 'Start time must occur before end time')
-      expect(chr.reload.attributes).to eq(before)
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body).to eq('message' => 'Start time must occur before end time')
+        expect(chr.reload.attributes).to eq(before)
+      end
     end
 
     it 'refuses a year the database cannot store, at either end, and leaves the reservation as it was' do

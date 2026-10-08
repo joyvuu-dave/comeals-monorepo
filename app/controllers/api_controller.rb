@@ -135,8 +135,10 @@ class ApiController < ActionController::API
   # 12:05 that day is saved as the second one, not the first.
   #
   # So a start in the skipped hour can move past its end (02:30 to 03:00
-  # becomes 03:30 to 03:00), and the model refuses that with "Start time
-  # must occur before end time".
+  # becomes 03:30 to 03:00) or onto it (02:30 to 03:30 becomes 03:30 to
+  # 03:30), and the model refuses both with "Start time must occur before
+  # end time". Only midnight to midnight may be set to end when it starts
+  # (#141).
   def parse_start_end_params(allday: false)
     times = start_end_times(allday)
     return times if times.is_a?(String)

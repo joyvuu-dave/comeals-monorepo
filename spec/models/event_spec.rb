@@ -214,13 +214,139 @@ RSpec.describe Event do
       expect(event.errors[:base]).to include('Start time must occur before end time')
     end
 
-    # The rule refuses only an end before the start. An event that ends
-    # when it starts is allowed; the case where start is before end is
-    # checked under #end_date_or_allday.
-    it 'is valid when the event ends at the moment it starts' do
-      moment = Time.zone.local(2026, 4, 15, 16, 0)
+    # An event that ends when it starts lasts zero minutes, so it is refused
+    # like an end before its start (#141). The days are an ordinary one
+    # and both daylight saving days in Los Angeles.
+    it 'is invalid when the event ends at the moment it starts, and valid when it ends a minute later' do
+      [[2026, 4, 15], [2026, 3, 8], [2026, 11, 1]].each do |day|
+        start = Time.zone.local(*day, 14, 0)
+
+        same = build(:event, start_date: start, end_date: start, allday: false)
+        expect(same).not_to be_valid
+        expect(same.errors[:base]).to eq(['Start time must occur before end time'])
+        expect(build(:event, start_date: start, end_date: start + 1.minute, allday: false)).to be_valid
+      end
+    end
+
+    # Both time menus left empty save the event from midnight to midnight,
+    # as a notice ("Movie night is cancelled tonight"). That is the one
+    # time an event may be set to end when it starts. Midnight happens
+    # once on each daylight saving day in Los Angeles.
+    it 'is valid from midnight to midnight in the community zone, on an ordinary day and both daylight saving days' do
+      [[2026, 4, 15], [2026, 3, 8], [2026, 11, 1]].each do |day|
+        midnight = Time.zone.local(*day)
+
+        expect(build(:event, start_date: midnight, end_date: midnight, allday: false)).to be_valid
+      end
+    end
+
+    it 'is invalid when it starts at midnight and ends before that, on an ordinary day and both daylight saving days' do
+      [[2026, 4, 15], [2026, 3, 8], [2026, 11, 1]].each do |day|
+        midnight = Time.zone.local(*day)
+        event = build(:event, start_date: midnight, end_date: midnight - 1.hour, allday: false)
+
+        expect(event).not_to be_valid
+        expect(event.errors[:base]).to eq(['Start time must occur before end time'])
+      end
+    end
+
+    # 02:30 does not happen in Los Angeles on 2026-03-08, and the API reads
+    # 02:30 to 03:30 that day as 03:30 to 03:30 (#125).
+    it 'is invalid when a start in the spring-forward gap is moved to its end time' do
+      moment = Time.utc(2026, 3, 8, 10, 30)
       event = build(:event, start_date: moment, end_date: moment, allday: false)
-      expect(event).to be_valid
+
+      expect(event).not_to be_valid
+      expect(event.errors[:base]).to eq(['Start time must occur before end time'])
+    end
+
+    # A task or a job has no zone of its own; the app's zone here is Los
+    # Angeles, and the community is in New York.
+    it 'reads midnight in the community zone, not the app zone' do
+      community = create(:community, timezone: 'America/New_York')
+      new_york = ActiveSupport::TimeZone['America/New_York']
+
+      valid = [new_york.local(2026, 3, 8), Time.zone.local(2026, 3, 8)].map do |moment|
+        build(:event, community: community, start_date: moment, end_date: moment, allday: false).valid?
+      end
+
+      expect(valid).to eq([true, false])
+    end
+
+    # A change of only one of the two times can also make them equal.
+    it 'refuses a change of only the start, or only the end, that makes the event end when it starts' do
+      start = Time.zone.local(2026, 4, 15, 14, 0)
+      event = create(:event, start_date: start, end_date: start + 1.hour, allday: false)
+
+      expect(event.update(start_date: start + 1.hour)).to be(false)
+      expect(event.errors[:base]).to eq(['Start time must occur before end time'])
+      event.reload
+      expect(event.update(end_date: start)).to be(false)
+      expect(event.errors[:base]).to eq(['Start time must occur before end time'])
+      expect(event.reload).to have_attributes(start_date: start, end_date: start + 1.hour)
+    end
+
+    # All day hides the times, so an all-day event may end when it starts.
+    # Turning all day off makes those times count, so the rule runs then.
+    it 'refuses turning all day off when the event would then end when it starts' do
+      start = Time.zone.local(2026, 4, 15, 14, 0)
+      event = create(:event, start_date: start, end_date: start, allday: true)
+
+      expect(event.update(allday: false)).to be(false)
+      expect(event.errors[:base]).to eq(['Start time must occur before end time'])
+      expect(event.reload.allday).to be(true)
+    end
+
+    # Production has three events from before #141 that end when they
+    # start, not at midnight: 143, 489 and 1056. The rule must not stop
+    # anyone from saving such an event as it is, with a new title, or with
+    # the same times sent back, as the edit form does. It runs only when a
+    # time is set or changed. The times here are those of event 1056.
+    describe 'an event saved before #141 that ends when it starts, not at midnight' do
+      let(:moment) { Time.zone.local(2022, 7, 26, 8, 0) }
+      let(:event) do
+        create(:event, title: 'WM Bulk Pick-up', start_date: moment, end_date: moment + 1.hour, allday: false)
+          .tap { |event| event.update_columns(end_date: moment) }
+      end
+
+      it 'saves a new title, and the same times sent back' do
+        expect(event.update(title: 'WM Bulk Pick-up moved')).to be(true)
+        expect(event.update(start_date: Time.zone.local(2022, 7, 26, 8, 0),
+                            end_date: Time.zone.local(2022, 7, 26, 8, 0), description: 'Bins out by 7')).to be(true)
+
+        expect(event.reload).to have_attributes(title: 'WM Bulk Pick-up moved', description: 'Bins out by 7',
+                                                start_date: moment, end_date: moment)
+      end
+
+      it 'refuses a move to other times that end when they start, on an ordinary day and both daylight saving days' do
+        [[2026, 4, 15], [2026, 3, 8], [2026, 11, 1]].each do |day|
+          other = Time.zone.local(*day, 14, 0)
+
+          expect(event.update(start_date: other, end_date: other)).to be(false)
+          expect(event.errors[:base]).to eq(['Start time must occur before end time'])
+          expect(event.reload).to have_attributes(start_date: moment, end_date: moment)
+        end
+      end
+
+      it 'saves a later end, or an earlier start' do
+        expect(event.update(end_date: moment + 1.hour)).to be(true)
+        expect(event.reload).to have_attributes(start_date: moment, end_date: moment + 1.hour)
+
+        event.update_columns(end_date: moment)
+        expect(event.update(start_date: moment - 1.hour)).to be(true)
+        expect(event.reload).to have_attributes(start_date: moment - 1.hour, end_date: moment)
+      end
+    end
+
+    # An end before its start is refused on every save, even one that does
+    # not change the times. No such event is in production.
+    it 'refuses any save of an event that ends before it starts' do
+      moment = Time.zone.local(2022, 7, 26, 8, 0)
+      event = create(:event, start_date: moment, end_date: moment + 1.hour, allday: false)
+      event.update_columns(end_date: moment - 1.minute)
+
+      expect(event.update(title: 'Renamed')).to be(false)
+      expect(event.errors[:base]).to eq(['Start time must occur before end time'])
     end
 
     it 'skips validation when allday is true' do

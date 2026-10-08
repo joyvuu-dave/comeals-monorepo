@@ -208,6 +208,19 @@ class Community < ApplicationRecord
     ActiveSupport::TimeZone[timezone].local(date.year, date.month, date.day, hour, minute)
   end
 
+  # Whether `time` is midnight, the start of its day, in this community's
+  # zone. An event or a common house booking may be set to end when it
+  # starts only at midnight (#141). Midnight is found with
+  # TimeZone#local, the same call the API uses for an entry with both
+  # time menus empty (ApiController#start_end_times), so the two always
+  # agree.
+  sig { params(time: T.any(Time, ActiveSupport::TimeWithZone)).returns(T::Boolean) }
+  def midnight?(time)
+    zone = ActiveSupport::TimeZone[timezone]
+    day = time.in_time_zone(zone)
+    time == zone.local(day.year, day.month, day.day)
+  end
+
   has_many :bills, dependent: :destroy
   has_many :meals, dependent: :destroy
   has_many :meal_residents, dependent: :destroy

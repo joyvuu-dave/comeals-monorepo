@@ -529,9 +529,16 @@ An event is one day. With `"all_day": true` the hour fields are ignored.
 Without `all_day` on create, it is false; on update, the stored value
 stays. An `all_day` that is sent is true or false, as "True and false"
 above says; otherwise the answer is `400 "All day must be true or
-false"`. End must not be before start. When both times are empty (all
-four hour and minute fields left out or `""`), a timed event runs from
-midnight to midnight. When only one of the two times is empty, it
+false"`. End must be after start. An end before the start returns
+`400 "Start time must occur before end time"`. So does an end the same
+as the start (14:00 to 14:00), on create and on an update that changes
+the times or turns `all_day` off. An update that sends back the times
+the event already has is not refused for them: a few events saved
+before this rule end when they start, and they can still get a new
+title. When both times are empty (all four hour and minute fields left
+out or `""`), a timed event runs from midnight to midnight. This is the
+one way to set an event to end when it starts, and picking 00:00 for
+both times gives the same. When only one of the two times is empty, it
 returns `400 "Pick both a start and an end time."`. Each part is a
 whole number, as a number or a string of digits. A date that does not
 exist (February 30), or on a timed event an hour or minute that is out
@@ -546,8 +553,9 @@ Times are read in the community's time zone. A time that the clock
 skips when daylight saving time starts is read with the UTC offset from
 before the skip: in America/Los_Angeles, 02:30 on 2026-03-08 is saved
 as 03:30 PDT. So a start of 02:30 with an end of 03:00 that day returns
-`400 "Start time must occur before end time"`. A time that the clock
-shows twice when daylight saving time ends is the first of the two:
+`400 "Start time must occur before end time"`, and so does an end of
+03:30, because the start is then the same as the end. A time that the
+clock shows twice when daylight saving time ends is the first of the two:
 01:30 on 2026-11-01 is saved as 01:30 PDT (UTC-7). This is the rule in
 RFC 5545, section 3.3.5, and it holds for every clock change since 1972.
 Some earlier changes were not a one-hour skip or the end of daylight
@@ -602,14 +610,18 @@ is read the same way as for an event: 02:30 on 2026-03-08 is saved as
 03:30 PDT, and 01:30 on 2026-11-01 is the first 01:30, in PDT. A block
 that overlaps another returns `400 "Time period is already taken"`.
 
-A block that ends when it starts is saved and returns 200, but it holds
-no time. It overlaps only a block that starts before its time and ends
-after it. Both times empty gives such a block at midnight. Only a
-booking that runs past midnight can overlap it, and only admin can make
-one. A start and an end that are the same, such as 14:00 to 14:00, give
-such a block too, and so does 02:30 to 03:30 on 2026-03-08, which is
-saved as 03:30 to 03:30. A booking from 03:00 to 03:30 that day can
-still be made; one from 03:00 to 04:00 overlaps it.
+End must be after start, the same as for an event. A block that ends
+when it starts lasts zero minutes, so it would stop no one from booking the
+common house: 14:00 to 14:00 returns
+`400 "Start time must occur before end time"`, and so does 02:30 to
+03:30 on 2026-03-08, which would be saved as 03:30 to 03:30. As for an
+event, an end the same as the start is refused on create and on an
+update that changes the times, not on an update that sends back the
+times the booking already has. Both times empty is the one exception:
+it gives a block from midnight to midnight, for a notice such as "Movie
+night is cancelled tonight". Picking 00:00 for both times gives the
+same block. That block lasts zero minutes either, so it overlaps only a
+booking that runs past midnight, and only admin can make one.
 
 ## Calendar feeds (iCal)
 

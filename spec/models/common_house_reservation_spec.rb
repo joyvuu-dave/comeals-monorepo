@@ -293,12 +293,130 @@ RSpec.describe CommonHouseReservation do
       expect(reservation).to be_valid
     end
 
-    # The rule refuses only an end before the start, so a booking that ends
-    # when it starts is allowed, the same as an event.
-    it 'is valid when the booking ends at the moment it starts' do
-      moment = Time.zone.local(2026, 4, 12, 14, 0)
+    # A booking that ends when it starts lasts zero minutes, and it stops no one
+    # from booking the common house, so it is refused like an end before
+    # its start (#141). The days are an ordinary one and both daylight
+    # saving days in Los Angeles.
+    it 'is invalid when the booking ends at the moment it starts, and valid when it ends a minute later' do
+      [[2026, 4, 12], [2026, 3, 8], [2026, 11, 1]].each do |day|
+        start = Time.zone.local(*day, 14, 0)
+
+        same = build(:common_house_reservation, start_date: start, end_date: start)
+        expect(same).not_to be_valid
+        expect(same.errors[:base]).to eq(['Start time must occur before end time'])
+        expect(build(:common_house_reservation, start_date: start, end_date: start + 1.minute)).to be_valid
+      end
+    end
+
+    # Both time menus left empty save the booking from midnight to
+    # midnight, as a notice ("Movie night is cancelled tonight"). That is
+    # the one time a booking may be set to end when it starts. Midnight
+    # happens once on each daylight saving day in Los Angeles.
+    it 'is valid from midnight to midnight in the community zone, on an ordinary day and both daylight saving days' do
+      [[2026, 4, 12], [2026, 3, 8], [2026, 11, 1]].each do |day|
+        midnight = Time.zone.local(*day)
+
+        expect(build(:common_house_reservation, start_date: midnight, end_date: midnight)).to be_valid
+      end
+    end
+
+    it 'is invalid when it starts at midnight and ends before that, on an ordinary day and both daylight saving days' do
+      [[2026, 4, 12], [2026, 3, 8], [2026, 11, 1]].each do |day|
+        midnight = Time.zone.local(*day)
+        reservation = build(:common_house_reservation, start_date: midnight, end_date: midnight - 1.hour)
+
+        expect(reservation).not_to be_valid
+        expect(reservation.errors[:base]).to eq(['Start time must occur before end time'])
+      end
+    end
+
+    # 02:30 does not happen in Los Angeles on 2026-03-08, and the API reads
+    # 02:30 to 03:30 that day as 03:30 to 03:30 (#125).
+    it 'is invalid when a start in the spring-forward gap is moved to its end time' do
+      moment = Time.utc(2026, 3, 8, 10, 30)
       reservation = build(:common_house_reservation, start_date: moment, end_date: moment)
-      expect(reservation).to be_valid
+
+      expect(reservation).not_to be_valid
+      expect(reservation.errors[:base]).to eq(['Start time must occur before end time'])
+    end
+
+    # A task or a job has no zone of its own; the app's zone here is Los
+    # Angeles, and the community is in New York.
+    it 'reads midnight in the community zone, not the app zone' do
+      community = create(:community, timezone: 'America/New_York')
+      resident = create(:resident, community: community)
+      new_york = ActiveSupport::TimeZone['America/New_York']
+
+      valid = [new_york.local(2026, 3, 8), Time.zone.local(2026, 3, 8)].map do |moment|
+        build(:common_house_reservation, community: community, resident: resident,
+                                         start_date: moment, end_date: moment).valid?
+      end
+
+      expect(valid).to eq([true, false])
+    end
+
+    # A change of only one of the two times can also make them equal.
+    it 'refuses a change of only the start, or only the end, that makes the booking end when it starts' do
+      start = Time.zone.local(2026, 4, 12, 14, 0)
+      reservation = create(:common_house_reservation, start_date: start, end_date: start + 1.hour)
+
+      expect(reservation.update(start_date: start + 1.hour)).to be(false)
+      expect(reservation.errors[:base]).to eq(['Start time must occur before end time'])
+      reservation.reload
+      expect(reservation.update(end_date: start)).to be(false)
+      expect(reservation.errors[:base]).to eq(['Start time must occur before end time'])
+      expect(reservation.reload).to have_attributes(start_date: start, end_date: start + 1.hour)
+    end
+
+    # Production has one booking from before #141 that ends when it
+    # starts, not at midnight: 1117. The rule must not stop anyone from
+    # saving it as it is, with a new title, or with the same times sent
+    # back, as the edit form does. It runs only when a time is set or
+    # changed. The times here are those of booking 1117.
+    describe 'a booking saved before #141 that ends when it starts, not at midnight' do
+      let(:moment) { Time.zone.local(2023, 12, 11, 17, 30) }
+      let(:reservation) do
+        create(:common_house_reservation, title: 'Finance Committee', start_date: moment, end_date: moment + 1.hour)
+          .tap { |reservation| reservation.update_columns(end_date: moment) }
+      end
+
+      it 'saves a new title, and the same times sent back' do
+        expect(reservation.update(title: 'Finance Committee [Zoom]')).to be(true)
+        expect(reservation.update(start_date: Time.zone.local(2023, 12, 11, 17, 30),
+                                  end_date: Time.zone.local(2023, 12, 11, 17, 30), title: 'Finance')).to be(true)
+
+        expect(reservation.reload).to have_attributes(title: 'Finance', start_date: moment, end_date: moment)
+      end
+
+      it 'refuses a move to other times that end when they start, on an ordinary day and both daylight saving days' do
+        [[2026, 4, 12], [2026, 3, 8], [2026, 11, 1]].each do |day|
+          other = Time.zone.local(*day, 14, 0)
+
+          expect(reservation.update(start_date: other, end_date: other)).to be(false)
+          expect(reservation.errors[:base]).to eq(['Start time must occur before end time'])
+          expect(reservation.reload).to have_attributes(start_date: moment, end_date: moment)
+        end
+      end
+
+      it 'saves a later end, or an earlier start' do
+        expect(reservation.update(end_date: moment + 1.hour)).to be(true)
+        expect(reservation.reload).to have_attributes(start_date: moment, end_date: moment + 1.hour)
+
+        reservation.update_columns(end_date: moment)
+        expect(reservation.update(start_date: moment - 1.hour)).to be(true)
+        expect(reservation.reload).to have_attributes(start_date: moment - 1.hour, end_date: moment)
+      end
+    end
+
+    # An end before its start is refused on every save, even one that does
+    # not change the times. No such booking is in production.
+    it 'refuses any save of a booking that ends before it starts' do
+      moment = Time.zone.local(2023, 12, 11, 17, 30)
+      reservation = create(:common_house_reservation, start_date: moment, end_date: moment + 1.hour)
+      reservation.update_columns(end_date: moment - 1.minute)
+
+      expect(reservation.update(title: 'Renamed')).to be(false)
+      expect(reservation.errors[:base]).to eq(['Start time must occur before end time'])
     end
   end
 end
