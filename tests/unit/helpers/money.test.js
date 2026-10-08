@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   isValidAmountString,
   isZeroAmountString,
+  sameAmount,
   toDisplayAmountString,
 } from "../../../app/frontend/src/helpers/money";
 
@@ -75,5 +76,28 @@ describe("toDisplayAmountString", () => {
     // exactly as stored — a rounded display value must not exist at all.
     expect(toDisplayAmountString("12.345")).toBe("12.345");
     expect(toDisplayAmountString("0.00000001")).toBe("0.00000001");
+  });
+});
+
+describe("sameAmount", () => {
+  it("compares by value, not by how the amount is written", () => {
+    expect(sameAmount("5", "5.0")).toBe(true);
+    expect(sameAmount("5", "5.00")).toBe(true);
+    expect(sameAmount("05", "5.00")).toBe(true);
+    expect(sameAmount("25.5", "25.50")).toBe(true);
+    expect(sameAmount("0.5", "00.50")).toBe(true);
+  });
+
+  it("treats blank and every way of writing zero as the same", () => {
+    expect(sameAmount("", "0.0")).toBe(true);
+    expect(sameAmount("", "0")).toBe(true);
+    expect(sameAmount("00", "0.00")).toBe(true);
+  });
+
+  it("tells different amounts apart", () => {
+    expect(sameAmount("5", "50")).toBe(false);
+    expect(sameAmount("10", "1")).toBe(false);
+    expect(sameAmount("5.01", "5.1")).toBe(false);
+    expect(sameAmount("", "0.01")).toBe(false);
   });
 });

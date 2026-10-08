@@ -6,7 +6,9 @@ import { useEffect, useRef } from "react";
 // button at the far right — under the control that was just tapped, so
 // a stray second tap lands on No — and it takes focus, so Enter is a
 // No. Escape and a click anywhere else are also a No. Only a
-// deliberate click on the red Yes proceeds.
+// deliberate click on the red Yes proceeds. For a control on the left
+// of its row, className "confirm-bar-left" puts a wide No on the left
+// instead, under that control (styles.css).
 //
 // armMs guards a destructive Yes: clicks bounce off until the bar has
 // been on screen that long, so the second tap of an accidental
@@ -70,7 +72,7 @@ const ConfirmBar = ({
         </button>
         <button
           type="button"
-          className="button"
+          className="button confirm-bar-no"
           ref={noButtonRef}
           onClick={onDismiss}
         >

@@ -9,8 +9,18 @@ module Api
       # What an action hands to render: { json:, status: }.
       Rendering = T.type_alias { T::Hash[Symbol, T.untyped] }
 
+      # The two answers to a bills save whose Idempotency-Key this meal
+      # has seen (answer_seen_key).
+      REPLAYED = T.let('This save was already made, so nothing more was written.', String)
+      KEY_REUSED = T.let('This Idempotency-Key was already used for a different save. Nothing was saved. ' \
+                         'Send a new key with each save.', String)
+      private_constant :REPLAYED, :KEY_REUSED
+
       before_action :authenticate
       before_action :set_meal, except: [:next]
+      # Before the settled check, so a bills save sent again after its
+      # first try was written is not told that nothing was saved.
+      before_action :answer_seen_bills_key, only: [:update_bills]
       before_action :reject_if_reconciled, only: %i[
         create_meal_resident destroy_meal_resident update_meal_resident
         create_guest destroy_guest
@@ -157,35 +167,43 @@ module Api
         end
       end
 
-      # PATCH /meals/:meal_id/bills
-      # PAYLOAD {id: 1, bills: [{resident_id: 3, amount: "0.00",
-      #   no_cost: true}, {resident_id: "4", amount: "0.00",
-      #   no_cost: true}]}
+      # PATCH /api/v1/meals/:meal_id/bills
+      # Idempotency-Key: "8e03978e-40d5-43e8-bc93-6894a57f9324"
+      # { edits: [{ op: "change", resident_id: 9,
+      #             from: { amount: "5.0", no_cost: false },
+      #             to: { amount: "7.00", no_cost: false } }, ...] }
       #
-      # BillsPayload checks the list and writes it; this action does the
-      # request's part. The checks run before the lock and write nothing,
-      # so a bad row anywhere means no row changes. The third-cook warning
-      # is answered as a 400 with type 'warning', but the write happens:
-      # the warning is advice about the rotation, not a refusal.
+      # Each edit names one cook and the bill the page saw for that cook,
+      # and BillsPayload checks and writes them (#135, ADR 0009). This
+      # action does the request's part. The checks, in order:
       #
-      # The write runs under the meal lock (with_meal_lock), which also
-      # re-checks reconciled? on the fresh row, so a settlement that
-      # committed after reject_if_reconciled is refused. Rendering happens
-      # after the transaction, because a retry runs the block again.
+      #   1. A key this meal has a row for, with a body and key that are
+      #      right, gets the answer for a seen key (answer_seen_bills_key).
+      #   2. A settled meal gets the settled words (reject_if_reconciled).
+      #   3. A body in the old format, which listed every cook, is refused
+      #      as out of date. A page that old sends no key either, and "out
+      #      of date" is what tells the person what to do.
+      #   4. A missing or wrong Idempotency-Key header (IdempotencyKeyHeader).
+      #   5. Wrong edits.
+      #
+      # These run before the lock and write nothing, so a problem in any of
+      # them means no edit is written. The rest runs under the meal lock
+      # (with_meal_lock), which looks up the key and then checks reconciled?
+      # again on the fresh row, so a save that committed, or a settlement
+      # that committed, after the checks above is seen. See save_bills.
       sig { void }
       def update_bills
-        payload = BillsPayload.parse(params[:bills])
+        payload = bills_payload
+        return refuse_outdated_bills(payload) if payload.outdated?
+
+        header = bills_key_header
+        key = header.key
+        return render json: { message: header.error }, status: :bad_request if key.nil?
         return render json: { message: payload.error }, status: :bad_request unless payload.valid?
 
-        warning = ThirdCookWarning.for(meal, payload.cook_ids)
-        rejection = with_meal_lock do
-          payload.write_to(meal)
-          nil
-        end
-        # with_meal_lock returns the rejection if the sweep won.
-        return render(**rejection) if rejection
-
-        render json: bills_written(warning), status: warning ? :bad_request : :ok
+        render(**T.must(with_meal_lock(before_settled_check: -> { seen_bills_key_answer }) do
+          save_bills(payload, key)
+        end))
       rescue ActiveRecord::RecordNotFound => e
         render json: { message: e.message }, status: :bad_request
       rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotDestroyed => e
@@ -228,17 +246,122 @@ module Api
         render json: { message: e.record.errors.full_messages.join("\n") }, status: :bad_request
       end
 
+      # A bills save under the meal lock, once per try: RetryOnConflict
+      # runs it again after a conflict, so every read here is fresh on
+      # each try. Before it, in the same try, with_meal_lock has looked up
+      # the key (seen_bills_key_answer) and checked that the meal is not
+      # settled.
+      #
+      # The stored bills are read once. If any edit was built on a bill
+      # that has changed since the page read it, nothing is written, and
+      # the answer is a 409 of type 'stale' that carries the bills as
+      # stored. Otherwise the edits are written, and so is the key's row,
+      # in the same transaction: a try that is rolled back takes its key
+      # with it, so the next try is not answered as already made. The
+      # third-cook warning and the answer's bills are read after the
+      # writes, in the same transaction, so both describe what this save
+      # left.
+      #
+      # The meal lock runs two saves with the same key one after the other.
+      # The second still reads the table as it was before the first
+      # committed, because its snapshot is taken by the lock it waited
+      # for. PostgreSQL refuses it as a conflict, even when the refusal
+      # comes at its insert of the same key, and the next try finds the
+      # key (spec/requests/api/v1/bills_idempotency_key_race_spec.rb). So
+      # a RecordNotUnique here would mean the look-up was skipped.
+      sig { params(payload: BillsPayload, key: String).returns(Rendering) }
+      def save_bills(payload, key)
+        stored = T.let(meal.bills.reload.index_by(&:resident_id), T::Hash[Integer, Bill])
+        stale = payload.write_to(meal, stored)
+        return { json: { message: stale, type: 'stale', bills: bill_rows(stored.values) }, status: :conflict } if stale
+
+        BillsSaveKey.create!(meal: meal, key: key, edits_sha256: payload.fingerprint)
+        warning = ThirdCookWarning.for(meal, stored.keys)
+        bills_written(warning)
+      end
+
+      # Runs before reject_if_reconciled, for update_bills only. A key this
+      # meal has a row for belongs to a save that was written, while the
+      # meal was open, so its answer comes before the settled check: the
+      # settled words would say that nothing was saved, which is false.
+      sig { void }
+      def answer_seen_bills_key
+        answer = seen_bills_key_answer
+        render(**answer) if answer
+      end
+
+      # The answer to a bills save whose key this meal has a row for
+      # (answer_seen_key), or nil. A save whose body or key is wrong is not
+      # looked up, so it gets the other checks, in their usual order.
+      # update_bills runs this before the lock (answer_seen_bills_key) and
+      # again under it, in each try, before the settled check: a first try
+      # that commits while this save waits for the lock is found there.
+      sig { returns(T.nilable(Rendering)) }
+      def seen_bills_key_answer
+        key = bills_key_header.key
+        return nil if key.nil? || !bills_payload.valid?
+
+        seen = BillsSaveKey.find_by(meal_id: meal.id, key: key)
+        answer_seen_key(seen, bills_payload) if seen
+      end
+
+      # The bills save's body and Idempotency-Key header, each read once
+      # per request: answer_seen_bills_key reads them before update_bills
+      # does.
+      sig { returns(BillsPayload) }
+      def bills_payload
+        @bills_payload ||= T.let(BillsPayload.parse(params), T.nilable(BillsPayload))
+      end
+
+      sig { returns(IdempotencyKeyHeader) }
+      def bills_key_header
+        @bills_key_header ||= T.let(IdempotencyKeyHeader.new(request.headers['Idempotency-Key']),
+                                    T.nilable(IdempotencyKeyHeader))
+      end
+
+      # The answer to a save whose key was already used on this meal. With
+      # the same edits it is the same save sent again, whose first try was
+      # written: a 200 of type 'replayed' with the bills as stored now,
+      # which may differ from what that try wrote if someone saved since.
+      # With other edits it is a mistake in the client, and the IETF draft
+      # answers it with 422.
+      sig { params(seen: BillsSaveKey, payload: BillsPayload).returns(Rendering) }
+      def answer_seen_key(seen, payload)
+        if seen.edits_sha256 == payload.fingerprint
+          { json: { message: REPLAYED, type: 'replayed', bills: bill_rows(meal.bills.reload) }, status: :ok }
+        else
+          { json: { message: KEY_REUSED }, status: :unprocessable_content }
+        end
+      end
+
       # The answer to a bills write: the message, the warning's type when
       # there is one, and the rows as stored (same shape as the meal
-      # form's bills), so the client shows what the server kept rather than
-      # what it sent. reload defeats the association cache — the rows were
-      # rewritten under the lock.
+      # form's bills). The warning is a 400 with type 'warning', but the
+      # write happened: the warning is advice about the rotation, not a
+      # refusal. reload reads the rows again, because the meal's loaded
+      # list still holds any bill this save destroyed.
       sig { params(warning: T.nilable(String)).returns(Rendering) }
       def bills_written(warning)
-        payload = { message: warning || 'Form submitted.' }
-        payload[:type] = 'warning' if warning
-        payload[:bills] = meal.bills.reload.map { |bill| bill.slice(:resident_id, :amount, :no_cost) }
-        payload
+        body = { message: warning || 'Form submitted.' }
+        body[:type] = 'warning' if warning
+        body[:bills] = bill_rows(meal.bills.reload)
+        { json: body, status: warning ? :bad_request : :ok }
+      end
+
+      sig { params(bills: T::Enumerable[Bill]).returns(T::Array[T::Hash[String, T.untyped]]) }
+      def bill_rows(bills)
+        bills.map { |bill| bill.slice(:resident_id, :amount, :no_cost) }
+      end
+
+      # A page loaded before #135 still sends every cook it shows, and the
+      # server used to remove any cook the list left out. That is how a
+      # page that had not yet seen another page's save deleted a cook. The
+      # one line in the log shows how often old pages still try.
+      sig { params(payload: BillsPayload).void }
+      def refuse_outdated_bills(payload)
+        Rails.logger.info("Refused a bills save in the old format for meal #{meal.id}: " \
+                          'the page was loaded before #135.')
+        render json: { message: payload.error, type: 'outdated' }, status: :bad_request
       end
 
       sig { returns(ActionController::Parameters) }
@@ -294,6 +417,12 @@ module Api
       # retry when a transaction is already open, because every statement in
       # a refused transaction fails too. Inside the lock it would do nothing.
       #
+      # before_settled_check runs under the lock, before reconciled?, in
+      # each try. When it returns an answer, that is the answer, and the
+      # block does not run. Only a bills save passes one: a save whose
+      # first try was written is answered as already made, even when the
+      # meal was settled after that try (seen_bills_key_answer).
+      #
       # At SERIALIZABLE, PostgreSQL can refuse this transaction even though
       # the lock was granted: the lock orders two writers on the same meal,
       # and SSI can still find a cycle through rows the lock does not cover.
@@ -305,12 +434,18 @@ module Api
       # `with_lock` refuses to lock a record with unsaved changes. So each
       # attempt first drops them; the lock's reload reads the row fresh.
       # Without this the retry was a 500 (spec/requests/api/v1/meal_write_retry_spec.rb).
-      sig { params(blk: T.proc.returns(T.nilable(Rendering))).returns(T.nilable(Rendering)) }
-      def with_meal_lock(&blk) # rubocop:disable Naming/BlockForwarding -- the sig above has to name the block
+      sig do
+        params(before_settled_check: T.nilable(T.proc.returns(T.nilable(Rendering))),
+               blk: T.proc.returns(T.nilable(Rendering))).returns(T.nilable(Rendering))
+      end
+      def with_meal_lock(before_settled_check: nil, &blk)
         RetryOnConflict.call do
           meal.restore_attributes
           meal.with_lock do
-            if meal.reconciled?
+            answer = before_settled_check&.call
+            if answer
+              answer
+            elsif meal.reconciled?
               reconciled_rejection
             else
               yield

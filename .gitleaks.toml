@@ -62,6 +62,13 @@ description = "Devise's generator writes its example key as a comment; the app r
 regexTarget = "line"
 regexes = ['''^\s*#\s*config\.secret_key = ''']
 
+# The example Idempotency-Key from the IETF draft "The Idempotency-Key
+# HTTP Header Field", written in api.md, ADR 0009, an error message and
+# specs (#135). It is an example value, not a key anyone uses.
+[[allowlists]]
+description = "The IETF draft's example Idempotency-Key, used as an example in docs, a message and specs"
+regexes = ['''8e03978e-40d5-43e8-bc93-6894a57f9324''']
+
 # The history before this file, scanned on 2026-09-16. Each commit is
 # named so a reader knows what was in it and what was done about it.
 [[allowlists]]

@@ -48,6 +48,52 @@ function rails500(route) {
   });
 }
 
+// A bills save answered with a status that is not 200.
+function answerBillsSave(route, status, body) {
+  return route.fulfill({
+    status,
+    contentType: "application/json",
+    body: JSON.stringify(body),
+  });
+}
+
+// An amount's text in one form, so the bills stub compares amounts by
+// value, as the server does, without turning them into numbers: "" and
+// "0.0" are both "0.00", and "25.5" and "25.50" are both "25.50".
+function amountInCents(text) {
+  const [dollars, cents = ""] = (text === "" ? "0" : text).split(".");
+  return `${dollars.replace(/^0+(?=\d)/, "")}.${cents.replace(/0+$/, "").padEnd(2, "0")}`;
+}
+
+// One side of a bills edit (`from` or `to`) is the stored bill: both
+// missing, or the same amount by value and the same no_cost
+// (BillsPayload::Edit#matches?).
+function sameBill(side, bill) {
+  if (side === undefined) return bill === undefined;
+  return (
+    bill !== undefined &&
+    amountInCents(side.amount) === amountInCents(bill.amount) &&
+    side.no_cost === bill.no_cost
+  );
+}
+
+// What changed since the page read the meal, in the server's words
+// (BillsPayload::Edit#change_seen), for an edit whose cook's bill is
+// neither its `from` nor its `to`.
+function changeSeen(edit, bill, meal) {
+  const cook = meal.residents.find((r) => r.id === edit.resident_id);
+  const name = cook ? cook.short_name : `Resident #${edit.resident_id}`;
+  if (bill === undefined) return `${name} is no longer a cook`;
+  if (edit.op === "add") return `${name} is already a cook`;
+  return `${name}'s cost changed`;
+}
+
+// Rails' Array#to_sentence: "a", "a and b", "a, b, and c".
+function toSentence(parts) {
+  if (parts.length <= 2) return parts.join(" and ");
+  return `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}`;
+}
+
 // ApiController#not_found_api: the 404 for a record that is not there.
 // A silent caller logs it as it is, so a test that expects it lets
 // NOT_FOUND_LOG through its allowedConsoleErrors.
@@ -154,6 +200,15 @@ async function throttleCpu(page) {
  *   calendarData - override calendar fixture
  *   historyData - override history fixture
  *   hosts       - hosts list for reservation forms
+ *   billsWarning - the advice ThirdCookWarning gives about the rotation.
+ *                 The stub cannot read the rotation, so a test that wants
+ *                 the warning passes its words here, and every bills save
+ *                 that writes is answered with them, as a 400 of type
+ *                 "warning", the way the server answers it.
+ *
+ * Returns { mealState }: the meal as the stub stores it. A test changes
+ * it to stand for a save made on another page. The next fetch of the
+ * meal and the next bills save see the change.
  */
 async function mockApi(page, options = {}) {
   await throttleCpu(page);
@@ -297,27 +352,84 @@ async function mockApi(page, options = {}) {
   });
 
   // Meal bills (PATCH /api/v1/meals/*/bills*). Like
-  // MealsController#update_bills: a cook left out of the payload loses
-  // the bill, a row sent without values keeps its stored ones, and the
-  // answer lists every stored bill, which the store shows
-  // (applyBillsAck). The server writes a blank amount as zero.
+  // MealsController#update_bills (docs/adr/0009-bills-saves-send-edits.md).
+  // A body in the old format, which listed every cook under `bills`, is
+  // refused as out of date. A save needs an Idempotency-Key. A key the
+  // stub has seen answers as "replayed" when the edits are the same, and
+  // 422 when they are not. Each edit is checked against its cook's stored
+  // bill: an edit whose `to` is stored already is done, an edit whose
+  // `from` is stored is written, and any other edit refuses the whole
+  // save with a 409 of type "stale". A cook no edit names keeps their
+  // bill. A blank amount is stored as zero. The answer lists every stored
+  // bill, with the billsWarning option's words when it has them.
+  const billsSaveKeys = new Map();
   await page.route("**/api/v1/meals/*/bills*", (route) => {
-    const stored = new Map(mealState.bills.map((b) => [b.resident_id, b]));
-    mealState.bills = route
-      .request()
-      .postDataJSON()
-      .bills.map((row) => {
-        const before = stored.get(row.resident_id) || {
-          amount: "0.0",
-          no_cost: false,
-        };
-        return {
-          resident_id: row.resident_id,
-          amount:
-            row.amount === undefined ? before.amount : row.amount || "0.0",
-          no_cost: row.no_cost === undefined ? before.no_cost : row.no_cost,
-        };
+    const request = route.request();
+    const key = request.headers()["idempotency-key"];
+    const body = request.postDataJSON();
+    if (body.bills !== undefined) {
+      return answerBillsSave(route, 400, {
+        message:
+          "Nothing was saved, because this page is out of date. Please reload the page and enter the costs again.",
+        type: "outdated",
       });
+    }
+    const { edits } = body;
+    const sent = JSON.stringify(edits);
+    if (key === undefined) {
+      return answerBillsSave(route, 400, {
+        message:
+          "A bills save needs an Idempotency-Key header, with a new key for each save. Nothing was saved.",
+      });
+    }
+    if (billsSaveKeys.has(key)) {
+      return billsSaveKeys.get(key) === sent
+        ? json(route, {
+            message: "This save was already made, so nothing more was written.",
+            type: "replayed",
+            bills: mealState.bills,
+          })
+        : answerBillsSave(route, 422, {
+            message:
+              "This Idempotency-Key was already used for a different save. Nothing was saved. Send a new key with each save.",
+          });
+    }
+    const stored = new Map(mealState.bills.map((b) => [b.resident_id, b]));
+    const changesSeen = edits
+      .filter(
+        (edit) =>
+          !sameBill(edit.to, stored.get(edit.resident_id)) &&
+          !sameBill(edit.from, stored.get(edit.resident_id)),
+      )
+      .map((edit) => changeSeen(edit, stored.get(edit.resident_id), meal));
+    if (changesSeen.length > 0) {
+      return answerBillsSave(route, 409, {
+        message: `Nothing was saved, because this meal changed after you loaded it: ${toSentence(changesSeen)}. Check the cooks and costs, then enter your change again.`,
+        type: "stale",
+        bills: mealState.bills,
+      });
+    }
+    for (const edit of edits) {
+      if (sameBill(edit.to, stored.get(edit.resident_id))) continue;
+      if (edit.to === undefined) {
+        stored.delete(edit.resident_id);
+      } else {
+        stored.set(edit.resident_id, {
+          resident_id: edit.resident_id,
+          amount: edit.to.amount === "" ? "0.0" : edit.to.amount,
+          no_cost: edit.to.no_cost,
+        });
+      }
+    }
+    mealState.bills = [...stored.values()];
+    billsSaveKeys.set(key, sent);
+    if (options.billsWarning) {
+      return answerBillsSave(route, 400, {
+        message: options.billsWarning,
+        type: "warning",
+        bills: mealState.bills,
+      });
+    }
     json(route, { message: "Form submitted.", bills: mealState.bills });
   });
 
@@ -493,16 +605,19 @@ async function mockApi(page, options = {}) {
       await route.fallback();
     });
   }
+
+  return { mealState };
 }
 
 /**
  * Full page setup: auth + pusher stub + idle timer disable + API mocks.
+ * Returns what mockApi returns.
  */
 async function setupAuthenticatedPage(page, context, options = {}) {
   await authenticateContext(context);
   await stubPusher(page);
   await disableIdleTimer(page);
-  await mockApi(page, options);
+  return mockApi(page, options);
 }
 
 module.exports = {

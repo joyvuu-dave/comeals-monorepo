@@ -38,6 +38,24 @@ RSpec.describe 'config/recurring.yml' do # -- a config file
     end
   end
 
+  # A bills save's Idempotency-Key is kept 7 days (BillsSaveKey). The
+  # entry is a command, like Solid Queue's own clear_finished_jobs: it
+  # deletes rows nobody needs, so a missed hour is caught up by the next
+  # one and no healthchecks.io check is needed. Run here the way Solid
+  # Queue runs a command.
+  it 'deletes the bills save keys older than 7 days every hour' do
+    task = tasks.fetch(:delete_expired_bills_save_keys)
+    meal = create(:meal)
+    fingerprint = Digest::SHA256.hexdigest('[]')
+    BillsSaveKey.create!(meal: meal, key: 'old', edits_sha256: fingerprint, created_at: 8.days.ago)
+    BillsSaveKey.create!(meal: meal, key: 'new', edits_sha256: fingerprint, created_at: 1.hour.ago)
+
+    SolidQueue::RecurringJob.perform_now(task[:command])
+
+    expect(Fugit.parse(task[:schedule]).to_cron_s).to eq('41 * * * * UTC')
+    expect(BillsSaveKey.pluck(:key)).to eq(['new'])
+  end
+
   # Outside CI the test environment loads a class only when something uses
   # it, and descendants lists only loaded classes. So without eager loading
   # this example, run alone, checked an empty list, and it never saw a job

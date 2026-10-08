@@ -1,26 +1,35 @@
 # typed: true
 # frozen_string_literal: true
 
-# Cook-scheduling guard for the bills form. Warns when a payload adds or
+# Cook-scheduling guard for the bills form. Warns when a save adds or
 # switches a third cook on a future meal while another meal in the rotation
 # still has fewer than two cooks. The bills are saved either way — the
-# warning only tells the user the rotation is understaffed. Compares the
-# incoming cook ids against the stored bills, so run it before the bills
-# are written.
+# warning only tells the user the rotation is understaffed.
+#
+# Run it after the save has written, inside the meal lock
+# (Api::V1::MealsController#save_bills). It is given the cooks as they
+# were before the save, and reads the cooks after the save from the
+# database, so it describes what the save did. A save names only the
+# cooks it changes (#135), so the list it sent is not the meal's cooks.
 class ThirdCookWarning
-  def self.for(meal, cook_ids)
-    new(meal, cook_ids).message
+  extend T::Sig
+
+  sig { params(meal: Meal, cooks_before: T::Array[Integer]).returns(T.nilable(String)) }
+  def self.for(meal, cooks_before)
+    new(meal, cooks_before).message
   end
 
-  def initialize(meal, cook_ids)
+  sig { params(meal: Meal, cooks_before: T::Array[Integer]).void }
+  def initialize(meal, cooks_before)
     @meal = meal
-    @cook_ids = cook_ids
+    @before = T.let(cooks_before.sort, T::Array[Integer])
   end
 
-  # The warning text, or nil when the payload raises no concern.
+  # The warning text, or nil when the save raises no concern.
+  sig { returns(T.nilable(String)) }
   def message
-    return nil unless @meal.date > Community.instance.today
-    return nil unless @cook_ids.length > 2
+    return nil unless T.must(@meal.date) > Community.instance.today
+    return nil unless after.length > 2
     return nil unless adding? || switching?
     return nil unless @meal.another_meal_in_this_rotation_has_less_than_two_cooks?
 
@@ -35,19 +44,22 @@ class ThirdCookWarning
 
   private
 
-  def existing
-    @existing ||= @meal.bills.pluck(:resident_id).map(&:to_s).sort
+  # A read of the table, not of the meal's loaded bills: a bill the save
+  # destroyed is still in that list in memory. Sorted, because the
+  # database returns rows in no set order (an updated row comes back
+  # last), and switching? compares the two lists as they are.
+  sig { returns(T::Array[Integer]) }
+  def after
+    @after ||= T.let(Bill.where(meal_id: @meal.id).pluck(:resident_id).sort, T.nilable(T::Array[Integer]))
   end
 
-  def incoming
-    @incoming ||= @cook_ids.map(&:to_s).sort
-  end
-
+  sig { returns(T::Boolean) }
   def adding?
-    incoming.length > existing.length
+    after.length > @before.length
   end
 
+  sig { returns(T::Boolean) }
   def switching?
-    incoming.length == existing.length && incoming != existing
+    after.length == @before.length && after != @before
   end
 end

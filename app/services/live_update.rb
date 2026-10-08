@@ -26,7 +26,8 @@
 #                                           chips, birthdays).
 #
 # Batching. A request can write many rows (a bills save writes one row
-# per cook), and each row's callback calls in here. The calls are
+# for each cook it adds, changes or removes), and each row's callback
+# calls in here. The calls are
 # collected per database transaction and flushed once, after the
 # outermost transaction commits: one cache clear per month, one push per
 # channel. A rolled-back transaction flushes nothing — its callbacks are

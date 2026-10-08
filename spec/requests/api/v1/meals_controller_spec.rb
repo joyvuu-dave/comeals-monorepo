@@ -938,8 +938,8 @@ RSpec.describe 'Meals API' do
     # rendering it blindly, so the rejection has to travel that path too.
     it 'answers update_bills with 409 and keeps the bills' do
       patch "/api/v1/meals/#{meal.id}/bills", params: {
-        token: token, bills: [{ resident_id: resident.id, amount: '12.00' }]
-      }
+        token: token, edits: [{ op: 'add', resident_id: resident.id, to: { amount: '12.00', no_cost: false } }]
+      }, headers: BillEdits.key_header, as: :json
 
       expect(response).to have_http_status(:conflict)
       expect(response.parsed_body['message']).to include('Nothing was saved')

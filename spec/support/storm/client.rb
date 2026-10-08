@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
+require 'bigdecimal'
 require 'json'
+require_relative '../bill_edits'
 
 module Storm
   # One phone at dinner time: a resident sending requests as fast as the
@@ -98,6 +100,9 @@ module Storm
       # A meal push must carry one of these for its meal (LiveUpdate).
       @meal_sockets = Set.new
       @guests = Hash.new { |h, k| h[k] = [] }
+      # The bills this client last saw for each meal, by cook: what a bills
+      # save names as `from` (#135).
+      @bills_seen = {}
       @events = []
       @guest_rooms = []
       @common_houses = []
@@ -118,7 +123,7 @@ module Storm
       # A delete with nothing to delete creates instead; judge what was sent.
       action = done if done
       started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      status, response = call(method, path, body, action == :login)
+      status, response = call(method, path, body, action)
       ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started) * 1000).round(1)
       problem = judge(action, status, response, check)
       @log << Entry.new(client: @index, n: @n, action: action, meal_id: meal.id, status: status, problem: problem,
@@ -147,8 +152,13 @@ module Storm
       @rng.rand < 0.5 ? @home : @plan.meals.sample(random: @rng)
     end
 
-    def call(method, path, body, login)
+    # A bills save carries a new Idempotency-Key, as the page sends one
+    # (decision 6 of #135): this client and request number, which no other
+    # request has.
+    def call(method, path, body, action)
       headers = { 'Authorization' => "Bearer #{@token}" }
+      headers['Idempotency-Key'] = %("storm-#{@index}-#{@n}") if action == :bills
+      login = action == :login
       note_sent(login)
       status, response = @transport.call(method, path, headers, body && JSON.generate(body), @ip)
       [status, response]
@@ -227,15 +237,36 @@ module Storm
       meal_write(meal, :delete, "/residents/#{@resident.id}/guests/#{id}", {})
     end
 
+    # A bills save the way the page sends it (#135): the cooks picked here
+    # become the meal's cooks, as edits from the bills this client last
+    # saw. Without a copy it reads the meal form instead, the way a page
+    # loads a meal before it can save one. A copy is used once: a save
+    # that is refused (a stale 409, when another client saved first) gives
+    # no new copy, so the next bills request reads the form again.
     def request_bills(meal)
+      seen = @bills_seen.delete(meal.id)
+      return request_cooks(meal) + [:cooks] if seen.nil?
+
       cooks = @plan.residents.sample(@rng.rand(1..3), random: @rng)
-      bills = cooks.map do |cook|
+      wanted = cooks.to_h do |cook|
         no_cost = @rng.rand < 0.15
-        cents = @rng.rand(0..999_999)
-        { resident_id: cook.id, amount: no_cost ? '0' : "#{cents / 100}.#{format('%02d', cents % 100)}",
-          no_cost: no_cost }
+        [cook.id, { amount: no_cost ? BigDecimal('0') : BigDecimal(@rng.rand(0..999_999)) / 100, no_cost: no_cost }]
       end
-      meal_write(meal, :patch, '/bills', { bills: bills })
+      method, path, body = meal_write(meal, :patch, '/bills', { edits: BillEdits.between(seen, wanted) })
+      [method, path, body, ->(response) { remember_bills(meal, response) }]
+    end
+
+    # The bills in a meal form, or in a bills answer that has them: a save
+    # and a warning do, a refusal does not. judge never calls a check on a
+    # 409, so after one the client has no copy and reads the form again.
+    def remember_bills(meal, response)
+      bills = JSON.parse(response)['bills']
+      if bills
+        @bills_seen[meal.id] = bills.to_h do |bill|
+          [bill['resident_id'], { amount: BigDecimal(bill['amount']), no_cost: bill['no_cost'] }]
+        end
+      end
+      true
     end
 
     def request_close(meal)
@@ -255,7 +286,7 @@ module Storm
     end
 
     def request_cooks(meal)
-      [:get, "/api/v1/meals/#{meal.id}/cooks", nil, nil]
+      [:get, "/api/v1/meals/#{meal.id}/cooks", nil, ->(response) { remember_bills(meal, response) }]
     end
 
     def request_history(meal)

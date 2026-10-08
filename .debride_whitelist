@@ -20,6 +20,8 @@ serializable_hash
 # (StorableTimeValidator):
 validate_each
 # Named in before_action / rescue_from / config lines debride does not read:
+# (delete_expired is a command in config/recurring.yml)
+delete_expired
 require_reconciler
 render_conflict
 render_overloaded

@@ -257,6 +257,7 @@ namespace :test do
                             username: jane.name,
                             bob_email: bob.email,
                             bob_password: 'password',
+                            bob_id: bob.id,
                             diana_id: diana.id,
                             rotations: {
                               first: { id: first_rotation.id, place_value: first_rotation.reload.place_value },

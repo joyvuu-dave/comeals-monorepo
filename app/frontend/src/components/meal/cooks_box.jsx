@@ -15,19 +15,46 @@ const styles = {
   },
 };
 
+// A cook every row's menu offers: one who is active and can cook.
+function offeredInEveryMenu(resident) {
+  return resident.active === true && resident.can_cook === true;
+}
+
 // The cooks a row's menu offers: every active resident who can cook,
-// the row's cook now, and the row's cook when the meal was loaded. A
-// cook who was retired, or whose "can cook" was turned off, after
+// the row's cook now, and the row's cook when the meal was loaded,
+// except a cook picked in another row. A save names each cook once, so
+// a cook picked in two rows could not be saved (billEditsOf).
+//
+// A cook who was retired, or whose "can cook" was turned off, after
 // cooking keeps their bill (#91), and only their own row offers them.
-// Their row offers them even after someone picks another name there by
-// mistake, so the person can pick them again. Otherwise the next save
-// would leave them out, and the server would delete their bill.
-function cookChoices(residents, bill) {
-  return Array.from(residents.values()).filter(
+// Picking another name in their row, or the blank, sends a save that
+// removes their bill, so that pick asks first. Their row offers them
+// even after a Yes, so the person can pick them again, and that save
+// adds the bill back. After the page loads the meal again, no menu
+// offers them, and only an admin can make them a cook again.
+function cookChoices(store, bill) {
+  const pickedElsewhere = new Set(
+    Array.from(store.bills.values())
+      .filter((other) => other !== bill)
+      .map((other) => other.resident_id),
+  );
+  return Array.from(store.residents.values()).filter(
     (resident) =>
       resident.id === bill.resident_id ||
-      resident.id === bill.loadedCookId ||
-      (resident.active === true && resident.can_cook === true),
+      (!pickedElsewhere.has(resident.id) &&
+        (resident.id === bill.loadedCookId || offeredInEveryMenu(resident))),
+  );
+}
+
+// True when a pick in the row's menu removes a bill that only an admin
+// can add back once the meal loads again: the row's cook is one no other
+// menu offers, and the server has their bill for this row (the row's
+// base). If the server does not have it yet, the pick only undoes a
+// pick that was not saved, and removes nothing.
+function pickRemovesBillOnlyAdminCanAddBack(bill) {
+  const cook = bill.resident;
+  return (
+    cook !== null && cook.id === bill.baseCookId && !offeredInEveryMenu(cook)
   );
 }
 
@@ -36,21 +63,48 @@ const BillEdit = observer(({ bill }) => {
   // Turning on "no cost" erases a typed cost, and on a shared screen
   // that click can come from anyone. So the switch asks first.
   const [confirmingNoCost, setConfirmingNoCost] = useState(false);
+  // A pick in the cook menu that waits for a Yes: the menu's value, or
+  // null when no pick is waiting.
+  const [pickToConfirm, setPickToConfirm] = useState(null);
   const confirmKeyRef = useRef(0);
 
   // Bills freeze at reconciliation, not at close — the server has
   // always allowed bill edits on a closed meal. Costs are often not
   // known until after the shopping, which is often after the close.
   // No meal loaded also freezes: rows must never be editable while
-  // there is no meal to save them to.
-  const frozen = !store.meal || store.meal.reconciled;
+  // there is no meal to save them to. So does a meal loading again
+  // after a bills save for it failed: until it arrives, a row may show
+  // what the server does not have, and an edit typed on it would be
+  // built on that (loadMealAgain).
+  const frozen = !store.meal || store.meal.reconciled || store.mealLoading;
+
+  // A question goes away when the row freezes: a Yes would change a row
+  // that may show what the server does not have. When the meal arrives,
+  // the rows are made again, and a new row asks nothing.
+  const askingNoCost =
+    confirmingNoCost && !frozen && !isZeroAmountString(bill.amount);
+  const askingToRemoveCook = pickToConfirm !== null && !frozen;
 
   return (
     <div className="confirm-bar-anchor">
       <div className="input-group">
         <select
           value={bill.resident_id}
-          onChange={(e) => bill.setResident(e.target.value)}
+          onChange={(e) => {
+            // Every pick closes the no-cost question. A keyboard can reach
+            // this menu while that question is open, with no click to
+            // close it, and the question names the row's cook: after a
+            // pick it would name another cook, or no cook at all.
+            setConfirmingNoCost(false);
+            // The menu keeps showing the row's cook until the Yes, because
+            // its value comes from the row.
+            if (pickRemovesBillOnlyAdminCanAddBack(bill)) {
+              confirmKeyRef.current += 1;
+              setPickToConfirm(e.target.value);
+              return;
+            }
+            bill.setResident(e.target.value);
+          }}
           onBlur={() => store.flushPendingBillsSave()}
           style={styles.select}
           disabled={frozen}
@@ -59,7 +113,7 @@ const BillEdit = observer(({ bill }) => {
           <option value={""} key={-1}>
             ¯\_(ツ)_/¯
           </option>
-          {cookChoices(store.residents, bill).map((resident) => (
+          {cookChoices(store, bill).map((resident) => (
             <option value={resident.id} key={resident.id}>
               {resident.name}
             </option>
@@ -74,6 +128,10 @@ const BillEdit = observer(({ bill }) => {
             step="0.01"
             value={bill.amount}
             onChange={(e) => {
+              // Typing a cost closes the no-cost question, for the same
+              // reason a pick in the menu does: the question names the
+              // row's cost.
+              setConfirmingNoCost(false);
               // setAmount refuses input that breaks the whole-cents grammar.
               // On refusal the store is unchanged, so React skips the
               // re-render — put the stored amount back in the DOM by hand.
@@ -106,6 +164,7 @@ const BillEdit = observer(({ bill }) => {
               // destroys nothing and flips right away.
               if (!bill.no_cost && !isZeroAmountString(bill.amount)) {
                 confirmKeyRef.current += 1;
+                setPickToConfirm(null);
                 setConfirmingNoCost(true);
                 return;
               }
@@ -118,7 +177,7 @@ const BillEdit = observer(({ bill }) => {
           <label htmlFor={`no_cost_switch-${bill.id}`} />
         </span>
       </div>
-      {confirmingNoCost && !isZeroAmountString(bill.amount) && (
+      {askingNoCost && (
         <ConfirmBar
           key={confirmKeyRef.current}
           armMs={400}
@@ -138,6 +197,29 @@ const BillEdit = observer(({ bill }) => {
             bill.toggleNoCost();
           }}
           onDismiss={() => setConfirmingNoCost(false)}
+        />
+      )}
+      {askingToRemoveCook && (
+        <ConfirmBar
+          key={confirmKeyRef.current}
+          armMs={400}
+          // No goes on the left, under the menu that was just used.
+          className="confirm-bar-left"
+          ariaLabel={`Remove ${bill.resident.plainName} as a cook?`}
+          question={
+            <>
+              Remove <strong>{bill.resident.plainName}</strong> as a cook?
+              <span className="confirm-bar-note">
+                After this page updates, only an admin can add{" "}
+                {bill.resident.plainName} back.
+              </span>
+            </>
+          }
+          onYes={() => {
+            setPickToConfirm(null);
+            bill.setResident(pickToConfirm);
+          }}
+          onDismiss={() => setPickToConfirm(null)}
         />
       )}
     </div>

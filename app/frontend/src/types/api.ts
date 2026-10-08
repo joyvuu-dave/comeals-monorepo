@@ -133,14 +133,26 @@ export interface Ack {
   message: string;
 }
 
-// update_bills returns `type: "warning"` on cook-scheduling guard violations
-// (alongside HTTP 400). Existing JS branches on this discriminator.
-// `bills` is present whenever the write happened — the 200, and the warning
-// 400 (which also persists) — and holds the rows as stored, so the client
-// can reconcile its display with the ledger. Plain-error 400s carry only
-// `message`.
+// The answer to PATCH /api/v1/meals/:id/bills (MealsController#update_bills,
+// docs/adr/0009-bills-saves-send-edits.md). `type` says which answer it is:
+//
+//   none        200: the edits were written. On a 400 or a 422 nothing
+//               was written; on a 409 nothing was written either, and
+//               the same save may be sent again with the same key.
+//   "replayed"  200: this key's save was written before, and nothing
+//               more was written now.
+//   "warning"   400: the edits were written, and the message is advice
+//               about the rotation (ThirdCookWarning).
+//   "stale"     409: a bill an edit was built on has changed since the
+//               page read it. Nothing was written.
+//   "outdated"  400: the body used the format from before #135, which
+//               this page never sends. Nothing was written.
+//
+// `bills` holds the meal's bills as stored, in the shape of the meal
+// form's: on a 200, read right after the save's writes (on a replayed
+// 200, as they are now), on the warning, and on the stale 409.
 export interface BillsAck {
   message: string;
-  type?: "warning";
+  type?: "warning" | "replayed" | "stale" | "outdated";
   bills?: MealFormBill[];
 }

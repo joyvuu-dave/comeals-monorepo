@@ -141,8 +141,11 @@ RSpec.describe 'a write storm against one meal, with a settlement in it' do
     end
   end
 
-  # The core of Api::V1::MealsController#update_bills: cooks left out go,
-  # the rest are written.
+  # Bill rows written through the models: the cooks not picked are
+  # removed and the picked ones are written. An API save
+  # (BillsPayload#write_to) makes the same row writes when its edits
+  # remove some cooks and add or change the rest. This spec is about the
+  # rows and the locks, not about what the page saw.
   def write_bills(meal_id, rng, how)
     cooks = residents.sample(rng.rand(1..3), random: rng)
     amounts = cooks.to_h { |c| [c.id, BigDecimal(rng.rand(0..999_999)) / 100] }

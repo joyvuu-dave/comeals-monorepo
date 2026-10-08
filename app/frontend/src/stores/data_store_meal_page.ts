@@ -46,10 +46,16 @@ export interface MealPageStore extends ReturnType<typeof mealPageVolatile> {
   mealLoadFailed: boolean;
   mealLoadNotFound: boolean;
   closedPending: boolean;
+  // data_store_bills.ts: bumped on every bill edit.
+  billsEdits: ReturnType<typeof createVersionGuard>;
   saveBillsBeforeLeaving(): void;
+  billsPendingFor(mealId: number): boolean;
   ensureResidentsChannel(): void;
   settleClosed(): void;
   loadDataAsync(): void;
+  loadMealAgain(): void;
+  holdMealAnswer(mealId: number, editsAtFetch: number): boolean;
+  afterBillsIdle(): void;
   handleMealLoadError(error: unknown, mealId: number): void;
   handleMealProcessingError(error: unknown, mealId: number): void;
   scheduleMealRetry(mealId: number): void;
@@ -93,13 +99,11 @@ export function mealPageVolatile() {
     // reconnect refetch), and the responses can land in either order;
     // only the newest fetch's response may reach the screen.
     mealFetches: createVersionGuard(),
-    // The meal has a bill whose cook is not in the residents list, so
-    // the page cannot show that bill (#91). While this is true, no
-    // bills save is built from the rows (data_store_bills.ts): a save
-    // lists every cook, and the server deletes the bill of a cook left
-    // out. loadData sets it, and clearBills sets it back to false with
-    // the rows.
-    billsIncomplete: false,
+    // The id of the meal on screen when it was to be fetched while a
+    // bills edit for it was pending, or null. The fetch was put off, and
+    // afterBillsIdle makes it once nothing is pending for the meal
+    // (#136). Any fetch of the meal clears it.
+    mealReloadWanted: null as number | null,
   };
 }
 
@@ -175,7 +179,17 @@ export function mealPageActions(self: MealPageStore) {
       // callback that lands after that has nothing to refetch.
       if (!self.meal) return;
       const mealIdAtFetch = self.meal.id;
+      // A bills edit for this meal may not be on the server yet. The
+      // answer would build the rows again without it, and the edit
+      // would never be sent (#136). So the fetch waits until nothing is
+      // pending for the meal (afterBillsIdle).
+      if (self.billsPendingFor(mealIdAtFetch)) {
+        self.mealReloadWanted = mealIdAtFetch;
+        return;
+      }
+      self.mealReloadWanted = null;
       const fetchToken = self.mealFetches.bump();
+      const editsAtFetch = self.billsEdits.current();
       api.meals
         .getCooks(mealIdAtFetch)
         .then(
@@ -183,6 +197,7 @@ export function mealPageActions(self: MealPageStore) {
             // A newer fetch is out: this answer is older than what
             // that one will bring, so neither cache nor screen gets it.
             if (!self.mealFetches.isCurrent(fetchToken)) return;
+            if (self.holdMealAnswer(mealIdAtFetch, editsAtFetch)) return;
             return kvSet(response.data.id.toString(), response.data)
               .catch(function (error: unknown) {
                 // The copy on disk only makes the next visit faster. A
@@ -195,6 +210,8 @@ export function mealPageActions(self: MealPageStore) {
               })
               .then(function () {
                 if (!self.mealFetches.isCurrent(fetchToken)) return;
+                // A cost can be typed while the answer is written.
+                if (self.holdMealAnswer(mealIdAtFetch, editsAtFetch)) return;
                 // Skip stale responses from a previous meal
                 if (self.meal && self.meal.id === response.data.id) {
                   self.loadData(response.data, "server");
@@ -214,6 +231,50 @@ export function mealPageActions(self: MealPageStore) {
         .catch(function (error: unknown) {
           self.handleMealProcessingError(error, mealIdAtFetch);
         });
+    },
+    // A bills save for the meal on screen failed, or its answer did not
+    // hold what it sent (data_store_bills.ts). The rows may show what
+    // the server does not have, and their bases say it does, so the meal
+    // loads again the way it loads the first time: mealLoading freezes
+    // the page until it arrives, and a fetch that fails is retried
+    // (handleMealLoadError, LoadStatus). The fetch waits until nothing
+    // is pending for the meal (loadDataAsync).
+    loadMealAgain() {
+      self.mealLoading = true;
+      self.loadDataAsync();
+    },
+    // An answer to a fetch of this meal arrived. It must not build the
+    // rows again if a bill was edited after the fetch was sent, or if a
+    // bills edit for the meal is pending: the server may have read the
+    // meal before it stored that edit, and new rows would show the old
+    // cost (#136). Then this returns true. The answer is not used, not
+    // even for the copy on the device, and the meal is fetched again
+    // once nothing is pending for it (at once, if nothing is).
+    holdMealAnswer(mealId: number, editsAtFetch: number): boolean {
+      if (
+        self.billsEdits.isCurrent(editsAtFetch) &&
+        !self.billsPendingFor(mealId)
+      ) {
+        return false;
+      }
+      // The person has left this meal, so the answer is only dropped.
+      // The meal is fetched again when they come back to it. It must
+      // not take mealReloadWanted from the meal on screen, which may be
+      // waiting for its own fetch.
+      if (self.meal?.id !== mealId) return true;
+      self.mealReloadWanted = mealId;
+      self.afterBillsIdle();
+      return true;
+    },
+    // A bills save was answered, or a bills edit turned out to have
+    // nothing to send. If a fetch of the meal on screen was put off while
+    // a bills edit for it was pending, and nothing is pending for it
+    // now, fetch it.
+    afterBillsIdle() {
+      const meal = self.meal;
+      if (!meal || self.mealReloadWanted !== meal.id) return;
+      if (self.billsPendingFor(meal.id)) return;
+      self.loadDataAsync();
     },
     // A meal fetch failed. Only the FIRST load of the meal on screen
     // gets the retry treatment: with mealLoading false there is data
@@ -353,24 +414,24 @@ export function mealPageActions(self: MealPageStore) {
       });
 
       // A bill's row points at its cook's resident row, so a bill whose
-      // cook is not in the residents list cannot be shown. The page shows
-      // the other bills and refuses every bills save until a load lists
-      // every cook (#91). The server lists every cook who has a bill
-      // (MealFormSerializer), so in the server's answer this is a bug,
-      // and it is reported. In the copy saved on the device it is not
-      // reported: a copy saved before the server listed every cook can
-      // still be on the device, and the server's answer is fetched right
-      // after it.
+      // cook is not in the residents list cannot be shown (#91). The page
+      // shows the other bills, and saves them as usual: a save names only
+      // the cooks it changes, and no row names this cook, so no save can
+      // touch their bill (ADR 0009). The server lists every cook who has
+      // a bill (MealFormSerializer), so in the server's answer this is a
+      // bug, and it is reported. In the copy saved on the device it is
+      // not reported: a copy saved before the server listed every cook
+      // can still be on the device, and the server's answer is fetched
+      // right after it.
       const cookListed = (bill: { resident_id: number }) =>
         self.residents.has(String(bill.resident_id));
       const shownBills = data.bills.filter(cookListed);
       const hiddenCookIds = data.bills
         .filter((bill) => !cookListed(bill))
         .map((bill) => bill.resident_id);
-      self.billsIncomplete = hiddenCookIds.length > 0;
-      if (self.billsIncomplete) {
+      if (hiddenCookIds.length > 0) {
         console.warn(
-          "Bills will not save: these cooks have a bill but are not in the residents list:",
+          "These cooks have a bill but are not in the residents list, so the page does not show their bills:",
           hiddenCookIds,
         );
         if (source === "server") {
@@ -400,7 +461,10 @@ export function mealPageActions(self: MealPageStore) {
         bills.push({ id: String(newId()) });
       }
       bills.forEach((bill) => {
-        self.bills.put(bill).rememberLoadedCook();
+        const row = self.bills.put(bill);
+        row.rememberLoadedCook();
+        // The server has what the row loaded with.
+        row.setBaseToShown();
       });
 
       // Change loading state. A landed load also ends any retry state:
@@ -445,7 +509,6 @@ export function mealPageActions(self: MealPageStore) {
     },
     clearBills() {
       self.bills.clear();
-      self.billsIncomplete = false;
     },
     clearGuests() {
       self.guests.clear();
@@ -485,12 +548,14 @@ export function mealPageActions(self: MealPageStore) {
       // The rows belong to the meal we are leaving, so they leave with
       // it (same rule as teardownMealPage). They used to stay on screen
       // until the new meal's data arrived, still editable — and a bill
-      // edit made in that window was sent to the NEW meal id with the
-      // OLD meal's cook list as the payload. The server deletes cooks
-      // left out of that list, so one keystroke during a slow load
-      // could rewrite the new meal's bills. saveBillsBeforeLeaving
-      // above already built a save of any edit not sent yet, so
-      // clearing here cannot lose one.
+      // edit made in that window was sent to the NEW meal id, built from
+      // the OLD meal's rows. Back then a save listed every cook and the
+      // server deleted the cooks the list left out, so one keystroke
+      // during a slow load could rewrite the new meal's bills. A save
+      // built from another meal's rows is wrong whatever it sends: it
+      // could add the old meal's cooks to the new meal.
+      // saveBillsBeforeLeaving above already built a save of any edit
+      // not sent yet, so clearing here cannot lose one.
       self.clearBills();
       self.clearResidents();
       self.clearGuests();
@@ -498,6 +563,19 @@ export function mealPageActions(self: MealPageStore) {
       // A retry belongs to the meal it was scheduled for; the new
       // meal starts with a clean slate and a fresh backoff.
       self.cancelMealRetry();
+
+      // A bills save for this meal from an earlier visit has no answer
+      // yet. Rows built now, from the server or from the copy on the
+      // device, would not have that save's costs or cooks. Their bases
+      // would be older than the server's bills, so the next save from
+      // them would be refused as stale, and a cost typed there would be
+      // lost (#135, #136). So neither is read now: loadDataAsync marks
+      // the meal to be fetched once its saves are answered, and until
+      // then the page shows it loading.
+      if (self.billsPendingFor(id)) {
+        self.loadDataAsync();
+        return;
+      }
 
       kvGet(id.toString())
         .then(function (value) {

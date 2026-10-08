@@ -395,43 +395,17 @@ test.describe("Meal Editing", () => {
   test("set cost, then a cook: each bills PATCH carries only what was changed", async ({
     page,
   }) => {
-    // A small stand-in for the server: it keeps the stored bills, writes
-    // amount and no_cost only for rows that carry them (BillsPayload),
-    // and answers like MealsController#update_bills with the rows as
-    // stored. A blank amount is stored as zero.
-    const stored = new Map(
-      mealFixture.bills.map((b) => [
-        b.resident_id,
-        { amount: b.amount, no_cost: b.no_cost },
-      ]),
-    );
-    const billsPayloads = [];
+    // Each save is recorded, then answered by the stand-in server in
+    // setupAuthenticatedPage, which applies the edits the way
+    // MealsController#update_bills does.
+    const billsSaves = [];
     await page.route("**/api/v1/meals/*/bills*", (route) => {
       if (route.request().method() !== "PATCH") return route.fallback();
-      const body = route.request().postDataJSON();
-      billsPayloads.push(body);
-      const next = new Map();
-      for (const row of body.bills) {
-        const old = stored.get(row.resident_id) || {
-          amount: "0.0",
-          no_cost: false,
-        };
-        next.set(
-          row.resident_id,
-          "amount" in row
-            ? {
-                amount: row.amount === "" ? "0.0" : row.amount,
-                no_cost: row.no_cost,
-              }
-            : old,
-        );
-      }
-      stored.clear();
-      next.forEach((v, k) => stored.set(k, v));
-      fulfillJson(route, {
-        message: "Form submitted.",
-        bills: [...stored].map(([resident_id, v]) => ({ resident_id, ...v })),
+      billsSaves.push({
+        key: route.request().headers()["idempotency-key"],
+        body: route.request().postDataJSON(),
       });
+      return route.fallback();
     });
 
     await page.goto("/meals/42/edit/");
@@ -443,41 +417,44 @@ test.describe("Meal Editing", () => {
     const costInput = page.locator('[aria-label="Set meal cost"]').first();
     await expect(costInput).toHaveValue("25.50");
 
-    // Change Jane's cost to 35.00. The PATCH lists the one cook, with
-    // the amount typed and no_cost off.
+    // Change Jane's cost to 35.00. The save is one change, from the bill
+    // the page loaded to the amount typed.
     const firstAnswer = page.waitForResponse(
       (r) => r.url().includes("/api/v1/meals/42/bills") && r.status() === 200,
     );
     await costInput.fill("35.00");
     await firstAnswer;
-    expect(billsPayloads).toHaveLength(1);
-    expect(billsPayloads[0].id).toBe(42);
-    expect(billsPayloads[0].bills).toEqual([
-      { resident_id: 1, amount: "35.00", no_cost: false },
+    expect(billsSaves).toHaveLength(1);
+    expect(billsSaves[0].body.edits).toEqual([
+      {
+        op: "change",
+        resident_id: 1,
+        from: { amount: "25.50", no_cost: false },
+        to: { amount: "35.00", no_cost: false },
+      },
     ]);
-    // After the server's answer the field shows what was stored.
+    expect(billsSaves[0].key).toMatch(/^"[^"]+"$/);
     await expect(costInput).toHaveValue("35.00");
 
-    // Pick Bob as the second cook. The server's answer to the first
-    // save marked Jane's row as saved, so this PATCH lists her without
-    // an amount: a resend of 35.00 could overwrite a newer cost that
-    // someone else saved in between.
+    // Pick Bob as the second cook. This save names only Bob: Jane's cost
+    // went out with the first save, and sending it again could write
+    // over a newer cost that someone else saved in between.
     await cookSelects.nth(1).selectOption("2");
-    await expect.poll(() => billsPayloads.length, { timeout: 3000 }).toBe(2);
-    expect(billsPayloads[1].bills).toEqual([
-      { resident_id: 1 },
-      { resident_id: 2, amount: "", no_cost: false },
+    await expect.poll(() => billsSaves.length, { timeout: 3000 }).toBe(2);
+    expect(billsSaves[1].body.edits).toEqual([
+      { op: "add", resident_id: 2, to: { amount: "", no_cost: false } },
     ]);
+    // A new key for each save.
+    expect(billsSaves[1].key).not.toBe(billsSaves[0].key);
     await expect(cookSelects.nth(1)).toHaveValue("2");
   });
 
   // #91: Carol cooked this open meal, did not eat, and was retired
   // afterwards. The server lists her in the meal form because she has a
   // bill (MealFormSerializer). Her bill shows in her row of the cooks
-  // box, no other row offers her, she is not on the sign-up list, and a
-  // save of Jane's cost names both cooks. The server deletes the bill of
-  // a cook left out of that list (BillsPayload#write_to), so naming her
-  // is what keeps her $40.
+  // box, no other row offers her, and she is not on the sign-up list. A
+  // save of Jane's cost names only Jane, and the server never touches the
+  // bill of a cook a save does not name (#135), so Carol keeps her $40.
   test("a retired cook who did not eat keeps her bill when another cook's cost is saved", async ({
     page,
   }) => {
@@ -509,6 +486,7 @@ test.describe("Meal Editing", () => {
     await page.route("**/api/v1/meals/*/bills*", (route) => {
       if (route.request().method() !== "PATCH") return route.fallback();
       billsPayloads.push(route.request().postDataJSON());
+      // The server's answer: Jane's new cost, and Carol's bill as it was.
       fulfillJson(route, {
         message: "Form submitted.",
         bills: [
@@ -549,17 +527,20 @@ test.describe("Meal Editing", () => {
       page.getByRole("cell", { name: "D - Carol Davis", exact: true }),
     ).toHaveCount(0);
 
-    // Change Jane's cost. The save names Carol too, without values, so
-    // the server keeps her stored $40.
+    // Change Jane's cost. The save does not name Carol.
     const answer = page.waitForResponse(
       (r) => r.url().includes("/api/v1/meals/42/bills") && r.status() === 200,
     );
     await costInputs.first().fill("35.00");
     await answer;
     expect(billsPayloads).toHaveLength(1);
-    expect(billsPayloads[0].bills).toEqual([
-      { resident_id: 1, amount: "35.00", no_cost: false },
-      { resident_id: 4 },
+    expect(billsPayloads[0].edits).toEqual([
+      {
+        op: "change",
+        resident_id: 1,
+        from: { amount: "25.50", no_cost: false },
+        to: { amount: "35.00", no_cost: false },
+      },
     ]);
     await expect(costInputs.nth(1)).toHaveValue("40.00");
   });

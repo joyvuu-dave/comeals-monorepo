@@ -395,11 +395,11 @@ RSpec.describe 'live updates: every write reaches the screen that shows it' do
 
       patch "/api/v1/meals/#{meal.id}/bills", params: {
         token: token, socket_id: 'sender-socket',
-        bills: [
-          { resident_id: resident.id, amount: '10.00', no_cost: false },
-          { resident_id: other_resident.id, amount: '5.00', no_cost: false }
+        edits: [
+          { op: 'add', resident_id: resident.id, to: { amount: '10.00', no_cost: false } },
+          { op: 'add', resident_id: other_resident.id, to: { amount: '5.00', no_cost: false } }
         ]
-      }, as: :json
+      }, headers: BillEdits.key_header, as: :json
 
       expect(response).to have_http_status(:ok)
       expect(Pusher).to have_received(:trigger)

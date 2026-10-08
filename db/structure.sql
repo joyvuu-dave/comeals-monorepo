@@ -516,6 +516,40 @@ ALTER SEQUENCE public.bills_id_seq OWNED BY public.bills.id;
 
 
 --
+-- Name: bills_save_keys; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.bills_save_keys (
+    id bigint NOT NULL,
+    meal_id bigint NOT NULL,
+    key text NOT NULL,
+    edits_sha256 text NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT bills_save_keys_edits_sha256_hex CHECK ((edits_sha256 ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT bills_save_keys_key_printable CHECK ((key ~ '^[ -~]{1,255}$'::text))
+);
+
+
+--
+-- Name: bills_save_keys_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.bills_save_keys_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: bills_save_keys_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.bills_save_keys_id_seq OWNED BY public.bills_save_keys.id;
+
+
+--
 -- Name: common_house_reservations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1686,6 +1720,13 @@ ALTER TABLE ONLY public.bills ALTER COLUMN id SET DEFAULT nextval('public.bills_
 
 
 --
+-- Name: bills_save_keys id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.bills_save_keys ALTER COLUMN id SET DEFAULT nextval('public.bills_save_keys_id_seq'::regclass);
+
+
+--
 -- Name: common_house_reservations id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1939,6 +1980,14 @@ ALTER TABLE ONLY public.audits
 
 ALTER TABLE ONLY public.bills
     ADD CONSTRAINT bills_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: bills_save_keys bills_save_keys_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.bills_save_keys
+    ADD CONSTRAINT bills_save_keys_pkey PRIMARY KEY (id);
 
 
 --
@@ -2245,6 +2294,20 @@ CREATE UNIQUE INDEX index_bills_on_meal_id_and_resident_id ON public.bills USING
 --
 
 CREATE INDEX index_bills_on_resident_id ON public.bills USING btree (resident_id);
+
+
+--
+-- Name: index_bills_save_keys_on_created_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_bills_save_keys_on_created_at ON public.bills_save_keys USING btree (created_at);
+
+
+--
+-- Name: index_bills_save_keys_on_meal_id_and_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_bills_save_keys_on_meal_id_and_key ON public.bills_save_keys USING btree (meal_id, key);
 
 
 --
@@ -2936,6 +2999,14 @@ ALTER TABLE ONLY public.reconciliation_balances
 
 
 --
+-- Name: bills_save_keys fk_rails_594e3a0a91; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.bills_save_keys
+    ADD CONSTRAINT fk_rails_594e3a0a91 FOREIGN KEY (meal_id) REFERENCES public.meals(id) ON DELETE CASCADE;
+
+
+--
 -- Name: reconciliations fk_rails_6c1fea41cb; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3104,6 +3175,7 @@ SET search_path TO "$user", public;
 INSERT INTO "schema_migrations" (version) VALUES
 ('20261007153100'),
 ('20261007153000'),
+('20261007120000'),
 ('20260917130000'),
 ('20260917120000'),
 ('20260915120000'),

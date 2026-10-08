@@ -3,12 +3,13 @@
 require 'rails_helper'
 
 # The meal form (GET /meals/:id/cooks) and the bills save (PATCH
-# /meals/:id/bills) are used together. A bills save lists every cook, and
-# the server removes the bill of any cook the list leaves out
-# (BillsPayload#write_to). Before #91 the form left out a retired cook who
-# did not eat, so the page dropped that bill, and the next save deleted
-# it. This spec acts like the page before its fix: it sends only the bills
-# whose cook is in the form's residents list.
+# /meals/:id/bills) are used together. Before #91 the form left out a
+# retired cook who did not eat, so the page did not show that bill, and
+# a save from the page then deleted it: a save listed every cook, and the
+# server removed any cook the list left out. Since #135 a save names only
+# the cooks it changes, so a cook the page does not show is never named
+# and never touched. This spec saves the way the page does: one edit for
+# the cook whose cost the person typed, with the values the form showed.
 RSpec.describe 'A cook retired after cooking an open meal' do
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
@@ -23,14 +24,12 @@ RSpec.describe 'A cook retired after cooking an open meal' do
     carol.update!(active: false)
 
     get "/api/v1/meals/#{meal.id}/cooks", params: { token: token }
-    form = response.parsed_body
-    # Send only the bills whose cook is in the residents list. The person
-    # edits Bob's cost; the other rows are untouched.
-    kept = form['bills'].pluck('resident_id') & form['residents'].pluck('id')
-    rows = kept.map { |id| { resident_id: id } }
-    rows.find { |row| row[:resident_id] == bob.id }.merge!(amount: '20.00', no_cost: false)
+    shown = response.parsed_body['bills'].find { |row| row['resident_id'] == bob.id }
+    edit = { op: 'change', resident_id: bob.id, from: shown.slice('amount', 'no_cost'),
+             to: { amount: '20.00', no_cost: false } }
 
-    patch "/api/v1/meals/#{meal.id}/bills", params: { bills: rows, token: token }
+    patch "/api/v1/meals/#{meal.id}/bills", params: { edits: [edit], token: token }, headers: BillEdits.key_header,
+                                            as: :json
 
     expect(response).to have_http_status(:ok)
     expect(meal.bills.reload.to_h { |bill| [bill.resident_id, bill.amount] })

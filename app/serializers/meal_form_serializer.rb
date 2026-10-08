@@ -132,11 +132,11 @@ class MealFormSerializer
   # retired resident has moved out or died. Without the second part, a
   # retired resident would be missing from old meals they ate at. Without
   # the third, a retired cook who did not eat would be missing, and the
-  # page can show a bill only when its cook is in this list. A bills save
-  # removes the bill of any cook the save leaves out
-  # (BillsPayload#write_to), so a missing cook could lose their bill on
-  # the next save (#91). That holds for a no-cost bill too: it moves no
-  # money, but it records who cooked.
+  # page can show and change a bill only when its cook is in this list.
+  # That holds for a no-cost bill too: it moves no money, but it records
+  # who cooked. (Before #135 a bills save also removed the bill of any
+  # cook it left out, so a missing cook lost their bill on the next save,
+  # #91. A save now names only the cooks it changes.)
   # The ids come from the sign-ups and bills the meal already holds, not
   # from a new read of those tables. The controller loads them first, in
   # another statement, and the page is not read in one transaction. So a

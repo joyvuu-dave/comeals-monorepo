@@ -95,6 +95,24 @@ Meal:
     NumericalityConstraintChecker:
       enabled: false
 
+# A bills save's key row is written only by
+# Api::V1::MealsController#save_bills, under the meal lock, right after it
+# looked the key up and found none, with a key IdempotencyKeyHeader read
+# and a fingerprint BillsPayload#fingerprint made. The NOT NULL and CHECK
+# constraints and the unique index are the rules. A uniqueness validator
+# would read the same row again, and a presence validator would refuse a
+# key of spaces, which the header allows.
+BillsSaveKey:
+  index_bills_save_keys_on_meal_id_and_key:
+    UniqueIndexChecker:
+      enabled: false
+  key:
+    NullConstraintChecker:
+      enabled: false
+  edits_sha256:
+    NullConstraintChecker:
+      enabled: false
+
 # Charges are written only by Settlement, inside the meal lock, one credit
 # per cook and one debit per attendee. The unique indexes are the rule;
 # the writes skip validations on purpose (docs/adr/0003).

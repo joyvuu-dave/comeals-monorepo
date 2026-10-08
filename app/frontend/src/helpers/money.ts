@@ -39,3 +39,14 @@ export function toDisplayAmountString(wire: string | null | undefined): string {
   const decimals = str.length - dot - 1;
   return decimals < 2 ? str + "0".repeat(2 - decimals) : str;
 }
+
+// True when two amount strings are the same number of cents: "5", "5.0"
+// and "05.00" are the same, and so are "" and "0.0". String edits only,
+// like the rest of this file: leading zeros are dropped, then both sides
+// are compared in their display form.
+export function sameAmount(a: string, b: string): boolean {
+  return (
+    toDisplayAmountString(a.replace(/^0+(?=\d)/, "")) ===
+    toDisplayAmountString(b.replace(/^0+(?=\d)/, ""))
+  );
+}

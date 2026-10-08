@@ -1893,3 +1893,107 @@ check (14 failed, among them the job spec's "still makes rotations
 after the last meal"); the flag set to false (5 failed); the flag set
 only on create (3 failed, the edit form's); and only on update (2
 failed, the New Meal form's).
+
+### 2026-10-08, bills saves send edits (#135)
+
+Run on the server code the #135 branch added or changed, by name:
+`BillsPayload*` (which takes `BillsPayload::Edit` too),
+`IdempotencyKeyHeader*`, `BillsSaveKey*` (the hourly delete of old
+keys), `ThirdCookWarning*`, and eleven methods of
+`Api::V1::MealsController`: `update_bills`, the methods it calls
+(`save_bills`, `answer_seen_bills_key`, `seen_bills_key_answer`,
+`bills_payload`, `bills_key_header`, `answer_seen_key`, `bills_written`,
+`bill_rows`, `refuse_outdated_bills`), and `with_meal_lock`, which now
+takes the key look-up. Six workers, 300-second limit.
+
+| Run                                                                    | Subjects | Mutations | Killed | Alive | Timeouts             | Time   |
+| ---------------------------------------------------------------------- | -------- | --------- | ------ | ----- | -------------------- | ------ |
+| 1                                                                      | 41       | 1,837     | 1,778  | 59    | 23, counted as alive | 1h11   |
+| 2, every subject but `ThirdCookWarning`, whose examples did not change | 35       | 1,689     | 1,664  | 25    | 0                    | 41 min |
+
+Every subject not named below had no survivor in run 1, among them
+`BillsSaveKey.delete_expired`, the four `BillsPayload::Edit` methods,
+`BillsPayload#write` and `#unknown_cook`, and `answer_seen_bills_key`,
+`bills_payload`, `bills_key_header`, `bill_rows` and
+`refuse_outdated_bills` in the controller.
+
+Run 1, 59 alive, by kind:
+
+- Timeouts that were failures (23). `bills_idempotency_key_race_spec.rb`
+  waited for the first save to write its key with no time limit
+  (`stopped.pop`). Every mutation that stops a save before it writes its
+  key left that example waiting until mutant's limit, whenever mutant
+  ran it before an example that fails: refusing every save as out of
+  date or for its key, answering stale or settled every time, and a
+  `BillsSaveKey.create!` that is gone or raises. `update_bills` (11),
+  `save_bills` (9) and `with_meal_lock` (3). Every save would show each
+  of these. The wait now gives up after 15 seconds and fails the
+  example; with every save refused as out of date, both race examples
+  now fail in 33 seconds. Run 2 has no timeout.
+- Missing assertions (10), each now with an example that fails on it
+  (checked by making each change by hand).
+  - `BillsPayload#amount` (1): showing an amount that is not text with
+    Ruby's `to_s` instead of as JSON. For a number, `true` or `null` the
+    two are the same text; for a list or an object they are not (`[1, 2]`
+    and `{"value" => "1"}` against `[1,2]` and `{"value":"1"}`).
+  - `BillsPayload#duplicate_cook` (1): `map` for `filter_map`. An id
+    that is not a whole number is read as nil, and two nils make a pair
+    whose key is nil. `find` stops at that pair, and `&.first` gives nil,
+    so a cook named twice after them was not reported.
+  - `BillsPayload#resident_id` (2): `Integer(raw)` and `Integer(raw, 0)`
+    for `Integer(raw, 10)`. Both read a leading 0 as base 8, and no
+    example sent one. `"01000010"` now names resident 1000010; the
+    example sets that id, because for 0 to 7 the two bases agree.
+  - `IdempotencyKeyHeader#read` (1): matching the value without `.b`.
+    The example for a byte that is not valid UTF-8 sent a binary string,
+    so it never showed the case `.b` is there for: the same bytes in a
+    string marked UTF-8, where matching raises `ArgumentError`.
+  - `MealsController#seen_bills_key_answer` (4): every way of dropping
+    `key.nil? ||`. With no key, the look-up asks for `key IS NULL`, and
+    the column is NOT NULL, so it finds nothing and the answer is the
+    same, one read later. The method says a save with a wrong body or key
+    is not looked up. A request example now records the SQL of a save
+    with no key, one with a key that is not a quoted string, and one
+    with wrong edits, and expects no read of `bills_save_keys`.
+  - `MealsController#answer_seen_key` (1): `meal.bills` for
+    `meal.bills.reload`. Before the lock, the meal's bills are the ones
+    `set_meal` read when the request started. A new example commits
+    another page's change after that, inside the key's look-up, and
+    expects the answer to show it.
+- Noise (26), changes no caller can see:
+  - `instance_of?` for `is_a?` (9), in `BillsPayload#amount` (2),
+    `#check` (2), `#edit` (2), `#resident_id` (2) and `#side` (1). The
+    values are the Strings, Integers and Arrays of a parsed body, or this
+    class's own answers, never a subclass.
+  - `.fetch` for `[]` in `BillsPayload#side` (2): the line before checks
+    that both keys are there.
+  - `BillsPayload#sides` (2): `to_s` or the bare amount for `to_s('F')`.
+    ActiveSupport makes a BigDecimal's `to_s` plain digits and writes it
+    to JSON as a string of them, so the text that is hashed is the same.
+    The call stays: `fingerprint` must not change with the JSON settings
+    while a key is kept, and its comment says so.
+  - `BillsPayload#fingerprint` (1): `edit.op` for `edit.op.serialize`. A
+    `T::Enum` writes itself to JSON as its serialized value. Kept for the
+    same reason.
+  - `BillsPayload#write_to` (2): `to_str`, or nothing, for the `.to_s` on
+    the cook's name. The column is NOT NULL; the `.to_s` is there because
+    Sorbet reads every column as nilable.
+  - `BillsPayload#initialize` (1): the `@residents` declaration, which
+    nothing reads before `unknown_cook` sets it, as on 2026-09-27.
+  - `IdempotencyKeyHeader#read` (1): dropping
+    `force_encoding(Encoding::UTF_8)`. The grammar lets only printable
+    ASCII through, so the key is the same text marked binary, and it
+    counts, compares and is stored the same.
+  - `ThirdCookWarning#switching?` (1): `!eql?` for `!=` on two lists of
+    Integers.
+  - `MealsController#seen_bills_key_answer` (1): `meal_id: meal` for
+    `meal.id` (Rails reads the id).
+  - `MealsController#answer_seen_key` (3) and `#bills_written` (2): no
+    status, or nil, for `:ok`. Rails answers 200 either way, as on
+    2026-09-27.
+  - `MealsController#update_bills` (1): the error for its message, as on
+    2026-09-27.
+
+Run 2 reran every subject whose examples changed. Its 25 alive are the
+noise above, less the one in `ThirdCookWarning`. The whole suite
+afterwards: 3,079 examples, no failure, 100% of lines and branches.

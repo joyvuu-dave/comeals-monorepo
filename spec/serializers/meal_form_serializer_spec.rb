@@ -52,12 +52,11 @@ RSpec.describe MealFormSerializer do
       expect(resident_ids.count(resident.id)).to eq(1)
     end
 
-    # The page can show a bill only when its cook is in this list, and a
-    # bills save removes the bill of any cook the save leaves out
-    # (BillsPayload#write_to). So a cook missing from this list could lose
-    # their bill on the next save (#91). The request spec that reads the
-    # form and saves from it, from start to end:
-    # spec/requests/api/v1/meal_form_retired_cook_spec.rb.
+    # The page can show and change a bill only when its cook is in this
+    # list. Before #135 a bills save also removed the bill of any cook it
+    # left out, so a cook missing from this list lost their bill on the
+    # next save (#91). The request spec that reads the form and saves from
+    # it, from start to end: spec/requests/api/v1/meal_form_retired_cook_spec.rb.
     # The meal is read again with none of its rows loaded: the serializer
     # must load the bills and sign-ups itself when no one has.
     it 'names every cook who has a bill on the meal, even a retired one who did not eat' do

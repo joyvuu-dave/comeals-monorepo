@@ -153,8 +153,10 @@ describe("meal page store", () => {
   });
 
   // The server lists every cook who has a bill (MealFormSerializer), so
-  // a bill whose cook is not in the residents list is a bug (#91). The
-  // page refuses bills saves while it lasts, and the bug is reported.
+  // a bill whose cook is not in the residents list is a bug (#91), and
+  // it is reported. A bills save names only the cooks it changes, and
+  // no row names this cook, so saves go on and never touch their bill
+  // (#135).
   describe("a bill whose cook is not in the residents list", () => {
     it("is reported once per load, naming the meal and every such cook", () => {
       vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -212,21 +214,32 @@ describe("meal page store", () => {
       return axios.mock.calls.filter(([config]) => config.method === "patch");
     }
 
-    // Saves the bills right away and answers with what the person sees.
+    // Types a cost for the cook the page shows, saves it right away, and
+    // answers with the messages the person sees.
     function toastsAfterASave(store) {
       toastStore.clearAll();
+      const row = Array.from(store.bills.values()).find(
+        (bill) => bill.resident !== null,
+      );
+      row.setAmount("16");
       store.submitBills();
       return toastStore.toasts.map((toast) => [toast.type, toast.message]);
     }
 
-    const RELOAD_MESSAGE =
-      "One cook's cost on this meal is not shown on this page, so nothing was saved. Please reload the page.";
+    // The save names only the cook the page shows.
+    const EDITS_SENT = [
+      {
+        op: "change",
+        resident_id: 10,
+        from: { amount: "15.00", no_cost: false },
+        to: { amount: "16", no_cost: false },
+      },
+    ];
 
     // The copy on the device is not a bug in the server's answer: an old
     // copy is expected for a while after the deploy, and the server's
-    // answer comes right after it. So it is not reported. Saves are
-    // still refused while it is on screen.
-    it("is not reported when it is in the copy saved on the device, but saves are still refused", async () => {
+    // answer comes right after it. So it is not reported.
+    it("is not reported when it is in the copy saved on the device, and a save never names that cook", async () => {
       vi.spyOn(console, "warn").mockImplementation(() => {});
       const store = createStore();
       idbKeyval.get.mockResolvedValueOnce(meal2WithHiddenCook());
@@ -239,9 +252,9 @@ describe("meal page store", () => {
       expect(store.meal.id).toBe(2);
       expect(store.bills.size).toBe(3);
       expect(notifyError).not.toHaveBeenCalled();
-      expect(store.billsIncomplete).toBe(true);
-      expect(toastsAfterASave(store)).toEqual([["error", RELOAD_MESSAGE]]);
-      expect(billsPatches()).toHaveLength(0);
+      expect(toastsAfterASave(store)).toEqual([]);
+      expect(billsPatches()).toHaveLength(1);
+      expect(billsPatches()[0][0].data.edits).toEqual(EDITS_SENT);
     });
 
     it("is reported once when the server's answer has it, after the copy on the device had it too", async () => {
@@ -261,9 +274,8 @@ describe("meal page store", () => {
       expect(notifyError.mock.calls[0][0].message).toBe(
         "Meal 2 has bills whose cooks are not in its residents list: 999",
       );
-      expect(store.billsIncomplete).toBe(true);
-      expect(toastsAfterASave(store)).toEqual([["error", RELOAD_MESSAGE]]);
-      expect(billsPatches()).toHaveLength(0);
+      expect(toastsAfterASave(store)).toEqual([]);
+      expect(billsPatches()[0][0].data.edits).toEqual(EDITS_SENT);
     });
   });
 

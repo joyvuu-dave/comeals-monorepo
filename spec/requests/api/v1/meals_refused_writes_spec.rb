@@ -54,7 +54,8 @@ RSpec.describe 'meal writes that are refused' do
 
     # The controller reaches the bills through the meal it loaded, so the
     # meal's bills relation is where the refusal is staged: on the read of
-    # the bills that stay, the first thing BillsPayload#write_to does.
+    # the stored bills, which a bills save does under the meal lock right
+    # after it looks up its key (MealsController#save_bills).
     def stage(error)
       bills = Bill.where(meal_id: meal.id)
       allow(bills).to receive(:reload).and_raise(error)
@@ -65,8 +66,9 @@ RSpec.describe 'meal writes that are refused' do
     end
 
     def submit
-      patch "/api/v1/meals/#{meal.id}/bills",
-            params: { token: token, bills: [{ resident_id: cook.id, amount: '12.00', no_cost: false }] }
+      edit = { op: 'add', resident_id: cook.id, to: { amount: '12.00', no_cost: false } }
+      patch "/api/v1/meals/#{meal.id}/bills", params: { token: token, edits: [edit] }, headers: BillEdits.key_header,
+                                              as: :json
     end
 
     # The record's own sentences, like every other meal write

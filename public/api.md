@@ -88,7 +88,8 @@ is an HTML page too.
 | `400`  | The request was understood but refused. The `message` says why. Bad input, a rule of the meal (closed, full, reconciled), or a wrong id in the body. |
 | `401`  | No token or a bad token.                                                                                                                             |
 | `404`  | The record in the URL does not exist.                                                                                                                |
-| `409`  | Two writes to the same meal collided. Nothing was saved. Send the same request again.                                                                |
+| `409`  | Two writes to the same meal collided. Nothing was saved. Send the same request again. A bills save has one more `409`; see "Bills".                  |
+| `422`  | A bills save came with an `Idempotency-Key` that was already used for a different save. Nothing was saved. See "Bills".                              |
 | `429`  | Rate limit.                                                                                                                                          |
 
 Note that `404` is only for the record named in the URL path. A wrong id
@@ -220,46 +221,143 @@ The token only records who made the change in the history.
 | `PATCH` | `/meals/:meal_id/description` | `{ "description": "Tacos" }` | Sets the menu text.                                                    |
 | `PATCH` | `/meals/:meal_id/closed`      | `{ "closed": true }`         | Closes or reopens the meal.                                            |
 | `PATCH` | `/meals/:meal_id/max`         | `{ "max": 30 }`              | Sets a cap on a closed meal. `null` removes it. `400` on an open meal. |
-| `PATCH` | `/meals/:meal_id/bills`       | see below                    | Sets the cooks and their costs.                                        |
+| `PATCH` | `/meals/:meal_id/bills`       | see below                    | Adds, changes or removes cooks and their costs.                        |
 
 ### Bills
 
+A bills save names only the cooks it changes, one edit per cook. A
+change or a remove also carries the bill you saw for that cook. The
+server checks that bill before it writes anything, so a save built from
+an old copy of the meal form cannot undo a save someone made since.
+
 ```
 PATCH /meals/:meal_id/bills
-{ "bills": [
-    { "resident_id": 7, "amount": "48.50", "no_cost": false },
-    { "resident_id": 9, "amount": "0", "no_cost": true },
-    { "resident_id": 11 }
+Idempotency-Key: "8e03978e-40d5-43e8-bc93-6894a57f9324"
+{ "edits": [
+    { "op": "add",    "resident_id": 7,
+      "to":   { "amount": "48.50", "no_cost": false } },
+    { "op": "change", "resident_id": 9,
+      "from": { "amount": "5.0",   "no_cost": false },
+      "to":   { "amount": "7.00",  "no_cost": false } },
+    { "op": "remove", "resident_id": 11,
+      "from": { "amount": "0.0",   "no_cost": true } }
 ] }
 ```
 
-The list is the full set of cooks. A cook not in the list is removed. A
-row with only `resident_id` keeps that cook and leaves their stored
-amount alone. A row with `amount` or `no_cost` rewrites both.
+| `op`     | Fields                      | What it does                                   |
+| -------- | --------------------------- | ---------------------------------------------- |
+| `add`    | `resident_id`, `to`         | Makes the resident a cook, with that bill.     |
+| `change` | `resident_id`, `from`, `to` | Changes a cook's `amount`, `no_cost`, or both. |
+| `remove` | `resident_id`, `from`       | Removes the cook and their bill.               |
+
+- `from` is the cook's bill as you last read it: the `amount` and
+  `no_cost` from `bills` in the meal form, or in the answer to your last
+  bills save. `to` is the bill you want. Each is an object with both
+  keys.
+- A cook you do not name is never touched.
+- Name each cook at most once in one save.
+- `resident_id` is a number, or a string of digits. An id that is not a
+  resident is refused, even in a remove.
 
 Rules for `amount`:
 
-- A string or number with at most two decimal places: `"48.50"`, `"48"`,
-  `48.5`. Whole cents only; `"48.505"` is refused.
-- From `0` to `9999.99`. Never negative.
-- An empty or missing `amount` on a touched row means `0`.
+- Text, never a JSON number: `"48.50"`, `"48.5"`, `"48"`. A number is
+  refused, because JSON readers turn it into a floating-point value,
+  and money must not pass through one.
+- Whole cents only; `"48.505"` is refused.
+- From `"0"` to `"9999.99"`. Never negative.
+- `""` means 0.
+- Amounts are compared as numbers, so `"5"`, `"5.0"` and `"5.00"` are
+  the same bill.
 
-The response is `200` with `message`, and `bills` as the server stored
-them. One exception: adding a third cook to a future meal while another
-meal in the same rotation still has fewer than two cooks returns `400`
-with `"type": "warning"`. The bills are still saved; the `message` only
-says the rotation is short of cooks.
+`no_cost` is `true` or `false` (in a form-encoded body, the text
+`"true"` or `"false"`). `no_cost: true` means the cook spent nothing,
+and their bill is skipped when the cost is split.
+
+Every bills save needs an `Idempotency-Key` header, as the IETF draft
+"The Idempotency-Key HTTP Header Field" describes. It lets you send a
+save again when you got no answer, and be sure it is written at most
+once.
+
+- The value is a string in double quotes: 1 to 255 printable ASCII
+  characters, like `"8e03978e-40d5-43e8-bc93-6894a57f9324"`. Inside the
+  quotes, write `\"` for a quote and `\\` for a backslash. A random
+  UUID makes a good key.
+- Make a new key for each save. When you send a save again (after no
+  answer, or after a `409` with no `type`), send it with the same key.
+- The server keeps the key of each save it wrote, for that meal, for 7
+  days. The same key with the same edits writes nothing: the answer is
+  `200` with `"type": "replayed"`, and `bills` as stored now. These can
+  differ from the first try's `to` if someone saved since then.
+- The same key with other edits is refused with `422`, and nothing is
+  written.
+- The server looks up the key before it checks whether the meal was
+  settled, so these two answers hold on a settled meal too. A key it
+  kept belongs to a save it wrote while the meal was open. A save with a
+  new key to a settled meal gets the settled words (rule 1 in "Rules an
+  agent must know").
+- "The same edits" means the same ops, cooks, amounts and `no_cost`
+  values, in the same order. Amounts are compared as numbers. The
+  `socket_id` and the token are not part of it.
+- A save that was refused keeps no key, so nothing stops you from
+  sending its key again. Still, a changed save needs a new key.
+
+The server looks at each edit and the stored bill of its cook:
+
+- The bill already is `to`, or a remove finds no bill: nothing to do.
+  So two people who make the same change do no harm.
+- The bill is `from`, or an add finds no bill: the edit is written.
+- Anything else: the meal changed after you read it, and the whole save
+  is refused. Nothing is written, not even the edits that matched.
+
+The answers:
+
+| Status | `type`     | Written?         | What to do                                                                          |
+| ------ | ---------- | ---------------- | ----------------------------------------------------------------------------------- |
+| `200`  |            | yes              | Nothing.                                                                            |
+| `200`  | `replayed` | by the first try | Nothing. This key's save was written before, and nothing more was written now.      |
+| `400`  | `warning`  | yes              | Nothing more. Show the `message` (see below).                                       |
+| `400`  |            | no               | Fix the request. The `message` says what is wrong, for example a missing key.       |
+| `400`  | `outdated` | no               | The body used the old format, a full list under `bills`. Send `edits`.              |
+| `409`  | `stale`    | no               | Read the meal form again, and build a new save, with a new key, from what it shows. |
+| `409`  |            | no               | Two writes collided. Send the same request again, with the same key.                |
+| `422`  |            | no               | The key was used for a different save. Use a new key for each save.                 |
+
+The `200` (`replayed` too), the warning, and the `stale` `409` carry
+`bills`: the meal's bills as stored, in the same shape as `bills` in the
+meal form. A `stale` answer names the cooks that changed:
+
+```
+{ "message": "Nothing was saved, because this meal changed after you loaded it: Bob's cost changed. Check the cooks and costs, then enter your change again.",
+  "type": "stale",
+  "bills": [ { "resident_id": 9, "amount": "9.0", "no_cost": false } ] }
+```
+
+The warning: adding a third cook to a future meal while another meal in
+the same rotation still has fewer than two cooks returns `400` with
+`"type": "warning"`. The bills are still saved; the `message` only says
+the rotation is short of cooks.
+
+With no answer at all (a timeout, or a dropped connection), the save may
+or may not have been written. Send the same save again, with the same
+key. If the first try was written, the answer is `replayed` and nothing
+more is written, even if the meal was settled since. If it was not, the
+server takes it as a new save.
 
 ## Rules an agent must know
 
 These come from the database and the models, not the controller, so
-every path enforces them. Each refusal is a `400` with a `message`.
+every path enforces them. Each refusal is a `400` with a `message`. A
+bills save built from an old copy of the meal form is a `409` instead;
+see "Bills".
 
 1. **Reconciled meals cannot change.** Once a meal is in a settlement
    (`reconciled: true` in the meal form), every write to it, its
    signups, its guests, and its bills is refused:
    `"Change not permitted. Meal has already been reconciled."`. This is
-   an accounting rule: the ledger is not edited, it is appended to.
+   an accounting rule: the ledger is not edited, it is appended to. The
+   one exception: a bills save sent again with a key the server kept
+   gets `replayed` or `422`, as in "Bills", and writes nothing.
 2. **A closed meal's headcount is frozen.** While `closed` is true and
    `max` is null, no one can sign up, cancel, add a guest, or remove a
    guest (`"Meal has been closed."`). The cook closes a meal to know
@@ -270,25 +368,38 @@ every path enforces them. Each refusal is a `400` with a `message`.
    signup or guest added after the meal closed can be removed again.
    One added before the close cannot. `max` cannot be set below the
    current headcount, and cannot be set at all on an open meal.
-4. **Bills are whole cents, 0 to 9999.99.** See "Bills".
+4. **Bills are whole cents, 0 to 9999.99, sent as text.** See "Bills".
 5. **Writes to one meal take a lock on that meal.** If a settlement is
-   running, or another write collides, you get `409`. Nothing was
-   saved. Resend the same request.
+   running, or another write collides, you get `409` with no `type`.
+   Nothing was saved. Resend the same request (a bills save with the
+   same `Idempotency-Key`). A bills save can also get a `409` with
+   `"type": "stale"`: then read the meal form again before you build a
+   new save.
 6. **Every write is recorded.** `GET /meals/:meal_id/history` shows who
    changed what, by the resident whose token was used.
 
 ## How the cost is split
 
 For a meal, the cost is the sum of the cooks' bills (skipping `no_cost`
-bills). Each person who ate counts with a weight, called a multiplier: full
-price is 2, half price is 1, free is 0. An adult and a guest are 2; a
-child is 1 or 0 depending on age. Cost per unit is cost divided by the
-sum of multipliers. Each eater is charged `unit cost × multiplier`; each cook is
-credited what they spent. If the community has set a cap per
-unit, the cost per unit stops at the cap and the community pays the
-rest. All of this is computed at full precision and rounded to cents
-only at settlement, and the rounded results always sum to zero. The
-API does not expose balances; those are in the admin site.
+bills). Each person who ate counts with a weight, called a multiplier:
+full price is 2, half price is 1, free is 0. An adult and a guest are 2;
+a child is 1 or 0 depending on age. If the community has set a cap per
+unit, the cost stops at the cap times the sum of the multipliers, and
+the community pays the rest.
+
+That cost is shared out among the people who ate, in proportion to
+their multipliers. A guest's share is charged to the host. Each cook is
+credited what they spent, or on a meal the cap cut, a share of the cut
+cost in proportion to what each cook spent.
+
+Amounts are kept in whole units of 10^-8 dollars (0.00000001), and a
+share is never worked out by dividing. Each person first gets the whole
+units of their exact share. The few units left over then go one each to
+the people whose share lost the most, ties to the lowest resident id. So
+a meal's charges and credits add up to exactly zero. Rounding to cents
+happens once, at settlement, by the same method at the cent, so the
+rounded balances add up to exactly zero too. The API does not expose
+balances; those are in the admin site.
 
 ## Calendar
 

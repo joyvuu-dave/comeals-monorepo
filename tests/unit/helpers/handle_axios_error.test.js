@@ -3,39 +3,42 @@ import handleAxiosError from "../../../app/frontend/src/helpers/handle_axios_err
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
 
 // What every failed request turns into: a toast the person sees, or a
-// console line when the caller asked for silence, and the toast type as
-// the return value so a caller can tell a warning from an error.
+// console line when the caller asked for silence. It returns the id of
+// the toast it showed, so a caller can tell later whether that toast is
+// still on screen, or null when it showed none.
 describe("handleAxiosError", () => {
   beforeEach(() => {
     toastStore.clearAll();
   });
 
-  describe("a response with a message", () => {
-    it("shows it as an error toast", () => {
-      const type = handleAxiosError({ response: { data: { message: "No." } } });
+  // The one toast on screen, as [id, message, type].
+  function toastsOnScreen() {
+    return toastStore.toasts.map((t) => [t.id, t.message, t.type]);
+  }
 
-      expect(type).toBe("error");
-      expect(toastStore.toasts.map((t) => [t.message, t.type])).toEqual([
-        ["No.", "error"],
-      ]);
+  describe("a response with a message", () => {
+    it("shows it as an error toast, and returns the toast's id", () => {
+      const id = handleAxiosError({ response: { data: { message: "No." } } });
+
+      expect(toastsOnScreen()).toEqual([[id, "No.", "error"]]);
+      expect(id).toEqual(expect.any(Number));
     });
 
-    it("shows a warning as a warning toast", () => {
-      const type = handleAxiosError({
+    it("shows a warning as a warning toast, and returns the toast's id", () => {
+      const id = handleAxiosError({
         response: { data: { message: "Careful.", type: "warning" } },
       });
 
-      expect(type).toBe("warning");
-      expect(toastStore.toasts[0].type).toBe("warning");
+      expect(toastsOnScreen()).toEqual([[id, "Careful.", "warning"]]);
     });
 
-    it("logs instead of toasting when silent", () => {
-      const type = handleAxiosError(
+    it("logs instead of toasting when silent, and returns null", () => {
+      const id = handleAxiosError(
         { response: { data: { message: "No." } } },
         { silent: true },
       );
 
-      expect(type).toBe("error");
+      expect(id).toBeNull();
       expect(toastStore.toasts).toHaveLength(0);
       expect(console.error).toHaveBeenCalledWith("No.");
     });
@@ -65,13 +68,14 @@ describe("handleAxiosError", () => {
       ["an empty body", 502, ""],
       ["no body at all", 502, undefined],
     ])(
-      "shows a plain error toast for %s, and logs it",
+      "shows a plain error toast for %s, logs it, and returns the toast's id",
       (_label, status, data) => {
         const error = { response: { status, data } };
 
-        expect(handleAxiosError(error)).toBe("error");
-        expect(toastStore.toasts.map((t) => [t.message, t.type])).toEqual([
-          ["The server had a problem. Please try again.", "error"],
+        const id = handleAxiosError(error);
+
+        expect(toastsOnScreen()).toEqual([
+          [id, "The server had a problem. Please try again.", "error"],
         ]);
         expect(console.error).toHaveBeenCalledWith(
           "Bad response from server",
@@ -80,10 +84,10 @@ describe("handleAxiosError", () => {
       },
     );
 
-    it("only logs when silent", () => {
+    it("only logs when silent, and returns null", () => {
       const error = { response: { status: 500, data: "<html>500</html>" } };
 
-      expect(handleAxiosError(error, { silent: true })).toBe("error");
+      expect(handleAxiosError(error, { silent: true })).toBeNull();
       expect(toastStore.toasts).toHaveLength(0);
       expect(console.error).toHaveBeenCalledWith(
         "Bad response from server",
@@ -93,15 +97,16 @@ describe("handleAxiosError", () => {
   });
 
   describe("a request that got no response", () => {
-    it("says so in a toast", () => {
-      expect(handleAxiosError({ request: {} })).toBe("error");
-      expect(toastStore.toasts[0].message).toBe(
-        "Error: no response received from server.",
-      );
+    it("says so in a toast, and returns the toast's id", () => {
+      const id = handleAxiosError({ request: {} });
+
+      expect(toastsOnScreen()).toEqual([
+        [id, "Error: no response received from server.", "error"],
+      ]);
     });
 
-    it("logs when silent", () => {
-      expect(handleAxiosError({ request: {} }, { silent: true })).toBe("error");
+    it("logs when silent, and returns null", () => {
+      expect(handleAxiosError({ request: {} }, { silent: true })).toBeNull();
       expect(toastStore.toasts).toHaveLength(0);
       expect(console.error).toHaveBeenCalledWith(
         "Error: no response received from server.",
@@ -110,21 +115,32 @@ describe("handleAxiosError", () => {
   });
 
   describe("a request that never went out", () => {
-    it("says the form could not be submitted", () => {
-      expect(handleAxiosError(new Error("boom"))).toBe("error");
-      expect(toastStore.toasts[0].message).toBe(
-        "Error: could not submit form.",
-      );
+    it("says the form could not be submitted, and returns the toast's id", () => {
+      const id = handleAxiosError(new Error("boom"));
+
+      expect(toastsOnScreen()).toEqual([
+        [id, "Error: could not submit form.", "error"],
+      ]);
     });
 
-    it("logs when silent", () => {
-      expect(handleAxiosError(new Error("boom"), { silent: true })).toBe(
-        "error",
-      );
+    it("logs when silent, and returns null", () => {
+      expect(handleAxiosError(new Error("boom"), { silent: true })).toBeNull();
       expect(toastStore.toasts).toHaveLength(0);
       expect(console.error).toHaveBeenCalledWith(
         "Error: could not submit form.",
       );
     });
+  });
+
+  // Toast ids are never used twice, so the id of a toast that is gone
+  // matches no toast on screen.
+  it("returns a new id for each toast", () => {
+    const first = handleAxiosError({ request: {} });
+    const second = handleAxiosError({ request: {} });
+
+    expect(second).not.toBe(first);
+    expect(toastsOnScreen()).toEqual([
+      [second, "Error: no response received from server.", "error"],
+    ]);
   });
 });

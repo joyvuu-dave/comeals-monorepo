@@ -51,8 +51,8 @@ RSpec.describe 'random action sequences against one meal, through the API' do
   # JSON, as the SPA sends it. (A form-encoded empty bills list reaches the
   # controller as one empty string; it answered 500 until 2026-09-10 and is
   # refused with 400 now, see update_bills_spec.rb.)
-  def request(verb, path, resident, params = {})
-    public_send(verb, path, params: params.merge(token: resident.keys.first.token), as: :json)
+  def request(verb, path, resident, params = {}, headers = {})
+    public_send(verb, path, params: params.merge(token: resident.keys.first.token), headers: headers, as: :json)
     expect(response.status).to be < 500, "#{where}: #{verb.upcase} #{path} answered #{response.status}"
     [response.status, response.parsed_body]
   end
@@ -150,20 +150,56 @@ RSpec.describe 'random action sequences against one meal, through the API' do
     end
   end
 
+  # A bills save the way the page sends it (#135): one edit for each cook
+  # whose bill changes, with the bill the model says is stored as `from`.
+  # The cooks picked here become the meal's cooks, so every save mixes
+  # adds, changes and removes. Now and then one edit carries a `from` that
+  # is not stored, the way a page that missed another page's save would
+  # send it: the whole save must be refused and write nothing. And now and
+  # then a save that went through is sent again with its Idempotency-Key,
+  # the way a page resends after no answer: it must change nothing.
   def set_bills(model, rng)
     cooks = residents.sample(rng.rand(model[:bills].empty? ? (1..3) : (0..3)), random: rng)
-    bills = cooks.map do |cook|
+    wanted = cooks.to_h do |cook|
       no_cost = rng.rand < 0.2
       cents = no_cost ? 0 : rng.rand(0..999_999)
-      { resident_id: cook.id, amount: "#{cents / 100}.#{format('%02d', cents % 100)}", no_cost: no_cost }
+      [cook.id, { amount: BigDecimal(cents) / 100, no_cost: no_cost }]
     end
-    status, = request(:patch, "/api/v1/meals/#{meal.id}/bills", residents.first, bills: bills)
+    edits = BillEdits.between(model[:bills], wanted)
+    stale = edits.any? { |edit| edit[:from] } && rng.rand < 0.15
+    edits = with_a_wrong_from(edits, rng) if stale
+    key = BillEdits.key_header
+    status, body = request(:patch, "/api/v1/meals/#{meal.id}/bills", residents.first, { edits: edits }, key)
+    return unless bills_saved?(model, status, body, stale)
+
+    model[:bills] = wanted
+    resend(edits, key) if rng.rand < 0.2
+  end
+
+  def bills_saved?(model, status, body, stale)
     if model[:settled]
       expect(status).to eq(400), "#{where}: bills after settlement answered #{status}"
+    elsif stale
+      expect([status, body['type']]).to eq([409, 'stale']), "#{where}: a stale bills save #{answer}"
     else
-      expect(status).to eq(200), "#{where}: bills answered #{status}"
-      model[:bills] = bills.to_h { |b| [b[:resident_id], { amount: BigDecimal(b[:amount]), no_cost: b[:no_cost] }] }
+      expect(status).to eq(200), "#{where}: bills #{answer}"
+      return true
     end
+    false
+  end
+
+  # Flips no_cost in one edit's `from`, so it is neither the stored bill
+  # nor the edit's `to`.
+  def with_a_wrong_from(edits, rng)
+    index = edits.each_index.select { |i| edits[i][:from] }.sample(random: rng)
+    edits.each_with_index.map do |edit, i|
+      i == index ? edit.merge(from: edit[:from].merge(no_cost: !edit[:from][:no_cost])) : edit
+    end
+  end
+
+  def resend(edits, key)
+    status, body = request(:patch, "/api/v1/meals/#{meal.id}/bills", residents.first, { edits: edits }, key)
+    expect([status, body['type']]).to eq([200, 'replayed']), "#{where}: the same bills save sent again #{answer}"
   end
 
   def close(model, _rng)

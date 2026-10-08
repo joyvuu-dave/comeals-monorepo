@@ -57,10 +57,12 @@ The money path is `# typed: strict`: `MealLedger`, `Settlement`,
 `BalanceRecalculation`, `SnapshotRead`, `LedgerVerification`, the three
 services that wrap them (`SettleAndNotify`, `RetryOnConflict`,
 `MealCostSummary`), the two API controllers on it
-(`Api::V1::MealsController`, `Api::V1::ReconciliationsController`), and the
-models that hold ledger rows: `Meal`, `Resident`, `Bill`, `MealResident`,
-`Guest`, `MealCharge`, `Reconciliation`, `ReconciliationBalance`,
-`ResidentBalance`. Every hand-written method there has a `sig`, and the
+(`Api::V1::MealsController`, `Api::V1::ReconciliationsController`), the
+three classes that read and write a bills save (`BillsPayload`,
+`IdempotencyKeyHeader`, and `BillsSaveKey`, whose row is written in the
+same transaction as the bills), and the models that hold ledger rows:
+`Meal`, `Resident`, `Bill`, `MealResident`, `Guest`, `MealCharge`,
+`Reconciliation`, `ReconciliationBalance`, `ResidentBalance`. Every hand-written method there has a `sig`, and the
 value objects (`MealLedger::Line`, `MealLedger::Summary`,
 `Settlement::Preview`) are `T::Struct`s, so a nil or a Float in a money
 field raises before any arithmetic runs. The `*_types_spec.rb` files under

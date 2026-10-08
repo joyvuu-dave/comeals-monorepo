@@ -1207,6 +1207,56 @@ test.describe("Visual Baselines", () => {
     });
   });
 
+  // Carol cooked and was retired after (#91), so only her own row offers
+  // her. Picking another name there would remove her bill, so it asks
+  // first, with No on the left under the menu.
+  test("remove retired cook confirm bar", async ({ page, context }) => {
+    await setupAuthenticatedPage(page, context, {
+      mealData: {
+        ...mealFixture,
+        bills: [
+          ...mealFixture.bills,
+          { resident_id: 4, amount: "40.0", no_cost: false },
+        ],
+        residents: [
+          ...mealFixture.residents,
+          {
+            id: 4,
+            meal_id: 42,
+            name: "D - Carol Davis",
+            short_name: "Carol Davis",
+            attending: false,
+            attending_at: null,
+            late: false,
+            vegetarian: false,
+            can_cook: true,
+            active: false,
+          },
+        ],
+      },
+    });
+    await page.clock.setFixedTime(FROZEN_NOW);
+
+    await page.goto("/meals/42/edit/");
+    await page.waitForLoadState("networkidle");
+    const carolsMenu = page
+      .getByRole("combobox", { name: "Select meal cook" })
+      .nth(1);
+    await expect(carolsMenu).toHaveValue("4", { timeout: 10000 });
+
+    await carolsMenu.selectOption("2");
+    await expect(
+      page.getByRole("alertdialog", { name: "Remove Carol Davis as a cook?" }),
+    ).toBeVisible({ timeout: 5000 });
+    // The menu still shows Carol until a Yes.
+    await expect(carolsMenu).toHaveValue("4");
+    await page.waitForTimeout(500);
+
+    await expect(page).toHaveScreenshot("remove-cook-confirm-bar.png", {
+      fullPage: true,
+    });
+  });
+
   test("login submitting", async ({ page }) => {
     await stubPusher(page);
     await disableIdleTimer(page);

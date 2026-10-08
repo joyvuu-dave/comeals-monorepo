@@ -65,6 +65,73 @@ RSpec.describe 'a meal write retried after a conflict', prosopite: false do
     expect(meal.reload.max).to eq(5)
   end
 
+  # A bills save reads the stored bills again on each try. Here the first
+  # try writes Bob's $7 and is refused, and another page's $9 for Bob
+  # commits while this one waits to try again. The second try finds $9,
+  # not the $5 this page saw, so it must answer stale and keep the $9.
+  # A save that read the bills once, before the first try, would write
+  # $7 over the other page's $9 with no message.
+  it 'answers a bills save stale when another save committed between two tries' do
+    cook = create(:resident, community: community, unit: unit, name: 'Bob')
+    bill = create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('5'))
+    token
+    refuse_first_bill_update
+    allow(RetryOnConflict).to receive(:sleep) { Bill.where(id: bill.id).update_all(amount: BigDecimal('9')) }
+
+    patch "/api/v1/meals/#{meal.id}/bills", params: {
+      token: token, edits: [{ op: 'change', resident_id: cook.id, from: { amount: '5.0', no_cost: false },
+                              to: { amount: '7.00', no_cost: false } }]
+    }, headers: BillEdits.key_header, as: :json
+
+    expect(response).to have_http_status(:conflict)
+    expect(response.parsed_body['type']).to eq('stale')
+    expect(bill.reload.amount).to eq(BigDecimal('9'))
+  end
+
+  # The save's Idempotency-Key is written in the same transaction as its
+  # bills (decision 6 of #135). Here the first try writes Bob's $7 and its
+  # key, and is then refused. The rollback must take the key too: a key
+  # left behind would make the second try answer "already made" for a save
+  # that was never written.
+  it 'writes a bills save on the second try, and keeps its key once, when the first try wrote its key' do
+    cook = create(:resident, community: community, unit: unit, name: 'Bob')
+    bill = create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('5'))
+    token
+    allow(RetryOnConflict).to receive(:sleep)
+    refused = false
+    allow(BillsSaveKey).to receive(:create!).and_wrap_original do |create, *args, **kwargs|
+      create.call(*args, **kwargs).tap do
+        unless refused
+          refused = true
+          raise ActiveRecord::SerializationFailure, 'could not serialize access due to read/write dependencies'
+        end
+      end
+    end
+
+    patch "/api/v1/meals/#{meal.id}/bills", params: {
+      token: token, edits: [{ op: 'change', resident_id: cook.id, from: { amount: '5.0', no_cost: false },
+                              to: { amount: '7.00', no_cost: false } }]
+    }, headers: BillEdits.key_header('the-key'), as: :json
+
+    expect(refused).to be(true)
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body).not_to have_key('type')
+    expect(bill.reload.amount).to eq(BigDecimal('7'))
+    expect(meal.associated_audits.where(auditable_type: 'Bill', action: 'update').count).to eq(1)
+    expect(BillsSaveKey.where(meal_id: meal.id).pluck(:key)).to eq(['the-key'])
+  end
+
+  def refuse_first_bill_update
+    refused = false
+    allow_any_instance_of(Bill).to receive(:update!).and_wrap_original do |update, *args, **kwargs| # rubocop:disable RSpec/AnyInstance -- the save loads the record
+      update.call(*args, **kwargs)
+      next if refused
+
+      refused = true
+      raise ActiveRecord::SerializationFailure, 'could not serialize access due to read/write dependencies'
+    end
+  end
+
   # Every try is refused after it wrote: the conflict arrives after the
   # INSERT, inside the lock's transaction, as a SERIALIZABLE refusal often
   # does. The transaction rolls the row back each time, so the 409's

@@ -83,9 +83,10 @@ RSpec.describe 'High-trust cross-resident authorization (ADR 0002)' do
       create(:bill, meal: meal, resident: other, community: community, amount: BigDecimal('0'))
 
       patch "/api/v1/meals/#{meal.id}/bills", params: {
-        token: token, meal_id: meal.id,
-        bills: [{ resident_id: other.id, amount: '42.00', no_cost: false }]
-      }
+        token: token,
+        edits: [{ op: 'change', resident_id: other.id, from: { amount: '0.0', no_cost: false },
+                  to: { amount: '42.00', no_cost: false } }]
+      }, headers: BillEdits.key_header, as: :json
 
       expect(response).to have_http_status(:ok)
       expect(meal.bills.find_by(resident_id: other.id).amount).to eq(BigDecimal('42.00'))

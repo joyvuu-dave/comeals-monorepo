@@ -486,6 +486,23 @@ question must never shift the content someone is about to click.
 .confirm-bar-buttons .button {
   min-width: 4.5rem;
 }
+/*
+The same bar under a control on the left of its row (a cook menu). The
+question takes the whole first line. No is wide and at the far left,
+under the control, and Yes stays at the far right, away from it.
+*/
+.confirm-bar-left .confirm-bar-question {
+  flex-basis: 100%;
+}
+.confirm-bar-left .confirm-bar-buttons {
+  flex-basis: 100%;
+  flex-direction: row-reverse;
+  justify-content: space-between;
+  margin-left: 0;
+}
+.confirm-bar-left .confirm-bar-no {
+  min-width: 40%;
+}
 /* The word "pending" in an empty cost box: a status, not a number. */
 .cost-pending::placeholder {
   color: var(--amber);

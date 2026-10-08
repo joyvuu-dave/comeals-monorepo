@@ -1748,9 +1748,6 @@ describe("DataStore", () => {
   // ── BUG-6 and #91: a bill whose cook is not in the residents list ──
 
   describe("loadData bill reference integrity", () => {
-    const RELOAD_MESSAGE =
-      "One cook's cost on this meal is not shown on this page, so nothing was saved. Please reload the page.";
-
     function billsPatches() {
       return axios.mock.calls.filter(
         ([config]) =>
@@ -1787,17 +1784,16 @@ describe("DataStore", () => {
       expect(store.bills.size).toBe(3);
       expect(blankRows(store)).toHaveLength(2);
       expect(spy).toHaveBeenCalledWith(
-        "Bills will not save: these cooks have a bill but are not in the residents list:",
+        "These cooks have a bill but are not in the residents list, so the page does not show their bills:",
         [999],
       );
       spy.mockRestore();
     });
 
-    // A bills save lists every cook, and the server deletes the bill of
-    // a cook left out (BillsPayload#write_to). So a save from this page
-    // would delete cook 999's bill. Nothing is sent, and the person is
-    // told to reload (#91).
-    it("refuses a save of another cook's cost: nothing is sent, and the toast says to reload", () => {
+    // A bills save names only the cooks it changes (#135), and no row
+    // names cook 999, so a save of Alice's cost is sent and cannot touch
+    // cook 999's bill (#91).
+    it("sends a save of another cook's cost, and it never names the cook the page cannot show", () => {
       const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
       toastStore.clearAll();
       const store = createDataStore({ mealProps: { closed: false } });
@@ -1806,54 +1802,16 @@ describe("DataStore", () => {
       billFor(store, 10).setAmount("16");
       store.submitBills();
 
-      expect(billsPatches()).toHaveLength(0);
-      expect(store.billsSaveInFlight).toBe(false);
-      expect(toastStore.toasts.map((t) => [t.type, t.message])).toEqual([
-        ["error", RELOAD_MESSAGE],
-      ]);
-      spy.mockRestore();
-    });
-
-    // The reload brings the server's list, which names the retired cook
-    // (inactive, did not eat). Saves go through again, and a save of
-    // another cook's cost names both cooks, so the server keeps the
-    // retired cook's bill.
-    it("sends saves again once a reload lists every cook, naming the retired cook too", () => {
-      const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
-      const store = createDataStore({ mealProps: { closed: false } });
-      store.loadData(mealWithHiddenCook(), "server");
-
-      store.loadData(
-        mealPayload({
-          residents: [
-            residentRow(10, "Alice"),
-            residentRow(999, "Carol", { active: false }),
-          ],
-          bills: mealWithHiddenCook().bills,
-        }),
-        "server",
-      );
-      billFor(store, 10).setAmount("16");
-      store.submitBills();
-
       expect(billsPatches()).toHaveLength(1);
-      expect(billsPatches()[0][0].data.bills).toEqual([
-        { resident_id: 10, amount: "16", no_cost: false },
-        { resident_id: 999 },
+      expect(billsPatches()[0][0].data.edits).toEqual([
+        {
+          op: "change",
+          resident_id: 10,
+          from: { amount: "15.00", no_cost: false },
+          to: { amount: "16", no_cost: false },
+        },
       ]);
-      spy.mockRestore();
-    });
-
-    // billsIncomplete is about the bill rows on screen. Switching meals
-    // clears those rows, so it clears the flag too.
-    it("clears billsIncomplete when the page switches to another meal", () => {
-      const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
-      const store = createDataStore({ mealProps: { closed: false } });
-      store.loadData(mealWithHiddenCook(), "server");
-
-      store.switchMeals(2);
-
-      expect(store.billsIncomplete).toBe(false);
+      expect(toastStore.toasts).toEqual([]);
       spy.mockRestore();
     });
   });
@@ -2135,49 +2093,11 @@ describe("DataStore", () => {
     });
   });
 
-  // ── Issue #29: only touched rows carry values to the server ──
+  // ── Issue #29: only edited rows carry values to the server ──
 
+  // A save is the difference between the rows and their bases (#135),
+  // so a row nobody changed is never sent (issue #29).
   describe("submitBills only-edited-rows", () => {
-    function mealDataWithBills(bills) {
-      return {
-        id: 1,
-        date: "2023-06-15",
-        description: "",
-        closed: false,
-        closed_at: null,
-        reconciled: false,
-        max: null,
-        next_id: 1,
-        prev_id: 1,
-        residents: [
-          {
-            id: 10,
-            meal_id: 1,
-            name: "Alice",
-            attending: false,
-            attending_at: null,
-            late: false,
-            vegetarian: false,
-            can_cook: true,
-            active: true,
-          },
-          {
-            id: 11,
-            meal_id: 1,
-            name: "Bob",
-            attending: false,
-            attending_at: null,
-            late: false,
-            vegetarian: false,
-            can_cook: true,
-            active: true,
-          },
-        ],
-        guests: [],
-        bills,
-      };
-    }
-
     function billsPatchCalls() {
       return axios.mock.calls.filter(
         ([config]) =>
@@ -2195,65 +2115,63 @@ describe("DataStore", () => {
       vi.useRealTimers();
     });
 
-    it("sends resident_id only for rows the user did not touch", () => {
+    it("sends only the cook whose cost changed", () => {
       const store = createDataStore({ mealProps: { closed: false } });
       store.loadData(
-        mealDataWithBills([
-          { resident_id: 10, amount: "12.34", no_cost: false },
-          { resident_id: 11, amount: "0.0", no_cost: false },
-        ]),
+        mealPayload({
+          residents: [residentRow(10, "Alice"), residentRow(11, "Bob")],
+          bills: [
+            { resident_id: 10, amount: "12.34", no_cost: false },
+            { resident_id: 11, amount: "0.0", no_cost: false },
+          ],
+        }),
         "server",
       );
 
-      const bobsBill = Array.from(store.bills.values()).find(
-        (b) => b.resident && b.resident.id === 11,
-      );
-      bobsBill.setAmount("5.00"); // triggers the debounced saveBills
+      billFor(store, 11).setAmount("5.00"); // triggers the debounced saveBills
       vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
 
       const calls = billsPatchCalls();
       expect(calls.length).toBe(1);
-      const payload = calls[0][0].data;
-      expect(payload.bills).toContainEqual({ resident_id: 10 });
-      expect(payload.bills).toContainEqual({
-        resident_id: 11,
-        amount: "5.00",
-        no_cost: false,
-      });
+      expect(calls[0][0].data.edits).toEqual([
+        {
+          op: "change",
+          resident_id: 11,
+          from: { amount: "", no_cost: false },
+          to: { amount: "5.00", no_cost: false },
+        },
+      ]);
     });
 
-    it("never sends a stored amount the user did not type back to the server", () => {
-      // A legacy sub-cent amount (data older than the whole-cents CHECK)
-      // displays exactly as stored and must never leave the client — this
-      // is the write-back that used to silently rewrite the ledger.
+    // A legacy sub-cent amount (data older than the whole-cents CHECK)
+    // displays exactly as stored and must never leave the client: that
+    // is the write-back that used to silently rewrite the ledger. Its
+    // text breaks the whole-cents grammar, and it still must not block a
+    // save of another cook.
+    it("never sends a stored amount nobody changed, and an amount like that does not block the save", () => {
       const store = createDataStore({ mealProps: { closed: false } });
       store.loadData(
-        mealDataWithBills([
-          { resident_id: 10, amount: "12.345", no_cost: false },
-          { resident_id: 11, amount: "0.0", no_cost: false },
-        ]),
+        mealPayload({
+          residents: [residentRow(10, "Alice"), residentRow(11, "Bob")],
+          bills: [
+            { resident_id: 10, amount: "12.345", no_cost: false },
+            { resident_id: 11, amount: "0.0", no_cost: false },
+          ],
+        }),
         "server",
       );
+      expect(billFor(store, 10).amount).toBe("12.345"); // exact wire string, no float
 
-      const alicesBill = Array.from(store.bills.values()).find(
-        (b) => b.resident && b.resident.id === 10,
-      );
-      expect(alicesBill.amount).toBe("12.345"); // exact wire string, no float
-
-      const bobsBill = Array.from(store.bills.values()).find(
-        (b) => b.resident && b.resident.id === 11,
-      );
-      bobsBill.setAmount("5.00");
+      billFor(store, 11).setAmount("5.00");
       vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
 
-      const payload = billsPatchCalls()[0][0].data;
-      expect(payload.bills).toContainEqual({ resident_id: 10 });
+      expect(billsPatchCalls()).toHaveLength(1);
       expect(
-        payload.bills.find((b) => b.resident_id === 10),
-      ).not.toHaveProperty("amount");
+        billsPatchCalls()[0][0].data.edits.map((edit) => edit.resident_id),
+      ).toEqual([11]);
     });
 
-    it("blocks the save when a touched row is invalid", () => {
+    it("blocks the save when a changed row's amount is not whole cents", () => {
       const store = createDataStore({
         mealProps: { closed: false },
         residents: [{ id: 10, meal_id: 1, name: "Alice", can_cook: true }],
@@ -2265,7 +2183,6 @@ describe("DataStore", () => {
       const bill = store.bills.get("b1");
       stage(store, () => {
         bill.amount = "1e3";
-        bill.touched = true;
       });
 
       store.submitBills();
@@ -2279,26 +2196,15 @@ describe("DataStore", () => {
         residents: [{ id: 10, meal_id: 1, name: "Alice", can_cook: true }],
         bills: [{ id: "b1", resident: 10, amount: "5.00", no_cost: false }],
       });
+      // The row as loadData leaves it: the server has its bill, so
+      // leaving the meal has no edit to send.
+      store.bills.get("b1").setBaseToShown();
       store.teardownMealPage();
 
       expect(() => store.submitBills()).not.toThrow();
       expect(
         axios.mock.calls.filter(([c]) => c && c.method === "patch").length,
       ).toBe(0);
-    });
-
-    it("does not let an untouched invalid legacy row block the save", () => {
-      const store = createDataStore({
-        mealProps: { closed: false },
-        residents: [{ id: 10, meal_id: 1, name: "Alice", can_cook: true }],
-        bills: [{ id: "b1", resident: 10, amount: "12.345", no_cost: false }],
-      });
-
-      store.submitBills();
-
-      const calls = billsPatchCalls();
-      expect(calls.length).toBe(1);
-      expect(calls[0][0].data.bills).toEqual([{ resident_id: 10 }]);
     });
   });
 
@@ -2349,6 +2255,24 @@ describe("DataStore", () => {
           config &&
           config.method === "patch" &&
           config.url === `/api/v1/meals/${mealId}/bills`,
+      );
+    }
+
+    // A change of one cook's amount, as a save sends it.
+    function change(residentId, from, to) {
+      return {
+        op: "change",
+        resident_id: residentId,
+        from: { amount: from, no_cost: false },
+        to: { amount: to, no_cost: false },
+      };
+    }
+
+    // The amounts each bills save for a meal sent, oldest first: one list
+    // per save.
+    function amountsSent(mealId = 1) {
+      return billsPatchCalls(mealId).map(([config]) =>
+        config.data.edits.map((edit) => edit.to.amount),
       );
     }
 
@@ -2412,6 +2336,11 @@ describe("DataStore", () => {
       "The cooks and costs you entered for Thu, Jun 15th were not saved, because that meal has already been settled.";
     const MEAL_1_NOT_SAVED =
       "The cooks and costs you entered for Thu, Jun 15th were not saved. Please open that meal and enter them again.";
+    // The words a person sees when the second try of a save for the meal
+    // on screen got no answer from the app (no answer, or a 5xx page with
+    // no message), so it may have been written.
+    const MAYBE_NOT_SAVED =
+      "Your cooks and costs may not have been saved. Check them when the meal shows again.";
 
     // The server's exact answer to a write to a settled meal
     // (reconciled_rejection in app/controllers/api/v1/meals_controller.rb).
@@ -2421,15 +2350,24 @@ describe("DataStore", () => {
     // server.
     const SETTLED_WORDS = contract.messages.reconciled_rejection;
 
+    // The words of a stale 409: Bob's $0 changed on the server after the
+    // page loaded the meal (#135).
+    const STALE_WORDS =
+      "Nothing was saved, because this meal changed after you loaded it: Bob's cost changed. Check the cooks and costs, then enter your change again.";
+
     // The ways a bills save can fail, with the words the person sees
     // for each: when the save is for the meal on screen, and when the
-    // save is for meal 1 and the person has left it.
+    // save is for meal 1 and the person has left it. Last, how many
+    // times the save is sent: a failure that may not be final is sent
+    // once more, and the words show only when that fails too (decision
+    // 7 of #135).
     const SAVE_FAILURES = [
       [
         "the server refuses it because the meal was settled (400)",
         { response: { status: 400, data: { message: SETTLED_WORDS } } },
         SETTLED_WORDS,
         MEAL_1_SETTLED,
+        1,
       ],
       [
         "the server refuses it for another reason (400)",
@@ -2441,6 +2379,19 @@ describe("DataStore", () => {
         },
         "Invalid cook assignment.",
         MEAL_1_NOT_SAVED,
+        1,
+      ],
+      [
+        "the server refuses it because the bills changed after the page loaded the meal (409, stale)",
+        {
+          response: {
+            status: 409,
+            data: { message: STALE_WORDS, type: "stale", bills: [] },
+          },
+        },
+        STALE_WORDS,
+        MEAL_1_NOT_SAVED,
+        1,
       ],
       [
         "the server refuses it because another write changed the meal at the same time (409)",
@@ -2455,6 +2406,7 @@ describe("DataStore", () => {
         },
         "Someone else was changing this meal at the same time. Nothing was saved. Try again.",
         MEAL_1_NOT_SAVED,
+        2,
       ],
       [
         "the server fails with its 500 page",
@@ -2464,25 +2416,36 @@ describe("DataStore", () => {
             data: "<!doctype html><html><head><title>We're sorry, but something went wrong (500)</title></head></html>",
           },
         },
-        "The server had a problem. Please try again.",
+        MAYBE_NOT_SAVED,
         MEAL_1_NOT_SAVED,
+        2,
       ],
       [
         "the server never answers (no network)",
         { request: {} },
-        "Error: no response received from server.",
+        MAYBE_NOT_SAVED,
         MEAL_1_NOT_SAVED,
+        2,
       ],
       [
         "the request is never sent",
         new Error("Network Error"),
-        "Error: could not submit form.",
+        MAYBE_NOT_SAVED,
         MEAL_1_NOT_SAVED,
+        2,
       ],
     ];
-    // Shorter names for the rows the tests below use one at a time.
+    // Shorter names for the rows the tests below use one at a time. The
+    // tests about which meals the message names use final failures, so
+    // each failure is one request.
     const SETTLED = SAVE_FAILURES[0][1];
-    const CONFLICT = SAVE_FAILURES[2][1];
+    const STALE = SAVE_FAILURES[2][1];
+    const NO_NETWORK = SAVE_FAILURES[5][1];
+
+    // The next `tries` bills saves fail with this error.
+    function failNextSaves(error, tries) {
+      for (let i = 0; i < tries; i += 1) axios.mockRejectedValueOnce(error);
+    }
 
     // The two warnings the server can give when it saves the cooks
     // (ThirdCookWarning). The answer is a 400, so axios rejects with it.
@@ -2572,16 +2535,12 @@ describe("DataStore", () => {
       // The switch flushed the edit to the meal it was typed on.
       const flushed = billsPatchCalls(1);
       expect(flushed.length).toBe(1);
-      expect(flushed[0][0].data.bills).toContainEqual({
-        resident_id: 11,
-        amount: "99.00",
-        no_cost: false,
-      });
+      expect(flushed[0][0].data.edits).toEqual([change(11, "", "99.00")]);
 
       // The old rows left with meal 1, so nothing remains that could be
       // edited — or sent — against meal 2 while it loads. A probe on
       // 2026-07-22 showed a keystroke in this window sending meal 1's
-      // cook list to meal 2, which the server treats as the complete
+      // cook list to meal 2, which the server then took as the complete
       // list for meal 2.
       expect(store.bills.size).toBe(0);
       // The flush consumed the timer: nothing more fires later.
@@ -2603,11 +2562,7 @@ describe("DataStore", () => {
       vi.advanceTimersByTime(1);
       const calls = billsPatchCalls();
       expect(calls.length).toBe(1);
-      expect(calls[0][0].data.bills).toContainEqual({
-        resident_id: 11,
-        amount: "50",
-        no_cost: false,
-      });
+      expect(calls[0][0].data.edits).toEqual([change(11, "", "50")]);
     });
 
     it("keeps one request in flight and resends the latest state when it settles", async () => {
@@ -2632,54 +2587,30 @@ describe("DataStore", () => {
       vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
       expect(billsPatchCalls().length).toBe(1);
 
-      // The first request settles; the queued save sends the latest state.
+      // The first request settles; the queued save sends what changed
+      // since the first was built.
       resolveFirst({ status: 200, data: {} });
       await vi.advanceTimersByTimeAsync(0);
 
       const calls = billsPatchCalls();
       expect(calls.length).toBe(2);
-      expect(calls[1][0].data.bills).toContainEqual({
-        resident_id: 11,
-        amount: "50",
-        no_cost: false,
-      });
+      expect(calls[1][0].data.edits).toEqual([change(11, "5", "50")]);
     });
 
-    it("applies the persisted bills from the ack when the user has not typed since", async () => {
-      const store = storeWithCookBill();
-      const bill = bobsBill(store);
-
-      // The server answers with what it stored (here: a different value,
-      // as if another client's write won the lock first).
-      axios.mockResolvedValueOnce({
-        status: 200,
-        data: {
-          message: "Form submitted.",
-          bills: [{ resident_id: 11, amount: "12.34", no_cost: false }],
-        },
-      });
-
-      bill.setAmount("5.50");
-      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
-      await vi.advanceTimersByTimeAsync(0);
-
-      expect(bill.amount).toBe("12.34");
-      expect(bill.touched).toBe(false);
-    });
-
-    it("ignores an ack row for a cook who is not on screen", async () => {
+    // The answer holds every bill the meal has. The check looks only at
+    // the cooks the save named (bills_save.test.js has the rest), so a
+    // cook the page does not show is fine: no message, and no fetch.
+    it("takes an answer that also holds a cook who is not on screen", async () => {
       const store = storeWithCookBill();
       const bill = bobsBill(store);
       toastStore.clearAll();
-      // The unknown cook comes first: skipping it must not stop the rows
-      // after it from being applied.
       axios.mockResolvedValueOnce({
         status: 200,
         data: {
           message: "Form submitted.",
           bills: [
             { resident_id: 99, amount: "7.00", no_cost: false },
-            { resident_id: 11, amount: "12.34", no_cost: false },
+            { resident_id: 11, amount: "5.5", no_cost: false },
           ],
         },
       });
@@ -2689,20 +2620,19 @@ describe("DataStore", () => {
       axios.get.mockClear();
       await vi.advanceTimersByTimeAsync(0);
 
-      expect(bill.amount).toBe("12.34");
-      expect(bill.touched).toBe(false);
-      // A clean ack: no error toast, and no refetch to repair it.
+      expect(bill.amount).toBe("5.50");
+      expect(bill.unsent).toBe(false);
       expect(toastStore.toasts).toEqual([]);
       expect(axios.get).not.toHaveBeenCalled();
     });
 
     // Regression from issue #30's fix. Typing "1", pausing past the
-    // debounce, then typing "0" used to fail: the ack rewrote the field
-    // to "1.00" under the cursor, so the next keystroke made "1.000" —
-    // three decimals, which the whole-cents grammar refuses. The "0" was
-    // swallowed. When the server agrees with the screen, the ack must
-    // not reformat what the user is still typing.
-    it("keeps the typed string when the ack differs only in formatting, so typing can continue", async () => {
+    // debounce, then typing "0" used to fail: the answer rewrote the
+    // field to "1.00" under the cursor, so the next keystroke made
+    // "1.000" — three decimals, which the whole-cents grammar refuses.
+    // The "0" was swallowed. The answer changes no row now (#135), so
+    // the typed string stays.
+    it("keeps the typed string when the answer differs only in formatting, so typing can continue", async () => {
       const store = storeWithCookBill();
       const bill = bobsBill(store);
 
@@ -2719,31 +2649,32 @@ describe("DataStore", () => {
       vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
       await vi.advanceTimersByTimeAsync(0);
 
-      // Same number: keep the user's string. The row is still in sync
-      // with the server, so it needs no resend.
+      // Same number: keep the user's string. The row is still what the
+      // server has, so it needs no resend.
       expect(bill.amount).toBe("1");
-      expect(bill.touched).toBe(false);
+      expect(bill.unsent).toBe(false);
 
       // The slow "0" keystroke lands: "1" then "0" makes "10".
       expect(bill.setAmount("10")).toBe("10");
       expect(bill.amount).toBe("10");
     });
 
-    // The counterpart of the ack no-reformat rule: the field pads itself
-    // when the user leaves it, so "1" still ends up shown as "1.00".
-    it("pads the display on blur without marking the row for a resend", () => {
+    // The counterpart of the rule above: the field pads itself when the
+    // user leaves it, so "1" still ends up shown as "1.00", and the
+    // padding is not an edit to send.
+    it("pads the display on blur without marking the row for a resend", async () => {
       const store = storeWithCookBill();
       const bill = bobsBill(store);
 
       bill.setAmount("1");
-      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS); // save fires; row settles
-      stage(store, () => {
-        bill.touched = false;
-      });
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS); // the save is sent
+      await vi.advanceTimersByTimeAsync(0); // and answered
 
       bill.normalizeAmountDisplay(); // what the input's onBlur calls
       expect(bill.amount).toBe("1.00");
-      expect(bill.touched).toBe(false);
+      expect(bill.unsent).toBe(false);
+      store.flushPendingBillsSave();
+      expect(billsPatchCalls().length).toBe(1);
 
       // A typed zero means "not filled in yet" and shows as blank — the
       // same mapping loadData uses, so blur and reload agree.
@@ -2752,7 +2683,7 @@ describe("DataStore", () => {
       expect(bill.amount).toBe("");
     });
 
-    it("ignores the ack when the user typed after the request was sent", async () => {
+    it("keeps a cost typed after the request was sent, and sends it next as a change from what was sent", async () => {
       const store = storeWithCookBill();
       const bill = bobsBill(store);
 
@@ -2779,19 +2710,15 @@ describe("DataStore", () => {
       });
       await vi.advanceTimersByTimeAsync(0);
 
-      // Applying the ack here would erase the newer keystroke.
+      // The answer does not erase the newer keystroke.
       expect(bill.amount).toBe("50");
-      expect(bill.touched).toBe(true);
+      expect(bill.unsent).toBe(true);
 
       // The debounced save then sends the newer value.
       await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
       const calls = billsPatchCalls();
       expect(calls.length).toBe(2);
-      expect(calls[1][0].data.bills).toContainEqual({
-        resident_id: 11,
-        amount: "50",
-        no_cost: false,
-      });
+      expect(calls[1][0].data.edits).toEqual([change(11, "5", "50")]);
     });
 
     it("flushes a pending save immediately on demand (blur) and consumes the timer", () => {
@@ -2803,11 +2730,7 @@ describe("DataStore", () => {
 
       const calls = billsPatchCalls();
       expect(calls.length).toBe(1);
-      expect(calls[0][0].data.bills).toContainEqual({
-        resident_id: 11,
-        amount: "5",
-        no_cost: false,
-      });
+      expect(calls[0][0].data.edits).toEqual([change(11, "", "5")]);
 
       // The flush consumed the timer — nothing more fires later.
       vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
@@ -2906,9 +2829,7 @@ describe("DataStore", () => {
 
       const calls = billsPatchCalls(1);
       expect(calls.length).toBe(2);
-      expect(calls[1][0].data.bills).toEqual([
-        { resident_id: 11, amount: "50", no_cost: false },
-      ]);
+      expect(calls[1][0].data.edits).toEqual([change(11, "5", "50")]);
       expect(billsPatchCalls(2).length).toBe(0);
 
       // Meal 1's answer: the server stored $50 for Bob on meal 1.
@@ -2922,7 +2843,7 @@ describe("DataStore", () => {
       await vi.advanceTimersByTimeAsync(0);
 
       expect(bobsBill(store).amount).toBe("7.00");
-      expect(bobsBill(store).touched).toBe(false);
+      expect(bobsBill(store).unsent).toBe(false);
       expect(billsPatchCalls(2).length).toBe(0);
     });
 
@@ -2970,11 +2891,7 @@ describe("DataStore", () => {
 
         const calls = billsPatchCalls(1);
         expect(calls.length).toBe(2);
-        expect(calls[1][0].data.bills).toContainEqual({
-          resident_id: 11,
-          amount: "50",
-          no_cost: false,
-        });
+        expect(calls[1][0].data.edits).toEqual([change(11, "5", "50")]);
         expect(billsPatchCalls(2).length).toBe(0);
       },
     );
@@ -3011,8 +2928,8 @@ describe("DataStore", () => {
         "/api/v1/meals/1/bills",
         "/api/v1/meals/2/bills",
       ]);
-      expect(billsPatchCalls(2)[0][0].data.bills).toEqual([
-        { resident_id: 11, amount: "8", no_cost: false },
+      expect(billsPatchCalls(2)[0][0].data.edits).toEqual([
+        change(11, "7.00", "8"),
       ]);
     });
 
@@ -3047,8 +2964,8 @@ describe("DataStore", () => {
         "/api/v1/meals/1/bills",
         "/api/v1/meals/1/bills",
       ]);
-      expect(billsPatchCalls(1)[1][0].data.bills).toEqual([
-        { resident_id: 11, amount: "50", no_cost: false },
+      expect(billsPatchCalls(1)[1][0].data.edits).toEqual([
+        change(11, "5", "50"),
       ]);
 
       resolveSecond({ status: 200, data: {} });
@@ -3058,17 +2975,18 @@ describe("DataStore", () => {
         "/api/v1/meals/1/bills",
         "/api/v1/meals/2/bills",
       ]);
-      expect(billsPatchCalls(2)[0][0].data.bills).toEqual([
-        { resident_id: 11, amount: "8", no_cost: false },
+      expect(billsPatchCalls(2)[0][0].data.edits).toEqual([
+        change(11, "7.00", "8"),
       ]);
       expect(billsPatchCalls(3).length).toBe(0);
     });
 
-    // The person leaves meal 1 with $50 waiting, comes back, and types
-    // $60. Both saves wait for the answer to the $5 save. The $50 save
-    // was made first, so it is sent first. If the $60 save went first,
-    // the $50 save would come after it and the server would keep $50.
-    it("sends the waiting save for a meal before a newer edit typed after coming back to that meal", async () => {
+    // The person leaves meal 1 with $50 waiting behind the $5 save, and
+    // comes back before either is answered. Meal 1's rows do not load
+    // until both are answered (#136), so a cost typed after that is
+    // sent after them. If a $60 save went before the $50 save, the
+    // server would keep $50.
+    it("loads a meal the person comes back to only once its saves are answered, so a newer edit is sent after them", async () => {
       const store = storeWithCookBill();
       answerMealFetches();
       const answerFirst = queueAnEditBehindASave(store);
@@ -3076,36 +2994,27 @@ describe("DataStore", () => {
       store.switchMeals(2);
       await vi.advanceTimersByTimeAsync(0); // meal 2's rows load
       store.switchMeals(1);
-      await vi.advanceTimersByTimeAsync(0); // meal 1's rows load again
-      bobsBill(store).setAmount("60");
-      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS); // waits for the $5 save
-      expect(billsPatchUrls()).toEqual(["/api/v1/meals/1/bills"]);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.bills.size).toBe(0);
 
+      // The $50 save is sent and works, then meal 1's rows load.
       answerFirst({ status: 200, data: {} });
       await vi.advanceTimersByTimeAsync(0);
+      bobsBill(store).setAmount("60");
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
 
-      expect(
-        billsPatchCalls(1).map(([config]) =>
-          config.data.bills.map((bill) => bill.amount),
-        ),
-      ).toEqual([["5"], ["50"], ["60"]]);
+      expect(amountsSent(1)).toEqual([["5"], ["50"], ["60"]]);
       expect(billsPatchCalls(2).length).toBe(0);
     });
 
-    // #91: while the meal has a bill the page does not show, no bills
-    // save may be sent, because the server deletes the bill of a cook
-    // left out of a save. The waiting save for the meal being left
-    // follows the same rule, and the person is told which meal, in the
-    // same words as any other save for a meal they left that failed.
-    it("does not send the waiting save for the meal being left while that meal has a bill the page does not show", async () => {
+    // #91: the meal has a bill the page does not show. A save names only
+    // the cooks it changes, so the save built when the person leaves the
+    // meal is sent, and it never names that cook (#135).
+    it("sends the save for the meal being left even when that meal has a bill the page does not show", async () => {
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-      const store = storeWithCookBill();
+      const store = createDataStore({ mealProps: { closed: false } });
       answerMealFetches();
       toastStore.clearAll();
-      const answerFirst = queueAnEditBehindASave(store);
-
-      // A fetch of meal 1, while the first save had no answer yet,
-      // listed a bill whose cook is not in the residents list.
       store.loadData(
         mealPayload({
           residents: [residentRow(11, "Bob")],
@@ -3116,19 +3025,16 @@ describe("DataStore", () => {
         }),
         "server",
       );
-      bobsBill(store).setAmount("50");
+      bobsBill(store).setAmount("50"); // in the wait before its save
 
       store.switchMeals(2);
-      expect(toastStore.toasts.map((t) => [t.type, t.message])).toEqual([
-        ["error", MEAL_1_NOT_SAVED],
-      ]);
-
-      answerFirst({ status: 200, data: {} });
-      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(0); // meal 2's rows load
 
       expect(billsPatchUrls()).toEqual(["/api/v1/meals/1/bills"]);
-      expect(store.billsSaveInFlight).toBe(false);
-      expect(toastsOnScreen()).toEqual([["error", MEAL_1_NOT_SAVED]]);
+      expect(billsPatchCalls(1)[0][0].data.edits).toEqual([
+        change(11, "", "50"),
+      ]);
+      expect(toastsOnScreen()).toEqual([]);
       warn.mockRestore();
     });
 
@@ -3138,18 +3044,18 @@ describe("DataStore", () => {
     // and otherwise asks the person to enter the costs again.
     it.each(SAVE_FAILURES)(
       "names the meal by its day when the waiting save for a meal the person left fails: %s",
-      async (_label, error, _wordsOnScreen, wordsAfterLeaving) => {
+      async (_label, error, _wordsOnScreen, wordsAfterLeaving, tries) => {
         const store = storeWithCookBill();
         answerMealFetches();
         const answerFirst = queueAnEditBehindASave(store);
-        axios.mockRejectedValueOnce(error);
+        failNextSaves(error, tries);
 
         store.switchMeals(2);
         toastStore.clearAll();
         answerFirst({ status: 200, data: {} });
         await vi.advanceTimersByTimeAsync(0);
 
-        expect(billsPatchCalls(1).length).toBe(2);
+        expect(billsPatchCalls(1).length).toBe(1 + tries);
         expect(toastStore.toasts.map((t) => [t.type, t.message])).toEqual([
           ["error", wordsAfterLeaving],
         ]);
@@ -3173,7 +3079,7 @@ describe("DataStore", () => {
       vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
       store.teardownMealPage();
       toastStore.clearAll();
-      rejectFirst(CONFLICT);
+      rejectFirst(STALE);
       await vi.advanceTimersByTimeAsync(0);
 
       expect(toastStore.toasts.map((t) => [t.type, t.message])).toEqual([
@@ -3209,7 +3115,7 @@ describe("DataStore", () => {
     // both meals.
     it("names every meal the person left in one message when a second fails while the first message still shows", async () => {
       const store = storeWithCookBill();
-      await leaveMeals1And2(store, CONFLICT, SETTLED);
+      await leaveMeals1And2(store, STALE, SETTLED);
 
       expect(toastsOnScreen()).toEqual([["error", MEALS_1_AND_2_NOT_SAVED]]);
     });
@@ -3218,10 +3124,10 @@ describe("DataStore", () => {
     // in it, so the meals stay in the order they first failed.
     it("keeps a meal's place in the message when it fails again", async () => {
       const store = storeWithCookBill();
-      await leaveMeals1And2(store, CONFLICT, CONFLICT);
+      await leaveMeals1And2(store, STALE, STALE);
 
       const meal1Save = await leaveWithASaveInFlight(store, 1, "60", 3);
-      meal1Save.reject(CONFLICT);
+      meal1Save.reject(STALE);
       await vi.advanceTimersByTimeAsync(0);
 
       expect(billsPatchCalls(1).length).toBe(3);
@@ -3232,8 +3138,8 @@ describe("DataStore", () => {
     // so when a later save for that meal fails for another reason. A
     // 409 or a lost network does not mean the meal is open again.
     it.each([
-      ["was settled, then failed for another reason", SETTLED, CONFLICT],
-      ["failed, then was settled", CONFLICT, SETTLED],
+      ["was settled, then failed for another reason", SETTLED, STALE],
+      ["failed, then was settled", STALE, SETTLED],
     ])(
       "says a meal the person left was settled when it %s",
       async (_label, firstError, secondError) => {
@@ -3262,7 +3168,7 @@ describe("DataStore", () => {
     async function failMeal1ThenLeaveMeal2(store) {
       answerMealFetches();
       const answerFirst = queueAnEditBehindASave(store);
-      axios.mockRejectedValueOnce(CONFLICT); // meal 1's $50 save
+      axios.mockRejectedValueOnce(STALE); // meal 1's $50 save
       store.switchMeals(2);
       await vi.advanceTimersByTimeAsync(0); // meal 2's rows load
       toastStore.clearAll();
@@ -3287,15 +3193,15 @@ describe("DataStore", () => {
     }
 
     // One outage fails the waiting save for meal 1 and then, right after
-    // it, the save for meal 2, the meal on screen. The message must still
+    // it, the save for the meal on screen, meal 2. Each is sent twice
+    // (decision 7 of #135), one after the other. The message must still
     // name meal 1, so meal 2 joins it instead of replacing it.
     it("still names a meal the person left when the save for the meal on screen fails right after it", async () => {
       const store = storeWithCookBill();
       answerMealFetches();
       const answerFirst = queueAnEditBehindASave(store);
-      const NO_NETWORK = SAVE_FAILURES[4][1];
-      axios.mockRejectedValueOnce(NO_NETWORK); // meal 1's $50 save
-      axios.mockRejectedValueOnce(NO_NETWORK); // meal 2's $8 save
+      failNextSaves(NO_NETWORK, 2); // meal 1's $50 save
+      failNextSaves(NO_NETWORK, 2); // meal 2's $8 save
       store.switchMeals(2);
       await vi.advanceTimersByTimeAsync(0); // meal 2's rows load
       bobsBill(store).setAmount("8");
@@ -3307,6 +3213,8 @@ describe("DataStore", () => {
       expect(billsPatchUrls()).toEqual([
         "/api/v1/meals/1/bills",
         "/api/v1/meals/1/bills",
+        "/api/v1/meals/1/bills",
+        "/api/v1/meals/2/bills",
         "/api/v1/meals/2/bills",
       ]);
       expect(toastsOnScreen()).toEqual([["error", MEALS_1_AND_2_NOT_SAVED]]);
@@ -3332,7 +3240,7 @@ describe("DataStore", () => {
         const rejectMeal2 = await failMeal1ThenLeaveMeal2(store);
 
         removeTheMessage();
-        rejectMeal2(CONFLICT);
+        rejectMeal2(STALE);
         await vi.advanceTimersByTimeAsync(0);
 
         expect(toastStore.toasts.map((t) => t.message)).toEqual([
@@ -3348,7 +3256,7 @@ describe("DataStore", () => {
     // it names all three.
     it("does not change the message when the person opens a meal it names again and a save for that meal works", async () => {
       const store = storeWithCookBill();
-      await leaveMeals1And2(store, CONFLICT, SETTLED);
+      await leaveMeals1And2(store, STALE, SETTLED);
       expect(toastsOnScreen()).toEqual([["error", MEALS_1_AND_2_NOT_SAVED]]);
 
       await saveOnScreen(store, 1, "50");
@@ -3356,7 +3264,7 @@ describe("DataStore", () => {
       expect(toastsOnScreen()).toEqual([["error", MEALS_1_AND_2_NOT_SAVED]]);
 
       const meal3Save = await leaveWithASaveInFlight(store, 3, "9", 2);
-      meal3Save.reject(CONFLICT);
+      meal3Save.reject(STALE);
       await vi.advanceTimersByTimeAsync(0);
 
       expect(toastsOnScreen()).toEqual([
@@ -3395,17 +3303,11 @@ describe("DataStore", () => {
       await vi.advanceTimersByTimeAsync(0); // meal 2's rows load
       toastStore.clearAll();
 
-      rejectFirst(CONFLICT);
+      rejectFirst(STALE);
       await vi.advanceTimersByTimeAsync(0); // the $50 save is sent
-      expect(
-        billsPatchCalls(1).map(([config]) =>
-          config.data.bills.map((bill) => bill.amount),
-        ),
-      ).toEqual([["5"], ["50"]]);
+      expect(amountsSent(1)).toEqual([["5"], ["50"]]);
       expect(toastsOnScreen()).toEqual([["error", MEAL_1_NOT_SAVED]]);
-      expect(console.error).toHaveBeenCalledWith(
-        CONFLICT.response.data.message,
-      );
+      expect(console.error).toHaveBeenCalledWith(STALE.response.data.message);
 
       resolveSecond({ status: 200, data: {} });
       await vi.advanceTimersByTimeAsync(0);
@@ -3437,10 +3339,11 @@ describe("DataStore", () => {
       return store;
     }
 
-    // Bob's $5 save is in flight when the person leaves meal 1 and comes
-    // back. Coming back loads the rows again, so Bob shows $0. They type
-    // $10 for Carol and leave again while the $5 save still waits. The
-    // $5 save fails. Carol's save works, but it does not hold Bob's $5.
+    // Bob's $5 save fails after the person left meal 1. They come back,
+    // and the rows load from the server, which never stored the $5, so
+    // Bob shows $0. They type $10 for Carol, and that save works. It
+    // names only Carol, so it does not hold Bob's $5, and the message
+    // about meal 1 stays.
     it("names the meal when the newer save that works for it holds only another cook's cost", async () => {
       const store = storeWithTwoCooks();
       let rejectFirst;
@@ -3455,30 +3358,33 @@ describe("DataStore", () => {
       vi.advanceTimersByTime(SAVE_DEBOUNCE_MS); // Bob's $5 is in flight
       store.switchMeals(2);
       await vi.advanceTimersByTimeAsync(0);
+      toastStore.clearAll();
+      rejectFirst(STALE);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(toastsOnScreen()).toEqual([["error", MEAL_1_NOT_SAVED]]);
+
       store.switchMeals(1);
       await vi.advanceTimersByTimeAsync(0); // meal 1's rows load again
       expect(billFor(store, 11).amount).toBe("");
       billFor(store, 12).setAmount("10");
-      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS); // waits for the $5 save
-      store.switchMeals(2);
-      await vi.advanceTimersByTimeAsync(0);
-      toastStore.clearAll();
-
-      rejectFirst(CONFLICT);
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
       await vi.advanceTimersByTimeAsync(0); // Carol's save is sent and works
 
-      expect(billsPatchCalls(1)[1][0].data.bills).toEqual([
-        { resident_id: 11 },
-        { resident_id: 12, amount: "10", no_cost: false },
+      expect(billsPatchCalls(1)[1][0].data.edits).toEqual([
+        change(12, "", "10"),
       ]);
       expect(toastsOnScreen()).toEqual([["error", MEAL_1_NOT_SAVED]]);
     });
 
-    // The same, without leaving: a push on the meal's channel loads the
-    // rows again while Bob's $5 save is in flight, so Bob shows $0.
-    // Then the person types $10 for Carol and leaves. The $5 save fails,
-    // and Carol's save works without Bob's $5.
-    it("names the meal when its rows load again while a save is in flight, and that save then fails", async () => {
+    // A push on the meal's channel while Bob's $5 save is in flight does
+    // not load the rows again (#136), so Bob's row keeps its $5. The
+    // person types $10 for Carol and leaves. The save made on leaving is
+    // built on the $5 save, so it sends only Carol's $10 (#135). The $5
+    // save is refused, and nothing sends it again: saves are never
+    // joined (decision 7 of #135). The $10 save works, and the message
+    // about meal 1 still shows (see billsNotSaved in
+    // data_store_bills.ts).
+    it("keeps a cost in flight on its row when a push comes, and the save made on leaving sends only what changed after it", async () => {
       const store = storeWithTwoCooks();
       let rejectFirst;
       axios.mockImplementationOnce(
@@ -3492,19 +3398,18 @@ describe("DataStore", () => {
       vi.advanceTimersByTime(SAVE_DEBOUNCE_MS); // Bob's $5 is in flight
       store.loadDataAsync(); // what a push on the meal's channel does
       await vi.advanceTimersByTimeAsync(0);
-      expect(billFor(store, 11).amount).toBe("");
+      expect(billFor(store, 11).amount).toBe("5");
       billFor(store, 12).setAmount("10");
       vi.advanceTimersByTime(SAVE_DEBOUNCE_MS); // waits for the $5 save
       store.switchMeals(2);
       await vi.advanceTimersByTimeAsync(0);
       toastStore.clearAll();
 
-      rejectFirst(CONFLICT);
-      await vi.advanceTimersByTimeAsync(0); // Carol's save is sent and works
+      rejectFirst(STALE);
+      await vi.advanceTimersByTimeAsync(0); // the save made on leaving works
 
-      expect(billsPatchCalls(1)[1][0].data.bills).toEqual([
-        { resident_id: 11 },
-        { resident_id: 12, amount: "10", no_cost: false },
+      expect(billsPatchCalls(1)[1][0].data.edits).toEqual([
+        change(12, "", "10"),
       ]);
       expect(toastsOnScreen()).toEqual([["error", MEAL_1_NOT_SAVED]]);
     });
@@ -3519,7 +3424,7 @@ describe("DataStore", () => {
       async (warning) => {
         const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
         const store = storeWithCookBill();
-        await leaveMeals1And2(store, CONFLICT, savedWithWarning(warning));
+        await leaveMeals1And2(store, STALE, savedWithWarning(warning));
 
         expect(toastsOnScreen()).toEqual([["error", MEAL_1_NOT_SAVED]]);
         expect(warn).toHaveBeenCalledWith(
@@ -3537,7 +3442,7 @@ describe("DataStore", () => {
       const store = storeWithCookBill();
       answerMealFetches();
       const answerFirst = queueAnEditBehindASave(store);
-      axios.mockRejectedValueOnce(CONFLICT); // meal 1's $50 save
+      axios.mockRejectedValueOnce(STALE); // meal 1's $50 save
       store.switchMeals(2);
       await vi.advanceTimersByTimeAsync(0); // meal 2's rows load
       toastStore.clearAll();
@@ -3561,7 +3466,7 @@ describe("DataStore", () => {
     it("does not take a meal off the message when a later save for that meal is saved with a warning", async () => {
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       const store = storeWithCookBill();
-      await leaveMeals1And2(store, CONFLICT, SETTLED);
+      await leaveMeals1And2(store, STALE, SETTLED);
 
       const meal1Save = await leaveWithASaveInFlight(store, 1, "60", 3);
       meal1Save.reject(savedWithWarning(THIRD_COOK_ADDED));
@@ -3574,32 +3479,32 @@ describe("DataStore", () => {
       warn.mockRestore();
     });
 
-    // Two waiting saves for meal 1: the person left it, came back,
-    // typed again, and left again before the first save was answered.
-    // Both fail, and the message names meal 1 once.
+    // Two saves for meal 1 fail after the person left it: the $5 save
+    // in flight, then the $50 save waiting behind it. The message names
+    // meal 1 once.
     it("names a meal once when two of its saves fail", async () => {
       const store = storeWithCookBill();
       answerMealFetches();
-      const answerFirst = queueAnEditBehindASave(store);
-      axios.mockRejectedValueOnce(CONFLICT); // the $50 save
-      axios.mockRejectedValueOnce(CONFLICT); // the $60 save
+      let rejectFirst;
+      axios.mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectFirst = reject;
+          }),
+      );
+      axios.mockRejectedValueOnce(STALE); // the $50 save
+      bobsBill(store).setAmount("5");
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS); // the $5 save is in flight
+      bobsBill(store).setAmount("50");
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS); // the $50 save waits
 
       store.switchMeals(2);
       await vi.advanceTimersByTimeAsync(0); // meal 2's rows load
-      store.switchMeals(1);
-      await vi.advanceTimersByTimeAsync(0); // meal 1's rows load again
-      bobsBill(store).setAmount("60");
-      store.switchMeals(2);
-      await vi.advanceTimersByTimeAsync(0);
       toastStore.clearAll();
-      answerFirst({ status: 200, data: {} });
+      rejectFirst(STALE);
       await vi.advanceTimersByTimeAsync(0);
 
-      expect(
-        billsPatchCalls(1).map(([config]) =>
-          config.data.bills.map((bill) => bill.amount),
-        ),
-      ).toEqual([["5"], ["50"], ["60"]]);
+      expect(amountsSent(1)).toEqual([["5"], ["50"]]);
       expect(toastStore.toasts.map((t) => t.message)).toEqual([
         MEAL_1_NOT_SAVED,
       ]);
@@ -3643,7 +3548,7 @@ describe("DataStore", () => {
       const store = storeWithCookBill();
       answerMealFetches();
       const answerFirst = queueAnEditBehindASave(store);
-      axios.mockRejectedValueOnce(CONFLICT); // meal 1's $50 save
+      axios.mockRejectedValueOnce(STALE); // meal 1's $50 save
 
       store.switchMeals(2);
       await vi.advanceTimersByTimeAsync(0); // meal 2's rows load
@@ -3659,14 +3564,14 @@ describe("DataStore", () => {
       expect(axios.get).not.toHaveBeenCalled();
 
       vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
-      expect(billsPatchCalls(2)[0][0].data.bills).toEqual([
-        { resident_id: 11, amount: "8", no_cost: false },
+      expect(billsPatchCalls(2)[0][0].data.edits).toEqual([
+        change(11, "7.00", "8"),
       ]);
     });
 
     // The other half of the rule above: a failed save for the meal on
     // screen means the rows may show what the server did not store, so
-    // that meal is fetched again.
+    // that meal is fetched again, frozen until it arrives.
     it("fetches the meal on screen again when its own save fails", async () => {
       const store = storeWithCookBill();
       answerMealFetches();
@@ -3678,23 +3583,25 @@ describe("DataStore", () => {
 
       expect(axios.get).toHaveBeenCalledTimes(1);
       expect(bobsBill(store).amount).toBe("");
-      expect(bobsBill(store).touched).toBe(false);
+      expect(bobsBill(store).unsent).toBe(false);
+      expect(store.mealLoading).toBe(false);
     });
 
-    // A save for the meal still on screen keeps the words it always
-    // had: the person can see which meal it is about.
+    // A message about a save for the meal still on screen does not name
+    // the meal: the person can see which meal it is about.
     it.each(SAVE_FAILURES)(
-      "shows the usual words, with no meal day, when a save for the meal on screen fails: %s",
-      async (_label, error, wordsOnScreen) => {
+      "shows words with no meal day when a save for the meal on screen fails: %s",
+      async (_label, error, wordsOnScreen, _wordsAfterLeaving, tries) => {
         const store = storeWithCookBill();
         answerMealFetches();
         toastStore.clearAll();
-        axios.mockRejectedValueOnce(error);
+        failNextSaves(error, tries);
 
         bobsBill(store).setAmount("5");
         vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
         await vi.advanceTimersByTimeAsync(0);
 
+        expect(billsPatchCalls().length).toBe(tries);
         expect(toastStore.toasts.map((t) => [t.type, t.message])).toEqual([
           ["error", wordsOnScreen],
         ]);

@@ -52,6 +52,7 @@ module NonTransactionalCleanup
   TABLES = %w[
     audits
     bills
+    bills_save_keys
     meal_residents
     guests
     meal_charges

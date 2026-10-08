@@ -46,6 +46,7 @@ matcher:
     - BillsPayload*
     - DateRangeDescription*
     - Healthcheck*
+    - IdempotencyKeyHeader*
     - JwtAuth*
     - LargestRemainderSplit*
     - LedgerVerification*
@@ -89,6 +90,7 @@ matcher:
     - ApplicationRecord*
     - AdminUser*
     - Bill*
+    - BillsSaveKey*
     - CommonHouseReservation*
     - Community*
     - Event*

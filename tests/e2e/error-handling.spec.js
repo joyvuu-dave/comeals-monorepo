@@ -385,53 +385,28 @@ test.describe("Error Handling & Edge Cases", () => {
 
     // The one warning the server sends: the bills write answers 400
     // with type "warning" and saves the bills anyway
-    // (MealsController#update_bills, ThirdCookWarning). The bills store
+    // (MealsController#save_bills, ThirdCookWarning). The bills store
     // shows it as an info toast that starts "Cooks saved.", never as an
     // error or a warning toast.
     test("a warning from the bills write says the cooks were saved, in an info toast", async ({
       page,
       context,
     }) => {
-      await setupAuthenticatedPage(page, context);
-
       const warning =
         "Warning: third cooks should not be added until all meals in the rotation have at least two cooks.";
-      // The bills as the server stored them.
-      let stored = null;
-      await page.route("**/api/v1/meals/*/bills*", (route) => {
-        if (route.request().method() !== "PATCH") return route.fallback();
-        stored = [
-          { resident_id: 1, amount: "25.5", no_cost: false },
-          { resident_id: 2, amount: "0.0", no_cost: false },
-        ];
-        return route.fulfill({
-          status: 400,
-          contentType: "application/json",
-          body: JSON.stringify({
-            message: warning,
-            type: "warning",
-            bills: stored,
-          }),
-        });
-      });
-      // The store fetches the meal again after the answer; the server
-      // then has the saved cooks.
-      await page.route("**/api/v1/meals/42/cooks*", (route) => {
-        if (route.request().method() !== "GET" || stored === null) {
-          return route.fallback();
-        }
-        return route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify({ ...mealFixture, bills: stored }),
-        });
-      });
+      await setupAuthenticatedPage(page, context, { billsWarning: warning });
 
       await page.goto("/meals/42/edit/");
       const cooks = page.locator('[aria-label="Select meal cook"]');
       await expect(cooks.first()).toHaveValue("1", { timeout: 10000 });
 
+      const answered = page.waitForResponse(
+        (r) =>
+          r.request().method() === "PATCH" &&
+          r.url().includes("/api/v1/meals/42/bills"),
+      );
       await cooks.nth(1).selectOption("2");
+      expect((await answered).status()).toBe(400);
 
       const toast = page.locator(".toast--info");
       await expect(toast.locator(".toast__message")).toHaveText(
@@ -441,6 +416,61 @@ test.describe("Error Handling & Edge Cases", () => {
       await expect(page.locator(".toast--error")).toHaveCount(0);
       await expect(page.locator(".toast--warning")).toHaveCount(0);
       await expect(cooks.nth(1)).toHaveValue("2");
+    });
+
+    // Another page saved Jane's cost after this page loaded the meal
+    // (#135). This page's save says it changes her cost from the $25.50
+    // it shows, which the server no longer has, so the server writes
+    // nothing and answers 409 with type "stale". The page shows the
+    // server's words, does not send the save again, and loads the meal
+    // again, so it shows the cost the other page saved.
+    test("a save built on a cost another page changed shows the server's words, and the meal loads again", async ({
+      page,
+      context,
+    }) => {
+      const server = await setupAuthenticatedPage(page, context);
+
+      await page.goto("/meals/42/edit/");
+      const cost = page
+        .getByRole("spinbutton", { name: "Set meal cost" })
+        .first();
+      await expect(cost).toHaveValue("25.50", { timeout: 10000 });
+
+      // The other page's save.
+      server.mealState.bills = [
+        { resident_id: 1, amount: "30.0", no_cost: false },
+      ];
+
+      const saves = [];
+      page.on("request", (request) => {
+        if (
+          request.method() === "PATCH" &&
+          request.url().includes("/api/v1/meals/42/bills")
+        ) {
+          saves.push(request.postDataJSON());
+        }
+      });
+      const refused = page.waitForResponse(
+        (r) =>
+          r.request().method() === "PATCH" &&
+          r.url().includes("/api/v1/meals/42/bills"),
+      );
+      const loadedAgain = page.waitForResponse(
+        (r) =>
+          r.request().method() === "GET" &&
+          r.url().includes("/api/v1/meals/42/cooks"),
+      );
+      await cost.fill("35.00");
+
+      const answer = await refused;
+      expect(answer.status()).toBe(409);
+      expect((await answer.json()).type).toBe("stale");
+      await expect(page.locator(".toast--error .toast__message")).toHaveText(
+        "Nothing was saved, because this meal changed after you loaded it: Jane Smith's cost changed. Check the cooks and costs, then enter your change again.",
+      );
+      await loadedAgain;
+      await expect(cost).toHaveValue("30.00");
+      expect(saves).toHaveLength(1);
     });
 
     test("network error (no response) shows generic alert", async ({

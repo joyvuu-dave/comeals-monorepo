@@ -67,7 +67,8 @@ the nightly job, a settlement, a rake task, the console.
 
 ### One flush per transaction, after commit.
 
-A request can write many rows (a bills save writes one per cook).
+A request can write many rows (a bills save writes one for each cook it
+adds, changes or removes).
 `LiveUpdate` collects the notes per open database transaction and
 flushes once after the outermost commit — one cache clear per month,
 one push per channel — using `ActiveRecord::Base.current_transaction`'s

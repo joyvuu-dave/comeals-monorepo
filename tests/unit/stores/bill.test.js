@@ -302,56 +302,108 @@ describe("Bill model", () => {
     });
   });
 
-  // ── touched flag (issue #29: only touched rows carry values on save) ──
+  // ── base and unsent (#135, #136) ──
+  //
+  // A row's base is what the server has for the row's cook, as far as
+  // this page knows. A bills save sends the difference between the rows
+  // and their bases, so a row nobody edited is never sent (issue #29).
+  // A row that differs from its base holds an edit the server may not
+  // have yet, so the page must not build the rows again from a fetch
+  // while it does.
 
-  describe("touched", () => {
-    it("starts false", () => {
+  describe("unsent", () => {
+    // A row whose base is what it shows, the way loadData makes it.
+    function rowAtItsBase(bill) {
       const store = createStore({
-        bills: [{ id: "bill-1", amount: "25.00" }],
+        residents: [
+          { id: 10, meal_id: 1, name: "Alice" },
+          { id: 11, meal_id: 1, name: "Bob" },
+        ],
+        bills: [bill],
       });
+      const row = store.bills.get(bill.id);
+      row.setBaseToShown();
+      return row;
+    }
 
-      expect(store.bills.get("bill-1").touched).toBe(false);
+    it("is false for a row that shows its base", () => {
+      const row = rowAtItsBase({ id: "b1", resident: 10, amount: "25.00" });
+
+      expect(row.unsent).toBe(false);
     });
 
-    it("is set by setAmount", () => {
-      const store = createStore({
-        bills: [{ id: "bill-1", amount: "" }],
-      });
+    it("is true once the amount changes", () => {
+      const row = rowAtItsBase({ id: "b1", resident: 10, amount: "25.00" });
 
-      const bill = store.bills.get("bill-1");
-      bill.setAmount("10.00");
-      expect(bill.touched).toBe(true);
+      row.setAmount("26");
+
+      expect(row.unsent).toBe(true);
     });
 
-    it("is not set by a refused setAmount", () => {
-      const store = createStore({
-        bills: [{ id: "bill-1", amount: "" }],
-      });
+    it("is true once no_cost changes", () => {
+      const row = rowAtItsBase({ id: "b1", resident: 10, amount: "" });
 
-      const bill = store.bills.get("bill-1");
-      bill.setAmount("12.345");
-      expect(bill.touched).toBe(false);
+      row.toggleNoCost();
+
+      expect(row.unsent).toBe(true);
     });
 
-    it("is set by toggleNoCost", () => {
-      const store = createStore({
-        bills: [{ id: "bill-1", no_cost: false }],
-      });
+    it("is true once another cook is picked", () => {
+      const row = rowAtItsBase({ id: "b1", resident: 10, amount: "25.00" });
 
-      const bill = store.bills.get("bill-1");
-      bill.toggleNoCost();
-      expect(bill.touched).toBe(true);
+      row.setResident(11);
+
+      expect(row.unsent).toBe(true);
     });
 
-    it("is set by setResident", () => {
-      const store = createStore({
-        residents: [{ id: 10, meal_id: 1, name: "Alice" }],
-        bills: [{ id: "bill-1" }],
-      });
+    it("is true once the cook is taken off the row", () => {
+      const row = rowAtItsBase({ id: "b1", resident: 10, amount: "25.00" });
 
-      const bill = store.bills.get("bill-1");
-      bill.setResident(10);
-      expect(bill.touched).toBe(true);
+      row.setResident("");
+
+      expect(row.unsent).toBe(true);
+    });
+
+    it("is true once a cook is picked in a blank row", () => {
+      const row = rowAtItsBase({ id: "b1", amount: "" });
+
+      row.setResident(10);
+
+      expect(row.unsent).toBe(true);
+    });
+
+    // "25" and "25.00" are the same cost, and the field pads "1" to
+    // "1.00" on blur. Neither is an edit the server does not have.
+    it("is false when the amount is the same number written another way", () => {
+      const row = rowAtItsBase({ id: "b1", resident: 10, amount: "25.00" });
+      row.setAmount("25");
+      expect(row.unsent).toBe(false);
+
+      const padded = rowAtItsBase({ id: "b2", resident: 10, amount: "1" });
+      padded.normalizeAmountDisplay();
+      expect(padded.amount).toBe("1.00");
+      expect(padded.unsent).toBe(false);
+    });
+
+    // A save sends only rows with a cook, so a number typed in a blank
+    // row is never sent and is not an edit the server is missing.
+    it("is false for a blank row with a number typed in it", () => {
+      const row = rowAtItsBase({ id: "b1", amount: "" });
+
+      row.setAmount("5");
+
+      expect(row.unsent).toBe(false);
+    });
+
+    it("is false again once the base moves to what the row shows", () => {
+      const row = rowAtItsBase({ id: "b1", resident: 10, amount: "25.00" });
+      row.setAmount("26");
+      row.setResident(11);
+      row.toggleNoCost();
+
+      row.setBaseToShown();
+
+      expect(row.unsent).toBe(false);
     });
   });
 
@@ -473,7 +525,6 @@ describe("Bill model", () => {
       bill.normalizeAmountDisplay();
 
       expect(bill.amount).toBe("1.00");
-      expect(bill.touched).toBe(false);
       expect(saveBillsSpy).not.toHaveBeenCalled();
     });
 

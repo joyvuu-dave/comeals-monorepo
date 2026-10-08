@@ -26,6 +26,11 @@ shared: &shared
   clear_finished_jobs:
     command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
     schedule: 12 * * * * UTC
+  # A bills save's Idempotency-Key is kept 7 days (BillsSaveKey). Like
+  # clear_finished_jobs, a missed hour is caught up by the next one.
+  delete_expired_bills_save_keys:
+    command: "BillsSaveKey.delete_expired"
+    schedule: 41 * * * * UTC
 
 development:
   <<: *shared

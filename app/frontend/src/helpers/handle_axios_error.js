@@ -7,41 +7,40 @@ import toastStore from "../stores/toast_store";
 // response.data is HTML or has no `message`.
 var SERVER_PROBLEM = "The server had a problem. Please try again.";
 
+// Show a failed request to the person as a toast, in place of any toast
+// on screen, or only log it when `options.silent` is true. Returns the
+// id of the toast it showed, or null when it showed none. A caller keeps
+// the id to tell later whether that toast is still on screen.
 export default function handleAxiosError(error, options) {
   var silent = options && options.silent;
   if (error.response) {
     var data = error.response.data;
     if (data && data.message) {
-      var toastType = data.type === "warning" ? "warning" : "error";
       if (silent) {
         console.error(data.message);
-      } else {
-        toastStore.replaceAll(data.message, toastType);
+        return null;
       }
-      return toastType;
+      var toastType = data.type === "warning" ? "warning" : "error";
+      return toastStore.replaceAll(data.message, toastType);
     } else {
       console.error("Bad response from server", error);
-      if (!silent) {
-        toastStore.replaceAll(SERVER_PROBLEM, "error");
-      }
-      return "error";
+      if (silent) return null;
+      return toastStore.replaceAll(SERVER_PROBLEM, "error");
     }
   } else if (error.request) {
     if (silent) {
       console.error("Error: no response received from server.");
-    } else {
-      toastStore.replaceAll(
-        "Error: no response received from server.",
-        "error",
-      );
+      return null;
     }
-    return "error";
+    return toastStore.replaceAll(
+      "Error: no response received from server.",
+      "error",
+    );
   } else {
     if (silent) {
       console.error("Error: could not submit form.");
-    } else {
-      toastStore.replaceAll("Error: could not submit form.", "error");
+      return null;
     }
-    return "error";
+    return toastStore.replaceAll("Error: could not submit form.", "error");
   }
 }

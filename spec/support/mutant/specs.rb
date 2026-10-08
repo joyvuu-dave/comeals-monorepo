@@ -106,7 +106,15 @@ MUTANT_SPEC_ROWS = {
   'spec/requests/api/v1/calendar_read_conflict_spec.rb' =>
     %w[RetryOnConflict ApiController Api::V1::CommunitiesController],
   'spec/requests/api/v1/pool_exhaustion_spec.rb' => %w[ApiController],
-  'spec/requests/api/v1/update_bills_spec.rb' => %w[ThirdCookWarning Api::V1::MealsController Bill],
+  'spec/requests/api/v1/update_bills_spec.rb' => %w[BillsPayload ThirdCookWarning Api::V1::MealsController Bill],
+  # Two pages on one meal, the second saving from a form read before the
+  # first page's save (#135).
+  'spec/requests/api/v1/two_pages_bills_spec.rb' => %w[BillsPayload Api::V1::MealsController],
+  # The Idempotency-Key on a bills save (decision 6 of #135). The race
+  # spec is the only one that sends two saves with one key at once.
+  'spec/requests/api/v1/bills_idempotency_key_spec.rb' =>
+    %w[IdempotencyKeyHeader BillsPayload BillsSaveKey Api::V1::MealsController],
+  'spec/requests/api/v1/bills_idempotency_key_race_spec.rb' => %w[Api::V1::MealsController],
   'spec/requests/api/v1/meals_controller_spec.rb' =>
     %w[Api::V1::MealsController AuditDescription MealFormSerializer MealCostSummary Meal MealResident Guest],
   'spec/requests/api/v1/meals_refused_writes_spec.rb' =>
@@ -120,8 +128,9 @@ MUTANT_SPEC_ROWS = {
   # A method entry, not the class: meal_form_serializer_spec.rb has a
   # '#residents' group, and mutant runs only the examples of the most
   # exact expression it finds. A class entry here would never run for
-  # #residents.
-  'spec/requests/api/v1/meal_form_retired_cook_spec.rb' => %w[MealFormSerializer#residents],
+  # #residents. BillsPayload is named because the save from the form is
+  # what must leave the retired cook's bill alone.
+  'spec/requests/api/v1/meal_form_retired_cook_spec.rb' => %w[MealFormSerializer#residents BillsPayload],
   'spec/requests/api/v1/events_controller_spec.rb' => %w[Api::V1::EventsController Event LiveUpdate],
   'spec/requests/api/v1/guest_room_reservations_controller_spec.rb' =>
     %w[Api::V1::GuestRoomReservationsController GuestRoomReservation StorableTimeValidator],
