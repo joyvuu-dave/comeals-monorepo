@@ -35,9 +35,11 @@ RSpec.describe 'Admin meal form: max' do
     expect(meal.reload).to have_attributes(closed: false, max: nil)
   end
 
+  # An earlier day: the form refuses a date after the last meal (#143),
+  # and this meal is the only one.
   it 'saves a new date on a meal with more eaters than its max' do
     add_past_max
-    new_date = meal.date + 1
+    new_date = meal.date - 1
 
     patch "/meals/#{meal.id}", params: { meal: { date: new_date.iso8601, max: '1' } }
 

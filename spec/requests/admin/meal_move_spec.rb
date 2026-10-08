@@ -14,6 +14,11 @@ RSpec.describe 'Admin meal form: moving a meal to another date' do
   let(:token) { resident.keys.first.token }
   let(:meal) { create(:meal, community: community, date: Date.new(2026, 4, 10)) }
 
+  # The form refuses a date after the last meal of the calendar (#143), so
+  # the calendar runs past June. August is outside the six weeks the two
+  # months below show.
+  before { create(:meal, community: community, date: Date.new(2026, 8, 20)) }
+
   around do |example|
     original_store = Rails.cache
     Rails.cache = ActiveSupport::Cache::MemoryStore.new

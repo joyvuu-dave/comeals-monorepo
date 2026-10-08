@@ -93,7 +93,9 @@ test.describe("Meals", () => {
     ).toBeVisible();
   });
 
-  // A gap date is one between two rotations, or after the last one.
+  // A gap date is one between two rotations. The menu is blank after the
+  // last rotation too, but that date is refused (the group after this
+  // one).
   test("asks for a rotation for a gap date", async ({ page }) => {
     await login(page);
     await page.goto("/meals/new");
@@ -128,19 +130,21 @@ test.describe("Meals", () => {
     ).toBeVisible();
   });
 
+  // To an earlier day: a later one is after the last rotation (the
+  // next group).
   test("moves a meal to another date", async ({ page }) => {
     await login(page);
     await page.goto("/meals/1/edit");
     await expect(page.locator("#meal_date")).toHaveValue("2027-02-04");
-    await page.fill("#meal_date", "2027-02-05");
+    await page.fill("#meal_date", "2027-02-01");
     await page.click('input[type="submit"]');
 
     await expect(notice(page)).toHaveText("Meal was successfully updated.");
-    await expect(page.locator(".row-date td")).toHaveText("February 05, 2027");
+    await expect(page.locator(".row-date td")).toHaveText("February 01, 2027");
     // The index shows the moved meal with its new weekday.
     await page.goto("/meals");
     await expect(
-      page.locator("td.col-date", { hasText: "Fri, Feb 5 2027" }),
+      page.locator("td.col-date", { hasText: "Mon, Feb 1 2027" }),
     ).toHaveCount(1);
     await expect(
       page.locator("td.col-date", { hasText: "Thu, Feb 4 2027" }),
@@ -180,6 +184,46 @@ test.describe("Meals", () => {
     await expect(alert(page)).toHaveText(
       "Meal has been closed. Reopen it before deleting.",
     );
+  });
+});
+
+// Both forms refuse a date after the last meal of the calendar (#143):
+// the nightly job starts the next rotation the day after the last meal,
+// so a meal after it would leave schedule days with no meal. The test
+// reads the end from every meal, and the tests in "Meals" add, move and
+// delete meals, so it has a group and a fresh seed of its own. In the
+// seed the last meal is meal 1, on 2027-02-04.
+test.describe("Meals: a date after the last rotation", () => {
+  reseedBeforeGroup();
+
+  test("refuses a date after the last rotation", async ({ page }) => {
+    const refusal =
+      "This date is after the last rotation, which ends Feb 4, 2027. " +
+      "Add the meal once the calendar reaches that date.";
+    await login(page);
+
+    // The New Meal form. The menu stays blank after the last rotation,
+    // and choosing a rotation does not make the date allowed.
+    await page.goto("/meals/new");
+    await page.fill("#meal_date", "2027-03-01");
+    // Leave the field, as a click on the menu does. That fires the
+    // field's change event, and the script picks again then; without it,
+    // that would happen on the submit click and clear the choice below.
+    await page.locator("#meal_date").blur();
+    await expect(page.locator("#meal_rotation_id")).toHaveValue("");
+    await page.selectOption("#meal_rotation_id", "1");
+    await page.click('input[type="submit"]');
+    await expect(page).toHaveURL(/\/meals$/);
+    await expect(page.locator(".errors")).toHaveText(refusal);
+
+    // The edit form: the last meal cannot move later.
+    await page.goto("/meals/1/edit");
+    await page.fill("#meal_date", "2027-02-05");
+    await page.click('input[type="submit"]');
+    await expect(page).toHaveURL(/\/meals\/1$/);
+    await expect(page.locator(".errors")).toHaveText(refusal);
+    await page.goto("/meals/1");
+    await expect(page.locator(".row-date td")).toHaveText("February 04, 2027");
   });
 });
 

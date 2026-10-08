@@ -1863,3 +1863,33 @@ block, not a class. Six changes were made there by hand, and each one
 failed a spec: `optional: true` on the `belongs_to`; `rotation_id`
 permitted on every action, or on none; the rotation menu on every form,
 or on none; and the menu with no blank choice.
+
+### 2026-10-07, a date after the last rotation (#143)
+
+Run on `Meal#date_not_after_the_last_rotation`, the one Ruby method the
+#143 change added, and on four methods whose examples it changed. The
+admin forms now refuse a date after the last meal, so two specs got a
+later meal: `meal_move_spec` has a meal on 2026-08-20, so its move to
+June is allowed, and `calendar_rotation_chip_spec` has one on
+2027-03-20, so its one-off meal after the rotation is allowed. Those
+specs run for `Meal#note_live_update`, `Meal#note_rotation_months`,
+`CalendarSerializer#rotations_in_range` and
+`Community#calendar_cache_version`. Six workers, 5 subjects, 372
+mutations, 366 killed, 6 alive, no timeout, 11 minutes. The new method
+alone had 77 mutations, and all 77 were killed.
+
+The 6 alive are the 6 answered as noise in the two #100 entries above:
+the 3 in `calendar_cache_version`, and the dropped `.uniq` and the two
+`.to_a` rewrites in `rotations_in_range`. The later meals did not let
+any other mutation of those four methods live.
+
+Mutant cannot reach two parts of the change. The `validate` line and
+its `if: :from_admin_form` run in the class body, and the
+`before_save` that sets the flag is in `app/admin/meal.rb`, an
+ActiveAdmin block. Five changes were made there by hand, and each one
+failed examples in `meal_date_after_last_rotation_spec`: the `validate`
+line removed (5 failed); its `if:` removed, so every save runs the
+check (14 failed, among them the job spec's "still makes rotations
+after the last meal"); the flag set to false (5 failed); the flag set
+only on create (3 failed, the edit form's); and only on update (2
+failed, the New Meal form's).

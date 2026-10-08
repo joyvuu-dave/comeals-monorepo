@@ -174,6 +174,9 @@ MUTANT_SPEC_ROWS = {
   'spec/requests/admin/resident_form_spec.rb' => %w[Resident HasPhoneNumber],
   'spec/requests/admin/unit_form_spec.rb' => %w[Unit],
   'spec/requests/admin/meal_move_spec.rb' => %w[Meal Bill ReconciledMealImmutability NotesMealLiveUpdate],
+  # The only spec of Meal#date_not_after_the_last_rotation, which runs
+  # only when the admin forms set the flag (#143).
+  'spec/requests/admin/meal_date_after_last_rotation_spec.rb' => %w[Meal],
   'spec/tasks/community_create_rotations_spec.rb' => %w[EnsureRotationsJob Community MealSchedule Rotation],
   'spec/tasks/rotations_notify_new_spec.rb' => %w[PacedDelivery ResidentMailer MailDelivery],
   'spec/tasks/residents_notify_spec.rb' => %w[PacedDelivery ResidentMailer MailDeliveryFailure MailDelivery],

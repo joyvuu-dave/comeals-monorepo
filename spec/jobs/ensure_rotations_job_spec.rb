@@ -20,6 +20,19 @@ RSpec.describe EnsureRotationsJob do
     expect(Rotation.count).to be > 0
   end
 
+  # The admin forms refuse a date after the last meal (#143,
+  # spec/requests/admin/meal_date_after_last_rotation_spec.rb). The job
+  # makes exactly those dates, so that rule must not apply to it.
+  it 'still makes rotations after the last meal' do
+    travel_to(Time.zone.local(2026, 1, 15, 12)) { described_class.perform_now }
+    last_date = community.meals.maximum(:date)
+
+    travel_to(Time.zone.local(2026, 2, 15, 12)) do
+      expect { described_class.perform_now }.to change(Rotation, :count)
+    end
+    expect(community.meals.where(date: (last_date + 1)..)).to exist
+  end
+
   it 'does nothing on a second run' do
     described_class.perform_now
 

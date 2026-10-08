@@ -137,7 +137,9 @@ $(function () {
   // rotation whose dates contain it. When no rotation does (a date
   // between two rotations, or after the last one), or more than one
   // does, leave the menu blank, so the admin must choose: the server
-  // refuses a meal with no rotation. Nothing happens when the page
+  // refuses a meal with no rotation. After the last rotation no choice
+  // is right, because the server refuses that date too (#143), so the
+  // menu stays blank there as well. Nothing happens when the page
   // loads: the menu keeps what the server sent, which is blank on a new
   // form and the admin's own choice on a form shown again with an error.
   // The date field and the data attributes are both YYYY-MM-DD, so

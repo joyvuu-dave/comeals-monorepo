@@ -95,7 +95,8 @@ removed the slug.
 - `meal_schedule` — a `MealSchedule` built from `schedule`
 - `create_next_rotation` — asks `meal_schedule` for the next
   `meals_per_rotation` meal dates, starting the day after the last existing
-  meal (or today), and creates one Rotation with those meals.
+  meal (or today), and creates one Rotation with those meals. This is why
+  the admin meal forms refuse a date after the last meal (`Meal`, `date`).
 - `unreconciled_ave_cost` — dashboard "cost per adult" over the unreconciled
   meals dated up to and including today. Upcoming meals are left out: they
   have sign-ups but no receipt yet (#98). It reads `MealLedger#summary_for`,
@@ -364,7 +365,16 @@ Meal ----< MealCharge (written at settlement; empty until then)
 
 **Key fields:**
 
-- `date` — unique (`index_meals_on_date`)
+- `date` — unique (`index_meals_on_date`). The admin New Meal form and the
+  meal edit form refuse a date after the last meal of the calendar, the end
+  of the last rotation (#143): "This date is after the last rotation, which
+  ends Mar 3, 2027. Add the meal once the calendar reaches that date." The
+  next rotation starts the day after the last meal, so with a meal after
+  the end, the schedule days between the end and that meal would never get
+  a meal. On an edit the meal counts at the date it has before the edit, so
+  the last meal can move earlier but not later. Only the forms set the flag
+  the check runs on (`from_admin_form`); the nightly job and the seeds make
+  the meals after the end. With no meal at all, any date is allowed.
 - `rotation_id` — required by the model and by NOT NULL (#100). The nightly
   job makes each rotation with its meals. A one-off meal from the admin New
   Meal form goes in the rotation the admin picks; the form chooses the

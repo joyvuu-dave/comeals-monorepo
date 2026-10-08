@@ -34,6 +34,12 @@ RSpec.describe "Calendar: a rotation's chip on a month that does not hold the ch
   before do
     create(:meal, community: community, rotation: rotation, date: Date.new(2027, 1, 20))
     create(:meal, community: community, rotation: rotation, date: Date.new(2027, 2, 3))
+    # The admin forms refuse a date after the last meal of the calendar
+    # (#143). So a later rotation has a meal after every date below. That
+    # meal is outside January's six weeks, so January does not show its
+    # rotation.
+    create(:meal, community: community, rotation: create(:rotation, community: community),
+                  date: Date.new(2027, 3, 20))
   end
 
   # The last day of the chip on January's calendar. The chip's end is the

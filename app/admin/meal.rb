@@ -21,6 +21,12 @@ ActiveAdmin.register Meal do
     permitted
   end
 
+  # The New Meal form and the edit form refuse a date after the last meal
+  # of the calendar (#143, Meal#date_not_after_the_last_rotation).
+  # ActiveAdmin runs this block just before it saves, on create and on
+  # update.
+  before_save { |meal| meal.from_admin_form = true }
+
   # CONFIG
   filter :reconciliation_id_null, as: :select, collection: [['Yes', false], ['No', true]], include_blank: false,
                                   default: false, label: 'Reconciled?'
@@ -177,10 +183,12 @@ ActiveAdmin.register Meal do
       f.input :date, as: :datepicker
       # Only on the New Meal form, which makes one-off meals (#100). The
       # options and the script that picks one by date: RotationChoicesHelper.
+      # A date after the last rotation is refused on save (#143).
       if f.object.new_record?
         f.input :rotation, collection: rotation_choices, include_blank: 'Choose a rotation',
                            hint: 'When the date is inside a rotation, that rotation is chosen for you. ' \
-                                 'For a date between two rotations, or after the last one, choose one yourself.'
+                                 'For a date between two rotations, choose one yourself. ' \
+                                 'A date after the last rotation is refused.'
       end
       f.input :closed
       f.input :max if f.object.closed

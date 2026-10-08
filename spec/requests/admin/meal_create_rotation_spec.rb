@@ -21,19 +21,23 @@ RSpec.describe 'Admin meal create and its rotation' do
     post '/meals', params: { meal: { date: date.iso8601, closed: '0', rotation_id: rotation_id } }
   end
 
+  # The dates below are before the rotation's one meal: the form refuses
+  # a date after the last meal of the calendar (#143,
+  # meal_date_after_last_rotation_spec.rb).
   it 'saves the meal in the rotation the admin picked' do
-    expect { create_meal(date: community.today + 10, rotation_id: rotation.id) }.to change(Meal, :count).by(1)
+    expect { create_meal(date: community.today + 1, rotation_id: rotation.id) }.to change(Meal, :count).by(1)
 
-    meal = Meal.find_by!(date: community.today + 10)
+    meal = Meal.find_by!(date: community.today + 1)
     expect(response).to redirect_to("/meals/#{meal.id}")
     expect(meal.rotation).to eq(rotation)
   end
 
   it 'refuses a meal with no rotation, and says why on the form' do
-    expect { create_meal(date: community.today + 10, rotation_id: '') }.not_to change(Meal, :count)
+    expect { create_meal(date: community.today + 1, rotation_id: '') }.not_to change(Meal, :count)
 
     expect(response).to have_http_status(:ok)
-    expect(response.body).to include('Rotation must be chosen. Every meal belongs to a rotation.')
+    expect(response.parsed_body.css('ul.errors li').map(&:text))
+      .to eq(['Rotation must be chosen. Every meal belongs to a rotation.'])
   end
 
   # The script in active_admin.js picks a rotation when the date
@@ -71,7 +75,8 @@ RSpec.describe 'Admin meal create and its rotation' do
   end
 
   it 'leaves the nightly job able to extend the calendar' do
-    create_meal(date: community.today + 10, rotation_id: rotation.id)
+    create_meal(date: community.today + 1, rotation_id: rotation.id)
+    expect(Meal.find_by(date: community.today + 1)).to be_present
 
     expect { EnsureRotationsJob.perform_now }.to change(Rotation, :count)
     expect(community.meals.where(date: (community.today + EnsureRotationsJob::HORIZON)..)).to exist

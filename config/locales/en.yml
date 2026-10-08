@@ -49,3 +49,7 @@ en:
               # The admin New Meal form shows this when the rotation menu
               # is left blank (#100).
               required: "must be chosen. Every meal belongs to a rotation."
+          # The admin meal forms refuse a date after the last meal of the
+          # calendar (#143, Meal#date_not_after_the_last_rotation).
+          # ends_on is that meal's date, like "Mar 3, 2027".
+          after_the_last_rotation: "This date is after the last rotation, which ends %{ends_on}. Add the meal once the calendar reaches that date."

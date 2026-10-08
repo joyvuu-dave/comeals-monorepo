@@ -12,6 +12,8 @@
 # one rotation whose dates contain it. When no rotation does (a date
 # between two rotations, or after the last one), it leaves the menu
 # blank, and the admin must choose: a meal with no rotation is refused.
+# A date after the last rotation is refused whatever the menu says
+# (#143, Meal#date_not_after_the_last_rotation).
 module RotationChoicesHelper
   # [label, id, data attributes] for each rotation, newest first, in the
   # shape a Formtastic select takes. One query for all of them.

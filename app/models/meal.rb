@@ -137,6 +137,23 @@ class Meal < ApplicationRecord
 
   validates :date, uniqueness: true
 
+  # Set by the admin New Meal form and the meal edit form (app/admin/meal.rb),
+  # and by nothing else. Never saved, and not a form field.
+  sig { returns(T.nilable(T::Boolean)) }
+  attr_accessor :from_admin_form
+
+  # The two admin forms refuse a date after the last meal of the calendar,
+  # which is the end of the last rotation (#143). EnsureRotationsJob starts
+  # each new rotation the day after the last meal. With a meal after the
+  # end, it would skip every schedule day between the end and that meal,
+  # and nothing would ever put a meal on those days.
+  #
+  # Only those forms: the job, the seeds and the test seeds make the meals
+  # after the end, one rotation at a time. A flag, not a validation
+  # context: Rails gives a save's context to the nested guests too, and a
+  # guest's own `on: :create` checks would then not run.
+  validate :date_not_after_the_last_rotation, if: :from_admin_form
+
   # Reconciled meals are immutable (accounting principle: no edits to a closed
   # ledger). Settlement inputs are frozen; an unreconciled meal can still be
   # reconciled (reconciliation_id nil -> id happens via update_all anyway).
@@ -186,6 +203,25 @@ class Meal < ApplicationRecord
   sig { void }
   def conditionally_set_max
     self.max = nil if closed == false
+  end
+
+  # The end is the latest date in the database. On an edit that is read
+  # before the save, so this meal counts at the date it has now: the last
+  # meal cannot move later, and it can move to any earlier day. A date
+  # that is not changing is never after the end, because it is already in
+  # the database. With no meal at all there is no end, and any date is
+  # allowed.
+  #
+  # On :base, not :date: the form lists an error on an attribute with the
+  # attribute's name in front ("Date This date is ..."). The sentence is
+  # in config/locales/en.yml.
+  sig { void }
+  def date_not_after_the_last_rotation
+    new_date = date
+    last_date = T.cast(Meal.maximum(:date), T.nilable(Date))
+    return if new_date.nil? || last_date.nil? || new_date <= last_date
+
+    errors.add(:base, :after_the_last_rotation, ends_on: last_date.strftime('%b %-d, %Y'))
   end
 
   # closed_at is the "extras" boundary (ClosedMealAttendanceFreeze): an
