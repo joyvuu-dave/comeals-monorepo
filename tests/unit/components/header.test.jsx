@@ -10,6 +10,9 @@ cookies.current = { username: "Jane Smith" };
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
 import Header from "../../../app/frontend/src/components/meal/header.jsx";
 import { fakeLocation } from "../helpers/fake_location.js";
+import FakeResizeObserver, {
+  makeTall,
+} from "../helpers/fake_resize_observer.js";
 
 function makeStore(overrides = {}) {
   return observable(
@@ -45,6 +48,41 @@ function renderHeader(store) {
 describe("Header", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    FakeResizeObserver.made = [];
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // On a phone the header can take two or three lines (#151), and the
+  // stack of messages must stop under the meal's date, which is under
+  // the header (toast.css). So the header puts its height on the page's
+  // root element while it shows.
+  it("gives the page its height while it shows, and follows it", () => {
+    const { unmount } = renderHeader(makeStore());
+    const header = document.querySelector("header");
+    const [observer] = FakeResizeObserver.made;
+    expect(observer.watching).toEqual([header]);
+
+    function published() {
+      return document.documentElement.style.getPropertyValue(
+        "--meal-header-height",
+      );
+    }
+
+    makeTall(header, 36);
+    observer.resized();
+    expect(published()).toBe("36px");
+
+    makeTall(header, 72);
+    observer.resized();
+    expect(published()).toBe("72px");
+
+    unmount();
+    expect(observer.watching).toEqual([]);
+    expect(published()).toBe("");
   });
 
   it("shows the online state and flips with the store", () => {

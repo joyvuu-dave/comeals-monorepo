@@ -697,4 +697,66 @@ test.describe("Meal Editing", () => {
     // Each page fetched its meal from the server, in order.
     expect(fetchedIds).toEqual([42, 43, 42]);
   });
+
+  // #151. On a phone, "logout" and the person's name did not fit on the
+  // header's line next to "history". They went to a second line, below
+  // the header, and the box with the meal's date was drawn over them,
+  // so a tap on "logout" landed on that box.
+  test.describe("the logout button on a phone", () => {
+    // True when a tap in the middle of this element lands on it, and
+    // not on something drawn over it.
+    async function tappable(locator) {
+      return locator.evaluate((element) => {
+        const box = element.getBoundingClientRect();
+        const hit = window.document.elementFromPoint(
+          box.left + box.width / 2,
+          box.top + box.height / 2,
+        );
+        return element.contains(hit);
+      });
+    }
+
+    async function expectLogoutInHeader(page) {
+      await page.goto("/meals/42/edit/");
+      await expect(
+        page.getByRole("cell", { name: "B - Bob Johnson", exact: true }),
+      ).toBeVisible({ timeout: 10000 });
+      const logout = page.getByRole("button", { name: /^logout/ });
+      await expect(logout).toBeInViewport({ ratio: 1 });
+      const header = await page.locator("header").boundingBox();
+      const box = await logout.boundingBox();
+      expect(box.y).toBeGreaterThanOrEqual(header.y);
+      expect(box.y + box.height).toBeLessThanOrEqual(header.y + header.height);
+      expect(await tappable(logout)).toBe(true);
+    }
+
+    for (const width of [320, 375, 414]) {
+      test(`at ${width}px wide, it is in the header and can be tapped`, async ({
+        page,
+      }) => {
+        await page.setViewportSize({ width, height: 667 });
+        await expectLogoutInHeader(page);
+      });
+    }
+
+    // The name is part of the button, so a longer name needs more room.
+    // The server shortens a name only as far as it stays unique
+    // (ResidentNameShortener), so a full name can show. 375px is a
+    // common phone width.
+    test("at 375px wide, with a long name, it is in the header and can be tapped", async ({
+      page,
+      context,
+    }) => {
+      await context.addCookies([
+        {
+          name: "username",
+          value: "Bartholomew Fitzgerald-Montgomery",
+          domain: "localhost",
+          path: "/",
+        },
+      ]);
+      await page.setViewportSize({ width: 375, height: 667 });
+      await expectLogoutInHeader(page);
+    });
+  });
 });

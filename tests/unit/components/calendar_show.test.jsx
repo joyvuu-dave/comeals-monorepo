@@ -405,6 +405,79 @@ describe("MainCalendar", () => {
     });
   });
 
+  // #148. react-modal listens for Escape only on the dialog itself, so
+  // Escape closes a form only while focus is inside the dialog. When
+  // focus moves to the page's <body>, it goes back to the dialog.
+  describe("focus that leaves the dialog", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    function pressEscape() {
+      fireEvent.keyDown(document.activeElement, {
+        key: "Escape",
+        keyCode: 27,
+      });
+    }
+
+    // Chrome takes focus off a button that turns disabled, and the
+    // event it sends is the same as for a blur.
+    it("goes back to the dialog when a control loses it to the page", async () => {
+      renderCalendar({ path: "/calendar/all/2026-01-15/events/new" });
+      const dialog = screen.getByRole("dialog");
+      const title = screen.getByLabelText("Title");
+      title.focus();
+
+      title.blur();
+      expect(document.body).toHaveFocus();
+
+      await vi.waitFor(() => expect(dialog).toHaveFocus());
+      pressEscape();
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        /^\/calendar\/all\/2026-01-15$/,
+      );
+    });
+
+    // WebKit, like jsdom, sends no event when the focused element is
+    // removed: here the ✕ of a message the person closes.
+    it("goes back to the dialog when the control that had it is removed", async () => {
+      const axios = (await import("axios")).default;
+      axios.post.mockRejectedValueOnce({
+        response: { status: 422, data: { message: "Title can't be blank" } },
+      });
+      renderCalendar({ path: "/calendar/all/2026-01-15/events/new" });
+      const dialog = screen.getByRole("dialog");
+      fireEvent.click(screen.getByRole("button", { name: "Create" }));
+      const dismiss = await screen.findByRole("button", { name: "Dismiss" });
+      dismiss.focus();
+      // A move of focus is checked a moment later. That check runs
+      // now, so it cannot be what puts focus back after the removal.
+      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+
+      fireEvent.click(dismiss);
+      expect(dismiss).not.toBeInTheDocument();
+      expect(document.body).toHaveFocus();
+
+      await vi.waitFor(() => expect(dialog).toHaveFocus());
+      pressEscape();
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        /^\/calendar\/all\/2026-01-15$/,
+      );
+    });
+
+    it("stays on the control it moved to", () => {
+      renderCalendar({ path: "/calendar/all/2026-01-15/events/new" });
+      vi.useFakeTimers();
+      const description = screen.getByLabelText("Description");
+      screen.getByLabelText("Title").focus();
+
+      description.focus();
+      vi.runAllTimers();
+
+      expect(description).toHaveFocus();
+    });
+  });
+
   it("clicking a day number goes to that day; the current day stays put", () => {
     renderCalendar();
     fireEvent.click(screen.getByRole("button", { name: "15" }));

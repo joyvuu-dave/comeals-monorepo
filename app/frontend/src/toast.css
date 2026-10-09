@@ -21,8 +21,15 @@
    keeps its order, newest on top, and the "more" line is last, at the
    bottom edge.
 
-   It grows up from the bottom, and stops 11rem (176px) from the top of
-   the screen. A taller stack scrolls inside its box, opened with the
+   It grows up from the bottom, and stops 8.75rem (140px) below the
+   bottom of the meal page's header. While the meal page shows, its
+   header puts its height on the page's root element as
+   --meal-header-height (meal/header.jsx). The header is 2.25rem (36px)
+   tall when it fits on one line, so then the stack stops 176px from the
+   top of the screen. On a phone the header can take two or three lines
+   (#151), and the stop moves down with it. Other pages set no height,
+   and there the stack stops 176px from the top, as if the header were
+   one line. A taller stack scrolls inside its box, opened with the
    "more" line or not: on a short screen, such as a small phone on its
    side, three messages are enough to reach that line.
 
@@ -34,16 +41,18 @@
    36px, and the calendar's "today" and month arrows at 84px.
 
    Below 825px the app puts its parts in one column, and there the
-   176px keeps only the top of the meal page uncovered: "← Calendar"
-   and "history" end 36px from the top, the meal's arrows end at 133px,
-   and the date under them ends at 164px, at every width from 320 to
-   824px. Other controls are lower on the screen, and the stack covers
-   them until the person scrolls them above it. On the meal page "Open
-   / Close Meal" is 258 to 294px from the top. On the calendar "today"
-   and the month arrows are 638 to 674px from the top, under the
-   Reserve, Add and Goto boxes, so on a 375x667 phone one message
-   covers them. The room under the page (below) is what lets the person
-   scroll them above the stack.
+   stop keeps only the top of the meal page uncovered. With a header of
+   one line, "← Calendar" and "history" end 36px from the top, the
+   meal's arrows end at 133px, and the date under them ends at 164px, at
+   every width from 320 to 824px. Each line the header adds moves the
+   arrows, the date and the stop down by 36px. Other controls are lower
+   on the screen, and the stack covers them until the person scrolls
+   them above it. On the meal page, with a header of one line, "Open /
+   Close Meal" is 258 to 294px from the top. On the calendar "today" and
+   the month arrows are 638 to 674px from the top, under the Reserve,
+   Add and Goto boxes, so on a 375x667 phone one message covers them.
+   The room under the page (below) is what lets the person scroll them
+   above the stack.
 
    A box that scrolls cuts off what spills past its edges, which here is
    the messages' shadows, so the padding gives the shadows room, and the
@@ -54,7 +63,8 @@
 
    On an iPhone, 100vh is the height with Safari's toolbar hidden. While
    the toolbar shows, a person sees less than that, and a stack sized
-   from 100vh could come closer than 176px to the top of what they see.
+   from 100vh could come closer than the stop to the top of what they
+   see.
    100dvh is the height a person can see now. A browser that does not
    know dvh skips that line and keeps the 100vh one.
 
@@ -87,8 +97,12 @@
   flex-direction: column;
   gap: var(--space-2);
   max-width: calc(24rem + 2 * var(--space-2));
-  max-height: calc(100vh - 11rem - var(--space-2));
-  max-height: calc(100dvh - 11rem - var(--space-2));
+  max-height: calc(
+    100vh - var(--meal-header-height, 2.25rem) - 8.75rem - var(--space-2)
+  );
+  max-height: calc(
+    100dvh - var(--meal-header-height, 2.25rem) - 8.75rem - var(--space-2)
+  );
   overflow-x: hidden;
   overflow-y: auto;
   padding: var(--space-2);

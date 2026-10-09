@@ -13,6 +13,14 @@ const styles = {
     marginLeft: "1px",
     opacity: "1",
   },
+  // The cost field of a row with no cook takes no cost (#145), and it
+  // is dimmed like the No cost switch next to it. On a touch screen the
+  // not-allowed cursor does not show, so the dimming is what says the
+  // field is off (#113).
+  costWithoutCook: {
+    marginLeft: "1px",
+    opacity: "0.5",
+  },
 };
 
 // A cook every row's menu offers: one who is active and can cook.
@@ -144,9 +152,12 @@ const BillEdit = observer(({ bill }) => {
               bill.normalizeAmountDisplay();
               store.flushPendingBillsSave();
             }}
-            style={styles.select}
+            style={bill.resident_id ? styles.select : styles.costWithoutCook}
             className={bill.costPending ? "cost-pending" : ""}
-            disabled={frozen}
+            // A save names cooks, so a cost in a row with no cook would
+            // never be sent, and the next load of the meal would make
+            // the row again without it (#145).
+            disabled={frozen || !bill.resident_id}
             placeholder={bill.costPending ? "pending" : undefined}
             aria-label="Set meal cost"
           />

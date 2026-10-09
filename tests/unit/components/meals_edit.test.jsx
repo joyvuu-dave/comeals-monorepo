@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, act, waitFor } from "@testing-library/react";
 
 // meal/date_box.jsx calls Modal.setAppElement("#root") at import time.
@@ -32,6 +32,7 @@ import { StoreContext } from "../../../app/frontend/src/helpers/store_context.js
 import { MEAL_EDIT_PATH } from "../../../app/frontend/src/routes.js";
 import MealsEdit from "../../../app/frontend/src/components/meals/edit.jsx";
 import mealFixture from "../../fixtures/meal.json";
+import FakeResizeObserver from "../helpers/fake_resize_observer.js";
 
 // index.jsx registers these at app startup; the date box needs both.
 dayjs.extend(advancedFormat);
@@ -50,8 +51,16 @@ function renderPage(store) {
 }
 
 describe("MealsEdit", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
+    // The header watches its own height (meal/header.jsx), and jsdom
+    // has no ResizeObserver.
+    FakeResizeObserver.made = [];
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver);
     Object.defineProperty(globalThis, "navigator", {
       value: { onLine: true },
       writable: true,

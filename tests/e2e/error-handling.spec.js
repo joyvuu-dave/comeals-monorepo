@@ -386,6 +386,178 @@ test.describe("Error Handling & Edge Cases", () => {
       await expect(page.locator(".toast")).toHaveCount(0);
     });
 
+    // #148. react-modal listens for Escape only on the dialog, so it
+    // gets the key only while focus is inside the dialog. Chrome takes
+    // focus off a button when the button is disabled (a form disables
+    // its buttons while its request is out). Both browsers take focus
+    // off an element that is removed (a dismissed message, the day
+    // picker after a pick). Focus then went to the page's <body>, and
+    // Escape did nothing. WebKit does not focus a button on a click, so
+    // there only the removals broke Escape.
+    test.describe("Escape closes a calendar form", () => {
+      function refuse(words) {
+        return (route) =>
+          route.fulfill({
+            status: 400,
+            contentType: "application/json",
+            body: JSON.stringify({ message: words }),
+          });
+      }
+
+      const RESERVATION_REFUSED = "Resident can't be blank";
+
+      for (const [label, path, api, submit, words] of [
+        [
+          "New Event",
+          "/calendar/all/2026-01-15/events/new/",
+          "**/api/v1/events",
+          "Create",
+          EVENT_REFUSED,
+        ],
+        [
+          "New Common House reservation",
+          "/calendar/all/2026-01-15/common-house-reservations/new/",
+          "**/api/v1/common-house-reservations",
+          "Create",
+          RESERVATION_REFUSED,
+        ],
+        [
+          "New Guest Room reservation",
+          "/calendar/all/2026-01-15/guest-room-reservations/new/",
+          "**/api/v1/guest-room-reservations",
+          "Create",
+          RESERVATION_REFUSED,
+        ],
+        [
+          "Edit Event",
+          "/calendar/all/2026-01-15/events/edit/70",
+          "**/api/v1/events/70/update",
+          "Update",
+          EVENT_REFUSED,
+        ],
+        [
+          "Edit Common House reservation",
+          "/calendar/all/2026-01-15/common-house-reservations/edit/50",
+          "**/api/v1/common-house-reservations/50/update",
+          "Update",
+          RESERVATION_REFUSED,
+        ],
+        [
+          "Edit Guest Room reservation",
+          "/calendar/all/2026-01-15/guest-room-reservations/edit/60",
+          "**/api/v1/guest-room-reservations/60/update",
+          "Update",
+          RESERVATION_REFUSED,
+        ],
+      ]) {
+        test(`${label}: after its ${submit} is refused`, async ({
+          page,
+          context,
+        }) => {
+          await setupAuthenticatedPage(page, context);
+          await page.route(api, refuse(words));
+          await page.goto(path);
+          const modal = page.locator(".ReactModal__Content--after-open");
+          const button = modal.getByRole("button", { name: submit });
+          // An edit form turns its buttons on once the record is loaded.
+          await expect(button).toBeEnabled({ timeout: 10000 });
+
+          await button.click();
+          await expect(modal.locator(".form-message__text")).toHaveText(words);
+
+          await page.keyboard.press("Escape");
+          await expect(modal).toHaveCount(0);
+        });
+      }
+
+      test("Edit Event: after its Delete is refused", async ({
+        page,
+        context,
+      }) => {
+        await setupAuthenticatedPage(page, context);
+        const DELETE_REFUSED = "Event could not be removed.";
+        await page.route("**/api/v1/events/70/delete", refuse(DELETE_REFUSED));
+        await page.goto("/calendar/all/2026-01-15/events/edit/70");
+        const modal = page
+          .locator(".ReactModal__Content--after-open")
+          .filter({ hasText: "Edit Event" });
+        const remove = modal.getByRole("button", { name: "Delete" });
+        await expect(remove).toBeEnabled({ timeout: 10000 });
+
+        await remove.click();
+        const confirm = page
+          .locator(".ReactModal__Content--after-open")
+          .filter({ hasText: "Do you really want to delete this event?" });
+        // The confirm button is armed only after 400ms (ConfirmModal).
+        await page.waitForTimeout(450);
+        await confirm.getByRole("button", { name: "Delete" }).click();
+        await expect(modal.locator(".form-message__text")).toHaveText(
+          DELETE_REFUSED,
+        );
+
+        await page.keyboard.press("Escape");
+        await expect(modal).toHaveCount(0);
+      });
+
+      // The confirm dialog gives focus back to Delete when it closes,
+      // but Delete is disabled by then, so focus goes to the form.
+      test("Edit Event: while its Delete is out", async ({ page, context }) => {
+        await setupAuthenticatedPage(page, context);
+        let deleteSent = false;
+        await page.route("**/api/v1/events/70/delete", () => {
+          // No answer: the request stays out.
+          deleteSent = true;
+        });
+        await page.goto("/calendar/all/2026-01-15/events/edit/70");
+        const modal = page
+          .locator(".ReactModal__Content--after-open")
+          .filter({ hasText: "Edit Event" });
+        const remove = modal.getByRole("button", { name: "Delete" });
+        await expect(remove).toBeEnabled({ timeout: 10000 });
+
+        await remove.click();
+        const confirm = page
+          .locator(".ReactModal__Content--after-open")
+          .filter({ hasText: "Do you really want to delete this event?" });
+        await page.waitForTimeout(450);
+        await confirm.getByRole("button", { name: "Delete" }).click();
+        await expect.poll(() => deleteSent).toBe(true);
+        await expect(remove).toBeDisabled();
+
+        await page.keyboard.press("Escape");
+        await expect(modal).toHaveCount(0);
+      });
+
+      test("New Event: after its message is dismissed", async ({
+        page,
+        context,
+      }) => {
+        await setupAuthenticatedPage(page, context);
+        await page.route("**/api/v1/events", refuse(EVENT_REFUSED));
+        await page.goto("/calendar/all/2026-01-15/events/new/");
+        const modal = page.locator(".ReactModal__Content--after-open");
+        await modal.getByRole("button", { name: "Create" }).click();
+        await modal.getByRole("button", { name: "Dismiss" }).click();
+        await expect(modal.locator(".form-message")).toHaveCount(0);
+
+        await page.keyboard.press("Escape");
+        await expect(modal).toHaveCount(0);
+      });
+
+      // A picked day makes the form dirty, so Escape asks first.
+      test("New Event: after a day is picked", async ({ page, context }) => {
+        await setupAuthenticatedPage(page, context);
+        await page.goto("/calendar/all/2026-01-15/events/new/");
+        const modal = page.locator(".ReactModal__Content--after-open");
+        await modal.locator("#event-new-day").click();
+        await modal.getByRole("button", { name: /January 20/ }).click();
+        await expect(modal.locator("#event-new-day")).toHaveValue("01/20/2026");
+
+        await page.keyboard.press("Escape");
+        await expect(page.getByText("Discard your changes?")).toBeVisible();
+      });
+    });
+
     // #137. The person leaves a meal while its costs are still being
     // saved, and the save fails. On the calendar, the message that names
     // the meal is the only sign the costs were lost. A calendar form's
@@ -1004,16 +1176,28 @@ test.describe("Error Handling & Edge Cases", () => {
       // stop before the top of the meal page: "← Calendar", the meal's
       // arrows and its date. A taller stack scrolls inside its own box.
       // Five errors: three show with a line for two more, and a tap on
-      // the line shows all five.
-      for (const [label, viewport] of [
-        ["on a phone", { width: 375, height: 480 }],
-        ["on a short phone on its side", { width: 568, height: 320 }],
+      // the line shows all five. On a 375px phone the header takes two
+      // lines, and three with a long name on the logout button (#151),
+      // so the date is lower, and the stack must stop lower too.
+      for (const [label, viewport, name] of [
+        ["on a phone", { width: 375, height: 480 }, null],
+        [
+          "on a phone, with a long name",
+          { width: 375, height: 480 },
+          "Bartholomew Fitzgerald-Montgomery",
+        ],
+        ["on a short phone on its side", { width: 568, height: 320 }, null],
       ]) {
         test(`${label}, the stack stays under the meal's date and arrows`, async ({
           page,
           context,
         }) => {
           await setupAuthenticatedPage(page, context);
+          if (name) {
+            await context.addCookies([
+              { name: "username", value: name, domain: "localhost", path: "/" },
+            ]);
+          }
           await fiveErrors(page, { width: viewport.width, height: 667 });
           await page.setViewportSize(viewport);
 

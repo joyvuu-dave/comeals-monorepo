@@ -97,6 +97,62 @@ describe("ConfirmModal", () => {
     expect(screen.getByTestId("field")).toHaveFocus();
   });
 
+  // #148. A calendar form's Delete asks here first. A Delete that was
+  // just confirmed is disabled while its request is out, so it cannot
+  // take focus back. Focus goes to the form's dialog instead, where
+  // Escape still closes the form. Before, it went to the page's <body>.
+  describe("when whoever had focus cannot take it back", () => {
+    const props = {
+      message: "Really delete?",
+      cancelLabel: "Cancel",
+      confirmLabel: "Delete",
+      onCancel: vi.fn(),
+      onConfirm: vi.fn(),
+    };
+
+    // The opener turns disabled in the same change that closes the
+    // dialog, as a confirmed Delete does.
+    function Page({ inDialog, open, disabled }) {
+      const opener = (
+        <button data-testid="opener" disabled={disabled}>
+          Delete
+        </button>
+      );
+      return (
+        <div>
+          {inDialog ? (
+            <div role="dialog" tabIndex={-1} data-testid="form">
+              {opener}
+            </div>
+          ) : (
+            opener
+          )}
+          <ConfirmModal isOpen={open} {...props} />
+        </div>
+      );
+    }
+
+    function confirmThenDisable(inDialog) {
+      const { rerender } = render(
+        <Page inDialog={inDialog} open={false} disabled={false} />,
+      );
+      screen.getByTestId("opener").focus();
+      rerender(<Page inDialog={inDialog} open={true} disabled={false} />);
+      expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+      rerender(<Page inDialog={inDialog} open={false} disabled={true} />);
+    }
+
+    it("focus goes to the dialog it is in", () => {
+      confirmThenDisable(true);
+      expect(screen.getByTestId("form")).toHaveFocus();
+    });
+
+    it("outside a dialog, focus stays on the page", () => {
+      confirmThenDisable(false);
+      expect(document.body).toHaveFocus();
+    });
+  });
+
   it("Escape is a no", () => {
     const { onCancel, onConfirm } = renderModal();
     fireEvent.keyDown(screen.getByRole("dialog"), {

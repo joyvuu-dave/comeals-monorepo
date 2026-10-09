@@ -1463,6 +1463,28 @@ test.describe("Visual Baselines", () => {
     });
   });
 
+  // A cook row with no cook takes no cost (#145). Its cost field is off
+  // and dimmed, like the No cost switch next to it. Jane's row has a
+  // cook, so her cost field is on.
+  test("cook rows with no cook", async ({ page, context }) => {
+    await setupAuthenticatedPage(page, context);
+    await page.clock.setFixedTime(FROZEN_NOW);
+
+    await page.goto("/meals/42/edit/");
+    await page.waitForLoadState("networkidle");
+    const costs = page.getByRole("spinbutton", { name: "Set meal cost" });
+    await expect(costs.first()).toHaveValue("25.50", { timeout: 10000 });
+    await expect(costs.first()).toBeEnabled();
+    await expect(costs.nth(1)).toBeDisabled();
+    await expect(costs.nth(2)).toBeDisabled();
+    await page.waitForTimeout(500);
+
+    const cooksBox = page
+      .getByRole("heading", { name: "Cooks" })
+      .locator("xpath=ancestor::div[contains(@class, 'offwhite')][1]");
+    await expect(cooksBox).toHaveScreenshot("cooks-no-cook.png");
+  });
+
   // Turning "no cost" on over a typed cost asks first.
   test("no-cost confirm bar", async ({ page, context }) => {
     await setupAuthenticatedPage(page, context);

@@ -40,8 +40,17 @@ function ConfirmModal({
         openedAtRef.current = performance.now();
         restoreFocusRef.current = document.activeElement;
       } else if (restoreFocusRef.current) {
-        restoreFocusRef.current.focus();
+        const opener = restoreFocusRef.current;
         restoreFocusRef.current = null;
+        opener.focus();
+        // A button that is disabled by now cannot take focus back: a
+        // calendar form's Delete, once confirmed, is disabled while its
+        // request is out. Focus then goes to the dialog the button is
+        // in, so Escape still reaches that dialog (#148). Outside a
+        // dialog, focus stays where the browser put it.
+        if (document.activeElement !== opener) {
+          opener.closest('[role="dialog"]')?.focus();
+        }
       }
     },
     [isOpen],

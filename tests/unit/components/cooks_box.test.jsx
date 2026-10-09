@@ -182,6 +182,24 @@ describe("CooksBox", () => {
     expect(screen.getByRole("checkbox")).toBeDisabled();
   });
 
+  // #145. A save names cooks, so a cost typed in a row with no cook was
+  // never sent, and the next load of the meal made the row again
+  // without it. Nothing said so. The cost field is off until the row
+  // has a cook, like the No cost switch.
+  it("turns off the cost field of a row with no cook", () => {
+    renderBox(
+      makeEditStore([
+        makeBill({ id: "1" }),
+        makeBill({ id: "2", resident: null, resident_id: "" }),
+      ]),
+    );
+    const [cooksCost, blankCost] = screen.getAllByRole("spinbutton", {
+      name: "Set meal cost",
+    });
+    expect(cooksCost).toBeEnabled();
+    expect(blankCost).toBeDisabled();
+  });
+
   it("turning on no-cost over a typed cost asks first instead of erasing", () => {
     const bill = makeBill({ amount: "12.00" });
     renderBox(makeEditStore([bill]));
@@ -808,6 +826,25 @@ describe("CooksBox", () => {
       expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
       expect(alicesRow).toHaveDisplayValue("Eve S.");
       expect(alicesNoCost).not.toBeChecked();
+    });
+
+    // #145, on the real rows: the cost field turns on when the row gets
+    // a cook, and off again when the blank is picked.
+    it("turns a row's cost field on with a cook and off with the blank", () => {
+      renderBox(loadedStore([]));
+      const [firstRow] = screen.getAllByRole("combobox", {
+        name: "Select meal cook",
+      });
+      const [firstCost] = screen.getAllByRole("spinbutton", {
+        name: "Set meal cost",
+      });
+      expect(firstCost).toBeDisabled();
+
+      fireEvent.change(firstRow, { target: { value: "42" } });
+      expect(firstCost).toBeEnabled();
+
+      fireEvent.change(firstRow, { target: { value: "" } });
+      expect(firstCost).toBeDisabled();
     });
 
     // A cook picked in one row leaves the other rows' menus, and comes
