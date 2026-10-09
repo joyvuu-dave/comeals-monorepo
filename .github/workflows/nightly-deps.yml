@@ -196,15 +196,11 @@ jobs:
       # worktree — there is no development database on this runner.
       # An empty suffix keeps the name comeals_test, matching
       # DATABASE_URL. (.env is gitignored, so this never gets
-      # committed.) The stubs let Rails boot before bin/check's real
-      # Vite build replaces them, same as ci.yml's ruby-test job.
+      # committed.)
       - name: Prepare the bin/check environment
         if: steps.diff.outputs.changed == 'true'
         run: |
           echo "TEST_DB_SUFFIX=" > .env
-          echo '<!DOCTYPE html><html><head></head><body><div id="root"></div></body></html>' > public/index.html
-          mkdir -p public/.vite
-          echo '{}' > public/.vite/manifest.json
           bin/rails db:schema:load
           bin/tapioca dsl
 

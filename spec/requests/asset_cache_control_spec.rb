@@ -9,15 +9,9 @@ RSpec.describe 'AssetCacheControl' do
   # at once and one process must not delete another's fixture.
   let(:fixture) { Rails.public_path.join("assets/spec-fixture-#{Process.pid}-Ab12Cd34.js") }
 
-  # The SPA page exists only after a build. Bring one when it is
-  # missing, and leave it: a later build overwrites it, and deleting it
-  # would race the other processes that also found it missing.
-  let(:index) { Rails.public_path.join('index.html') }
-
   before do
     fixture.dirname.mkpath
     fixture.write('// asset_cache_control_spec fixture')
-    index.write('<!doctype html><title>Comeals</title><div id="root"></div>') unless index.exist?
   end
 
   after do
@@ -65,10 +59,10 @@ RSpec.describe 'AssetCacheControl' do
 
   describe '/.vite/manifest.json' do
     # The real manifest exists only after a build. Bring one when it is
-    # missing, leave a real one alone, and never delete it, for the same
-    # reason as index.html above: mutant runs this file in several
-    # processes at once, and one deleting the file would make another's
-    # request miss it. A later build overwrites it.
+    # missing, leave a real one alone, and never delete it: mutant runs
+    # this file in several processes at once, and one deleting the file
+    # would make another's request miss it. A later build overwrites it.
+    # spec/support/spa_page.rb does the same for index.html.
     let(:manifest) { Rails.public_path.join('.vite/manifest.json') }
 
     before do

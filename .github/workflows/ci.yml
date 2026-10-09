@@ -50,11 +50,10 @@ jobs:
       - uses: ruby/setup-ruby@v1
         with:
           bundler-cache: true
-      - name: Create frontend build stubs
-        run: |
-          echo '<!DOCTYPE html><html><head></head><body><div id="root"></div></body></html>' > public/index.html
-          mkdir -p public/.vite
-          echo '{}' > public/.vite/manifest.json
+      # No front-end build here, on purpose: the request specs bring
+      # their own index.html and manifest.json when there is none
+      # (spec/support/spa_page.rb, asset_cache_control_spec.rb), and
+      # this job is what checks that they still do (#142).
       - run: bin/rails db:schema:load
       - run: bundle exec rake
       # The 100% minimum is enforced here too (spec/spec_helper.rb). A
@@ -198,12 +197,6 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      # Same stubs as ruby-test: the app boots without a Vite build.
-      - name: Create frontend build stubs
-        run: |
-          echo '<!DOCTYPE html><html><head></head><body><div id="root"></div></body></html>' > public/index.html
-          mkdir -p public/.vite
-          echo '{}' > public/.vite/manifest.json
       - run: bin/rails db:schema:load
       - run: bundle exec rake test:generate_fixtures
       - name: Fail if fixtures are stale
