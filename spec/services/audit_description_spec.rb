@@ -95,6 +95,9 @@ RSpec.describe AuditDescription do
     gone.destroy!
     bill = create(:bill, meal: meal, resident: other, community: community, amount: BigDecimal('30'))
     bill.update!(amount: BigDecimal('50'))
+    guest = create(:guest, meal: meal, resident: resident)
+    guest.update!(multiplier: Multiplier::HALF)
+    guest.update!(resident: other)
     rows = meal.total_audits
     # One describer per row is the repeat this spec exists to rule out,
     # so it is not scanned here; it is the yardstick the list is checked
@@ -106,7 +109,9 @@ RSpec.describe AuditDescription do
 
     expect(together).to eq(0)
     expect(rows.map { |row| describer.describe(row) }).to eq(one_at_a_time)
-    expect(one_at_a_time).to include("#{name} marked late", "#{ResidentNameShortener.short(other.name)} removed")
+    other_name = ResidentNameShortener.short(other.name)
+    expect(one_at_a_time).to include("#{name} marked late", "#{other_name} removed",
+                                     "Guest of #{name}: Adult to Child", "Guest of #{name} moved to #{other_name}")
   end
 
   it 'resolves resident name for bill destroy audit after bill is deleted' do
@@ -186,6 +191,151 @@ RSpec.describe AuditDescription do
     expect(described_class.describe(veg.audits.where(action: 'destroy').last)).to eq("Veg guest of #{name} removed")
     expect(described_class.describe(omni.audits.where(action: 'destroy').last))
       .to eq("Omnivore guest of #{name} removed")
+  end
+
+  # A price change or a new host once read "MealResident, update" or
+  # "Guest, update", which named neither the person nor the change. The
+  # price words are the ones every admin page uses (Multiplier.label).
+  describe 'price and host changes' do # -- a group of cases, not a method
+    let(:ann) { create(:resident, community: community, unit: unit) }
+    let(:bob) { create(:resident, community: community, unit: unit) }
+
+    def short(person)
+      ResidentNameShortener.short(person.name)
+    end
+
+    def update_rows(record)
+      record.audits.where(action: 'update').order(:version).to_a
+    end
+
+    # The one path in the app that changes a resident's price: an admin
+    # moves the meal to a day on which Sam has turned 12
+    # (Meal#restamp_attendance_for_new_date).
+    it 'says whose price changed, and from what to what, when a meal moves past a birthday' do
+      moving = create(:meal, community: community, date: Date.new(2026, 11, 5))
+      sam = create(:resident, community: community, unit: unit, birthday: Date.new(2014, 11, 6))
+      attendance = create(:meal_resident, meal: moving, resident: sam, community: community)
+
+      moving.update!(date: Date.new(2026, 11, 6))
+
+      expect(described_class.describe(update_rows(attendance).last)).to eq("#{short(sam)}: Child to Adult")
+    end
+
+    it 'says a guest moved from one host to another' do
+      guest = create(:guest, meal: meal, resident: ann)
+      guest.update!(resident: bob)
+
+      expect(described_class.describe(update_rows(guest).last)).to eq("Guest of #{short(ann)} moved to #{short(bob)}")
+    end
+
+    it 'says whose guest changed price, and from what to what' do
+      guest = create(:guest, meal: meal, resident: ann)
+      guest.update!(multiplier: Multiplier::HALF)
+
+      expect(described_class.describe(update_rows(guest).last)).to eq("Guest of #{short(ann)}: Adult to Child")
+    end
+
+    it 'says both when one save changed the host and the price' do
+      guest = create(:guest, meal: meal, resident: ann)
+      guest.update!(resident: bob, multiplier: Multiplier::HALF)
+
+      expect(described_class.describe(update_rows(guest).last))
+        .to eq("Guest of #{short(ann)} moved to #{short(bob)}: Adult to Child")
+    end
+
+    # The host is the one the guest had when the row was written, read
+    # from the guest's own history. The guest as it is now would put
+    # Bob's name on a price change made while Ann was the host.
+    it 'names the host a guest had when its price changed, not the host it has now' do
+      guest = create(:guest, meal: meal, resident: ann)
+      guest.update!(multiplier: Multiplier::HALF)
+      guest.update!(resident: bob)
+      guest.update!(multiplier: Multiplier::FULL)
+      rows = update_rows(guest)
+      describer = described_class.for(rows)
+      expected = ["Guest of #{short(ann)}: Adult to Child", "Guest of #{short(ann)} moved to #{short(bob)}",
+                  "Guest of #{short(bob)}: Child to Adult"]
+
+      expect(rows.map { |row| describer.describe(row) }).to eq(expected)
+      # One describer per row repeats its reads on purpose: it is the
+      # same answer reached one row at a time.
+      expect(Prosopite.pause { rows.map { |row| described_class.describe(row) } }).to eq(expected)
+    end
+
+    it 'names the host of a guest that is gone' do
+      guest = create(:guest, meal: meal, resident: ann)
+      guest.update!(multiplier: Multiplier::HALF)
+      row = update_rows(guest).last
+      guest.destroy!
+
+      expect(described_class.describe(row)).to eq("Guest of #{short(ann)}: Adult to Child")
+    end
+
+    # Every guest has a create row: the app has audited guests from the
+    # start. One written outside the app would not, and then the history
+    # cannot say who the host was.
+    it 'names an unknown host when the history has no create row for the guest' do
+      row = instance_double(Audited::Audit, id: 999_998, auditable_type: 'Guest', action: 'update',
+                                            auditable_id: 999_999, audited_changes: { 'multiplier' => [2, 1] })
+
+      expect(described_class.describe(row)).to eq('Guest of unknown: Adult to Child')
+    end
+
+    it "names an unknown host when the guest's create row is gone and only its later rows are left" do
+      guest = create(:guest, meal: meal, resident: ann)
+      guest.update!(multiplier: Multiplier::HALF)
+      guest.audits.where(action: 'create').delete_all
+
+      expect(described_class.describe(update_rows(guest).last)).to eq('Guest of unknown: Adult to Child')
+    end
+
+    # The ids of two tables often match. This attendance row has the
+    # guest's id, and its person changes between the guest's two price
+    # changes. Read with the guest's history, that change would look like
+    # a new host for the guest.
+    it 'reads only the guest history, not the history of an attendance row with the same id' do
+      guest = create(:guest, meal: meal, resident: ann)
+      guest.update!(multiplier: Multiplier::HALF)
+      guest.update!(multiplier: Multiplier::FULL)
+      attendance = create(:meal_resident, id: guest.id, meal: meal, resident: bob, community: community)
+      attendance.update!(resident: create(:resident, community: community, unit: unit))
+
+      expect(described_class.describe(update_rows(guest).last)).to eq("Guest of #{short(ann)}: Child to Adult")
+    end
+
+    # Each row's host is the host before it, so the history has to be
+    # read in order. PostgreSQL often returns these rows in that order
+    # without being asked, so no set of rows can show that it was asked.
+    # This reads the statement instead.
+    it "asks for each guest's history in version order" do
+      guest = create(:guest, meal: meal, resident: ann)
+      guest.update!(multiplier: Multiplier::HALF)
+      rows = update_rows(guest)
+      statements = []
+      callback = ->(*, payload) { statements << payload[:sql] }
+      ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') { described_class.for(rows) }
+
+      expect(statements.grep(/FROM "audits"/)).to contain_exactly(/ ORDER BY "audits"\."version" ASC\z/)
+    end
+
+    it 'names an unknown host when the resident is gone' do
+      row = instance_double(Audited::Audit, auditable_type: 'Guest', action: 'update', auditable_id: 999_999,
+                                            audited_changes: { 'resident_id' => [ann.id, 999_999] })
+
+      expect(described_class.describe(row)).to eq("Guest of #{short(ann)} moved to unknown")
+    end
+
+    it "reads every guest's history in one query, however many guests and rows there are" do
+      2.times do
+        guest = create(:guest, meal: meal, resident: ann)
+        guest.update!(multiplier: Multiplier::HALF)
+        guest.update!(resident: bob)
+      end
+      rows = Audited::Audit.where(auditable_type: 'Guest', action: 'update').to_a
+
+      # The guests' histories and the residents.
+      expect(count_queries { described_class.for(rows) }).to eq(2)
+    end
   end
 
   describe 'the less common meal changes' do # -- a group of cases, not a method
@@ -335,6 +485,11 @@ RSpec.describe AuditDescription do
         expect(described_class.describe(row)).to eq("#{name} removed")
       end
 
+      it 'names an unknown person when the attendance row and its create audit are both gone' do
+        row = audit('MealResident', 'update', { 'multiplier' => [2, 1] }, id: 999_999)
+        expect(described_class.describe(row)).to eq('unknown: Adult to Child')
+      end
+
       it 'says who is no longer late' do
         attendance.update!(late: true)
         attendance.update!(late: false)
@@ -359,9 +514,24 @@ RSpec.describe AuditDescription do
         expect(rows.map { |row| describer.describe(row) }).to all(eq('MealResident, update'))
       end
 
-      it 'falls back for an update that touched neither late nor vegetarian' do
-        row = audit('MealResident', 'update', { 'multiplier' => [2, 1] }, id: attendance.id)
+      it 'falls back for an update that touched none of late, vegetarian and the price' do
+        row = audit('MealResident', 'update', { 'updated_at' => [1, 2] }, id: attendance.id)
         expect(described_class.describe(row)).to eq('MealResident, update')
+      end
+
+      # The column refuses a nil, so no real row holds one. The history
+      # still answers, because a history that raises shows nothing at all.
+      it 'falls back for a price change that is not two whole numbers' do
+        rows = [[nil, 2], %w[2 1]].map do |change|
+          audit('MealResident', 'update', { 'multiplier' => change }, id: attendance.id)
+        end
+        describer = described_class.for(rows)
+        expect(rows.map { |row| describer.describe(row) }).to all(eq('MealResident, update'))
+      end
+
+      it 'names a free child by the words the admin pages use' do
+        row = audit('MealResident', 'update', { 'multiplier' => [0, 1] }, id: attendance.id)
+        expect(described_class.describe(row)).to eq("#{name}: Child (free) to Child")
       end
 
       it 'falls back for an action it does not know' do
@@ -371,7 +541,7 @@ RSpec.describe AuditDescription do
     end
 
     describe 'guest rows' do
-      it 'falls back for an update, which the API never writes' do
+      it 'falls back for a vegetarian change, which nothing in the app writes' do
         row = audit('Guest', 'update', { 'resident_id' => resident.id, 'vegetarian' => [false, true] })
         expect(described_class.describe(row)).to eq('Guest, update')
       end
@@ -379,6 +549,11 @@ RSpec.describe AuditDescription do
       it 'falls back for an update even when the row reads like a create' do
         row = audit('Guest', 'update', { 'resident_id' => resident.id, 'vegetarian' => true })
         expect(described_class.describe(row)).to eq('Guest, update')
+      end
+
+      it 'falls back for an action it does not know' do
+        row = audit('Guest', 'touch', { 'resident_id' => resident.id, 'vegetarian' => true })
+        expect(described_class.describe(row)).to eq('Guest, touch')
       end
 
       it 'falls back when the row does not say whether the guest was vegetarian' do

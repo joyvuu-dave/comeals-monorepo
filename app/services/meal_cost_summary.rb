@@ -53,19 +53,24 @@ class MealCostSummary
   # A settled meal with no lines is one of two stories. A meal nobody
   # attended is swept but charges no one on purpose — the cooks absorb
   # the receipts. Its receipts are immutable once settled, so summing
-  # them here cannot drift; the zeros say "nothing was charged". A meal
-  # WITH attendance and no lines was settled before line items existed
+  # them here cannot drift; the zeros say "nothing was charged". Its
+  # cooks were credited nothing, so it is subsidized when they spent
+  # anything, the same as MealLedger says of an open meal nobody ate
+  # (#94). (A settlement holds such a meal back when a receipt has money
+  # on it, since 2026-09-10; older ones were swept.) A meal WITH
+  # attendance and no lines was settled before line items existed
   # (2026-08-02): unrecorded, so show nothing rather than a recomputed
   # number the settlement never used.
   sig { params(meal: Meal).returns(T.nilable(MealLedger::Summary)) }
   def self.chargeless(meal)
     return nil if meal.meal_residents.any? || meal.guests.any?
 
+    spent = meal.bills.reject(&:no_cost).sum(BigDecimal('0')) { |bill| T.must(bill.amount) }
     MealLedger::Summary.new(
-      total_cost: meal.bills.reject(&:no_cost).sum(BigDecimal('0')) { |bill| T.must(bill.amount) },
+      total_cost: spent,
       effective_cost: BigDecimal('0'),
       unit_cost: BigDecimal('0'),
-      subsidized: false
+      subsidized: spent.positive?
     )
   end
 

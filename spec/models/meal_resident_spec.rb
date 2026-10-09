@@ -296,6 +296,23 @@ RSpec.describe MealResident do
     end
   end
 
+  # Nothing in the app gives an attendance row another resident: the API
+  # and the admin attendance page only add and remove rows. A console
+  # session can, and on a closed meal that would move one person's whole
+  # charge to another, so the freeze refuses it, the same as for a
+  # guest's host (spec/models/guest_spec.rb).
+  describe 'a change of resident on a closed meal' do
+    it 'refuses it for a row that was on the meal before it closed' do
+      mr = create(:meal_resident, meal: meal, resident: resident, community: community)
+      other = create(:resident, community: community, unit: unit)
+      meal.update_columns(closed: true, closed_at: DateTime.now + 1.hour)
+
+      expect(mr.update(resident: other)).to be(false)
+      expect(mr.errors[:base]).to eq(['Meal has been closed.'])
+      expect(mr.reload.resident_id).to eq(resident.id)
+    end
+  end
+
   # The admin_correction flag (issue #25) is the one sanctioned bypass of the
   # closed-meal freeze: an admin correcting the record to match reality. It
   # must never weaken the reconciled freeze — the books are closed.

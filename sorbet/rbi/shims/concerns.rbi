@@ -29,6 +29,9 @@ module ClosedMealAttendanceFreeze
 
   sig { returns(T::Boolean) }
   def multiplier_changed?; end
+
+  sig { returns(T::Boolean) }
+  def resident_id_changed?; end
 end
 
 module LocksItsMealFirst

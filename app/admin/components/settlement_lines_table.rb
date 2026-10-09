@@ -31,8 +31,8 @@ class SettlementLinesTable < Arbre::Component
       end
       column('Amount') { |charge| charge_amount_tag(charge) }
       # Only when this table has one: the column answers "why was the
-      # credit smaller than the receipt", and with no capped cook in the
-      # table it would be a blank column with no question.
+      # credit smaller than the receipt". When no cook in the table was
+      # credited less than they spent, it would be a blank column.
       if lines.any?(&:subsidized?)
         column('Cook spent') do |charge|
           number_to_currency(charge.bill_amount) if charge.subsidized?

@@ -58,16 +58,19 @@ class Meal < ApplicationRecord
   # The meals a settlement with this cutoff sweeps: not yet settled, with at
   # least one bill, on or before the cutoff, from a day that is over, and
   # with either someone to charge or nothing owed. A meal where a cook
-  # entered a receipt with money on it and nobody signed up is held back
-  # (receipt_and_nobody_ate): settling it would write no lines and freeze
-  # the meal, taking the cook's money silently and for good. Until
-  # 2026-09-10 it did; three times since 2024, for $22.22. A meal whose
-  # cook slots are all $0 or no-cost settles with no effect, as before.
-  # Meals on today's date are never swept, whatever the cutoff — their
-  # receipts and attendance are not final (issue #3).
+  # entered a receipt with money on it and nobody with a price ate is held
+  # back (receipt_and_nobody_to_charge): settling it would credit the cook
+  # $0 and freeze the meal, taking the cook's money silently and for good.
+  # That covers a meal nobody signed up for, which settled with no lines
+  # until 2026-09-10 (three times since 2024, for $22.22), and a meal only
+  # people who eat free signed up for, which settled with every line at $0
+  # until 2026-10-09 (#94). A meal whose cook slots are all $0 or no-cost settles
+  # with no effect, as before. Meals on today's date are never swept,
+  # whatever the cutoff — their receipts and attendance are not final
+  # (issue #3).
   scope :settleable_by, lambda { |cutoff, today: Community.instance.today|
     unreconciled.joins(:bills).where(date: ..cutoff).where(date: ...today)
-                .where(anyone_ate.or(a_receipt_with_money.not)).distinct
+                .where(someone_to_charge.or(a_receipt_with_money.not)).distinct
   }
   scope :open, -> { where(closed: false) }
   scope :closed_with_bills, -> { where(closed: true).joins(:bills).distinct }
@@ -79,10 +82,11 @@ class Meal < ApplicationRecord
   scope :with_attendees, -> { where(anyone_ate) }
 
   # Held back from a settlement: a receipt with money on it, and nobody to
-  # charge. The preview lists these (ReconciliationWarnings,
-  # bill_with_no_attendees) so the reconciler can add the attendance or
-  # remove the bill before settling.
-  scope :receipt_and_nobody_ate, -> { where(anyone_ate.not).where(a_receipt_with_money) }
+  # charge, because nobody signed up or everyone who did eats free. The
+  # preview lists these (ReconciliationWarnings, bill_with_no_attendees and
+  # bill_with_only_free_eaters) so the reconciler can add someone who pays
+  # or remove the bill before settling.
+  scope :receipt_and_nobody_to_charge, -> { where(someone_to_charge.not).where(a_receipt_with_money) }
 
   # EXISTS, not JOIN, so a SUM over meals is not multiplied by the rows.
   # Public because a scope's lambda runs on the relation, which cannot
@@ -92,6 +96,19 @@ class Meal < ApplicationRecord
     mr = MealResident.arel_table
     g = Guest.arel_table
     MealResident.where(mr[:meal_id].eq(arel_table[:id])).arel.exists
+                .or(Guest.where(g[:meal_id].eq(arel_table[:id])).arel.exists)
+  end
+
+  # At least one eater with a price: an attendance row whose multiplier
+  # is above 0, or any guest, because a guest always pays as an adult or
+  # as a child (Multiplier::GUEST_PRICES, CHECK
+  # guests_multiplier_adult_or_child). A meal where everyone who ate eats
+  # free has nobody to charge a share of its cost to.
+  sig { returns(Arel::Nodes::Node) }
+  def self.someone_to_charge
+    mr = MealResident.arel_table
+    g = Guest.arel_table
+    MealResident.where(mr[:meal_id].eq(arel_table[:id])).where(mr[:multiplier].gt(0)).arel.exists
                 .or(Guest.where(g[:meal_id].eq(arel_table[:id])).arel.exists)
   end
 

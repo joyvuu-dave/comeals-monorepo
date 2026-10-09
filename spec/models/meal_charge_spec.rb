@@ -123,9 +123,9 @@ RSpec.describe MealCharge do
     # (LedgerVerification). Worth asserting here too, because if it were
     # ever false the check would only say so at 5am. The lines are at the
     # ledger grain and the balances are rounded to cents, so in general
-    # they agree only within a cent. $16 over four units splits into whole
-    # dollars, so here they agree exactly. The whole hash is compared, so a
-    # balance row that is missing or extra fails too.
+    # they are only less than a cent apart. $16 over four units splits
+    # into whole dollars, so here they agree exactly. The whole hash is
+    # compared, so a balance row that is missing or extra fails too.
     it 'adds up, per resident, to the balance that was stored' do
       reconciliation = settle_plain_meal
 
@@ -140,7 +140,7 @@ RSpec.describe MealCharge do
     # unit of 10^-8 left over goes to the lowest id, the cook. The cook's
     # lines sum to 10 - 3.33333334. The balances are rounded toward zero
     # to cents, and those already sum to zero, so no cent moves.
-    it 'adds up to within a cent of each stored balance when a meal does not split into cents' do
+    it 'adds up to less than a cent from each stored balance when a meal does not split into cents' do
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('10'))
       create(:meal_resident, meal: meal, resident: cook, community: community)
@@ -204,11 +204,17 @@ RSpec.describe MealCharge do
   describe 'database constraints' do
     let(:meal) { create(:meal, community: community) }
 
+    # The meal is open, and the database refuses a line on an open meal
+    # from anyone but a repair (spec/db/settled_ledger_inserts_spec.rb), so
+    # these write as one. The bypass does not turn off a check constraint
+    # or a unique index, which are what these examples are about.
     def insert(**attributes)
-      described_class.insert_all!([{
-        meal_id: meal.id, resident_id: cook.id, unit_cost: BigDecimal('1'),
-        created_at: Time.current, updated_at: Time.current
-      }.merge(attributes)])
+      with_repair_bypass do
+        described_class.insert_all!([{
+          meal_id: meal.id, resident_id: cook.id, unit_cost: BigDecimal('1'),
+          created_at: Time.current, updated_at: Time.current
+        }.merge(attributes)])
+      end
     end
 
     it 'refuses an unknown kind' do

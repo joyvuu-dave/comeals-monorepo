@@ -45,8 +45,11 @@ ActiveAdmin.register LedgerCheckRun do
     para do
       status_tag 'did not finish', class: 'error'
       text_node ' — the check itself crashed before it could compare ' \
-                'everything. The error is on the run page. This says ' \
-                'nothing about the ledger either way.'
+                'everything. The error is on the run page. If it found ' \
+                'nothing before the crash, this says nothing about the ' \
+                'ledger either way. If it found a difference first, the ' \
+                'label starts with how many mismatched, and those ' \
+                'differences are real: they are listed on the run page.'
     end
   end
 
@@ -54,11 +57,15 @@ ActiveAdmin.register LedgerCheckRun do
   index do
     column :started_at
     column('Checked', &:reconciliations_checked)
+    # A difference found before a crash is a fact about the books, so the
+    # count comes first and the crash second.
     column('Result') do |run|
-      if run.errored?
+      if run.failed?
+        label = "#{run.mismatch_count} mismatched"
+        label += ', did not finish' if run.errored?
+        status_tag label, class: 'error'
+      elsif run.errored?
         status_tag 'did not finish', class: 'error'
-      elsif run.failed?
-        status_tag "#{run.mismatch_count} mismatched", class: 'error'
       else
         status_tag 'all match', class: 'ok'
       end

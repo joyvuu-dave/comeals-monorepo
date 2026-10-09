@@ -42,15 +42,18 @@ class LedgerCheckRun < ApplicationRecord
   append_only update_message: 'A ledger check run records what was true at a point in time and cannot be modified.',
               destroy_message: 'A ledger check run records what was true at a point in time and cannot be destroyed.'
 
-  # There are three outcomes, not two. A run that could not finish tells you
-  # nothing about the books, which is different from a run that finished and
-  # found them right.
+  # There are three outcomes, not two. A run that could not finish and found
+  # nothing tells you nothing about the books, which is different from a run
+  # that finished and found them right. A run that found a difference and
+  # then could not finish is failed and errored at once: the difference is
+  # already a fact about the books, so the run counts as failed even though
+  # it crashed.
   def passed?
     error.nil? && T.must(mismatch_count).zero?
   end
 
   def failed?
-    error.nil? && T.must(mismatch_count).positive?
+    T.must(mismatch_count).positive?
   end
 
   def errored?

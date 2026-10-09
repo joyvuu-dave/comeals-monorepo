@@ -104,6 +104,24 @@ RSpec.describe 'POST /api/v1/reconciliations' do
                                                  'A reconciliation must settle at least one meal.')
   end
 
+  # The cook spent $30 and only a baby ate, so the meal is held back. The
+  # answer names it, and does not say there are no meals with bills.
+  it 'refuses a period whose only meal with a bill is held back, and names that meal' do
+    meal = create(:meal, community: community, date: Date.yesterday)
+    create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
+    baby = create(:resident, community: community, unit: unit, multiplier: 0)
+    create(:meal_resident, meal: meal, resident: baby, community: community)
+
+    expect { settle(Date.yesterday) }.not_to change(Reconciliation, :count)
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.parsed_body[:message])
+      .to eq('No meal on or before this date can be settled yet. Meals held back because a bill has money on ' \
+             "it and nobody who pays is signed up: #{Date.yesterday.iso8601}. To settle one, sign up someone " \
+             'who pays or remove the bill. A reconciliation must settle at least one meal.')
+    expect(meal.reload.reconciliation_id).to be_nil
+  end
+
   it 'refuses a cutoff that is not a date' do
     post '/api/v1/reconciliations', params: { cutoff: 'soon' }, headers: { 'Authorization' => "Bearer #{token}" }
 

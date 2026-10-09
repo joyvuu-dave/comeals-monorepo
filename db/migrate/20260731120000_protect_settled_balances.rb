@@ -19,10 +19,14 @@
 #    again. Corrections settle as new entries in the next reconciliation
 #    (CLAUDE.md money rule 7).
 #
-#    INSERT is allowed, because that is how settlement writes the rows in the
-#    first place, and a row-level trigger cannot tell settlement's own inserts
-#    from a later one. Trigger 2 is what covers that gap: a spurious insert
-#    unbalances its reconciliation and is refused at commit.
+#    INSERT is allowed here, because that is how settlement writes the rows.
+#    This comment used to say that a row-level trigger cannot tell
+#    settlement's own inserts from a later one, and that trigger 2 covers
+#    the gap. Both were wrong. Trigger 2 refuses only an insert that
+#    unbalances its reconciliation, so two inserts that cancel out passed
+#    it. And a trigger can tell them apart: 20261009120000 refuses an
+#    INSERT unless the settlement is writing it, which the settlement says
+#    with a setting that lasts only for its own transaction.
 #
 # 2. reconciliation_balances_sum_zero asserts that every reconciliation's
 #    stored balances sum to exactly zero. This is the accounting invariant the

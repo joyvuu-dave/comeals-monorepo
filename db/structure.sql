@@ -52,6 +52,68 @@ COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
 
 
 --
+-- Name: comeals_balance_insert_by_settlement(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.comeals_balance_insert_by_settlement() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF current_setting('comeals.allow_settled_writes', true) = 'on' THEN
+    RETURN NEW;
+  END IF;
+
+  IF NEW.reconciliation_id::text = current_setting('comeals.settling', true) THEN
+    RETURN NEW;
+  END IF;
+
+  RAISE EXCEPTION 'INSERT on reconciliation_balances refused: the balances of reconciliation % '
+    'are written only by its own settlement. Corrections belong in the next reconciliation. '
+    'For genuine data corruption see docs/runbooks/settled-data-repair.md.',
+    NEW.reconciliation_id;
+END;
+$$;
+
+
+--
+-- Name: comeals_meal_charge_insert_by_settlement(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.comeals_meal_charge_insert_by_settlement() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  meal_reconciliation_id bigint;
+BEGIN
+  IF current_setting('comeals.allow_settled_writes', true) = 'on' THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT reconciliation_id INTO meal_reconciliation_id FROM meals WHERE id = NEW.meal_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'INSERT on meal_charges refused: there is no meal %.', NEW.meal_id;
+  END IF;
+
+  IF meal_reconciliation_id IS NULL THEN
+    RAISE EXCEPTION 'INSERT on meal_charges refused: meal % is not settled. A meal gets its line items '
+      'only from the settlement that settles it.',
+      NEW.meal_id;
+  END IF;
+
+  IF meal_reconciliation_id::text = current_setting('comeals.settling', true) THEN
+    RETURN NEW;
+  END IF;
+
+  RAISE EXCEPTION 'INSERT on meal_charges refused: the line items of meal % are written only '
+    'by the settlement that settles it. Corrections belong in the next reconciliation. '
+    'For genuine data corruption see docs/runbooks/settled-data-repair.md.',
+    NEW.meal_id;
+END;
+$$;
+
+
+--
 -- Name: comeals_meal_charges_sum_zero(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -712,7 +774,7 @@ CREATE TABLE public.guests (
     resident_id bigint NOT NULL,
     updated_at timestamp without time zone NOT NULL,
     vegetarian boolean DEFAULT false NOT NULL,
-    CONSTRAINT guests_multiplier_non_negative CHECK ((multiplier >= 0))
+    CONSTRAINT guests_multiplier_adult_or_child CHECK ((multiplier = ANY (ARRAY[1, 2])))
 );
 
 
@@ -2822,6 +2884,13 @@ CREATE TRIGGER mail_deliveries_protect BEFORE DELETE OR UPDATE ON public.mail_de
 
 
 --
+-- Name: meal_charges meal_charges_insert_by_settlement; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER meal_charges_insert_by_settlement BEFORE INSERT ON public.meal_charges FOR EACH ROW EXECUTE FUNCTION public.comeals_meal_charge_insert_by_settlement();
+
+
+--
 -- Name: meal_charges meal_charges_protect; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -2854,6 +2923,13 @@ CREATE TRIGGER meals_protect_settled BEFORE DELETE OR UPDATE ON public.meals FOR
 --
 
 CREATE TRIGGER prevent_community_delete BEFORE DELETE ON public.communities FOR EACH ROW EXECUTE FUNCTION public.prevent_community_delete();
+
+
+--
+-- Name: reconciliation_balances reconciliation_balances_insert_by_settlement; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER reconciliation_balances_insert_by_settlement BEFORE INSERT ON public.reconciliation_balances FOR EACH ROW EXECUTE FUNCTION public.comeals_balance_insert_by_settlement();
 
 
 --
@@ -3173,6 +3249,9 @@ ALTER TABLE ONLY public.bills
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261009130100'),
+('20261009130000'),
+('20261009120000'),
 ('20261007153100'),
 ('20261007153000'),
 ('20261007120000'),

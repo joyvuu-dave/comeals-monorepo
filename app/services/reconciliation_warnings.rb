@@ -16,7 +16,8 @@
 # are NOT in the settlement. `meals` are the ones the settlement would
 # claim. `skipped` are the ones it would leave behind because people ate
 # and no cook billed (Settlement::Preview#skipped_meals). `held` are the
-# ones it would hold back because a cook entered money and nobody ate
+# ones it would hold back because a cook entered money and nobody can be
+# charged: nobody signed up, or only people who eat free did
 # (Settlement::Preview#held_meals). A warning's meal_id can therefore name
 # a meal that is not in the preview's meal list.
 #
@@ -25,7 +26,7 @@
 class ReconciliationWarnings
   include ActionView::Helpers::NumberHelper
 
-  KINDS = %w[bill_with_no_attendees attendance_without_bill zero_bill_not_flagged].freeze
+  KINDS = %w[bill_with_no_attendees bill_with_only_free_eaters attendance_without_bill zero_bill_not_flagged].freeze
 
   def self.for(meals, skipped: [], held: [])
     new(meals, skipped: skipped, held: held).call
@@ -39,11 +40,23 @@ class ReconciliationWarnings
 
   def call
     @skipped.map { |meal| attendance_without_bill(meal) } +
-      @held.flat_map { |meal| money_bills(meal).map { |bill| bill_with_no_attendees(meal, bill) } } +
+      @held.flat_map { |meal| held_warnings(meal) } +
       @meals.flat_map { |meal| warnings_for(meal) }
   end
 
   private
+
+  # One warning per bill with money on it. A held meal has nobody to
+  # charge, either because nobody signed up or because everyone who did
+  # eats free, and the words say which. A held meal never has a guest:
+  # any guest is someone to charge (Meal.someone_to_charge), so only its
+  # attendance rows can tell the two apart.
+  def held_warnings(meal)
+    nobody_signed_up = meal.meal_residents.empty?
+    money_bills(meal).map do |bill|
+      nobody_signed_up ? bill_with_no_attendees(meal, bill) : bill_with_only_free_eaters(meal, bill)
+    end
+  end
 
   # The bills a settlement would credit: not no-cost, and with money on them.
   def money_bills(meal)
@@ -67,6 +80,18 @@ class ReconciliationWarnings
             title: 'Bill with no attendees',
             body: "#{bill.resident.name} submitted a #{money(bill.amount)} bill for #{meal.date.iso8601}, but nobody " \
                   'signed up to eat. This meal will not be settled until someone is signed up or the bill is removed.')
+  end
+
+  # A cook spent money on a meal that only people who eat free signed up
+  # for, so nobody can be charged a share. The settlement holds the meal
+  # back rather than credit the cook $0 for good (#94).
+  def bill_with_only_free_eaters(meal, bill)
+    warning('bill_with_only_free_eaters', meal, bill,
+            severity: 'warning',
+            title: 'Bill with only free eaters',
+            body: "#{bill.resident.name} submitted a #{money(bill.amount)} bill for #{meal.date.iso8601}, but only " \
+                  'people who eat free signed up. This meal will not be settled until someone who pays is signed ' \
+                  'up or the bill is removed.')
   end
 
   # People ate but no cook entered a receipt. A settlement never claims a

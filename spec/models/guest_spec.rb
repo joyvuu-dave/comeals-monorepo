@@ -288,6 +288,91 @@ RSpec.describe Guest do
     end
   end
 
+  # A guest's share is charged to the host. A new host moves the whole
+  # guest charge from one person to another, so on a closed meal it
+  # follows the removal rule, the same as a price change. To fix a wrong
+  # host, an admin reopens the meal, changes the host, and closes it again.
+  describe 'a host change on a closed meal' do
+    let(:new_host) { create(:resident, community: community, unit: unit) }
+
+    it 'refuses it for a guest who was on the meal before it closed' do
+      guest = create(:guest, meal: meal, resident: resident)
+      meal.update_columns(closed: true, closed_at: DateTime.now + 1.hour)
+
+      expect(guest.update(resident: new_host)).to be(false)
+      expect(guest.errors[:base]).to eq(['Meal has been closed.'])
+      expect(guest.reload.resident_id).to eq(resident.id)
+    end
+
+    it 'allows it while the meal is open' do
+      guest = create(:guest, meal: meal, resident: resident)
+
+      expect(guest.update(resident: new_host)).to be(true)
+      expect(guest.reload.resident_id).to eq(new_host.id)
+    end
+
+    # An extra may leave a closed meal, so it may change its host too.
+    it 'allows it for a guest added as an extra after the meal closed' do
+      meal.update_columns(closed: true, closed_at: 1.hour.ago, max: 5)
+      guest = create(:guest, meal: meal, resident: resident)
+
+      expect(guest.update(resident: new_host)).to be(true)
+      expect(guest.reload.resident_id).to eq(new_host.id)
+    end
+
+    it 'lets an admin correction change the host of a guest who was on the meal before it closed' do
+      guest = create(:guest, meal: meal, resident: resident)
+      meal.update_columns(closed: true, closed_at: DateTime.now + 1.hour)
+      guest.admin_correction = true
+
+      expect(guest.update(resident: new_host)).to be(true)
+      expect(guest.reload.resident_id).to eq(new_host.id)
+    end
+
+    # A move is judged by the move rule alone, as with a new price: on the
+    # new meal the guest is an addition, with any host.
+    it 'judges a move with a new host as a move' do
+      guest = create(:guest, meal: meal, resident: resident)
+      other_meal = create(:meal, community: community, date: meal.date + 1)
+      other_meal.update_columns(closed: true, closed_at: DateTime.now + 1.hour, max: 5)
+
+      expect(guest.update(meal: other_meal, resident: new_host)).to be(true)
+      expect(guest.reload).to have_attributes(meal_id: other_meal.id, resident_id: new_host.id)
+    end
+  end
+
+  # A guest pays as an adult or as a child, nothing else. The admin meal
+  # form offers exactly these two, so it can always show the price a
+  # guest has, and a save never changes a price nobody touched. Free is a
+  # price only a resident's age gives. The guests_multiplier_adult_or_child
+  # CHECK refuses the rest from writes that skip the model
+  # (spec/db/guests_multiplier_check_spec.rb).
+  describe 'the price' do
+    it 'accepts Adult and Child' do
+      [Multiplier::FULL, Multiplier::HALF].each do |multiplier|
+        guest = described_class.new(meal: meal, resident: resident, multiplier: multiplier)
+
+        expect(guest).to be_valid, "#{multiplier}: #{guest.errors.full_messages}"
+      end
+    end
+
+    it 'refuses free, and every other number, with a sentence' do
+      [Multiplier::FREE, 3, -1].each do |multiplier|
+        guest = described_class.new(meal: meal, resident: resident, multiplier: multiplier)
+
+        expect(guest).not_to be_valid
+        expect(guest.errors.full_messages).to eq(['Multiplier must be 2 (Adult) or 1 (Child)']), multiplier.to_s
+      end
+    end
+
+    it 'refuses a new price of free on an open meal and keeps the stored one' do
+      guest = create(:guest, meal: meal, resident: resident, multiplier: Multiplier::HALF)
+
+      expect(guest.update(multiplier: Multiplier::FREE)).to be(false)
+      expect(guest.reload.multiplier).to eq(Multiplier::HALF)
+    end
+  end
+
   describe '#destroy' do
     it 'blocks removal when guest was added before meal was closed' do
       guest = create(:guest, meal: meal, resident: resident)

@@ -430,11 +430,14 @@ RSpec.describe Meal do
     it 'blocks destroying a meal with a settlement line item, even before the reconciled guard' do
       # In practice a meal with charges is always reconciled, and the guard
       # above refuses it first. This isolates the association's own guard by
-      # inserting a charge on an open meal directly.
+      # inserting a charge on an open meal directly. The database refuses a
+      # line on an open meal from anyone but a repair, so this writes as one.
       meal = create(:meal, community: community)
       resident = create(:resident, community: community, unit: unit, multiplier: 2)
-      MealCharge.create!(meal: meal, resident: resident, kind: 'debit',
-                         amount: BigDecimal('-8'), unit_cost: BigDecimal('4'), multiplier: 2)
+      with_repair_bypass do
+        MealCharge.create!(meal: meal, resident: resident, kind: 'debit',
+                           amount: BigDecimal('-8'), unit_cost: BigDecimal('4'), multiplier: 2)
+      end
 
       expect { meal.destroy }.not_to change(described_class, :count)
       expect(meal.errors[:base]).to include('Cannot delete record because dependent meal charges exist')
@@ -493,14 +496,14 @@ RSpec.describe Meal do
     it 'destroys guests removed via host_ids= with an audit record of the multiplier' do
       meal = create(:meal, community: community)
       host = create(:resident, community: community, unit: unit, multiplier: 2)
-      guest = create(:guest, meal: meal, resident: host, multiplier: 3)
+      guest = create(:guest, meal: meal, resident: host, multiplier: Multiplier::HALF)
 
       expect { meal.host_ids = [] }.to change(Guest, :count).by(-1)
 
       destroy_audit = meal.associated_audits.find_by(auditable_type: 'Guest', auditable_id: guest.id,
                                                      action: 'destroy')
       expect(destroy_audit).not_to be_nil
-      expect(destroy_audit.audited_changes['multiplier']).to eq(3)
+      expect(destroy_audit.audited_changes['multiplier']).to eq(Multiplier::HALF)
     end
 
     it 'cannot strip guests from a reconciled meal via host_ids=' do
@@ -640,21 +643,90 @@ RSpec.describe Meal do
       held = meal_with('30', eaten: false)
 
       expect(described_class.settleable_by(Date.yesterday)).not_to include(held)
-      expect(described_class.receipt_and_nobody_ate).to contain_exactly(held)
+      expect(described_class.receipt_and_nobody_to_charge).to contain_exactly(held)
+    end
+
+    # Only people who eat free signed up, so nobody can be charged a share
+    # and the cook would be credited $0 for good: the same loss as a meal
+    # nobody signed up for (#94).
+    it 'holds back a meal only free residents ate when a cook entered money' do
+      held = meal_with('30', eaten: false)
+      baby = create(:resident, community: community, unit: unit, multiplier: 0)
+      create(:meal_resident, meal: held, resident: baby, community: community)
+
+      expect(described_class.settleable_by(Date.yesterday)).not_to include(held)
+      expect(described_class.receipt_and_nobody_to_charge).to contain_exactly(held)
+    end
+
+    # A guest pays as an adult or as a child, never free
+    # (Multiplier::GUEST_PRICES), so any guest is someone to charge.
+    it 'takes a meal with money on a receipt when only a child guest ate' do
+      meal = meal_with('30', eaten: false)
+      create(:guest, meal: meal, resident: eater, multiplier: Multiplier::HALF)
+
+      expect(described_class.settleable_by(Date.yesterday)).to include(meal)
+      expect(described_class.receipt_and_nobody_to_charge).to be_empty
+    end
+
+    it 'takes a meal only free eaters ate when its cook slots hold no money, so it settles with no effect' do
+      free = meal_with('0', eaten: false)
+      baby = create(:resident, community: community, unit: unit, multiplier: 0)
+      create(:meal_resident, meal: free, resident: baby, community: community)
+
+      expect(described_class.settleable_by(Date.yesterday)).to include(free)
+      expect(described_class.receipt_and_nobody_to_charge).to be_empty
+    end
+
+    # One paying eater is enough, whether a resident or a guest, and a
+    # free eater next to them changes nothing.
+    it 'takes a meal with money on a receipt when a free eater ate next to someone who pays' do
+      baby = create(:resident, community: community, unit: unit, multiplier: 0)
+      paying_guest = meal_with('30', eaten: false)
+      create(:meal_resident, meal: paying_guest, resident: baby, community: community)
+      create(:guest, meal: paying_guest, resident: baby, multiplier: 2)
+      paying_resident = meal_with('30', eaten: true, date: Date.yesterday - 1)
+      create(:meal_resident, meal: paying_resident, resident: baby, community: community)
+
+      expect(described_class.settleable_by(Date.yesterday)).to include(paying_guest, paying_resident)
+      expect(described_class.receipt_and_nobody_to_charge).to be_empty
+    end
+
+    # A child pays half (Multiplier::HALF), so a child is someone to charge.
+    it 'takes a meal with money on a receipt when only a child who pays half ate' do
+      meal = meal_with('30', eaten: false)
+      child = create(:resident, community: community, unit: unit, multiplier: Multiplier::HALF)
+      create(:meal_resident, meal: meal, resident: child, community: community)
+
+      expect(described_class.settleable_by(Date.yesterday)).to include(meal)
+      expect(described_class.receipt_and_nobody_to_charge).to be_empty
+    end
+
+    # Each EXISTS reads the meal's own rows. Without that, the paying eater
+    # and the guest of the other two meals would count for the first one.
+    it 'judges each meal by its own eaters, not by who ate another meal' do
+      baby = create(:resident, community: community, unit: unit, multiplier: 0)
+      held = meal_with('30', eaten: false)
+      create(:meal_resident, meal: held, resident: baby, community: community)
+      paid = meal_with('30', eaten: true, date: Date.yesterday - 1)
+      with_guest = meal_with('30', eaten: false, date: Date.yesterday - 2)
+      create(:guest, meal: with_guest, resident: eater, multiplier: Multiplier::FULL)
+
+      expect(described_class.receipt_and_nobody_to_charge).to contain_exactly(held)
+      expect(described_class.settleable_by(Date.yesterday)).to contain_exactly(paid, with_guest)
     end
 
     it 'holds back a meal nobody ate for any amount of money, however small' do
       held = meal_with('0.50', eaten: false)
 
       expect(described_class.settleable_by(Date.yesterday)).not_to include(held)
-      expect(described_class.receipt_and_nobody_ate).to contain_exactly(held)
+      expect(described_class.receipt_and_nobody_to_charge).to contain_exactly(held)
     end
 
     it 'judges each meal by its own cook slots, not by money entered on another meal' do
       held = meal_with('30', eaten: false)
       free = meal_with('0', eaten: false, date: Date.yesterday - 1)
 
-      expect(described_class.receipt_and_nobody_ate).to contain_exactly(held)
+      expect(described_class.receipt_and_nobody_to_charge).to contain_exactly(held)
       expect(described_class.settleable_by(Date.yesterday)).to include(free)
       expect(described_class.settleable_by(Date.yesterday)).not_to include(held)
     end

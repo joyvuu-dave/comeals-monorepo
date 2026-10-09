@@ -28,9 +28,11 @@ RSpec.describe LedgerCheckRun do
   end
 
   describe 'outcomes' do
-    # Three states, not two. A run that could not finish says nothing about
-    # the books, which is different from one that finished and found them
-    # right — and the difference matters at 3am when an email arrives.
+    # Three states, not two. A run that could not finish and found nothing
+    # says nothing about the books, which is different from one that
+    # finished and found them right. A run that found a difference and then
+    # crashed is both failed and errored: the difference is already a fact
+    # about the books.
     it 'passes when it finished and found nothing' do
       run = build_run(reconciliations_checked: 3, mismatch_count: 0)
 
@@ -54,11 +56,11 @@ RSpec.describe LedgerCheckRun do
       expect(run).not_to be_failed
     end
 
-    it 'is errored, not failed, when the error came after some mismatches were counted' do
+    it 'is failed and errored when the error came after some mismatches were counted' do
       run = build_run(reconciliations_checked: 2, mismatch_count: 1, error: 'PG::ConnectionBad: gone')
 
+      expect(run.failed?).to be(true)
       expect(run.errored?).to be(true)
-      expect(run.failed?).to be(false)
       expect(run.passed?).to be(false)
     end
 

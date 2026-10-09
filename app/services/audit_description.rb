@@ -10,10 +10,11 @@
 # when the record is gone) is the only way back to a resident's name. So
 # a describer is built for a whole list of rows and loads what they name
 # up front, one query per table: the bills and attendance rows that
-# update rows point at, the create audits of those that are gone, and
-# every resident any row names. Describing a row then reads nothing
-# (#84: one to three queries per row made a long history a few hundred
-# queries for one modal).
+# update rows point at, the create audits of those that are gone, the
+# history of every guest an update row points at, and every resident any
+# row names. Describing a row then reads nothing (#84: one to three
+# queries per row made a long history a few hundred queries for one
+# modal).
 class AuditDescription
   include ActiveSupport::NumberHelper
 
@@ -29,6 +30,7 @@ class AuditDescription
     rows = audits.to_a
     @bill_cooks = cook_ids(Bill, rows, 'Bill')
     @attendance_residents = cook_ids(MealResident, rows, 'MealResident')
+    @guest_hosts = guest_hosts(rows)
     @residents = Resident.where(id: named_resident_ids(rows)).index_by(&:id)
   end
 
@@ -72,13 +74,37 @@ class AuditDescription
     from_records.merge(from_trail)
   end
 
+  # The host each guest update row's guest had just before that row was
+  # written, by audit id. Read from the guest's own history, in order: the
+  # host its create row names, then each host change after it. Not from
+  # the guest as it is now, because a later host change would put the new
+  # host's name on an older price change. A guest with no create row has
+  # no host here, and is named 'unknown'. One query for every guest.
+  def guest_hosts(rows)
+    ids = rows.filter_map { |row| row.auditable_id if row.auditable_type == 'Guest' && row.action == 'update' }
+    # In version order, which is each guest's own order. Rows of different
+    # guests may mix: host_now keeps one host per guest.
+    trail = Audited::Audit.where(auditable_type: 'Guest', auditable_id: ids, action: %w[create update]).order(:version)
+    host_now = {}
+    trail.each_with_object({}) do |audit, hosts|
+      host = audit.audited_changes['resident_id']
+      if audit.action == 'create'
+        host_now[audit.auditable_id] = host
+      else
+        hosts[audit.id] = host_now[audit.auditable_id]
+        host_now[audit.auditable_id] = host.last if host.instance_of?(Array)
+      end
+    end
+  end
+
   # Every resident id the rows name: in a create or destroy row's
-  # changes, or through the record an update row points at.
+  # changes, both sides of a change of resident in an update row, or
+  # through the record an update row points at.
   def named_resident_ids(rows)
     from_changes = rows.filter_map do |row|
       row.audited_changes['resident_id'] if %w[Bill MealResident Guest].include?(row.auditable_type)
     end
-    (from_changes + @bill_cooks.values + @attendance_residents.values).compact.uniq
+    (from_changes.flatten + @bill_cooks.values + @attendance_residents.values + @guest_hosts.values).compact.uniq
   end
 
   def resident(id)
@@ -177,6 +203,9 @@ class AuditDescription
     return "#{name} removed" if audit.action == 'destroy'
 
     if audit.action == 'update'
+      price = price_change(changes)
+      return "#{name}: #{price}" if price
+
       if changes['late'].instance_of?(Array)
         return "#{name} marked late" if changes['late'][0] == false && changes['late'][1] == true
         return "#{name} marked not late" if changes['late'][0] == true && changes['late'][1] == false
@@ -198,6 +227,8 @@ class AuditDescription
   end
 
   def describe_guest(audit)
+    return describe_guest_update(audit) if audit.action == 'update'
+
     changes = audit.audited_changes
     name = name_or_unknown(resident(changes['resident_id']))
 
@@ -209,5 +240,34 @@ class AuditDescription
     when false then "Omnivore guest of #{name} #{verb}"
     else fallback_description(audit)
     end
+  end
+
+  # "Guest of Ann moved to Bob", "Guest of Ann: Adult to Child", or both
+  # from one save: "Guest of Ann moved to Bob: Adult to Child". Any other
+  # change (nothing in the app writes one) falls back.
+  def describe_guest_update(audit)
+    changes = audit.audited_changes
+    price = price_change(changes)
+    moved = changes['resident_id']
+    unless moved.instance_of?(Array)
+      return fallback_description(audit) if price.nil?
+
+      return "Guest of #{name_or_unknown(resident(@guest_hosts[audit.id]))}: #{price}"
+    end
+
+    sentence = "Guest of #{name_or_unknown(resident(moved.first))} moved to #{name_or_unknown(resident(moved.last))}"
+    price ? "#{sentence}: #{price}" : sentence
+  end
+
+  # "Child to Adult", in the words every admin page uses, or nil when the
+  # row did not change the price or holds something other than two whole
+  # numbers (Multiplier.label takes only an Integer, and a history that
+  # raises shows nothing at all).
+  def price_change(changes)
+    prices = changes['multiplier']
+    return nil unless prices.instance_of?(Array) && prices.all?(Integer)
+
+    from, to = prices
+    "#{Multiplier.label(from)} to #{Multiplier.label(to)}"
   end
 end

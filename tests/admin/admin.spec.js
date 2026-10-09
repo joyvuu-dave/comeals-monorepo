@@ -90,4 +90,27 @@ test.describe("Admin", () => {
     await expect(page).toHaveURL(/\/communities\/\d+$/);
     await expect(page.locator("#page_title")).toHaveText("Admin E2E");
   });
+
+  // ActiveAdmin gives a status tag no color for the "error" class, so
+  // without the rule in active_admin.scss a run that found a difference
+  // is the same grey as a clean run. Seeded: run 2 found one, run 1 is
+  // clean.
+  test("a ledger check that found a difference is red, a clean one is grey", async ({
+    page,
+  }) => {
+    await login(page);
+    await page.goto("/ledger_check_runs");
+
+    const result = page.locator("td.col-result .status_tag");
+    // $error-color, #932419.
+    await expect(result.filter({ hasText: "1 mismatched" })).toHaveCSS(
+      "background-color",
+      "rgb(147, 36, 25)",
+    );
+    // The plain status tag color, #666.
+    await expect(result.filter({ hasText: "all match" })).toHaveCSS(
+      "background-color",
+      "rgb(102, 102, 102)",
+    );
+  });
 });

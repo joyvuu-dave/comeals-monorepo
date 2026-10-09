@@ -26,5 +26,12 @@ FactoryBot.define do
     reconciliation
     resident
     amount { BigDecimal('0') }
+
+    # The database refuses a balance that its reconciliation's settlement
+    # is not writing (20261009120000), so the factory writes it as that
+    # settlement would.
+    to_create do |balance|
+      SettledWrites.as_settlement_of(balance.reconciliation) { balance.save! }
+    end
   end
 end

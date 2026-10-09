@@ -19,9 +19,9 @@ RSpec.describe 'ledger:verify' do
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
 
-  def settle
-    cook = create(:resident, community: community, unit: unit, multiplier: 2, name: 'Cook')
-    eater = create(:resident, community: community, unit: unit, multiplier: 2, name: 'Eater')
+  def settle(cook_name: 'Cook', eater_name: 'Eater')
+    cook = create(:resident, community: community, unit: unit, multiplier: 2, name: cook_name)
+    eater = create(:resident, community: community, unit: unit, multiplier: 2, name: eater_name)
 
     meal = create(:meal, community: community)
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('80'))
@@ -69,6 +69,33 @@ RSpec.describe 'ledger:verify' do
     end
 
     expect { Rake::Task['ledger:verify'].invoke }.to raise_error(LedgerVerification::MismatchError)
+    expect(Healthcheck).to have_received(:ping).with('ledger-verify', state: 'fail')
+  end
+
+  # The job's run record keeps only the error's own message, not its
+  # cause. So when the check finds a difference and then crashes, the
+  # error has to be the difference, and its message has to say the check
+  # did not finish.
+  it 'names the difference, not the crash, when the check finds one and then crashes' do
+    reconciliation = settle
+    balances = reconciliation.reconciliation_balances.order(:resident_id).to_a
+    later = settle(cook_name: 'Second Cook', eater_name: 'Second Eater')
+    allow(Healthcheck).to receive(:ping)
+    ActiveRecord::Base.transaction do
+      ActiveRecord::Base.connection.execute("SET LOCAL comeals.allow_settled_writes = 'on'")
+      ReconciliationBalance.where(id: balances.first.id).update_all(amount: balances.first.amount + 1)
+      ReconciliationBalance.where(id: balances.last.id).update_all(amount: balances.last.amount - 1)
+    end
+    crashing = Reconciliation.find(later.id)
+    allow(crashing).to receive(:settlement_balances).and_raise(ActiveRecord::StatementInvalid, 'connection lost')
+    allow(Reconciliation).to receive(:order).with(:id).and_return([Reconciliation.find(reconciliation.id), crashing])
+
+    expect { Rake::Task['ledger:verify'].invoke }.to raise_error(LedgerVerification::MismatchError)
+
+    expect(JobRun.last.error).to start_with('LedgerVerification::MismatchError: Ledger check failed: 2 findings')
+    expect(JobRun.last.error).to include("— #{reconciliation.id}.")
+    expect(JobRun.last.error).to end_with('did not finish, so it may have missed more: ' \
+                                          'ActiveRecord::StatementInvalid: connection lost')
     expect(Healthcheck).to have_received(:ping).with('ledger-verify', state: 'fail')
   end
 end

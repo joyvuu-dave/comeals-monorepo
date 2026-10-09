@@ -182,8 +182,8 @@ module PlainLedger
     # "effective_cost = min(total_cost, cap * total multiplier)".
     # "A meal whose total multiplier is 0 ... has a unit cost of 0, and
     # every one of its lines is 0: each cook is credited 0 and each eater
-    # is charged 0. The cook absorbs the cost. The zero lines still exist"
-    # (MODELS.md, The Multiplier System). See assumption 2.
+    # is charged 0. The lines still exist, each at $0" (MODELS.md, The
+    # Multiplier System). See assumption 2.
     cap = meal.fetch(:cap)
     effective_cost =
       if total_multiplier.zero?

@@ -121,6 +121,29 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
       expect(settled_before.reload.reconciliation_id).to eq(earlier.id)
     end
 
+    # Only people who eat free signed up, so nobody could be charged a
+    # share, and settling would credit the cook $0 for good. Held back the
+    # same way as a receipt nobody signed up for (#94).
+    it 'holds back a meal with money on a receipt that only free eaters ate, and claims one with no money' do
+      cook = resident
+      baby = resident(multiplier: 0)
+      paid = meal_on(Date.yesterday - 3)
+      bill(paid, cook, 20)
+      attend(paid, resident)
+      free_with_money = meal_on(Date.yesterday - 2)
+      bill(free_with_money, cook, 25)
+      attend(free_with_money, baby)
+      free_without_money = meal_on(Date.yesterday - 1)
+      bill(free_without_money, cook, 0)
+      attend(free_without_money, baby)
+
+      reconciliation = settle!(cutoff: Date.yesterday)
+
+      expect(reconciliation.meals).to contain_exactly(paid, free_without_money)
+      expect(free_with_money.reload.reconciliation_id).to be_nil
+      expect(free_with_money.meal_charges).to be_empty
+    end
+
     it 'leaves a meal dated after the cutoff for the next settlement' do
       cook = resident
       inside = meal_on(Date.yesterday - 3)
@@ -262,6 +285,21 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
       expect(preview.meals).to contain_exactly(eaten, no_money)
     end
 
+    it 'lists a meal with money on a receipt that only free eaters ate as held, not as one it settles' do
+      cook = resident
+      baby = resident(multiplier: 0)
+      free_with_money = meal_on(Date.yesterday - 1)
+      bill(free_with_money, cook, 25)
+      attend(free_with_money, baby)
+      paid = meal_on(Date.yesterday - 2)
+      bill(paid, cook, 20)
+      attend(paid, resident)
+
+      preview = Settlement.preview(cutoff: Date.yesterday)
+      expect(preview.held_meals).to eq([free_with_money])
+      expect(preview.meals).to eq([paid])
+    end
+
     # The preview refuses a cutoff that is not in the past before it asks
     # for either list, so there the filter changes nothing. Asked directly,
     # each list still follows settleable_by's rule that a day that is not
@@ -285,6 +323,20 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
       bill(tonight, cook, 25)
 
       expect(Settlement.held_by(today, today: today)).to eq([yesterday])
+    end
+
+    # The held meals example above passes without ORDER BY too: PostgreSQL
+    # returned those rows in date order without being asked. So this reads
+    # the statement.
+    it 'asks for the held meals oldest first' do
+      bill(meal_on(Date.yesterday - 1), resident, 25)
+      statements = []
+      callback = ->(*, payload) { statements << payload[:sql] }
+      ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') do
+        Settlement.held_by(Date.yesterday, today: community.today)
+      end
+
+      expect(statements.grep(/\ASELECT "meals"\.\* FROM "meals"/)).to contain_exactly(/ ORDER BY "meals"\."date" ASC\z/)
     end
   end
 

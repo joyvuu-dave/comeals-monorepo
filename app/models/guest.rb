@@ -47,7 +47,12 @@ class Guest < ApplicationRecord
   include ClosedMealAttendanceFreeze
   include NotesMealLiveUpdate
 
+  # The integer check refuses 1.5, which the column would otherwise cut to
+  # 1 without a word. The list is the two guest prices (Multiplier); the
+  # guests_multiplier_adult_or_child CHECK holds the same rule for writes
+  # that skip the model.
   validates :multiplier, numericality: { only_integer: true }
+  validates :multiplier, inclusion: { in: Multiplier::GUEST_PRICES, message: 'must be 2 (Adult) or 1 (Child)' }
   # Both columns are NOT NULL. Without this a nil (a guest sent without
   # vegetarian) reached the database and the API answered 500 (#121).
   # Nothing writes late today. It is checked anyway, because its column

@@ -158,8 +158,10 @@ RSpec.describe MealLedger do
 
       ledger = ledger_for(meal)
 
-      # The zero lines exist: a settlement stores them, and a settled meal's
-      # screen reads them (MealCostSummary). `all` alone passes on no lines.
+      # The zero lines exist: the nightly balance task reads them, a meal
+      # like this settled before 2026-10-09 stored them, and a settled
+      # meal's screen reads them (MealCostSummary). `all` alone passes on
+      # no lines.
       expect(ledger.lines.map { |line| [line.kind, line.resident_id] })
         .to contain_exactly([:credit, cook.id], [:debit, baby.id])
       expect(ledger.lines.map(&:amount)).to all(eq(BigDecimal('0')))
@@ -355,6 +357,41 @@ RSpec.describe MealLedger do
       expect { described_class.units(BigDecimal('0.000000001')) }
         .to raise_error(ArgumentError, '0.000000001 is not a whole number of 10^-8 dollars')
       expect(described_class.units(BigDecimal('12.34'))).to eq(1_234_000_000)
+    end
+  end
+
+  # What a screen shows for one meal. "Subsidized" means the cooks were
+  # credited less than they spent, for any reason: a cap, or nobody with a
+  # price to charge (#94).
+  describe '#summary_for' do
+    it 'shows what the cooks spent, and subsidized, when nobody who ate has a price' do
+      cook = resident('Cook')
+      baby = resident('Baby', multiplier: 0)
+
+      meal = create(:meal, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('25'))
+      create(:meal_resident, meal: meal, resident: baby, community: community)
+
+      summary = ledger_for(meal).summary_for(meal)
+
+      expect(summary.total_cost).to eq(BigDecimal('25'))
+      expect(summary.effective_cost).to eq(BigDecimal('0'))
+      expect(summary.unit_cost).to eq(BigDecimal('0'))
+      expect(summary.subsidized).to be(true)
+    end
+
+    it 'is not subsidized when nobody who ate has a price and the cooks spent nothing' do
+      cook = resident('Cook')
+      baby = resident('Baby', multiplier: 0)
+
+      meal = create(:meal, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('0'))
+      create(:meal_resident, meal: meal, resident: baby, community: community)
+
+      summary = ledger_for(meal).summary_for(meal)
+
+      expect(summary.total_cost).to eq(BigDecimal('0'))
+      expect(summary.subsidized).to be(false)
     end
   end
 

@@ -95,6 +95,13 @@ body {
   &.no {
     background: #666;
   }
+
+  // ActiveAdmin has no color for this class. The Ledger Checks page uses
+  // it for a run that found a difference or did not finish, so those
+  // stand out from a clean run. 8.4:1 against the white text.
+  &.error {
+    background: $error-color;
+  }
 }
 
 .pagination_information {

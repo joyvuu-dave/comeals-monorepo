@@ -208,7 +208,7 @@ ActiveAdmin.register Resident do
           settlement_lines_table(lines, first_column: :meal)
         end
 
-        para 'Credited amounts minus charged amounts come to within one cent of the settled ' \
+        para 'Credited amounts minus charged amounts come to less than one cent from the settled ' \
              'amount. Line amounts are stored to eight decimal places; the settled amount is ' \
              'rounded to cents by largest-remainder allocation.'
       end

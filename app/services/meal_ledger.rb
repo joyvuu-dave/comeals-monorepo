@@ -112,10 +112,11 @@ class MealLedger
 
   # The per-meal numbers a screen shows: what the cooks spent, what the
   # eaters are charged for (lower on a subsidized meal), the cost per
-  # unit of multiplier, and whether the community subsidized it. This is
-  # the display face of the same financials_for pass the lines are built
-  # from — screens must read it (via MealCostSummary), never re-derive
-  # the arithmetic.
+  # unit of multiplier, and whether the meal is subsidized: the cooks are
+  # credited less than they spent, for any reason (subsidized? below).
+  # This is the display face of the same financials_for pass the lines
+  # are built from — screens must read it (via MealCostSummary), never
+  # re-derive the arithmetic.
   class Summary < T::Struct
     const :total_cost, BigDecimal
     const :effective_cost, BigDecimal
@@ -172,6 +173,11 @@ class MealLedger
     UNIT * units
   end
 
+  # True when the eaters are charged less than the cooks spent, so the
+  # cooks are credited less than they spent. Two things cause it: a cap,
+  # or nobody who ate has a price, so nobody can be charged at all (#94).
+  # MealCharge#subsidized? asks the same question of a settled meal's
+  # stored lines, so an open meal and a settled one say the same thing.
   sig { params(financials: Financials).returns(T::Boolean) }
   def subsidized?(financials)
     financials.effective_units < financials.total_units
@@ -201,13 +207,19 @@ class MealLedger
   #
   # total_units is what the cooks spent. effective_units is what the eaters
   # are charged for, which is lower when the meal is capped and the cooks
-  # spent more than the cap allows. The community absorbs the difference.
+  # spent more than the cap allows. Then each cook is credited less than
+  # they spent, and the meal's lines still sum to zero.
   #
-  # Nobody can be charged a share of a meal with no units of multiplier — a
-  # meal attended only by babies. Every line is zero there, which also means
-  # the cooks get no credit and absorb the cost themselves. The lines still
-  # exist: a zero line is a fact about what happened, and a settled meal's
-  # screen reads its lines (MealCostSummary).
+  # Nobody can be charged a share of a meal with no units of multiplier —
+  # a meal that only people who eat free attended, or nobody. Every line
+  # is zero there, which also means each cook is credited $0 for what they
+  # spent. total_units is still what they spent, so the meal's screen
+  # shows what they spent and that it is subsidized, the same before
+  # settlement as after (#94). The lines still exist: a zero line is a
+  # fact about what happened, and a settled meal's screen reads its lines
+  # (MealCostSummary). A settlement holds such a meal back when a receipt
+  # has money on it (Meal.settleable_by), so a settled one with money on
+  # a receipt is from before 2026-10-09.
   #
   # unit_cost is the one quotient in the ledger, and it is cut to the grain
   # (rounded down) here, in one place, for screens. No line is computed
@@ -217,11 +229,11 @@ class MealLedger
   end
   def financials_for(meal, people, spent)
     total_multiplier = people.sum { |eater| T.must(eater.multiplier) }
+    total_units = spent.sum
     if total_multiplier.zero?
-      return Financials.new(total_multiplier: 0, total_units: 0, effective_units: 0, unit_cost: ZERO)
+      return Financials.new(total_multiplier: 0, total_units: total_units, effective_units: 0, unit_cost: ZERO)
     end
 
-    total_units = spent.sum
     effective_units = total_units
 
     cap = meal.cap # nil means uncapped (Meal#capped?)
@@ -281,7 +293,8 @@ class MealLedger
   # Each cook is credited what they spent. On a subsidized meal the eaters
   # were charged less than that, so the cooks share what the eaters were
   # charged, in proportion to what each spent: two cooks who spent $40 and
-  # $20 on a meal capped at $18 are credited $12 and $6.
+  # $20 on a meal capped at $18 are credited $12 and $6. When nobody who
+  # ate has a price, the eaters were charged $0, so the cooks share $0.
   sig do
     params(meal: Meal, bills: T::Array[Bill], spent: T::Array[Integer], financials: Financials)
       .returns(T::Array[Line])
@@ -304,7 +317,6 @@ class MealLedger
 
   sig { params(spent: T::Array[Integer], financials: Financials).returns(T::Array[Integer]) }
   def credit_units(spent, financials)
-    return Array.new(spent.size, 0) if financials.total_multiplier.zero?
     return spent unless subsidized?(financials)
 
     LargestRemainderSplit.call(financials.effective_units, spent)

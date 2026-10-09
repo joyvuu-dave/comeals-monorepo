@@ -676,7 +676,7 @@ class Meal
     def readonly(*args, &blk); end
 
     sig { params(args: T.untyped, blk: T.untyped).returns(PrivateAssociationRelation) }
-    def receipt_and_nobody_ate(*args, &blk); end
+    def receipt_and_nobody_to_charge(*args, &blk); end
 
     sig { params(args: T.untyped, blk: T.untyped).returns(PrivateAssociationRelation) }
     def references(*args, &blk); end
@@ -1586,7 +1586,7 @@ class Meal
     def readonly(*args, &blk); end
 
     sig { params(args: T.untyped, blk: T.untyped).returns(PrivateRelation) }
-    def receipt_and_nobody_ate(*args, &blk); end
+    def receipt_and_nobody_to_charge(*args, &blk); end
 
     sig { params(args: T.untyped, blk: T.untyped).returns(PrivateRelation) }
     def references(*args, &blk); end

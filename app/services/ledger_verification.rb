@@ -22,11 +22,11 @@
 #    settlement.
 #
 # 2. Line items against balances. The meal_charges rows written at settlement
-#    must add up, per resident, to the stored balance — within one cent, which
-#    is all largest-remainder allocation is allowed to move them — and must sum
-#    to exactly zero overall, because every meal's lines do (MODELS.md, "The
-#    ledger grain"). No arithmetic happens in Ruby here: both sides are read
-#    and PostgreSQL does the sums.
+#    must add up, per resident, to less than one cent from the stored
+#    balance, because rounding to cents never moves a balance further than
+#    that — and must sum to exactly zero overall, because every meal's lines
+#    do (MODELS.md, "The ledger grain"). No arithmetic happens in Ruby here:
+#    both sides are read and PostgreSQL does the sums.
 #
 # The second is the stronger one, and it is why line items exist. The
 # recompute check uses MealLedger, which is what wrote the stored values, so
@@ -69,8 +69,10 @@ class LedgerVerification
   Detail = T.type_alias { T::Hash[Symbol, T.untyped] }
   Balances = T.type_alias { T::Hash[Integer, BigDecimal] }
 
-  # Raised when at least one reconciliation disagrees with its source data.
-  # The run row is already written by the time this is raised.
+  # Raised when at least one reconciliation disagrees with its source data,
+  # even when the check then crashed: the difference is raised, with the
+  # crash as its cause. The run row is already written by the time this is
+  # raised.
   class MismatchError < StandardError
     extend T::Sig
 
@@ -99,17 +101,25 @@ class LedgerVerification
     findings = T.must(run.mismatch_count)
     checked = T.must(run.reconciliations_checked)
 
-    "Ledger check failed: #{findings} #{'finding'.pluralize(findings)} " \
-      "(#{checks}) across #{ids.size} of #{checked} " \
-      "#{'reconciliation'.pluralize(checked)} — #{ids.join(', ')}. " \
-      'Settled balances were changed after settlement, or the source rows behind them were. ' \
-      'See docs/runbooks/settled-data-repair.md.'
+    summary = "Ledger check failed: #{findings} #{'finding'.pluralize(findings)} " \
+              "(#{checks}) across #{ids.size} of #{checked} " \
+              "#{'reconciliation'.pluralize(checked)} — #{ids.join(', ')}. " \
+              'Settled balances were changed after settlement, or the source rows behind them were. ' \
+              'See docs/runbooks/settled-data-repair.md.'
+    return summary unless run.errored?
+
+    # The job's run record keeps only this message, not the crash that is
+    # its cause, so the message names the crash too.
+    "#{summary} The check did not finish, so it may have missed more: #{run.error}"
   end
 
-  # Largest-remainder allocation moves a balance by at most one cent away from
-  # its exact amount, so that is the whole tolerance the line-item check is
-  # allowed. Anything further apart is a real disagreement.
-  ROUNDING_TOLERANCE = T.let(BigDecimal('0.01'), BigDecimal)
+  # Rounding to cents leaves every stored balance less than one cent from the
+  # sum of its lines. Cutting toward zero to whole cents drops less than a
+  # cent. Largest-remainder allocation then moves at most one cent, and only
+  # to a balance whose cut dropped something, back toward its lines
+  # (Settlement.allocate_to_cents). So a gap of one cent or more cannot come
+  # from rounding. It is a real disagreement.
+  ONE_CENT = T.let(BigDecimal('0.01'), BigDecimal)
 
   sig { returns(LedgerCheckRun) }
   def call
@@ -121,16 +131,20 @@ class LedgerVerification
       SnapshotRead.call do
         Reconciliation.order(:id).each do |reconciliation|
           checked += 1
-          mismatches.concat(checks_for(reconciliation))
+          check(reconciliation, mismatches)
         end
       end
     rescue StandardError => e
-      record(started_at: started_at, checked: checked, mismatches: mismatches, error: e)
-      raise
+      run = record(started_at: started_at, checked: checked, mismatches: mismatches, error: e)
+      raise unless run.failed?
+
+      # A difference found before the crash is a fact about the books, so
+      # it is what the alert names. Raised inside this rescue, so Ruby sets
+      # the crash as its cause.
+      raise MismatchError, run
     end
 
     run = record(started_at: started_at, checked: checked, mismatches: mismatches, error: nil)
-    log(run)
     raise MismatchError, run if run.failed?
 
     run
@@ -139,10 +153,15 @@ class LedgerVerification
   private
 
   # Two independent checks per reconciliation, and they fail for different
-  # reasons, so both run and both are reported.
-  sig { params(reconciliation: Reconciliation).returns(T::Array[Detail]) }
-  def checks_for(reconciliation)
-    [recompute_check(reconciliation), line_item_check(reconciliation)].compact
+  # reasons, so both run and both are reported. Each finding is added as
+  # soon as it is made, so a crash in the second check keeps the first
+  # check's finding.
+  sig { params(reconciliation: Reconciliation, mismatches: T::Array[Detail]).void }
+  def check(reconciliation, mismatches)
+    recompute = recompute_check(reconciliation)
+    mismatches << recompute if recompute
+    line_items = line_item_check(reconciliation)
+    mismatches << line_items if line_items
   end
 
   # Check one: recompute the settlement from source and compare. Catches
@@ -188,14 +207,13 @@ class LedgerVerification
 
   # The line items are at the ledger grain and the balances are rounded to
   # cents, so these two can never be compared for equality — only for being
-  # within the one cent that largest-remainder allocation is allowed to move
-  # things.
+  # less than one cent apart (see ONE_CENT).
   sig { params(stored: Balances, summed: Balances).returns(T::Array[Difference]) }
   def line_item_differences(stored, summed)
     (stored.keys | summed.keys).sort.filter_map do |resident_id|
       stored_amount = stored[resident_id] || BigDecimal('0')
       summed_amount = summed[resident_id] || BigDecimal('0')
-      next if (stored_amount - summed_amount).abs <= ROUNDING_TOLERANCE
+      next if (stored_amount - summed_amount).abs < ONE_CENT
 
       {
         resident_id: resident_id,
@@ -271,7 +289,7 @@ class LedgerVerification
       .returns(LedgerCheckRun)
   end
   def record(started_at:, checked:, mismatches:, error:)
-    LedgerCheckRun.create!(
+    run = LedgerCheckRun.new(
       started_at: started_at,
       finished_at: Time.current,
       reconciliations_checked: checked,
@@ -279,8 +297,16 @@ class LedgerVerification
       details: mismatches,
       error: error && "#{error.class}: #{error.message}"
     )
+    # Logged before it is saved. When the crash was a lost connection, the
+    # save can fail too, and then the log is the only place a difference
+    # found before the crash is written down.
+    log(run)
+    run.save!
+    run
   end
 
+  # A run that crashed and found nothing logs nothing here. The crash
+  # itself is raised, and it says what went wrong.
   sig { params(run: LedgerCheckRun).void }
   def log(run)
     if run.passed?
@@ -288,7 +314,7 @@ class LedgerVerification
         "ledger:verify checked #{run.reconciliations_checked} " \
         "#{'reconciliation'.pluralize(run.reconciliations_checked)} in #{run.duration.round(2)}s — all match"
       )
-    else
+    elsif run.failed?
       Rails.logger.error(self.class.summary_for(run))
       run.details.each { |detail| Rails.logger.error("  #{detail.to_json}") }
     end

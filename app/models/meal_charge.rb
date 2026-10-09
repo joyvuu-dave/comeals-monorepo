@@ -67,6 +67,11 @@ class MealCharge < ApplicationRecord
   # Immutable once written, the same as the balances these add up to. The
   # database trigger in 20260802120000 is the backstop; this is the
   # readable half.
+  #
+  # Adding a line has no guard here, only in the database: the trigger in
+  # 20261009120000 refuses an INSERT unless the settlement that settles the
+  # line's meal is writing it, or the repair bypass is on. That refusal
+  # also holds for writes that skip the model, like insert_all and psql.
   include AppendOnly
 
   append_only update_message: 'Settlement line items record what a meal cost and who was charged for it. ' \
@@ -79,9 +84,11 @@ class MealCharge < ApplicationRecord
     kind == 'credit'
   end
 
-  # True when the cook spent more than the cap allowed, so they were credited
-  # less than they laid out and the difference was absorbed rather than
-  # charged to the eaters.
+  # True on a credit that is less than what the cook spent, for any reason:
+  # a cap lowered what the eaters were charged, or nobody who ate had a
+  # price, so nobody was charged at all (#94). MealLedger's subsidized?
+  # asks the same question of an open meal, so the open and the settled
+  # screens of one meal agree.
   sig { returns(T::Boolean) }
   def subsidized?
     bill_amount = self.bill_amount

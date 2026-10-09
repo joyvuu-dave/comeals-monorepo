@@ -9,8 +9,8 @@ require 'rails_helper'
 #   1. the lines of each meal sum to exactly zero: what the cooks are
 #      credited is what the eaters are charged;
 #   2. the rounded balances sum to exactly zero, so no penny is dropped;
-#   3. every rounded balance is whole cents and within one cent of the
-#      exact amount;
+#   3. every rounded balance is whole cents and less than one cent from
+#      the exact amount;
 #   4. the same ledger rounds the same way every time.
 #
 # Each ledger is built from a seed, printed on failure so the case can be
@@ -37,7 +37,7 @@ RSpec.describe Settlement, '.allocate_to_cents, on random ledgers' do
       # 2. no penny dropped
       expect(rounded.values.sum(BigDecimal('0'))).to eq(0), "seed #{seed}: rounded balances do not sum to zero"
 
-      # 3. whole cents, within a cent of the truth
+      # 3. whole cents, less than a cent from the exact amount
       rounded.each do |id, amount|
         expect(amount).to eq(amount.round(2)), "seed #{seed}, resident #{id}: #{amount.to_s('F')} is not whole cents"
         expect((amount - raw[id]).abs).to be < cent,

@@ -29,6 +29,26 @@ RSpec.describe ReconciliationWarnings do
                            }])
   end
 
+  # Someone signed up, but everyone who did eats free, so nobody can be
+  # charged and the settlement holds the meal back (#94). Saying "nobody
+  # signed up" would be false.
+  it 'warns about a bill with money on a held meal only free eaters signed up for' do
+    row = bill('12.50')
+    baby = create(:resident, community: community, unit: unit, multiplier: 0)
+    create(:meal_resident, meal: meal, resident: baby, community: community)
+
+    warnings = described_class.for([], held: [meal])
+
+    expect(warnings).to eq([{
+                             id: "bill_with_only_free_eaters:meal=#{meal.id}:bill=#{row.id}",
+                             kind: 'bill_with_only_free_eaters',
+                             severity: 'warning', meal_id: meal.id, title: 'Bill with only free eaters',
+                             body: 'Cook Person submitted a $12.50 bill for 2026-04-10, but only people who eat ' \
+                                   'free signed up. This meal will not be settled until someone who pays is ' \
+                                   'signed up or the bill is removed.'
+                           }])
+  end
+
   it 'does not take a no-cost bill for money because an amount was left on it' do
     bill('12', no_cost: true)
 

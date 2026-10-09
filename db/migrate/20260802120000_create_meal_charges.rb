@@ -98,6 +98,8 @@ class CreateMealCharges < ActiveRecord::Migration[8.1]
     # stays open because that is how settlement writes them, and settlement
     # inserts them after the meal is already claimed — so the settled-child
     # trigger cannot be reused here, it would refuse settlement's own writes.
+    # (20261009120000 closes INSERT to everyone but the settlement, with a
+    # setting only the settlement's own transaction sets.)
     # rubocop:disable Rails/SquishedSQLHeredocs -- PL/pgSQL function bodies need preserved formatting
     execute <<~SQL
       CREATE FUNCTION comeals_protect_meal_charge() RETURNS trigger AS $$

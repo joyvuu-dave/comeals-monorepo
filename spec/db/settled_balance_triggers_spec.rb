@@ -82,16 +82,18 @@ RSpec.describe 'settled balance triggers' do
   end
 
   describe 'the books must still add up' do
-    # The insert path is the one the first trigger cannot judge: settlement
-    # writes its rows one at a time, so a row-level BEFORE trigger cannot
-    # tell settlement's own inserts from one added months later. The deferred
-    # constraint catches it at commit instead, by the only thing that
-    # separates them — whether the reconciliation still balances.
+    # Only the settlement itself may insert a balance
+    # (spec/db/settled_ledger_inserts_spec.rb), so these examples write as
+    # the settlement would. Then the insert guard lets them through, and
+    # only the deferred sum-zero check can refuse them. It is what catches
+    # a settlement that writes balances that do not add up.
     it 'refuses an inserted balance that unbalances the reconciliation' do
       expect do
-        ReconciliationBalance.create!(
-          reconciliation: reconciliation, resident: new_resident('Stranger'), amount: BigDecimal('10')
-        )
+        as_settlement_of(reconciliation) do
+          ReconciliationBalance.create!(
+            reconciliation: reconciliation, resident: new_resident('Stranger'), amount: BigDecimal('10')
+          )
+        end
       end.to raise_error(ActiveRecord::StatementInvalid, /sum to 10\.0*, not zero/)
     end
 
@@ -99,9 +101,11 @@ RSpec.describe 'settled balance triggers' do
       before_count = reconciliation.reconciliation_balances.count
 
       suppress(ActiveRecord::StatementInvalid) do
-        ReconciliationBalance.create!(
-          reconciliation: reconciliation, resident: new_resident('Stranger'), amount: BigDecimal('10')
-        )
+        as_settlement_of(reconciliation) do
+          ReconciliationBalance.create!(
+            reconciliation: reconciliation, resident: new_resident('Stranger'), amount: BigDecimal('10')
+          )
+        end
       end
 
       expect(reconciliation.reconciliation_balances.count).to eq(before_count)
@@ -116,7 +120,7 @@ RSpec.describe 'settled balance triggers' do
       two = new_resident('Two')
 
       expect do
-        ActiveRecord::Base.transaction do
+        as_settlement_of(reconciliation) do
           ReconciliationBalance.create!(reconciliation: reconciliation, resident: one, amount: BigDecimal('10'))
 
           # Unbalanced right here, and nothing has complained.
@@ -176,6 +180,19 @@ RSpec.describe 'settled balance triggers' do
 
       expect(reconciliation.reconciliation_balances.order(:resident_id).pluck(:amount)).to eq(before_amounts)
       expect(MealCharge.for_reconciliation(reconciliation).count).to eq(before_lines)
+    end
+
+    # The runbook says a rebuild that skips the deletes writes nothing.
+    # The unique indexes refuse the second copy of each line, and
+    # insert_all! raises on that instead of skipping the line.
+    it 'refuses a rebuild that skips the deletes, and writes nothing' do
+      before_lines = MealCharge.for_reconciliation(reconciliation).order(:id).pluck(:id)
+
+      expect { repair { Settlement.new(reconciliation).rewrite! } }
+        .to raise_error(ActiveRecord::RecordNotUnique, /index_meal_charges_one_credit_per_cook/)
+
+      expect(MealCharge.for_reconciliation(reconciliation).order(:id).pluck(:id)).to eq(before_lines)
+      expect(reconciliation.reconciliation_balances.count).to eq(2)
     end
 
     it 'keeps the original amounts when an unbalanced repair is refused' do

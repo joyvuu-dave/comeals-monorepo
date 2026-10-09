@@ -115,6 +115,30 @@ RSpec.describe 'GET /api/v1/reconciliations/preview' do
       expect(body[:meals].pluck(:id)).to eq([empty.id])
     end
 
+    # Only a free eater signed up, so nobody can be charged and the cook
+    # would be credited $0 for good. The settlement holds the meal back,
+    # and the preview says why and leaves its cost out of the total (#94).
+    it 'holds back a bill on a meal only free eaters attended, and says so' do
+      baby = create(:resident, community: community, unit: unit, multiplier: 0)
+      meal = create(:meal, community: community, date: Date.yesterday)
+      bill = create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('45'))
+      create(:meal_resident, meal: meal, resident: baby, community: community)
+
+      body = preview
+      expected = {
+        id: "bill_with_only_free_eaters:meal=#{meal.id}:bill=#{bill.id}",
+        kind: 'bill_with_only_free_eaters',
+        severity: 'warning',
+        meal_id: meal.id,
+        title: 'Bill with only free eaters',
+        body: "Charlie Cook submitted a $45.00 bill for #{meal.date.iso8601}, but only people who eat free " \
+              'signed up. This meal will not be settled until someone who pays is signed up or the bill is removed.'
+      }
+      expect(body[:warnings].map(&:deep_symbolize_keys)).to eq([expected])
+      expect(body[:meals]).to eq([])
+      expect(money(body[:summary][:total_cost])).to eq(0)
+    end
+
     it 'does not say a meal it claims will not be settled, for a $0 cook slot nobody ate' do
       meal = create(:meal, community: community, date: Date.yesterday)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('0'))

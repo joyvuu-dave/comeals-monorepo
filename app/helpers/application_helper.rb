@@ -12,20 +12,10 @@ module ApplicationHelper
 
   include ActiveSupport::NumberHelper
 
-  # The one rendering of a price category. A multiplier of 2 is one
-  # adult, 1 is a child, 0 is a child who eats free (the words the
-  # community form uses for the age rule); anything else shows as a
-  # multiple of an adult ("Adult x 1.5"). Every screen that names a
-  # category calls this — five hand-written copies of this block once
-  # disagreed (#51), and one of them showed a 1.5x adult as a plain
-  # "Adult". A free child showed as "Adult x 0" until #99.
+  # The words for a price ("Adult", "Child", "Child (free)"). They live
+  # in Multiplier.label, because the meal history uses them too.
   def price_category_label(multiplier)
-    return 'Child (free)' if multiplier == Multiplier::FREE
-    return 'Child' if multiplier == Multiplier::HALF
-    return 'Adult' if multiplier == Multiplier::FULL
-
-    "Adult x #{number_with_precision(multiplier.to_f / Multiplier::FULL,
-                                     precision: 1, strip_insignificant_zeros: true)}"
+    Multiplier.label(multiplier)
   end
 
   # The child pricing rule as one plain sentence, built from the community's

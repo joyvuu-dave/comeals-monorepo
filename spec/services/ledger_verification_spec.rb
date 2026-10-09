@@ -264,9 +264,10 @@ RSpec.describe LedgerVerification do
     end
 
     # A resident's stored balance is rounded to cents and their lines are not,
-    # so the two are never equal. The check has to allow exactly the one cent
-    # that largest-remainder allocation is allowed to move a balance, and no
-    # more — otherwise it would either cry wolf every night or miss real drift.
+    # so the two are often not equal. Rounding leaves them less than one cent
+    # apart, so the check allows any gap under one cent and nothing more.
+    # Allowing less would report correct ledgers every night; allowing more
+    # would miss real edits.
     it 'does not complain about ordinary cent rounding' do
       eaters = [eater] + %w[Second Third].map do |name|
         create(:resident, community: community, unit: unit, multiplier: 2, name: name)
@@ -361,7 +362,13 @@ RSpec.describe LedgerVerification do
       expect(detail['differences']).to include('resident_id' => nil, 'stored' => nil, 'source' => '-0.5')
     end
 
-    it 'allows a line sum a whole cent away from the balance, which rounding to cents can produce' do
+    # Rounding to cents moves a cent only to a balance whose lines left a
+    # remainder (Settlement.allocate_to_cents), so a stored balance is
+    # always less than one cent from its lines. A gap of exactly one cent
+    # can only come from an edit. Here a cent is moved between two lines
+    # with the repair bypass on: the lines still sum to zero, and the
+    # source rows did not change, so only this comparison can see it.
+    it 'reports a line sum exactly one cent from the balance, which rounding to cents can never produce' do
       reconciliation = settle
       behind_the_guards do
         MealCharge.where(meal_id: reconciliation.meals.select(:id), resident_id: cook.id, kind: 'credit')
@@ -370,7 +377,16 @@ RSpec.describe LedgerVerification do
                   .update_all(amount: BigDecimal('-40.01'))
       end
 
-      expect(described_class.call).to be_passed
+      expect { described_class.call }.to raise_error(described_class::MismatchError)
+
+      details = LedgerCheckRun.recent.first.details
+      expect(details.pluck('check')).to eq(['line_items'])
+      expect(details.first['differences']).to eq([
+                                                   { 'resident_id' => cook.id, 'stored' => '40.0',
+                                                     'source' => '40.01' },
+                                                   { 'resident_id' => eater.id, 'stored' => '-40.0',
+                                                     'source' => '-40.01' }
+                                                 ])
     end
 
     it 'reports line items that no longer sum to zero as a finding with no resident' do
@@ -418,17 +434,111 @@ RSpec.describe LedgerVerification do
       expect(LedgerCheckRun.recent.first.error).to eq('ActiveRecord::StatementInvalid: connection lost')
     end
 
+    # Nothing was found before the crash, so the crash itself is what is
+    # raised, and nothing is logged as a failed check.
     it 'records the error and re-raises, so the failure is never silent' do
       settle
       allow_any_instance_of(Reconciliation).to receive(:settlement_balances) # rubocop:disable RSpec/AnyInstance -- the failure has to come from inside the loop
         .and_raise(ActiveRecord::StatementInvalid, 'connection lost')
+      allow(Rails.logger).to receive(:error)
 
       expect { described_class.call }.to raise_error(ActiveRecord::StatementInvalid)
 
       run = LedgerCheckRun.recent.first
       expect(run).to be_errored
       expect(run).not_to be_passed
+      expect(run).not_to be_failed
       expect(run.error).to include('connection lost')
+      expect(Rails.logger).not_to have_received(:error)
+    end
+  end
+
+  # A difference found before a crash is a fact about the books. The run
+  # says it failed, and the error names the difference first, with the
+  # crash as its cause, so the alert does not hide it behind a lost
+  # connection.
+  describe 'a run that finds a difference and then cannot finish' do
+    # The first reconciliation's balances were edited; checking the second
+    # one crashes. Fresh rows, so the stubs below touch only these objects.
+    def edit_the_first_and_crash_on_the_second
+      first = settle
+      second = settle
+      behind_the_guards do
+        balances = ReconciliationBalance.where(reconciliation: first)
+        balances.where(resident: cook).update_all(amount: BigDecimal('39'))
+        balances.where(resident: eater).update_all(amount: BigDecimal('-39'))
+      end
+      crashing = Reconciliation.find(second.id)
+      allow(crashing).to receive(:settlement_balances).and_raise(ActiveRecord::StatementInvalid, 'connection lost')
+      allow(Reconciliation).to receive(:order).with(:id).and_return([Reconciliation.find(first.id), crashing])
+      first
+    end
+
+    it 'records a failed run that did not finish, with what it found' do
+      first = edit_the_first_and_crash_on_the_second
+
+      suppress(described_class::MismatchError) { described_class.call }
+
+      run = LedgerCheckRun.recent.first
+      expect(run).to be_failed
+      expect(run).to be_errored
+      expect(run.error).to eq('ActiveRecord::StatementInvalid: connection lost')
+      expect(run.details.pluck('reconciliation_id', 'check'))
+        .to eq([[first.id, 'recompute'], [first.id, 'line_items']])
+    end
+
+    it 'raises the difference, with the crash as its cause' do
+      first = edit_the_first_and_crash_on_the_second
+
+      expect { described_class.call }.to raise_error(described_class::MismatchError) do |error|
+        expect(error.run).to eq(LedgerCheckRun.recent.first)
+        expect(error.message).to eq(
+          'Ledger check failed: 2 findings (line_items and recompute) across 1 of 2 reconciliations — ' \
+          "#{first.id}. Settled balances were changed after settlement, or the source rows behind them " \
+          'were. See docs/runbooks/settled-data-repair.md. The check did not finish, so it may have ' \
+          'missed more: ActiveRecord::StatementInvalid: connection lost'
+        )
+        expect(error.cause).to be_a(ActiveRecord::StatementInvalid)
+        expect(error.cause.message).to eq('connection lost')
+      end
+    end
+
+    # The crash here was a lost connection, so saving the run can fail too.
+    # Then the log is the only place the difference is written down.
+    it 'logs what it found before saving the run, so a failed save does not lose it' do
+      first = edit_the_first_and_crash_on_the_second
+      allow(LedgerCheckRun).to receive(:new).and_wrap_original do |original, *args, **kwargs|
+        original.call(*args, **kwargs).tap do |run|
+          allow(run).to receive(:save!).and_raise(ActiveRecord::ConnectionNotEstablished, 'still gone')
+        end
+      end
+      allow(Rails.logger).to receive(:error)
+
+      expect { described_class.call }.to raise_error(ActiveRecord::ConnectionNotEstablished, 'still gone')
+
+      expect(Rails.logger).to have_received(:error)
+        .with(/\ALedger check failed: 2 findings .* — #{first.id}\. .* did not finish/)
+      expect(Rails.logger).to have_received(:error).with(/"reconciliation_id":#{first.id},/).twice
+    end
+
+    # If both checks of a reconciliation had to finish before either
+    # finding was kept, a crash in the second check would lose the first
+    # check's finding.
+    it 'keeps a finding from the first check when the second check of the same reconciliation crashes' do
+      reconciliation = settle
+      behind_the_guards do
+        balances = ReconciliationBalance.where(reconciliation: reconciliation)
+        balances.where(resident: cook).update_all(amount: BigDecimal('39'))
+        balances.where(resident: eater).update_all(amount: BigDecimal('-39'))
+      end
+      allow(MealCharge).to receive(:for_reconciliation).and_raise(ActiveRecord::StatementInvalid, 'connection lost')
+
+      expect { described_class.call }.to raise_error(described_class::MismatchError)
+
+      run = LedgerCheckRun.recent.first
+      expect(run).to be_errored
+      expect(run.mismatch_count).to eq(1)
+      expect(run.details.pluck('reconciliation_id', 'check')).to eq([[reconciliation.id, 'recompute']])
     end
   end
 

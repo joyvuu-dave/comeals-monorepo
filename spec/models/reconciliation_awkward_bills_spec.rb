@@ -10,8 +10,8 @@ require 'rails_helper'
 # the money model makes, against numbers computed by hand:
 #
 #   - the rounded balances sum to exactly zero, and
-#   - every rounded balance is within one cent of the exact ledger-grain
-#     amount, with penny ties broken by lowest resident_id.
+#   - every rounded balance is less than one cent from the exact
+#     ledger-grain amount, with penny ties broken by lowest resident_id.
 #
 # The last example stops hand-computing and settles a whole batch of
 # awkward meals at once, asserting the same two promises directly against
@@ -198,7 +198,7 @@ RSpec.describe Reconciliation do
     expect(balances.values.sum(BigDecimal('0'))).to eq(BigDecimal('0'))
   end
 
-  it 'keeps every balance within one cent of exact, and the total at zero, across a batch of awkward meals' do
+  it 'keeps every balance less than one cent from exact, and the total at zero, across a batch of awkward meals' do
     cook = resident
     eaters = Array.new(5) { resident }
 
@@ -229,8 +229,10 @@ RSpec.describe Reconciliation do
     expect(balances[cook.id]).to be > BigDecimal('10_000')
     expect(balances.values.sum(BigDecimal('0'))).to eq(BigDecimal('0'))
     balances.each do |resident_id, cents|
-      # Within one cent of exact.
-      expect((cents - exact[resident_id]).abs).to be <= BigDecimal('0.01')
+      # Less than one cent from exact. A cent moves only to a balance whose
+      # cut to cents dropped something, so a gap of a whole cent never
+      # happens, and the nightly line-item check relies on that.
+      expect((cents - exact[resident_id]).abs).to be < BigDecimal('0.01')
     end
   end
 end

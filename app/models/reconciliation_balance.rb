@@ -49,6 +49,11 @@ class ReconciliationBalance < ApplicationRecord
   # triggers, and the same reason: a validation only runs when the write goes
   # through the model.
   #
+  # Adding a balance has no guard here, only in the database: the trigger in
+  # 20261009120000 refuses an INSERT unless its reconciliation's settlement
+  # is writing it, or the repair bypass is on. The settlement itself adds
+  # balances through this model, so the model cannot refuse them.
+  #
   include AppendOnly
 
   append_only update_message: 'Settled balances are what residents have already been billed and cannot be ' \

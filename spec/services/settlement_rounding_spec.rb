@@ -7,8 +7,8 @@ require 'rails_helper'
 # remainders, ties to the lowest resident id).
 #
 # The property spec next to this file checks what must hold for any
-# ledger: the result sums to zero, is whole cents, and is within a cent
-# of the exact amount. Other rules satisfy that too, such as handing the
+# ledger: the result sums to zero, is whole cents, and is less than a cent
+# from the exact amount. Other rules satisfy that too, such as handing the
 # pennies out by resident id, or rounding half up. Mutant made both of
 # those changes and no spec failed (docs/mutation-testing.md,
 # 2026-09-08). These examples say which resident gets each penny.

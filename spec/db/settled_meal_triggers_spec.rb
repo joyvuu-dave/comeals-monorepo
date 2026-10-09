@@ -136,7 +136,7 @@ RSpec.describe 'settled-meal database triggers' do
     it 'refuses update_all' do
       guest = settled_meal_with_guest
       expect do
-        Guest.where(meal_id: guest.meal_id).update_all(multiplier: 0)
+        Guest.where(meal_id: guest.meal_id).update_all(multiplier: Multiplier::HALF)
       end.to raise_error(ActiveRecord::StatementInvalid, /reconciled/)
     end
 
@@ -150,7 +150,7 @@ RSpec.describe 'settled-meal database triggers' do
     it 'refuses update_columns' do
       guest = settled_meal_with_guest
       expect do
-        guest.update_columns(multiplier: 0)
+        guest.update_columns(multiplier: Multiplier::HALF)
       end.to raise_error(ActiveRecord::StatementInvalid, /reconciled/)
     end
 

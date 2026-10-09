@@ -408,11 +408,18 @@ how the math once ended up in three places (#48).
 - `unreconciled` — reconciliation_id IS NULL
 - `open` — closed = false
 - `closed_with_bills` — closed meals that have at least one bill
-- `with_attendees` — at least one attendance or guest row. A bill on a meal
-  nobody ate has no financial effect, so a settlement holds such a meal back
-  when the bill has money on it (`receipt_and_nobody_ate`, listed by the
-  preview as `bill_with_no_attendees`) and settles it with no effect when
-  every cook slot is $0 or no-cost.
+- `with_attendees` — at least one attendance or guest row.
+- `receipt_and_nobody_to_charge` — a bill with money on it, no
+  attendance row with a multiplier above 0, and no guest (a guest always
+  pays, as an adult or as a child): nobody signed up, or only residents
+  who eat free did. Nobody can be charged a share, so settling
+  would credit the cook $0 for good. A settlement holds such a meal back
+  (`settleable_by`), and the preview lists it as `bill_with_no_attendees`
+  or `bill_with_only_free_eaters`. A meal with nobody to charge whose cook
+  slots are all $0 or no-cost settles with no effect. (Until 2026-09-10 a
+  meal nobody signed up for was settled with no lines, and until
+  2026-10-09 a meal only free eaters ate was settled with every line at
+  $0, #94.)
 
 **Immutability:** once `reconciliation_id` is set, `cap`, `date`, and
 `reconciliation_id` itself can no longer change (`FROZEN_WHEN_RECONCILED`),
@@ -449,7 +456,9 @@ MealResident ----> Community
   (`multiplier_is_the_residents`). A later birthday or a changed age rule
   never changes a past charge. The one thing that changes it is an admin
   moving the meal to another date: every row then gets the band for the
-  new date (`Meal#restamp_attendance_for_new_date`). Required; CHECK
+  new date (`Meal#restamp_attendance_for_new_date`). The meal history
+  names each such change in the price words, for example "Sam: Child to
+  Adult" (`AuditDescription`). Required; CHECK
   `meal_residents_multiplier_non_negative`.
 - `late` — arrived late. Required: true or false. A nil (a flag left out
   of a sign-up, or sent as `""`) is refused with "must be true or false"
@@ -475,6 +484,18 @@ single-column `meal_id` index was dropped; the composite covers it.
 - Can change its price (`multiplier`) on a closed meal only if it could be
   removed: a lower price raises every other eater's share, the same as a
   removal (#92)
+- Can change who it charges (`resident_id`: a guest's host, or the person
+  on an attendance row) on a closed meal only if it could be removed: it
+  moves a whole share from one person to another. Nothing in the app
+  changes the person on an attendance row; the admin meal form offers a
+  host for every guest. To fix a wrong host on a closed meal, reopen the
+  meal, change the host, and close it again. Reopening clears `max` and
+  the close time, so extras added after the first close can no longer
+  leave
+- A save that closes the meal (the admin form's Closed box) counts as
+  closed for its rows: every row already on the meal was there before the
+  close, so a removal, a new price or a new host in that same save is
+  refused
 - A reconciled meal refuses all of it (`ReconciledMealImmutability`, included
   first so it runs first), and the `meal_residents_reject_settled_write`
   trigger enforces the same rule for writes that skip callbacks
@@ -498,9 +519,14 @@ Guest ----> Meal
 Guest ----> Resident (the host)
 ```
 
-**Key fields:** `multiplier` (default 2, CHECK
-`guests_multiplier_non_negative`), `late`, `vegetarian`, `meal_id`,
-`resident_id`, timestamps. There is no `name` column and no `community_id`
+**Key fields:** `multiplier` — 2 (Adult, the default) or 1 (Child),
+nothing else (`Multiplier::GUEST_PRICES`, a model validation, and CHECK
+`guests_multiplier_adult_or_child`). A guest is never free: free is a price
+only a resident's age gives. The admin meal form offers exactly these two,
+so it can always show the price a guest has, and a save never changes a
+price nobody touched. Until 2026-10-09 the column took any number of 0 or
+more, and the form sent Adult for any other value. Also `late`,
+`vegetarian`, `meal_id`, `resident_id` (the host), timestamps. There is no `name` column and no `community_id`
 column; a guest reaches the community through its host. `late` and
 `vegetarian` are required: true or false. A nil is refused with "must be
 true or false" (#121). Nothing in the app writes a guest's `late` today:
@@ -513,7 +539,11 @@ host's `resident_id`.
 
 **Rules:** the same `ReconciledMealImmutability` and
 `ClosedMealAttendanceFreeze` as MealResident, in that order, and the
-`guests_reject_settled_write` trigger. Audited, linked to the meal.
+`guests_reject_settled_write` trigger. On a closed meal, a guest who was
+there when it closed keeps its price and its host. Audited, linked to the
+meal. The meal history names a new host ("Guest of Ann moved to Bob") and a
+new price ("Guest of Ann: Adult to Child"), with the host the guest had
+when the change was made (`AuditDescription`).
 
 ---
 
@@ -552,16 +582,24 @@ Reconciliation ----< ReconciliationBalance ---> Resident
   admin form, and the specs call; the pipeline is:
   1. save the row (validations run here);
   2. `assign_meals` — claim every meal in `eligible_meals`
-     (`Meal.settleable_by(end_date)`: unreconciled, has a bill, someone to charge or nothing owed, dated on or
-     before the cutoff, and from a day that is over). It takes
+     (`Meal.settleable_by(end_date)`: unreconciled, has a bill, someone
+     with a price to charge or nothing owed, dated on or before the cutoff,
+     and from a day that is over). It takes
      `SELECT ... FOR UPDATE` on those meals in id order first, then updates
      only rows whose `reconciliation_id` is still NULL, and raises if a rival
      settlement claimed any of them. See ADR 0003.
-  3. `write_ledger!` — one `MealLedger` pass, then in one transaction:
+  3. `write_ledger!` — one `MealLedger` pass, then, in a savepoint inside
+     the settlement's transaction:
      every line (including zero lines) into `meal_charges` with
-     `insert_all`, and each non-zero rounded balance into
+     `insert_all!`, and each non-zero rounded balance into
      `reconciliation_balances`. Both tables come from the same read, so the
-     lines explain the balances.
+     lines explain the balances. While it writes, it sets the database
+     setting `comeals.settling` (`Settlement::SETTLING_SETTING`) to the
+     reconciliation's id, and it turns the setting off when it is done. The
+     database refuses an insert into either table without it (see
+     "Append-only ledger" below). `insert_all!` and not `insert_all`:
+     without the bang, a line already on the meal would make it skip the
+     real line with no error.
   4. after commit, clear the `meal-<id>` cache of every claimed meal and the
      calendar months they fall in (issue #70).
 - `eligible_meals` — the scope above; the create validation and the claim
@@ -621,8 +659,8 @@ A charge belongs to a reconciliation only through its meal:
   `meal_charges_multiplier_on_debits_only`, `_non_negative`).
 - `bill_amount` DECIMAL(12,8) — what the cook actually spent, before any cap.
   Present on credits only (CHECK `meal_charges_bill_amount_on_credits_only`).
-  On a capped meal it is larger than `amount`, and is the only record of why
-  the cook was not paid back in full.
+  On a subsidized meal it is larger than `amount`, and is the only record of
+  why the cook was not paid back in full.
 
 **Indexes:** `index_meal_charges_on_meal_id`,
 `index_meal_charges_on_resident_id`, and two partial unique indexes:
@@ -632,10 +670,18 @@ one for `kind = 'credit'` and one for `kind = 'debit'`). A host can have
 several `guest_debit` lines on one meal, so those are not unique.
 
 **Methods:** `credit?`; `subsidized?` — true on a credit whose `bill_amount`
-is larger than `amount`. This is the only `subsidized?` in the app.
+is larger than `amount`: the cook was credited less than they spent, for any
+reason (a cap, or nobody who ate had a price). There are two `subsidized?`
+methods: this one, which `MealCostSummary` reads for a settled meal, and
+`MealLedger`'s private one, which `summary_for` uses for an open meal. Both
+ask the same question, so a meal's screen says the same thing before and
+after it is settled (#94).
 
 **Immutability:** `AppendOnly` in the model; the `meal_charges_protect`
-trigger refuses every UPDATE and DELETE in the database. The deferred
+trigger refuses every UPDATE and DELETE in the database, and
+`meal_charges_insert_by_settlement` refuses every INSERT except one from
+the settlement of the meal's reconciliation. A meal that is not settled
+has no reconciliation, so no line can be added to it. The deferred
 constraint trigger `meal_charges_sum_zero` refuses a commit that leaves a
 meal's lines summing to anything but zero, and the repair bypass does not
 turn it off. Reconciliations
@@ -664,9 +710,11 @@ ReconciliationBalance ----> Resident
   `index_reconciliation_balances_on_resident_id`. The single-column
   `reconciliation_id` index was dropped; the composite covers it.
 
-**Immutability:** `AppendOnly` in the model. Two triggers in the database:
+**Immutability:** `AppendOnly` in the model. Three triggers in the database:
 `reconciliation_balances_protect_settled` refuses every UPDATE and DELETE,
-and `reconciliation_balances_sum_zero`, a deferred constraint trigger, checks
+`reconciliation_balances_insert_by_settlement` refuses every INSERT except
+one from the reconciliation's own settlement, and
+`reconciliation_balances_sum_zero`, a deferred constraint trigger, checks
 at commit time that the balances of every touched reconciliation sum to
 exactly zero.
 
@@ -712,9 +760,10 @@ No associations.
 `mismatch_count` (both CHECKed non-negative), `error` (text, NULL when the run
 finished), `details` (jsonb). Index on `started_at`.
 
-**Methods:** `passed?` (no error, zero mismatches), `failed?` (no error, some
-mismatches), `errored?` (the run did not finish), `duration`. Scope:
-`recent`.
+**Methods:** `passed?` (no error, zero mismatches), `failed?` (some
+mismatches, whether or not the run then finished), `errored?` (the run did not
+finish), `duration`. A run that found a difference and then crashed is both
+failed and errored. Scope: `recent`.
 
 **Immutability:** `AppendOnly`, plus the `ledger_check_runs_protect` trigger.
 A record that can be edited afterwards is not evidence.
@@ -926,8 +975,8 @@ so a price was wrong from a birthday until the next run.) A `MealResident`
 copies the band for the meal's date when the row is created, so a later
 birthday or a changed age rule never changes what someone was charged for
 a past meal. The API creates every guest with the
-database default of 2 (an adult guest); only an admin can set a different
-value.
+database default of 2 (an adult guest); only an admin can make a guest a
+child (1). A guest is never free (`Multiplier::GUEST_PRICES`).
 
 `MealLedger` does not read `Multiplier`. It sums the numbers and shares the
 cost out in proportion to them; it does not know that 2 means one adult. Pricing policy lives in
@@ -942,9 +991,14 @@ unit of 10^-8 dollars, and a free child pays nothing.
 
 A meal whose total multiplier is 0 — nobody there is old enough to be
 charged — has a unit cost of 0, and every one of its lines is 0: each cook
-is credited 0 and each eater is charged 0. The cook absorbs the cost. The
-zero lines still exist, because a zero line is a fact about what happened
-and a settled meal's screen reads its lines.
+is credited 0 and each eater is charged 0. The lines still exist, each at
+$0, because a line is a fact about what happened and a settled meal's
+screen reads its lines. Its total cost is still what the cooks spent, and
+it is subsidized when they spent anything. A settlement holds such a meal
+back when a receipt has money on it (`Meal.receipt_and_nobody_to_charge`),
+so the cook is not credited 0 for good; it settles only when its cook
+slots hold no money (#94). In the nightly running balance the cook is
+credited 0 while the meal waits.
 
 Example: $60 meal, 3 adults (residents 1, 2, 3) and 1 half-price child
 (resident 4) attending:
@@ -977,7 +1031,8 @@ largest-remainder method, so the rounded balances sum to exactly zero.
   `guests` preloaded; it runs no queries of its own. `lines` returns every
   credit, debit, and guest_debit at the ledger grain; `balances(resident_ids)`
   sums them per resident; `summary_for(meal)` returns `total_cost`,
-  `effective_cost`, `unit_cost`, and `subsidized` for a screen. Caps are
+  `effective_cost`, `unit_cost`, and `subsidized` (the cooks are credited
+  less than they spent, for any reason) for a screen. Caps are
   applied here: when `cap * total multiplier` is less than the bills, the
   eaters pay the capped amount and each cook is credited their share of it
   in proportion to what they spent. Every share is allocated by
@@ -1023,6 +1078,17 @@ books at commit: `reconciliation_balances_sum_zero`, that every settlement's
 balances sum to zero, and `meal_charges_sum_zero`, that every meal's lines
 do.
 
+Only a settlement adds rows to the settled ledger. Since 20261009120000,
+`meal_charges_insert_by_settlement` and
+`reconciliation_balances_insert_by_settlement` refuse an INSERT unless the
+setting `comeals.settling` names the reconciliation the row belongs to (for
+a line, the reconciliation of its meal). `Settlement#write_ledger!` sets it
+with `set_config(..., true)`, so it lasts at most until the end of its
+transaction, and turns it off when it is done. Without this, two rows that
+add up to zero could be added to a settled meal from a console, and the
+sum-zero triggers would accept them. A spec that writes these rows by hand
+uses `SettledWrites` (`spec/support/settled_writes.rb`).
+
 **Settled meals are frozen.** `ReconciledMealImmutability` refuses create,
 update, and destroy on Bill, MealResident, and Guest once their meal (or the
 meal they are being moved from) is reconciled. The
@@ -1032,9 +1098,11 @@ unconditionally so an unlocked write waits for a running settlement and is
 then refused. `Meal` freezes its own `cap`, `date`, and `reconciliation_id`,
 backed by `meals_protect_settled`. See ADR 0003 and CLAUDE.md.
 
-The protect and reject triggers all step aside when the session setting
-`comeals.allow_settled_writes` is `on`. That is for deliberate repair only:
-`docs/runbooks/settled-data-repair.md`.
+The protect, reject and insert triggers all step aside when the session
+setting `comeals.allow_settled_writes` is `on`. That is for deliberate
+repair only: `docs/runbooks/settled-data-repair.md`. A person who sets
+either setting on purpose can still write these rows. The triggers are
+there to stop mistakes.
 
 **Audits.** Meal, Bill, MealResident, Guest, and Reconciliation write to the
 `audits` table (the `audited` gem). Child rows are linked to their meal.

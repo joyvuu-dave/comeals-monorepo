@@ -29,9 +29,15 @@ RSpec.describe 'meal charges sum-zero trigger' do
     meal.reload
   end
 
+  # Only the settlement of the meal's reconciliation may insert a line
+  # (spec/db/settled_ledger_inserts_spec.rb), so this writes as that
+  # settlement would. Then the insert guard lets the line through, and only
+  # the deferred sum-zero check can refuse it.
   def extra_line(amount)
-    MealCharge.create!(meal: meal, resident: eater, kind: 'guest_debit', amount: amount, multiplier: 1,
-                       unit_cost: BigDecimal('40'))
+    as_settlement_of(meal.reconciliation) do
+      MealCharge.create!(meal: meal, resident: eater, kind: 'guest_debit', amount: amount, multiplier: 1,
+                         unit_cost: BigDecimal('40'))
+    end
   end
 
   def repair

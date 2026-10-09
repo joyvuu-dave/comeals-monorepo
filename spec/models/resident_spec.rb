@@ -547,10 +547,13 @@ RSpec.describe Resident do
     it 'cannot be destroyed with a settlement line item' do
       # A real charge always comes with a bill or attendance, which would
       # trip their own guards first. Inserting one directly isolates this
-      # association's guard.
+      # association's guard. The database refuses a line on an open meal
+      # from anyone but a repair, so this writes as one.
       meal = create(:meal, community: community)
-      MealCharge.create!(meal: meal, resident: resident, kind: 'debit',
-                         amount: BigDecimal('-8'), unit_cost: BigDecimal('4'), multiplier: 2)
+      with_repair_bypass do
+        MealCharge.create!(meal: meal, resident: resident, kind: 'debit',
+                           amount: BigDecimal('-8'), unit_cost: BigDecimal('4'), multiplier: 2)
+      end
 
       expect(resident.destroy).to be false
       expect(resident.errors[:base]).to include('Cannot delete record because dependent meal charges exist')

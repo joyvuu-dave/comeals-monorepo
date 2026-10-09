@@ -196,8 +196,13 @@ ActiveAdmin.register Meal do
     f.inputs do
       f.has_many :guests, allow_destroy: true, heading: 'Guests', new_record: true do |g|
         g.input :_destroy, as: :hidden
+        # Every price a guest can have, and no other (Multiplier::GUEST_PRICES),
+        # so the menu always shows the stored one and a save sends it back
+        # unchanged. A new guest is an adult. On a closed meal, a guest who
+        # was there when it closed keeps its price and its host
+        # (ClosedMealAttendanceFreeze).
         g.input :multiplier, label: 'Price Category', as: :select, include_blank: false,
-                             collection: [['Adult', Multiplier::FULL], ['Child', Multiplier::HALF]]
+                             collection: Multiplier::GUEST_PRICES.map { |price| [Multiplier.label(price), price] }
         g.input :resident, label: 'Host',
                            collection: Resident.order(:name)
       end

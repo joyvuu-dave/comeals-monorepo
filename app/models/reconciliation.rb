@@ -95,7 +95,7 @@ class Reconciliation < ApplicationRecord
     # Round to cents using largest-remainder method (Hamilton's method).
     # This guarantees rounded balances sum to exactly zero — the standard
     # accounting approach for apportioning monetary amounts. Each value is
-    # within 1 cent of its exact amount at the ledger grain.
+    # less than 1 cent from its exact amount at the ledger grain.
     balances = Settlement.allocate_to_cents(raw_balances, reconciliation_id: id)
 
     # Verify the books balance exactly. allocate_to_cents guarantees this;
@@ -195,13 +195,35 @@ class Reconciliation < ApplicationRecord
   # A blank end date is already an end_date error by the time this runs
   # (the presence validation is declared first), so that case needs no
   # guard of its own (mutant showed it dead, 2026-09-10).
+  #
+  # When the period has meals with bills but every one is held back (money
+  # on a bill and nobody who pays signed up, Meal.receipt_and_nobody_to_charge),
+  # "no meals with bills" would be false, so the answer names the held
+  # meals and says what has to change before they can settle.
   sig { void }
   def must_settle_at_least_one_meal
     return if errors[:end_date].any?
     return if eligible_meals.exists?
 
-    errors.add(:base, 'No unreconciled meals with bills on or before this date. ' \
-                      'A reconciliation must settle at least one meal.')
+    held = held_meal_dates
+    if held.empty?
+      errors.add(:base, 'No unreconciled meals with bills on or before this date. ' \
+                        'A reconciliation must settle at least one meal.')
+    else
+      errors.add(:base, 'No meal on or before this date can be settled yet. Meals held back because a bill has ' \
+                        "money on it and nobody who pays is signed up: #{held.map(&:iso8601).to_sentence}. " \
+                        'To settle one, sign up someone who pays or remove the bill. ' \
+                        'A reconciliation must settle at least one meal.')
+    end
+  end
+
+  # The unreconciled meals up to the cutoff that a settlement holds back,
+  # oldest first. Settlement.held_by also leaves out today and later, but
+  # this only runs once end_date is in the past, so the cutoff already
+  # does that.
+  sig { returns(T::Array[Date]) }
+  def held_meal_dates
+    Meal.unreconciled.where(date: ..end_date).receipt_and_nobody_to_charge.order(:date).pluck(:date)
   end
 
   # A reconciliation row is only ever written by Settlement, in the same

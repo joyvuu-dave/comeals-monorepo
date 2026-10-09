@@ -174,6 +174,7 @@ On the iOS side, all money is `Decimal`. A thin `Money` wrapper type may be just
 **`kind` is a string enum the client switches on** (for icons, colors, tap navigation). Known v1 kinds:
 
 - `bill_with_no_attendees`
+- `bill_with_only_free_eaters` (added 2026-10-09)
 - `attendance_without_bill`
 - `zero_bill_not_flagged`
 
@@ -233,9 +234,10 @@ ReconciliationWarnings.new(meals:).call
 
 v1 checks:
 
-1. **`bill_with_no_attendees`** — a bill with money on it exists on a meal with zero `meal_residents` and zero `guests`; the settlement holds that meal back until someone is signed up or the bill is removed (since 2026-09-10; before, it was settled with no lines and the cook absorbed the money)
-2. **`attendance_without_bill`** — a meal has attendees but no bills
-3. **`zero_bill_not_flagged`** — a bill has `amount == 0` but `no_cost == false`
+1. **`bill_with_no_attendees`** — a bill with money on it exists on a meal with zero `meal_residents` and zero `guests`; the settlement holds that meal back until someone is signed up or the bill is removed (since 2026-09-10; before, it was settled with no lines and the cook got $0 back)
+2. **`bill_with_only_free_eaters`** — a bill with money on it exists on a meal where everyone who signed up eats free (every `meal_residents` row has multiplier 0, and there is no guest, because a guest always pays); nobody can be charged a share, so the settlement holds that meal back until someone who pays is signed up or the bill is removed (since 2026-10-09, #94; before, it was settled with every line at $0 and the cook got $0 back)
+3. **`attendance_without_bill`** — a meal has attendees but no bills
+4. **`zero_bill_not_flagged`** — a bill has `amount == 0` but `no_cost == false`
 
 The preview controller composes both: calculator for the money, warnings for the data quality, then renders a single JSON response.
 

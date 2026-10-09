@@ -473,11 +473,16 @@ and written nowhere. Returns `cutoff_date`, `generated_at`, a `summary` (`meal_c
 with its cost numbers, counts, and `cooks`), `balances` per resident and
 per unit, and `warnings` about data that settles fine but usually means
 someone forgot a step (`kind` is one of `bill_with_no_attendees`,
-`attendance_without_bill`, `zero_bill_not_flagged`; show `title` and
-`body` for a kind you do not know). An `attendance_without_bill` warning
-names a meal that is not in `meals`: people ate, no cook billed, and a
-settlement never claims a meal without a bill, so it is left behind until
-someone enters one. Money is a string; the sign is the
+`bill_with_only_free_eaters`, `attendance_without_bill`,
+`zero_bill_not_flagged`; show `title` and `body` for a kind you do not
+know). An `attendance_without_bill` warning names a meal that is not in
+`meals`: people ate, no cook billed, and a settlement never claims a meal
+without a bill, so it is left behind until someone enters one. A
+`bill_with_no_attendees` or `bill_with_only_free_eaters` warning also
+names a meal that is not in `meals`: a cook entered money, and nobody
+signed up or only people who eat free did, so nobody can be charged and
+the meal is held back until someone who pays signs up or the bill is
+removed. Money is a string; the sign is the
 direction: positive means the community owes the resident. No meals to
 settle is a `200` with empty lists, not an error.
 
@@ -493,8 +498,10 @@ running balance, and emails each cook. Returns `201` with `id`, `date`,
 `cutoff_date`, and `meal_count`. Creating it is the lock: the settlement
 and its meals are frozen from this moment and there is no undo, so
 preview first. `400` when the cutoff is not a past day or there is
-nothing to settle; `409` when another settlement or a meal write got
-there first — nothing was saved, send the same request again.
+nothing to settle; when every meal with a bill up to the cutoff is held
+back, the `message` gives those meals' dates. `409` when another
+settlement or a meal write got there first — nothing was saved, send the
+same request again.
 
 ## Bills as records
 

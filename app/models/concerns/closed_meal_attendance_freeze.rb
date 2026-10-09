@@ -19,7 +19,13 @@
 #   * a price change (multiplier) follows the removal rule. Moving a guest
 #     from Adult to Child lowers Meal#multiplier, so every other eater pays
 #     more, the same as when the guest leaves (#92). The admin meal form
-#     offers a price for every guest.
+#     offers a price for every guest;
+#   * a change of who the row charges (resident_id: a guest's host, or the
+#     person on an attendance row) follows the removal rule too. It moves a
+#     whole share from one person to another. The admin meal form offers
+#     a host for every guest. Nothing in the app changes the person on an
+#     attendance row, but a console session can. To fix a wrong host, an
+#     admin reopens the meal, changes the host, and closes it again.
 #
 # An open meal always has max nil (Meal#conditionally_set_max), so max
 # only ever constrains closed meals.
@@ -48,6 +54,7 @@ module ClosedMealAttendanceFreeze
     validate :meal_has_open_spots, on: :create
     validate :move_keeps_both_meals_rules, on: :update
     validate :price_change_is_allowed, on: :update
+    validate :resident_change_is_allowed, on: :update
     before_destroy :record_can_be_removed
   end
 
@@ -82,6 +89,19 @@ module ClosedMealAttendanceFreeze
   # is an addition, and an addition may have any price.
   def price_change_is_allowed
     return unless multiplier_changed?
+    return if meal_id_changed?
+    # Scenario: Admin attendance correction — the freeze does not apply
+    return if admin_correction
+    return if can_leave?(T.must(meal))
+
+    # Scenario: Meal is closed, record was added before meal was closed
+    errors.add(:base, 'Meal has been closed.')
+  end
+
+  # A move is left to move_keeps_both_meals_rules, as for a price change:
+  # on the new meal the row is an addition, with any resident.
+  def resident_change_is_allowed
+    return unless resident_id_changed?
     return if meal_id_changed?
     # Scenario: Admin attendance correction — the freeze does not apply
     return if admin_correction
@@ -139,12 +159,20 @@ module ClosedMealAttendanceFreeze
     # Scenario: Meal is open
     return true if meal.closed == false
 
-    # The meal is closed here. A closed meal always has closed_at:
-    # Meal#conditionally_set_closed_at sets it, on create as well as on
-    # close, and the database CHECK meals_closed_at_matches_closed refuses
-    # a closed meal without one from every write path. So T.must, not a
-    # nil branch: if it is ever nil the data is corrupt and raising is
-    # right.
+    # Scenario: Meal closes in this same save (the admin form's Closed box
+    # with a guest's new price or host). The close happens now, so every
+    # row already on the meal was there before it. This also has to come
+    # before the closed_at check below: Meal#conditionally_set_closed_at
+    # sets closed_at in a before_save, after this validation, so it is
+    # still nil here.
+    return false if meal.closed_in_database == false
+
+    # The meal is closed in the database here. A closed meal always has
+    # closed_at: Meal#conditionally_set_closed_at sets it, on create as
+    # well as on close, and the database CHECK
+    # meals_closed_at_matches_closed refuses a closed meal without one from
+    # every write path. So T.must, not a nil branch: if it is ever nil the
+    # data is corrupt and raising is right.
     T.must(created_at) > T.must(meal.closed_at)
   end
 end

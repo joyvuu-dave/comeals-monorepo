@@ -117,6 +117,16 @@ the guard for every session, not just yours.
 **Rewriting is refused.** No `UPDATE`, no `DELETE`, from any path — the same
 bypass above is the only way through, for the same narrow reason.
 
+**Adding is refused too, since `20261009120000`.** An `INSERT` into
+`reconciliation_balances` or `meal_charges` is refused unless the settlement
+of that row's reconciliation is writing it, or the bypass above is on. The
+settlement says so with a setting that lasts only for its own transaction,
+`comeals.settling` = the reconciliation's id
+(`Settlement::SETTLING_SETTING`). Before this, two new rows that add up to
+zero passed every check: the sum-zero rule below only asks that the books
+still add up. A line on a meal that is not settled yet is refused as well,
+because no settlement has claimed that meal.
+
 **Every reconciliation must sum to exactly zero, and that rule has no
 bypass.** `comeals.allow_settled_writes` does not turn it off. A repair may
 change what a settled balance says; it may not leave the books not adding up.
@@ -171,6 +181,15 @@ end
 All of it must be in the one transaction, and both tables must be cleared.
 The delete alone leaves the reconciliation with no rows, which sums to zero
 and commits cleanly — and now you have a settlement with no balances at all.
+
+`rewrite!` sets the settlement's own setting (`comeals.settling`) while it
+writes, so its inserts would pass without the bypass. The bypass is still
+needed for the two deletes. If you skip the deletes, `rewrite!` fails and
+nothing is written. It fails on the line items' unique indexes (one credit
+per cook and one debit per eater per meal). A reconciliation settled before
+2026-08-02 has no line items, so for it the failure comes from the
+balances: the model checks that a resident has only one balance per
+reconciliation.
 
 `meal_charges` has the same no-bypass rule as the balances, per meal: the
 deferred trigger `meal_charges_sum_zero` refuses a commit that leaves any

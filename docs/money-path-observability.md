@@ -19,7 +19,9 @@ Worth writing down so nobody rebuilds it.
 - **Settled data cannot change through normal paths.** The seven protect and
   reject triggers in `db/structure.sql` (settled meals, bills, guests,
   attendance, settled balances, meal charges, and ledger check runs), the
-  model concerns, and the `AppendOnly` concern
+  two insert triggers on settled balances and meal charges (only the
+  settlement that owns a row may add it, since 2026-10-09), the model
+  concerns, and the `AppendOnly` concern
   (`app/models/concerns/append_only.rb`) that `Reconciliation` includes.
 - **Settled balances sum to zero.** `assert_balanced_input!` and
   `assert_candidates_cover_pennies!` in `Reconciliation`, and since
@@ -30,7 +32,10 @@ Worth writing down so nobody rebuilds it.
   `UPDATE` and `DELETE` at the database level, the same way the settled
   meal's source rows do. This was a gap the list below did not name: the
   source rows were immutable but the amounts they produced were an ordinary
-  table. Added 2026-07-31.
+  table. Added 2026-07-31. `INSERT` stayed open until 2026-10-09, so two new
+  rows that add up to zero could still be added to a settled reconciliation
+  or meal. Now only the settlement that owns the row may add it
+  (`20261009120000`).
 - **One implementation of the arithmetic.** `MealLedger`. Settlement and the
   running balance used to carry separate copies of the same rules.
 
@@ -66,9 +71,16 @@ never ran look identical without it. The rows are append-only, guarded the same
 way the balances are, because a check record that can be edited afterwards is
 not evidence. `admin/ledger_check_runs` shows the history.
 
-There are three outcomes, not two. A run that could not finish is recorded with
-its error and is neither passed nor failed: it says nothing about the books,
-which is different from saying they are right.
+There are three outcomes, not two. A run that could not finish and found
+nothing is recorded with its error and is neither passed nor failed: it says
+nothing about the books, which is different from saying they are right. A run
+that found a difference and then could not finish is failed as well as errored,
+because the difference is already a fact about the books (since 2026-10-09).
+The admin page shows it as "1 mismatched, did not finish". The job raises the
+difference (`MismatchError`), with the crash as its cause, so the alert names
+the difference first. Each finding is kept as soon as it is made, and the
+findings are logged before the run is saved, so a crash that also stops the
+save does not lose them.
 
 Two things this control does **not** prove, both worth keeping straight:
 
@@ -102,10 +114,13 @@ question can disagree.
 
 **The per-resident half of the line-item check is not an equality check, and
 the original proposal here was wrong about that.** The lines are at the ledger
-grain and the balances are rounded to cents, so a resident's lines sum to
-within one cent of their balance, never to exactly it. One cent is precisely
-what largest-remainder allocation is allowed to move, so that is the whole
-tolerance. `LedgerVerification` runs this nightly as a second check alongside
+grain and the balances are rounded to cents, so a resident's lines often do not
+sum to exactly their balance. They always sum to less than one cent from it:
+cutting to cents drops less than a cent, and largest-remainder allocation moves
+a cent only to a balance whose cut dropped something, back toward its lines. So
+the check allows any gap under one cent. A gap of exactly one cent was allowed
+until 2026-10-09, though rounding can never make one; only an edit can.
+`LedgerVerification` runs this nightly as a second check alongside
 the recompute, and it is the stronger of the two: two tables, written by
 different code at settlement, compared with no Ruby arithmetic at all.
 

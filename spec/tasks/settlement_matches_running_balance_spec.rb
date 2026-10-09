@@ -26,9 +26,9 @@ require Rails.root.join('spec/support/oracle/plain_ledger')
 #     column stores, and there is nothing to allow for;
 #   - the exact tie: those running balances, put through the settlement's
 #     own allocate_to_cents, equal the stored settled balances row for row;
-#   - the loose tie: each stored settled balance is within one cent of the
-#     running balance, which is the guarantee largest-remainder allocation
-#     actually makes.
+#   - the loose tie: each stored settled balance is less than one cent
+#     from the running balance, which is the guarantee largest-remainder
+#     allocation actually makes.
 RSpec.describe 'settlement and running-balance arithmetic agree', type: :task do
   before(:all) do
     RakeTasks.ensure_loaded
@@ -87,10 +87,10 @@ RSpec.describe 'settlement and running-balance arithmetic agree', type: :task do
       running_amount = stored_running.fetch(resident.id, BigDecimal('0'))
       difference = (settled_amount - running_amount).abs
 
-      expect(difference).to be <= BigDecimal('0.01'),
+      expect(difference).to be < BigDecimal('0.01'),
                             "Resident #{resident.name}: settled #{settled_amount.to_s('F')} is " \
                             "#{difference.to_s('F')} from running #{running_amount.to_s('F')} — " \
-                            'largest-remainder allocation may only move a balance by one cent.'
+                            'rounding to cents leaves a balance less than one cent from its lines.'
     end
 
     reconciliation
@@ -177,12 +177,15 @@ RSpec.describe 'settlement and running-balance arithmetic agree', type: :task do
     expect_settlement_to_match_running_balances(community)
   end
 
-  it 'agrees on a meal whose attendees all have multiplier zero, where the cook absorbs the cost' do
+  # Every line of a meal whose attendees all have multiplier zero is zero.
+  # A settlement takes such a meal only when its cook slots hold no money;
+  # one with money on a receipt is held back (#94), in the example below.
+  it 'agrees on a meal whose attendees all have multiplier zero and whose cook spent nothing' do
     cook = resident('Cook')
     baby = resident('Baby', multiplier: 0)
 
     meal = create(:meal, community: community)
-    create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('25'))
+    create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('0'))
     create(:meal_resident, meal: meal, resident: baby, community: community)
 
     reconciliation = expect_settlement_to_match_running_balances(community)
@@ -190,7 +193,28 @@ RSpec.describe 'settlement and running-balance arithmetic agree', type: :task do
     # Both paths give everyone zero, so nothing is stored. Asserted because
     # an empty table would also satisfy the comparison if both paths were
     # broken in the same way, and this is the branch where that is easiest.
+    expect(reconciliation.meals).to contain_exactly(meal)
     expect(reconciliation.reconciliation_balances).to be_empty
+  end
+
+  it 'agrees when a receipt only free eaters ate is held back, where the cook absorbs the cost' do
+    cook = resident('Cook')
+    eater = resident('Eater')
+    baby = resident('Baby', multiplier: 0)
+    held = create(:meal, community: community, date: Date.yesterday - 1)
+    create(:bill, meal: held, resident: cook, community: community, amount: BigDecimal('25'))
+    create(:meal_resident, meal: held, resident: baby, community: community)
+    eaten = create(:meal, community: community, date: Date.yesterday)
+    create(:bill, meal: eaten, resident: cook, community: community, amount: BigDecimal('20'))
+    create(:meal_resident, meal: eaten, resident: eater, community: community)
+
+    reconciliation = expect_settlement_to_match_running_balances(community)
+
+    # The running balance counts the held meal, because someone ate, but
+    # every one of its lines is zero: the cook absorbs the $25 there. The
+    # settlement does not sweep it, so it adds nothing there either.
+    expect(held.reload.reconciliation_id).to be_nil
+    expect(reconciliation.meals).to contain_exactly(eaten)
   end
 
   it 'agrees when a receipt nobody ate is held back' do

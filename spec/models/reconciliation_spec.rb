@@ -726,6 +726,110 @@ RSpec.describe Reconciliation do
       expect(second.errors[:base].first).to include('must settle at least one meal')
     end
 
+    # A meal with money on a bill and nobody who pays signed up is held
+    # back (Meal.settleable_by). When those are the only meals with bills,
+    # "no meals with bills" is false: the reconciler can see the bills.
+    # The answer names the held meals and says what has to change before
+    # they can settle.
+    describe 'when the only meals with bills are held back' do
+      def held_meal(date, eater_multiplier: nil)
+        cook = create(:resident, community: community, unit: unit, multiplier: 2)
+        meal = create(:meal, community: community, date: date)
+        create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('25'))
+        if eater_multiplier
+          eater = create(:resident, community: community, unit: unit, multiplier: eater_multiplier)
+          create(:meal_resident, meal: meal, resident: eater, community: community)
+        end
+        meal
+      end
+
+      def held_answer(dates)
+        'No meal on or before this date can be settled yet. Meals held back because a bill has money on it ' \
+          "and nobody who pays is signed up: #{dates}. To settle one, sign up someone who pays or remove " \
+          'the bill. A reconciliation must settle at least one meal.'
+      end
+
+      it 'names a meal nobody signed up for' do
+        held_meal(Date.new(2025, 3, 4))
+
+        recon = build(:reconciliation, community: community, end_date: Date.new(2025, 3, 31))
+
+        expect(recon).not_to be_valid
+        expect(recon.errors[:base]).to eq([held_answer('2025-03-04')])
+      end
+
+      it 'names meals only people who eat free signed up for, oldest first' do
+        held_meal(Date.new(2025, 3, 9), eater_multiplier: 0)
+        held_meal(Date.new(2025, 3, 2), eater_multiplier: 0)
+
+        recon = build(:reconciliation, community: community, end_date: Date.new(2025, 3, 31))
+
+        expect(recon).not_to be_valid
+        expect(recon.errors[:base]).to eq([held_answer('2025-03-02 and 2025-03-09')])
+      end
+
+      # The example above passes without ORDER BY too: PostgreSQL returned
+      # these dates in date order without being asked. So this reads the
+      # statement.
+      it 'asks for the held meals oldest first' do
+        held_meal(Date.new(2025, 3, 4))
+        recon = build(:reconciliation, community: community, end_date: Date.new(2025, 3, 31))
+        statements = []
+        callback = ->(*, payload) { statements << payload[:sql] }
+        ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') { recon.valid? }
+
+        expect(statements.grep(/\ASELECT "meals"\."date" FROM "meals"/))
+          .to contain_exactly(/ ORDER BY "meals"\."date" ASC\z/)
+      end
+
+      # People ate and no cook entered a bill. A settlement skips that meal
+      # (Settlement.skipped_by), but it is not held back: there is no
+      # money on a bill to lose.
+      it 'does not name a meal people ate that no cook billed' do
+        held_meal(Date.new(2025, 3, 4))
+        no_bill = create(:meal, community: community, date: Date.new(2025, 3, 5))
+        create(:meal_resident, meal: no_bill, resident: create(:resident, community: community, unit: unit),
+                               community: community)
+
+        recon = build(:reconciliation, community: community, end_date: Date.new(2025, 3, 31))
+
+        expect(recon).not_to be_valid
+        expect(recon.errors[:base]).to eq([held_answer('2025-03-04')])
+      end
+
+      it 'does not name a held meal after the cutoff' do
+        held_meal(Date.new(2025, 4, 1))
+
+        recon = build(:reconciliation, community: community, end_date: Date.new(2025, 3, 31))
+
+        expect(recon).not_to be_valid
+        expect(recon.errors[:base]).to eq(['No unreconciled meals with bills on or before this date. ' \
+                                           'A reconciliation must settle at least one meal.'])
+      end
+
+      # Three meals nobody attended were settled with money on a bill
+      # before 2026-09-10. They are settled, so they are not held.
+      it 'does not name a meal that a settlement already claimed' do
+        old = held_meal(Date.new(2025, 3, 4))
+        old.update_columns(reconciliation_id: create(:reconciliation, community: community).id)
+
+        recon = build(:reconciliation, community: community, end_date: Date.yesterday)
+
+        expect(recon).not_to be_valid
+        expect(recon.errors[:base]).to eq(['No unreconciled meals with bills on or before this date. ' \
+                                           'A reconciliation must settle at least one meal.'])
+      end
+
+      it 'says nothing about held meals when another meal can be settled' do
+        held_meal(Date.new(2025, 3, 4))
+        settleable_meal(date: Date.new(2025, 3, 5))
+
+        recon = build(:reconciliation, community: community, end_date: Date.new(2025, 3, 31))
+
+        expect(recon).to be_valid
+      end
+    end
+
     # end_date in the future is already wrong on its own. Reporting "no meals"
     # alongside it would be noise — with no valid cutoff there is no period to
     # judge emptiness against.
@@ -876,6 +980,10 @@ RSpec.describe Reconciliation do
       expect(balances[higher_id_eater.id]).to eq(BigDecimal('-0.02'))
     end
 
+    # The total multiplier is 0, so nobody can be charged a share and every
+    # line is zero. Only a meal whose cook slots hold no money gets here: one
+    # with money on a receipt is held back instead, so the cook is not
+    # credited $0 for good (Meal.settleable_by, #94).
     it 'handles a child-only meal (all multiplier-0 attendees, zero total multiplier)' do
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
       baby1 = create(:resident, community: community, unit: unit, multiplier: 0)
@@ -884,17 +992,16 @@ RSpec.describe Reconciliation do
       meal = create(:meal, community: community)
       create(:meal_resident, meal: meal, resident: baby1, community: community)
       create(:meal_resident, meal: meal, resident: baby2, community: community)
-      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('25'))
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('0'))
       meal.reload
 
       reconciliation = settle!(cutoff: Date.yesterday)
       balances = reconciliation.settlement_balances
 
-      # total_mult = 0 → unit_cost = 0 → no debits, but cook IS credited
-      # Wait — with_attendees includes this meal (babies are meal_residents).
-      # But total_mult = 0, so the code sets unit_cost: 0, total_cost: 0, effective_cost: 0.
-      # Credits loop: mf[:total_cost].zero? → credit = 0.
-      # So cook gets zero credit. Babies get zero debit. Cook absorbs the cost.
+      expect(meal.reload.reconciliation_id).to eq(reconciliation.id)
+      expect(meal.meal_charges.map { |charge| [charge.kind, charge.resident_id, charge.amount] })
+        .to contain_exactly(['credit', cook.id, BigDecimal('0')], ['debit', baby1.id, BigDecimal('0')],
+                            ['debit', baby2.id, BigDecimal('0')])
       expect(balances[cook.id]).to eq(BigDecimal('0'))
       expect(balances[baby1.id]).to eq(BigDecimal('0'))
       expect(balances[baby2.id]).to eq(BigDecimal('0'))

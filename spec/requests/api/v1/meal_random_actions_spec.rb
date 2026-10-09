@@ -19,16 +19,19 @@ require Rails.root.join('spec/support/oracle/plain_ledger')
 # ClosedMealAttendanceFreeze (no new attendance on a closed meal unless a
 # max leaves spots, and only rows added after the close can be removed),
 # ReconciledMealImmutability (nothing changes after settlement), the max
-# validation, and Settlement's own rule that a meal needs a bill and an
-# attendee to settle. A disagreement is either a rule the model misread,
-# which is a documentation finding, or a write path that does not do what
-# the rules say, which is a bug. Every failure message carries the seed
-# and the step, so `MONEY_PROPERTY_SEED=n` reruns the one sequence.
+# validation, and Settlement's own rule that a meal needs a bill, and
+# someone with a price or no money on the receipts, to settle. A
+# disagreement is either a rule the model misread, which is a
+# documentation finding, or a write path that does not do what the rules
+# say, which is a bug. Every failure message carries the seed and the
+# step, so `MONEY_PROPERTY_SEED=n` reruns the one sequence.
 RSpec.describe 'random action sequences against one meal, through the API' do
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
+  # Each resident's price. The one at 0 eats free.
+  let(:prices) { [2, 2, 2, 1, 0, 2] }
   let(:residents) do
-    [2, 2, 2, 1, 0, 2].each_with_index.map do |multiplier, i|
+    prices.each_with_index.map do |multiplier, i|
       create(:resident, community: community, unit: unit, multiplier: multiplier, can_reconcile: i.zero?)
     end
   end
@@ -64,6 +67,12 @@ RSpec.describe 'random action sequences against one meal, through the API' do
   end
 
   def attendees_count(model) = model[:attendance].size + model[:guests].size
+
+  # Someone with a price ate: a resident whose multiplier is above 0, or
+  # any guest, because the API adds a guest at the adult price.
+  def someone_to_charge?(model)
+    model[:guests].any? || residents.zip(prices).any? { |r, price| price.positive? && model[:attendance].key?(r.id) }
+  end
 
   def spots_left?(model)
     !model[:closed] || (model[:max] && attendees_count(model) < model[:max])
@@ -247,17 +256,18 @@ RSpec.describe 'random action sequences against one meal, through the API' do
     expect(status).to be < 500, "#{where}: settling answered #{status}"
     if model[:settled]
       expect(status).to eq(400), "#{where}: settling twice answered #{status}"
-    elsif model[:bills].any? && (attendees_count(model).positive? || model[:bills].values.none? do |b|
+    elsif model[:bills].any? && (someone_to_charge?(model) || model[:bills].values.none? do |b|
       b[:amount].positive? && !b[:no_cost]
     end)
       # Meal.settleable_by: a bill, a past date, and someone to charge or
-      # nothing owed. A receipt with money and nobody signed up is held back
-      # (seed 13 found it was settled and frozen, 2026-09-09; changed 2026-09-10).
+      # nothing owed. A receipt with money is held back when nobody signed
+      # up (seed 13 found it was settled and frozen, 2026-09-09; changed
+      # 2026-09-10) or when only the free resident did (#94, 2026-10-09).
       expect(status).to eq(201), "#{where}: settling answered #{status}: #{response.body}"
       model[:settled] = true
     else
-      expect(status).to eq(400),
-                        "#{where}: settling with nothing to settle, or only a receipt nobody ate, answered #{status}"
+      expect(status).to eq(400), "#{where}: settling with nothing to settle, or only a receipt nobody can be " \
+                                 "charged for, answered #{status}"
     end
   end
 

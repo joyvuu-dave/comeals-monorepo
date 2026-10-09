@@ -39,6 +39,13 @@ class Settlement
   # meals first. Everything rolls back; the request can simply be sent again.
   class Contested < RuntimeError; end
 
+  # The name of the database setting that says which settlement is writing.
+  # write_ledger! sets it to the reconciliation's id while it writes the
+  # line items and balances, and the database refuses an insert into
+  # either table unless this setting names the reconciliation the row
+  # belongs to, or the repair bypass is on (migration 20261009120000).
+  SETTLING_SETTING = 'comeals.settling'
+
   # Settle the period and clear the settled meals from the caches. For a
   # caller with no retry around it (the seed task).
   sig { params(cutoff: Date).returns(Reconciliation) }
@@ -84,7 +91,8 @@ class Settlement
     const :resident_balances, T::Hash[Integer, BigDecimal]
     const :skipped_meals, T::Array[Meal]
     # Left behind the other way round: a receipt with money on it and nobody
-    # signed up (Meal.receipt_and_nobody_ate). Also not in `meals`.
+    # to charge, because nobody signed up or everyone who did eats free
+    # (Meal.receipt_and_nobody_to_charge). Also not in `meals`.
     const :held_meals, T::Array[Meal]
 
     sig { params(meal: Meal).returns(MealLedger::Summary) }
@@ -117,11 +125,14 @@ class Settlement
   end
 
   # Unreconciled meals in the period held back for a receipt nobody can be
-  # charged for. The date rules are settleable_by's.
+  # charged for. The date rules are settleable_by's. The attendance comes
+  # along so the warning can say whether nobody signed up or only people
+  # who eat free did. A held meal has no guest, because any guest is
+  # someone to charge.
   sig { params(cutoff: Date, today: Date).returns(T::Array[Meal]) }
   def self.held_by(cutoff, today:)
     Meal.unreconciled.where(date: ..cutoff).where(date: ...today)
-        .receipt_and_nobody_ate.order(:date).preload(bills: :resident).to_a
+        .receipt_and_nobody_to_charge.order(:date).preload({ bills: :resident }, :meal_residents).to_a
   end
 
   sig { returns(Reconciliation) }
@@ -167,7 +178,10 @@ class Settlement
   # Distributes balances at the ledger grain (which sum to exactly zero) into
   # cent-rounded balances that also sum to exactly zero, using the
   # largest-remainder method (Hamilton's method). Each rounded value is
-  # within 1 cent of its exact amount. LargestRemainderSplit is the same
+  # less than 1 cent from its exact amount: a cent is moved only to a value
+  # whose cut to cents dropped something, and it moves that value back
+  # toward its exact amount. LedgerVerification relies on this, and treats
+  # a gap of a whole cent as an edit. LargestRemainderSplit is the same
   # rule at the ledger grain; this one differs in that its input is signed,
   # so it truncates toward zero rather than down.
   #
@@ -369,26 +383,52 @@ class Settlement
   # deletes by the triggers in 20260731120000 and 20260802120000, and the
   # re-inserts by the unique indexes on both tables. To rebuild a
   # reconciliation on purpose, see docs/runbooks/settled-data-repair.md.
+  #
+  # The database refuses an insert into either table unless
+  # SETTLING_SETTING names the reconciliation the row belongs to
+  # (20261009120000). So the setting is on for exactly these writes: set
+  # first, and turned off once both tables are written. The writes run in their own savepoint
+  # (requires_new) so that an error rolls the setting back with the rows.
+  # Without the savepoint, a caller that caught the error and kept its
+  # transaction would also keep the setting, and could then add rows to
+  # this reconciliation as if the settlement wrote them.
   sig { void }
   def write_ledger!
     ledger = reconciliation.settlement_ledger
 
-    Reconciliation.transaction do
+    Reconciliation.transaction(requires_new: true) do
+      write_settling_setting(T.must(reconciliation.id).to_s)
       persist_charges!(ledger)
       persist_balances!(ledger)
+      write_settling_setting('')
     end
   end
 
+  # set_config(name, value, true) does what SET LOCAL does: the value
+  # lasts until the end of the transaction.
+  sig { params(value: String).void }
+  def write_settling_setting(value)
+    Reconciliation.connection.execute(
+      Reconciliation.sanitize_sql_array(['SELECT set_config(?, ?, true)', SETTLING_SETTING, value])
+    )
+  end
+
   # One row per source row: one credit per bill, one debit per attendance,
-  # one per guest. insert_all rather than create! because these are written
-  # in a batch and there is nothing per-row to validate that the check
-  # constraints and MealLedger do not already guarantee — and a settlement
-  # writes a few hundred of them.
+  # one per guest. insert_all! rather than create! because these are
+  # written in a batch and there is nothing per-row to validate that the
+  # check constraints and MealLedger do not already guarantee — and a
+  # settlement writes a few hundred of them.
+  #
+  # insert_all! and not insert_all: without the bang, a row that breaks a
+  # unique index is skipped with no error (ON CONFLICT DO NOTHING). A line
+  # already sitting on the meal would then stay in place of the real one.
+  # If it had the same amount, the meal would still add up to zero, and the
+  # nightly check would not see it either.
   sig { params(ledger: MealLedger).void }
   def persist_charges!(ledger)
-    # insert_all fills created_at and updated_at itself, and an empty
+    # insert_all! fills created_at and updated_at itself, and an empty
     # list is a no-op without a query.
-    MealCharge.insert_all(
+    MealCharge.insert_all!(
       ledger.lines.map do |line|
         {
           meal_id: line.meal_id, resident_id: line.resident_id, kind: line.kind.to_s,

@@ -1015,7 +1015,9 @@ Run 2, 113 alive, by kind:
 - Needs an owner decision, left (1): `MealLedger#financials_for` with
   `total_units: -1` for `0` in the zero-multiplier return. Issue #94 says
   that value is wrong (the summary should show what the cooks spent) and
-  asks what "subsidized" means there.
+  asks what "subsidized" means there. Decided 2026-10-09: the return
+  now carries what the cooks spent, and "subsidized" means the cooks were
+  credited less than they spent, for any reason.
 - Noise (73):
   - `MealLedger` (12). `units`: `to_s` or the bare amount for
     `to_s('F')` (2), because ActiveSupport makes a BigDecimal's `to_s`
@@ -2155,3 +2157,172 @@ only that the alert includes "Resident must exist".
 
 The other change in the branch is a comment in `MealResident`, so no
 other Ruby method needed a run.
+
+### 2026-10-09, the money rules (#94 and six more)
+
+Run on every Ruby method the money rules branch added or changed. The
+branch made seven changes. A meal is subsidized when its cooks get back
+less than they spent, for any reason, so a meal that only people who
+eat free signed up for is subsidized too (#94). A settlement holds such
+a meal back when a bill has money on it, as it already held back a
+meal nobody signed up for. A guest's host can change on a closed meal
+only where its price can. A guest's price is adult or child, by a model
+rule and a CHECK. The ledger check allows a gap under one cent, not a
+gap of exactly one cent. A check that finds a difference and then
+crashes is reported as failed. And only a settlement can add line items
+or settled balances (a database trigger). Six workers, 300-second
+limit.
+
+| Run                                                          | Subjects | Mutations | Killed | Alive | Timeouts             | Time   |
+| ------------------------------------------------------------ | -------- | --------- | ------ | ----- | -------------------- | ------ |
+| 1, every method the branch added or changed                  | 33       | 2,302     | 2,198  | 104   | 0                    | 1h47   |
+| 2, the 18 methods whose code or examples the answers changed | 18       | 1,517     | 1,443  | 74    | 10, counted as alive | 2h08   |
+| 3, `Settlement.held_by` alone                                | 1        | 45        | 38     | 7     | 0                    | 12 min |
+
+The 33 subjects of run 1, by name: `ApplicationHelper#price_category_label`,
+`Multiplier.label`, `ClosedMealAttendanceFreeze#resident_change_is_allowed`
+and `#can_leave?`, `LedgerCheckRun#failed?`, `Meal.someone_to_charge`,
+`MealCharge#subsidized?`, `Reconciliation#must_settle_at_least_one_meal`
+and `#held_meal_dates`; seven `AuditDescription` methods (`initialize`,
+`guest_hosts`, `named_resident_ids`, `describe_meal_resident`,
+`describe_guest`, `describe_guest_update`, `price_change`); six
+`LedgerVerification` methods (`.summary_for`, `call`, `check`,
+`line_item_differences`, `record`, `log`); `MealCostSummary.chargeless`;
+three `MealLedger` methods (`financials_for`, `credit_units`,
+`subsidized?`); three `ReconciliationWarnings` methods (`call`,
+`held_warnings`, `bill_with_only_free_eaters`); and four `Settlement`
+methods (`.held_by`, `write_ledger!`, `write_settling_setting`,
+`persist_charges!`). The two `subsidized?` methods changed only in their
+comments, but what they mean and their examples changed.
+
+Fifteen had no survivor: `ApplicationHelper#price_category_label`, both
+`ClosedMealAttendanceFreeze` methods, `LedgerCheckRun#failed?`,
+`AuditDescription#describe_guest_update`, `LedgerVerification#call` and
+`#check`, `MealCostSummary.chargeless`, the three `MealLedger` methods,
+`ReconciliationWarnings#call` and `#bill_with_only_free_eaters`, and
+`Settlement#write_ledger!` and `#write_settling_setting`. In
+`write_ledger!` that includes the savepoint (`requires_new: true`) and
+the line that turns the setting off: the two examples in
+`settlement_spec.rb` that read the setting after a write, and after a
+failed write that the caller catches, fail on each.
+
+Run 1, 104 alive, by kind:
+
+- Missing assertions (12), each now with an example that fails on it
+  (checked by making each change by hand).
+  - `Meal.someone_to_charge` (4). The attendance EXISTS without its
+    meal (dropped, or `where(nil)`), and the guest EXISTS without its
+    meal. In every example the only eaters were on the meal being
+    checked, so an EXISTS that read every meal's rows gave the same
+    answer. `meal_spec.rb` now puts a held meal next to a meal with a
+    paying eater and a meal with a guest, and expects only the first to
+    be held. And `gt(1)` for `gt(0)`: no example had a child who pays
+    half as the only eater. One does now, and the meal settles.
+  - `Reconciliation#held_meal_dates` (2). Without
+    `receipt_and_nobody_to_charge`, the refusal named every unsettled
+    meal up to the cutoff, and no example had any other such meal. Now
+    a meal people ate with no bill sits beside the held one, and is not
+    named. And the dropped `order(:date)`: the example that makes the
+    later meal first still passed, because PostgreSQL returned the
+    dates in date order without being asked. A new example reads the
+    statement, as the calendar's order examples do (2026-09-27).
+  - `Settlement.held_by` (1): the dropped `order(:date)`, for the same
+    reason. `settlement_contract_spec.rb` reads the statement now.
+  - `AuditDescription#guest_hosts` (4). Reading audits of every type:
+    the ids of two tables often match, so an attendance row with a
+    guest's id could put its person's name on the guest. A new example
+    has such a row, whose person changes between the guest's two price
+    changes. `.fetch` for `[]` on the host so far: a guest whose create
+    row is gone raised `KeyError`, and the history would show nothing.
+    The example for that case used a made-up row with no history at
+    all, which never reached that line; a new one deletes a real
+    guest's create row. And the dropped `order(:version)`, or
+    `order(nil)`: each row's host is the host before it, so the order
+    is part of the answer, and PostgreSQL returned these rows in version
+    order without being asked. A new example reads the statement.
+  - `AuditDescription#describe_meal_resident` (1): `.fetch` for `[]` on
+    the attendance row's person. Bills had an example for a row and its
+    create row both gone; attendance rows have one now too.
+- Redundant code, removed (5). `ReconciliationWarnings#held_warnings`
+  (3): the `&& meal.guests.empty?`. A held meal never has a guest,
+  because any guest is someone to charge (`Meal.someone_to_charge`), so
+  only the attendance rows can tell "nobody signed up" from "only people
+  who eat free signed up". The `:guests` preload in `Settlement.held_by`
+  (2) was there only for that check, and went with it.
+- Noise (87), changes no caller can see:
+  - `AuditDescription#describe_meal_resident` (44), the kinds of
+    2026-09-12 and 2026-09-27: `.fetch` or `.at` for `[]` on a change
+    (24), `== true` or `== false` to truthiness (4), `instance_of?(Array)`
+    to truthiness (2), the `action == 'update'` check after create and
+    destroy have returned (4, one of them by taking the whole update
+    branch out of its `if`), a `return` before the same fallback the
+    method ends with (9), and `.fetch('resident_id')` on a create or
+    destroy row, which always has one (1). The price line the branch
+    added had no survivor.
+  - `AuditDescription#named_resident_ids` (7) and `#initialize` (2), as
+    on 2026-09-27: nil or repeated ids, and rows of other types, change
+    the `IN` list but not which residents are found; `to_a`.
+  - `AuditDescription#guest_hosts` (5). Also reading the history of a
+    guest that only a create or destroy row names (3): that adds hosts
+    for rows nobody asked about. Also reading destroy rows (1): a
+    guest's destroy row is its last, and it holds the host as a plain
+    id, not a change, so it moves no host. `instance_of?(Array)` to
+    truthiness on an update row's host (1): the audited gem stores a
+    change as a two-element array, or leaves the key out.
+  - `AuditDescription#describe_guest` (1): `.fetch('resident_id')` on a
+    create or destroy row. `#price_change` (1): `instance_of?(Array)` to
+    truthiness, as above.
+  - `Multiplier.label` (5): the `precision:`. The method moved here from
+    `ApplicationHelper#price_category_label`, and so did the answer of
+    2026-09-27: half of a whole number has at most one decimal.
+  - `Settlement.held_by` (8): `to_ary` for `to_a` (1), and the bill,
+    resident and attendance preloads dropped or emptied (7). goldiloader
+    loads them anyway, as in `settlement_ledger` and `skipped_by`.
+  - `LedgerVerification` (11), the kinds of 2026-09-12 and 2026-09-21:
+    in `line_item_differences`, the `.sort` (1) and `to_s('F')` (4); in
+    `.summary_for`, the `.sort` on ids (1), which come in id order
+    already; in `record`, `"#{error}"` for `"#{error.message}"` (1); in
+    `log`, the `if` around the "all match" line (4). Log lines are
+    skipped by `ignore_patterns`, so a passing run that logs nothing
+    looks the same. The error lines are pinned: one example expects no
+    error logged for a run that crashed and found nothing, and one
+    expects the difference in the log when saving the run fails.
+  - `Settlement#persist_charges!` (1): `line.kind` for `line.kind.to_s`,
+    kept on purpose since 2026-09-08.
+  - `Reconciliation#must_settle_at_least_one_meal` (1): `errors.any?`
+    for `errors[:end_date].any?`, as on 2026-09-10.
+  - `MealCharge#subsidized?` (1): `self.bill_amount` written as
+    `bill_amount()`.
+
+Run 2 had no survivor from the first two kinds. Its 74 alive were 62
+outside `Settlement.held_by`, the same mutations as in run 1, and 12 in
+`held_by`. Ten of the 12 were timeouts. Browser suites in two other
+worktrees started during the run, and a `held_by` mutation that no
+example fails runs 808 examples. Four of the ten were mutations that
+run 1 killed: `order(nil)`, the two changes to the `today` bound, and a
+preload of an association that does not exist.
+
+Run 3 was `Settlement.held_by` alone, after the browser suites ended.
+Its 7 alive are the 8 noise mutations above but one. That one,
+`{ bills: nil }` for `{ bills: :resident }`, was counted as killed, but
+not by an assertion: the cleanup after a race example
+(`settlement_race_spec.rb`) hit its statement timeout. It is the same
+goldiloader noise, and run 1 had it alive.
+
+Mutant cannot reach the lines in class bodies, in ActiveAdmin blocks,
+or in constants. Eleven changes were made there by hand, and each one
+failed examples: `settleable_by` with `anyone_ate` for
+`someone_to_charge` (3 failed), and `receipt_and_nobody_to_charge` with
+`anyone_ate.not` (3); the Guest price rule removed (2); the
+`validate :resident_change_is_allowed` line removed (4);
+`GUEST_PRICES` with the child first (2), or with free added (4); the
+admin guest price menu showing numbers for the words (1); the admin
+ledger check label without ", did not finish" (1), or with the crash
+checked before the difference (1); `ONE_CENT` as two cents (1); and
+`SETTLING_SETTING` with another name (20 of the 21 examples in
+`settlement_spec.rb` and `settled_ledger_inserts_spec.rb`).
+`ReconciliationWarnings::KINDS` got the new kind too, but nothing reads
+that list, in the app or in a spec, so a change to it fails nothing.
+
+The whole suite afterwards: 3,326 examples, no failure, 100% of lines
+and branches.

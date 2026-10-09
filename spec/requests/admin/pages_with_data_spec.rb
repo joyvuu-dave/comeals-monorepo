@@ -108,6 +108,19 @@ RSpec.describe 'Admin pages with something to list' do
     expect(response.body).not_to include('What disagreed')
   end
 
+  # A difference found before the crash is a fact about the books, so the
+  # label says how many, and says the check did not finish.
+  it 'shows a ledger check that found a difference and then crashed as mismatched first' do
+    create(:ledger_check_run, :with_mismatches, :errored)
+    create(:ledger_check_run, :with_mismatches, started_at: 1.day.ago, finished_at: 1.day.ago + 1.second)
+
+    get '/ledger_check_runs'
+
+    expect(response).to have_http_status(:ok)
+    expect(response.body).to include('1 Mismatched, Did Not Finish')
+    expect(response.body.scan(/>\s*1 Mismatched\s*</).size).to eq(1)
+  end
+
   it 'exports guest room reservations as CSV with the host name' do
     create(:guest_room_reservation, community: community, resident: resident)
 
@@ -116,6 +129,21 @@ RSpec.describe 'Admin pages with something to list' do
     expect(response).to have_http_status(:ok)
     expect(response.content_type).to start_with('text/csv')
     expect(response.body).to include('Rosa Lister')
+  end
+
+  # Nobody with a price ate, so the cook gets nothing back for the $25.
+  # The page says what the cook spent and that the meal is subsidized,
+  # the same as it would after settlement, not a blank cost (#94).
+  it 'shows what the cook spent, and subsidized, on an open meal only a free eater ate' do
+    baby = create(:resident, community: community, unit: unit, multiplier: 0)
+    create(:meal_resident, meal: meal, resident: baby, community: community)
+    create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('25'))
+
+    get "/meals/#{meal.id}"
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body.at_css('tr.row-total_cost td').text.strip).to eq('$25.00')
+    expect(response.parsed_body.at_css('tr.row-subsidized td').text.strip).to eq('Yes')
   end
 
   describe 'a settled meal that a hand edit left without its line items or its bills' do

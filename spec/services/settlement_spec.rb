@@ -55,6 +55,55 @@ RSpec.describe Settlement do
 
       expect(MealLedger).to have_received(:new).once
     end
+
+    # insert_all without the bang skips a row that breaks a unique index
+    # and says nothing (ON CONFLICT DO NOTHING). So a line already sitting
+    # on the meal took the place of the real one. Here the stray line has
+    # the same amount, so the meal still adds up to zero, and the
+    # settlement would commit with a line it never wrote.
+    it 'refuses to settle a meal that already holds a line in the place of a real one' do
+      meal = settleable_meal(Date.yesterday)
+      with_repair_bypass do
+        MealCharge.create!(meal: meal, resident: eater, kind: 'debit', amount: BigDecimal('-30'),
+                           multiplier: 2, unit_cost: BigDecimal('15'))
+      end
+
+      expect { settle! }.to raise_error(ActiveRecord::RecordNotUnique, /index_meal_charges_one_debit_per_attendee/)
+    end
+  end
+
+  # While it writes the lines and the balances, a settlement sets a
+  # database setting that names its reconciliation, and the database
+  # refuses those inserts without it (spec/db/settled_ledger_inserts_spec.rb).
+  # It must not outlive the write, or a later insert in the same
+  # transaction would get through as if the settlement wrote it.
+  describe 'the setting that lets it write the ledger' do
+    def setting
+      ActiveRecord::Base.connection.select_value("SELECT current_setting('#{described_class::SETTLING_SETTING}', true)")
+    end
+
+    it 'is off again once the ledger is written' do
+      settleable_meal(Date.yesterday)
+
+      ActiveRecord::Base.transaction do
+        settle!
+        expect(setting).to be_blank
+      end
+    end
+
+    # The write runs in its own savepoint, and rolling that back also
+    # undoes the setting. Without it, a caller that catches the error and
+    # keeps its transaction would keep the setting too.
+    it 'is off again when the write fails, even for a caller that catches the error' do
+      settleable_meal(Date.yesterday)
+      reconciliation = Reconciliation.new(end_date: Date.yesterday)
+      allow(reconciliation).to receive(:settlement_balances).and_raise(RuntimeError, 'the write failed')
+
+      ActiveRecord::Base.transaction do
+        expect { described_class.new(reconciliation).settle! }.to raise_error(RuntimeError, 'the write failed')
+        expect(setting).to be_blank
+      end
+    end
   end
 
   describe 'the screens after a settlement' do
