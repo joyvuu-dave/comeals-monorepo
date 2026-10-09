@@ -59,7 +59,11 @@ class MealResident < ApplicationRecord
   validates :multiplier, numericality: { only_integer: true }
   # Both columns are NOT NULL. Without this a nil (a flag left out of a
   # sign-up, or sent as "") reached the database and the API answered 500
-  # (#121). A flag left out is refused, not read as false.
+  # (#121). In a sign-up request, a flag left out is refused, not read as
+  # false (TrueOrFalse). But a new row whose code never sets a flag gets
+  # the column's default, false, and passes this check: the admin
+  # attendance add saved every vegetarian resident as not vegetarian that
+  # way until #140.
   validates :late, :vegetarian, inclusion: { in: [true, false], message: TrueOrFalse::MESSAGE }
   validate :multiplier_is_the_residents, on: :create
 

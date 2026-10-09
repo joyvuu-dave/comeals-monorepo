@@ -2117,3 +2117,41 @@ methods, as in run 2. `Community#midnight?` and both
 
 The whole suite after run 4: 3,184 examples, no failure, 100% of lines
 and branches, with the placeholder `public/index.html`.
+
+### 2026-10-09, an admin add of a vegetarian resident (#140)
+
+The #140 fix changed one Ruby method: `create` in
+`app/admin/meal_resident.rb`, an ActiveAdmin page. It now sets the new
+row's `vegetarian` from the resident. Mutant cannot change this method.
+It is defined inside two blocks (`ActiveAdmin.register MealResident do`
+and `controller do`), and mutant refuses any method defined inside a
+block (`Matcher::Method::Evaluator#match_view`, "dynamically defined in a
+closure"). A run by name, `Admin::MealResidentsController#create`, with
+an extra `-r` file that draws the routes first, found 0 subjects. (The
+admin controllers exist only once the routes are drawn. The
+`eager_load!` hook does not define them.)
+
+So ten changes of the kinds mutant makes were made by hand. Each one
+failed at least one of the 13 examples of
+`spec/requests/admin/attendance_correction_spec.rb`:
+
+| Change                                                       | Examples failed |
+| ------------------------------------------------------------ | --------------- |
+| the line that sets `vegetarian` removed                      | 1               |
+| `true` for the resident's setting                            | 1               |
+| `false` for the resident's setting                           | 1               |
+| `nil` for the resident's setting                             | 4               |
+| `!resident.vegetarian`                                       | 2               |
+| the `if resident` removed (no resident: `NoMethodError`)     | 1               |
+| `resident&.vegetarian` with no `if` (the alert gains a line) | 1               |
+| `unless resident` for `if resident`                          | 2               |
+| `resident = nil`                                             | 1               |
+| `resident = row`                                             | 1               |
+
+The `resident&.vegetarian` change is caught only by a line added to the
+"no resident is chosen" example: the alert must not mention
+vegetarian. Without that line the example passed, because it checked
+only that the alert includes "Resident must exist".
+
+The other change in the branch is a comment in `MealResident`, so no
+other Ruby method needed a run.

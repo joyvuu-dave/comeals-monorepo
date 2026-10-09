@@ -20,11 +20,19 @@ ActiveAdmin.register MealResident do
     # could add or remove attendance on a closed meal.
     before_action :authorize_attendance_correction!
 
+    # The form sends only a resident. It has no vegetarian or late switch.
+    # So the row gets the values the meal page's switches show for someone
+    # who is not signed up: vegetarian is the resident's own setting
+    # (MealFormSerializer#vegetarian), and late is false, the column's
+    # default. Before #140, vegetarian was always the column's default too.
+    # With no resident, belongs_to refuses the row, so vegetarian is not set.
     def create
       meal = Meal.find(params[:meal_id])
       row = meal.meal_residents.new(
         resident_id: params.require(:meal_resident).permit(:resident_id)[:resident_id]
       )
+      resident = row.resident
+      row.vegetarian = resident.vegetarian if resident
       row.admin_correction = true
       if row.save
         redirect_to admin_meal_path(meal), notice: "Added #{row.resident.name} to the meal."

@@ -34,6 +34,35 @@ RSpec.describe 'Admin attendance correction' do
       expect(row.multiplier).to eq(resident.multiplier_on(meal.date))
     end
 
+    # #140. The admin form sends only a resident. The row gets the values
+    # the meal page's switches show for someone who is not signed up:
+    # vegetarian is the resident's own setting
+    # (MealFormSerializer#vegetarian), and late is false. Before the fix,
+    # vegetarian was always false.
+    it 'saves a vegetarian resident as vegetarian, and not late' do
+      veg = create(:resident, community: community, unit: unit, vegetarian: true)
+      meal = create(:meal, community: community)
+      meal.update!(closed: true)
+
+      post "/meals/#{meal.id}/meal_residents", params: { meal_resident: { resident_id: veg.id } }
+
+      expect(response).to redirect_to("/meals/#{meal.id}")
+      row = MealResident.find_by!(meal: meal, resident: veg)
+      expect(row.vegetarian).to be(true)
+      expect(row.late).to be(false)
+    end
+
+    it 'saves a resident who is not vegetarian as not vegetarian' do
+      meat_eater = create(:resident, community: community, unit: unit, vegetarian: false)
+      meal = create(:meal, community: community)
+      meal.update!(closed: true)
+
+      post "/meals/#{meal.id}/meal_residents", params: { meal_resident: { resident_id: meat_eater.id } }
+
+      expect(response).to redirect_to("/meals/#{meal.id}")
+      expect(MealResident.find_by!(meal: meal, resident: meat_eater).vegetarian).to be(false)
+    end
+
     it 'writes one audit row naming the admin' do
       meal = create(:meal, community: community)
       meal.update!(closed: true)
@@ -59,6 +88,10 @@ RSpec.describe 'Admin attendance correction' do
 
       expect(response).to redirect_to("/meals/#{meal.id}")
       expect(flash[:alert]).to include('Resident must exist')
+      # With no resident there is no vegetarian setting to start from. The
+      # row keeps the column's false, so the alert does not add "Vegetarian
+      # must be true or false" (#140).
+      expect(flash[:alert]).not_to include('Vegetarian')
     end
   end
 
