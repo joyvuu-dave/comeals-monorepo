@@ -344,11 +344,17 @@ RSpec.describe LiveUpdate do
     end
 
     it 'is reported with the channel once the tries run out, and the caller does not fail' do
-      allow(LivePushJob).to receive(:perform_later).and_raise(ActiveRecord::SerializationFailure, 'conflict')
+      # Counted by hand, as in the example above: every try raises, so no
+      # job is ever enqueued, and have_enqueued_job would see none.
+      tries = 0
+      allow(LivePushJob).to receive(:perform_later) do
+        tries += 1
+        raise ActiveRecord::SerializationFailure, 'conflict'
+      end
 
       expect { described_class.residents }.not_to raise_error
 
-      expect(LivePushJob).to have_received(:perform_later).exactly(RetryOnConflict::MAX_ATTEMPTS).times
+      expect(tries).to eq(RetryOnConflict::MAX_ATTEMPTS)
       expect(Rails.error).to have_received(:report)
         .with(an_instance_of(ActiveRecord::SerializationFailure),
               hash_including(handled: true, context: { channel: "community-#{Community.instance.id}-residents" }))
