@@ -48,6 +48,10 @@ export interface MealPageStore extends ReturnType<typeof mealPageVolatile> {
   closedPending: boolean;
   // data_store_bills.ts: bumped on every bill edit.
   billsEdits: ReturnType<typeof createVersionGuard>;
+  // data_store_signup_requests.ts: bumped on every answer to a request
+  // from the sign-up list.
+  signupAnswers: ReturnType<typeof createVersionGuard>;
+  mealLoadedFromServer(mealId: number): void;
   saveBillsBeforeLeaving(): void;
   dropFixedCookInTwoRows(): void;
   billsPendingFor(mealId: number): boolean;
@@ -55,7 +59,11 @@ export interface MealPageStore extends ReturnType<typeof mealPageVolatile> {
   settleClosed(): void;
   loadDataAsync(): void;
   loadMealAgain(): void;
-  holdMealAnswer(mealId: number, editsAtFetch: number): boolean;
+  holdMealAnswer(
+    mealId: number,
+    editsAtFetch: number,
+    signupsAtFetch: number,
+  ): boolean;
   afterBillsIdle(): void;
   handleMealLoadError(error: unknown, mealId: number): void;
   handleMealProcessingError(error: unknown, mealId: number): void;
@@ -191,6 +199,7 @@ export function mealPageActions(self: MealPageStore) {
       self.mealReloadWanted = null;
       const fetchToken = self.mealFetches.bump();
       const editsAtFetch = self.billsEdits.current();
+      const signupsAtFetch = self.signupAnswers.current();
       api.meals
         .getCooks(mealIdAtFetch)
         .then(
@@ -198,7 +207,11 @@ export function mealPageActions(self: MealPageStore) {
             // A newer fetch is out: this answer is older than what
             // that one will bring, so neither cache nor screen gets it.
             if (!self.mealFetches.isCurrent(fetchToken)) return;
-            if (self.holdMealAnswer(mealIdAtFetch, editsAtFetch)) return;
+            if (
+              self.holdMealAnswer(mealIdAtFetch, editsAtFetch, signupsAtFetch)
+            ) {
+              return;
+            }
             return kvSet(response.data.id.toString(), response.data)
               .catch(function (error: unknown) {
                 // The copy on disk only makes the next visit faster. A
@@ -211,8 +224,17 @@ export function mealPageActions(self: MealPageStore) {
               })
               .then(function () {
                 if (!self.mealFetches.isCurrent(fetchToken)) return;
-                // A cost can be typed while the answer is written.
-                if (self.holdMealAnswer(mealIdAtFetch, editsAtFetch)) return;
+                // A cost can be typed, or a request from the sign-up
+                // list answered, while the answer is written.
+                if (
+                  self.holdMealAnswer(
+                    mealIdAtFetch,
+                    editsAtFetch,
+                    signupsAtFetch,
+                  )
+                ) {
+                  return;
+                }
                 // Skip stale responses from a previous meal
                 if (self.meal && self.meal.id === response.data.id) {
                   self.loadData(response.data, "server");
@@ -248,13 +270,22 @@ export function mealPageActions(self: MealPageStore) {
     // rows again if a bill was edited after the fetch was sent, or if a
     // bills edit for the meal is pending: the server may have read the
     // meal before it stored that edit, and new rows would show the old
-    // cost (#136). Then this returns true. The answer is not used, not
-    // even for the copy on the device, and the meal is fetched again
-    // once nothing is pending for it (at once, if nothing is).
-    holdMealAnswer(mealId: number, editsAtFetch: number): boolean {
+    // cost (#136). The same goes for a request from the sign-up list
+    // answered after the fetch was sent: new rows would not show that
+    // sign-up or guest, and the push for it skips this screen
+    // (data_store_signup_requests.ts). Then this returns true. The answer
+    // is not used, not even for the copy on the device, and the meal is
+    // fetched again once nothing is pending for it (at once, if nothing
+    // is).
+    holdMealAnswer(
+      mealId: number,
+      editsAtFetch: number,
+      signupsAtFetch: number,
+    ): boolean {
       if (
         self.billsEdits.isCurrent(editsAtFetch) &&
-        !self.billsPendingFor(mealId)
+        !self.billsPendingFor(mealId) &&
+        self.signupAnswers.isCurrent(signupsAtFetch)
       ) {
         return false;
       }
@@ -507,6 +538,11 @@ export function mealPageActions(self: MealPageStore) {
       // the failure is over and the backoff starts fresh next time.
       self.mealLoading = false;
       self.cancelMealRetry();
+
+      // The server's answer shows the meal's head count, so a load the
+      // sign-up list asked for has landed. The copy on the device may be
+      // older than what the server has.
+      if (source === "server") self.mealLoadedFromServer(meal.id);
 
       self.watchMealChannel(meal.id);
 

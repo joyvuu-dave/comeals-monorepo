@@ -1437,6 +1437,98 @@ test.describe("Visual Baselines", () => {
     });
   });
 
+  // S4. A closed meal with a cap of 6 while two requests from the
+  // sign-up list wait for their answers. Bob's sign-up shows at the tap:
+  // his name is green, Total is 4 and Extras is 2. Jane's guest add
+  // shows nothing until the server says yes: her badge stays at 1 and
+  // Total stays at 4. While either waits, the Extras boxes take no picks
+  // and look the way they look while an Extras save waits. Jane's
+  // + Guest takes no taps, so a second tap cannot add a second guest,
+  // and keeps its look. Her add holds one of the two seats left, and
+  // the other is still open, so nothing else looks locked.
+  test("closed meal while a sign-up and a guest add wait", async ({
+    page,
+    context,
+  }) => {
+    await setupAuthenticatedPage(page, context, {
+      mealData: {
+        ...mealFixture,
+        closed: true,
+        closed_at: "2026-01-15T08:00:00Z",
+        max: 6,
+      },
+    });
+    await page.clock.setFixedTime(FROZEN_NOW);
+    await holdRoute(page, "**/api/v1/meals/42/residents/2", "POST");
+    await holdRoute(page, "**/api/v1/meals/42/residents/1/guests", "POST");
+
+    await page.goto("/meals/42/edit/");
+    await page.waitForLoadState("networkidle");
+    await expect(page.locator("h1", { hasText: "CLOSED" })).toBeVisible({
+      timeout: 10000,
+    });
+    const total = page
+      .locator(".info-circle", { hasText: "Total" })
+      .locator("div")
+      .nth(1);
+    await expect(total).toHaveText("3");
+    await expect(page.getByLabel("Set Extras to 3")).toBeChecked();
+
+    const bobCell = page.getByRole("cell", {
+      name: "B - Bob Johnson",
+      exact: true,
+    });
+    await bobCell.click();
+    await expect(bobCell).toHaveClass(/background-green/);
+    await expect(total).toHaveText("4");
+
+    const janeRow = page
+      .getByRole("cell", { name: "A - Jane Smith", exact: true })
+      .locator("xpath=ancestor::tr");
+    const janeAdd = janeRow.locator("button", {
+      has: page.getByLabel("Add Guest of A - Jane Smith"),
+    });
+    const janeMenu = janeRow.locator(".dropdown");
+    await janeAdd.click();
+    const posted = page.waitForRequest(
+      (request) =>
+        request.method() === "POST" &&
+        request.url().endsWith("/meals/42/residents/1/guests"),
+    );
+    await janeMenu.locator("img[alt='cow-icon']").click();
+    await posted;
+
+    // Guard the story before diffing pixels. Jane's guest is not
+    // counted yet, every Extras box is locked, and her + Guest takes no
+    // taps but is not grayed out like a control with no seat behind it.
+    await expect(janeAdd).toHaveAttribute("aria-disabled", "true");
+    await expect(janeAdd).not.toHaveAttribute("disabled");
+    await janeAdd.click({ force: true });
+    await expect(janeMenu).not.toHaveClass(/active/);
+    await expect(
+      janeRow.locator(".badge", { has: page.locator("img[alt='cow-icon']") }),
+    ).toHaveText("1");
+    await expect(total).toHaveText("4");
+    for (let n = 0; n <= 8; n++) {
+      await expect(page.getByLabel(`Set Extras to ${n}`)).toBeDisabled();
+    }
+    await expect(page.getByLabel("Set Extras to 2")).toBeChecked();
+    // One seat is still open to other taps.
+    await expect(
+      page.locator("button", {
+        has: page.getByLabel("Add Guest of B - Bob Johnson"),
+      }),
+    ).toBeEnabled();
+    // The taps left the focus on the button, and Chromium draws a ring
+    // for it. The golden shows the button's own look.
+    await janeAdd.blur();
+    await page.waitForTimeout(500);
+
+    await expect(page).toHaveScreenshot("meal-closed-requests-waiting.png", {
+      fullPage: true,
+    });
+  });
+
   test("close confirm bar with two blank cook costs", async ({
     page,
     context,

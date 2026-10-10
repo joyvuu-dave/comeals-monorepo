@@ -8,6 +8,16 @@
 // app sends that add's key again (public/api.md, "Guests").
 // The server keeps the key of each add it wrote, and answers a key it has
 // seen as already done, with the guest that add made.
+//
+// Nothing on the page changes at the tap. When the server says yes, the
+// guest shows and its seat goes in one step, so Extras, Total and the
+// cap always agree (S4). While a host's add waits, that host's
+// add-guest control takes no taps, so a second tap cannot send a second
+// guest. That also covers an add on a dead connection, which waits 35
+// seconds before its key is kept for the next tap. And while an add
+// waits, the seat it asks for is not open to other taps on the screen
+// (Meal#openSeats), or the server would take the guest and refuse the
+// other tap, and in between the page would show Total over the cap.
 import { IAnyStateTreeNode, isAlive } from "mobx-state-tree";
 
 import { api } from "../helpers/api";
@@ -43,11 +53,21 @@ export interface GuestAddsStore
   extends ReturnType<typeof guestAddsVolatile>, SignupStore {
   meal: {
     id: number;
-    incrementExtras(): void;
+    decrementExtras(): void;
   } | null;
+  guests: { has(key: string): boolean };
   appendGuest(guest: Omit<Guest, "created_at"> & { created_at: Date }): void;
-  sendGuestAdd(add: GuestAdd): void;
-  guestAddAnswered(add: GuestAdd, data: Guest | GuestReplayed): void;
+  // From data_store_signup_requests.ts.
+  waitForSignupRequest<T>(mealId: number, request: Promise<T>): Promise<T>;
+  // This file's own views and actions.
+  guestAddWaiting(mealId: number, hostId: number): boolean;
+  guestAddsWaitingOn(mealId: number): number;
+  endGuestAdd(add: GuestAdd): void;
+  sendGuestAdd(add: GuestAdd): Promise<void>;
+  guestAddAnswered(
+    add: GuestAdd,
+    data: Guest | GuestReplayed,
+  ): Promise<void> | undefined;
   guestAddFailed(add: GuestAdd, key: string, error: unknown): void;
   takeGuestAddKey(add: GuestAdd): string;
   keepGuestAddKey(add: GuestAdd, key: string): void;
@@ -57,6 +77,11 @@ export interface GuestAddsStore
 // choice, which is the same guest to the server.
 function sameGuest(add: GuestAdd): string {
   return `${add.mealId}:${add.hostId}:${add.vegetarian}`;
+}
+
+// The host of an add, on its meal.
+function hostOf(mealId: number, hostId: number): string {
+  return `${mealId}:${hostId}`;
 }
 
 export function guestAddsVolatile() {
@@ -69,27 +94,67 @@ export function guestAddsVolatile() {
     // long as the page is open: a key the server no longer has (it keeps
     // them 7 days) is a new add, which is what the tap asks for then.
     guestAddKeysInDoubt: {} as Record<string, string[]>,
+    // The hosts whose guest add has no answer yet, by hostOf. Kept here,
+    // not on the host's row: a load builds every row again while the add
+    // is out, and the new row may not show its guest yet.
+    guestAddsWaiting: [] as string[],
+  };
+}
+
+export function guestAddsViews(self: GuestAddsStore) {
+  return {
+    guestAddWaiting(mealId: number, hostId: number): boolean {
+      return self.guestAddsWaiting.includes(hostOf(mealId, hostId));
+    },
+    // How many guest adds on the meal wait: one at most for each host.
+    guestAddsWaitingOn(mealId: number): number {
+      return self.guestAddsWaiting.filter((host) =>
+        host.startsWith(`${mealId}:`),
+      ).length;
+    },
   };
 }
 
 export function guestAddsActions(self: GuestAddsStore) {
   return {
+    // A tap on a host's add-guest choice. It does nothing while an add
+    // for the same host on the same meal waits. The add waits until its
+    // last answer: an answer can send it again (guestAddAnswered).
+    startGuestAdd(add: GuestAdd) {
+      if (self.guestAddWaiting(add.mealId, add.hostId)) return;
+      self.guestAddsWaiting = [
+        ...self.guestAddsWaiting,
+        hostOf(add.mealId, add.hostId),
+      ];
+      self.sendGuestAdd(add).finally(function () {
+        self.endGuestAdd(add);
+      });
+    },
+    endGuestAdd(add: GuestAdd) {
+      const host = hostOf(add.mealId, add.hostId);
+      self.guestAddsWaiting = self.guestAddsWaiting.filter(
+        (waiting) => waiting !== host,
+      );
+    },
     // Send one guest add, with the oldest key in doubt for the same
-    // guest, or a new key. The row took the seat on screen at the tap.
-    sendGuestAdd(add: GuestAdd) {
+    // guest, or a new key. Settles once the add has its last answer.
+    sendGuestAdd(add: GuestAdd): Promise<void> {
       const key = self.takeGuestAddKey(add);
-      api.meals.residents.guests
-        .add(add.mealId, add.hostId, {
-          vegetarian: add.vegetarian,
-          key,
-          socketId: window.Comeals.socketId,
-        })
+      return self
+        .waitForSignupRequest(
+          add.mealId,
+          api.meals.residents.guests.add(add.mealId, add.hostId, {
+            vegetarian: add.vegetarian,
+            key,
+            socketId: window.Comeals.socketId,
+          }),
+        )
         .then(
           function (response) {
             // The server has the guest, so the copy of the meal on the
             // device is out of date (issue #37).
             evictMealCache(add.mealId);
-            self.guestAddAnswered(add, response.data);
+            return self.guestAddAnswered(add, response.data);
           },
           function (error: unknown) {
             self.guestAddFailed(add, key, error);
@@ -102,25 +167,45 @@ export function guestAddsActions(self: GuestAddsStore) {
     // screen, the tap was for one guest more, and if it is null (it was
     // removed since, or given to another host or meal), the tap was for
     // a guest: either way a new add goes out.
-    guestAddAnswered(add: GuestAdd, data: Guest | GuestReplayed) {
+    guestAddAnswered(
+      add: GuestAdd,
+      data: Guest | GuestReplayed,
+    ): Promise<void> | undefined {
       let guest: Guest;
       if ("type" in data) {
         if (data.guest === null || add.guestIdsAtTap.includes(data.guest.id)) {
-          self.sendGuestAdd(add);
-          return;
+          return self.sendGuestAdd(add);
         }
         guest = data.guest;
       } else {
         guest = data;
       }
       if (!isAlive(add.row)) {
-        // The meal was loaded again while the add was out, perhaps
-        // before the guest was written. Load it again to show it.
-        // Without this the person taps again and makes a second guest.
-        self.loadDataAsync();
+        // The meal was loaded again while the add was out, perhaps from
+        // a read made before the guest was written. Then the screen does
+        // not show the guest, and its seat is not counted: loadData
+        // works out Extras from the same answer's guests. So the guest
+        // shows now, with its seat, or the person would tap again and
+        // make a second guest. The meal still loads again, to show what
+        // else the server has.
+        if (
+          self.meal?.id === add.mealId &&
+          !self.guests.has(String(guest.id))
+        ) {
+          self.appendGuest({
+            ...guest,
+            created_at: new Date(guest.created_at),
+          });
+          self.meal.decrementExtras();
+        }
+        self.reloadAfterSignupRequest(add.mealId);
         return;
       }
+      // The guest and its seat in one action, so Extras, Total and the
+      // cap change together. While the tapped row is alive, the meal on
+      // screen is the add's meal.
       self.appendGuest({ ...guest, created_at: new Date(guest.created_at) });
+      self.meal?.decrementExtras();
     },
     guestAddFailed(add: GuestAdd, key: string, error: unknown) {
       if (noAnswerFromApp(error)) self.keepGuestAddKey(add, key);
@@ -134,10 +219,6 @@ export function guestAddsActions(self: GuestAddsStore) {
           ),
         );
       }
-      // The seat the tap took goes back, while the rows on screen are
-      // the ones that were tapped. Rows built again since show the
-      // server's seat count already.
-      if (isAlive(add.row)) self.meal?.incrementExtras();
       showSignupFailure(self, add.tapped, error);
     },
     takeGuestAddKey(add: GuestAdd): string {

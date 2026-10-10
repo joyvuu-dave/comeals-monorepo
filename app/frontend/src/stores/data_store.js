@@ -11,6 +11,10 @@
 //   data_store_calendar.js  — rendering a month, its Pusher channels
 //   data_store_hosts.js     — the hosts list the reservation modals show
 //   data_store_guest_adds.ts — guest adds and their Idempotency-Keys
+//   data_store_signup_requests.ts — the sign-up list's requests that
+//                             have no answer yet, which lock the Extras
+//                             and a host's guest removal, and the count
+//                             of answers a meal load checks
 //
 // The month cache/fetch machinery is not a subsystem of the store at
 // all — it lives in ./month_fetch, because the boot-time prefetch
@@ -32,7 +36,16 @@ import { mealPageVolatile, mealPageActions } from "./data_store_meal_page";
 import { billsVolatile, billsViews, billsActions } from "./data_store_bills";
 import { calendarVolatile, calendarActions } from "./data_store_calendar";
 import { hostsVolatile, hostsActions } from "./data_store_hosts";
-import { guestAddsVolatile, guestAddsActions } from "./data_store_guest_adds";
+import {
+  guestAddsVolatile,
+  guestAddsViews,
+  guestAddsActions,
+} from "./data_store_guest_adds";
+import {
+  signupRequestsVolatile,
+  signupRequestsViews,
+  signupRequestsActions,
+} from "./data_store_signup_requests";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -99,6 +112,9 @@ export const DataStore = types
   .volatile(calendarVolatile)
   .volatile(hostsVolatile)
   .volatile(guestAddsVolatile)
+  .volatile(signupRequestsVolatile)
+  .views(guestAddsViews)
+  .views(signupRequestsViews)
   .views((self) => ({
     get hostsLoaded() {
       return self.hostsLoadedAt !== null;
@@ -163,13 +179,13 @@ export const DataStore = types
         return "";
       }
     },
+    // A guest can be added: the meal is open, or a seat is open to a
+    // tap (Meal#openSeats).
     get canAdd() {
       if (!self.meal) return false;
       return (
         !self.meal.closed ||
-        (self.meal.closed &&
-          typeof self.extras === "number" &&
-          self.extras >= 1)
+        (self.meal.openSeats !== null && self.meal.openSeats >= 1)
       );
     },
   }))
@@ -179,4 +195,5 @@ export const DataStore = types
   .actions(billsActions)
   .actions(calendarActions)
   .actions(hostsActions)
-  .actions(guestAddsActions);
+  .actions(guestAddsActions)
+  .actions(signupRequestsActions);

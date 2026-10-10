@@ -791,6 +791,144 @@ describe("AttendeesBox", () => {
       expect(store.guests.size).toBe(0);
     });
 
+    // S4. Jane's guest add waits for its answer. Her + Guest takes no
+    // taps, so a second tap cannot send a second guest, and keeps its
+    // look. Bob's still opens. Nothing on the page counts the guest
+    // until the server says yes.
+    it("Jane's add-guest control takes no taps while her guest add waits", async () => {
+      const store = closedStore(2);
+      let answer;
+      axios.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      );
+      renderBox(store);
+      const janeAdd = screen
+        .getByLabelText("Add Guest of Jane Smith")
+        .closest("button");
+      const janeMenu = janeAdd.closest(".dropdown");
+
+      fireEvent.click(janeAdd);
+      fireEvent.click(within(janeMenu).getByAltText("cow-icon"));
+      expect(store.meal.extras).toBe(2);
+      fireEvent.click(janeAdd);
+      expect(janeMenu).not.toHaveClass("active");
+      fireEvent.click(within(janeMenu).getByAltText("cow-icon"));
+      expect(axios).toHaveBeenCalledTimes(1);
+      expect(janeAdd).toBeEnabled();
+
+      const bobAdd = screen
+        .getByLabelText("Add Guest of Bob Johnson")
+        .closest("button");
+      fireEvent.click(bobAdd);
+      expect(bobAdd.closest(".dropdown")).toHaveClass("active");
+
+      await act(async () => {
+        answer({
+          status: 200,
+          data: {
+            id: 555,
+            meal_id: 1,
+            resident_id: 1,
+            vegetarian: false,
+            created_at: "2026-01-14T13:00:00Z",
+          },
+        });
+      });
+      expect(store.meal.extras).toBe(1);
+      fireEvent.click(janeAdd);
+      expect(janeMenu).toHaveClass("active");
+    });
+
+    // Jane's guest add waits for the last seat. Nothing is counted yet,
+    // but the seat is spoken for, so Bob's name, his switches and his
+    // + Guest look locked, as they would with no seat left. Jane's own
+    // + Guest looks locked too: no guest can be added now.
+    it("locks everyone else's way to the last seat while Jane's guest add waits for it", async () => {
+      const store = closedStore(1);
+      let refuse;
+      axios.mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            refuse = reject;
+          }),
+      );
+      renderBox(store);
+      const bobAdd = screen
+        .getByLabelText("Add Guest of Bob Johnson")
+        .closest("button");
+      const janeAdd = screen
+        .getByLabelText("Add Guest of Jane Smith")
+        .closest("button");
+
+      fireEvent.click(janeAdd);
+      fireEvent.click(
+        within(janeAdd.closest(".dropdown")).getByAltText("cow-icon"),
+      );
+
+      expect(store.meal.extras).toBe(1);
+      const bob = screen.getByRole("cell", { name: "Bob Johnson" });
+      expect(bob.style.pointerEvents).toBe("none");
+      expect(
+        screen.getByLabelText("Toggle Late for Bob Johnson"),
+      ).toBeDisabled();
+      expect(bobAdd).toBeDisabled();
+      expect(janeAdd).toBeDisabled();
+
+      // The server says no: the seat is free again.
+      await act(async () => {
+        refuse({
+          response: {
+            status: 400,
+            data: { message: "Meal has no open spots." },
+          },
+        });
+      });
+      expect(bob.style.pointerEvents).toBe("");
+      expect(bobAdd).toBeEnabled();
+    });
+
+    // A second tap on Jane's - Guest while her removal waits would send
+    // a second removal of the same guest. Like + Guest, the button takes
+    // no taps then and keeps its look.
+    it("Jane's remove-guest control takes no taps while her guest removal waits", async () => {
+      const store = closedStore(1);
+      stage(store, () => {
+        store.guests.put({
+          id: 100,
+          meal_id: 1,
+          resident_id: 1,
+          vegetarian: false,
+          created_at: new Date("2026-01-14T13:00:00Z"),
+        });
+      });
+      let answer;
+      axios.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      );
+      renderBox(store);
+      const janeRemove = screen.getByLabelText("Remove Guest of Jane Smith");
+      expect(janeRemove).toHaveAttribute("aria-disabled", "false");
+
+      fireEvent.click(janeRemove);
+      fireEvent.click(janeRemove);
+      expect(axios).toHaveBeenCalledTimes(1);
+      expect(janeRemove).toBeEnabled();
+      expect(janeRemove).toHaveAttribute("aria-disabled", "true");
+
+      await act(async () => {
+        answer({ status: 200, data: {} });
+      });
+      expect(store.guests.size).toBe(0);
+      expect(janeRemove).toHaveAttribute("aria-disabled", "true");
+      expect(janeRemove).toBeDisabled();
+    });
+
     it("leaves the switches open for someone who can still join", () => {
       renderBox(closedStore(2));
       expect(

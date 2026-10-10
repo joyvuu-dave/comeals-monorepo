@@ -4,10 +4,13 @@ import createVersionGuard from "../helpers/version_guard";
 import handleAxiosError from "../helpers/handle_axios_error";
 
 // What a meal reads from the DataStore at the root of its tree (the store
-// is still JavaScript): the head count its cap is computed from, and the
-// refetch that follows a settled save.
+// is still JavaScript): the head count its cap is computed from, whether
+// a request that can change that head count waits, how many guest adds
+// on it wait, and the refetch that follows a settled save.
 interface MealRoot {
   attendeesCount: number;
+  signupRequestWaiting(mealId: number): boolean;
+  guestAddsWaitingOn(mealId: number): number;
   loadDataAsync(): void;
 }
 
@@ -35,7 +38,7 @@ const Meal = types
     // edits. loadData converts on the way in; updateMax converts on
     // the way out. When reading, remember which side you are on.
     extras: types.maybeNull(types.number),
-    // True while an extras save is in flight; the checkboxes are disabled.
+    // True while an extras save is in flight. See extrasLocked.
     extrasPending: false,
     closed: false,
     closed_at: types.maybeNull(types.Date),
@@ -83,6 +86,23 @@ const Meal = types
       } else {
         return Number(self.extras) + self.root.attendeesCount;
       }
+    },
+    // The Extras boxes take no picks: an Extras save waits, or a request
+    // from the sign-up list on this meal waits (S4). A pick sends the
+    // cap worked out from the head count on screen (max), and that head
+    // count can change when the request is answered.
+    get extrasLocked(): boolean {
+      return self.extrasPending || self.root.signupRequestWaiting(self.id);
+    },
+    // The seats a tap on the sign-up list can still take: Extras, less
+    // one for each guest add on this meal that waits for its answer.
+    // Such an add shows nothing until the server says yes (S4), but the
+    // server takes its seat then, so no other tap may take it now. Only
+    // whether a tap can go out reads this; the screen shows Extras.
+    // null while the meal has no cap.
+    get openSeats(): number | null {
+      if (self.extras === null) return null;
+      return self.extras - self.root.guestAddsWaitingOn(self.id);
     },
     // The "not saved" marker: there is unsaved text AND a save has
     // failed. Plain dirty is not enough — every normal save round-trip
@@ -180,7 +200,7 @@ const Meal = types
       // A seat count from a form control: a number, a numeric string, ""
       // (which becomes 0), or null to clear.
       setExtras(val: number | string | null) {
-        if (self.extrasPending) {
+        if (self.extrasLocked) {
           return;
         }
 

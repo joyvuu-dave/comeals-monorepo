@@ -8,13 +8,21 @@ const styles = {
   },
 };
 
-function GuestDropdown({ resident, canAdd, reconciled }) {
+function GuestDropdown({ resident, canAdd, reconciled, addWaiting }) {
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef(null);
   // No guest can be added: the meal has no seat left, or it is
-  // reconciled. The props can change while the menu is open (a Pusher
-  // refresh), so everything below checks this, not only the button.
+  // reconciled. The button looks disabled.
   const blocked = reconciled || !canAdd;
+  // The control takes no taps. That is so when guests are blocked, and
+  // also while this host's guest add waits for its answer, so a second
+  // tap cannot send a second guest (S4). While the add waits, the button
+  // keeps its look: the disabled look says no guest can be added, and
+  // the page has no look for "waiting" here. aria-disabled tells a
+  // screen reader. The props can change while the menu is open (a
+  // Pusher refresh), so everything below checks this, not only the
+  // button.
+  const locked = blocked || addWaiting;
 
   useEffect(function () {
     function handleClickOutside(event) {
@@ -29,28 +37,28 @@ function GuestDropdown({ resident, canAdd, reconciled }) {
     };
   }, []);
 
-  // The menu closes whenever `blocked` changes: an open menu closes
+  // The menu closes whenever `locked` changes: an open menu closes
   // when guests become blocked (issue #116), and it cannot be open
-  // while they are blocked, so it stays closed when they are allowed
+  // while the control is locked, so it stays closed when it takes taps
   // again.
   useEffect(
     function () {
       setOpen(false);
     },
-    [blocked],
+    [locked],
   );
 
   // The wrapper, not only the button, takes the click: the disabled
   // button's right margin belongs to the wrapper.
   function handleClick() {
-    if (blocked) return;
+    if (locked) return;
     setOpen((prevOpen) => !prevOpen);
   }
 
   // A tap can land on the menu in the render before the effect above
   // closes it.
   function addGuest(vegetarian) {
-    if (blocked) return;
+    if (locked) return;
     resident.addGuest({ vegetarian: vegetarian });
   }
 
@@ -67,6 +75,7 @@ function GuestDropdown({ resident, canAdd, reconciled }) {
         className="mar-r-sm"
         style={styles.topButton}
         disabled={blocked}
+        aria-disabled={locked}
       >
         <div
           className="dropdown-add"

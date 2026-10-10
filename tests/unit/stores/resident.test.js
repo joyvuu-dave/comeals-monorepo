@@ -813,9 +813,9 @@ describe("Resident model", () => {
   // ── addGuest boundary ──
 
   describe("addGuest boundary", () => {
-    it("decrements extras when adding a guest to a closed meal", async () => {
-      // Guest additions also consume an extras slot, and the server's
-      // yes keeps it taken.
+    // A guest takes a seat. It goes when the server says yes, with the
+    // guest, so Extras and Total change together (S4).
+    it("takes a seat on a closed meal when the server says yes, not at the tap", async () => {
       axios.mockResolvedValueOnce(guestAnswer());
       const store = createStore({
         mealProps: { closed: true, extras: 1 },
@@ -823,7 +823,8 @@ describe("Resident model", () => {
       });
       const alice = store.residents.get("10");
       alice.addGuest({ vegetarian: false });
-      expect(store.meal.extras).toBe(0);
+      expect(store.meal.extras).toBe(1);
+      expect(alice.guestsCount).toBe(0);
 
       await new Promise((r) => setTimeout(r, 0));
       expect(store.meal.extras).toBe(0);
@@ -1261,12 +1262,10 @@ describe("Resident model", () => {
 
       await flush();
       expect(loadDataAsyncSpy).toHaveBeenCalledTimes(1);
-      // The dropped guest must not be appended by hand — the refetch
-      // brings it back. (Without the return after the refetch, the
-      // callback goes on and throws: a dead node's root is the node
-      // itself, which has no appendGuest. The catch then returns because
-      // the node is dead, so nothing is written and no warning shows.)
-      expect(store.guests.size).toBe(0);
+      // The store shows the guest at once, from the answer, through its
+      // own action and not through the dead row: the load that killed
+      // the row may have been read before the guest was written (S4).
+      expect(store.guests.has("555")).toBe(true);
       expectNoDeadNodeUse();
     });
 
@@ -1590,7 +1589,9 @@ describe("Resident model", () => {
       expect(alice.vegetarian).toBe(false);
     });
 
-    it("gives the seat back when a guest cannot be added", async () => {
+    // A guest add takes no seat before the answer, so a refusal has
+    // none to give back (S4).
+    it("leaves the seats alone when a guest cannot be added", async () => {
       const store = createStore({
         mealProps: closedWithSeats,
         residents: [{ id: 10, meal_id: 1, name: "Alice", attending: true }],
@@ -1598,7 +1599,7 @@ describe("Resident model", () => {
       axios.mockRejectedValueOnce(refusal);
 
       store.residents.get("10").addGuest();
-      expect(store.meal.extras).toBe(2);
+      expect(store.meal.extras).toBe(3);
       await settle();
 
       expect(store.meal.extras).toBe(3);
@@ -1717,7 +1718,7 @@ describe("Resident model", () => {
       refuse();
       await settle();
 
-      expect(store.meal.extras).toBe(2);
+      expect(store.meal.extras).toBe(3);
       expect(loadDataAsyncSpy).not.toHaveBeenCalled();
       expectNoDeadNodeUse();
     });

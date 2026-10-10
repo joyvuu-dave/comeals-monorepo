@@ -27,7 +27,8 @@ interface TappedRow {
 // What this file reads and calls on the DataStore.
 export interface SignupStore {
   meal: { id: number } | null;
-  loadDataAsync(): void;
+  // data_store_signup_requests.ts
+  reloadAfterSignupRequest(mealId: number): void;
 }
 
 // The words after the name when a request got no answer from the app,
@@ -76,7 +77,8 @@ export function noAnswerFromApp(error: unknown): boolean {
 // With no answer from the app, the request may have been written, and
 // the push for it skips this screen, because the request carried this
 // screen's socket id. So the copy of the meal on the device goes, and the
-// meal on screen loads again to show what the server has.
+// meal on screen loads again to show what the server has. Its Extras
+// boxes stay locked until that load lands.
 export function showSignupFailure(
   store: SignupStore,
   tapped: Tapped,
@@ -90,7 +92,7 @@ export function showSignupFailure(
       `${who}: ${onScreen ? MAYBE_ON_SCREEN : MAYBE_LEFT}`,
       "error",
     );
-    if (onScreen) store.loadDataAsync();
+    if (onScreen) store.reloadAfterSignupRequest(tapped.mealId);
     return;
   }
   handleAxiosError(error, {

@@ -141,11 +141,13 @@ const Resident = types
       }
 
       // Scenario #1: Meal is closed, you're not attending
-      //              there are no extras -- can't add yourself
+      //              no seat is open -- can't add yourself. A seat that
+      //              a waiting guest add asks for is not open
+      //              (Meal#openSeats).
       if (
         self.root.meal.closed &&
         !self.attending &&
-        self.root.meal.extras < 1
+        self.root.meal.openSeats < 1
       ) {
         return;
       }
@@ -190,12 +192,15 @@ const Resident = types
 
       if (val) {
         self.root.meal.decrementExtras();
-        api.meals.residents
-          .add(self.meal_id, self.id, {
-            late: currentLate,
-            vegetarian: currentVeg,
-            socketId: window.Comeals.socketId,
-          })
+        store
+          .waitForSignupRequest(
+            mealId,
+            api.meals.residents.add(self.meal_id, self.id, {
+              late: currentLate,
+              vegetarian: currentVeg,
+              socketId: window.Comeals.socketId,
+            }),
+          )
           .then(function (response) {
             // The server saved the change, so the cached meal payload is
             // now stale — whether or not this node is still alive.
@@ -203,7 +208,7 @@ const Resident = types
             if (!isAlive(self)) {
               // The node died but the server saved the change; fetch
               // the confirmed state so the screen shows it.
-              store.loadDataAsync();
+              store.reloadAfterSignupRequest(mealId);
               return;
             }
             // The server's created_at is the signup time of record; the
@@ -236,14 +241,17 @@ const Resident = types
         var previousLate = self.late;
         self.late = false;
         self.root.meal.incrementExtras();
-        api.meals.residents
-          .remove(self.meal_id, self.id, {
-            socketId: window.Comeals.socketId,
-          })
+        store
+          .waitForSignupRequest(
+            mealId,
+            api.meals.residents.remove(self.meal_id, self.id, {
+              socketId: window.Comeals.socketId,
+            }),
+          )
           .then(function () {
             evictMealCache(mealId);
             if (!isAlive(self)) {
-              store.loadDataAsync();
+              store.reloadAfterSignupRequest(mealId);
               return;
             }
             self.setAttendingAt(null);
@@ -275,14 +283,17 @@ const Resident = types
       const mealId = self.meal_id;
       const tapped = tappedOf(self);
 
-      api.meals.residents
-        .update(self.meal_id, self.id, {
-          late: val,
-          socketId: window.Comeals.socketId,
-        })
+      store
+        .waitForSignupRequest(
+          mealId,
+          api.meals.residents.update(self.meal_id, self.id, {
+            late: val,
+            socketId: window.Comeals.socketId,
+          }),
+        )
         .then(function () {
           evictMealCache(mealId);
-          if (!isAlive(self)) store.loadDataAsync();
+          if (!isAlive(self)) store.reloadAfterSignupRequest(mealId);
         })
         .catch(function (error) {
           if (isAlive(self)) self.setLate(!val);
@@ -306,14 +317,17 @@ const Resident = types
       const mealId = self.meal_id;
       const tapped = tappedOf(self);
 
-      api.meals.residents
-        .update(self.meal_id, self.id, {
-          vegetarian: val,
-          socketId: window.Comeals.socketId,
-        })
+      store
+        .waitForSignupRequest(
+          mealId,
+          api.meals.residents.update(self.meal_id, self.id, {
+            vegetarian: val,
+            socketId: window.Comeals.socketId,
+          }),
+        )
         .then(function () {
           evictMealCache(mealId);
-          if (!isAlive(self)) store.loadDataAsync();
+          if (!isAlive(self)) store.reloadAfterSignupRequest(mealId);
         })
         .catch(function (error) {
           if (isAlive(self)) self.setVeg(!val);
@@ -321,14 +335,15 @@ const Resident = types
           showSignupFailure(store, tapped, error);
         });
     },
-    // The seat goes at the tap. The request, its Idempotency-Key, and
-    // what the answer means are in data_store_guest_adds.ts (S2).
+    // Nothing changes at the tap: the guest and its seat show when the
+    // server says yes (S4). The request, its Idempotency-Key, what the
+    // answer means, and the lock that keeps a second tap from sending a
+    // second guest are in data_store_guest_adds.ts (S2, S4).
     addGuest(options = { vegetarian: false }) {
       if (self.root.meal.reconciled) {
         return;
       }
-      self.root.meal.decrementExtras();
-      self.root.sendGuestAdd({
+      self.root.startGuestAdd({
         row: self,
         mealId: self.meal_id,
         hostId: self.id,
@@ -339,6 +354,12 @@ const Resident = types
     },
     removeGuest() {
       if (self.root.meal.reconciled || !self.canRemoveGuest) {
+        return false;
+      }
+      // A removal of this host's guest waits for its answer. A second
+      // tap would send a second removal of the same guest, which the
+      // server answers with "doesn't exist" after the first one worked.
+      if (self.root.guestRemovalWaiting(self.meal_id, self.id)) {
         return false;
       }
 
@@ -354,24 +375,34 @@ const Resident = types
       // Captured while alive; see toggleAttending.
       const store = getRoot(self);
       const mealId = self.meal_id;
+      const hostId = self.id;
       const tapped = tappedOf(self);
 
-      api.meals.residents.guests
-        .remove(self.meal_id, self.id, guestId, {
-          socketId: window.Comeals.socketId,
-        })
+      const request = store
+        .waitForSignupRequest(
+          mealId,
+          api.meals.residents.guests.remove(self.meal_id, self.id, guestId, {
+            socketId: window.Comeals.socketId,
+          }),
+        )
         .then(function () {
           evictMealCache(mealId);
           if (!isAlive(self)) {
-            store.loadDataAsync();
+            store.reloadAfterSignupRequest(mealId);
             return;
           }
-          self.root.removeGuest(guestId);
-          self.root.meal.incrementExtras();
+          self.guestRemoved(guestId);
         })
         .catch(function (error) {
           showSignupFailure(store, tapped, error);
         });
+      store.waitForGuestRemoval(mealId, hostId, request);
+    },
+    // The server removed the guest. The guest and its seat go in one
+    // action, so Extras, Total and the cap change together (S4).
+    guestRemoved(guestId) {
+      self.root.removeGuest(guestId);
+      self.root.meal.incrementExtras();
     },
   }));
 

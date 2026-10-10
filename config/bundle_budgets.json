@@ -1,5 +1,5 @@
 {
-  "comment": "Gzipped JavaScript size budgets, in KB, checked by bin/bundle-budget (run by bin/check). firstLoadKB covers the entry chunk plus every chunk it imports statically — the JavaScript a browser must run before first paint. totalKB covers all JavaScript, lazy chunks included. If a change pushes past a budget on purpose, raise the budget in the same commit and say why in the commit message. Set 2026-08-05: first load measured 166, total measured 270 (#44).",
-  "firstLoadKB": 180,
+  "comment": "Gzipped JavaScript size budgets, in KB, checked by bin/bundle-budget (run by bin/check). firstLoadKB covers the entry chunk plus every chunk it imports statically — the JavaScript a browser must run before first paint. totalKB covers all JavaScript, lazy chunks included. If a change pushes past a budget on purpose, raise the budget in the same commit and say why in the commit message. Set 2026-08-05: first load measured 166, total measured 270 (#44). First load raised to 190 on 2026-10-10, when it measured 180.7 after the meal page gained per-row cost saves (#150) and the sign-up refusal, guest key and waiting-request code (S2, S4), all of which the meal store loads at start.",
+  "firstLoadKB": 190,
   "totalKB": 290
 }

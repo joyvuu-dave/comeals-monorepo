@@ -434,6 +434,16 @@ lost, tapped again, adds one guest"). So `POST
   not show at that tap is the guest the tap asked for. If the page
   already showed it, or it was removed since, the tap was for one more
   guest, and the page sends a new add (`data_store_guest_adds.ts`).
+  While a host's add waits for its answer, that host's add-guest control
+  takes no taps. Without that, a second tap in the 35 seconds an add can
+  wait sent a new key, so both adds could be written.
+- **The guest shows once the server says yes, whatever loaded since.**
+  A load of the meal can land while the add is out, from a read made
+  before the guest was written. If it landed before the add's answer,
+  the answer still shows the guest, with its seat, unless that load
+  already had it. If it went out before the answer and lands after it,
+  it is not used, and the meal loads again (#156). Either way, the
+  person never sees the guest go away and taps again for a second one.
 - **Keys older than 7 days are deleted** every hour, by
   `GuestAddKey.delete_expired` in `config/recurring.yml`.
 - **A client must send the header.** An add without one is refused with

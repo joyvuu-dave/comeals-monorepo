@@ -136,6 +136,7 @@ describe("a guest add's Idempotency-Key", () => {
     axios.mockResolvedValueOnce(added(555)).mockResolvedValueOnce(added(556));
 
     addFor(s, 10);
+    await settle();
     addFor(s, 10);
     await settle();
 
@@ -191,8 +192,8 @@ describe("a guest add's Idempotency-Key", () => {
     expect(s.residents.get("10").guestsCount).toBe(2);
   });
 
-  // Each tap after no answer takes one lost add's key, so two taps that
-  // are both out at once never send the same key.
+  // Each tap after no answer takes one lost add's key, so the tap after
+  // that one is a new add.
   it("goes again with one tap only: the tap after it gets a new key", async () => {
     const s = store();
     axios.mockRejectedValueOnce(NO_ANSWER);
@@ -203,6 +204,7 @@ describe("a guest add's Idempotency-Key", () => {
       .mockResolvedValueOnce(replayed(555))
       .mockResolvedValueOnce(added(556));
     addFor(s, 10);
+    await settle();
     addFor(s, 10);
     await settle();
 
@@ -272,7 +274,7 @@ describe("a guest add's Idempotency-Key", () => {
   describe("when the server answers that the guest was already added", () => {
     // The lost add was written, and the page never showed its guest. So
     // the tap was for that guest: it shows, and nothing more is sent.
-    it("shows that guest, and the seat the tap took stays taken", async () => {
+    it("shows that guest, and takes its seat", async () => {
       const s = store();
       axios.mockRejectedValueOnce(NO_ANSWER);
       addFor(s, 10);
@@ -348,12 +350,25 @@ describe("a guest add's Idempotency-Key", () => {
 
     // Two adds were lost. The tap after them for one more guest tries
     // the second lost add before a new one: if it was written, its guest
-    // is the one more.
+    // is the one more. Since S4 a host's add-guest control takes no taps
+    // while an add of theirs waits, so the screen cannot have two adds
+    // for one host out at once, and this list holds one key at most.
+    // The list still keeps every lost key in order, so the two adds go
+    // to the store's send directly here.
     it("tries the next lost add's key before a new one", async () => {
       const s = store();
       axios.mockRejectedValueOnce(NO_ANSWER).mockRejectedValueOnce(NO_ANSWER);
-      addFor(s, 10);
-      addFor(s, 10);
+      const alice = s.residents.get("10");
+      for (let i = 0; i < 2; i += 1) {
+        s.sendGuestAdd({
+          row: alice,
+          mealId: 1,
+          hostId: 10,
+          vegetarian: false,
+          tapped: { name: "Alice", mealId: 1, mealDay: "Thu, Jun 15th" },
+          guestIdsAtTap: [100],
+        });
+      }
       await settle();
       stage(s, () => {
         s.guests.put({
@@ -377,9 +392,10 @@ describe("a guest add's Idempotency-Key", () => {
     });
 
     // The meal loaded again while the add was out, so the row is not the
-    // one that was tapped. The load shows what the server has, and the
-    // page loads once more to show the guest.
-    it("loads the meal again when the row was built again while the add was out", async () => {
+    // one that was tapped. That load may have been read before the
+    // guest was written, so the guest shows now, with its seat, and the
+    // page loads once more to show what else the server has (S4).
+    it("shows the guest and loads the meal again when the row was built again while the add was out", async () => {
       const s = store();
       axios.mockRejectedValueOnce(NO_ANSWER);
       addFor(s, 10);
@@ -408,7 +424,8 @@ describe("a guest add's Idempotency-Key", () => {
       await settle();
 
       expect(loadDataAsyncSpy).toHaveBeenCalledTimes(1);
-      expect(s.guests.has("555")).toBe(false);
+      expect(s.guests.has("555")).toBe(true);
+      expect(s.meal.extras).toBe(2);
       expect(toastStore.toasts).toHaveLength(0);
     });
   });

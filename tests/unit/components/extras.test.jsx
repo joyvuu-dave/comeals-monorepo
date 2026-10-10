@@ -12,7 +12,7 @@ function makeStore(mealOverrides = {}) {
       closed: true,
       reconciled: false,
       extras: null,
-      extrasPending: false,
+      extrasLocked: false,
       setExtras: vi.fn(),
       ...mealOverrides,
     },
@@ -55,8 +55,16 @@ describe("Extras", () => {
     expect(screen.getByLabelText("Set Extras to 1")).toBeDisabled();
   });
 
-  it("disables the boxes while an extras save is pending", () => {
-    renderExtras(makeStore({ extrasPending: true }));
+  // Meal#extrasLocked: an Extras save, or a request from the sign-up
+  // list, is waiting (S4). The boxes then look the way they always
+  // looked while an Extras save waits.
+  it("disables the boxes while the meal's Extras are locked", () => {
+    renderExtras(makeStore({ extrasLocked: true }));
     expect(screen.getByLabelText("Set Extras to 1")).toBeDisabled();
+  });
+
+  it("leaves the boxes usable while nothing waits", () => {
+    renderExtras(makeStore());
+    expect(screen.getByLabelText("Set Extras to 1")).toBeEnabled();
   });
 });

@@ -19,7 +19,7 @@ function makeStore(overrides = {}) {
         closed: false,
         reconciled: false,
         extras: null,
-        extrasPending: false,
+        extrasLocked: false,
         setExtras: vi.fn(),
       },
       toggleClosed: vi.fn(),

@@ -17,6 +17,7 @@ function renderDropdown(props = {}) {
       resident={makeResident()}
       canAdd={true}
       reconciled={false}
+      addWaiting={false}
       {...props}
     />,
   );
@@ -112,6 +113,32 @@ describe("GuestDropdown", () => {
       );
       unmount();
     }
+  });
+
+  // The host's guest add is waiting for its answer (S4). A second tap
+  // would send a second guest. The button keeps its look: the gray
+  // disabled look says no guest can be added, which is not so.
+  it("takes no taps while the host's guest add waits, and keeps its look", () => {
+    const resident = makeResident();
+    const { container } = renderDropdown({ resident, addWaiting: true });
+    const button = screen
+      .getByLabelText("Add Guest of Jane Smith")
+      .closest("button");
+
+    fireEvent.click(button);
+    expect(container.firstChild).not.toHaveClass("active");
+    fireEvent.click(screen.getByAltText("cow-icon"));
+    fireEvent.click(screen.getByAltText("carrot-icon"));
+    expect(resident.addGuest).not.toHaveBeenCalled();
+    expect(button).toBeEnabled();
+    expect(button).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("tells screen readers the button takes taps while nothing waits", () => {
+    renderDropdown();
+    expect(
+      screen.getByLabelText("Add Guest of Jane Smith").closest("button"),
+    ).toHaveAttribute("aria-disabled", "false");
   });
 
   it("stays open on a click inside the menu", () => {

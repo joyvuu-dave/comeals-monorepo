@@ -76,13 +76,19 @@ export const AttendeeComponent = observer(({ resident }) => {
   ).length;
   // A tap on this row's name or switches does nothing when the resident
   // cannot join, so they look locked. Resident#toggleAttending has the
-  // same two rules. Nobody can join a closed meal with no seat left. A
-  // retired resident can join only when they were signed up when the
+  // same two rules. Nobody can join a closed meal with no seat open to a
+  // tap: a seat a waiting guest add asks for is not open (Meal#openSeats).
+  // A retired resident can join only when they were signed up when the
   // meal was loaded, so a wrong tap can be undone (#91). So a retired
   // host on the list only because of a guest cannot join (#134).
   const cannotJoin =
-    (meal.closed && !resident.attending && meal.extras < 1) ||
+    (meal.closed && !resident.attending && meal.openSeats < 1) ||
     (!resident.active && !resident.attending && !resident.attendingAtLoad);
+  // While this host's guest removal waits, a second tap would send a
+  // second removal of the same guest, so the remove-guest button takes
+  // no taps (Resident#removeGuest). Like + Guest, it keeps its look
+  // then; aria-disabled tells a screen reader.
+  const removalWaiting = store.guestRemovalWaiting(meal.id, resident.id);
 
   return (
     <tr>
@@ -160,6 +166,7 @@ export const AttendeeComponent = observer(({ resident }) => {
           resident={resident}
           reconciled={meal.reconciled}
           canAdd={store.canAdd}
+          addWaiting={store.guestAddWaiting(meal.id, resident.id)}
         />
         <button
           className="dropdown-remove"
@@ -167,6 +174,9 @@ export const AttendeeComponent = observer(({ resident }) => {
           style={styles.monospace}
           onClick={() => resident.removeGuest()}
           disabled={meal.reconciled || !resident.canRemoveGuest}
+          aria-disabled={
+            meal.reconciled || !resident.canRemoveGuest || removalWaiting
+          }
         />
       </td>
     </tr>
