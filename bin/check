@@ -136,7 +136,9 @@ check_rubocop() {
     record "RuboCop" "PASS" "$summary"
   else
     fail "$summary"
-    echo "$output" | grep -E '^[A-Z/].*:[0-9]' | head -20
+    # Each offense line is "path:line:column: severity: message". Most
+    # paths start with a lowercase letter (app/, lib/, spec/).
+    echo "$output" | grep -E '^[^ ]+:[0-9]+:[0-9]+: [A-Z]: ' | head -20
     record "RuboCop" "FAIL" "$summary"
   fi
 }
