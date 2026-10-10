@@ -190,11 +190,12 @@ RSpec.describe 'the calendar chips', type: :serializer do
 
     # Before #104 both ends were sent one minute late, so a booking that
     # ends at midnight ended at 00:01 on the chip, and the month view drew
-    # it on the next day too.
+    # it on the next day too. The model refuses such a booking since
+    # #154, so this one is written without the model.
     it 'starts and ends the chip at the booking\'s own times, like a timed event' do
-      reservation = create(:common_house_reservation, community: community, resident: resident, title: 'Late',
-                                                      start_date: Time.zone.local(2026, 4, 15, 22, 0),
-                                                      end_date: Time.zone.local(2026, 4, 16, 0, 0))
+      reservation = booking_without_the_model(resident: resident, title: 'Late',
+                                              start_date: Time.zone.local(2026, 4, 15, 22, 0),
+                                              end_date: Time.zone.local(2026, 4, 16, 0, 0))
 
       expect(chip(reservation)).to include(start: Time.zone.local(2026, 4, 15, 22, 0),
                                            end: Time.zone.local(2026, 4, 16, 0, 0))

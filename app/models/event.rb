@@ -26,6 +26,7 @@
 
 class Event < ApplicationRecord
   include BelongsToTheCommunity
+  include ConstraintMessages
 
   # Ransack allowlists for ActiveAdmin sorting
   def self.ransackable_attributes(_auth_object = nil)
@@ -40,8 +41,18 @@ class Event < ApplicationRecord
   validates :start_date, presence: true
   validates :start_date, :end_date, storable_time: true
 
+  END_BEFORE_START = 'Start time must occur before end time'
+  SAME_DAY = 'An event must start and end on the same day.'
+
+  # The words for each database rule on this table (ConstraintMessages).
+  CONSTRAINT_MESSAGES = {
+    'events_end_not_before_start' => END_BEFORE_START,
+    'events_one_day' => SAME_DAY
+  }.freeze
+
   validate :end_date_or_allday
   validate :start_date_is_before_end_date
+  validate :starts_and_ends_on_one_day
 
   after_destroy :note_live_update
   after_save :note_live_update
@@ -76,7 +87,30 @@ class Event < ApplicationRecord
     return if start_date == end_date && !times_set_or_changed?
     return if start_date == end_date && T.must(community).midnight?(start_date)
 
-    errors.add(:base, 'Start time must occur before end time')
+    errors.add(:base, END_BEFORE_START)
+  end
+
+  # An event must start and end on the same day, in the community's zone
+  # (#154). The app's forms give an event one day and two times, and the
+  # edit form keeps only the start day, so it cannot save an event that
+  # ends on a later day. Admin, a task or the console could make one, so
+  # the rule is here, where all of them save. A notice, from midnight to
+  # the same midnight, is one day. An event that ends at the next
+  # midnight ends on the next day. An all-day event has no end that
+  # counts. The database refuses a write of such times too, from any path
+  # (events_one_day, a trigger that reads the day in the same zone).
+  #
+  # The rule runs on every save: no event in production breaks it. If an
+  # admin changes the community's zone, an event can end on a later day
+  # in the new zone, and then each save of it is refused until its times
+  # are changed.
+  def starts_and_ends_on_one_day
+    start_date = self.start_date
+    end_date = self.end_date
+    return if allday || start_date.nil? || end_date.nil?
+
+    community = T.must(self.community)
+    errors.add(:base, SAME_DAY) unless community.date_of(start_date) == community.date_of(end_date)
   end
 
   # Events appear on the calendar: every month from start to end, and,
@@ -91,6 +125,10 @@ class Event < ApplicationRecord
   end
 
   private
+
+  def constraint_messages
+    CONSTRAINT_MESSAGES
+  end
 
   # Whether this save sets or changes the times. A new event sets them
   # (from nothing), so this is true on create.

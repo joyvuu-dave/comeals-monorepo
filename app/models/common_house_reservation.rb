@@ -27,6 +27,7 @@
 
 class CommonHouseReservation < ApplicationRecord
   include BelongsToTheCommunity
+  include ConstraintMessages
 
   # Ransack allowlists for ActiveAdmin sorting
   def self.ransackable_attributes(_auth_object = nil)
@@ -39,24 +40,51 @@ class CommonHouseReservation < ApplicationRecord
   validates :end_date, presence: true
   validates :start_date, :end_date, storable_time: true
 
+  END_BEFORE_START = 'Start time must occur before end time'
+  TAKEN = 'Time period is already taken'
+  SAME_DAY = 'A booking must start and end on the same day.'
+
+  # The words for each database rule on this table (ConstraintMessages).
+  CONSTRAINT_MESSAGES = {
+    'common_house_reservations_end_not_before_start' => END_BEFORE_START,
+    'common_house_reservations_no_overlap' => TAKEN,
+    'common_house_reservations_one_day' => SAME_DAY
+  }.freeze
+
   validate :period_is_free
   validate :start_date_is_before_end_date
+  validate :starts_and_ends_on_one_day
 
   after_destroy :note_live_update
   after_save :note_live_update
 
-  # The query below cannot run with a time the database cannot store:
+  # Whether another booking holds any of this one's time. Two bookings
+  # overlap when each starts before the other ends, so one that ends as
+  # the other starts is free.
+  #
+  # A booking that ends when it starts holds no time, so it overlaps
+  # nothing: a midnight notice, or one of the old rows from before #141.
+  # This checks nothing for such a booking, and leaves out the others.
+  # The database's EXCLUDE (common_house_reservations_no_overlap) gives
+  # the same answer, because it sees such a booking as an empty range
+  # (#149). spec/db/common_house_reservations_no_overlap_spec.rb checks
+  # that the two agree. An end before the start is left to
+  # start_date_is_before_end_date.
+  #
+  # The query cannot run with a time the database cannot store:
   # PostgreSQL refuses the whole statement. The storable_time rule above
   # reports such a time, and a missing one is left to the presence rules.
   def period_is_free
     start_date = self.start_date
     end_date = self.end_date
     return unless start_date && end_date && StorableTime.timestamp?(start_date) && StorableTime.timestamp?(end_date)
+    return unless start_date < end_date
 
-    errors.add(:base, 'Time period is already taken') if CommonHouseReservation
-                                                         .where.not(id: id)
-                                                         .where(start_date: ...end_date)
-                                                         .exists?(['end_date > ?', start_date])
+    errors.add(:base, TAKEN) if CommonHouseReservation
+                                .where.not(id: id)
+                                .where(start_date: ...end_date)
+                                .where('end_date > start_date')
+                                .exists?(['end_date > ?', start_date])
   end
 
   # A booking must end after it starts. An end before the start is
@@ -82,14 +110,39 @@ class CommonHouseReservation < ApplicationRecord
     return if start_date == end_date && !times_set_or_changed?
     return if start_date == end_date && T.must(community).midnight?(start_date)
 
-    errors.add(:base, 'Start time must occur before end time')
+    errors.add(:base, END_BEFORE_START)
   end
 
-  # Reservations appear on the calendar: every month from start to end
-  # (an overnight booking can cross a month), and, after a date change,
-  # the months of the old range too. An end that did not change is read
-  # as it is now, so when nothing moved the old range is the new one, and
-  # LiveUpdate notes each month once. See LiveUpdate.
+  # A booking must start and end on the same day, in the community's
+  # zone (#154). The app's forms give a booking one day and two times,
+  # and the edit form keeps only the start day, so it cannot save a
+  # booking that ends on a later day. Admin, a task or the console could
+  # make one, so the rule is here, where all of them save. A notice, from
+  # midnight to the same midnight, is one day. A booking that ends at the
+  # next midnight ends on the next day. The database refuses a write of
+  # such times too, from any path (common_house_reservations_one_day, a
+  # trigger that reads the day in the same zone).
+  #
+  # The rule runs on every save: no booking in production breaks it. If
+  # an admin changes the community's zone, a booking can end on a later
+  # day in the new zone, and then each save of it is refused until its
+  # times are changed.
+  def starts_and_ends_on_one_day
+    start_date = self.start_date
+    end_date = self.end_date
+    return if start_date.nil? || end_date.nil?
+
+    community = T.must(self.community)
+    errors.add(:base, SAME_DAY) unless community.date_of(start_date) == community.date_of(end_date)
+  end
+
+  # Reservations appear on the calendar: every month from start to end,
+  # and, after a date change, the months of the old range too. A booking
+  # is one day (#154), but a change of the community's zone can leave one
+  # that ends on the next day, and so in the next month. An end that did
+  # not change is read as it is now, so when nothing moved
+  # the old range is the new one, and LiveUpdate notes each month once.
+  # See LiveUpdate.
   def note_live_update
     LiveUpdate.calendar_range(start_date, end_date)
     LiveUpdate.calendar_range(saved_changes.dig('start_date', 0) || start_date,
@@ -97,6 +150,10 @@ class CommonHouseReservation < ApplicationRecord
   end
 
   private
+
+  def constraint_messages
+    CONSTRAINT_MESSAGES
+  end
 
   # Whether this save sets or changes the times. A new booking sets them
   # (from nothing), so this is true on create.

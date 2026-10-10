@@ -102,9 +102,8 @@ class ApiController < ActionController::API
   #   parts are not read.
   # - With both time menus empty, the entry runs from midnight to
   #   midnight. People post notices this way ("Movie night is cancelled
-  #   tonight"). Such an entry ends when it starts, so it overlaps only a
-  #   common house booking that runs past midnight, and only admin can
-  #   make one of those.
+  #   tonight"). Such an entry ends when it starts, so it overlaps no
+  #   common house booking (#149).
   # - With one time menu empty, the answer is PICK_BOTH_TIMES. A blank
   #   time used to be read as midnight, so this booked from midnight.
   # - Otherwise each part must be a whole number in its range.

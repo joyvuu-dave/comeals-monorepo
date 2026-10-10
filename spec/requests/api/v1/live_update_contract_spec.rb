@@ -334,12 +334,15 @@ RSpec.describe 'live updates: every write reaches the screen that shows it' do
   end
 
   describe 'events and reservations that cross months' do
+    # The model refuses an event on two days since #154, so this one is
+    # written without it (see RowsWithoutTheModel), and deleted.
     it 'an event that spans three months pushes the middle month' do
+      event = event_without_the_model(community: community, start_date: Time.zone.local(2026, 3, 20, 9),
+                                      end_date: Time.zone.local(2026, 5, 10, 17))
       RSpec::Mocks.space.proxy_for(Pusher).reset
       allow(Pusher).to receive(:trigger)
 
-      create(:event, community: community,
-                     start_date: Time.zone.local(2026, 3, 20, 9), end_date: Time.zone.local(2026, 5, 10, 17))
+      event.destroy!
 
       expect_pushed(calendar_channel(Date.new(2026, 4, 1)))
     end

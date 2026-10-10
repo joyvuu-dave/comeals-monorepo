@@ -26,10 +26,23 @@
 require 'rails_helper'
 
 RSpec.describe Event do
+  include ActiveSupport::Testing::TimeHelpers
+
   describe 'validations' do
     it 'is valid with valid attributes' do
       event = build(:event)
       expect(event).to be_valid
+    end
+
+    # The factory's event must be one day at any hour a spec runs, in any
+    # zone. Its times were 49 to 48 hours ago, which ran past midnight
+    # when a spec ran from 00:00 to 00:59.
+    it 'is valid as the factory makes it, at any hour and in a zone far from the app zone' do
+      [Time.zone.local(2026, 4, 12, 23, 30), Time.zone.local(2026, 4, 13, 0, 30)].each do |now|
+        travel_to(now) { expect(build(:event)).to be_valid }
+      end
+      create(:community, timezone: 'Europe/Paris')
+      expect(build(:event)).to be_valid
     end
 
     it 'validates presence of title' do
@@ -66,7 +79,8 @@ RSpec.describe Event do
     end
 
     it 'takes the first and the last instant, and an all-day event with no end' do
-      expect(errors_of(build(:event, start_date: first, end_date: last))).to eq({})
+      expect(errors_of(build(:event, start_date: first, end_date: first + 1.hour))).to eq({})
+      expect(errors_of(build(:event, start_date: last - 1.hour, end_date: last))).to eq({})
       expect(errors_of(build(:event, allday: true, start_date: first, end_date: nil))).to eq({})
     end
   end
@@ -84,7 +98,10 @@ RSpec.describe Event do
     end
 
     it 'is valid with end_date when allday is false' do
-      event = build(:event, start_date: 2.hours.ago, end_date: 1.hour.ago, allday: false)
+      # Fixed times: two hours ago to one hour ago runs past midnight when
+      # a spec runs from 01:00 to 01:59, and an event is one day (#154).
+      event = build(:event, start_date: Time.zone.local(2026, 4, 15, 14), end_date: Time.zone.local(2026, 4, 15, 15),
+                            allday: false)
       expect(event).to be_valid
     end
   end
@@ -99,9 +116,8 @@ RSpec.describe Event do
     end
 
     it 'invalidates end_date month when it differs from start_date month' do
-      create(:event, community: community,
-                     start_date: Time.zone.local(2026, 3, 1, 14, 0),
-                     end_date: Time.zone.local(2026, 4, 30, 14, 0))
+      event_without_the_model(community: community, start_date: Time.zone.local(2026, 3, 1, 14, 0),
+                              end_date: Time.zone.local(2026, 4, 30, 14, 0)).destroy!
 
       april_key = community.calendar_cache_key(2026, 4)
       expect(Rails.cache).to have_received(:delete).with(april_key)
@@ -142,57 +158,63 @@ RSpec.describe Event do
       community.calendar_cache_key(year, month)
     end
 
-    it 'pushes every month from start to end when it is created' do
-      pushed = months_pushed do
-        create(:event, community: community, start_date: Time.zone.local(2026, 3, 15, 14, 0),
-                       end_date: Time.zone.local(2026, 5, 15, 16, 0))
-      end
+    it 'pushes every month from start to end when it is deleted' do
+      event = event_without_the_model(community: community, start_date: Time.zone.local(2026, 3, 15, 14, 0),
+                                      end_date: Time.zone.local(2026, 5, 15, 16, 0))
+
+      pushed = months_pushed { event.destroy! }
 
       expect(pushed).to include(key(2026, 3), key(2026, 4), key(2026, 5))
       expect(pushed).not_to include(key(2026, 7))
     end
 
-    it 'pushes the months it no longer spans when only its end moves' do
+    # The console can save without the validations, and so without the
+    # one-day rule (#154). The database refuses such an end too, unless
+    # its one-day trigger is turned off, as a repair in psql could do.
+    # Then the months up to the new end must be told too, not only the
+    # start's.
+    it 'pushes every month up to a new end saved without the validations' do
       event = create(:event, community: community, start_date: Time.zone.local(2026, 3, 15, 14, 0),
-                             end_date: Time.zone.local(2026, 7, 15, 16, 0))
+                             end_date: Time.zone.local(2026, 3, 15, 16, 0))
+      event.end_date = Time.zone.local(2026, 5, 15, 16, 0)
 
-      pushed = months_pushed { event.update!(end_date: Time.zone.local(2026, 3, 16, 16, 0)) }
+      pushed = months_pushed { with_one_day_trigger_off(:events) { event.save(validate: false) } }
+
+      expect(pushed).to include(key(2026, 4), key(2026, 5))
+    end
+
+    it 'pushes the months it no longer spans when only its end moves' do
+      event = event_without_the_model(community: community, start_date: Time.zone.local(2026, 3, 15, 14, 0),
+                                      end_date: Time.zone.local(2026, 7, 15, 16, 0))
+
+      pushed = months_pushed { event.update!(end_date: Time.zone.local(2026, 3, 15, 16, 0)) }
 
       expect(pushed).to include(key(2026, 3), key(2026, 6), key(2026, 7))
     end
 
     it 'pushes the months it no longer spans when only its start moves' do
-      event = create(:event, community: community, start_date: Time.zone.local(2026, 3, 15, 14, 0),
-                             end_date: Time.zone.local(2026, 7, 15, 16, 0))
+      event = event_without_the_model(community: community, start_date: Time.zone.local(2026, 3, 15, 14, 0),
+                                      end_date: Time.zone.local(2026, 7, 15, 16, 0))
 
-      pushed = months_pushed { event.update!(start_date: Time.zone.local(2026, 7, 14, 14, 0)) }
+      pushed = months_pushed { event.update!(start_date: Time.zone.local(2026, 7, 15, 14, 0)) }
 
       expect(pushed).to include(key(2026, 3), key(2026, 4), key(2026, 7))
     end
 
-    # The new range can be months the old one never reached. March 2026
-    # starts on a Sunday, so its calendar begins on March 1: February 28
-    # is not on it, and only the new end tells March. May 15 is on April's
-    # and May's calendars, and February 1 is on January's.
+    # The new range can be months the old one never reached. February 1,
+    # the first day of the new month, is on January's calendar too.
+    # February 28 is not on March's: March 2026 starts on a Sunday, so its
+    # calendar begins on March 1. May 1 is on April's calendar.
     it 'pushes the months it moves into as well as the ones it leaves' do
       event = create(:event, community: community, start_date: Time.zone.local(2026, 5, 15, 14, 0),
                              end_date: Time.zone.local(2026, 5, 15, 16, 0))
 
       pushed = months_pushed do
         event.update!(start_date: Time.zone.local(2026, 2, 28, 18, 0),
-                      end_date: Time.zone.local(2026, 3, 1, 10, 0))
+                      end_date: Time.zone.local(2026, 2, 28, 21, 0))
       end
 
-      expect(pushed).to contain_exactly(key(2026, 1), key(2026, 2), key(2026, 3), key(2026, 4), key(2026, 5))
-    end
-
-    it 'pushes every month it spans when something else about it changes' do
-      event = create(:event, community: community, start_date: Time.zone.local(2026, 3, 15, 14, 0),
-                             end_date: Time.zone.local(2026, 5, 15, 16, 0))
-
-      pushed = months_pushed { event.update!(title: 'Renamed') }
-
-      expect(pushed).to include(key(2026, 3), key(2026, 4), key(2026, 5))
+      expect(pushed).to contain_exactly(key(2026, 1), key(2026, 2), key(2026, 4), key(2026, 5))
     end
 
     it 'pushes only its own months when the dates do not change' do
@@ -240,13 +262,15 @@ RSpec.describe Event do
       end
     end
 
+    # The end is on the day before, so the one-day rule refuses it too.
     it 'is invalid when it starts at midnight and ends before that, on an ordinary day and both daylight saving days' do
       [[2026, 4, 15], [2026, 3, 8], [2026, 11, 1]].each do |day|
         midnight = Time.zone.local(*day)
         event = build(:event, start_date: midnight, end_date: midnight - 1.hour, allday: false)
 
         expect(event).not_to be_valid
-        expect(event.errors[:base]).to eq(['Start time must occur before end time'])
+        expect(event.errors[:base])
+          .to eq(['Start time must occur before end time', 'An event must start and end on the same day.'])
       end
     end
 
@@ -339,10 +363,13 @@ RSpec.describe Event do
     end
 
     # An end before its start is refused on every save, even one that does
-    # not change the times. No such event is in production.
+    # not change the times. Since #149 the database refuses such a row
+    # too, so the CHECK is dropped for this example (rolled back with the
+    # transaction).
     it 'refuses any save of an event that ends before it starts' do
       moment = Time.zone.local(2022, 7, 26, 8, 0)
       event = create(:event, start_date: moment, end_date: moment + 1.hour, allday: false)
+      ActiveRecord::Base.connection.remove_check_constraint(:events, name: 'events_end_not_before_start')
       event.update_columns(end_date: moment - 1.minute)
 
       expect(event.update(title: 'Renamed')).to be(false)
@@ -369,6 +396,155 @@ RSpec.describe Event do
 
       expect { event.valid? }.not_to raise_error
       expect(event.errors[:base]).to eq(['Event must end or be all day'])
+    end
+  end
+
+  # The app's forms give an event one day and two times. Admin, a task or
+  # the console could give it an end on a later day, and the edit form
+  # could not save such an event again: it keeps only the start day
+  # (#154). So an event must start and end on the same day. The day is
+  # read in the community's zone, never in UTC: 5 PM in Los Angeles is
+  # already the next day in UTC, and that mistake made #154's first
+  # counts wrong. The days are an ordinary one and both daylight saving
+  # days in Los Angeles.
+  describe '#starts_and_ends_on_one_day' do
+    let(:days) { [[2026, 4, 15], [2026, 3, 8], [2026, 11, 1]] }
+    let(:refused) { ['An event must start and end on the same day.'] }
+
+    def timed(start, finish)
+      build(:event, start_date: start, end_date: finish, allday: false)
+    end
+
+    it 'takes an event from 00:30 to 23:30, which is two days in UTC' do
+      days.each do |day|
+        start = Time.zone.local(*day, 0, 30)
+        finish = Time.zone.local(*day, 23, 30)
+
+        expect(start.utc.to_date).not_to eq(finish.utc.to_date)
+        expect(timed(start, finish)).to be_valid
+      end
+    end
+
+    # 23:00 to 00:30 is one day in UTC: 06:00 to 07:30, or 07:00 to
+    # 08:30 in winter.
+    it 'refuses an event that runs past midnight, even when UTC sees one day' do
+      days.each do |day|
+        start = Time.zone.local(*day, 23, 0)
+        finish = start + 90.minutes
+
+        expect(start.utc.to_date).to eq(finish.utc.to_date)
+        event = timed(start, finish)
+        expect(event).not_to be_valid
+        expect(event.errors[:base]).to eq(refused)
+      end
+    end
+
+    # Midnight is the first moment of the next day, so an event that ends
+    # at midnight ends on the next day. The time menus cannot make one:
+    # they run from 8 AM to 10 PM.
+    it 'refuses an event that ends at the next midnight' do
+      days.each do |day|
+        next_day = Date.new(*day) + 1
+        event = timed(Time.zone.local(*day, 22, 0), Time.zone.local(next_day.year, next_day.month, next_day.day))
+
+        expect(event).not_to be_valid
+        expect(event.errors[:base]).to eq(refused)
+      end
+    end
+
+    # A task or a job has no zone of its own; the app's zone here is Los
+    # Angeles, and the community is in New York. 20:00 to 22:00 in Los
+    # Angeles is 23:00 to 01:00 in New York, and 23:00 to 00:30 is 02:00
+    # to 03:30.
+    it 'reads the day in the community zone, not the app zone' do
+      community = create(:community, timezone: 'America/New_York')
+      evening = Time.zone.local(2026, 4, 15, 20, 0)
+      late = Time.zone.local(2026, 4, 15, 23, 0)
+
+      valid = [[evening, evening + 2.hours], [late, late + 90.minutes]].map do |start, finish|
+        build(:event, community: community, start_date: start, end_date: finish, allday: false).valid?
+      end
+
+      expect(valid).to eq([false, true])
+    end
+
+    # All day hides the end, so an all-day event has no days to compare.
+    # The API saves one with no end; the admin form can keep an end.
+    it 'does not apply to an all-day event' do
+      start = Time.zone.local(2026, 4, 15)
+
+      expect(build(:event, allday: true, start_date: start, end_date: nil)).to be_valid
+      expect(build(:event, allday: true, start_date: start, end_date: start + 3.days)).to be_valid
+    end
+
+    # The rule runs on every save, not only when the times change. No
+    # event in production starts and ends on different days, but a change
+    # of the community's zone can make one: 20:30 to 21:30 in Los Angeles
+    # is 23:30 to 00:30 in New York. Turning all day off makes the end
+    # count again.
+    it 'refuses any save of an event that ends on a later day, a new title too' do
+      start = Time.zone.local(2026, 4, 15, 20, 30)
+      event = create(:event, start_date: start, end_date: start + 1.hour, allday: false)
+      event.community.update_columns(timezone: 'America/New_York')
+
+      expect(event.update(title: 'Renamed')).to be(false)
+      expect(event.errors[:base]).to eq(refused)
+
+      event.update_columns(allday: true)
+      expect(event.update(allday: false)).to be(false)
+      expect(event.errors[:base]).to eq(refused)
+    end
+
+    it 'gives both messages for an end on the day before the start' do
+      start = Time.zone.local(2026, 4, 16, 1, 0)
+
+      event = timed(start, start - 2.hours)
+
+      expect(event).not_to be_valid
+      expect(event.errors[:base]).to eq(['Start time must occur before end time', *refused])
+    end
+  end
+
+  # The database refuses an end before the start even when the model did
+  # not see it: another write changed the row after the model checked it
+  # (#149). Then save answers false with the model's own message, as it
+  # does when the model sees the other write in time, instead of raising
+  # (an error page in admin).
+  describe 'a save the database refuses' do
+    let(:start) { Time.zone.local(2026, 4, 15, 18, 0) }
+
+    # A console or a task beside a request: two copies of one event. Each
+    # changes one time and passes its own check, and Rails writes only the
+    # column that changed, so the row would end before it starts.
+    it 'answers in words when another copy moved the start past this copy\'s new end' do
+      event = create(:event, start_date: start, end_date: start + 3.hours, allday: false)
+      first = described_class.find(event.id)
+      second = described_class.find(event.id)
+      first.update!(start_date: start + 2.hours)
+
+      expect(second.update(end_date: start + 1.hour)).to be(false)
+      expect(second.errors[:base]).to eq(['Start time must occur before end time'])
+      expect(event.reload).to have_attributes(start_date: start + 2.hours, end_date: start + 3.hours)
+    end
+
+    # Two copies again. One moves the event to the day before. The other,
+    # loaded earlier, moves only its end, later on the old day. Each is
+    # one day as it sees it, and the row would run over two days.
+    it 'answers in words when another copy moved the event to an earlier day' do
+      event = create(:event, start_date: start, end_date: start + 3.hours, allday: false)
+      first = described_class.find(event.id)
+      second = described_class.find(event.id)
+      first.update!(start_date: start - 1.day, end_date: start - 1.day + 3.hours)
+
+      expect(second.update(end_date: start + 4.hours)).to be(false)
+      expect(second.errors[:base]).to eq(['An event must start and end on the same day.'])
+      expect(event.reload).to have_attributes(start_date: start - 1.day, end_date: start - 1.day + 3.hours)
+    end
+
+    it 'raises for a database rule it has no words for' do
+      ActiveRecord::Base.connection.add_check_constraint(:events, "title <> 'spec'", name: 'spec_only')
+
+      expect { create(:event, title: 'spec') }.to raise_error(ActiveRecord::CheckViolation, /spec_only/)
     end
   end
 

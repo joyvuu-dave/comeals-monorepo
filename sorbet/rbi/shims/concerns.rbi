@@ -34,6 +34,11 @@ module ClosedMealAttendanceFreeze
   def resident_id_changed?; end
 end
 
+module ConstraintMessages
+  sig { returns(T::Hash[String, String]) }
+  def constraint_messages; end
+end
+
 module LocksItsMealFirst
   sig { returns(T.nilable(Integer)) }
   def meal_id; end

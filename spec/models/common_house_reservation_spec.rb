@@ -27,10 +27,23 @@
 require 'rails_helper'
 
 RSpec.describe CommonHouseReservation do
+  include ActiveSupport::Testing::TimeHelpers
+
   describe 'validations' do
     it 'is valid with valid attributes' do
       reservation = build(:common_house_reservation)
       expect(reservation).to be_valid
+    end
+
+    # The factory's booking must be one day at any hour a spec runs, in
+    # any zone. Its times were 72 to 71 hours ago, which ran past
+    # midnight when a spec ran from 23:00 to 23:59.
+    it 'is valid as the factory makes it, at any hour and in a zone far from the app zone' do
+      [Time.zone.local(2026, 4, 12, 23, 30), Time.zone.local(2026, 4, 13, 0, 30)].each do |now|
+        travel_to(now) { expect(build(:common_house_reservation)).to be_valid }
+      end
+      create(:community, timezone: 'Europe/Paris')
+      expect(build(:common_house_reservation)).to be_valid
     end
 
     it 'validates presence of resident' do
@@ -90,14 +103,14 @@ RSpec.describe CommonHouseReservation do
       create(:common_house_reservation,
              community: community,
              resident: resident,
-             start_date: 10.hours.ago,
-             end_date: 8.hours.ago)
+             start_date: Time.zone.local(2026, 4, 12, 10),
+             end_date: Time.zone.local(2026, 4, 12, 12))
 
       overlapping = build(:common_house_reservation,
                           community: community,
                           resident: resident,
-                          start_date: 9.hours.ago,
-                          end_date: 7.hours.ago)
+                          start_date: Time.zone.local(2026, 4, 12, 11),
+                          end_date: Time.zone.local(2026, 4, 12, 13))
       expect(overlapping).not_to be_valid
       expect(overlapping.errors[:base]).to include('Time period is already taken')
     end
@@ -108,14 +121,14 @@ RSpec.describe CommonHouseReservation do
       create(:common_house_reservation,
              community: community,
              resident: resident,
-             start_date: 10.hours.ago,
-             end_date: 8.hours.ago)
+             start_date: Time.zone.local(2026, 4, 12, 10),
+             end_date: Time.zone.local(2026, 4, 12, 12))
 
       non_overlapping = build(:common_house_reservation,
                               community: community,
                               resident: resident,
-                              start_date: 7.hours.ago,
-                              end_date: 6.hours.ago)
+                              start_date: Time.zone.local(2026, 4, 12, 13),
+                              end_date: Time.zone.local(2026, 4, 12, 14))
       expect(non_overlapping).to be_valid
     end
 
@@ -150,10 +163,8 @@ RSpec.describe CommonHouseReservation do
       # March 1 start — end_of_week is still in March (March 1 is Sunday),
       # so the week-spillover logic does NOT cover April. Only the fix
       # (invalidating end_date's month) would make this pass.
-      create(:common_house_reservation,
-             community: community, resident: resident,
-             start_date: Time.zone.local(2026, 3, 1, 14, 0),
-             end_date: Time.zone.local(2026, 4, 30, 16, 0))
+      booking_without_the_model(resident: resident, start_date: Time.zone.local(2026, 3, 1, 14, 0),
+                                end_date: Time.zone.local(2026, 4, 30, 16, 0)).destroy!
 
       april_key = community.calendar_cache_key(2026, 4)
       expect(Rails.cache).to have_received(:delete).with(april_key)
@@ -176,41 +187,59 @@ RSpec.describe CommonHouseReservation do
       community.calendar_cache_key(year, month)
     end
 
-    it 'pushes every month from start to end when it is created' do
-      pushed = months_pushed do
-        create(:common_house_reservation, community: community, resident: resident,
-                                          start_date: Time.zone.local(2026, 3, 15, 14, 0),
-                                          end_date: Time.zone.local(2026, 5, 15, 16, 0))
-      end
+    it 'pushes every month from start to end when it is deleted' do
+      reservation = booking_without_the_model(resident: resident,
+                                              start_date: Time.zone.local(2026, 3, 15, 14, 0),
+                                              end_date: Time.zone.local(2026, 5, 15, 16, 0))
+
+      pushed = months_pushed { reservation.destroy! }
 
       expect(pushed).to include(key(2026, 3), key(2026, 4), key(2026, 5))
       expect(pushed).not_to include(key(2026, 7))
     end
 
-    it 'pushes the months it no longer spans when only its end moves' do
+    # The console can save without the validations, and so without the
+    # one-day rule (#154). The database refuses such an end too, unless
+    # its one-day trigger is turned off, as a repair in psql could do.
+    # Then the months up to the new end must be told too, not only the
+    # start's.
+    it 'pushes every month up to a new end saved without the validations' do
       reservation = create(:common_house_reservation, community: community, resident: resident,
                                                       start_date: Time.zone.local(2026, 3, 15, 14, 0),
-                                                      end_date: Time.zone.local(2026, 7, 15, 16, 0))
+                                                      end_date: Time.zone.local(2026, 3, 15, 16, 0))
+      reservation.end_date = Time.zone.local(2026, 5, 15, 16, 0)
 
-      pushed = months_pushed { reservation.update!(end_date: Time.zone.local(2026, 3, 16, 16, 0)) }
+      pushed = months_pushed do
+        with_one_day_trigger_off(:common_house_reservations) { reservation.save(validate: false) }
+      end
+
+      expect(pushed).to include(key(2026, 4), key(2026, 5))
+    end
+
+    it 'pushes the months it no longer spans when only its end moves' do
+      reservation = booking_without_the_model(resident: resident,
+                                              start_date: Time.zone.local(2026, 3, 15, 14, 0),
+                                              end_date: Time.zone.local(2026, 7, 15, 16, 0))
+
+      pushed = months_pushed { reservation.update!(end_date: Time.zone.local(2026, 3, 15, 16, 0)) }
 
       expect(pushed).to include(key(2026, 3), key(2026, 6), key(2026, 7))
     end
 
     it 'pushes the months it no longer spans when only its start moves' do
-      reservation = create(:common_house_reservation, community: community, resident: resident,
-                                                      start_date: Time.zone.local(2026, 3, 15, 14, 0),
-                                                      end_date: Time.zone.local(2026, 7, 15, 16, 0))
+      reservation = booking_without_the_model(resident: resident,
+                                              start_date: Time.zone.local(2026, 3, 15, 14, 0),
+                                              end_date: Time.zone.local(2026, 7, 15, 16, 0))
 
-      pushed = months_pushed { reservation.update!(start_date: Time.zone.local(2026, 7, 14, 14, 0)) }
+      pushed = months_pushed { reservation.update!(start_date: Time.zone.local(2026, 7, 15, 14, 0)) }
 
       expect(pushed).to include(key(2026, 3), key(2026, 4), key(2026, 7))
     end
 
-    # The new range can be months the old one never reached. March 2026
-    # starts on a Sunday, so its calendar begins on March 1: February 28
-    # is not on it, and only the new end tells March. May 15 is on April's
-    # and May's calendars, and February 1 is on January's.
+    # The new range can be months the old one never reached. February 1,
+    # the first day of the new month, is on January's calendar too.
+    # February 28 is not on March's: March 2026 starts on a Sunday, so its
+    # calendar begins on March 1. May 1 is on April's calendar.
     it 'pushes the months it moves into as well as the ones it leaves' do
       reservation = create(:common_house_reservation, community: community, resident: resident,
                                                       start_date: Time.zone.local(2026, 5, 15, 14, 0),
@@ -218,20 +247,10 @@ RSpec.describe CommonHouseReservation do
 
       pushed = months_pushed do
         reservation.update!(start_date: Time.zone.local(2026, 2, 28, 18, 0),
-                            end_date: Time.zone.local(2026, 3, 1, 10, 0))
+                            end_date: Time.zone.local(2026, 2, 28, 21, 0))
       end
 
-      expect(pushed).to contain_exactly(key(2026, 1), key(2026, 2), key(2026, 3), key(2026, 4), key(2026, 5))
-    end
-
-    it 'pushes every month it spans when something else about it changes' do
-      reservation = create(:common_house_reservation, community: community, resident: resident,
-                                                      start_date: Time.zone.local(2026, 3, 15, 14, 0),
-                                                      end_date: Time.zone.local(2026, 5, 15, 16, 0))
-
-      pushed = months_pushed { reservation.update!(resident: create(:resident, community: community)) }
-
-      expect(pushed).to include(key(2026, 3), key(2026, 4), key(2026, 5))
+      expect(pushed).to contain_exactly(key(2026, 1), key(2026, 2), key(2026, 4), key(2026, 5))
     end
 
     it 'pushes only its own months when the dates do not change' do
@@ -249,14 +268,15 @@ RSpec.describe CommonHouseReservation do
     # A month whose calendar lists the booking must be told, or an open
     # tab keeps showing that month without it. The months that list it
     # are asked of CalendarSerializer, with the six weeks
-    # CommunitiesController#calendar uses. Each booking crosses the edge
+    # CommunitiesController#calendar uses. Each booking is on the edge
     # of a month's six weeks: March's run March 1 to April 11, April's
-    # March 29 to May 9, and May's start on April 26.
+    # March 29 to May 9, and May's start on April 26. Each is in the
+    # evening, when the UTC date is already the next day.
     it 'pushes every month whose calendar lists it' do
       bookings = {
-        'starts before April' => [[3, 28, 18], [4, 3, 10]],
-        'ends as May opens' => [[4, 25, 22], [4, 26, 0]],
-        'starts on the last day of March' => [[4, 11, 23], [4, 12, 1]]
+        "on March 28, the day before April's calendar starts" => [[3, 28, 18], [3, 28, 22]],
+        "on April 26, the first day of May's calendar" => [[4, 26, 19], [4, 26, 23]],
+        "on April 11, the last day of March's calendar" => [[4, 11, 20], [4, 11, 23]]
       }
 
       seen = bookings.transform_values do |(start_parts, end_parts)|
@@ -275,9 +295,11 @@ RSpec.describe CommonHouseReservation do
         { listed: listed, all_pushed: listed.all? { |month| pushed.include?(key(2026, month)) } }
       end
 
-      expect(seen).to eq('starts before April' => { listed: [3, 4], all_pushed: true },
-                         'ends as May opens' => { listed: [4, 5], all_pushed: true },
-                         'starts on the last day of March' => { listed: [3, 4], all_pushed: true })
+      expect(seen).to eq(
+        "on March 28, the day before April's calendar starts" => { listed: [3], all_pushed: true },
+        "on April 26, the first day of May's calendar" => { listed: [4, 5], all_pushed: true },
+        "on April 11, the last day of March's calendar" => { listed: [3, 4], all_pushed: true }
+      )
     end
   end
 
@@ -289,7 +311,10 @@ RSpec.describe CommonHouseReservation do
     end
 
     it 'is valid when start_date is before end_date' do
-      reservation = build(:common_house_reservation, start_date: 2.hours.ago, end_date: 1.hour.ago)
+      # Fixed times: two hours ago to one hour ago runs past midnight when
+      # a spec runs from 01:00 to 01:59, and a booking is one day (#154).
+      reservation = build(:common_house_reservation, start_date: Time.zone.local(2026, 4, 12, 14),
+                                                     end_date: Time.zone.local(2026, 4, 12, 15))
       expect(reservation).to be_valid
     end
 
@@ -320,13 +345,15 @@ RSpec.describe CommonHouseReservation do
       end
     end
 
+    # The end is on the day before, so the one-day rule refuses it too.
     it 'is invalid when it starts at midnight and ends before that, on an ordinary day and both daylight saving days' do
       [[2026, 4, 12], [2026, 3, 8], [2026, 11, 1]].each do |day|
         midnight = Time.zone.local(*day)
         reservation = build(:common_house_reservation, start_date: midnight, end_date: midnight - 1.hour)
 
         expect(reservation).not_to be_valid
-        expect(reservation.errors[:base]).to eq(['Start time must occur before end time'])
+        expect(reservation.errors[:base])
+          .to eq(['Start time must occur before end time', 'A booking must start and end on the same day.'])
       end
     end
 
@@ -409,14 +436,245 @@ RSpec.describe CommonHouseReservation do
     end
 
     # An end before its start is refused on every save, even one that does
-    # not change the times. No such booking is in production.
+    # not change the times. Since #149 the database refuses such a row
+    # too: the CHECK, and the EXCLUDE's range, which cannot end before it
+    # starts. Both are dropped for this example (rolled back with the
+    # transaction).
     it 'refuses any save of a booking that ends before it starts' do
       moment = Time.zone.local(2023, 12, 11, 17, 30)
       reservation = create(:common_house_reservation, start_date: moment, end_date: moment + 1.hour)
+      connection = ActiveRecord::Base.connection
+      connection.remove_check_constraint(:common_house_reservations,
+                                         name: 'common_house_reservations_end_not_before_start')
+      connection.remove_exclusion_constraint(:common_house_reservations, name: 'common_house_reservations_no_overlap')
       reservation.update_columns(end_date: moment - 1.minute)
 
       expect(reservation.update(title: 'Renamed')).to be(false)
       expect(reservation.errors[:base]).to eq(['Start time must occur before end time'])
+    end
+  end
+
+  # The app's forms give a booking one day and two times. Admin, a task
+  # or the console could give it an end on a later day, and the edit form
+  # could not save such a booking again: it keeps only the start day
+  # (#154). So a booking must start and end on the same day. The day is
+  # read in the community's zone, never in UTC: 5 PM in Los Angeles is
+  # already the next day in UTC, and that mistake made #154's first
+  # counts wrong. The days are an ordinary one and both daylight saving
+  # days in Los Angeles.
+  describe '#starts_and_ends_on_one_day' do
+    let(:days) { [[2026, 4, 12], [2026, 3, 8], [2026, 11, 1]] }
+    let(:refused) { ['A booking must start and end on the same day.'] }
+
+    def booking(start, finish)
+      build(:common_house_reservation, start_date: start, end_date: finish)
+    end
+
+    it 'takes a booking from 00:30 to 23:30, which is two days in UTC' do
+      days.each do |day|
+        start = Time.zone.local(*day, 0, 30)
+        finish = Time.zone.local(*day, 23, 30)
+
+        expect(start.utc.to_date).not_to eq(finish.utc.to_date)
+        expect(booking(start, finish)).to be_valid
+      end
+    end
+
+    # 23:00 to 00:30 is one day in UTC: 06:00 to 07:30, or 07:00 to
+    # 08:30 in winter.
+    it 'refuses a booking that runs past midnight, even when UTC sees one day' do
+      days.each do |day|
+        start = Time.zone.local(*day, 23, 0)
+        finish = start + 90.minutes
+
+        expect(start.utc.to_date).to eq(finish.utc.to_date)
+        reservation = booking(start, finish)
+        expect(reservation).not_to be_valid
+        expect(reservation.errors[:base]).to eq(refused)
+      end
+    end
+
+    # Midnight is the first moment of the next day, so a booking that
+    # ends at midnight ends on the next day. The time menus cannot make
+    # one: they run from 8 AM to 10 PM.
+    it 'refuses a booking that ends at the next midnight' do
+      days.each do |day|
+        next_day = Date.new(*day) + 1
+        reservation = booking(Time.zone.local(*day, 22, 0),
+                              Time.zone.local(next_day.year, next_day.month, next_day.day))
+
+        expect(reservation).not_to be_valid
+        expect(reservation.errors[:base]).to eq(refused)
+      end
+    end
+
+    # A task or a job has no zone of its own; the app's zone here is Los
+    # Angeles, and the community is in New York. 20:00 to 22:00 in Los
+    # Angeles is 23:00 to 01:00 in New York, and 23:00 to 00:30 is 02:00
+    # to 03:30.
+    it 'reads the day in the community zone, not the app zone' do
+      community = create(:community, timezone: 'America/New_York')
+      resident = create(:resident, community: community)
+      evening = Time.zone.local(2026, 4, 12, 20, 0)
+      late = Time.zone.local(2026, 4, 12, 23, 0)
+
+      valid = [[evening, evening + 2.hours], [late, late + 90.minutes]].map do |start, finish|
+        build(:common_house_reservation, community: community, resident: resident,
+                                         start_date: start, end_date: finish).valid?
+      end
+
+      expect(valid).to eq([false, true])
+    end
+
+    # The rule runs on every save, not only when the times change. No
+    # booking in production starts and ends on different days, but a
+    # change of the community's zone can make one: 20:30 to 21:30 in Los
+    # Angeles is 23:30 to 00:30 in New York.
+    it 'refuses any save of a booking that ends on a later day, a new title too' do
+      start = Time.zone.local(2026, 4, 12, 20, 30)
+      reservation = create(:common_house_reservation, start_date: start, end_date: start + 1.hour)
+      reservation.community.update_columns(timezone: 'America/New_York')
+
+      expect(reservation.update(title: 'Renamed')).to be(false)
+      expect(reservation.errors[:base]).to eq(refused)
+    end
+
+    it 'gives both messages for an end on the day before the start' do
+      start = Time.zone.local(2026, 4, 13, 1, 0)
+
+      reservation = booking(start, start - 2.hours)
+
+      expect(reservation).not_to be_valid
+      expect(reservation.errors[:base]).to eq(['Start time must occur before end time', *refused])
+    end
+  end
+
+  # The database refuses an end before the start, and an overlap, even
+  # when the model saw neither: another write changed the rows after the
+  # model checked them (#149). Then save answers false with the model's
+  # own message, as it does when the model sees the other write in time,
+  # instead of raising (a 500 from the API, an error page in admin).
+  describe 'a save the database refuses' do
+    let(:start) { Time.zone.local(2026, 4, 12, 18, 0) }
+    let(:booking) { create(:common_house_reservation, start_date: start, end_date: start + 3.hours) }
+
+    # A console or a task beside a request: two copies of one booking.
+    # Each changes one time and passes its own check, and Rails writes
+    # only the column that changed, so the row would end before it starts.
+    def two_copies_crossing
+      first = described_class.find(booking.id)
+      second = described_class.find(booking.id)
+      first.update!(start_date: start + 2.hours)
+      second.end_date = start + 1.hour
+      second
+    end
+
+    it 'answers in words when another copy moved the start past this copy\'s new end' do
+      second = two_copies_crossing
+
+      expect(second.save).to be(false)
+      expect(second.errors[:base]).to eq(['Start time must occur before end time'])
+      expect(booking.reload).to have_attributes(start_date: start + 2.hours, end_date: start + 3.hours)
+    end
+
+    # Two copies again. One moves the booking to the day before. The
+    # other, loaded earlier, moves only its end, later on the old day.
+    # Each is one day as it sees it, and the row would run over two days.
+    it 'answers in words when another copy moved the booking to an earlier day' do
+      first = described_class.find(booking.id)
+      second = described_class.find(booking.id)
+      first.update!(start_date: start - 1.day, end_date: start - 1.day + 3.hours)
+
+      expect(second.update(end_date: start + 4.hours)).to be(false)
+      expect(second.errors[:base]).to eq(['A booking must start and end on the same day.'])
+      expect(booking.reload).to have_attributes(start_date: start - 1.day, end_date: start - 1.day + 3.hours)
+    end
+
+    # The check passed because the other booking was not written yet when
+    # it ran. Here it is skipped, which leaves the same state.
+    it 'answers in words when another booking took the time after the check' do
+      create(:common_house_reservation, start_date: start + 1.hour, end_date: start + 2.hours)
+      late = build(:common_house_reservation, start_date: start, end_date: start + 3.hours)
+      allow(late).to receive(:period_is_free)
+
+      expect(late.save).to be(false)
+      expect(late.errors[:base]).to eq(['Time period is already taken'])
+      expect(late).to be_new_record
+    end
+
+    # The refused statement runs in a savepoint of its own, so a caller's
+    # transaction can go on. Without it, the next statement there fails
+    # with "current transaction is aborted".
+    it 'leaves a transaction the caller opened usable' do
+      second = two_copies_crossing
+
+      count = described_class.transaction do
+        second.save
+        described_class.count
+      end
+
+      expect(count).to eq(1)
+    end
+
+    # Rails reads save's options further down (touch: false keeps
+    # updated_at), so the savepoint must pass them on.
+    it 'passes the options of save on' do
+      stamped = booking.updated_at
+
+      booking.title = 'Quiet change'
+      expect(booking.save(touch: false)).to be(true)
+
+      expect(booking.reload).to have_attributes(title: 'Quiet change', updated_at: stamped)
+    end
+
+    it 'raises for a database rule it has no words for' do
+      ActiveRecord::Base.connection.add_check_constraint(:common_house_reservations, "title <> 'spec'",
+                                                         name: 'spec_only')
+
+      expect { create(:common_house_reservation, title: 'spec') }
+        .to raise_error(ActiveRecord::CheckViolation, /spec_only/)
+    end
+  end
+
+  # A booking that ends when it starts holds no time, and the database's
+  # EXCLUDE (common_house_reservations_no_overlap) sees it as an empty
+  # range, which overlaps nothing. The model must agree, or the two give
+  # different answers about the same row (#149).
+  describe '#period_is_free and a booking that ends when it starts' do
+    def at(*parts)
+      Time.zone.local(2026, 4, *parts)
+    end
+
+    # Booking 1117 in production: 17:30 to 17:30, from before #141.
+    def zero_length_booking(moment)
+      create(:common_house_reservation, start_date: moment, end_date: moment + 1.hour)
+        .tap { |booking| booking.update_columns(end_date: moment) }
+    end
+
+    it 'lets a booking cover an older one that ends when it starts' do
+      zero_length_booking(at(12, 17, 30))
+
+      expect(build(:common_house_reservation, start_date: at(12, 17), end_date: at(12, 18))).to be_valid
+    end
+
+    it 'saves a booking that ends when it starts, with a new title, while another booking covers it' do
+      old = zero_length_booking(at(12, 17, 30))
+      create(:common_house_reservation, start_date: at(12, 9), end_date: at(12, 10))
+        .update_columns(start_date: at(12, 17), end_date: at(12, 18))
+
+      expect(old.update(title: 'Finance Committee [Zoom]')).to be(true)
+    end
+
+    # A notice runs from midnight to midnight. A booking that runs past
+    # that midnight can only be a row from before the one-day rule, or
+    # one that a change of the community's zone moved.
+    it 'posts a midnight notice on a day that an older booking runs into' do
+      older = create(:common_house_reservation, start_date: at(11, 22), end_date: at(11, 23))
+      with_one_day_trigger_off(:common_house_reservations) { older.update_columns(end_date: at(12, 1)) }
+
+      notice = build(:common_house_reservation, start_date: at(12), end_date: at(12))
+
+      expect(notice).to be_valid
     end
   end
 end

@@ -851,7 +851,15 @@ refused on every save. An end equal to the start is refused only when a
 save sets or changes the times, or turns all day off (#141), so events
 saved before that rule that end when they start (three in a copy of
 production from September 2026) can still be saved with a new title. The one exception is midnight to midnight in
-the community's zone, which is how a notice is saved.
+the community's zone, which is how a notice is saved. A timed event must
+start and end on the same day in the community's zone, on every save
+(#154): an event that ends at the next midnight ends on the next day.
+The database refuses an end before the start with a CHECK
+(`events_end_not_before_start`, #149). A trigger (`events_one_day`)
+refuses a write that gives a timed event an end on a later day in the
+community's zone, so two copies of one event, saved one after the other,
+cannot leave one. The model answers each refusal in its own words
+(`ConstraintMessages`).
 
 ### GuestRoomReservation
 
@@ -872,7 +880,19 @@ start is refused on every save. An end equal to the start is refused
 only when a save sets or changes the times (#141), so bookings
 saved before that rule that end when they start (one in a copy of
 production from September 2026) can still be saved with a new title. The one exception is midnight to midnight in the
-community's zone, which is how a notice is saved.
+community's zone, which is how a notice is saved. A booking must start
+and end on the same day in the community's zone, on every save (#154).
+
+The database has the same three rules about time. A CHECK refuses an
+end before the start (`common_house_reservations_end_not_before_start`,
+#149). A trigger refuses a write that gives a booking an end on a later
+day in the community's zone (`common_house_reservations_one_day`, #154).
+An EXCLUDE refuses an overlap (`common_house_reservations_no_overlap`,
+#149, each booking the range [start, end)). A booking that ends when it starts,
+such as a notice, is an empty range: it overlaps nothing, and the model's
+overlap check (`period_is_free`) agrees. When two bookings for one time
+are saved at the same moment, the second gets the model's own words,
+"Time period is already taken" (`ConstraintMessages`), not an error.
 
 ```
 CommonHouseReservation ----> Community

@@ -36,8 +36,10 @@ RSpec.describe 'Admin write authorization' do
       it 'may create an event' do
         expect do
           post '/events', params: {
-            event: { title: 'Community potluck', start_date: 1.day.from_now,
-                     end_date: 1.day.from_now + 2.hours }
+            # Fixed times: tomorrow from now to two hours later runs past
+            # midnight from 22:00 on, and an event is one day (#154).
+            event: { title: 'Community potluck', start_date: '2026-04-15 18:00',
+                     end_date: '2026-04-15 20:00' }
           }
         end.to change(Event, :count).by(1)
       end

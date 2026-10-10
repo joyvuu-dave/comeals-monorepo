@@ -32,7 +32,11 @@
 # outermost transaction commits: one cache clear per month, one push per
 # channel. A rolled-back transaction flushes nothing — its callbacks are
 # dropped with it, which is what ActiveRecord::Transaction#after_commit
-# does. A call with no transaction open flushes right away.
+# does. A call with no transaction open flushes right away. A savepoint
+# gets its own batch, so a month noted inside two savepoints is pushed
+# twice: an event or a booking saves in a savepoint of its own
+# (ConstraintMessages), so two of them saved in one transaction push
+# each month twice. A second push only makes a screen fetch again.
 #
 # The flush clears every cache entry itself, at once: the clear is what
 # keeps the next fetch correct. Each push is then handed to LivePushJob,

@@ -28,7 +28,12 @@ FactoryBot.define do
   factory :common_house_reservation do
     community
     resident
-    start_date { 72.hours.ago }
-    end_date { 71.hours.ago }
+    # 2 to 3 PM three days ago, in the community's zone, so the booking
+    # starts and ends on one day there at any hour a spec runs (#154).
+    transient do
+      two_pm { 3.days.ago.in_time_zone(community.timezone).change(hour: 14) }
+    end
+    start_date { two_pm }
+    end_date { two_pm + 1.hour }
   end
 end

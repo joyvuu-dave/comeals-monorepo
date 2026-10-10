@@ -120,6 +120,7 @@ matcher:
     - AppendOnly*
     - BelongsToTheCommunity*
     - ClosedMealAttendanceFreeze*
+    - ConstraintMessages*
     - HasPhoneNumber*
     - LocksItsMealFirst*
     - NotesMealLiveUpdate*

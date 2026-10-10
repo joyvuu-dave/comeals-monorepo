@@ -219,10 +219,19 @@ MUTANT_SPEC_ROWS = {
   'spec/serializers/calendar_chips_spec.rb' =>
     %w[MealSerializer BillSerializer EventSerializer GuestRoomReservationSerializer
        CommonHouseReservationSerializer ResidentBirthdaySerializer RotationSerializer],
-  'spec/models/event_spec.rb' => %w[Event LiveUpdate BelongsToTheCommunity StorableTimeValidator],
+  # Community#date_of is the day the one-day rule reads (#154).
+  'spec/models/event_spec.rb' =>
+    %w[Event LiveUpdate BelongsToTheCommunity ConstraintMessages StorableTimeValidator Community#date_of],
   # Also asks CalendarSerializer which months list a booking.
   'spec/models/common_house_reservation_spec.rb' =>
-    %w[CommonHouseReservation LiveUpdate BelongsToTheCommunity CalendarSerializer StorableTimeValidator],
+    %w[CommonHouseReservation LiveUpdate BelongsToTheCommunity ConstraintMessages CalendarSerializer
+       StorableTimeValidator Community#date_of],
+  # period_is_free must give the database's answer for every kind of pair.
+  'spec/db/common_house_reservations_no_overlap_spec.rb' => %w[CommonHouseReservation],
+  # The only spec where the database refuses a booking in a real race.
+  'spec/requests/api/v1/common_house_reservation_race_spec.rb' =>
+    %w[ConstraintMessages CommonHouseReservation Api::V1::CommonHouseReservationsController],
+  'spec/requests/admin/one_day_spec.rb' => %w[Event CommonHouseReservation Community#date_of],
   'spec/models/guest_room_reservation_spec.rb' =>
     %w[GuestRoomReservation LiveUpdate BelongsToTheCommunity StorableTimeValidator StorableTime],
   'spec/models/rotation_spec.rb' => %w[Rotation LiveUpdate BelongsToTheCommunity],

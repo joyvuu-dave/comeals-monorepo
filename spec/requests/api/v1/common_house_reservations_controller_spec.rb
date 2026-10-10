@@ -162,21 +162,23 @@ RSpec.describe 'Common House Reservations API' do
       expect(CommonHouseReservation.pluck(:start_date, :end_date)).to eq([[Time.zone.local(2026, 3, 8)] * 2])
     end
 
-    # The API's start and end are on one day, but a booking made in admin
-    # can run past midnight, and a reservation with no times at that
-    # midnight overlaps it.
-    it 'refuses a reservation with no times at a midnight that a booking made in admin runs past' do
-      create(:common_house_reservation, community: community, resident: resident,
-                                        start_date: Time.zone.local(2026, 5, 1, 22, 0),
-                                        end_date: Time.zone.local(2026, 5, 2, 2, 0))
+    # A reservation with no times ends when it starts, so it holds no
+    # time and overlaps nothing, as the database's EXCLUDE sees it
+    # (#149). It used to be refused when a booking ran past its midnight.
+    # The model refuses such a booking since #154, so this one is written
+    # without the model (see RowsWithoutTheModel).
+    it 'takes a reservation with no times at a midnight that an older booking runs past' do
+      booking_without_the_model(resident: resident, start_date: Time.zone.local(2026, 5, 1, 22, 0),
+                                end_date: Time.zone.local(2026, 5, 2, 2, 0))
 
       post '/api/v1/common-house-reservations', params: {
         token: token, resident_id: resident.id, start_year: 2026, start_month: 5, start_day: 2
       }
 
-      expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq('message' => 'Time period is already taken')
-      expect(CommonHouseReservation.count).to eq(1)
+      expect(response).to have_http_status(:ok)
+      expect(CommonHouseReservation.order(:start_date).pluck(:start_date, :end_date))
+        .to eq([[Time.zone.local(2026, 5, 1, 22, 0), Time.zone.local(2026, 5, 2, 2, 0)],
+                [Time.zone.local(2026, 5, 2)] * 2])
     end
 
     # Before, a blank time was read as midnight, so a blank start with a

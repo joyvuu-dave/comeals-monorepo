@@ -2460,3 +2460,102 @@ and the two settle routes in `no_query_after_commit_spec.rb`, where the
 job is then an INSERT after the commit); `WINDOW` of 6 days (2) or 8
 days (2); another healthchecks.io slug (1); and a 15:00 schedule in
 `config/recurring.yml` (1).
+
+### 2026-10-09, one day, and the database's time rules (#154, #149)
+
+Run on every Ruby method the branch added or changed, and on the methods
+whose examples it rewrote. The branch made three changes. An event or a
+common house booking must start and end on the same day in the
+community's zone (#154, `starts_and_ends_on_one_day`, reading the day
+with the new `Community#date_of`). The database refuses an end before
+the start (two CHECKs) and an overlap of two bookings (an EXCLUDE), and
+`period_is_free` now gives the EXCLUDE's answer for a booking that ends
+when it starts: it overlaps nothing (#149). And `ConstraintMessages`
+turns a refusal by those rules into the model's own words. Many
+examples used to save a booking or an event that lasts days; the model
+refuses those now, so they write the row without the model
+(`spec/support/rows_without_the_model.rb`), which is why the
+`note_live_update` methods and two `CalendarSerializer` methods were run
+too. Four workers, 300-second limit.
+
+| Run                                                                                    | Subjects | Mutations | Killed | Alive | Timeouts | Time   |
+| -------------------------------------------------------------------------------------- | -------- | --------- | ------ | ----- | -------- | ------ |
+| 1, every method the branch added or changed, or whose examples it rewrote              | 14       | 726       | 707    | 19    | 0        | 14 min |
+| 2, the two `note_live_update` methods and `ConstraintMessages`, after two new examples | 4        | 170       | 170    | 0     | 0        | 3 min  |
+
+The 14 subjects of run 1, by name: `starts_and_ends_on_one_day`,
+`start_date_is_before_end_date`, `constraint_messages` and
+`note_live_update` in `Event` and in `CommonHouseReservation`;
+`CommonHouseReservation#period_is_free`; `Community#date_of`;
+`ConstraintMessages#create_or_update` and `#constraint_name`; and
+`CalendarSerializer#common_house_reservations_in_range` and
+`#events_in_range`. The two `constraint_messages` methods,
+`Community#date_of` and `ConstraintMessages#constraint_name` had no
+survivor.
+
+Run 1, 19 alive. Three were missing assertions, and each now has an
+example:
+
+- `calendar_range(start_date, nil)` for `calendar_range(start_date,
+end_date)` in both `note_live_update` methods (2). Every row the model
+  saves now lasts one day, so the end named the start's own day. But
+  the console can save without the validations, and so without the
+  one-day rule. A new example in each model spec does that with an end
+  two months later, and expects April and May to be told.
+- `super()` for `super` in `ConstraintMessages#create_or_update` (1).
+  It drops the options of `save`, so `save(touch: false)` changed
+  `updated_at`. A new example saves a booking that way and expects
+  `updated_at` to stay.
+
+The other 16 change nothing a caller can see:
+
+- `self.start_date` and `self.end_date` written as `start_date()` and
+  `end_date()` (10), in both `starts_and_ends_on_one_day` methods, both
+  `start_date_is_before_end_date` methods and `period_is_free`, as on
+  2026-09-27.
+- `self.transaction` for `ApplicationRecord.transaction` in
+  `create_or_update` (1). Both open the savepoint on the one
+  connection. The call is now `transaction(...)` on the record, which
+  leaves mutant nothing to swap.
+- The preloads of the common house query (4), and `..` before the
+  window's first instant in `events_in_range` (1), as on 2026-09-28 and
+  2026-09-27: goldiloader loads the residents and units without the
+  preloads, and an event that starts at that instant is already in the
+  window.
+
+Run 2, after the two new examples and the `transaction(...)` change, had
+no survivor.
+
+Mutant cannot change the database rules or the migrations, so three
+checks were made by hand. Without the `ExclusionViolation` rescue in
+`ConstraintMessages`, `spec/requests/api/v1/common_house_reservation_race_spec.rb`
+fails: the second of two bookings for one time raises instead of
+answering 400. Without the two `validate :starts_and_ends_on_one_day`
+lines, 4 of the 5 examples in `spec/requests/admin/one_day_spec.rb` fail
+(the fifth is the all-day event, which the rule leaves alone). And the
+three migrations were rolled back and run again on the test database,
+and `db/structure.sql` came out the same both times.
+
+The whole suite afterwards: 3,373 examples, no failure, 100% of lines
+and branches. One run before that failed one example, because it ran
+at 22:00: `superuser_authorization_spec.rb` made an event from this
+time tomorrow to two hours later, which ran past midnight. That example
+and four model examples with times counted back from now (which run
+past midnight at other hours) now use fixed times, and the event and
+booking factories make 2 to 3 PM in the community's zone.
+
+After the review (2026-10-10), two triggers (`events_one_day` and
+`common_house_reservations_one_day`) refuse an end on a later day in the
+database too, so two copies of one row saved one after the other cannot
+store one. No Ruby method changed: only the two `CONSTRAINT_MESSAGES`
+hashes, which are constants, and mutant changes only methods. So no
+mutant run. Checked by hand instead: without the two new names in
+`CONSTRAINT_MESSAGES`, the two new examples for two copies ("moved the
+booking to an earlier day", "moved the event to an earlier day") raise
+instead of answering in words. A row that ends on a later day now needs
+the trigger turned off, so `spec/support/rows_without_the_model.rb`
+turns it off for its one write (`with_one_day_trigger_off`), and so do
+the two examples for `calendar_range(start_date, nil)` above. Without
+that, their save is refused and nothing is told. With the trigger on,
+that mutation does the same as the code for every save the model and
+the trigger allow: the end is on the start's day.

@@ -658,7 +658,8 @@ exist, a bad hour or minute, or a time the database cannot store,
 returns `400 "Error: Invalid date"`. A time on a daylight saving night
 is read the same way as for an event: 02:30 on 2026-03-08 is saved as
 03:30 PDT, and 01:30 on 2026-11-01 is the first 01:30, in PDT. A block
-that overlaps another returns `400 "Time period is already taken"`.
+that overlaps another returns `400 "Time period is already taken"`,
+also when two requests for the same time arrive at once.
 
 End must be after start, the same as for an event. A block that ends
 when it starts lasts zero minutes, so it would stop no one from booking the
@@ -670,8 +671,7 @@ update that changes the times, not on an update that sends back the
 times the booking already has. Both times empty is the one exception:
 it gives a block from midnight to midnight, for a notice such as "Movie
 night is cancelled tonight". Picking 00:00 for both times gives the
-same block. That block lasts zero minutes either, so it overlaps only a
-booking that runs past midnight, and only admin can make one.
+same block. That block lasts zero minutes, so it overlaps nothing.
 
 ## Calendar feeds (iCal)
 

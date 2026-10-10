@@ -76,6 +76,15 @@ $$;
 
 
 --
+-- Name: comeals_local_day(timestamp without time zone, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.comeals_local_day(stored timestamp without time zone, zone text) RETURNS date
+    LANGUAGE sql STABLE
+    AS $$ SELECT CASE WHEN stored < '4714-11-25 00:00:00 BC' OR stored >= '294276-12-31 00:00:00' THEN NULL ELSE (stored AT TIME ZONE 'UTC' AT TIME ZONE zone)::date END $$;
+
+
+--
 -- Name: comeals_meal_charge_insert_by_settlement(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -310,6 +319,34 @@ $$;
 CREATE FUNCTION public.comeals_refuse_last_superuser_removal() RETURNS trigger
     LANGUAGE plpgsql
     AS $$ BEGIN IF TG_OP = 'UPDATE' AND (NOT OLD.superuser OR NEW.superuser) THEN RETURN NEW; END IF; IF TG_OP = 'DELETE' AND NOT OLD.superuser THEN RETURN OLD; END IF; PERFORM 1 FROM admin_users WHERE superuser IS TRUE AND id <> OLD.id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'refusing to remove the last superuser (admin_users.id=%): the community would have no one able to settle reconciliations or grant admin access', OLD.id USING ERRCODE = 'raise_exception'; END IF; IF TG_OP = 'DELETE' THEN RETURN OLD; END IF; RETURN NEW; END; $$;
+
+
+--
+-- Name: comeals_refuse_two_days(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.comeals_refuse_two_days() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  zone text;
+  start_day date;
+  end_day date;
+BEGIN
+  SELECT timezone INTO zone FROM communities;
+  start_day := comeals_local_day(NEW.start_date, zone);
+  end_day := comeals_local_day(NEW.end_date, zone);
+
+  IF start_day <> end_day THEN
+    RAISE EXCEPTION '% on % refused: row % starts on % and ends on % in %. '
+      'It must start and end on the same day.',
+      TG_OP, TG_TABLE_NAME, NEW.id, start_day, end_day, zone
+      USING ERRCODE = 'check_violation', CONSTRAINT = TG_NAME;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
 
 
 --
@@ -623,7 +660,8 @@ CREATE TABLE public.common_house_reservations (
     resident_id bigint NOT NULL,
     start_date timestamp without time zone NOT NULL,
     title character varying,
-    updated_at timestamp without time zone NOT NULL
+    updated_at timestamp without time zone NOT NULL,
+    CONSTRAINT common_house_reservations_end_not_before_start CHECK ((end_date >= start_date))
 );
 
 
@@ -705,7 +743,8 @@ CREATE TABLE public.events (
     end_date timestamp without time zone,
     start_date timestamp without time zone NOT NULL,
     title character varying NOT NULL,
-    updated_at timestamp without time zone NOT NULL
+    updated_at timestamp without time zone NOT NULL,
+    CONSTRAINT events_end_not_before_start CHECK ((allday OR (end_date IS NULL) OR (end_date >= start_date)))
 );
 
 
@@ -2095,6 +2134,14 @@ ALTER TABLE ONLY public.bills_save_keys
 
 
 --
+-- Name: common_house_reservations common_house_reservations_no_overlap; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.common_house_reservations
+    ADD CONSTRAINT common_house_reservations_no_overlap EXCLUDE USING gist (tsrange(start_date, end_date, '[)'::text) WITH &&);
+
+
+--
 -- Name: common_house_reservations common_house_reservations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2934,6 +2981,20 @@ CREATE TRIGGER comeals_refuse_last_superuser_removal BEFORE DELETE OR UPDATE ON 
 
 
 --
+-- Name: common_house_reservations common_house_reservations_one_day; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER common_house_reservations_one_day BEFORE INSERT OR UPDATE OF start_date, end_date ON public.common_house_reservations FOR EACH ROW EXECUTE FUNCTION public.comeals_refuse_two_days();
+
+
+--
+-- Name: events events_one_day; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER events_one_day BEFORE INSERT OR UPDATE OF start_date, end_date, allday ON public.events FOR EACH ROW WHEN (((NOT new.allday) AND (new.end_date IS NOT NULL))) EXECUTE FUNCTION public.comeals_refuse_two_days();
+
+
+--
 -- Name: guests guests_reject_settled_write; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -3351,6 +3412,10 @@ ALTER TABLE ONLY public.bills
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261009171800'),
+('20261009171700'),
+('20261009171600'),
+('20261009171500'),
 ('20261009140000'),
 ('20261009130100'),
 ('20261009130000'),

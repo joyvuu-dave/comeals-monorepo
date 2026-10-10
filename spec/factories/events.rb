@@ -26,8 +26,13 @@
 FactoryBot.define do
   factory :event do
     title { 'Maintenance Committee Meeting' }
-    start_date { 49.hours.ago }
-    end_date { 48.hours.ago }
+    # 2 to 3 PM two days ago, in the community's zone, so the event
+    # starts and ends on one day there at any hour a spec runs (#154).
+    transient do
+      two_pm { 2.days.ago.in_time_zone(community.timezone).change(hour: 14) }
+    end
+    start_date { two_pm }
+    end_date { two_pm + 1.hour }
     allday { false }
     community
   end

@@ -28,6 +28,9 @@ guest_as_added
 # ActiveAdmin calls it by name (column and row :number_of_meals in
 # app/admin/reconciliation.rb):
 number_of_meals
+# ActiveRecord::Persistence#save and #save! call it (ConstraintMessages
+# wraps it):
+create_or_update
 # Named in before_action / rescue_from / config lines debride does not read:
 # (delete_expired is a command in config/recurring.yml)
 delete_expired

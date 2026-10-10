@@ -132,10 +132,11 @@ RSpec.describe CalendarSerializer, type: :serializer do
       expect(result[:events].length).to eq(1)
     end
 
+    # The model refuses an event on two days since #154; see
+    # RowsWithoutTheModel for where one can still come from.
     it 'includes events that span across the date range boundaries' do
-      create(:event, community: community,
-                     start_date: Time.zone.local(2026, 3, 28, 0, 0),
-                     end_date: Time.zone.local(2026, 4, 5, 0, 0))
+      event_without_the_model(community: community, start_date: Time.zone.local(2026, 3, 28, 0, 0),
+                              end_date: Time.zone.local(2026, 4, 5, 0, 0))
 
       result = serialize
       expect(result[:events].length).to eq(1)
@@ -265,9 +266,10 @@ RSpec.describe CalendarSerializer, type: :serializer do
       expect(starts).to contain_exactly(Time.zone.local(2026, 4, 1, 0, 0), Time.zone.local(2026, 4, 30, 23, 50))
     end
 
-    # The same edges as the event example below. The admin form takes
-    # any start and end, so a booking can last days. Each one here is
-    # made alone, because two that overlap cannot both be saved.
+    # The same edges as the event example below. A booking is one day
+    # since #154, but a row written without the model can last days (see
+    # RowsWithoutTheModel). Each one here is made alone, because two that
+    # overlap cannot both be saved.
     # prosopite: false, because the month is built once per booking on
     # purpose, and that repeats every query of the month.
     it 'takes a common house booking that ends inside, starts inside, or spans the window, like an event',
@@ -283,9 +285,8 @@ RSpec.describe CalendarSerializer, type: :serializer do
       }
 
       taken = bookings.transform_values do |(from, to)|
-        booking = create(:common_house_reservation, community: community, resident: resident,
-                                                    start_date: Time.zone.local(2026, *from),
-                                                    end_date: Time.zone.local(2026, *to))
+        booking = booking_without_the_model(resident: resident, start_date: Time.zone.local(2026, *from),
+                                            end_date: Time.zone.local(2026, *to))
         ids = serialize[:common_house_reservations].pluck(:id)
         booking.destroy!
         ids.map { |id| id == booking.cache_key_with_version ? :it : id }
@@ -297,19 +298,21 @@ RSpec.describe CalendarSerializer, type: :serializer do
                           'starts as it closes' => [])
     end
 
+    # The events that cross midnight are written without the model, which
+    # refuses them since #154 (see RowsWithoutTheModel).
     it 'takes an event that starts inside, ends inside, or spans the window, and not one entirely outside' do
-      starts_inside = create(:event, community: community, start_date: Time.zone.local(2026, 4, 30, 23, 0),
-                                     end_date: Time.zone.local(2026, 5, 1, 2, 0))
-      ends_inside = create(:event, community: community, start_date: Time.zone.local(2026, 3, 31, 22, 0),
-                                   end_date: Time.zone.local(2026, 4, 1, 0, 0))
-      spans = create(:event, community: community, start_date: Time.zone.local(2026, 3, 20, 12, 0),
-                             end_date: Time.zone.local(2026, 5, 10, 12, 0))
+      starts_inside = event_without_the_model(community: community, start_date: Time.zone.local(2026, 4, 30, 23, 0),
+                                              end_date: Time.zone.local(2026, 5, 1, 2, 0))
+      ends_inside = event_without_the_model(community: community, start_date: Time.zone.local(2026, 3, 31, 22, 0),
+                                            end_date: Time.zone.local(2026, 4, 1, 0, 0))
+      spans = event_without_the_model(community: community, start_date: Time.zone.local(2026, 3, 20, 12, 0),
+                                      end_date: Time.zone.local(2026, 5, 10, 12, 0))
       # The window's last instant is in it, at either end of an event.
       last_instant = Time.zone.local(2026, 4, 30, 23, 59, 59.999999r)
-      starts_at_last = create(:event, community: community, start_date: last_instant,
-                                      end_date: Time.zone.local(2026, 5, 1, 2, 0))
-      ends_at_last = create(:event, community: community, start_date: Time.zone.local(2026, 3, 31, 22, 0),
-                                    end_date: last_instant)
+      starts_at_last = event_without_the_model(community: community, start_date: last_instant,
+                                               end_date: Time.zone.local(2026, 5, 1, 2, 0))
+      ends_at_last = event_without_the_model(community: community, start_date: Time.zone.local(2026, 3, 31, 22, 0),
+                                             end_date: last_instant)
       create(:event, community: community, start_date: Time.zone.local(2026, 3, 31, 20, 0),
                      end_date: Time.zone.local(2026, 3, 31, 23, 59))
       create(:event, community: community, start_date: Time.zone.local(2026, 5, 1, 0, 0),

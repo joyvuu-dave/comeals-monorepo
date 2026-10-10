@@ -117,20 +117,21 @@ RSpec.describe Community do
       expect(version).not_to eq(before)
     end
 
-    # The admin form takes any start and end, so a booking can last days.
-    # One that starts the day before the six weeks is on April's calendar,
-    # so each write to it must be a miss for April's stored copy.
+    # A booking is one day since #154, but a row written without the
+    # model can last days (see RowsWithoutTheModel). One that starts the
+    # day before the six weeks is on April's calendar, so each write to it
+    # must be a miss for April's stored copy. The model refuses any save
+    # of it, so the change is written without the model too.
     it 'changes when a common house booking that starts before the six weeks is made, changed or removed' do
       resident = create(:resident, community: community)
       before = version
 
-      booking = create(:common_house_reservation, community: community, resident: resident,
-                                                  start_date: Time.zone.local(2026, 3, 28, 18),
-                                                  end_date: Time.zone.local(2026, 4, 3, 10))
+      booking = booking_without_the_model(resident: resident, start_date: Time.zone.local(2026, 3, 28, 18),
+                                          end_date: Time.zone.local(2026, 4, 3, 10))
       made = version
       expect(made).not_to eq(before)
 
-      booking.update!(title: 'Moving day')
+      booking.update_columns(title: 'Moving day', updated_at: booking.updated_at + 1.second)
       changed = version
       expect(changed).not_to eq(made)
 
@@ -159,9 +160,8 @@ RSpec.describe Community do
       }
 
       seen = bookings.transform_values do |(start_parts, end_parts)|
-        booking = create(:common_house_reservation, community: community, resident: resident,
-                                                    start_date: Time.zone.local(2026, *start_parts),
-                                                    end_date: Time.zone.local(2026, *end_parts))
+        booking = booking_without_the_model(resident: resident, start_date: Time.zone.local(2026, *start_parts),
+                                            end_date: Time.zone.local(2026, *end_parts))
         listed = CalendarSerializer.new(community, params: april).to_h[:common_house_reservations].any?
         # The common house count and newest change, after the community
         # day (see the first example for the order).

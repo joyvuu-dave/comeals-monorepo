@@ -221,6 +221,15 @@ class Community < ApplicationRecord
     time == zone.local(day.year, day.month, day.day)
   end
 
+  # The day `time` falls on in this community's zone. An event or a
+  # common house booking must start and end on the same one (#154). The
+  # stored times are UTC, and a UTC date is the wrong day for every time
+  # from 4 or 5 PM on in Los Angeles.
+  sig { params(time: T.any(Time, ActiveSupport::TimeWithZone)).returns(Date) }
+  def date_of(time)
+    time.in_time_zone(timezone).to_date
+  end
+
   has_many :bills, dependent: :destroy
   has_many :meals, dependent: :destroy
   has_many :meal_residents, dependent: :destroy
@@ -399,8 +408,10 @@ class Community < ApplicationRecord
   #                              outside the window can still change the
   #                              chip in it (#144)
   #   events                     overlapping the window
-  #   common_house_reservations  overlapping the window (one can last
-  #                              days, and start before it)
+  #   common_house_reservations  overlapping the window (a booking is
+  #                              one day, but after a change of zone
+  #                              one can end on the next day and start
+  #                              before the window)
   #   guest_room_reservations    in the window
   #
   # A write that skips the model and its timestamps (update_all, psql)

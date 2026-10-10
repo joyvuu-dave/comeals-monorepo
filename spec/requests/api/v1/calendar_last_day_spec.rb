@@ -44,14 +44,14 @@ RSpec.describe 'the calendar on the last day of the grid' do
       .to eq([reservation.cache_key_with_version])
   end
 
-  # The admin form takes any start and end, so a booking can last days.
-  # One that starts the day before the grid still holds April 2, so the
-  # grid must show it there; it used to be left out, and a person saw a
-  # free day that the server then refused.
+  # A booking is one day since #154, but a row written without the model
+  # can last days (see RowsWithoutTheModel). One that starts the day
+  # before the grid still holds April 2, so the grid must show it there;
+  # it used to be left out, and a person saw a free day that the server
+  # then refused.
   it 'sends a common house reservation that starts before the first day and ends inside the grid' do
-    reservation = create(:common_house_reservation, community: community, resident: resident,
-                                                    start_date: Time.zone.local(2026, 3, 28, 18),
-                                                    end_date: Time.zone.local(2026, 4, 3, 10))
+    reservation = booking_without_the_model(resident: resident, start_date: Time.zone.local(2026, 3, 28, 18),
+                                            end_date: Time.zone.local(2026, 4, 3, 10))
 
     expect(JSON.parse(calendar_body)['common_house_reservations'].pluck('id'))
       .to eq([reservation.cache_key_with_version])
