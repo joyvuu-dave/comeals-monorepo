@@ -21,19 +21,35 @@ function calendarParams(pathname: string): CalendarParams | null {
   return match === null ? null : match.params;
 }
 
-// The calendar's dialogs that only show something and hold nothing a
-// person typed. A rotation's dialog shows a list of meals.
-const VIEW_ONLY_DIALOGS = ["rotations"];
+// What the open calendar form holds that would be lost if it closed.
+// The form reports both (calendar/show.jsx), and both are false when no
+// form is open.
+export interface OpenForm {
+  // Changes a person typed: the flag the discard gate reads (ADR 0006).
+  // Each form compares its fields with the values it opened with, so a
+  // change typed and then undone does not count.
+  dirty: boolean;
+  // An error message of the form's own, shown inside the form
+  // (use_form_messages.ts). It goes when the form closes, and an error
+  // stays until a person closes it (#137).
+  errorShown: boolean;
+}
 
-// A calendar form is open: Guest Room, Common House or Event, New or
-// Edit. ADR 0006: a form is a draft until Create or Update, so nothing
-// here closes it or moves the calendar under it. Every dialog that is
-// not on the view-only list counts as a form, so a form added later is
-// kept safe without a change here.
-function formOpen(calendar: CalendarParams): boolean {
-  return (
-    calendar.modal !== undefined && !VIEW_ONLY_DIALOGS.includes(calendar.modal)
-  );
+// True when a calendar form is open that the screen must not close by
+// itself. Then nothing here closes it or moves the calendar under it.
+//
+// - A form with typed changes. ADR 0006: a typed draft is never dropped
+//   without the question "Discard your changes?", and on an idle screen
+//   nobody is there to answer it.
+// - A form that shows an error of its own: a refused Delete, an Edit
+//   form whose record could not be loaded (#115), a refused Create. The
+//   error would go with the form, unread.
+//
+// A form with nothing typed and no error, and a dialog that only shows
+// something (a rotation's list of meals), have nothing to lose. They
+// close the way the screen leaves a calendar with no dialog open.
+function keepsForm(calendar: CalendarParams, form: OpenForm): boolean {
+  return calendar.modal !== undefined && (form.dirty || form.errorShown);
 }
 
 // True when both days are in one month of one year. A day that is not a
@@ -49,22 +65,24 @@ function calendarOf(day: string): string {
 
 // Where the screen goes when nobody has used it for IDLE_MS, or null to
 // stay. Home is today's calendar. A calendar that already shows today's
-// month with no dialog open stays as it is, and so does a calendar with
-// a form open. A rotation's dialog is closed, on any month. Signed out,
-// there is no calendar, and every page stays: the login page is home
-// already ("/" also sends a signed-in screen to today's calendar by
-// itself), and a reset link's page holds the new password someone may
-// be typing.
+// month with no dialog open stays as it is, and so does a calendar
+// whose form holds typed changes or shows an error (keepsForm). Any
+// other dialog is closed, on any month: a form with nothing typed and
+// no error, and a rotation's dialog. Signed out, there is no calendar,
+// and every page stays: the login page is home already ("/" also sends
+// a signed-in screen to today's calendar by itself), and a reset link's
+// page holds the new password someone may be typing.
 export function pathAfterIdle(
   pathname: string,
   today: string,
   signedIn: boolean,
+  form: OpenForm,
 ): string | null {
   if (!signedIn || pathname === "/") return null;
   const home = calendarOf(today);
   const calendar = calendarParams(pathname);
   if (calendar === null) return home;
-  if (formOpen(calendar)) return null;
+  if (keepsForm(calendar, form)) return null;
   if (calendar.modal === undefined && sameMonth(calendar.date, today)) {
     return null;
   }
@@ -78,8 +96,11 @@ export interface ScreenState {
   // A newer build is on the server than the code running here
   // (VersionBanner).
   newVersion: boolean;
-  // An error message is on screen.
+  // An error message is in the stack of messages. A form's own error is
+  // in form.
   errorShown: boolean;
+  // What the open calendar form holds (keepsForm).
+  form: OpenForm;
 }
 
 // The page to load from the server when nobody has used the screen for
@@ -88,16 +109,21 @@ export interface ScreenState {
 // inside the app fixes neither:
 //
 // - The page crashed. The error page stays when the address changes.
-//   Nothing typed is lost: the error page took the place of every form.
-//   Home is today's calendar, or the login page when signed out.
+//   Nothing is lost: the error page took the place of every form, and
+//   each form reported nothing typed and no error as it went
+//   (use_dirty_report.js, use_form_messages.ts). So form is not read
+//   here. Still set, it could only be a flag the broken store failed to
+//   clear, and the error page would then stay for good. Home is today's
+//   calendar, or the login page when signed out.
 // - A new version is out. Without a load, the screen runs the old code
 //   until someone taps Refresh, and the old code may send requests the
-//   new server reads differently. Not while a form is open (ADR 0006).
-//   Not when signed out either: signing in loads the page again by
-//   itself, and the page a reset link opens holds the new password
-//   someone may be typing.
+//   new server reads differently. Not while a form holds typed changes
+//   (ADR 0006) or shows an error of its own (keepsForm); any other form
+//   goes with the load. Not when signed out either: signing in loads
+//   the page again by itself, and the page a reset link opens holds the
+//   new password someone may be typing.
 //
-// Never while an error message is on screen. A page load takes every
+// Never while an error message is in the stack. A page load takes every
 // message away, and an error stays until a person closes it (#137).
 // Closing it is a tap, which starts the five minutes again. A message
 // that is not an error closes by itself after a few seconds, so it does
@@ -112,21 +138,24 @@ export function pathToLoadAfterIdle(
   if (screen.crashed) return signedIn ? calendarOf(today) : "/";
   if (!screen.newVersion || !signedIn) return null;
   const calendar = calendarParams(pathname);
-  if (calendar !== null && formOpen(calendar)) return null;
+  if (calendar !== null && keepsForm(calendar, screen.form)) return null;
   return calendarOf(today);
 }
 
 // Where the calendar goes when the community's day changes (midnight, or
 // a wake from sleep, or a new zone), or null to stay. A calendar that
-// showed the old day's month moves to the new day's month, unless a form
-// is open. A calendar someone paged to another month stays there.
+// showed the old day's month moves to the new day's month, unless its
+// form holds typed changes or shows an error (keepsForm). Any other
+// form closes with the move. A calendar someone paged to another month
+// stays there, with its dialog.
 export function pathAfterNewDay(
   pathname: string,
   oldToday: string,
   newToday: string,
+  form: OpenForm,
 ): string | null {
   const calendar = calendarParams(pathname);
-  if (calendar === null || formOpen(calendar)) return null;
+  if (calendar === null || keepsForm(calendar, form)) return null;
   if (!sameMonth(calendar.date, oldToday)) return null;
   if (sameMonth(newToday, oldToday)) return null;
   return calendarOf(newToday);

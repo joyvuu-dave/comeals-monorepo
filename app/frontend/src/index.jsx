@@ -57,6 +57,8 @@ import PrivateRoute from "./components/app/private_route";
 
 import ScrollToTop from "./components/app/scroll_to_top";
 import ErrorBoundary from "./components/app/error_boundary";
+import OuterErrorBoundary from "./components/app/outer_error_boundary";
+import { forgetCrashesAfterAnHourWithout } from "./helpers/crash_reload_wait";
 import { CALENDAR_PATH, MEAL_EDIT_PATH, LOGIN_PATH } from "./routes";
 
 function TrailingSlash() {
@@ -150,43 +152,59 @@ document.addEventListener("DOMContentLoaded", () => {
     window.addEventListener("offline", updateOnlineStatus);
   });
 
+  // A page that runs an hour without a crash forgets the crashes before
+  // it, so the next crash waits five minutes again before the page
+  // loads itself (helpers/crash_reload_wait.ts).
+  forgetCrashesAfterAnHourWithout();
+
+  // OuterErrorBoundary is around everything, because a crash outside
+  // ErrorBoundary (the message stack, the banners, the idle timer) took
+  // the whole page away and left the shared screen blank. It reads
+  // nothing from the store, which may be what broke. It only asks the
+  // store to send the cost saves that wait before it loads the page.
   createRoot(document.getElementById("root")).render(
-    <StoreContext.Provider value={store}>
-      <ToastContainer />
-      <SessionExpiredBanner />
-      <Router>
-        <VersionBanner />
-        <TrailingSlash />
-        <BackToToday store={store} />
-        <ScrollToTop>
-          <main>
-            <Suspense fallback={<h3>Loading...</h3>}>
-              <ErrorBoundary>
-                <Routes>
-                  <Route
-                    path={CALENDAR_PATH}
-                    element={
-                      <PrivateRoute>
-                        <Calendar />
-                      </PrivateRoute>
-                    }
-                  />
-                  <Route
-                    path={MEAL_EDIT_PATH}
-                    element={
-                      <PrivateRoute>
-                        <MealsEdit />
-                      </PrivateRoute>
-                    }
-                  />
-                  <Route path={LOGIN_PATH} element={<ResidentsLogin />} />
-                </Routes>
-              </ErrorBoundary>
-            </Suspense>
-          </main>
-        </ScrollToTop>
-      </Router>
-    </StoreContext.Provider>,
+    <OuterErrorBoundary
+      sendWaitingSaves={function () {
+        return store.finishBillsSaves();
+      }}
+    >
+      <StoreContext.Provider value={store}>
+        <ToastContainer />
+        <SessionExpiredBanner />
+        <Router>
+          <VersionBanner />
+          <TrailingSlash />
+          <BackToToday store={store} />
+          <ScrollToTop>
+            <main>
+              <Suspense fallback={<h3>Loading...</h3>}>
+                <ErrorBoundary>
+                  <Routes>
+                    <Route
+                      path={CALENDAR_PATH}
+                      element={
+                        <PrivateRoute>
+                          <Calendar />
+                        </PrivateRoute>
+                      }
+                    />
+                    <Route
+                      path={MEAL_EDIT_PATH}
+                      element={
+                        <PrivateRoute>
+                          <MealsEdit />
+                        </PrivateRoute>
+                      }
+                    />
+                    <Route path={LOGIN_PATH} element={<ResidentsLogin />} />
+                  </Routes>
+                </ErrorBoundary>
+              </Suspense>
+            </main>
+          </ScrollToTop>
+        </Router>
+      </StoreContext.Provider>
+    </OuterErrorBoundary>,
   );
   // Unregister any leftover service worker from previous deploys.
   if ("serviceWorker" in navigator) {

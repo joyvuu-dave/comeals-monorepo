@@ -21,7 +21,9 @@ import Bugsnag from "@bugsnag/js";
 // unhandledrejection by itself, which covers most of what breaks. The
 // React render path is the gap: React catches those and hands them to the
 // nearest error boundary instead of letting them reach window.onerror, so
-// components/app/error_boundary.jsx reports them through notifyError.
+// components/app/error_boundary.jsx (around the pages) and
+// components/app/outer_error_boundary.tsx (around the whole app) report
+// them through notifyError.
 
 const apiKey = import.meta.env.VITE_BUGSNAG_API_KEY;
 

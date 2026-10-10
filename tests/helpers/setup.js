@@ -164,6 +164,33 @@ async function stubPusher(page) {
 }
 
 /**
+ * Make the message stack crash the page once a message shows: its
+ * ResizeObserver throws when it starts to watch the stack. The stack is
+ * outside ErrorBoundary, which is around the routes only, so this is a
+ * crash only OuterErrorBoundary catches. The app is not changed for
+ * tests; the browser's own ResizeObserver is wrapped. Call it before the
+ * page loads. It holds for every load of the page, so a page that loads
+ * again crashes again at its first message.
+ */
+async function breakMessageStack(page) {
+  await page.addInitScript(() => {
+    const RealResizeObserver = window.ResizeObserver;
+    window.ResizeObserver = class extends RealResizeObserver {
+      observe(target, options) {
+        if (target.classList.contains("toast-container")) {
+          throw new Error("Test: the message stack broke.");
+        }
+        super.observe(target, options);
+      }
+    };
+  });
+}
+
+// What the browser logs for the crash breakMessageStack makes: React's
+// own line and OuterErrorBoundary's both hold the error's words.
+const BROKEN_STACK_LOG = /Test: the message stack broke\./;
+
+/**
  * Slow the page's renderer via DevTools CPU throttling when
  * E2E_CPU_THROTTLE is set (e.g. E2E_CPU_THROTTLE=4 npm run test:e2e).
  * Used to hunt timing races (#21): OS-level CPU contention cannot slow
@@ -626,6 +653,8 @@ module.exports = {
   NOT_FOUND_LOG,
   rails500,
   stubPusher,
+  breakMessageStack,
+  BROKEN_STACK_LOG,
   disableIdleTimer,
   clearStorage,
   mockApi,

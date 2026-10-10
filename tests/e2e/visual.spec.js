@@ -11,6 +11,8 @@ const {
   rails500,
   setupAuthenticatedPage,
   stubPusher,
+  breakMessageStack,
+  BROKEN_STACK_LOG,
   disableIdleTimer,
   mockApi,
 } = require("../helpers/setup");
@@ -784,6 +786,36 @@ test.describe("Visual Baselines", () => {
     await page.waitForTimeout(500);
 
     await expect(toast).toHaveScreenshot("toast-error.png");
+  });
+
+  // The crash page OuterErrorBoundary shows in place of the whole app,
+  // after a crash outside the routes (here the message stack's). It
+  // shows no banner and no message: they went with the crash.
+  test.describe("crash page", () => {
+    test.use({ allowedConsoleErrors: BROKEN_STACK_LOG });
+
+    test("crash page after a crash outside the routes", async ({ page }) => {
+      await stubPusher(page);
+      await disableIdleTimer(page);
+      await mockApi(page);
+      await breakMessageStack(page);
+      await page.clock.setFixedTime(FROZEN_NOW);
+
+      await page.goto("/");
+      await page.waitForLoadState("networkidle");
+      await expect(page.locator('input[aria-label="email"]')).toBeVisible({
+        timeout: 10000,
+      });
+
+      await page.getByRole("button", { name: "Reset your password" }).click();
+      await expect(
+        page.getByText("Something went wrong with Comeals."),
+      ).toBeVisible();
+
+      await expect(page).toHaveScreenshot("crash-page.png", {
+        fullPage: true,
+      });
+    });
   });
 
   // Messages stack up, newest on top, up to three at once (#137). On a

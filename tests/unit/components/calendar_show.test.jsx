@@ -6,7 +6,8 @@ import {
   cleanup,
   act,
 } from "@testing-library/react";
-import { observable } from "mobx";
+import { useState } from "react";
+import { observable, runInAction } from "mobx";
 import {
   MemoryRouter,
   Routes,
@@ -37,6 +38,9 @@ import advancedFormat from "dayjs/plugin/advancedFormat";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
 import { CALENDAR_PATH } from "../../../app/frontend/src/routes.js";
 import MainCalendar from "../../../app/frontend/src/components/calendar/show.jsx";
+import BackToToday from "../../../app/frontend/src/components/app/back_to_today";
+import ErrorBoundary from "../../../app/frontend/src/components/app/error_boundary.jsx";
+import { IDLE_MS } from "../../../app/frontend/src/helpers/screen_home";
 import { fakeLocation } from "../helpers/fake_location.js";
 import handleAxiosError from "../../../app/frontend/src/helpers/handle_axios_error.js";
 import toastStore from "../../../app/frontend/src/stores/toast_store";
@@ -73,6 +77,21 @@ function makeStore(overrides = {}) {
       invalidateMonthForDate: vi.fn(),
       logout: vi.fn(),
       finishBillsSaves: vi.fn(() => Promise.resolve(true)),
+      // Read by the idle timer (back_to_today.tsx).
+      pageCrashed: false,
+      newVersionAvailable: false,
+      // The discard gate's flag (ADR 0006), set the way the real
+      // store's action sets it.
+      calendarFormDirty: false,
+      setCalendarFormDirty(value) {
+        this.calendarFormDirty = value;
+      },
+      // The open form shows an error of its own (use_form_messages.ts).
+      // The idle timer reads it too.
+      calendarFormErrorShown: false,
+      setCalendarFormErrorShown(value) {
+        this.calendarFormErrorShown = value;
+      },
       ...overrides,
     },
     {
@@ -308,6 +327,64 @@ describe("MainCalendar", () => {
       expect(screen.getByTestId("location")).toHaveTextContent("/events/new");
     });
 
+    // The flag lives in the store, so the idle timer reads the same one
+    // (back_to_today.tsx). The form compares values, not keystrokes.
+    it("keeps the flag in the store, where the idle timer reads it too", () => {
+      const { store } = renderCalendar({
+        path: "/calendar/all/2026-01-15/events/new",
+      });
+      expect(store.calendarFormDirty).toBe(false);
+
+      fireEvent.change(screen.getByLabelText("Title"), {
+        target: { value: "Movie Night" },
+      });
+      expect(store.calendarFormDirty).toBe(true);
+
+      fireEvent.change(screen.getByLabelText("Title"), {
+        target: { value: "" },
+      });
+      expect(store.calendarFormDirty).toBe(false);
+    });
+
+    // ADR 0006: "a change that is typed and then undone also does not
+    // count". The idle timer follows the same rule.
+    it("a title typed and then deleted counts as nothing typed: the X closes at once", () => {
+      renderCalendar({ path: "/calendar/all/2026-01-15/events/new" });
+      fireEvent.change(screen.getByLabelText("Title"), {
+        target: { value: "Movie Night" },
+      });
+      fireEvent.change(screen.getByLabelText("Title"), {
+        target: { value: "" },
+      });
+      fireEvent.click(screen.getByLabelText("Close"));
+
+      expect(
+        screen.queryByText("Discard your changes?"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        /^\/calendar\/all\/2026-01-15$/,
+      );
+    });
+
+    it("Discard leaves the flag clear for the next form", () => {
+      const { store } = renderCalendar({
+        path: "/calendar/all/2026-01-15/events/new",
+      });
+      fireEvent.change(screen.getByLabelText("Title"), {
+        target: { value: "Movie Night" },
+      });
+      fireEvent.click(screen.getByLabelText("Close"));
+      expect(screen.getByText("Discard your changes?")).toBeInTheDocument();
+      expect(store.calendarFormDirty).toBe(true);
+      const nowSpy = vi
+        .spyOn(performance, "now")
+        .mockReturnValue(performance.now() + 1000);
+      fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+      nowSpy.mockRestore();
+
+      expect(store.calendarFormDirty).toBe(false);
+    });
+
     // The untouched case is the existing "closing the modal returns to
     // the calendar path" test above; this pins the after-save case.
     it("a successful Create closes without asking", async () => {
@@ -324,6 +401,316 @@ describe("MainCalendar", () => {
       expect(
         screen.queryByText("Discard your changes?"),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  // The idle timer (back_to_today.tsx) reads the flag the discard gate
+  // reads. After five idle minutes, a form with nothing typed in it
+  // closes, and the screen goes to today's calendar the way it does
+  // with no form open. A form with typed changes stays: nobody is there
+  // to answer "Discard your changes?" (ADR 0006). The store's day and
+  // the clock are Jan 15, 2026, at noon in Los Angeles.
+  describe("the idle timer", () => {
+    const TODAY = "/calendar/all/2026-01-15/";
+
+    beforeEach(() => {
+      // The timer moves only a signed-in screen.
+      cookies.current.token = "test-token";
+      vi.useFakeTimers({ now: new Date("2026-01-15T12:00:00-08:00") });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    function renderWithTimer(path) {
+      const store = makeStore();
+      render(
+        <StoreContext.Provider value={store}>
+          <MemoryRouter initialEntries={[path]}>
+            <BackToToday store={store} />
+            <Routes>
+              <Route path={CALENDAR_PATH} element={<MainCalendar />} />
+            </Routes>
+            <LocationEcho />
+          </MemoryRouter>
+        </StoreContext.Provider>,
+      );
+      return store;
+    }
+
+    // The calendar draws a new month two animation frames after the
+    // address changes, and the fake clock runs those frames too.
+    function idle(ms) {
+      act(() => {
+        vi.advanceTimersByTime(ms);
+      });
+    }
+
+    function title() {
+      return screen.getByLabelText("Title");
+    }
+
+    it("closes a new form with nothing typed in it after five idle minutes", () => {
+      renderWithTimer("/calendar/all/2026-03-01/events/new/");
+
+      idle(IDLE_MS - 1);
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+      idle(1);
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(screen.getByTestId("location")).toHaveTextContent(TODAY);
+      expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent(
+        "January 2026",
+      );
+    });
+
+    // With no form open, the calendar of today's month stays as it is.
+    // With a form open, the form closes and the month stays.
+    it("closes a form with nothing typed in it on today's month, and stays on today's month", () => {
+      renderWithTimer("/calendar/all/2026-01-03/guest-room-reservations/new/");
+      expect(
+        screen.getByRole("heading", { name: "January 2026" }),
+      ).toBeInTheDocument();
+
+      idle(IDLE_MS);
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(screen.getByTestId("location")).toHaveTextContent(TODAY);
+      expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent(
+        "January 2026",
+      );
+    });
+
+    // The gate compares values, not keystrokes (ADR 0006), so a title
+    // typed and then deleted is nothing typed, for the timer too.
+    it("closes a form where a title was typed and then deleted", () => {
+      renderWithTimer("/calendar/all/2026-03-01/events/new/");
+      fireEvent.change(title(), { target: { value: "Movie Night" } });
+      fireEvent.change(title(), { target: { value: "" } });
+
+      idle(IDLE_MS);
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(screen.getByTestId("location")).toHaveTextContent(TODAY);
+    });
+
+    it("leaves a form with typed changes open, with what was typed", () => {
+      renderWithTimer("/calendar/all/2026-03-01/events/new/");
+      fireEvent.change(title(), { target: { value: "Movie Night" } });
+
+      idle(IDLE_MS * 3);
+      expect(title()).toHaveValue("Movie Night");
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        "/calendar/all/2026-03-01/events/new/",
+      );
+      expect(
+        screen.queryByText("Discard your changes?"),
+      ).not.toBeInTheDocument();
+    });
+
+    // Someone tapped outside a typed form and walked away from the
+    // question. The question and the form both stay.
+    it("leaves a typed form open under its discard question", () => {
+      renderWithTimer("/calendar/all/2026-03-01/events/new/");
+      fireEvent.change(title(), { target: { value: "Movie Night" } });
+      fireEvent.click(screen.getByLabelText("Close"));
+
+      idle(IDLE_MS * 3);
+      expect(screen.getByText("Discard your changes?")).toBeInTheDocument();
+      expect(title()).toHaveValue("Movie Night");
+    });
+
+    // The idle timer's load after a crash does not read the flag
+    // (helpers/screen_home.ts). The error page took the place of the
+    // form, and the form reported nothing typed as it went, so the flag
+    // is clear by then.
+    it("finds the flag clear after a crash took a typed form away", () => {
+      const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+      let crash;
+      function CrashOnDemand() {
+        const [broken, setBroken] = useState(false);
+        crash = () => setBroken(true);
+        if (broken) throw new Error("a render error beside the calendar");
+        return null;
+      }
+      const store = makeStore({ markPageCrashed: vi.fn() });
+      render(
+        <StoreContext.Provider value={store}>
+          <MemoryRouter
+            initialEntries={["/calendar/all/2026-03-01/events/new/"]}
+          >
+            <ErrorBoundary>
+              <Routes>
+                <Route path={CALENDAR_PATH} element={<MainCalendar />} />
+              </Routes>
+              <CrashOnDemand />
+            </ErrorBoundary>
+          </MemoryRouter>
+        </StoreContext.Provider>,
+      );
+      fireEvent.change(title(), { target: { value: "Movie Night" } });
+      expect(store.calendarFormDirty).toBe(true);
+
+      act(() => crash());
+      expect(
+        screen.getByText("Something went wrong with Comeals."),
+      ).toBeInTheDocument();
+      expect(store.calendarFormDirty).toBe(false);
+      quiet.mockRestore();
+      // ErrorBoundary counted the crash (helpers/crash_reload_wait.ts).
+      sessionStorage.clear();
+    });
+
+    // #137: an error stays until a person closes it. A form's own
+    // messages go when the form closes, so a form that shows an error of
+    // its own stays open, typed in or not. The person closes the error,
+    // and the next five idle minutes close the form.
+    describe("a form that shows an error of its own", () => {
+      const EVENT = {
+        id: 70,
+        title: "Community Meeting",
+        description: "",
+        start_date: "2026-03-28T19:00:00",
+        end_date: null,
+        allday: false,
+      };
+
+      function refusal(message) {
+        return { response: { status: 400, data: { message } } };
+      }
+
+      // The page asks for more than the event as it mounts (the
+      // signed-in resident's id), so each address gets its own answer.
+      // Any other address gets the mock's usual empty answer.
+      async function answerGets(answers) {
+        const axios = (await import("axios")).default;
+        axios.get.mockImplementation(function (url) {
+          const answer = answers[url];
+          return answer ? answer() : Promise.resolve({ status: 200, data: {} });
+        });
+        return axios;
+      }
+
+      afterEach(async () => {
+        const axios = (await import("axios")).default;
+        axios.get.mockImplementation(() =>
+          Promise.resolve({ status: 200, data: {} }),
+        );
+      });
+
+      // The case people will hit: the Edit form is clean, and the
+      // server refused the Delete.
+      it("keeps a refused Delete's reason on screen until a person closes it", async () => {
+        const axios = await answerGets({
+          "/api/v1/events/70": () =>
+            Promise.resolve({ status: 200, data: EVENT }),
+        });
+        axios.delete.mockRejectedValueOnce(
+          refusal("This event already happened."),
+        );
+        renderWithTimer("/calendar/all/2026-03-01/events/edit/70/");
+        await act(async () => {});
+        fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+        const buttons = screen.getAllByRole("button", { name: "Delete" });
+        const nowSpy = vi
+          .spyOn(performance, "now")
+          .mockReturnValue(performance.now() + 1000);
+        fireEvent.click(buttons[buttons.length - 1]);
+        nowSpy.mockRestore();
+        await act(async () => {});
+        expect(
+          screen.getByText("This event already happened."),
+        ).toBeInTheDocument();
+
+        idle(IDLE_MS * 3);
+        expect(
+          screen.getByText("This event already happened."),
+        ).toBeInTheDocument();
+        expect(screen.getByTestId("location")).toHaveTextContent(
+          "/calendar/all/2026-03-01/events/edit/70/",
+        );
+      });
+
+      // #115: the form stays empty and locked, and says why.
+      it("keeps an Edit form whose record could not be loaded, with the reason", async () => {
+        await answerGets({
+          "/api/v1/events/70": () =>
+            Promise.reject(refusal("Event not found.")),
+        });
+        renderWithTimer("/calendar/all/2026-03-01/events/edit/70/");
+        await act(async () => {});
+        expect(screen.getByText("Event not found.")).toBeInTheDocument();
+
+        idle(IDLE_MS * 3);
+        expect(screen.getByText("Event not found.")).toBeInTheDocument();
+      });
+
+      it("keeps a refused Create with nothing typed, and closes the form once the person closes the error", async () => {
+        const axios = (await import("axios")).default;
+        axios.post.mockRejectedValueOnce(refusal("Title can't be blank"));
+        renderWithTimer("/calendar/all/2026-03-01/events/new/");
+        fireEvent.click(screen.getByRole("button", { name: "Create" }));
+        await act(async () => {});
+        expect(screen.getByText("Title can't be blank")).toBeInTheDocument();
+
+        idle(IDLE_MS * 3);
+        expect(screen.getByText("Title can't be blank")).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+        idle(IDLE_MS);
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+        expect(screen.getByTestId("location")).toHaveTextContent(TODAY);
+      });
+
+      // The midnight move closes a form with nothing typed in it, the
+      // same as the idle timer does.
+      it("keeps the form and its error when the day moves to a new month", async () => {
+        const axios = (await import("axios")).default;
+        axios.post.mockRejectedValueOnce(refusal("Title can't be blank"));
+        const store = renderWithTimer("/calendar/all/2026-01-15/events/new/");
+        fireEvent.click(screen.getByRole("button", { name: "Create" }));
+        await act(async () => {});
+
+        act(() => {
+          runInAction(() => {
+            store.communityToday = "2026-02-01";
+          });
+        });
+        expect(screen.getByTestId("location")).toHaveTextContent(
+          "/calendar/all/2026-01-15/events/new/",
+        );
+        expect(screen.getByText("Title can't be blank")).toBeInTheDocument();
+      });
+    });
+
+    // An edit form compares its fields with what the server sent.
+    it("closes an edit form with nothing changed, and leaves one with a change", async () => {
+      const axios = (await import("axios")).default;
+      axios.get.mockResolvedValue({
+        status: 200,
+        data: {
+          id: 70,
+          title: "Community Meeting",
+          description: "",
+          start_date: "2026-03-28T19:00:00",
+          end_date: null,
+          allday: false,
+        },
+      });
+      renderWithTimer("/calendar/all/2026-03-01/events/edit/70/");
+      await act(async () => {});
+      expect(title()).toHaveValue("Community Meeting");
+
+      idle(IDLE_MS);
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(screen.getByTestId("location")).toHaveTextContent(TODAY);
+
+      cleanup();
+      renderWithTimer("/calendar/all/2026-03-01/events/edit/70/");
+      await act(async () => {});
+      fireEvent.change(title(), { target: { value: "Board Meeting" } });
+
+      idle(IDLE_MS * 3);
+      expect(title()).toHaveValue("Board Meeting");
     });
   });
 

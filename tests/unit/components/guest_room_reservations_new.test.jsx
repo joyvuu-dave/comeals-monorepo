@@ -48,6 +48,7 @@ function renderForm({
               <GuestRoomReservationsNew
                 handleCloseModal={handleCloseModal}
                 setDirty={setDirty}
+                setErrorShown={vi.fn()}
               />
             }
           />

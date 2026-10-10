@@ -3,7 +3,9 @@ import { useEffect } from "react";
 // Reports whether a modal form holds unsaved changes. The calendar
 // page owns the close gate (see calendar/show.jsx): a close request on
 // a dirty form opens the "Discard your changes?" dialog instead of
-// closing (ADR 0006).
+// closing (ADR 0006). The idle timer reads the same flag: after five
+// idle minutes it closes a clean form and leaves a dirty one
+// (components/app/back_to_today.tsx).
 //
 // Forms compute `isDirty` by comparing their fields to the values they
 // started with, so a change that is typed and then undone counts as

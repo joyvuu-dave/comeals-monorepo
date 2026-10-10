@@ -64,6 +64,7 @@ function renderForm({
         eventId={70}
         handleCloseModal={handleCloseModal}
         setDirty={setDirty}
+        setErrorShown={vi.fn()}
       />
     </StoreContext.Provider>,
   );

@@ -23,7 +23,7 @@ import useDeleteFlow from "../modal_form/use_delete_flow";
 // can't accidentally PATCH with placeholder/empty field values in the
 // brief window before the fetch returns.
 const GuestRoomReservationsEdit = observer(
-  ({ eventId, handleCloseModal, setDirty }) => {
+  ({ eventId, handleCloseModal, setDirty, setErrorShown }) => {
     const store = useStore();
 
     const [loaded, setLoaded] = useState(false);
@@ -34,7 +34,7 @@ const GuestRoomReservationsEdit = observer(
 
     const mountedRef = useMountedRef();
 
-    const formMessages = useFormMessages();
+    const formMessages = useFormMessages(setErrorShown);
 
     const showError = formMessages.showError;
 

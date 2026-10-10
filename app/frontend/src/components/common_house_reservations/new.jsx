@@ -19,7 +19,7 @@ import { buildStartEndPayload } from "../modal_form/payload";
 // or freshly-fetched list is available — and stays in sync in real time
 // via the Pusher `community-<id>-residents` subscription.
 const CommonHouseReservationsNew = observer(
-  ({ handleCloseModal, setDirty }) => {
+  ({ handleCloseModal, setDirty, setErrorShown }) => {
     const store = useStore();
     const params = useParams();
 
@@ -30,7 +30,7 @@ const CommonHouseReservationsNew = observer(
     const [endTime, setEndTime] = useState("");
     const [loading, setLoading] = useState(false);
     const mountedRef = useMountedRef();
-    const formMessages = useFormMessages();
+    const formMessages = useFormMessages(setErrorShown);
     const showError = formMessages.showError;
 
     // Hosts cache: kick off fetch if empty; no-op if already loaded.

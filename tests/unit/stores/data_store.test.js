@@ -1608,12 +1608,74 @@ describe("DataStore", () => {
       expect(store.pageCrashed).toBe(false);
       expect(store.newVersionAvailable).toBe(false);
 
-      store.markPageCrashed();
+      store.markPageCrashed(20 * 60 * 1000);
       expect(store.pageCrashed).toBe(true);
       expect(store.newVersionAvailable).toBe(false);
 
       store.markNewVersionAvailable();
       expect(store.newVersionAvailable).toBe(true);
+    });
+
+    // ErrorBoundary hands over how long the idle timer waits before it
+    // loads the page again. The wait grows when the page keeps crashing
+    // (helpers/crash_reload_wait.ts).
+    it("keeps the wait the crash came with", () => {
+      const store = createDataStore();
+      store.markPageCrashed(20 * 60 * 1000);
+      expect(store.crashReloadWaitMs).toBe(20 * 60 * 1000);
+    });
+
+    // The idle timer waits this long on a crashed page, and a wait of 0
+    // would load the page as fast as it loads, all day. So a crash that
+    // comes with no wait, or with a wait that is not a sane number of
+    // milliseconds, gets the longest wait. A timer over about 24 days
+    // runs out at once in a browser, so the wait is never more than the
+    // longest.
+    it("waits the longest time when the crash comes with no usable wait", () => {
+      const LONGEST = 60 * 60 * 1000;
+      const store = createDataStore();
+      expect(store.crashReloadWaitMs).toBe(LONGEST);
+
+      [undefined, 0, -1, NaN, Infinity, 2 ** 40, "300000"].forEach((wait) => {
+        store.markPageCrashed(wait);
+        expect(store.crashReloadWaitMs).toBe(LONGEST);
+      });
+
+      store.markPageCrashed(5 * 60 * 1000);
+      expect(store.crashReloadWaitMs).toBe(5 * 60 * 1000);
+    });
+  });
+
+  // The discard gate's flag (calendar/show.jsx, ADR 0006): the open
+  // calendar form holds changes a person typed. The idle timer reads it
+  // too, and closes a form only when nothing is typed in it.
+  describe("a calendar form holds typed changes", () => {
+    it("starts false, and follows what the form reports", () => {
+      const store = createDataStore();
+      expect(store.calendarFormDirty).toBe(false);
+
+      store.setCalendarFormDirty(true);
+      expect(store.calendarFormDirty).toBe(true);
+
+      store.setCalendarFormDirty(false);
+      expect(store.calendarFormDirty).toBe(false);
+    });
+  });
+
+  // The open calendar form shows an error of its own
+  // (use_form_messages.ts). The idle timer leaves such a form open: the
+  // error would go with it, and an error stays until a person closes it
+  // (#137).
+  describe("a calendar form shows an error", () => {
+    it("starts false, and follows what the form reports", () => {
+      const store = createDataStore();
+      expect(store.calendarFormErrorShown).toBe(false);
+
+      store.setCalendarFormErrorShown(true);
+      expect(store.calendarFormErrorShown).toBe(true);
+
+      store.setCalendarFormErrorShown(false);
+      expect(store.calendarFormErrorShown).toBe(false);
     });
   });
 

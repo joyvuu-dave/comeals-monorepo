@@ -48,6 +48,7 @@ function renderForm({
               <CommonHouseReservationsNew
                 handleCloseModal={handleCloseModal}
                 setDirty={setDirty}
+                setErrorShown={vi.fn()}
               />
             }
           />

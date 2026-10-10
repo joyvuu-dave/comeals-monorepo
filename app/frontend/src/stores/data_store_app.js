@@ -12,6 +12,7 @@ import {
   msUntilNextMidnight,
 } from "../helpers/helpers";
 import { communityId } from "../helpers/session";
+import { LONGEST_CRASH_WAIT_MS } from "../helpers/crash_reload_wait";
 import * as monthData from "./month_fetch";
 
 export function appVolatile() {
@@ -25,9 +26,28 @@ export function appVolatile() {
     residentsChannel: null,
     // The page crashed: ErrorBoundary shows "Something went wrong".
     pageCrashed: false,
+    // How long the idle timer waits before it loads the page after the
+    // crash. ErrorBoundary hands it over with the crash. It grows when
+    // the page keeps crashing (helpers/crash_reload_wait.ts). It starts
+    // at the longest wait, so a crash noted with no wait never loads the
+    // page at once (markPageCrashed).
+    crashReloadWaitMs: LONGEST_CRASH_WAIT_MS,
     // VersionBanner found a newer build on the server than the code
     // running here.
     newVersionAvailable: false,
+    // The open calendar form holds changes a person typed. The form
+    // reports it (use_dirty_report.js), the discard gate reads it when
+    // someone closes the form (calendar/show.jsx, ADR 0006), and the
+    // idle timer reads it before it closes the form
+    // (back_to_today.tsx). Nothing on screen reads it, so a keystroke
+    // does not draw the calendar again.
+    calendarFormDirty: false,
+    // The open calendar form shows an error message of its own. The
+    // form reports it (use_form_messages.ts), and the idle timer leaves
+    // such a form open: the error would go with the form, and an error
+    // stays until a person closes it (#137, back_to_today.tsx). The
+    // discard gate does not read it.
+    calendarFormErrorShown: false,
   };
 }
 
@@ -127,11 +147,27 @@ export function appActions(self) {
     // The idle timer reads these two: a move inside the app fixes
     // neither, so it loads the page again (back_to_today.tsx). Each
     // goes one way. The page load starts a new store.
-    markPageCrashed() {
+    //
+    // A wait of 0 would load a page that crashes every time as fast as
+    // it loads, all day. So a crash noted with no wait, or with a wait
+    // that is not a number of milliseconds above 0, waits the longest
+    // time. So does a wait longer than that: a browser runs a timer of
+    // more than about 24 days at once.
+    markPageCrashed(reloadWaitMs) {
       self.pageCrashed = true;
+      self.crashReloadWaitMs =
+        typeof reloadWaitMs === "number" && reloadWaitMs > 0
+          ? Math.min(reloadWaitMs, LONGEST_CRASH_WAIT_MS)
+          : LONGEST_CRASH_WAIT_MS;
     },
     markNewVersionAvailable() {
       self.newVersionAvailable = true;
+    },
+    setCalendarFormDirty(value) {
+      self.calendarFormDirty = value;
+    },
+    setCalendarFormErrorShown(value) {
+      self.calendarFormErrorShown = value;
     },
     // Subscribe to the residents channel once. The server pushes it
     // when a resident or unit changes in any way a screen shows

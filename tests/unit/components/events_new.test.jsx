@@ -37,6 +37,7 @@ function renderForm({
               <EventsNew
                 handleCloseModal={handleCloseModal}
                 setDirty={setDirty}
+                setErrorShown={vi.fn()}
               />
             }
           />

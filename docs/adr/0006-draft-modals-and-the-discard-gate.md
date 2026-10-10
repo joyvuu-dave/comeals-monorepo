@@ -97,12 +97,24 @@ contract as `ConfirmBar` (see `confirm_bar.jsx`):
   compare against their empty defaults.
 - A form that is unmounted reports clean on the way out, so a stale
   flag cannot block the next modal.
-- Nothing moves the screen by itself while a form is open. The idle
-  timer and the move to the new month at midnight
-  (`components/app/back_to_today.tsx`) both leave an open form where
-  it is. Until October 2026 the idle timer loaded the page again after
-  five minutes with nobody at the screen, which threw an open draft
-  away.
+- Nothing moves the screen by itself while a form holds typed
+  changes. The idle timer, the move to the new month at midnight, and
+  the page load for a new version (`components/app/back_to_today.tsx`)
+  all leave such a form where it is. Until October 2026 the idle timer
+  loaded the page again after five minutes with nobody at the screen,
+  which threw an open draft away.
+- 2026-10-10: after five idle minutes, a form with nothing typed in it
+  closes, and the screen goes to today's calendar the way it does with
+  no form open. The timer reads the gate's own flag (the store's
+  `calendarFormDirty`), so a change typed and then undone counts as
+  nothing typed, here as at the gate.
+- A form that shows an error of its own also stays open, typed in or
+  not: a refused Delete, an Edit form whose record could not be loaded
+  (#115), a refused Create. Its messages go when it closes, and an
+  error stays until a person closes it (#137). The form reports it
+  through `useFormMessages` into the store's `calendarFormErrorShown`.
+  The gate does not read that flag: a person who closes the form has
+  seen the error.
 
 ## Consequences
 
@@ -110,8 +122,15 @@ contract as `ConfirmBar` (see `confirm_bar.jsx`):
 - The forms keep their Create/Update buttons forever; any future
   request to make them real-time should be answered by pointing here.
 - Every modal form that creates or edits a record must accept
-  `setDirty` and report through `useDirtyReport`, or dismissal will
-  silently discard its changes — the exact bug this ADR removes. The
-  login form is a modal too, but it edits nothing: an email and a
-  password are retyped in seconds, so it stays outside the gate on
-  purpose (invariant hunt, 2026-08-25).
+  `setDirty` and report through `useDirtyReport`, or its changes are
+  silently discarded — the exact bug this ADR removes. Not only when
+  someone closes it: the idle timer, the move to the new month at
+  midnight, and the page load for a new version also close a form that
+  reports nothing typed. Before October 2026 the screen kept every
+  dialog but a rotation's open, so a form that forgot `useDirtyReport`
+  was safe from the timer; it no longer is. A form must also accept
+  `setErrorShown` and pass it to `useFormMessages`. The hook calls it,
+  so a form that leaves it out fails as soon as it opens, in its own
+  tests first. The login form is a modal too, but it edits nothing: an
+  email and a password are retyped in seconds, so it stays outside the
+  gate on purpose (invariant hunt, 2026-08-25).

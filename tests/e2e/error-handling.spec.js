@@ -14,6 +14,8 @@ const {
   rails500,
   setupAuthenticatedPage,
   stubPusher,
+  breakMessageStack,
+  BROKEN_STACK_LOG,
   disableIdleTimer,
   mockApi,
 } = require("../helpers/setup");
@@ -1532,5 +1534,44 @@ test.describe("Error Handling & Edge Cases", () => {
       );
       expect(requested).toEqual([42, 43]);
     });
+  });
+});
+
+// A crash in a part of the page outside ErrorBoundary, which is around
+// the routes only. Before OuterErrorBoundary, React took the whole page
+// away, the idle timer with it, and a shared screen stayed blank until
+// someone came and reloaded it.
+test.describe("a crash outside the error page", () => {
+  test.use({
+    allowedConsoleErrors: combinePatterns(httpFailurePattern, BROKEN_STACK_LOG),
+  });
+
+  test("shows the crash page, and loads the login page again by itself after five minutes", async ({
+    page,
+  }) => {
+    await stubPusher(page);
+    await disableIdleTimer(page);
+    await mockApi(page);
+    await breakMessageStack(page);
+    await page.clock.install({ time: FROZEN_NOW });
+
+    await page.goto("/");
+    await expect(page.locator('input[aria-label="email"]')).toBeVisible({
+      timeout: 10000,
+    });
+
+    // Reset with an empty email shows an error message, and the message
+    // stack crashes as it shows it.
+    await page.getByRole("button", { name: "Reset your password" }).click();
+    const crashPage = page.getByText("Something went wrong with Comeals.");
+    await expect(crashPage).toBeVisible();
+    await expect(page.getByRole("button", { name: "Refresh" })).toBeVisible();
+
+    const loaded = page.waitForEvent("load");
+    await page.clock.fastForward("05:01");
+    await loaded;
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.locator('input[aria-label="email"]')).toBeVisible();
+    await expect(crashPage).toHaveCount(0);
   });
 });

@@ -10,6 +10,7 @@ import {
   pathAfterNewDay,
   pathToLoadAfterIdle,
 } from "../../helpers/screen_home";
+import type { OpenForm } from "../../helpers/screen_home";
 import { signedIn } from "../../helpers/session";
 import toastStore from "../../stores/toast_store";
 
@@ -20,8 +21,17 @@ interface ScreenStore {
   readonly communityToday: string;
   // ErrorBoundary caught a crash.
   readonly pageCrashed: boolean;
+  // How long to wait after the crash before the page loads again. It
+  // grows when the page keeps crashing (helpers/crash_reload_wait.ts).
+  readonly crashReloadWaitMs: number;
   // VersionBanner found a newer build on the server.
   readonly newVersionAvailable: boolean;
+  // The open calendar form holds changes a person typed: the flag the
+  // discard gate reads (calendar/show.jsx, ADR 0006).
+  readonly calendarFormDirty: boolean;
+  // The open calendar form shows an error message of its own
+  // (use_form_messages.ts).
+  readonly calendarFormErrorShown: boolean;
   // The wait for the bills saves on their way, before a page load.
   finishBillsSaves(): Promise<boolean>;
 }
@@ -43,6 +53,14 @@ const MODIFIER_KEYS = ["Shift", "Control", "Alt", "Meta"];
 // What a page change calls while the timer is off.
 function timerOff() {}
 
+// What the open calendar form holds, as screen_home.ts reads it.
+function openForm(store: ScreenStore): OpenForm {
+  return {
+    dirty: store.calendarFormDirty,
+    errorShown: store.calendarFormErrorShown,
+  };
+}
+
 // Brings the shared screen back to today's calendar by itself, inside
 // the app, with no page load. A page load would take away every message
 // on screen, read or not (#137), and a meal page's cost still waiting to
@@ -60,17 +78,25 @@ function timerOff() {}
 // - The community's day changed while the calendar showed the old day's
 //   month.
 //
-// Neither ever closes an open calendar form (ADR 0006), and neither
-// moves a signed-out page.
+// Neither ever closes a calendar form that holds changes a person
+// typed: nobody is there to answer "Discard your changes?" (ADR 0006).
+// Nor one that shows an error of its own: the error would go with the
+// form, and an error stays until a person closes it (#137). Any other
+// form closes, the way the screen leaves a calendar with no form open.
+// Neither moves a signed-out page.
 //
 // Two things a move inside the app cannot fix: a crashed page, whose
 // error page stays when the address changes, and old code after a
 // deploy. For those the timer loads today's calendar from the server
 // instead, once the bills saves on their way are answered
 // (pathToLoadAfterIdle says when). The crash and the new version each
-// start the five minutes again, so a screen nobody uses gets the load
-// five minutes later. Without that, the timer could have run out
-// already, and nothing would start it until someone touched the screen.
+// start the wait again, so a screen nobody uses gets the load five
+// minutes later. Without that, the timer could have run out already,
+// and nothing would start it until someone touched the screen. On a
+// crashed page the wait is the one ErrorBoundary noted with the crash:
+// five minutes after the first crash, and longer when the page keeps
+// crashing, so a page that crashes every time it loads does not load
+// every five minutes all day (helpers/crash_reload_wait.ts).
 export default function BackToToday({ store }: { store: ScreenStore }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -97,6 +123,7 @@ export default function BackToToday({ store }: { store: ScreenStore }) {
           crashed: store.pageCrashed,
           newVersion: store.newVersionAvailable,
           errorShown: toastStore.toasts.some((toast) => toast.type === "error"),
+          form: openForm(store),
         });
         if (load !== null) {
           loadAfterBillsSaves(store, function () {
@@ -104,12 +131,20 @@ export default function BackToToday({ store }: { store: ScreenStore }) {
           });
           return;
         }
-        const path = pathAfterIdle(pathname.current, today, signedIn());
+        const path = pathAfterIdle(
+          pathname.current,
+          today,
+          signedIn(),
+          openForm(store),
+        );
         if (path !== null) navigateTo.current(path);
       }
       function startAgain() {
         clearTimeout(timer);
-        timer = setTimeout(goHome, IDLE_MS);
+        timer = setTimeout(
+          goHome,
+          store.pageCrashed ? store.crashReloadWaitMs : IDLE_MS,
+        );
       }
       function onKeyDown(event: KeyboardEvent) {
         if (!MODIFIER_KEYS.includes(event.key)) startAgain();
@@ -161,7 +196,12 @@ export default function BackToToday({ store }: { store: ScreenStore }) {
       return reaction(
         () => store.communityToday,
         function (newToday, oldToday) {
-          const path = pathAfterNewDay(pathname.current, oldToday, newToday);
+          const path = pathAfterNewDay(
+            pathname.current,
+            oldToday,
+            newToday,
+            openForm(store),
+          );
           // In place of the old day's address: nobody went anywhere.
           if (path !== null) navigateTo.current(path, { replace: true });
         },

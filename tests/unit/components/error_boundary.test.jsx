@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
+import { useEffect } from "react";
 
 vi.mock("../../../app/frontend/src/helpers/bugsnag", () => ({
   notifyError: vi.fn(),
@@ -10,8 +11,19 @@ import { StoreContext } from "../../../app/frontend/src/helpers/store_context.js
 import { notifyError } from "../../../app/frontend/src/helpers/bugsnag";
 import { fakeLocation } from "../helpers/fake_location.js";
 
+const MINUTE = 60 * 1000;
+
 function Bomb() {
   throw new Error("boom");
+}
+
+// An error in an effect, not in drawing. React hands it to the nearest
+// boundary all the same.
+function EffectBomb({ message }) {
+  useEffect(() => {
+    throw new Error(message);
+  }, [message]);
+  return null;
 }
 
 describe("ErrorBoundary", () => {
@@ -21,11 +33,13 @@ describe("ErrorBoundary", () => {
   // so clear its calls here: each test then sees only its own render.
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
     vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    sessionStorage.clear();
   });
 
   it("renders its children when nothing throws", () => {
@@ -65,7 +79,9 @@ describe("ErrorBoundary", () => {
   // The idle timer reads the note and loads today's calendar: the
   // error page stays when the address changes, so a move inside the
   // app would leave it on screen (components/app/back_to_today.tsx).
-  it("notes the crash in the store", () => {
+  // The note carries how long the timer waits: five minutes after the
+  // first crash.
+  it("notes the crash in the store, with the wait before the reload", () => {
     const store = { markPageCrashed: vi.fn() };
     render(
       <StoreContext.Provider value={store}>
@@ -75,6 +91,44 @@ describe("ErrorBoundary", () => {
       </StoreContext.Provider>,
     );
     expect(store.markPageCrashed).toHaveBeenCalledTimes(1);
+    expect(store.markPageCrashed).toHaveBeenCalledWith(5 * 60 * 1000);
+  });
+
+  // Two parts of the page can fail in one go. That is one crash, so it
+  // is counted once, and the wait is the one for a first crash. Counted
+  // twice, it would wait ten minutes. Each error is still reported.
+  it("counts two errors that arrive together as one crash", () => {
+    const store = { markPageCrashed: vi.fn() };
+    render(
+      <StoreContext.Provider value={store}>
+        <ErrorBoundary>
+          <EffectBomb message="first" />
+          <EffectBomb message="second" />
+        </ErrorBoundary>
+      </StoreContext.Provider>,
+    );
+    expect(
+      screen.getByText("Something went wrong with Comeals."),
+    ).toBeInTheDocument();
+    expect(store.markPageCrashed).toHaveBeenCalledTimes(1);
+    expect(store.markPageCrashed).toHaveBeenCalledWith(5 * MINUTE);
+    expect(sessionStorage.getItem("crashReloads")).toBe("1");
+    expect(notifyError).toHaveBeenCalledTimes(2);
+  });
+
+  // A page that crashes every time it loads must not load every five
+  // minutes all day (helpers/crash_reload_wait.ts).
+  it("notes a longer wait when the page keeps crashing", () => {
+    sessionStorage.setItem("crashReloads", "3");
+    const store = { markPageCrashed: vi.fn() };
+    render(
+      <StoreContext.Provider value={store}>
+        <ErrorBoundary>
+          <Bomb />
+        </ErrorBoundary>
+      </StoreContext.Provider>,
+    );
+    expect(store.markPageCrashed).toHaveBeenCalledWith(40 * 60 * 1000);
   });
 
   // The store may be what broke. The error page shows anyway, and the
@@ -97,6 +151,107 @@ describe("ErrorBoundary", () => {
     ).toBeInTheDocument();
     expect(notifyError).toHaveBeenCalledTimes(1);
     expect(notifyError.mock.lastCall[0].message).toBe("boom");
+  });
+
+  // The idle timer loads a crashed page because it reads the note
+  // (back_to_today.tsx). When the store cannot take the note, the timer
+  // never learns of the crash, and the crash page would stay for good.
+  // So the page starts its own plain timer with the same wait, the way
+  // OuterErrorBoundary does, and loads "/" when it runs out.
+  describe("when the store cannot take the note", () => {
+    let location;
+    let restoreLocation;
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      ({ location, restore: restoreLocation } = fakeLocation({
+        assign: vi.fn(),
+      }));
+    });
+
+    afterEach(() => {
+      restoreLocation();
+      vi.useRealTimers();
+    });
+
+    function brokenStore() {
+      return {
+        markPageCrashed: vi.fn(() => {
+          throw new Error("[mobx-state-tree] the store is dead");
+        }),
+        finishBillsSaves: vi.fn(() => Promise.resolve(true)),
+      };
+    }
+
+    function renderCrash(store) {
+      return render(
+        <StoreContext.Provider value={store}>
+          <ErrorBoundary>
+            <Bomb />
+          </ErrorBoundary>
+        </StoreContext.Provider>,
+      );
+    }
+
+    // The fake clock runs the wait, and the promises of the saves
+    // settle.
+    async function wait(ms) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ms);
+      });
+    }
+
+    it("sends the waiting saves, then loads '/' by itself five minutes after the first crash", async () => {
+      const store = brokenStore();
+      renderCrash(store);
+
+      await wait(5 * MINUTE - 1);
+      expect(store.finishBillsSaves).not.toHaveBeenCalled();
+      expect(location.assign).not.toHaveBeenCalled();
+
+      await wait(1);
+      expect(store.finishBillsSaves).toHaveBeenCalledTimes(1);
+      expect(location.assign).toHaveBeenCalledTimes(1);
+      expect(location.assign).toHaveBeenCalledWith("/");
+    });
+
+    // A page that crashes every time it loads must not load every five
+    // minutes all day (helpers/crash_reload_wait.ts).
+    it("waits longer when the page keeps crashing", async () => {
+      sessionStorage.setItem("crashReloads", "3");
+      renderCrash(brokenStore());
+
+      await wait(40 * MINUTE - 1);
+      expect(location.assign).not.toHaveBeenCalled();
+
+      await wait(1);
+      expect(location.assign).toHaveBeenCalledWith("/");
+    });
+
+    // Every part of the store may be dead, the wait for the saves too.
+    // Nothing else takes the screen off this page, so it loads anyway.
+    it("loads '/' when the store has nothing left that works", async () => {
+      renderCrash({});
+
+      await wait(5 * MINUTE);
+      expect(location.assign).toHaveBeenCalledWith("/");
+    });
+
+    it("loads nothing once the page is gone", async () => {
+      const { unmount } = renderCrash(brokenStore());
+      unmount();
+
+      await wait(60 * MINUTE);
+      expect(location.assign).not.toHaveBeenCalled();
+    });
+
+    // With a store that takes the note, the idle timer does the load. A
+    // second timer here would load the page twice.
+    it("starts no timer of its own when the store takes the note", () => {
+      const timers = vi.getTimerCount();
+      renderCrash({ markPageCrashed: vi.fn() });
+      expect(vi.getTimerCount()).toBe(timers);
+    });
   });
 
   // A reload ends every request on its way, so Refresh first waits for

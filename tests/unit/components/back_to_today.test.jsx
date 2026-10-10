@@ -71,7 +71,13 @@ function navigationKey() {
 
 // The page the router starts on. A list of pages is the history, and
 // the router starts on the last one.
-function renderAt(path, store = observable({ communityToday: "2026-10-10" })) {
+function renderAt(
+  path,
+  store = observable({
+    communityToday: "2026-10-10",
+    calendarFormDirty: false,
+  }),
+) {
   const entries = Array.isArray(path) ? path : [path];
   render(
     <MemoryRouter initialEntries={entries} initialIndex={entries.length - 1}>
@@ -182,12 +188,67 @@ describe("BackToToday", () => {
       expect(where()).toBe(HOME);
     });
 
-    // ADR 0006: an open form is a draft. The timer must not close it.
-    it("leaves an open calendar form alone", () => {
-      renderAt("/calendar/all/2026-12-01/events/edit/5/");
+    // ADR 0006: a typed draft is never dropped without the question
+    // "Discard your changes?", and nobody is there to answer it. The
+    // flag is the one the discard gate reads (calendar/show.jsx).
+    it("leaves an open calendar form with typed changes alone", () => {
+      renderAt(
+        "/calendar/all/2026-12-01/events/edit/5/",
+        observable({ communityToday: "2026-10-10", calendarFormDirty: true }),
+      );
 
       wait(IDLE_MS * 2);
       expect(where()).toBe("/calendar/all/2026-12-01/events/edit/5/");
+    });
+
+    // #137: an error stays until a person closes it. A form's own error
+    // goes with the form, so the form stays, typed in or not.
+    it("leaves an open calendar form that shows an error of its own alone", () => {
+      renderAt(
+        "/calendar/all/2026-12-01/events/edit/5/",
+        observable({
+          communityToday: "2026-10-10",
+          calendarFormDirty: false,
+          calendarFormErrorShown: true,
+        }),
+      );
+
+      wait(IDLE_MS * 2);
+      expect(where()).toBe("/calendar/all/2026-12-01/events/edit/5/");
+    });
+
+    // A form with nothing typed in it holds nothing to lose. It closes
+    // the way the calendar goes home with no form open.
+    it("closes an open calendar form with nothing typed in it", () => {
+      renderAt("/calendar/all/2026-12-01/events/new/");
+
+      wait(IDLE_MS - 1);
+      expect(where()).toBe("/calendar/all/2026-12-01/events/new/");
+
+      wait(1);
+      expect(where()).toBe(HOME);
+    });
+
+    // The flag is read when the five minutes run out, not when they
+    // start: a form someone typed in and then emptied is clean then.
+    it("reads the flag when the five minutes run out", () => {
+      const store = renderAt(
+        "/calendar/all/2026-10-03/events/new/",
+        observable({ communityToday: "2026-10-10", calendarFormDirty: true }),
+      );
+      wait(IDLE_MS * 2);
+      expect(where()).toBe("/calendar/all/2026-10-03/events/new/");
+
+      // A form's report is not a page change or a touch, so it does not
+      // start the five minutes again. The next touch does.
+      act(() => {
+        runInAction(() => {
+          store.calendarFormDirty = false;
+        });
+      });
+      fireEvent.keyDown(screen.getByTestId("scroller"), { key: "Backspace" });
+      wait(IDLE_MS);
+      expect(where()).toBe(HOME);
     });
 
     // The trip home is a move inside the app, so the stack of messages
@@ -264,6 +325,10 @@ describe("BackToToday", () => {
           communityToday: "2026-10-10",
           pageCrashed: false,
           newVersionAvailable: false,
+          calendarFormDirty: false,
+          calendarFormErrorShown: false,
+          // The wait ErrorBoundary notes after a first crash.
+          crashReloadWaitMs: IDLE_MS,
           finishBillsSaves,
         },
         { finishBillsSaves: false },
@@ -284,6 +349,30 @@ describe("BackToToday", () => {
         await vi.advanceTimersByTimeAsync(ms);
       });
     }
+
+    // ErrorBoundary notes how long to wait. It grows when the page keeps
+    // crashing, so a page that crashes every time it loads does not load
+    // every five minutes all day (helpers/crash_reload_wait.ts).
+    it("waits as long as the crash says before it loads today's calendar", async () => {
+      const store = renderAt(MEAL, screenStore());
+      act(() => {
+        runInAction(() => {
+          store.crashReloadWaitMs = 20 * 60 * 1000;
+          store.pageCrashed = true;
+        });
+      });
+
+      await waitAndSettle(20 * 60 * 1000 - 1);
+      expect(location.assign).not.toHaveBeenCalled();
+
+      // A touch starts the twenty minutes again.
+      fireEvent.mouseMove(screen.getByTestId("scroller"));
+      await waitAndSettle(20 * 60 * 1000 - 1);
+      expect(location.assign).not.toHaveBeenCalled();
+
+      await waitAndSettle(1);
+      expect(location.assign).toHaveBeenCalledWith(HOME);
+    });
 
     it("loads today's calendar five minutes after a crash, once the bills saves are answered", async () => {
       const store = renderAt(MEAL, screenStore());
@@ -370,18 +459,48 @@ describe("BackToToday", () => {
       expect(location.assign).toHaveBeenCalledWith(HOME);
     });
 
-    // ADR 0006: a form is a draft until Create or Update.
-    it("does not load a new version over an open calendar form", async () => {
+    // #137: the load would take the form's own error away unread.
+    it("does not load a new version over a calendar form that shows an error of its own", async () => {
+      const store = renderAt(
+        "/calendar/all/2026-10-01/events/edit/5/",
+        screenStore(),
+      );
+      note(store, "calendarFormErrorShown");
+      note(store, "newVersionAvailable");
+
+      await waitAndSettle(IDLE_MS * 2);
+      expect(store.finishBillsSaves).not.toHaveBeenCalled();
+      expect(location.assign).not.toHaveBeenCalled();
+      expect(where()).toBe("/calendar/all/2026-10-01/events/edit/5/");
+    });
+
+    // ADR 0006: a typed draft is never dropped without the question.
+    it("does not load a new version over a calendar form with typed changes", async () => {
       const store = renderAt(
         "/calendar/all/2026-10-01/events/new/",
         screenStore(),
       );
+      note(store, "calendarFormDirty");
       note(store, "newVersionAvailable");
 
       await waitAndSettle(IDLE_MS * 2);
       expect(store.finishBillsSaves).not.toHaveBeenCalled();
       expect(location.assign).not.toHaveBeenCalled();
       expect(where()).toBe("/calendar/all/2026-10-01/events/new/");
+    });
+
+    // A form with nothing typed in it goes with the load, the way the
+    // timer closes it with no new version.
+    it("loads a new version over a calendar form with nothing typed in it", async () => {
+      const store = renderAt(
+        "/calendar/all/2026-10-01/events/new/",
+        screenStore(),
+      );
+      note(store, "newVersionAvailable");
+
+      await waitAndSettle(IDLE_MS);
+      expect(store.finishBillsSaves).toHaveBeenCalledTimes(1);
+      expect(location.assign).toHaveBeenCalledWith(HOME);
     });
 
     // Login loads the page again by itself.
@@ -403,12 +522,16 @@ describe("BackToToday", () => {
       beforeEach(() => {
         vi.stubEnv("VITE_PUSHER_KEY", "test-key");
         vi.spyOn(console, "error").mockImplementation(() => {});
+        // No crash before this one, so the wait is five minutes
+        // (helpers/crash_reload_wait.ts).
+        sessionStorage.clear();
       });
 
       afterEach(() => {
         store.beforeDestroy();
         vi.unstubAllEnvs();
         vi.restoreAllMocks();
+        sessionStorage.clear();
       });
 
       function Boom() {
@@ -462,7 +585,7 @@ describe("BackToToday", () => {
       expect(where()).toBe(MEAL);
     });
 
-    it("leaves a calendar of another month, and an open form, where they are", () => {
+    it("leaves a calendar of another month, and a form with typed changes, where they are", () => {
       const store = renderAt("/calendar/all/2026-12-01/");
       newDay(store, "2026-11-01");
       expect(where()).toBe("/calendar/all/2026-12-01/");
@@ -472,10 +595,43 @@ describe("BackToToday", () => {
           "/calendar/all/2026-11-20/guest-room-reservations/new",
         ),
       );
+      act(() => {
+        runInAction(() => {
+          store.calendarFormDirty = true;
+        });
+      });
       newDay(store, "2026-12-01");
       expect(where()).toBe(
         "/calendar/all/2026-11-20/guest-room-reservations/new",
       );
+    });
+
+    // #137: the move would close the form and take its error away
+    // unread.
+    it("leaves a form that shows an error of its own where it is", () => {
+      const store = renderAt(
+        "/calendar/all/2026-11-20/events/edit/5/",
+        observable({
+          communityToday: "2026-11-30",
+          calendarFormDirty: false,
+          calendarFormErrorShown: true,
+        }),
+      );
+
+      newDay(store, "2026-12-01");
+      expect(where()).toBe("/calendar/all/2026-11-20/events/edit/5/");
+    });
+
+    // A form with nothing typed in it holds nothing to lose. The month
+    // moves as it does with no form open, and the form closes.
+    it("moves the calendar under a form with nothing typed in it, and closes the form", () => {
+      const store = renderAt(
+        "/calendar/all/2026-11-20/guest-room-reservations/new",
+      );
+      store.communityToday = "2026-11-30";
+
+      newDay(store, "2026-12-01");
+      expect(where()).toBe("/calendar/all/2026-12-01/");
     });
   });
 });

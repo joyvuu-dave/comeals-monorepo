@@ -26,7 +26,7 @@ dayjs.extend(timezone);
 // the shared `store.hosts` cache — see guest_room_reservations/edit.jsx
 // for the full pattern.
 const CommonHouseReservationsEdit = observer(
-  ({ eventId, handleCloseModal, setDirty }) => {
+  ({ eventId, handleCloseModal, setDirty, setErrorShown }) => {
     const store = useStore();
 
     const [loaded, setLoaded] = useState(false);
@@ -40,7 +40,7 @@ const CommonHouseReservationsEdit = observer(
 
     const mountedRef = useMountedRef();
 
-    const formMessages = useFormMessages();
+    const formMessages = useFormMessages(setErrorShown);
 
     const showError = formMessages.showError;
 

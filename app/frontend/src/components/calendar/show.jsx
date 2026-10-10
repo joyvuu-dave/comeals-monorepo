@@ -277,19 +277,29 @@ const MainCalendar = observer(() => {
   // "Discard your changes?" Forms that just saved report themselves
   // clean first, so Create/Update/Delete close without asking.
   //
-  // A ref, not state: the flag is only read at close time, and a
-  // keystroke in a form must not re-render the calendar.
-  const modalDirtyRef = useRef(false);
+  // The flag is the store's calendarFormDirty, because the idle timer
+  // reads it too: after five idle minutes it closes a clean form and
+  // leaves a dirty one (back_to_today.tsx). Nothing here reads it while
+  // drawing, so a keystroke in a form does not draw the calendar again.
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
 
   const setModalDirty = useCallback(function (value) {
-    modalDirtyRef.current = value;
+    storeRef.current.setCalendarFormDirty(value);
+  }, []);
+
+  // A form also reports whether it shows an error of its own
+  // (use_form_messages.ts). The gate does not read this: a person who
+  // closes the form has seen the error. The idle timer reads it and
+  // leaves the form open, because the error goes with the form, and an
+  // error stays until a person closes it (#137, back_to_today.tsx).
+  const setModalErrorShown = useCallback(function (value) {
+    storeRef.current.setCalendarFormErrorShown(value);
   }, []);
 
   // The form's own messages go with it (use_form_messages.ts). Any
   // other message stays (#137).
   const closeModal = useCallback(function () {
-    modalDirtyRef.current = false;
+    storeRef.current.setCalendarFormDirty(false);
     setDiscardConfirmOpen(false);
     navigateRef.current(
       `/calendar/${paramsRef.current.type}/${paramsRef.current.date}`,
@@ -298,7 +308,7 @@ const MainCalendar = observer(() => {
 
   const handleCloseModal = useCallback(
     function () {
-      if (modalDirtyRef.current) {
+      if (storeRef.current.calendarFormDirty) {
         setDiscardConfirmOpen(true);
         return;
       }
@@ -445,6 +455,7 @@ const MainCalendar = observer(() => {
         eventId={params.id}
         handleCloseModal={handleCloseModal}
         setDirty={setModalDirty}
+        setErrorShown={setModalErrorShown}
       />
     );
   }

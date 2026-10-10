@@ -12,7 +12,7 @@ import FormMessages from "../modal_form/form_messages";
 import TimeSelect from "../modal_form/time_select";
 import { buildStartEndPayload } from "../modal_form/payload";
 
-function EventsNew({ handleCloseModal, setDirty }) {
+function EventsNew({ handleCloseModal, setDirty, setErrorShown }) {
   const store = useStore();
   const params = useParams();
 
@@ -24,7 +24,7 @@ function EventsNew({ handleCloseModal, setDirty }) {
   const [allDay, setAllDay] = useState(false);
   const [loading, setLoading] = useState(false);
   const mountedRef = useMountedRef();
-  const formMessages = useFormMessages();
+  const formMessages = useFormMessages(setErrorShown);
   const showError = formMessages.showError;
 
   function handleSubmit(e) {

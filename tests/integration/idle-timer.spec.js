@@ -23,7 +23,8 @@ const { zonedInstant } = require("../helpers/zoned_time");
 // So a shared screen someone walked away from shows today again. It
 // moves inside the app, with no page load: the messages on screen stay,
 // a cost still waiting to save is sent the way leaving a meal sends it,
-// and an open calendar form is never closed. A crashed page and old code
+// and a calendar form with typed changes is never closed. A form with
+// nothing typed in it closes (ADR 0006). A crashed page and old code
 // after a deploy are the two cases it loads the page from the server
 // instead; the crash is checked in
 // tests/unit/components/back_to_today.test.jsx.
@@ -188,9 +189,11 @@ test.describe("Idle timer (real backend)", () => {
     expect(await page.evaluate(() => window.__samePage)).toBeUndefined();
   });
 
-  // ADR 0006: a calendar form is a draft until Create or Update. Before,
-  // the trip home closed it and threw the draft away.
-  test("an open calendar form stays open with what was typed", async ({
+  // ADR 0006: a calendar form is a draft until Create or Update, and a
+  // typed draft is never dropped without the question "Discard your
+  // changes?", which nobody is there to answer. Before, the trip home
+  // closed it and threw the draft away.
+  test("a calendar form with typed changes stays open with what was typed", async ({
     page,
   }) => {
     await page.goto("/calendar/all/2026-03-01/events/new/");
@@ -204,6 +207,59 @@ test.describe("Idle timer (real backend)", () => {
       endsWith("/calendar/all/2026-03-01/events/new/"),
     );
     await expect(title).toHaveValue("Draft the timer must keep");
+  });
+
+  // ADR 0006: a form with nothing typed in it holds nothing to lose.
+  // Left open, it would cover the calendar until someone closed it by
+  // hand. So it closes, and the screen goes to today's calendar the way
+  // it does with no form open.
+  test("a calendar form with nothing typed in it closes after five idle minutes", async ({
+    page,
+  }) => {
+    await page.goto("/calendar/all/2026-03-01/events/new/");
+    await expect(page.locator("#event-new-title")).toBeVisible();
+    await page.mouse.move(10, 10);
+
+    await page.clock.fastForward("04:55");
+    await expect(page.locator("#event-new-title")).toBeVisible();
+
+    await page.clock.fastForward("00:06");
+    await expect(page).toHaveURL(endsWith(calendarPath));
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.locator("h2", { hasText: "January 2026" })).toBeVisible();
+  });
+
+  // The form compares what it holds with what it opened with, not
+  // keystrokes, for the "Discard your changes?" question and for the
+  // timer alike. So a title typed and then deleted is nothing typed.
+  test("a calendar form where a title was typed and then deleted closes too", async ({
+    page,
+  }) => {
+    await page.goto("/calendar/all/2026-03-01/events/new/");
+    const title = page.locator("#event-new-title");
+    await title.pressSequentially("Gone");
+    for (let i = 0; i < 4; i += 1) await title.press("Backspace");
+    await expect(title).toHaveValue("");
+
+    await page.clock.fastForward("05:01");
+    await expect(page).toHaveURL(endsWith(calendarPath));
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  });
+
+  // With no form open, the calendar of today's month stays as it is.
+  // With a form open on it, the form closes and the month stays.
+  test("a form with nothing typed in it on today's month closes, and the screen stays on today's month", async ({
+    page,
+  }) => {
+    await page.goto("/calendar/all/2026-01-03/guest-room-reservations/new/");
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(page.locator("h2", { hasText: "January 2026" })).toBeVisible();
+    await page.mouse.move(10, 10);
+
+    await page.clock.fastForward("05:01");
+    await expect(page).toHaveURL(endsWith(calendarPath));
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.locator("h2", { hasText: "January 2026" })).toBeVisible();
   });
 
   // A cook row saves 2 seconds after its last edit. A cost can still be

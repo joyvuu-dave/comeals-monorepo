@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import handleAxiosError from "./handle_axios_error";
 import { newId } from "./new_id";
 import type { ToastType } from "../stores/toast_store";
@@ -36,8 +36,35 @@ export interface FormMessages {
 // again and gets the same error can tell the second try failed too.
 // There is no timer and no limit: every message a form gets is about
 // the form on screen, and closing the form ends them all.
-export default function useFormMessages(): FormMessages {
+//
+// Because closing the form ends them, the form reports whether it shows
+// an error through reportErrorShown, the way it reports typed changes
+// (use_dirty_report.js). The calendar hands it down (calendar/show.jsx),
+// and the idle timer then leaves the form open, so the error is not
+// taken away before anyone reads it (components/app/back_to_today.tsx).
+// When the form goes, it reports no error: a closed form shows nothing,
+// and the next form must not be held by this one's error.
+export default function useFormMessages(
+  reportErrorShown: (shown: boolean) => void,
+): FormMessages {
   const [messages, setMessages] = useState<FormMessage[]>([]);
+  const errorShown = messages.some((message) => message.type === "error");
+
+  useEffect(
+    function () {
+      reportErrorShown(errorShown);
+    },
+    [reportErrorShown, errorShown],
+  );
+
+  useEffect(
+    function () {
+      return function () {
+        reportErrorShown(false);
+      };
+    },
+    [reportErrorShown],
+  );
 
   const show = useCallback(function (message: string, type: ToastType) {
     setMessages(function (shown) {

@@ -6,6 +6,10 @@ import useFormMessages from "../../helpers/use_form_messages";
 import toastStore from "../../stores/toast_store";
 import FormMessages from "../modal_form/form_messages";
 
+// Where this form reports whether it shows an error. Nothing reads it
+// (see useFormMessages below).
+function nobodyReads() {}
+
 function ResidentsPasswordNew() {
   const { token } = useParams();
   const navigate = useNavigate();
@@ -20,8 +24,11 @@ function ResidentsPasswordNew() {
   // The form is in a dialog, and the stack of messages is drawn under an
   // open dialog, so a refused password shows inside the form (#137).
   // When a try works, the dialog closes, and the reasons earlier tries
-  // got go with it.
-  const formMessages = useFormMessages();
+  // got go with it. Nothing needs to know whether it shows an error.
+  // This form shows only when signed out (login.jsx sends a signed-in
+  // person on), and the idle timer leaves a signed-out page where it is
+  // (helpers/screen_home.ts).
+  const formMessages = useFormMessages(nobodyReads);
 
   // The submit handler outlives a navigation away from the page; the
   // mounted flag keeps it from setting state after unmount, like the

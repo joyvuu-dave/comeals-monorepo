@@ -24,7 +24,7 @@ dayjs.extend(timezone);
 // the inputs when it returns. There's no hosts dependency here (events
 // don't belong to a resident) so `data-populated` simply tracks the event
 // payload's arrival.
-function EventsEdit({ eventId, handleCloseModal, setDirty }) {
+function EventsEdit({ eventId, handleCloseModal, setDirty, setErrorShown }) {
   const store = useStore();
 
   const [loaded, setLoaded] = useState(false);
@@ -39,7 +39,7 @@ function EventsEdit({ eventId, handleCloseModal, setDirty }) {
 
   const mountedRef = useMountedRef();
 
-  const formMessages = useFormMessages();
+  const formMessages = useFormMessages(setErrorShown);
 
   const showError = formMessages.showError;
 

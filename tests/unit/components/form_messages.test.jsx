@@ -12,9 +12,12 @@ import toastStore from "../../../app/frontend/src/stores/toast_store";
 describe("a form's own messages", () => {
   // The form's showError, so a test can make a request fail.
   let showError;
+  // Where the form reports whether it shows an error. The calendar hands
+  // it down to its forms (calendar/show.jsx).
+  let reportErrorShown;
 
   function Form() {
-    const messages = useFormMessages();
+    const messages = useFormMessages(reportErrorShown);
     showError = messages.showError;
     return (
       <div>
@@ -42,6 +45,7 @@ describe("a form's own messages", () => {
   beforeEach(() => {
     toastStore.clearAll();
     vi.spyOn(Element.prototype, "scrollIntoView");
+    reportErrorShown = vi.fn();
   });
 
   afterEach(() => {
@@ -193,6 +197,39 @@ describe("a form's own messages", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Dismiss" })[1]);
 
     expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(2);
+  });
+
+  // The idle timer closes a form with nothing typed in it, and the
+  // form's messages would go with it. So the form reports whether it
+  // shows an error, and the timer leaves it open while it does
+  // (components/app/back_to_today.tsx). An error stays until a person
+  // closes it (#137).
+  it("reports an error while one shows, and none once the person closes the last one", () => {
+    render(<Form />);
+    expect(reportErrorShown).toHaveBeenLastCalledWith(false);
+
+    fail(REFUSED);
+    expect(reportErrorShown).toHaveBeenLastCalledWith(true);
+    fail({ request: {} });
+    expect(reportErrorShown).toHaveBeenLastCalledWith(true);
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Dismiss" })[0]);
+    expect(reportErrorShown).toHaveBeenLastCalledWith(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(reportErrorShown).toHaveBeenLastCalledWith(false);
+  });
+
+  // A closed form shows nothing, and the next form must not be held by
+  // an error that went with this one.
+  it("reports no error when the form goes", () => {
+    const { unmount } = render(<Form />);
+    fail(REFUSED);
+    expect(reportErrorShown).toHaveBeenLastCalledWith(true);
+
+    unmount();
+
+    expect(reportErrorShown).toHaveBeenLastCalledWith(false);
   });
 
   // The messages are the form's, so they go with it.
