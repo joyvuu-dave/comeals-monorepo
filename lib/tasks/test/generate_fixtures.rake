@@ -35,10 +35,10 @@ namespace :test do
     # ------------------------------------------------------------------
     # SEED — the fixture story: meal 42, Jane/Bob/Alice, January 2026.
     # ------------------------------------------------------------------
-    community = jane = bob = alice = nil
+    jane = bob = alice = nil
 
     clock.travel_to Time.zone.parse('2026-01-01 09:00') do
-      community = Community.create!(
+      Community.create!(
         id: 1,
         name: 'Test Community',
         cap: nil,

@@ -29,6 +29,8 @@ gem 'bigdecimal'
 gem 'activeadmin', '~> 3.0'
 gem 'alba', '~> 3.11'
 gem 'audited'
+# activeadmin needs ransack. Held below 6 until we check 6.0 (#160).
+gem 'ransack', '~> 5.0'
 
 # Stateless authentication tokens (see app/services/jwt_auth.rb).
 gem 'jwt'

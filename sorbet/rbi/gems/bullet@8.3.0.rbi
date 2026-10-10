@@ -247,28 +247,31 @@ class Bullet::BulletRailtie < ::Rails::Railtie; end
 
 # pkg:gem/bullet#lib/bullet/dependency.rb:4
 module Bullet::Dependency
-  # pkg:gem/bullet#lib/bullet/dependency.rb:55
+  # pkg:gem/bullet#lib/bullet/dependency.rb:57
   def active_record6_or_older?; end
 
-  # pkg:gem/bullet#lib/bullet/dependency.rb:67
+  # pkg:gem/bullet#lib/bullet/dependency.rb:69
   def active_record70?; end
 
-  # pkg:gem/bullet#lib/bullet/dependency.rb:71
+  # pkg:gem/bullet#lib/bullet/dependency.rb:73
   def active_record71?; end
 
-  # pkg:gem/bullet#lib/bullet/dependency.rb:75
+  # pkg:gem/bullet#lib/bullet/dependency.rb:77
   def active_record72?; end
 
-  # pkg:gem/bullet#lib/bullet/dependency.rb:59
+  # pkg:gem/bullet#lib/bullet/dependency.rb:61
   def active_record7?; end
 
-  # pkg:gem/bullet#lib/bullet/dependency.rb:79
+  # pkg:gem/bullet#lib/bullet/dependency.rb:81
   def active_record80?; end
 
-  # pkg:gem/bullet#lib/bullet/dependency.rb:83
+  # pkg:gem/bullet#lib/bullet/dependency.rb:85
   def active_record81?; end
 
-  # pkg:gem/bullet#lib/bullet/dependency.rb:63
+  # pkg:gem/bullet#lib/bullet/dependency.rb:89
+  def active_record82?; end
+
+  # pkg:gem/bullet#lib/bullet/dependency.rb:65
   def active_record8?; end
 
   # pkg:gem/bullet#lib/bullet/dependency.rb:9
@@ -277,28 +280,28 @@ module Bullet::Dependency
   # pkg:gem/bullet#lib/bullet/dependency.rb:13
   def active_record_version; end
 
-  # pkg:gem/bullet#lib/bullet/dependency.rb:87
+  # pkg:gem/bullet#lib/bullet/dependency.rb:93
   def mongoid4x?; end
 
-  # pkg:gem/bullet#lib/bullet/dependency.rb:91
+  # pkg:gem/bullet#lib/bullet/dependency.rb:97
   def mongoid5x?; end
 
-  # pkg:gem/bullet#lib/bullet/dependency.rb:95
+  # pkg:gem/bullet#lib/bullet/dependency.rb:101
   def mongoid6x?; end
 
-  # pkg:gem/bullet#lib/bullet/dependency.rb:99
+  # pkg:gem/bullet#lib/bullet/dependency.rb:105
   def mongoid7x?; end
 
-  # pkg:gem/bullet#lib/bullet/dependency.rb:103
+  # pkg:gem/bullet#lib/bullet/dependency.rb:109
   def mongoid8x?; end
 
-  # pkg:gem/bullet#lib/bullet/dependency.rb:107
+  # pkg:gem/bullet#lib/bullet/dependency.rb:113
   def mongoid9x?; end
 
   # pkg:gem/bullet#lib/bullet/dependency.rb:5
   def mongoid?; end
 
-  # pkg:gem/bullet#lib/bullet/dependency.rb:34
+  # pkg:gem/bullet#lib/bullet/dependency.rb:36
   def mongoid_version; end
 end
 
@@ -769,7 +772,7 @@ end
 # pkg:gem/bullet#lib/bullet/active_record81.rb:4
 module Bullet::SaveWithBulletSupport
   # pkg:gem/bullet#lib/bullet/active_record81.rb:5
-  def _create_record(*_arg0); end
+  def _create_record(*); end
 end
 
 # pkg:gem/bullet#lib/bullet/stack_trace_filter.rb:8
