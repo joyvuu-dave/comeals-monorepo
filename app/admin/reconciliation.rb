@@ -12,6 +12,11 @@ ActiveAdmin.register Reconciliation do
   # cooks were notified of and paid against. No edit, update, or destroy —
   # corrections settle as new entries in the next reconciliation (the model
   # enforces this too; see Reconciliation#reject_update / #reject_destroy).
+  # The one exception is not on this page: Settlement#correct!, which a
+  # migration runs after it fixes a settled meal's rows, works the numbers
+  # out again. This page then shows the new numbers like any other
+  # settlement's, and the record of the correction stays in the database
+  # (docs/runbooks/settled-data-repair.md has the query).
   actions :index, :show, :new, :create
 
   permit_params :end_date
@@ -106,7 +111,8 @@ ActiveAdmin.register Reconciliation do
         end
         # From the stored charges — what this settlement actually used.
         # Blank for zero or for a settlement from before line items
-        # existed, like every other cost cell (meal_cost_cell).
+        # existed and never corrected since, like every other cost cell
+        # (meal_cost_cell).
         column('Total Cost') { |m| meal_cost_cell(m, :total_cost) }
       end
     end

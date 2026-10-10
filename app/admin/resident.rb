@@ -170,7 +170,8 @@ ActiveAdmin.register Resident do
     # charges, so a settlement with no line items still gets a section — a
     # reconciliation settled before 2026-08-02 has no lines on purpose (the
     # backfill decision in docs/money-path-observability.md), and that must
-    # read as "not recorded", not as zero charges.
+    # read as "not recorded", not as zero charges. A settlement worked out
+    # again since (Settlement#correct!) has lines, written that day.
     #
     # This panel sits outside the attributes_table above for the same reason
     # as the attendance panel in app/admin/meal.rb: content like this cannot

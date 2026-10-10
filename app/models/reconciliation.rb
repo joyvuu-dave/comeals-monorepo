@@ -35,6 +35,10 @@ class Reconciliation < ApplicationRecord
   has_many :bills, through: :meals
   has_many :cooks, through: :bills, source: :resident
   has_many :reconciliation_balances, dependent: :destroy
+  # Each time this settlement's numbers were worked out again after it was
+  # made (Settlement#correct!), oldest first.
+  has_many :settlement_corrections, -> { order(:created_at, :id) }, dependent: :restrict_with_exception,
+                                                                    inverse_of: :reconciliation
 
   audited
 
@@ -51,7 +55,10 @@ class Reconciliation < ApplicationRecord
   # contradict the meals actually settled. Corrections settle as new entries
   # in the next reconciliation. If un-settlement is ever required, write a
   # deliberate rake task that uses `delete` / `update_columns` to bypass
-  # these guards.
+  # these guards. When the owner decides a settlement's numbers must be
+  # worked out again after its rows were fixed, Settlement#correct! does
+  # it: the row, its meals and its cutoff stay; its balances and line
+  # items are replaced; a SettlementCorrection records what changed.
   #
   # The destroy guard aborts before the has_many dependent callbacks
   # declared above (nullify meals, destroy balances) can un-reconcile

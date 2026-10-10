@@ -195,7 +195,8 @@ GET /meals/:meal_id/cooks
 
 - `bills` lists the cooks. A cook is anyone with a bill row. `amount` is
   a decimal string in dollars. `no_cost: true` means the cook spent
-  nothing, and that bill is skipped when the cost is split.
+  nothing, and that bill is skipped when the cost is split. Such a bill
+  has amount `"0.0"`.
 - `residents` lists every active resident, plus anyone no longer active
   who is signed up for this meal, has a bill on it, or has a guest on it.
   So every cook in `bills` and every host in `guests` is in `residents`.
@@ -339,6 +340,13 @@ the answer is `400 "No cost must be true or false"`. `no_cost: true`
 means the cook spent nothing, and their bill is skipped when the cost is
 split.
 
+So a `to` with `no_cost: true` must have amount 0 (`"0"`, `"0.00"` or
+`""`). A `to` with `no_cost: true` and any other amount is refused, and
+nothing in the save is written: `400 "A bill marked No cost can't have
+an amount. Clear the amount, or turn No cost off."`. A `from` is not
+checked for this. It is the bill as you read it, and a meal read before
+the October 2026 fix may have shown a bill with both.
+
 Every bills save needs an `Idempotency-Key` header, as the IETF draft
 "The Idempotency-Key HTTP Header Field" describes. It lets you send a
 save again when you got no answer, and be sure it is written at most
@@ -442,7 +450,9 @@ see "Bills".
    `409` with `"type": "stale"`: then read the meal form again before
    you build a new save.
 6. **Every write is recorded.** `GET /meals/:meal_id/history` shows who
-   changed what, by the resident whose token was used.
+   changed what, by the resident whose token was used. A change no
+   person made, such as a fix of old data that ran during a deploy,
+   shows a name that says so in place of a resident's name.
 
 ## How the cost is split
 

@@ -51,6 +51,36 @@ RSpec.describe 'Admin bill no cost' do
       .to eq([[jane.id, BigDecimal('0'), true]])
   end
 
+  # The hint said "The meal's cost leaves out a no-cost bill, even if it
+  # has an amount" until 2026-10-10. A no-cost bill cannot have one now.
+  it 'says in the hint that a no-cost bill has no amount' do
+    get '/bills/new'
+
+    expect(page.at_css('#bill_no_cost_input .inline-hints').text.squish)
+      .to eq("Check this box when the cook spent nothing. A bill marked No cost can't have an amount.")
+  end
+
+  # "No cost" means the cook spent nothing (Bill::NO_COST_MEANS_NO_AMOUNT).
+  # Both forms answer with the sentence and save nothing.
+  it 'refuses a new bill marked no cost with an amount, in words' do
+    post '/bills', params: { bill: { meal_id: meal.id, resident_id: jane.id, amount: '86', no_cost: '1' } }
+
+    expect(response).to have_http_status(:ok)
+    expect(page.at_css('ul.errors').text.squish).to eq(Bill::NO_COST_MEANS_NO_AMOUNT)
+    expect(meal.bills.reload).to be_empty
+  end
+
+  it 'refuses marking a bill with an amount no cost from the edit form, in words, and keeps the bill' do
+    bill = create(:bill, meal: meal, resident: jane, community: community, amount: BigDecimal('86'))
+
+    patch "/bills/#{bill.id}", params: { bill: { amount: '86.00', no_cost: '1' } }
+
+    expect(response).to have_http_status(:ok)
+    expect(page.at_css('ul.errors').text.squish)
+      .to eq("A bill marked No cost can't have an amount. Clear the amount, or turn No cost off.")
+    expect(bill.reload).to have_attributes(amount: BigDecimal('86'), no_cost: false)
+  end
+
   it 'marks a saved bill no cost, and clears the mark, from the edit form' do
     bill = create(:bill, meal: meal, resident: jane, community: community, amount: 0)
 

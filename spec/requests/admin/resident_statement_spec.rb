@@ -75,6 +75,24 @@ RSpec.describe 'Admin settlement statement' do
       expect(response.body).not_to include("#{reconciliation.date} to #{reconciliation.end_date}")
     end
 
+    # A settlement worked out again after it was made (Settlement#correct!)
+    # reads like any other: the new balance, and nothing about the
+    # correction (docs/runbooks/settled-data-repair.md has the query).
+    it 'shows a corrected settlement like any other, with its new balance and no note' do
+      reconciliation = settle_plain_meal
+      bill = Bill.find_by!(resident: cook)
+      Settlement.new(reconciliation).correct!(reason: 'The receipt was $12.') do
+        SettledWrites.with_repair_bypass { bill.update_columns(amount: BigDecimal('12')) }
+      end
+
+      get "/residents/#{eater.id}"
+
+      heading = response.parsed_body.css('.panel h3').map { |h3| h3.text.squish }
+                        .find { |text| text.include?('settled:') }
+      expect(heading).to end_with('settled: owes $6.00')
+      expect(response.body).not_to include('The receipt was $12', 'orrected')
+    end
+
     it 'shows the cook a credit line' do
       settle_plain_meal
 

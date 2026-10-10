@@ -213,17 +213,52 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
       expect(bill.amount).to eq(BigDecimal('0'))
     end
 
-    # The no_cost row carries money on purpose: the API keeps an amount
-    # next to no_cost, so only leaving the row out keeps the total at 60.
-    it 'leaves no_cost bills out of total_cost' do
-      create(:meal_resident, meal: meal, resident: resident, community: community)
+    # "No cost" means the cook spent nothing (Bill::NO_COST_MEANS_NO_AMOUNT).
+    # Until 2026-10-10 this save was written: the bill kept $15 and No
+    # cost, MealLedger left the bill out of the meal's cost, and the cook
+    # was credited $0 for what they spent. The edit before it is not
+    # written either, because the body is checked before anything is.
+    it 'refuses No cost with an amount, in words, and writes nothing' do
       paying_cook = new_cook
 
-      save_edits([changing(cook, seen, values('15.00', no_cost: true)), adding(paying_cook, values('60.00'))])
+      save_edits([adding(paying_cook, values('60.00')), changing(cook, seen, values('15.00', no_cost: true))])
 
-      expect(response).to have_http_status(:ok)
-      expect(bill.reload.amount).to eq(BigDecimal('15'))
-      expect(MealCostSummary.for(meal.reload).total_cost).to eq(BigDecimal('60'))
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message'])
+        .to eq("A bill marked No cost can't have an amount. Clear the amount, or turn No cost off.")
+      expect(meal.bills.reload.map { |b| [b.resident_id, b.amount, b.no_cost] })
+        .to eq([[cook.id, BigDecimal('0'), false]])
+      expect(bill_audits.where(action: 'update')).to be_empty
+    end
+
+    # A page that read the meal before migration 20261010130000 turned No
+    # cost off on this bill still shows it with both. A change built on
+    # what that page saw is stale, so nothing is written and the page reads
+    # the meal again.
+    it 'answers 409 stale to a save built on the bill as it was before the fix' do
+      bill.update!(amount: BigDecimal('86'))
+
+      save_edits([changing(cook, values('86', no_cost: true), values('90'))])
+
+      expect(response).to have_http_status(:conflict)
+      expect(response.parsed_body['type']).to eq('stale')
+      expect(bill.reload).to have_attributes(amount: BigDecimal('86'), no_cost: false)
+    end
+
+    # The same page, when the person picks another cook in that row. The
+    # row keeps its amount and No cost (bill.ts, setResident), so the page
+    # sends an add with both. That is refused in words before the stale
+    # check runs, and nothing is written. The page reads the meal again
+    # after any refused save (billsSaveFailed).
+    it 'answers 400 in words when that page moves the row to another cook' do
+      bill.update!(amount: BigDecimal('86'))
+
+      save_edits([removing(cook, values('86', no_cost: true)), adding(new_cook, values('86', no_cost: true))])
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq(Bill::NO_COST_MEANS_NO_AMOUNT)
+      expect(meal.bills.reload.map { |b| [b.resident_id, b.amount, b.no_cost] })
+        .to eq([[cook.id, BigDecimal('86'), false]])
     end
 
     # Issue #138. no_cost follows the rule of every true/false value the

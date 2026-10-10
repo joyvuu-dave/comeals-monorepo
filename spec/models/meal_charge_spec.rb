@@ -112,7 +112,7 @@ RSpec.describe MealCharge do
     it 'writes no line for a no_cost bill' do
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('80'))
-      create(:bill, meal: meal, resident: eater, community: community, amount: BigDecimal('9'), no_cost: true)
+      no_cost_bill_with_an_amount(meal: meal, resident: eater, amount: '9')
       create(:meal_resident, meal: meal, resident: cook, community: community)
       settle!(cutoff: Date.yesterday)
 

@@ -56,6 +56,13 @@
 #                                      \"25.50\"."
 #       - a no_cost that TrueOrFalse does not take
 #                                      "No cost must be true or false"
+#     - a `to` with no_cost true and an amount above 0
+#                                      "A bill marked No cost can't have
+#                                      an amount. Clear the amount, or
+#                                      turn No cost off."
+#       (Bill::NO_COST_MEANS_NO_AMOUNT). Only `to`: `from` is the bill
+#       as the page saw it, and a page that read the meal before
+#       migration 20261010130000 ran may have seen a bill with both.
 #   - the same cook twice              "Duplicate cook in edits: resident #N."
 #   - a cook who is not a resident, or a resident_id that is not a whole
 #     number                           "Resident not found."
@@ -278,6 +285,7 @@ class BillsPayload
 
     to = side(item['to'])
     return to if to.is_a?(String)
+    return Bill::NO_COST_MEANS_NO_AMOUNT if to&.no_cost && to.amount.positive?
 
     Edit.new(op: op, resident_id: resident_id(item['resident_id']), from: from, to: to)
   end

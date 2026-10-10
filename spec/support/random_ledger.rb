@@ -44,12 +44,15 @@ module RandomLedger
     meal
   end
 
-  # A no-cost bill keeps an amount, as a real one can (the API saves both
-  # fields), so the no-cost rule has to be what leaves it out. With a $0
-  # amount the ledger came out the same whether or not no_cost was
-  # honored. The amount comes from a generator of its own, seeded from the
-  # ledger's seed and the bill's place, so the draws above, and so every
-  # seed's ledger, are what they were before (2026-09-28).
+  # A no-cost bill keeps an amount, so the no-cost rule has to be what
+  # leaves it out. With a $0 amount the ledger came out the same whether
+  # or not no_cost was honored. No bill in the database can have both
+  # since 2026-10-10 (the CHECK bills_no_cost_means_no_amount), but
+  # MealLedger still reads bills in memory, and its rule is to leave a
+  # no-cost bill out whatever it holds. The
+  # amount comes from a generator of its own, seeded from the ledger's
+  # seed and the bill's place, so the draws above, and so every seed's
+  # ledger, are what they were before (2026-09-28).
   def self.no_cost_amount(rng, index, row, cents_max)
     BigDecimal(Random.new((rng.seed * 100_000) + (index * 10) + row).rand(0..cents_max)) / 100
   end

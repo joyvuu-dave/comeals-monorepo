@@ -141,6 +141,7 @@ class Meal < ApplicationRecord
   # backstop for the same rule, declared before the destroy cascades so the
   # check runs before anything is deleted.
   has_many :meal_charges, dependent: :restrict_with_error
+  has_many :settlement_correction_charges, dependent: :restrict_with_error
 
   has_many :bills, inverse_of: :meal, dependent: :destroy
   has_many :cooks, through: :bills, source: :resident, dependent: :destroy

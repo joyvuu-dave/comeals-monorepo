@@ -31,7 +31,7 @@ class AuditDescription
 
   def initialize(audits)
     rows = audits.to_a
-    @named_before = named_before(rows)
+    @named_before, @amount_before = before_each_update(rows)
     @residents = Resident.where(id: named_resident_ids(rows)).index_by(&:id)
   end
 
@@ -62,47 +62,70 @@ class AuditDescription
     "#{audit.auditable_type}, #{audit.action}"
   end
 
-  # The resident each update row's record named just before that row was
-  # written, by audit id: a bill's cook, an attendance row's person, a
-  # guest's host. Read from the record's own history, in order: the
-  # resident its create row names, then each change of resident after it.
+  # Two lists, by audit id, of what each update row's record held just
+  # before that row was written. The first is the resident it named: a
+  # bill's cook, an attendance row's person, a guest's host. The second is
+  # a bill's amount, in dollars. Read from the record's own history, in
+  # order: what its create row says, then each change after it.
   # Not from the record as it is now, because a later change would put the
-  # new resident's name on an older line. Until 2026-10-10 an admin could
-  # change a bill's cook in place (Bill::COOK_AND_MEAL_FIXED), and a guest's
-  # host can still change. A record with no create row names no one here,
-  # and is shown as 'unknown': the app has audited these records from the
-  # start, so only a record written outside the app has none.
+  # new resident's name, or the new amount, on an older line. Until
+  # 2026-10-10 an admin could change a bill's cook in place
+  # (Bill::COOK_AND_MEAL_FIXED), and a guest's host can still change. A
+  # record with no create row names no one here, and is shown as
+  # 'unknown': the app has audited these records from the start, so only a
+  # record written outside the app has none.
   #
   # One query for every record of the three kinds. Each kind has its own
   # ids, because a bill and an attendance row often share an id.
-  def named_before(rows)
+  def before_each_update(rows)
     updates = rows.select { |row| NAMED_THROUGH_HISTORY.include?(row.auditable_type) && row.action == 'update' }
-    return {} if updates.empty?
+    return [{}, {}] if updates.empty?
 
     trail = updates.group_by(&:auditable_type)
                    .map { |type, typed| Audited::Audit.where(auditable_type: type, auditable_id: typed.map(&:auditable_id)) }
                    .reduce(:or)
                    .where(action: %w[create update])
                    .order(:version, :id)
-    resident_before_each_update(trail)
+    walk(trail)
   end
 
   # In version order, which is each record's own order, then by id: two rows
   # of one record can share a version (374 bills in the production copy do),
   # and without the id PostgreSQL picks their order. Rows of different
-  # records may mix: named_now keeps one resident per record.
-  def resident_before_each_update(trail)
+  # records may mix: named_now and amount_now keep one value per record.
+  def walk(trail)
     named_now = {}
-    trail.each_with_object({}) do |audit, named|
+    amount_now = {}
+    trail.each_with_object([{}, {}]) do |audit, (named, amounts)|
       record = [audit.auditable_type, audit.auditable_id]
-      resident_id = audit.audited_changes['resident_id']
+      changes = audit.audited_changes
       if audit.action == 'create'
-        named_now[record] = resident_id
+        named_now[record] = changes['resident_id']
+        amount_now[record] = created_amount(changes)
       else
         named[audit.id] = named_now[record]
-        named_now[record] = resident_id.last if resident_id.instance_of?(Array)
+        amounts[audit.id] = amount_now[record]
+        named_now[record] = changes['resident_id'].last if changes['resident_id'].instance_of?(Array)
+        amount = amount_change(changes)
+        amount_now[record] = dollars(amount.last) if amount.instance_of?(Array)
       end
     end
+  end
+
+  # The amount a bill's create row gives it, in dollars, or nil. Rows
+  # written before migration 20260326000001 hold whole cents
+  # (amount_change says more).
+  def created_amount(changes)
+    return dollars(changes['amount']) if changes.key?('amount')
+
+    cents = changes['amount_cents']
+    BigDecimal(cents) / 100 if cents.is_a?(Integer)
+  end
+
+  # An amount as a row stores it (audited writes a decimal as text, like
+  # "86.0"), as a BigDecimal, or nil when it is not a number.
+  def dollars(value)
+    BigDecimal(value.to_s, exception: false)
   end
 
   # Every resident id the rows name: in a create or destroy row's
@@ -200,7 +223,7 @@ class AuditDescription
     changes = audit.audited_changes
     amounts = amount_change(changes)
     what = [amounts && "changed from #{number_to_currency(amounts[0])} to #{number_to_currency(amounts[1])}",
-            no_cost_change(changes)].compact
+            no_cost_change(audit, amounts.nil? ? @amount_before[audit.id] : nil)].compact
     move = moved(changes)
     return ["Bill moved #{move}", *what].join(' and ') if move
     return 'unknown bill changed' if what.empty?
@@ -208,11 +231,24 @@ class AuditDescription
     "Bill for #{name_before(audit)} #{what.join(' and ')}"
   end
 
-  def no_cost_change(changes)
-    flags = changes['no_cost']
+  # "marked as no cost" or "no longer marked as no cost". When No cost
+  # goes off on a bill that already had an amount, and the row does not
+  # change the amount, the amount now counts, so the line says so: "no
+  # longer marked as no cost, so the $86.00 now counts in the meal's
+  # cost". Before April 2026 the meal page let a cost be typed into a row
+  # marked No cost, and MealLedger leaves a no-cost bill out of the meal's
+  # cost. Migration 20261010130000 turned No cost off on those bills, with
+  # rows like this one. On a meal that was already settled, the migration
+  # worked the settlement out again with the amount counted
+  # (Settlement#correct!), so the line is true there too. `amount` is the
+  # bill's amount just before the row, from its history, or nil.
+  def no_cost_change(audit, amount)
+    flags = audit.audited_changes['no_cost']
     return nil unless flags.instance_of?(Array)
+    return 'marked as no cost' if flags[1] == true
+    return 'no longer marked as no cost' unless amount&.positive?
 
-    flags[1] == true ? 'marked as no cost' : 'no longer marked as no cost'
+    "no longer marked as no cost, so the #{number_to_currency(amount)} now counts in the meal's cost"
   end
 
   # The amount a bill row changed, as [from, to] in dollars, or nil when

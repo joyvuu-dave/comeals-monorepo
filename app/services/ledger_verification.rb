@@ -41,7 +41,10 @@
 #
 # Reconciliations settled before meal_charges existed have no lines and get
 # check 1 only. Inventing lines for them now would be recording today's
-# belief as though it were what happened then.
+# belief as though it were what happened then. A settlement worked out
+# again since (Settlement#correct!) has lines: the correction wrote them
+# from the same ledger as its new balances, on the day it ran, and the
+# settlement's page says when.
 #
 # One consequence worth expecting: if the settlement arithmetic is ever
 # changed on purpose, this check will disagree with every reconciliation
@@ -148,6 +151,17 @@ class LedgerVerification
     raise MismatchError, run if run.failed?
 
     run
+  end
+
+  # What the nightly check would report about one settlement, read now: a
+  # detail for each check that disagrees, or nothing. Records no run.
+  # Settlement#correct! reads it before it changes anything, so a
+  # correction cannot hide a difference that was there before it.
+  sig { params(reconciliation: Reconciliation).returns(T::Array[Detail]) }
+  def findings_for(reconciliation)
+    found = T.let([], T::Array[Detail])
+    check(reconciliation, found)
+    found
   end
 
   private

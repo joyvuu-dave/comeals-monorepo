@@ -28,6 +28,9 @@ MUTANT_SPEC_ROWS = {
   # ledger's allocation at the grain and the exact zero-sum guard too.
   'spec/services/ledger_verification_line_rounding_spec.rb' => %w[LedgerVerification MealLedger Settlement],
   'spec/services/settlement_contract_spec.rb' => %w[Settlement Reconciliation MealLedger],
+  # Settlement#correct! lives in SettlementCorrecting, which Settlement
+  # includes; the spec describes it through Settlement.
+  'spec/services/settlement_correct_spec.rb' => %w[Settlement SettlementCorrecting LedgerVerification],
   'spec/services/ledger_verification_spec.rb' => %w[LedgerVerification Settlement Reconciliation MealLedger],
   'spec/services/settle_and_notify_spec.rb' =>
     %w[SettleAndNotify Settlement Reconciliation BalanceRecalculation RetryOnConflict NotifyCooksJob],
@@ -36,6 +39,8 @@ MUTANT_SPEC_ROWS = {
   'spec/models/reconciliation_awkward_bills_spec.rb' =>
     %w[Reconciliation Settlement MealLedger AppendOnly BelongsToTheCommunity],
   'spec/models/reconciliation_balance_spec.rb' => %w[ReconciliationBalance Reconciliation Settlement AppendOnly],
+  'spec/models/settlement_correction_spec.rb' =>
+    %w[SettlementCorrection SettlementCorrectionLine SettlementCorrectionCharge AppendOnly],
   'spec/helpers/balance_display_helper_spec.rb' => %w[BalanceDisplayHelper MealLedger],
   'spec/mailers/reconciliation_mailer_spec.rb' => %w[ReconciliationMailer ApplicationMailer Reconciliation],
   'spec/mailers/resident_mailer_spec.rb' => %w[ResidentMailer ApplicationMailer],

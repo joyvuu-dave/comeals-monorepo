@@ -646,9 +646,15 @@ RSpec.describe Meal do
     let(:cook) { create(:resident, community: community, unit: unit, multiplier: 2) }
     let(:eater) { create(:resident, community: community, unit: unit, multiplier: 2) }
 
+    # A no-cost bill with an amount is written the way the app wrote one
+    # before April 2026 (no_cost_bill_with_an_amount says why).
     def meal_with(amount, eaten:, date: Date.yesterday, no_cost: false)
       meal = create(:meal, community: community, date: date)
-      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal(amount), no_cost: no_cost)
+      if no_cost
+        no_cost_bill_with_an_amount(meal: meal, resident: cook, amount: amount)
+      else
+        create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal(amount))
+      end
       create(:meal_resident, meal: meal, resident: eater, community: community) if eaten
       meal
     end

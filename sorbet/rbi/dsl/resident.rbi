@@ -564,6 +564,34 @@ class Resident
     sig { params(value: T.nilable(::ResidentBalance)).void }
     def resident_balance=(value); end
 
+    sig { returns(T::Array[T.untyped]) }
+    def settlement_correction_charge_ids; end
+
+    sig { params(ids: T::Array[T.untyped]).returns(T::Array[T.untyped]) }
+    def settlement_correction_charge_ids=(ids); end
+
+    # This method is created by ActiveRecord on the `Resident` class because it declared `has_many :settlement_correction_charges`.
+    # 🔗 [Rails guide for `has_many` association](https://guides.rubyonrails.org/association_basics.html#the-has-many-association)
+    sig { returns(::SettlementCorrectionCharge::PrivateCollectionProxy) }
+    def settlement_correction_charges; end
+
+    sig { params(value: T::Enumerable[::SettlementCorrectionCharge]).void }
+    def settlement_correction_charges=(value); end
+
+    sig { returns(T::Array[T.untyped]) }
+    def settlement_correction_line_ids; end
+
+    sig { params(ids: T::Array[T.untyped]).returns(T::Array[T.untyped]) }
+    def settlement_correction_line_ids=(ids); end
+
+    # This method is created by ActiveRecord on the `Resident` class because it declared `has_many :settlement_correction_lines`.
+    # 🔗 [Rails guide for `has_many` association](https://guides.rubyonrails.org/association_basics.html#the-has-many-association)
+    sig { returns(::SettlementCorrectionLine::PrivateCollectionProxy) }
+    def settlement_correction_lines; end
+
+    sig { params(value: T::Enumerable[::SettlementCorrectionLine]).void }
+    def settlement_correction_lines=(value); end
+
     sig { returns(T.nilable(::Unit)) }
     def unit; end
 

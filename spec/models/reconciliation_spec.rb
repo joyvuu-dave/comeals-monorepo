@@ -868,7 +868,7 @@ RSpec.describe Reconciliation do
 
       meal = create(:meal, community: community)
       create(:meal_resident, meal: meal, resident: eater, community: community)
-      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('50'), no_cost: true)
+      no_cost_bill_with_an_amount(meal: meal, resident: cook, amount: '50')
       meal.reload
 
       reconciliation = settle!(cutoff: Date.yesterday)

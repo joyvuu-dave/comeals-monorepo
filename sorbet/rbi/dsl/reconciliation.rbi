@@ -512,6 +512,20 @@ class Reconciliation
 
     sig { void }
     def reset_community; end
+
+    sig { returns(T::Array[T.untyped]) }
+    def settlement_correction_ids; end
+
+    sig { params(ids: T::Array[T.untyped]).returns(T::Array[T.untyped]) }
+    def settlement_correction_ids=(ids); end
+
+    # This method is created by ActiveRecord on the `Reconciliation` class because it declared `has_many :settlement_corrections`.
+    # 🔗 [Rails guide for `has_many` association](https://guides.rubyonrails.org/association_basics.html#the-has-many-association)
+    sig { returns(::SettlementCorrection::PrivateCollectionProxy) }
+    def settlement_corrections; end
+
+    sig { params(value: T::Enumerable[::SettlementCorrection]).void }
+    def settlement_corrections=(value); end
   end
 
   module GeneratedAssociationRelationMethods

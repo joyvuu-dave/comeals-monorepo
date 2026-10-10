@@ -151,8 +151,16 @@ Built on top of this, and the reason it was worth doing:
   pages the token already reads, so the allowlist did not change.
 - **Backfill, or not.** Reconciliations settled before 2026-08-02 have no
   lines, and the nightly check skips the line-item half for them. Writing lines
-  for them now would record today's belief as though it were what happened
-  then. Left undone deliberately; it is a decision, not an oversight.
+  for them now, unasked, would record today's belief as though it were what
+  happened then, so there is no backfill. The exception is a settlement the
+  owner decided to work out again (`Settlement#correct!`): its new balances
+  are today's numbers by that decision, so it gets line items written from
+  the same ledger, and both checks cover it from then on. Its admin page and
+  each person's statement show the new numbers like any other settlement's;
+  the record of the correction is read with the query in
+  `docs/runbooks/settled-data-repair.md`.
+  Migration `20261010130000` did this for settlements 3, 7 and 9 (11 bills
+  marked No cost by mistake); settlement 6 still has no lines.
 
 The old proposal follows, for the reasoning about rule 8.
 

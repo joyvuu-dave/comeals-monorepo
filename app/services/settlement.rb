@@ -17,6 +17,10 @@
 #   Settlement.new(reconciliation).rewrite!   # repair only: rewrite the
 #                                             # ledger of an existing row
 #                                             # (docs/runbooks/settled-data-repair.md)
+#   Settlement.new(reconciliation).correct!(reason: '...') { fix the rows }
+#                                             # fix a settled period's rows,
+#                                             # work it out again, and record
+#                                             # what changed
 #
 # This used to be an after_create callback on Reconciliation, so creating
 # the row settled the period as a side effect. It is a service now so that
@@ -29,6 +33,7 @@
 # Standards"); the concurrency rules are in docs/adr/0003 and 0005.
 class Settlement
   extend T::Sig
+  include SettlementCorrecting
 
   # Raised by preview for a cutoff that run! would refuse. Its words are
   # the ones POST /reconciliations answers for the same cutoff: "cutoff",
@@ -39,12 +44,27 @@ class Settlement
   # meals first. Everything rolls back; the request can simply be sent again.
   class Contested < RuntimeError; end
 
+  # Raised by correct! when the settlement already disagreed with its rows
+  # before the caller's fix. Nothing is written.
+  class EarlierDifference < RuntimeError; end
+
+  # Raised by correct! when its fix block was left by return, break or
+  # throw. Rails commits a transaction block that is left without an
+  # error, so the fix would stay on the settled rows with no correction
+  # and no new numbers. Raising rolls the savepoint back. Nothing is
+  # written.
+  class FixLeftEarly < RuntimeError; end
+
   # The name of the database setting that says which settlement is writing.
   # write_ledger! sets it to the reconciliation's id while it writes the
   # line items and balances, and the database refuses an insert into
   # either table unless this setting names the reconciliation the row
   # belongs to, or the repair bypass is on (migration 20261009120000).
   SETTLING_SETTING = 'comeals.settling'
+
+  # The repair bypass (docs/runbooks/settled-data-repair.md). correct!
+  # turns it on for its two deletes only.
+  BYPASS_SETTING = 'comeals.allow_settled_writes'
 
   # Settle the period and clear the settled meals from the caches. For a
   # caller with no retry around it (the seed task).
@@ -423,9 +443,12 @@ class Settlement
   # lasts until the end of the transaction.
   sig { params(value: String).void }
   def write_settling_setting(value)
-    Reconciliation.connection.execute(
-      Reconciliation.sanitize_sql_array(['SELECT set_config(?, ?, true)', SETTLING_SETTING, value])
-    )
+    write_setting(SETTLING_SETTING, value)
+  end
+
+  sig { params(name: String, value: String).void }
+  def write_setting(name, value)
+    Reconciliation.connection.execute(Reconciliation.sanitize_sql_array(['SELECT set_config(?, ?, true)', name, value]))
   end
 
   # One row per source row: one credit per bill, one debit per attendance,

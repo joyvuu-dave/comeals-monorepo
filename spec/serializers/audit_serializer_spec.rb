@@ -43,6 +43,30 @@ RSpec.describe AuditSerializer do
                                             'Ann marked late', 'Ann added', 'Meal record created'])
   end
 
+  # A row with a username and no user: audited's `user` then returns that
+  # text, not a record, and asking the text for a name raised, so the
+  # whole meal history answered 500. The text is shown as it is:
+  # shortening it as a person's name would leave only its first word.
+  it 'shows the username of a row that no person made, as it is' do
+    meal = create(:meal, community: community)
+    audit = Audited::Audit.create!(auditable: meal, action: 'update', audited_changes: { 'description' => %w[a b] },
+                                   username: 'Nightly import')
+
+    expect(described_class.new(audit).to_h)
+      .to include(user_name: 'Nightly import', description: 'Menu description updated')
+  end
+
+  # A data fix writes its rows with no user and no username, so the
+  # release before this one can still show them after a rollback (it asks
+  # `user` for a name). Its comment starts with who made the change.
+  it 'names a data fix as the maker of its rows, from the comment' do
+    meal = create(:meal, community: community)
+    audit = Audited::Audit.create!(auditable: meal, action: 'update', audited_changes: { 'description' => %w[a b] },
+                                   comment: 'Automatic fix (migration 20261010130000). Turned No cost off.')
+
+    expect(described_class.new(audit).to_h).to include(user_name: 'Automatic fix')
+  end
+
   it 'leaves the name empty for a change nobody was signed in for' do
     meal = create(:meal, community: community)
 

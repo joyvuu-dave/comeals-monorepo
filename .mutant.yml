@@ -62,6 +62,7 @@ matcher:
     - ResidentNameShortener*
     - RetryOnConflict*
     - SettleAndNotify*
+    - SettlementCorrecting*
     - SnapshotRead*
     - ThirdCookWarning*
     - TrueOrFalse*
@@ -115,6 +116,9 @@ matcher:
     - Resident*
     - ResidentBalance*
     - Rotation*
+    - SettlementCorrection*
+    - SettlementCorrectionCharge*
+    - SettlementCorrectionLine*
     - StorableTime*
     - StorableTimeValidator*
     - Unit*

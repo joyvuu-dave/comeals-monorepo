@@ -123,6 +123,57 @@ RSpec.describe AuditDescription do
     end
   end
 
+  # Before April 2026 the meal page let a cost be typed into a row marked
+  # No cost, and MealLedger leaves a no-cost bill out of the meal's cost.
+  # Migration 20261010130000 turned No cost off on those bills, and wrote
+  # one row for each: no_cost [true, false], and nothing about the amount,
+  # because the amount did not change. The history reads the amount from
+  # the bill's own rows, the way it reads the cook. Nothing can make such a
+  # bill now (Bill::NO_COST_MEANS_NO_AMOUNT), so the rows are written by
+  # hand, the way they are stored.
+  describe 'a row that turns No cost off on a bill with an amount' do # -- a group of cases, not a method
+    def row(bill_id, action, changes, username: nil, comment: nil)
+      Audited::Audit.create!(auditable_type: 'Bill', auditable_id: bill_id, associated_type: 'Meal',
+                             associated_id: meal.id, action: action, audited_changes: changes, username: username,
+                             comment: comment)
+    end
+
+    it 'says the amount now counts in the meal cost' do
+      row(999_990, 'create', { 'meal_id' => meal.id, 'resident_id' => resident.id, 'amount' => '0.0',
+                               'no_cost' => true })
+      row(999_990, 'update', { 'amount' => ['0.0', '86.0'] })
+      fix = row(999_990, 'update', { 'no_cost' => [true, false] }, username: 'Automatic fix')
+
+      expect(described_class.describe(fix))
+        .to eq("Bill for #{name} no longer marked as no cost, so the $86.00 now counts in the meal's cost")
+    end
+
+    # The 27 bills in the production copy of September 2026 were all typed
+    # before the amount was in dollars, so their rows hold amount_cents.
+    it 'reads an amount typed in cents, and the last of several' do
+      row(999_991, 'create', { 'meal_id' => meal.id, 'resident_id' => resident.id, 'no_cost' => false,
+                               'amount_cents' => 0, 'amount_currency' => 'USD' })
+      row(999_991, 'update', { 'no_cost' => [false, true] })
+      row(999_991, 'update', { 'amount_cents' => [0, 300] })
+      row(999_991, 'update', { 'amount_cents' => [300, 3550] })
+      fix = row(999_991, 'update', { 'no_cost' => [true, false] })
+
+      expect(described_class.describe(fix))
+        .to eq("Bill for #{name} no longer marked as no cost, so the $35.50 now counts in the meal's cost")
+    end
+
+    it 'says nothing about an amount of $0, or an amount the history does not hold' do
+      row(999_992, 'create', { 'meal_id' => meal.id, 'resident_id' => resident.id, 'amount' => '0.0',
+                               'no_cost' => true })
+      zero = row(999_992, 'update', { 'no_cost' => [true, false] })
+      unknown = row(999_993, 'update', { 'no_cost' => [true, false] })
+      describer = described_class.for([zero, unknown])
+
+      expect(describer.describe(zero)).to eq("Bill for #{name} no longer marked as no cost")
+      expect(describer.describe(unknown)).to eq('Bill for unknown no longer marked as no cost')
+    end
+  end
+
   # Until 2026-10-10 the admin bill form could change a bill's cook in
   # place. Production holds three such rows, all on bill 1995 (meal 1356,
   # 2023-03-05): Sandra to Sarah, back to Sandra, and to Sarah again,
@@ -779,7 +830,7 @@ RSpec.describe AuditDescription do
     # attendance row's new person must not become the bill's cook.
     it "keeps a bill's history apart from the history of an attendance row with the same id" do
       bill = create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('30'))
-      bill.update!(no_cost: true)
+      bill.update!(no_cost: true, amount: 0)
       attendance = create(:meal_resident, id: bill.id, meal: meal, resident: other, community: community)
       attendance.update!(resident: create(:resident, community: community, unit: unit))
       bill.update!(no_cost: false, amount: BigDecimal('50'))
@@ -787,7 +838,7 @@ RSpec.describe AuditDescription do
       describer = described_class.for(rows)
 
       expect(describer.describe(rows.last))
-        .to eq("Bill for #{name} changed from $30.00 to $50.00 and no longer marked as no cost")
+        .to eq("Bill for #{name} changed from $0.00 to $50.00 and no longer marked as no cost")
     end
 
     # A row deleted outside the app has no destroy audit, so its last audit

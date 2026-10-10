@@ -296,6 +296,25 @@ $$;
 
 
 --
+-- Name: comeals_protect_settlement_correction(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.comeals_protect_settlement_correction() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF current_setting('comeals.allow_settled_writes', true) = 'on' THEN
+    RETURN CASE TG_OP WHEN 'DELETE' THEN OLD ELSE NEW END;
+  END IF;
+
+  RAISE EXCEPTION '% on % refused: a settlement correction is a record of what a settlement '
+    'said before and after, and cannot be changed. See docs/runbooks/settled-data-repair.md.',
+    TG_OP, TG_TABLE_NAME;
+END;
+$$;
+
+
+--
 -- Name: comeals_reconciliation_balances_sum_zero(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -417,6 +436,39 @@ BEGIN
   END IF;
 
   RETURN CASE TG_OP WHEN 'DELETE' THEN OLD ELSE NEW END;
+END;
+$$;
+
+
+--
+-- Name: comeals_settlement_correction_insert_by_settlement(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.comeals_settlement_correction_insert_by_settlement() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  settlement_id bigint;
+BEGIN
+  IF current_setting('comeals.allow_settled_writes', true) = 'on' THEN
+    RETURN NEW;
+  END IF;
+
+  IF TG_TABLE_NAME = 'settlement_corrections' THEN
+    settlement_id := NEW.reconciliation_id;
+  ELSE
+    SELECT reconciliation_id INTO settlement_id
+    FROM settlement_corrections WHERE id = NEW.settlement_correction_id;
+  END IF;
+
+  IF settlement_id::text = current_setting('comeals.settling', true) THEN
+    RETURN NEW;
+  END IF;
+
+  RAISE EXCEPTION 'INSERT on % refused: a correction of reconciliation % is written only by '
+    'Settlement#correct!, while it works that settlement out again. '
+    'See docs/runbooks/settled-data-repair.md.',
+    TG_TABLE_NAME, settlement_id;
 END;
 $$;
 
@@ -611,7 +663,8 @@ CREATE TABLE public.bills (
     resident_id bigint NOT NULL,
     updated_at timestamp without time zone NOT NULL,
     CONSTRAINT bills_amount_non_negative CHECK ((amount >= (0)::numeric)),
-    CONSTRAINT bills_amount_whole_cents CHECK ((amount = round(amount, 2)))
+    CONSTRAINT bills_amount_whole_cents CHECK ((amount = round(amount, 2))),
+    CONSTRAINT bills_no_cost_means_no_amount CHECK (((NOT no_cost) OR (amount = (0)::numeric)))
 );
 
 
@@ -1347,6 +1400,118 @@ CREATE TABLE public.schema_migrations (
 
 
 --
+-- Name: settlement_correction_charges; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.settlement_correction_charges (
+    id bigint NOT NULL,
+    settlement_correction_id bigint NOT NULL,
+    meal_charge_id bigint NOT NULL,
+    meal_id bigint NOT NULL,
+    resident_id bigint NOT NULL,
+    kind character varying NOT NULL,
+    amount numeric(16,8) NOT NULL,
+    multiplier integer,
+    unit_cost numeric(16,8) NOT NULL,
+    bill_amount numeric(12,8),
+    charged_at timestamp(6) without time zone NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: settlement_correction_charges_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.settlement_correction_charges_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: settlement_correction_charges_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.settlement_correction_charges_id_seq OWNED BY public.settlement_correction_charges.id;
+
+
+--
+-- Name: settlement_correction_lines; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.settlement_correction_lines (
+    id bigint NOT NULL,
+    settlement_correction_id bigint NOT NULL,
+    resident_id bigint NOT NULL,
+    old_amount numeric(16,8) NOT NULL,
+    new_amount numeric(16,8) NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT settlement_correction_lines_changed CHECK ((old_amount <> new_amount))
+);
+
+
+--
+-- Name: settlement_correction_lines_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.settlement_correction_lines_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: settlement_correction_lines_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.settlement_correction_lines_id_seq OWNED BY public.settlement_correction_lines.id;
+
+
+--
+-- Name: settlement_corrections; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.settlement_corrections (
+    id bigint NOT NULL,
+    reconciliation_id bigint NOT NULL,
+    reason text NOT NULL,
+    include_earlier_differences boolean DEFAULT false NOT NULL,
+    earlier_differences jsonb DEFAULT '[]'::jsonb NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT settlement_corrections_earlier_differences_list CHECK ((jsonb_typeof(earlier_differences) = 'array'::text)),
+    CONSTRAINT settlement_corrections_earlier_differences_only_when_included CHECK ((include_earlier_differences OR (earlier_differences = '[]'::jsonb))),
+    CONSTRAINT settlement_corrections_reason_present CHECK ((btrim(reason) <> ''::text))
+);
+
+
+--
+-- Name: settlement_corrections_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.settlement_corrections_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: settlement_corrections_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.settlement_corrections_id_seq OWNED BY public.settlement_corrections.id;
+
+
+--
 -- Name: solid_cache_entries; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2009,6 +2174,27 @@ ALTER TABLE ONLY public.rotations ALTER COLUMN id SET DEFAULT nextval('public.ro
 
 
 --
+-- Name: settlement_correction_charges id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.settlement_correction_charges ALTER COLUMN id SET DEFAULT nextval('public.settlement_correction_charges_id_seq'::regclass);
+
+
+--
+-- Name: settlement_correction_lines id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.settlement_correction_lines ALTER COLUMN id SET DEFAULT nextval('public.settlement_correction_lines_id_seq'::regclass);
+
+
+--
+-- Name: settlement_corrections id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.settlement_corrections ALTER COLUMN id SET DEFAULT nextval('public.settlement_corrections_id_seq'::regclass);
+
+
+--
 -- Name: solid_cache_entries id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -2314,6 +2500,30 @@ ALTER TABLE ONLY public.schema_migrations
 
 
 --
+-- Name: settlement_correction_charges settlement_correction_charges_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.settlement_correction_charges
+    ADD CONSTRAINT settlement_correction_charges_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: settlement_correction_lines settlement_correction_lines_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.settlement_correction_lines
+    ADD CONSTRAINT settlement_correction_lines_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: settlement_corrections settlement_corrections_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.settlement_corrections
+    ADD CONSTRAINT settlement_corrections_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: solid_cache_entries solid_cache_entries_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2448,6 +2658,13 @@ CREATE INDEX auditable_index ON public.audits USING btree (auditable_type, audit
 
 
 --
+-- Name: idx_on_settlement_correction_id_2e132aa3fc; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_settlement_correction_id_2e132aa3fc ON public.settlement_correction_charges USING btree (settlement_correction_id);
+
+
+--
 -- Name: index_admin_users_on_email; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2515,6 +2732,13 @@ CREATE UNIQUE INDEX index_communities_on_name ON public.communities USING btree 
 --
 
 CREATE UNIQUE INDEX index_communities_on_singleton_guard ON public.communities USING btree (singleton_guard);
+
+
+--
+-- Name: index_correction_lines_on_correction_and_resident; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_correction_lines_on_correction_and_resident ON public.settlement_correction_lines USING btree (settlement_correction_id, resident_id);
 
 
 --
@@ -2732,6 +2956,34 @@ CREATE UNIQUE INDEX index_residents_on_reset_password_token ON public.residents 
 --
 
 CREATE INDEX index_residents_on_unit_id ON public.residents USING btree (unit_id);
+
+
+--
+-- Name: index_settlement_correction_charges_on_meal_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_settlement_correction_charges_on_meal_id ON public.settlement_correction_charges USING btree (meal_id);
+
+
+--
+-- Name: index_settlement_correction_charges_on_resident_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_settlement_correction_charges_on_resident_id ON public.settlement_correction_charges USING btree (resident_id);
+
+
+--
+-- Name: index_settlement_correction_lines_on_resident_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_settlement_correction_lines_on_resident_id ON public.settlement_correction_lines USING btree (resident_id);
+
+
+--
+-- Name: index_settlement_corrections_on_reconciliation_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_settlement_corrections_on_reconciliation_id ON public.settlement_corrections USING btree (reconciliation_id);
 
 
 --
@@ -3113,6 +3365,48 @@ CREATE CONSTRAINT TRIGGER reconciliation_balances_sum_zero AFTER INSERT OR DELET
 
 
 --
+-- Name: settlement_correction_charges settlement_correction_charges_insert_by_settlement; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER settlement_correction_charges_insert_by_settlement BEFORE INSERT ON public.settlement_correction_charges FOR EACH ROW EXECUTE FUNCTION public.comeals_settlement_correction_insert_by_settlement();
+
+
+--
+-- Name: settlement_correction_charges settlement_correction_charges_protect; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER settlement_correction_charges_protect BEFORE DELETE OR UPDATE ON public.settlement_correction_charges FOR EACH ROW EXECUTE FUNCTION public.comeals_protect_settlement_correction();
+
+
+--
+-- Name: settlement_correction_lines settlement_correction_lines_insert_by_settlement; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER settlement_correction_lines_insert_by_settlement BEFORE INSERT ON public.settlement_correction_lines FOR EACH ROW EXECUTE FUNCTION public.comeals_settlement_correction_insert_by_settlement();
+
+
+--
+-- Name: settlement_correction_lines settlement_correction_lines_protect; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER settlement_correction_lines_protect BEFORE DELETE OR UPDATE ON public.settlement_correction_lines FOR EACH ROW EXECUTE FUNCTION public.comeals_protect_settlement_correction();
+
+
+--
+-- Name: settlement_corrections settlement_corrections_insert_by_settlement; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER settlement_corrections_insert_by_settlement BEFORE INSERT ON public.settlement_corrections FOR EACH ROW EXECUTE FUNCTION public.comeals_settlement_correction_insert_by_settlement();
+
+
+--
+-- Name: settlement_corrections settlement_corrections_protect; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER settlement_corrections_protect BEFORE DELETE OR UPDATE ON public.settlement_corrections FOR EACH ROW EXECUTE FUNCTION public.comeals_protect_settlement_correction();
+
+
+--
 -- Name: meals fk_rails_0336f048cd; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3217,6 +3511,14 @@ ALTER TABLE ONLY public.reconciliation_balances
 
 
 --
+-- Name: settlement_correction_lines fk_rails_47b857c364; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.settlement_correction_lines
+    ADD CONSTRAINT fk_rails_47b857c364 FOREIGN KEY (settlement_correction_id) REFERENCES public.settlement_corrections(id);
+
+
+--
 -- Name: guests fk_rails_47de94cfe5; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3233,11 +3535,27 @@ ALTER TABLE ONLY public.meals
 
 
 --
+-- Name: settlement_correction_charges fk_rails_4cacb7adfc; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.settlement_correction_charges
+    ADD CONSTRAINT fk_rails_4cacb7adfc FOREIGN KEY (settlement_correction_id) REFERENCES public.settlement_corrections(id);
+
+
+--
 -- Name: solid_queue_blocked_executions fk_rails_4cd34e2228; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.solid_queue_blocked_executions
     ADD CONSTRAINT fk_rails_4cd34e2228 FOREIGN KEY (job_id) REFERENCES public.solid_queue_jobs(id) ON DELETE CASCADE;
+
+
+--
+-- Name: settlement_corrections fk_rails_528a5c25bd; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.settlement_corrections
+    ADD CONSTRAINT fk_rails_528a5c25bd FOREIGN KEY (reconciliation_id) REFERENCES public.reconciliations(id);
 
 
 --
@@ -3361,6 +3679,14 @@ ALTER TABLE ONLY public.meals
 
 
 --
+-- Name: settlement_correction_lines fk_rails_a90e6df171; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.settlement_correction_lines
+    ADD CONSTRAINT fk_rails_a90e6df171 FOREIGN KEY (resident_id) REFERENCES public.residents(id);
+
+
+--
 -- Name: meal_charges fk_rails_b08ec17f22; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3433,12 +3759,32 @@ ALTER TABLE ONLY public.bills
 
 
 --
+-- Name: settlement_correction_charges fk_rails_f24e6547a2; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.settlement_correction_charges
+    ADD CONSTRAINT fk_rails_f24e6547a2 FOREIGN KEY (meal_id) REFERENCES public.meals(id);
+
+
+--
+-- Name: settlement_correction_charges fk_rails_f31d3dcaa7; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.settlement_correction_charges
+    ADD CONSTRAINT fk_rails_f31d3dcaa7 FOREIGN KEY (resident_id) REFERENCES public.residents(id);
+
+
+--
 -- PostgreSQL database dump complete
 --
 
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261010130200'),
+('20261010130000'),
+('20261010125900'),
+('20261010125800'),
 ('20261010120000'),
 ('20261009171800'),
 ('20261009171700'),

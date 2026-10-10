@@ -11,7 +11,11 @@ RSpec.describe ReconciliationWarnings do
   let(:cook) { create(:resident, community: community, unit: unit, name: 'Cook Person') }
   let(:meal) { create(:meal, community: community, date: Date.new(2026, 4, 10)) }
 
+  # A no-cost bill with an amount is written the way the app wrote one
+  # before April 2026 (no_cost_bill_with_an_amount says why).
   def bill(amount, no_cost: false)
+    return no_cost_bill_with_an_amount(meal: meal, resident: cook, amount: amount) if no_cost && amount != '0'
+
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal(amount), no_cost: no_cost)
   end
 

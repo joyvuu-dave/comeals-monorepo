@@ -530,8 +530,9 @@ describe("Bill model", () => {
     });
 
     it("does not clear amount when no_cost is toggled off", () => {
-      // The server does not tie no_cost to amount, and an admin can save
-      // both, so a row can load with no cost ticked and an amount.
+      // No bill has both since migration 20261010130000, but a page that
+      // loaded the meal before it ran can still hold a row with No cost
+      // ticked and an amount.
       const store = createStore({
         residents: [{ id: 10, meal_id: 1, name: "Alice" }],
         bills: [{ id: "bill-1", resident: 10, no_cost: true, amount: "25.00" }],

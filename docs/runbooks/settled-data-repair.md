@@ -109,6 +109,71 @@ After the repair:
 Do not use `ALTER TABLE ... DISABLE TRIGGER`. It takes a DDL lock and drops
 the guard for every session, not just yours.
 
+### A repair that worked the settlements out again (2026-10-10)
+
+Migration `20261010130000` used the bypass on 11 bills of 9 settled
+meals. Each was marked No cost and also had an amount, which the meal
+page allowed before April 2026, so the cook was credited $0 for what they
+spent. Nobody recorded what was paid or collected for those settlements,
+and the owner decided that the app must show the right numbers. So, in
+the same transaction as the bill fix, the migration works out again each
+settlement that claimed one of the bills:
+
+```ruby
+Settlement.new(reconciliation).correct!(reason: '3 costs on these meals were marked No cost by mistake, ...') do
+  # the fix of the rows, with the bypass on
+end
+```
+
+`correct!` keeps the reconciliation row, its meals and its cutoff. Before
+the block runs, it asks the nightly check about the settlement and
+refuses, writing nothing, if the settlement already disagrees with its
+rows or its line items: working it out again would fold that earlier
+difference in under this reason, and `ledger:verify` would stop reporting
+it. Find out where such a difference came from first. If you decide to
+fold it in anyway, pass `include_earlier_differences: true`: the record
+then says so and keeps what the check found.
+Then it runs the block, which must end normally or raise. A block left by
+`return`, `break` or `throw` raises `Settlement::FixLeftEarly` and nothing
+stays, because Rails would otherwise commit the fix with no correction.
+Then it copies the line items it is about to delete into the record,
+deletes the line items and balances with the bypass on for those two
+statements only, writes both again from the rows as they are now with
+the settlement's own code (`write_ledger!`), and records each person whose
+balance changed, before and after. No admin page shows the record: the
+settlement page and each person's statement show the new numbers like
+any other settlement's (the owner's choice, 2026-10-12). `ledger:verify`
+then finds the settlement matching its rows, with no exception to
+remember.
+
+Use it the same way for the next repair of this kind, after the owner has
+decided the settled numbers must change: fix the rows in the block.
+Because the cents are shared out across the whole settlement, a person
+who had nothing to do with the fixed rows can move by one cent. The
+correction records that cent too. A settlement corrected twice keeps both
+records, each with the line items it replaced.
+
+### Reading the record of a correction
+
+Every correction, with each changed balance before and after. A positive
+amount means the community owes the person, a negative one that the
+person owes (the sign convention in `MealLedger`). Read-only, so it is
+safe on production with `heroku pg:psql`.
+
+```sql
+SELECT c.reconciliation_id, c.created_at, c.reason,
+       r.name, l.old_amount, l.new_amount
+FROM settlement_corrections c
+JOIN settlement_correction_lines l ON l.settlement_correction_id = c.id
+JOIN residents r ON r.id = l.resident_id
+ORDER BY c.reconciliation_id, c.created_at, r.name;
+```
+
+`settlement_corrections.earlier_differences` holds what the nightly check
+had already found when a correction was told to fold it in, and
+`settlement_correction_charges` holds the line items a correction
+replaced, column for column.
+
 ## The settled amounts themselves
 
 `reconciliation_balances` holds what each resident was actually billed. Since
@@ -165,6 +230,9 @@ those lines add up to). `Settlement#rewrite!` writes both, and
 it is not re-runnable on its own — re-running it would rewrite the ledger
 rather than correct it. Rebuilding is a deliberate repair, and a last resort:
 the stored balances are what residents were already told they owed.
+
+`Settlement#correct!` (the section above) does these steps in one call and
+also records what changed. Prefer it. The steps by hand leave no record.
 
 ```ruby
 # bin/rails runner, against a reconciliation you have decided is corrupt.

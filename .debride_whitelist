@@ -76,6 +76,13 @@ reconciliations
 attendees
 hosts
 mail_deliveries
+settlement_correction
+settlement_correction_lines
+settlement_correction_charges
+charges
+# Called from a migration, which debride does not read: migration
+# 20261010130000 works out again the settlements it fixed a bill of.
+correct!
 # Read by specs only, on purpose: Settlement#rewrite! is a repair step,
 # Resident#password is the plain-text password just assigned.
 rewrite!

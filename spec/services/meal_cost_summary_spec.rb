@@ -22,8 +22,7 @@ RSpec.describe MealCostSummary do
       resident_b = create(:resident, community: community, unit: unit, multiplier: 2)
       create(:meal_resident, meal: meal, resident: resident_a, community: community)
       create(:bill, meal: meal, resident: resident_a, community: community, amount: BigDecimal('30'))
-      create(:bill, meal: meal, resident: resident_b, community: community, amount: BigDecimal('20'),
-                    no_cost: true)
+      no_cost_bill_with_an_amount(meal: meal, resident: resident_b, amount: '20')
       meal.reload
 
       summary = described_class.for(meal)
@@ -166,7 +165,7 @@ RSpec.describe MealCostSummary do
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
       other = create(:resident, community: community, unit: unit, multiplier: 2)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('10'))
-      create(:bill, meal: meal, resident: other, community: community, amount: BigDecimal('12'), no_cost: true)
+      no_cost_bill_with_an_amount(meal: meal, resident: other, amount: '12')
       meal.update!(reconciliation: create(:reconciliation, community: community))
 
       summary = described_class.for(meal.reload)

@@ -77,13 +77,15 @@ RSpec.describe MealLedger do
   end
 
   describe 'lines' do
+    # With an amount on the no-cost bill, as the settlements of 11 bills in
+    # production read them (no_cost_bill_with_an_amount says why).
     it 'produces no line at all for a no_cost bill' do
       cook = resident('Cook')
       helper = resident('Helper')
 
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
-      create(:bill, meal: meal, resident: helper, community: community, amount: BigDecimal('12'), no_cost: true)
+      no_cost_bill_with_an_amount(meal: meal, resident: helper, amount: '12')
       create(:meal_resident, meal: meal, resident: cook, community: community)
       create(:meal_resident, meal: meal, resident: helper, community: community)
 

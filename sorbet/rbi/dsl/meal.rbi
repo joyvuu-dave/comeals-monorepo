@@ -570,6 +570,20 @@ class Meal
 
     sig { returns(T::Boolean) }
     def rotation_previously_changed?; end
+
+    sig { returns(T::Array[T.untyped]) }
+    def settlement_correction_charge_ids; end
+
+    sig { params(ids: T::Array[T.untyped]).returns(T::Array[T.untyped]) }
+    def settlement_correction_charge_ids=(ids); end
+
+    # This method is created by ActiveRecord on the `Meal` class because it declared `has_many :settlement_correction_charges`.
+    # 🔗 [Rails guide for `has_many` association](https://guides.rubyonrails.org/association_basics.html#the-has-many-association)
+    sig { returns(::SettlementCorrectionCharge::PrivateCollectionProxy) }
+    def settlement_correction_charges; end
+
+    sig { params(value: T::Enumerable[::SettlementCorrectionCharge]).void }
+    def settlement_correction_charges=(value); end
   end
 
   module GeneratedAssociationRelationMethods

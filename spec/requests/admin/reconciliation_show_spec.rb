@@ -47,6 +47,36 @@ RSpec.describe 'Admin Reconciliation Show' do
       .to eq(['Owed to units: $15.00', 'Owed by units: $15.00', 'Difference: $0.00 ✓'])
   end
 
+  # A settlement worked out again after it was made (Settlement#correct!)
+  # looks like any other: its page shows the new numbers and nothing about
+  # the correction. The record stays in the database, and the query in
+  # docs/runbooks/settled-data-repair.md reads it.
+  it 'shows a corrected settlement like any other, with its new numbers and no note' do
+    elm = create(:unit, community: community, name: 'Elm')
+    oak = create(:unit, community: community, name: 'Oak')
+    cook = create(:resident, community: community, unit: elm, name: 'Casey Cook')
+    elm_eater = create(:resident, community: community, unit: elm, name: 'Dana Diner')
+    oak_eater = create(:resident, community: community, unit: oak, name: 'Eli Eater')
+    meal = create(:meal, community: community, date: Date.new(2025, 3, 1))
+    bill = create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
+    create(:meal_resident, meal: meal, resident: elm_eater, community: community)
+    create(:meal_resident, meal: meal, resident: oak_eater, community: community)
+    reconciliation = settle!(cutoff: Date.new(2025, 3, 31))
+    Settlement.new(reconciliation).correct!(reason: 'A receipt was $36, not $30.') do
+      SettledWrites.with_repair_bypass { bill.update_columns(amount: BigDecimal('36')) }
+    end
+
+    get "/reconciliations/#{reconciliation.id}",
+        params: { token: token },
+        headers: { 'Host' => 'admin.example.com' }
+
+    expect(response).to have_http_status(:ok)
+    expect(panel_rows('Settlement Balances')).to eq([['Casey Cook', 'Elm', 'is owed $36.00'],
+                                                     ['Dana Diner', 'Elm', 'owes $18.00'],
+                                                     ['Eli Eater', 'Oak', 'owes $18.00']])
+    expect(response.body).not_to include('A receipt was $36', 'orrected')
+  end
+
   def panel(title)
     response.parsed_body.css('.panel').find { |node| node.at_css('h3')&.text&.strip == title }
   end

@@ -85,8 +85,7 @@ RSpec.describe 'billing:recalculate correctness', type: :task do
     create(:meal_resident, meal: meal3, resident: adult, community: community)
     create(:meal_resident, meal: meal3, resident: host, community: community)
     create(:bill, meal: meal3, resident: cook_b, community: community, amount: BigDecimal('30'))
-    create(:bill, meal: meal3, resident: cook_a, community: community, amount: BigDecimal('10'),
-                  no_cost: true)
+    no_cost_bill_with_an_amount(meal: meal3, resident: cook_a, amount: '10')
 
     # Meal 4 — uncapped child-only meal (zero total multiplier).
     # Nobody can be charged a share → the meal is zeroed and cook_a absorbs
@@ -100,8 +99,7 @@ RSpec.describe 'billing:recalculate correctness', type: :task do
     # Meal 5 — only no_cost bills: total_cost = 0, nothing credited or charged.
     meal5 = create(:meal, community: community)
     create(:meal_resident, meal: meal5, resident: adult, community: community)
-    create(:bill, meal: meal5, resident: cook_b, community: community, amount: BigDecimal('12'),
-                  no_cost: true)
+    no_cost_bill_with_an_amount(meal: meal5, resident: cook_b, amount: '12')
 
     expected = expect_cached_balances_to_match_oracle(residents, [meal1, meal2, meal3, meal4, meal5])
 

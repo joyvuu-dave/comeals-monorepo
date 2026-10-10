@@ -171,6 +171,27 @@ RSpec.describe BillsPayload do
       expect(rows).to eq(cook.id => [BigDecimal('0'), true], other.id => [BigDecimal('3'), false])
     end
 
+    # "No cost" means the cook spent nothing (Bill::NO_COST_MEANS_NO_AMOUNT).
+    # Only `to` is checked: `from` is the bill as the page saw it, and a
+    # page that read the meal before migration 20261010130000 ran may have
+    # seen a bill with both.
+    it 'refuses a to with No cost and an amount, and takes a from with both' do
+      no_cost_amount_error = "A bill marked No cost can't have an amount. Clear the amount, or turn No cost off."
+
+      expect(error_of(adding(cook, values('86', no_cost: true)))).to eq(no_cost_amount_error)
+      expect(error_of(changing(cook, values('0', no_cost: true), values('0.01', no_cost: true))))
+        .to eq(no_cost_amount_error)
+      expect(edits(adding(cook, values('0.00', no_cost: true)), adding(other, values('', no_cost: true)))).to be_valid
+      expect(edits(changing(cook, values('86', no_cost: true), values('86')))).to be_valid
+      expect(edits(removing(cook, values('86', no_cost: true)))).to be_valid
+    end
+
+    it 'checks No cost with an amount after the amount and no_cost themselves, and before the cooks' do
+      expect(error_of(adding(cook, values('86', no_cost: 'no')))).to eq(no_cost_error)
+      expect(error_of(adding(cook, values('86', no_cost: true)).merge(resident_id: 0)))
+        .to eq("A bill marked No cost can't have an amount. Clear the amount, or turn No cost off.")
+    end
+
     it 'checks from before to, and in each side the shape, then the amount, then no_cost' do
       expect(error_of(changing(cook, values('x', no_cost: 'no'), values('y')))).to eq(amount_error('x'))
       expect(error_of(changing(cook, values('1', no_cost: 'no'), values('y')))).to eq(no_cost_error)
@@ -455,7 +476,8 @@ RSpec.describe BillsPayload do
       prints = [
         [change],
         [changing(cook, values('5.0'), values('7.01'))],
-        [changing(cook, values('5.0'), values('7.00', no_cost: true))],
+        [changing(cook, values('5.0'), values(''))],
+        [changing(cook, values('5.0'), values('', no_cost: true))],
         [changing(cook, values('5.0', no_cost: true), values('7.00'))],
         [changing(other, values('5.0'), values('7.00'))],
         [adding(cook, values('7.00'))],

@@ -47,10 +47,7 @@ RSpec.describe 'the stored ledger against the plain ledger', type: :task do
     meals = RandomLedger.meals(seed, cents_max: cents_max).map do |draft|
       meal = create(:meal, community: community, date: draft.date)
       meal.update!(cap: draft.cap)
-      draft.bills.each do |bill|
-        create(:bill, meal: meal, resident: residents.fetch(bill.resident_id), community: community,
-                      amount: bill.amount, no_cost: bill.no_cost)
-      end
+      draft.bills.each { |bill| persist_bill(meal, residents.fetch(bill.resident_id), bill) }
       draft.meal_residents.each do |row|
         create(:meal_resident, meal: meal, resident: residents.fetch(row.resident_id), community: community)
       end
@@ -60,6 +57,16 @@ RSpec.describe 'the stored ledger against the plain ledger', type: :task do
       meal
     end
     [residents.values.map(&:id), meals.map(&:id)]
+  end
+
+  # A no-cost bill with an amount is written the way the app wrote one
+  # before April 2026 (no_cost_bill_with_an_amount says why).
+  def persist_bill(meal, cook, bill)
+    if bill.no_cost && bill.amount.positive?
+      no_cost_bill_with_an_amount(meal: meal, resident: cook, amount: bill.amount)
+    else
+      create(:bill, meal: meal, resident: cook, community: meal.community, amount: bill.amount, no_cost: bill.no_cost)
+    end
   end
 
   def expect_close(actual, expected, label)

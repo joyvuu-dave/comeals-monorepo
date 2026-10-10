@@ -258,6 +258,48 @@ RSpec.describe Bill do
     end
   end
 
+  # "No cost" means the cook spent nothing, so a bill marked No cost has
+  # no amount. Before 2026-10-10 nothing refused both at once. MealLedger
+  # leaves a no-cost bill out of the meal's cost, so a cook whose bill had
+  # both was credited $0 for what they spent: 27 bills in the production
+  # copy of September 2026. The database CHECK bills_no_cost_means_no_amount
+  # refuses the same rows from writes that skip the model
+  # (spec/db/bills_no_cost_means_no_amount_check_spec.rb).
+  describe 'a bill marked No cost has no amount' do
+    let(:meal) { create(:meal, community: community) }
+    let(:cook) { create(:resident, community: community, unit: unit) }
+
+    it 'refuses No cost on a bill with an amount, in words, and keeps the stored bill' do
+      bill = create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('86'))
+      bill.no_cost = true
+
+      expect(bill.save).to be(false)
+      expect(bill.errors.full_messages)
+        .to eq(["A bill marked No cost can't have an amount. Clear the amount, or turn No cost off."])
+      expect(bill.reload.no_cost).to be(false)
+    end
+
+    it 'refuses an amount on a bill marked No cost' do
+      bill = create(:bill, meal: meal, resident: cook, community: community, amount: 0, no_cost: true)
+
+      expect(bill.update(amount: BigDecimal('0.01'))).to be(false)
+      expect(bill.errors.full_messages).to eq([described_class::NO_COST_MEANS_NO_AMOUNT])
+      expect(bill.reload.amount).to eq(0)
+    end
+
+    it 'refuses a new bill with both' do
+      bill = build(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('12'), no_cost: true)
+
+      expect(bill).not_to be_valid
+      expect(bill.errors.full_messages).to eq([described_class::NO_COST_MEANS_NO_AMOUNT])
+    end
+
+    it 'takes No cost with $0, and an amount without No cost' do
+      expect(build(:bill, meal: meal, resident: cook, community: community, amount: 0, no_cost: true)).to be_valid
+      expect(build(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('12'))).to be_valid
+    end
+  end
+
   # Issue #139. Every true/false column is NOT NULL. Without this check a
   # nil (a no_cost sent as "" in the bills format before #135, which Rails
   # reads as nil) reached the database, and the API answered 500. The

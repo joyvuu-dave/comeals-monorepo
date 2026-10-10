@@ -133,11 +133,12 @@ ActiveAdmin.register Bill do
               }
       # The same switch as on the cook's row of the meal page. Without it
       # here, a no-cost bill deleted and added again (the way to fix a
-      # wrong cook) came back as a $0 bill waiting for a cost.
+      # wrong cook) came back as a $0 bill waiting for a cost. A bill
+      # marked No cost has no amount, and the model refuses both in
+      # words (Bill::NO_COST_MEANS_NO_AMOUNT), which the form shows.
       f.input :no_cost,
               label: 'No cost',
-              hint: "Check this box when the cook spent nothing. The meal's cost leaves out a no-cost bill, " \
-                    'even if it has an amount.'
+              hint: "Check this box when the cook spent nothing. A bill marked No cost can't have an amount."
     end
 
     f.actions
