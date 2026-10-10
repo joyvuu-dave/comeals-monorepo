@@ -5,14 +5,12 @@
  */
 
 /**
- * Turn off the idle timer in app/frontend/index.html, which sends the
- * page to "/" five minutes after the last mouse, key, scroll or touch
- * event. Call it before the first goto.
- *
- * The timer returns at once when this flag is set. Replacing
- * window.idleTimer with a stub does not work: index.html declares
- * `function idleTimer()` in a plain script, and that declaration
- * replaces the stub before the call on the next line runs (#118).
+ * Turn off the idle timer (app/frontend/src/components/app/
+ * back_to_today.tsx), which sends the screen to today's calendar five
+ * minutes after the page loads or changes, or after the last mouse,
+ * key, scroll or touch event. Call it before the first goto: the timer
+ * reads the flag once, when the app starts. It does not turn off the
+ * move to the new month at the community's midnight.
  * tests/integration/idle-timer.spec.js checks the flag and the timer.
  */
 async function disableIdleTimer(page) {

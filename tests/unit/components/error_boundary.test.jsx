@@ -62,6 +62,43 @@ describe("ErrorBoundary", () => {
     expect(meta.componentStack).toContain("Bomb");
   });
 
+  // The idle timer reads the note and loads today's calendar: the
+  // error page stays when the address changes, so a move inside the
+  // app would leave it on screen (components/app/back_to_today.tsx).
+  it("notes the crash in the store", () => {
+    const store = { markPageCrashed: vi.fn() };
+    render(
+      <StoreContext.Provider value={store}>
+        <ErrorBoundary>
+          <Bomb />
+        </ErrorBoundary>
+      </StoreContext.Provider>,
+    );
+    expect(store.markPageCrashed).toHaveBeenCalledTimes(1);
+  });
+
+  // The store may be what broke. The error page shows anyway, and the
+  // one error reported is the one that crashed the page.
+  it("shows the error page when the store cannot take the note", () => {
+    const store = {
+      markPageCrashed: vi.fn(() => {
+        throw new Error("[mobx-state-tree] the store is dead");
+      }),
+    };
+    render(
+      <StoreContext.Provider value={store}>
+        <ErrorBoundary>
+          <Bomb />
+        </ErrorBoundary>
+      </StoreContext.Provider>,
+    );
+    expect(
+      screen.getByText("Something went wrong with Comeals."),
+    ).toBeInTheDocument();
+    expect(notifyError).toHaveBeenCalledTimes(1);
+    expect(notifyError.mock.lastCall[0].message).toBe("boom");
+  });
+
   // A reload ends every request on its way, so Refresh first waits for
   // the bills saves on their way (finishBillsSaves, #150). index.jsx
   // puts the boundary inside the store's provider.

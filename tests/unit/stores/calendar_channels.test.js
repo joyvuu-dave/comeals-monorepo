@@ -294,4 +294,28 @@ describe("calendar channels through the real Pusher client", () => {
     expect(fetchesOf(2024, 6)).toBe(juneFetches);
     expect(monthCache.get(juneKey)).toBeDefined();
   });
+
+  // Logout removes the session cookies just before the page loads "/"
+  // again. A copy of the month read from the device after that is still
+  // drawn, but a channel opened then was named for the community
+  // "undefined" (#153).
+  it("opens no channel when a copy on disk is drawn after the session ended", async () => {
+    const idbKeyval = await import("idb-keyval");
+    const Cookie = (await import("js-cookie")).default;
+    let readEnds;
+    idbKeyval.get.mockImplementationOnce(
+      () => new Promise((resolve) => (readEnds = resolve)),
+    );
+    const store = DataStore.create({ meals: [] });
+
+    store.switchMonths("2024-07-15");
+    Cookie.remove("token");
+    Cookie.remove("community_id");
+    readEnds(calendarData(2024, 7, "July"));
+    await flush();
+
+    expect(store.calendarEvents[0].title).toBe("July");
+    expect(FakePusher.instance.opened).toEqual([]);
+    expect(axios.get).not.toHaveBeenCalled();
+  });
 });

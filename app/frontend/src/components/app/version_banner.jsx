@@ -59,6 +59,16 @@ function VersionBanner() {
     };
   }, []);
 
+  // The idle timer reads the note. When nobody has used the screen for
+  // five minutes, it loads the new code (back_to_today.tsx), so a shared
+  // screen does not run the old code until someone taps Refresh.
+  useEffect(
+    function () {
+      if (updateAvailable) store.markNewVersionAvailable();
+    },
+    [store, updateAvailable],
+  );
+
   if (!updateAvailable) {
     return null;
   }

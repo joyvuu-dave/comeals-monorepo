@@ -2,7 +2,7 @@
 # frozen_string_literal: true
 
 # Serializes a community's calendar month for the frontend. Build it with
-# `params: { month:, year:, start_date:, end_date:, month_int_array: }`.
+# `params: { month:, year:, start_date:, end_date: }`.
 #
 # CACHING: CommunitiesController#calendar caches this month for an hour
 # under a version read from the rows (Community#calendar_cache_version).
@@ -72,7 +72,7 @@ class CalendarSerializer
   attribute :birthdays do |community|
     T.bind(self, CalendarSerializer)
     days = Date.parse(start_date)..Date.parse(end_date)
-    ResidentBirthdaySerializer.new(birthdays_in_range(community), params: { days: days }).to_h
+    ResidentBirthdaySerializer.new(birthdays_in_range(community, days), params: { days: days }).to_h
   end
 
   attribute :common_house_reservations do |community|
@@ -127,13 +127,10 @@ class CalendarSerializer
     Rotation.where(id: rotation_ids).order(:id).preload(:meals).to_a
   end
 
-  # Born by the last day on screen: paged back to a year before
-  # someone was born, their birthday has no chip.
-  def birthdays_in_range(community)
-    community.residents.active
-             .where('extract(month from birthday) in (?)', params.fetch(:month_int_array))
-             .where(birthday: ..end_date)
-             .order(:id)
+  # A person has a chip only from their first birthday on: paged back to
+  # the year they were born, or before it, their birthday has no chip.
+  def birthdays_in_range(community, days)
+    community.residents.active.with_birthday_chip_on(days).order(:id)
   end
 
   # Every booking that overlaps the window, not only those that start in

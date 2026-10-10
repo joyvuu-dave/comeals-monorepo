@@ -11,6 +11,7 @@ import {
   getCommunityTimezone,
   msUntilNextMidnight,
 } from "../helpers/helpers";
+import { communityId } from "../helpers/session";
 import * as monthData from "./month_fetch";
 
 export function appVolatile() {
@@ -22,6 +23,11 @@ export function appVolatile() {
     // time any page that shows residents loads and kept for the life
     // of the store (the name depends only on community_id).
     residentsChannel: null,
+    // The page crashed: ErrorBoundary shows "Something went wrong".
+    pageCrashed: false,
+    // VersionBanner found a newer build on the server than the code
+    // running here.
+    newVersionAvailable: false,
   };
 }
 
@@ -114,15 +120,28 @@ export function appActions(self) {
     setIsOnline(val) {
       self.isOnline = !!val;
     },
+    // The idle timer reads these two: a move inside the app fixes
+    // neither, so it loads the page again (back_to_today.tsx). Each
+    // goes one way. The page load starts a new store.
+    markPageCrashed() {
+      self.pageCrashed = true;
+    },
+    markNewVersionAvailable() {
+      self.newVersionAvailable = true;
+    },
     // Subscribe to the residents channel once. The server pushes it
     // when a resident or unit changes in any way a screen shows
     // (Resident#note_live_update): the hosts dropdown, the meal page's
     // sign-up list and every calendar month list residents, so all of
-    // them are stale at once.
+    // them are stale at once. With no session there is no channel to
+    // open: a list can arrive after a logout, just before the page loads
+    // "/" again (#153).
     ensureResidentsChannel() {
       if (self.residentsChannel) return;
+      var id = communityId();
+      if (id === null) return;
       self.residentsChannel = window.Comeals.pusher.subscribe(
-        `community-${Cookie.get("community_id")}-residents`,
+        `community-${id}-residents`,
       );
       self.residentsChannel.bind("update", function () {
         self.handleResidentsUpdate();

@@ -81,6 +81,24 @@ class Resident < ApplicationRecord
   }
   scope :adult, -> { adult_on(Community.instance.today) }
   scope :active, -> { where(active: true) }
+  # The residents with a birthday chip on these days (a calendar's
+  # weeks, or one month). The chip goes on the birthday in the year the
+  # days give its month (ResidentBirthdaySerializer), so a person is
+  # taken when their birthday's month is on screen and they were born
+  # before that year. A birthday is a year since the day of birth, so
+  # the day of birth itself has no chip (it used to say "Mia's 0th
+  # B-day!"), and nor does a day before it. The days are at most 42, so
+  # each month number in them has one year. An empty list of days takes
+  # nobody: with no conditions to join, the WHERE would take everyone.
+  scope :with_birthday_chip_on, lambda { |days|
+    years = days.to_h { |day| [day.month, day.year] }
+    next none if years.empty?
+
+    where(years.map do |month, year|
+      sanitize_sql_array(['(EXTRACT(MONTH FROM residents.birthday) = ? AND residents.birthday < ?)',
+                          month, Date.new(year, 1, 1)])
+    end.join(' OR '))
+  }
   # Who can be asked to cook: active adults with can_cook set. The rotation
   # log lists these.
   scope :eligible_cooks, -> { active.adult.where(can_cook: true) }

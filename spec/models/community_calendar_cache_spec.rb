@@ -146,7 +146,7 @@ RSpec.describe Community do
     # saved.
     it 'counts a common house booking exactly when April lists it' do
       resident = create(:resident, community: community)
-      april = { month: 4, year: 2026, start_date: from.to_s, end_date: to.to_s, month_int_array: [3, 4, 5] }
+      april = { month: 4, year: 2026, start_date: from.to_s, end_date: to.to_s }
 
       bookings = {
         'ends as the six weeks open' => [[3, 28, 22, 0], [3, 29, 0, 0]],

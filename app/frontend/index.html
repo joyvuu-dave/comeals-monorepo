@@ -58,38 +58,5 @@
       <h3 class="shell-loading">Loading...</h3>
     </div>
     <script type="module" src="/src/index.jsx"></script>
-    <script>
-      // Five minutes after the last mouse, key, scroll or touch event, go
-      // to "/", which shows a signed-in resident today's calendar. The
-      // first event starts the timer, so a page nobody touches stays.
-      function idleTimer() {
-        // The browser tests set this flag to turn the timer off
-        // (disableIdleTimer in tests/helpers/browser_setup.js). A stub
-        // put on window.idleTimer cannot do it: this declaration
-        // replaces the stub before the call below runs.
-        if (window.__COMEALS_NO_IDLE_TIMER__) return;
-        var t;
-        window.onmousemove = resetTimer;
-        window.onmousedown = resetTimer;
-        window.onclick = resetTimer;
-        window.onscroll = resetTimer;
-        window.onkeydown = function (e) {
-          if (["Shift", "Control", "Alt", "Meta"].includes(e.key)) return;
-          resetTimer();
-        };
-        window.addEventListener("touchstart", resetTimer, { passive: true });
-
-        function navHome() {
-          window.location.href = "/";
-        }
-
-        function resetTimer() {
-          clearTimeout(t);
-          t = setTimeout(navHome, 1000 * 60 * 5);
-        }
-      }
-
-      idleTimer();
-    </script>
   </body>
 </html>

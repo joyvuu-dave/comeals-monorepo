@@ -86,16 +86,18 @@ RSpec.describe 'Communities API' do
       end
     end
 
-    # A person has no birthday chip in a month before they were born.
-    # Born on the last day of the month counts as born by then.
-    it 'leaves out someone born after the month, and keeps someone born on its last day' do
+    # A person has no birthday chip in a month before they were born, or
+    # on the day of birth: a birthday is a year since that day. The first
+    # birthday has a chip.
+    it 'leaves out the months before the first birthday, and keeps the first birthday' do
       travel_to Time.zone.local(2026, 9, 27, 12, 0) do
         token
         baby = create(:resident, community: community, unit: unit, name: 'Tia New', birthday: Date.new(2026, 3, 31))
 
         expect(birthdays(start: '2025-03-16')).to eq([])
-        expect(birthdays(start: '2026-03-15').pluck('id', 'start'))
-          .to eq([[baby.cache_key_with_version, '2026-03-31']])
+        expect(birthdays(start: '2026-03-15')).to eq([])
+        expect(birthdays(start: '2027-03-15').pluck('id', 'title', 'start'))
+          .to eq([[baby.cache_key_with_version, "Tia's 1st B-day!", '2027-03-31']])
       end
     end
 

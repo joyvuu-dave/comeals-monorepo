@@ -24,8 +24,9 @@ module Api
       #
       # The month two weeks after `start` (the middle of the calendar's
       # six weeks), or this month. The chips are dated in that month's
-      # year, and a person born after it has no chip there. A start that
-      # is not a date is a 400, the same answer #calendar gives.
+      # year, and a person has one there only from their first birthday
+      # on (Resident.with_birthday_chip_on). A start that is not a date
+      # is a 400, the same answer #calendar gives.
       def birthdays
         begin
           day = params[:start] ? Date.parse(params[:start]) + 2.weeks : Community.instance.today
@@ -34,9 +35,7 @@ module Api
         end
         days = day.all_month
 
-        residents = Community.instance.residents.active
-                             .where('extract(month from birthday) = ?', day.month)
-                             .where(birthday: ..days.last)
+        residents = Community.instance.residents.active.with_birthday_chip_on(days)
         render json: ResidentBirthdaySerializer.new(residents, params: { days: days })
       end
 
@@ -63,7 +62,6 @@ module Api
 
         start_date = date.beginning_of_month.beginning_of_week(:sunday)
         end_date = start_date + 41.days
-        month_int_array = (start_date..end_date).map(&:month).uniq
 
         month = (start_date + 20.days).month
         year = (start_date + 20.days).year
@@ -73,8 +71,7 @@ module Api
 
         result = cached_month(Community.instance,
                               month: month, year: year,
-                              start_date: start_date, end_date: end_date,
-                              month_int_array: month_int_array)
+                              start_date: start_date, end_date: end_date)
 
         # stale? digests `result` into an ETag. When the client sends a matching
         # If-None-Match, Rails auto-renders 304 Not Modified with an empty body.

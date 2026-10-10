@@ -8,6 +8,7 @@ import { stubRandomUUID } from "../mocks/uuid.js";
 stubRandomUUID();
 
 import axios from "axios";
+import Cookie from "js-cookie";
 import { createDataStore, stage } from "../helpers/create_data_store.js";
 import { pusherClient } from "../../../app/frontend/src/helpers/pusher_client.js";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
@@ -52,6 +53,30 @@ describe("hosts cache", () => {
       { id: 2, name: "Bob Johnson", unitName: "B" },
     ]);
     expect(store.hostsLoaded).toBe(true);
+  });
+
+  // Logout removes the session cookies just before the page reloads, and
+  // a calendar that mounts in between asks for the hosts. That request
+  // named the community "undefined" (#153).
+  it("sends no request without a community id, and keeps the list it has", async () => {
+    mockHostsResponse();
+    await store.ensureHosts();
+    axios.get.mockClear();
+    Cookie.remove("token");
+    Cookie.remove("community_id");
+
+    const fresh = createDataStore();
+    const freshHosts = await fresh.ensureHosts();
+    const keptHosts = await store.refetchHostsSilently();
+
+    expect(axios.get).not.toHaveBeenCalled();
+    expect(freshHosts.slice()).toEqual([]);
+    expect(fresh.hostsLoaded).toBe(false);
+    expect(keptHosts.slice()).toEqual([
+      { id: 1, name: "Jane Smith", unitName: "A" },
+      { id: 2, name: "Bob Johnson", unitName: "B" },
+    ]);
+    fresh.beforeDestroy();
   });
 
   it("a warm cache resolves without a second request", async () => {

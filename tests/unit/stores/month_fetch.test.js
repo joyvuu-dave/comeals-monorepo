@@ -10,6 +10,7 @@ vi.mock("js-cookie", () => import("../mocks/js_cookie.js"));
 vi.mock("idb-keyval", () => import("../mocks/idb_keyval.js"));
 
 import axios from "axios";
+import Cookie from "js-cookie";
 import * as idbKeyval from "idb-keyval";
 import * as monthCache from "../../../app/frontend/src/stores/month_cache.js";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
@@ -19,6 +20,7 @@ import {
   invalidateMonthForDate,
   loadForNavigation,
   prefetchMonth,
+  refetch,
 } from "../../../app/frontend/src/stores/month_fetch.js";
 
 const COMMUNITY = "test-community-id";
@@ -242,6 +244,54 @@ describe("month_fetch", () => {
       expect(monthCache.get(keyFor(2026, 4))).toBeUndefined();
       expect(idbKeyval.set).not.toHaveBeenCalled();
       expect(toastStore.toasts).toHaveLength(0);
+    });
+  });
+
+  // "Sign in" in the signed-out banner, and logout, remove the session
+  // cookies just before the page reloads. Work the page started before
+  // that can still go on in between, and a request built then named the
+  // community "undefined" (#153).
+  describe("after the session ends", () => {
+    function endSession() {
+      Cookie.remove("token");
+      Cookie.remove("community_id");
+    }
+
+    it("loadForNavigation sends no request when the disk read ends after the session", async () => {
+      const read = deferred();
+      idbKeyval.get.mockImplementationOnce(() => read.promise);
+      const render = vi.fn();
+
+      loadForNavigation("2026-01-15", render);
+      endSession();
+      read.resolve(undefined);
+      await flush();
+
+      expect(axios.get).not.toHaveBeenCalled();
+      expect(render).not.toHaveBeenCalled();
+    });
+
+    it("prefetchMonth sends no request when the disk read ends after the session", async () => {
+      const read = deferred();
+      idbKeyval.get.mockImplementationOnce(() => read.promise);
+
+      prefetchMonth("2026-01-15");
+      endSession();
+      read.resolve(undefined);
+      await flush();
+
+      expect(axios.get).not.toHaveBeenCalled();
+    });
+
+    it("refetch sends no request", async () => {
+      endSession();
+      const render = vi.fn();
+
+      refetch("2026-01-15", render);
+      await flush();
+
+      expect(axios.get).not.toHaveBeenCalled();
+      expect(render).not.toHaveBeenCalled();
     });
   });
 

@@ -236,6 +236,7 @@ MUTANT_SPEC_ROWS = {
     %w[Guest LiveUpdate LocksItsMealFirst ReconciledMealImmutability ClosedMealAttendanceFreeze NotesMealLiveUpdate],
   'spec/models/resident_spec.rb' => %w[Resident LiveUpdate BelongsToTheCommunity HasPhoneNumber],
   'spec/models/resident_price_band_spec.rb' => %w[Resident Community LiveUpdate BelongsToTheCommunity HasPhoneNumber],
+  'spec/models/resident_birthday_chip_spec.rb' => %w[Resident BelongsToTheCommunity HasPhoneNumber],
   'spec/models/unit_spec.rb' => %w[Unit LiveUpdate BelongsToTheCommunity],
   'spec/requests/admin/all_pages_spec.rb' =>
     %w[BalanceDisplayHelper SettlementLinesTable MoneyFieldHelper ScheduleWeekLabelHelper PhoneDisplayHelper

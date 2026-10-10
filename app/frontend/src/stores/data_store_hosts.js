@@ -3,10 +3,10 @@
 // reconnect recovery. One of the DataStore's subsystem files — see
 // data_store.js, which composes them.
 import axios from "axios";
-import Cookie from "js-cookie";
 
 import handleAxiosError from "../helpers/handle_axios_error";
 import createVersionGuard from "../helpers/version_guard";
+import { communityApiPath } from "../helpers/session";
 
 export function hostsVolatile() {
   return {
@@ -49,14 +49,19 @@ export function hostsActions(self) {
     //   supersede: false — dedupe onto any in-flight fetch
     //   supersede: true  — start a fresh fetch even if one is in flight;
     //                      the in-flight response will be version-skipped
+    //
+    // With no session there is nothing to ask: the page is about to
+    // load "/" again after a logout (#153). The list it has is kept.
     _fetchHosts(options = {}) {
       if (self.hostsInFlight && !options.supersede) return self.hostsInFlight;
 
+      var path = communityApiPath("hosts");
+      if (path === null) return Promise.resolve(self.hosts);
+
       var versionAtStart = self.hostsFetches.bump();
-      var communityId = Cookie.get("community_id");
 
       var promise = axios
-        .get(`/api/v1/communities/${communityId}/hosts`)
+        .get(path)
         .then(function (response) {
           // Superseded by a later fetch: let the winner's response win.
           if (!self.hostsFetches.isCurrent(versionAtStart)) return self.hosts;

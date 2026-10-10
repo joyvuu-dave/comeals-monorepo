@@ -14,8 +14,7 @@ RSpec.describe CalendarSerializer, type: :serializer do
   let(:options) do
     {
       month: 4, year: 2026,
-      start_date: start_date, end_date: end_date,
-      month_int_array: [4]
+      start_date: start_date, end_date: end_date
     }
   end
 
@@ -95,7 +94,7 @@ RSpec.describe CalendarSerializer, type: :serializer do
     # a year early, off the grid (#101).
     it 'dates each birthday in the year its month has in the window, across New Year' do
       travel_to Time.zone.local(2026, 9, 27, 12, 0) do
-        options.merge!(month: 12, start_date: '2026-11-29', end_date: '2027-01-09', month_int_array: [11, 12, 1])
+        options.merge!(month: 12, start_date: '2026-11-29', end_date: '2027-01-09')
         [Date.new(1990, 11, 30), Date.new(1990, 12, 31), Date.new(1990, 1, 3)].each do |birthday|
           create(:resident, community: community, unit: unit, birthday: birthday)
         end
@@ -105,16 +104,20 @@ RSpec.describe CalendarSerializer, type: :serializer do
       end
     end
 
-    # A person has no birthday chip before they were born. Born on the
-    # last day of the window counts as born by then.
-    it 'takes no birthday of someone born after the last day of the window' do
+    # A person has no birthday chip before they were born, or on the day
+    # of birth: a birthday is a year since that day. The first birthday
+    # has a chip.
+    it 'takes no birthday before the first one, and takes the first one' do
       travel_to Time.zone.local(2026, 9, 27, 12, 0) do
         baby = create(:resident, community: community, unit: unit, birthday: Date.new(2026, 4, 30))
 
-        expect(serialize[:birthdays].pluck(:id, :start)).to eq([[baby.cache_key_with_version, Date.new(2026, 4, 30)]])
+        expect(serialize[:birthdays]).to eq([])
 
         options.merge!(year: 2025, start_date: '2025-04-01', end_date: '2025-04-30')
         expect(serialize[:birthdays]).to eq([])
+
+        options.merge!(year: 2027, start_date: '2027-04-01', end_date: '2027-04-30')
+        expect(serialize[:birthdays].pluck(:id, :start)).to eq([[baby.cache_key_with_version, Date.new(2027, 4, 30)]])
       end
     end
   end
@@ -210,7 +213,7 @@ RSpec.describe CalendarSerializer, type: :serializer do
       end
       reads.merge!('bills' => /FROM "bills" .*WHERE "bills"\."community_id" = /,
                    'rotations' => /FROM "rotations" WHERE "rotations"\."id" /,
-                   'residents' => /FROM "residents" WHERE .*extract\(month from birthday\)/)
+                   'residents' => /FROM "residents" WHERE .*EXTRACT\(MONTH FROM residents\.birthday\)/)
       reads.each do |table, reads_the_list|
         expect(statements.grep(reads_the_list))
           .to include(anything).and all(match(/ ORDER BY "?#{table}"?\."?id"?( ASC)?\z/))

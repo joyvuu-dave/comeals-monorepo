@@ -97,6 +97,12 @@ contract as `ConfirmBar` (see `confirm_bar.jsx`):
   compare against their empty defaults.
 - A form that is unmounted reports clean on the way out, so a stale
   flag cannot block the next modal.
+- Nothing moves the screen by itself while a form is open. The idle
+  timer and the move to the new month at midnight
+  (`components/app/back_to_today.tsx`) both leave an open form where
+  it is. Until October 2026 the idle timer loaded the page again after
+  five minutes with nobody at the screen, which threw an open draft
+  away.
 
 ## Consequences
 

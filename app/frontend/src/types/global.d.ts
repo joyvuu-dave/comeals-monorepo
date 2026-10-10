@@ -18,6 +18,10 @@ export interface PusherClient {
 
 declare global {
   interface Window {
+    // Set by the browser tests (disableIdleTimer in
+    // tests/helpers/browser_setup.js) before the app loads, to turn off
+    // the idle timer in components/app/back_to_today.tsx.
+    __COMEALS_NO_IDLE_TIMER__?: boolean;
     Comeals: {
       pusher: PusherClient;
       socketId: string | null;

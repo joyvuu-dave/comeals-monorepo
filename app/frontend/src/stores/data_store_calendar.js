@@ -7,6 +7,7 @@ import dayjs from "dayjs";
 
 import * as monthData from "./month_fetch";
 import { toCommunityDayjs } from "../helpers/helpers";
+import { communityId as sessionCommunityId } from "../helpers/session";
 import { mark } from "../helpers/nav_trace";
 
 export function calendarVolatile() {
@@ -211,8 +212,13 @@ export function calendarActions(self) {
     // closed the month that had just come on screen (#112). And a
     // channel closed and opened again on every refetch would miss any
     // push sent in between, and fetch again on every confirmation.
+    //
+    // With no session, no channel is opened: a copy of the month read
+    // from the device can be drawn after a logout, just before the page
+    // loads "/" again (#153).
     watchMonthChannels() {
-      var communityId = Cookie.get("community_id");
+      var communityId = sessionCommunityId();
+      if (communityId === null) return;
       var current = dayjs(self.currentDate);
       var open = new Map();
       [window.Comeals.calendarChannel]

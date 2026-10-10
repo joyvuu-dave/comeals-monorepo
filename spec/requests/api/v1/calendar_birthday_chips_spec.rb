@@ -60,4 +60,32 @@ RSpec.describe 'birthday chips on the calendar' do
       expect(titles).to contain_exactly("Dee's 10th B-day!", "Fay's B-day!")
     end
   end
+
+  # A birthday is a year since the day of birth, so the day of birth has
+  # no chip. Before, the October 2026 grid said "Mia's 0th B-day!" on
+  # the day she was born.
+  it 'shows no chip on the day of birth, and the first birthday a year later' do
+    travel_to Time.zone.local(2026, 10, 5, 12, 0) do
+      token
+      create(:resident, community: community, unit: unit, name: 'Mia Ross', birthday: Date.new(2026, 10, 3))
+
+      expect(birthday_chips('2026-10-15')).to eq([])
+      expect(birthday_chips('2027-10-15').pluck('title', 'start')).to eq([["Mia's 1st B-day!", '2027-10-03']])
+    end
+  end
+
+  # The December 2026 grid runs from Sunday Nov 29, 2026 to Saturday
+  # Jan 9, 2027, so its January days are in 2027 and its December days
+  # in 2026. A day of birth in either part has no chip. A first birthday
+  # does.
+  it 'shows no chip on a day of birth in either year of the December grid' do
+    travel_to Time.zone.local(2027, 1, 7, 12, 0) do
+      token
+      create(:resident, community: community, unit: unit, name: 'Ned Ames', birthday: Date.new(2027, 1, 5))
+      create(:resident, community: community, unit: unit, name: 'Dot Hale', birthday: Date.new(2026, 12, 2))
+      create(:resident, community: community, unit: unit, name: 'Ola Berg', birthday: Date.new(2026, 1, 5))
+
+      expect(birthday_chips('2026-12-15').pluck('title', 'start')).to eq([["Ola's 1st B-day!", '2027-01-05']])
+    end
+  end
 end

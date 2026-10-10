@@ -8,9 +8,10 @@
 # not in this year. The December grid ends in the next January, and a
 # person can page to any month of another year (#101). The days on
 # screen are at most 42, so each month number is in them once, and the
-# month names one year. The caller sends only residents whose birthday
-# month is on screen, and who were born by the last day on screen, so
-# no chip falls before a birth.
+# month names one year. The caller sends only the residents
+# Resident.with_birthday_chip_on takes for the same days, so every chip
+# is a birthday the person has had: the first birthday or a later one,
+# never the day of birth.
 class ResidentBirthdaySerializer
   include Alba::Resource
 

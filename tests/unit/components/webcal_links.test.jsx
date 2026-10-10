@@ -18,6 +18,32 @@ describe("WebcalLinks", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     delete cookies.current.resident_id;
+    delete cookies.current.token;
+  });
+
+  // Logout removes every session cookie just before the page reloads,
+  // and a calendar that mounts in between drew these links. With no
+  // token, the server can only answer 401, so nothing is asked (#153).
+  it("asks for no resident id after the session ended", async () => {
+    render(<WebcalLinks />);
+    await act(async () => {});
+
+    expect(axios.get).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("link", { name: "Subscribe to My Meals" }),
+    ).not.toBeInTheDocument();
+  });
+
+  // The same moment, with the community id gone too. The link to the
+  // community's feed was drawn as /communities/undefined/ical.ics (#153).
+  it("draws no link after the community id is gone", async () => {
+    delete cookies.current.community_id;
+    cookies.current.resident_id = "3";
+    const { container } = render(<WebcalLinks />);
+    await act(async () => {});
+
+    expect(container.querySelectorAll("a")).toHaveLength(0);
+    expect(axios.get).not.toHaveBeenCalled();
   });
 
   it("links both calendars when the resident is already known", () => {
@@ -38,6 +64,7 @@ describe("WebcalLinks", () => {
   });
 
   it("fetches the resident id when the cookie is missing", async () => {
+    cookies.current.token = "test-token";
     axios.get.mockResolvedValue({ status: 200, data: 9 });
     render(<WebcalLinks />);
 
@@ -62,7 +89,30 @@ describe("WebcalLinks", () => {
     });
   });
 
+  // The calendar can go away (a meal opened, the idle timer) before the
+  // id arrives. The answer is then dropped: nothing is drawn, and the
+  // cookie is not written from a component that is gone.
+  it("drops the id that arrives after the links went away", async () => {
+    cookies.current.token = "test-token";
+    let answer;
+    axios.get.mockReturnValue(
+      new Promise((resolve) => {
+        answer = resolve;
+      }),
+    );
+    const { unmount } = render(<WebcalLinks />);
+
+    unmount();
+    await act(async () => {
+      answer({ status: 200, data: 9 });
+    });
+
+    expect(axios.get).toHaveBeenCalledWith("/api/v1/residents/id");
+    expect(Cookie.set).not.toHaveBeenCalled();
+  });
+
   it("shows only the community link when the id fetch fails", async () => {
+    cookies.current.token = "test-token";
     axios.get.mockRejectedValue({ response: { status: 500, data: {} } });
     render(<WebcalLinks />);
 

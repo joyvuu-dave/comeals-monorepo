@@ -34,6 +34,7 @@ import * as monthCache from "./month_cache";
 import createVersionGuard from "../helpers/version_guard";
 import handleAxiosError from "../helpers/handle_axios_error";
 import { toCommunityDayjs } from "../helpers/helpers";
+import { communityApiPath } from "../helpers/session";
 
 // Stale-response guard for month navigation. Bumped at the start of
 // every navigation and every revalidation; each async continuation
@@ -180,8 +181,12 @@ export function prefetchMonth(date) {
       return;
     }
 
+    // The session can end while the copy on disk is read (#153).
+    var path = communityApiPath(`calendar/${date}`);
+    if (path === null) return;
+
     var pending = axios
-      .get(`/api/v1/communities/${Cookie.get("community_id")}/calendar/${date}`)
+      .get(path)
       .then(function (response) {
         // Discard if a Pusher invalidation arrived since we started
         if (monthCache.versionFor(key) !== versionAtStart) return;
@@ -264,8 +269,12 @@ export function revalidate(date, render) {
 }
 
 function fetchMonth(date, token, render) {
+  // The session can end while the copy on disk is read, or while a
+  // calendar that mounted just then asks for its month (#153).
+  var path = communityApiPath(`calendar/${date}`);
+  if (path === null) return;
   axios
-    .get(`/api/v1/communities/${Cookie.get("community_id")}/calendar/${date}`)
+    .get(path)
     .then(function (response) {
       // A newer navigation or refetch superseded this response:
       // drop it entirely. Rendering it would show the wrong month;

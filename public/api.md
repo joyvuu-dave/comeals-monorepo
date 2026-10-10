@@ -482,7 +482,8 @@ which days have a cook. An event or a common house reservation is in
 every grid it overlaps, so one that starts before the first day shown
 and ends inside the grid is in it. A birthday card is dated in the year
 of the weeks shown, not this year, and names the age the person turns
-that day. A person born after the last day shown has no card.
+that day. A person has a card only from their first birthday on: the
+day of birth has no card, and nor does any day before it.
 
 The response carries an `ETag`. Send it back as `If-None-Match` to get
 `304` when nothing changed.

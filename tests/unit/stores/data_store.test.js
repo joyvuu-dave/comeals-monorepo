@@ -1599,6 +1599,24 @@ describe("DataStore", () => {
     });
   });
 
+  // The idle timer reads these two to know that a move inside the app
+  // is not enough (components/app/back_to_today.tsx). Each goes one way
+  // only: the page load that follows starts a new store.
+  describe("the page crashed and a new version is out", () => {
+    it("start false, and each one is set by its own action", () => {
+      const store = createDataStore();
+      expect(store.pageCrashed).toBe(false);
+      expect(store.newVersionAvailable).toBe(false);
+
+      store.markPageCrashed();
+      expect(store.pageCrashed).toBe(true);
+      expect(store.newVersionAvailable).toBe(false);
+
+      store.markNewVersionAvailable();
+      expect(store.newVersionAvailable).toBe(true);
+    });
+  });
+
   // ── BUG-3: one toast for a save with the third-cook warning ──
 
   describe("bills save warning toast", () => {

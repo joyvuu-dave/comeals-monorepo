@@ -29,12 +29,12 @@ import { setLivelinessChecking } from "mobx-state-tree";
 if (import.meta.env.DEV) {
   setLivelinessChecking("ignore");
 }
-import Cookie from "js-cookie";
 import { installAuthInterceptor } from "./helpers/axios_auth";
 installAuthInterceptor();
 import VersionBanner from "./components/app/version_banner";
 import ToastContainer from "./components/app/toast_container";
 import SessionExpiredBanner from "./components/app/session_expired_banner";
+import BackToToday from "./components/app/back_to_today";
 
 import {
   BrowserRouter as Router,
@@ -47,6 +47,7 @@ import {
 
 import { DataStore } from "./stores/data_store";
 import { sendBillsOnPageClose } from "./helpers/send_bills_on_page_close";
+import { communityId } from "./helpers/session";
 import { lazyRetry } from "./helpers/lazy_retry";
 import { prefetchMonth } from "./stores/month_fetch";
 import { clear } from "idb-keyval";
@@ -127,7 +128,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // The store is made above, so it hears the zone this prefetch's
   // answer carries (onServerZone in stores/month_fetch.js).
   const calendarBoot = matchPath(CALENDAR_PATH, window.location.pathname);
-  if (calendarBoot && typeof Cookie.get("community_id") !== "undefined") {
+  if (calendarBoot && communityId() !== null) {
     prefetchMonth(calendarBoot.params.date);
   }
 
@@ -156,6 +157,7 @@ document.addEventListener("DOMContentLoaded", () => {
       <Router>
         <VersionBanner />
         <TrailingSlash />
+        <BackToToday store={store} />
         <ScrollToTop>
           <main>
             <Suspense fallback={<h3>Loading...</h3>}>
