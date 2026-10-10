@@ -86,6 +86,20 @@ RSpec.configure do |config|
   # triggering implicit auto-inclusion in groups with matching metadata.
   config.shared_context_metadata_behavior = :apply_to_host_groups
 
+  # Run the examples in a new random order each time, so a spec that
+  # passes only because another one ran first fails, instead of hiding
+  # until someone runs it alone. RSpec prints the seed at the start and
+  # the end of the run ("Randomized with seed 1234"), and
+  # `bundle exec rspec --seed 1234` runs the same order again. Under
+  # bin/mutant, spec/support/mutant_selection.rb replaces this order with
+  # its own, after this file loads.
+  config.order = :random
+
+  # Seed Ruby's own random numbers with the same number, so Faker's names
+  # (spec/factories/residents.rb) and every other rand come out the same
+  # when a run is repeated with --seed.
+  Kernel.srand config.seed
+
   # The settings below are suggested to provide a good initial experience
   # with RSpec, but feel free to customize to your heart's content.
   #   # This allows you to limit a spec run to individual examples or groups
@@ -121,16 +135,4 @@ RSpec.configure do |config|
   #   # end of the spec run, to help surface which specs are running
   #   # particularly slow.
   #   config.profile_examples = 10
-  #
-  #   # Run specs in random order to surface order dependencies. If you find an
-  #   # order dependency and want to debug it, you can fix the order by providing
-  #   # the seed, which is printed after each run.
-  #   #     --seed 1234
-  #   config.order = :random
-  #
-  #   # Seed global randomization in this process using the `--seed` CLI option.
-  #   # Setting this allows you to use `--seed` to deterministically reproduce
-  #   # test failures related to randomization by passing the same `--seed` value
-  #   # as the one that triggered the failure.
-  #   Kernel.srand config.seed
 end

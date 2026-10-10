@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter, Routes, Route, useLocation } from "react-router";
 
 vi.mock("axios", () => import("../mocks/axios.js"));
@@ -70,23 +70,44 @@ describe("SideBar", () => {
     });
   });
 
-  // The server's answer when no meal is on the calendar from today on
-  // (MealsController#next): a 400 with a null meal id and no message.
-  // The button asks handleAxiosError to stay silent, so nothing shows.
-  it("Next Meal stays on the calendar when no meal is scheduled", async () => {
-    axios.get.mockRejectedValue({
-      response: { status: 400, data: { meal_id: null } },
-    });
-    renderBar();
+  // A failed Next Meal shows its message like every other button, and
+  // the calendar stays on screen. The first case is the server's answer
+  // when no meal is dated today or later (MealsController#next).
+  it.each([
+    {
+      failure: "no meal is scheduled",
+      error: {
+        response: {
+          status: 404,
+          data: { message: "No meal is scheduled yet." },
+        },
+      },
+      message: "No meal is scheduled yet.",
+    },
+    {
+      failure: "the server fails",
+      error: { response: { status: 500, data: "<html>500</html>" } },
+      message: "The server had a problem. Please try again.",
+    },
+    {
+      failure: "the connection is lost",
+      error: { request: {} },
+      message: "Error: no response received from server.",
+    },
+  ])(
+    "Next Meal says so and stays on the calendar when $failure",
+    async ({ error, message }) => {
+      axios.get.mockRejectedValue(error);
+      renderBar();
 
-    fireEvent.click(screen.getByRole("button", { name: "Next Meal" }));
-    await vi.waitFor(() => {
-      expect(axios.get).toHaveBeenCalledWith("/api/v1/meals/next");
-    });
-    await act(async () => {});
-    expect(screen.getByTestId("location")).toHaveTextContent(
-      /^\/calendar\/all\/2026-01-15\/$/,
-    );
-    expect(toastStore.toasts).toHaveLength(0);
-  });
+      fireEvent.click(screen.getByRole("button", { name: "Next Meal" }));
+      await vi.waitFor(() => {
+        expect(toastStore.toasts).toHaveLength(1);
+      });
+      expect(toastStore.toasts[0]).toMatchObject({ message, type: "error" });
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        /^\/calendar\/all\/2026-01-15\/$/,
+      );
+    },
+  );
 });

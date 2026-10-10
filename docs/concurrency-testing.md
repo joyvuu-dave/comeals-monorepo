@@ -55,7 +55,10 @@ the way ActiveAdmin does run beside them. The admin takes no
 first (`LocksItsMealFirst`), and attendance is marked as an admin
 correction, as the admin form marks it. `Rails.cache` and the Rack::Attack
 counters are a real solid_cache in the test database, at SERIALIZABLE,
-like production. What must hold:
+like production. One difference: the test environment leaves DEFERRABLE
+out of `SnapshotRead` (`config/environments/test.rb`), so the balance
+refresh and the ledger check can fail with a serialization error there
+and be retried. Production's cannot. What must hold:
 
 - every answer is one the API promises for that action, never a 500;
 - every answer belongs to its request (`/residents/id`, the login);

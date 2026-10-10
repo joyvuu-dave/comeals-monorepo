@@ -77,12 +77,14 @@ module Comeals
     config.time_zone = 'America/Los_Angeles'
 
     # SnapshotRead opens its batch reads SERIALIZABLE READ ONLY DEFERRABLE.
-    # The DEFERRABLE wait is cluster-wide: it lasts until every serializable
-    # read-write transaction in the whole PostgreSQL instance has finished,
-    # in every database. That is the right wait for a nightly job on one
-    # database. It is not for mutant, whose six workers keep six sibling
-    # databases busy, so config/mutant/hooks.rb turns this off in its
-    # workers. Nothing else does.
+    # The DEFERRABLE wait covers the whole PostgreSQL server: it lasts until
+    # every serializable read-write transaction has finished, in every
+    # database. For the nightly jobs, the wait means the read can never
+    # fail with a serialization error. In tests, every worktree and every
+    # mutant worker has its own database on one local server, and they
+    # made each other wait past the statement timeout, so
+    # config/environments/test.rb turns this off. Nothing else does
+    # (spec/config/snapshot_reads_deferrable_spec.rb).
     config.x.snapshot_reads_deferrable = true
   end
 end

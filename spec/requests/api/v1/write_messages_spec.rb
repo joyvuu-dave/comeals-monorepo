@@ -73,11 +73,11 @@ RSpec.describe 'API write responses' do
       expect(Pusher).not_to have_received(:trigger).with("meal-#{meal.id}", 'update', anything, { socket_id: '' })
     end
 
-    it 'says there is no next meal with a null id' do
+    it 'says no meal is scheduled yet when no meal is today or later' do
       get '/api/v1/meals/next', params: { token: token }
 
-      expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq('meal_id' => nil)
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq('message' => 'No meal is scheduled yet.')
     end
 
     # with_meal_lock refuses a settled meal too, in the same sentence, but

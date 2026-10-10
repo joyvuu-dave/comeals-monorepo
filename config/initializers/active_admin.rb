@@ -259,24 +259,12 @@ ActiveAdmin.setup do |config|
 
   # == Download Links
   #
-  # You can disable download links on resource listing pages,
-  # or customize the formats shown per namespace/globally
-  #
-  # To disable/customize for the :admin namespace:
-  #
-  #   config.namespace :admin do |admin|
-  #
-  #     # Disable the links entirely
-  #     admin.download_links = false
-  #
-  #     # Only show XML & PDF options
-  #     admin.download_links = [:xml, :pdf]
-  #
-  #     # Enable/disable the links based on block
-  #     #   (for example, with cancan)
-  #     admin.download_links = proc { can?(:view_download_links) }
-  #
-  #   end
+  # CSV and JSON only. XML never carried any data: Rails 5 moved to_xml
+  # into a gem this app does not use, so an index download held only
+  # "#<Resident:0x...>" and a show page's .xml was a 500 (#124).
+  # ActiveAdmin also refuses, on every index and show page, any format
+  # this list leaves out (spec/requests/admin/download_formats_spec.rb).
+  config.download_links = %i[csv json]
 
   # == Pagination
   #

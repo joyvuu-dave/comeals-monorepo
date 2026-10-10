@@ -44,10 +44,9 @@ RSpec.describe 'AssetCacheControl' do
     expect(response.headers['cache-control']).not_to eq('no-cache')
   end
 
-  it 'does not add the header when the SPA catch-all answers a missing asset' do
+  it 'answers a missing asset with a 404 that is not marked to be cached' do
     get '/assets/no-such-file-Ab12Cd34.js'
-    expect(response).to have_http_status(:ok)
-    expect(response.content_type).to start_with('text/html')
+    expect(response).to have_http_status(:not_found)
     expect(response.headers['cache-control'].to_s).not_to include('immutable')
   end
 

@@ -532,12 +532,21 @@ check_rspec() {
 
   local summary
   summary=$(echo "$output" | grep -E '^[0-9]+ examples')
+  # The specs run in a random order (spec/spec_helper.rb). The seed names
+  # the order, so a failure that depends on it can be run again with
+  # `bundle exec rspec --seed <seed>`.
+  local seed
+  seed=$(echo "$output" | sed -n 's/^Randomized with seed \([0-9]*\).*/\1/p' | tail -1)
 
   if [ "$exit_code" -eq 0 ]; then
-    pass "$summary"
-    record "RSpec" "PASS" "$summary"
+    pass "$summary${seed:+ (seed $seed)}"
+    record "RSpec" "PASS" "$summary${seed:+, seed $seed}"
   else
     fail "$summary"
+    # No seed line means rspec stopped before it ran any example.
+    if [ -n "$seed" ]; then
+      info "Randomized with seed $seed. Run the same order again: bundle exec rspec --seed $seed"
+    fi
     local failures
     # 120 lines, not 30: the storm's failure block is a tally of every
     # action plus the latency report, and the CI log of #86 ended
@@ -551,7 +560,7 @@ check_rspec() {
       # and either one says why in its last lines.
       echo "$output" | grep -vE '^[.F*]*$' | tail -15
     fi
-    record "RSpec" "FAIL" "$summary"
+    record "RSpec" "FAIL" "$summary${seed:+, seed $seed}"
   fi
 }
 

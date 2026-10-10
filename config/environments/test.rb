@@ -49,6 +49,20 @@ Rails.application.configure do
     config.middleware.insert_before(0, Prosopite::Middleware::Rack)
   end
 
+  # SnapshotRead leaves DEFERRABLE out of its batch reads here. A
+  # DEFERRABLE read waits until every SERIALIZABLE read-write transaction
+  # on the whole PostgreSQL server has finished, in every database, not
+  # only this one. On a laptop, every worktree's test database and every
+  # mutant worker's database share one server, so one run's writes made
+  # another run's balance refresh wait past the 10 s statement timeout
+  # (under mutant's workers, and between two worktrees' runs). Without
+  # DEFERRABLE the read is still SERIALIZABLE READ ONLY, one snapshot,
+  # and a rare serialization failure is retried by the caller
+  # (RecurringJob for the nightly jobs, SettleAndNotify for the refresh
+  # after a settlement). spec/services/snapshot_read_spec.rb
+  # turns it back on for the example that checks the production mode.
+  config.x.snapshot_reads_deferrable = false
+
   # Disable request forgery protection in test environment.
   config.action_controller.allow_forgery_protection = false
 

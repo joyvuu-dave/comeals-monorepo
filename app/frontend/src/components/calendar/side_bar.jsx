@@ -36,7 +36,7 @@ function SideBar() {
         navigate(`/meals/${response.data.meal_id}/edit`);
       })
       .catch(function (error) {
-        handleAxiosError(error, { silent: true });
+        handleAxiosError(error);
       });
   }
 

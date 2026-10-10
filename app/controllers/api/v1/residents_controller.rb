@@ -42,6 +42,7 @@ module Api
         render json: { message: 'Email required.' }, status: :bad_request and return if params[:email].blank?
 
         resident = Resident.find_by(email: params[:email].to_s.strip.downcase)
+        # Says which one is wrong, the email or the password, on purpose (docs/adr/0010-explicit-login-messages.md).
         if resident.nil?
           return render json: { message: "No resident with email #{params[:email]}" }, status: :bad_request
         end
@@ -64,6 +65,7 @@ module Api
 
         resident = Resident.find_by(email: params[:email].to_s.strip.downcase)
 
+        # Says the email is unknown, on purpose (docs/adr/0010-explicit-login-messages.md).
         return render json: { message: 'No resident with that email address.' }, status: :bad_request if resident.nil?
 
         case PasswordReset.request(resident)

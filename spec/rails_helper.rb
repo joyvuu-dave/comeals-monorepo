@@ -55,12 +55,16 @@ RSpec.configure do |config|
   # not before it: a `before` would run inside a spec's
   # `perform_enqueued_jobs { example.run }` and undo the block's own
   # settings. A spec may change them for itself to see the enqueue
-  # (live_update_contract_spec).
+  # (live_update_contract_spec). Its lists of enqueued and performed jobs
+  # are emptied at the same time, so each example sees only its own jobs
+  # (spec/config/job_lists_between_examples_spec.rb).
   perform_push_jobs_inline = proc do
     adapter = ActiveJob::Base.queue_adapter
     adapter.perform_enqueued_jobs = true
     adapter.perform_enqueued_at_jobs = true
     adapter.filter = [LivePushJob]
+    adapter.enqueued_jobs.clear
+    adapter.performed_jobs.clear
   end
   config.before(:suite, &perform_push_jobs_inline)
   config.after(&perform_push_jobs_inline)

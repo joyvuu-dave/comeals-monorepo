@@ -555,14 +555,18 @@ only one end moves).
   deferrable one waited the full length of the other's transaction).
   Six workers in six databases never stop writing, and a sibling's hung
   mutation holds a transaction open for up to two minutes, so the read
-  starved. `config/mutant/hooks.rb` now turns
+  starved. `config/mutant/hooks.rb` then turned
   `config.x.snapshot_reads_deferrable` off in its workers, and
   `SnapshotRead`'s spec sets it back on for the example that checks the
   mode. The small runs never showed it because no sibling hung long
   enough while the two examples ran. The whole-stage rerun with the
   setting off had no neutral failure; `SnapshotRead.call` keeps four
   survivors, the rewrites of its isolation and mode line, which the
-  workers cannot see with the setting off.
+  workers cannot see with the setting off. Since 2026-10-09 the whole
+  test environment turns the setting off (`config/environments/test.rb`),
+  and the hook no longer sets it: two worktrees running tests at once
+  made each other's balance refresh wait past the statement timeout in
+  the same way.
 
 Stage B, 373 after the second run, 4 answered in a third pass and the rest read:
 

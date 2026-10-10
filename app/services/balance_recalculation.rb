@@ -33,7 +33,8 @@ class BalanceRecalculation
     # reads yields per-meal financials that match no real state of the
     # ledger. SnapshotRead opens the transaction SERIALIZABLE READ ONLY
     # DEFERRABLE, which cannot abort with a serialization failure and so
-    # still needs no retry. See app/services/snapshot_read.rb.
+    # still needs no retry. (The test environment leaves DEFERRABLE out;
+    # the callers retry a conflict there.) See app/services/snapshot_read.rb.
     unreconciled_meals, resident_ids = SnapshotRead.call do
       # Batch-load all unreconciled meals with their financial associations
       # (4 queries). Uses preload (not includes) to guarantee separate IN(?)

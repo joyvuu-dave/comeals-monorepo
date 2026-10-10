@@ -16,6 +16,11 @@ module Api
                          'Send a new key with each save.', String)
       private_constant :REPLAYED, :KEY_REUSED
 
+      # GET /meals/next names one meal. When no meal is dated today or
+      # later, that meal does not exist, so the answer is a 404.
+      NO_MEAL_SCHEDULED = T.let('No meal is scheduled yet.', String)
+      private_constant :NO_MEAL_SCHEDULED
+
       before_action :authenticate
       before_action :set_meal, except: [:next]
       # Before the settled check, so a bills save sent again after its
@@ -37,7 +42,7 @@ module Api
                         .order(:date).first
 
         if next_meal.nil?
-          render json: { meal_id: nil }, status: :bad_request
+          render json: { message: NO_MEAL_SCHEDULED }, status: :not_found
         else
           render json: { meal_id: next_meal.id }
         end

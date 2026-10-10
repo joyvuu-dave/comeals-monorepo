@@ -2,8 +2,8 @@
 
 require 'rails_helper'
 
-# Every admin index page offers CSV, XML and JSON downloads, and every
-# show page answers .json. No download may carry a column that holds a
+# Every admin index page offers CSV and JSON downloads, and every show
+# page answers .json. No download may carry a column that holds a
 # credential, or says when one was made. A resident's reset token is
 # stored as it is mailed, and a live one is as good as the password. An
 # admin who could read it could sign in as that resident, which
@@ -11,11 +11,9 @@ require 'rails_helper'
 #
 # The CSV columns come from ActiveAdmin's filter_attributes
 # (config/initializers/active_admin.rb). The JSON comes from the model's
-# serializable_hash: Resident's own, and Devise's for AdminUser. The XML
-# download prints only "#<Resident:0x...>" for these pages (Rails 5 moved
-# to_xml into a gem this app does not use), so it is checked only for
-# carrying no secret. The read-only token's side is in
-# read_only_token_spec.rb.
+# serializable_hash: Resident's own, and Devise's for AdminUser. There is
+# no XML download (download_formats_spec.rb). The read-only token's side
+# is in read_only_token_spec.rb.
 RSpec.describe 'Secret columns in admin downloads' do
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
@@ -58,7 +56,7 @@ RSpec.describe 'Secret columns in admin downloads' do
 
   shared_examples 'an admin who cannot download a secret' do
     it 'gets no resident secret from any download of the residents pages' do
-      paths = %W[/residents.csv /residents.json /residents.xml /residents/#{ann.id}.json]
+      paths = %W[/residents.csv /residents.json /residents/#{ann.id}.json]
 
       expect(paths_containing(['live-reset-token', ann.password_digest, secret_date], paths)).to eq({})
     end
@@ -79,7 +77,7 @@ RSpec.describe 'Secret columns in admin downloads' do
     end
 
     it 'gets no admin secret from any download of the admins pages' do
-      paths = %W[/admin_users.csv /admin_users.json /admin_users.xml /admin_users/#{other_admin.id}.json]
+      paths = %W[/admin_users.csv /admin_users.json /admin_users/#{other_admin.id}.json]
       secrets = ['admin-reset-digest', other_admin.encrypted_password, secret_date]
 
       expect(paths_containing(secrets, paths)).to eq({})
@@ -116,7 +114,7 @@ RSpec.describe 'Secret columns in admin downloads' do
       expect(mailed_token).not_to eq('live-reset-token')
       expect(ActionMailer::Base.deliveries.last.body.encoded).to include(mailed_token)
 
-      paths = %W[/residents.csv /residents.json /residents.xml /residents/#{ann.id}.json]
+      paths = %W[/residents.csv /residents.json /residents/#{ann.id}.json]
 
       expect(paths_containing([mailed_token], paths)).to eq({})
     end

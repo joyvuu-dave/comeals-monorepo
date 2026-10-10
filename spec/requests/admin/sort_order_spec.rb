@@ -197,6 +197,15 @@ RSpec.describe 'Admin index sort order' do
       end
     ensure
       Resident.reset_column_information
+      # ActiveAdmin keeps a page's column list from the first request
+      # that needs it (ActiveAdmin::Resource#resource_attributes, and the
+      # CSV builder made from it). If that request was this example's,
+      # the list still names recovery_secret, and every later residents
+      # CSV asks each row for a column that is gone. Forget the list.
+      admin_page = ActiveAdmin.application.namespaces[:admin].resource_for(Resident)
+      %i[@resource_attributes @content_columns @association_columns @default_csv_builder].each do |name|
+        admin_page.remove_instance_variable(name) if admin_page.instance_variable_defined?(name)
+      end
     end
   end
 end

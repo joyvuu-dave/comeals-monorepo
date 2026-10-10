@@ -12,10 +12,10 @@
 # elsewhere in public/ (manifest.json, icons) keep their names across
 # deploys, so they must not get this header.
 #
-# The text/html check matters: when an /assets/ URL names a file that no
-# longer exists, the SPA catch-all route answers it with the app page and
-# status 200. That response must stay uncached, or the browser would keep
-# serving HTML at that URL for a year.
+# Only a 200 is marked. A file under these paths that is not there is a
+# 404 (config/routes.rb), and a 404 must never be kept for a year. The
+# text/html check is there for the same reason: the app page must never
+# be kept for a year at an asset URL, even if a route ever sends it there.
 #
 # /service-worker.js is the opposite case, so it gets 'no-cache': its
 # name never changes, and it is the no-op worker that neutralizes the old

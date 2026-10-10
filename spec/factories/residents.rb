@@ -41,8 +41,7 @@ FactoryBot.define do
     unit
     sequence(:name) { |n| "#{Faker::Name.first_name} #{Faker::Name.last_name} #{n}" }
     # Numbered, not random: residents has a unique index on lower(email),
-    # and a random one with no seed could repeat and fail a spec that
-    # could not be replayed.
+    # and a random one could repeat.
     sequence(:email) { |n| "resident-#{n}@example.com" }
     password { Faker::Internet.password }
 

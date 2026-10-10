@@ -87,13 +87,15 @@ is an HTML page too.
 | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `400`  | The request was understood but refused. The `message` says why. Bad input, a rule of the meal (closed, full, reconciled), or a wrong id in the body. |
 | `401`  | No token or a bad token.                                                                                                                             |
-| `404`  | The record in the URL does not exist.                                                                                                                |
+| `404`  | The record in the URL does not exist, or `/meals/next` found no meal.                                                                                |
 | `409`  | Two writes to the same meal collided. Nothing was saved. Send the same request again. A bills save has one more `409`; see "Bills".                  |
 | `422`  | A bills save came with an `Idempotency-Key` that was already used for a different save. Nothing was saved. See "Bills".                              |
 | `429`  | Rate limit.                                                                                                                                          |
 
-Note that `404` is only for the record named in the URL path. A wrong id
-in the body (say, an unknown `resident_id` in a bill) is a `400`.
+Other than `/meals/next`, a `404` is only for the record named in the URL
+path. A wrong id in the body (say, an unknown `resident_id` in a bill) is
+a `400`. `/meals/next` asks for one meal, so it is a `404` when no meal is
+dated today or later.
 
 ## Ids in the URL are mostly ignored
 
@@ -156,7 +158,7 @@ The record id is the number in the card's `url` field (`/meals/42/edit`
 
 | Method | Path                      | Returns                                                                                                                   |
 | ------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `GET`  | `/meals/next`             | `{ "meal_id": 42 }` for the next meal on or after today. `400` with `{ "meal_id": null }` if there is none.               |
+| `GET`  | `/meals/next`             | `{ "meal_id": 42 }` for the next meal on or after today. `404` with a `message` if there is none.                         |
 | `GET`  | `/meals/:meal_id/history` | `{ "date": ..., "items": [...] }`. Each item is one change to the meal: `id`, `user_name`, `description`, `display_time`. |
 
 ### Read the meal form

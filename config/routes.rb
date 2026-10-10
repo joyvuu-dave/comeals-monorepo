@@ -62,6 +62,13 @@ Rails.application.routes.draw do
     end
   end
 
+  # The static file server answers every file under /assets/ and
+  # /vite-assets/ before the router runs, so a request that gets here
+  # names a file that is not there. No app page lives under these two
+  # folders, so the answer is the plain 404 page, not the app page.
+  get '/assets(/*rest)', to: 'application#not_found'
+  get '/vite-assets(/*rest)', to: 'application#not_found'
+
   # SPA catch-all (must be last; only on non-admin subdomains). Rails replaces
   # a scope's lambda constraint with a route-level one instead of merging them,
   # so each route carries the whole check itself (issue #18).

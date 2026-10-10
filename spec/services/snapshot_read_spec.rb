@@ -3,12 +3,15 @@
 require 'rails_helper'
 
 RSpec.describe SnapshotRead do
+  # SHOW, not SELECT. A SELECT takes a snapshot, and a DEFERRABLE
+  # transaction waits for its first snapshot until every SERIALIZABLE
+  # writer on the server has finished, in every database, so a write
+  # left open in another worktree's database held the example that turns
+  # DEFERRABLE on past the statement timeout. SHOW takes no snapshot, so
+  # it never waits.
   def transaction_modes
-    ActiveRecord::Base.connection.select_one(
-      "SELECT current_setting('transaction_isolation') AS isolation,
-              current_setting('transaction_read_only') AS read_only,
-              current_setting('transaction_deferrable') AS deferrable"
-    )
+    connection = ActiveRecord::Base.connection
+    %w[isolation read_only deferrable].index_with { |mode| connection.select_value("SHOW transaction_#{mode}") }
   end
 
   def session_default_isolation
@@ -21,8 +24,8 @@ RSpec.describe SnapshotRead do
   describe 'with no transaction already open' do
     include_context 'with no test transaction'
 
-    # Mutant's workers turn the setting off (config/mutant/hooks.rb), so
-    # these two set it themselves.
+    # The test environment turns the setting off (config/environments/test.rb),
+    # so the example that checks the production mode turns it back on.
     def with_deferrable(value)
       was = Rails.configuration.x.snapshot_reads_deferrable
       Rails.configuration.x.snapshot_reads_deferrable = value
@@ -31,8 +34,28 @@ RSpec.describe SnapshotRead do
       Rails.configuration.x.snapshot_reads_deferrable = was
     end
 
-    it 'opens the transaction SERIALIZABLE READ ONLY DEFERRABLE' do
-      modes = with_deferrable(true) { described_class.call { transaction_modes } }
+    # Another session's SERIALIZABLE transaction, open for the whole block.
+    # A DEFERRABLE transaction waits for every one of these on the server,
+    # in every database, before it takes its first snapshot. So this one
+    # stands in for a write that another worktree or a mutant worker left
+    # open. It is a raw PG connection because the test pool has only one.
+    def with_serializable_transaction_open_elsewhere
+      db = ActiveRecord::Base.connection_db_config.configuration_hash
+      other = PG.connect(host: db[:host], port: db[:port], user: db[:username],
+                         password: db[:password], dbname: db[:database])
+      other.exec('BEGIN ISOLATION LEVEL SERIALIZABLE')
+      # Its first snapshot is what puts it on the server's list.
+      other.exec('SELECT 1')
+      yield
+    ensure
+      # Closing the session rolls the transaction back. It wrote nothing.
+      other&.close
+    end
+
+    it 'opens the transaction SERIALIZABLE READ ONLY DEFERRABLE when the setting is on, as in production' do
+      modes = with_serializable_transaction_open_elsewhere do
+        with_deferrable(true) { described_class.call { transaction_modes } }
+      end
 
       expect(modes['isolation']).to eq('serializable')
       expect(modes['read_only']).to eq('on')
@@ -42,10 +65,11 @@ RSpec.describe SnapshotRead do
       expect(modes['deferrable']).to eq('on')
     end
 
-    it 'is on by default, and leaves DEFERRABLE out only when the setting is off' do
-      expect(Rails.application.config.x.snapshot_reads_deferrable).to be(true) unless ENV['MUTANT']
-
-      modes = with_deferrable(false) { described_class.call { transaction_modes } }
+    # config/environments/test.rb says why the setting is off in tests.
+    # Production and development keep it on:
+    # spec/config/snapshot_reads_deferrable_spec.rb.
+    it 'leaves DEFERRABLE out in the test environment, and keeps SERIALIZABLE READ ONLY' do
+      modes = described_class.call { transaction_modes }
 
       expect(modes['isolation']).to eq('serializable')
       expect(modes['read_only']).to eq('on')

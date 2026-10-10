@@ -50,9 +50,13 @@
 # Under mutant, six workers in six databases never stop writing, and a
 # sibling's hung mutation can hold a transaction open for two minutes,
 # so the read hit the 10 s statement timeout and the unmutated code
-# failed its own examples. config/mutant/hooks.rb therefore turns
-# `config.x.snapshot_reads_deferrable` off in its workers; everywhere
-# else it is on (config/application.rb).
+# failed its own examples. Two worktrees running tests at once did the
+# same to each other. So `config.x.snapshot_reads_deferrable` is off in
+# the test environment (config/environments/test.rb) and on everywhere
+# else (config/application.rb). Without DEFERRABLE the read can fail
+# with a serialization error, and every caller retries one: RecurringJob
+# for the nightly jobs, SettleAndNotify for the refresh after a
+# settlement.
 #
 # Rails has no API for READ ONLY or DEFERRABLE, only for the isolation
 # level, so the other two modes are set with a second SET TRANSACTION.

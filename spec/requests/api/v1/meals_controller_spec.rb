@@ -71,13 +71,13 @@ RSpec.describe 'Meals API' do
       expect(response.parsed_body['meal_id']).to eq(future_meal.id)
     end
 
-    it 'returns 400 when no future meals exist' do
+    it 'answers 404 with a message when no meal is today or later' do
       create(:meal, community: community, date: Date.yesterday)
 
       get '/api/v1/meals/next', params: { token: token }
 
-      expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body['meal_id']).to be_nil
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq('message' => 'No meal is scheduled yet.')
     end
   end
 

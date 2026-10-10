@@ -57,6 +57,36 @@ RSpec.describe 'Routing' do
     end
   end
 
+  describe 'missing files under the built asset folders' do
+    # The static file server answers every file that is there before the
+    # router runs. So a request that reaches the router asks for a file a
+    # deploy removed, or one that never existed. No app page lives under
+    # these two folders, so the answer is the plain 404 page.
+    %w[/assets/gone-Ab12Cd34.css /vite-assets/show-Ab12Cd34.js /vite-assets/logo.png /assets].each do |path|
+      it "answers #{path} with the plain 404 page when the file is not there" do
+        host! 'www.example.com'
+        get path
+        expect(response).to have_http_status(:not_found)
+        expect(response.content_type).to start_with('text/html')
+        expect(response.body).to include("The page you were looking for doesn't exist (404)")
+      end
+    end
+
+    it 'answers the same on the admin host, where the admin stylesheets live under /assets/' do
+      host! 'admin.example.com'
+      get '/assets/active_admin-Ab12Cd34.css'
+      expect(response).to have_http_status(:not_found)
+      expect(response.body).to include("The page you were looking for doesn't exist (404)")
+    end
+
+    it 'still serves the SPA at a path that only starts like an asset folder' do
+      host! 'www.example.com'
+      get '/assets-list'
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('<div id="root">')
+    end
+  end
+
   describe 'API routes remain functional' do
     it 'routes /api/v1/version to site#version' do
       get '/api/v1/version'

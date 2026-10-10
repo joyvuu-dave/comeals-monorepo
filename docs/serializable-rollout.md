@@ -329,11 +329,13 @@ not come back in two later whole-suite runs or in three runs of
 `spec/db spec/models/bill_spec.rb` together.
 
 Not chased further, and not explained. The likeliest source is the
-non-transactional files in `spec/db`, which run before `spec/models` and open
-real second sessions; SSI needs another concurrent SERIALIZABLE transaction to
-cancel anything, and those are the only ones in the suite. If this comes back,
-that is where to look first, and the useful next step is a run with `--seed`
-pinned rather than more re-runs.
+non-transactional files in `spec/db`, which open real second sessions; SSI
+needs another concurrent SERIALIZABLE transaction to cancel anything, and
+those are the only ones in the suite. (In 2026-08 they always ran just before
+`spec/models`. Since 2026-10-09 the specs run in a random order.) If this
+comes back, that is where to look first. The run prints its seed, and
+`bundle exec rspec --seed <seed>` runs the same order again, which is more
+useful than more re-runs.
 
 What to take from it: at SERIALIZABLE a single red example in an unrelated file
 is not automatically a real failure. Re-run before believing it. That is a bad
