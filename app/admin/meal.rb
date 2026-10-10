@@ -28,8 +28,10 @@ ActiveAdmin.register Meal do
   before_save { |meal| meal.from_admin_form = true }
 
   # CONFIG
-  filter :reconciliation_id_null, as: :select, collection: [['Yes', false], ['No', true]], include_blank: false,
-                                  default: false, label: 'Reconciled?'
+  # include_blank adds "Any", which is what the list shows before a filter
+  # is applied: open and reconciled meals together.
+  filter :reconciliation_id_null, as: :select, collection: [['Yes', false], ['No', true]], include_blank: true,
+                                  label: 'Reconciled?'
   config.sort_order = 'date_desc'
 
   controller do
