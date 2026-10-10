@@ -1,11 +1,13 @@
-// The edits a bills save sends (#135, docs/adr/0009-bills-saves-send-edits.md),
-// worked out from the meal's bill rows.
+// The edits one cook row's save sends (#135, #150,
+// docs/adr/0009-bills-saves-send-edits.md).
 //
 // Each row shows a cook and a bill, and keeps a base: the cook and bill
-// the server has for that row, as far as this page knows. A save is the
-// difference between what the rows show and their bases. It is worked
-// out per cook, not per row, so a cook moved from one row to another is
-// a change of that cook's bill, not a remove and an add of the same cook.
+// the server has for that row, as far as this page knows. Each row saves
+// on its own, and its save is the difference between what the row shows
+// and its base. It names at most two cooks: the cook at its base, and
+// the cook it shows. The same cook is a change of that cook's bill;
+// another cook is a remove of the cook at the base and an add of the
+// cook shown.
 //
 // A bill whose cook no row shows is in no base and on no row, so no edit
 // names it, and the server never touches it. That is how a bill the page
@@ -25,10 +27,10 @@ export interface BillRow {
 }
 
 export type BillEditsResult<R extends BillRow> =
-  // What to send. An empty list means the rows show what the server has.
+  // What to send. An empty list means the row shows what the server has.
   | { kind: "edits"; edits: BillEdit[] }
-  // One cook is picked in two rows. A save names each cook once, so
-  // nothing can be sent until one of the rows shows another cook.
+  // The row's cook is picked in another row too. A cook has one bill,
+  // so nothing can be sent until one of the rows shows another cook.
   | { kind: "cookInTwoRows"; cook: NonNullable<R["resident"]> }
   // A changed row's amount is not whole cents from 0 to 9999.99.
   // setAmount refuses such text, so only a bug can put it on a row.
@@ -38,20 +40,28 @@ function sameValues(a: BillValues, b: BillValues): boolean {
   return sameAmount(a.amount, b.amount) && a.no_cost === b.no_cost;
 }
 
-export function billEditsOf<R extends BillRow>(rows: R[]): BillEditsResult<R> {
-  // Each cook's bill at the rows' bases, and as the rows show it now.
+export function billEditsOf<R extends BillRow>(
+  row: R,
+  otherRows: R[],
+): BillEditsResult<R> {
+  const cook = row.resident;
+  if (
+    cook !== null &&
+    otherRows.some((other) => other.resident?.id === cook.id)
+  ) {
+    return { kind: "cookInTwoRows", cook };
+  }
+
+  // The bill of the cook at the row's base, and of the cook it shows.
   const before = new Map<number, BillValues>();
   const after = new Map<number, BillValues>();
-  for (const row of rows) {
-    if (row.baseCookId !== null) {
-      before.set(row.baseCookId, {
-        amount: row.baseAmount,
-        no_cost: row.baseNoCost,
-      });
-    }
-    const cook = row.resident;
-    if (cook === null) continue;
-    if (after.has(cook.id)) return { kind: "cookInTwoRows", cook };
+  if (row.baseCookId !== null) {
+    before.set(row.baseCookId, {
+      amount: row.baseAmount,
+      no_cost: row.baseNoCost,
+    });
+  }
+  if (cook !== null) {
     after.set(cook.id, { amount: row.amount, no_cost: row.no_cost });
   }
 

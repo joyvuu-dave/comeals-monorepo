@@ -1,12 +1,13 @@
-// The bill save pipeline (issue #30): debounce, one request at a time,
-// and saves that send edits with the bills the page saw (#135,
+// The bill save pipeline (#30, #150): each cook row saves on its own,
+// and a save sends edits with the bills the page saw (#135,
 // docs/adr/0009-bills-saves-send-edits.md). One of the DataStore's
 // subsystem files — see data_store.js, which composes them.
+import { when } from "mobx";
 import { Instance } from "mobx-state-tree";
 
 import { api, BillEdit } from "../helpers/api";
 import { billEditsOf } from "../helpers/bill_edits";
-import { mealDayLabel, SAVE_DEBOUNCE_MS } from "../helpers/helpers";
+import { mealDayLabel } from "../helpers/helpers";
 import { sameAmount } from "../helpers/money";
 import { evictMealCache } from "../helpers/meal_cache";
 import { newId } from "../helpers/new_id";
@@ -18,6 +19,24 @@ import Bill from "./bill";
 import toastStore from "./toast_store";
 
 type BillNode = Instance<typeof Bill>;
+
+// How long a cook row waits after its last edit before it saves (#150).
+// A person who picks a cook and then types the cost, or types a cost
+// with pauses, sends one save. Leaving the cost box or pressing Enter in
+// it saves at once.
+export const BILL_ROW_SAVE_WAIT_MS = 2000;
+
+// How long a row's save can be on its way before the row shows a
+// spinner in its cost box. Most saves are answered sooner, and then the
+// person never sees that the row was locked.
+export const BILL_ROW_SPINNER_WAIT_MS = 1000;
+
+// How long logout, Refresh and the error page's Refresh wait for the
+// bills saves on their way before the page reloads (finishBillsSaves).
+// A reload ends every request on its way, and the person would not
+// learn whether it was saved. A save still on its way then is sent again
+// with fetch keepalive when the page closes (sendBillsAgainBeforeClose).
+export const BILLS_WAIT_BEFORE_RELOAD_MS = 5000;
 
 // One meal a message about a meal the person left names.
 interface MealNamed {
@@ -124,13 +143,6 @@ function answerIn(error: unknown): BillsAck | undefined {
   return responseIn(error)?.data;
 }
 
-// The warning the bills endpoint answers with when the cooks were saved,
-// with advice about the rotation (ThirdCookWarning).
-function warningIn(error: unknown): BillsAck | null {
-  const answer = answerIn(error);
-  return answer?.type === "warning" ? answer : null;
-}
-
 // The status of the server's answer, or 0 when the answer has none.
 function statusOf(response: { status?: number }): number {
   return response.status ?? 0;
@@ -164,8 +176,12 @@ function noAnswerFromApp(error: unknown): boolean {
   return statusOf(response) >= 500 && !response.data?.message;
 }
 
-// One bills save: what is sent, and to which meal.
+// One bills save: what is sent, to which meal, and from which row.
 interface BillsSave {
+  // The id of the cook row the save was built from. The row is locked
+  // while the save is on its way. Once the person leaves the meal, no
+  // row has this id.
+  rowId: string;
   mealId: number;
   // The meal's day as the date box shows it. A message about this save
   // uses it when the person has left the meal by the time the server
@@ -179,6 +195,11 @@ interface BillsSave {
   // a failure that may not be final (worthSendingAgain). There is no
   // third try.
   secondTry: boolean;
+  // True when the save went with fetch keepalive, which can finish after
+  // the page is gone (#150): it was sent because the page was hidden or
+  // closed, or it was sent again before the page closed
+  // (sendBillsAgainBeforeClose).
+  keepalive: boolean;
 }
 
 // What this file reads and writes on the DataStore it is composed into
@@ -186,48 +207,65 @@ interface BillsSave {
 // flags it saves, and the actions it defines and calls on itself.
 export interface BillsStore extends ReturnType<typeof billsVolatile> {
   meal: { id: number; date: Date | null } | null;
-  bills: { values(): IterableIterator<BillNode> };
+  bills: {
+    values(): IterableIterator<BillNode>;
+    has(id: string): boolean;
+  };
   // True while the meal on screen loads, the first time or again after
   // a bills save for it failed (data_store_meal_page.ts).
   mealLoading: boolean;
-  loadDataAsync(): void;
   // data_store_meal_page.ts: load the meal on screen again, frozen until
   // it arrives.
   loadMealAgain(): void;
   // data_store_meal_page.ts: fetch the meal on screen if its fetch was
   // put off and nothing is pending for it now.
   afterBillsIdle(): void;
-  flushBillsSave(): void;
-  submitBills(): void;
+  sendBillRow(row: BillNode, keepalive: boolean): void;
   sendBillsSave(save: BillsSave): void;
+  postBillsSave(save: BillsSave): void;
+  endReloadWait(failuresBefore: number): boolean;
+  sendBillsAgainBeforeClose(): void;
   billsSaveFailed(save: BillsSave, error: unknown): void;
   showBillsNotSaved(meal: MealNotSaved): void;
   showBillsMaybeNotSaved(meal: MealNamed): void;
   dropFixedCookInTwoRows(): void;
   applyBillsAck(data: BillsAck | undefined, save: BillsSave): void;
-  settleBillsSave(): void;
+  markBillsSaveSlow(key: string): void;
+  settleBillsSave(save: BillsSave): void;
 }
 
 export function billsVolatile() {
   return {
-    // Pending debounce timer for a bill save, or null.
-    billsSaveTimer: null as ReturnType<typeof setTimeout> | null,
-    // The bills save sent and not answered yet, or null. With one
-    // request at a time, this client's writes cannot arrive at the
-    // server out of order. It holds its meal's id, and that meal's rows
-    // are not built again from the server until it is answered
-    // (billsPendingFor). A save sent a second time stays here until the
-    // second try is answered.
-    billsSaveInFlight: null as BillsSave | null,
-    // A save of the meal on screen was requested while one was in
-    // flight; send one more request with the latest state when it
-    // settles. Leaving the meal clears it (saveBillsBeforeLeaving), so
-    // it is always about the meal on screen.
-    billsSaveQueued: false,
-    // Saves built from the rows of a meal the person left while a save
-    // was in flight (#107). Each waits for the save before it, then goes
-    // to the meal it was built from, oldest first.
-    billsSavesForMealsLeft: [] as BillsSave[],
+    // The wait before each row's save, by row id: a row is here from
+    // its edit until its save is built. Only rows on screen have one.
+    // Replaced, never changed in place.
+    billsSaveTimers: {} as Record<string, ReturnType<typeof setTimeout>>,
+    // The bills saves sent and not answered yet, for the meal on screen
+    // and for meals the person left. A save sent a second time stays
+    // here until the second try is answered. A meal's rows are not built
+    // again from the server while a save for it is here
+    // (billsPendingFor). Each row has at most one save here, because a
+    // row takes no edit while its save is on its way. Two saves here
+    // never name the same cook of one meal, because a row cannot take a
+    // cook while another row's change to that cook is not answered
+    // (cookTakenByAnotherRow), so the server can take them in any order.
+    billsSavesOnTheirWay: [] as BillsSave[],
+    // The keys of the saves here that have been on their way longer
+    // than BILL_ROW_SPINNER_WAIT_MS. Their rows show a spinner.
+    billsSlowSaveKeys: [] as string[],
+    // True from the moment Logout, Refresh or the error page's Refresh
+    // starts to wait for the bills saves (finishBillsSaves) until the
+    // page reloads, or until the wait says it must not. The cook rows
+    // take no edit then (cooks_box.jsx): an edit would wait 2 seconds
+    // before its save, and the reload, or logout taking the token away,
+    // would lose it.
+    waitingToReload: false,
+    // How many times the page has told the person that a bills edit was
+    // not saved, or may not have been: a save that failed for good, or a
+    // row whose save could not be built (one cook in two rows).
+    // finishBillsSaves reads it before and after its wait, so it knows
+    // whether one of the saves it waited for was not saved.
+    billsFailuresShown: 0,
     // The message on screen about saves for meals the person left that
     // were not saved (#107): the message's id, and the meals it names,
     // in the order they first failed. While this message is still in
@@ -268,6 +306,51 @@ export function billsVolatile() {
   };
 }
 
+// What the cook rows read about their saves. Views, not actions: a row
+// reads them while it renders.
+export function billsViews(self: BillsStore) {
+  return {
+    // True while this row's save is on its way. The row takes no edit
+    // until it is answered (#150).
+    billsRowSaving(rowId: string): boolean {
+      return self.billsSavesOnTheirWay.some((save) => save.rowId === rowId);
+    },
+    // True when this row's save has been on its way for longer than
+    // BILL_ROW_SPINNER_WAIT_MS, so the row shows a spinner.
+    billsRowSlowToSave(rowId: string): boolean {
+      return self.billsSavesOnTheirWay.some(
+        (save) =>
+          save.rowId === rowId && self.billsSlowSaveKeys.includes(save.key),
+      );
+    },
+    // True when a row other than this one is still changing this cook:
+    // it has the cook at its base but shows another, so its save will
+    // remove or move the cook, or its save that names the cook is on its
+    // way. This row must not take the cook until that save is answered.
+    // Two saves on their way at once that name one cook could reach the
+    // server in either order, and an add that arrives before the remove
+    // it follows would be undone by it, with no message.
+    cookTakenByAnotherRow(row: BillNode, cookId: number): boolean {
+      const changedInAnotherRow = Array.from(self.bills.values()).some(
+        (other) =>
+          other !== row &&
+          other.baseCookId === cookId &&
+          other.resident_id !== cookId,
+      );
+      // A save whose row is not on screen is for a meal the person left.
+      return (
+        changedInAnotherRow ||
+        self.billsSavesOnTheirWay.some(
+          (save) =>
+            save.rowId !== row.id &&
+            self.bills.has(save.rowId) &&
+            save.edits.some((edit) => edit.resident_id === cookId),
+        )
+      );
+    },
+  };
+}
+
 export function billsActions(self: BillsStore) {
   // Show these words on top of the stack, in place of the earlier
   // message if it is still in the stack, and hand back the new
@@ -276,6 +359,18 @@ export function billsActions(self: BillsStore) {
     return earlier === null
       ? toastStore.show(words, "error")
       : toastStore.replace(earlier.toastId, words, "error");
+  }
+
+  // The server saved the cooks and warned about the rotation
+  // (ThirdCookWarning). The words say the cooks were saved, and name the
+  // meal when the person has left it. They go on top of any message
+  // about a save that failed, which stays under them (#137).
+  function showWarning(warning: BillsAck, save: BillsSave) {
+    const mealLeft = !self.meal || self.meal.id !== save.mealId;
+    const words =
+      (mealLeft ? `Cooks saved for ${save.mealDay}.` : "Cooks saved.") +
+      (warning.message ? " " + warning.message : "");
+    toastStore.show(words, "info");
   }
 
   // Take this meal out of the "may not have been saved" message, if it
@@ -299,11 +394,11 @@ export function billsActions(self: BillsStore) {
 
   // Check the answer to a save that was written (applyBillsAck). The
   // caller runs settleBillsSave next, and it must run whatever the
-  // answer holds: until it runs, billsSaveInFlight stays set, so no
-  // later save is ever sent. So a check that throws (an amount that is
-  // not text, which only a bug in the server can send) is reported as
-  // a bug. The rows could not be checked against the answer, so the
-  // meal on screen loads again.
+  // answer holds: until it runs, the save stays on its way, so its row
+  // stays locked. So a check that throws (an amount that is not text,
+  // which only a bug in the server can send) is reported as a bug. The
+  // rows could not be checked against the answer, so the meal on screen
+  // loads again.
   function checkAnswer(data: BillsAck | undefined, save: BillsSave) {
     try {
       self.applyBillsAck(data, save);
@@ -313,16 +408,52 @@ export function billsActions(self: BillsStore) {
     }
   }
 
-  // The save of the rows on screen, or null when there is nothing to
-  // send or it cannot be sent. Building it moves every row's base to
-  // what the row shows: the server will have that once this save is
-  // stored, so the next save names only what changes after this one.
+  // Stop the wait before this row's save, if it has one. Answers true
+  // when it had one.
+  function stopRowWait(rowId: string): boolean {
+    const timer = self.billsSaveTimers[rowId];
+    if (timer === undefined) return false;
+    clearTimeout(timer);
+    self.billsSaveTimers = Object.fromEntries(
+      Object.entries(self.billsSaveTimers).filter(([id]) => id !== rowId),
+    );
+    return true;
+  }
+
+  // Start the wait before this row's save, in place of the wait it had.
+  function startRowWait(row: BillNode) {
+    stopRowWait(row.id);
+    self.billsSaveTimers = {
+      ...self.billsSaveTimers,
+      [row.id]: setTimeout(function () {
+        self.sendBillRow(row, false);
+      }, BILL_ROW_SAVE_WAIT_MS),
+    };
+  }
+
+  // The rows on screen that wait to save.
+  function rowsWaiting(): BillNode[] {
+    return Array.from(self.bills.values()).filter(
+      (row) => self.billsSaveTimers[row.id] !== undefined,
+    );
+  }
+
+  // The save of one row, or null when there is nothing to send or it
+  // cannot be sent. It names only this row's cooks: the cook it shows,
+  // and the cook at its base. Building it moves the row's base to what
+  // the row shows: the server will have that once this save is stored,
+  // so the row's next save names only what changes after this one.
   // `leaving` is true when the person is leaving the meal. A refusal
   // then names the meal, because by the time it shows, another meal or
   // the calendar is on screen. It uses the same words as any other save
   // for a meal the person left that was not saved.
-  function billsSaveOfRows(leaving: boolean): BillsSave | null {
-    // No meal on screen, so nothing to save to.
+  function rowSave(
+    row: BillNode,
+    leaving: boolean,
+    keepalive: boolean,
+  ): BillsSave | null {
+    // No meal on screen, so nothing to save to. The rows are frozen
+    // then (cooks_box.jsx), so only a bug can get here.
     const meal = self.meal;
     if (!meal) {
       return null;
@@ -331,9 +462,12 @@ export function billsActions(self: BillsStore) {
     // from, so the date is never null here.
     const mealDay = mealDayLabel(meal.date);
 
-    const rows = Array.from(self.bills.values());
-    const built = billEditsOf(rows);
+    const otherRows = Array.from(self.bills.values()).filter(
+      (other) => other !== row,
+    );
+    const built = billEditsOf(row, otherRows);
     if (built.kind === "cookInTwoRows") {
+      self.billsFailuresShown += 1;
       const words = cookInTwoRowsMessage(built.cook.plainName);
       if (leaving) {
         console.warn(words);
@@ -350,56 +484,160 @@ export function billsActions(self: BillsStore) {
       return null;
     }
 
-    rows.forEach((bill) => bill.setBaseToShown());
+    row.setBaseToShown();
     return {
+      rowId: row.id,
       mealId: meal.id,
       mealDay,
       edits: built.edits,
       key: newId(),
       secondTry: false,
+      keepalive,
     };
   }
 
+  // Stop every row's wait, and save now each row on screen that shows an
+  // edit the server does not have, whether it waits to save or its save
+  // was refused before it could be sent (one cook in two rows). A row
+  // with no edit builds no save. A row whose save is on its way takes no
+  // edits, so it has nothing more to send.
+  function sendEveryRowNow(leaving: boolean) {
+    Array.from(self.bills.values()).forEach((row) => {
+      stopRowWait(row.id);
+      const save = rowSave(row, leaving, false);
+      if (save !== null) self.sendBillsSave(save);
+    });
+  }
+
   return {
-    // Debounced, same delay as the description field: a save fires only
-    // after the user stops editing, so half-typed amounts never hit the
-    // wire and each pause produces one request instead of one per keystroke.
-    saveBills() {
+    // A row was edited. It saves BILL_ROW_SAVE_WAIT_MS after its last
+    // edit, so half-typed amounts never go to the server, and each pause
+    // sends one save instead of one per keystroke.
+    saveBillRowSoon(row: BillNode) {
       self.billsEdits.bump();
       self.dropFixedCookInTwoRows();
-      if (self.billsSaveTimer !== null) {
-        clearTimeout(self.billsSaveTimer);
-      }
-      self.billsSaveTimer = setTimeout(function () {
-        self.flushBillsSave();
-      }, SAVE_DEBOUNCE_MS);
+      startRowWait(row);
     },
-    flushBillsSave() {
-      self.billsSaveTimer = null;
-      self.submitBills();
+    // The person came to the row's cost box. If the row waits to save,
+    // its wait starts again. A person who picks a cook and then goes to
+    // the cost box can take about 2 seconds to get there on a phone
+    // (close the menu, tap the box, wait for the keyboard). If the pick's
+    // save went then, the row would lock under the first digits typed,
+    // and they would not land.
+    restartBillRowWait(row: BillNode) {
+      if (self.billsSaveTimers[row.id] !== undefined) startRowWait(row);
     },
-    // Send a pending debounced save right now. Blur calls this, so
-    // "type, then click away" saves immediately — the debounce only
-    // spans pauses while the field still has focus. Without this,
-    // closing the tab inside the debounce window would lose the edit.
-    flushPendingBillsSave() {
-      if (self.billsSaveTimer !== null) {
-        self.submitBills();
+    // Save this row now, if it waits to save. The cost box calls this
+    // when the person leaves it or presses Enter, so "type, then click
+    // away" saves at once: the wait only spans pauses while the cost
+    // box still has focus.
+    saveBillRowNow(row: BillNode) {
+      if (self.billsSaveTimers[row.id] !== undefined) {
+        self.sendBillRow(row, false);
       }
+    },
+    // Build this row's save and send it. With nothing to send, the meal
+    // on screen may be waiting for nothing more before a fetch.
+    sendBillRow(row: BillNode, keepalive: boolean) {
+      stopRowWait(row.id);
+      const save = rowSave(row, false, keepalive);
+      if (save === null) {
+        self.afterBillsIdle();
+        return;
+      }
+      self.sendBillsSave(save);
+    },
+    // The page is being hidden or closed (#150): the browser fired
+    // visibilitychange to hidden, or pagehide. On a phone that is the
+    // last event the page can count on, so every row that waits to save
+    // is sent now, with fetch keepalive, which can finish after the page
+    // is gone. If the page stays open, the answers are handled as usual.
+    sendBillsBeforeHidden() {
+      rowsWaiting().forEach((row) => self.sendBillRow(row, true));
+    },
+    // Logout, Refresh and the error page's Refresh call this before they
+    // reload the page, which ends every request on its way. The cook
+    // rows freeze, and every row with an edit the server does not have
+    // is sent now. The wait ends once no bills save is on its way and no
+    // row waits to save, or after BILLS_WAIT_BEFORE_RELOAD_MS, whichever
+    // comes first. The promise then says whether the page may reload:
+    //
+    // - true when no save the page waited for failed. The rows stay
+    //   frozen until the reload. A save still on its way after the 5
+    //   seconds is sent again now with keepalive
+    //   (sendBillsAgainBeforeClose): WebKit ends it as soon as the reload
+    //   starts, before the page fires pagehide, and logout takes the
+    //   token away right after this. It may or may not be written, and
+    //   nothing tells the person.
+    // - false when one of them was not saved, or may not have been
+    //   (billsFailuresShown). The message is on screen, and a reload
+    //   would take it away before the person could read it, so the page
+    //   stays and the rows take edits again. The next tap goes on.
+    finishBillsSaves(): Promise<boolean> {
+      self.waitingToReload = true;
+      const failuresBefore = self.billsFailuresShown;
+      sendEveryRowNow(false);
+      return when(
+        () =>
+          self.billsSavesOnTheirWay.length === 0 &&
+          Object.keys(self.billsSaveTimers).length === 0,
+        { timeout: BILLS_WAIT_BEFORE_RELOAD_MS },
+      ).then(
+        () => self.endReloadWait(failuresBefore),
+        () => self.endReloadWait(failuresBefore),
+      );
+    },
+    // The wait before a reload ended (finishBillsSaves). Answers whether
+    // the page may reload.
+    endReloadWait(failuresBefore: number): boolean {
+      const mayReload = self.billsFailuresShown === failuresBefore;
+      self.waitingToReload = mayReload;
+      if (mayReload) self.sendBillsAgainBeforeClose();
+      return mayReload;
+    },
+    // The page is about to reload or close (#150): a reload the page
+    // makes itself (endReloadWait, and the reload after a chunk fails to
+    // load, lazy_retry.ts), or pagehide when the browser does not keep
+    // the page in its back-forward cache. A save on its way went by
+    // XMLHttpRequest, which the browser ends with the page, so the save
+    // may never reach the server. WebKit ends it as soon as a reload
+    // starts, before pagehide, so a reload the page makes itself does
+    // this first. Each one is sent again now, unchanged, with fetch
+    // keepalive, which can finish after the page is gone. It has the same key, so if the first try was written, the
+    // server answers this one as replayed and writes nothing more. A save
+    // that went with keepalive already is not sent again.
+    //
+    // The page does not read the answer: it will be gone. If it stays
+    // open after all, the first try's answer is the one it reads, and a
+    // failure of this one is only logged.
+    sendBillsAgainBeforeClose() {
+      const again = self.billsSavesOnTheirWay.filter((save) => !save.keepalive);
+      self.billsSavesOnTheirWay = self.billsSavesOnTheirWay.map((save) => ({
+        ...save,
+        keepalive: true,
+      }));
+      again.forEach((save) => {
+        api.meals
+          .updateBills(save.mealId, {
+            edits: save.edits,
+            key: save.key,
+            socketId: window.Comeals.socketId,
+            keepalive: true,
+          })
+          .catch((error: unknown) => {
+            handleAxiosError(error, { silent: true });
+          });
+      });
     },
     // switchMeals and teardownMealPage call this first: the person is
     // leaving the meal on screen, and its rows are about to be cleared.
-    // An edit not sent yet belongs to this meal, whether it is still in
-    // the debounce window, waiting for the save in flight to be
-    // answered, or on a row whose save was refused before it could be
-    // sent (one cook in two rows). That last kind has no timer and no
-    // queued save, only a row that differs from its base. It is built
-    // into a save now, from these rows and their bases, and sent to this
-    // meal: right away, or after the save in flight is answered (#107).
-    // It never goes to the next meal. If one cook is still picked in two
-    // rows, no save can be built, and the message names this meal. The
-    // bases already hold what the save in flight sent, so this save's
-    // `from` is that save's `to`.
+    // Each row that shows an edit the server does not have is saved now,
+    // to this meal, whether it waits to save or its save was refused
+    // before it could be sent (one cook in two rows). It never goes to
+    // the next meal. A row whose save is on its way takes no edits, so
+    // it has nothing more to send. If one cook is still picked in two
+    // rows, that row's save cannot be built, and the message names this
+    // meal.
     saveBillsBeforeLeaving() {
       // The "may not have been saved" message about this meal says to
       // check the costs "when the meal shows again", which is about the
@@ -412,116 +650,84 @@ export function billsActions(self: BillsStore) {
         self.showBillsMaybeNotSaved(maybeOnScreen);
       }
 
-      const unsent =
-        self.billsSaveTimer !== null ||
-        self.billsSaveQueued ||
-        Array.from(self.bills.values()).some((bill) => bill.unsent);
-      if (self.billsSaveTimer !== null) {
-        clearTimeout(self.billsSaveTimer);
-        self.billsSaveTimer = null;
-      }
-      self.billsSaveQueued = false;
-      if (!unsent) return;
-
-      const save = billsSaveOfRows(true);
-      if (save === null) return;
-      if (self.billsSaveInFlight !== null) {
-        self.billsSavesForMealsLeft = [...self.billsSavesForMealsLeft, save];
-        return;
-      }
-      self.sendBillsSave(save);
+      sendEveryRowNow(true);
     },
-    submitBills() {
-      // A direct submit (blur, the end of the debounce) supersedes a
-      // pending debounced save — it sends the same latest state now.
-      if (self.billsSaveTimer !== null) {
-        clearTimeout(self.billsSaveTimer);
-        self.billsSaveTimer = null;
-      }
-
-      // Single-flight: one request at a time. The queued resend in
-      // settleBillsSave sends whatever was edited meanwhile. The save
-      // is built only then, and not now: building it moves the rows'
-      // bases, and a base must not move for a save that is not sent.
-      if (self.billsSaveInFlight !== null) {
-        self.billsSaveQueued = true;
-        return;
-      }
-
-      const save = billsSaveOfRows(false);
-      if (save === null) {
-        // Nothing was sent. If the rows now show what the server has,
-        // the meal may be waiting for nothing more before a fetch.
-        self.afterBillsIdle();
-        return;
-      }
-
-      self.sendBillsSave(save);
-    },
+    // Send a new save: its first try. Its row shows a spinner if it is
+    // still on its way after BILL_ROW_SPINNER_WAIT_MS. A second try is
+    // sent by postBillsSave alone, so it keeps the first try's wait: the
+    // spinner shows one second after the save was first sent.
     sendBillsSave(save: BillsSave) {
-      self.billsSaveInFlight = save;
+      setTimeout(function () {
+        self.markBillsSaveSlow(save.key);
+      }, BILL_ROW_SPINNER_WAIT_MS);
+      self.postBillsSave(save);
+    },
+    // Send a try of this save and handle its answer. Until the answer
+    // comes, the save is on its way, in place of an earlier try with the
+    // same key.
+    postBillsSave(save: BillsSave) {
+      self.billsSavesOnTheirWay = [
+        ...self.billsSavesOnTheirWay.filter((other) => other.key !== save.key),
+        save,
+      ];
 
       api.meals
         .updateBills(save.mealId, {
           edits: save.edits,
           key: save.key,
           socketId: window.Comeals.socketId,
+          keepalive: save.keepalive,
         })
         .then(
           function (response) {
             // The server saved the bills, so the cached meal payload is
             // now stale (issue #37).
             evictMealCache(save.mealId);
-            checkAnswer(response.data, save);
-            self.settleBillsSave();
+            const answer: BillsAck | undefined = response.data;
+            if (answer?.type === "warning") showWarning(answer, save);
+            checkAnswer(answer, save);
+            self.settleBillsSave(save);
           },
           function (error: unknown) {
             self.billsSaveFailed(save, error);
           },
         );
     },
-    // A bills save failed, or was saved with a warning (a 400 the client
-    // rejects with). Decision 7 of #135: a failure that may not be final
-    // sends the same save once more, before any save built after it. A
-    // base is never moved back: a save built after this one was built on
-    // it, and the server checks that save's `from`.
+    // The save has been on its way for BILL_ROW_SPINNER_WAIT_MS, unless
+    // it was answered by now.
+    markBillsSaveSlow(key: string) {
+      if (!self.billsSavesOnTheirWay.some((save) => save.key === key)) return;
+      self.billsSlowSaveKeys = [...self.billsSlowSaveKeys, key];
+    },
+    // A bills save failed. Decision 7 of #135: a failure that may not be
+    // final sends the same save once more, and its row stays locked
+    // until that try is answered. A base is never moved back: the row's
+    // next save is built on it, and the server checks that save's
+    // `from`.
     billsSaveFailed(save: BillsSave, error: unknown) {
       // The person may have left the meal while the save waited for
       // the server's answer. The message then shows on another meal or
       // on the calendar, so it names the meal (#107).
       const mealLeft = !self.meal || self.meal.id !== save.mealId;
-      const warning = warningIn(error);
-      if (warning) {
-        // A warning response still persisted the bills — evict, same
-        // as the success path.
-        evictMealCache(save.mealId);
-        const msg = warning.message || "";
-        const words =
-          (mealLeft ? `Cooks saved for ${save.mealDay}.` : "Cooks saved.") +
-          (msg ? " " + msg : "");
-        // It goes on top of any message about a save that failed, which
-        // stays under it (#137).
-        toastStore.show(words, "info");
-        checkAnswer(warning, save);
-        self.settleBillsSave();
-        return;
-      }
 
       if (!save.secondTry && worthSendingAgain(error)) {
         // Nothing shows yet: the second try may work. The first
         // failure is only logged.
         handleAxiosError(error, { silent: true });
-        self.sendBillsSave({ ...save, secondTry: true });
+        self.postBillsSave({ ...save, secondTry: true });
         return;
       }
+
+      // Every way on from here shows the person a message about it.
+      self.billsFailuresShown += 1;
 
       if (mealLeft) {
         // The server's words are only logged: they do not say which
         // meal they are about.
         handleAxiosError(error, { silent: true });
-        // Every failure is shown, even when a newer save for this meal
-        // waits behind this one (see billsNotSaved). Only a second try
-        // gets no answer from the app here, as below.
+        // Every failure is shown, even when another save for this meal
+        // worked (see billsNotSaved). Only a second try gets no answer
+        // from the app here, as below.
         const meal = { mealId: save.mealId, mealDay: save.mealDay };
         if (noAnswerFromApp(error)) {
           self.showBillsMaybeNotSaved(meal);
@@ -562,11 +768,11 @@ export function billsActions(self: BillsStore) {
       // The rows on screen show what this save sent, and their bases say
       // the server has it, which it may not. So the meal loads again,
       // frozen until it arrives. The load waits until nothing is pending
-      // for the meal, so a cost typed behind this save is sent first
+      // for the meal, so a cost another row waits to save is sent first
       // (#136). A save for a meal the person left did not change the
       // rows on screen, so that meal is not loaded.
       if (!mealLeft) self.loadMealAgain();
-      self.settleBillsSave();
+      self.settleBillsSave(save);
     },
     // A save for a meal the person left was not saved. Show the message
     // that names it, with the meals the message on screen already names
@@ -633,14 +839,14 @@ export function billsActions(self: BillsStore) {
       self.billsCookInTwoRows = null;
     },
     // The answer to a save that was written. It changes no row: the
-    // rows' bases moved when the save was built, and a row may already
-    // show a newer cost. It is checked instead. The server reads the
-    // bills right after the save's writes, in the same transaction, so
-    // each cook the save named must show what the save sent, and a cook
-    // it removed must be gone. A replayed answer holds the bills as
-    // stored now, and someone may have saved since the first try, so a
-    // difference there is not a bug. Either way the rows on screen may
-    // not be what the server has, so the meal loads again.
+    // row's base moved when the save was built, and the row took no
+    // edit while the save was on its way. It is checked instead. The
+    // server reads the bills right after the save's writes, in the same
+    // transaction, so each cook the save named must show what the save
+    // sent, and a cook it removed must be gone. A replayed answer holds
+    // the bills as stored now, and someone may have saved since the
+    // first try, so a difference there is not a bug. Either way the rows
+    // on screen may not be what the server has, so the meal loads again.
     applyBillsAck(data: BillsAck | undefined, save: BillsSave) {
       const bills = data?.bills;
       if (bills === undefined) return;
@@ -664,50 +870,40 @@ export function billsActions(self: BillsStore) {
       }
       if (self.meal?.id === save.mealId) self.loadMealAgain();
     },
-    // The save in flight was answered. Saves for meals the person left
-    // go first, oldest first: they were made before anything typed on
-    // the meal on screen now. Then a queued save sends the rows of the
-    // meal on screen as they are now. The queue flag is always about the
-    // meal on screen, because leaving a meal clears it. Last, the meal on
+    // The save was answered, and its row is free again. The meal on
     // screen is fetched if it was waiting for its saves and now waits
     // for nothing more.
-    settleBillsSave() {
-      self.billsSaveInFlight = null;
-      if (self.billsSavesForMealsLeft.length > 0) {
-        const [next, ...rest] = self.billsSavesForMealsLeft;
-        self.billsSavesForMealsLeft = rest;
-        self.sendBillsSave(next);
-      } else if (self.billsSaveQueued) {
-        self.billsSaveQueued = false;
-        self.submitBills();
-      }
+    settleBillsSave(save: BillsSave) {
+      self.billsSavesOnTheirWay = self.billsSavesOnTheirWay.filter(
+        (other) => other.key !== save.key,
+      );
+      self.billsSlowSaveKeys = self.billsSlowSaveKeys.filter(
+        (key) => key !== save.key,
+      );
       self.afterBillsIdle();
     },
     // True while this page has a bills edit for the meal that the server
-    // may not have yet: sent and not answered, waiting to be sent after
-    // the save in flight, in the wait before a save, or on a row that
-    // differs from its base with no save to carry it. While it is true,
-    // the meal's rows must not be built again from the server (#136):
-    // the server's answer may be older than the edit, and new rows would
-    // drop it, so the next save would never send it.
+    // may not have yet: sent and not answered, in a row's wait before
+    // its save, or on a row that differs from its base with no save to
+    // carry it. While it is true, the meal's rows must not be built
+    // again from the server (#136): the server's answer may be older
+    // than the edit, and new rows would drop it, so no save would ever
+    // send it.
     //
     // While the meal on screen loads again after a failed save, a row
-    // that differs from its base with no timer or queued save to carry
-    // it does not count. Its edit was refused before it could be sent
-    // (one cook in two rows), and the rows are frozen until the meal
-    // loads, so nobody could change it, and waiting for it would keep
-    // the meal from ever loading.
+    // that differs from its base and does not wait to save does not
+    // count. Its edit was refused before it could be sent (one cook in
+    // two rows), and the rows are frozen until the meal loads, so nobody
+    // could change it, and waiting for it would keep the meal from ever
+    // loading.
     billsPendingFor(mealId: number): boolean {
-      if (self.billsSaveInFlight?.mealId === mealId) return true;
-      if (self.billsSavesForMealsLeft.some((save) => save.mealId === mealId)) {
+      if (self.billsSavesOnTheirWay.some((save) => save.mealId === mealId)) {
         return true;
       }
-      // The timer, the queue flag and the rows are always about the meal
-      // on screen.
+      // The waits and the rows are always about the meal on screen.
       if (self.meal?.id !== mealId) return false;
       return (
-        self.billsSaveTimer !== null ||
-        self.billsSaveQueued ||
+        Object.keys(self.billsSaveTimers).length > 0 ||
         (!self.mealLoading &&
           Array.from(self.bills.values()).some((bill) => bill.unsent))
       );

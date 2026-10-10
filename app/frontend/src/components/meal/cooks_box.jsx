@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react-lite";
 import { useStore } from "../../helpers/store_context";
 import ConfirmBar from "../confirm_bar";
@@ -30,16 +30,22 @@ function offeredInEveryMenu(resident) {
 
 // The cooks a row's menu offers: every active resident who can cook,
 // the row's cook now, and the row's cook when the meal was loaded,
-// except a cook picked in another row. A save names each cook once, so
-// a cook picked in two rows could not be saved (billEditsOf).
+// except a cook picked in another row, and a cook another row is still
+// changing. A cook has one bill, so a cook picked in two rows could not
+// be saved (billEditsOf). And each row saves on its own, so two saves
+// that name one cook could reach the server in either order
+// (cookTakenByAnotherRow in data_store_bills.ts).
 //
 // A cook who was retired, or whose "can cook" was turned off, after
 // cooking keeps their bill (#91), and only their own row offers them.
 // Picking another name in their row, or the blank, sends a save that
 // removes their bill, so that pick asks first. Their row offers them
 // even after a Yes, so the person can pick them again, and that save
-// adds the bill back. After the page loads the meal again, no menu
-// offers them, and only an admin can make them a cook again.
+// adds the bill back. After the blank, the bill comes back with the
+// cost it had (Bill#setResident). After a pick of another name, the
+// cost went with the row to that cook, so it stays with the row. After
+// the page loads the meal again, no menu offers them, and only an
+// admin can make them a cook again.
 function cookChoices(store, bill) {
   const pickedElsewhere = new Set(
     Array.from(store.bills.values())
@@ -50,6 +56,7 @@ function cookChoices(store, bill) {
     (resident) =>
       resident.id === bill.resident_id ||
       (!pickedElsewhere.has(resident.id) &&
+        !store.cookTakenByAnotherRow(bill, resident.id) &&
         (resident.id === bill.loadedCookId || offeredInEveryMenu(resident))),
   );
 }
@@ -83,15 +90,38 @@ const BillEdit = observer(({ bill }) => {
   // there is no meal to save them to. So does a meal loading again
   // after a bills save for it failed: until it arrives, a row may show
   // what the server does not have, and an edit typed on it would be
-  // built on that (loadMealAgain).
-  const frozen = !store.meal || store.meal.reconciled || store.mealLoading;
+  // built on that (loadMealAgain). So does the wait before a reload
+  // (finishBillsSaves): an edit then would wait 2 seconds before its
+  // save, and the reload, or logout taking the token away, would lose
+  // it.
+  const frozen =
+    !store.meal ||
+    store.meal.reconciled ||
+    store.mealLoading ||
+    store.waitingToReload;
+
+  // While the row's save is on its way, the row takes no edit (#150).
+  // Its controls are read-only, not off: they keep their look and their
+  // focus, so the lock shows nothing for the first second. After that,
+  // a spinner shows in the cost box. The other rows stay free.
+  const locked = bill.saving;
+
+  // A question that was open when the row locked goes away for good: a
+  // Yes could not change the row, and the question would come back when
+  // the save is answered, about a row that may have changed under it.
+  useEffect(() => {
+    if (locked) {
+      setConfirmingNoCost(false);
+      setPickToConfirm(null);
+    }
+  }, [locked]);
 
   // A question goes away when the row freezes: a Yes would change a row
   // that may show what the server does not have. When the meal arrives,
   // the rows are made again, and a new row asks nothing.
   const askingNoCost =
-    confirmingNoCost && !frozen && !isZeroAmountString(bill.amount);
-  const askingToRemoveCook = pickToConfirm !== null && !frozen;
+    confirmingNoCost && !frozen && !locked && !isZeroAmountString(bill.amount);
+  const askingToRemoveCook = pickToConfirm !== null && !frozen && !locked;
 
   return (
     <div className="confirm-bar-anchor">
@@ -99,6 +129,9 @@ const BillEdit = observer(({ bill }) => {
         <select
           value={bill.resident_id}
           onChange={(e) => {
+            // The menu's value comes from the row, so a pick that is not
+            // taken shows the row's cook again.
+            if (locked) return;
             // Every pick closes the no-cost question. A keyboard can reach
             // this menu while that question is open, with no click to
             // close it, and the question names the row's cook: after a
@@ -113,9 +146,9 @@ const BillEdit = observer(({ bill }) => {
             }
             bill.setResident(e.target.value);
           }}
-          onBlur={() => store.flushPendingBillsSave()}
           style={styles.select}
           disabled={frozen}
+          aria-disabled={locked || undefined}
           aria-label="Select meal cook"
         >
           <option value={""} key={-1}>
@@ -127,8 +160,12 @@ const BillEdit = observer(({ bill }) => {
             </option>
           ))}
         </select>
-        <div className="input-group">
+        <div className="input-group cost-box">
           <span className="input-addon">$</span>
+          {/* Out of the flow, so the $ and the input keep their corners. */}
+          {bill.slowToSave && (
+            <span className="cost-spinner" aria-hidden="true" />
+          )}
           <input
             type="number"
             min="0"
@@ -148,9 +185,20 @@ const BillEdit = observer(({ bill }) => {
                 e.target.value = landed;
               }
             }}
+            // Coming to the cost box starts the row's wait again, if it
+            // has one. A person who picks a cook and then comes here to
+            // type the cost can take about 2 seconds on a phone, and the
+            // pick's save would lock the row under the first digits.
+            onFocus={() => store.restartBillRowWait(bill)}
+            // Leaving the cost box, or pressing Enter in it, saves the
+            // row at once. Otherwise the row saves 2 seconds after its
+            // last edit (data_store_bills.ts).
             onBlur={() => {
               bill.normalizeAmountDisplay();
-              store.flushPendingBillsSave();
+              store.saveBillRowNow(bill);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") store.saveBillRowNow(bill);
             }}
             style={bill.resident_id ? styles.select : styles.costWithoutCook}
             className={bill.costPending ? "cost-pending" : ""}
@@ -158,6 +206,8 @@ const BillEdit = observer(({ bill }) => {
             // never be sent, and the next load of the meal would make
             // the row again without it (#145).
             disabled={frozen || !bill.resident_id}
+            readOnly={locked}
+            aria-busy={bill.slowToSave || undefined}
             placeholder={bill.costPending ? "pending" : undefined}
             aria-label="Set meal cost"
           />
@@ -170,6 +220,9 @@ const BillEdit = observer(({ bill }) => {
             className="switch"
             checked={bill.no_cost}
             onChange={() => {
+              // The switch shows the row's no_cost, so a click that is not
+              // taken shows it as it was.
+              if (locked) return;
               // Turning no cost on erases a typed cost — that needs a
               // Yes first. Turning it off, or on with nothing typed,
               // destroys nothing and flips right away.
@@ -181,8 +234,8 @@ const BillEdit = observer(({ bill }) => {
               }
               bill.toggleNoCost();
             }}
-            onBlur={() => store.flushPendingBillsSave()}
             disabled={frozen || !bill.resident_id}
+            aria-disabled={locked || undefined}
             aria-label={`No cost button for ${bill.id}`}
           />
           <label htmlFor={`no_cost_switch-${bill.id}`} />
@@ -237,8 +290,12 @@ const BillEdit = observer(({ bill }) => {
   );
 });
 
+// When the page is hidden or closed, the rows that wait to save are
+// sent at once: helpers/send_bills_on_page_close.ts, which index.jsx
+// starts for every page (#150).
 const CooksBox = observer(() => {
   const store = useStore();
+
   return (
     <div className="offwhite button-border-radius" style={styles.main}>
       <div className="flex space-between title">

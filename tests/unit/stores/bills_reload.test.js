@@ -12,7 +12,7 @@ import axios from "axios";
 import * as idbKeyval from "idb-keyval";
 import { createDataStore, stubAction } from "../helpers/create_data_store.js";
 import { BOB, CAROL, billsServer, mealIdOf } from "../helpers/bills_server.js";
-import { SAVE_DEBOUNCE_MS } from "../../../app/frontend/src/helpers/helpers.js";
+import { BILL_ROW_SAVE_WAIT_MS } from "../../../app/frontend/src/stores/data_store_bills";
 
 // The page does not build a meal's rows again from the server while it
 // has a bills edit for that meal the server may not have yet: typed and
@@ -76,11 +76,11 @@ describe("a live update of the meal while a cost is typed but not sent", () => {
       Array.from(store.bills.values()).find(
         (b) => b.resident && b.resident.id === 11,
       );
-    bob().setAmount("50"); // in the debounce window
+    bob().setAmount("50"); // in the wait before its save
     store.loadDataAsync(); // what the meal channel's "update" handler calls
     await vi.advanceTimersByTimeAsync(0);
     expect(bob().amount).toBe("50");
-    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+    await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS);
     const patches = axios.mock.calls.filter(([c]) => c && c.method === "patch");
     expect(patches.length).toBe(1);
     // The issue checked the full list of cooks the page sent then. A
@@ -118,8 +118,8 @@ describe("the meal is not loaded again while a bills edit for it is pending", ()
     vi.restoreAllMocks();
   });
 
-  function answerSave() {
-    return server.answerSave();
+  function answerSave(place) {
+    return server.answerSave(place);
   }
 
   function failSave(error) {
@@ -217,7 +217,7 @@ describe("the meal is not loaded again while a bills edit for it is pending", ()
       expect(mealFetches()).toBe(0);
       expect(rowOf(store, BOB).amount).toBe("50");
 
-      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS); // the save is sent
+      await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS); // the save is sent
       trigger(store);
       await vi.advanceTimersByTimeAsync(0);
       expect(mealFetches()).toBe(0);
@@ -230,39 +230,42 @@ describe("the meal is not loaded again while a bills edit for it is pending", ()
     },
   );
 
-  // A save sent while another has no answer waits, and is sent when
-  // that one is answered (billsSaveQueued).
-  it("does not load the meal while a cost waits behind a save that has no answer", async () => {
+  // Each row saves on its own (#150). Bob's save has no answer while
+  // Carol's row waits to save: the meal waits for both.
+  it("does not load the meal while one row's save has no answer and another row waits to save", async () => {
+    stored[1][CAROL] = { amount: "0.0", no_cost: false };
     const store = createStore();
     rowOf(store, BOB).setAmount("5");
-    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS); // the $5 save is sent
-    rowOf(store, BOB).setAmount("50");
-    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS); // waits for it
+    await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS); // the $5 save is sent
+    rowOf(store, CAROL).setAmount("7"); // in the wait before its save
 
     fire("meal-1", "update");
-    await answerSave(); // the $50 save is sent
+    await answerSave(); // Bob's $5
     fire("meal-1", "update");
     await vi.advanceTimersByTimeAsync(0);
     expect(mealFetches()).toBe(0);
-    expect(amountsSentForBob()).toEqual(["5", "50"]);
+    expect(rowOf(store, CAROL).amount).toBe("7");
 
+    await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS); // Carol's is sent
+    expect(mealFetches()).toBe(0);
     await answerSave();
     expect(mealFetches()).toBe(1);
-    expect(rowOf(store, BOB).amount).toBe("50.00");
+    expect(rowOf(store, BOB).amount).toBe("5.00");
+    expect(rowOf(store, CAROL).amount).toBe("7.00");
   });
 
-  // #136, the first comment. The $5 save is refused, so the page
+  // #136, the first comment. Bob's $5 save is refused, so the page
   // fetches the meal to show what the server has. It does that after
-  // the $50 typed behind it is sent, not before: a fetch first would
-  // build the rows again, and the $50 would never be sent. (The $50
-  // save is built on the $5 the server never stored, so it is refused
-  // too, with a message, and the meal then shows what the server has.)
-  it("does not load the meal after a failed save until the cost typed behind it is sent", async () => {
+  // the cost Carol's row waits to save is sent, not before: a fetch
+  // first would build the rows again, and Carol's cost would never be
+  // sent.
+  it("does not load the meal after a failed save until a cost another row waits to save is sent", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
+    stored[1][CAROL] = { amount: "0.0", no_cost: false };
     const store = createStore();
     rowOf(store, BOB).setAmount("5");
-    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS); // the $5 save is sent
-    rowOf(store, BOB).setAmount("50"); // in the wait before its save
+    await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS); // the $5 save is sent
+    rowOf(store, CAROL).setAmount("7"); // in the wait before its save
 
     await failSave({
       response: {
@@ -271,13 +274,13 @@ describe("the meal is not loaded again while a bills edit for it is pending", ()
       },
     });
     expect(mealFetches()).toBe(0);
-    expect(rowOf(store, BOB).amount).toBe("50");
+    expect(rowOf(store, CAROL).amount).toBe("7");
 
-    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
-    expect(amountsSentForBob()).toEqual(["5", "50"]);
-    await answerSave();
+    await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS);
+    await answerSave(); // Carol's $7
     expect(mealFetches()).toBe(1);
     expect(rowOf(store, BOB).amount).toBe("");
+    expect(rowOf(store, CAROL).amount).toBe("7.00");
   });
 
   describe("an answer to a fetch sent before a cost was typed", () => {
@@ -291,7 +294,7 @@ describe("the meal is not loaded again while a bills edit for it is pending", ()
       expect(rowOf(store, BOB).amount).toBe("50");
       expect(idbKeyval.set).not.toHaveBeenCalled();
 
-      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+      await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS);
       await answerSave();
       expect(mealFetches()).toBe(2);
       expect(rowOf(store, BOB).amount).toBe("50.00");
@@ -304,7 +307,7 @@ describe("the meal is not loaded again while a bills edit for it is pending", ()
       const answerFetch = holdNextFetch();
       fire("meal-1", "update"); // the server reads Bob's $0
       rowOf(store, BOB).setAmount("50");
-      store.flushPendingBillsSave(); // the field loses focus
+      store.saveBillRowNow(rowOf(store, BOB)); // the cost box loses focus
       await answerSave();
       expect(mealFetches()).toBe(1);
 
@@ -331,7 +334,7 @@ describe("the meal is not loaded again while a bills edit for it is pending", ()
       await vi.advanceTimersByTimeAsync(0);
       expect(rowOf(store, BOB).amount).toBe("50");
 
-      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+      await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS);
       await answerSave();
       expect(mealFetches()).toBe(2);
       expect(rowOf(store, BOB).amount).toBe("50.00");
@@ -339,23 +342,23 @@ describe("the meal is not loaded again while a bills edit for it is pending", ()
   });
 
   // #135, the second comment. Bob's $5 save has no answer. The person
-  // picks Carol as a second cook and types $50, which waits for the $5
-  // save. They go to meal 2 and come back. Before #136's fix, coming
-  // back built meal 1's rows from a server that did not have Carol yet,
-  // and the next save, which listed every cook the page showed, deleted
-  // her $50. A save now names only the cooks it changes, and the rows
-  // load only after both saves are answered, so the $6 save is built on
-  // the $5 the server has.
+  // picks Carol as a second cook and types $50, and that row's save has
+  // no answer either. They go to meal 2 and come back. Before #136's
+  // fix, coming back built meal 1's rows from a server that did not
+  // have Carol yet, and the next save, which listed every cook the page
+  // showed, deleted her $50. A save now names only the cooks it
+  // changes, and the rows load only after both saves are answered, so
+  // the $6 save is built on the $5 the server has.
   it("shows a meal the person comes back to as loading until its saves are answered, then loads it with every cook those saves sent", async () => {
     const store = createStore();
     rowOf(store, BOB).setAmount("5");
-    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS); // the $5 save is sent
+    await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS); // the $5 save is sent
     const blankRow = Array.from(store.bills.values()).find(
       (bill) => bill.resident === null,
     );
     blankRow.setResident(store.residents.get(String(CAROL)));
     rowOf(store, CAROL).setAmount("50");
-    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS); // waits
+    await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS); // Carol's is sent
 
     store.goToMeal(2);
     await vi.advanceTimersByTimeAsync(0);
@@ -369,16 +372,16 @@ describe("the meal is not loaded again while a bills edit for it is pending", ()
     expect(idbKeyval.get).not.toHaveBeenCalled(); // no copy from the device
     expect(mealFetches(1)).toBe(0);
 
-    await answerSave(); // Bob's $5; then the save made on leaving is sent
+    await answerSave(1); // Carol's $50, first
     expect(mealFetches(1)).toBe(0);
-    await answerSave(); // Bob's $5 and Carol's $50
+    await answerSave(); // Bob's $5
     expect(mealFetches(1)).toBe(1);
     expect(store.mealLoading).toBe(false);
     expect(rowOf(store, BOB).amount).toBe("5.00");
     expect(rowOf(store, CAROL).amount).toBe("50.00");
 
     rowOf(store, BOB).setAmount("6");
-    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+    await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS);
     await answerSave();
     expect(stored[1]).toEqual({
       [BOB]: { amount: "6", no_cost: false },
@@ -386,21 +389,20 @@ describe("the meal is not loaded again while a bills edit for it is pending", ()
     });
   });
 
-  // Meal 1's save is in flight when the person goes to meal 2 and types
-  // a cost there. Meal 2's save waits behind meal 1's, and when the
-  // person leaves meal 2 it waits for meal 2. They go back to meal 2
-  // before it is sent.
-  it("does not load a meal whose save waits behind another meal's save", async () => {
+  // Meal 1's save and meal 2's save are both on their way. The person
+  // goes back to meal 2. It loads once its own save is answered, and
+  // does not wait for meal 1's.
+  it("does not load a meal the person comes back to while its save has no answer, and does not wait for another meal's", async () => {
     stored[2] = { [BOB]: { amount: "7.0", no_cost: false } };
     const store = createStore();
     rowOf(store, BOB).setAmount("5");
-    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS); // meal 1's save is sent
+    await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS); // meal 1's save is sent
     store.goToMeal(2);
     await vi.advanceTimersByTimeAsync(0); // meal 2's rows load
     rowOf(store, BOB).setAmount("8");
-    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS); // waits for meal 1's
-    store.goToMeal(1);
+    store.goToMeal(1); // meal 2's save is sent on leaving
     await vi.advanceTimersByTimeAsync(0);
+    expect(server.saves).toHaveLength(2);
 
     store.goToMeal(2);
     await vi.advanceTimersByTimeAsync(0);
@@ -408,41 +410,39 @@ describe("the meal is not loaded again while a bills edit for it is pending", ()
     expect(store.bills.size).toBe(0);
     expect(mealFetches(2)).toBe(1); // only the first visit
 
-    await answerSave(); // meal 1's; then meal 2's is sent
-    expect(mealFetches(2)).toBe(1);
-    await answerSave();
+    await answerSave(1); // meal 2's $8
     expect(mealFetches(2)).toBe(2);
     expect(rowOf(store, BOB).amount).toBe("8.00");
+    expect(server.saves).toHaveLength(1); // meal 1's still has no answer
   });
 
   // Meal 2's save has no answer. On meal 1, a push sends a fetch of
-  // meal 1 that is slow, and a cost typed there waits behind meal 2's
-  // save. The person goes back to meal 2, which shows loading until its
-  // save is answered. Then the old answer for meal 1 arrives. It is
-  // dropped, and it must not stop meal 2 from loading after its save is
-  // answered.
+  // meal 1 that is slow, and a cost typed there is saved when the
+  // person leaves. The person goes back to meal 2, which shows loading
+  // until its save is answered. Then the old answer for meal 1 arrives.
+  // It is dropped, and it must not stop meal 2 from loading after its
+  // save is answered.
   it("loads the meal on screen once its save is answered, even when an old answer for a meal the person left arrives first", async () => {
     stored[2] = { [BOB]: { amount: "7.0", no_cost: false } };
     const store = createStore();
     store.goToMeal(2);
     await vi.advanceTimersByTimeAsync(0); // meal 2's rows load
     rowOf(store, BOB).setAmount("8");
-    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS); // meal 2's save is sent
+    await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS); // meal 2's save is sent
 
     store.goToMeal(1);
     await vi.advanceTimersByTimeAsync(0); // meal 1's rows load
     const answerFetch = holdNextFetch();
     fire("meal-1", "update"); // a fetch of meal 1 is sent, and is slow
-    rowOf(store, BOB).setAmount("5");
-    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS); // waits for meal 2's save
+    rowOf(store, BOB).setAmount("5"); // in the wait before its save
 
-    store.goToMeal(2);
+    store.goToMeal(2); // meal 1's $5 is sent on leaving
     await vi.advanceTimersByTimeAsync(0);
     expect(store.mealLoading).toBe(true);
     await answerFetch(); // the old answer for meal 1
     expect(store.bills.size).toBe(0);
 
-    await answerSave(); // meal 2's $8; then meal 1's $5 is sent
+    await answerSave(); // meal 2's $8
     await answerSave(); // meal 1's $5
     expect(mealFetches(2)).toBe(2);
     expect(store.mealLoading).toBe(false);
@@ -450,55 +450,33 @@ describe("the meal is not loaded again while a bills edit for it is pending", ()
     expect(stored[1][BOB].amount).toBe("5");
   });
 
-  // A row's base says what the server will have once the saves already
-  // built are stored. A save is built only when it is sent, so a cost
-  // typed while a save has no answer leaves its row's base alone. If
-  // that base moved to the new cost before any save carried it, the page
-  // would count the cost as sent, and a save built from the bases would
-  // not send it.
-  it("keeps a cost that waits behind a save with no answer unsent, with its base at the cost that was sent", async () => {
-    const store = createStore();
-    rowOf(store, BOB).setAmount("5");
-    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS); // the $5 save is sent
-    rowOf(store, BOB).setAmount("50");
-    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS); // waits for it
-
-    expect(amountsSentForBob()).toEqual(["5"]);
-    expect(rowOf(store, BOB).unsent).toBe(true);
-    expect(rowOf(store, BOB).baseAmount).toBe("5");
-
-    await answerSave(); // the $50 save is sent
-    expect(amountsSentForBob()).toEqual(["5", "50"]);
-    expect(rowOf(store, BOB).unsent).toBe(false);
-  });
-
-  // Meal 2's save has no answer, and on meal 1 a cost waits behind it.
-  // A push on meal 1 must not build meal 1's rows again before that
-  // cost is sent: the new rows would not have it, and the save that
-  // waits would send none.
-  it("does not load the meal while a cost on it waits behind another meal's save", async () => {
+  // Meal 2's save has no answer, and on meal 1 a cost's save has no
+  // answer either. A push on meal 1 must not build meal 1's rows again
+  // before that save is answered: the server may not have the cost yet,
+  // and the new rows would not show it.
+  it("does not load the meal while its own save has no answer, and loads it once that is answered, whatever another meal's save does", async () => {
     stored[2] = { [BOB]: { amount: "7.0", no_cost: false } };
     const store = createStore();
     store.goToMeal(2);
     await vi.advanceTimersByTimeAsync(0); // meal 2's rows load
     rowOf(store, BOB).setAmount("8");
-    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS); // meal 2's save is sent
+    await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS); // meal 2's save is sent
     store.goToMeal(1);
     await vi.advanceTimersByTimeAsync(0); // meal 1's rows load
     expect(mealFetches(1)).toBe(1);
     rowOf(store, BOB).setAmount("50");
-    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS); // waits for meal 2's save
+    await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS); // meal 1's save is sent
 
     fire("meal-1", "update");
     await vi.advanceTimersByTimeAsync(0);
     expect(mealFetches(1)).toBe(1);
     expect(rowOf(store, BOB).amount).toBe("50");
 
-    await answerSave(); // meal 2's $8; then meal 1's $50 is sent
-    await answerSave(); // meal 1's $50
+    await answerSave(1); // meal 1's $50
     expect(stored[1][BOB].amount).toBe("50");
     expect(mealFetches(1)).toBe(2);
     expect(rowOf(store, BOB).amount).toBe("50.00");
+    expect(server.saves).toHaveLength(1); // meal 2's still has no answer
   });
 
   // One cook picked in two rows: no save can be built, so the edits stay
@@ -511,7 +489,7 @@ describe("the meal is not loaded again while a bills edit for it is pending", ()
       (bill) => bill.resident === null,
     );
     blankRow.setResident(store.residents.get(String(BOB)));
-    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS); // refused: no save
+    await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS); // refused: no save
     expect(server.saves).toHaveLength(0);
     fire("meal-1", "update");
     await vi.advanceTimersByTimeAsync(0);
@@ -520,7 +498,7 @@ describe("the meal is not loaded again while a bills edit for it is pending", ()
 
     blankRow.setResident("");
     rowOf(store, BOB).setAmount("");
-    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS); // nothing to send
+    await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS); // nothing to send
     expect(server.saves).toHaveLength(0);
     expect(mealFetches()).toBe(1);
   });

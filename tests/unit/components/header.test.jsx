@@ -21,9 +21,10 @@ function makeStore(overrides = {}) {
       isOnline: true,
       meal: { date: new Date(2026, 0, 15) },
       logout: vi.fn(),
+      finishBillsSaves: vi.fn(() => Promise.resolve(true)),
       ...overrides,
     },
-    { logout: false },
+    { logout: false, finishBillsSaves: false },
   );
 }
 
@@ -152,16 +153,57 @@ describe("Header", () => {
     });
   });
 
-  it("logout signs out and reloads to the login page", () => {
-    const store = makeStore();
+  // A reload ends every request on its way, and logout takes the token
+  // away. So logout first waits for the bills saves on their way
+  // (finishBillsSaves, #150).
+  it("logout waits for the bills saves, then signs out and reloads to the login page", async () => {
+    let saved;
+    const store = makeStore({
+      finishBillsSaves: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            saved = resolve;
+          }),
+      ),
+    });
     renderHeader(store);
     const { location, restore } = fakeLocation();
     try {
       fireEvent.click(
         screen.getByRole("button", { name: "logout Jane Smith" }),
       );
+      expect(store.finishBillsSaves).toHaveBeenCalledTimes(1);
+      expect(store.logout).not.toHaveBeenCalled();
+      expect(location.href).toBe("http://localhost:3000/");
+
+      await act(async () => saved(true));
+
       expect(store.logout).toHaveBeenCalledTimes(1);
       expect(location.href).toBe("/");
+    } finally {
+      restore();
+    }
+  });
+
+  // A save it waited for was not saved, and the message is on screen.
+  // Signing out and reloading would take it away before the person
+  // could read it. The next tap goes on.
+  it("logout stays signed in when a save it waited for was not saved", async () => {
+    const store = makeStore({
+      finishBillsSaves: vi.fn(() => Promise.resolve(false)),
+    });
+    renderHeader(store);
+    const { location, restore } = fakeLocation();
+    try {
+      await act(async () => {
+        fireEvent.click(
+          screen.getByRole("button", { name: "logout Jane Smith" }),
+        );
+      });
+
+      expect(store.finishBillsSaves).toHaveBeenCalledTimes(1);
+      expect(store.logout).not.toHaveBeenCalled();
+      expect(location.href).toBe("http://localhost:3000/");
     } finally {
       restore();
     }

@@ -1485,6 +1485,32 @@ test.describe("Visual Baselines", () => {
     await expect(cooksBox).toHaveScreenshot("cooks-no-cook.png");
   });
 
+  // A cook row whose save has waited more than a second (#150): a small
+  // spinner inside its cost box. The save never gets an answer here, so
+  // the row stays in that look.
+  test("cook row saving", async ({ page, context }) => {
+    await setupAuthenticatedPage(page, context);
+    await page.clock.setFixedTime(FROZEN_NOW);
+    await holdRoute(page, "**/api/v1/meals/*/bills*", "PATCH");
+
+    await page.goto("/meals/42/edit/");
+    await page.waitForLoadState("networkidle");
+    const costs = page.getByRole("spinbutton", { name: "Set meal cost" });
+    await expect(costs.first()).toHaveValue("25.50", { timeout: 10000 });
+    await costs.first().fill("30.00");
+    await costs.first().press("Enter");
+    await expect(costs.first()).toHaveAttribute("aria-busy", "true", {
+      timeout: 5000,
+    });
+    await expect(page.locator(".cost-spinner")).toBeVisible();
+    await page.waitForTimeout(500);
+
+    const cooksBox = page
+      .getByRole("heading", { name: "Cooks" })
+      .locator("xpath=ancestor::div[contains(@class, 'offwhite')][1]");
+    await expect(cooksBox).toHaveScreenshot("cooks-saving.png");
+  });
+
   // Turning "no cost" on over a typed cost asks first.
   test("no-cost confirm bar", async ({ page, context }) => {
     await setupAuthenticatedPage(page, context);

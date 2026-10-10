@@ -8,13 +8,22 @@
 import axios from "axios";
 import Cookie from "js-cookie";
 
+//
+// `synchronous: true` makes axios run it when the request is made, not
+// in a later microtask, so the token is read then. Logout hands the
+// bills saves on their way to the browser again and then takes the
+// token away at once (#150): read later, the token would be gone.
 export function installAuthInterceptor() {
-  axios.interceptors.request.use((config) => {
-    const token = Cookie.get("token");
-    if (token) {
-      config.headers = config.headers || {};
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  });
+  axios.interceptors.request.use(
+    (config) => {
+      const token = Cookie.get("token");
+      if (token) {
+        config.headers = config.headers || {};
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      return config;
+    },
+    null,
+    { synchronous: true },
+  );
 }

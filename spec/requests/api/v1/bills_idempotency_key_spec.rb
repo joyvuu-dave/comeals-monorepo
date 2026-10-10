@@ -344,7 +344,7 @@ RSpec.describe 'the Idempotency-Key header on PATCH /api/v1/meals/:meal_id/bills
     end
   end
 
-  # The warning is a 400, but the save was written, so its key is kept.
+  # The save was written, so its key is kept, and the answer is a 200.
   it 'keeps the key of a save that was written with the third-cook warning' do
     rotation = create(:rotation, community: community)
     future = create(:meal, community: community, date: 1.week.from_now, rotation: rotation)
@@ -354,6 +354,7 @@ RSpec.describe 'the Idempotency-Key header on PATCH /api/v1/meals/:meal_id/bills
     create(:bill, meal: other, resident: cooks.first, community: community)
     add_third = [{ op: 'add', resident_id: cooks.last.id, to: { amount: '0', no_cost: false } }]
     save(add_third, key: 'first-try', meal_id: future.id)
+    expect(response).to have_http_status(:ok)
     expect(response.parsed_body['type']).to eq('warning')
 
     save(add_third, key: 'first-try', meal_id: future.id)

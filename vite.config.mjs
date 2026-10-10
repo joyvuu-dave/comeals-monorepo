@@ -126,6 +126,15 @@ export default defineConfig(({ command }) => ({
       "/api": "http://localhost:3000",
     },
   },
+  // vite preview runs only for the browser tests, which answer every API
+  // request inside the page (page.route). Without this, preview would
+  // copy server.proxy and send any request the page does not answer to
+  // port 3000, the shared dev server. A keepalive save sent as a test
+  // page closes is one: page.route never sees it. With no proxy, preview
+  // answers it itself.
+  preview: {
+    proxy: {},
+  },
   build: {
     outDir: visualCoverage ? "../../tmp/visual-coverage/build" : "../../public",
     emptyOutDir: visualCoverage,

@@ -203,7 +203,7 @@ async function throttleCpu(page) {
  *   billsWarning - the advice ThirdCookWarning gives about the rotation.
  *                 The stub cannot read the rotation, so a test that wants
  *                 the warning passes its words here, and every bills save
- *                 that writes is answered with them, as a 400 of type
+ *                 that writes is answered with them, as a 200 of type
  *                 "warning", the way the server answers it.
  *
  * Returns { mealState }: the meal as the stub stores it. A test changes
@@ -424,7 +424,7 @@ async function mockApi(page, options = {}) {
     mealState.bills = [...stored.values()];
     billsSaveKeys.set(key, sent);
     if (options.billsWarning) {
-      return answerBillsSave(route, 400, {
+      return json(route, {
         message: options.billsWarning,
         type: "warning",
         bills: mealState.bills,

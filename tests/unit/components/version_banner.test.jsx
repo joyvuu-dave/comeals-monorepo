@@ -1,7 +1,20 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, act, fireEvent } from "@testing-library/react";
 import VersionBanner from "../../../app/frontend/src/components/app/version_banner.jsx";
+import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
 import { fakeLocation } from "../helpers/fake_location.js";
+
+// The banner reads one thing from the store: the wait for the bills
+// saves on their way before a reload (#150).
+function renderBanner(
+  store = { finishBillsSaves: vi.fn(() => Promise.resolve(true)) },
+) {
+  return render(
+    <StoreContext.Provider value={store}>
+      <VersionBanner />
+    </StoreContext.Provider>,
+  );
+}
 
 const POLL_INTERVAL = 5 * 60 * 1000;
 
@@ -68,13 +81,13 @@ describe("VersionBanner", () => {
 
   it("renders nothing before the first poll", () => {
     mockManifest("vite-assets/index-NEW.js");
-    const { container } = render(<VersionBanner />);
+    const { container } = renderBanner();
     expect(container).toBeEmptyDOMElement();
   });
 
   it("shows the banner when the manifest names a newer entry file", async () => {
     mockManifest("vite-assets/index-NEW.js");
-    render(<VersionBanner />);
+    renderBanner();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(POLL_INTERVAL + 1000);
@@ -87,7 +100,7 @@ describe("VersionBanner", () => {
 
   it("stops polling once it has found a new version", async () => {
     mockManifest("vite-assets/index-NEW.js");
-    render(<VersionBanner />);
+    renderBanner();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(POLL_INTERVAL);
@@ -102,7 +115,7 @@ describe("VersionBanner", () => {
 
   it("polls every five minutes while the build is current", async () => {
     mockManifest("vite-assets/index-OLD.js");
-    render(<VersionBanner />);
+    renderBanner();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(POLL_INTERVAL - 1);
@@ -122,7 +135,7 @@ describe("VersionBanner", () => {
 
   it("stays hidden while the manifest matches the running build", async () => {
     mockManifest("vite-assets/index-OLD.js");
-    const { container } = render(<VersionBanner />);
+    const { container } = renderBanner();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(POLL_INTERVAL + 1000);
@@ -136,7 +149,7 @@ describe("VersionBanner", () => {
       "fetch",
       vi.fn(() => Promise.reject(new Error("offline"))),
     );
-    const { container } = render(<VersionBanner />);
+    const { container } = renderBanner();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(POLL_INTERVAL + 1000);
@@ -148,7 +161,7 @@ describe("VersionBanner", () => {
   it("never polls when the page has no module script to compare against", async () => {
     script.remove();
     mockManifest("vite-assets/index-NEW.js");
-    const { container } = render(<VersionBanner />);
+    const { container } = renderBanner();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(POLL_INTERVAL + 1000);
@@ -163,7 +176,7 @@ describe("VersionBanner", () => {
       "fetch",
       vi.fn(() => Promise.resolve({ ok: false, status: 503 })),
     );
-    const { container } = render(<VersionBanner />);
+    const { container } = renderBanner();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(POLL_INTERVAL + 1000);
@@ -174,7 +187,7 @@ describe("VersionBanner", () => {
 
   it("stops polling when it unmounts", async () => {
     mockManifest("vite-assets/index-OLD.js");
-    const { unmount } = render(<VersionBanner />);
+    const { unmount } = renderBanner();
     unmount();
 
     await act(async () => {
@@ -183,9 +196,20 @@ describe("VersionBanner", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("Refresh reloads the page", async () => {
+  // A reload ends every request on its way, so Refresh first waits for
+  // the bills saves on their way (finishBillsSaves, #150).
+  it("Refresh waits for the bills saves, then reloads the page", async () => {
     mockManifest("vite-assets/index-NEW.js");
-    render(<VersionBanner />);
+    let saved;
+    const store = {
+      finishBillsSaves: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            saved = resolve;
+          }),
+      ),
+    };
+    renderBanner(store);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(POLL_INTERVAL + 1000);
     });
@@ -193,7 +217,35 @@ describe("VersionBanner", () => {
     const { location, restore } = fakeLocation();
     try {
       fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+      expect(store.finishBillsSaves).toHaveBeenCalledTimes(1);
+      expect(location.reload).not.toHaveBeenCalled();
+
+      await act(async () => saved(true));
+
       expect(location.reload).toHaveBeenCalledTimes(1);
+    } finally {
+      restore();
+    }
+  });
+
+  // A save it waited for was not saved, and the message is on screen.
+  // A reload would take it away before the person could read it. The
+  // next tap goes on.
+  it("Refresh does not reload when a save it waited for was not saved", async () => {
+    mockManifest("vite-assets/index-NEW.js");
+    const store = { finishBillsSaves: vi.fn(() => Promise.resolve(false)) };
+    renderBanner(store);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL + 1000);
+    });
+
+    const { location, restore } = fakeLocation();
+    try {
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+      });
+      expect(store.finishBillsSaves).toHaveBeenCalledTimes(1);
+      expect(location.reload).not.toHaveBeenCalled();
     } finally {
       restore();
     }

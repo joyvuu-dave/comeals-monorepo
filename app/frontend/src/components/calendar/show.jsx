@@ -319,12 +319,20 @@ const MainCalendar = observer(() => {
   }, []);
 
   const handleClickLogout = useCallback(function () {
-    storeRef.current.logout();
-    // Hard reload, matching login. A client-side route change would
-    // leave the store and the Pusher channels alive on the login
-    // page; the next broadcast would fire an unauthenticated fetch
-    // and raise the "signed out" banner. A reload resets everything.
-    window.location.href = "/";
+    // A save of a meal the person left can still be on its way. It is
+    // answered first, for a few seconds at most: the reload would end
+    // its request, and logout takes the token away (#150). If it was
+    // not saved, its message is on screen, and the page stays so the
+    // person can read it. The next tap goes on.
+    storeRef.current.finishBillsSaves().then(function (mayReload) {
+      if (!mayReload) return;
+      storeRef.current.logout();
+      // Hard reload, matching login. A client-side route change would
+      // leave the store and the Pusher channels alive on the login
+      // page; the next broadcast would fire an unauthenticated fetch
+      // and raise the "signed out" banner. A reload resets everything.
+      window.location.href = "/";
+    });
   }, []);
 
   const formatEvent = useCallback(function (event) {

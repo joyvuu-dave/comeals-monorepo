@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 
 vi.mock("../../../app/frontend/src/helpers/bugsnag", () => ({
   notifyError: vi.fn(),
 }));
 
 import ErrorBoundary from "../../../app/frontend/src/components/app/error_boundary.jsx";
+import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
 import { notifyError } from "../../../app/frontend/src/helpers/bugsnag";
 import { fakeLocation } from "../helpers/fake_location.js";
 
@@ -61,16 +62,99 @@ describe("ErrorBoundary", () => {
     expect(meta.componentStack).toContain("Bomb");
   });
 
-  it("Refresh reloads the page", () => {
+  // A reload ends every request on its way, so Refresh first waits for
+  // the bills saves on their way (finishBillsSaves, #150). index.jsx
+  // puts the boundary inside the store's provider.
+  it("Refresh waits for the bills saves, then reloads the page", async () => {
+    let saved;
+    const store = {
+      finishBillsSaves: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            saved = resolve;
+          }),
+      ),
+    };
     render(
-      <ErrorBoundary>
-        <Bomb />
-      </ErrorBoundary>,
+      <StoreContext.Provider value={store}>
+        <ErrorBoundary>
+          <Bomb />
+        </ErrorBoundary>
+      </StoreContext.Provider>,
     );
     const { location, restore } = fakeLocation();
     try {
       fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+      expect(store.finishBillsSaves).toHaveBeenCalledTimes(1);
+      expect(location.reload).not.toHaveBeenCalled();
+
+      await act(async () => saved(true));
+
       expect(location.reload).toHaveBeenCalledTimes(1);
+    } finally {
+      restore();
+    }
+  });
+
+  // Renders the error page with this store, and taps Refresh. Hands
+  // back the fake location.
+  async function tapRefresh(store) {
+    render(
+      <StoreContext.Provider value={store}>
+        <ErrorBoundary>
+          <Bomb />
+        </ErrorBoundary>
+      </StoreContext.Provider>,
+    );
+    vi.mocked(notifyError).mockClear();
+    const fake = fakeLocation();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    });
+    return fake;
+  }
+
+  // A save it waited for was not saved. The message shows above this
+  // page (index.jsx puts the messages outside the boundary), and a
+  // reload would take it away before the person could read it. The
+  // next tap goes on.
+  it("Refresh does not reload when a save it waited for was not saved", async () => {
+    const store = { finishBillsSaves: vi.fn(() => Promise.resolve(false)) };
+    const { location, restore } = await tapRefresh(store);
+    try {
+      expect(store.finishBillsSaves).toHaveBeenCalledTimes(1);
+      expect(location.reload).not.toHaveBeenCalled();
+    } finally {
+      restore();
+    }
+  });
+
+  // This page shows because something threw, and the store may be what
+  // broke. Refresh is the only way off the page, so it reloads even when
+  // the wait fails, and the failure is reported.
+  it("Refresh reloads, and reports it, when the wait for the bills saves throws", async () => {
+    const broken = new Error("[mobx-state-tree] Failed to resolve reference");
+    const store = {
+      finishBillsSaves: vi.fn(() => {
+        throw broken;
+      }),
+    };
+    const { location, restore } = await tapRefresh(store);
+    try {
+      expect(location.reload).toHaveBeenCalledTimes(1);
+      expect(notifyError).toHaveBeenCalledWith(broken);
+    } finally {
+      restore();
+    }
+  });
+
+  it("Refresh reloads, and reports it, when the wait for the bills saves fails", async () => {
+    const broken = new Error("[mobx-state-tree] Failed to resolve reference");
+    const store = { finishBillsSaves: vi.fn(() => Promise.reject(broken)) };
+    const { location, restore } = await tapRefresh(store);
+    try {
+      expect(location.reload).toHaveBeenCalledTimes(1);
+      expect(notifyError).toHaveBeenCalledWith(broken);
     } finally {
       restore();
     }

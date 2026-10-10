@@ -99,11 +99,19 @@ const Header = observer(() => {
         <button
           className="button button-link text-secondary"
           onClick={() => {
-            store.logout();
-            // Hard reload, matching login: a client-side route change
-            // would leave the store and the Pusher channels alive on
-            // the login page. See handleClickLogout in calendar/show.
-            window.location.href = "/";
+            // A cost being saved is sent and answered first, for a few
+            // seconds at most: the reload would end its request, and
+            // logout takes the token away (#150). If one of those saves
+            // was not saved, its message is on screen, and the page
+            // stays so the person can read it. The next tap goes on.
+            store.finishBillsSaves().then((mayReload) => {
+              if (!mayReload) return;
+              store.logout();
+              // Hard reload, matching login: a client-side route change
+              // would leave the store and the Pusher channels alive on
+              // the login page. See handleClickLogout in calendar/show.
+              window.location.href = "/";
+            });
           }}
         >
           logout {Cookie.get("username")}

@@ -15,8 +15,11 @@
 //   server.install();
 //
 // Every bills save waits until the test answers it (answerSave,
-// failSave, loseAnswer), oldest first. A meal fetch is answered at once,
-// with what the server has when the fetch arrives.
+// failSave, loseAnswer), oldest first unless the test names another by
+// its place in `saves`. Saves of different rows are on their way at the
+// same time (#150), and the server may take them in any order. A meal
+// fetch is answered at once, with what the server has when the fetch
+// arrives.
 import { vi } from "vitest";
 import { sameAmount } from "../../../app/frontend/src/helpers/money";
 
@@ -175,20 +178,20 @@ export function billsServer(axios) {
         Promise.resolve({ status: 200, data: mealForm(mealIdOf(url)) }),
       );
     },
-    // The server answers the oldest save that has no answer. Returns
-    // the answer.
-    async answerSave() {
-      const { config, resolve, reject } = saves.shift();
+    // The server answers the oldest save that has no answer, or the one
+    // at this place in `saves`. Returns the answer.
+    async answerSave(place = 0) {
+      const [{ config, resolve, reject }] = saves.splice(place, 1);
       const answer = apply(config);
       if (answer.status === 200) resolve(answer);
       else reject({ response: answer });
       await vi.advanceTimersByTimeAsync(0);
       return answer;
     },
-    // The oldest save fails with this error, and the server writes
-    // nothing.
-    async failSave(error) {
-      saves.shift().reject(error);
+    // The oldest save, or the one at this place in `saves`, fails with
+    // this error, and the server writes nothing.
+    async failSave(error, place = 0) {
+      saves.splice(place, 1)[0].reject(error);
       await vi.advanceTimersByTimeAsync(0);
     },
     // The server writes the oldest save, but its answer is lost on the

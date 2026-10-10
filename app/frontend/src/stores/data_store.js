@@ -6,7 +6,8 @@
 //                             reconnect recovery, logout
 //   data_store_meal_page.js — loading a meal's rows, retry backoff,
 //                             menu description, open/close, teardown
-//   data_store_bills.js     — the bill save pipeline (issue #30)
+//   data_store_bills.ts     — the bill save pipeline: each cook row
+//                             saves on its own (#30, #150)
 //   data_store_calendar.js  — rendering a month, its Pusher channels
 //   data_store_hosts.js     — the hosts list the reservation modals show
 //
@@ -27,7 +28,7 @@ import { isZeroAmountString } from "../helpers/money";
 
 import { appVolatile, appActions } from "./data_store_app";
 import { mealPageVolatile, mealPageActions } from "./data_store_meal_page";
-import { billsVolatile, billsActions } from "./data_store_bills";
+import { billsVolatile, billsViews, billsActions } from "./data_store_bills";
 import { calendarVolatile, calendarActions } from "./data_store_calendar";
 import { hostsVolatile, hostsActions } from "./data_store_hosts";
 
@@ -169,6 +170,7 @@ export const DataStore = types
       );
     },
   }))
+  .views(billsViews)
   .actions(appActions)
   .actions(mealPageActions)
   .actions(billsActions)

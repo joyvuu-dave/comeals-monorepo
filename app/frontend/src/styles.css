@@ -514,3 +514,34 @@ under the control, and Yes stays at the far right, away from it.
   font-style: italic;
   opacity: 1;
 }
+
+/* A cook row whose save has waited more than a second (cooks_box.jsx,
+   #150): a small spinner inside the row's cost box, at its right end.
+   It turns like the spinner on a saving button (components.css). */
+.cost-box {
+  position: relative;
+}
+/* The cost box is read-only while its row's save is on its way, and the
+   lock shows nothing for the first second. components.css gives every
+   read-only box a gray background, so this box keeps its white one. */
+.cost-box input[type="number"][readonly] {
+  background-color: var(--white);
+}
+.cost-spinner {
+  animation: button-loader 0.75s linear infinite;
+  border-color: var(--gray-19) var(--gray-19-faint) var(--gray-19-faint)
+    var(--gray-19);
+  border-radius: 50%;
+  border-style: solid;
+  border-width: 0.15em;
+  height: 1em;
+  pointer-events: none;
+  position: absolute;
+  /* Left of the up and down arrows a number box shows at its right end
+     (always in Safari, on hover in Chrome), so the two do not overlap. */
+  right: 2rem;
+  /* The row can be taller than the cost box (the No cost switch takes
+     two lines), so the middle of the box is half its own height down. */
+  top: calc(var(--control-height) / 2 - 0.5em - 0.15em);
+  width: 1em;
+}

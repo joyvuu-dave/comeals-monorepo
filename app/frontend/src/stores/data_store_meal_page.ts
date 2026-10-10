@@ -563,10 +563,12 @@ export function mealPageActions(self: MealPageStore) {
       self.meals.push(obj);
     },
     switchMeals(id: number) {
-      // A bill edit not sent yet belongs to the meal we are leaving,
-      // whether it is in the debounce window or waiting for a save in
-      // flight to be answered. Build its save now, while the meal id and
-      // the bill rows it was typed on are still current (#107).
+      // A bill edit not sent yet belongs to the meal we are leaving: a
+      // row in its wait before its save, or a row whose save was refused
+      // before it could be sent. Build and send its save now, while the
+      // meal id and the bill rows it was typed on are still current
+      // (#107). The person goes on to the next meal at once; the save's
+      // answer is handled when it comes.
       self.saveBillsBeforeLeaving();
 
       if (typeof self.meals.find((item) => item.id === id) === "undefined") {

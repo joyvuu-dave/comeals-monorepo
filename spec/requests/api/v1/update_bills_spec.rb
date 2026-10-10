@@ -751,10 +751,12 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
       save_edits([adding(cook_3, values('0'))], meal_id: target.id)
     end
 
+    # The save was written, so the answer is a 200. The warning is advice
+    # about the rotation, not a refusal.
     it 'warns when adding a 3rd cook, and saves the bill' do
       add_cook_3
 
-      expect(response).to have_http_status(:bad_request)
+      expect(response).to have_http_status(:ok)
       expect(response.parsed_body['message'])
         .to eq('Warning: third cooks should not be added until all meals in the rotation have at least two cooks.')
       expect(response.parsed_body['type']).to eq('warning')
@@ -764,7 +766,7 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
     it 'includes the stored bills alongside the warning — the write happened' do
       save_edits([changing(cook_1, seen, values('10.00')), adding(cook_3, values('0'))], meal_id: future_meal.id)
 
-      expect(response).to have_http_status(:bad_request)
+      expect(response).to have_http_status(:ok)
       expect(response.parsed_body['type']).to eq('warning')
       expect(response.parsed_body['bills']).to contain_exactly(
         { 'resident_id' => cook_1.id, 'amount' => '10.0', 'no_cost' => false },
@@ -778,7 +780,7 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
 
       save_edits([removing(cook_3, seen), adding(cook_4, values('0'))], meal_id: future_meal.id)
 
-      expect(response).to have_http_status(:bad_request)
+      expect(response).to have_http_status(:ok)
       expect(response.parsed_body['message'])
         .to eq('Warning: third cook should not be switched when there are other meals in the rotation ' \
                'without at least two cooks.')

@@ -358,16 +358,16 @@ module Api
 
       # The answer to a bills write: the message, the warning's type when
       # there is one, and the rows as stored (same shape as the meal
-      # form's bills). The warning is a 400 with type 'warning', but the
-      # write happened: the warning is advice about the rotation, not a
-      # refusal. reload reads the rows again, because the meal's loaded
+      # form's bills). It is a 200 with or without the warning, because
+      # the write happened: the warning is advice about the rotation, not
+      # a refusal. reload reads the rows again, because the meal's loaded
       # list still holds any bill this save destroyed.
       sig { params(warning: T.nilable(String)).returns(Rendering) }
       def bills_written(warning)
         body = { message: warning || 'Form submitted.' }
         body[:type] = 'warning' if warning
         body[:bills] = bill_rows(meal.bills.reload)
-        { json: body, status: warning ? :bad_request : :ok }
+        { json: body, status: :ok }
       end
 
       sig { params(bills: T::Enumerable[Bill]).returns(T::Array[T::Hash[String, T.untyped]]) }

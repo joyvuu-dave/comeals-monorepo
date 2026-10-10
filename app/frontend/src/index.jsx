@@ -46,6 +46,8 @@ import {
 } from "react-router";
 
 import { DataStore } from "./stores/data_store";
+import { sendBillsOnPageClose } from "./helpers/send_bills_on_page_close";
+import { lazyRetry } from "./helpers/lazy_retry";
 import { prefetchMonth } from "./stores/month_fetch";
 import { clear } from "idb-keyval";
 
@@ -64,30 +66,26 @@ function TrailingSlash() {
   return null;
 }
 
-function lazyRetry(importFn) {
-  return function () {
-    return importFn().catch(function (err) {
-      if (!sessionStorage.getItem("chunk_retry")) {
-        sessionStorage.setItem("chunk_retry", "1");
-        window.location.reload();
-        return new Promise(function () {});
-      }
-      sessionStorage.removeItem("chunk_retry");
-      throw err;
-    });
-  };
+// The store, once the page has made it (below). A page's code is only
+// asked for after the page renders, so it is there by then.
+let appStore = null;
+
+// The reload after a page's code fails to load ends every bills save on
+// its way, so each one is sent again with keepalive first (#150).
+function sendBillsBeforeChunkReload() {
+  appStore.sendBillsAgainBeforeClose();
 }
 
 const Calendar = React.lazy(
   lazyRetry(function () {
     return import("./components/calendar/show");
-  }),
+  }, sendBillsBeforeChunkReload),
 );
 
 const MealsEdit = React.lazy(
   lazyRetry(function () {
     return import("./components/meals/edit");
-  }),
+  }, sendBillsBeforeChunkReload),
 );
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -113,6 +111,10 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   const store = DataStore.create();
+  appStore = store;
+  // A cost still in its row's wait, or a bills save on its way, is
+  // handed to the browser when the page is hidden or closed (#150).
+  sendBillsOnPageClose(store);
 
   // Landing on the calendar: start the month data download now, in
   // parallel with the calendar chunk (preloaded from index.html).

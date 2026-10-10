@@ -1225,11 +1225,10 @@ test.describe("Error Handling & Edge Cases", () => {
       }
     });
 
-    // The one warning the server sends: the bills write answers 400
-    // with type "warning" and saves the bills anyway
-    // (MealsController#save_bills, ThirdCookWarning). The bills store
-    // shows it as an info toast that starts "Cooks saved.", never as an
-    // error or a warning toast.
+    // The one warning the server sends: the bills write saves the bills
+    // and answers 200 with type "warning" (MealsController#save_bills,
+    // ThirdCookWarning). The bills store shows it as an info toast that
+    // starts "Cooks saved.", never as an error.
     test("a warning from the bills write says the cooks were saved, in an info toast", async ({
       page,
       context,
@@ -1253,7 +1252,7 @@ test.describe("Error Handling & Edge Cases", () => {
           r.url().includes("/api/v1/meals/42/bills"),
       );
       await cooks.nth(1).selectOption("2");
-      expect((await answered).status()).toBe(400);
+      expect((await answered).status()).toBe(200);
 
       const toast = page.locator(".toast--info");
       await expect(toast.locator(".toast__message")).toHaveText(
@@ -1261,7 +1260,6 @@ test.describe("Error Handling & Edge Cases", () => {
         { timeout: 5000 },
       );
       await expect(page.locator(".toast--error")).toHaveCount(0);
-      await expect(page.locator(".toast--warning")).toHaveCount(0);
       await expect(cooks.nth(1)).toHaveValue("2");
       await expect(polite).toHaveText(`Cooks saved. ${warning}`);
     });

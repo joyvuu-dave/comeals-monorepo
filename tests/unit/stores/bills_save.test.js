@@ -14,7 +14,7 @@ import { notifyError } from "../../../app/frontend/src/helpers/bugsnag.js";
 import toastStore from "../../../app/frontend/src/stores/toast_store";
 import { createDataStore, stubAction } from "../helpers/create_data_store.js";
 import { BOB, CAROL, billsServer, editsSent } from "../helpers/bills_server.js";
-import { SAVE_DEBOUNCE_MS } from "../../../app/frontend/src/helpers/helpers.js";
+import { BILL_ROW_SAVE_WAIT_MS } from "../../../app/frontend/src/stores/data_store_bills";
 
 // A bills save sends edits: one per cook it changes, each with the bill
 // the page saw for that cook (#135, docs/adr/0009-bills-saves-send-edits.md).
@@ -68,11 +68,11 @@ function blankRow(store) {
   return blankRows(store)[0];
 }
 
-// Type a cost and wait out the debounce, so its save is sent (or waits
-// for the save in flight).
+// Type a cost and wait out the row's wait before its save, so its save
+// is sent.
 async function typeCost(store, residentId, amount) {
   rowOf(store, residentId).setAmount(amount);
-  await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+  await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS);
 }
 
 function keysSent() {
@@ -145,14 +145,13 @@ describe("what a bills save sends", () => {
     expect(axios).not.toHaveBeenCalled();
   });
 
-  // The save that waits is built only when the save in flight is
-  // answered, from the bases that save moved, so it names only what
-  // changed after that save was built.
-  it("sends a cost typed behind a save in flight as a change from what that save sent", async () => {
+  // Building a save moves the row's base to what it sends, so the
+  // row's next save names only what changed after it.
+  it("sends a row's next cost as a change from what its last save sent", async () => {
     const store = createStore();
     await typeCost(store, BOB, "5");
-    await typeCost(store, BOB, "50");
     await server.answerSave();
+    await typeCost(store, BOB, "50");
     await server.answerSave();
 
     expect(editsSent(axios)).toEqual([
@@ -162,31 +161,36 @@ describe("what a bills save sends", () => {
     expect(server.stored[1][BOB]).toEqual({ amount: "50", no_cost: false });
   });
 
-  // #107: the save made on leaving a meal is built from its rows then,
-  // while the $5 save has no answer, and goes after it.
-  it("builds the save for a meal left on top of the save in flight", async () => {
+  // #107: a cost typed on a meal is sent to that meal when the person
+  // leaves it, at once, while another row's save has no answer yet.
+  it("sends a row's cost to its own meal when the person leaves, while another row's save has no answer", async () => {
+    server.stored[1][CAROL] = { amount: "0.0", no_cost: false };
     const store = createStore();
     await typeCost(store, BOB, "5");
-    await typeCost(store, BOB, "50");
+    rowOf(store, CAROL).setAmount("7"); // in the wait before its save
     store.goToMeal(2);
     await vi.advanceTimersByTimeAsync(0);
-    await server.answerSave();
-    await server.answerSave();
-
     expect(editsSent(axios)).toEqual([
       [change(BOB, "", "5")],
-      [change(BOB, "5", "50")],
+      [change(CAROL, "", "7")],
     ]);
-    expect(server.stored[1][BOB]).toEqual({ amount: "50", no_cost: false });
+    await server.answerSave(1);
+    await server.answerSave();
+
+    expect(server.stored[1]).toEqual({
+      [BOB]: { amount: "5", no_cost: false },
+      [CAROL]: { amount: "7", no_cost: false },
+    });
+    expect(server.saves).toHaveLength(0);
   });
 
   it("adds a cook picked in a blank row, and removes a cook taken off a row", async () => {
     const store = createStore();
     blankRow(store).setResident(store.residents.get(String(CAROL)));
-    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+    await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS);
     await server.answerSave();
     rowOf(store, BOB).setResident("");
-    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+    await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS);
     await server.answerSave();
 
     expect(editsSent(axios)).toEqual([
@@ -257,7 +261,7 @@ describe("one cook picked in two rows", () => {
   it("sends nothing, and says which cook", async () => {
     const store = createStore();
     blankRow(store).setResident(store.residents.get(String(BOB)));
-    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+    await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS);
 
     expect(axios).not.toHaveBeenCalled();
     expect(toastsOnScreen()).toEqual([["error", TWO_ROWS]]);
@@ -267,9 +271,9 @@ describe("one cook picked in two rows", () => {
     const store = createStore();
     const second = blankRow(store);
     second.setResident(store.residents.get(String(BOB)));
-    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+    await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS);
     second.setResident(store.residents.get(String(CAROL)));
-    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+    await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS);
 
     expect(editsSent(axios)).toEqual([
       [{ op: "add", resident_id: CAROL, to: { amount: "", no_cost: false } }],
@@ -288,7 +292,7 @@ describe("one cook picked in two rows", () => {
     async function bobInTwoRows(store) {
       const second = blankRow(store);
       second.setResident(store.residents.get(String(BOB)));
-      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+      await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS);
       expect(toastsOnScreen()).toEqual([["error", TWO_ROWS]]);
       return second;
     }
@@ -313,7 +317,7 @@ describe("one cook picked in two rows", () => {
       const second = await bobInTwoRows(store);
 
       second.setAmount("5");
-      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+      await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS);
       expect(toastsOnScreen()).toEqual([["error", TWO_ROWS]]);
 
       second.setResident(store.residents.get(String(CAROL)));
@@ -328,7 +332,7 @@ describe("one cook picked in two rows", () => {
 
       second.setResident(store.residents.get(String(CAROL)));
       expect(toastsOnScreen()).toEqual([]);
-      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+      await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS);
 
       expect(toastsOnScreen()).toEqual([
         [
@@ -343,7 +347,7 @@ describe("one cook picked in two rows", () => {
       toastStore.show(MEAL_1_NOT_SAVED, "error");
       const second = blankRow(store);
       second.setResident(store.residents.get(String(BOB)));
-      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+      await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS);
       expect(toastsOnScreen()).toEqual([
         ["error", TWO_ROWS],
         ["error", MEAL_1_NOT_SAVED],
@@ -396,10 +400,11 @@ describe("one cook picked in two rows", () => {
     expect(warn).toHaveBeenCalledWith(TWO_ROWS);
   });
 
-  // The refusal leaves no wait before a save and no queued save, but the
-  // rows still show edits the server does not have. Leaving the meal
-  // clears the rows, so the message names the meal even when the
-  // person closed the refusal's own message by then.
+  // The refusal leaves the row with no wait before a save, but it still
+  // shows an edit the server does not have. Leaving the meal clears the
+  // rows, so the message names the meal even when the person closed the
+  // refusal's own message by then. Each row saves on its own, so the
+  // row with Carol is sent: only the row that shows Bob twice is not.
   it("names the meal when the person leaves it after closing the refusal's message", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const store = createStore();
@@ -407,14 +412,16 @@ describe("one cook picked in two rows", () => {
     first.setResident(store.residents.get(String(CAROL)));
     first.setAmount("50");
     second.setResident(store.residents.get(String(BOB)));
-    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+    await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS);
     expect(toastsOnScreen()).toEqual([["error", TWO_ROWS]]);
     toastStore.remove(toastStore.toasts[0].id); // the person closed it
 
     store.goToMeal(2);
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(axios).not.toHaveBeenCalled();
+    expect(editsSent(axios)).toEqual([
+      [{ op: "add", resident_id: CAROL, to: { amount: "50", no_cost: false } }],
+    ]);
     expect(toastsOnScreen()).toEqual([
       [
         "error",
@@ -445,7 +452,7 @@ describe("one cook picked in two rows", () => {
     const [first, second] = blankRows(store);
     first.setResident(store.residents.get(String(BOB)));
     second.setResident(store.residents.get(String(BOB)));
-    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+    await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS);
 
     expect(axios).toHaveBeenCalledTimes(1);
     expect(toastsOnScreen()).toEqual([
@@ -461,8 +468,9 @@ describe("one cook picked in two rows", () => {
 
 // Decision 7 of #135. A 409 with no type wrote nothing for sure, and no
 // answer or a 5xx leaves the page not knowing. The same save goes once
-// more, with the same key, before any save built after it. If the first
-// try was written, the server answers the second as replayed.
+// more, with the same key, and its row stays locked until that try is
+// answered, so no later save of the row goes before it. If the first try
+// was written, the server answers the second as replayed.
 describe("a save that failed in a way that may not be final", () => {
   const AGAIN = [
     ["a 409 with no type", PLAIN_CONFLICT],
@@ -481,13 +489,13 @@ describe("a save that failed in a way that may not be final", () => {
       vi.spyOn(console, "error").mockImplementation(() => {});
       const store = createStore();
       await typeCost(store, BOB, "5");
-      await typeCost(store, BOB, "50"); // waits for the $5 save
 
       await server.failSave(error);
       expect(axios).toHaveBeenCalledTimes(2);
       expect(axios.mock.calls[1][0]).toEqual(axios.mock.calls[0][0]);
 
       await server.answerSave(); // the $5 save, the second time
+      await typeCost(store, BOB, "50");
       await server.answerSave(); // the $50 save
       expect(editsSent(axios)).toEqual([
         [change(BOB, "", "5")],
@@ -501,17 +509,17 @@ describe("a save that failed in a way that may not be final", () => {
   );
 
   // The critique's case: the $5 save was written but its answer was
-  // lost, and the person set Bob back to $0 while it waited. The second
-  // try is replayed, and the $0 is still sent, as a change from $5.
-  it("still sends a cost set back to the old value while the first try's answer was lost", async () => {
+  // lost. The second try is replayed. The person then sets Bob back to
+  // $0, which is sent as a change from $5, the cost the server has.
+  it("sends a cost set back to the old value after the first try's answer was lost", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const store = createStore();
     await typeCost(store, BOB, "5");
-    await typeCost(store, BOB, "");
 
     await server.loseAnswer(); // the server has $5
     const replayed = await server.answerSave();
     expect(replayed.data.type).toBe("replayed");
+    await typeCost(store, BOB, "");
     await server.answerSave();
 
     expect(editsSent(axios)).toEqual([
@@ -524,22 +532,21 @@ describe("a save that failed in a way that may not be final", () => {
   });
 
   // The same case on a meal the person left: Carol was added with $50,
-  // that save was written and its answer lost, and the person took
-  // Carol off again before leaving. The save made on leaving removes
-  // her, from the $50 the first save sent.
-  it("still removes a cook added by a save whose answer was lost, after the person took them off and left", async () => {
+  // that save was written and its answer lost, and the second try was
+  // replayed. The person takes Carol off and leaves. The save made on
+  // leaving removes her, from the $50 the first save sent.
+  it("removes a cook added by a save whose answer was lost, when the person takes them off and leaves", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const store = createStore();
     const row = blankRow(store);
     row.setResident(store.residents.get(String(CAROL)));
     rowOf(store, CAROL).setAmount("50");
-    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS); // add Carol $50
+    await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS); // add Carol $50
+    await server.loseAnswer(); // the server has Carol's $50
+    await server.answerSave(); // the second try is replayed
     row.setResident("");
     store.goToMeal(2);
     await vi.advanceTimersByTimeAsync(0);
-
-    await server.loseAnswer(); // the server has Carol's $50
-    await server.answerSave(); // the second try is replayed
     await server.answerSave(); // the save made on leaving
 
     expect(editsSent(axios)[2]).toEqual([
@@ -655,34 +662,32 @@ describe("a save that failed in a way that may not be final", () => {
     );
 
     // A message that says a save failed stays when a message that says
-    // a save worked comes after it (#137). Here Carol's $50 waits behind
-    // Bob's $5. Bob's save gets no answer twice, and Carol's is written
-    // with the third-cook warning.
-    it("keeps the words on screen, under the warning, when a save sent after it comes back with a warning", async () => {
+    // a save worked comes after it (#137). Here Bob's $5 and Carol's $50
+    // are on their way at once. Bob's save gets no answer twice, and
+    // Carol's is written with the third-cook warning.
+    it("keeps the words on screen, under the warning, when another row's save comes back with a warning", async () => {
       const THIRD_COOK =
         "Warning: third cooks should not be added until all meals in the rotation have at least two cooks.";
       vi.spyOn(console, "error").mockImplementation(() => {});
       const store = createStore();
       await typeCost(store, BOB, "5");
       blankRow(store).setResident(store.residents.get(String(CAROL)));
-      await typeCost(store, CAROL, "50"); // waits for the $5 save
-
-      await server.failSave(NO_ANSWER);
-      await server.failSave(NO_ANSWER);
-      expect(toastsOnScreen()).toEqual([["error", MAYBE_NOT_SAVED]]);
-
-      expect(editsSent(axios)[2]).toEqual([
+      await typeCost(store, CAROL, "50");
+      expect(editsSent(axios)[1]).toEqual([
         { op: "add", resident_id: CAROL, to: { amount: "50", no_cost: false } },
       ]);
+
+      await server.failSave(NO_ANSWER); // Bob's first try
+      await server.failSave(NO_ANSWER, 1); // Bob's second try
+      expect(toastsOnScreen()).toEqual([["error", MAYBE_NOT_SAVED]]);
+
       server.stored[1][CAROL] = { amount: "50", no_cost: false }; // written
-      server.saves.shift().reject({
-        response: {
-          status: 400,
-          data: {
-            type: "warning",
-            message: THIRD_COOK,
-            bills: server.mealForm(1).bills,
-          },
+      server.saves.shift().resolve({
+        status: 200,
+        data: {
+          type: "warning",
+          message: THIRD_COOK,
+          bills: server.mealForm(1).bills,
         },
       });
       await vi.advanceTimersByTimeAsync(0);
@@ -828,37 +833,38 @@ describe("a save the server refused", () => {
     expect(rowOf(store, BOB).amount).toBe("9.00");
   });
 
-  // The $50 typed behind the refused $5 save is sent as built: its
-  // `from` is the $5 the page meant to save, the server has $9, so it is
-  // refused too. Nothing is sent twice, and the meal loads once, after
+  // Carol's cost waits to be saved when Bob's save is refused. It is
+  // sent as built, nothing is sent twice, and the meal loads once, after
   // both.
-  it("sends a later save as built, and loads the meal once nothing is pending", async () => {
+  it("sends a cost another row waits to save, and loads the meal once nothing is pending", async () => {
+    server.stored[1][CAROL] = { amount: "0.0", no_cost: false };
     const store = createStore();
     server.stored[1][BOB] = { amount: "9.0", no_cost: false };
     await typeCost(store, BOB, "5");
-    rowOf(store, BOB).setAmount("50"); // in the wait before its save
+    rowOf(store, CAROL).setAmount("7"); // in the wait before its save
 
     await server.answerSave(); // the $5 save is stale
     expect(store.mealLoading).toBe(true);
     expect(mealFetches()).toBe(0);
 
-    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+    await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS);
     expect(editsSent(axios)).toEqual([
       [change(BOB, "", "5")],
-      [change(BOB, "5", "50")],
+      [change(CAROL, "", "7")],
     ]);
-    await server.answerSave(); // stale too
+    await server.answerSave();
     expect(mealFetches()).toBe(1);
     expect(store.mealLoading).toBe(false);
     expect(rowOf(store, BOB).amount).toBe("9.00");
+    expect(rowOf(store, CAROL).amount).toBe("7.00");
   });
 
   // A message that says a save failed stays when one that says a save
   // worked comes after it: the failure is still true, and the person
-  // may not have read it yet (#137). Here Carol's $50 waits behind Bob's
-  // $5. Bob's save is refused as stale, and Carol's is written with the
-  // third-cook warning.
-  describe("when a save sent after it comes back with a warning", () => {
+  // may not have read it yet (#137). Here Bob's $5 and Carol's $50 are
+  // on their way at once. Bob's save is refused as stale, and Carol's
+  // is written with the third-cook warning.
+  describe("when another row's save comes back with a warning after it", () => {
     const THIRD_COOK =
       "Warning: third cooks should not be added until all meals in the rotation have at least two cooks.";
 
@@ -867,11 +873,7 @@ describe("a save the server refused", () => {
       server.stored[1][BOB] = { amount: "9.0", no_cost: false };
       await typeCost(store, BOB, "5");
       blankRow(store).setResident(store.residents.get(String(CAROL)));
-      await typeCost(store, CAROL, "50"); // waits for the $5 save
-      const stale = await server.answerSave();
-      expect(toastsOnScreen()).toEqual([["error", stale.data.message]]);
-      betweenTheAnswers();
-
+      await typeCost(store, CAROL, "50");
       expect(editsSent(axios)[1]).toEqual([
         {
           op: "add",
@@ -879,15 +881,17 @@ describe("a save the server refused", () => {
           to: { amount: "50", no_cost: false },
         },
       ]);
+      const stale = await server.answerSave();
+      expect(toastsOnScreen()).toEqual([["error", stale.data.message]]);
+      betweenTheAnswers();
+
       server.stored[1][CAROL] = { amount: "50", no_cost: false }; // written
-      server.saves.shift().reject({
-        response: {
-          status: 400,
-          data: {
-            type: "warning",
-            message: THIRD_COOK,
-            bills: server.mealForm(1).bills,
-          },
+      server.saves.shift().resolve({
+        status: 200,
+        data: {
+          type: "warning",
+          message: THIRD_COOK,
+          bills: server.mealForm(1).bills,
         },
       });
       await vi.advanceTimersByTimeAsync(0);
@@ -928,9 +932,9 @@ describe("a save the server refused", () => {
     server.stored[1][BOB] = { amount: "9.0", no_cost: false };
     await typeCost(store, BOB, "5");
     blankRow(store).setResident(store.residents.get(String(BOB)));
-    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS); // waits
+    await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS); // refused
 
-    await server.answerSave(); // stale; the waiting save is refused
+    await server.answerSave(); // stale
 
     expect(axios).toHaveBeenCalledTimes(1);
     expect(mealFetches()).toBe(1);
@@ -943,14 +947,17 @@ describe("a save the server refused", () => {
 // so each cook the save named shows what the save sent. The rows'
 // bases moved when the save was built, so the answer changes no row.
 describe("the answer to a save that was written", () => {
-  it("changes nothing on screen, even a cost typed after the save was sent", async () => {
+  it("changes nothing on screen, even a cost another row typed after the save was sent", async () => {
+    server.stored[1][CAROL] = { amount: "0.0", no_cost: false };
     const store = createStore();
     await typeCost(store, BOB, "5");
-    rowOf(store, BOB).setAmount("50");
+    rowOf(store, CAROL).setAmount("7");
     await server.answerSave();
 
-    expect(rowOf(store, BOB).amount).toBe("50");
+    expect(rowOf(store, BOB).amount).toBe("5");
     expect(rowOf(store, BOB).baseAmount).toBe("5");
+    expect(rowOf(store, CAROL).amount).toBe("7");
+    expect(rowOf(store, CAROL).baseAmount).toBe("");
     expect(notifyError).not.toHaveBeenCalled();
     expect(store.mealLoading).toBe(false);
   });
@@ -989,7 +996,7 @@ describe("the answer to a save that was written", () => {
   it("is reported as a bug when it still holds a cook the save removed", async () => {
     const store = createStore();
     rowOf(store, BOB).setResident("");
-    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+    await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS);
     await answerWith({
       message: "Form submitted.",
       bills: [{ resident_id: BOB, amount: "0.0", no_cost: false }],
@@ -1018,14 +1025,12 @@ describe("the answer to a save that was written", () => {
   it("checks the warning answer too", async () => {
     const store = createStore();
     await typeCost(store, BOB, "5");
-    server.saves.shift().reject({
-      response: {
-        status: 400,
-        data: {
-          type: "warning",
-          message: "Warning: third cooks should not be added.",
-          bills: [],
-        },
+    server.saves.shift().resolve({
+      status: 200,
+      data: {
+        type: "warning",
+        message: "Warning: third cooks should not be added.",
+        bills: [],
       },
     });
     await vi.advanceTimersByTimeAsync(0);
@@ -1055,14 +1060,12 @@ describe("the answer to a save that was written", () => {
     [
       "the warning answer",
       (save) =>
-        save.reject({
-          response: {
-            status: 400,
-            data: {
-              type: "warning",
-              message: "Warning: third cooks should not be added.",
-              bills: AMOUNT_NOT_TEXT,
-            },
+        save.resolve({
+          status: 200,
+          data: {
+            type: "warning",
+            message: "Warning: third cooks should not be added.",
+            bills: AMOUNT_NOT_TEXT,
           },
         }),
     ],
@@ -1089,21 +1092,18 @@ describe("the answer to a save that was written", () => {
     },
   );
 
-  // The same bug in the answer for a meal the person left: the save made
-  // on leaving it still goes, and that meal is not fetched.
-  it("still sends the save made on leaving the meal when checking the answer throws", async () => {
+  // The same bug in the answer for a meal the person left: it is
+  // reported, and that meal is not fetched, because no rows on screen
+  // are out of date.
+  it("reports a check that throws for a meal the person left, and does not fetch that meal", async () => {
     const store = createStore();
     await typeCost(store, BOB, "5");
-    await typeCost(store, BOB, "50"); // waits for the $5 save
     store.goToMeal(2);
     await vi.advanceTimersByTimeAsync(0);
     await answerWith({ message: "Form submitted.", bills: AMOUNT_NOT_TEXT });
 
     expect(notifyError).toHaveBeenCalledTimes(1);
-    expect(editsSent(axios)).toEqual([
-      [change(BOB, "", "5")],
-      [change(BOB, "5", "50")],
-    ]);
+    expect(notifyError.mock.calls[0][0]).toBeInstanceOf(TypeError);
     expect(mealFetches(1)).toBe(0);
   });
 

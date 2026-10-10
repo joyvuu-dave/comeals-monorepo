@@ -34,9 +34,10 @@ test.describe("Bill entry (real backend)", () => {
     });
   }
 
-  // Bill saves are debounced, and picking a cook schedules a save of its
-  // own. Waiting on the PATCH response whose request carried the typed
-  // amount is the deterministic way to know that value reached the server.
+  // A cook row saves 2 seconds after its last edit (the row's 2-second
+  // wait), and picking a cook starts that wait too. Waiting on the PATCH
+  // response whose request carried the typed amount is the
+  // deterministic way to know that value reached the server.
   function billSaved(page, mealId, amount) {
     return billsSaveAnswered(page, mealId, (to) => to.amount === amount);
   }
@@ -70,12 +71,12 @@ test.describe("Bill entry (real backend)", () => {
     await cleared;
   });
 
-  // Typing "1", pausing past the debounce, then typing "0" used to
-  // produce "1.00" with the "0" swallowed: the save's ack reformatted
-  // the field under the cursor, and "1.00" plus "0" breaks the
-  // whole-cents grammar. The ack must not touch a field it agrees with;
-  // padding happens on blur instead.
-  test("typing slowly across the save debounce keeps accepting keystrokes", async ({
+  // Typing "1", pausing past the row's 2-second wait, then typing "0"
+  // used to produce "1.00" with the "0" swallowed: the save's ack
+  // reformatted the field under the cursor, and "1.00" plus "0" breaks
+  // the whole-cents grammar. The ack must not touch a field it agrees
+  // with; padding happens on blur instead.
+  test("typing slowly across the row's 2-second wait keeps accepting keystrokes", async ({
     page,
   }) => {
     const mealId = auth.meals.today.id;
@@ -87,7 +88,8 @@ test.describe("Bill entry (real backend)", () => {
     const cookSelect = page.locator('[aria-label="Select meal cook"]').first();
     await cookSelect.selectOption(String(auth.resident_id));
 
-    // Type "1", then pause: the debounce fires and the server answers.
+    // Type "1", then pause: the row's 2-second wait ends, it saves, and
+    // the server answers.
     const costInput = page.locator('[aria-label="Set meal cost"]').first();
     const firstSave = billSaved(page, mealId, "1");
     await costInput.press("1");

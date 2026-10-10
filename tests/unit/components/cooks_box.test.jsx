@@ -13,7 +13,7 @@ import axios from "axios";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
 import CooksBox from "../../../app/frontend/src/components/meal/cooks_box.jsx";
 import { createDataStore } from "../helpers/create_data_store.js";
-import { SAVE_DEBOUNCE_MS } from "../../../app/frontend/src/helpers/helpers.js";
+import { BILL_ROW_SAVE_WAIT_MS } from "../../../app/frontend/src/stores/data_store_bills";
 
 // A stub of the one bill shape CooksBox reads. The real Bill is a
 // mobx-state-tree node; the component only touches these fields. The
@@ -38,6 +38,8 @@ function makeBill(overrides = {}) {
       amount: "",
       no_cost: false,
       costPending: false,
+      saving: false,
+      slowToSave: false,
       setResident: vi.fn(),
       setAmount: vi.fn((value) => value),
       normalizeAmountDisplay: vi.fn(),
@@ -58,16 +60,23 @@ function makeStore(bills, overrides = {}) {
     {
       meal: { reconciled: false },
       mealLoading: false,
+      waitingToReload: false,
       bills: new Map(bills.map((bill) => [bill.id, bill])),
       residents: new Map([
         [42, { id: 42, name: "Alice R.", can_cook: true, active: true }],
         [43, { id: 43, name: "Bob", can_cook: false, active: true }],
         [46, { id: 46, name: "Eve S.", can_cook: true, active: true }],
       ]),
-      flushPendingBillsSave: vi.fn(),
+      saveBillRowNow: vi.fn(),
+      restartBillRowWait: vi.fn(),
+      cookTakenByAnotherRow: () => false,
       ...overrides,
     },
-    { flushPendingBillsSave: false },
+    {
+      saveBillRowNow: false,
+      restartBillRowWait: false,
+      cookTakenByAnotherRow: false,
+    },
   );
 }
 
@@ -182,6 +191,32 @@ describe("CooksBox", () => {
     expect(screen.getByRole("checkbox")).toBeDisabled();
   });
 
+  // Logout, Refresh and the error page's Refresh wait for the bills
+  // saves before they reload (#150). An edit then would wait 2 seconds
+  // before its save, and the reload, or logout taking the token away,
+  // would lose it.
+  it("starts the row's wait again when the person comes to its cost box", () => {
+    const bill = makeBill();
+    const store = makeEditStore([bill]);
+    renderBox(store);
+
+    fireEvent.focus(screen.getByRole("spinbutton", { name: "Set meal cost" }));
+
+    expect(store.restartBillRowWait).toHaveBeenCalledTimes(1);
+    expect(store.restartBillRowWait).toHaveBeenCalledWith(bill);
+  });
+
+  it("freezes every control while the page waits to reload", () => {
+    renderBox(makeEditStore([makeBill()], { waitingToReload: true }));
+    expect(
+      screen.getByRole("combobox", { name: "Select meal cook" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("spinbutton", { name: "Set meal cost" }),
+    ).toBeDisabled();
+    expect(screen.getByRole("checkbox")).toBeDisabled();
+  });
+
   // #145. A save names cooks, so a cost typed in a row with no cook was
   // never sent, and the next load of the meal made the row again
   // without it. Nothing said so. The cost field is off until the row
@@ -243,7 +278,7 @@ describe("CooksBox", () => {
     expect(bill.toggleNoCost).toHaveBeenCalledTimes(1);
   });
 
-  it("choosing a cook and leaving the select saves the row", () => {
+  it("choosing a cook sends it to the bill", () => {
     const bill = makeBill();
     const store = makeEditStore([bill]);
     renderBox(store);
@@ -251,9 +286,6 @@ describe("CooksBox", () => {
 
     fireEvent.change(select, { target: { value: "42" } });
     expect(bill.setResident).toHaveBeenCalledWith("42");
-
-    fireEvent.blur(select);
-    expect(store.flushPendingBillsSave).toHaveBeenCalledTimes(1);
   });
 
   // setAmount keeps the whole-cents grammar: it answers with the value
@@ -281,7 +313,7 @@ describe("CooksBox", () => {
 
     fireEvent.blur(input);
     expect(bill.normalizeAmountDisplay).toHaveBeenCalledTimes(1);
-    expect(store.flushPendingBillsSave).toHaveBeenCalledTimes(1);
+    expect(store.saveBillRowNow).toHaveBeenCalledWith(bill);
   });
 
   it("marks a pending cost", () => {
@@ -289,13 +321,6 @@ describe("CooksBox", () => {
     const pending = screen.getByRole("spinbutton", { name: "Set meal cost" });
     expect(pending).toHaveClass("cost-pending");
     expect(pending).toHaveAttribute("placeholder", "pending");
-  });
-
-  it("leaving the no-cost switch saves the row", () => {
-    const store = makeEditStore([makeBill()]);
-    renderBox(store);
-    fireEvent.blur(screen.getByRole("checkbox"));
-    expect(store.flushPendingBillsSave).toHaveBeenCalledTimes(1);
   });
 
   it("Yes erases the typed cost", () => {
@@ -571,10 +596,13 @@ describe("CooksBox", () => {
   });
 
   // The real store, loaded with the server's answer, so a pick in a menu
-  // goes through the real Bill and the real save.
+  // goes through the real Bill and the real save. The clock is fake in
+  // every test here: an edit starts a row's 2-second wait, and on a real
+  // clock that wait would end during a later test and send a save there.
   describe("on the real store", () => {
     beforeEach(() => {
       vi.clearAllMocks();
+      vi.useFakeTimers();
     });
 
     afterEach(() => {
@@ -660,12 +688,12 @@ describe("CooksBox", () => {
 
       fireEvent.change(carolsRow, { target: { value: "42" } });
       fireEvent.blur(carolsRow);
-      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+      await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS);
       expect(billsPatches()).toHaveLength(0);
       expect(carolsRow).toHaveDisplayValue("Carol R.");
 
       answerYes();
-      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+      await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS);
 
       expect(carolsRow).toHaveDisplayValue("Alice R.");
       expect(billsPatches()).toHaveLength(1);
@@ -687,7 +715,7 @@ describe("CooksBox", () => {
       fireEvent.change(carolsRow, { target: { value: "" } });
       fireEvent.click(screen.getByRole("button", { name: "No" }));
       fireEvent.blur(carolsRow);
-      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+      await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS);
 
       expect(billsPatches()).toHaveLength(0);
       expect(carolsRow).toHaveValue("44");
@@ -719,7 +747,7 @@ describe("CooksBox", () => {
       });
       fireEvent.change(carolsRow, { target: { value: "42" } });
       answerYes();
-      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+      await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS);
 
       expect(billsPatches()).toHaveLength(1);
       expect(billsPatches()[0][0].data.edits).toEqual([
@@ -738,7 +766,9 @@ describe("CooksBox", () => {
       });
       fireEvent.change(carolsRow, { target: { value: "44" } });
       expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
-      fireEvent.blur(carolsRow);
+      await vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS - 1);
+      expect(billsPatches()).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(1);
 
       expect(billsPatches()).toHaveLength(2);
       expect(billsPatches()[1][0].data.edits).toEqual([
@@ -847,9 +877,20 @@ describe("CooksBox", () => {
       expect(firstCost).toBeDisabled();
     });
 
-    // A cook picked in one row leaves the other rows' menus, and comes
-    // back to them when that row picks someone else.
-    it("offers a cook in the other rows again once their row picks someone else", () => {
+    // A cook picked in one row leaves the other rows' menus. When that
+    // row picks someone else, the cook comes back to them once the row's
+    // save is answered: until then the server may still have the cook's
+    // bill, and another row's save that adds them could reach the
+    // server first (#150).
+    it("offers a cook in the other rows again once their row picks someone else and that is saved", async () => {
+      vi.useFakeTimers();
+      let answer;
+      axios.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      );
       renderBox(
         loadedStore([{ resident_id: 42, amount: "12", no_cost: false }]),
       );
@@ -860,8 +901,15 @@ describe("CooksBox", () => {
       expect(offered(thirdRow)).toEqual(["¯\\_(ツ)_/¯"]);
 
       fireEvent.change(alicesRow, { target: { value: "" } });
-
       expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+      expect(offered(secondRow)).toEqual(["¯\\_(ツ)_/¯"]);
+
+      await act(() => vi.advanceTimersByTimeAsync(BILL_ROW_SAVE_WAIT_MS));
+      expect(billsPatches()).toHaveLength(1);
+      expect(offered(secondRow)).toEqual(["¯\\_(ツ)_/¯"]);
+
+      answer({ status: 200, data: { message: "Form submitted.", bills: [] } });
+      await act(() => vi.advanceTimersByTimeAsync(0));
       expect(offered(secondRow)).toEqual(["¯\\_(ツ)_/¯", "Alice R."]);
       expect(offered(thirdRow)).toEqual(["¯\\_(ツ)_/¯", "Alice R."]);
     });
@@ -885,5 +933,385 @@ describe("CooksBox", () => {
       expect(offered(dansRow)).toEqual(["¯\\_(ツ)_/¯", "Alice R.", "Dan R."]);
       expect(offered(blankRow)).toEqual(["¯\\_(ツ)_/¯", "Alice R."]);
     });
+  });
+
+  // #150. Each row saves on its own. While a row's save is on its way,
+  // its menu, cost box and No cost switch are read-only, and the other
+  // rows are not. The lock shows nothing for one second. After that, a
+  // small spinner shows in the row's cost box.
+  describe("a row whose save is on its way", () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    // Bob (11) and Carol (12) cook, with no cost yet. Every save waits
+    // until the test answers it. With bobRetired, Bob was retired after
+    // cooking (#91), so only his own row offers him.
+    function twoCooks({ bobRetired = false } = {}) {
+      const answers = [];
+      axios.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            answers.push(resolve);
+          }),
+      );
+      const store = createDataStore({ mealProps: { closed: false } });
+      store.loadData(
+        {
+          id: 1,
+          date: "2023-06-15",
+          description: "",
+          closed: false,
+          closed_at: null,
+          reconciled: false,
+          max: null,
+          next_id: 1,
+          prev_id: 1,
+          residents: [11, 12, 13].map((id) => ({
+            id,
+            meal_id: 1,
+            name: { 11: "Bob", 12: "Carol", 13: "Dan" }[id],
+            short_name: "x",
+            attending: false,
+            attending_at: null,
+            late: false,
+            vegetarian: false,
+            can_cook: true,
+            active: !(bobRetired && id === 11),
+          })),
+          guests: [],
+          bills: [
+            { resident_id: 11, amount: "0.0", no_cost: false },
+            { resident_id: 12, amount: "0.0", no_cost: false },
+          ],
+        },
+        "server",
+      );
+      renderBox(store);
+      const answerNext = async () => {
+        answers.shift()({ status: 200, data: { message: "Form submitted." } });
+        await act(() => vi.advanceTimersByTimeAsync(0));
+      };
+      return { store, answerNext };
+    }
+
+    function controls(index) {
+      return {
+        menu: screen.getAllByRole("combobox", { name: "Select meal cook" })[
+          index
+        ],
+        cost: screen.getAllByRole("spinbutton", { name: "Set meal cost" })[
+          index
+        ],
+        noCost: screen.getAllByRole("checkbox")[index],
+      };
+    }
+
+    function spinners() {
+      return document.querySelectorAll(".cost-spinner");
+    }
+
+    it("makes that row read-only, and leaves the other rows alone", () => {
+      twoCooks();
+      const bob = controls(0);
+      fireEvent.change(bob.cost, { target: { value: "5" } });
+      fireEvent.blur(bob.cost);
+
+      expect(axios).toHaveBeenCalledTimes(1);
+      expect(bob.cost).toHaveAttribute("readonly");
+      expect(bob.menu).toHaveAttribute("aria-disabled", "true");
+      expect(bob.noCost).toHaveAttribute("aria-disabled", "true");
+      // Read-only, not off: the controls keep their look and their
+      // focus, so the lock shows nothing.
+      expect(bob.cost).toBeEnabled();
+      expect(bob.menu).toBeEnabled();
+      expect(bob.noCost).toBeEnabled();
+
+      const carol = controls(1);
+      expect(carol.cost).not.toHaveAttribute("readonly");
+      expect(carol.menu).not.toHaveAttribute("aria-disabled");
+      expect(carol.noCost).not.toHaveAttribute("aria-disabled");
+    });
+
+    it("takes no pick and no switch while it is locked, and asks nothing", async () => {
+      const { answerNext } = twoCooks();
+      const bob = controls(0);
+      fireEvent.change(bob.cost, { target: { value: "5" } });
+      fireEvent.blur(bob.cost);
+
+      fireEvent.change(bob.menu, { target: { value: "13" } });
+      fireEvent.click(bob.noCost);
+
+      expect(bob.menu).toHaveValue("11");
+      expect(bob.noCost).not.toBeChecked();
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+      // A tap on the switch over a typed cost asks "Erase...?" when the
+      // row is free. A tap during the lock asks nothing later either.
+      await answerNext();
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    });
+
+    // A pick in the row of a retired cook asks "Remove...?" when the row
+    // is free. A pick during the lock asks nothing, then or after.
+    it("does not ask about a pick made in a retired cook's row while it was locked", async () => {
+      const { answerNext } = twoCooks({ bobRetired: true });
+      const bob = controls(0);
+      fireEvent.change(bob.cost, { target: { value: "5" } });
+      fireEvent.blur(bob.cost);
+
+      fireEvent.change(bob.menu, { target: { value: "13" } });
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+
+      await answerNext();
+      expect(bob.menu).toHaveValue("11");
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+      // The same pick on the free row asks.
+      fireEvent.change(bob.menu, { target: { value: "13" } });
+      expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+    });
+
+    it("frees the row once its save is answered", async () => {
+      const { answerNext } = twoCooks();
+      const bob = controls(0);
+      fireEvent.change(bob.cost, { target: { value: "5" } });
+      fireEvent.blur(bob.cost);
+
+      await answerNext();
+
+      expect(bob.cost).not.toHaveAttribute("readonly");
+      expect(bob.menu).not.toHaveAttribute("aria-disabled");
+      expect(bob.noCost).not.toHaveAttribute("aria-disabled");
+    });
+
+    it("shows a spinner in the cost box, with aria-busy, once the save has waited one second", async () => {
+      const { answerNext } = twoCooks();
+      const bob = controls(0);
+      fireEvent.change(bob.cost, { target: { value: "5" } });
+      fireEvent.blur(bob.cost);
+
+      await act(() => vi.advanceTimersByTimeAsync(999));
+      expect(spinners()).toHaveLength(0);
+      expect(bob.cost).not.toHaveAttribute("aria-busy");
+
+      await act(() => vi.advanceTimersByTimeAsync(1));
+      expect(spinners()).toHaveLength(1);
+      expect(spinners()[0]).toHaveAttribute("aria-hidden", "true");
+      expect(spinners()[0]).toHaveTextContent("");
+      expect(bob.cost.parentElement).toContainElement(spinners()[0]);
+      expect(bob.cost).toHaveAttribute("aria-busy", "true");
+      expect(controls(1).cost).not.toHaveAttribute("aria-busy");
+
+      await answerNext();
+      expect(spinners()).toHaveLength(0);
+      expect(bob.cost).not.toHaveAttribute("aria-busy");
+    });
+
+    it("closes a question that was open when the row locked, for good", async () => {
+      const { answerNext } = twoCooks();
+      const bob = controls(0);
+      fireEvent.change(bob.cost, { target: { value: "5" } });
+      fireEvent.click(bob.noCost);
+      expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+
+      await act(() => vi.advanceTimersByTimeAsync(2000)); // the row saves
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+
+      await answerNext();
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    });
+
+    it("closes a question about removing a retired cook for good too", async () => {
+      const { answerNext } = twoCooks({ bobRetired: true });
+      const bob = controls(0);
+      fireEvent.change(bob.cost, { target: { value: "5" } });
+      fireEvent.change(bob.menu, { target: { value: "13" } });
+      expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+
+      await act(() => vi.advanceTimersByTimeAsync(2000)); // the row saves
+      await answerNext();
+
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+      expect(bob.menu).toHaveValue("11");
+    });
+
+    it("lets two rows save at the same time", () => {
+      twoCooks();
+      fireEvent.change(controls(0).cost, { target: { value: "5" } });
+      fireEvent.blur(controls(0).cost);
+      fireEvent.change(controls(1).cost, { target: { value: "7" } });
+      fireEvent.blur(controls(1).cost);
+
+      expect(axios).toHaveBeenCalledTimes(2);
+      expect(controls(0).cost).toHaveAttribute("readonly");
+      expect(controls(1).cost).toHaveAttribute("readonly");
+    });
+  });
+
+  describe("when a row saves", () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    function loaded() {
+      const store = createDataStore({ mealProps: { closed: false } });
+      store.loadData(
+        {
+          id: 1,
+          date: "2023-06-15",
+          description: "",
+          closed: false,
+          closed_at: null,
+          reconciled: false,
+          max: null,
+          next_id: 1,
+          prev_id: 1,
+          residents: [
+            {
+              id: 11,
+              meal_id: 1,
+              name: "Bob",
+              short_name: "Bob",
+              attending: false,
+              attending_at: null,
+              late: false,
+              vegetarian: false,
+              can_cook: true,
+              active: true,
+            },
+          ],
+          guests: [],
+          bills: [],
+        },
+        "server",
+      );
+      renderBox(store);
+      return store;
+    }
+
+    it("saves at once when Enter is pressed in the cost box", () => {
+      loaded();
+      fireEvent.change(
+        screen.getAllByRole("combobox", { name: "Select meal cook" })[0],
+        { target: { value: "11" } },
+      );
+      const cost = screen.getAllByRole("spinbutton", {
+        name: "Set meal cost",
+      })[0];
+      fireEvent.change(cost, { target: { value: "5" } });
+
+      fireEvent.keyDown(cost, { key: "Enter" });
+
+      expect(axios).toHaveBeenCalledTimes(1);
+      expect(axios.mock.calls[0][0].data.edits).toEqual([
+        { op: "add", resident_id: 11, to: { amount: "5", no_cost: false } },
+      ]);
+    });
+
+    // A pick starts the row's 2-second wait. On a phone the person then
+    // closes the menu, taps the cost box and waits for the keyboard,
+    // which can take about 2 seconds. Coming to the cost box starts the
+    // wait again, so the pick's save does not lock the row under the
+    // first digits typed: "25" must not become "5".
+    it("takes the digits typed in the cost box soon after a pick", async () => {
+      axios.mockImplementation(() => new Promise(() => {}));
+      loaded();
+      const menu = screen.getAllByRole("combobox", {
+        name: "Select meal cook",
+      })[0];
+      fireEvent.change(menu, { target: { value: "11" } });
+      await act(() => vi.advanceTimersByTimeAsync(1900));
+      const cost = screen.getAllByRole("spinbutton", {
+        name: "Set meal cost",
+      })[0];
+      fireEvent.focus(cost);
+      await act(() => vi.advanceTimersByTimeAsync(200));
+
+      fireEvent.change(cost, { target: { value: "2" } });
+      fireEvent.change(cost, { target: { value: "25" } });
+
+      expect(cost).toHaveValue(25);
+      expect(axios).not.toHaveBeenCalled();
+    });
+
+    it("does not save on other keys", () => {
+      loaded();
+      fireEvent.change(
+        screen.getAllByRole("combobox", { name: "Select meal cook" })[0],
+        { target: { value: "11" } },
+      );
+      fireEvent.keyDown(
+        screen.getAllByRole("spinbutton", { name: "Set meal cost" })[0],
+        { key: "5" },
+      );
+
+      expect(axios).not.toHaveBeenCalled();
+    });
+
+    // A person who picks a cook and then goes to the cost box to type
+    // the cost sends one save. A save on leaving the menu would lock the
+    // cost box they are about to type in.
+    it("waits 2 seconds after a pick, even when the person leaves the menu", async () => {
+      loaded();
+      const menu = screen.getAllByRole("combobox", {
+        name: "Select meal cook",
+      })[0];
+      fireEvent.change(menu, { target: { value: "11" } });
+      fireEvent.blur(menu);
+
+      await act(() => vi.advanceTimersByTimeAsync(1999));
+      expect(axios).not.toHaveBeenCalled();
+      await act(() => vi.advanceTimersByTimeAsync(1));
+      expect(axios).toHaveBeenCalledTimes(1);
+    });
+
+    it("waits 2 seconds after the No cost switch, even when the person leaves it", async () => {
+      loaded();
+      fireEvent.change(
+        screen.getAllByRole("combobox", { name: "Select meal cook" })[0],
+        { target: { value: "11" } },
+      );
+      const noCost = screen.getAllByRole("checkbox")[0];
+      fireEvent.click(noCost);
+      fireEvent.blur(noCost);
+
+      await act(() => vi.advanceTimersByTimeAsync(1999));
+      expect(axios).not.toHaveBeenCalled();
+      await act(() => vi.advanceTimersByTimeAsync(1));
+      expect(axios.mock.calls[0][0].data.edits).toEqual([
+        { op: "add", resident_id: 11, to: { amount: "", no_cost: true } },
+      ]);
+    });
+  });
+
+  // Two saves on their way at once must not name one cook (#150): a
+  // row's menu does not offer a cook that another row is still
+  // changing.
+  it("does not offer a cook another row is taking off until that row's save is answered", () => {
+    const store = makeEditStore(
+      [
+        makeBill({ id: "1", resident: null, resident_id: "", baseCookId: 42 }),
+        makeBill({ id: "2", resident: null, resident_id: "" }),
+      ],
+      {
+        cookTakenByAnotherRow: (row, cookId) => row.id === "2" && cookId === 42,
+      },
+    );
+    renderBox(store);
+
+    const [firstRow, secondRow] = screen.getAllByRole("combobox", {
+      name: "Select meal cook",
+    });
+    expect(offered(firstRow)).toEqual(["¯\\_(ツ)_/¯", "Alice R.", "Eve S."]);
+    expect(offered(secondRow)).toEqual(["¯\\_(ツ)_/¯", "Eve S."]);
   });
 });

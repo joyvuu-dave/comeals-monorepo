@@ -11,14 +11,15 @@ vi.mock("idb-keyval", () => import("../mocks/idb_keyval.js"));
 
 import { createDataStore, stubAction } from "../helpers/create_data_store.js";
 
-// The real DataStore, with saveBills stubbed: these tests assert WHEN
-// the bill actions ask the store to save, not what the save pipeline
-// does with it (data_store.test.js covers that). The stub also keeps
-// the debounce timer out of these tests.
+// The real DataStore, with saveBillRowSoon stubbed: these tests assert
+// WHEN the bill actions ask the store to save the row, not what the
+// save pipeline does with it (bills_save.test.js and
+// bills_row_saves.test.js cover that). The stub also keeps the wait
+// before a row's save out of these tests.
 let saveBillsSpy;
 function createStore(opts = {}) {
   const store = createDataStore(opts);
-  saveBillsSpy = stubAction(store, "saveBills");
+  saveBillsSpy = stubAction(store, "saveBillRowSoon");
   window.Comeals.socketId = "test";
   return store;
 }
@@ -201,6 +202,39 @@ describe("Bill model", () => {
       expect(bill.resident_id).toBe("");
     });
 
+    // A row with no cook has no cost, so the next cook picked in the
+    // row does not take the last cook's cost.
+    it.each([
+      ["a typed cost", { amount: "12.50", no_cost: false }],
+      ["no cost", { amount: "", no_cost: true }],
+    ])("clears %s when the blank is picked", (_label, values) => {
+      const store = createStore({
+        residents: [{ id: 10, meal_id: 1, name: "Alice" }],
+        bills: [{ id: "bill-1", resident: 10, ...values }],
+      });
+
+      const bill = store.bills.get("bill-1");
+      bill.setResident("");
+
+      expect(bill.amount).toBe("");
+      expect(bill.no_cost).toBe(false);
+    });
+
+    it("keeps the cost when another cook is picked", () => {
+      const store = createStore({
+        residents: [
+          { id: 10, meal_id: 1, name: "Alice" },
+          { id: 11, meal_id: 1, name: "Bob" },
+        ],
+        bills: [{ id: "bill-1", resident: 10, amount: "12.50" }],
+      });
+
+      const bill = store.bills.get("bill-1");
+      bill.setResident(11);
+
+      expect(bill.amount).toBe("12.50");
+    });
+
     it("returns null when clearing, returns resident ref when setting", () => {
       const store = createStore({
         residents: [{ id: 10, meal_id: 1, name: "Alice" }],
@@ -217,7 +251,7 @@ describe("Bill model", () => {
       expect(clearResult).toBeNull();
     });
 
-    it("triggers saveBills", () => {
+    it("asks the store to save the row", () => {
       const store = createStore({
         residents: [{ id: 10, meal_id: 1, name: "Alice" }],
         bills: [{ id: "bill-1" }],
@@ -253,7 +287,7 @@ describe("Bill model", () => {
       expect(bill.amount).toBe("");
     });
 
-    it("triggers saveBills", () => {
+    it("asks the store to save the row", () => {
       const store = createStore({
         bills: [{ id: "bill-1", amount: "" }],
       });
@@ -432,7 +466,7 @@ describe("Bill model", () => {
       expect(bill.no_cost).toBe(false);
     });
 
-    it("triggers saveBills", () => {
+    it("asks the store to save the row", () => {
       const store = createStore({
         bills: [{ id: "bill-1", no_cost: false }],
       });

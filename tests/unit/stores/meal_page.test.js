@@ -222,7 +222,7 @@ describe("meal page store", () => {
         (bill) => bill.resident !== null,
       );
       row.setAmount("16");
-      store.submitBills();
+      store.saveBillRowNow(row);
       return toastStore.toasts.map((toast) => [toast.type, toast.message]);
     }
 

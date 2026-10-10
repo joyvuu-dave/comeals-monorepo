@@ -141,7 +141,7 @@ export interface Ack {
 //               the same save may be sent again with the same key.
 //   "replayed"  200: this key's save was written before, and nothing
 //               more was written now.
-//   "warning"   400: the edits were written, and the message is advice
+//   "warning"   200: the edits were written, and the message is advice
 //               about the rotation (ThirdCookWarning).
 //   "stale"     409: a bill an edit was built on has changed since the
 //               page read it. Nothing was written.

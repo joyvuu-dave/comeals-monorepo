@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
+import { useStore } from "../../helpers/store_context";
 
 var POLL_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
 function VersionBanner() {
+  var store = useStore();
   var [updateAvailable, setUpdateAvailable] = useState(false);
 
   useEffect(function () {
@@ -67,7 +69,14 @@ function VersionBanner() {
       <button
         className="app-banner__button"
         onClick={function () {
-          window.location.reload();
+          // A reload ends every request on its way, so a cost being
+          // saved is sent and answered first, for a few seconds at most
+          // (#150). If it was not saved, its message is on screen, and
+          // the page stays so the person can read it. The next tap goes
+          // on.
+          store.finishBillsSaves().then(function (mayReload) {
+            if (mayReload) window.location.reload();
+          });
         }}
       >
         Refresh

@@ -342,14 +342,14 @@ The answers:
 | ------ | ---------- | ---------------- | ----------------------------------------------------------------------------------- |
 | `200`  |            | yes              | Nothing.                                                                            |
 | `200`  | `replayed` | by the first try | Nothing. This key's save was written before, and nothing more was written now.      |
-| `400`  | `warning`  | yes              | Nothing more. Show the `message` (see below).                                       |
+| `200`  | `warning`  | yes              | Nothing more. Show the `message` (see below).                                       |
 | `400`  |            | no               | Fix the request. The `message` says what is wrong, for example a missing key.       |
 | `400`  | `outdated` | no               | The body used the old format, a full list under `bills`. Send `edits`.              |
 | `409`  | `stale`    | no               | Read the meal form again, and build a new save, with a new key, from what it shows. |
 | `409`  |            | no               | Two writes collided. Send the same request again, with the same key.                |
 | `422`  |            | no               | The key was used for a different save. Use a new key for each save.                 |
 
-The `200` (`replayed` too), the warning, and the `stale` `409` carry
+Every `200` (plain, `replayed` or `warning`) and the `stale` `409` carry
 `bills`: the meal's bills as stored, in the same shape as `bills` in the
 meal form. A `stale` answer names the cooks that changed:
 
@@ -360,9 +360,9 @@ meal form. A `stale` answer names the cooks that changed:
 ```
 
 The warning: adding a third cook to a future meal while another meal in
-the same rotation still has fewer than two cooks returns `400` with
-`"type": "warning"`. The bills are still saved; the `message` only says
-the rotation is short of cooks.
+the same rotation still has fewer than two cooks returns `200` with
+`"type": "warning"`. The bills are saved; the `message` only says the
+rotation is short of cooks.
 
 With no answer at all (a timeout, or a dropped connection), the save may
 or may not have been written. Send the same save again, with the same

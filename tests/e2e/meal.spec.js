@@ -480,7 +480,7 @@ test.describe("Meal Editing", () => {
     // went out with the first save, and sending it again could write
     // over a newer cost that someone else saved in between.
     await cookSelects.nth(1).selectOption("2");
-    await expect.poll(() => billsSaves.length, { timeout: 3000 }).toBe(2);
+    await expect.poll(() => billsSaves.length, { timeout: 5000 }).toBe(2);
     expect(billsSaves[1].body.edits).toEqual([
       { op: "add", resident_id: 2, to: { amount: "", no_cost: false } },
     ]);
@@ -798,5 +798,292 @@ test.describe("Meal Editing", () => {
       await page.setViewportSize({ width: 375, height: 667 });
       await expectLogoutInHeader(page);
     });
+  });
+});
+
+// #150. Each cook row saves on its own. While a row's save is on its
+// way, that row's menu, cost box and No cost switch are read-only, and
+// the other rows are not. The lock shows nothing for the first second.
+// After that, a small spinner shows inside the row's cost box.
+test.describe("a cook row whose save is on its way", () => {
+  // Every bills save waits until the test lets it through. Returns the
+  // function that does, and the requests the page sent.
+  async function holdBillsSaves(page) {
+    let release;
+    const released = new Promise((resolve) => {
+      release = resolve;
+    });
+    const requests = [];
+    await page.route("**/api/v1/meals/*/bills*", async (route) => {
+      requests.push(route.request());
+      await released;
+      return route.fallback();
+    });
+    return { release, requests };
+  }
+
+  async function openMeal(page) {
+    await page.goto("/meals/42/edit/");
+    const costs = page.getByRole("spinbutton", { name: "Set meal cost" });
+    await expect(costs.first()).toHaveValue("25.50", { timeout: 10000 });
+    return {
+      menus: page.getByRole("combobox", { name: "Select meal cook" }),
+      costs,
+      switches: page.locator('label[for^="no_cost_switch-"]'),
+      boxes: page.locator('[aria-label^="No cost button"]'),
+    };
+  }
+
+  test.beforeEach(async ({ page, context }) => {
+    await setupAuthenticatedPage(page, context);
+  });
+
+  test("is read-only until the save is answered, and the other rows are not", async ({
+    page,
+  }) => {
+    const held = await holdBillsSaves(page);
+    const { menus, costs, switches, boxes } = await openMeal(page);
+
+    await costs.first().fill("30.00");
+    await costs.first().press("Enter");
+    await expect.poll(() => held.requests.length).toBe(1);
+    expect(held.requests[0].postDataJSON().edits).toEqual([
+      {
+        op: "change",
+        resident_id: 1,
+        from: { amount: "25.50", no_cost: false },
+        to: { amount: "30.00", no_cost: false },
+      },
+    ]);
+
+    // Jane's row takes nothing. Its cost box keeps the focus.
+    await expect(costs.first()).toHaveAttribute("readonly", "");
+    await expect(costs.first()).toBeFocused();
+    await costs.first().press("5");
+    await expect(costs.first()).toHaveValue("30.00");
+    // A person can still open the menu and pick. Playwright will not
+    // pick in a menu marked aria-disabled, so the pick is made the way
+    // the browser makes it: a new value, then a change event.
+    await expect(menus.first()).toHaveAttribute("aria-disabled", "true");
+    await menus.first().evaluate((menu) => {
+      menu.value = "2";
+      menu.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await expect(menus.first()).toHaveValue("1");
+    await expect(boxes.first()).toHaveAttribute("aria-disabled", "true");
+    await switches.first().click({ force: true }); // a person can tap it
+    await expect(boxes.first()).not.toBeChecked();
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+
+    // The next row takes a cook.
+    await expect(menus.nth(1)).not.toHaveAttribute("aria-disabled");
+    await menus.nth(1).selectOption("2");
+    await expect(menus.nth(1)).toHaveValue("2");
+
+    held.release();
+    await expect(costs.first()).not.toHaveAttribute("readonly");
+    await expect(menus.first()).not.toHaveAttribute("aria-disabled");
+    await costs.first().fill("31.00");
+    await expect(costs.first()).toHaveValue("31.00");
+  });
+
+  // The lock shows nothing for the first second: most saves are answered
+  // sooner, and a box that turned gray and white again would flash on
+  // every save. The browser's own look for a read-only box must not
+  // show either.
+  test("keeps the cost box's look for the first second of the lock", async ({
+    page,
+  }) => {
+    const held = await holdBillsSaves(page);
+    const { costs } = await openMeal(page);
+    const look = () =>
+      costs.first().evaluate((box) => {
+        const style = window.getComputedStyle(box);
+        return {
+          background: style.backgroundColor,
+          border: style.borderColor,
+          color: style.color,
+          opacity: style.opacity,
+        };
+      });
+
+    await costs.first().fill("30.00");
+    // The box's colors change over 0.1 seconds (components.css), and
+    // the fill just gave it the focus, so its border is still turning
+    // red. Read its look once that is done.
+    await page.waitForTimeout(300);
+    const unlocked = await look();
+    await costs.first().press("Enter");
+    await expect.poll(() => held.requests.length).toBe(1);
+    await expect(costs.first()).toHaveAttribute("readonly", "");
+    // A change of color would be done by now. The spinner is not there
+    // yet.
+    await page.waitForTimeout(500);
+    await expect(page.locator(".cost-spinner")).toHaveCount(0);
+    expect(await look()).toEqual(unlocked);
+
+    held.release();
+    await expect(costs.first()).not.toHaveAttribute("readonly");
+  });
+
+  test("shows a spinner in its cost box once the save has waited one second", async ({
+    page,
+  }) => {
+    const held = await holdBillsSaves(page);
+    const { costs } = await openMeal(page);
+    const spinner = page.locator(".cost-spinner");
+
+    await costs.first().fill("30.00");
+    await costs.first().press("Enter");
+    await expect.poll(() => held.requests.length).toBe(1);
+    await expect(spinner).toHaveCount(0);
+    await expect(costs.first()).not.toHaveAttribute("aria-busy");
+
+    await expect(spinner).toHaveCount(1, { timeout: 3000 });
+    await expect(spinner).toBeVisible();
+    await expect(costs.first()).toHaveAttribute("aria-busy", "true");
+    // Inside the cost box: its middle is over the box.
+    const box = await costs.first().boundingBox();
+    const mark = await spinner.boundingBox();
+    expect(mark.x).toBeGreaterThan(box.x);
+    expect(mark.x + mark.width).toBeLessThan(box.x + box.width);
+    expect(mark.y).toBeGreaterThan(box.y);
+    expect(mark.y + mark.height).toBeLessThan(box.y + box.height);
+    await expect(costs.nth(1)).not.toHaveAttribute("aria-busy");
+
+    held.release();
+    await expect(spinner).toHaveCount(0);
+    await expect(costs.first()).not.toHaveAttribute("aria-busy");
+  });
+
+  // A save on its way goes by XMLHttpRequest, and the browser ends it
+  // with the page. So when the page closes, the save is sent again with
+  // fetch keepalive, which can finish after the page is gone, with the
+  // same key and the token. If the first try was written, the server
+  // answers the second as replayed and writes nothing more.
+  //
+  // The page gets the pagehide event a closing tab fires, but stays
+  // open: Playwright does not always see a request a page sends as it
+  // closes, and such a request then goes to the preview server's /api
+  // proxy instead of this test's routes.
+  test("sends a save on its way again when the page closes", async ({
+    page,
+  }) => {
+    const held = await holdBillsSaves(page);
+    const { costs } = await openMeal(page);
+    await costs.first().fill("30.00");
+    await costs.first().press("Enter");
+    await expect.poll(() => held.requests.length).toBe(1);
+
+    await page.evaluate(() => {
+      window.dispatchEvent(
+        new window.PageTransitionEvent("pagehide", { persisted: false }),
+      );
+    });
+
+    await expect.poll(() => held.requests.length).toBe(2);
+    const [first, again] = held.requests;
+    expect(first.resourceType()).toBe("xhr");
+    expect(again.resourceType()).toBe("fetch");
+    const firstHeaders = await first.allHeaders();
+    const againHeaders = await again.allHeaders();
+    expect(againHeaders["idempotency-key"]).toBe(
+      firstHeaders["idempotency-key"],
+    );
+    expect(againHeaders.authorization).toBe("Bearer test-token-abc123");
+    expect(again.postDataJSON()).toEqual(first.postDataJSON());
+
+    // The page stays open, so it reads the first try's answer.
+    held.release();
+    await expect(costs.first()).not.toHaveAttribute("readonly");
+    await expect(costs.first()).toHaveValue("30.00");
+  });
+
+  // Logout waits 5 seconds at most for a save on its way, then signs
+  // out and reloads, which ends the save. So logout sends it again with
+  // keepalive first, while the token is still there.
+  //
+  // Chromium only. WebKit ends an XMLHttpRequest on its way as soon as
+  // the page starts to go to the login page, and reports that as an
+  // error on the page, which fails any test here. This test needs a save
+  // on its way at that moment. The code under test is the same in both
+  // browsers, and the pagehide test above runs in both.
+  test("logout sends a slow save again, with the token, before it signs out", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName === "webkit",
+      "WebKit reports the ended save as a page error",
+    );
+    // The first try waits until logout sends it again, so it is still on
+    // its way when logout's 5-second wait ends.
+    const requests = [];
+    let releaseFirst;
+    const firstReleased = new Promise((resolve) => {
+      releaseFirst = resolve;
+    });
+    await page.route("**/api/v1/meals/*/bills*", async (route) => {
+      requests.push(route.request());
+      if (requests.length === 1) await firstReleased;
+      else releaseFirst();
+      return route.fallback();
+    });
+    const { costs } = await openMeal(page);
+    await costs.first().fill("30.00");
+    await costs.first().press("Enter");
+    await expect.poll(() => requests.length).toBe(1);
+
+    await page.getByRole("button", { name: /^logout/ }).click();
+    // The cook rows take no edit while logout waits.
+    await expect(costs.nth(1)).toBeDisabled();
+    await expect(page.locator('input[aria-label="email"]')).toBeVisible({
+      timeout: 10000,
+    });
+
+    expect(requests).toHaveLength(2);
+    const [first, again] = requests;
+    expect(again.resourceType()).toBe("fetch");
+    const firstHeaders = await first.allHeaders();
+    const againHeaders = await again.allHeaders();
+    expect(againHeaders["idempotency-key"]).toBe(
+      firstHeaders["idempotency-key"],
+    );
+    expect(againHeaders.authorization).toBe("Bearer test-token-abc123");
+    expect(again.postDataJSON()).toEqual(first.postDataJSON());
+  });
+
+  // On a phone, the page can be closed after it is hidden with no other
+  // event. So a row that waits to save is sent when the page is hidden,
+  // with fetch keepalive, its key and the token.
+  test("sends a row that waits to save when the page is hidden", async ({
+    page,
+  }) => {
+    const held = await holdBillsSaves(page);
+    const { costs } = await openMeal(page);
+
+    await costs.first().fill("30.00");
+    await page.evaluate(() => {
+      Object.defineProperty(window.document, "visibilityState", {
+        value: "hidden",
+        configurable: true,
+      });
+      window.document.dispatchEvent(new Event("visibilitychange"));
+    });
+
+    await expect.poll(() => held.requests.length).toBe(1);
+    const headers = await held.requests[0].allHeaders();
+    expect(headers["idempotency-key"]).toMatch(/^"[^"]+"$/);
+    expect(headers.authorization).toMatch(/^Bearer /);
+    expect(held.requests[0].postDataJSON().edits).toEqual([
+      {
+        op: "change",
+        resident_id: 1,
+        from: { amount: "25.50", no_cost: false },
+        to: { amount: "30.00", no_cost: false },
+      },
+    ]);
+    held.release();
+    await expect(costs.first()).not.toHaveAttribute("readonly");
   });
 });

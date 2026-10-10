@@ -72,6 +72,7 @@ function makeStore(overrides = {}) {
       clearCalendarEvents: vi.fn(),
       invalidateMonthForDate: vi.fn(),
       logout: vi.fn(),
+      finishBillsSaves: vi.fn(() => Promise.resolve(true)),
       ...overrides,
     },
     {
@@ -81,6 +82,7 @@ function makeStore(overrides = {}) {
       clearCalendarEvents: false,
       invalidateMonthForDate: false,
       logout: false,
+      finishBillsSaves: false,
     },
   );
 }
@@ -676,13 +678,55 @@ describe("MainCalendar", () => {
     });
   });
 
-  it("logout signs out and reloads to the login page", () => {
+  // A bills save for a meal the person left can still be on its way. A
+  // reload would end it, and logout takes the token away, so logout
+  // first waits for it (finishBillsSaves, #150).
+  it("logout waits for the bills saves, then signs out and reloads to the login page", async () => {
     const { location, restore } = fakeLocation();
     try {
-      const { store } = renderCalendar();
+      let saved;
+      const { store } = renderCalendar({
+        store: makeStore({
+          finishBillsSaves: vi.fn(
+            () =>
+              new Promise((resolve) => {
+                saved = resolve;
+              }),
+          ),
+        }),
+      });
       fireEvent.click(screen.getByText("logout Jane Smith"));
+      expect(store.finishBillsSaves).toHaveBeenCalledTimes(1);
+      expect(store.logout).not.toHaveBeenCalled();
+      expect(location.href).toBe("http://localhost:3000/");
+
+      await act(async () => saved(true));
+
       expect(store.logout).toHaveBeenCalledTimes(1);
       expect(location.href).toBe("/");
+    } finally {
+      restore();
+    }
+  });
+
+  // A save it waited for was not saved, and the message is on screen.
+  // Signing out and reloading would take it away before the person
+  // could read it. The next tap goes on.
+  it("logout stays signed in when a save it waited for was not saved", async () => {
+    const { location, restore } = fakeLocation();
+    try {
+      const { store } = renderCalendar({
+        store: makeStore({
+          finishBillsSaves: vi.fn(() => Promise.resolve(false)),
+        }),
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByText("logout Jane Smith"));
+      });
+
+      expect(store.finishBillsSaves).toHaveBeenCalledTimes(1);
+      expect(store.logout).not.toHaveBeenCalled();
+      expect(location.href).toBe("http://localhost:3000/");
     } finally {
       restore();
     }

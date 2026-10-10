@@ -34,9 +34,8 @@ export type BillEdit =
 // How long the page waits for the answer to a bills save. Heroku's
 // router ends a request at 30 seconds, so a request still open after 35
 // seconds lost its answer on the way (a dropped connection can leave
-// the browser waiting for minutes). Until a save is answered, no other
-// bills save is sent and its meal is not loaded again, so the wait must
-// end.
+// the browser waiting for minutes). Until a save is answered, its row
+// takes no edit and its meal is not loaded again, so the wait must end.
 export const BILLS_SAVE_TIMEOUT_MS = 35000;
 
 interface SocketBound {
@@ -78,13 +77,22 @@ export const api = {
     // the same one when that save is sent again. The header's value is a
     // quoted string (RFC 9651). The keys are UUIDs, which have no quote
     // or backslash to escape.
+    //
+    // `keepalive` is true for a save sent because the page is being
+    // hidden or closed (#150). It then goes with fetch and its keepalive
+    // flag, which lets the request finish after the page is gone. An
+    // XMLHttpRequest, which axios uses otherwise, is ended with the page.
+    // It still goes through axios, so the token is added the same way
+    // (axios_auth.js). navigator.sendBeacon cannot send the
+    // Idempotency-Key or the token, so it is not used.
     updateBills(
       mealId: number,
       {
         edits,
         key,
         socketId,
-      }: { edits: BillEdit[]; key: string } & SocketBound,
+        keepalive,
+      }: { edits: BillEdit[]; key: string; keepalive: boolean } & SocketBound,
     ): Promise<AxiosResponse<BillsAck>> {
       return axios({
         method: "patch",
@@ -93,6 +101,9 @@ export const api = {
         timeout: BILLS_SAVE_TIMEOUT_MS,
         headers: { "Idempotency-Key": `"${key}"` },
         data: { edits, socket_id: socketId },
+        ...(keepalive
+          ? { adapter: "fetch", fetchOptions: { keepalive: true } }
+          : {}),
       });
     },
 

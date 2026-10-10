@@ -1,4 +1,4 @@
-import { types, getRoot, Instance } from "mobx-state-tree";
+import { types, getRoot, cast, Instance } from "mobx-state-tree";
 
 import Resident from "./resident";
 import {
@@ -13,12 +13,15 @@ import {
 // of it a bill depends on, and nothing more.
 interface BillRoot {
   meal: { closed: boolean; reconciled: boolean } | null;
-  saveBills(): void;
+  saveBillRowSoon(row: { id: string }): void;
+  billsRowSaving(rowId: string): boolean;
+  billsRowSlowToSave(rowId: string): boolean;
+  cookTakenByAnotherRow(row: { id: string }, cookId: number): boolean;
 }
 
-// A cook picked from the row's cook menu: a Resident node, or "" for the
-// blank option.
-type ResidentChoice = "" | Instance<typeof Resident>;
+// A cook picked for the row: a Resident node, or the resident's id (the
+// cook menu hands over its value, a string), or "" for the blank option.
+type ResidentChoice = "" | string | number | Instance<typeof Resident>;
 
 const Bill = types
   .model("Bill", {
@@ -50,6 +53,13 @@ const Bill = types
     baseCookId: null as number | null,
     baseAmount: "",
     baseNoCost: false,
+    // The cost and No cost switch the blank cleared, by the cook the row
+    // showed then. The next time that cook is picked in this row, while
+    // the row shows no cost of its own, they come back. A cook no other
+    // menu offers (retired after cooking, #91) is offered again in their
+    // own row after the blank, so the person can undo it, and nobody may
+    // know what the cost was. Replaced, never changed in place.
+    clearedByBlank: {} as Record<number, { amount: string; no_cost: boolean }>,
   }))
   // Two views blocks: MobX-State-Tree types `self` inside a block without
   // the views that block defines, so a view another view reads goes first.
@@ -60,6 +70,19 @@ const Bill = types
     // The DataStore at the root of the tree.
     get root(): BillRoot {
       return getRoot<BillRoot>(self);
+    },
+  }))
+  .views((self) => ({
+    // True while this row's save is on its way. The row takes no edit
+    // then, so when the answer comes, the row still shows what the save
+    // sent (#150).
+    get saving(): boolean {
+      return self.root.billsRowSaving(self.id);
+    },
+    // True when this row's save has been on its way for more than a
+    // second. The row shows a spinner in its cost box.
+    get slowToSave(): boolean {
+      return self.root.billsRowSlowToSave(self.id);
     },
   }))
   .views((self) => ({
@@ -111,28 +134,66 @@ const Bill = types
       self.baseAmount = self.amount;
       self.baseNoCost = self.no_cost;
     },
+    // Every edit of a row is refused while the row's save is on its way.
+    //
+    // The blank clears the cost and the no-cost switch too: a row with no
+    // cook has no cost, so the next cook picked in the row does not take
+    // the last cook's cost. Picking another cook straight away keeps the
+    // cost with the row. What the blank cleared is kept for its cook
+    // (clearedByBlank), and comes back the next time that cook is picked
+    // in the row, if the row shows no cost then. A cost typed for
+    // another cook after the blank is the row's own, and stays.
+    //
+    // A cook that another row is still changing does not land
+    // (cookTakenByAnotherRow): the row keeps the cook it had. The menus
+    // do not offer that cook, so this is for a menu drawn before the
+    // other row changed.
     setResident(val: ResidentChoice) {
+      if (self.saving) return self.resident;
       if (val === "") {
+        if (self.resident !== null) {
+          self.clearedByBlank = {
+            ...self.clearedByBlank,
+            [self.resident.id]: { amount: self.amount, no_cost: self.no_cost },
+          };
+        }
         self.resident = null;
-        self.root.saveBills();
+        self.amount = "";
+        self.no_cost = false;
+        self.root.saveBillRowSoon(self);
         return null;
-      } else {
-        self.resident = val;
-        self.root.saveBills();
-        return self.resident;
       }
+      const cookId = typeof val === "object" ? val.id : Number(val);
+      if (self.root.cookTakenByAnotherRow(self, cookId)) return self.resident;
+      // A reference takes the resident or the resident's id, and finds
+      // the resident from the id.
+      self.resident = cast(val);
+      const cleared = self.clearedByBlank[cookId];
+      if (cleared !== undefined) {
+        self.clearedByBlank = Object.fromEntries(
+          Object.entries(self.clearedByBlank).filter(
+            ([id]) => Number(id) !== cookId,
+          ),
+        );
+        if (isZeroAmountString(self.amount) && !self.no_cost) {
+          self.amount = cleared.amount;
+          self.no_cost = cleared.no_cost;
+        }
+      }
+      self.root.saveBillRowSoon(self);
+      return self.resident;
     },
     // A keystroke that breaks the whole-cents grammar does not land: the
     // amount keeps its previous value and nothing is saved.
     setAmount(val: string) {
-      if (!isValidAmountString(val)) {
+      if (self.saving || !isValidAmountString(val)) {
         return self.amount;
       }
       self.amount = val;
       if (!isZeroAmountString(val)) {
         self.no_cost = false;
       }
-      self.root.saveBills();
+      self.root.saveBillRowSoon(self);
       return val;
     },
     // Pad the display when the user leaves the field: "1" shows as
@@ -145,12 +206,13 @@ const Bill = types
       }
     },
     toggleNoCost() {
+      if (self.saving) return self.no_cost;
       const val = !self.no_cost;
       self.no_cost = val;
       if (val) {
         self.amount = "";
       }
-      self.root.saveBills();
+      self.root.saveBillRowSoon(self);
       return val;
     },
   }));

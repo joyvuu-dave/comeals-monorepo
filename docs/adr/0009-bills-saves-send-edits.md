@@ -3,6 +3,8 @@
 - **Status:** Accepted
 - **Date:** 2026-10-07
 - **Issue:** #135 (also #136 and #91)
+- **Amended:** 2026-10-09: each cook row saves on its own (#150), and the
+  third-cook warning is a `200`. See "What the meal page sends".
 
 ## Context
 
@@ -86,7 +88,9 @@ it is the key of a save sent again (below).
 The third-cook warning runs after the writes, inside the lock. It is
 given the cooks before the save and reads the cooks after it from the
 database, so it describes what the save did. The answer's bills are read
-there too, so they are what this save left.
+there too, so they are what this save left. The save was written, so the
+answer is a `200` with `"type": "warning"` (amended 2026-10-09; it was a
+`400`, which told a client that nothing was saved).
 
 ### Two kinds of 409, told apart by `type`
 
@@ -191,62 +195,165 @@ financial data (money rule 8).
 
 ### What the meal page sends
 
-- **A base on each row.** Each bill row keeps a base: the cook and bill
-  the server has for that row, as far as the page knows. A save is the
-  difference between the rows and their bases, worked out per cook, not
-  per row (`app/frontend/src/helpers/bill_edits.ts`). So a cook moved
-  from one row to another is a change of that cook's bill, and a bill
-  whose cook no row shows (#91) is never named.
-- **Bases move when a save is built,** not when it is answered. One
-  request goes at a time, and a save that waits behind another is built
-  when that one is answered, so its `from` is the other save's `to`. A
-  save built when the person leaves a meal (#107) is built the same way.
-  A base is never moved back.
-- **The answer changes no row.** The bases already hold what the save
-  sent, and a row may show a newer cost. The page checks the answer
-  instead: each cook the save named must show what it sent. A
-  difference is reported to Bugsnag as a server bug, except on a
-  `replayed` answer, where someone may have saved since. Either way the
-  meal loads again.
+(Amended 2026-10-09 for #150. Before, the page sent one save at a time
+for the whole cooks box: a save waited 500 ms after the last edit, and a
+save asked for while another was on its way waited in a queue until that
+one was answered. A save still waiting in the page was lost with no
+message when the page reloaded or closed.)
+
+- **Each cook row saves on its own.** A row's save is the difference
+  between that row and its base (`app/frontend/src/helpers/bill_edits.ts`).
+  It names at most two cooks: the cook at the row's base and the cook it
+  shows. The same cook is a `change`; another cook is a `remove` of the
+  cook at the base and an `add` of the cook shown. A bill whose cook no
+  row shows (#91) is never named. Saves of different rows go at the same
+  time: the server takes edits per cook, so it can take them in any
+  order.
+- **When a row saves.** 2 seconds after its last edit (a keystroke, a
+  pick, the No cost switch), or at once when the person leaves its cost
+  box or presses Enter in it. Leaving the cook menu does not save: a
+  person who picks a cook and then goes to the cost box sends one save
+  with both. Coming to the cost box starts the row's wait again, if it
+  has one. On a phone, closing the menu, tapping the box and waiting
+  for the keyboard can take about 2 seconds, and the pick's save would
+  lock the row under the first digits typed. Leaving the meal sends every row that waits to save, at
+  once, to the meal it was typed on (#107), and the next meal shows at
+  once.
+- **A base on each row.** Each row keeps a base: the cook and bill the
+  server has for that row, as far as the page knows. It moves when the
+  row's save is built, not when it is answered. A base is never moved
+  back.
+- **A row is read-only while its save is on its way.** Its cook menu,
+  cost box and No cost switch take no edit until the save is answered,
+  the other rows stay free, and a question open in the row closes. So a
+  row never has a second save waiting behind its first, and when the
+  answer comes the row still shows what the save sent. The controls keep
+  their look and their focus (`readonly` on the cost box, `aria-disabled`
+  on the menu and the switch), so the lock shows nothing for the first
+  second. The cost box keeps its white background: the app gives every
+  other read-only box a gray one. After one second a small spinner shows
+  inside the row's cost box, which is `aria-busy`, with no words.
+- **Two saves on their way never name one cook.** Saves for different
+  cooks can reach the server in either order. Saves for one cook cannot:
+  if a row's `add` of Bob arrived before another row's `remove` of Bob,
+  the remove would undo it with no message. So a row cannot take a cook
+  that another row is still changing: one that has the cook at its base
+  but shows another, or whose save that names the cook is on its way.
+  The cook menus do not offer that cook, and a pick of it does not land.
+  The cook is offered again once that row's save is answered.
+- **The answer changes no row.** The page checks it instead: each cook
+  the save named must show what it sent. A difference is reported to
+  Bugsnag as a server bug, except on a `replayed` answer, where someone
+  may have saved since. Either way the meal loads again. A `200` with
+  `"type": "warning"` shows "Cooks saved." and the warning, and names the
+  meal when the person has left it.
 - **A failure that may not be final is sent once more**, unchanged and
-  with the same key, before any save built after it: a `409` with no
-  `type`, a `5xx`, or no answer. The page stops waiting after 35 seconds,
-  because Heroku's router ends a request at 30. The person sees the
-  failure only if the second try fails too, and the second try alone
-  decides what they see. For a meal they left, it is the message that
-  names the meal. The meal on screen joins that message while it still
-  shows. Otherwise, for the meal on screen, if the second try got no
-  answer from the app (no answer, or a `5xx` page with no message from
-  the app), the page says "Your cooks and costs may not have been
-  saved. Check them when the meal shows again.", whatever the first try
-  got. The second try may have been written, even after a first try
-  that wrote nothing (a `409` with no `type`, or the app's `503`). If
-  the second try got the app's own words (a `409` with no `type`, or
-  the app's `503`), the page shows those words, even after a first try
-  with no answer. Puma runs one thread, so the first try was finished
-  before the second was read, and if it had been written, the second
-  would have been answered as `replayed`. Either way the meal on screen
-  loads again.
+  with the same key: a `409` with no `type`, a `5xx`, or no answer. The
+  row stays locked until that try is answered. The page stops waiting
+  after 35 seconds, because Heroku's router ends a request at 30. The
+  person sees the failure only if the second try fails too, and the
+  second try alone decides what they see. For a meal they left, it is
+  the message that names the meal. The meal on screen joins that message
+  while it still shows. Otherwise, for the meal on screen, if the second
+  try got no answer from the app (no answer, or a `5xx` page with no
+  message from the app), the page says "Your cooks and costs may not
+  have been saved. Check them when the meal shows again.", whatever the
+  first try got. The second try may have been written, even after a
+  first try that wrote nothing (a `409` with no `type`, or the app's
+  `503`). If the second try got the app's own words (a `409` with no
+  `type`, or the app's `503`), the page shows those words, even after a
+  first try with no answer. Puma runs one thread, so the first try was
+  finished before the second was read, and if it had been written, the
+  second would have been answered as `replayed`. Either way the meal on
+  screen loads again.
 - **A final failure is not sent again:** a `stale` `409`, a `400` or a
   `422`. The person sees the server's words (or, for a meal they left,
   the message that names the meal, which the meal on screen also joins
-  while it shows), later saves go as they were built,
-  and the meal on screen loads again as on its first load, frozen until
-  it arrives, once nothing is pending for it. A `422` can only come from
-  a bug in the page, so it is reported too.
-- **One cook picked in two rows** cannot be sent, because a save names a
-  cook once. Nothing is sent, and the message names the cook. The cook
-  menus do not offer a cook picked in another row, so only a bug in the
-  page can get here.
+  while it shows), and the meal on screen loads again as on its first
+  load, frozen until it arrives, once nothing is pending for it. A `422`
+  can only come from a bug in the page, so it is reported too.
+- **The meal's rows are not built again while an edit is pending (#136):**
+  a save of the meal on its way, a row in its wait before its save, or a
+  row that differs from its base. The fetch waits until nothing is
+  pending.
+- **One cook picked in two rows** cannot be sent, because a cook has one
+  bill. Neither row's save is sent, and the message names the cook. The
+  cook menus do not offer a cook picked in another row, so only a bug in
+  the page can get here.
 - **Removing a cook that no other menu offers asks first.** A cook who
   was retired, or whose "can cook" was turned off, after cooking is
   offered only in their own row (#91). Picking another name there, or
   the blank, is a `remove` of their bill, and once the meal loads again
   only an admin can add it back. So that pick asks first, with the
-  app's yes/no bar.
+  app's yes/no bar. Until the meal loads again, their row still offers
+  them, so the person can undo the pick.
+- **The blank clears the row's cost.** A row with no cook has no cost, so
+  picking the blank clears the cost and the No cost switch too, and the
+  next cook picked in the row does not take the last cook's cost.
+  Picking another cook straight away keeps the cost with the row. The
+  row keeps what the blank cleared, for the cook it cleared it from.
+  The next time that cook is picked in the row, if the row shows no
+  cost then, the cost and the switch come back. If the blank's save
+  was already sent, the next save is an `add` with that cost. A cost
+  typed for another cook after the blank is the row's own, and stays.
+- **A reload the page makes itself waits.** Logout, Refresh in the "new
+  version" banner, and Refresh on the error page first freeze the cook
+  rows and send every row with an edit the server does not have. Then
+  they wait until no bills save is on its way and no row waits to save,
+  for at most 5 seconds. A reload ends every request on its way, and
+  logout takes the token away. Moving to another meal or to the
+  calendar does not wait.
+  - If a save they waited for was not saved, or may not have been, or a
+    row could not be sent (one cook in two rows), the page does not
+    reload. Its message is on screen, and a reload would take it away
+    before the person could read it. The rows take edits again, and the
+    next tap goes on.
+  - Otherwise the page reloads, and the rows stay frozen until it does.
+  - The error page shows because something threw, and the store may be
+    what broke. So if the wait itself throws, its Refresh reports the
+    error and reloads anyway: it is the only way off that page.
+- **A page that is hidden or closed sends what waits.** When the browser
+  fires `visibilitychange` to hidden, or `pagehide`, every row that waits
+  to save is sent at once with `fetch` and its `keepalive` flag, which
+  lets the request finish after the page is gone. On a phone,
+  `visibilitychange` to hidden is the last event a page can count on: a
+  page in the background may be closed with no other event. The save
+  carries its Idempotency-Key and the token, like any other, so
+  `navigator.sendBeacon`, which can send neither, is not used. If the
+  page stays open, the answer is handled as usual. The app listens for
+  these events on every page, because a save for a meal the person left
+  can still be on its way while the calendar shows.
+- **A save on its way is sent again when the page closes.** A save goes
+  by XMLHttpRequest, and the browser ends it with the page. So on
+  `pagehide`, when the browser does not keep the page in its
+  back-forward cache, each bills save on its way is sent again,
+  unchanged, with `keepalive` and the same key. If the first try was
+  written, the server answers the second as `replayed` and writes
+  nothing more. A save that went with `keepalive` already is not sent
+  again. The page does not read the answer, because it will be gone; if
+  it stays open after all, the first try's answer is the one it reads.
+  A reload the page makes itself does this before it starts: Logout and
+  both Refresh buttons when their wait says the page may reload, and
+  the reload after a page's code fails to load. WebKit, the engine of
+  every browser on an iPhone, ends a request on its way as soon as a
+  reload starts, before `pagehide`, and logout takes the token away
+  before its reload. The token is read when a request is made, not in a
+  later step (`axios_auth.js`), so logout can take it away right after.
 
 ## Consequences
 
+- (2026-10-09, #150.) A cost typed on one row no longer waits for another
+  row's save. A cost still in a row's wait is sent when the person
+  leaves the meal, logs out, taps Refresh, or the page is hidden or
+  closed, and a save on its way is sent again when the page reloads or
+  closes. Two cases still lose it with no message: a page the browser ends without
+  firing `visibilitychange` or `pagehide` (a crash), and a `keepalive`
+  save the browser refuses or the network drops after the page is gone.
+- (2026-10-09.) After the first tap, Logout and both Refresh buttons can
+  now leave the person on the page: when a save they waited for was not
+  saved, the page stays with the message, and the next tap goes on.
+- (2026-10-09.) A client that read the third-cook warning as a failure
+  must read it on its success path: the answer is a `200`.
 - A save can no longer remove or bring back a cook it did not name. Both
   forms of #135 are fixed, and so is the cause of #91: a bill the page
   does not show is never named, so it is never removed.

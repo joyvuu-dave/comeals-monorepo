@@ -190,8 +190,7 @@ export function generateTimes() {
   }
 }
 
-// How long a save waits after the last edit before firing, for every
-// debounced autosave field (bill amounts, meal description). Blur flushes
-// a pending bill save immediately, so this only spans pauses while the
-// field still has focus. One constant so the fields cannot drift apart.
+// How long the meal's menu text waits after the last keystroke before
+// it saves. A cook row waits longer, 2 seconds, and saves on its own
+// (BILL_ROW_SAVE_WAIT_MS in stores/data_store_bills.ts, #150).
 export const SAVE_DEBOUNCE_MS = 500;

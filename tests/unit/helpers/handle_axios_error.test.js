@@ -24,8 +24,8 @@ describe("handleAxiosError", () => {
 
     // An answer with an error status is an error, whatever its body
     // says. The one answer the server marks "warning", the bills write's
-    // third-cook advice, never comes here: billsSaveFailed shows it
-    // itself (data_store_bills.ts).
+    // third-cook advice, is a 200, so it never comes here: the bills
+    // save reads it on success (data_store_bills.ts).
     it("shows an answer marked as a warning as an error too", () => {
       handleAxiosError({
         response: { data: { message: "Careful.", type: "warning" } },
