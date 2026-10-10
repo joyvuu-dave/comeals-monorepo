@@ -13,7 +13,7 @@ namespace :reconciliations do
     # reading the same scope Settlement#assign_meals claims, so there is no
     # pre-check here — the refusal arrives as RecordInvalid.
     begin
-      reconciliation = SettleAndNotify.call(cutoff: community.yesterday, community: community)
+      settlement = SettleAndNotify.call(cutoff: community.yesterday, community: community)
     rescue ActiveRecord::RecordInvalid => e
       Rails.logger.info(
         "reconciliations:create skipping #{community.name} — #{e.record.errors.full_messages.to_sentence}"
@@ -29,10 +29,13 @@ namespace :reconciliations do
       next
     end
 
+    # The count the settlement read inside its transaction: a query here,
+    # after the commit, could fail and make the task exit 1 for a period
+    # that is settled.
     total_time = Time.current - start_time
     Rails.logger.info(
-      "Reconciliation ##{reconciliation.id} created for #{community.name}: " \
-      "#{reconciliation.number_of_meals} meals, in #{total_time.round(2)}s"
+      "Reconciliation ##{settlement.reconciliation.id} created for #{community.name}: " \
+      "#{settlement.meal_count} meals, in #{total_time.round(2)}s"
     )
   end
 end

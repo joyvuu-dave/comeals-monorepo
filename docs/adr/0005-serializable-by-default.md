@@ -436,6 +436,29 @@ is needed by the specs before it is needed by the application.
   the API, so an admin edit against an API write on one meal deadlocked.
   `LocksItsMealFirst` takes the trigger's lock (`FOR KEY SHARE`) before
   the row instead of after it.
+- **2026-10-09** — nothing after a write's commit may fail into "Nothing
+  was saved". The 409 above is true only when nothing committed, so a
+  write action now answers from what it read inside its own
+  transaction. The settlement did not: after its commit it read its
+  meals again for the cache clear, counted them for the answer, and
+  queued the cook mail, and a refusal of any of the three answered 409
+  for a settlement that was saved. Now the meals and the count are kept
+  from inside the transaction, the cook mail job is a Solid Queue row
+  written in the same transaction, and the steps after the commit report
+  their errors instead of raising (`SettleAndNotify`). Two admin writes
+  broke the same rule: a rotation delete renumbered and recolored the
+  rotations left after its commit, so a refusal there showed "Nothing
+  was saved" for a rotation that was gone (the two now run inside the
+  delete's transaction, and a new rotation is numbered inside its own
+  create's transaction too), and removing someone from a meal read
+  their name for the notice after the commit (it is now read before).
+  `spec/requests/no_query_after_commit_spec.rb` runs every API and
+  admin route that writes, checks both lists against the routes, and
+  fails on any query after the commit outside a step that reports its
+  own errors. The same change made
+  `RetryOnConflict` retry a conflict that Solid Queue wraps in its own
+  `EnqueueError`; before that, a refused push enqueue was dropped after
+  one try.
 
 The full record of the rollout, step by step, is in
 [docs/serializable-rollout.md](../serializable-rollout.md).

@@ -179,6 +179,7 @@ MUTANT_SPEC_ROWS = {
   'spec/requests/admin/admin_zone_spec.rb' => %w[ApplicationController],
   'spec/requests/admin/deletion_safeguards_spec.rb' => %w[RefusedDestroyMessage Meal Resident Rotation Unit],
   'spec/requests/admin/rotation_destroy_spec.rb' => %w[Rotation RefusedDestroyMessage],
+  'spec/requests/admin/rotation_destroy_refused_spec.rb' => %w[Rotation RefusedDestroyMessage],
   'spec/requests/admin/meal_lock_order_spec.rb' => %w[LocksItsMealFirst],
   'spec/requests/admin/meal_form_guests_spec.rb' => %w[Guest ClosedMealAttendanceFreeze],
   'spec/requests/admin/meal_form_guest_move_spec.rb' => %w[Guest ClosedMealAttendanceFreeze],
@@ -200,7 +201,15 @@ MUTANT_SPEC_ROWS = {
   'spec/tasks/residents_notify_spec.rb' => %w[PacedDelivery ResidentMailer MailDeliveryFailure MailDelivery],
   'spec/jobs/recurring_job_spec.rb' => %w[RecurringJob RetryOnConflict Healthcheck JobRun],
   'spec/jobs/notify_cooks_job_spec.rb' => %w[NotifyCooksJob PacedDelivery MailDelivery],
+  # NotifyCooksJob.cooks_owed has no other caller and no other examples.
+  'spec/jobs/send_missed_cook_mail_job_spec.rb' => %w[SendMissedCookMailJob NotifyCooksJob MailDelivery],
+  # The only spec that sees a query after a settlement's commit. Settlement
+  # is not named: its mutations are many, and this file runs some 60
+  # requests with no test transaction; settle_and_notify_spec checks what
+  # it keeps.
+  'spec/requests/no_query_after_commit_spec.rb' => %w[SettleAndNotify Api::V1::ReconciliationsController],
   'spec/jobs/ensure_rotations_job_spec.rb' => %w[EnsureRotationsJob Community Rotation MealSchedule],
+  'spec/jobs/ensure_rotations_job_numbering_refused_spec.rb' => %w[EnsureRotationsJob Rotation],
   'spec/serializers/api_contract_spec.rb' =>
     %w[MealSerializer BillSerializer GuestSerializer GuestReplayedSerializer MealResidentSerializer EventSerializer
        GuestRoomReservationSerializer CommonHouseReservationSerializer RotationSerializer

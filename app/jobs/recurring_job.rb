@@ -38,7 +38,7 @@ class RecurringJob < ApplicationJob
   end
 
   def perform
-    started_at = Time.current
+    @started_at = Time.current
     details = T.let(nil, T.untyped)
     self.class.const_get(:HEALTHCHECK).then do |slug|
       Healthcheck.monitor(slug) do
@@ -64,6 +64,12 @@ class RecurringJob < ApplicationJob
   end
 
   private
+
+  # When this run started, as its run record says. A `run` that looks at
+  # earlier runs' started_at uses this as its own "now", so that this run
+  # and the next one draw the line at the same moment
+  # (SendMissedCookMailJob).
+  attr_reader :started_at
 
   def record(started_at, outcome:, details: nil, error: nil)
     JobRun.create!(name: self.class.run_name, started_at: started_at, finished_at: Time.current,

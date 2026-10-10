@@ -141,8 +141,8 @@ module Storm
 
     def settle_once
       Rails.application.executor.wrap do
-        reconciliation = SettleAndNotify.call(cutoff: @plan.community.yesterday)
-        [:settled, reconciliation.id]
+        settlement = SettleAndNotify.call(cutoff: @plan.community.yesterday)
+        [:settled, settlement.reconciliation.id]
       end
     rescue ActiveRecord::RecordInvalid
       :nothing_to_settle

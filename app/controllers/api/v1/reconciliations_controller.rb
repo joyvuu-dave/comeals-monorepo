@@ -34,16 +34,23 @@ module Api
       # the answer does not wait on SMTP. Creating it is the lock — the row
       # and its meals are frozen from this moment, and there is no undo.
       # Preview first.
+      #
+      # The answer is built from what the settlement read inside its own
+      # transaction, with no query after the commit. A query here could be
+      # refused, and the 409 below would then say "Nothing was saved"
+      # about a settlement that is saved
+      # (spec/requests/no_query_after_commit_spec.rb).
       sig { void }
       def create
         cutoff = Date.iso8601(params.require(:cutoff))
         # A person is waiting, so three quick tries and then the 409 below,
         # not the nightly task's minutes of patience (SettleAndNotify::REQUEST).
-        reconciliation = SettleAndNotify.call(cutoff: cutoff, retries: SettleAndNotify::REQUEST)
+        settlement = SettleAndNotify.call(cutoff: cutoff, retries: SettleAndNotify::REQUEST)
+        reconciliation = settlement.reconciliation
         # Both dates are NOT NULL on a saved row, which this is.
         render json: { id: reconciliation.id, date: T.must(reconciliation.date).iso8601,
                        cutoff_date: T.must(reconciliation.end_date).iso8601,
-                       meal_count: reconciliation.number_of_meals },
+                       meal_count: settlement.meal_count },
                status: :created
       rescue Date::Error, ActionController::ParameterMissing
         render json: { message: 'cutoff must be a date, YYYY-MM-DD' }, status: :bad_request

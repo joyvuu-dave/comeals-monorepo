@@ -23,6 +23,12 @@ shared: &shared
   ensure_rotations:
     class: EnsureRotationsJob
     schedule: 30 22 * * * UTC
+  # Queues the cook mail again for a settlement from the last 7 days that
+  # still has a cook without it (SendMissedCookMailJob). 16:00 UTC is
+  # morning in California, so a mail this sends arrives in the morning.
+  send_missed_cook_mail:
+    class: SendMissedCookMailJob
+    schedule: 0 16 * * * UTC
   clear_finished_jobs:
     command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
     schedule: 12 * * * * UTC

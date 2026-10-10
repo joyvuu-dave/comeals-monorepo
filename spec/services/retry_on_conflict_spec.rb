@@ -61,6 +61,52 @@ RSpec.describe RetryOnConflict do
       expect(calls).to eq(described_class::MAX_ATTEMPTS)
     end
 
+    # Solid Queue's enqueue wraps every database error in its own
+    # EnqueueError, a plain StandardError, with the database error as its
+    # cause. A job queued inside the block is a row in the block's
+    # transaction, so a conflict there is the block's conflict.
+    def enqueue_refused(cause)
+      raise cause
+    rescue StandardError
+      raise SolidQueue::Job::EnqueueError, "#{cause.class.name}: #{cause.message}"
+    end
+
+    it 'runs the block again when Solid Queue refused an enqueue for a conflict' do
+      calls = 0
+      described_class.call do
+        calls += 1
+        enqueue_refused(ActiveRecord::SerializationFailure.new('conflict')) if calls < 2
+      end
+
+      expect(calls).to eq(2)
+    end
+
+    it 'raises the conflict itself once the tries run out, so callers answer it as any conflict' do
+      calls = 0
+
+      expect do
+        described_class.call do
+          calls += 1
+          enqueue_refused(ActiveRecord::Deadlocked.new('deadlock'))
+        end
+      end.to raise_error(ActiveRecord::Deadlocked, 'deadlock')
+
+      expect(calls).to eq(described_class::MAX_ATTEMPTS)
+    end
+
+    it 'does not retry an enqueue refused for another reason' do
+      calls = 0
+
+      expect do
+        described_class.call do
+          calls += 1
+          enqueue_refused(ActiveRecord::NotNullViolation.new('null value'))
+        end
+      end.to raise_error(SolidQueue::Job::EnqueueError)
+
+      expect(calls).to eq(1)
+    end
+
     it 'does not retry an ordinary error' do
       calls = 0
 

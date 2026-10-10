@@ -59,7 +59,8 @@ class Settlement
   # the commit on a conflict (SettleAndNotify): it calls
   # forget_cached_meals itself, after the retry, so nothing that runs
   # after the commit can be taken for a failed commit and settle the
-  # period again.
+  # period again. A caller that opens its own transaction around this
+  # one adds its writes to the settlement's commit.
   sig { params(cutoff: Date).returns(Settlement) }
   def self.settle!(cutoff:)
     new(Reconciliation.new(end_date: cutoff)).tap(&:settle!)
@@ -141,16 +142,31 @@ class Settlement
   sig { params(reconciliation: Reconciliation).void }
   def initialize(reconciliation)
     @reconciliation = reconciliation
-    @claimed_meal_ids = T.let(nil, T.nilable(T::Array[Integer]))
+    @claimed_meals = T.let(nil, T.nilable(T::Array[[Integer, Date]]))
   end
+
+  # The id and date of each meal this settlement claimed, read under the
+  # meals' row locks inside its transaction (assign_meals). Kept so that
+  # nothing after the commit has to read the meals again: the cache clear
+  # and the answer to the person who settled both come from here, and a
+  # read after the commit is a read that can fail for a settlement that
+  # is saved. Never empty: reconciliation.save! refuses a period with no
+  # meal before assign_meals runs.
+  sig { returns(T::Array[[Integer, Date]]) }
+  def claimed_meals = T.must(@claimed_meals)
+
+  # How many meals this settlement claimed. The same number as
+  # reconciliation.number_of_meals, without a query.
+  sig { returns(Integer) }
+  def meal_count = claimed_meals.size
 
   # Create the row, claim the meals, write the ledger. Raises
   # ActiveRecord::RecordInvalid when the period is not settleable (cutoff
-  # not in the past, or no meal to settle), and RuntimeError when a
+  # not in the past, or no meal to settle), and Contested when a
   # concurrent settlement claimed a meal first; both roll everything back.
   # Does nothing after the commit; the caller runs forget_cached_meals.
   # Returns nothing: every caller already holds the row, as
-  # `reconciliation`.
+  # `reconciliation`, and the meals, as claimed_meals.
   sig { void }
   def settle!
     reconciliation.mark_settling!
@@ -288,18 +304,14 @@ class Settlement
   # refill a cache from a claim that then rolled back. LiveUpdate clears
   # every month before the first push, and nothing in its flush raises —
   # the ledger is committed by the time this runs, and a raise here would
-  # make the caller skip the balance refresh and the cook emails
-  # (SettleAndNotify) for a settlement that is in the database. Not
-  # called from settle!, so a caller that retries the commit can run it
-  # after the retry.
+  # reach the person who settled as an error for a settlement that is in
+  # the database. The meals come from claimed_meals, not from a new read,
+  # for the same reason. Not called from settle!, so a caller that
+  # retries the commit can run it after the retry.
   sig { void }
   def forget_cached_meals
-    # assign_meals set this, and reconciliation.save! refused a period
-    # with no meal before assign_meals ran, so the list is never empty.
-    ids = T.must(@claimed_meal_ids)
-
     LiveUpdate.batch do
-      Meal.where(id: ids).pluck(:id, :date).each do |id, date|
+      claimed_meals.each do |id, date|
         LiveUpdate.meal(id, socket_id: nil)
         LiveUpdate.calendar(date)
       end
@@ -345,12 +357,15 @@ class Settlement
   #
   # ORDER BY id keeps the lock order deterministic so two concurrent
   # settlements cannot deadlock against each other.
+  #
+  # The locking read also takes each meal's date, for claimed_meals: read
+  # under the lock, the dates are the ones this settlement claims.
   sig { void }
   def assign_meals
     meal_ids = eligible_meal_ids
-    Meal.where(id: meal_ids).order(:id).lock.pluck(:id)
+    locked = T.let(Meal.where(id: meal_ids).order(:id).lock.pluck(:id, :date), T::Array[[Integer, Date]])
     claimed = Meal.where(id: meal_ids, reconciliation_id: nil).update_all(reconciliation_id: reconciliation.id)
-    @claimed_meal_ids = meal_ids
+    @claimed_meals = locked
     return if claimed == meal_ids.size
 
     raise Contested, "assign_meals: reconciliation #{reconciliation.id} plucked #{meal_ids.size} " \

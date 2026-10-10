@@ -362,6 +362,39 @@ RSpec.describe LiveUpdate do
     end
   end
 
+  # The same refusal as Solid Queue raises it. Its enqueue wraps every
+  # database error in SolidQueue::Job::EnqueueError, a plain
+  # StandardError that ActiveJob lets through, so the examples above,
+  # which raise the conflict itself, did not show what production does:
+  # the push was reported and dropped after one try.
+  describe 'an enqueue Postgres refuses for a conflict, under Solid Queue' do
+    include_context 'with no test transaction'
+    include_context 'with Solid Queue as the job adapter'
+
+    before do
+      create(:community)
+      allow(RetryOnConflict).to receive(:sleep)
+      allow(Rails.error).to receive(:report)
+    end
+
+    it 'is tried again, and the push is queued' do
+      refused = false
+      allow(SolidQueue::Job).to receive(:create!).and_wrap_original do |original, **attributes|
+        unless refused
+          refused = true
+          raise ActiveRecord::SerializationFailure, 'could not serialize access'
+        end
+        original.call(**attributes)
+      end
+
+      described_class.residents
+
+      expect(SolidQueue::Job.where(class_name: 'LivePushJob').count).to eq(1)
+      expect(Rails.error).not_to have_received(:report).with(anything,
+                                                             hash_including(context: hash_including(:channel)))
+    end
+  end
+
   describe 'notes inside a transaction' do
     include_context 'with no test transaction'
 

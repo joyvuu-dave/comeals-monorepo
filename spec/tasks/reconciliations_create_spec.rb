@@ -207,6 +207,9 @@ RSpec.describe 'reconciliations:create' do
     expect { Rake::Task['reconciliations:create'].invoke }.not_to raise_error
 
     expect(delivered).to eq([second])
+    # The first try and each quick try after it (NotifyCooksJob::RETRY_WAITS),
+    # which the test adapter runs at once instead of minutes later.
     expect(Rails.logger).to have_received(:error).with(/reconciliation_notify_email failed/)
+                                                 .exactly(NotifyCooksJob::RETRY_WAITS.size + 1).times
   end
 end

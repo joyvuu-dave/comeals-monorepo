@@ -67,6 +67,8 @@ module NonTransactionalCleanup
     residents
     units
     communities
+    solid_queue_jobs
+    solid_queue_semaphores
   ].freeze
 
   # RetryOnConflict for the same reason the old after hooks used it: the app

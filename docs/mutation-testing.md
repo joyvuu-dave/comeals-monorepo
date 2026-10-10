@@ -2393,3 +2393,70 @@ still a guest of the same host on the same meal
 (`GuestAddKey#guest_as_added`, new). Run 3, on that method and
 `GuestReplayedSerializer*`: 3 subjects, 45 mutations, 45 killed, 0
 alive, 0 timeouts, 18 seconds.
+
+### 2026-10-09, nothing after a settlement's commit, and the missed cook mail
+
+Run on every Ruby method this branch added or changed:
+`NotifyCooksJob*`, `SendMissedCookMailJob*` (new), `SettleAndNotify*`,
+`RetryOnConflict*`, the five `Settlement` methods that keep the claimed
+meals (`#initialize`, `#claimed_meals`, `#meal_count`,
+`#forget_cached_meals`, `#assign_meals`), and
+`Api::V1::ReconciliationsController#create`. Two new rows in
+`spec/support/mutant/specs.rb`: the nightly job's spec also proves
+`NotifyCooksJob.cooks_owed`, and `no_query_after_commit_spec.rb` proves
+`SettleAndNotify` and the settle action. `Settlement` is not on that
+row: the file runs 25 requests with no test transaction, and
+`settle_and_notify_spec.rb` already checks what `Settlement` keeps.
+
+| Run                                                  | Subjects | Mutations | Killed | Alive | Timeouts | Time |
+| ---------------------------------------------------- | -------- | --------- | ------ | ----- | -------- | ---- |
+| 1, all of the above, two other suites running        | 20       | 1,010     | 972    | 38    | 14       | 1h01 |
+| 2, the two jobs and the three `Settlement` neutrals  | 11       | 472       | 469    | 3     | 0        | 14m  |
+| 3, `NotifyCooksJob.cooks_owed` after removing a call | 1        | 83        | 83     | 0     | 0        | 3m   |
+
+Run 1's 38, by kind:
+
+- Missing examples (11), each with an example now. `cooks_owed` (6):
+  the mailer condition, the `about_type` condition, or both (3), which
+  no example told apart from this mail about this settlement; and
+  `count` or `count(nil)` for `count('bills.resident_id')`, or no
+  `distinct` (3), which no example told apart, because no cook had two
+  bills in one settlement. `log_cooks_without_email` (2): the same
+  `distinct`, and the condition on the email removed.
+  `SendMissedCookMailJob` (3): another job's run taken as this job's
+  first run or its last good run (2), and `..` for `...` on the
+  window's start (1), now an example of a settlement exactly 7 days old.
+- Redundant code, removed (7). `SendMissedCookMailJob#run`: `.order(:id)`
+  removed or `order(nil)`, `.to_a` removed or `to_ary` (4); the order of
+  the queued jobs is not seen anywhere, and `each` loads the list once.
+  `#left_the_window_since_the_last_run`: `.sort` (1), the same.
+  `cooks_owed`: the settlements for `.select(:id)`, or `.select(nil)`
+  (2); Rails uses the key for a relation in a `where` hash. Run 2 still
+  had these two; run 3 is after removing the call.
+- Loops that never end (10), all `RetryOnConflict.call`, the kinds of
+  2026-09-27: an attempt count that does not grow (2), no raise at the
+  last attempt (6), and `sleep` or `sleep(nil)` (2). These were run 1's
+  timeouts with the four below.
+- Noise (5). `RetryOnConflict.call` (4): `==`, `eql?` or `equal?` for
+  `>=`, and `self.rand`, as on 2026-09-27. `Settlement#initialize` (1):
+  the `T.let(nil, ...)` removed; an instance variable that was never set
+  reads as nil, and `srb tc` refuses the file without it (`typed:
+strict`).
+- Noise in the settle action (2): `.iso8601` removed on `date` and
+  `cutoff_date`. A Date is written as YYYY-MM-DD in the JSON either way.
+  Both calls were there before this branch.
+- Neutral failures (3): `Settlement#initialize`, `#claimed_meals` and
+  `#meal_count` select 815 examples, the race specs among them, and the
+  unmutated code failed under the load of two full suites in other
+  worktrees. Run 2, on a quiet machine, had none, and killed every
+  mutation of the three but the `T.let` above.
+
+Mutant cannot reach class bodies. Ten changes were made there by hand,
+and each failed examples: `retry_on` with one try fewer (1 failed) or
+one more (1); the wait for `executions` instead of `executions - 1` (1);
+two waits instead of three (1); the block after the last try removed
+(1); `enqueue_after_transaction_commit = true` (3: the setting itself,
+and the two settle routes in `no_query_after_commit_spec.rb`, where the
+job is then an INSERT after the commit); `WINDOW` of 6 days (2) or 8
+days (2); another healthchecks.io slug (1); and a 15:00 schedule in
+`config/recurring.yml` (1).

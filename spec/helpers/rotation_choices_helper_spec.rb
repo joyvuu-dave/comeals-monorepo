@@ -39,9 +39,10 @@ RSpec.describe RotationChoicesHelper do
       expect(helper.rotation_choices.map(&:second)).to eq([later.id, earlier.id])
     end
 
-    # Two rotations share a place number only when neither has one yet:
-    # a rotation gets its number after its save commits
-    # (Rotation#set_place_value). Then the newer id comes first. Rows can
+    # Two rotations share a place number only when neither has one, which
+    # happens only to rows written without the model
+    # (Rotation#set_place_value numbers every rotation in the transaction
+    # that makes one). Then the newer id comes first. Rows can
     # not show this every time: with equal place numbers, PostgreSQL
     # returns the rows in whatever order its grouping finds them, and an
     # example with two such rotations passed with the id dropped from the

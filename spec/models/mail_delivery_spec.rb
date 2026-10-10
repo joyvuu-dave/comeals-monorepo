@@ -54,6 +54,33 @@ RSpec.describe MailDelivery do
     end.to raise_error(ActiveRecord::RecordNotUnique)
   end
 
+  # The row is written after the mail went out. A refusal for a conflict
+  # that ends the run leaves a person mailed with no row, and the next run
+  # mails them again (spec/jobs/notify_cooks_job_spec.rb shows the whole
+  # path). So a conflict is tried again, like any other refused write.
+  # No test transaction: a retry can only happen outside one.
+  context 'when the database refuses the row once for a conflict' do
+    include_context 'with no test transaction'
+
+    it 'writes it on the next try' do
+      allow(Rails.error).to receive(:report)
+      refused = false
+      allow(described_class).to receive(:create!).and_wrap_original do |original, **attributes|
+        unless refused
+          refused = true
+          raise ActiveRecord::SerializationFailure, 'could not serialize access'
+        end
+        original.call(**attributes)
+      end
+
+      row = described_class.record!(mailer: 'new_rotation_email', about: rotation, resident: ann)
+
+      expect(row).to be_persisted
+      expect(described_class.where(mailer: 'new_rotation_email', about: rotation).pluck(:resident_id)).to eq([ann.id])
+      expect(described_class).to have_received(:create!).twice
+    end
+  end
+
   it 'refuses an update at the database' do
     row = described_class.record!(mailer: 'new_rotation_email', about: rotation, resident: ann)
     expect { row.update_columns(sent_at: 1.day.ago) }

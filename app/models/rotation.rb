@@ -49,6 +49,20 @@ class Rotation < ApplicationRecord
   has_many :cooks, -> { distinct }, through: :bills, source: :resident
 
   before_validation :set_color, on: :create
+  # The rotations are renumbered when one is made or deleted, and a
+  # delete also puts their colors back on the cycle. All of it runs inside
+  # the create's or the delete's own transaction. Until 2026-10-10 it ran
+  # after the commit. At SERIALIZABLE the database can refuse any
+  # statement (ADR 0005), and a refusal there left the change saved and
+  # the numbers wrong until the next rotation change: a deleted rotation's
+  # admin page said "Nothing was saved"
+  # (spec/requests/admin/rotation_destroy_refused_spec.rb), and a rotation
+  # the nightly job made had no number at all
+  # (spec/jobs/ensure_rotations_job_numbering_refused_spec.rb). Now a
+  # refusal takes the create or the delete back with it. On create this
+  # runs after the meals of meals_attributes are saved: has_many above
+  # registered their save first.
+  after_create :set_place_value
   # Both prepended, for the same reason as Meal's guards (#26): the
   # has_many above registers its destroy cascade first, so without prepend a
   # refused destroy could still delete meals inside an enclosing transaction.
@@ -61,9 +75,9 @@ class Rotation < ApplicationRecord
   # The guards make that path safe; they are not only about mistakes.
   before_destroy :reject_destroy_unless_last, prepend: true
   before_destroy :reject_destroy_if_any_meal_touched, prepend: true
+  after_destroy :set_place_value
+  after_destroy :recolor_remaining_rotations
   after_save :note_live_update
-  after_commit :set_place_value, on: %i[create destroy]
-  after_commit :recolor_remaining_rotations, on: :destroy
   after_create_commit :suppress_notification_if_no_email
   validates :color, presence: true
   # NOT NULL, so without this a nil would reach the database as a 500
@@ -159,9 +173,7 @@ class Rotation < ApplicationRecord
     end
     return if renumbered.empty?
 
-    LiveUpdate.batch do
-      Meal.where(rotation_id: renumbered).distinct.pluck(:date).each { |date| LiveUpdate.calendar(date) }
-    end
+    Meal.where(rotation_id: renumbered).distinct.pluck(:date).each { |date| LiveUpdate.calendar(date) }
   end
 
   # Rotations appear as colored bars on the calendar, one per meal date.
@@ -217,13 +229,11 @@ class Rotation < ApplicationRecord
   end
 
   # The destroyed rotation's own meals push their months as the cascade
-  # destroys them (Meal#note_live_update); this pushes the months of the
-  # rotations whose color changed.
+  # destroys them (Meal#note_live_update). Each rotation whose color
+  # changes pushes its own months as it saves (note_live_update). Both
+  # are noted in the delete's transaction, so they are pushed once,
+  # after it commits.
   def recolor_remaining_rotations
-    changed_ids = self.class.recolor_community
-
-    LiveUpdate.batch do
-      Meal.where(rotation_id: changed_ids).distinct.pluck(:date).each { |date| LiveUpdate.calendar(date) }
-    end
+    self.class.recolor_community
   end
 end

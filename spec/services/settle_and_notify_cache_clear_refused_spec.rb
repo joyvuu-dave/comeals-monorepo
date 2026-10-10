@@ -55,7 +55,7 @@ RSpec.describe SettleAndNotify do
 
     expect do
       reconciliation = described_class.call(cutoff: Date.yesterday, community: community,
-                                            retries: described_class::REQUEST)
+                                            retries: described_class::REQUEST).reconciliation
     end.to change(Reconciliation, :count).by(1)
 
     expect(reconciliation).to be_a(Reconciliation)

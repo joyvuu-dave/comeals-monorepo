@@ -25,6 +25,9 @@ required?
 # Alba calls it by name (one :guest_as_added in
 # app/serializers/guest_replayed_serializer.rb):
 guest_as_added
+# ActiveAdmin calls it by name (column and row :number_of_meals in
+# app/admin/reconciliation.rb):
+number_of_meals
 # Named in before_action / rescue_from / config lines debride does not read:
 # (delete_expired is a command in config/recurring.yml)
 delete_expired

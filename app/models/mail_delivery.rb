@@ -47,7 +47,11 @@ class MailDelivery < ApplicationRecord
     residents.where.not(id: sent_ids)
   end
 
+  # Written after the mail went out, so a refusal for a conflict is tried
+  # again (RetryOnConflict). Without the retry the refusal ended the run:
+  # that person had the mail and no row, so the next run mailed them a
+  # second time, and everyone after them in the run waited for it.
   def self.record!(mailer:, about:, resident:)
-    create!(mailer: mailer, about: about, resident: resident, sent_at: Time.current)
+    RetryOnConflict.call { create!(mailer: mailer, about: about, resident: resident, sent_at: Time.current) }
   end
 end

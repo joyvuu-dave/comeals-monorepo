@@ -14,9 +14,10 @@ class ApiController < ActionController::API
   # before_action or a read nothing was saved — a refused transaction
   # writes nothing — so the honest answer is the same 409, not a 500.
   # A render after a write action is different: the write has already
-  # committed, so "Nothing was saved" would be false. No serializer that
-  # a write action renders runs a query today, so this cannot happen now;
-  # a serializer that starts to needs its own answer. Without this rescue
+  # committed, so "Nothing was saved" would be false. So a write action
+  # answers from what it read inside its transaction, and runs no query
+  # after the commit; spec/requests/no_query_after_commit_spec.rb fails
+  # for any API write that starts to. Without this rescue
   # the storm saw both a calendar read and a guest write answer 500
   # (docs/concurrency-testing.md).
   #

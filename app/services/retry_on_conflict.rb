@@ -24,7 +24,18 @@
 # Pusher, no HTTP call before the commit. That holds today because every
 # such side effect is in an after_commit callback or outside the transaction
 # entirely, which is what makes retry cheap here at all. Anything added
-# inside a retried block has to keep that property.
+# inside a retried block has to keep that property. A job queued inside
+# the block keeps it: Solid Queue writes the job as a row in the block's
+# own transaction, so a refused try takes its job with it
+# (SettleAndNotify queues the cook mail this way).
+#
+# A conflict can also arrive wrapped. Solid Queue turns every database
+# error from its enqueue into SolidQueue::Job::EnqueueError, a plain
+# StandardError, with the database error as its cause. That is still the
+# database refusing this block, so it is retried the same way, and when
+# the tries run out the conflict itself is raised, so a caller's rescue
+# of TransactionRollbackError still answers it. Until 2026-10-09 a
+# refused push enqueue (LiveUpdate.push) was dropped after one try.
 #
 # Retries are reported through Rails.error so they are counted rather than
 # merely survived. A retry that works and a retry that fires constantly look
@@ -59,11 +70,13 @@ class RetryOnConflict
     begin
       attempt += 1
       yield
-    rescue ActiveRecord::TransactionRollbackError => e
-      raise if attempt >= attempts
+    rescue ActiveRecord::TransactionRollbackError, SolidQueue::Job::EnqueueError => e
+      conflict = conflict_in(e)
+      raise unless conflict
+      raise conflict if attempt >= attempts
 
       Rails.error.report(
-        e,
+        conflict,
         handled: true,
         severity: :warning,
         context: { attempt: attempt, max_attempts: attempts }
@@ -73,4 +86,18 @@ class RetryOnConflict
       retry
     end
   end
+
+  # The conflict an error is, or carries: the error itself, or the cause
+  # of an EnqueueError. Nil for an enqueue refused for another reason.
+  sig do
+    params(error: T.any(ActiveRecord::TransactionRollbackError, SolidQueue::Job::EnqueueError))
+      .returns(T.nilable(ActiveRecord::TransactionRollbackError))
+  end
+  def self.conflict_in(error)
+    return error if error.is_a?(ActiveRecord::TransactionRollbackError)
+
+    cause = error.cause
+    cause if cause.is_a?(ActiveRecord::TransactionRollbackError)
+  end
+  private_class_method :conflict_in
 end

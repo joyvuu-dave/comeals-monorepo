@@ -18,6 +18,14 @@ no jobs and can be removed; the schedule lives in git.
   once: the old code reads the `residents.multiplier` column, which the
   new code stops writing, so a child created or grown up after the
   deploy is priced wrong until that task runs.)
+- A fourth daily job has no Scheduler entry, because it is new:
+  `SendMissedCookMailJob` (16:00 UTC, healthchecks.io check
+  `send-missed-cook-mail`, created by its first ping). It queues the cook
+  mail again for each settlement from the last 7 days that still has a
+  cook without it, and reports to Bugsnag a settlement that reaches 7
+  days with a cook still not mailed. It leaves alone every settlement
+  made before its own first run, which happens at boot (step 4): those
+  were mailed before the app kept a record of each mail.
 - Every run writes a `job_runs` row and pings the same healthchecks.io
   checks as before, so the "late" alerts keep working unchanged.
 - `RecurringCatchUp` runs at Puma boot and enqueues any job that missed
@@ -64,11 +72,12 @@ healthchecks.io's grace period (1 hour) expires and emails you.
 3. Set the config var that starts the supervisor inside Puma:
    `heroku config:set SOLID_QUEUE_IN_PUMA=true -a comeals-monorepo`.
    The dyno restarts; the log shows `SolidQueue-…: Started Supervisor`.
-4. Confirm the catch-up ran: `heroku run rails runner 'puts JobRun.order(:id).last(3).map { |r| [r.name, r.outcome, r.finished_at] }'`.
-   Every job that had never recorded a run is due at boot, so all three
+4. Confirm the catch-up ran: `heroku run rails runner 'puts JobRun.order(:id).last(4).map { |r| [r.name, r.outcome, r.finished_at] }'`.
+   Every job that had never recorded a run is due at boot, so all four
    should have a row within a minute of the restart.
 5. Leave both schedules running for one full day. Each healthchecks.io
-   check should receive two pings per day (Scheduler's and Solid Queue's).
+   check should receive two pings per day (Scheduler's and Solid Queue's),
+   except `send-missed-cook-mail`, which only Solid Queue runs.
    The two can fire within seconds of each other at the shared UTC times;
    every job is idempotent, so a double run costs a few queries, not
    correctness — RefreshBalancesJob and VerifyLedgerJob recompute from

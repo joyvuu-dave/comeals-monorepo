@@ -58,7 +58,14 @@ Prosopite.allow_stack_paths = [
   # The nightly check reads each settlement's rows on their own, on
   # purpose: one settlement's check must not depend on another's rows.
   # It runs once a night over every settlement, about twelve a year.
-  'app/services/ledger_verification.rb'
+  'app/services/ledger_verification.rb',
+  # One LivePushJob per channel a write changed, by design (ADR 0007).
+  # Under the real Solid Queue adapter each enqueue also reads its own
+  # job row back, so a write that changes three channels reads three
+  # rows from this line. Only specs that switch to that adapter run it
+  # (spec/requests/no_query_after_commit_spec.rb); the test adapter keeps
+  # jobs in memory.
+  /live_update\.rb:\d+:in 'LiveUpdate\.push'/
 ]
 
 # A factory create runs with the scan paused, and so does everything it

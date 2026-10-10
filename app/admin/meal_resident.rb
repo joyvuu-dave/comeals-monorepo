@@ -41,12 +41,17 @@ ActiveAdmin.register MealResident do
       end
     end
 
+    # The name for the notice is read before the destroy. Read after it,
+    # it was a query after the commit, and a refusal there answered
+    # "Nothing was saved" about a row that was gone
+    # (spec/requests/no_query_after_commit_spec.rb).
     def destroy
       meal = Meal.find(params[:meal_id])
       row = meal.meal_residents.find(params[:id])
+      name = row.resident.name
       row.admin_correction = true
       if row.destroy
-        redirect_to admin_meal_path(meal), notice: "Removed #{row.resident.name} from the meal."
+        redirect_to admin_meal_path(meal), notice: "Removed #{name} from the meal."
       else
         redirect_to admin_meal_path(meal), alert: row.errors.full_messages.to_sentence
       end

@@ -18,8 +18,10 @@ ActiveAdmin.register Reconciliation do
 
   controller do
     # The form settles a period, the same way the nightly task and the API
-    # do: SettleAndNotify claims the meals, writes the ledger, refreshes the
-    # running balances, and enqueues the cook mail (#73). build_resource
+    # do: SettleAndNotify claims the meals, writes the ledger, queues the
+    # cook mail, and refreshes the running balances (#73). Nothing after
+    # its commit can raise, so the conflict rescue's "Nothing was saved"
+    # is only ever shown for a settlement that was not saved. build_resource
     # runs the authorization check and permits the params; the row it
     # builds is only read for its cutoff, because a retry after a conflict
     # needs a fresh row each time (RetryOnConflict). A refused settlement
@@ -29,7 +31,7 @@ ActiveAdmin.register Reconciliation do
       cutoff = build_resource.end_date
       # A person is waiting at a form, so the request's three quick tries,
       # not the nightly task's minutes (SettleAndNotify::REQUEST).
-      reconciliation = SettleAndNotify.call(cutoff: cutoff, retries: SettleAndNotify::REQUEST)
+      reconciliation = SettleAndNotify.call(cutoff: cutoff, retries: SettleAndNotify::REQUEST).reconciliation
       redirect_to resource_path(reconciliation), notice: 'Reconciliation was successfully created.'
     rescue ActiveRecord::RecordInvalid => e
       set_resource_ivar(e.record)

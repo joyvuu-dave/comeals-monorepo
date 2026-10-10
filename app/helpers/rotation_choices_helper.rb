@@ -24,8 +24,9 @@ module RotationChoicesHelper
   #
   # Newest first means by place number, which follows the dates of the
   # meals, not by id. Two rotations have the same place number only when
-  # neither has one yet: a new rotation gets its number after its save
-  # commits (Rotation#set_place_value). Then the newer id comes first.
+  # neither has one, which happens only to rows written without the model:
+  # Rotation#set_place_value numbers every rotation in the transaction
+  # that makes one. Then the newer id comes first.
   def rotation_choices
     Rotation.left_joins(:meals)
             .group(:id)

@@ -246,8 +246,8 @@ RSpec.describe 'a write storm against one meal, with a settlement in it' do
         # run_writers). Until then a settlement may be refused for having
         # nothing to settle, or contested, and is tried again.
         200.times do
-          reconciliation = SettleAndNotify.call(cutoff: Date.yesterday, retries: storm_retries)
-          log << [:settler, 0, :settle, [:settled, reconciliation.id]]
+          settlement = SettleAndNotify.call(cutoff: Date.yesterday, retries: storm_retries)
+          log << [:settler, 0, :settle, [:settled, settlement.reconciliation.id]]
           break
         rescue ActiveRecord::RecordInvalid, Settlement::Contested
           sleep(0.02)

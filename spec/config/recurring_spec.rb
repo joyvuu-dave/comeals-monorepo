@@ -38,6 +38,16 @@ RSpec.describe 'config/recurring.yml' do # -- a config file
     end
   end
 
+  # Not a job the old Heroku Scheduler ran: it came with NotifyCooksJob's
+  # MailDelivery rows. Morning in California, so the mail it sends
+  # arrives in the morning.
+  it 'queues the missed cook mail each morning in California' do
+    task = tasks.fetch(:send_missed_cook_mail)
+
+    expect(task[:class]).to eq('SendMissedCookMailJob')
+    expect(Fugit.parse(task[:schedule]).to_cron_s).to eq('0 16 * * * UTC')
+  end
+
   # A bills save's Idempotency-Key is kept 7 days (BillsSaveKey). The
   # entry is a command, like Solid Queue's own clear_finished_jobs: it
   # deletes rows nobody needs, so a missed hour is caught up by the next
@@ -80,7 +90,7 @@ RSpec.describe 'config/recurring.yml' do # -- a config file
     Rails.application.eager_load!
     jobs = RecurringJob.descendants.select(&:name)
 
-    expect(jobs).to include(RefreshBalancesJob, VerifyLedgerJob, EnsureRotationsJob)
+    expect(jobs).to include(RefreshBalancesJob, VerifyLedgerJob, EnsureRotationsJob, SendMissedCookMailJob)
     jobs.each do |job|
       expect(job::HEALTHCHECK).to be_present, "#{job} has no healthchecks.io slug"
     end

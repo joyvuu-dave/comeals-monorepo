@@ -31,7 +31,10 @@
 # (ADR 0007), so a rolled-back write sends none. So the message can tell
 # the person nothing was saved, and that is true
 # (spec/requests/admin/conflict_rescue_spec.rb refuses a write after its
-# INSERT and checks the row is gone).
+# INSERT and checks the row is gone). It is true only while no admin
+# write runs a query after its commit, because a refusal there would
+# reach this rescue too. spec/requests/no_query_after_commit_spec.rb
+# checks every admin route that writes.
 #
 # TransactionRollbackError, not SerializationFailure, so this covers a deadlock
 # too. Both are the same problem with the same answer. This matches what
