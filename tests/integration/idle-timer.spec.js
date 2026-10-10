@@ -170,8 +170,27 @@ test.describe("Idle timer (real backend)", () => {
         }),
       }),
     );
+    // Wait until the requests the page sends as it loads have answers.
+    // The idle timer's page load below stops any request still out. If
+    // that is the month request, the calendar asks for the month again
+    // as the page goes away (#163), and WebKit refuses that new request
+    // with "XMLHttpRequest cannot load ... due to access control
+    // checks." as a page error (#161). A stopped hosts request logs
+    // "Error: no response received from server." A real screen has
+    // these answers minutes before that load; here the clock moves ten
+    // minutes in a few milliseconds. The waits are set up before goto,
+    // so an answer that comes first is not missed.
+    const answered = (path) =>
+      page.waitForEvent("requestfinished", (request) =>
+        new URL(request.url()).pathname.endsWith(path),
+      );
+    const bootAnswers = Promise.all([
+      answered(`/calendar/${FAKE_TODAY}`),
+      answered("/hosts"),
+    ]);
     await page.goto(calendarPath);
     await expect(page.locator(".rbc-calendar")).toBeVisible();
+    await bootAnswers;
     await page.evaluate(() => {
       window.__samePage = true;
     });
