@@ -4111,8 +4111,10 @@ describe("DataStore", () => {
       handler({ previous: "connected", current: "connecting" });
       handler({ previous: "connecting", current: "connected" });
 
+      // The meal on screen is fetched. The meal page shows no month,
+      // so none is fetched (app_plumbing.test.js).
       expect(axios.get).toHaveBeenCalledWith("/api/v1/meals/1/cooks");
-      expect(axios.get).toHaveBeenCalledWith(
+      expect(axios.get).not.toHaveBeenCalledWith(
         expect.stringContaining("/calendar/"),
       );
     });

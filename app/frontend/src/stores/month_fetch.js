@@ -226,6 +226,7 @@ export function loadForNavigation(date, render) {
   }
 
   // Async IndexedDB fallback
+  var versionAtStart = monthCache.versionFor(key);
   readFromDisk(key).then(function (value) {
     if (value === null || typeof value === "undefined") {
       // User already navigated elsewhere: nothing to fetch here.
@@ -233,8 +234,12 @@ export function loadForNavigation(date, render) {
       revalidate(date, render);
     } else {
       // Warming the in-memory cache is safe even when superseded —
-      // the data sits under its own key.
-      monthCache.set(key, value);
+      // the data sits under its own key. Unless a push dropped this
+      // month during the read: the copy was saved before the push,
+      // and kept in memory it would be drawn on the next visit.
+      if (monthCache.versionFor(key) === versionAtStart) {
+        monthCache.set(key, value);
+      }
       // User already navigated elsewhere: skip the render and the
       // revalidation fetch.
       if (!navigations.isCurrent(token)) return;

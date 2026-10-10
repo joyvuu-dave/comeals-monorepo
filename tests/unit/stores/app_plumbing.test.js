@@ -148,6 +148,19 @@ describe("app plumbing", () => {
       expect(refetch).toHaveBeenCalledTimes(1);
     });
 
+    // The answer on the wire may have been read before a push this page
+    // missed while it was offline.
+    it("refreshes a hosts list whose first answer is still on the wire", () => {
+      const store = createDataStore();
+      store.setHostsInFlight(new Promise(() => {}));
+      const refetch = stubAction(store, "refetchHostsSilently");
+      stubAction(store, "loadMonthAsync");
+
+      store.handleReconnect();
+
+      expect(refetch).toHaveBeenCalledTimes(1);
+    });
+
     it("does not refetch a meal when no meal is on screen", () => {
       const store = createDataStore();
       stage(store, () => {
@@ -159,6 +172,92 @@ describe("app plumbing", () => {
       store.handleReconnect();
 
       expect(loadDataAsync).not.toHaveBeenCalled();
+    });
+
+    // After a Pusher reconnect, the residents channel's confirmation
+    // fetches the meal, the month on the calendar and the hosts list
+    // (handleResidentsUpdate), after pushes reach the page again.
+    describe("when Pusher will confirm the residents channel again", () => {
+      it("on the meal page, leaves the meal and the hosts list to the confirmation, and fetches no month", () => {
+        const store = createDataStore();
+        stage(store, () => {
+          store.hostsLoadedAt = Date.now();
+        });
+        expect(window.Comeals.calendarChannel).toBeNull();
+        const loadDataAsync = stubAction(store, "loadDataAsync");
+        const loadMonthAsync = stubAction(store, "loadMonthAsync");
+        const refetch = stubAction(store, "refetchHostsSilently");
+        const recompute = stubAction(store, "recomputeCommunityToday");
+        const retry = stubAction(store, "retryDirtyDescriptions");
+
+        store.handleReconnect({ residentsWillConfirm: true });
+
+        expect(loadDataAsync).not.toHaveBeenCalled();
+        expect(refetch).not.toHaveBeenCalled();
+        // The meal page shows no month. A fetched month would open the
+        // calendar's channels again, which the meal page closed (#38).
+        expect(loadMonthAsync).not.toHaveBeenCalled();
+        expect(recompute).toHaveBeenCalledTimes(1);
+        expect(retry).toHaveBeenCalledTimes(1);
+      });
+
+      it("on the calendar, leaves the month to the confirmation", () => {
+        const store = createDataStore();
+        stage(store, () => {
+          store.meal = null;
+        });
+        window.Comeals.calendarChannel = { name: "calendar on screen" };
+        stubAction(store, "loadDataAsync");
+        const loadMonthAsync = stubAction(store, "loadMonthAsync");
+
+        store.handleReconnect({ residentsWillConfirm: true });
+
+        expect(loadMonthAsync).not.toHaveBeenCalled();
+      });
+    });
+
+    // The browser's online event can come while the Pusher socket stayed
+    // up, so no channel is confirmed again.
+    it("after the browser's online event, fetches the month on the calendar", () => {
+      const store = createDataStore();
+      stage(store, () => {
+        store.meal = null;
+      });
+      window.Comeals.calendarChannel = { name: "calendar on screen" };
+      stubAction(store, "loadDataAsync");
+      const loadMonthAsync = stubAction(store, "loadMonthAsync");
+
+      store.handleReconnect();
+
+      expect(loadMonthAsync).toHaveBeenCalledTimes(1);
+    });
+
+    // A calendar whose first month never arrived has no month channel
+    // open yet, so no confirmation will fetch its month.
+    it("after either kind of reconnect, fetches the month on a calendar that has none yet", () => {
+      const store = createDataStore();
+      stage(store, () => {
+        store.meal = null;
+      });
+      expect(window.Comeals.calendarChannel).toBeNull();
+      const loadMonthAsync = stubAction(store, "loadMonthAsync");
+
+      store.handleReconnect({ residentsWillConfirm: true });
+      store.handleReconnect();
+
+      expect(loadMonthAsync).toHaveBeenCalledTimes(2);
+    });
+
+    it("after the browser's online event on the meal page, fetches the meal and no month", () => {
+      const store = createDataStore();
+      expect(window.Comeals.calendarChannel).toBeNull();
+      const loadDataAsync = stubAction(store, "loadDataAsync");
+      const loadMonthAsync = stubAction(store, "loadMonthAsync");
+
+      store.handleReconnect();
+
+      expect(loadDataAsync).toHaveBeenCalledTimes(1);
+      expect(loadMonthAsync).not.toHaveBeenCalled();
     });
   });
 
@@ -194,6 +293,23 @@ describe("app plumbing", () => {
       // The timer schedules the next midnight, which refetches again.
       vi.advanceTimersByTime(DAY);
       expect(refetch).toHaveBeenCalledTimes(2);
+      clearTimeout(store.midnightTimer);
+    });
+
+    // The server may have read the list on the wire before midnight.
+    it("refetches a hosts list whose first answer is still on the wire", () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(NOON_PACIFIC);
+      const store = createDataStore();
+      store.setHostsInFlight(new Promise(() => {}));
+      const refetch = stubAction(store, "refetchHostsSilently");
+      stubAction(store, "loadMonthAsync");
+      stubAction(store, "recomputeCommunityToday");
+
+      store.scheduleMidnightRecompute();
+      vi.advanceTimersByTime(TO_FIRST_FIRING);
+
+      expect(refetch).toHaveBeenCalledTimes(1);
       clearTimeout(store.midnightTimer);
     });
 

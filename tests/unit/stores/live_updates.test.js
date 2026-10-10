@@ -60,7 +60,8 @@ function calendarData(year, month, title) {
   };
 }
 
-function mealPayload(id, description) {
+// `residentName` puts one resident (id 1) on the sign-up list.
+function mealPayload(id, description, residentName) {
   return {
     id,
     date: "2024-07-15",
@@ -72,7 +73,22 @@ function mealPayload(id, description) {
     // The server's answer at the ends: the meal's own id, never null.
     next_id: id,
     prev_id: id,
-    residents: [],
+    residents:
+      residentName === undefined
+        ? []
+        : [
+            {
+              id: 1,
+              meal_id: id,
+              name: residentName,
+              attending: false,
+              attending_at: null,
+              late: false,
+              vegetarian: false,
+              can_cook: true,
+              active: true,
+            },
+          ],
     guests: [],
     bills: [],
   };
@@ -89,15 +105,19 @@ function fireUpdate(name) {
   call[1]();
 }
 
-// What Pusher does, and nothing more: a push reaches a channel only if
-// this client subscribed to it, and a subscription is confirmed with
-// "pusher:subscription_succeeded". A push to a channel nobody opened
-// is lost.
+// What Pusher does, and nothing more: a push reaches a channel only
+// once Pusher has confirmed this client's subscription to it, with
+// "pusher:subscription_succeeded". A push to a channel nobody opened,
+// or to one opened but not confirmed yet, is lost.
+const confirmed = new Set();
+
 function pushTo(name) {
+  if (!confirmed.has(name)) return;
   runHandlers(name, "update");
 }
 
 function confirmSubscription(name) {
+  confirmed.add(name);
   runHandlers(name, "pusher:subscription_succeeded");
 }
 
@@ -116,9 +136,34 @@ function calendarRequests(year, month) {
   return axios.get.mock.calls.filter(([url]) => url.endsWith(suffix)).length;
 }
 
-// Serves calendar months from `payloads` (a key per "year-month"), and
-// the meal page from `meals` (a key per id).
-function serveFrom(payloads, meals) {
+function hostsRequests() {
+  return axios.get.mock.calls.filter(([url]) => url.endsWith("/hosts")).length;
+}
+
+// Holds the next hosts answer until the test sends it, the way a slow
+// network does. The test sends it with the rows the server read when
+// the request came in. Every later hosts request is answered at once.
+function holdNextHostsAnswer() {
+  let send = null;
+  const serve = axios.get.getMockImplementation();
+  axios.get.mockImplementation((url) => {
+    if (send === null && url.endsWith("/hosts")) {
+      return new Promise((resolve) => {
+        send = resolve;
+      });
+    }
+    return serve(url);
+  });
+  return function (rowsAsRead) {
+    expect(send, "no hosts request was made").not.toBeNull();
+    send({ status: 200, data: rowsAsRead });
+  };
+}
+
+// Serves calendar months from `payloads` (a key per "year-month"), the
+// meal page from `meals` (a key per id), and the hosts list from
+// `hosts.rows`.
+function serveFrom(payloads, meals, hosts) {
   axios.get.mockImplementation((url) => {
     const month = url.match(/\/calendar\/(\d{4})-(\d{2})-\d{2}$/);
     if (month) {
@@ -129,12 +174,17 @@ function serveFrom(payloads, meals) {
     if (meal) {
       return Promise.resolve({ status: 200, data: meals.get(meal[1]) });
     }
+    if (url.endsWith("/hosts")) {
+      return Promise.resolve({ status: 200, data: hosts.rows });
+    }
     return Promise.resolve({ status: 200, data: {} });
   });
 }
 
-function createStore() {
-  const store = DataStore.create({ meals: [{ id: 1 }], meal: 1 });
+// Meal 1 on screen, unless the test hands in another snapshot: a page
+// load on the calendar has no meal ({ meals: [] }).
+function createStore(snapshot = { meals: [{ id: 1 }], meal: 1 }) {
+  const store = DataStore.create(snapshot);
   window.Comeals.pusher.subscribe = vi.fn((name) => {
     const channel = { name, bind: vi.fn() };
     channels.set(name, channel);
@@ -153,10 +203,12 @@ async function flush() {
 describe("live updates in the store", () => {
   let payloads;
   let meals;
+  let hosts;
 
   beforeEach(() => {
     vi.clearAllMocks();
     channels.clear();
+    confirmed.clear();
     idbKeyval._disk.clear();
     monthCache.clear();
     payloads = new Map([
@@ -165,7 +217,8 @@ describe("live updates in the store", () => {
       ["2024-8", calendarData(2024, 8, "August")],
     ]);
     meals = new Map([["1", mealPayload(1, "Menu v1")]]);
-    serveFrom(payloads, meals);
+    hosts = { rows: [[1, "Bob", "A"]] };
+    serveFrom(payloads, meals, hosts);
     Object.defineProperty(globalThis, "navigator", {
       value: { onLine: true },
       writable: true,
@@ -227,6 +280,61 @@ describe("live updates in the store", () => {
 
       await vi.waitFor(() => {
         expect(store.meal.description).toBe("Menu v2");
+      });
+    });
+
+    // The calendar asks for the hosts list when it mounts (show.jsx).
+    // The server read the list before the rename, so its answer, still
+    // on the wire when the push comes, holds the old name.
+    it("an update refetches a hosts list whose first answer is still on the wire", async () => {
+      const store = createStore({ meals: [] });
+      store.switchMonths("2024-07-15");
+      await vi.waitFor(() => {
+        expect(store.calendarEvents[0].title).toBe("July");
+      });
+      confirmSubscription(RESIDENTS_CHANNEL);
+      await flush();
+      const sendHostsAnswer = holdNextHostsAnswer();
+      store.ensureHosts();
+      const asRead = hosts.rows;
+
+      hosts.rows = [[1, "Robert", "A"]];
+      pushTo(RESIDENTS_CHANNEL);
+      await flush();
+      sendHostsAnswer(asRead);
+      await flush();
+
+      expect(store.hosts[0].name).toBe("Robert");
+    });
+
+    // A tap to October reads its copy from the disk. An update comes
+    // before the read ends, and the person taps back to July before
+    // October is drawn. The read's copy was saved before the update.
+    it("an update drops a copy that a navigation was reading from disk", async () => {
+      const store = createStore({ meals: [] });
+      store.switchMonths("2024-07-15");
+      await vi.waitFor(() => {
+        expect(store.calendarEvents[0].title).toBe("July");
+      });
+      await flush();
+      confirmSubscription(RESIDENTS_CHANNEL);
+      await flush();
+      const octoberKey = monthCache.keyFor(COMMUNITY, "2024", "10");
+      idbKeyval._disk.set(octoberKey, calendarData(2024, 10, "October"));
+      payloads.set("2024-9", calendarData(2024, 9, "September"));
+      payloads.set("2024-10", calendarData(2024, 10, "October, renamed"));
+      payloads.set("2024-11", calendarData(2024, 11, "November"));
+
+      store.switchMonths("2024-10-15");
+      fireUpdate(RESIDENTS_CHANNEL);
+      store.switchMonths("2024-07-15");
+      await flush();
+      expect(store.calendarEvents[0].title).toBe("July");
+
+      store.switchMonths("2024-10-15");
+      expect(store.calendarEvents[0].title).not.toBe("October");
+      await vi.waitFor(() => {
+        expect(store.calendarEvents[0].title).toBe("October, renamed");
       });
     });
 
@@ -376,6 +484,139 @@ describe("live updates in the store", () => {
       await flush();
 
       expect(store.meal.description).toBe("Menu v2");
+    });
+  });
+
+  // The residents channel opens with the first month, meal or hosts
+  // list drawn, and a rename pushes only the residents channel. A rename pushed before Pusher confirms it reaches
+  // no one. So the confirmation does what a push on that channel does:
+  // every copy read before it is dropped, and what is on screen is
+  // fetched again.
+  describe("a rename pushed before Pusher confirms the residents channel", () => {
+    const JUNE = `community-${COMMUNITY}-calendar-2024-6`;
+    const JULY = `community-${COMMUNITY}-calendar-2024-7`;
+    const AUGUST = `community-${COMMUNITY}-calendar-2024-8`;
+
+    // July on screen, June and August prefetched, the hosts list loaded.
+    // Pusher has confirmed the three months' channels, which open first,
+    // so July's own confirmation fetched it again before the rename.
+    async function julyOnScreen() {
+      const store = createStore({ meals: [] });
+      store.switchMonths("2024-07-15");
+      await vi.waitFor(() => {
+        expect(store.calendarEvents[0].title).toBe("July");
+      });
+      await store.ensureHosts();
+      await flush();
+      expect(monthCache.size()).toBe(3);
+      [JULY, JUNE, AUGUST].forEach(confirmSubscription);
+      await flush();
+      expect(store.calendarEvents[0].title).toBe("July");
+      return store;
+    }
+
+    // An admin renames Bob to Robert. His name is in every month, the
+    // hosts list and the meal's sign-up list.
+    function renameBob() {
+      payloads.set("2024-6", calendarData(2024, 6, "June, renamed"));
+      payloads.set("2024-7", calendarData(2024, 7, "July, renamed"));
+      payloads.set("2024-8", calendarData(2024, 8, "August, renamed"));
+      hosts.rows = [[1, "Robert", "A"]];
+      meals.set("1", mealPayload(1, "Menu v1", "Robert"));
+    }
+
+    it("shows the new name in the month next to the one on screen", async () => {
+      // The clock stands still, so August's prefetch is under 5 seconds
+      // old on the tap however slow the run is. On a run slower than
+      // that, the tap would fetch August again, and the test would pass
+      // without the confirmation's fix.
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2024-07-15T12:00:00-07:00"));
+      const store = await julyOnScreen();
+
+      renameBob();
+      pushTo(RESIDENTS_CHANNEL);
+      confirmSubscription(RESIDENTS_CHANNEL);
+      await flush();
+
+      // A tap to August, less than 5 seconds after its prefetch, draws
+      // the copy in memory and fetches nothing. That copy was read
+      // before the rename.
+      store.switchMonths("2024-08-15");
+      await flush();
+      expect(store.calendarEvents[0].title).toBe("August, renamed");
+    });
+
+    it("shows the new name in the hosts list", async () => {
+      const store = await julyOnScreen();
+      expect(store.hosts[0].name).toBe("Bob");
+      const fetchesBefore = hostsRequests();
+
+      renameBob();
+      pushTo(RESIDENTS_CHANNEL);
+      confirmSubscription(RESIDENTS_CHANNEL);
+      await flush();
+
+      expect(store.hosts[0].name).toBe("Robert");
+      expect(hostsRequests()).toBe(fetchesBefore + 1);
+    });
+
+    // The calendar asks for the hosts list when it mounts, next to the
+    // month, so its answer can come after the confirmation.
+    it("shows the new name in a hosts list whose first answer is still on the wire", async () => {
+      const sendHostsAnswer = holdNextHostsAnswer();
+      const store = createStore({ meals: [] });
+      store.switchMonths("2024-07-15");
+      store.ensureHosts();
+      await vi.waitFor(() => {
+        expect(store.calendarEvents[0].title).toBe("July");
+      });
+      [JULY, JUNE, AUGUST].forEach(confirmSubscription);
+      await flush();
+      const asRead = hosts.rows;
+
+      renameBob();
+      pushTo(RESIDENTS_CHANNEL);
+      confirmSubscription(RESIDENTS_CHANNEL);
+      await flush();
+      sendHostsAnswer(asRead);
+      await flush();
+
+      expect(store.hosts[0].name).toBe("Robert");
+    });
+
+    it("shows the new name in the month on screen, which its own confirmation read before the rename", async () => {
+      const store = await julyOnScreen();
+
+      renameBob();
+      pushTo(RESIDENTS_CHANNEL);
+      confirmSubscription(RESIDENTS_CHANNEL);
+      await flush();
+
+      expect(store.calendarEvents[0].title).toBe("July, renamed");
+    });
+
+    it("shows the new name on the meal page, and drops the months saved on disk by an earlier visit", async () => {
+      // A visit to the calendar before this page load saved July.
+      const julyKey = monthCache.keyFor(COMMUNITY, "2024", "7");
+      idbKeyval._disk.set(julyKey, calendarData(2024, 7, "July"));
+      meals.set("1", mealPayload(1, "Menu v1", "Bob"));
+      const store = createStore();
+      store.loadDataAsync();
+      await flush();
+      expect(store.residents.get("1").name).toBe("Bob");
+      confirmSubscription("meal-1");
+      await flush();
+
+      renameBob();
+      pushTo(RESIDENTS_CHANNEL);
+      confirmSubscription(RESIDENTS_CHANNEL);
+      await flush();
+
+      expect(store.residents.get("1").name).toBe("Robert");
+      expect(idbKeyval._disk.has(julyKey)).toBe(false);
+      // The meal page has no month on screen, so no month is fetched.
+      expect(calendarRequests(2024, 7)).toBe(0);
     });
   });
 

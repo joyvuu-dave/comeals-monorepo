@@ -42,6 +42,15 @@ export function hostsActions(self) {
     refetchHostsSilently() {
       return self._fetchHosts({ supersede: true });
     },
+    // The hosts list may hold an old name or age: a push, a reconnect or
+    // midnight says so. Fetch it again if this page has one, or has
+    // asked for one. An answer still on the wire may have been read on
+    // the server before the change, so the new fetch replaces it.
+    refetchHostsIfAskedFor() {
+      if (self.hostsLoaded || self.hostsInFlight !== null) {
+        self.refetchHostsSilently();
+      }
+    },
     // Internal: shared fetch implementation for ensureHosts and
     // refetchHostsSilently. Every call bumps the hostsFetches guard;
     // the resolve path discards a response whose token is stale.

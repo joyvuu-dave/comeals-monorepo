@@ -67,7 +67,11 @@ export function appActions(self) {
           hasConnectedBefore = true;
           return;
         }
-        self.handleReconnect();
+        // pusher-js subscribes every channel again on this same
+        // "connected" event, and Pusher confirms each one a moment later.
+        self.handleReconnect({
+          residentsWillConfirm: self.residentsChannel !== null,
+        });
       });
 
       self.setIsOnline(navigator.onLine);
@@ -146,15 +150,21 @@ export function appActions(self) {
       self.residentsChannel.bind("update", function () {
         self.handleResidentsUpdate();
       });
+      // Pusher confirmed the subscription, at page load or again after a
+      // reconnect. A push sent before this reached no one, so any copy
+      // of a month, a meal or the hosts list read before it may hold an
+      // old name. The confirmation does what a push does.
+      self.residentsChannel.bind("pusher:subscription_succeeded", function () {
+        self.handleResidentsUpdate();
+      });
     },
-    // A resident or unit changed. Every cached month and meal may hold
-    // the old name, so all of them go, and whatever is on screen is
-    // fetched again.
+    // A resident or unit changed, or may have changed while no push
+    // could reach this page. Every cached month and meal may hold the
+    // old name, so all of them go, and whatever is on screen is fetched
+    // again.
     handleResidentsUpdate() {
       monthData.invalidateAllMonths();
-      if (self.hostsLoaded) {
-        self.refetchHostsSilently();
-      }
+      self.refetchHostsIfAskedFor();
       if (self.meal && self.meal.id) {
         self.loadDataAsync();
       }
@@ -166,7 +176,16 @@ export function appActions(self) {
     // (afterCreate above) and the browser's `online` event (index.jsx).
     // Any gap means the data on screen can no longer be trusted, so
     // both signals do the same repairs.
-    handleReconnect() {
+    //
+    // With `residentsWillConfirm` (a Pusher reconnect while the residents
+    // channel is open), Pusher confirms that channel again in a moment,
+    // and handleResidentsUpdate then fetches the meal, the month on the
+    // calendar and the hosts list. Its reads come after pushes reach
+    // this page again, so those fetches are left to it: the same fetch
+    // made here would read earlier, and the later answer replaces it.
+    // The browser's `online` event can come with no Pusher reconnect at
+    // all, so it fetches all of them here.
+    handleReconnect(options = {}) {
       // A machine asleep past midnight wakes with a stale "today" and a
       // throttled timer; the wake-up is the reliable recompute moment.
       // Before the cookie guard on purpose — no auth needed.
@@ -179,15 +198,28 @@ export function appActions(self) {
       // and an unauthenticated fetch would 401 and raise the "signed
       // out" banner.
       if (typeof Cookie.get("community_id") === "undefined") return;
-      if (self.meal && self.meal.id) {
+      var leftToConfirmation = options.residentsWillConfirm === true;
+      if (self.meal && self.meal.id && !leftToConfirmation) {
         self.loadDataAsync();
       }
-      self.loadMonthAsync();
-      // A cached hosts list may have missed an invalidation pushed
-      // while offline — silently refresh it so the next modal to open
-      // shows current data.
-      if (self.hostsLoaded) {
-        self.refetchHostsSilently();
+      // The meal page shows no month, and a month drawn there would
+      // open the calendar's channels again, which the meal page closed
+      // (#38). Going back to the calendar fetches the month again.
+      // On the calendar, handleResidentsUpdate fetches the month only
+      // while the month's channel is open. With none open yet (the
+      // first month never arrived), the month is fetched here.
+      var onCalendar = !self.meal;
+      if (
+        onCalendar &&
+        (window.Comeals.calendarChannel === null || !leftToConfirmation)
+      ) {
+        self.loadMonthAsync();
+      }
+      // A hosts list may have missed an invalidation pushed while
+      // offline — silently refresh it so the next modal to open shows
+      // current data.
+      if (!leftToConfirmation) {
+        self.refetchHostsIfAskedFor();
       }
     },
     // Roll the observable "today" forward. Called by the midnight timer
@@ -218,9 +250,7 @@ export function appActions(self) {
         // A birthday moves someone into the adult band with no write
         // on the server, so nothing pushes it: the hosts list is
         // fetched again too, if this screen has one.
-        if (self.hostsLoaded) {
-          self.refetchHostsSilently();
-        }
+        self.refetchHostsIfAskedFor();
         if (window.Comeals.calendarChannel !== null) {
           self.loadMonthAsync();
         }

@@ -87,6 +87,24 @@ function calendarData(year, month, title) {
   };
 }
 
+// The meal page's answer for meal `id`, with nobody signed up.
+function mealData(id) {
+  return {
+    id: Number(id),
+    date: "2024-07-15",
+    description: "Soup",
+    closed: false,
+    closed_at: null,
+    reconciled: false,
+    max: null,
+    next_id: Number(id),
+    prev_id: Number(id),
+    residents: [],
+    guests: [],
+    bills: [],
+  };
+}
+
 async function flush() {
   for (let i = 0; i < 10; i++) {
     await new Promise((r) => setTimeout(r, 0));
@@ -99,6 +117,30 @@ describe("calendar channels through the real Pusher client", () => {
   let monthCache;
   // The server's months, a title per "year-month".
   let titles;
+  // The server's hosts list.
+  let hostRows;
+
+  function hostsFetches() {
+    return axios.get.mock.calls.filter(([url]) => url.endsWith("/hosts"))
+      .length;
+  }
+
+  // Pusher confirms every channel this page has open, as it does at page
+  // load and again after each reconnect.
+  function confirmEveryChannel() {
+    [...FakePusher.instance.open.keys()].forEach((name) => {
+      fire(name, "pusher:subscription_succeeded");
+    });
+  }
+
+  // The handler the store bound for the connection's state changes.
+  function stateChange() {
+    const calls = FakePusher.instance.connection.bind.mock.calls.filter(
+      ([event]) => event === "state_change",
+    );
+    expect(calls).toHaveLength(1);
+    return calls[0][1];
+  }
 
   function fetchesOf(year, month) {
     const suffix = `/calendar/${year}-${String(month).padStart(2, "0")}-15`;
@@ -129,7 +171,15 @@ describe("calendar channels through the real Pusher client", () => {
       configurable: true,
     });
     titles = new Map();
+    hostRows = [[1, "Bob", "A"]];
     axios.get.mockImplementation((url) => {
+      if (url.endsWith("/hosts")) {
+        return Promise.resolve({ status: 200, data: hostRows });
+      }
+      const meal = url.match(/\/meals\/(\d+)\/cooks$/);
+      if (meal) {
+        return Promise.resolve({ status: 200, data: mealData(meal[1]) });
+      }
       const m = url.match(/\/calendar\/(\d{4})-(\d{2})-\d{2}$/);
       const year = Number(m[1]);
       const month = Number(m[2]);
@@ -293,6 +343,96 @@ describe("calendar channels through the real Pusher client", () => {
     expect(store.calendarEvents[0].title).toBe("July, changed");
     expect(fetchesOf(2024, 6)).toBe(juneFetches);
     expect(monthCache.get(juneKey)).toBeDefined();
+  });
+
+  // pusher-js marks every channel unconfirmed when the connection drops,
+  // subscribes them all again when it is back, and Pusher confirms each
+  // one again. A rename pushed in between reaches no one. The residents
+  // channel's confirmation fetches the month on screen and the hosts
+  // list. So the reconnect itself does not: its fetch would read
+  // before pushes reach the page again, and the later one replaces it.
+  it("after a reconnect, the confirmations fetch the month on screen and the hosts list, and the reconnect itself does not", async () => {
+    const store = await julyOnScreen();
+    await store.ensureHosts();
+    stateChange()({ previous: "connecting", current: "connected" });
+    confirmEveryChannel();
+    await flush();
+    const julyFetches = fetchesOf(2024, 7);
+    const hostsFetchesBefore = hostsFetches();
+
+    stateChange()({ previous: "connected", current: "connecting" });
+    stateChange()({ previous: "connecting", current: "connected" });
+    await flush();
+
+    expect(fetchesOf(2024, 7)).toBe(julyFetches);
+    expect(hostsFetches()).toBe(hostsFetchesBefore);
+
+    // An admin renames Bob before Pusher confirms the channels again.
+    titles.set("2024-7", "July, renamed");
+    hostRows = [[1, "Robert", "A"]];
+    confirmEveryChannel();
+    await flush();
+
+    expect(store.calendarEvents[0].title).toBe("July, renamed");
+    expect(store.hosts[0].name).toBe("Robert");
+    // One fetch for July's own confirmation (#112) and one for the
+    // residents channel's. The order of the two confirmations is not
+    // known, and the month needs a read after both.
+    expect(fetchesOf(2024, 7)).toBe(julyFetches + 2);
+    expect(hostsFetches()).toBe(hostsFetchesBefore + 1);
+  });
+
+  // The meal page closes the calendar's channels when it mounts (#38).
+  // A reconnect there fetches the meal, and no month: a month drawn on
+  // the meal page would open the calendar's three channels again.
+  describe("a reconnect on the meal page", () => {
+    // July was on screen, and then a meal was tapped.
+    async function mealPageAfterJuly() {
+      const store = await julyOnScreen();
+      store.teardownCalendarPage();
+      store.goToMeal("1");
+      await flush();
+      expect(store.meal.description).toBe("Soup");
+      expect(openNames()).toEqual([RESIDENTS, "meal-1"]);
+      return store;
+    }
+
+    function mealFetches() {
+      return axios.get.mock.calls.filter(([url]) =>
+        /\/meals\/1\/cooks$/.test(url),
+      ).length;
+    }
+
+    it("from Pusher leaves the calendar's channels closed", async () => {
+      const store = await mealPageAfterJuly();
+      const mealFetchesBefore = mealFetches();
+      stateChange()({ previous: "connecting", current: "connected" });
+      stateChange()({ previous: "connected", current: "connecting" });
+      stateChange()({ previous: "connecting", current: "connected" });
+      confirmEveryChannel();
+      await flush();
+
+      expect(openNames()).toEqual([RESIDENTS, "meal-1"]);
+      expect(fetchesOf(2024, 7)).toBe(1);
+      // The meal is fetched again, by its own confirmation and the
+      // residents channel's.
+      expect(mealFetches()).toBeGreaterThan(mealFetchesBefore);
+      expect(store.meal.description).toBe("Soup");
+    });
+
+    it("from the browser's online event leaves the calendar's channels closed", async () => {
+      const store = await mealPageAfterJuly();
+      const before = axios.get.mock.calls.length;
+
+      store.handleReconnect();
+      await flush();
+
+      expect(openNames()).toEqual([RESIDENTS, "meal-1"]);
+      expect(fetchesOf(2024, 7)).toBe(1);
+      expect(axios.get.mock.calls.slice(before).map(([url]) => url)).toEqual([
+        expect.stringMatching(/\/meals\/1\/cooks$/),
+      ]);
+    });
   });
 
   // Logout removes the session cookies just before the page loads "/"

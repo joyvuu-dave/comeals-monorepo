@@ -30,14 +30,21 @@
 //    triggers its own refetch.
 // 6. Pusher does not replay messages missed while the socket was down,
 //    so every reconnect and every browser "online" event refetches
-//    (data_store_app.js handleReconnect). Midnight refetches the month
-//    too: the chips' words depend on the day and nothing pushes then.
+//    (data_store_app.js handleReconnect). After a Pusher reconnect, what
+//    the residents channel's confirmation fetches (item 7) is left to
+//    it. Midnight refetches the month too: the chips' words depend on
+//    the day and nothing pushes then.
 // 7. A push reaches this client only after Pusher has confirmed its
 //    subscription, and a channel opens only when the first answer for
 //    its month or meal is drawn. So when Pusher confirms the channel
 //    of the month or meal on screen ("pusher:subscription_succeeded"),
-//    the client fetches it once more (#112). pusher-js subscribes every
-//    channel again after a reconnect, so this also runs then.
+//    the client fetches it once more (#112). The residents channel opens
+//    with the first month, meal or hosts list drawn, and a rename pushes
+//    only that channel, so its confirmation does what its push does: it
+//    drops every copy of a month and a meal, and fetches again what is
+//    on screen and the hosts list (also one still on the wire).
+//    pusher-js subscribes every channel again after a reconnect, so all
+//    of this also runs then.
 // 8. With no VITE_PUSHER_KEY the client never connects and the app runs
 //    without live updates; nothing else changes.
 //
