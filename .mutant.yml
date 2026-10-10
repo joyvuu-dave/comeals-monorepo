@@ -84,6 +84,7 @@ matcher:
     - RotationChoicesHelper*
     - ScheduleWeekLabelHelper*
     - SettlementLinesTable*
+    - LedgerCheckFindingsTable*
     - AdminOrderClause*
     - AssetCacheControl*
     - DatabasePoolCheck*

@@ -2,25 +2,26 @@
 
 require 'rails_helper'
 
-# A bill, an attendance row, or a guest moved from one meal to another
-# changes two meal pages and up to two calendar months. Both must be told.
+# An attendance row or a guest moved from one meal to another changes two
+# meal pages and up to two calendar months. Both must be told. (A bill
+# never moves: Bill::COOK_AND_MEAL_FIXED.)
 RSpec.describe NotesMealLiveUpdate do
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
   let(:cook) { create(:resident, community: community, unit: unit) }
-  # The first meal in the table is one the bill never touches, so a
+  # The first meal in the table is one the row never touches, so a
   # lookup that forgets which meal it is asking about finds this one.
   let!(:elsewhere) { create(:meal, community: community, date: Date.new(2026, 1, 14)) }
   let(:from) { create(:meal, community: community, date: Date.new(2026, 3, 30)) }
   let(:to) { create(:meal, community: community, date: Date.new(2026, 5, 4)) }
 
-  it 'tells the old meal and the old month as well as the new ones when a bill moves' do
-    bill = create(:bill, meal: from, resident: cook, community: community, amount: BigDecimal('10'))
+  it 'tells the old meal and the old month as well as the new ones when a guest moves' do
+    guest = create(:guest, meal: from, resident: cook)
     to # created here, because a new meal also tells its neighbors' pages (Meal#note_live_update)
     channels = []
     allow(Pusher).to receive(:trigger) { |channel, *| channels << channel }
 
-    bill.update!(meal: to)
+    guest.update!(meal: to)
 
     expect(channels).to include("meal-#{from.id}", "meal-#{to.id}",
                                 community.calendar_cache_key(2026, 3), community.calendar_cache_key(2026, 5))

@@ -76,6 +76,26 @@ $$;
 
 
 --
+-- Name: comeals_bill_keeps_cook_and_meal(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.comeals_bill_keeps_cook_and_meal() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.resident_id IS DISTINCT FROM OLD.resident_id OR NEW.meal_id IS DISTINCT FROM OLD.meal_id THEN
+    RAISE EXCEPTION 'UPDATE on bills refused (bill %): A bill''s cook and meal cannot change. '
+      'To fix a wrong cook or meal, delete this bill and add a new one.',
+      OLD.id
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: comeals_local_day(timestamp without time zone, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2974,6 +2994,13 @@ CREATE TRIGGER bills_reject_settled_write BEFORE INSERT OR DELETE OR UPDATE ON p
 
 
 --
+-- Name: bills bills_same_cook_and_meal; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER bills_same_cook_and_meal BEFORE UPDATE ON public.bills FOR EACH ROW EXECUTE FUNCTION public.comeals_bill_keeps_cook_and_meal();
+
+
+--
 -- Name: admin_users comeals_refuse_last_superuser_removal; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -3412,6 +3439,7 @@ ALTER TABLE ONLY public.bills
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261010120000'),
 ('20261009171800'),
 ('20261009171700'),
 ('20261009171600'),

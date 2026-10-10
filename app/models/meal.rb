@@ -118,6 +118,17 @@ class Meal < ApplicationRecord
     Bill.where(bills[:meal_id].eq(arel_table[:id])).where(no_cost: false).where(bills[:amount].gt(0)).arel.exists
   end
 
+  # A cook whose cost is not entered yet: $0 and not marked no-cost. The
+  # meal page reads a bill the same way (cooksMissingCost in
+  # data_store.js), and a settlement preview warns about one
+  # (ReconciliationWarnings, zero_bill_not_flagged). The dashboard
+  # averages wait for such a meal instead of counting it at $0.
+  sig { returns(Arel::Nodes::Node) }
+  def self.a_cost_not_entered
+    bills = Bill.arel_table
+    Bill.where(bills[:meal_id].eq(arel_table[:id])).where(no_cost: false).where(amount: 0).arel.exists
+  end
+
   belongs_to :reconciliation, optional: true
   # Required (#100). The calendar and the rotation emails show each meal
   # in its rotation, and a meal with no rotation once stopped the nightly

@@ -256,40 +256,72 @@ class Community < ApplicationRecord
 
   # Report Methods
 
-  # Dashboard "Cost per adult". Reads MealLedger's per-meal summaries,
-  # so it cannot drift from settlement math: meals nobody attended are
-  # skipped by the scope, capped meals count their effective cost, and a
-  # zero-multiplier meal charges nobody (its effective cost is zero).
-  # An adult is Multiplier::FULL units, hence the multiply.
+  # The meals both dashboard averages read: the ones whose costs are
+  # final. That is what a settlement run today would claim
+  # (Meal.settleable_by: not settled, from a day that is over, at least
+  # one cook, and someone to charge or no money spent), less any meal
+  # with a cost not entered yet, and only meals someone ate at.
   #
-  # Both dashboard averages take the unreconciled meals up to and including
-  # today. The nightly job keeps six months of upcoming meals, and those
-  # have sign-ups but no receipt yet, so they would count at $0 (#98).
+  # The settlement does settle a $0 cost that is not marked no-cost, at
+  # $0, and only warns about it: it cannot wait for a cost forever. An
+  # average can, so it leaves the meal out until the cook enters the
+  # cost. Until 2026-10-10 the averages also counted tonight's meal
+  # before its receipt was in, and past meals with no cook or no cost,
+  # all at $0, so "Cost per adult" dropped every evening and after
+  # every settlement (#98 had already left out the upcoming meals).
+  def averaged_meals
+    meals.settleable_by(today - 1, today: today).with_attendees.where(Meal.a_cost_not_entered.not)
+  end
+
+  def averaged_meal_count
+    averaged_meals.count
+  end
+
+  # The past meals people ate at that the averages leave out, by reason.
+  # Each meal is counted once, under the first reason that fits: a meal
+  # waiting for a cost and held for nobody to charge counts as waiting,
+  # because entering the cost is the first thing to fix. These and
+  # averaged_meals are all of the unsettled meals people ate at on a day
+  # that is over.
+  def meals_left_out_of_averages
+    past = meals.unreconciled.where(date: ...today).with_attendees
+    {
+      no_cook: past.where.missing(:bills).count,
+      cost_not_entered: past.where(Meal.a_cost_not_entered).count,
+      nobody_to_charge: past.receipt_and_nobody_to_charge.where(Meal.a_cost_not_entered.not).count
+    }
+  end
+
+  # Dashboard "Cost per adult", over averaged_meals. Reads MealLedger's
+  # per-meal summaries, so it cannot drift from settlement math: capped
+  # meals count their effective cost, and a meal where some eat free
+  # charges only the others. An adult is Multiplier::FULL units, hence
+  # the multiply.
   #
   # Rounded as a BigDecimal, half up, like number_to_currency: 8.125 shows
   # as 8.13. format('%.2f') turned it into a Float first and showed 8.12.
   def unreconciled_ave_cost
-    unreconciled = meals.unreconciled.where(date: ..today).with_attendees
-                        .preload(:meal_residents, :guests, :bills).to_a
-    total_multiplier = unreconciled.sum(&:multiplier)
+    final = averaged_meals.preload(:meal_residents, :guests, :bills).to_a
+    total_multiplier = final.sum(&:multiplier)
     return '--' if total_multiplier.zero?
 
-    ledger = MealLedger.new(unreconciled)
-    total_cost = unreconciled.sum(BigDecimal('0')) do |meal|
+    ledger = MealLedger.new(final)
+    total_cost = final.sum(BigDecimal('0')) do |meal|
       ledger.summary_for(meal).effective_cost
     end
     val = Multiplier::FULL * (total_cost / total_multiplier)
     "$#{ActiveSupport::NumberHelper.number_to_rounded(val, precision: 2)}/adult"
   end
 
-  # Dashboard "Attendees per meal", over the same meals as the cost.
+  # Dashboard "Attendees per meal", over averaged_meals, the same meals
+  # as the cost.
   def unreconciled_ave_number_of_attendees
-    unreconciled = meals.unreconciled.where(date: ..today)
-    meal_count = unreconciled.count
+    final = averaged_meals
+    meal_count = final.count
     return '--' if meal_count.zero?
 
-    mr_count = MealResident.where(meal_id: unreconciled.select(:id)).count
-    g_count = Guest.where(meal_id: unreconciled.select(:id)).count
+    mr_count = MealResident.where(meal_id: final.select(:id)).count
+    g_count = Guest.where(meal_id: final.select(:id)).count
     ((mr_count + g_count).to_f / meal_count).round(1)
   end
 

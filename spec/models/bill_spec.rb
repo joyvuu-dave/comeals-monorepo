@@ -170,17 +170,6 @@ RSpec.describe Bill do
       expect(bill.reload.amount).to eq(BigDecimal('75'))
     end
 
-    it 'allows re-parenting a bill between two open meals' do
-      meal = create(:meal, community: community)
-      resident = create(:resident, community: community, unit: unit)
-      bill = create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('50'))
-      other = create(:meal, community: community)
-
-      bill.meal = other
-      expect(bill.save).to be true
-      expect(bill.reload.meal_id).to eq(other.id)
-    end
-
     it 'blocks re-parenting a bill out of a reconciled meal' do
       meal = create(:meal, community: community)
       resident = create(:resident, community: community, unit: unit)
@@ -207,6 +196,65 @@ RSpec.describe Bill do
       expect(bill.save).to be false
       expect(bill.errors[:base]).to include('Meal has been reconciled.')
       expect(bill.reload.meal_id).to eq(meal.id)
+    end
+  end
+
+  # A bill is "this cook on this meal" (ADR 0009, #135). An admin who
+  # changed a bill's cook in place made the meal history wrong: it said
+  # "unknown bill changed", and the cook's older lines then named the new
+  # cook. To fix a wrong cook or meal, delete the bill and add a new one.
+  describe 'a saved bill keeps its cook and its meal' do
+    let(:meal) { create(:meal, community: community) }
+    let(:cook) { create(:resident, community: community, unit: unit) }
+    let(:other_cook) { create(:resident, community: community, unit: unit) }
+    let(:bill) { create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('50')) }
+
+    it 'refuses a new cook in words, and keeps the cook it had' do
+      bill.resident = other_cook
+
+      expect(bill.save).to be(false)
+      expect(bill.errors.full_messages).to eq([Bill::COOK_AND_MEAL_FIXED])
+      expect(bill.reload.resident_id).to eq(cook.id)
+    end
+
+    it 'refuses a new meal in words, and keeps the meal it had, when both meals are open' do
+      other_meal = create(:meal, community: community, date: meal.date + 1)
+      bill.meal = other_meal
+
+      expect(bill.save).to be(false)
+      expect(bill.errors.full_messages).to eq([Bill::COOK_AND_MEAL_FIXED])
+      expect(bill.reload.meal_id).to eq(meal.id)
+    end
+
+    it 'refuses a new cook from a save that skips validation' do
+      bill.resident_id = other_cook.id
+
+      expect(bill.save(validate: false)).to be(false)
+      expect(bill.errors.full_messages).to eq([Bill::COOK_AND_MEAL_FIXED])
+      expect(bill.reload.resident_id).to eq(cook.id)
+    end
+
+    # The before_save gives the same sentence, but it never runs when
+    # another mistake fails validation first. Without the validation, this
+    # save would show only the cents error and hide the cook refusal.
+    it 'says the cook and meal cannot change along with any other mistake in the same save' do
+      bill.assign_attributes(resident: other_cook, amount: BigDecimal('40.555'))
+
+      expect(bill.save).to be(false)
+      expect(bill.errors.full_messages).to contain_exactly(Bill::COOK_AND_MEAL_FIXED, 'Amount must be whole cents')
+    end
+
+    it 'saves when the cook and meal are given again unchanged, as a string the way a form sends them' do
+      bill.assign_attributes(resident_id: cook.id.to_s, meal_id: meal.id.to_s, amount: BigDecimal('60'))
+
+      expect(bill.save).to be(true)
+      expect(bill.reload.amount).to eq(BigDecimal('60'))
+    end
+
+    it 'takes any cook and any meal on a new bill' do
+      new_bill = build(:bill, meal: meal, resident: other_cook, community: community)
+
+      expect(new_bill.save).to be(true)
     end
   end
 

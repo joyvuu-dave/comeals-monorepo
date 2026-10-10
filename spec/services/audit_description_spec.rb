@@ -77,6 +77,157 @@ RSpec.describe AuditDescription do
     expect(described_class.describe(audit)).to eq("Bill for #{name} changed from $30.00 to $0.00 and marked as no cost")
   end
 
+  # Until migration 20260326000001, bills.amount was called amount_cents
+  # and held whole cents. The audit rows written before it still hold
+  # amount_cents: 6051 of them in production, from 2017-08-30 to
+  # 2026-03-24. The history once said "unknown bill changed" for each.
+  describe 'bill rows from before the amount was in dollars' do # -- a group of cases, not a method
+    # Stored, as the old rows are: a row names its cook through the rows
+    # before it in the bill's own history.
+    def cents_row(bill_id, cents)
+      Audited::Audit.create!(auditable_type: 'Bill', auditable_id: bill_id, action: 'update',
+                             audited_changes: { 'amount_cents' => cents })
+    end
+
+    let(:bill) { create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('72.06')) }
+
+    it 'says whose bill changed, and from what to what, in dollars' do
+      rows = [[7200, 7206], [0, 400], [400, 1], [1, 8_674_900]].map { |cents| cents_row(bill.id, cents) }
+      describer = described_class.for(rows)
+
+      expect(rows.map { |row| describer.describe(row) }).to eq(
+        ["Bill for #{name} changed from $72.00 to $72.06", "Bill for #{name} changed from $0.00 to $4.00",
+         "Bill for #{name} changed from $4.00 to $0.01", "Bill for #{name} changed from $0.01 to $86,749.00"]
+      )
+    end
+
+    # The create rows of that time hold amount_cents too, and name the
+    # cook the same way.
+    it 'names the cook of a bill that is gone from its old create row' do
+      Audited::Audit.create!(auditable_type: 'Bill', auditable_id: 999_999, action: 'create',
+                             audited_changes: { 'meal_id' => meal.id, 'resident_id' => resident.id,
+                                                'amount_cents' => 0, 'amount_currency' => 'USD' })
+
+      expect(described_class.describe(cents_row(999_999, [0, 3648])))
+        .to eq("Bill for #{name} changed from $0.00 to $36.48")
+    end
+
+    # The column was a NOT NULL integer, so no real row holds anything
+    # else. The history still answers, because a history that raises
+    # shows nothing at all.
+    it 'says a bill changed in an unknown way when the old amounts are not whole numbers of cents' do
+      rows = [[nil, 400], %w[7200 7206], [72.5, 80], 7200].map { |cents| cents_row(bill.id, cents) }
+      describer = described_class.for(rows)
+
+      expect(rows.map { |row| describer.describe(row) }).to all(eq('unknown bill changed'))
+    end
+  end
+
+  # Until 2026-10-10 the admin bill form could change a bill's cook in
+  # place. Production holds three such rows, all on bill 1995 (meal 1356,
+  # 2023-03-05): Sandra to Sarah, back to Sandra, and to Sarah again,
+  # after which the bill was deleted. The history said "unknown bill
+  # changed" for each. Nothing can write such a row now
+  # (Bill::COOK_AND_MEAL_FIXED), so these are written by hand, the way
+  # they are stored.
+  describe 'bills whose cook was changed in place' do # -- a group of cases, not a method
+    let(:ann) { create(:resident, community: community, unit: unit) }
+    let(:bob) { create(:resident, community: community, unit: unit) }
+
+    def short(person)
+      ResidentNameShortener.short(person.name)
+    end
+
+    def old_row(bill_id, action, changes)
+      Audited::Audit.create!(auditable_type: 'Bill', auditable_id: bill_id, associated_type: 'Meal',
+                             associated_id: meal.id, action: action, audited_changes: changes)
+    end
+
+    # Bill 1995's history, with other names, and one more cost change
+    # after the moves, so a line after a move has a cook to name.
+    def moved_bill_history(bill_id)
+      old_row(bill_id, 'create', { 'meal_id' => meal.id, 'resident_id' => ann.id, 'amount_cents' => 0 })
+      old_row(bill_id, 'update', { 'amount_cents' => [0, 350] })
+      [[ann, bob], [bob, ann], [ann, bob]].each do |from, to|
+        old_row(bill_id, 'update', { 'resident_id' => [from.id, to.id] })
+      end
+      old_row(bill_id, 'update', { 'amount_cents' => [350, 358] })
+      old_row(bill_id, 'destroy', { 'meal_id' => meal.id, 'resident_id' => bob.id, 'amount_cents' => 358 })
+      Audited::Audit.where(auditable_type: 'Bill', auditable_id: bill_id).order(:version).to_a
+    end
+
+    it 'says the bill moved, with both names, and names each cost line by the cook it was about' do
+      rows = moved_bill_history(999_995)
+      describer = described_class.for(rows)
+      expected = ["#{short(ann)} added as cook", "Bill for #{short(ann)} changed from $0.00 to $3.50",
+                  "Bill moved from #{short(ann)} to #{short(bob)}", "Bill moved from #{short(bob)} to #{short(ann)}",
+                  "Bill moved from #{short(ann)} to #{short(bob)}",
+                  "Bill for #{short(bob)} changed from $3.50 to $3.58", "#{short(bob)} removed as cook"]
+
+      expect(rows.map { |row| describer.describe(row) }).to eq(expected)
+      # One describer per row repeats its reads on purpose: it is the
+      # same answer reached one row at a time.
+      expect(Prosopite.pause { rows.map { |row| described_class.describe(row) } }).to eq(expected)
+    end
+
+    it 'says what else changed when one save moved the bill' do
+      old_row(999_996, 'create', { 'meal_id' => meal.id, 'resident_id' => ann.id, 'amount' => '0.0' })
+      cost = old_row(999_996, 'update', { 'resident_id' => [ann.id, bob.id], 'amount' => ['0.0', '12.0'] })
+      flag = old_row(999_996, 'update', { 'resident_id' => [bob.id, ann.id], 'no_cost' => [false, true] })
+
+      describer = described_class.for([cost, flag])
+
+      expect([cost, flag].map { |row| describer.describe(row) }).to eq(
+        ["Bill moved from #{short(ann)} to #{short(bob)} and changed from $0.00 to $12.00",
+         "Bill moved from #{short(bob)} to #{short(ann)} and marked as no cost"]
+      )
+    end
+
+    it 'names an unknown cook on either side when that resident is gone' do
+      row = old_row(999_997, 'update', { 'resident_id' => [ann.id, 999_999] })
+
+      expect(described_class.describe(row)).to eq("Bill moved from #{short(ann)} to unknown")
+    end
+  end
+
+  # No path in the app changes the person on an attendance row: the API
+  # changes only late and vegetarian, and admin only adds and removes
+  # rows. The model does not refuse it, though, and three production
+  # rows did it (attendance row 8756, meal 1356, 2023-03-05: Sandra to
+  # Arlen, back to Sandra, and to Arlen again). The history said
+  # "MealResident, update" for each.
+  describe 'attendance rows whose person was changed' do # -- a group of cases, not a method
+    let(:ann) { create(:resident, community: community, unit: unit) }
+    let(:bob) { create(:resident, community: community, unit: unit) }
+
+    def short(person)
+      ResidentNameShortener.short(person.name)
+    end
+
+    it 'says the sign-up moved, with both names, and names each other line by the person it was about' do
+      attendance = create(:meal_resident, meal: meal, resident: ann, community: community, late: false)
+      attendance.update!(late: true)
+      [bob, ann, bob].each { |person| attendance.update!(resident: person) }
+      attendance.update!(late: false)
+      rows = attendance.audits.order(:version).to_a
+      describer = described_class.for(rows)
+
+      expect(rows.map { |row| describer.describe(row) }).to eq(
+        ["#{short(ann)} added", "#{short(ann)} marked late", "Sign-up moved from #{short(ann)} to #{short(bob)}",
+         "Sign-up moved from #{short(bob)} to #{short(ann)}", "Sign-up moved from #{short(ann)} to #{short(bob)}",
+         "#{short(bob)} marked not late"]
+      )
+    end
+
+    it 'says the price changed too when one save moved the sign-up and changed its price' do
+      attendance = create(:meal_resident, meal: meal, resident: ann, community: community)
+      row = Audited::Audit.create!(auditable: attendance, action: 'update',
+                                   audited_changes: { 'resident_id' => [ann.id, bob.id], 'multiplier' => [2, 1] })
+
+      expect(described_class.describe(row)).to eq("Sign-up moved from #{short(ann)} to #{short(bob)}: Adult to Child")
+    end
+  end
+
   it 'resolves resident name for a bill update audit from the create audit once the bill is gone' do
     bill = create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('30'))
     bill.update!(amount: BigDecimal('50'))
@@ -306,8 +457,9 @@ RSpec.describe AuditDescription do
     # Each row's host is the host before it, so the history has to be
     # read in order. PostgreSQL often returns these rows in that order
     # without being asked, so no set of rows can show that it was asked.
-    # This reads the statement instead.
-    it "asks for each guest's history in version order" do
+    # This reads the statement instead. Two rows of one record can share a
+    # version, so the id breaks the tie.
+    it "asks for each guest's history in version order, then id" do
       guest = create(:guest, meal: meal, resident: ann)
       guest.update!(multiplier: Multiplier::HALF)
       rows = update_rows(guest)
@@ -315,7 +467,8 @@ RSpec.describe AuditDescription do
       callback = ->(*, payload) { statements << payload[:sql] }
       ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') { described_class.for(rows) }
 
-      expect(statements.grep(/FROM "audits"/)).to contain_exactly(/ ORDER BY "audits"\."version" ASC\z/)
+      expect(statements.grep(/FROM "audits"/))
+        .to contain_exactly(/ ORDER BY "audits"\."version" ASC, "audits"\."id" ASC\z/)
     end
 
     it 'names an unknown host when the resident is gone' do
@@ -392,15 +545,15 @@ RSpec.describe AuditDescription do
 
     it 'says a bill changed in an unknown way when neither amount nor no_cost moved' do
       bill = create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('30'))
-      audit = instance_double(Audited::Audit, auditable_type: 'Bill', action: 'update', auditable_id: bill.id,
-                                              audited_changes: { 'updated_at' => [1, 2] })
+      audit = instance_double(Audited::Audit, id: nil, auditable_type: 'Bill', action: 'update',
+                                              auditable_id: bill.id, audited_changes: { 'updated_at' => [1, 2] })
       expect(described_class.describe(audit)).to eq('unknown bill changed')
     end
 
     it 'falls back for a meal_resident late change with no clear direction' do
       open_meal = create(:meal, community: community, date: meal.date + 1)
       meal_resident = create(:meal_resident, meal: open_meal, resident: resident, community: community)
-      audit = instance_double(Audited::Audit, auditable_type: 'MealResident', action: 'update',
+      audit = instance_double(Audited::Audit, id: nil, auditable_type: 'MealResident', action: 'update',
                                               auditable_id: meal_resident.id,
                                               audited_changes: { 'late' => [nil, nil] })
       expect(described_class.describe(audit)).to eq('MealResident, update')
@@ -430,8 +583,10 @@ RSpec.describe AuditDescription do
     let(:meal) { create(:meal, community: community, closed: true, max: nil) }
     let(:name) { ResidentNameShortener.short(resident.name) }
 
+    # A row that is not stored, so it has no id, and the history of its
+    # record does not hold it.
     def audit(type, action, changes, id: nil)
-      instance_double(Audited::Audit, auditable_type: type, action: action, audited_changes: changes,
+      instance_double(Audited::Audit, id: nil, auditable_type: type, action: action, audited_changes: changes,
                                       auditable_id: id)
     end
 
@@ -529,8 +684,11 @@ RSpec.describe AuditDescription do
         expect(rows.map { |row| describer.describe(row) }).to all(eq('MealResident, update'))
       end
 
+      # Stored, so the row's place in the attendance row's history names
+      # the person.
       it 'names a free child by the words the admin pages use' do
-        row = audit('MealResident', 'update', { 'multiplier' => [0, 1] }, id: attendance.id)
+        row = Audited::Audit.create!(auditable: attendance, action: 'update',
+                                     audited_changes: { 'multiplier' => [0, 1] })
         expect(described_class.describe(row)).to eq("#{name}: Child (free) to Child")
       end
 
@@ -564,9 +722,9 @@ RSpec.describe AuditDescription do
   end
 
   # A describer loads, before it describes anything, the resident each
-  # update row's bill or attendance row points at: from the row while it
-  # exists, from its create audit once it is gone (#84). These pin what
-  # it reads, and from where.
+  # update row's bill, attendance row or guest named just before that
+  # row: from the record's own history, read in order (#84). These pin
+  # what it reads, and from where.
   describe 'what a describer reads first' do
     let(:other) { create(:resident, community: community, unit: unit) }
 
@@ -585,20 +743,24 @@ RSpec.describe AuditDescription do
       expect(count_queries { described_class.for(rows) }).to eq(1)
     end
 
-    it 'reads no audit trail when every row the updates name still exists' do
+    # The records' histories, then the residents. Never the bills,
+    # attendance rows or guests themselves: a record as it is now cannot
+    # say who it named at an older row.
+    it 'reads the history of every bill, attendance row and guest in one query, and not the records' do
       bill_update(resident, from: '30', to: '50')
       attendance = create(:meal_resident, meal: meal, resident: other, community: community, late: false)
       attendance.update!(late: true)
-      rows = Audited::Audit.where(action: 'update', auditable_type: %w[Bill MealResident]).to_a
+      guest = create(:guest, meal: meal, resident: resident)
+      guest.update!(multiplier: Multiplier::HALF)
+      rows = Audited::Audit.where(action: 'update').to_a
       statements = []
       recorder = ->(*, event) { statements << event[:sql] unless event[:name] == 'SCHEMA' || event[:cached] }
 
       ActiveSupport::Notifications.subscribed(recorder, 'sql.active_record') { described_class.for(rows) }
 
-      # The bills, the attendance rows, the residents. The first two read
-      # only the rows the updates name, never the whole table.
-      expect(statements.size).to eq(3)
-      expect(statements.first(2)).to all(match(/WHERE "(bills|meal_residents)"\."id" (=|IN)/))
+      expect(statements.size).to eq(2)
+      expect(statements.first).to include('FROM "audits"')
+      expect(statements.second).to include('FROM "residents"')
     end
 
     # Ids are counted per table, so a gone bill can share its id with an
@@ -612,6 +774,22 @@ RSpec.describe AuditDescription do
       expect(described_class.describe(audit)).to eq("Bill for #{name} changed from $30.00 to $50.00")
     end
 
+    # Read in one query, the histories of a bill and an attendance row
+    # with the same id mix. Each record keeps its own resident: the
+    # attendance row's new person must not become the bill's cook.
+    it "keeps a bill's history apart from the history of an attendance row with the same id" do
+      bill = create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('30'))
+      bill.update!(no_cost: true)
+      attendance = create(:meal_resident, id: bill.id, meal: meal, resident: other, community: community)
+      attendance.update!(resident: create(:resident, community: community, unit: unit))
+      bill.update!(no_cost: false, amount: BigDecimal('50'))
+      rows = Audited::Audit.where(action: 'update').order(:id).to_a
+      describer = described_class.for(rows)
+
+      expect(describer.describe(rows.last))
+        .to eq("Bill for #{name} changed from $30.00 to $50.00 and no longer marked as no cost")
+    end
+
     # A row deleted outside the app has no destroy audit, so its last audit
     # is an update, which does not name the resident.
     it "reads a gone row's resident from its create audit, not a later one" do
@@ -621,19 +799,14 @@ RSpec.describe AuditDescription do
       expect(described_class.describe(audit)).to eq("Bill for #{name} changed from $30.00 to $50.00")
     end
 
-    # The bill's cook is changed without an audit, so its create audit
-    # names someone else. A gone bill beside it makes the describer read
-    # the audit trail at all.
-    it "reads a live row's resident from the row, not from its create audit" do
-      bill, audit = bill_update(resident, from: '30', to: '50')
-      bill.update_columns(resident_id: other.id)
-      gone, gone_audit = bill_update(create(:resident, community: community, unit: unit), from: '10', to: '20')
-      gone.destroy!
+    # The app has audited these records from the start, so only a row
+    # written outside the app has no create row. Then the history cannot
+    # say who the record named, even while the record is still there.
+    it 'names an unknown cook when the history has no create row for a bill that is still there' do
+      _bill, audit = bill_update(resident, from: '30', to: '50')
+      Audited::Audit.where(auditable_type: 'Bill', action: 'create').delete_all
 
-      describer = described_class.for([audit, gone_audit])
-
-      expect(describer.describe(audit))
-        .to eq("Bill for #{ResidentNameShortener.short(other.name)} changed from $30.00 to $50.00")
+      expect(described_class.describe(audit)).to eq('Bill for unknown changed from $30.00 to $50.00')
     end
   end
 end

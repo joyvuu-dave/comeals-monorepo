@@ -37,10 +37,12 @@ ActiveAdmin.register LedgerCheckRun do
     end
     para do
       status_tag 'mismatched', class: 'error'
-      text_node ' — a stored balance no longer agrees with its source ' \
-                'data. Something changed settled data after settlement. ' \
-                'The differences are listed on the run page. See ' \
-                'docs/runbooks/settled-data-repair.md.'
+      text_node ' — a stored balance no longer agrees with the balance ' \
+                'rebuilt from bills and sign-ups, or with the sum of that ' \
+                "person's meal lines, or a settlement's meal lines no longer " \
+                'add up to $0.00. Something changed settled data after ' \
+                'settlement. The run page lists each difference and the ' \
+                'check that found it. See docs/runbooks/settled-data-repair.md.'
     end
     para do
       status_tag 'did not finish', class: 'error'
@@ -86,26 +88,10 @@ ActiveAdmin.register LedgerCheckRun do
     end
 
     if resource.details.any?
+      # Each row says which check found it: the same stored keys mean a
+      # different thing in each (LedgerCheckFindingsTable).
       panel 'What disagreed' do
-        # Amounts are strings on purpose — they are money, and JSON numbers
-        # are floats. Rendered as stored, with no parsing on the way out.
-        rows = resource.details.flat_map do |detail|
-          detail['differences'].map do |difference|
-            {
-              reconciliation: "##{detail['reconciliation_id']} (#{detail['date']})",
-              resident_id: difference['resident_id'],
-              stored: difference['stored'] || '(no row)',
-              source: difference['source'] || '(no row)'
-            }
-          end
-        end
-
-        table_for rows do
-          column('Reconciliation') { |row| row[:reconciliation] }
-          column('Resident') { |row| row[:resident_id] }
-          column('Stored at settlement') { |row| row[:stored] }
-          column('Source data says') { |row| row[:source] }
-        end
+        ledger_check_findings_table(resource)
       end
     end
   end

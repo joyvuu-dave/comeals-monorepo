@@ -171,32 +171,47 @@ RSpec.describe Community do
     end
   end
 
+  # The two dashboard averages read the same meals: unreconciled, from a
+  # day that is over, with at least one cook, someone who ate, and every
+  # cook's cost entered. A cost is not entered while it is $0 and not
+  # marked no-cost (cooksMissingCost in data_store.js says the same).
+  # Before 2026-10-10 they counted tonight's meal and every past meal
+  # without a cost at $0, so "Cost per adult" dropped every evening and
+  # after every settlement.
+  shared_context 'with meals for the dashboard averages' do
+    include ActiveSupport::Testing::TimeHelpers
+
+    let(:cook) { create(:resident, community: community, unit: unit, multiplier: 2) }
+    let(:diner) { create(:resident, community: community, unit: unit, multiplier: 2) }
+
+    # A meal with one bill, from its own cook, per amount (none: no cook),
+    # and the given eaters.
+    def meal_on(date, bills: [], eaters: [], no_cost: false)
+      meal = create(:meal, community: community, date: date)
+      bills.each do |amount|
+        create(:bill, meal: meal, resident: create(:resident, community: community, unit: unit),
+                      community: community, amount: BigDecimal(amount), no_cost: no_cost)
+      end
+      eaters.each { |eater| create(:meal_resident, meal: meal, resident: eater, community: community) }
+      meal
+    end
+  end
+
   describe '#unreconciled_ave_cost' do
+    include_context 'with meals for the dashboard averages'
+
     it 'returns average cost per adult for unreconciled meals' do
-      cook = create(:resident, community: community, unit: unit, multiplier: 2)
-      diner = create(:resident, community: community, unit: unit, multiplier: 2)
+      meal_on(community.today - 1, bills: %w[16], eaters: [cook, diner])
 
-      meal = create(:meal, community: community)
-      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('16'))
-      create(:meal_resident, meal: meal, resident: cook, community: community)
-      create(:meal_resident, meal: meal, resident: diner, community: community)
-
-      result = community.unreconciled_ave_cost
       # total_multiplier = 2 + 2 = 4, total_cost = 16 (under the 4.50/unit cap),
       # cost_per_unit = 4, per_adult = 8
-      expect(result).to eq('$8.00/adult')
+      expect(community.unreconciled_ave_cost).to eq('$8.00/adult')
     end
 
     # Settlement rule: a subsidized meal charges only its effective (capped)
     # cost — cap * multiplier — not the raw bill total.
     it 'uses the effective capped cost for subsidized meals' do
-      cook = create(:resident, community: community, unit: unit, multiplier: 2)
-      diner = create(:resident, community: community, unit: unit, multiplier: 2)
-
-      meal = create(:meal, community: community)
-      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('40'))
-      create(:meal_resident, meal: meal, resident: cook, community: community)
-      create(:meal_resident, meal: meal, resident: diner, community: community)
+      meal_on(community.today - 1, bills: %w[40], eaters: [cook, diner])
 
       # cap 4.50 * multiplier 4 = 18 effective (raw 40); 2 * (18 / 4) = $9.00
       expect(community.unreconciled_ave_cost).to eq('$9.00/adult')
@@ -207,26 +222,19 @@ RSpec.describe Community do
     end
 
     it 'leaves settled meals out' do
-      cook = create(:resident, community: community, unit: unit, multiplier: 2)
-      diner = create(:resident, community: community, unit: unit, multiplier: 2)
-      settled = create(:meal, community: community, date: Date.yesterday)
-      create(:bill, meal: settled, resident: cook, community: community, amount: BigDecimal('16'))
-      create(:meal_resident, meal: settled, resident: cook, community: community)
-      create(:meal_resident, meal: settled, resident: diner, community: community)
-      settle!(cutoff: Date.yesterday)
-      open_meal = create(:meal, community: community, date: Time.zone.today)
-      create(:bill, meal: open_meal, resident: cook, community: community, amount: BigDecimal('6'))
-      create(:meal_resident, meal: open_meal, resident: diner, community: community)
+      meal_on(community.today - 1, bills: %w[16], eaters: [cook, diner])
+      settle!(cutoff: community.today - 1)
+      meal_on(community.today - 2, bills: %w[6], eaters: [diner])
 
       # Only the open meal: $6 over a multiplier of 2 is $3 a unit, $6 an adult.
       expect(community.unreconciled_ave_cost).to eq('$6.00/adult')
     end
 
-    it 'returns -- when total multiplier is zero' do
+    # A settlement holds back a meal with a receipt and nobody to
+    # charge, so the averages leave it out too.
+    it 'returns -- when only people who eat free ate' do
       child = create(:resident, community: community, unit: unit, multiplier: 0)
-      meal = create(:meal, community: community)
-      create(:bill, meal: meal, resident: child, community: community, amount: BigDecimal('10'))
-      create(:meal_resident, meal: meal, resident: child, community: community)
+      meal_on(community.today - 1, bills: %w[10], eaters: [child])
 
       expect(community.unreconciled_ave_cost).to eq('--')
     end
@@ -234,109 +242,97 @@ RSpec.describe Community do
     # Settlement rule: a bill on a meal nobody attended has zero financial
     # impact (the cook absorbs it). The dashboard average must skip it too.
     it 'excludes bills from meals with no attendees' do
-      cook = create(:resident, community: community, unit: unit, multiplier: 2)
-      diner = create(:resident, community: community, unit: unit, multiplier: 2)
-
-      attended = create(:meal, community: community)
-      create(:bill, meal: attended, resident: cook, community: community, amount: BigDecimal('16'))
-      create(:meal_resident, meal: attended, resident: cook, community: community)
-      create(:meal_resident, meal: attended, resident: diner, community: community)
-
-      empty = create(:meal, community: community)
-      create(:bill, meal: empty, resident: cook, community: community, amount: BigDecimal('60'))
+      meal_on(community.today - 1, bills: %w[16], eaters: [cook, diner])
+      meal_on(community.today - 2, bills: %w[60])
 
       # Only the attended meal counts: 2 * (16 / 4) = $8.00
       expect(community.unreconciled_ave_cost).to eq('$8.00/adult')
     end
 
-    # Settlement rule (the total_mult.zero? short-circuit in billing:recalculate):
-    # a meal whose attendees sum to zero multiplier charges nobody, so its
-    # bills add nothing — even when the meal is uncapped.
-    it 'excludes bills from zero-multiplier meals' do
-      cook = create(:resident, community: community, unit: unit, multiplier: 2)
-      diner = create(:resident, community: community, unit: unit, multiplier: 2)
+    it 'excludes bills from meals only people who eat free ate, even uncapped' do
       child = create(:resident, community: community, unit: unit, multiplier: 0)
-
-      attended = create(:meal, community: community)
-      create(:bill, meal: attended, resident: cook, community: community, amount: BigDecimal('16'))
-      create(:meal_resident, meal: attended, resident: cook, community: community)
-      create(:meal_resident, meal: attended, resident: diner, community: community)
-
-      child_only = create(:meal, community: community)
-      child_only.update!(cap: nil) # uncapped, so the cap can't mask the rule
-      create(:bill, meal: child_only, resident: cook, community: community, amount: BigDecimal('10'))
-      create(:meal_resident, meal: child_only, resident: child, community: community)
+      meal_on(community.today - 1, bills: %w[16], eaters: [cook, diner])
+      meal_on(community.today - 2, bills: %w[10], eaters: [child]).update!(cap: nil)
 
       # Only the attended meal contributes cost: 2 * (16 / 4) = $8.00
       expect(community.unreconciled_ave_cost).to eq('$8.00/adult')
     end
 
-    # An upcoming meal with a sign-up and no receipt would count at $0 and
-    # pull the average down.
-    it 'leaves upcoming meals out' do
-      cook = create(:resident, community: community, unit: unit, multiplier: 2)
-      diner = create(:resident, community: community, unit: unit, multiplier: 2)
+    # Tonight's cook often enters the receipt after dinner. At 5 pm the
+    # cost is $0 and the sign-ups are in, so counting tonight pulled the
+    # average down until the cook entered it. A settlement waits for
+    # the day to be over, and so do the averages. If tonight counted,
+    # the average would be $5.33.
+    it "leaves out tonight's meal and tomorrow's" do
+      meal_on(community.today - 1, bills: %w[16], eaters: [cook, diner])
+      meal_on(community.today, bills: %w[0], eaters: [diner])
+      meal_on(community.today + 1, bills: %w[30], eaters: [diner])
 
-      past = create(:meal, community: community)
-      create(:bill, meal: past, resident: cook, community: community, amount: BigDecimal('16'))
-      create(:meal_resident, meal: past, resident: cook, community: community)
-      create(:meal_resident, meal: past, resident: diner, community: community)
-
-      upcoming = create(:meal, community: community, date: community.today + 7)
-      create(:meal_resident, meal: upcoming, resident: diner, community: community)
-
-      # Only the past meal: 2 * (16 / 4) = $8.00
       expect(community.unreconciled_ave_cost).to eq('$8.00/adult')
     end
 
-    # A meal dated today counts (the dashboard shows tonight's sign-ups);
-    # one dated tomorrow does not. If it did, its $9 capped cost over a
-    # multiplier of 2 would make the average $8.33.
-    it "counts a meal dated today and leaves out tomorrow's" do
-      cook = create(:resident, community: community, unit: unit, multiplier: 2)
-      diner = create(:resident, community: community, unit: unit, multiplier: 2)
+    # The meal is left out while any of its cooks has not entered a
+    # cost, even when another cook has. Counted, these two would make
+    # the average $6.25.
+    it 'leaves out a past meal while a cook has not entered a cost' do
+      meal_on(community.today - 1, bills: %w[16], eaters: [cook, diner])
+      meal_on(community.today - 2, bills: %w[0], eaters: [diner])
+      meal_on(community.today - 3, bills: %w[20 0], eaters: [diner])
 
-      tonight = create(:meal, community: community, date: community.today)
-      create(:bill, meal: tonight, resident: cook, community: community, amount: BigDecimal('16'))
-      create(:meal_resident, meal: tonight, resident: cook, community: community)
-      create(:meal_resident, meal: tonight, resident: diner, community: community)
+      expect(community.unreconciled_ave_cost).to eq('$8.00/adult')
+    end
 
-      tomorrow = create(:meal, community: community, date: community.today + 1)
-      create(:bill, meal: tomorrow, resident: cook, community: community, amount: BigDecimal('30'))
-      create(:meal_resident, meal: tomorrow, resident: diner, community: community)
+    # A no-cost meal has a final cost of $0, so it counts.
+    it 'counts a meal whose cook marked it no cost' do
+      meal_on(community.today - 1, bills: %w[16], eaters: [cook, diner])
+      meal_on(community.today - 2, bills: %w[0], eaters: [cook, diner], no_cost: true)
+
+      # $16 over a multiplier of 8 is $2 a unit, $4 an adult.
+      expect(community.unreconciled_ave_cost).to eq('$4.00/adult')
+    end
+
+    # 26 such meals were in production in 2026-09, from 2024-07-11 to
+    # 2026-08-02. A settlement never claims a meal with no cook, so
+    # right after each settlement they were most of what this average
+    # read, and it showed about $0.00. Counted, this one would make the
+    # average $5.33.
+    it 'leaves out a past meal people ate at with no cook' do
+      meal_on(community.today - 1, bills: %w[16], eaters: [cook, diner])
+      meal_on(community.today - 2, eaters: [diner])
 
       expect(community.unreconciled_ave_cost).to eq('$8.00/adult')
     end
 
     it 'rounds a half cent the way BigDecimal and number_to_currency do' do
-      cook = create(:resident, community: community, unit: unit, multiplier: 2)
-      diner = create(:resident, community: community, unit: unit, multiplier: 2)
-
-      meal = create(:meal, community: community)
-      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('16.25'))
-      create(:meal_resident, meal: meal, resident: cook, community: community)
-      create(:meal_resident, meal: meal, resident: diner, community: community)
+      meal_on(community.today - 1, bills: %w[16.25], eaters: [cook, diner])
 
       # 2 * (16.25 / 4) is exactly 8.125, under the 4.50/unit cap.
       expect(community.unreconciled_ave_cost).to eq('$8.13/adult')
     end
+
+    # At 07:30 UTC on 2026-08-24 it is 00:30 in Los Angeles and still
+    # 21:30 on 2026-08-23 in Honolulu. The Honolulu meal dated 08-23 is
+    # tonight's, so it is left out. Read in another zone, it would
+    # count and make the average $6.67.
+    it "reads today in the community's time zone" do
+      travel_to(Time.utc(2026, 8, 24, 7, 30)) do
+        community.update!(timezone: 'Pacific/Honolulu')
+        meal_on(Date.new(2026, 8, 22), bills: %w[16], eaters: [cook, diner])
+        meal_on(Date.new(2026, 8, 23), bills: %w[4], eaters: [diner])
+
+        expect(community.unreconciled_ave_cost).to eq('$8.00/adult')
+      end
+    end
   end
 
   describe '#unreconciled_ave_number_of_attendees' do
-    include ActiveSupport::Testing::TimeHelpers
+    include_context 'with meals for the dashboard averages'
 
     it 'returns average attendee count across unreconciled meals' do
-      cook = create(:resident, community: community, unit: unit, multiplier: 2)
-      diner = create(:resident, community: community, unit: unit, multiplier: 2)
+      meal_on(community.today - 1, bills: %w[16], eaters: [cook, diner])
+      meal_on(community.today - 2, bills: %w[16], eaters: [cook])
 
-      meal1 = create(:meal, community: community)
-      create(:meal_resident, meal: meal1, resident: cook, community: community)
-      create(:meal_resident, meal: meal1, resident: diner, community: community)
-
-      meal2 = create(:meal, community: community)
-      create(:meal_resident, meal: meal2, resident: cook, community: community)
-
-      # meal1: 2 attendees, meal2: 1 attendee, average = 1.5
+      # meal 1: 2 attendees, meal 2: 1 attendee, average = 1.5
       expect(community.unreconciled_ave_number_of_attendees).to eq(1.5)
     end
 
@@ -345,89 +341,92 @@ RSpec.describe Community do
     end
 
     it 'leaves settled meals and their attendance out' do
-      cook = create(:resident, community: community, unit: unit, multiplier: 2)
-      diner = create(:resident, community: community, unit: unit, multiplier: 2)
-      settled = create(:meal, community: community, date: Date.yesterday)
-      create(:bill, meal: settled, resident: cook, community: community, amount: BigDecimal('16'))
-      create(:meal_resident, meal: settled, resident: cook, community: community)
-      create(:meal_resident, meal: settled, resident: diner, community: community)
+      settled = meal_on(community.today - 1, bills: %w[16], eaters: [cook, diner])
       create(:guest, meal: settled, resident: diner)
-      settle!(cutoff: Date.yesterday)
-      open_meal = create(:meal, community: community, date: Time.zone.today)
-      create(:meal_resident, meal: open_meal, resident: diner, community: community)
+      settle!(cutoff: community.today - 1)
+      meal_on(community.today - 2, bills: %w[16], eaters: [diner])
 
       expect(community.unreconciled_ave_number_of_attendees).to eq(1.0)
     end
 
     it 'rounds to one decimal' do
-      cook = create(:resident, community: community, unit: unit, multiplier: 2)
-      diner = create(:resident, community: community, unit: unit, multiplier: 2)
-      3.times do |n|
-        meal = create(:meal, community: community, date: Date.yesterday - n)
-        create(:meal_resident, meal: meal, resident: cook, community: community)
-        create(:meal_resident, meal: meal, resident: diner, community: community) if n.zero?
-      end
+      meal_on(community.today - 1, bills: %w[16], eaters: [cook, diner])
+      meal_on(community.today - 2, bills: %w[16], eaters: [cook])
+      meal_on(community.today - 3, bills: %w[16], eaters: [cook])
 
       # 4 attendees over 3 meals is 1.333..., shown as 1.3.
       expect(community.unreconciled_ave_number_of_attendees).to eq(1.3)
     end
 
     it 'counts guests in addition to residents' do
-      cook = create(:resident, community: community, unit: unit, multiplier: 2)
-      meal = create(:meal, community: community)
-      create(:meal_resident, meal: meal, resident: cook, community: community)
+      meal = meal_on(community.today - 1, bills: %w[16], eaters: [cook])
       create(:guest, meal: meal, resident: cook)
 
       # 1 resident + 1 guest = 2 attendees / 1 meal = 2.0
       expect(community.unreconciled_ave_number_of_attendees).to eq(2.0)
     end
 
-    # The nightly job keeps six months of upcoming meals, and nobody has
-    # signed up for most of them yet.
-    it 'leaves upcoming meals out' do
-      cook = create(:resident, community: community, unit: unit, multiplier: 2)
-      diner = create(:resident, community: community, unit: unit, multiplier: 2)
-
-      meal1 = create(:meal, community: community)
-      create(:meal_resident, meal: meal1, resident: cook, community: community)
-      create(:meal_resident, meal: meal1, resident: diner, community: community)
-
-      meal2 = create(:meal, community: community)
-      create(:meal_resident, meal: meal2, resident: cook, community: community)
-
-      create(:meal, community: community, date: community.today + 7)
-
-      # Only the two past meals: 3 attendees / 2 meals = 1.5
-      expect(community.unreconciled_ave_number_of_attendees).to eq(1.5)
-    end
-
-    it "counts a meal dated today and leaves out tomorrow's" do
-      cook = create(:resident, community: community, unit: unit, multiplier: 2)
-      diner = create(:resident, community: community, unit: unit, multiplier: 2)
-
-      tonight = create(:meal, community: community, date: community.today)
-      create(:meal_resident, meal: tonight, resident: cook, community: community)
-      create(:meal_resident, meal: tonight, resident: diner, community: community)
-      tomorrow = create(:meal, community: community, date: community.today + 1)
-      create(:meal_resident, meal: tomorrow, resident: diner, community: community)
+    # The same meals as the cost. Each one left out here has one
+    # attendee, so counting any of them would bring the average below 2.
+    it 'reads the same meals as the cost' do
+      child = create(:resident, community: community, unit: unit, multiplier: 0)
+      meal_on(community.today - 1, bills: %w[16], eaters: [cook, diner])
+      meal_on(community.today - 2, eaters: [diner])
+      meal_on(community.today - 3, bills: %w[0], eaters: [diner])
+      meal_on(community.today - 4, bills: %w[10], eaters: [child])
+      meal_on(community.today - 5, bills: %w[0], no_cost: true)
+      meal_on(community.today, bills: %w[16], eaters: [diner])
+      meal_on(community.today + 7, eaters: [diner])
 
       expect(community.unreconciled_ave_number_of_attendees).to eq(2.0)
     end
 
-    # Today is the community's day, not the app's. At 00:30 in Los Angeles
-    # it is still 21:30 on the day before in Honolulu, so a Honolulu meal
-    # dated the Los Angeles date is tomorrow's and is left out.
     it "reads today in the community's time zone" do
       travel_to(Time.utc(2026, 8, 24, 7, 30)) do
         community.update!(timezone: 'Pacific/Honolulu')
-        cook = create(:resident, community: community, unit: unit, multiplier: 2)
-
-        tonight = create(:meal, community: community, date: Date.new(2026, 8, 23))
-        create(:meal_resident, meal: tonight, resident: cook, community: community)
-        create(:meal, community: community, date: Date.new(2026, 8, 24))
+        meal_on(Date.new(2026, 8, 22), bills: %w[16], eaters: [cook])
+        meal_on(Date.new(2026, 8, 23), bills: %w[16], eaters: [cook, diner])
 
         expect(community.unreconciled_ave_number_of_attendees).to eq(1.0)
       end
+    end
+  end
+
+  # Every past meal people ate at that is not settled yet is either
+  # counted or left out, for one reason only, so the dashboard's
+  # numbers add up to the meals people ate at.
+  describe '#meals_left_out_of_averages' do
+    include_context 'with meals for the dashboard averages'
+
+    it 'counts each past meal people ate at once, as counted or left out for its first reason' do
+      child = create(:resident, community: community, unit: unit, multiplier: 0)
+      # Counted: a receipt, and a no-cost meal.
+      meal_on(community.today - 1, bills: %w[16], eaters: [cook, diner])
+      meal_on(community.today - 2, bills: %w[0], eaters: [diner], no_cost: true)
+      # No cook.
+      meal_on(community.today - 3, eaters: [diner])
+      # A cost not entered, on one cook or on one of two, and one that
+      # only a free eater ate as well.
+      meal_on(community.today - 4, bills: %w[0], eaters: [diner])
+      meal_on(community.today - 5, bills: %w[20 0], eaters: [diner])
+      meal_on(community.today - 6, bills: %w[10 0], eaters: [child])
+      # Nobody to charge: only a free eater ate.
+      meal_on(community.today - 7, bills: %w[10], eaters: [child])
+      # Neither: nobody ate, tonight, tomorrow.
+      meal_on(community.today - 8, bills: %w[25])
+      meal_on(community.today - 9)
+      meal_on(community.today, eaters: [diner])
+      meal_on(community.today + 1, bills: %w[0], eaters: [diner])
+
+      expect(community.averaged_meal_count).to eq(2)
+      expect(community.meals_left_out_of_averages).to eq(no_cook: 1, cost_not_entered: 3, nobody_to_charge: 1)
+    end
+
+    it 'counts nothing and leaves nothing out when no meal is past' do
+      meal_on(community.today, bills: %w[0], eaters: [diner])
+
+      expect(community.averaged_meal_count).to eq(0)
+      expect(community.meals_left_out_of_averages).to eq(no_cook: 0, cost_not_entered: 0, nobody_to_charge: 0)
     end
   end
 

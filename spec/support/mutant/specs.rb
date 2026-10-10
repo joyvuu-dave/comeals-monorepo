@@ -185,6 +185,9 @@ MUTANT_SPEC_ROWS = {
   'spec/requests/admin/meal_form_guest_move_spec.rb' => %w[Guest ClosedMealAttendanceFreeze],
   'spec/requests/admin/attendance_correction_spec.rb' => %w[MealResident ClosedMealAttendanceFreeze],
   'spec/requests/admin/reconciled_immutability_spec.rb' => %w[ReconciledMealImmutability Bill],
+  # The admin bill form: a new cook or meal is refused in Bill's words,
+  # and a wrong cook is fixed by delete and add, named in the history.
+  'spec/requests/admin/bill_cook_and_meal_spec.rb' => %w[Bill AuditDescription],
   'spec/requests/admin/reconciliation_immutability_spec.rb' => %w[SettleAndNotify Reconciliation AppendOnly],
   'spec/requests/admin/child_pricing_rule_spec.rb' => %w[Community Multiplier],
   'spec/requests/admin/community_form_spec.rb' => %w[Community],
@@ -248,12 +251,16 @@ MUTANT_SPEC_ROWS = {
   'spec/models/resident_birthday_chip_spec.rb' => %w[Resident BelongsToTheCommunity HasPhoneNumber],
   'spec/models/unit_spec.rb' => %w[Unit LiveUpdate BelongsToTheCommunity],
   'spec/requests/admin/all_pages_spec.rb' =>
-    %w[BalanceDisplayHelper SettlementLinesTable MoneyFieldHelper ScheduleWeekLabelHelper PhoneDisplayHelper
-       ApplicationHelper SuperuserAdapter AdminOrderClause],
+    %w[BalanceDisplayHelper SettlementLinesTable LedgerCheckFindingsTable MoneyFieldHelper ScheduleWeekLabelHelper
+       PhoneDisplayHelper ApplicationHelper SuperuserAdapter AdminOrderClause],
+  # The only spec of the ledger check run page's table. One example reads
+  # a run LedgerVerification wrote, so it pins the stored shape too.
+  'spec/requests/admin/ledger_check_run_page_spec.rb' =>
+    %w[LedgerCheckFindingsTable BalanceDisplayHelper LedgerVerification],
   'spec/requests/admin/sort_order_spec.rb' => %w[AdminOrderClause],
   'spec/requests/admin/pages_with_data_spec.rb' =>
-    %w[BalanceDisplayHelper SettlementLinesTable MoneyFieldHelper PhoneDisplayHelper ApplicationHelper
-       MealCostSummary],
+    %w[BalanceDisplayHelper SettlementLinesTable LedgerCheckFindingsTable MoneyFieldHelper PhoneDisplayHelper
+       ApplicationHelper MealCostSummary],
   'spec/models/community_dinner_start_times_spec.rb' => %w[Community],
   # Checks the version against the common house bookings
   # CalendarSerializer lists, edge by edge. Its two groups are Community

@@ -55,9 +55,27 @@ class Bill < ApplicationRecord
   include LocksItsMealFirst
 
   # ActiveAdmin's Bill form would otherwise allow a superuser to quietly
-  # rewrite a reconciled bill's amount, or move it between meals.
+  # rewrite a reconciled bill's amount.
   include ReconciledMealImmutability
   include NotesMealLiveUpdate
+
+  # A bill is "this cook on this meal" (ADR 0009, #135), so a saved bill
+  # never gets a new cook or a new meal. To fix a wrong one, an admin
+  # deletes the bill and adds a new one, and the meal history then says
+  # who was removed and who was added. Before 2026-10-10 the admin form
+  # could change the cook in place. The history then said "unknown bill
+  # changed", and the cook's older lines named the new cook.
+  #
+  # Two hooks, one rule, as in ReconciledMealImmutability: the
+  # validation gives the sentence along with any other mistakes on the
+  # form, and the before_save covers a save that skips validation. A
+  # write that skips the model (update_columns, update_all, psql) is
+  # refused by the trigger bills_same_cook_and_meal, in these same words.
+  COOK_AND_MEAL_FIXED = "A bill's cook and meal cannot change. " \
+                        'To fix a wrong cook or meal, delete this bill and add a new one.'
+
+  validate :refuse_new_cook_or_meal
+  before_save :reject_new_cook_or_meal
 
   delegate :date, to: :meal
   delegate :unit, to: :resident
@@ -85,4 +103,27 @@ class Bill < ApplicationRecord
   end
 
   delegate :reconciled?, to: :meal
+
+  private
+
+  sig { void }
+  def refuse_new_cook_or_meal
+    errors.add(:base, COOK_AND_MEAL_FIXED) if new_cook_or_meal?
+  end
+
+  sig { void }
+  def reject_new_cook_or_meal
+    return unless new_cook_or_meal?
+
+    errors.add(:base, COOK_AND_MEAL_FIXED)
+    throw(:abort)
+  end
+
+  # A new bill takes any cook and any meal. A form that sends the same
+  # cook or meal again, as a string, changes nothing: Rails compares the
+  # value after turning it into a number.
+  sig { returns(T::Boolean) }
+  def new_cook_or_meal?
+    persisted? && (will_save_change_to_resident_id? || will_save_change_to_meal_id?)
+  end
 end

@@ -68,6 +68,16 @@ ones that turn bills and attendance into an amount a person is told to
 pay — and the rest followed. `Current` is left out: it declares
 attributes and has no method to mutate.
 
+Mutant picks its subjects from the classes that are loaded when it has
+run the hook in `config/mutant/hooks.rb`, before it loads any spec
+file. A name in `.mutant.yml` whose class is not loaded by then matches
+nothing, and the run does not say so. So the hook loads every class:
+`eager_load!` for what Rails autoloads, ActiveAdmin's pages for the
+tables in `app/admin/components`, and every file in `lib/`.
+`spec/config/mutant_subjects_spec.rb` fails when a listed class is not
+loaded at that point. Before 2026-10-10 the hook did only `eager_load!`,
+so `SettlementLinesTable` and `DeployConfigCheck` were never mutated.
+
 Two kinds of node are skipped (`ignore_patterns` in `.mutant.yml`):
 `T.must(...)` and `T.let(...)`. Both are no-ops at runtime, so the
 mutation "remove the call" can never fail a test, and every one would
@@ -1064,7 +1074,9 @@ failure, 100% of lines and branches.
 and `# jobs, mailers, helpers, lib` blocks of `.mutant.yml`. This
 branch added `BillsPayload`, `LivePushJob` and `DeployConfigCheck` to
 those blocks; none of the three had been in a stage run before.
-`LivePushJob` and `DeployConfigCheck` had no survivor.
+`LivePushJob` and `DeployConfigCheck` had no survivor. (Found
+2026-10-10: `DeployConfigCheck` had no mutation at all. The hook did
+not load it, so its name matched nothing. See "What is mutated".)
 
 | Run                                                 | Subjects | Mutations | Killed | Alive | Timeouts             | Time   |
 | --------------------------------------------------- | -------- | --------- | ------ | ----- | -------------------- | ------ |

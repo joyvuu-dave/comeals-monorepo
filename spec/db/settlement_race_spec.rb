@@ -259,8 +259,11 @@ RSpec.describe 'settlement race against unlocked write paths' do
 
     # Moving a bill OFF the settling meal removes it from the ledger just as
     # a delete would, and it is the OLD.meal_id lookup that has to catch it —
-    # the NEW lookup only sees the unlocked destination. (app/admin/bill.rb
-    # permits :meal_id, so admin can move a bill too, through the model.)
+    # the NEW lookup only sees the unlocked destination. (Nothing moves a
+    # bill now: the model and the trigger bills_same_cook_and_meal refuse
+    # it. That trigger runs after this one, by name, so this move still
+    # waits for the settlement here, and the settled-meal trigger refuses
+    # it. An attendance row or a guest can still move.)
     it 'refuses a raw SQL move of a bill off the meal being settled' do
       expect_racing_write_refused(
         'UPDATE bills SET meal_id = $1 WHERE id = $2',

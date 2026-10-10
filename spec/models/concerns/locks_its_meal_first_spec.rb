@@ -70,6 +70,19 @@ RSpec.describe LocksItsMealFirst do
       expect(delete).to be > lock
     end
 
+    it 'asks for the meal once when the row stays on it' do
+      row = make_row(meal)
+
+      statements = statements_during { row.update!(change) }
+
+      expect(statements.count { |(sql, _binds)| sql.include?('FOR KEY SHARE') }).to eq(1)
+      expect(statements).to include(lock_statement(meal.id))
+    end
+  end
+
+  # An attendance row and a guest can move to another meal. A bill
+  # cannot (Bill::COOK_AND_MEAL_FIXED), so it has no move to lock for.
+  shared_examples 'a row that locks both meals when it moves' do
     it 'locks both meals, lowest id first, when a row moves to a meal with a lower id' do
       earlier = meal
       later = create(:meal, community: community, date: Date.new(2026, 4, 12))
@@ -89,15 +102,6 @@ RSpec.describe LocksItsMealFirst do
 
       expect(statements).to include(lock_statement(meal.id, later.id))
     end
-
-    it 'asks for the meal once when the row stays on it' do
-      row = make_row(meal)
-
-      statements = statements_during { row.update!(change) }
-
-      expect(statements.count { |(sql, _binds)| sql.include?('FOR KEY SHARE') }).to eq(1)
-      expect(statements).to include(lock_statement(meal.id))
-    end
   end
 
   context 'with a bill' do
@@ -112,6 +116,7 @@ RSpec.describe LocksItsMealFirst do
     def change = { late: true }
 
     it_behaves_like 'a row that locks its meal first', 'meal_residents'
+    it_behaves_like 'a row that locks both meals when it moves'
   end
 
   context 'with a guest' do
@@ -119,5 +124,6 @@ RSpec.describe LocksItsMealFirst do
     def change = { vegetarian: true }
 
     it_behaves_like 'a row that locks its meal first', 'guests'
+    it_behaves_like 'a row that locks both meals when it moves'
   end
 end

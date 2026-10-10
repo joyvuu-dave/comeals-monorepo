@@ -5,9 +5,17 @@
 #
 # 1. Load every class before mutant looks for subjects. The test
 #    environment autoloads, so `Settlement*` would match nothing until
-#    something had called Settlement.
+#    something had called Settlement. eager_load! loads only what Rails
+#    autoloads. The tables in app/admin/components load when ActiveAdmin
+#    loads its pages, and DeployConfigCheck in lib/ is required only by
+#    its rake task, so both are loaded here too. Mutant loads the spec
+#    files only after it has picked its subjects, so a spec that requires
+#    a file does not count. spec/config/mutant_subjects_spec.rb fails
+#    when a subject's class is not loaded at this point.
 hooks.register(:env_infection_post) do |env:| # rubocop:disable Lint/UnusedBlockArgument
   Rails.application.eager_load!
+  ActiveAdmin.application.load!
+  Rails.root.glob('lib/**/*.rb').each { |file| require file }
 end
 
 # 2. Give each worker process its own database. Mutant forks one

@@ -6,17 +6,20 @@
 # ApplicationHelper, where audit parsing sat next to view formatting and
 # ran its own queries from a view-layer module (#51).
 #
-# An audit row names records by id, and the record (or its create audit,
-# when the record is gone) is the only way back to a resident's name. So
-# a describer is built for a whole list of rows and loads what they name
-# up front, one query per table: the bills and attendance rows that
-# update rows point at, the create audits of those that are gone, the
-# history of every guest an update row points at, and every resident any
-# row names. Describing a row then reads nothing (#84: one to three
+# An update row of a bill, an attendance row or a guest names no
+# resident unless it changed one. The record's own history is the only
+# way back to whose it was. So a describer is built for a whole list of
+# rows and loads what they name up front: the history of every record an
+# update row points at, in one query, and every resident any row names,
+# in one more. Describing a row then reads nothing (#84: one to three
 # queries per row made a long history a few hundred queries for one
 # modal).
 class AuditDescription
   include ActiveSupport::NumberHelper
+
+  # The records whose update rows name their resident (a bill's cook, an
+  # attendance row's person, a guest's host) only through the record.
+  NAMED_THROUGH_HISTORY = %w[Bill MealResident Guest].freeze
 
   def self.describe(audit)
     self.for([audit]).describe(audit)
@@ -28,9 +31,7 @@ class AuditDescription
 
   def initialize(audits)
     rows = audits.to_a
-    @bill_cooks = cook_ids(Bill, rows, 'Bill')
-    @attendance_residents = cook_ids(MealResident, rows, 'MealResident')
-    @guest_hosts = guest_hosts(rows)
+    @named_before = named_before(rows)
     @residents = Resident.where(id: named_resident_ids(rows)).index_by(&:id)
   end
 
@@ -61,50 +62,71 @@ class AuditDescription
     "#{audit.auditable_type}, #{audit.action}"
   end
 
-  # The resident id each update row's record points at, by record id:
-  # from the record while it exists, and from the record's own create
-  # audit once it is gone. A record neither has is left out. Rails runs
-  # no query for an empty id list, so an empty list needs no shortcut.
-  def cook_ids(model, rows, auditable_type)
-    ids = rows.filter_map { |row| row.auditable_id if row.auditable_type == auditable_type && row.action == 'update' }
-    from_records = model.where(id: ids).pluck(:id, :resident_id).to_h
-    gone = ids - from_records.keys
-    from_trail = Audited::Audit.where(auditable_type: auditable_type, auditable_id: gone, action: 'create')
-                               .to_h { |audit| [audit.auditable_id, audit.audited_changes['resident_id']] }
-    from_records.merge(from_trail)
+  # The resident each update row's record named just before that row was
+  # written, by audit id: a bill's cook, an attendance row's person, a
+  # guest's host. Read from the record's own history, in order: the
+  # resident its create row names, then each change of resident after it.
+  # Not from the record as it is now, because a later change would put the
+  # new resident's name on an older line. Until 2026-10-10 an admin could
+  # change a bill's cook in place (Bill::COOK_AND_MEAL_FIXED), and a guest's
+  # host can still change. A record with no create row names no one here,
+  # and is shown as 'unknown': the app has audited these records from the
+  # start, so only a record written outside the app has none.
+  #
+  # One query for every record of the three kinds. Each kind has its own
+  # ids, because a bill and an attendance row often share an id.
+  def named_before(rows)
+    updates = rows.select { |row| NAMED_THROUGH_HISTORY.include?(row.auditable_type) && row.action == 'update' }
+    return {} if updates.empty?
+
+    trail = updates.group_by(&:auditable_type)
+                   .map { |type, typed| Audited::Audit.where(auditable_type: type, auditable_id: typed.map(&:auditable_id)) }
+                   .reduce(:or)
+                   .where(action: %w[create update])
+                   .order(:version, :id)
+    resident_before_each_update(trail)
   end
 
-  # The host each guest update row's guest had just before that row was
-  # written, by audit id. Read from the guest's own history, in order: the
-  # host its create row names, then each host change after it. Not from
-  # the guest as it is now, because a later host change would put the new
-  # host's name on an older price change. A guest with no create row has
-  # no host here, and is named 'unknown'. One query for every guest.
-  def guest_hosts(rows)
-    ids = rows.filter_map { |row| row.auditable_id if row.auditable_type == 'Guest' && row.action == 'update' }
-    # In version order, which is each guest's own order. Rows of different
-    # guests may mix: host_now keeps one host per guest.
-    trail = Audited::Audit.where(auditable_type: 'Guest', auditable_id: ids, action: %w[create update]).order(:version)
-    host_now = {}
-    trail.each_with_object({}) do |audit, hosts|
-      host = audit.audited_changes['resident_id']
+  # In version order, which is each record's own order, then by id: two rows
+  # of one record can share a version (374 bills in the production copy do),
+  # and without the id PostgreSQL picks their order. Rows of different
+  # records may mix: named_now keeps one resident per record.
+  def resident_before_each_update(trail)
+    named_now = {}
+    trail.each_with_object({}) do |audit, named|
+      record = [audit.auditable_type, audit.auditable_id]
+      resident_id = audit.audited_changes['resident_id']
       if audit.action == 'create'
-        host_now[audit.auditable_id] = host
+        named_now[record] = resident_id
       else
-        hosts[audit.id] = host_now[audit.auditable_id]
-        host_now[audit.auditable_id] = host.last if host.instance_of?(Array)
+        named[audit.id] = named_now[record]
+        named_now[record] = resident_id.last if resident_id.instance_of?(Array)
       end
     end
   end
 
   # Every resident id the rows name: in a create or destroy row's
   # changes, both sides of a change of resident in an update row, or
-  # through the record an update row points at.
+  # through the history of the record an update row points at.
   def named_resident_ids(rows)
     from_changes = rows.filter_map do |row|
-      row.audited_changes['resident_id'] if %w[Bill MealResident Guest].include?(row.auditable_type)
+      row.audited_changes['resident_id'] if NAMED_THROUGH_HISTORY.include?(row.auditable_type)
     end
-    (from_changes.flatten + @bill_cooks.values + @attendance_residents.values + @guest_hosts.values).compact.uniq
+    (from_changes.flatten + @named_before.values).compact.uniq
+  end
+
+  # The name of the resident an update row's record named just before
+  # the row, or 'unknown'.
+  def name_before(audit)
+    name_or_unknown(resident(@named_before[audit.id]))
+  end
+
+  # "from Ann to Bob" for a row that changed the resident, or nil.
+  def moved(changes)
+    ids = changes['resident_id']
+    return nil unless ids.instance_of?(Array)
+
+    "from #{name_or_unknown(resident(ids.first))} to #{name_or_unknown(resident(ids.last))}"
   end
 
   def resident(id)
@@ -162,63 +184,84 @@ class AuditDescription
 
   def describe_bill(audit)
     changes = audit.audited_changes
-
-    if %w[create destroy].include?(audit.action)
-      name = name_or_unknown(resident(changes['resident_id']))
-      return "#{name} added as cook" if audit.action == 'create'
-
-      return "#{name} removed as cook"
+    case audit.action
+    when 'create' then "#{name_or_unknown(resident(changes['resident_id']))} added as cook"
+    when 'destroy' then "#{name_or_unknown(resident(changes['resident_id']))} removed as cook"
+    when 'update' then describe_bill_update(audit)
+    else fallback_description(audit)
     end
-
-    cook_name = name_or_unknown(resident(@bill_cooks[audit.auditable_id]))
-
-    if changes['amount'].nil?
-      if changes['no_cost'].instance_of?(Array)
-        return "Bill for #{cook_name} no longer marked as no cost" unless changes['no_cost'][1] == true
-
-        return "Bill for #{cook_name} marked as no cost"
-      end
-      return 'unknown bill changed'
-    end
-
-    if audit.action == 'update'
-      msg = "Bill for #{cook_name} " \
-            "changed from #{number_to_currency(changes['amount'][0])} " \
-            "to #{number_to_currency(changes['amount'][1])}"
-      if changes['no_cost'].instance_of?(Array)
-        msg += changes['no_cost'][1] == true ? ' and marked as no cost' : ' and no longer marked as no cost'
-      end
-      return msg
-    end
-
-    fallback_description(audit)
   end
 
-  def describe_meal_resident(audit) # rubocop:disable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity --audit change parsing with many attribute branches
+  # "Bill for Ann changed from $30.00 to $50.00", "Bill for Ann marked as
+  # no cost", or both, joined by "and". A row that changed the cook
+  # (possible until 2026-10-10, Bill::COOK_AND_MEAL_FIXED) starts "Bill
+  # moved from Ann to Bob" instead, and any other change follows it.
+  def describe_bill_update(audit)
     changes = audit.audited_changes
-    resident_id = audit.action == 'update' ? @attendance_residents[audit.auditable_id] : changes['resident_id']
-    name = name_or_unknown(resident(resident_id))
+    amounts = amount_change(changes)
+    what = [amounts && "changed from #{number_to_currency(amounts[0])} to #{number_to_currency(amounts[1])}",
+            no_cost_change(changes)].compact
+    move = moved(changes)
+    return ["Bill moved #{move}", *what].join(' and ') if move
+    return 'unknown bill changed' if what.empty?
 
-    return "#{name} added" if audit.action == 'create'
-    return "#{name} removed" if audit.action == 'destroy'
+    "Bill for #{name_before(audit)} #{what.join(' and ')}"
+  end
 
-    if audit.action == 'update'
-      price = price_change(changes)
-      return "#{name}: #{price}" if price
+  def no_cost_change(changes)
+    flags = changes['no_cost']
+    return nil unless flags.instance_of?(Array)
 
-      if changes['late'].instance_of?(Array)
-        return "#{name} marked late" if changes['late'][0] == false && changes['late'][1] == true
-        return "#{name} marked not late" if changes['late'][0] == true && changes['late'][1] == false
+    flags[1] == true ? 'marked as no cost' : 'no longer marked as no cost'
+  end
 
-        return fallback_description(audit)
-      end
+  # The amount a bill row changed, as [from, to] in dollars, or nil when
+  # it changed none. Until migration 20260326000001 the column was
+  # amount_cents and held whole cents, and the audit rows written before
+  # it still say so (6051 in production, 2017 to 2026-03). Those become
+  # dollars here, as BigDecimal, so they read like every later row. A row
+  # whose amount_cents is not a list of whole numbers is not read: the
+  # column was a NOT NULL integer, so a real row never has that.
+  def amount_change(changes)
+    return changes['amount'] unless changes['amount'].nil?
 
-      if changes['vegetarian'].instance_of?(Array)
-        return "#{name} marked veg" if changes['vegetarian'][0] == false && changes['vegetarian'][1] == true
-        return "#{name} marked not veg" if changes['vegetarian'][0] == true && changes['vegetarian'][1] == false
+    cents = changes['amount_cents']
+    return nil unless cents.instance_of?(Array) && cents.all?(Integer)
 
-        return fallback_description(audit)
-      end
+    cents.map { |amount| BigDecimal(amount) / 100 }
+  end
+
+  def describe_meal_resident(audit)
+    changes = audit.audited_changes
+    case audit.action
+    when 'create' then "#{name_or_unknown(resident(changes['resident_id']))} added"
+    when 'destroy' then "#{name_or_unknown(resident(changes['resident_id']))} removed"
+    when 'update' then describe_meal_resident_update(audit)
+    else fallback_description(audit)
+    end
+  end
+
+  def describe_meal_resident_update(audit) # rubocop:disable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity --audit change parsing with many attribute branches
+    changes = audit.audited_changes
+    price = price_change(changes)
+    # Nothing in the app changes the person on an attendance row, but
+    # three old rows in production did (attendance row 8756, 2023-03-05).
+    move = moved(changes)
+    return ["Sign-up moved #{move}", price].compact.join(': ') if move
+
+    name = name_before(audit)
+    return "#{name}: #{price}" if price
+
+    if changes['late'].instance_of?(Array)
+      return "#{name} marked late" if changes['late'][0] == false && changes['late'][1] == true
+      return "#{name} marked not late" if changes['late'][0] == true && changes['late'][1] == false
+
+      return fallback_description(audit)
+    end
+
+    if changes['vegetarian'].instance_of?(Array)
+      return "#{name} marked veg" if changes['vegetarian'][0] == false && changes['vegetarian'][1] == true
+      return "#{name} marked not veg" if changes['vegetarian'][0] == true && changes['vegetarian'][1] == false
 
       return fallback_description(audit)
     end
@@ -248,14 +291,14 @@ class AuditDescription
   def describe_guest_update(audit)
     changes = audit.audited_changes
     price = price_change(changes)
-    moved = changes['resident_id']
-    unless moved.instance_of?(Array)
+    hosts = changes['resident_id']
+    unless hosts.instance_of?(Array)
       return fallback_description(audit) if price.nil?
 
-      return "Guest of #{name_or_unknown(resident(@guest_hosts[audit.id]))}: #{price}"
+      return "Guest of #{name_before(audit)}: #{price}"
     end
 
-    sentence = "Guest of #{name_or_unknown(resident(moved.first))} moved to #{name_or_unknown(resident(moved.last))}"
+    sentence = "Guest of #{name_or_unknown(resident(hosts.first))} moved to #{name_or_unknown(resident(hosts.last))}"
     price ? "#{sentence}: #{price}" : sentence
   end
 

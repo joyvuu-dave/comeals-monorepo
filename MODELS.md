@@ -97,13 +97,25 @@ removed the slug.
   `meals_per_rotation` meal dates, starting the day after the last existing
   meal (or today), and creates one Rotation with those meals. This is why
   the admin meal forms refuse a date after the last meal (`Meal`, `date`).
-- `unreconciled_ave_cost` — dashboard "cost per adult" over the unreconciled
-  meals dated up to and including today. Upcoming meals are left out: they
-  have sign-ups but no receipt yet (#98). It reads `MealLedger#summary_for`,
-  so it cannot disagree with settlement math, and it rounds the BigDecimal
-  half up, like `number_to_currency`.
+- `averaged_meals` — the meals both dashboard averages read: the ones
+  whose costs are final. That is what a settlement run today would claim
+  (`Meal.settleable_by`: not settled, from a day that is over, at least
+  one cook, and someone to charge or no money spent), less any meal with
+  a cook's cost not entered yet (`Meal.a_cost_not_entered`), and only
+  meals someone ate at. Tonight's meal waits until its day is over. Until
+  2026-10-10 the averages counted tonight's meal and every past meal with
+  no cook or no cost at $0 (upcoming meals were left out by #98).
+- `meals_left_out_of_averages` — how many unsettled meals people ate at,
+  on a day that is over, the averages leave out, by reason: a cost not
+  entered, no cook, or nobody to charge. Each meal is counted once, under
+  the first reason that fits. The dashboard shows these counts next to
+  `averaged_meal_count`, so a missing receipt stays in view.
+- `unreconciled_ave_cost` — dashboard "cost per adult" over
+  `averaged_meals`. It reads `MealLedger#summary_for`, so it cannot
+  disagree with settlement math, and it rounds the BigDecimal half up,
+  like `number_to_currency`.
 - `unreconciled_ave_number_of_attendees` — dashboard "attendees per meal"
-  over the same meals.
+  over `averaged_meals`, the same meals as the cost.
 - Clearing the calendar cache and pushing is not the community's job:
   every model a screen shows notes itself in `LiveUpdate` from its own
   `note_live_update` callback, and `LiveUpdate` clears and pushes after the
@@ -347,7 +359,21 @@ Bill ----> Community
 - `ReconciledMealImmutability`: no create, update, or destroy once the meal is
   reconciled. The `bills_reject_settled_write` trigger enforces the same rule
   for writes that skip the model.
-- Audited (the `audits` table), linked to the meal.
+- A saved bill keeps its cook and its meal: a bill is "this cook on this
+  meal" (ADR 0009, #135). The model refuses a new `resident_id` or
+  `meal_id` on update (`Bill::COOK_AND_MEAL_FIXED`), and the
+  `bills_same_cook_and_meal` trigger refuses it from writes that skip the
+  model, in the same words, as a check violation. Only the amount and
+  `no_cost` change. To fix a wrong cook or meal, delete the bill and add
+  a new one; the meal history then says who was removed and who was
+  added. The trigger's name sorts after `bills_reject_settled_write`, so
+  on a settled meal that trigger answers first. Until 2026-10-10 the
+  admin form could change the cook in place. Production holds three
+  rows that changed a bill's cook (bill 1995, 2023-03-05); the history
+  reads them as "Bill moved from Sandra to Sarah" (`AuditDescription`).
+- Audited (the `audits` table), linked to the meal. The history names the
+  cook of each update row from the bill's own audit rows, in order, not
+  from the bill as it is now.
 
 **Financial methods:** none. All cost math is in `MealLedger`.
 
@@ -413,6 +439,11 @@ how the math once ended up in three places (#48).
 - `open` — closed = false
 - `closed_with_bills` — closed meals that have at least one bill
 - `with_attendees` — at least one attendance or guest row.
+- `a_cost_not_entered` (an Arel condition, not a scope) — a bill of $0
+  not marked no-cost: the cook has not entered a cost yet. The meal page
+  reads a bill the same way (`cooksMissingCost`), and a settlement
+  preview warns about one (`zero_bill_not_flagged`). The dashboard
+  averages leave such a meal out (`Community#averaged_meals`).
 - `receipt_and_nobody_to_charge` — a bill with money on it, no
   attendance row with a multiplier above 0, and no guest (a guest always
   pays, as an adult or as a child): nobody signed up, or only residents
@@ -491,8 +522,10 @@ single-column `meal_id` index was dropped; the composite covers it.
 - Can change who it charges (`resident_id`: a guest's host, or the person
   on an attendance row) on a closed meal only if it could be removed: it
   moves a whole share from one person to another. Nothing in the app
-  changes the person on an attendance row; the admin meal form offers a
-  host for every guest. To fix a wrong host on a closed meal, reopen the
+  changes the person on an attendance row (the model and the database
+  still allow it; three production rows did it, attendance row 8756 on
+  2023-03-05, and the history reads them as "Sign-up moved from Sandra
+  to Arlen"); the admin meal form offers a host for every guest. To fix a wrong host on a closed meal, reopen the
   meal, change the host, and close it again. Reopening clears `max` and
   the close time, so extras added after the first close can no longer
   leave
@@ -762,7 +795,10 @@ No associations.
 **Key fields:** `started_at`, `finished_at` (CHECK
 `ledger_check_runs_finished_after_started`), `reconciliations_checked`,
 `mismatch_count` (both CHECKed non-negative), `error` (text, NULL when the run
-finished), `details` (jsonb). Index on `started_at`.
+finished), `details` (jsonb). Index on `started_at`. Each detail names the
+check that found it, `recompute` or `line_items`; the first runs, from
+2026-08-02, name none and mean `recompute`, the only check then. The shape
+never changes, because past runs use it (`LedgerVerification#detail`).
 
 **Methods:** `passed?` (no error, zero mismatches), `failed?` (some
 mismatches, whether or not the run then finished), `errored?` (the run did not

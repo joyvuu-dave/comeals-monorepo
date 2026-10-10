@@ -54,13 +54,22 @@ test.describe("Admin", () => {
     );
   });
 
-  test("bill form names the meal by readable date", async ({ page }) => {
+  // A saved bill keeps its meal (Bill::COOK_AND_MEAL_FIXED), so the edit
+  // form names it as text, and only the new bill form has the menu.
+  test("bill forms name the meal by readable date", async ({ page }) => {
     await login(page);
     await page.goto("/bills/1/edit");
 
-    await expect(page.locator("#bill_meal_id option:checked")).toHaveText(
+    await expect(page.locator("#bill_meal_input span")).toHaveText(
       MEAL_DATE_TEXT,
     );
+    await expect(page.locator("#bill_meal_id")).toHaveCount(0);
+
+    await page.goto("/bills/new");
+
+    await expect(
+      page.locator("#bill_meal_id option", { hasText: MEAL_DATE_TEXT }),
+    ).toHaveCount(1);
   });
 
   test("meal date field opens a datepicker on the right month", async ({
@@ -93,7 +102,7 @@ test.describe("Admin", () => {
 
   // ActiveAdmin gives a status tag no color for the "error" class, so
   // without the rule in active_admin.scss a run that found a difference
-  // is the same grey as a clean run. Seeded: run 2 found one, run 1 is
+  // is the same grey as a clean run. Seeded: run 2 found two, run 1 is
   // clean.
   test("a ledger check that found a difference is red, a clean one is grey", async ({
     page,
@@ -103,7 +112,7 @@ test.describe("Admin", () => {
 
     const result = page.locator("td.col-result .status_tag");
     // $error-color, #932419.
-    await expect(result.filter({ hasText: "1 mismatched" })).toHaveCSS(
+    await expect(result.filter({ hasText: "2 mismatched" })).toHaveCSS(
       "background-color",
       "rgb(147, 36, 25)",
     );

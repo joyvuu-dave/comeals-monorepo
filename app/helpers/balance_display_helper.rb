@@ -45,6 +45,33 @@ module BalanceDisplayHelper
     end
   end
 
+  # Like balance_tag, but with every digit the amount has: "owes $0.00000001".
+  # For the ledger check page, where a difference smaller than a cent is
+  # the thing being shown, so rounding to cents would hide it. The
+  # direction comes from the sign itself, for the same reason.
+  def exact_balance_tag(amount)
+    if amount.positive?
+      tag.span("is owed #{exact_dollars(amount)}", class: 'balance-is-owed')
+    elsif amount.negative?
+      tag.span("owes #{exact_dollars(amount.abs)}", class: 'balance-owes')
+    else
+      tag.span(number_to_currency(0), class: 'balance-zero')
+    end
+  end
+
+  # The sum of a settlement's meal lines, which must be zero, as words. A
+  # credit is positive and a charge is negative (MealLedger, "Signs"), so a
+  # sum above zero means the credits are bigger.
+  def lines_total_words(total)
+    if total.positive?
+      "Credits are #{exact_dollars(total)} more than charges."
+    elsif total.negative?
+      "Charges are #{exact_dollars(total.abs)} more than credits."
+    else
+      'Credits and charges are equal.'
+    end
+  end
+
   # A settlement line (MealCharge), as words: a credit is money the community
   # owes the cook ("credited $16.00"), a debit is money the eater owes
   # ("charged $8.00"). The kind decides the word; the amount's sign always
@@ -81,5 +108,13 @@ module BalanceDisplayHelper
       end
     ]
     tag.div(safe_join(lines), class: 'settlement-total')
+  end
+
+  private
+
+  # A dollar amount with at least two decimals and every digit it has:
+  # 40 is "$40.00", 0.00000001 is "$0.00000001". BigDecimal all the way.
+  def exact_dollars(amount)
+    number_to_currency(amount, precision: [2, amount.scale].max)
   end
 end

@@ -63,10 +63,24 @@ ActiveAdmin.register_page 'Dashboard' do
       end
 
       column do
+        # Only meals whose costs are final (Community#averaged_meals). The
+        # meals left out are counted by reason, so a missing receipt stays
+        # in view instead of pulling the average toward $0.
         panel 'Averages' do
+          counted = community.averaged_meal_count
+          left_out_counts = community.meals_left_out_of_averages
+          left_out = {
+            cost_not_entered: "waiting for a cook's cost", no_cook: 'with no cook',
+            nobody_to_charge: 'where only free eaters ate'
+          }.filter_map do |reason, words|
+            count = left_out_counts.fetch(reason)
+            "#{count} #{'meal'.pluralize(count)} #{words}" if count.positive?
+          end
           ul do
             li "Cost per adult: #{community.unreconciled_ave_cost}"
             li "Attendees per meal: #{community.unreconciled_ave_number_of_attendees}"
+            li "Meals counted: #{counted} (days that are over, not settled yet)"
+            li "Left out: #{left_out.any? ? left_out.join(', ') : 'none'}"
           end
         end
       end

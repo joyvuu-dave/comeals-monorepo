@@ -250,11 +250,12 @@ class LedgerVerification
   #   recompute   the balance rebuilt from source rows via MealLedger
   #   line_items  the sum of that resident's stored line items — or,
   #               with resident_id nil, the whole settlement's line
-  #               total, which must be (near) zero
+  #               total, which must be exactly zero
   #
   # The key names are pinned by stored history: every past run in
   # ledger_check_runs.details already uses them, and the admin page
-  # reads them back. Renaming the keys would orphan every past run.
+  # reads them back (LedgerCheckFindingsTable), with words for each
+  # check. Renaming the keys would orphan every past run.
   sig { params(reconciliation: Reconciliation, check: String, differences: T::Array[Difference]).returns(Detail) }
   def detail(reconciliation, check, differences)
     {

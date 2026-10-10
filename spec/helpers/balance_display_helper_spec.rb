@@ -124,6 +124,70 @@ RSpec.describe BalanceDisplayHelper do
     end
   end
 
+  # The ledger check page shows a difference that can be smaller than a
+  # cent, so it keeps every digit, where balance_tag rounds to cents.
+  describe '#exact_balance_tag' do
+    it 'says the direction in words and keeps every digit, with no minus sign' do
+      expect(helper.exact_balance_tag(BigDecimal('12.39999999'))).to include('is owed $12.39999999')
+      expect(helper.exact_balance_tag(BigDecimal('-0.00000001'))).to include('owes $0.00000001')
+      expect(helper.exact_balance_tag(BigDecimal('-40'))).to include('owes $40.00')
+      expect(helper.exact_balance_tag(BigDecimal('-1234.5'))).to include('owes $1,234.50')
+      expect(helper.exact_balance_tag(BigDecimal('-0.00000001'))).not_to include('-$')
+    end
+
+    it 'shows a plain $0.00 for zero' do
+      expect(helper.exact_balance_tag(BigDecimal('0'))).to eq('<span class="balance-zero">$0.00</span>')
+    end
+
+    it 'carries the same direction class as balance_tag' do
+      expect(helper.exact_balance_tag(BigDecimal('0.004'))).to eq('<span class="balance-is-owed">is owed $0.004</span>')
+      expect(helper.exact_balance_tag(BigDecimal('-0.004'))).to eq('<span class="balance-owes">owes $0.004</span>')
+    end
+
+    it 'shows the cook as owed and the eater as owing, derived from the arithmetic, not the docs' do
+      community = create(:community)
+      unit = create(:unit, community: community)
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      eater = create(:resident, community: community, unit: unit, multiplier: 2)
+      meal = create(:meal, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('16'))
+      create(:meal_resident, meal: meal, resident: eater, community: community)
+
+      balances = MealLedger.new([meal]).balances([cook.id, eater.id])
+
+      expect(helper.exact_balance_tag(balances[cook.id])).to include('is owed $16.00')
+      expect(helper.exact_balance_tag(balances[eater.id])).to include('owes $16.00')
+    end
+  end
+
+  # A settlement's meal lines must add up to zero. When they do not, the
+  # sum says which side is bigger, in words, never with a sign.
+  describe '#lines_total_words' do
+    it 'says credits are more than charges for lines that add up above zero, derived from the arithmetic' do
+      community = create(:community)
+      unit = create(:unit, community: community)
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      eater = create(:resident, community: community, unit: unit, multiplier: 2)
+      meal = create(:meal, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('16'))
+      create(:meal_resident, meal: meal, resident: eater, community: community)
+      lines = MealLedger.new([meal]).lines
+      credits = lines.select { |line| line.kind == :credit }.sum(BigDecimal('0'), &:amount)
+      charges = lines.reject { |line| line.kind == :credit }.sum(BigDecimal('0'), &:amount)
+
+      expect(helper.lines_total_words(credits)).to eq('Credits are $16.00 more than charges.')
+      expect(helper.lines_total_words(charges)).to eq('Charges are $16.00 more than credits.')
+    end
+
+    it 'keeps every digit' do
+      expect(helper.lines_total_words(BigDecimal('-0.00000001'))).to eq('Charges are $0.00000001 more than credits.')
+    end
+
+    it 'says the two are equal when the lines add up to zero' do
+      expect(helper.lines_total_words(BigDecimal('0'))).to eq('Credits and charges are equal.')
+    end
+  end
+
   describe '#settlement_totals_tag' do
     it 'splits the total into each direction and shows the difference is zero' do
       amounts = [BigDecimal('16'), BigDecimal('-8'), BigDecimal('-8')]

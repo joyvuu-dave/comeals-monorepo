@@ -3,7 +3,18 @@
 
 ActiveAdmin.register Bill do
   # STRONG PARAMS
-  permit_params :meal_id, :resident_id, :amount
+  # The cook and the meal are set on the new bill form. The edit form does
+  # not send them, and a request that does is refused in words by the
+  # model (Bill::COOK_AND_MEAL_FIXED), so they stay permitted here.
+  permit_params :meal_id, :resident_id, :amount, :no_cost
+
+  # The edit form says "delete this bill and add a new one" to fix a wrong
+  # cook or meal, so the edit page offers Delete too. ActiveAdmin puts it
+  # only on the show page by itself.
+  action_item :destroy_from_edit, only: :edit, if: -> { authorized?(ActiveAdmin::Auth::DESTROY, resource) } do
+    link_to 'Delete Bill', resource_path(resource), method: :delete,
+                                                    data: { confirm: 'Are you sure you want to delete this?' }
+  end
 
   # CONFIG
   filter :resident, as: :select, collection: proc { Resident.order(:name).pluck('name', 'id') }, include_blank: true
@@ -83,12 +94,33 @@ ActiveAdmin.register Bill do
   # FORM
   form do |f|
     f.inputs do
-      f.input :meal, label: 'Common Meal Date', collection: Meal.order(date: :desc).map { |i|
-        [I18n.l(i.date, format: :admin), i.id]
-      }
-      f.input :resident_id, as: :select, include_blank: false, label: 'Cook', collection: Resident.includes(:unit).adult.order('units.name ASC').map { |r|
-        ["#{r.name} - #{r.unit.name}", r.id]
-      }
+      if f.object.new_record?
+        f.input :meal, label: 'Common Meal Date', collection: Meal.order(date: :desc).map { |i|
+          [I18n.l(i.date, format: :admin), i.id]
+        }
+        f.input :resident_id, as: :select, include_blank: false, label: 'Cook', collection: Resident.includes(:unit).adult.order('units.name ASC').map { |r|
+          ["#{r.name} - #{r.unit.name}", r.id]
+        }
+      else
+        # A saved bill keeps its cook and its meal (Bill::COOK_AND_MEAL_FIXED),
+        # so the edit form shows them as text. Read from the database, not
+        # from the form's record: after a refused save, the record holds
+        # the cook or meal the request asked for, which the bill never got.
+        meal = Meal.find(f.object.meal_id_in_database)
+        cook = Resident.includes(:unit).find(f.object.resident_id_in_database)
+        # tag.label, not Arbre's label: inside a form, Arbre's label is the
+        # form builder's, which reads its text as a field name and writes
+        # "Common meal date".
+        li class: 'input', id: 'bill_meal_input' do
+          text_node helpers.tag.label('Common Meal Date', class: 'label')
+          span I18n.l(meal.date, format: :admin)
+        end
+        li class: 'input', id: 'bill_resident_input' do
+          text_node helpers.tag.label('Cook', class: 'label')
+          span "#{cook.name} - #{cook.unit.name}"
+          para 'To change the cook or the meal, delete this bill and add a new one.', class: 'inline-hints'
+        end
+      end
       # The column is DECIMAL(12,8), so the raw value renders as "16.0" —
       # render it as money instead (MoneyFieldHelper). A new bill's amount
       # is the column default 0, which renders blank so the cook's real
@@ -99,6 +131,13 @@ ActiveAdmin.register Bill do
               input_html: {
                 value: helpers.money_field_value(f.object.amount, blank_when_zero: f.object.new_record?)
               }
+      # The same switch as on the cook's row of the meal page. Without it
+      # here, a no-cost bill deleted and added again (the way to fix a
+      # wrong cook) came back as a $0 bill waiting for a cost.
+      f.input :no_cost,
+              label: 'No cost',
+              hint: "Check this box when the cook spent nothing. The meal's cost leaves out a no-cost bill, " \
+                    'even if it has an amount.'
     end
 
     f.actions

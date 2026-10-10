@@ -121,16 +121,31 @@ def seed_calendar(community, cook, bob)
   FactoryBot.create(:guest_room_reservation, community: community, resident: bob, date: Date.new(2026, 2, 14))
 end
 
-# Two ledger checks: one clean, one that found a difference (id 2), so
+# Two ledger checks: one clean, one that found differences (id 2), so
 # /ledger_check_runs renders both status tags and the run page renders
-# its "what disagreed" table.
+# its "what disagreed" table with every kind of row: a balance rebuilt
+# from bills and sign-ups (one of them with no balance), the sum of one
+# person's meal lines, and the sum of all meal lines. Residents 1 and 2
+# are Alice and Bob; reconciliation 1 is the seeded settlement.
 def seed_ledger_checks
   FactoryBot.create(:ledger_check_run, started_at: SEED_NOW - 1.day - 8.hours,
                                        finished_at: SEED_NOW - 1.day - 8.hours + 3.seconds,
                                        reconciliations_checked: 1)
-  FactoryBot.create(:ledger_check_run, :with_mismatches,
-                    started_at: SEED_NOW - 8.hours, finished_at: SEED_NOW - 8.hours + 2.seconds,
-                    reconciliations_checked: 1)
+  settled = SEED_NOW.to_date.iso8601
+  FactoryBot.create(:ledger_check_run, mismatch_count: 2, reconciliations_checked: 1,
+                                       started_at: SEED_NOW - 8.hours, finished_at: SEED_NOW - 8.hours + 2.seconds,
+                                       details: [
+                                         { 'reconciliation_id' => 1, 'date' => settled, 'check' => 'recompute',
+                                           'differences' => [
+                                             { 'resident_id' => 1, 'stored' => '40.0', 'source' => '39.0' },
+                                             { 'resident_id' => 2, 'stored' => '-40.0', 'source' => nil }
+                                           ] },
+                                         { 'reconciliation_id' => 1, 'date' => settled, 'check' => 'line_items',
+                                           'differences' => [
+                                             { 'resident_id' => 2, 'stored' => '-40.0', 'source' => '-39.98' },
+                                             { 'resident_id' => nil, 'stored' => nil, 'source' => '0.01' }
+                                           ] }
+                                       ])
 end
 
 community, cook, bob, carol = seed_people
