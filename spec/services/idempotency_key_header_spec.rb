@@ -37,6 +37,16 @@ RSpec.describe IdempotencyKeyHeader do
     expect(header.error).to eq(missing)
   end
 
+  # A guest add takes the header too (S2), and its sentence names it.
+  it 'answers a missing header with the sentence it was given for that request' do
+    header = described_class.new(nil, missing: 'A guest add needs one.')
+
+    expect(header.key).to be_nil
+    expect(header.error).to eq('A guest add needs one.')
+    expect(described_class.new('"abc"', missing: 'A guest add needs one.').error).to be_nil
+    expect(described_class.new('abc', missing: 'A guest add needs one.').error).to eq(invalid)
+  end
+
   # RFC 9651, section 4.2: spaces before and after the item are discarded.
   it 'takes spaces before and after the string' do
     expect(key_of('  "abc"  ')).to eq('abc')

@@ -21,6 +21,7 @@ import type {
   CommonHouseReservationForm,
   EventForm,
   Guest,
+  GuestReplayed,
   GuestRoomReservationForm,
   MealForm,
   MealFormBill,
@@ -67,6 +68,11 @@ const manifests: Record<string, string[]> = {
     resident_id: true,
     vegetarian: true,
     created_at: true,
+  }),
+  GuestReplayed: keysOf<GuestReplayed>({
+    message: true,
+    type: true,
+    guest: true,
   }),
   MealForm: keysOf<MealForm>({
     id: true,

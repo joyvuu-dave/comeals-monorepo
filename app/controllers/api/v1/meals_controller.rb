@@ -8,6 +8,8 @@ module Api
 
       # What an action hands to render: { json:, status: }.
       Rendering = T.type_alias { T::Hash[Symbol, T.untyped] }
+      # What with_meal_lock runs under the lock before the settled check.
+      SettledCheck = T.type_alias { T.nilable(T.proc.returns(T.nilable(Rendering))) }
 
       # The two answers to a bills save whose Idempotency-Key this meal
       # has seen (answer_seen_key).
@@ -23,9 +25,9 @@ module Api
 
       before_action :authenticate
       before_action :set_meal, except: [:next]
-      # Before the settled check, so a bills save sent again after its
-      # first try was written is not told that nothing was saved.
-      before_action :answer_seen_bills_key, only: [:update_bills]
+      # Before the settled check, so a bills save or a guest add sent again
+      # after its first try was written is not told that nothing was saved.
+      before_action :answer_if_key_seen, only: %i[update_bills create_guest]
       before_action :reject_if_reconciled, only: %i[
         create_meal_resident destroy_meal_resident update_meal_resident
         create_guest destroy_guest
@@ -108,19 +110,39 @@ module Api
       end
 
       # POST /api/v1/meals/:meal_id/residents/:resident_id/guests { vegetarian }
+      # Idempotency-Key: "8e03978e-40d5-43e8-bc93-6894a57f9324"
+      #
       # Uses pessimistic locking to prevent concurrent guest additions from
       # exceeding meal.max. vegetarian is required (#121), and must be a
       # value TrueOrFalse takes (#138); otherwise the answer is a 400.
+      #
+      # The key works the way a bills save's does (S2, ADR 0009). A guest
+      # add whose answer is lost may have been written, and the person taps
+      # again; the page sends the first tap's key with that tap, so a guest
+      # that was written is not added twice. The checks, in order:
+      #
+      #   1. A key this meal has a row for, with a key and flag that are
+      #      right, gets the answer for a seen key (answer_if_key_seen).
+      #   2. A settled meal gets the settled words (reject_if_reconciled).
+      #   3. A host who is not a resident (verify_resident_exists).
+      #   4. A missing or wrong Idempotency-Key header.
+      #   5. A wrong flag.
+      #
+      # Under the meal lock, in each try, the key is looked up again before
+      # the settled check, and the guest and its key's row are written in
+      # one transaction (GuestAdd#write). Two adds with the same key at once
+      # are put one after the other by the meal lock, and PostgreSQL
+      # refuses the second as a conflict, because the first one's guest
+      # touched the meal row the second locked. The next try finds the key
+      # (spec/requests/api/v1/guest_idempotency_key_race_spec.rb).
       sig { void }
       def create_guest
-        flags = TrueOrFalse.from_params(params, %i[vegetarian], required: true)
-        return render_refused(flags) if flags.is_a?(String)
+        add = guest_add
+        error = add.error
+        return render_refused(error) if error
 
-        render_write_under_lock do
-          # multiplier omitted intentionally — DB default of 2 applies (adult guest).
-          guest = Guest.new(meal_id: meal.id, resident_id: params[:resident_id], vegetarian: flags.fetch(:vegetarian))
-          guest.save!
-          { json: GuestSerializer.new(guest) }
+        render_write_under_lock(before_settled_check: -> { seen_guest_key_answer }) do
+          { json: GuestSerializer.new(add.write(meal)) }
         end
       end
 
@@ -194,7 +216,7 @@ module Api
       # action does the request's part. The checks, in order:
       #
       #   1. A key this meal has a row for, with a body and key that are
-      #      right, gets the answer for a seen key (answer_seen_bills_key).
+      #      right, gets the answer for a seen key (answer_if_key_seen).
       #   2. A settled meal gets the settled words (reject_if_reconciled).
       #   3. A body in the old format, which listed every cook, is refused
       #      as out of date. A page that old sends no key either, and "out
@@ -259,11 +281,14 @@ module Api
       # record's own sentences. Every single-record write action goes
       # through here, so a new one cannot skip the lock (CLAUDE.md, money
       # rule 9) or answer a refusal with a 500.
-      sig { params(blk: T.proc.returns(Rendering)).void }
-      # rubocop:disable Naming/BlockForwarding, Style/ArgumentsForwarding -- the sig above has to name the block
-      def render_write_under_lock(&blk)
-        render(**T.must(with_meal_lock(&blk)))
-        # rubocop:enable Naming/BlockForwarding, Style/ArgumentsForwarding
+      #
+      # before_settled_check is with_meal_lock's: only a guest add passes
+      # one.
+      sig { params(before_settled_check: SettledCheck, blk: T.proc.returns(Rendering)).void }
+      # rubocop:disable Style/ArgumentsForwarding -- the sig above has to name the block
+      def render_write_under_lock(before_settled_check: nil, &blk)
+        render(**T.must(with_meal_lock(before_settled_check: before_settled_check, &blk)))
+        # rubocop:enable Style/ArgumentsForwarding
       rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotDestroyed => e
         render json: { message: e.record.errors.full_messages.join("\n") }, status: :bad_request
       end
@@ -302,20 +327,21 @@ module Api
         bills_written(warning)
       end
 
-      # Runs before reject_if_reconciled, for update_bills only. A key this
-      # meal has a row for belongs to a save that was written, while the
-      # meal was open, so its answer comes before the settled check: the
-      # settled words would say that nothing was saved, which is false.
+      # Runs before reject_if_reconciled, for a bills save and a guest add.
+      # A key this meal has a row for belongs to a save or an add that was
+      # written, while the meal was open, so its answer comes before the
+      # settled check: the settled words would say that nothing was saved,
+      # which is false.
       sig { void }
-      def answer_seen_bills_key
-        answer = seen_bills_key_answer
+      def answer_if_key_seen
+        answer = action_name == 'create_guest' ? seen_guest_key_answer : seen_bills_key_answer
         render(**answer) if answer
       end
 
       # The answer to a bills save whose key this meal has a row for
       # (answer_seen_key), or nil. A save whose body or key is wrong is not
       # looked up, so it gets the other checks, in their usual order.
-      # update_bills runs this before the lock (answer_seen_bills_key) and
+      # update_bills runs this before the lock (answer_if_key_seen) and
       # again under it, in each try, before the settled check: a first try
       # that commits while this save waits for the lock is found there.
       sig { returns(T.nilable(Rendering)) }
@@ -327,8 +353,34 @@ module Api
         answer_seen_key(seen, bills_payload) if seen
       end
 
+      # The answer to a guest add whose key this meal has a row for, or nil
+      # (GuestAdd#seen_key). create_guest runs this before the lock
+      # (answer_if_key_seen) and again under it, in each try.
+      #
+      # For the same add it is that add sent again, whose first try was
+      # written: a 200 of type 'replayed' with the guest that try made, as
+      # stored now, or null if it was removed since, or given to another
+      # host or meal (GuestReplayedSerializer). With another host or flag
+      # it is a mistake in the client, and the IETF draft answers it with
+      # 422.
+      sig { returns(T.nilable(Rendering)) }
+      def seen_guest_key_answer
+        seen = guest_add.seen_key(meal)
+        return nil if seen.nil?
+        return { json: GuestReplayedSerializer.new(seen), status: :ok } if guest_add.same_add?(seen)
+
+        { json: { message: GuestAdd::KEY_REUSED }, status: :unprocessable_content }
+      end
+
+      # The guest add's request, read once: answer_if_key_seen reads it
+      # before create_guest does.
+      sig { returns(GuestAdd) }
+      def guest_add
+        @guest_add ||= T.let(GuestAdd.new(params, request.headers['Idempotency-Key']), T.nilable(GuestAdd))
+      end
+
       # The bills save's body and Idempotency-Key header, each read once
-      # per request: answer_seen_bills_key reads them before update_bills
+      # per request: answer_if_key_seen reads them before update_bills
       # does.
       sig { returns(BillsPayload) }
       def bills_payload
@@ -436,9 +488,10 @@ module Api
       #
       # before_settled_check runs under the lock, before reconciled?, in
       # each try. When it returns an answer, that is the answer, and the
-      # block does not run. Only a bills save passes one: a save whose
-      # first try was written is answered as already made, even when the
-      # meal was settled after that try (seen_bills_key_answer).
+      # block does not run. It is nil for every write but a bills save and
+      # a guest add: a save or an add whose first try was written is
+      # answered as already made, even when the meal was settled after
+      # that try (seen_bills_key_answer, seen_guest_key_answer).
       #
       # At SERIALIZABLE, PostgreSQL can refuse this transaction even though
       # the lock was granted: the lock orders two writers on the same meal,
@@ -452,10 +505,10 @@ module Api
       # attempt first drops them; the lock's reload reads the row fresh.
       # Without this the retry was a 500 (spec/requests/api/v1/meal_write_retry_spec.rb).
       sig do
-        params(before_settled_check: T.nilable(T.proc.returns(T.nilable(Rendering))),
-               blk: T.proc.returns(T.nilable(Rendering))).returns(T.nilable(Rendering))
+        params(before_settled_check: SettledCheck, blk: T.proc.returns(T.nilable(Rendering)))
+          .returns(T.nilable(Rendering))
       end
-      def with_meal_lock(before_settled_check: nil, &blk)
+      def with_meal_lock(before_settled_check:, &blk)
         RetryOnConflict.call do
           meal.restore_attributes
           meal.with_lock do

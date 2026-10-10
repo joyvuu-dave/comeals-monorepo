@@ -1,6 +1,12 @@
 const dayjs = require("dayjs");
 const advancedFormat = require("dayjs/plugin/advancedFormat");
-const { test, expect } = require("../helpers/test");
+const { randomUUID } = require("crypto");
+const {
+  test,
+  expect,
+  httpFailurePattern,
+  combinePatterns,
+} = require("../helpers/test");
 const {
   FAKE_TODAY,
   loadAuthInfo,
@@ -127,7 +133,10 @@ test.describe("Meal actions (real backend)", () => {
 
     const added = await request.post(
       `/api/v1/meals/${mealId}/residents/${diana}/guests`,
-      { headers, data: { vegetarian: false } },
+      {
+        headers: { ...headers, "Idempotency-Key": `"${randomUUID()}"` },
+        data: { vegetarian: false },
+      },
     );
     expect(added.status(), await added.text()).toBe(200);
     const guestId = (await added.json()).id;
@@ -186,6 +195,103 @@ test.describe("Meal actions (real backend)", () => {
         );
       }
     }
+  });
+
+  // A guest add whose answer is lost (a dropped connection, or Heroku's
+  // router giving up after 30 seconds while the request still runs) may
+  // or may not have been written. The page cannot tell, so it shows no
+  // guest, and the person taps again. Here the first try was written.
+  // With a new request the second tap adds a second guest, and the host
+  // pays for two. The second tap sends the first one's Idempotency-Key
+  // instead, so the server answers that the guest was already added,
+  // and adds nothing. The meal's own reload after no answer is held
+  // back, so the page still shows no guest when the person taps again.
+  test.describe(() => {
+    // The meal's own reload is aborted here, and the page logs that
+    // failed load.
+    test.use({
+      allowedConsoleErrors: combinePatterns(
+        httpFailurePattern,
+        /^Error: no response received from server\.$/,
+      ),
+    });
+
+    test("a guest add whose answer was lost, tapped again, adds one guest", async ({
+      page,
+      request,
+    }) => {
+      const mealId = auth.meals.future.id;
+      const jane = auth.resident_id;
+      const headers = { Authorization: `Bearer ${auth.token}` };
+      const janeRow = page
+        .getByRole("cell", { name: "A - Jane Smith", exact: true })
+        .locator("xpath=ancestor::tr");
+      const guestsUrl = `/api/v1/meals/${mealId}/residents/${jane}/guests`;
+      async function janesGuests() {
+        const form = await request.get(`/api/v1/meals/${mealId}/cooks`, {
+          headers,
+        });
+        return (await form.json()).guests.filter(
+          (guest) => guest.resident_id === jane,
+        );
+      }
+      async function addGuest() {
+        await janeRow.locator(".dropdown-add").click();
+        await janeRow
+          .locator(".dropdown-menu")
+          .locator("img[alt='cow-icon']")
+          .click();
+      }
+
+      const before = (await janesGuests()).map((guest) => guest.id);
+      const keys = [];
+      await page.route(`**${guestsUrl}`, async (route) => {
+        keys.push(route.request().headers()["idempotency-key"]);
+        if (keys.length > 1) return route.fallback();
+        // The server writes the first try, and its answer never
+        // reaches the page.
+        await route.fetch();
+        return route.abort("connectionfailed");
+      });
+
+      try {
+        await gotoMeal(page, mealId);
+        await expect(janeRow).toBeVisible({ timeout: 10000 });
+        await expect(janeRow.locator(".badge img")).toHaveCount(before.length);
+        await page.route(`**/api/v1/meals/${mealId}/cooks`, (route) =>
+          route.abort("connectionfailed"),
+        );
+
+        const lost = page.waitForEvent("requestfailed", (r) =>
+          r.url().endsWith(guestsUrl),
+        );
+        await addGuest();
+        await lost;
+        await expect(janeRow.locator(".badge img")).toHaveCount(before.length);
+
+        const secondTry = page.waitForResponse(
+          (r) => r.request().method() === "POST" && r.url().endsWith(guestsUrl),
+        );
+        await addGuest();
+        const answer = await secondTry;
+
+        expect(await janesGuests()).toHaveLength(before.length + 1);
+        expect(answer.status()).toBe(200);
+        expect((await answer.json()).type).toBe("replayed");
+        expect(keys).toHaveLength(2);
+        expect(keys[0]).toMatch(/^"[0-9a-f-]{36}"$/);
+        expect(keys[1]).toBe(keys[0]);
+        await expect(janeRow.locator(".badge img")).toHaveCount(
+          before.length + 1,
+        );
+      } finally {
+        await page.unrouteAll({ behavior: "ignoreErrors" });
+        for (const guest of await janesGuests()) {
+          if (before.includes(guest.id)) continue;
+          await request.delete(`${guestsUrl}/${guest.id}`, { headers });
+        }
+      }
+    });
   });
 
   test("selecting a cook persists across reload", async ({ page }) => {

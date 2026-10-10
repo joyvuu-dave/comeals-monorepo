@@ -12,7 +12,14 @@
 
 import axios, { AxiosResponse } from "axios";
 
-import { Ack, BillsAck, Guest, MealForm, MealResident } from "../types/api";
+import {
+  Ack,
+  BillsAck,
+  Guest,
+  GuestReplayed,
+  MealForm,
+  MealResident,
+} from "../types/api";
 
 // One side of a bills edit: a cook's bill as the page saw it (`from`),
 // or as the person wants it (`to`). The amount is text, never a number
@@ -41,6 +48,18 @@ export const BILLS_SAVE_TIMEOUT_MS = 35000;
 interface SocketBound {
   socketId: string | null;
 }
+
+// How long the page waits for the answer to a tap on a row of the
+// sign-up list: a sign-up, a take-off, Late, Veg, a guest add or a guest
+// removal. The same 35 seconds as a bills save (BILLS_SAVE_TIMEOUT_MS):
+// Heroku's router ends a request at 30 seconds, so a request still open
+// after 35 seconds lost its answer on the way. Without a limit, the
+// browser can wait for minutes on a dropped connection. All that time
+// the page shows no message and does not load the meal again, and a
+// guest add tapped again goes with a new key, so it can add a second
+// guest (S2). When axios stops waiting, its error has no response, and
+// the page treats that as no answer (signup_failure.ts).
+export const SIGNUP_TIMEOUT_MS = 35000;
 
 export const api = {
   meals: {
@@ -133,6 +152,7 @@ export const api = {
           method: "post",
           url: `/api/v1/meals/${mealId}/residents/${residentId}`,
           withCredentials: true,
+          timeout: SIGNUP_TIMEOUT_MS,
           data: { late, vegetarian, socket_id: socketId },
         });
       },
@@ -146,6 +166,7 @@ export const api = {
           method: "delete",
           url: `/api/v1/meals/${mealId}/residents/${residentId}`,
           withCredentials: true,
+          timeout: SIGNUP_TIMEOUT_MS,
           data: { socket_id: socketId },
         });
       },
@@ -162,20 +183,32 @@ export const api = {
           method: "patch",
           url: `/api/v1/meals/${mealId}/residents/${residentId}`,
           withCredentials: true,
+          timeout: SIGNUP_TIMEOUT_MS,
           data: { ...rest, socket_id: socketId },
         });
       },
 
       guests: {
+        // `key` is the add's Idempotency-Key, as for a bills save: a new
+        // one for each add, and the same one when a tap sends an add
+        // that got no answer again (data_store_guest_adds.ts). The answer
+        // is the guest, or, for a key the server has seen with the same
+        // host and flag, that add's guest marked "replayed".
         add(
           mealId: number,
           residentId: number,
-          { vegetarian, socketId }: { vegetarian: boolean } & SocketBound,
-        ): Promise<AxiosResponse<Guest>> {
+          {
+            vegetarian,
+            key,
+            socketId,
+          }: { vegetarian: boolean; key: string } & SocketBound,
+        ): Promise<AxiosResponse<Guest | GuestReplayed>> {
           return axios({
             method: "post",
             url: `/api/v1/meals/${mealId}/residents/${residentId}/guests`,
             withCredentials: true,
+            timeout: SIGNUP_TIMEOUT_MS,
+            headers: { "Idempotency-Key": `"${key}"` },
             data: { vegetarian, socket_id: socketId },
           });
         },
@@ -190,6 +223,7 @@ export const api = {
             method: "delete",
             url: `/api/v1/meals/${mealId}/residents/${residentId}/guests/${guestId}`,
             withCredentials: true,
+            timeout: SIGNUP_TIMEOUT_MS,
             data: { socket_id: socketId },
           });
         },

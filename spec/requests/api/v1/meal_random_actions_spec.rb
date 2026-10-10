@@ -132,7 +132,8 @@ RSpec.describe 'random action sequences against one meal, through the API' do
 
   def add_guest(model, rng)
     host = residents.sample(random: rng)
-    status, body = request(:post, "/api/v1/meals/#{meal.id}/residents/#{host.id}/guests", host, vegetarian: false)
+    status, body = request(:post, "/api/v1/meals/#{meal.id}/residents/#{host.id}/guests", host,
+                           { vegetarian: false }, IdempotencyKey.header)
     if model[:settled]
       expect(status).to eq(400), "#{where}: guest after settlement answered #{status}"
     elsif spots_left?(model)

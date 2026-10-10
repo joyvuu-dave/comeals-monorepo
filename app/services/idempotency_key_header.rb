@@ -1,8 +1,8 @@
 # typed: strict
 # frozen_string_literal: true
 
-# The Idempotency-Key request header of a bills save, read by the rules of
-# the IETF draft "The Idempotency-Key HTTP Header Field"
+# The Idempotency-Key request header of a bills save or a guest add, read
+# by the rules of the IETF draft "The Idempotency-Key HTTP Header Field"
 # (draft-ietf-httpapi-idempotency-key-header-07, section 2.1). Its value
 # is a Structured Field Item whose value is a String (RFC 9651): printable
 # ASCII between double quotes, where a backslash comes only before a quote
@@ -18,8 +18,8 @@
 # in a parameter decodes to is not checked, because nothing reads them.
 #
 # This app adds one rule: a key is 1 to 255 characters, counted after the
-# backslashes are read. The bills_save_keys_key_printable CHECK says the
-# same.
+# backslashes are read. The bills_save_keys_key_printable and
+# guest_add_keys_key_printable CHECKs say the same.
 class IdempotencyKeyHeader
   extend T::Sig
 
@@ -58,10 +58,12 @@ class IdempotencyKeyHeader
   sig { returns(T.nilable(String)) }
   attr_reader :error
 
-  sig { params(value: T.nilable(String)).void }
-  def initialize(value)
+  # `missing` is the sentence for a request with no header. It names the
+  # request, so a guest add passes its own; the default is a bills save's.
+  sig { params(value: T.nilable(String), missing: String).void }
+  def initialize(value, missing: MISSING)
     @key = T.let(value && read(value), T.nilable(String))
-    @error = T.let(if value.nil? then MISSING
+    @error = T.let(if value.nil? then missing
                    elsif @key.nil? then INVALID
                    end, T.nilable(String))
   end

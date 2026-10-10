@@ -17,6 +17,7 @@
     "updated_at"
   ],
   "Guest": ["created_at", "id", "meal_id", "resident_id", "vegetarian"],
+  "GuestReplayed": ["guest", "message", "type"],
   "GuestRoomReservationForm": ["date", "id", "resident_id"],
   "MealForm": [
     "bills",

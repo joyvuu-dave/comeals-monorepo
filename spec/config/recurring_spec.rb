@@ -56,6 +56,21 @@ RSpec.describe 'config/recurring.yml' do # -- a config file
     expect(BillsSaveKey.pluck(:key)).to eq(['new'])
   end
 
+  # A guest add's Idempotency-Key is kept 7 days too (GuestAddKey, S2),
+  # deleted the same way.
+  it 'deletes the guest add keys older than 7 days every hour' do
+    task = tasks.fetch(:delete_expired_guest_add_keys)
+    meal = create(:meal)
+    host = create(:resident)
+    GuestAddKey.create!(meal: meal, key: 'old', resident: host, vegetarian: false, created_at: 8.days.ago)
+    GuestAddKey.create!(meal: meal, key: 'new', resident: host, vegetarian: false, created_at: 1.hour.ago)
+
+    SolidQueue::RecurringJob.perform_now(task[:command])
+
+    expect(Fugit.parse(task[:schedule]).to_cron_s).to eq('43 * * * * UTC')
+    expect(GuestAddKey.pluck(:key)).to eq(['new'])
+  end
+
   # Outside CI the test environment loads a class only when something uses
   # it, and descendants lists only loaded classes. So without eager loading
   # this example, run alone, checked an empty list, and it never saw a job

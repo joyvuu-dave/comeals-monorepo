@@ -409,6 +409,37 @@ message when the page reloaded or closed.)
   place. Nothing reads it there, and the hourly delete is not in v613's
   schedule, so the rows stay until this change is deployed again.
 
+## Amended 2026-10-09: guest adds use the same key
+
+A guest add whose answer was lost could also be written twice. The meal
+page showed no guest after no answer, so the person tapped again, the
+second tap added a second guest, and the host paid for two
+(`tests/integration/meal-actions.spec.js`, "a guest add whose answer was
+lost, tapped again, adds one guest"). So `POST
+/meals/:meal_id/residents/:resident_id/guests` now takes the same
+`Idempotency-Key` header, by the same rules:
+
+- **The table** is its own, `guest_add_keys`: the meal, the key, the host
+  and the `vegetarian` flag the add asked for, the guest it made, and the
+  time. `bills_save_keys` does not fit, because a guest add's answer
+  names the guest it made. When that guest is removed, the row stays and
+  its `guest_id` becomes null, so the key still adds nothing.
+- **The same key** with the same host and flag answers `200` with
+  `"type": "replayed"` and the guest as stored now, or `null` once it was
+  removed. With another host or flag, `422`. Both come before the
+  settled check, before the lock and again under it, as for a bills save.
+- **The meal page** sends a new key with each tap. When an add gets no
+  answer from the app, the page keeps its key, and the next tap for the
+  same host and flag sends it again. A `replayed` guest that the page did
+  not show at that tap is the guest the tap asked for. If the page
+  already showed it, or it was removed since, the tap was for one more
+  guest, and the page sends a new add (`data_store_guest_adds.ts`).
+- **Keys older than 7 days are deleted** every hour, by
+  `GuestAddKey.delete_expired` in `config/recurring.yml`.
+- **A client must send the header.** An add without one is refused with
+  `400`. A page loaded before this change sends none, so it cannot add a
+  guest until it is reloaded.
+
 ## Alternatives rejected
 
 - **A version check (If-Match, 412).** The form sends a hash of the bill

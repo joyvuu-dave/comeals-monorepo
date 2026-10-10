@@ -500,7 +500,7 @@ RSpec.describe 'Meals API' do
       post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests", params: {
         token: token,
         vegetarian: false
-      }
+      }, headers: IdempotencyKey.header
 
       expect(response).to have_http_status(:ok)
       expect(meal.guests.count).to eq(1)
@@ -524,17 +524,17 @@ RSpec.describe 'Meals API' do
       post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests", params: {
         token: token,
         vegetarian: true
-      }
+      }, headers: IdempotencyKey.header
 
       expect(meal.guests.first.vegetarian).to be(true)
     end
 
     # The SPA posts JSON, with vegetarian as true or false.
     it 'takes vegetarian as the JSON boolean the SPA sends' do
+      json = { 'CONTENT_TYPE' => 'application/json' }
       [true, false].each do |vegetarian|
         post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests",
-             params: { token: token, vegetarian: vegetarian }.to_json,
-             headers: { 'CONTENT_TYPE' => 'application/json' }
+             params: { token: token, vegetarian: vegetarian }.to_json, headers: json.merge(IdempotencyKey.header)
         expect(response).to have_http_status(:ok)
       end
 
@@ -544,7 +544,8 @@ RSpec.describe 'Meals API' do
     # Issue #121, the guest half. Before Guest checked the flag, the nil
     # reached the NOT NULL column and the answer was a 500.
     it 'refuses a guest without vegetarian with a 400, and saves nothing' do
-      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests", params: { token: token }
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests", params: { token: token },
+                                                                       headers: IdempotencyKey.header
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body['message']).to eq('Vegetarian must be true or false')
@@ -553,7 +554,8 @@ RSpec.describe 'Meals API' do
 
     # Issue #138, as for a sign-up: Rails would read these as true.
     it 'refuses a guest with vegetarian "False", and saves nothing' do
-      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests", params: { token: token, vegetarian: 'False' }
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests", params: { token: token, vegetarian: 'False' },
+                                                                       headers: IdempotencyKey.header
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body['message']).to eq('Vegetarian must be true or false')
@@ -562,7 +564,8 @@ RSpec.describe 'Meals API' do
 
     it 'refuses a guest with vegetarian "maybe" or "", and saves nothing' do
       ['maybe', ''].each do |value|
-        post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests", params: { token: token, vegetarian: value }
+        post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests", params: { token: token, vegetarian: value },
+                                                                         headers: IdempotencyKey.header
 
         expect(response).to have_http_status(:bad_request), value.inspect
         expect(response.parsed_body['message']).to eq('Vegetarian must be true or false')
@@ -571,10 +574,10 @@ RSpec.describe 'Meals API' do
     end
 
     it 'takes vegetarian 1 and 0, as JSON numbers and as text' do
+      json = { 'CONTENT_TYPE' => 'application/json' }
       [1, 0, '1', '0'].each do |vegetarian|
         post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests",
-             params: { token: token, vegetarian: vegetarian }.to_json,
-             headers: { 'CONTENT_TYPE' => 'application/json' }
+             params: { token: token, vegetarian: vegetarian }.to_json, headers: json.merge(IdempotencyKey.header)
         expect(response).to have_http_status(:ok), vegetarian.inspect
       end
 
@@ -587,7 +590,7 @@ RSpec.describe 'Meals API' do
       post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests", params: {
         token: token,
         vegetarian: false
-      }
+      }, headers: IdempotencyKey.header
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body['message']).to include('Meal has been closed.')
@@ -602,7 +605,7 @@ RSpec.describe 'Meals API' do
       post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests", params: {
         token: token,
         vegetarian: false
-      }
+      }, headers: IdempotencyKey.header
 
       expect(response).to have_http_status(:bad_request)
       expect(meal.guests.count).to eq(0)
@@ -715,7 +718,7 @@ RSpec.describe 'Meals API' do
     it 'blocks create_guest on a reconciled meal' do
       reconcile!
       post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests",
-           params: { token: token, vegetarian: false }
+           params: { token: token, vegetarian: false }, headers: IdempotencyKey.header
 
       expect(response).to have_http_status(:bad_request)
       expect(meal.guests.count).to eq(0)
@@ -803,7 +806,8 @@ RSpec.describe 'Meals API' do
     it 'create_guest returns 400 and adds nothing when the meal is swept mid-request' do
       create(:meal_resident, meal: meal, resident: resident, community: community)
 
-      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests", params: { token: token, vegetarian: false }
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests", params: { token: token, vegetarian: false },
+                                                                       headers: IdempotencyKey.header
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body['message']).to eq(reconciled_message)

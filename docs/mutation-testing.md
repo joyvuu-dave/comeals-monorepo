@@ -2330,3 +2330,66 @@ that list, in the app or in a spec, so a change to it fails nothing.
 
 The whole suite afterwards: 3,326 examples, no failure, 100% of lines
 and branches.
+
+### 2026-10-09, a guest add's Idempotency-Key (S2)
+
+Run on the server code the S2 branch added or changed, by name:
+`GuestAdd*` (the guest add's request: its host, flag and key),
+`GuestAddKey*` (the hourly delete of old keys),
+`GuestReplayedSerializer*`, `IdempotencyKeyHeader#initialize` (which
+now takes the sentence for a missing key), and six methods of
+`Api::V1::MealsController`: `create_guest`, `answer_if_key_seen` (the
+one `before_action` that answers a bills save or a guest add whose key
+the meal has seen), `seen_guest_key_answer`, `guest_add`,
+`render_write_under_lock` and `with_meal_lock`, which both take the
+key look-up now. Four workers, 300-second limit. Another worktree's
+mutant run had ended before this one started.
+
+| Run                       | Subjects | Mutations | Killed | Alive | Timeouts | Time   |
+| ------------------------- | -------- | --------- | ------ | ----- | -------- | ------ |
+| 1                         | 16       | 454       | 443    | 11    | 0        | 21 min |
+| 2, `with_meal_lock` alone | 1        | 54        | 54     | 0     | 0        | 3 min  |
+
+Every subject not named below had no survivor in run 1, among them
+`GuestAdd#same_add?` and `#write`, `GuestAddKey.delete_expired`,
+`IdempotencyKeyHeader#initialize`, and `create_guest`,
+`answer_if_key_seen` and `guest_add` in the controller.
+
+Run 1, 11 alive, by kind:
+
+- Done, accepted (1). `with_meal_lock` with `before_settled_check:`
+  required instead of defaulting to nil. Both callers pass it now:
+  `update_bills`, and `render_write_under_lock`, which passes nil for
+  every write but a guest add. The default is gone, and run 2 killed
+  all 54 mutations of the method.
+- Noise (10):
+  - `instance_of?` for `is_a?` in `GuestAdd#error` (1), the kind of
+    2026-10-08: `TrueOrFalse.from_params` answers a Hash or a String it
+    built with `join`, never a subclass of String.
+  - `meal_id: meal` for `meal_id: meal.id` in `GuestAdd#seen_key` (1):
+    Rails reads the record's id.
+  - The `T.cast` type arguments in `GuestAdd#vegetarian` (2): `T.cast`
+    checks nothing at runtime. `.mutant.yml` says so next to its
+    `ignore_patterns`.
+  - `status: :ok` in the replayed answer of `seen_guest_key_answer`
+    (3): dropped, nil, or another key. Rails answers 200 without it, as
+    for `update_bills` on 2026-09-27. Kept, because the answer names its
+    status the way every other answer there does.
+  - The `join("\n")` in `render_write_under_lock` (3): `join`,
+    `join(nil)` and `join("")`. The method only gained an argument here,
+    so these survived before this branch too. On 2026-10-07 a sign-up
+    with neither flag reached this join with two messages. Since #138
+    (2026-10-08) `TrueOrFalse.from_params` refuses the flags before the
+    lock, and no API write fails under the lock with two messages any
+    more, so nothing can tell a newline from no separator.
+
+The browser and unit tests that pin the page's side (the name before a
+refusal, the load after no answer, the key sent again by the next tap)
+are not Ruby, so mutant does not reach them; Vitest and the
+integration test do.
+
+After the review, the replayed answer names the guest only while it is
+still a guest of the same host on the same meal
+(`GuestAddKey#guest_as_added`, new). Run 3, on that method and
+`GuestReplayedSerializer*`: 3 subjects, 45 mutations, 45 killed, 0
+alive, 0 timeouts, 18 seconds.

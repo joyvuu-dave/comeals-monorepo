@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'bigdecimal'
+require_relative 'idempotency_key'
 
 # The edits a bills save sends (#135) to turn the bills a page saw into
 # the bills it wants: one add, change or remove for each cook whose bill
@@ -30,9 +31,8 @@ module BillEdits
   end
 
   # The Idempotency-Key header a bills save needs (decision 6 of #135):
-  # a new key for each save, or the given one for a save sent again. The
-  # value is a Structured Field String, so it is in quotes.
+  # a new key for each save, or the given one for a save sent again.
   def self.key_header(key = SecureRandom.uuid)
-    { 'Idempotency-Key' => %("#{key}") }
+    IdempotencyKey.header(key)
   end
 end

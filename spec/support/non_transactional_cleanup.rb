@@ -53,6 +53,7 @@ module NonTransactionalCleanup
     audits
     bills
     bills_save_keys
+    guest_add_keys
     meal_residents
     guests
     meal_charges

@@ -10,6 +10,7 @@
 //                             saves on its own (#30, #150)
 //   data_store_calendar.js  — rendering a month, its Pusher channels
 //   data_store_hosts.js     — the hosts list the reservation modals show
+//   data_store_guest_adds.ts — guest adds and their Idempotency-Keys
 //
 // The month cache/fetch machinery is not a subsystem of the store at
 // all — it lives in ./month_fetch, because the boot-time prefetch
@@ -31,6 +32,7 @@ import { mealPageVolatile, mealPageActions } from "./data_store_meal_page";
 import { billsVolatile, billsViews, billsActions } from "./data_store_bills";
 import { calendarVolatile, calendarActions } from "./data_store_calendar";
 import { hostsVolatile, hostsActions } from "./data_store_hosts";
+import { guestAddsVolatile, guestAddsActions } from "./data_store_guest_adds";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -96,6 +98,7 @@ export const DataStore = types
   .volatile(billsVolatile)
   .volatile(calendarVolatile)
   .volatile(hostsVolatile)
+  .volatile(guestAddsVolatile)
   .views((self) => ({
     get hostsLoaded() {
       return self.hostsLoadedAt !== null;
@@ -175,4 +178,5 @@ export const DataStore = types
   .actions(mealPageActions)
   .actions(billsActions)
   .actions(calendarActions)
-  .actions(hostsActions);
+  .actions(hostsActions)
+  .actions(guestAddsActions);

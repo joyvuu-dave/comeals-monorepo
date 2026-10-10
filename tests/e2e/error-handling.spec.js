@@ -36,6 +36,11 @@ test.use({
 // The words handle_axios_error shows for an error answer with no message.
 const SERVER_PROBLEM = "The server had a problem. Please try again.";
 
+// What follows a person's name when their sign-up, Late, Veg or guest
+// request got no answer from the app (signup_failure.ts, S2).
+const MAYBE_SAVED =
+  "this change may not have been saved. The meal will load again and show what was saved.";
+
 // What EventsController#create sends for an event with no title.
 const EVENT_REFUSED = "Title can't be blank";
 
@@ -47,7 +52,8 @@ const MEAL_CONFLICT =
 test.describe("Error Handling & Edge Cases", () => {
   test.describe("API Error Responses", () => {
     // The server's refusal carries its own sentence, and the toast shows
-    // it word for word.
+    // it word for word, after the name of the person whose row was
+    // tapped (S2).
     test("an attendance refusal reverts the cell and shows the server's message", async ({
       page,
       context,
@@ -79,7 +85,9 @@ test.describe("Error Handling & Edge Cases", () => {
 
       const toast = page.locator(".toast--error");
       await expect(toast).toBeVisible({ timeout: 5000 });
-      await expect(toast.locator(".toast__message")).toHaveText(MEAL_CONFLICT);
+      await expect(toast.locator(".toast__message")).toHaveText(
+        `Bob Johnson: ${MEAL_CONFLICT}`,
+      );
 
       // Background should revert to NOT green (state rolled back)
       await expect(bobCell).not.toHaveClass(/background-green/, {
@@ -89,7 +97,10 @@ test.describe("Error Handling & Edge Cases", () => {
 
     // An exception the API does not rescue answers with Rails' 500 page,
     // which has no message. The tap must still say it failed (#108).
-    test("an attendance write that hits Rails' 500 page reverts the cell and says the server had a problem", async ({
+    // Heroku's router answers with a page like it after 30 seconds while
+    // the request may still run, so the words say the change may not
+    // have been saved, and the meal loads again to show what was (S2).
+    test("an attendance write that hits Rails' 500 page reverts the cell, says it may not have been saved, and loads the meal again", async ({
       page,
       context,
     }) => {
@@ -106,11 +117,17 @@ test.describe("Error Handling & Edge Cases", () => {
       await expect(bobCell).toBeVisible({ timeout: 10000 });
       await expect(bobCell).not.toHaveClass(/background-green/);
 
+      const loadedAgain = page.waitForResponse((r) =>
+        r.url().includes("/api/v1/meals/42/cooks"),
+      );
       await bobCell.click();
 
       const toast = page.locator(".toast--error");
       await expect(toast).toBeVisible({ timeout: 5000 });
-      await expect(toast.locator(".toast__message")).toHaveText(SERVER_PROBLEM);
+      await expect(toast.locator(".toast__message")).toHaveText(
+        `Bob Johnson: ${MAYBE_SAVED}`,
+      );
+      await loadedAgain;
       await expect(bobCell).not.toHaveClass(/background-green/, {
         timeout: 3000,
       });
@@ -752,9 +769,9 @@ test.describe("Error Handling & Edge Cases", () => {
         await page.goto("/meals/42/edit/");
         await page.waitForLoadState("networkidle");
         for (const [name, words] of [
-          ["B - Bob Johnson", MEAL_CONFLICT],
-          ["A - Jane Smith", SETTLED],
-          ["C - Alice Williams", NOT_FOUND],
+          ["B - Bob Johnson", `Bob Johnson: ${MEAL_CONFLICT}`],
+          ["A - Jane Smith", `Jane Smith: ${SETTLED}`],
+          ["C - Alice Williams", `Alice Williams: ${NOT_FOUND}`],
         ]) {
           await page.getByRole("cell", { name, exact: true }).click();
           await expect(messages(page).first()).toHaveText(words);
@@ -771,7 +788,7 @@ test.describe("Error Handling & Edge Cases", () => {
         await janeRow.locator(".dropdown-add").click();
         await janeRow.locator(".dropdown-menu img[alt='cow-icon']").click();
         await expect(messages(page).first()).toHaveText(
-          "Error: no response received from server.",
+          `Jane Smith: ${MAYBE_SAVED}`,
         );
       }
 
@@ -1038,7 +1055,7 @@ test.describe("Error Handling & Edge Cases", () => {
         await expectBothTappable(
           page,
           page.locator(".app-banner--info"),
-          MEAL_CONFLICT,
+          `Bob Johnson: ${MEAL_CONFLICT}`,
         );
       });
 
@@ -1064,7 +1081,7 @@ test.describe("Error Handling & Edge Cases", () => {
         await expectBothTappable(
           page,
           page.locator(".app-banner--error"),
-          SIGNED_OUT,
+          `Bob Johnson: ${SIGNED_OUT}`,
         );
       });
 

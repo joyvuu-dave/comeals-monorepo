@@ -26,7 +26,7 @@ RSpec.describe 'API contract (tests/fixtures/api_contract.json)', type: :seriali
   # Every fixture entry must be asserted below; a new entry without a matching
   # test here should fail loudly, not pass silently.
   let(:covered) do
-    %w[MealForm MealFormBill MealFormResident MealFormGuest MealResident Guest
+    %w[MealForm MealFormBill MealFormResident MealFormGuest MealResident Guest GuestReplayed
        EventForm CommonHouseReservationForm GuestRoomReservationForm]
   end
 
@@ -91,6 +91,17 @@ RSpec.describe 'API contract (tests/fixtures/api_contract.json)', type: :seriali
       result = GuestSerializer.new(guest).to_h
 
       expect(keys_of(result)).to eq(contract.fetch('Guest').sort)
+    end
+
+    # The answer to an add sent again with a key the meal has seen (S2).
+    # Its guest has the Guest shape above, or is null once removed.
+    it 'matches GuestReplayed, with a Guest inside' do
+      guest = create(:guest, meal: meal, resident: resident)
+      key = GuestAddKey.create!(meal: meal, key: 'k', resident: resident, vegetarian: false, guest: guest)
+      result = GuestReplayedSerializer.new(key).to_h
+
+      expect(keys_of(result)).to eq(contract.fetch('GuestReplayed').sort)
+      expect(keys_of(result.fetch(:guest))).to eq(contract.fetch('Guest').sort)
     end
   end
 

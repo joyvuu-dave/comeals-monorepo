@@ -24,7 +24,8 @@ RSpec.describe 'API write responses' do
       delete "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: { token: token }
       expect(response.parsed_body).to eq('message' => 'MealResident destroyed.')
 
-      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests", params: { token: token, vegetarian: false }
+      post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests", params: { token: token, vegetarian: false },
+                                                                       headers: IdempotencyKey.header
       guest_id = response.parsed_body.fetch('id')
       delete "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests/#{guest_id}", params: { token: token }
       expect(response.parsed_body).to eq('message' => 'Guest was destroyed.')

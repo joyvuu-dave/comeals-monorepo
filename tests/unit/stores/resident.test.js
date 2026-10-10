@@ -483,6 +483,7 @@ describe("Resident model", () => {
         method: "delete",
         url: "/api/v1/meals/1/residents/10",
         withCredentials: true,
+        timeout: 35000,
         data: { socket_id: "test" },
       });
 
@@ -548,6 +549,7 @@ describe("Resident model", () => {
         method: "post",
         url: "/api/v1/meals/1/residents/10",
         withCredentials: true,
+        timeout: 35000,
         data: { late: false, vegetarian: true, socket_id: "test" },
       });
     });
@@ -579,6 +581,7 @@ describe("Resident model", () => {
         method: "post",
         url: "/api/v1/meals/1/residents/10",
         withCredentials: true,
+        timeout: 35000,
         data: { ...flags, socket_id: "test" },
       });
     });
@@ -848,6 +851,8 @@ describe("Resident model", () => {
         method: "post",
         url: "/api/v1/meals/1/residents/10/guests",
         withCredentials: true,
+        timeout: 35000,
+        headers: { "Idempotency-Key": expect.stringMatching(/^".+"$/) },
         data: { vegetarian: true, socket_id: "test" },
       });
       await new Promise((r) => setTimeout(r, 0));
@@ -1300,11 +1305,15 @@ describe("Resident model", () => {
       expectNoDeadNodeUse();
     });
 
-    it("does not refetch when a request fails on a dead node", async () => {
+    // A request that got no answer is different: the server may have
+    // saved it, so the meal loads again (signup_failures.test.js).
+    it("does not refetch when the server refuses a request on a dead node", async () => {
       const expectNoDeadNodeUse = watchDeadNodeUse();
-      // On failure the server saved nothing; the raced snapshot already
-      // matches the server, so a repair fetch is not needed.
-      axios.mockRejectedValueOnce({ response: { status: 500 } });
+      // A refusal saved nothing; the raced snapshot already matches the
+      // server, so a repair fetch is not needed.
+      axios.mockRejectedValueOnce({
+        response: { status: 400, data: { message: "Meal has been closed." } },
+      });
 
       const store = createStore({
         mealProps: { closed: false },
@@ -1595,7 +1604,7 @@ describe("Resident model", () => {
       expect(store.meal.extras).toBe(3);
     });
 
-    it("does nothing more when the node died before the refusal arrived", async () => {
+    it("puts nothing back when the node died before the refusal arrived", async () => {
       const expectNoDeadNodeUse = watchDeadNodeUse();
       const store = createStore({
         mealProps: closedWithSeats,
@@ -1634,7 +1643,7 @@ describe("Resident model", () => {
       return () => reject(refusal);
     }
 
-    it("does nothing more when the node died before a removal was refused", async () => {
+    it("puts nothing back when the node died before a removal was refused", async () => {
       const expectNoDeadNodeUse = watchDeadNodeUse();
       const store = createStore({
         mealProps: { closed: false },
@@ -1651,7 +1660,7 @@ describe("Resident model", () => {
       expectNoDeadNodeUse();
     });
 
-    it("does nothing more when the node died before a late toggle was refused", async () => {
+    it("puts nothing back when the node died before a late toggle was refused", async () => {
       const expectNoDeadNodeUse = watchDeadNodeUse();
       const store = createStore({
         mealProps: { closed: false },
@@ -1670,7 +1679,7 @@ describe("Resident model", () => {
       expectNoDeadNodeUse();
     });
 
-    it("does nothing more when the node died before a veg toggle was refused", async () => {
+    it("puts nothing back when the node died before a veg toggle was refused", async () => {
       const expectNoDeadNodeUse = watchDeadNodeUse();
       const store = createStore({
         mealProps: { closed: false },
@@ -1695,7 +1704,7 @@ describe("Resident model", () => {
       expectNoDeadNodeUse();
     });
 
-    it("does nothing more when the node died before a guest add was refused", async () => {
+    it("puts nothing back when the node died before a guest add was refused", async () => {
       const expectNoDeadNodeUse = watchDeadNodeUse();
       const store = createStore({
         mealProps: closedWithSeats,
@@ -1755,6 +1764,7 @@ describe("Resident model", () => {
         method: "delete",
         url: "/api/v1/meals/1/residents/10/guests/102",
         withCredentials: true,
+        timeout: 35000,
         data: { socket_id: "test" },
       });
     });

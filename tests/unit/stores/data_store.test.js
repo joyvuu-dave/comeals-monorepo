@@ -3401,7 +3401,7 @@ describe("DataStore", () => {
         await vi.advanceTimersByTimeAsync(0);
 
         expect(toastsOnScreen()).toEqual([
-          ["error", MEAL_CONFLICT],
+          ["error", `Bob: ${MEAL_CONFLICT}`],
           ["error", MEAL_1_NOT_SAVED],
         ]);
       });
@@ -3423,7 +3423,7 @@ describe("DataStore", () => {
 
         expect(toastsOnScreen()).toEqual([
           ["error", MEALS_1_AND_2_NOT_SAVED],
-          ["error", MEAL_CONFLICT],
+          ["error", `Bob: ${MEAL_CONFLICT}`],
         ]);
       });
 

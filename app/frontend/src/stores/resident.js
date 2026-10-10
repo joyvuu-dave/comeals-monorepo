@@ -1,7 +1,7 @@
 import { types, getRoot, isAlive } from "mobx-state-tree";
 import { api } from "../helpers/api";
-import handleAxiosError from "../helpers/handle_axios_error";
 import { evictMealCache } from "../helpers/meal_cache";
+import { showSignupFailure, tappedOf } from "../helpers/signup_failure";
 
 const Resident = types
   .model("Resident", {
@@ -179,12 +179,14 @@ const Resident = types
       const currentLate = self.late;
 
       // A raced refetch can destroy this node while the request is in
-      // flight. Capture the root store and the meal id now — a dead node
-      // cannot reach its parents or its fields — so the success callbacks
-      // below can repair by refetching instead of silently dropping the
-      // server's change.
+      // flight. Capture the root store, the meal id, and whose row this
+      // is now — a dead node cannot reach its parents or its fields — so
+      // the callbacks below can repair by refetching instead of silently
+      // dropping the server's change, and a failure can still say whose
+      // tap failed (S2).
       const store = getRoot(self);
       const mealId = self.meal_id;
+      const tapped = tappedOf(self);
 
       if (val) {
         self.root.meal.decrementExtras();
@@ -209,23 +211,26 @@ const Resident = types
             self.setAttendingAt(new Date(response.data.created_at));
           })
           .catch(function (error) {
-            if (!isAlive(self)) return;
-            self.setAttending(false);
-            self.setAttendingAt(null);
-            self.root.meal.incrementExtras();
+            // A row built again since the tap shows what the server has,
+            // so only the row that was tapped is put back.
+            if (isAlive(self)) {
+              self.setAttending(false);
+              self.setAttendingAt(null);
+              self.root.meal.incrementExtras();
 
-            // If they were clicking late to add, uncheck late
-            if (options.late) {
-              self.setLate(false);
+              // If they were clicking late to add, uncheck late
+              if (options.late) {
+                self.setLate(false);
+              }
+
+              // If they were clicking veg to add, put back the veg value
+              // from before the tap.
+              if (options.veg) {
+                self.setVeg(previousVeg);
+              }
             }
 
-            // If they were clicking veg to add, put back the veg value
-            // from before the tap.
-            if (options.veg) {
-              self.setVeg(previousVeg);
-            }
-
-            handleAxiosError(error);
+            showSignupFailure(store, tapped, error);
           });
       } else {
         var previousLate = self.late;
@@ -244,12 +249,13 @@ const Resident = types
             self.setAttendingAt(null);
           })
           .catch(function (error) {
-            if (!isAlive(self)) return;
-            self.setAttending(true);
-            self.setLate(previousLate);
-            self.root.meal.decrementExtras();
+            if (isAlive(self)) {
+              self.setAttending(true);
+              self.setLate(previousLate);
+              self.root.meal.decrementExtras();
+            }
 
-            handleAxiosError(error);
+            showSignupFailure(store, tapped, error);
           });
       }
     },
@@ -267,6 +273,7 @@ const Resident = types
       // Captured while alive; see toggleAttending.
       const store = getRoot(self);
       const mealId = self.meal_id;
+      const tapped = tappedOf(self);
 
       api.meals.residents
         .update(self.meal_id, self.id, {
@@ -278,10 +285,9 @@ const Resident = types
           if (!isAlive(self)) store.loadDataAsync();
         })
         .catch(function (error) {
-          if (!isAlive(self)) return;
-          self.setLate(!val);
+          if (isAlive(self)) self.setLate(!val);
 
-          handleAxiosError(error);
+          showSignupFailure(store, tapped, error);
         });
     },
     toggleVeg() {
@@ -298,6 +304,7 @@ const Resident = types
       // Captured while alive; see toggleAttending.
       const store = getRoot(self);
       const mealId = self.meal_id;
+      const tapped = tappedOf(self);
 
       api.meals.residents
         .update(self.meal_id, self.id, {
@@ -309,45 +316,26 @@ const Resident = types
           if (!isAlive(self)) store.loadDataAsync();
         })
         .catch(function (error) {
-          if (!isAlive(self)) return;
-          self.setVeg(!val);
+          if (isAlive(self)) self.setVeg(!val);
 
-          handleAxiosError(error);
+          showSignupFailure(store, tapped, error);
         });
     },
+    // The seat goes at the tap. The request, its Idempotency-Key, and
+    // what the answer means are in data_store_guest_adds.ts (S2).
     addGuest(options = { vegetarian: false }) {
       if (self.root.meal.reconciled) {
         return;
       }
-      // Captured while alive; see toggleAttending.
-      const store = getRoot(self);
-      const mealId = self.meal_id;
       self.root.meal.decrementExtras();
-
-      api.meals.residents.guests
-        .add(self.meal_id, self.id, {
-          vegetarian: options.vegetarian,
-          socketId: window.Comeals.socketId,
-        })
-        .then(function (response) {
-          evictMealCache(mealId);
-          if (!isAlive(self)) {
-            // The guest row exists on the server; the refetch brings it
-            // back. Without this the user re-clicks and creates a
-            // second real guest — a double charge.
-            store.loadDataAsync();
-            return;
-          }
-          const guest = response.data;
-          guest.created_at = new Date(guest.created_at);
-          self.root.appendGuest(guest);
-        })
-        .catch(function (error) {
-          if (!isAlive(self)) return;
-          self.root.meal.incrementExtras();
-
-          handleAxiosError(error);
-        });
+      self.root.sendGuestAdd({
+        row: self,
+        mealId: self.meal_id,
+        hostId: self.id,
+        vegetarian: options.vegetarian,
+        tapped: tappedOf(self),
+        guestIdsAtTap: self.guests.map((guest) => guest.id),
+      });
     },
     removeGuest() {
       if (self.root.meal.reconciled || !self.canRemoveGuest) {
@@ -366,6 +354,7 @@ const Resident = types
       // Captured while alive; see toggleAttending.
       const store = getRoot(self);
       const mealId = self.meal_id;
+      const tapped = tappedOf(self);
 
       api.meals.residents.guests
         .remove(self.meal_id, self.id, guestId, {
@@ -381,7 +370,7 @@ const Resident = types
           self.root.meal.incrementExtras();
         })
         .catch(function (error) {
-          handleAxiosError(error);
+          showSignupFailure(store, tapped, error);
         });
     },
   }));

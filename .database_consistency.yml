@@ -113,6 +113,23 @@ BillsSaveKey:
     NullConstraintChecker:
       enabled: false
 
+# A guest add's key row is written only by GuestAdd#write, which
+# Api::V1::MealsController#create_guest calls under the meal lock, right
+# after it looked the key up and found none, with a key
+# IdempotencyKeyHeader read and the flag TrueOrFalse read (S2). The NOT
+# NULL and CHECK constraints and the unique index are the rules, for the
+# same reasons as BillsSaveKey above.
+GuestAddKey:
+  index_guest_add_keys_on_meal_id_and_key:
+    UniqueIndexChecker:
+      enabled: false
+  key:
+    NullConstraintChecker:
+      enabled: false
+  vegetarian:
+    NullConstraintChecker:
+      enabled: false
+
 # Charges are written only by Settlement, inside the meal lock, one credit
 # per cook and one debit per attendee. The unique indexes are the rule;
 # the writes skip validations on purpose (docs/adr/0003).

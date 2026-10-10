@@ -729,6 +729,41 @@ ALTER SEQUENCE public.events_id_seq OWNED BY public.events.id;
 
 
 --
+-- Name: guest_add_keys; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.guest_add_keys (
+    id bigint NOT NULL,
+    meal_id bigint NOT NULL,
+    key text NOT NULL,
+    resident_id bigint NOT NULL,
+    vegetarian boolean NOT NULL,
+    guest_id bigint,
+    created_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT guest_add_keys_key_printable CHECK ((key ~ '^[ -~]{1,255}$'::text))
+);
+
+
+--
+-- Name: guest_add_keys_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.guest_add_keys_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: guest_add_keys_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.guest_add_keys_id_seq OWNED BY public.guest_add_keys.id;
+
+
+--
 -- Name: guest_room_reservations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1810,6 +1845,13 @@ ALTER TABLE ONLY public.events ALTER COLUMN id SET DEFAULT nextval('public.event
 
 
 --
+-- Name: guest_add_keys id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guest_add_keys ALTER COLUMN id SET DEFAULT nextval('public.guest_add_keys_id_seq'::regclass);
+
+
+--
 -- Name: guest_room_reservations id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -2074,6 +2116,14 @@ ALTER TABLE ONLY public.communities
 
 ALTER TABLE ONLY public.events
     ADD CONSTRAINT events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: guest_add_keys guest_add_keys_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guest_add_keys
+    ADD CONSTRAINT guest_add_keys_pkey PRIMARY KEY (id);
 
 
 --
@@ -2405,6 +2455,34 @@ CREATE UNIQUE INDEX index_communities_on_singleton_guard ON public.communities U
 --
 
 CREATE INDEX index_events_on_start_date ON public.events USING btree (start_date);
+
+
+--
+-- Name: index_guest_add_keys_on_created_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_guest_add_keys_on_created_at ON public.guest_add_keys USING btree (created_at);
+
+
+--
+-- Name: index_guest_add_keys_on_guest_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_guest_add_keys_on_guest_id ON public.guest_add_keys USING btree (guest_id);
+
+
+--
+-- Name: index_guest_add_keys_on_meal_id_and_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_guest_add_keys_on_meal_id_and_key ON public.guest_add_keys USING btree (meal_id, key);
+
+
+--
+-- Name: index_guest_add_keys_on_resident_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_guest_add_keys_on_resident_id ON public.guest_add_keys USING btree (resident_id);
 
 
 --
@@ -2971,6 +3049,22 @@ ALTER TABLE ONLY public.admin_users
 
 
 --
+-- Name: guest_add_keys fk_rails_176efa00a8; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guest_add_keys
+    ADD CONSTRAINT fk_rails_176efa00a8 FOREIGN KEY (meal_id) REFERENCES public.meals(id) ON DELETE CASCADE;
+
+
+--
+-- Name: guest_add_keys fk_rails_24cf261179; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guest_add_keys
+    ADD CONSTRAINT fk_rails_24cf261179 FOREIGN KEY (resident_id) REFERENCES public.residents(id) ON DELETE CASCADE;
+
+
+--
 -- Name: solid_queue_recurring_executions fk_rails_318a5533ed; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3064,6 +3158,14 @@ ALTER TABLE ONLY public.solid_queue_blocked_executions
 
 ALTER TABLE ONLY public.common_house_reservations
     ADD CONSTRAINT fk_rails_52e17e5c72 FOREIGN KEY (resident_id) REFERENCES public.residents(id);
+
+
+--
+-- Name: guest_add_keys fk_rails_54c5acd1db; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guest_add_keys
+    ADD CONSTRAINT fk_rails_54c5acd1db FOREIGN KEY (guest_id) REFERENCES public.guests(id) ON DELETE SET NULL;
 
 
 --
@@ -3249,6 +3351,7 @@ ALTER TABLE ONLY public.bills
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261009140000'),
 ('20261009130100'),
 ('20261009130000'),
 ('20261009120000'),

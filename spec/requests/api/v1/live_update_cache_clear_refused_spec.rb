@@ -46,7 +46,8 @@ RSpec.describe 'a refused cache clear after the commit' do
   end
 
   def post_guest
-    post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests", params: { token: token, vegetarian: false }
+    post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests", params: { token: token, vegetarian: false },
+                                                                     headers: IdempotencyKey.header
   end
 
   before do

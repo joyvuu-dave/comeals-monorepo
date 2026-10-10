@@ -121,6 +121,35 @@ RSpec.describe 'a meal write retried after a conflict', prosopite: false do
     expect(BillsSaveKey.where(meal_id: meal.id).pluck(:key)).to eq(['the-key'])
   end
 
+  # The same for a guest add's Idempotency-Key (S2): the first try writes
+  # the guest and its key's row, and is then refused. The rollback must
+  # take both. A key left behind would make the second try answer
+  # "replayed" with no guest, and a guest left behind would be added twice.
+  it 'adds a guest on the second try, and keeps its key once, when the first try wrote its key' do
+    host = create(:resident, community: community, unit: unit, name: 'Hana')
+    token
+    allow(RetryOnConflict).to receive(:sleep)
+    refused = false
+    allow(GuestAddKey).to receive(:create!).and_wrap_original do |create, *args, **kwargs|
+      create.call(*args, **kwargs).tap do
+        unless refused
+          refused = true
+          raise ActiveRecord::SerializationFailure, 'could not serialize access due to read/write dependencies'
+        end
+      end
+    end
+
+    post "/api/v1/meals/#{meal.id}/residents/#{host.id}/guests",
+         params: { token: token, vegetarian: false }, headers: { 'Idempotency-Key' => '"the-key"' }, as: :json
+
+    expect(refused).to be(true)
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body).not_to have_key('type')
+    expect(meal.guests.count).to eq(1)
+    expect(meal.associated_audits.where(auditable_type: 'Guest', action: 'create').count).to eq(1)
+    expect(GuestAddKey.where(meal_id: meal.id).pluck(:key)).to eq(['the-key'])
+  end
+
   def refuse_first_bill_update
     refused = false
     allow_any_instance_of(Bill).to receive(:update!).and_wrap_original do |update, *args, **kwargs| # rubocop:disable RSpec/AnyInstance -- the save loads the record

@@ -22,6 +22,9 @@ validate_each
 # Formtastic calls it on every boolean input to decide on the "*"
 # (config/initializers/check_box_not_required.rb):
 required?
+# Alba calls it by name (one :guest_as_added in
+# app/serializers/guest_replayed_serializer.rb):
+guest_as_added
 # Named in before_action / rescue_from / config lines debride does not read:
 # (delete_expired is a command in config/recurring.yml)
 delete_expired

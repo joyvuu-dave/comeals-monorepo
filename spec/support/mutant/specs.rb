@@ -116,9 +116,13 @@ MUTANT_SPEC_ROWS = {
   'spec/requests/api/v1/bills_idempotency_key_spec.rb' =>
     %w[IdempotencyKeyHeader BillsPayload BillsSaveKey Api::V1::MealsController],
   'spec/requests/api/v1/bills_idempotency_key_race_spec.rb' => %w[Api::V1::MealsController],
+  # The same for a guest add (S2).
+  'spec/requests/api/v1/guest_idempotency_key_spec.rb' =>
+    %w[IdempotencyKeyHeader GuestAdd GuestAddKey GuestReplayedSerializer Api::V1::MealsController],
+  'spec/requests/api/v1/guest_idempotency_key_race_spec.rb' => %w[GuestAdd Api::V1::MealsController],
   'spec/requests/api/v1/meals_controller_spec.rb' =>
     %w[Api::V1::MealsController AuditDescription MealFormSerializer MealCostSummary Meal MealResident Guest
-       TrueOrFalse],
+       TrueOrFalse GuestAdd],
   'spec/requests/api/v1/meals_refused_writes_spec.rb' =>
     %w[Api::V1::MealsController ReconciledMealImmutability ClosedMealAttendanceFreeze],
   'spec/requests/api/v1/meals_unknown_resident_spec.rb' => %w[Api::V1::MealsController],
@@ -198,7 +202,7 @@ MUTANT_SPEC_ROWS = {
   'spec/jobs/notify_cooks_job_spec.rb' => %w[NotifyCooksJob PacedDelivery MailDelivery],
   'spec/jobs/ensure_rotations_job_spec.rb' => %w[EnsureRotationsJob Community Rotation MealSchedule],
   'spec/serializers/api_contract_spec.rb' =>
-    %w[MealSerializer BillSerializer GuestSerializer MealResidentSerializer EventSerializer
+    %w[MealSerializer BillSerializer GuestSerializer GuestReplayedSerializer MealResidentSerializer EventSerializer
        GuestRoomReservationSerializer CommonHouseReservationSerializer RotationSerializer
        RotationLogSerializer ResidentBirthdaySerializer AuditSerializer ReconciliationPreviewSerializer],
   'spec/serializers/serializers_spec.rb' => %w[MealFormSerializer RotationLogSerializer],

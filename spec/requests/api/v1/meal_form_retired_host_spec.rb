@@ -23,7 +23,8 @@ RSpec.describe 'A host retired after adding a guest to an open meal' do
   end
 
   it 'is in the meal form while the guest is on the meal, and not after the guest is removed' do
-    post "/api/v1/meals/#{meal.id}/residents/#{host.id}/guests", params: { token: token, vegetarian: false }
+    post "/api/v1/meals/#{meal.id}/residents/#{host.id}/guests", params: { token: token, vegetarian: false },
+                                                                 headers: IdempotencyKey.header
     expect(response).to have_http_status(:ok)
     guest_id = response.parsed_body['id']
     host.update!(active: false)

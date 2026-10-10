@@ -89,7 +89,7 @@ is an HTML page too.
 | `401`  | No token or a bad token.                                                                                                                             |
 | `404`  | The record in the URL does not exist, or `/meals/next` found no meal.                                                                                |
 | `409`  | Two writes to the same meal collided. Nothing was saved. Send the same request again. A bills save has one more `409`; see "Bills".                  |
-| `422`  | A bills save came with an `Idempotency-Key` that was already used for a different save. Nothing was saved. See "Bills".                              |
+| `422`  | A bills save or a guest add came with an `Idempotency-Key` that was already used for a different one. Nothing was saved. See "Bills" and "Guests".   |
 | `429`  | Rate limit.                                                                                                                                          |
 
 Other than `/meals/next`, a `404` is only for the record named in the URL
@@ -216,13 +216,13 @@ GET /meals/:meal_id/cooks
 
 ### Sign up and cancel
 
-| Method   | Path                                                      | Body                                     | What it does                                                                                                                    |
-| -------- | --------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `POST`   | `/meals/:meal_id/residents/:resident_id`                  | `{ "late": false, "vegetarian": false }` | Signs the resident up. Both flags are required. If already signed up, updates `late` and `vegetarian` instead. Returns the row. |
-| `PATCH`  | `/meals/:meal_id/residents/:resident_id`                  | `{ "late": ..., "vegetarian": ... }`     | Changes `late` or `vegetarian` for a signup.                                                                                    |
-| `DELETE` | `/meals/:meal_id/residents/:resident_id`                  |                                          | Cancels the signup.                                                                                                             |
-| `POST`   | `/meals/:meal_id/residents/:resident_id/guests`           | `{ "vegetarian": false }`                | Adds one guest hosted by that resident. `vegetarian` is required. Returns the guest, including its `id`.                        |
-| `DELETE` | `/meals/:meal_id/residents/:resident_id/guests/:guest_id` |                                          | Removes that guest.                                                                                                             |
+| Method   | Path                                                      | Body                                     | What it does                                                                                                                                                   |
+| -------- | --------------------------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST`   | `/meals/:meal_id/residents/:resident_id`                  | `{ "late": false, "vegetarian": false }` | Signs the resident up. Both flags are required. If already signed up, updates `late` and `vegetarian` instead. Returns the row.                                |
+| `PATCH`  | `/meals/:meal_id/residents/:resident_id`                  | `{ "late": ..., "vegetarian": ... }`     | Changes `late` or `vegetarian` for a signup.                                                                                                                   |
+| `DELETE` | `/meals/:meal_id/residents/:resident_id`                  |                                          | Cancels the signup.                                                                                                                                            |
+| `POST`   | `/meals/:meal_id/residents/:resident_id/guests`           | `{ "vegetarian": false }`                | Adds one guest hosted by that resident. `vegetarian` and an `Idempotency-Key` header are required (see "Guests" below). Returns the guest, including its `id`. |
+| `DELETE` | `/meals/:meal_id/residents/:resident_id/guests/:guest_id` |                                          | Removes that guest.                                                                                                                                            |
 
 Each flag is true or false, as "True and false" above says. A refused
 flag answers `400`, and nothing is saved. The `message` names each
@@ -238,6 +238,45 @@ refused flag, one per line: `"Late must be true or false"`,
 Any resident can sign up, cancel, or add guests for any other resident.
 The app is a shared screen in the common house, and the API is the same.
 The token only records who made the change in the history.
+
+### Guests
+
+A guest is a charge to the host, and the same request sent twice would
+add two guests. So every guest add needs an `Idempotency-Key` header, the
+same header a bills save takes (see "Bills" for the rules of its value):
+
+```
+POST /meals/:meal_id/residents/:resident_id/guests
+Idempotency-Key: "8e03978e-40d5-43e8-bc93-6894a57f9324"
+{ "vegetarian": false }
+```
+
+- Make a new key for each guest you add. When you send an add again
+  (after no answer, or after a `409`), send it with the same key.
+- The server keeps the key of each guest add it wrote, for that meal,
+  for 7 days. The same key with the same host and the same `vegetarian`
+  adds nothing: the answer is `200` with `"type": "replayed"` and
+  `guest`, the guest that key added, as stored now. `guest` is `null` if
+  that guest was removed since, or given to another host or another meal.
+  Nothing is added then either; to add a guest again, use a new key.
+- The same key with another host or another `vegetarian` is refused with
+  `422`, and nothing is added.
+- The server looks up the key before it checks whether the meal was
+  settled, so these two answers hold on a settled meal too.
+- An add that was refused keeps no key, so the same key may be sent
+  again.
+
+```
+{ "message": "This guest was already added, so nothing more was added.",
+  "type": "replayed",
+  "guest": { "id": 55, "meal_id": 12, "resident_id": 7, "vegetarian": false,
+             "created_at": "2026-10-09T18:30:00.000-07:00" } }
+```
+
+With no answer at all (a timeout, or a dropped connection), the add may or
+may not have been written. Send it again with the same key. If the first
+try was written, the answer is `replayed` and nothing more is added. If it
+was not, the server adds the guest.
 
 ### Change the meal
 
@@ -382,8 +421,9 @@ see "Bills".
    signups, its guests, and its bills is refused:
    `"Change not permitted. Meal has already been reconciled."`. This is
    an accounting rule: the ledger is not edited, it is appended to. The
-   one exception: a bills save sent again with a key the server kept
-   gets `replayed` or `422`, as in "Bills", and writes nothing.
+   one exception: a bills save or a guest add sent again with a key the
+   server kept gets `replayed` or `422`, as in "Bills" and "Guests", and
+   writes nothing.
 2. **A closed meal's headcount is frozen.** While `closed` is true and
    `max` is null, no one can sign up, cancel, add a guest, or remove a
    guest (`"Meal has been closed."`). The cook closes a meal to know
@@ -397,10 +437,10 @@ see "Bills".
 4. **Bills are whole cents, 0 to 9999.99, sent as text.** See "Bills".
 5. **Writes to one meal take a lock on that meal.** If a settlement is
    running, or another write collides, you get `409` with no `type`.
-   Nothing was saved. Resend the same request (a bills save with the
-   same `Idempotency-Key`). A bills save can also get a `409` with
-   `"type": "stale"`: then read the meal form again before you build a
-   new save.
+   Nothing was saved. Resend the same request (a bills save or a guest
+   add with the same `Idempotency-Key`). A bills save can also get a
+   `409` with `"type": "stale"`: then read the meal form again before
+   you build a new save.
 6. **Every write is recorded.** `GET /meals/:meal_id/history` shows who
    changed what, by the resident whose token was used.
 

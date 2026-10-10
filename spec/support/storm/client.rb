@@ -80,6 +80,8 @@ module Storm
 
     MEAL_WRITES = %i[signup leave toggle add_guest remove_guest bills close reopen max description].freeze
     ROW_WRITES = %i[signup leave toggle add_guest remove_guest bills].freeze
+    # The writes that need an Idempotency-Key header.
+    KEYED = %i[bills add_guest].freeze
     RECONCILER_ONLY = %i[preview settle].freeze
 
     attr_reader :log, :meal_sockets
@@ -152,12 +154,12 @@ module Storm
       @rng.rand < 0.5 ? @home : @plan.meals.sample(random: @rng)
     end
 
-    # A bills save carries a new Idempotency-Key, as the page sends one
-    # (decision 6 of #135): this client and request number, which no other
-    # request has.
+    # A bills save and a guest add carry a new Idempotency-Key, as the
+    # page sends one (decision 6 of #135, S2): this client and request
+    # number, which no other request has.
     def call(method, path, body, action)
       headers = { 'Authorization' => "Bearer #{@token}" }
-      headers['Idempotency-Key'] = %("storm-#{@index}-#{@n}") if action == :bills
+      headers['Idempotency-Key'] = %("storm-#{@index}-#{@n}") if KEYED.include?(action)
       login = action == :login
       note_sent(login)
       status, response = @transport.call(method, path, headers, body && JSON.generate(body), @ip)

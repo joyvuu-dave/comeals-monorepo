@@ -60,7 +60,9 @@ services that wrap them (`SettleAndNotify`, `RetryOnConflict`,
 (`Api::V1::MealsController`, `Api::V1::ReconciliationsController`), the
 three classes that read and write a bills save (`BillsPayload`,
 `IdempotencyKeyHeader`, and `BillsSaveKey`, whose row is written in the
-same transaction as the bills), and the models that hold ledger rows:
+same transaction as the bills), the two that read and write a guest add
+(`GuestAdd`, and `GuestAddKey`, whose row is written in the same
+transaction as the guest), and the models that hold ledger rows:
 `Meal`, `Resident`, `Bill`, `MealResident`, `Guest`, `MealCharge`,
 `Reconciliation`, `ReconciliationBalance`, `ResidentBalance`. Every hand-written method there has a `sig`, and the
 value objects (`MealLedger::Line`, `MealLedger::Summary`,

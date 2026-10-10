@@ -810,6 +810,14 @@ test.describe("Visual Baselines", () => {
     // ThirdCookWarning.
     const THIRD_COOK =
       "Warning: third cooks should not be added until all meals in the rotation have at least two cooks.";
+    // A refused sign-up or guest request names the person whose row was
+    // tapped first (S2). One with no answer says it may not have been
+    // saved.
+    const BOB_CONFLICT = `Bob Johnson: ${MEAL_CONFLICT}`;
+    const JANE_SETTLED = `Jane Smith: ${SETTLED}`;
+    const ALICE_NOT_FOUND = `Alice Williams: ${NOT_FOUND}`;
+    const JANE_GUEST_MAYBE =
+      "Jane Smith: this change may not have been saved. The meal will load again and show what was saved.";
 
     function refuse(status, message) {
       return (route) =>
@@ -858,15 +866,15 @@ test.describe("Visual Baselines", () => {
     }
 
     async function signUpBob(page) {
-      await tapResident(page, "B - Bob Johnson", MEAL_CONFLICT);
+      await tapResident(page, "B - Bob Johnson", BOB_CONFLICT);
     }
 
     async function signOffJane(page) {
-      await tapResident(page, "A - Jane Smith", SETTLED);
+      await tapResident(page, "A - Jane Smith", JANE_SETTLED);
     }
 
     async function signOffAlice(page) {
-      await tapResident(page, "C - Alice Williams", NOT_FOUND);
+      await tapResident(page, "C - Alice Williams", ALICE_NOT_FOUND);
     }
 
     async function changeMenu(page) {
@@ -885,9 +893,7 @@ test.describe("Visual Baselines", () => {
         .locator("xpath=ancestor::tr");
       await janeRow.locator(".dropdown-add").click();
       await janeRow.locator(".dropdown-menu img[alt='cow-icon']").click();
-      await expect(messages(page).first()).toHaveText(
-        "Error: no response received from server.",
-      );
+      await expect(messages(page).first()).toHaveText(JANE_GUEST_MAYBE);
     }
 
     // An error under a message that is not one. The info message closes
@@ -902,7 +908,7 @@ test.describe("Visual Baselines", () => {
 
       await expect(messages(page)).toHaveText([
         `Cooks saved. ${THIRD_COOK}`,
-        MEAL_CONFLICT,
+        BOB_CONFLICT,
       ]);
       await scrollToTop(page);
       await expect(page.locator(".toast-container")).toHaveScreenshot(
@@ -920,8 +926,8 @@ test.describe("Visual Baselines", () => {
 
       await expect(messages(page)).toHaveText([
         "The server had a problem. Please try again.",
-        SETTLED,
-        MEAL_CONFLICT,
+        JANE_SETTLED,
+        BOB_CONFLICT,
       ]);
       await expect(page.getByRole("button", { name: /more/ })).toHaveCount(0);
       await expect(page.locator(".toast-container")).toHaveScreenshot(
@@ -943,9 +949,9 @@ test.describe("Visual Baselines", () => {
       await page.waitForTimeout(500);
 
       await expect(messages(page)).toHaveText([
-        "Error: no response received from server.",
+        JANE_GUEST_MAYBE,
         "The server had a problem. Please try again.",
-        NOT_FOUND,
+        ALICE_NOT_FOUND,
       ]);
       await expect(
         page.getByRole("button", { name: "Show 2 more messages" }),
@@ -955,11 +961,11 @@ test.describe("Visual Baselines", () => {
       // Tapped, the line shows every message.
       await page.getByRole("button", { name: "Show 2 more messages" }).click();
       await expect(messages(page)).toHaveText([
-        "Error: no response received from server.",
+        JANE_GUEST_MAYBE,
         "The server had a problem. Please try again.",
-        NOT_FOUND,
-        SETTLED,
-        MEAL_CONFLICT,
+        ALICE_NOT_FOUND,
+        JANE_SETTLED,
+        BOB_CONFLICT,
       ]);
       await page.waitForTimeout(500);
       await expect(page).toHaveScreenshot("message-stack-all.png");
@@ -977,7 +983,7 @@ test.describe("Visual Baselines", () => {
       await scrollToTop(page);
       await page.waitForTimeout(500);
 
-      await expect(messages(page)).toHaveText([MEAL_CONFLICT]);
+      await expect(messages(page)).toHaveText([BOB_CONFLICT]);
       await expect(page).toHaveScreenshot("message-stack-phone.png");
     });
 

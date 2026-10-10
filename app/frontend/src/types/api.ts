@@ -86,6 +86,17 @@ export interface Guest {
   created_at: string;
 }
 
+// The answer to a guest add sent again with a key the meal has seen, for
+// the same host and flag (MealsController#seen_guest_key_answer): that add
+// was written before, and nothing more was added now. `guest` is the
+// guest it made, as stored now, or null when it was removed since, or
+// given to another host or another meal. Mirrors GuestReplayedSerializer.
+export interface GuestReplayed {
+  message: string;
+  type: "replayed";
+  guest: Guest | null;
+}
+
 // ---------------------------------------------------------------------------
 // Calendar edit forms — the record a modal edits
 // ---------------------------------------------------------------------------
