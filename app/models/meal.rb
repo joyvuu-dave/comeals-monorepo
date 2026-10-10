@@ -351,7 +351,14 @@ class Meal < ApplicationRecord
     end
   end
 
-  delegate :count, to: :bills, prefix: true
+  # size, not count: count always runs a COUNT query, and the admin meal
+  # list preloads bills (scoped_collection in app/admin/meal.rb), so that
+  # was one query per row. size counts the loaded rows when they are
+  # loaded, and runs one COUNT query when they are not.
+  sig { returns(Integer) }
+  def bills_count
+    bills.size
+  end
 
   # No cost methods here on purpose. What a meal costs is MealLedger's
   # arithmetic; screens read it (or the stored meal_charges of a settled

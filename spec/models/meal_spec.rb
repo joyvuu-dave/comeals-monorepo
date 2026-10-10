@@ -315,6 +315,30 @@ RSpec.describe Meal do
     end
   end
 
+  describe '#bills_count' do
+    let(:meal) { create(:meal, community: community) }
+
+    before do
+      create(:bill, meal: meal, community: community, resident: create(:resident, community: community, unit: unit))
+      create(:bill, meal: meal, community: community, resident: create(:resident, community: community, unit: unit))
+    end
+
+    it 'counts the bills with one query when they are not loaded, and does not load them' do
+      unloaded = described_class.find(meal.id)
+
+      expect(count_queries { expect(unloaded.bills_count).to eq(2) }).to eq(1)
+      expect(unloaded.bills).not_to be_loaded
+    end
+
+    # The admin meal list preloads bills and shows this count on every
+    # row, so a query here would be one query per meal.
+    it 'counts the loaded bills with no query when they are preloaded' do
+      loaded = described_class.preload(:bills).find(meal.id)
+
+      expect(count_queries { expect(loaded.bills_count).to eq(2) }).to eq(0)
+    end
+  end
+
   describe '#capped?' do
     it 'returns true when cap is present' do
       capped_community = create(:community, cap: BigDecimal('3'))
