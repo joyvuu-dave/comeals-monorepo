@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  cleanup,
+  within,
+} from "@testing-library/react";
 import { observable } from "mobx";
 
 // events/edit renders ConfirmModal, which needs #root at import time.
@@ -407,5 +413,148 @@ describe("EventsEdit", () => {
       expect(handleCloseModal).not.toHaveBeenCalled();
     }
     expect(toastStore.toasts).toHaveLength(0);
+  });
+});
+
+// #147. The time menus list 8:00 AM to 10:00 PM in 15-minute steps. A
+// menu must show what the form will send: before, a stored time that
+// was not on the menu showed as the empty choice, while the form still
+// held that time and sent it.
+describe("EventsEdit: a stored time that is not on the menu", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv("TZ", "UTC");
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  function stored(start_date, end_date, allday = false) {
+    axios.get.mockResolvedValue({
+      status: 200,
+      data: { ...EVENT, start_date, end_date, allday },
+    });
+  }
+
+  function sent() {
+    const body = axios.patch.mock.calls[0][1];
+    return {
+      start_hours: body.start_hours,
+      start_minutes: body.start_minutes,
+      end_hours: body.end_hours,
+      end_minutes: body.end_minutes,
+    };
+  }
+
+  const BOTH_EMPTY = {
+    start_hours: "",
+    start_minutes: "",
+    end_hours: "",
+    end_minutes: "",
+  };
+
+  // A notice: both menus left empty save an entry from midnight to
+  // midnight (7c66ade4). It opens the way the New form makes one.
+  it("sends both times empty when both menus show empty", async () => {
+    stored("2026-04-15T00:00:00.000-07:00", "2026-04-15T00:00:00.000-07:00");
+    axios.patch.mockResolvedValue({ status: 200, data: {} });
+    renderForm();
+    await screen.findByDisplayValue("Community Meeting");
+
+    const start = screen.getByLabelText("Start Time");
+    const end = screen.getByLabelText("End Time");
+    fireEvent.change(start, { target: { value: "18:00" } });
+    fireEvent.change(start, { target: { value: "" } });
+    expect(start).toHaveDisplayValue("");
+    expect(end).toHaveDisplayValue("");
+
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    expect(sent()).toEqual(BOTH_EMPTY);
+  });
+
+  // The server saves both empty as the same notice (#141).
+  it("keeps a notice a notice when only the title changes", async () => {
+    stored("2026-04-15T00:00:00.000-07:00", "2026-04-15T00:00:00.000-07:00");
+    axios.patch.mockResolvedValue({ status: 200, data: {} });
+    const { setDirty } = renderForm();
+    const title = await screen.findByDisplayValue("Community Meeting");
+    expect(setDirty).toHaveBeenLastCalledWith(false);
+
+    fireEvent.change(title, { target: { value: "Movie night cancelled" } });
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+
+    expect(sent()).toEqual(BOTH_EMPTY);
+  });
+
+  // The admin form takes any time.
+  it("shows a time made in admin as one more choice, and sends it back", async () => {
+    stored("2026-04-15T07:00:00.000-07:00", "2026-04-15T22:30:00.000-07:00");
+    axios.patch.mockResolvedValue({ status: 200, data: {} });
+    const { setDirty } = renderForm();
+    await screen.findByDisplayValue("Community Meeting");
+
+    const start = screen.getByLabelText("Start Time");
+    const end = screen.getByLabelText("End Time");
+    expect(start).toHaveDisplayValue("7:00 AM");
+    expect(end).toHaveDisplayValue("10:30 PM");
+    expect(setDirty).toHaveBeenLastCalledWith(false);
+    // In its place by time: first on the start menu, after the empty
+    // choice, and last on the end menu.
+    expect(within(start).getAllByRole("option")[1]).toHaveTextContent(
+      "7:00 AM",
+    );
+    expect(within(end).getAllByRole("option").at(-1)).toHaveTextContent(
+      "10:30 PM",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    expect(sent()).toEqual({
+      start_hours: "07",
+      start_minutes: "00",
+      end_hours: "22",
+      end_minutes: "30",
+    });
+  });
+
+  // The choice is the stored time, so it stays on the menu after the
+  // person picks another time, and they can pick it again.
+  it("keeps the stored time's choice after another time is picked", async () => {
+    stored("2026-04-15T07:00:00.000-07:00", "2026-04-15T09:00:00.000-07:00");
+    renderForm();
+    await screen.findByDisplayValue("Community Meeting");
+    const start = screen.getByLabelText("Start Time");
+
+    fireEvent.change(start, { target: { value: "18:00" } });
+    expect(start).toHaveDisplayValue("6:00 PM");
+    fireEvent.change(start, { target: { value: "07:00" } });
+
+    expect(start).toHaveDisplayValue("7:00 AM");
+  });
+
+  // Midnight on only one side is not a notice.
+  it("shows a midnight start as 12:00 AM when the end is another time", async () => {
+    stored("2026-04-15T00:00:00.000-07:00", "2026-04-15T09:00:00.000-07:00");
+    renderForm();
+    await screen.findByDisplayValue("Community Meeting");
+
+    expect(screen.getByLabelText("Start Time")).toHaveDisplayValue("12:00 AM");
+    expect(screen.getByLabelText("End Time")).toHaveDisplayValue("9:00 AM");
+  });
+
+  // An all-day event is saved from midnight with no end. It opens with
+  // both menus empty, the way the All Day box leaves them, so turning
+  // All Day off shows what the form will send.
+  it("opens an all-day event with both menus empty", async () => {
+    stored("2026-04-15T00:00:00.000-07:00", null, true);
+    axios.patch.mockResolvedValue({ status: 200, data: {} });
+    renderForm();
+    await screen.findByDisplayValue("Community Meeting");
+
+    fireEvent.click(screen.getByLabelText("All Day"));
+    expect(screen.getByLabelText("Start Time")).toHaveDisplayValue("");
+    expect(screen.getByLabelText("End Time")).toHaveDisplayValue("");
+
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    expect(sent()).toEqual(BOTH_EMPTY);
   });
 });

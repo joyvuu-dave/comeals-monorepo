@@ -84,15 +84,28 @@ export function calendarActions(self) {
       self.switchMonths(date);
     },
     // The zone the SPA computes every time and "today" from comes
-    // from a cookie written at login. A month payload carries the
-    // community's current zone; when it differs, the admin changed it
-    // since login, so take it, recompute today, and move the midnight
-    // timer. Otherwise a tab kept the old zone until logout and login.
+    // from a cookie written at login. A month the server sends carries
+    // the community's current zone; when it differs, the admin changed
+    // it since login, so take it, recompute today, and move the
+    // midnight timer. Otherwise a tab kept the old zone until logout
+    // and login. Only a month that just came from the server reaches
+    // here (onServerZone in month_fetch.js), never a copy, because a
+    // copy can hold the zone from before the change.
     adoptCommunityTimezone(timezone) {
       if (!timezone || timezone === Cookie.get("timezone")) return;
       Cookie.set("timezone", timezone, { expires: 7300 });
       self.recomputeCommunityToday();
       self.scheduleMidnightRecompute();
+      // The month on screen was drawn in the old zone, and the answer
+      // that brought the new one can be for a month next to it. So its
+      // events are drawn again from its copy in memory. A copy holds
+      // exact instants, so it shows the right times in the new zone.
+      // Only the events: the answer can come after the person went to
+      // a meal page, which closed the calendar's channels (#38), and
+      // loadMonth would open them again and fetch the months next to
+      // this one again.
+      var onScreen = monthData.copyInMemory(self.currentDate);
+      if (onScreen !== undefined) self.drawEvents(onScreen);
     },
     loadMonth(data) {
       if (typeof data === "string") {
@@ -103,8 +116,26 @@ export function calendarActions(self) {
 
       mark("loadMonth-start");
 
-      self.adoptCommunityTimezone(data.timezone);
+      self.drawEvents(data);
 
+      self.monthLoading = false;
+
+      self.watchMonthChannels();
+
+      // Names on chips and birthdays come from residents and units,
+      // which have their own channel.
+      self.ensureResidentsChannel();
+
+      // Prefetch adjacent months for instant navigation
+      var current = dayjs(self.currentDate);
+      monthData.prefetchMonth(
+        current.subtract(1, "month").format("YYYY-MM-DD"),
+      );
+      monthData.prefetchMonth(current.add(1, "month").format("YYYY-MM-DD"));
+    },
+    // Turn a month's events into the calendar's events, in the zone the
+    // cookie has now.
+    drawEvents(data) {
       // Build the full events array as plain JS, then replace the
       // observable in one shot for a single MobX notification.
       var allEvents = [];
@@ -172,21 +203,6 @@ export function calendarActions(self) {
       self.calendarEventsVersion += 1;
 
       mark("events-replaced", { count: allEvents.length });
-
-      self.monthLoading = false;
-
-      self.watchMonthChannels();
-
-      // Names on chips and birthdays come from residents and units,
-      // which have their own channel.
-      self.ensureResidentsChannel();
-
-      // Prefetch adjacent months for instant navigation
-      var current = dayjs(self.currentDate);
-      monthData.prefetchMonth(
-        current.subtract(1, "month").format("YYYY-MM-DD"),
-      );
-      monthData.prefetchMonth(current.add(1, "month").format("YYYY-MM-DD"));
     },
     // Keep this page subscribed to the month on screen and its two
     // neighbours. A channel that is open under a name still wanted stays

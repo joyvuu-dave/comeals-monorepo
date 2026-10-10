@@ -168,6 +168,57 @@ describe("ResidentsPasswordNew", () => {
     },
   );
 
+  // Only a 400 says the link is bad. Any other answer says nothing about
+  // the link, so the page that can still use it stays, and shows the
+  // server's words in place of "Loading...". Reloading the page asks for
+  // the name again.
+  it.each([
+    [
+      "Rails' own 500 page",
+      { status: 500, data: "<html>500</html>" },
+      "The server had a problem. Please try again.",
+    ],
+    [
+      "a Heroku router error",
+      { status: 503, data: "<html>Application Error</html>" },
+      "The server had a problem. Please try again.",
+    ],
+    [
+      "a conflict ApiController rescued",
+      {
+        status: 409,
+        data: { message: "Someone else saved at the same time." },
+      },
+      "Someone else saved at the same time.",
+    ],
+    [
+      "too many requests",
+      {
+        status: 429,
+        data: {
+          message:
+            "Too many requests. Please wait 30 seconds before trying again.",
+        },
+      },
+      "Too many requests. Please wait 30 seconds before trying again.",
+    ],
+  ])(
+    "%s on the name lookup stays on the page and shows why",
+    async (_name, response, words) => {
+      axios.get.mockRejectedValue({ response });
+      renderForm();
+      expect(await screen.findByText(words)).toBeVisible();
+      expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
+      expect(
+        screen.queryByPlaceholderText("New Password"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        "/reset-password/tok-1/",
+      );
+      expect(toastStore.toasts).toHaveLength(0);
+    },
+  );
+
   // With no answer from the server there is nothing to go on, so the
   // page stays and says so, instead of "Loading..." forever.
   it.each([

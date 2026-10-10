@@ -571,6 +571,29 @@ describe("ResidentsLogin", () => {
     expect(screen.getByTestId("location")).toHaveTextContent(/^\/$/);
   });
 
+  // #152. react-modal listens for Escape only on the dialog itself. In
+  // Chrome, a refused password left focus on the page's <body>: the
+  // form disables its field and Submit while the request is out, and
+  // Chrome takes focus off a control that turns disabled. Then Escape
+  // did nothing. Focus that goes to <body> now goes back to the dialog
+  // (watch_dialog_focus.ts).
+  it("Escape still closes the new-password modal after its field lost focus to the page", async () => {
+    axios.get.mockResolvedValue({ status: 200, data: { name: "Jane Smith" } });
+    renderLogin({ path: "/reset-password/tok-1" });
+    const field = await screen.findByPlaceholderText("New Password");
+    const dialog = screen.getByRole("dialog");
+    field.focus();
+
+    // Chrome sends the same event when it takes focus off a control
+    // that turns disabled.
+    field.blur();
+    expect(document.body).toHaveFocus();
+
+    await vi.waitFor(() => expect(dialog).toHaveFocus());
+    fireEvent.keyDown(document.activeElement, { key: "Escape", keyCode: 27 });
+    expect(screen.getByTestId("location")).toHaveTextContent(/^\/$/);
+  });
+
   it("shows OFFLINE when the connection drops", () => {
     renderLogin({ store: observable({ isOnline: false }) });
     expect(screen.getByText("OFFLINE")).toBeInTheDocument();

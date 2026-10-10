@@ -172,10 +172,14 @@ Resident
   System" below.
 - `active` — false for residents who moved away or died
 - `can_cook` — eligible for the cooking rotation
-- `vegetarian` — the starting value of the veg switch on the meal page,
-  for a resident who is not signed up (`MealFormSerializer#vegetarian`).
-  The SPA sends the switch's value on sign-up; the server does not copy
-  this column onto the attendance row.
+- `vegetarian` — what a tap on the name on the meal page signs a
+  resident up with, when they are not signed up
+  (`MealFormSerializer#vegetarian`). Their Veg switch is off until they
+  are signed up, like Late, because a switch shows only what is saved; a
+  tap on it signs them up as a vegetarian. The SPA sends the value on
+  sign-up, and the API saves what it sends. The admin form that adds
+  someone to a meal sends no value, so it copies this column onto the
+  new attendance row (#140).
 - `birthday` — two uses: the calendar shows it, and the price band is
   computed from it for the day of each meal (`multiplier_on`). Optional:
   NULL means an adult who gave none, and the calendar shows nothing. A

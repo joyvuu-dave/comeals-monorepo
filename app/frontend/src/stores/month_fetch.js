@@ -17,8 +17,9 @@
 // which data reaches it, if any.
 //
 // This state is module-level on purpose: the boot-time prefetch
-// (index.jsx) runs before any store exists, and the store's navigation
-// must adopt that same in-flight request instead of racing it.
+// (index.jsx) runs before the calendar asks for any month, and the
+// store's navigation must adopt that same in-flight request instead of
+// racing it.
 import axios from "axios";
 import Cookie from "js-cookie";
 import dayjs from "dayjs";
@@ -49,6 +50,25 @@ const navigations = createVersionGuard();
 // is still in flight, revalidate adopts the pending request instead
 // of racing it with a duplicate one.
 const networkInFlight = {};
+
+// Who hears the community's time zone from each month the server
+// sends: the DataStore's adoptCommunityTimezone (data_store_app.js
+// sets it when the store is made). Only an answer from the server is
+// passed on, never a copy of a month from memory or from IndexedDB. A
+// copy saved before an admin changed the zone still holds the old one.
+// A tab that was closed or offline at the change keeps its copies (only
+// tabs that were connected then clear them), and showing one of them
+// would move "today" and every time back to the old zone until the
+// server's answer came, or for good if that fetch failed.
+var zoneListener = null;
+
+export function onServerZone(listener) {
+  zoneListener = listener;
+}
+
+function tellZone(answer) {
+  if (zoneListener !== null) zoneListener(answer.timezone);
+}
 
 // How long a network-fetched month counts as fresh. Within this
 // window loadForNavigation renders it without a revalidation fetch —
@@ -81,6 +101,12 @@ function keyForDate(date) {
     d.format("YYYY"),
     d.format("M"),
   );
+}
+
+// The copy of `date`'s month in memory, or undefined. The store draws
+// the month on screen again from it when the zone changes.
+export function copyInMemory(date) {
+  return monthCache.get(keyForDate(date));
 }
 
 // Evict one month from both caches and bump its invalidation version,
@@ -159,6 +185,7 @@ export function prefetchMonth(date) {
       .then(function (response) {
         // Discard if a Pusher invalidation arrived since we started
         if (monthCache.versionFor(key) !== versionAtStart) return;
+        tellZone(response.data);
         monthCache.set(key, response.data);
         monthCache.markFresh(key);
         writeToDisk(key, response.data);
@@ -245,6 +272,7 @@ function fetchMonth(date, token, render) {
       // caching it could overwrite fresher same-month data.
       if (!navigations.isCurrent(token)) return;
       var respData = response.data;
+      tellZone(respData);
       var key = monthCache.keyFor(respData.id, respData.year, respData.month);
       monthCache.set(key, respData);
       monthCache.markFresh(key);

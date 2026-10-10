@@ -21,8 +21,8 @@ ActiveAdmin.register MealResident do
     before_action :authorize_attendance_correction!
 
     # The form sends only a resident. It has no vegetarian or late switch.
-    # So the row gets the values the meal page's switches show for someone
-    # who is not signed up: vegetarian is the resident's own setting
+    # So the row gets what a tap on the resident's name on the meal page
+    # signs them up with: vegetarian is the resident's own setting
     # (MealFormSerializer#vegetarian), and late is false, the column's
     # default. Before #140, vegetarian was always the column's default too.
     # With no resident, belongs_to refuses the row, so vegetarian is not set.

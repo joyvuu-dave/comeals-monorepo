@@ -122,6 +122,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // stores/month_fetch.js — instead of starting the download from zero.
   // Matched against CALENDAR_PATH itself, so a route change cannot
   // silently strand this prefetch on a stale hand-written pattern.
+  // The store is made above, so it hears the zone this prefetch's
+  // answer carries (onServerZone in stores/month_fetch.js).
   const calendarBoot = matchPath(CALENDAR_PATH, window.location.pathname);
   if (calendarBoot && typeof Cookie.get("community_id") !== "undefined") {
     prefetchMonth(calendarBoot.params.date);

@@ -506,7 +506,7 @@ describe("Resident model", () => {
       expect(alice.late).toBe(true);
     });
 
-    it("sets vegetarian flag when options.toggleVeg is true", () => {
+    it("sets the vegetarian flag when options.veg is true", () => {
       const store = createStore({
         mealProps: { closed: false },
         residents: [
@@ -521,7 +521,7 @@ describe("Resident model", () => {
       });
 
       const alice = store.residents.get("10");
-      alice.toggleAttending({ toggleVeg: true });
+      alice.toggleAttending({ veg: true });
       expect(alice.attending).toBe(true);
       expect(alice.vegetarian).toBe(true);
     });
@@ -947,6 +947,38 @@ describe("Resident model", () => {
       alice.toggleVeg();
       expect(alice.attending).toBe(true);
       expect(alice.vegetarian).toBe(true);
+    });
+
+    // The Veg switch of someone who is not signed up is off whatever
+    // the profile says (attendees_box.jsx), so a tap there always means
+    // "sign me up as a vegetarian". A vegetarian who tapped it was
+    // saved as not vegetarian, and the cook's Veg count was one short.
+    it("signs up a vegetarian who taps the veg switch as a vegetarian", () => {
+      const store = createStore({
+        mealProps: { closed: false },
+        residents: [
+          {
+            id: 10,
+            meal_id: 1,
+            name: "Alice",
+            attending: false,
+            vegetarian: true,
+          },
+        ],
+      });
+
+      const alice = store.residents.get("10");
+      alice.toggleVeg();
+
+      expect(alice.attending).toBe(true);
+      expect(alice.vegetarian).toBe(true);
+      expect(axios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: "post",
+          url: "/api/v1/meals/1/residents/10",
+          data: expect.objectContaining({ vegetarian: true }),
+        }),
+      );
     });
 
     it("toggles vegetarian when already attending", () => {
@@ -1422,7 +1454,7 @@ describe("Resident model", () => {
       axios.mockRejectedValueOnce(refusal);
 
       const alice = store.residents.get("10");
-      alice.toggleAttending({ late: true, toggleVeg: true });
+      alice.toggleAttending({ late: true, veg: true });
       expect(alice.attending).toBe(true);
       await settle();
 
@@ -1433,9 +1465,10 @@ describe("Resident model", () => {
       expect(store.meal.extras).toBe(3);
     });
 
-    // A resident who is not attending shows their profile's veg value
-    // (MealFormSerializer), so the veg switch can start on. A refused
-    // add must put back that value, not always false (issue #109).
+    // A resident who is not attending holds their profile's veg value
+    // (MealFormSerializer), and a tap on the name joins with it. A
+    // refused add must put back that value, not always false (issue
+    // #109).
     // Here someone else took the last seat first.
     function vegetarianNotAttending() {
       return createStore({
@@ -1460,7 +1493,7 @@ describe("Resident model", () => {
       const alice = store.residents.get("10");
       alice.toggleVeg();
       expect(alice.attending).toBe(true);
-      expect(alice.vegetarian).toBe(false);
+      expect(alice.vegetarian).toBe(true);
       await settle();
 
       expect(alice.attending).toBe(false);

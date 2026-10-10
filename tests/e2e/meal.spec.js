@@ -76,8 +76,9 @@ test.describe("Meal Editing", () => {
     await expect(page.locator("#late_switch_3")).toBeChecked();
     // Jane (id=1) is not late -- her switch should be unchecked
     await expect(page.locator("#late_switch_1")).not.toBeChecked();
-    // Bob (id=2) is vegetarian -- his switch should be checked
-    await expect(page.locator("#veg_switch_2")).toBeChecked();
+    // Bob (id=2) is vegetarian but not signed up. Nothing is saved for
+    // him, so his switch is off, like his Late switch.
+    await expect(page.locator("#veg_switch_2")).not.toBeChecked();
     // Jane (id=1) is not vegetarian
     await expect(page.locator("#veg_switch_1")).not.toBeChecked();
 
@@ -149,6 +150,45 @@ test.describe("Meal Editing", () => {
       "socket_id",
       "vegetarian",
     ]);
+    expect(apiPayload.vegetarian).toBe(true);
+    expect(apiPayload.late).toBe(false);
+  });
+
+  // A switch shows what is saved, and a tap turns it to the other
+  // value. Bob is vegetarian and not signed up, so his Veg switch is
+  // off, and tapping it signs him up as a vegetarian.
+  test("the veg switch of a vegetarian who is not signed up signs him up as a vegetarian", async ({
+    page,
+  }) => {
+    let apiPayload = null;
+    await page.route("**/api/v1/meals/*/residents/2*", (route) => {
+      apiPayload = route.request().postDataJSON();
+      fulfillJson(route, {
+        id: 900,
+        meal_id: 42,
+        resident_id: 2,
+        late: false,
+        vegetarian: true,
+        created_at: "2026-01-15T10:00:00.000-08:00",
+      });
+    });
+
+    await page.goto("/meals/42/edit/");
+    const bobCell = page.getByRole("cell", {
+      name: "B - Bob Johnson",
+      exact: true,
+    });
+    await expect(bobCell).toBeVisible({ timeout: 10000 });
+    const vegSwitch = page.locator("#veg_switch_2");
+    await expect(vegSwitch).not.toBeChecked();
+    await expect(circleNumber(page, "Veg")).toHaveText("0");
+
+    await page.locator('label[for="veg_switch_2"]').click();
+
+    await expect(bobCell).toHaveClass(/background-green/, { timeout: 3000 });
+    await expect(vegSwitch).toBeChecked();
+    await expect(circleNumber(page, "Veg")).toHaveText("1");
+    await expect.poll(() => apiPayload, { timeout: 3000 }).toBeTruthy();
     expect(apiPayload.vegetarian).toBe(true);
     expect(apiPayload.late).toBe(false);
   });

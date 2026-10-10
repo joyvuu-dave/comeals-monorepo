@@ -68,6 +68,9 @@ export function appActions(self) {
 
       self.scheduleMidnightRecompute();
 
+      // The community's zone, from each month the server sends.
+      monthData.onServerZone(self.adoptCommunityTimezone);
+
       if (typeof window.__comealsInterceptor !== "undefined") {
         axios.interceptors.response.eject(window.__comealsInterceptor);
       }

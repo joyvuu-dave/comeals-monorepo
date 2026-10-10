@@ -75,10 +75,10 @@ describe("a form's own messages", () => {
   it.each([
     ["a response with a message", REFUSED, "No.", "error"],
     [
-      "a warning",
+      "an answer marked as a warning",
       { response: { data: { message: "Careful.", type: "warning" } } },
       "Careful.",
-      "warning",
+      "error",
     ],
     [
       "a response with no message",

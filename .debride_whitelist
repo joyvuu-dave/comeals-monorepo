@@ -19,6 +19,9 @@ serializable_hash
 # ActiveModel::EachValidator#validate calls it for each attribute
 # (StorableTimeValidator):
 validate_each
+# Formtastic calls it on every boolean input to decide on the "*"
+# (config/initializers/check_box_not_required.rb):
+required?
 # Named in before_action / rescue_from / config lines debride does not read:
 # (delete_expired is a command in config/recurring.yml)
 delete_expired

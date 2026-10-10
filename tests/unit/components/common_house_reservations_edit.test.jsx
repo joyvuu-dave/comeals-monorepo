@@ -393,3 +393,94 @@ describe("CommonHouseReservationsEdit", () => {
     expect(toastStore.toasts).toHaveLength(0);
   });
 });
+
+// #147. A menu must show what the form will send. Before, a stored time
+// that was not on the menu (8:00 AM to 10:00 PM) showed as the empty
+// choice, while the form still held that time and sent it.
+describe("CommonHouseReservationsEdit: a stored time that is not on the menu", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv("TZ", "UTC");
+    axios.patch.mockResolvedValue({ status: 200, data: {} });
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  function stored(start_date, end_date) {
+    axios.get.mockResolvedValue({
+      status: 200,
+      data: { event: { ...RESERVATION.event, start_date, end_date } },
+    });
+  }
+
+  function sent() {
+    const body = axios.patch.mock.calls[0][1];
+    return [
+      body.start_hours,
+      body.start_minutes,
+      body.end_hours,
+      body.end_minutes,
+    ];
+  }
+
+  // A notice: both menus left empty save an entry from midnight to
+  // midnight. It opens the way the New form makes one, and the server
+  // saves both empty as the same notice (#141).
+  it("opens a notice with both menus empty and sends both empty", async () => {
+    stored("2026-04-15T00:00:00.000-07:00", "2026-04-15T00:00:00.000-07:00");
+    const { setDirty } = renderForm();
+    await screen.findByDisplayValue("Book Club");
+
+    expect(screen.getByLabelText("Start Time")).toHaveValue("");
+    expect(screen.getByLabelText("End Time")).toHaveValue("");
+    expect(setDirty).toHaveBeenLastCalledWith(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    expect(sent()).toEqual(["", "", "", ""]);
+  });
+
+  // Admin can book from midnight to the next midnight. That is not a
+  // notice, which starts and ends at the same moment, so both menus show
+  // 12:00 AM, the time the form holds and sends.
+  it("opens a booking from midnight to the next midnight with both menus at 12:00 AM", async () => {
+    stored("2026-04-15T00:00:00.000-07:00", "2026-04-16T00:00:00.000-07:00");
+    renderForm();
+    await screen.findByDisplayValue("Book Club");
+
+    expect(screen.getByLabelText("Start Time")).toHaveDisplayValue("12:00 AM");
+    expect(screen.getByLabelText("End Time")).toHaveDisplayValue("12:00 AM");
+
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    expect(sent()).toEqual(["00", "00", "00", "00"]);
+  });
+
+  // A booking from before #141 can end when it starts at a time that is
+  // not midnight. The server reads only midnight to midnight as a
+  // notice, so this one opens with its time in both menus, and a save of
+  // only a new title sends that time back. Sent empty, the server would
+  // move it to midnight.
+  it("opens a booking that ends when it starts, not at midnight, with its time in both menus", async () => {
+    stored("2026-04-15T07:00:00.000-07:00", "2026-04-15T07:00:00.000-07:00");
+    renderForm();
+    await screen.findByDisplayValue("Book Club");
+
+    expect(screen.getByLabelText("Start Time")).toHaveDisplayValue("7:00 AM");
+    expect(screen.getByLabelText("End Time")).toHaveDisplayValue("7:00 AM");
+
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    expect(sent()).toEqual(["07", "00", "07", "00"]);
+  });
+
+  it("shows a time made in admin as one more choice, and sends it back", async () => {
+    stored("2026-04-15T07:00:00.000-07:00", "2026-04-15T22:30:00.000-07:00");
+    renderForm();
+    await screen.findByDisplayValue("Book Club");
+
+    expect(screen.getByLabelText("Start Time")).toHaveDisplayValue("7:00 AM");
+    expect(screen.getByLabelText("End Time")).toHaveDisplayValue("10:30 PM");
+
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    expect(sent()).toEqual(["07", "00", "22", "30"]);
+  });
+});

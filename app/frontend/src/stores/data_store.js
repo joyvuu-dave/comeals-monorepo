@@ -11,8 +11,8 @@
 //   data_store_hosts.js     — the hosts list the reservation modals show
 //
 // The month cache/fetch machinery is not a subsystem of the store at
-// all — it lives in ./month_fetch, because the boot-time prefetch runs
-// before any store exists.
+// all — it lives in ./month_fetch, because the boot-time prefetch
+// (index.jsx) calls it directly, before the calendar asks for a month.
 import { types } from "mobx-state-tree";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";

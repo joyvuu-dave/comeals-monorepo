@@ -121,7 +121,7 @@ const Resident = types
       self.vegetarian = val;
       return val;
     },
-    toggleAttending(options = { late: false, toggleVeg: false }) {
+    toggleAttending(options = { late: false, veg: false }) {
       // A settled meal's sign-ups are final. The screen locks the name
       // cell only with pointer-events: none, which a click sent to the
       // cell itself (a screen reader, a script) does not go through, so
@@ -163,12 +163,16 @@ const Resident = types
         self.late = !self.late;
       }
 
-      // Toggle Veg if Necessary. A resident who is not attending shows
-      // their profile's veg value, so the switch can start on; a
-      // refused add puts this value back (issue #109).
+      // The tap was on the Veg switch, so they join as a vegetarian.
+      // A resident who is not attending holds their profile's veg value
+      // (MealFormSerializer), and a tap on the name joins with it. Their
+      // Veg switch is off whatever the profile says, because nothing is
+      // saved for them yet (attendees_box.jsx), so a tap on it always
+      // means "sign me up as a vegetarian". A refused add puts the
+      // profile's value back (issue #109).
       const previousVeg = self.vegetarian;
-      if (options.toggleVeg) {
-        self.vegetarian = !self.vegetarian;
+      if (options.veg) {
+        self.vegetarian = true;
       }
 
       const currentVeg = self.vegetarian;
@@ -217,7 +221,7 @@ const Resident = types
 
             // If they were clicking veg to add, put back the veg value
             // from before the tap.
-            if (options.toggleVeg) {
+            if (options.veg) {
               self.setVeg(previousVeg);
             }
 
@@ -285,7 +289,7 @@ const Resident = types
         return;
       }
       if (self.attending === false) {
-        self.toggleAttending({ toggleVeg: true });
+        self.toggleAttending({ veg: true });
         return;
       }
 

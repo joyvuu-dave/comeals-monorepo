@@ -141,11 +141,6 @@ body {
   color: var(--gray-19);
 }
 
-.toast--warning {
-  background-color: var(--hasana-yellow);
-  color: var(--gray-19);
-}
-
 .toast--info {
   background-color: var(--teal);
   color: var(--gray-19);
@@ -206,11 +201,6 @@ body {
 
 .form-message--error {
   background-color: var(--brand-red);
-}
-
-.form-message--warning {
-  background-color: var(--hasana-yellow);
-  color: var(--gray-19);
 }
 
 .form-message__text {

@@ -14,7 +14,9 @@ function ResidentsPasswordNew() {
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [errored, setErrored] = useState(false);
+  // Why the name could not be loaded, shown in place of "Loading...",
+  // or null.
+  const [failure, setFailure] = useState(null);
   // The form is in a dialog, and the stack of messages is drawn under an
   // open dialog, so a refused password shows inside the form (#137).
   // When a try works, the dialog closes, and the reasons earlier tries
@@ -38,16 +40,26 @@ function ResidentsPasswordNew() {
         })
         .catch(function (error) {
           if (!mountedRef.current) return;
-          if (error.response) {
-            // The server will not use this link. Show its reason; the
-            // toast stays up on the login page (issue #115).
+          if (error.response && error.response.status === 400) {
+            // The server will not use this link: it answers 400 for a
+            // link it does not know and for one that has expired
+            // (ResidentsController#show_name). Show its reason; the
+            // message stays up on the login page (issue #115).
             handleAxiosError(error);
             navigate("/");
+          } else if (error.response) {
+            // Any other answer, such as a 500 or a 429, says nothing
+            // about the link, so the page that can still use it stays,
+            // and shows the server's words. Reloading the page asks
+            // for the name again.
+            handleAxiosError(error, { show: (words) => setFailure(words) });
           } else {
             // No answer came back, so say so instead of "Loading..."
             // forever (issue #115).
             handleAxiosError(error, { silent: true });
-            setErrored(true);
+            setFailure(
+              "Could not load this page. Check your connection and try again.",
+            );
           }
         });
 
@@ -112,12 +124,8 @@ function ResidentsPasswordNew() {
           </button>
         </form>
       )}
-      {!ready && !errored && <h3>Loading...</h3>}
-      {errored && (
-        <h3 className="text-warning">
-          Could not load this page. Check your connection and try again.
-        </h3>
-      )}
+      {!ready && !failure && <h3>Loading...</h3>}
+      {failure && <h3 className="text-warning">{failure}</h3>}
     </div>
   );
 }

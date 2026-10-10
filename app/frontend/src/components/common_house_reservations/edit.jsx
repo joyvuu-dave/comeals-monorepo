@@ -15,7 +15,7 @@ import ModalFormHeader from "../modal_form/header";
 import FormMessages from "../modal_form/form_messages";
 import ModalFormFooter from "../modal_form/footer";
 import TimeSelect from "../modal_form/time_select";
-import { buildStartEndPayload, toTimeString } from "../modal_form/payload";
+import { buildStartEndPayload, storedTimes } from "../modal_form/payload";
 import useDeleteFlow from "../modal_form/use_delete_flow";
 
 dayjs.extend(utc);
@@ -66,14 +66,15 @@ const CommonHouseReservationsEdit = observer(
             var evt = response.data.event;
             var sd = toCommunityDayjs(evt.start_date);
             var ed = toCommunityDayjs(evt.end_date);
+            var times = storedTimes(sd, ed);
             // title is nullable in the database; a null value would make
             // the controlled input uncontrolled.
             var initial = {
               residentId: String(evt.resident_id),
               title: evt.title || "",
               day: sd.format("YYYY-MM-DD"),
-              startTime: toTimeString(sd),
-              endTime: toTimeString(ed),
+              startTime: times.startTime,
+              endTime: times.endTime,
             };
             initialRef.current = initial;
             setEvent(evt);
@@ -233,6 +234,7 @@ const CommonHouseReservationsEdit = observer(
               value={startTime}
               onChange={setStartTime}
               disabled={disabled}
+              storedTime={initial && initial.startTime}
             />
             <br />
 
@@ -242,6 +244,7 @@ const CommonHouseReservationsEdit = observer(
               value={endTime}
               onChange={setEndTime}
               disabled={disabled}
+              storedTime={initial && initial.endTime}
             />
             <br />
 

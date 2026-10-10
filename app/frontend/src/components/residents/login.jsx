@@ -7,6 +7,7 @@ import Modal from "react-modal";
 
 import { useStore } from "../../helpers/store_context";
 import handleAxiosError from "../../helpers/handle_axios_error";
+import watchDialogFocus from "../../helpers/watch_dialog_focus";
 import toastStore from "../../stores/toast_store";
 import { communityNow } from "../../helpers/helpers";
 import { RESET_PASSWORD_MODAL } from "../../routes";
@@ -244,6 +245,10 @@ const ResidentsLogin = observer(() => {
         isOpen={modalOpen}
         contentLabel="Login Modal"
         onRequestClose={handleCloseModal}
+        // The form disables its field and Submit while its request is
+        // out, which in Chrome moves focus to <body>, where Escape
+        // does nothing (#152).
+        contentRef={watchDialogFocus}
         style={{
           content: {
             backgroundColor: "var(--powder-blue)",

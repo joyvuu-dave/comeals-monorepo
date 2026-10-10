@@ -1,6 +1,6 @@
 import { makeAutoObservable, observable } from "mobx";
 
-export type ToastType = "success" | "info" | "warning" | "error";
+export type ToastType = "success" | "info" | "error";
 
 export interface Toast {
   // Never used twice, so the id of a message that is gone matches none
@@ -15,7 +15,6 @@ export interface Toast {
 const SHOWN_FOR_MS: Record<Exclude<ToastType, "error">, number> = {
   success: 5000,
   info: 5000,
-  warning: 8000,
 };
 
 // How many messages show at once. Past this, a line under the stack

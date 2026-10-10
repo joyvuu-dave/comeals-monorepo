@@ -29,8 +29,7 @@ export default function handleAxiosError(error, options) {
         console.error(data.message);
         return null;
       }
-      var toastType = data.type === "warning" ? "warning" : "error";
-      return show(data.message, toastType);
+      return show(data.message, "error");
     } else {
       console.error("Bad response from server", error);
       if (silent) return null;

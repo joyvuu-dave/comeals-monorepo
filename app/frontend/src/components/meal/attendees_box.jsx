@@ -139,7 +139,11 @@ export const AttendeeComponent = observer(({ resident }) => {
             id={`veg_switch_${resident.id}`}
             type="checkbox"
             className="switch"
-            checked={resident.vegetarian}
+            // Only what is saved: someone not signed up has nothing
+            // saved, so the switch is off even when their profile says
+            // vegetarian, the way Late is off. A tap signs them up as a
+            // vegetarian (toggleVeg).
+            checked={resident.attending && resident.vegetarian}
             onChange={() => resident.toggleVeg()}
             disabled={
               meal.reconciled ||

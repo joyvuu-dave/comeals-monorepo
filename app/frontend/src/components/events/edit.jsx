@@ -14,7 +14,7 @@ import ModalFormHeader from "../modal_form/header";
 import FormMessages from "../modal_form/form_messages";
 import ModalFormFooter from "../modal_form/footer";
 import TimeSelect from "../modal_form/time_select";
-import { buildStartEndPayload, toTimeString } from "../modal_form/payload";
+import { buildStartEndPayload, storedTimes } from "../modal_form/payload";
 import useDeleteFlow from "../modal_form/use_delete_flow";
 
 dayjs.extend(utc);
@@ -57,14 +57,21 @@ function EventsEdit({ eventId, handleCloseModal, setDirty }) {
           var evt = response.data;
           var sd = toCommunityDayjs(evt.start_date);
           var ed = evt.end_date ? toCommunityDayjs(evt.end_date) : null;
+          // An all-day event is saved from midnight with no end. It has
+          // no times, so both menus are empty, the way the All Day box
+          // leaves them: turning All Day off then shows what the form
+          // will send.
+          var times = evt.allday
+            ? { startTime: "", endTime: "" }
+            : storedTimes(sd, ed);
           // title and description are NOT NULL columns (description
           // defaults to ""), so both are always strings.
           var initial = {
             title: evt.title,
             description: evt.description,
             day: sd.format("YYYY-MM-DD"),
-            startTime: toTimeString(sd),
-            endTime: ed ? toTimeString(ed) : "",
+            startTime: times.startTime,
+            endTime: times.endTime,
             allDay: Boolean(evt.allday),
           };
           initialRef.current = initial;
@@ -205,6 +212,7 @@ function EventsEdit({ eventId, handleCloseModal, setDirty }) {
             value={startTime}
             onChange={setStartTime}
             disabled={disabled || allDay}
+            storedTime={initial && initial.startTime}
           />
           <br />
           <TimeSelect
@@ -213,6 +221,7 @@ function EventsEdit({ eventId, handleCloseModal, setDirty }) {
             value={endTime}
             onChange={setEndTime}
             disabled={disabled || allDay}
+            storedTime={initial && initial.endTime}
           />
           <br />
           <label htmlFor="event-edit-all-day">All Day</label>

@@ -1,4 +1,4 @@
-const { test, expect } = require("../helpers/test");
+const { test, expect, httpFailurePattern } = require("../helpers/test");
 const { stubPusher, disableIdleTimer, mockApi } = require("../helpers/setup");
 
 test.describe("Password Reset", () => {
@@ -127,5 +127,36 @@ test.describe("Password Reset", () => {
     await expect(toast.locator(".toast__message")).toHaveText(
       "Password updated!",
     );
+  });
+
+  // #152. While the request is out, the form disables its field and
+  // Submit. Chrome moves focus off a control that turns disabled, to
+  // <body>, and react-modal listens for Escape only on the dialog, so
+  // Escape did nothing after a refused password. WebKit does not focus
+  // a button on a click, so it worked there.
+  test.describe("refused", () => {
+    test.use({ allowedConsoleErrors: httpFailurePattern });
+
+    test("Escape closes the reset dialog after its Submit is refused", async ({
+      page,
+    }) => {
+      await page.route("**/api/v1/residents/password-reset/*", (route) =>
+        route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({ message: "Password is too short" }),
+        }),
+      );
+      await page.goto("/reset-password/test-reset-token/");
+      const modal = page.locator(".ReactModal__Content--after-open");
+      await modal.locator('input[type="password"]').fill("x");
+      await modal.getByRole("button", { name: "Submit" }).click();
+      await expect(modal.locator(".form-message__text")).toHaveText(
+        "Password is too short",
+      );
+
+      await page.keyboard.press("Escape");
+      await expect(modal).toHaveCount(0);
+    });
   });
 });

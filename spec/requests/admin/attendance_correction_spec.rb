@@ -34,11 +34,11 @@ RSpec.describe 'Admin attendance correction' do
       expect(row.multiplier).to eq(resident.multiplier_on(meal.date))
     end
 
-    # #140. The admin form sends only a resident. The row gets the values
-    # the meal page's switches show for someone who is not signed up:
+    # #140. The admin form sends only a resident. So the row gets what a
+    # tap on the resident's name on the meal page signs them up with:
     # vegetarian is the resident's own setting
-    # (MealFormSerializer#vegetarian), and late is false. Before the fix,
-    # vegetarian was always false.
+    # (MealFormSerializer#vegetarian), and late is false, the column's
+    # default. Before the fix, vegetarian was always false.
     it 'saves a vegetarian resident as vegetarian, and not late' do
       veg = create(:resident, community: community, unit: unit, vegetarian: true)
       meal = create(:meal, community: community)

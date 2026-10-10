@@ -67,7 +67,7 @@ describe("toastStore", () => {
     it("is never removed by newer messages", () => {
       toastStore.show("It failed.", "error");
       toastStore.show("One", "info");
-      toastStore.show("Two", "warning");
+      toastStore.show("Two", "success");
       toastStore.show("Three", "success");
       toastStore.show("Four", "info");
 
@@ -89,7 +89,6 @@ describe("toastStore", () => {
   it.each([
     { type: "success", ms: 5000 },
     { type: "info", ms: 5000 },
-    { type: "warning", ms: 8000 },
   ])("a $type message closes itself after $ms ms", ({ type, ms }) => {
     toastStore.show("Hello.", type);
 
@@ -103,12 +102,12 @@ describe("toastStore", () => {
   it("a message's timer removes only that message", () => {
     toastStore.show("It worked.", "info");
     vi.advanceTimersByTime(3000);
-    toastStore.show("Careful.", "warning");
+    toastStore.show("Saved.", "success");
 
     vi.advanceTimersByTime(2000);
-    expect(stack()).toEqual([["warning", "Careful."]]);
+    expect(stack()).toEqual([["success", "Saved."]]);
 
-    vi.advanceTimersByTime(6000);
+    vi.advanceTimersByTime(3000);
     expect(stack()).toEqual([]);
   });
 
@@ -153,9 +152,11 @@ describe("toastStore", () => {
       expect(vi.getTimerCount()).toBe(0);
     });
 
+    // "Saved." had 1 second left when the dialog opened, and gets its
+    // full 5 seconds again.
     it("each message that is not an error gets its full time again when the dialog closes", () => {
-      toastStore.show("Careful.", "warning");
-      vi.advanceTimersByTime(7000);
+      toastStore.show("Saved.", "success");
+      vi.advanceTimersByTime(4000);
       toastStore.setDialogOpen(true);
       toastStore.show("Cooks saved.", "info");
       toastStore.show("It failed.", "error");
@@ -166,16 +167,10 @@ describe("toastStore", () => {
       expect(stack()).toEqual([
         ["error", "It failed."],
         ["info", "Cooks saved."],
-        ["warning", "Careful."],
+        ["success", "Saved."],
       ]);
 
       vi.advanceTimersByTime(1);
-      expect(stack()).toEqual([
-        ["error", "It failed."],
-        ["warning", "Careful."],
-      ]);
-
-      vi.advanceTimersByTime(3000);
       expect(stack()).toEqual([["error", "It failed."]]);
       expect(vi.getTimerCount()).toBe(0);
     });
@@ -206,12 +201,12 @@ describe("toastStore", () => {
     it("drops the oldest message that is not an error first", () => {
       toastStore.show("Old info", "info");
       toastStore.show("Error A", "error");
-      toastStore.show("Newer warning", "warning");
+      toastStore.show("Newer success", "success");
       toastStore.show("Error B", "error");
 
       expect(stack()).toEqual([
         ["error", "Error B"],
-        ["warning", "Newer warning"],
+        ["success", "Newer success"],
         ["error", "Error A"],
       ]);
 
@@ -396,14 +391,14 @@ describe("toastStore", () => {
     it("keeps an error an error, with no timer", () => {
       toastStore.show("Careful.", "error");
 
-      toastStore.show("Careful.", "warning");
+      toastStore.show("Careful.", "info");
       vi.advanceTimersByTime(60000);
 
       expect(stack()).toEqual([["error", "Careful."]]);
     });
 
     it("makes a message an error when the new one is an error, and stops its timer", () => {
-      toastStore.show("Careful.", "warning");
+      toastStore.show("Careful.", "info");
 
       toastStore.show("Careful.", "error");
       vi.advanceTimersByTime(60000);
@@ -412,7 +407,7 @@ describe("toastStore", () => {
     });
 
     it("takes the new type when neither is an error", () => {
-      toastStore.show("Careful.", "warning");
+      toastStore.show("Careful.", "success");
 
       toastStore.show("Careful.", "info");
 
@@ -468,7 +463,7 @@ describe("toastStore", () => {
     });
 
     it("stops the old message's timer", () => {
-      const old = toastStore.show("Careful.", "warning");
+      const old = toastStore.show("Careful.", "info");
 
       toastStore.replace(old, "It failed.", "error");
 
@@ -483,19 +478,16 @@ describe("toastStore", () => {
       expect(toastStore.newestNotError).toBeNull();
     });
 
-    it.each(["success", "info", "warning"])(
-      "is the newest %s message",
-      (type) => {
-        toastStore.show("Older.", "info");
-        const id = toastStore.show("Hello.", type);
+    it.each(["success", "info"])("is the newest %s message", (type) => {
+      toastStore.show("Older.", "info");
+      const id = toastStore.show("Hello.", type);
 
-        expect(toastStore.newestNotError).toEqual({
-          id,
-          message: "Hello.",
-          type,
-        });
-      },
-    );
+      expect(toastStore.newestNotError).toEqual({
+        id,
+        message: "Hello.",
+        type,
+      });
+    });
 
     it("stays the newest message that is not an error when an error comes after it", () => {
       const id = toastStore.show("Cooks saved.", "info");
@@ -513,7 +505,7 @@ describe("toastStore", () => {
     // An older message that is still there was said when it came, so
     // it is not said again when the newer one goes.
     it("is null once that message is gone, even when an older one is still there", () => {
-      toastStore.show("Older.", "warning");
+      toastStore.show("Older.", "success");
       const id = toastStore.show("Newer.", "info");
 
       toastStore.remove(id);
@@ -523,7 +515,7 @@ describe("toastStore", () => {
     });
 
     it("is null once the same words came again as an error", () => {
-      toastStore.show("Careful.", "warning");
+      toastStore.show("Careful.", "info");
 
       toastStore.show("Careful.", "error");
 

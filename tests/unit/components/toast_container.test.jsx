@@ -146,7 +146,7 @@ describe("ToastContainer", () => {
   // the page with its words already in it, so the words go into the
   // region that was there all along. The message on screen has no role
   // of its own, or a screen reader that does say it would say it twice.
-  it.each(["success", "info", "warning"])(
+  it.each(["success", "info"])(
     "says a %s message through the polite region",
     (type) => {
       render(<ToastContainer />);
@@ -167,7 +167,7 @@ describe("ToastContainer", () => {
     render(<ToastContainer />);
     act(() => {
       toastStore.show("Older.", "info");
-      toastStore.show("Newer.", "warning");
+      toastStore.show("Newer.", "success");
       toastStore.show("It failed.", "error");
     });
 
@@ -178,13 +178,11 @@ describe("ToastContainer", () => {
   it("the polite region empties when its message goes", () => {
     render(<ToastContainer />);
     act(() => {
-      toastStore.show("Older.", "warning");
+      toastStore.show("Older.", "success");
       toastStore.show("Newer.", "info");
     });
 
-    act(() => {
-      vi.advanceTimersByTime(5000);
-    });
+    fireEvent.click(screen.getAllByRole("button", { name: "Dismiss" })[0]);
 
     expect(wordsOnScreen()).toEqual(["Older."]);
     expect(politeRegion()).toBeEmptyDOMElement();

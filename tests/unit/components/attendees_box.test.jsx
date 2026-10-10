@@ -461,7 +461,11 @@ describe("AttendeesBox", () => {
     expect(
       screen.getByLabelText("Toggle Late for Jane Smith"),
     ).not.toBeChecked();
-    expect(screen.getByLabelText("Toggle Veg for Bob Johnson")).toBeChecked();
+    // Bob's profile says vegetarian, but he is not signed up, so nothing
+    // is saved for him: his Veg switch is off, like his Late switch.
+    expect(
+      screen.getByLabelText("Toggle Veg for Bob Johnson"),
+    ).not.toBeChecked();
 
     // Jane's one meat guest: a cow badge in her row.
     const janeRow = screen
@@ -670,6 +674,34 @@ describe("AttendeesBox", () => {
       .getByRole("cell", { name: "Bob Johnson" })
       .closest("tr");
     expect(bobRow.querySelector('img[alt="carrot-icon"]')).toBeInTheDocument();
+  });
+
+  // A switch shows what is saved, and a tap turns it to the other
+  // value. Bob is a vegetarian who is not signed up, so his Veg switch
+  // is off, and a tap signs him up as a vegetarian.
+  it("a Veg tap by a vegetarian who is not signed up signs him up as a vegetarian", async () => {
+    const store = defaultStore();
+    axios.mockResolvedValueOnce(mealResidentAnswer(2));
+    renderBox(store);
+    const veg = screen.getByLabelText("Toggle Veg for Bob Johnson");
+    expect(veg).not.toBeChecked();
+
+    fireEvent.click(veg);
+
+    expect(veg).toBeChecked();
+    expect(axios).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "post",
+        url: "/api/v1/meals/1/residents/2",
+        data: expect.objectContaining({ vegetarian: true }),
+      }),
+    );
+    await vi.waitFor(() => {
+      expect(store.residents.get("2").attending_at).toEqual(
+        new Date("2026-01-14T13:00:00Z"),
+      );
+    });
+    expect(veg).toBeChecked();
   });
 
   it("the switches and the remove button reach the store", async () => {

@@ -22,12 +22,16 @@ describe("handleAxiosError", () => {
       expect(toastsOnScreen()).toEqual([["No.", "error"]]);
     });
 
-    it("shows a warning as a warning", () => {
+    // An answer with an error status is an error, whatever its body
+    // says. The one answer the server marks "warning", the bills write's
+    // third-cook advice, never comes here: billsSaveFailed shows it
+    // itself (data_store_bills.ts).
+    it("shows an answer marked as a warning as an error too", () => {
       handleAxiosError({
         response: { data: { message: "Careful.", type: "warning" } },
       });
 
-      expect(toastsOnScreen()).toEqual([["Careful.", "warning"]]);
+      expect(toastsOnScreen()).toEqual([["Careful.", "error"]]);
     });
 
     it("logs instead of showing when silent", () => {
@@ -162,10 +166,10 @@ describe("handleAxiosError", () => {
       "error",
     ],
     [
-      "a warning",
+      "an answer marked as a warning",
       { response: { data: { message: "Careful.", type: "warning" } } },
       "Careful.",
-      "warning",
+      "error",
     ],
     [
       "a response with no message",
