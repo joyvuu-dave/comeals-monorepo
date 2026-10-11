@@ -41,6 +41,8 @@ const NOT_FOUND = {
 function makeStore() {
   return observable(
     {
+      // The day picker marks the community's today.
+      communityToday: "2026-01-15",
       hosts: [
         { id: 1, name: "Jane Smith", unitName: "A1" },
         { id: 2, name: "Bob Johnson", unitName: "B2" },
@@ -161,7 +163,7 @@ describe("CommonHouseReservationsEdit", () => {
     // The cached month the booking was in is stale now (issue #37).
     expect(store.invalidateMonthForDate.mock.calls).toEqual([
       [RESERVATION.event.start_date],
-      [new Date(2026, 0, 22)],
+      ["2026-01-22"],
     ]);
   });
 
@@ -193,7 +195,7 @@ describe("CommonHouseReservationsEdit", () => {
     });
     expect(store.invalidateMonthForDate.mock.calls).toEqual([
       [RESERVATION.event.start_date],
-      [new Date(2026, 1, 3)],
+      ["2026-02-03"],
     ]);
   });
 

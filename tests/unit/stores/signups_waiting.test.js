@@ -111,7 +111,7 @@ function closedStore(alice = { attending: true }) {
       closed: true,
       closed_at: CLOSED_AT,
       extras: alice.attending ? 2 : 3,
-      date: new Date(2023, 5, 15),
+      date: "2023-06-15",
     },
     residents: [
       {
@@ -236,7 +236,7 @@ function rebuildRows(store) {
 // back as a new node.
 function leaveAndComeBack(store) {
   stage(store, () => {
-    store.meals.push({ id: 2, date: new Date(2023, 5, 16) });
+    store.meals.push({ id: 2, date: "2023-06-16" });
     store.meal = 2;
     store.meals.remove(store.meals.find((meal) => meal.id === 1));
     store.residents.clear();
@@ -246,7 +246,7 @@ function leaveAndComeBack(store) {
       closed: true,
       closed_at: CLOSED_AT,
       extras: 2,
-      date: new Date(2023, 5, 15),
+      date: "2023-06-15",
     });
     store.meal = 1;
   });

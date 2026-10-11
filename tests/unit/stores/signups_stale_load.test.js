@@ -108,7 +108,7 @@ async function settle() {
 
 function loaded() {
   const store = createDataStore({
-    mealProps: { id: 1, date: new Date(2023, 5, 15) },
+    mealProps: { id: 1, date: "2023-06-15" },
   });
   store.loadData(mealForm(), "server");
   window.Comeals.socketId = "test";

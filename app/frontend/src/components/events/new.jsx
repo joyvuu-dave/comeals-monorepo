@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useParams } from "react-router";
 import DayPickerInputWrapper from "../common/day_picker_input";
-import dayjs from "dayjs";
 import axios from "axios";
 import { useStore } from "../../helpers/store_context";
 import useFormMessages from "../../helpers/use_form_messages";
@@ -11,6 +10,7 @@ import ModalFormHeader from "../modal_form/header";
 import FormMessages from "../modal_form/form_messages";
 import TimeSelect from "../modal_form/time_select";
 import { buildStartEndPayload } from "../modal_form/payload";
+import { sixMonthsAfter } from "../modal_form/last_day";
 
 function EventsNew({ handleCloseModal, setDirty, setErrorShown }) {
   const store = useStore();
@@ -107,12 +107,8 @@ function EventsNew({ handleCloseModal, setDirty, setErrorShown }) {
               placeholder=""
               onDayChange={setDay}
               inputDisabled={loading}
-              defaultMonth={dayjs(params.date).toDate()}
-              disabledDays={[
-                {
-                  after: dayjs(params.date).add(6, "month").toDate(),
-                },
-              ]}
+              defaultMonth={params.date}
+              lastDay={sixMonthsAfter(params.date)}
             />
           </div>
           <br />

@@ -1,7 +1,6 @@
 import { useEffect, useRef } from "react";
 import { observer } from "mobx-react-lite";
 import { useNavigate } from "react-router";
-import dayjs from "dayjs";
 import { useStore } from "../../helpers/store_context";
 import { communityNow } from "../../helpers/helpers";
 import ButtonBar from "./button_bar";
@@ -61,12 +60,14 @@ const Header = observer(() => {
     };
   }, []);
 
-  // The day the Calendar button opens: the meal's day, or today while
-  // the meal loads. Today is the community's, not the device's: a click
-  // reads communityNow() (helpers.js).
+  // The day the Calendar button opens, "YYYY-MM-DD": the meal's day,
+  // or today while the meal loads. Today is the community's, not the
+  // device's: a click reads communityNow() (helpers.js).
   function calendarDay() {
-    if (store.mealLoading || !store.meal) return communityNow();
-    return dayjs(store.meal.date);
+    if (store.mealLoading || !store.meal) {
+      return communityNow().format("YYYY-MM-DD");
+    }
+    return store.meal.date;
   }
 
   return (
@@ -76,9 +77,7 @@ const Header = observer(() => {
       className="header background-yellow"
     >
       <button
-        onClick={() =>
-          navigate(`/calendar/all/${calendarDay().format("YYYY-MM-DD")}`)
-        }
+        onClick={() => navigate(`/calendar/all/${calendarDay()}`)}
         className="text-black button-link"
       >
         <h5>

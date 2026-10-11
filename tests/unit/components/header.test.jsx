@@ -19,7 +19,7 @@ function makeStore(overrides = {}) {
     {
       mealLoading: false,
       isOnline: true,
-      meal: { date: new Date(2026, 0, 15) },
+      meal: { date: "2026-01-15" },
       logout: vi.fn(),
       finishBillsSaves: vi.fn(() => Promise.resolve(true)),
       ...overrides,
@@ -141,7 +141,7 @@ describe("Header", () => {
       ["while the meal is loading", { mealLoading: true, meal: null }],
       [
         "while a meal is loading over the last one",
-        { mealLoading: true, meal: { date: new Date(2026, 0, 15) } },
+        { mealLoading: true, meal: { date: "2026-01-15" } },
       ],
       ["when there is no meal", { mealLoading: false, meal: null }],
     ])("Calendar goes to the community's today %s", (_label, state) => {

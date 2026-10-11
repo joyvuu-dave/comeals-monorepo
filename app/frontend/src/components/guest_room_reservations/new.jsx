@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router";
 import DayPickerInputWrapper from "../common/day_picker_input";
-import dayjs from "dayjs";
 import axios from "axios";
 import { observer } from "mobx-react-lite";
 import { useStore } from "../../helpers/store_context";
@@ -10,6 +9,7 @@ import useDirtyReport from "../../helpers/use_dirty_report";
 import useMountedRef from "../../helpers/use_mounted_ref";
 import ModalFormHeader from "../modal_form/header";
 import FormMessages from "../modal_form/form_messages";
+import { sixMonthsAfter } from "../modal_form/last_day";
 
 // No `ready` gate: render the full form from the first frame. The host
 // select is reactively bound to `store.hosts` (populated on mount via
@@ -42,7 +42,7 @@ const GuestRoomReservationsNew = observer(
       axios
         .post(`/api/v1/guest-room-reservations`, {
           resident_id: residentId,
-          date: day ? dayjs(day).format("YYYY-MM-DD") : null,
+          date: day,
         })
         .then(function () {
           if (!mountedRef.current) return;
@@ -114,12 +114,8 @@ const GuestRoomReservationsNew = observer(
                 placeholder=""
                 onDayChange={setDay}
                 inputDisabled={loading}
-                defaultMonth={dayjs(params.date).toDate()}
-                disabledDays={[
-                  {
-                    after: dayjs(params.date).add(6, "month").toDate(),
-                  },
-                ]}
+                defaultMonth={params.date}
+                lastDay={sixMonthsAfter(params.date)}
               />
             </div>
             <br />

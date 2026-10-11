@@ -67,7 +67,7 @@ function store() {
       closed: true,
       closed_at: new Date(2023, 0, 1).getTime(),
       extras: 3,
-      date: new Date(2023, 5, 15),
+      date: "2023-06-15",
     },
     residents: [
       {

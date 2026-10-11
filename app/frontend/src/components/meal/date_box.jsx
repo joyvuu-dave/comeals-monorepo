@@ -121,13 +121,19 @@ const DateBox = observer(() => {
     // Observable "today" from the store, not communityNow() — a
     // direct clock read is not observable, so the label would keep
     // saying "Today" after midnight on an idle tab (#36).
-    var today = dayjs(store.communityToday);
-    var days = dayjs(store.meal.date).diff(today, "day");
+    //
+    // Both days are "YYYY-MM-DD", read in UTC, where every day is 24
+    // hours long and starts at midnight. Read in the device's zone, a
+    // day whose midnight the device's clock skips starts at 01:00, so
+    // the next day was 23 hours later and counted as 0 days (#129).
+    var today = dayjs.utc(store.communityToday);
+    var meal = dayjs.utc(store.meal.date);
+    var days = meal.diff(today, "day");
 
     if (days === 0) return "Today";
     if (days === -1) return "Yesterday";
     if (days === 1) return "Tomorrow";
-    return dayjs(store.meal.date).from(today);
+    return meal.from(today);
   }
 
   function displayTopDate() {

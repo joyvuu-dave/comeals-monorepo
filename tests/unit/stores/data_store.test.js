@@ -485,10 +485,7 @@ describe("DataStore", () => {
       expect(store.meal.prevId).toBe(41);
       expect(store.meal.extras).toBeNull();
       expect(store.meal.closed_at).toBeNull();
-      const date = store.meal.date;
-      expect([date.getFullYear(), date.getMonth(), date.getDate()]).toEqual([
-        2026, 0, 15,
-      ]);
+      expect(store.meal.date).toBe("2026-01-15");
       expect(Array.from(store.residents.values()).map((r) => r.name)).toEqual([
         "A - Jane Smith",
         "B - Bob Johnson",
@@ -3999,7 +3996,13 @@ describe("DataStore", () => {
 
       store.loadMonth(data);
       const [meal, birthday] = store.calendarEvents;
-      const wallClock = (d) => [d.getDate(), d.getHours(), d.getMinutes()];
+      // The calendar's Dates carry the community's wall clock in their
+      // UTC fields (calendar/wall_clock_localizer.ts).
+      const wallClock = (d) => [
+        d.getUTCDate(),
+        d.getUTCHours(),
+        d.getUTCMinutes(),
+      ];
 
       expect(meal.title).toBe("Dinner");
       expect(wallClock(meal.start)).toEqual([15, 18, 30]);
@@ -4034,10 +4037,10 @@ describe("DataStore", () => {
 
       store.loadMonth(data);
       var event = store.calendarEvents[0];
-      expect(event.start.getDate()).toBe(15);
-      expect(event.start.getHours()).toBe(16);
-      expect(event.end.getDate()).toBe(15);
-      expect(event.end.getHours()).toBe(18);
+      expect(event.start.getUTCDate()).toBe(15);
+      expect(event.start.getUTCHours()).toBe(16);
+      expect(event.end.getUTCDate()).toBe(15);
+      expect(event.end.getUTCHours()).toBe(18);
     });
 
     it("converts UTC (Z) date strings to correct community-tz dates", () => {
@@ -4065,10 +4068,10 @@ describe("DataStore", () => {
 
       store.loadMonth(data);
       var event = store.calendarEvents[0];
-      expect(event.start.getDate()).toBe(15);
-      expect(event.start.getHours()).toBe(18);
-      expect(event.end.getDate()).toBe(15);
-      expect(event.end.getHours()).toBe(20);
+      expect(event.start.getUTCDate()).toBe(15);
+      expect(event.start.getUTCHours()).toBe(18);
+      expect(event.end.getUTCDate()).toBe(15);
+      expect(event.end.getUTCHours()).toBe(20);
     });
   });
 
@@ -4077,10 +4080,10 @@ describe("DataStore", () => {
   // beyond the current one and its neighbors have no Pusher channel to
   // evict their cache.
   describe("invalidateMonthForDate", () => {
-    it("evicts the month's cache entry for a picker Date", () => {
+    it("evicts the month's cache entry for a picker's day", () => {
       const store = createDataStore();
 
-      store.invalidateMonthForDate(new Date(2026, 8, 15)); // Sep 15, 2026
+      store.invalidateMonthForDate("2026-09-15");
 
       expect(idbKeyval.del).toHaveBeenCalledWith(
         "community-test-community-id-calendar-2026-9",

@@ -96,7 +96,7 @@ function writeToDisk(key, value) {
 }
 
 function keyForDate(date) {
-  var d = dayjs(date);
+  var d = dayjs.utc(date);
   return monthCache.keyFor(
     Cookie.get("community_id"),
     d.format("YYYY"),
@@ -137,7 +137,7 @@ export function invalidateAllMonths() {
 // revalidate would otherwise adopt that in-flight request and render
 // data read before the change. Then fetch.
 export function refetch(date, render) {
-  var d = dayjs(date);
+  var d = dayjs.utc(date);
   invalidateMonth(Cookie.get("community_id"), d.format("YYYY"), d.format("M"));
   revalidate(date, render);
 }
@@ -148,13 +148,13 @@ export function refetch(date, render) {
 // stale — and the person who just made the booking would see it
 // missing. The modal that made the change calls this with the
 // affected date(s); an edit that moves a date calls it for both the
-// old and the new month. Accepts what the modals hold: a picker Date
-// (already a community-day "fake local" Date) or a wire date string
-// (offset or naive), which resolves to the community month — the same
-// month the cache key uses.
+// old and the new month. Accepts what the modals hold: a picker's day
+// ("YYYY-MM-DD", the community's day) or a wire date string (offset or
+// naive), which resolves to the community month — the same month the
+// cache key uses.
 export function invalidateMonthForDate(date) {
   if (!date) return;
-  var d = date instanceof Date ? dayjs(date) : toCommunityDayjs(date);
+  var d = toCommunityDayjs(date);
   // A date we cannot read names no month to evict.
   if (!d.isValid()) return;
   invalidateMonth(Cookie.get("community_id"), d.format("YYYY"), d.format("M"));

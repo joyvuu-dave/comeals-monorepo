@@ -166,10 +166,10 @@ describe("DataStore: the community time zone", () => {
       await showJuly(store);
 
       const [meal] = store.calendarEvents;
-      expect(meal.start.getDate()).toBe(8);
-      expect(meal.start.getHours()).toBe(21);
-      expect(meal.end.getHours()).toBe(22);
-      expect(meal.end.getMinutes()).toBe(30);
+      expect(meal.start.getUTCDate()).toBe(8);
+      expect(meal.start.getUTCHours()).toBe(21);
+      expect(meal.end.getUTCHours()).toBe(22);
+      expect(meal.end.getUTCMinutes()).toBe(30);
     });
 
     it("moves the midnight timer to the new zone's midnight", async () => {
@@ -259,9 +259,9 @@ describe("DataStore: the community time zone", () => {
 
       expect(Cookie.get("timezone")).toBe("America/New_York");
       const [meal] = store.calendarEvents;
-      expect(meal.start.getDate()).toBe(8);
-      expect(meal.start.getHours()).toBe(21);
-      expect(meal.end.getHours()).toBe(22);
+      expect(meal.start.getUTCDate()).toBe(8);
+      expect(meal.start.getUTCHours()).toBe(21);
+      expect(meal.end.getUTCHours()).toBe(22);
     });
 
     // The answer that brings the new zone can come after the person
@@ -295,7 +295,7 @@ describe("DataStore: the community time zone", () => {
       await settle();
 
       expect(Cookie.get("timezone")).toBe("America/New_York");
-      expect(store.calendarEvents[0].start.getHours()).toBe(21);
+      expect(store.calendarEvents[0].start.getUTCHours()).toBe(21);
       expect(subscribe).not.toHaveBeenCalled();
       expect(axios.get).toHaveBeenCalledTimes(requests);
     });

@@ -60,7 +60,7 @@ let loadDataAsyncSpy;
 // the date box shows it (mealDayLabel).
 function aliceStore(row) {
   const store = createDataStore({
-    mealProps: { closed: false, date: new Date(2023, 5, 15) },
+    mealProps: { closed: false, date: "2023-06-15" },
     residents: [
       {
         id: 10,
@@ -106,7 +106,7 @@ function rebuildRows(store) {
 // The person went on to another meal while the request was out.
 function moveToAnotherMeal(store) {
   stage(store, () => {
-    store.meals.push({ id: 2, date: new Date(2023, 5, 16) });
+    store.meals.push({ id: 2, date: "2023-06-16" });
     store.meal = 2;
     store.residents.clear();
     store.guests.clear();

@@ -15,6 +15,8 @@ import EventsNew from "../../../app/frontend/src/components/events/new.jsx";
 function makeStore() {
   return observable(
     {
+      // The day picker marks the community's today.
+      communityToday: "2026-01-15",
       invalidateMonthForDate: vi.fn(),
     },
     { invalidateMonthForDate: false },
@@ -118,9 +120,7 @@ describe("EventsNew", () => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);
     });
     expect(store.invalidateMonthForDate).toHaveBeenCalledTimes(1);
-    expect(store.invalidateMonthForDate).toHaveBeenCalledWith(
-      new Date(2026, 2, 20),
-    );
+    expect(store.invalidateMonthForDate).toHaveBeenCalledWith("2026-03-20");
   });
 
   // The picker offers days up to six months after the calendar's day

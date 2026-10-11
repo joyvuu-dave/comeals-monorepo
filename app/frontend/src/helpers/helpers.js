@@ -137,11 +137,13 @@ export function communityNow() {
 }
 
 // A meal's day the way the date box on the meal page shows it, for
-// example "Tue, Oct 6th". loadData builds a meal's date as a local Date
-// whose year, month and day are the community's day, so it is read here
-// as a local date.
-export function mealDayLabel(date) {
-  return dayjs(date).format("ddd, MMM Do");
+// example "Tue, Oct 6th". `day` is the community's day, "YYYY-MM-DD"
+// (a meal's date in the store). It is read in UTC, which has no
+// daylight saving time, so no day loses its midnight. Read in the
+// device's zone, a day whose midnight the device's clock skips starts
+// at 01:00 (#129).
+export function mealDayLabel(day) {
+  return dayjs.utc(day).format("ddd, MMM Do");
 }
 
 // The value space is a compile-time constant (~56 15-minute slots, 8am–10pm),

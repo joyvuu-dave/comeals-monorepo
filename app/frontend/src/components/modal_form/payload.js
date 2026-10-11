@@ -1,12 +1,16 @@
 // The wire format the events and common-house endpoints expect for a
 // start/end pair: the day split into calendar parts plus "HH:MM" times
-// split into hours and minutes. `day` is a Date or null; times are
-// "HH:MM" strings or "".
+// split into hours and minutes. The server makes the instant from these
+// fields in the community's zone. `day` is the community's day,
+// "YYYY-MM-DD", or null; times are "HH:MM" strings or "".
 export function buildStartEndPayload(day, startTime, endTime) {
+  var [year, month, date] = day
+    ? day.split("-").map(Number)
+    : [null, null, null];
   return {
-    start_year: day && day.getFullYear(),
-    start_month: day && day.getMonth() + 1,
-    start_day: day && day.getDate(),
+    start_year: year,
+    start_month: month,
+    start_day: date,
     start_hours: startTime && startTime.split(":")[0],
     start_minutes: startTime && startTime.split(":")[1],
     end_hours: endTime && endTime.split(":")[0],

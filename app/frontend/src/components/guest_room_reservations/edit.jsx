@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import DayPickerInputWrapper from "../common/day_picker_input";
-import dayjs from "dayjs";
 import axios from "axios";
 import { observer } from "mobx-react-lite";
 import { useStore } from "../../helpers/store_context";
@@ -11,6 +10,7 @@ import useMountedRef from "../../helpers/use_mounted_ref";
 import ModalFormHeader from "../modal_form/header";
 import FormMessages from "../modal_form/form_messages";
 import ModalFormFooter from "../modal_form/footer";
+import { sixMonthsAfter } from "../modal_form/last_day";
 import useDeleteFlow from "../modal_form/use_delete_flow";
 
 // Render the full form from the first frame; the per-event fetch hydrates
@@ -58,15 +58,16 @@ const GuestRoomReservationsEdit = observer(
           .then(function (response) {
             if (!mountedRef.current) return;
             var evt = response.data.event;
-            var d = dayjs(evt.date);
+            // The reservation's day, "YYYY-MM-DD", as the server sends
+            // it.
             initialRef.current = {
               residentId: String(evt.resident_id),
-              day: d.format("YYYY-MM-DD"),
+              day: evt.date,
             };
             setEvent(evt);
             setLoaded(true);
             setResidentId(evt.resident_id);
-            setDay(new Date(d.year(), d.month(), d.date()));
+            setDay(evt.date);
           })
           .catch(function (error) {
             if (!mountedRef.current) return;
@@ -86,7 +87,7 @@ const GuestRoomReservationsEdit = observer(
           resident_id: residentId,
           // Submit is disabled until the fetch has set the day, and the
           // picker never clears it, so there is always a day here.
-          date: dayjs(day).format("YYYY-MM-DD"),
+          date: day,
         })
         .then(function () {
           if (!mountedRef.current) return;
@@ -137,8 +138,7 @@ const GuestRoomReservationsEdit = observer(
     useDirtyReport(
       setDirty,
       initial !== null &&
-        (String(residentId) !== initial.residentId ||
-          dayjs(day).format("YYYY-MM-DD") !== initial.day),
+        (String(residentId) !== initial.residentId || day !== initial.day),
     );
 
     return (
@@ -185,15 +185,7 @@ const GuestRoomReservationsEdit = observer(
                 value={day}
                 onDayChange={setDay}
                 inputDisabled={disabled}
-                disabledDays={
-                  event.date
-                    ? [
-                        {
-                          after: dayjs(event.date).add(6, "month").toDate(),
-                        },
-                      ]
-                    : []
-                }
+                lastDay={initial ? sixMonthsAfter(initial.day) : undefined}
               />
             </div>
             <br />

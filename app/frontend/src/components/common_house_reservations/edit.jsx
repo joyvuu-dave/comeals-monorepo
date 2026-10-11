@@ -1,8 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import DayPickerInputWrapper from "../common/day_picker_input";
-import dayjs from "dayjs";
-import utc from "dayjs/plugin/utc";
-import timezone from "dayjs/plugin/timezone";
 import axios from "axios";
 import { toCommunityDayjs } from "../../helpers/helpers";
 import useFormMessages from "../../helpers/use_form_messages";
@@ -16,10 +13,8 @@ import FormMessages from "../modal_form/form_messages";
 import ModalFormFooter from "../modal_form/footer";
 import TimeSelect from "../modal_form/time_select";
 import { buildStartEndPayload, storedTimes } from "../modal_form/payload";
+import { sixMonthsAfter } from "../modal_form/last_day";
 import useDeleteFlow from "../modal_form/use_delete_flow";
-
-dayjs.extend(utc);
-dayjs.extend(timezone);
 
 // Render the full form from the first frame; the per-event fetch hydrates
 // the inputs when it returns. The resident select is reactively bound to
@@ -81,7 +76,7 @@ const CommonHouseReservationsEdit = observer(
             setLoaded(true);
             setResidentId(evt.resident_id);
             setTitle(initial.title);
-            setDay(new Date(sd.year(), sd.month(), sd.date()));
+            setDay(initial.day);
             setStartTime(initial.startTime);
             setEndTime(initial.endTime);
           })
@@ -151,7 +146,7 @@ const CommonHouseReservationsEdit = observer(
       initial !== null &&
         (String(residentId) !== initial.residentId ||
           title !== initial.title ||
-          dayjs(day).format("YYYY-MM-DD") !== initial.day ||
+          day !== initial.day ||
           startTime !== initial.startTime ||
           endTime !== initial.endTime),
     );
@@ -212,17 +207,7 @@ const CommonHouseReservationsEdit = observer(
                 value={day}
                 onDayChange={setDay}
                 inputDisabled={disabled}
-                disabledDays={
-                  event.start_date
-                    ? [
-                        {
-                          after: dayjs(event.start_date)
-                            .add(6, "month")
-                            .toDate(),
-                        },
-                      ]
-                    : []
-                }
+                lastDay={initial ? sixMonthsAfter(initial.day) : undefined}
               />
             </div>
             <br />

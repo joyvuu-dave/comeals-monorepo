@@ -42,7 +42,10 @@ const Meal = types
     extrasPending: false,
     closed: false,
     closed_at: types.maybeNull(types.Date),
-    date: types.maybeNull(types.Date),
+    // The meal's day in the community, "YYYY-MM-DD", like
+    // communityToday. A day, not a Date: a Date is an instant, and its
+    // day depends on the zone it is read in (#129).
+    date: types.maybeNull(types.string),
     reconciled: false,
     nextId: types.maybeNull(types.number),
     prevId: types.maybeNull(types.number),

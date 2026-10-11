@@ -28,7 +28,7 @@ export function calendarActions(self) {
   function isOnScreen(name) {
     return (
       name ===
-      monthChannelName(Cookie.get("community_id"), dayjs(self.currentDate))
+      monthChannelName(Cookie.get("community_id"), dayjs.utc(self.currentDate))
     );
   }
 
@@ -128,7 +128,7 @@ export function calendarActions(self) {
       self.ensureResidentsChannel();
 
       // Prefetch adjacent months for instant navigation
-      var current = dayjs(self.currentDate);
+      var current = dayjs.utc(self.currentDate);
       monthData.prefetchMonth(
         current.subtract(1, "month").format("YYYY-MM-DD"),
       );
@@ -141,31 +141,20 @@ export function calendarActions(self) {
       // observable in one shot for a single MobX notification.
       var allEvents = [];
 
-      // Convert event start/end strings to native Date objects.
-      // react-big-calendar requires native Dates for its date arithmetic.
-      // toCommunityDayjs handles both offset and naive strings correctly.
+      // Turn each start and end string into a Date for
+      // react-big-calendar: a wall-clock Date, whose UTC fields are the
+      // community's wall clock (calendar/wall_clock_localizer.ts). Not
+      // a Date in the device's zone: a time the device's clock skips
+      // cannot be one, and was drawn an hour late (#129).
+      // toCommunityDayjs reads strings with and without an offset.
       function convertEvents(events) {
         events.forEach(function (event) {
           var converted = Object.assign({}, event);
           if (converted.start) {
-            var s = toCommunityDayjs(converted.start);
-            converted.start = new Date(
-              s.year(),
-              s.month(),
-              s.date(),
-              s.hour(),
-              s.minute(),
-            );
+            converted.start = toCommunityDayjs(converted.start).toDate();
           }
           if (converted.end) {
-            var e = toCommunityDayjs(converted.end);
-            converted.end = new Date(
-              e.year(),
-              e.month(),
-              e.date(),
-              e.hour(),
-              e.minute(),
-            );
+            converted.end = toCommunityDayjs(converted.end).toDate();
           }
           allEvents.push(converted);
         });
@@ -219,7 +208,7 @@ export function calendarActions(self) {
     watchMonthChannels() {
       var communityId = sessionCommunityId();
       if (communityId === null) return;
-      var current = dayjs(self.currentDate);
+      var current = dayjs.utc(self.currentDate);
       var open = new Map();
       [window.Comeals.calendarChannel]
         .concat(self.adjacentChannels)

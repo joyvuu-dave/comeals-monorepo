@@ -12,7 +12,6 @@ app/frontend/src/components/app/version_banner.jsx
 app/frontend/src/components/calendar/show.jsx
 app/frontend/src/components/calendar/side_bar.jsx
 app/frontend/src/components/calendar/webcal_links.jsx
-app/frontend/src/components/common/day_picker_input.jsx
 app/frontend/src/components/common_house_reservations/edit.jsx
 app/frontend/src/components/common_house_reservations/new.jsx
 app/frontend/src/components/confirm_bar.jsx

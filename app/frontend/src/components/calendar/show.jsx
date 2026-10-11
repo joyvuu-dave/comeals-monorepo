@@ -28,9 +28,8 @@ import ConfirmModal from "../app/confirm_modal";
 import watchDialogFocus from "../../helpers/watch_dialog_focus";
 
 import WebcalLinks from "./webcal_links";
-import { Calendar, dateFnsLocalizer } from "react-big-calendar";
-import { format, parse, startOfWeek, getDay } from "date-fns";
-import { enUS } from "date-fns/locale";
+import { Calendar, DateLocalizer } from "react-big-calendar";
+import { wallClockLocalizer } from "./wall_clock_localizer";
 
 import Icon from "../icon";
 
@@ -59,13 +58,11 @@ function eventTextColor(hex) {
   return luminance > 0.179 ? "#000" : "#fff";
 }
 
-const localizer = dateFnsLocalizer({
-  format,
-  parse,
-  startOfWeek,
-  getDay,
-  locales: { "en-US": enUS },
-});
+// Every Date the calendar gets is a wall-clock Date: its UTC fields are
+// the community's wall clock (wall_clock_localizer.ts, #129). The
+// events come that way from the store (drawEvents); the dates made
+// here use dayjs.utc and communityNow().
+const localizer = new DateLocalizer(wallClockLocalizer);
 
 // The form each modal URL opens: /calendar/:type/:date/:modal/:view/:id.
 // The sidebar links and the event urls the server sends both spell the
@@ -98,18 +95,12 @@ const VIEWS = ["month"];
 // actually bites.
 const MemoCalendar = memo(Calendar);
 
-// Click-time and getNow-time reads only. Render-time "today" must come
-// from store.communityToday instead — this function is not observable,
-// so a render that reads it directly goes stale after midnight (#36).
+// The calendar's "now", as a wall-clock Date. getNow-time reads only.
+// Render-time "today" must come from store.communityToday instead —
+// this function is not observable, so a render that reads it directly
+// goes stale after midnight (#36).
 function getCommunityNow() {
-  var now = communityNow();
-  return new Date(
-    now.year(),
-    now.month(),
-    now.date(),
-    now.hour(),
-    now.minute(),
-  );
+  return communityNow().toDate();
 }
 
 const styles = {
@@ -151,7 +142,7 @@ const MonthNavHeader = memo(function MonthNavHeader({
 }) {
   return (
     <div style={styles.main}>
-      <h2 style={styles.month}>{dayjs(dateStr).format("MMMM YYYY")}</h2>
+      <h2 style={styles.month}>{dayjs.utc(dateStr).format("MMMM YYYY")}</h2>
       <span style={styles.main}>
         <button className="mar-sm press" onClick={onToday}>
           today
@@ -372,7 +363,7 @@ const MainCalendar = observer(() => {
   // skips it; events clear is deferred to the nested rAF in the
   // route-change effect.
   const handleNavigate = useCallback(function (event) {
-    var newDate = dayjs(event).format("YYYY-MM-DD");
+    var newDate = dayjs.utc(event).format("YYYY-MM-DD");
     if (newDate !== paramsRef.current.date) {
       navigateRef.current(`/calendar/${paramsRef.current.type}/${newDate}`);
     }
@@ -380,7 +371,8 @@ const MainCalendar = observer(() => {
 
   const handlePrev = useCallback(function () {
     mark("click");
-    var newDate = dayjs(paramsRef.current.date)
+    var newDate = dayjs
+      .utc(paramsRef.current.date)
       .subtract(1, "month")
       .format("YYYY-MM-DD");
     navigateRef.current(`/calendar/${paramsRef.current.type}/${newDate}`);
@@ -388,7 +380,8 @@ const MainCalendar = observer(() => {
 
   const handleNext = useCallback(function () {
     mark("click");
-    var newDate = dayjs(paramsRef.current.date)
+    var newDate = dayjs
+      .utc(paramsRef.current.date)
       .add(1, "month")
       .format("YYYY-MM-DD");
     navigateRef.current(`/calendar/${paramsRef.current.type}/${newDate}`);
@@ -396,7 +389,7 @@ const MainCalendar = observer(() => {
 
   const handleToday = useCallback(function () {
     mark("click");
-    var newDate = dayjs(getCommunityNow()).format("YYYY-MM-DD");
+    var newDate = communityNow().format("YYYY-MM-DD");
     if (newDate !== paramsRef.current.date) {
       navigateRef.current(`/calendar/${paramsRef.current.type}/${newDate}`);
     }
@@ -435,7 +428,7 @@ const MainCalendar = observer(() => {
     var cache = dateCacheRef.current;
     if (cache.str !== calendarDate) {
       cache.str = calendarDate;
-      cache.date = dayjs(calendarDate).toDate();
+      cache.date = dayjs.utc(calendarDate).toDate();
     }
     return cache.date;
   }
@@ -465,11 +458,13 @@ const MainCalendar = observer(() => {
   // rollover, so an idle tab repaints when the day changes. Also
   // the "today" boundary for formatEvent's past-event dimming.
   var communityToday = store.communityToday;
-  todayStartRef.current = dayjs(communityToday).toDate();
+  todayStartRef.current = dayjs.utc(communityToday).toDate();
   return (
     <div className="offwhite">
       <header className="header flex space-between">
-        <h5 className="pad-xs">{dayjs(communityToday).format("ddd MMM Do")}</h5>
+        <h5 className="pad-xs">
+          {dayjs.utc(communityToday).format("ddd MMM Do")}
+        </h5>
         {store.isOnline ? (
           <span className="online">ONLINE</span>
         ) : (

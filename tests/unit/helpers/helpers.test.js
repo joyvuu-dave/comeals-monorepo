@@ -376,10 +376,25 @@ describe("communityNow", () => {
 // message about a bills save for a meal the person has left (#107).
 describe("mealDayLabel", () => {
   it("shows the weekday, the month, and the day with its ending", () => {
-    expect(mealDayLabel(new Date(2026, 9, 6))).toBe("Tue, Oct 6th");
-    expect(mealDayLabel(new Date(2026, 9, 1))).toBe("Thu, Oct 1st");
-    expect(mealDayLabel(new Date(2026, 9, 22))).toBe("Thu, Oct 22nd");
+    expect(mealDayLabel("2026-10-06")).toBe("Tue, Oct 6th");
+    expect(mealDayLabel("2026-10-01")).toBe("Thu, Oct 1st");
+    expect(mealDayLabel("2026-10-22")).toBe("Thu, Oct 22nd");
   });
+
+  // Havana's clocks skip from midnight to 01:00 on Sunday, Mar 8, 2026,
+  // and Tokyo's midnight is the day before in UTC. Neither moves the
+  // day (#129).
+  describe.each(["America/Havana", "Asia/Tokyo", "Pacific/Honolulu"])(
+    "on a device in %s",
+    (deviceZone) => {
+      useDeviceZone(deviceZone);
+
+      it("shows the day it is given", () => {
+        expect(mealDayLabel("2026-03-08")).toBe("Sun, Mar 8th");
+        expect(mealDayLabel("2026-03-09")).toBe("Mon, Mar 9th");
+      });
+    },
+  );
 });
 
 // "Now" must read the community's clock on every device. A device-local

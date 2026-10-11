@@ -23,13 +23,16 @@ vi.mock("../../../app/frontend/src/components/history/show.jsx", () => ({
 
 import dayjs from "dayjs";
 import advancedFormat from "dayjs/plugin/advancedFormat";
+import relativeTime from "dayjs/plugin/relativeTime";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
 import { MEAL_EDIT_PATH } from "../../../app/frontend/src/routes.js";
 import DateBox from "../../../app/frontend/src/components/meal/date_box.jsx";
+import { useDeviceZone } from "../helpers/device_zone.js";
 
-// index.jsx registers this plugin at app startup; the "Do" ordinal in
-// the top date needs it.
+// index.jsx registers these plugins at app startup. The "Do" ordinal in
+// the top date needs one, and "in 2 days" the other.
 dayjs.extend(advancedFormat);
+dayjs.extend(relativeTime);
 
 // The spy annotations stop MobX from wrapping them in actions, which
 // would hide them from toHaveBeenCalled.
@@ -40,7 +43,7 @@ function makeStore(overrides = {}) {
       communityToday: "2026-01-15",
       meal: {
         id: 42,
-        date: new Date(2026, 0, 15),
+        date: "2026-01-15",
         prevId: 41,
         nextId: 43,
         closed: false,
@@ -202,15 +205,36 @@ describe("DateBox", () => {
 
   it("says Yesterday and Tomorrow for the neighbor days", () => {
     const yesterday = makeStore();
-    yesterday.meal.date = new Date(2026, 0, 14);
+    yesterday.meal.date = "2026-01-14";
     const { unmount } = renderBox(yesterday);
     expect(screen.getByText("Yesterday")).toBeInTheDocument();
     unmount();
 
     const tomorrow = makeStore();
-    tomorrow.meal.date = new Date(2026, 0, 16);
+    tomorrow.meal.date = "2026-01-16";
     renderBox(tomorrow);
     expect(screen.getByText("Tomorrow")).toBeInTheDocument();
+  });
+
+  // Havana's clocks skip from midnight to 01:00 on Sunday, Mar 8, 2026.
+  // Read in the device's zone, that Sunday started at 01:00 and Monday
+  // at midnight, 23 hours later, which counted as 0 days: Monday's meal
+  // said "Today", and Tuesday's "Tomorrow" (#129).
+  describe("on a device in Havana, on Sunday, Mar 8, 2026", () => {
+    useDeviceZone("America/Havana");
+
+    it.each([
+      ["2026-03-07", "Sat, Mar 7th", "Yesterday"],
+      ["2026-03-08", "Sun, Mar 8th", "Today"],
+      ["2026-03-09", "Mon, Mar 9th", "Tomorrow"],
+      ["2026-03-10", "Tue, Mar 10th", "in 2 days"],
+    ])("shows the meal on %s as %s, %s", (day, label, words) => {
+      const store = makeStore({ communityToday: "2026-03-08" });
+      store.meal.date = day;
+      renderBox(store);
+      expect(screen.getByText(label)).toBeInTheDocument();
+      expect(screen.getByText(words)).toBeInTheDocument();
+    });
   });
 
   it("Escape closes the history modal back to the meal", () => {

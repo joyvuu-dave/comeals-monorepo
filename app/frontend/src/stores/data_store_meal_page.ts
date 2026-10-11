@@ -390,12 +390,8 @@ export function mealPageActions(self: MealPageStore) {
       const meal = self.meal;
       if (!meal) return;
 
-      // Assign Meal Data — construct a "fake local" Date whose year/month/day
-      // components come from the community's timezone so that dayjs(meal.date)
-      // always reflects the community day, consistent with getCommunityNow()
-      // in calendar/show.jsx.
-      const d = toCommunityDayjs(data.date);
-      meal.date = new Date(d.year(), d.month(), d.date());
+      // The meal's day in the community, "YYYY-MM-DD".
+      meal.date = toCommunityDayjs(data.date).format("YYYY-MM-DD");
       // While the menu has unsaved typing, a reload must not overwrite it
       // (issue #35): your text wins on your own screen until it saves.
       // After it saves, last-write-wins as usual.

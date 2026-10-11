@@ -47,6 +47,8 @@ const NOT_FOUND = {
 function makeStore() {
   return observable(
     {
+      // The day picker marks the community's today.
+      communityToday: "2026-01-15",
       invalidateMonthForDate: vi.fn(),
     },
     { invalidateMonthForDate: false },
@@ -142,7 +144,7 @@ describe("EventsEdit", () => {
     // The cached month the event was in is stale now (issue #37).
     expect(store.invalidateMonthForDate.mock.calls).toEqual([
       [EVENT.start_date],
-      [new Date(2026, 0, 28)],
+      ["2026-01-28"],
     ]);
   });
 
@@ -174,7 +176,7 @@ describe("EventsEdit", () => {
     });
     expect(store.invalidateMonthForDate.mock.calls).toEqual([
       [EVENT.start_date],
-      [new Date(2026, 1, 3)],
+      ["2026-02-03"],
     ]);
   });
 

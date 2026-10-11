@@ -1,7 +1,10 @@
 import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
 import { matchPath } from "react-router";
 
 import { CALENDAR_PATH } from "../routes";
+
+dayjs.extend(utc);
 
 // Where the shared screen goes by itself (components/app/back_to_today.tsx).
 // Every day here is a "YYYY-MM-DD" string, the community's day.
@@ -55,7 +58,7 @@ function keepsForm(calendar: CalendarParams, form: OpenForm): boolean {
 // True when both days are in one month of one year. A day that is not a
 // date is in no month.
 function sameMonth(day: string | undefined, other: string): boolean {
-  const month = dayjs(day);
+  const month = dayjs.utc(day);
   return month.isValid() && month.format("YYYY-MM") === other.slice(0, 7);
 }
 

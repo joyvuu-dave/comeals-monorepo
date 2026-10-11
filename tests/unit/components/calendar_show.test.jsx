@@ -50,6 +50,10 @@ import { messagesShown } from "../helpers/form_messages.js";
 // the header date needs it.
 dayjs.extend(advancedFormat);
 
+// The calendar's events are wall-clock Dates: their UTC fields are the
+// community's wall clock (calendar/wall_clock_localizer.ts), so they are
+// made with Date.UTC.
+//
 // The spy annotations stop MobX from wrapping them in actions, which
 // would hide them from toHaveBeenCalled.
 function makeStore(overrides = {}) {
@@ -61,8 +65,8 @@ function makeStore(overrides = {}) {
         {
           id: "meal-42",
           title: "Meal: Jane Smith",
-          start: new Date(2026, 0, 15, 18, 0),
-          end: new Date(2026, 0, 15, 19, 0),
+          start: new Date(Date.UTC(2026, 0, 15, 18, 0)),
+          end: new Date(Date.UTC(2026, 0, 15, 19, 0)),
           color: "#4caf50",
           url: "/meals/42/edit",
         },
@@ -942,8 +946,8 @@ describe("MainCalendar", () => {
           {
             id: "note-1",
             title: "Holiday",
-            start: new Date(2026, 0, 16, 0, 0),
-            end: new Date(2026, 0, 16, 23, 59),
+            start: new Date(Date.UTC(2026, 0, 16, 0, 0)),
+            end: new Date(Date.UTC(2026, 0, 16, 23, 59)),
           },
         ],
       }),
@@ -969,32 +973,32 @@ describe("MainCalendar", () => {
             {
               id: "e1",
               title: "Light",
-              start: new Date(2026, 0, 16, 18, 0),
-              end: new Date(2026, 0, 16, 19, 0),
+              start: new Date(Date.UTC(2026, 0, 16, 18, 0)),
+              end: new Date(Date.UTC(2026, 0, 16, 19, 0)),
               color: "#4caf50",
               url: "/x",
             },
             {
               id: "e2",
               title: "Dark",
-              start: new Date(2026, 0, 17, 18, 0),
-              end: new Date(2026, 0, 17, 19, 0),
+              start: new Date(Date.UTC(2026, 0, 17, 18, 0)),
+              end: new Date(Date.UTC(2026, 0, 17, 19, 0)),
               color: "#1a237e",
               url: "/x",
             },
             {
               id: "e3",
               title: "Short",
-              start: new Date(2026, 0, 18, 18, 0),
-              end: new Date(2026, 0, 18, 19, 0),
+              start: new Date(Date.UTC(2026, 0, 18, 18, 0)),
+              end: new Date(Date.UTC(2026, 0, 18, 19, 0)),
               color: "#000",
               url: "/x",
             },
             {
               id: "e4",
               title: "Plain",
-              start: new Date(2026, 0, 19, 18, 0),
-              end: new Date(2026, 0, 19, 19, 0),
+              start: new Date(Date.UTC(2026, 0, 19, 18, 0)),
+              end: new Date(Date.UTC(2026, 0, 19, 19, 0)),
             },
           ],
         }),
@@ -1016,40 +1020,40 @@ describe("MainCalendar", () => {
             {
               id: "past",
               title: "Past",
-              start: new Date(2026, 0, 10, 18, 0),
-              end: new Date(2026, 0, 10, 19, 0),
+              start: new Date(Date.UTC(2026, 0, 10, 18, 0)),
+              end: new Date(Date.UTC(2026, 0, 10, 19, 0)),
               color: "#4caf50",
               url: "/meals/40/edit",
             },
             {
               id: "last-night",
               title: "Last night",
-              start: new Date(2026, 0, 14, 23, 0),
-              end: new Date(2026, 0, 14, 23, 30),
+              start: new Date(Date.UTC(2026, 0, 14, 23, 0)),
+              end: new Date(Date.UTC(2026, 0, 14, 23, 30)),
               color: "#4caf50",
               url: "/meals/41/edit",
             },
             {
               id: "midnight",
               title: "Midnight",
-              start: new Date(2026, 0, 15, 0, 0),
-              end: new Date(2026, 0, 15, 1, 0),
+              start: new Date(Date.UTC(2026, 0, 15, 0, 0)),
+              end: new Date(Date.UTC(2026, 0, 15, 1, 0)),
               color: "#4caf50",
               url: "/events/9/edit",
             },
             {
               id: "tomorrow",
               title: "Tomorrow",
-              start: new Date(2026, 0, 16, 18, 0),
-              end: new Date(2026, 0, 16, 19, 0),
+              start: new Date(Date.UTC(2026, 0, 16, 18, 0)),
+              end: new Date(Date.UTC(2026, 0, 16, 19, 0)),
               color: "#4caf50",
               url: "/meals/43/edit",
             },
             {
               id: "no-url",
               title: "No link",
-              start: new Date(2026, 0, 10, 0, 0),
-              end: new Date(2026, 0, 10, 23, 59),
+              start: new Date(Date.UTC(2026, 0, 10, 0, 0)),
+              end: new Date(Date.UTC(2026, 0, 10, 23, 59)),
               color: "#4caf50",
             },
           ],
