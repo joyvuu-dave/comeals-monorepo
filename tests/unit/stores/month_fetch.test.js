@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 // The navigation guard in month_fetch.js: the newest navigation wins,
 // and a read or a fetch that a later navigation overtook must not
@@ -19,6 +19,7 @@ import {
   invalidateMonth,
   invalidateMonthForDate,
   loadForNavigation,
+  NO_ANSWER_RETRY_MS,
   prefetchMonth,
   refetch,
 } from "../../../app/frontend/src/stores/month_fetch.js";
@@ -244,6 +245,108 @@ describe("month_fetch", () => {
       expect(monthCache.get(keyFor(2026, 4))).toBeUndefined();
       expect(idbKeyval.set).not.toHaveBeenCalled();
       expect(toastStore.toasts).toHaveLength(0);
+    });
+  });
+
+  // A page load stops the boot-time prefetch. WebKit fails it with
+  // ERR_NETWORK, and refuses a new request the page sends while it is
+  // leaving, which logs "... due to access control checks." (#163). So
+  // the calendar, which adopted that prefetch, must not ask again at
+  // once. It waits; if the page is gone by then, nothing is sent. If the
+  // page is still here, the failure was the network, and it asks again.
+  describe("when the prefetch the calendar adopted gets no answer", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    // Lets every promise chain that can run now finish. The fake clock
+    // stays where it is, so no wait runs out.
+    async function settle() {
+      await vi.advanceTimersByTimeAsync(0);
+    }
+
+    // What WebKit fails the request with when a page load stops it.
+    function stoppedByPageLoad() {
+      return Object.assign(noAnswer(), { code: "ERR_NETWORK" });
+    }
+
+    function januaryRequests() {
+      return axios.get.mock.calls.filter(([url]) =>
+        url.endsWith("/calendar/2026-01-15"),
+      ).length;
+    }
+
+    // The boot-time prefetch of January is on the wire, and the
+    // calendar mounts and adopts it. Hands back the prefetch, to fail.
+    async function calendarAdoptsThePrefetch(render) {
+      const prefetch = deferred();
+      axios.get.mockImplementationOnce(() => prefetch.promise);
+      prefetchMonth("2026-01-15");
+      await settle();
+      loadForNavigation("2026-01-15", render);
+      await settle();
+      expect(januaryRequests()).toBe(1);
+      return prefetch;
+    }
+
+    it("sends no second request at once when a page load stops the prefetch", async () => {
+      const render = vi.fn();
+      const prefetch = await calendarAdoptsThePrefetch(render);
+
+      prefetch.reject(stoppedByPageLoad());
+      await settle();
+      await vi.advanceTimersByTimeAsync(NO_ANSWER_RETRY_MS - 1);
+
+      expect(januaryRequests()).toBe(1);
+      expect(render).not.toHaveBeenCalled();
+    });
+
+    it("asks again after the wait when the page is still here, and draws the month", async () => {
+      const render = vi.fn();
+      const prefetch = await calendarAdoptsThePrefetch(render);
+
+      prefetch.reject(stoppedByPageLoad());
+      await settle();
+      await vi.advanceTimersByTimeAsync(NO_ANSWER_RETRY_MS);
+
+      expect(januaryRequests()).toBe(2);
+      expect(render.mock.calls).toEqual([[payload(2026, 1)]]);
+      expect(monthCache.get(keyFor(2026, 1))).toEqual(payload(2026, 1));
+    });
+
+    it("does not ask again for a month the person left during the wait", async () => {
+      const render = vi.fn();
+      const prefetch = await calendarAdoptsThePrefetch(render);
+
+      prefetch.reject(noAnswer());
+      await settle();
+      loadForNavigation("2026-02-15", vi.fn());
+      await vi.advanceTimersByTimeAsync(NO_ANSWER_RETRY_MS);
+
+      expect(januaryRequests()).toBe(1);
+      expect(render).not.toHaveBeenCalled();
+    });
+
+    // An answer means the request was not stopped, so the page is not
+    // leaving. That case asks again at once, as before.
+    it("asks again at once when the prefetch was answered with an error", async () => {
+      const render = vi.fn();
+      const prefetch = await calendarAdoptsThePrefetch(render);
+
+      prefetch.reject(
+        Object.assign(new Error("Request failed with status code 500"), {
+          request: {},
+          response: { status: 500, data: {} },
+        }),
+      );
+      await settle();
+
+      expect(januaryRequests()).toBe(2);
+      expect(render.mock.calls).toEqual([[payload(2026, 1)]]);
     });
   });
 

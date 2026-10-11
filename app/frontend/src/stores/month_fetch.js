@@ -195,8 +195,11 @@ export function prefetchMonth(date) {
         monthCache.markFresh(key);
         writeToDisk(key, response.data);
       })
-      .catch(function () {
-        // Prefetch failure is non-critical
+      .catch(function (error) {
+        // A failed prefetch is not shown to anyone. The error goes to
+        // revalidate, if the calendar adopted this request, so it can
+        // tell a request that got no answer from one that got an error.
+        return error;
       })
       .finally(function () {
         delete networkInFlight[key];
@@ -249,21 +252,55 @@ export function loadForNavigation(date, render) {
   });
 }
 
+// How long revalidate waits before it asks again for a month whose
+// adopted prefetch got no answer (#163). A page load stops the requests
+// the page has on the wire, and the prefetch then fails with no answer.
+// The page is leaving, so a new request is useless, and WebKit refuses
+// it and logs "... due to access control checks." So the request is
+// sent only after this wait. Once the page is gone, its timers never
+// run, so nothing is sent.
+//
+// The old page stays alive until the new page's answer arrives. If
+// that takes longer than this wait, the request is still sent while
+// the page is leaving. Then it is refused and logged, as before this
+// wait existed, and nothing changes on screen; the new page asks for
+// its own month anyway. So the wait is longer than a page load takes
+// on a working connection. It is also how long a person on a page that
+// stays waits for the month after the network fails once.
+export const NO_ANSWER_RETRY_MS = 3000;
+
+// The request got no answer: the network failed, or the browser stopped
+// it because the page is leaving. WebKit reports both as ERR_NETWORK.
+// The test is "no response" and not that code, so a request that ended
+// as an abort is treated the same way. An answer of any status means
+// the request was not stopped, so the page is not leaving.
+function gotNoAnswer(error) {
+  return error !== undefined && error.response === undefined;
+}
+
 // Fetch `date` from the server and render it — unless a prefetch of
 // the same month is still on the wire (the boot-time prefetch,
 // usually): then wait for it and render its result instead of issuing
-// a duplicate request. If it failed or was invalidated mid-flight,
-// fall through to a normal fetch.
+// a duplicate request. If it got no answer, ask again after
+// NO_ANSWER_RETRY_MS. If it was answered with an error, or a push
+// dropped its answer while it was on the wire, fetch again at once.
 export function revalidate(date, render) {
   var token = navigations.bump();
   var key = keyForDate(date);
   var pending = networkInFlight[key];
   if (pending) {
-    pending.then(function () {
+    pending.then(function (failure) {
       if (!navigations.isCurrent(token)) return;
       var cached = monthCache.get(key);
       if (cached !== undefined) {
         render(cached);
+      } else if (gotNoAnswer(failure)) {
+        setTimeout(function () {
+          // A navigation or a refetch since then asked for what it
+          // needs itself.
+          if (!navigations.isCurrent(token)) return;
+          fetchMonth(date, token, render);
+        }, NO_ANSWER_RETRY_MS);
       } else {
         fetchMonth(date, token, render);
       }
