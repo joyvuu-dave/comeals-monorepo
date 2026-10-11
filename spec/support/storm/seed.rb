@@ -12,7 +12,11 @@ module Storm
     # admin_rows: the ids of the attendance rows the storm's admin added
     # (Run#admin_write). An admin correction may put a closed meal over its
     # max, so Checks#check_cap leaves those rows out of the count.
-    Plan = Struct.new(:community, :residents, :tokens, :meals, :admin_rows, keyword_init: true) do
+    #
+    # baseline_meal: a future meal that only Storm::Baseline writes to. No
+    # client, settler or admin picks it, so the baseline finds it the same
+    # after the storm as before.
+    Plan = Struct.new(:community, :residents, :tokens, :meals, :admin_rows, :baseline_meal, keyword_init: true) do
       def reconcilers
         residents.select(&:can_reconcile?)
       end
@@ -47,12 +51,33 @@ module Storm
       today = community.today
       dates = (1..PAST_MEALS).map { |n| today - n } + (1..FUTURE_MEALS).map { |n| today + n }
       meals = dates.map { |date| Meal.create!(date: date, rotation: rotation) }
+      make_settleable(meals.first, residents.first)
       Plan.new(community: community, residents: residents,
                tokens: residents.to_h { |r| [r.id, JwtAuth.encode(r)] }, meals: meals,
-               admin_rows: Concurrent::Set.new)
+               admin_rows: Concurrent::Set.new,
+               baseline_meal: Meal.create!(date: today + FUTURE_MEALS + 1, rotation: rotation))
     end
 
     private
+
+    # A settlement claims only a meal with a cook and, when the cook spent
+    # money, someone who pays to eat it (Meal.settleable_by). Until
+    # 2026-10 the storm planted neither, so the settler had something to
+    # claim only after a client's bills save went through on a past meal.
+    # On a busy machine most bills saves end in 409. One run had 1 of 34
+    # go through, the settler found nothing to settle, and the spec failed
+    # with every other check passing (#131).
+    #
+    # So yesterday's meal starts with a cook who spent $40 and a guest of
+    # theirs. Nothing in the storm can take both away: a client removes
+    # only the guests it added itself, the admin writes attendance and
+    # bills but never deletes a bill, and a bills save always leaves at
+    # least one cook. The storm's writes still race the settlement on this
+    # meal as on any other.
+    def make_settleable(meal, cook)
+      Bill.create!(meal: meal, resident: cook, amount: BigDecimal('40'), no_cost: false)
+      Guest.create!(meal: meal, resident: cook, multiplier: 2, vegetarian: false, late: false)
+    end
 
     def resident(index, unit)
       multiplier = MULTIPLIERS[index % MULTIPLIERS.size]

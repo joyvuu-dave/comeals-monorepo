@@ -32,7 +32,8 @@ require 'rails_helper'
 #   - the settler, the jobs, and the admin never hit anything but their
 #     expected refusals;
 #   - the rows and the ledger are right after (Storm::Checks);
-#   - the storm actually happened: writes were sent at a rate, every
+#   - the storm actually happened: writes were sent at a rate set from
+#     what one client alone gets on this machine (Storm::Baseline), every
 #     client sent some, rows were written under them, and a settlement
 #     won while they did.
 #
@@ -141,11 +142,19 @@ RSpec.describe 'a request storm against the whole API, with the nightly jobs and
     end.uniq
   end
 
-  def describe_run(result, reports_tally)
+  # The share of one client's rate that the storm's meal writes must
+  # reach. The expectation that uses it says why a quarter.
+  def write_floor(alone)
+    alone.map(&:rate).min / 4
+  end
+
+  def describe_run(result, reports_tally, alone)
     lines = result.tally.sort.map { |action, statuses| "  #{action}: #{statuses.sort_by { |s, _| s.to_s }.to_h}" }
     "requests: #{result.requests.size}, meal writes: #{result.meal_write_attempts} " \
       "from #{result.clients_that_wrote} clients, ok writes: #{result.ok_writes} " \
       "(#{result.ok_row_writes} rows), settlements: #{result.settlements}\n" \
+      "meal writes/s: #{(result.meal_write_attempts / seconds.to_f).round(1)}, floor #{write_floor(alone).round(1)}; " \
+      "one client alone: #{alone.first} before, #{alone.last} after\n" \
       "#{lines.join("\n")}\nbackground: #{result.background_tally}\nreported: #{reports_tally}\n" \
       "#{result.latency.report}"
   end
@@ -186,7 +195,12 @@ RSpec.describe 'a request storm against the whole API, with the nightly jobs and
     pushes = Queue.new
     allow(Pusher).to receive(:trigger) { |channel, _event, _data, options = nil| pushes << [channel, options] }
 
+    # How fast one client alone is answered, just before the storm and
+    # just after it. The floor for meal writes per second is set from
+    # these, below.
+    alone = [Storm::Baseline.call(plan: plan, transport: transport, network: '10.8.0')]
     result = Storm::Run.call(plan: plan, transport: transport, clients: clients, seconds: seconds, seed: seed)
+    alone << Storm::Baseline.call(plan: plan, transport: transport, network: '10.8.1')
 
     problems = result.requests.filter_map { |e| e.problem && "client #{e.client} ##{e.n} #{e.action}: #{e.problem}" }
     problems += result.problems
@@ -197,7 +211,7 @@ RSpec.describe 'a request storm against the whole API, with the nightly jobs and
 
     summary = describe_run(result, reported.map do |e, handled|
       "#{e.class} (#{handled ? 'swallowed' : 'raised'})"
-    end.tally)
+    end.tally, alone)
     RSpec.configuration.reporter.message(summary) if ENV['STORM_TALLY']
     expect(problems.uniq).to be_empty, "#{problems.uniq.first(30).join("\n")}\n\n#{summary}"
     # The storm happened. Each floor follows what its count depends on,
@@ -208,9 +222,30 @@ RSpec.describe 'a request storm against the whole API, with the nightly jobs and
     #
     # Writes per second, not per client: in one process the GVL fixes
     # the request rate, so more clients means fewer writes each, not
-    # more in all. Eight a second is under half of what the CI runner
-    # sends (about twenty) and a tenth of a laptop.
-    expect(result.meal_write_attempts).to be >= 8 * seconds, summary
+    # more in all.
+    #
+    # And set from this machine as it is now (#131): at least a quarter
+    # of the meal writes a second one client alone gets, measured just
+    # before and just after the storm. A fixed number failed whenever
+    # other test suites loaded the laptop. The GVL runs the Ruby of one
+    # request at a time, so 24 clients together send about half as many
+    # meal writes as one client alone (half their requests are not meal
+    # writes): runs on a laptop gave 0.44 to 0.70 of it, and 0.79 or
+    # more with the laptop made busy (the load slowed one client more
+    # than it slowed the storm). The slower of the two measurements is used, so a
+    # load that starts or ends during the storm lowers the floor too. A
+    # load that starts after the first measurement and ends before the
+    # second is seen by neither, and can still fail this.
+    #
+    # What it catches: a storm in which nearly every client is waiting at
+    # once, for a lock or for each other. One client alone never waits
+    # for anyone, so its rate stays up and the storm falls under it. A
+    # settlement that locked the meals table and then waited five seconds
+    # brought the storm down to 8 to 10 writes a second, against a floor
+    # of 15 to 18. Clients that wait only some of the time do not show:
+    # the others use the time they leave. Nor does a write that got
+    # slower for everyone, because one client alone slows down as much.
+    expect(result.meal_write_attempts).to be >= write_floor(alone) * seconds, summary
     # Every client got to write, so a thread that spent the run waiting
     # is noticed.
     expect(result.clients_that_wrote).to eq(clients), summary
@@ -221,6 +256,9 @@ RSpec.describe 'a request storm against the whole API, with the nightly jobs and
     # a run where every write conflicts writes none, which is what this
     # guards against.
     expect(result.ok_row_writes).to be >= seconds / 3, summary
+    # The seed plants a meal a settlement can claim (Storm::Seed), so the
+    # settler always has something to settle. A run with no settlement is
+    # a settler that kept losing to the writes, or that failed.
     expect(result.settlements).to be >= 1, summary
   end
 end

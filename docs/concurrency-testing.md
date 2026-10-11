@@ -74,17 +74,40 @@ and be retried. Production's cannot. What must hold:
   final rows, `ledger:verify` passes, a cap holds, the balance refresh is
   stable, and every calendar month reads the same with the cache and
   without it;
-- the storm happened: meal writes were sent at eight a second or more
-  in total (the CI runner sends about twenty, a laptop about eighty; in
-  one process the GVL fixes the rate, so more clients means fewer writes
-  each), every client sent at least one, rows were written under them
-  (attendance, guests, bills: one every three seconds at least; the
-  runner writes about forty in fifteen seconds, a laptop hundreds, a
-  run where every write conflicts none), and a settlement won while
-  they did. Each floor follows what its count depends on, so
-  `STORM_CLIENTS` and `STORM_SECONDS` can turn the storm up. The floor
-  used to be five ok writes per client in total, a laptop's number, and
-  the CI runner missed it twice (#86).
+- the storm happened: meal writes were sent at a quarter or more of
+  the rate one client alone gets on the same machine, every client sent
+  at least one, rows were written under them (attendance, guests,
+  bills: one every three seconds at least; the runner writes about
+  forty in fifteen seconds, a laptop hundreds, a run where every write
+  conflicts none), and a settlement won while they did. Each floor
+  follows what its count depends on, so `STORM_CLIENTS` and
+  `STORM_SECONDS` can turn the storm up. The floor used to be five ok
+  writes per client in total, a laptop's number, and the CI runner
+  missed it twice (#86).
+
+The rate floor is measured, not fixed (#131). A fixed eight writes a
+second failed whenever other test suites loaded the laptop. So
+`Storm::Baseline` has one client sign up for a meal of its own and
+leave it again, alone, for two seconds just before the storm and again
+just after it, and the floor is a quarter of the slower of the two. The
+GVL runs one request's Ruby at a time, so the 24 clients together send
+about half as many meal writes a second as one client alone (half their
+requests are not meal writes): 0.44 to 0.70 of it on a laptop, and 0.79
+or more with the laptop made busy. The floor catches a storm in which
+nearly every client is waiting at once: a settlement that locked the
+meals table and then waited five seconds brought the storm to 8 to 10
+writes a second, under floors of 15 to 18. Waits that stop only some
+clients do not show, because the others use the time, and neither does
+a write that got slower for everyone, since one client alone slows down
+as much. These left the rate where it was: every API request behind
+one mutex, every meal write behind one database lock, a 50 ms sleep
+inside the meal lock, and a one-second wait before each retry after a
+conflict. The GVL already runs one request's Ruby at a time.
+
+A settlement always has something to claim: the seed plants yesterday's
+meal with a cook who spent money and a guest who pays (#131). Before,
+the settler waited for a client's bills save to go through on a past
+meal, and on a busy machine most of those end in 409.
 
 Knobs: `STORM_SECONDS`, `STORM_CLIENTS`, `STORM_SEED`, and `STORM_TALLY=1`
 to print the counts. The pool is widened for the group; Postgres allows
