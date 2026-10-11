@@ -617,9 +617,11 @@ RSpec.describe CommonHouseReservation do
     end
 
     # Rails reads save's options further down (touch: false keeps
-    # updated_at), so the savepoint must pass them on.
+    # updated_at), so the savepoint must pass them on. The stamp is read
+    # back from the database: on Linux the clock gives nanoseconds, and
+    # the column keeps only microseconds.
     it 'passes the options of save on' do
-      stamped = booking.updated_at
+      stamped = booking.reload.updated_at
 
       booking.title = 'Quiet change'
       expect(booking.save(touch: false)).to be(true)
