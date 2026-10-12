@@ -5,154 +5,41 @@
 # Please instead update this file by running `bin/tapioca gem ransack`.
 
 
-# pkg:gem/ransack#lib/polyamorous/tree_node.rb:1
-module Polyamorous; end
-
-# pkg:gem/ransack#lib/polyamorous/polyamorous.rb:3
-Polyamorous::InnerJoin = Arel::Nodes::InnerJoin
-
-# pkg:gem/ransack#lib/polyamorous/join.rb:2
-class Polyamorous::Join
-  include ::Polyamorous::TreeNode
-
-  # pkg:gem/ransack#lib/polyamorous/join.rb:8
-  def initialize(name, type = T.unsafe(nil), klass = T.unsafe(nil)); end
-
-  # pkg:gem/ransack#lib/polyamorous/join.rb:33
-  def ==(other); end
-
-  # pkg:gem/ransack#lib/polyamorous/join.rb:35
-  def add_to_tree(hash); end
-
-  # pkg:gem/ransack#lib/polyamorous/join.rb:26
-  def eql?(other); end
-
-  # pkg:gem/ransack#lib/polyamorous/join.rb:22
-  def hash; end
-
-  # pkg:gem/ransack#lib/polyamorous/join.rb:6
-  def klass; end
-
-  # pkg:gem/ransack#lib/polyamorous/join.rb:14
-  def klass=(klass); end
-
-  # pkg:gem/ransack#lib/polyamorous/join.rb:5
-  def name; end
-
-  # pkg:gem/ransack#lib/polyamorous/join.rb:5
-  def name=(_arg0); end
-
-  # pkg:gem/ransack#lib/polyamorous/join.rb:6
-  def type; end
-
-  # pkg:gem/ransack#lib/polyamorous/join.rb:18
-  def type=(type); end
-
-  private
-
-  # pkg:gem/ransack#lib/polyamorous/join.rb:41
-  def convert_to_arel_join_type(type); end
-
-  # pkg:gem/ransack#lib/polyamorous/join.rb:58
-  def convert_to_class(value); end
-end
-
-# pkg:gem/ransack#lib/polyamorous/polyamorous.rb:7
-Polyamorous::JoinAssociation = ActiveRecord::Associations::JoinDependency::JoinAssociation
-
-# pkg:gem/ransack#lib/polyamorous/activerecord/join_association.rb:2
-module Polyamorous::JoinAssociationExtensions
-  include ::Polyamorous::SwappingReflectionClass
-
-  # pkg:gem/ransack#lib/polyamorous/activerecord/join_association.rb:8
-  def initialize(reflection, children, polymorphic_class = T.unsafe(nil), join_type = T.unsafe(nil)); end
-
-  # Same as #join_constraints, but instead of constructing tables from the
-  # given block, uses the ones passed
-  #
-  # pkg:gem/ransack#lib/polyamorous/activerecord/join_association.rb:22
-  def join_constraints_with_tables(foreign_table, foreign_klass, join_type, alias_tracker, tables); end
-
-  class << self
-    # pkg:gem/ransack#lib/polyamorous/activerecord/join_association.rb:4
-    def prepended(base); end
-  end
-end
-
-# pkg:gem/ransack#lib/polyamorous/polyamorous.rb:6
-Polyamorous::JoinDependency = ActiveRecord::Associations::JoinDependency
-
-# pkg:gem/ransack#lib/polyamorous/activerecord/join_dependency.rb:2
-module Polyamorous::JoinDependencyExtensions
-  # Replaces ActiveRecord::Associations::JoinDependency#build
-  #
-  # pkg:gem/ransack#lib/polyamorous/activerecord/join_dependency.rb:4
-  def build(associations, base_klass); end
-
-  # pkg:gem/ransack#lib/polyamorous/activerecord/join_dependency.rb:50
-  def construct_tables_for_association!(join_root, association); end
-
-  # pkg:gem/ransack#lib/polyamorous/activerecord/join_dependency.rb:30
-  def join_constraints(joins_to_add, alias_tracker, references); end
-
-  private
-
-  # pkg:gem/ransack#lib/polyamorous/activerecord/join_dependency.rb:58
-  def table_aliases_for(parent, node); end
-end
-
-# pkg:gem/ransack#lib/polyamorous/activerecord/join_dependency.rb:78
-module Polyamorous::JoinDependencyExtensions::ClassMethods
-  # Prepended before ActiveRecord::Associations::JoinDependency#walk_tree
-  #
-  # pkg:gem/ransack#lib/polyamorous/activerecord/join_dependency.rb:81
-  def walk_tree(associations, hash); end
-end
-
-# pkg:gem/ransack#lib/polyamorous/polyamorous.rb:4
-Polyamorous::OuterJoin = Arel::Nodes::OuterJoin
-
-# pkg:gem/ransack#lib/polyamorous/activerecord/reflection.rb:2
-module Polyamorous::ReflectionExtensions
-  # pkg:gem/ransack#lib/polyamorous/activerecord/reflection.rb:3
-  def join_scope(table, foreign_table, foreign_klass); end
-end
-
-# pkg:gem/ransack#lib/polyamorous/swapping_reflection_class.rb:2
-module Polyamorous::SwappingReflectionClass
-  # pkg:gem/ransack#lib/polyamorous/swapping_reflection_class.rb:3
-  def swapping_reflection_klass(reflection, klass); end
-end
-
-# pkg:gem/ransack#lib/polyamorous/tree_node.rb:2
-module Polyamorous::TreeNode
-  # pkg:gem/ransack#lib/polyamorous/tree_node.rb:3
-  def add_to_tree(hash); end
-end
-
 # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:3
 RANSACK_FORM_BUILDER = T.let(T.unsafe(nil), String)
 
 # pkg:gem/ransack#lib/ransack/constants.rb:1
 module Ransack
   extend ::Ransack::Configuration
+
+  class << self
+    # pkg:gem/ransack#lib/ransack.rb:12
+    def deprecator; end
+  end
 end
 
-# pkg:gem/ransack#lib/ransack/adapters/active_record/base.rb:2
-module Ransack::Adapters; end
+# Everything Ransack needs from Active Record lives under this module: the
+# class methods mixed into every model (Base), the Context that turns a
+# search into a relation, and the extensions to Active Record's join
+# machinery that let Ransack build outer joins and polymorphic joins the
+# public query interface cannot express.
+#
+# pkg:gem/ransack#lib/ransack/active_record/base.rb:2
+module Ransack::ActiveRecord; end
 
-# pkg:gem/ransack#lib/ransack/adapters/active_record/base.rb:3
-module Ransack::Adapters::ActiveRecord; end
-
-# pkg:gem/ransack#lib/ransack/adapters/active_record/base.rb:4
-module Ransack::Adapters::ActiveRecord::Base
+# Extended onto ActiveRecord::Base: the `ransack` entry point, the
+# `ransacker` and `ransack_alias` declarations, and the allowlist methods
+# every model must define before it can be searched.
+#
+# pkg:gem/ransack#lib/ransack/active_record/base.rb:6
+module Ransack::ActiveRecord::Base
   # Bare list of all potentially searchable associations. Searchable
   # associations need to be explicitly allowlisted through the
   # `ransackable_associations` method in each model, but if you're
   # allowing almost everything to be searched, this list can be used as a
   # base for exclusions.
   #
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/base.rb:93
+  # pkg:gem/ransack#lib/ransack/active_record/base.rb:91
   def authorizable_ransackable_associations; end
 
   # Bare list of all potentially searchable attributes. Searchable attributes
@@ -160,79 +47,90 @@ module Ransack::Adapters::ActiveRecord::Base
   # method in each model, but if you're allowing almost everything to be
   # searched, this list can be used as a base for exclusions.
   #
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/base.rb:78
+  # pkg:gem/ransack#lib/ransack/active_record/base.rb:80
   def authorizable_ransackable_attributes; end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/base.rb:15
+  # pkg:gem/ransack#lib/ransack/active_record/base.rb:17
   def ransack(params = T.unsafe(nil), options = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/base.rb:19
+  # pkg:gem/ransack#lib/ransack/active_record/base.rb:21
   def ransack!(params = T.unsafe(nil), options = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/base.rb:28
+  # pkg:gem/ransack#lib/ransack/active_record/base.rb:30
   def ransack_alias(new_name, old_name); end
 
   # Ransackable_associations, by default, returns the names
   # of all associations as an array of strings.
   # For overriding with a whitelist array of strings.
   #
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/base.rb:45
+  # pkg:gem/ransack#lib/ransack/active_record/base.rb:47
   def ransackable_associations(auth_object = T.unsafe(nil)); end
 
   # Ransackable_attributes, by default, returns all column names
   # and any defined ransackers as an array of strings.
   # For overriding with a whitelist array of strings.
   #
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/base.rb:37
+  # pkg:gem/ransack#lib/ransack/active_record/base.rb:39
   def ransackable_attributes(auth_object = T.unsafe(nil)); end
+
+  # Whether this model, or a superclass of it, defines `method` itself
+  # rather than inheriting Ransack's default. The search context asks
+  # before trusting permitted strong parameters: a model with a list of
+  # its own always applies it, and only a model without one lets the
+  # controller's permit list be the boundary (#1403).
+  #
+  # pkg:gem/ransack#lib/ransack/active_record/base.rb:100
+  def ransackable_list_defined?(method); end
 
   # Ransackable_scopes, by default, returns an empty array
   # i.e. no class methods/scopes are authorized.
   # For overriding with a whitelist array of *symbols*.
   #
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/base.rb:61
+  # pkg:gem/ransack#lib/ransack/active_record/base.rb:63
   def ransackable_scopes(auth_object = T.unsafe(nil)); end
 
   # ransack_scope_skip_sanitize_args, by default, returns an empty array.
   # i.e. use the sanitize_scope_args setting to determine if args should be converted.
   # For overriding with a list of scopes which should be passed the args as-is.
   #
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/base.rb:69
+  # pkg:gem/ransack#lib/ransack/active_record/base.rb:71
   def ransackable_scopes_skip_sanitize_args; end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/base.rb:23
+  # pkg:gem/ransack#lib/ransack/active_record/base.rb:25
   def ransacker(name, opts = T.unsafe(nil), &block); end
 
   # Ransortable_attributes, by default, returns the names
   # of all attributes available for sorting as an array of strings.
   # For overriding with a whitelist array of strings.
   #
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/base.rb:53
+  # pkg:gem/ransack#lib/ransack/active_record/base.rb:55
   def ransortable_attributes(auth_object = T.unsafe(nil)); end
 
   private
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/base.rb:99
+  # pkg:gem/ransack#lib/ransack/active_record/base.rb:110
   def deprecated_ransackable_list(method); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/base.rb:136
-  def explicitly_defined?(method); end
-
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/base.rb:144
+  # pkg:gem/ransack#lib/ransack/active_record/base.rb:147
   def warn_deprecated(message); end
 
   class << self
-    # pkg:gem/ransack#lib/ransack/adapters/active_record/base.rb:6
+    # pkg:gem/ransack#lib/ransack/active_record/base.rb:8
     def extended(base); end
   end
 end
 
-# pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:7
-class Ransack::Adapters::ActiveRecord::Context < ::Ransack::Context
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:131
+# The Active Record implementation of Ransack::Context: resolves attribute
+# and association names against a model, builds the joins a search needs
+# on top of whatever joins the relation already has, and turns the search
+# tree into a relation.
+#
+# pkg:gem/ransack#lib/ransack/active_record/context.rb:9
+class Ransack::ActiveRecord::Context < ::Ransack::Context
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:154
   def alias_tracker; end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:66
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:77
   def attribute_method?(str, klass = T.unsafe(nil)); end
 
   # Build an Arel subquery that selects keys for the top query,
@@ -253,10 +151,13 @@ class Ransack::Adapters::ActiveRecord::Context < ::Ransack::Context
   # The WHERE condition on this query makes it invalid by itself,
   # because it is correlated to the primary key on the outer query.
   #
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:168
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:194
   def build_correlated_subquery(association); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:26
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:15
+  def dialect; end
+
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:37
   def evaluate(search, opts = T.unsafe(nil)); end
 
   # All dependent Arel::Join nodes used in the search query.
@@ -266,64 +167,398 @@ class Ransack::Adapters::ActiveRecord::Context < ::Ransack::Context
   # This extracts what we need to access the joins using our existing
   # JoinDependency to track table aliases.
   #
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:115
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:132
   def join_sources; end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:96
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:107
   def klassify(obj); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:135
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:158
   def lock_association(association); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:199
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:225
   def primary_key; end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:9
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:11
   def relation_for(object); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:139
+  # Drops a join Ransack added, when a negative condition on a collection
+  # replaces it with a correlated subquery. A join the relation already
+  # had, or one another condition needs, is locked and stays.
+  #
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:165
   def remove_association(association); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:92
+  # A concrete model. `ActiveRecord::Base` itself and an abstract class
+  # have no table to search.
+  #
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:121
+  def searchable_class?(klass); end
+
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:103
   def table_for(parent); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:13
+  # The type a value for this attribute is cast to. Read through the
+  # Attributes API rather than the schema column, so that
+  # `attribute :starts_at, :datetime` on a date column is honoured (#1028);
+  # a column with no attribute override reports its column type.
+  #
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:23
   def type_for(attr); end
 
   private
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:341
+  # Assigns the table aliases for a node the relation already joins, and
+  # every node under it, and locks them so a negative condition cannot
+  # remove a join that belongs to the relation.
+  #
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:414
+  def adopt(mirror, parent, node, join_type); end
+
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:454
   def build_association(name, parent = T.unsafe(nil), klass = T.unsafe(nil)); end
 
-  # Checkout active_record/relation/query_methods.rb +build_joins+ for
-  # reference. Lots of duplicated code maybe we can avoid it
-  #
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:288
-  def build_joins(relation); end
-
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:329
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:443
   def build_or_find_association(name, parent = T.unsafe(nil), klass = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:323
+  # The nodes that hang off a parent: the relation's own joins under it,
+  # plus the ones Ransack added under it.
+  #
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:439
+  def children_of(parent); end
+
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:383
   def convert_join_strings_to_ast(table, joins); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:205
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:231
   def extract_correlated_key(join_root); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:364
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:475
   def extract_joins(association); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:333
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:447
   def find_association(name, parent = T.unsafe(nil), klass = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:272
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:298
   def get_association(str, parent = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:242
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:268
   def get_parent_and_attribute_name(str, parent = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/adapters/active_record/context.rb:278
+  # Adds the children of a join dependency to the mirror, under the node
+  # they hang off, merging with what is already there the way Active
+  # Record's JoinDependency#walk does.
+  #
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:392
+  def graft(mirror, jd, join_type); end
+
+  # == Joins
+  #
+  # Ransack keeps a JoinDependency of its own, @join_dependency, that
+  # mirrors the joins the relation will have once Active Record turns it
+  # into SQL: the relation's `joins` and `left_outer_joins`, the join
+  # dependencies already stashed on it (an eager load, a previous search)
+  # and the associations Ransack adds for this search. The mirror exists
+  # so that a condition can be bound to the table alias its join will
+  # have.
+  #
+  # Active Record assigns those aliases only when it builds the query,
+  # with a fresh alias tracker and in a fixed order: the relation's own
+  # `joins`, then each stashed dependency in `joins_values`, then the
+  # `left_outer_joins`, then the dependencies stashed among them, then
+  # the eager load (see Relation#build_join_buckets). The mirror seeds
+  # its tracker the same way and assigns in the same order, so the two
+  # agree. Ransack stashes the joins it adds through `left_outer_joins`,
+  # one dependency per association in the order they are added, which is
+  # where they fall in that order; a join the relation already has is
+  # reused rather than added again.
+  #
+  # The relation's own joins keep their tree shape in the mirror. A node
+  # Ransack adds sits directly under the mirror root whatever its depth,
+  # with its parent recorded in @associations_pot, because its stashed
+  # dependency is rooted at the parent's table and Active Record renders
+  # it on its own; placing it under the parent would render it twice.
+  #
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:342
   def join_dependency(relation); end
+
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:400
+  def merge(mirror, parent, node, join_type); end
+
+  # The mirror node a stashed dependency's root corresponds to: the
+  # mirror root for one rooted at the model, otherwise the node whose
+  # table it was built from (Ransack roots a nested join at its parent).
+  #
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:423
+  def mirror_node_for(mirror, root); end
+
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:379
+  def named_joins(values); end
+
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:432
+  def parent_of(node); end
+
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:373
+  def referenced_aliases(relation); end
+
+  # An association that can actually be walked into. A polymorphic
+  # association has no class of its own, so it only counts when the name
+  # named one with `_of_Model_type`; otherwise `from_id_or_to_id` would
+  # match the `from` association and ask it for a class (#1267).
+  #
+  # pkg:gem/ransack#lib/ransack/active_record/context.rb:308
+  def traversable_association(name, polymorphic_class, parent); end
+end
+
+# The SQL dialect behind a model's connection.
+#
+# Nearly everything Ransack generates goes through Arel, which already
+# knows how to render for each database. The two exceptions are recorded
+# here: whether LIKE can be made case-insensitive without wrapping the
+# column in LOWER(), and which function counts characters in a string.
+#
+# The dialect is read from the adapter class's ancestry rather than its
+# name, so an adapter that subclasses one of Rails' own — PostGIS on top
+# of PostgreSQL, for example — is treated like its parent without Ransack
+# having to know it exists. An adapter that subclasses none of them gets
+# the generic dialect, which uses only standard SQL. `config.dialect`
+# overrides the detection for an adapter that should be treated as one of
+# the known dialects but does not inherit from it.
+#
+# pkg:gem/ransack#lib/ransack/active_record/dialect.rb:17
+class Ransack::ActiveRecord::Dialect
+  # pkg:gem/ransack#lib/ransack/active_record/dialect.rb:42
+  def initialize(name); end
+
+  # pkg:gem/ransack#lib/ransack/active_record/dialect.rb:69
+  def ==(other); end
+
+  # PostgreSQL has ILIKE, and Arel renders a `matches` that is not
+  # case-sensitive as ILIKE there. Elsewhere Ransack lowers both sides.
+  #
+  # pkg:gem/ransack#lib/ransack/active_record/dialect.rb:56
+  def case_insensitive_like?; end
+
+  # pkg:gem/ransack#lib/ransack/active_record/dialect.rb:72
+  def eql?(other); end
+
+  # pkg:gem/ransack#lib/ransack/active_record/dialect.rb:51
+  def generic?; end
+
+  # pkg:gem/ransack#lib/ransack/active_record/dialect.rb:74
+  def hash; end
+
+  # pkg:gem/ransack#lib/ransack/active_record/dialect.rb:78
+  def inspect; end
+
+  # CHAR_LENGTH is the SQL standard spelling and what PostgreSQL and MySQL
+  # use; their LENGTH counts bytes on MySQL. SQLite has no CHAR_LENGTH,
+  # and neither does Oracle, while both count characters with LENGTH, so
+  # the generic dialect keeps LENGTH: it is the spelling the adapters
+  # Ransack does not know are most likely to have.
+  #
+  # pkg:gem/ransack#lib/ransack/active_record/dialect.rb:65
+  def length_function; end
+
+  # pkg:gem/ransack#lib/ransack/active_record/dialect.rb:51
+  def mysql?; end
+
+  # pkg:gem/ransack#lib/ransack/active_record/dialect.rb:40
+  def name; end
+
+  # pkg:gem/ransack#lib/ransack/active_record/dialect.rb:51
+  def postgresql?; end
+
+  # pkg:gem/ransack#lib/ransack/active_record/dialect.rb:51
+  def sqlite?; end
+
+  class << self
+    # pkg:gem/ransack#lib/ransack/active_record/dialect.rb:31
+    def detect(adapter_class); end
+
+    # pkg:gem/ransack#lib/ransack/active_record/dialect.rb:27
+    def for(klass); end
+  end
+end
+
+# pkg:gem/ransack#lib/ransack/active_record/dialect.rb:20
+Ransack::ActiveRecord::Dialect::ADAPTER_ANCESTORS = T.let(T.unsafe(nil), Hash)
+
+# pkg:gem/ransack#lib/ransack/active_record/dialect.rb:18
+Ransack::ActiveRecord::Dialect::NAMES = T.let(T.unsafe(nil), Array)
+
+# An association to join, with the join type (inner or outer) and, for a
+# polymorphic belongs_to, the class to join to. Active Record's join
+# syntax has no way to say either, so Ransack builds its joins from these.
+#
+# pkg:gem/ransack#lib/ransack/active_record/join.rb:6
+class Ransack::ActiveRecord::Join
+  include ::Ransack::ActiveRecord::TreeNode
+
+  # pkg:gem/ransack#lib/ransack/active_record/join.rb:12
+  def initialize(name, type = T.unsafe(nil), klass = T.unsafe(nil)); end
+
+  # pkg:gem/ransack#lib/ransack/active_record/join.rb:37
+  def ==(other); end
+
+  # pkg:gem/ransack#lib/ransack/active_record/join.rb:39
+  def add_to_tree(hash); end
+
+  # pkg:gem/ransack#lib/ransack/active_record/join.rb:30
+  def eql?(other); end
+
+  # pkg:gem/ransack#lib/ransack/active_record/join.rb:26
+  def hash; end
+
+  # pkg:gem/ransack#lib/ransack/active_record/join.rb:10
+  def klass; end
+
+  # pkg:gem/ransack#lib/ransack/active_record/join.rb:18
+  def klass=(klass); end
+
+  # pkg:gem/ransack#lib/ransack/active_record/join.rb:9
+  def name; end
+
+  # pkg:gem/ransack#lib/ransack/active_record/join.rb:9
+  def name=(_arg0); end
+
+  # pkg:gem/ransack#lib/ransack/active_record/join.rb:10
+  def type; end
+
+  # pkg:gem/ransack#lib/ransack/active_record/join.rb:22
+  def type=(type); end
+
+  private
+
+  # pkg:gem/ransack#lib/ransack/active_record/join.rb:45
+  def convert_to_arel_join_type(type); end
+
+  # pkg:gem/ransack#lib/ransack/active_record/join.rb:62
+  def convert_to_class(value); end
+end
+
+# pkg:gem/ransack#lib/ransack/active_record.rb:14
+Ransack::ActiveRecord::JoinAssociation = ActiveRecord::Associations::JoinDependency::JoinAssociation
+
+# Prepended to ActiveRecord::Associations::JoinDependency::JoinAssociation.
+#
+# Adds the join type and the polymorphic class to a join association, and
+# a variant of #join_constraints that builds against tables Ransack has
+# already aliased, so a correlated subquery for a negative condition on a
+# collection uses the same aliases as the outer query.
+#
+# pkg:gem/ransack#lib/ransack/active_record/join_association.rb:9
+module Ransack::ActiveRecord::JoinAssociationExtensions
+  # pkg:gem/ransack#lib/ransack/active_record/join_association.rb:14
+  def initialize(reflection, children, polymorphic_class = T.unsafe(nil), join_type = T.unsafe(nil)); end
+
+  # Same as #join_constraints, but instead of constructing tables from the
+  # given block, uses the ones passed
+  #
+  # pkg:gem/ransack#lib/ransack/active_record/join_association.rb:40
+  def join_constraints_with_tables(foreign_table, foreign_klass, join_type, alias_tracker, tables); end
+
+  # A polymorphic reflection has no class of its own. To join it to one
+  # concrete class, work on a copy of the reflection that names that class
+  # and drops the polymorphic option; the shared reflection on the model
+  # is left untouched, so this is safe across threads.
+  #
+  # pkg:gem/ransack#lib/ransack/active_record/join_association.rb:30
+  def swapping_reflection_klass(reflection, klass); end
+
+  private
+
+  # Active Record's private append_constraints takes a leading connection
+  # argument in 7.2.0–7.2.2.2 and 8.0.0–8.0.2, and none in 7.2.3+, 8.0.3+
+  # and 8.1; the arity says which is loaded.
+  #
+  # pkg:gem/ransack#lib/ransack/active_record/join_association.rb:93
+  def append_constraints_to(join, constraints); end
+
+  class << self
+    # pkg:gem/ransack#lib/ransack/active_record/join_association.rb:10
+    def prepended(base); end
+  end
+end
+
+# pkg:gem/ransack#lib/ransack/active_record.rb:13
+Ransack::ActiveRecord::JoinDependency = ActiveRecord::Associations::JoinDependency
+
+# Prepended to ActiveRecord::Associations::JoinDependency.
+#
+# Teaches the join tree about Join nodes (join type, polymorphic class),
+# and exposes the table aliasing Ransack needs to add one association at a
+# time to a relation that may already carry joins of its own.
+#
+# pkg:gem/ransack#lib/ransack/active_record/join_dependency.rb:8
+module Ransack::ActiveRecord::JoinDependencyExtensions
+  # Replaces ActiveRecord::Associations::JoinDependency#build
+  #
+  # pkg:gem/ransack#lib/ransack/active_record/join_dependency.rb:10
+  def build(associations, base_klass); end
+
+  # pkg:gem/ransack#lib/ransack/active_record/join_dependency.rb:56
+  def construct_tables_for_association!(join_root, association, join_type = T.unsafe(nil)); end
+
+  # pkg:gem/ransack#lib/ransack/active_record/join_dependency.rb:36
+  def join_constraints(joins_to_add, alias_tracker, references); end
+
+  private
+
+  # The tables for a node's reflection chain, assigned the way Active
+  # Record's JoinDependency#make_constraints assigns them, so that the
+  # aliases Ransack binds conditions to are the ones the query will have.
+  # Once a chain tail has been joined before, Active Record stops
+  # aliasing and reuses that join; the remaining positions here are
+  # filled from the same record for the correlated-subquery builder.
+  #
+  # pkg:gem/ransack#lib/ransack/active_record/join_dependency.rb:70
+  def table_aliases_for(parent, node, join_type); end
+end
+
+# pkg:gem/ransack#lib/ransack/active_record/join_dependency.rb:98
+module Ransack::ActiveRecord::JoinDependencyExtensions::ClassMethods
+  # Prepended before ActiveRecord::Associations::JoinDependency#walk_tree
+  #
+  # pkg:gem/ransack#lib/ransack/active_record/join_dependency.rb:101
+  def walk_tree(associations, hash); end
+end
+
+# Prepended to ActiveRecord::Reflection::AbstractReflection.
+#
+# When a polymorphic belongs_to is joined to one concrete class, the join
+# must also constrain the type column, or rows pointing at a different
+# class with a colliding id would match.
+#
+# pkg:gem/ransack#lib/ransack/active_record/reflection.rb:8
+module Ransack::ActiveRecord::ReflectionExtensions
+  # pkg:gem/ransack#lib/ransack/active_record/reflection.rb:9
+  def join_scope(table, foreign_table, foreign_klass); end
+end
+
+# Anything that can be placed in the association tree handed to
+# JoinDependency. Active Record's own tree is built from symbols and
+# hashes; a TreeNode adds itself to that tree however it likes, which is
+# how a Join carries its join type and polymorphic class through.
+#
+# pkg:gem/ransack#lib/ransack/active_record/tree_node.rb:7
+module Ransack::ActiveRecord::TreeNode
+  # pkg:gem/ransack#lib/ransack/active_record/tree_node.rb:8
+  def add_to_tree(hash); end
+end
+
+# Ransack 5 and earlier kept the Active Record integration under
+# Ransack::Adapters::ActiveRecord, a leftover from when Mongoid was also
+# supported. Initializers that reopen it — usually to change the default
+# `ransackable_attributes` — keep working for one more major release, with a
+# deprecation warning pointing at the new name.
+#
+# pkg:gem/ransack#lib/ransack/active_record.rb:38
+module Ransack::Adapters
+  class << self
+    # pkg:gem/ransack#lib/ransack/active_record.rb:39
+    def const_missing(name); end
+  end
 end
 
 # pkg:gem/ransack#lib/ransack/naming.rb:48
@@ -337,13 +572,13 @@ end
 
 # pkg:gem/ransack#lib/ransack/configuration.rb:5
 module Ransack::Configuration
-  # pkg:gem/ransack#lib/ransack/configuration.rb:46
+  # pkg:gem/ransack#lib/ransack/configuration.rb:48
   def add_predicate(name, opts = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/configuration.rb:233
+  # pkg:gem/ransack#lib/ransack/configuration.rb:281
   def arel_predicate_with_suffix(arel_predicate, suffix); end
 
-  # pkg:gem/ransack#lib/ransack/configuration.rb:42
+  # pkg:gem/ransack#lib/ransack/configuration.rb:44
   def configure; end
 
   # By default, Ransack displays sort order indicator arrows with HTML codes:
@@ -366,7 +601,7 @@ module Ransack::Configuration
   #   }
   # end
   #
-  # pkg:gem/ransack#lib/ransack/configuration.rb:138
+  # pkg:gem/ransack#lib/ransack/configuration.rb:140
   def custom_arrows=(opts = T.unsafe(nil)); end
 
   # By default Ransack ignores empty predicates. Ransack can also fallback to
@@ -378,8 +613,22 @@ module Ransack::Configuration
   #   config.default_predicate = 'eq'
   # end
   #
-  # pkg:gem/ransack#lib/ransack/configuration.rb:114
+  # pkg:gem/ransack#lib/ransack/configuration.rb:116
   def default_predicate=(name); end
+
+  # Ransack works out which SQL dialect a model's database speaks from the
+  # connection adapter's class: PostgreSQL, MySQL (mysql2 and trilogy) and
+  # SQLite are recognised, as is any adapter that subclasses one of them,
+  # and anything else uses standard SQL only. For an adapter that speaks a
+  # known dialect without inheriting from Rails' adapter for it, name the
+  # dialect explicitly:
+  #
+  # Ransack.configure do |config|
+  #   config.dialect = :postgresql # or :mysql, :sqlite, :generic
+  # end
+  #
+  # pkg:gem/ransack#lib/ransack/configuration.rb:246
+  def dialect=(name); end
 
   # The `NULLS FIRST` and `NULLS LAST` options can be used to determine
   # whether nulls appear before or after non-null values in the sort ordering.
@@ -396,7 +645,7 @@ module Ransack::Configuration
   #
   # See https://www.postgresql.org/docs/current/queries-order.html
   #
-  # pkg:gem/ransack#lib/ransack/configuration.rb:175
+  # pkg:gem/ransack#lib/ransack/configuration.rb:177
   def fields_sort_option=(setting); end
 
   # By default, Ransack displays sort order indicator arrows in sort links.
@@ -408,7 +657,7 @@ module Ransack::Configuration
   #   config.hide_sort_order_indicators = true
   # end
   #
-  # pkg:gem/ransack#lib/ransack/configuration.rb:195
+  # pkg:gem/ransack#lib/ransack/configuration.rb:197
   def hide_sort_order_indicators=(boolean); end
 
   # By default, Ransack ignores search conditions whose value is blank — an
@@ -428,7 +677,7 @@ module Ransack::Configuration
   #   config.ignore_blank_values = false
   # end
   #
-  # pkg:gem/ransack#lib/ransack/configuration.rb:229
+  # pkg:gem/ransack#lib/ransack/configuration.rb:231
   def ignore_blank_values=(boolean); end
 
   # By default Ransack ignores errors if an unknown predicate, condition or
@@ -440,8 +689,38 @@ module Ransack::Configuration
   #   config.ignore_unknown_conditions = false
   # end
   #
-  # pkg:gem/ransack#lib/ransack/configuration.rb:101
+  # pkg:gem/ransack#lib/ransack/configuration.rb:103
   def ignore_unknown_conditions=(boolean); end
+
+  # Unset by default, so no application changes behavior on upgrade. Set
+  # this to a unique String value that cannot occur in your data, and an
+  # `eq` or `in` predicate (including their `_any` compounds) treats it as
+  # a request to also match `NULL`, instead of as a literal value to
+  # search for. A blank String, `false`, or a non-String value is not
+  # supported and produces undefined behavior:
+  #
+  # Ransack.configure do |config|
+  #   config.null_sentinel = '__ransack_null__'
+  # end
+  #
+  #   name_in: ['Ernie']              # name IN ('Ernie')
+  #   name_in: ['Ernie', '__ransack_null__']
+  #                                   # (name IN ('Ernie') OR name IS NULL)
+  #   name_in: ['__ransack_null__']   # name IS NULL
+  #
+  # A single multi-value form field can express all three states this
+  # way, with no change to the field's name and no controller-side
+  # rewriting. `eq` takes one value, so through it the sentinel means
+  # `IS NULL` alone; "a value or NULL" from one field needs `in` or an
+  # `_any` compound.
+  #
+  # This does not bypass `ransackable_attributes`: `NULL` on an exposed
+  # attribute is already reachable through the built-in `null` predicate.
+  #
+  # See https://github.com/activerecord-hackery/ransack/issues/940
+  #
+  # pkg:gem/ransack#lib/ransack/configuration.rb:277
+  def null_sentinel=(value); end
 
   # pkg:gem/ransack#lib/ransack/configuration.rb:7
   def options; end
@@ -453,7 +732,7 @@ module Ransack::Configuration
   # emitted through Arel and is no longer PostgreSQL-specific. The old name
   # still works so existing initializers keep running.
   #
-  # pkg:gem/ransack#lib/ransack/configuration.rb:182
+  # pkg:gem/ransack#lib/ransack/configuration.rb:184
   def postgres_fields_sort_option=(setting); end
 
   # pkg:gem/ransack#lib/ransack/configuration.rb:7
@@ -474,7 +753,7 @@ module Ransack::Configuration
   #   config.sanitize_custom_scope_booleans = false
   # end
   #
-  # pkg:gem/ransack#lib/ransack/configuration.rb:156
+  # pkg:gem/ransack#lib/ransack/configuration.rb:158
   def sanitize_custom_scope_booleans=(boolean); end
 
   # The default `search_key` name is `:q`. The default key may be overridden
@@ -496,7 +775,7 @@ module Ransack::Configuration
   # In the view:
   # <%= f.search_form_for @search, as: :log_search %>
   #
-  # pkg:gem/ransack#lib/ransack/configuration.rb:88
+  # pkg:gem/ransack#lib/ransack/configuration.rb:90
   def search_key=(name); end
 
   # By default, Ransack displays strips all whitespace when searching for a string.
@@ -508,7 +787,7 @@ module Ransack::Configuration
   #   config.strip_whitespace = true
   # end
   #
-  # pkg:gem/ransack#lib/ransack/configuration.rb:208
+  # pkg:gem/ransack#lib/ransack/configuration.rb:210
   def strip_whitespace=(boolean); end
 
   class << self
@@ -556,8 +835,17 @@ module Ransack::Constants
   # `Condition#format_predicate`; escaping without it silently does nothing
   # on SQLite. See https://github.com/activerecord-hackery/ransack/issues/1581
   #
-  # pkg:gem/ransack#lib/ransack/constants.rb:206
+  # pkg:gem/ransack#lib/ransack/constants.rb:245
   def escape_wildcards(unescaped); end
+
+  # pkg:gem/ransack#lib/ransack/constants.rb:249
+  def null_sentinel_predicate?(predicate_name, sentinel); end
+
+  # pkg:gem/ransack#lib/ransack/constants.rb:257
+  def null_sentinel_requested?(predicate_name, values, sentinel); end
+
+  # pkg:gem/ransack#lib/ransack/constants.rb:253
+  def null_sentinel_value?(value, sentinel); end
 
   class << self
     # Escapes the LIKE wildcards `%` and `_`, and the escape character itself,
@@ -565,8 +853,17 @@ module Ransack::Constants
     # `Condition#format_predicate`; escaping without it silently does nothing
     # on SQLite. See https://github.com/activerecord-hackery/ransack/issues/1581
     #
-    # pkg:gem/ransack#lib/ransack/constants.rb:206
+    # pkg:gem/ransack#lib/ransack/constants.rb:245
     def escape_wildcards(unescaped); end
+
+    # pkg:gem/ransack#lib/ransack/constants.rb:249
+    def null_sentinel_predicate?(predicate_name, sentinel); end
+
+    # pkg:gem/ransack#lib/ransack/constants.rb:257
+    def null_sentinel_requested?(predicate_name, values, sentinel); end
+
+    # pkg:gem/ransack#lib/ransack/constants.rb:253
+    def null_sentinel_value?(value, sentinel); end
   end
 end
 
@@ -600,22 +897,22 @@ Ransack::Constants::CAP_SEARCH = T.let(T.unsafe(nil), String)
 # pkg:gem/ransack#lib/ransack/constants.rb:12
 Ransack::Constants::COMBINATOR = T.let(T.unsafe(nil), String)
 
-# pkg:gem/ransack#lib/ransack/constants.rb:46
+# pkg:gem/ransack#lib/ransack/constants.rb:61
 Ransack::Constants::CONT = T.let(T.unsafe(nil), String)
 
-# pkg:gem/ransack#lib/ransack/constants.rb:62
+# pkg:gem/ransack#lib/ransack/constants.rb:77
 Ransack::Constants::DERIVED_PREDICATES = T.let(T.unsafe(nil), Array)
 
-# pkg:gem/ransack#lib/ransack/constants.rb:51
+# pkg:gem/ransack#lib/ransack/constants.rb:66
 Ransack::Constants::DISTINCT = T.let(T.unsafe(nil), String)
 
 # pkg:gem/ransack#lib/ransack/constants.rb:19
 Ransack::Constants::DOT_ASTERIX = T.let(T.unsafe(nil), String)
 
-# pkg:gem/ransack#lib/ransack/constants.rb:42
+# pkg:gem/ransack#lib/ransack/constants.rb:57
 Ransack::Constants::EQ = T.let(T.unsafe(nil), String)
 
-# pkg:gem/ransack#lib/ransack/constants.rb:44
+# pkg:gem/ransack#lib/ransack/constants.rb:59
 Ransack::Constants::EQ_ANY = T.let(T.unsafe(nil), String)
 
 # pkg:gem/ransack#lib/ransack/constants.rb:27
@@ -638,7 +935,7 @@ Ransack::Constants::LEFT_PARENTHESIS = T.let(T.unsafe(nil), String)
 # behaviour does not depend on a backend's default escape character —
 # MySQL and PostgreSQL default to backslash, SQLite has no default at all.
 #
-# pkg:gem/ransack#lib/ransack/constants.rb:199
+# pkg:gem/ransack#lib/ransack/constants.rb:238
 Ransack::Constants::LIKE_ESCAPE_CHARACTER = T.let(T.unsafe(nil), String)
 
 # The most `_`-separated segments a single condition or sort key may have
@@ -649,14 +946,29 @@ Ransack::Constants::LIKE_ESCAPE_CHARACTER = T.let(T.unsafe(nil), String)
 # denial of service (GHSA-j3f8-w227-4hh8). No real search key is this
 # long: OR-ing every column of a very wide table stays well under it.
 #
-# pkg:gem/ransack#lib/ransack/constants.rb:60
+# pkg:gem/ransack#lib/ransack/constants.rb:75
 Ransack::Constants::MAX_KEY_DEPTH = T.let(T.unsafe(nil), Integer)
 
-# pkg:gem/ransack#lib/ransack/constants.rb:43
+# pkg:gem/ransack#lib/ransack/constants.rb:58
 Ransack::Constants::NOT_EQ = T.let(T.unsafe(nil), String)
 
-# pkg:gem/ransack#lib/ransack/constants.rb:45
+# pkg:gem/ransack#lib/ransack/constants.rb:60
 Ransack::Constants::NOT_EQ_ALL = T.let(T.unsafe(nil), String)
+
+# The predicates `Ransack.options[:null_sentinel]` applies to. Limited to
+# the positive equality family (`eq`, `in`, and their `_any` compounds)
+# because these are the only predicates where "or is null" is
+# unambiguous. The `_all` compounds are excluded because they are
+# conjunctive: `eq_all`/`in_all` require a single column to equal every
+# supplied value at once, so ORing in `IS NULL` would widen a query that
+# already matches nothing (or almost nothing) rather than narrow it. A
+# negative predicate treats the sentinel as a literal value for the same
+# reason of unambiguity: `not_eq` matching the sentinel would otherwise
+# mean "is not unassigned", which reads as the opposite of what a caller
+# submitting it alone almost certainly wants.
+#
+# pkg:gem/ransack#lib/ransack/constants.rb:53
+Ransack::Constants::NULL_SENTINEL_PREDICATES = T.let(T.unsafe(nil), Array)
 
 # pkg:gem/ransack#lib/ransack/constants.rb:3
 Ransack::Constants::OR = T.let(T.unsafe(nil), String)
@@ -664,10 +976,10 @@ Ransack::Constants::OR = T.let(T.unsafe(nil), String)
 # pkg:gem/ransack#lib/ransack/constants.rb:17
 Ransack::Constants::Q = T.let(T.unsafe(nil), String)
 
-# pkg:gem/ransack#lib/ransack/constants.rb:48
+# pkg:gem/ransack#lib/ransack/constants.rb:63
 Ransack::Constants::RANSACK_SLASH_SEARCHES = T.let(T.unsafe(nil), String)
 
-# pkg:gem/ransack#lib/ransack/constants.rb:49
+# pkg:gem/ransack#lib/ransack/constants.rb:64
 Ransack::Constants::RANSACK_SLASH_SEARCHES_SLASH_SEARCH = T.let(T.unsafe(nil), String)
 
 # pkg:gem/ransack#lib/ransack/constants.rb:7
@@ -696,13 +1008,13 @@ Ransack::Constants::UNDERSCORE = T.let(T.unsafe(nil), String)
 
 # pkg:gem/ransack#lib/ransack/context.rb:4
 class Ransack::Context
-  # pkg:gem/ransack#lib/ransack/context.rb:42
+  # pkg:gem/ransack#lib/ransack/context.rb:52
   def initialize(object, options = T.unsafe(nil)); end
 
   # pkg:gem/ransack#lib/ransack/context.rb:5
   def arel_visitor; end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:148
+  # pkg:gem/ransack#lib/ransack/context.rb:175
   def association_path(str, base = T.unsafe(nil)); end
 
   # pkg:gem/ransack#lib/ransack/context.rb:6
@@ -714,20 +1026,33 @@ class Ransack::Context
   # pkg:gem/ransack#lib/ransack/context.rb:5
   def base; end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:114
+  # pkg:gem/ransack#lib/ransack/context.rb:141
   def bind(object, str); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:64
+  # pkg:gem/ransack#lib/ransack/context.rb:74
   def bind_pair_for(key); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:90
+  # A bare `false` normally means "this checkbox was not ticked" and the
+  # scope is not applied at all. A scope listed in
+  # `ransackable_scopes_skip_sanitize_args` has asked to see its values as
+  # given, so `false` reaches it like any other value and it can be driven
+  # by a yes / no / any select (#1375).
+  #
+  # pkg:gem/ransack#lib/ransack/context.rb:115
   def chain_scope(scope, args); end
 
   # Convert a string representing a chain of associations and an attribute
   # into the attribute itself
   #
-  # pkg:gem/ransack#lib/ransack/context.rb:85
+  # pkg:gem/ransack#lib/ransack/context.rb:105
   def contextualize(str); end
+
+  # The SQL dialect the search will be rendered in, for the few places
+  # where generated SQL differs by database. See
+  # Ransack::ActiveRecord::Dialect for the questions it answers.
+  #
+  # pkg:gem/ransack#lib/ransack/context.rb:86
+  def dialect; end
 
   # pkg:gem/ransack#lib/ransack/context.rb:5
   def engine; end
@@ -744,40 +1069,99 @@ class Ransack::Context
   # an over-long key is treated as unknown rather than parsed
   # (GHSA-j3f8-w227-4hh8).
   #
-  # pkg:gem/ransack#lib/ransack/context.rb:60
+  # pkg:gem/ransack#lib/ransack/context.rb:70
   def key_within_depth_limit?(key); end
 
   # pkg:gem/ransack#lib/ransack/context.rb:5
   def klass; end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:73
+  # The model class behind a search object, an association node or a class.
+  # Each ORM integration decides what counts as a model, so this is defined
+  # on the integration's Context subclass.
+  #
+  # pkg:gem/ransack#lib/ransack/context.rb:93
   def klassify(obj); end
+
+  # Falls back to the global option unless this search's own option was
+  # set, including to `false` to turn the feature off for one search. A
+  # Condition captures this when it is built, so a later search reusing
+  # this context does not change the conditions of an earlier one.
+  #
+  # pkg:gem/ransack#lib/ransack/context.rb:48
+  def null_sentinel; end
+
+  # Falls back to the global option unless this search's own option was
+  # set, including to `false` to turn the feature off for one search. A
+  # Condition captures this when it is built, so a later search reusing
+  # this context does not change the conditions of an earlier one.
+  #
+  # pkg:gem/ransack#lib/ransack/context.rb:7
+  def null_sentinel=(_arg0); end
 
   # pkg:gem/ransack#lib/ransack/context.rb:5
   def object; end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:181
+  # True when the search was built from `ActionController::Parameters` the
+  # controller permitted. A model with no allowlist of its own then lets
+  # that permit list be the boundary (see `allowlist` below).
+  #
+  # pkg:gem/ransack#lib/ransack/context.rb:12
+  def permitted; end
+
+  # True when the search was built from `ActionController::Parameters` the
+  # controller permitted. A model with no allowlist of its own then lets
+  # that permit list be the boundary (see `allowlist` below).
+  #
+  # pkg:gem/ransack#lib/ransack/context.rb:12
+  def permitted=(_arg0); end
+
+  # The class named in an `_of_Model_type` suffix comes from the query
+  # string, so it can name anything: a constant that does not exist, a
+  # lowercase word, a module, a class with no table, a path through
+  # something that is no module at all (`ENV::Person`). None of those is a
+  # model to search, so the suffix is then no polymorphic reference at all
+  # and the whole key fails as any other unknown attribute does, ignored or
+  # raised as `InvalidSearchError` under `ignore_unknown_conditions`.
+  # `Kernel.const_get` used to raise `NameError` straight from the URL
+  # (#1738).
+  #
+  # pkg:gem/ransack#lib/ransack/context.rb:222
+  def polymorphic_class(name); end
+
+  # pkg:gem/ransack#lib/ransack/context.rb:231
   def ransackable_alias(str); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:193
+  # pkg:gem/ransack#lib/ransack/context.rb:268
   def ransackable_association?(str, klass); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:185
+  # pkg:gem/ransack#lib/ransack/context.rb:260
   def ransackable_attribute?(str, klass); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:197
+  # pkg:gem/ransack#lib/ransack/context.rb:272
   def ransackable_scope?(str, klass); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:201
+  # pkg:gem/ransack#lib/ransack/context.rb:276
   def ransackable_scope_skip_sanitize_args?(str, klass); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:189
+  # pkg:gem/ransack#lib/ransack/context.rb:264
   def ransortable_attribute?(str, klass); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:106
+  # Expands every `ransack_alias` in a condition name: the whole name, each
+  # `_or_` / `_and_` segment of a compound, and an alias defined on an
+  # associated model and reached through an association path
+  # (`person_term` when Person aliases `term`). An alias that expands to a
+  # compound is joined with that compound's own combinator, so
+  # `term_or_daddy` with `term => name_or_email` becomes
+  # `name_or_email_or_parent_name`. Returns the name unchanged when it
+  # holds no alias.
+  #
+  # pkg:gem/ransack#lib/ransack/context.rb:243
+  def resolve_aliases(str); end
+
+  # pkg:gem/ransack#lib/ransack/context.rb:133
   def sanitize_scope_args(key, args); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:102
+  # pkg:gem/ransack#lib/ransack/context.rb:129
   def scope_arity(scope); end
 
   # pkg:gem/ransack#lib/ransack/context.rb:5
@@ -789,41 +1173,77 @@ class Ransack::Context
   # pkg:gem/ransack#lib/ransack/context.rb:6
   def search_key=(_arg0); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:213
+  # pkg:gem/ransack#lib/ransack/context.rb:288
   def searchable_associations(str = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:205
+  # pkg:gem/ransack#lib/ransack/context.rb:280
   def searchable_attributes(str = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:209
+  # Whether a class can be the base of a search. An ORM integration refines
+  # this; by default any class Ransack has been mixed into qualifies.
+  #
+  # pkg:gem/ransack#lib/ransack/context.rb:99
+  def searchable_class?(klass); end
+
+  # pkg:gem/ransack#lib/ransack/context.rb:284
   def sortable_attributes(str = T.unsafe(nil)); end
 
   # Unknown attributes, predicates and combinators raise rather than being
   # ignored when either the global option or this search's own option says so.
   #
-  # pkg:gem/ransack#lib/ransack/context.rb:38
+  # pkg:gem/ransack#lib/ransack/context.rb:40
   def strict_conditions?; end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:119
+  # pkg:gem/ransack#lib/ransack/context.rb:146
   def traverse(str, base = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/context.rb:173
+  # pkg:gem/ransack#lib/ransack/context.rb:204
   def unpolymorphize_association(str); end
 
   private
 
-  # pkg:gem/ransack#lib/ransack/context.rb:219
+  # The allowlist a search consults on `klass`. A model that defines its
+  # own `method` is always asked, so its list applies on top of whatever
+  # the controller permitted. A model that defines none has left the
+  # decision to the controller: when the parameters were permitted, the
+  # block's list of everything that exists is used, and otherwise the
+  # model's default runs, which raises asking for a list (#1403).
+  #
+  # pkg:gem/ransack#lib/ransack/context.rb:316
+  def allowlist(klass, method, *fallbacks); end
+
+  # pkg:gem/ransack#lib/ransack/context.rb:306
+  def associations_for(klass); end
+
+  # pkg:gem/ransack#lib/ransack/context.rb:294
+  def attributes_for(klass); end
+
+  # pkg:gem/ransack#lib/ransack/context.rb:343
   def cast_scope_args(args); end
 
+  # pkg:gem/ransack#lib/ransack/context.rb:324
+  def resolve_alias_segment(segment); end
+
+  # `ransortable_attributes` defaults to `ransackable_attributes`, so a
+  # model that defines either one has a sort list of its own.
+  #
+  # pkg:gem/ransack#lib/ransack/context.rb:300
+  def sortable_attributes_for(klass); end
+
   class << self
-    # pkg:gem/ransack#lib/ransack/context.rb:23
+    # pkg:gem/ransack#lib/ransack/context.rb:28
     def for(object, options = T.unsafe(nil)); end
 
-    # pkg:gem/ransack#lib/ransack/context.rb:10
-    def for_class(klass, options = T.unsafe(nil)); end
+    # An ORM integration registers a block that returns a Context for the
+    # objects it understands and nil for anything else. Ransack ships the
+    # Active Record integration (see Ransack::ActiveRecord::Context); an
+    # integration for another ORM registers its own resolver here.
+    #
+    # pkg:gem/ransack#lib/ransack/context.rb:20
+    def register(&resolver); end
 
-    # pkg:gem/ransack#lib/ransack/context.rb:16
-    def for_object(object, options = T.unsafe(nil)); end
+    # pkg:gem/ransack#lib/ransack/context.rb:24
+    def resolvers; end
   end
 end
 
@@ -882,49 +1302,60 @@ class Ransack::Helpers::FormBuilder < ::ActionView::Helpers::FormBuilder
 
   private
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:191
+  # Expands the +associations:+ option of +attribute_select+ into the flat
+  # list of association paths ransack understands. A String or Symbol
+  # names one association; an Array lists several; a Hash reaches through
+  # an association to its own associations, so +{ articles: :comments }+
+  # yields +articles+ and +articles_comments+. Shapes nest freely.
+  #
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:204
   def association_array(obj, prefix = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:208
-  def association_hash(obj); end
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:217
+  def association_hash(obj, prefix = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:197
-  def association_object(obj); end
-
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:250
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:255
   def attr_from_base_and_column(base, column); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:234
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:239
   def attribute_collection_for_base(attributes, base = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:219
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:224
   def attribute_collection_for_bases(action, bases); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:161
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:169
   def can_use_default?(default, attribute, values); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:245
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:250
   def collection_for_base(action, base); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:177
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:185
   def combinator_choices; end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:254
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:259
   def formbuilder_error_message(action); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:223
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:228
   def get_attribute_element(action, base); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:166
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:174
   def mapped_values(values); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:170
+  # Rails reads a select's current value back through the field name, which
+  # for the predicate select is +p+. Only a Condition has a public +p+, and
+  # +Kernel#p+ is private, so a builder for a Search or Grouping would
+  # raise instead of finding nothing. Resolve the value here instead.
+  #
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:151
+  def selected_predicate; end
+
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:178
   def sort_array; end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:154
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:162
   def template_collection_select(name, collection, options, html_options); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:147
+  # pkg:gem/ransack#lib/ransack/helpers/form_builder.rb:155
   def template_grouped_collection_select(collection, options, html_options); end
 end
 
@@ -1246,32 +1677,45 @@ end
 
 # pkg:gem/ransack#lib/ransack/nodes/condition.rb:5
 class Ransack::Nodes::Condition < ::Ransack::Nodes::Node
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:215
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:19
+  def initialize(context); end
+
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:282
   def ==(other); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:79
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:103
   def a; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:101
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:125
   def a=(args); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:302
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:385
   def arel_predicate; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:261
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:338
   def arel_predicate_for_attribute(attr); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:273
+  # The column (or ransacker expression) a predicate compares against.
+  # A case-insensitive predicate lowers it, unless the dialect has a
+  # case-insensitive LIKE of its own (ILIKE), in which case the lowering
+  # is left to the database. LOWER() is applied as a function rather than
+  # through Arel's Attribute#lower so that a ransacker returning any Arel
+  # node — a SQL literal, an infix operation — is lowered too (#1357).
+  #
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:356
   def attr_value_for_attribute(attr); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:76
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:100
   def attributes; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:81
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:105
   def attributes=(args); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:189
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:256
   def build(params); end
+
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:210
+  def build_attribute(name = T.unsafe(nil), ransacker_args = T.unsafe(nil)); end
 
   # == build_attribute
   #
@@ -1291,58 +1735,93 @@ class Ransack::Nodes::Condition < ::Ransack::Nodes::Node
   #  TODO: Add test coverage for this behavior and ensure that `name.nil?`
   #  isn't fixing issue #701 by introducing untested regressions.
   #
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:158
-  def build_attribute(name = T.unsafe(nil), ransacker_args = T.unsafe(nil)); end
+  # An attribute named in advanced-search params (`a: { '0' => { name:
+  # 'term' } }`) arrives raw, unlike a simple key, which `Condition.extract`
+  # resolves before it gets here. So a `ransack_alias` is expanded here the
+  # same way: an alias to one attribute is built under that name, and an
+  # alias to a compound becomes one attribute per segment, joined by the
+  # compound's combinator (#1728). Left alone, the alias passed `valid?`
+  # by being allowlisted and bound a column that does not exist.
+  #
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:198
+  def build_attributes(name, ransacker_args = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:168
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:220
   def build_value(val = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:239
+  # Casting the sentinel here would turn it into a real value on a
+  # typed column (e.g. an integer column casts it to 0), so a form
+  # re-rendering this condition's current value would resubmit that
+  # literal instead of the sentinel.
+  #
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:238
+  def cast_unless_null_sentinel(v); end
+
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:316
   def casted_values_for_attribute(attr); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:129
+  # A supplied combinator wins; the one an expanded alias carried is the
+  # fallback, so `a: { '0' => { name: 'term' } }` with `term` aliasing
+  # `name_or_email` ORs its two attributes without an `m` in the params.
+  # The fallback covers a missing or blank `m` only: an unknown one that
+  # `Node#combinator=` normalised to nil still fails `valid_combinator?`,
+  # as it does for any other multi-attribute condition.
+  #
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:159
   def combinator; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:133
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:165
   def combinator=(val); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:281
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:364
   def default_type; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:208
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:275
   def eql?(other); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:243
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:320
   def formatted_values_for_attribute(attr); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:217
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:284
   def hash; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:285
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:368
   def inspect; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:203
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:270
   def key; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:138
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:171
   def m; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:137
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:170
   def m=(val); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:298
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:381
   def negative?; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:348
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:418
   def not_nested_condition(attribute, parent_table); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:233
+  # The effective null sentinel, captured when the condition is built. A
+  # Context can be shared by several searches, each with its own
+  # per-search override; reading the context lazily at SQL generation or
+  # form rendering time would let a later search's setting rewrite an
+  # earlier search's conditions.
+  #
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:17
+  def null_sentinel; end
+
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:312
+  def null_sentinel_requested?; end
+
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:300
   def p; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:228
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:295
   def p=(name); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:199
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:266
   def persisted?; end
 
   # pkg:gem/ransack#lib/ransack/nodes/condition.rb:10
@@ -1351,73 +1830,112 @@ class Ransack::Nodes::Condition < ::Ransack::Nodes::Node
   # pkg:gem/ransack#lib/ransack/nodes/condition.rb:10
   def predicate=(_arg0); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:230
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:297
   def predicate_name; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:221
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:288
   def predicate_name=(name); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:106
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:130
   def v; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:127
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:151
   def v=(args); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:67
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:91
   def valid?; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:72
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:96
   def valid_arity?; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:235
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:302
   def validated_values; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:174
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:226
   def value; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:103
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:127
   def values; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:108
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:132
   def values=(args); end
 
   private
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:427
+  # `validated_values` has already excluded the sentinel above, so
+  # `predicate` here is built from the real values alone (or, when
+  # the sentinel was the only value submitted, from an empty
+  # array). An empty IN or eq_any/in_any is not `IS NULL` on its
+  # own terms (an empty `IN` is a literal false, and an empty
+  # `eq_any` builds a broken Grouping), so that case is replaced
+  # outright rather than OR'd.
+  #
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:481
+  def apply_null_sentinel(predicate, attr_value); end
+
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:550
   def casted_array?(predicate); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:354
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:424
   def combinator_method; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:358
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:428
   def format_predicate(attribute); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:431
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:554
   def format_values_for(predicate); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:404
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:489
   def in_predicate?(predicate); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:456
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:605
   def length_function_for_attribute(attribute); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:448
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:601
   def length_predicate?; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:414
+  # Builds a LIKE / NOT LIKE node (or the _any / _all forms).
+  #
+  # The value is wrapped in Arel::Nodes.build_quoted so that Active
+  # Record's `normalizes` cannot rewrite the wildcards, and the escape
+  # character is passed so the escaping done by `escape_wildcards` is
+  # honoured: without an explicit ESCAPE clause SQLite treats a backslash
+  # as a literal character (#1581). The compound forms iterate over an
+  # Array of patterns, so each element is quoted on its own.
+  #
+  # Only the `i_` predicates ask for a case-insensitive match. Arel's
+  # PostgreSQL visitor renders a case-sensitive `matches` as LIKE and the
+  # other kind as ILIKE; before 6.0 the flag was never passed and every
+  # LIKE on PostgreSQL became ILIKE (#1421).
+  #
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:516
+  def like_predicate(attribute, arel_predicate, values = T.unsafe(nil)); end
+
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:499
   def like_predicate?(arel_predicate); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:437
-  def replace_right_node?(predicate); end
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:591
+  def plain_integer(arel_node); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:420
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:543
   def string_like_attribute?(attribute); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:470
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:586
+  def unwrap_binary_right(node); end
+
+  # Walks a predicate node for the shapes `#arel_predicate` can produce
+  # (a single Binary, an In/NotIn holding an Array, or several of these
+  # combined with Grouping/And/Or) and replaces each integer Casted
+  # value it finds with the plain integer, in place.
+  #
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:564
+  def unwrap_oversized_integers(node); end
+
+  # pkg:gem/ransack#lib/ransack/nodes/condition.rb:612
   def valid_combinator?; end
 
   class << self
-    # pkg:gem/ransack#lib/ransack/nodes/condition.rb:13
+    # pkg:gem/ransack#lib/ransack/nodes/condition.rb:25
     def extract(context, key, values); end
 
     private
@@ -1428,28 +1946,32 @@ class Ransack::Nodes::Condition < ::Ransack::Nodes::Node
     # pkg:gem/ransack#lib/ransack/nodes/condition.rb:6
     def __class_attr_i18n_words=(new_value); end
 
-    # pkg:gem/ransack#lib/ransack/nodes/condition.rb:37
+    # A condition name carries one combinator: `a_or_b_or_c` or
+    # `a_and_b`. There is no grammar for precedence between the two,
+    # so a name using both is rejected under a strict search rather
+    # than silently applying whichever came first to every attribute
+    # (#1019). Mixed logic is what groupings are for.
+    #
+    # pkg:gem/ransack#lib/ransack/nodes/condition.rb:80
+    def combinator_in(str, context); end
+
+    # pkg:gem/ransack#lib/ransack/nodes/condition.rb:49
     def extract_values_for_condition(key, context = T.unsafe(nil)); end
   end
 end
 
-# CHAR_LENGTH counts characters and is the SQL standard spelling; SQLite
-# has no CHAR_LENGTH and its LENGTH already counts characters for text.
-#
-# pkg:gem/ransack#lib/ransack/nodes/condition.rb:454
-Ransack::Nodes::Condition::CHAR_LENGTH_ADAPTERS = T.let(T.unsafe(nil), Array)
-
-# pkg:gem/ransack#lib/ransack/nodes/condition.rb:409
+# pkg:gem/ransack#lib/ransack/nodes/condition.rb:494
 Ransack::Nodes::Condition::LIKE_PREDICATES = T.let(T.unsafe(nil), Array)
 
 # The long spellings route through the short setters: `p=` resolves a
 # Predicate object, whereas the `predicate=` attribute writer would store
-# the bare name.
+# the bare name. `predicate_name` is the spelling the ransacker docs
+# used for years, so it is accepted too (#1009).
 #
-# pkg:gem/ransack#lib/ransack/nodes/condition.rb:185
+# pkg:gem/ransack#lib/ransack/nodes/condition.rb:251
 Ransack::Nodes::Condition::LONG_KEYS = T.let(T.unsafe(nil), Hash)
 
-# pkg:gem/ransack#lib/ransack/nodes/condition.rb:418
+# pkg:gem/ransack#lib/ransack/nodes/condition.rb:541
 Ransack::Nodes::Condition::STRING_LIKE_TYPES = T.let(T.unsafe(nil), Array)
 
 # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:3
@@ -1457,28 +1979,28 @@ class Ransack::Nodes::Grouping < ::Ransack::Nodes::Node
   # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:18
   def initialize(context, combinator = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:55
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:49
   def [](key); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:59
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:53
   def []=(key, value); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:128
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:122
   def attribute_method?(name); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:155
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:149
   def build(params); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:75
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:69
   def build_condition(opts = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:144
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:138
   def build_grouping(params = T.unsafe(nil)); end
 
   # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:36
   def c; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:53
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:47
   def c=(conditions); end
 
   # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:4
@@ -1493,19 +2015,19 @@ class Ransack::Nodes::Grouping < ::Ransack::Nodes::Node
   # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:16
   def each(*, **, &); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:93
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:87
   def g; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:112
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:106
   def g=(groupings); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:90
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:84
   def groupings; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:95
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:89
   def groupings=(groupings); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:171
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:165
   def inspect; end
 
   # The writer is inherited from Node, which normalises the value. Defining
@@ -1519,39 +2041,58 @@ class Ransack::Nodes::Grouping < ::Ransack::Nodes::Node
   # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:11
   def m=(val); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:114
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:108
   def method_missing(method_id, *args); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:81
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:75
   def new_condition(opts = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:151
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:145
   def new_grouping(params = T.unsafe(nil)); end
 
   # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:23
   def persisted?; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:68
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:62
   def respond_to?(method_id); end
 
   # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:27
   def translate(key, options = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:64
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:58
   def values; end
 
   private
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:190
+  # A condition is dropped when it fails validation, as an unknown
+  # attribute or predicate would be. One failure is worth naming: a
+  # single-value predicate given several values. A strict search raises
+  # for it, so the caller learns why the filter vanished (#1724). The
+  # check only applies once the predicate and an attribute have resolved;
+  # a condition that is invalid for another reason keeps its behaviour.
+  #
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:220
+  def add_condition(attrs); end
+
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:231
+  def arity_failure?(condition); end
+
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:184
   def read_attribute(name); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:214
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:236
   def remove_duplicate_conditions!; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:208
+  # Drops a multiparameter index (`created_at(1i)`) and then the predicate
+  # from a key. The index is found by a plain scan. The `/(.+?)\(/` this
+  # replaces let its lazy group re-run from every position of a long key,
+  # which CodeQL reports as polynomial (rb/polynomial-redos); Ruby's engine
+  # short-circuits that in practice, but one pass needs no such help.
+  #
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:207
   def strip_predicate_and_index(str); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:183
+  # pkg:gem/ransack#lib/ransack/nodes/grouping.rb:177
   def write_attribute(name, val); end
 
   class << self
@@ -1696,7 +2237,7 @@ class Ransack::Nodes::Value < ::Ransack::Nodes::Node
   # pkg:gem/ransack#lib/ransack/nodes/value.rb:19
   def ==(other); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/value.rb:112
+  # pkg:gem/ransack#lib/ransack/nodes/value.rb:119
   def array_of_arrays?(val); end
 
   # pkg:gem/ransack#lib/ransack/nodes/value.rb:5
@@ -1705,25 +2246,25 @@ class Ransack::Nodes::Value < ::Ransack::Nodes::Node
   # pkg:gem/ransack#lib/ransack/nodes/value.rb:25
   def cast(type); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/value.rb:70
+  # pkg:gem/ransack#lib/ransack/nodes/value.rb:77
   def cast_to_boolean(val); end
 
   # pkg:gem/ransack#lib/ransack/nodes/value.rb:48
   def cast_to_date(val); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/value.rb:92
+  # pkg:gem/ransack#lib/ransack/nodes/value.rb:99
   def cast_to_decimal(val); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/value.rb:88
+  # pkg:gem/ransack#lib/ransack/nodes/value.rb:95
   def cast_to_float(val); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/value.rb:84
+  # pkg:gem/ransack#lib/ransack/nodes/value.rb:91
   def cast_to_integer(val); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/value.rb:104
+  # pkg:gem/ransack#lib/ransack/nodes/value.rb:111
   def cast_to_money(val); end
 
-  # pkg:gem/ransack#lib/ransack/nodes/value.rb:80
+  # pkg:gem/ransack#lib/ransack/nodes/value.rb:87
   def cast_to_string(val); end
 
   # pkg:gem/ransack#lib/ransack/nodes/value.rb:59
@@ -1735,7 +2276,7 @@ class Ransack::Nodes::Value < ::Ransack::Nodes::Node
   # pkg:gem/ransack#lib/ransack/nodes/value.rb:21
   def hash; end
 
-  # pkg:gem/ransack#lib/ransack/nodes/value.rb:108
+  # pkg:gem/ransack#lib/ransack/nodes/value.rb:115
   def inspect; end
 
   # pkg:gem/ransack#lib/ransack/nodes/value.rb:12
@@ -1783,14 +2324,14 @@ class Ransack::Predicate
   # pkg:gem/ransack#lib/ransack/predicate.rb:3
   def name; end
 
-  # pkg:gem/ransack#lib/ransack/predicate.rb:91
+  # pkg:gem/ransack#lib/ransack/predicate.rb:98
   def negative?; end
 
   # pkg:gem/ransack#lib/ransack/predicate.rb:3
   def type; end
 
   # pkg:gem/ransack#lib/ransack/predicate.rb:76
-  def validate(vals, type = T.unsafe(nil)); end
+  def validate(vals, type = T.unsafe(nil), sentinel = T.unsafe(nil)); end
 
   # pkg:gem/ransack#lib/ransack/predicate.rb:3
   def validator; end
@@ -1844,9 +2385,6 @@ class Ransack::Ransacker
   def type; end
 end
 
-# pkg:gem/ransack#lib/ransack/active_record.rb:6
-Ransack::SUPPORTS_ATTRIBUTE_ALIAS = T.let(T.unsafe(nil), TrueClass)
-
 # pkg:gem/ransack#lib/ransack/search.rb:13
 class Ransack::Search
   include ::Ransack::Naming
@@ -1858,7 +2396,7 @@ class Ransack::Search
   # pkg:gem/ransack#lib/ransack/search.rb:16
   def base; end
 
-  # pkg:gem/ransack#lib/ransack/search.rb:53
+  # pkg:gem/ransack#lib/ransack/search.rb:60
   def build(params); end
 
   # pkg:gem/ransack#lib/ransack/search.rb:19
@@ -1867,19 +2405,22 @@ class Ransack::Search
   # pkg:gem/ransack#lib/ransack/search.rb:19
   def build_grouping(*, **, &); end
 
-  # pkg:gem/ransack#lib/ransack/search.rb:98
+  # pkg:gem/ransack#lib/ransack/search.rb:107
   def build_sort(opts = T.unsafe(nil)); end
 
   # pkg:gem/ransack#lib/ransack/search.rb:16
   def context; end
 
-  # pkg:gem/ransack#lib/ransack/search.rb:124
+  # pkg:gem/ransack#lib/ransack/search.rb:146
   def inspect; end
 
   # pkg:gem/ransack#lib/ransack/search.rb:18
   def klass(*, **, &); end
 
-  # pkg:gem/ransack#lib/ransack/search.rb:108
+  # A scope wins over an attribute of the same name, as it does when the
+  # params hash is built (#1472).
+  #
+  # pkg:gem/ransack#lib/ransack/search.rb:119
   def method_missing(method_id, *args); end
 
   # pkg:gem/ransack#lib/ransack/search.rb:19
@@ -1888,25 +2429,28 @@ class Ransack::Search
   # pkg:gem/ransack#lib/ransack/search.rb:19
   def new_grouping(*, **, &); end
 
-  # pkg:gem/ransack#lib/ransack/search.rb:104
+  # pkg:gem/ransack#lib/ransack/search.rb:113
   def new_sort(opts = T.unsafe(nil)); end
 
   # pkg:gem/ransack#lib/ransack/search.rb:18
   def object(*, **, &); end
 
-  # pkg:gem/ransack#lib/ransack/search.rb:49
+  # pkg:gem/ransack#lib/ransack/search.rb:56
   def result(opts = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/search.rb:96
+  # pkg:gem/ransack#lib/ransack/search.rb:105
   def s; end
 
-  # pkg:gem/ransack#lib/ransack/search.rb:91
+  # pkg:gem/ransack#lib/ransack/search.rb:100
   def s=(args); end
 
-  # pkg:gem/ransack#lib/ransack/search.rb:93
+  # pkg:gem/ransack#lib/ransack/search.rb:102
   def sorts; end
 
-  # pkg:gem/ransack#lib/ransack/search.rb:68
+  # Replaces the sorts, so `search.sorts = []` clears them. Before 6.0 each
+  # assignment appended (#994); use `build_sort` to add one.
+  #
+  # pkg:gem/ransack#lib/ransack/search.rb:77
   def sorts=(args); end
 
   # pkg:gem/ransack#lib/ransack/search.rb:19
@@ -1914,10 +2458,18 @@ class Ransack::Search
 
   private
 
-  # pkg:gem/ransack#lib/ransack/search.rb:139
+  # pkg:gem/ransack#lib/ransack/search.rb:177
   def add_scope(key, args); end
 
-  # pkg:gem/ransack#lib/ransack/search.rb:233
+  # A sort that names neither a sortable attribute nor a `sort_by_<name>_<dir>`
+  # scope produces no ORDER BY. Under a strict search that is an error, the
+  # same as an unknown attribute in a condition (#1427); otherwise it is
+  # dropped as before.
+  #
+  # pkg:gem/ransack#lib/ransack/search.rb:165
+  def add_sort(sort); end
+
+  # pkg:gem/ransack#lib/ransack/search.rb:271
   def blank_advanced_condition?(condition); end
 
   # True when a condition's value should be dropped before building. With
@@ -1927,7 +2479,7 @@ class Ransack::Search
   # an explicit nil inside an array is kept so `name_in: [nil]` still reaches
   # the query. The `c:` pruning below shares this, so it follows the option.
   #
-  # pkg:gem/ransack#lib/ransack/search.rb:199
+  # pkg:gem/ransack#lib/ransack/search.rb:237
   def blank_condition_value?(value); end
 
   # Folds `created_at(1i)`, `created_at(2i)`, ... into `created_at` as an
@@ -1936,13 +2488,13 @@ class Ransack::Search
   # on: no position (`created_at(`), a position outside 1 to the limit,
   # or a fragment for an attribute that was also given as a plain value.
   #
-  # pkg:gem/ransack#lib/ransack/search.rb:161
+  # pkg:gem/ransack#lib/ransack/search.rb:199
   def collapse_multiparameter_attributes!(attrs); end
 
   # Params are not yet indifferent-access here, so look under both spellings
   # of a key and both its short and long forms.
   #
-  # pkg:gem/ransack#lib/ransack/search.rb:229
+  # pkg:gem/ransack#lib/ransack/search.rb:267
   def fetch_either(hash, short, long); end
 
   # The low-level `c:` API nests its values a level deeper than the shorthand
@@ -1950,13 +2502,27 @@ class Ransack::Search
   # an empty value still builds its attribute and contributes a join, giving a
   # LEFT OUTER JOIN with no WHERE clause to go with it.
   #
-  # pkg:gem/ransack#lib/ransack/search.rb:211
+  # pkg:gem/ransack#lib/ransack/search.rb:249
   def prune_blank_advanced_conditions!(node); end
 
-  # Values in the `c:` API may be given bare or wrapped in a `{ value: ... }`
-  # envelope, the same two forms `Condition#values=` accepts.
+  # Rails' form helpers only read a field's value back when the object
+  # says it responds to the reader; `form_with` in particular checks
+  # before calling. Mirror method_missing so a search_form_with field is
+  # pre-filled the same way a search_form_for one is.
   #
-  # pkg:gem/ransack#lib/ransack/search.rb:246
+  # pkg:gem/ransack#lib/ransack/search.rb:139
+  def respond_to_missing?(method_id, include_private = T.unsafe(nil)); end
+
+  # pkg:gem/ransack#lib/ransack/search.rb:173
+  def sort_scope?(sort); end
+
+  # Values in the `c:` API may be given bare or wrapped in a `{ value: ... }`
+  # envelope, the same two forms `Condition#values=` accepts. The envelope is
+  # opened by key rather than by truthiness: `false` is a value to search
+  # for, and `value[:value] || value['value']` read it as nil, which the
+  # pruning above then dropped (#1736).
+  #
+  # pkg:gem/ransack#lib/ransack/search.rb:287
   def unwrap_value(value); end
 end
 
@@ -1965,7 +2531,7 @@ end
 # position indexes an array, so an unbounded one from a crafted query
 # string would allocate an array that size (GHSA-vxc9-rm8f-p56j).
 #
-# pkg:gem/ransack#lib/ransack/search.rb:154
+# pkg:gem/ransack#lib/ransack/search.rb:192
 Ransack::Search::MULTIPARAMETER_POSITION_LIMIT = T.let(T.unsafe(nil), Integer)
 
 # pkg:gem/ransack#lib/ransack/translate.rb:8
@@ -2023,7 +2589,7 @@ module Ransack::Translate
   end
 end
 
-# pkg:gem/ransack#lib/ransack.rb:11
+# pkg:gem/ransack#lib/ransack.rb:10
 class Ransack::UntraversableAssociationError < ::StandardError; end
 
 # pkg:gem/ransack#lib/ransack/version.rb:2

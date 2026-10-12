@@ -5196,9 +5196,9 @@ end
 
 # pkg:gem/activerecord#lib/active_record/associations/join_dependency.rb:5
 class ActiveRecord::Associations::JoinDependency
-  include ::Polyamorous::JoinDependencyExtensions
+  include ::Ransack::ActiveRecord::JoinDependencyExtensions
   extend ::ActiveSupport::Autoload
-  extend ::Polyamorous::JoinDependencyExtensions::ClassMethods
+  extend ::Ransack::ActiveRecord::JoinDependencyExtensions::ClassMethods
 
   # pkg:gem/activerecord#lib/active_record/associations/join_dependency.rb:71
   def initialize(base, table, associations, join_type); end
@@ -5354,8 +5354,7 @@ end
 
 # pkg:gem/activerecord#lib/active_record/associations/join_dependency/join_association.rb:9
 class ActiveRecord::Associations::JoinDependency::JoinAssociation < ::ActiveRecord::Associations::JoinDependency::JoinPart
-  include ::Polyamorous::SwappingReflectionClass
-  include ::Polyamorous::JoinAssociationExtensions
+  include ::Ransack::ActiveRecord::JoinAssociationExtensions
 
   # pkg:gem/activerecord#lib/active_record/associations/join_dependency/join_association.rb:13
   def initialize(reflection, children, polymorphic_class = T.unsafe(nil), join_type = T.unsafe(nil)); end
@@ -8220,7 +8219,7 @@ class ActiveRecord::Base
   extend ::ActiveRecord::TokenFor::ClassMethods
   extend ::ActiveRecord::SignedId::ClassMethods
   extend ::ActiveRecord::Suppressor::ClassMethods
-  extend ::Ransack::Adapters::ActiveRecord::Base
+  extend ::Ransack::ActiveRecord::Base
   extend ::Kaminari::ActiveRecordExtension::ClassMethods
   extend ::Audited::Auditor::ClassMethods
   extend ::OrmAdapter::ToAdapter
@@ -30669,7 +30668,7 @@ end
 #
 # pkg:gem/activerecord#lib/active_record/reflection.rb:163
 class ActiveRecord::Reflection::AbstractReflection
-  include ::Polyamorous::ReflectionExtensions
+  include ::Ransack::ActiveRecord::ReflectionExtensions
 
   # pkg:gem/activerecord#lib/active_record/reflection.rb:164
   def initialize; end
