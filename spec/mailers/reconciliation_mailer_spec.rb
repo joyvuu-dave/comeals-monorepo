@@ -280,71 +280,95 @@ RSpec.describe ReconciliationMailer do
     end
   end
 
+  # The common house email (ADR 0011 rule 9): what each person owes or is
+  # owed in the settlement, by unit, then the people who had moved out,
+  # and a read-only link to the settlement's page. CollectionList's spec
+  # covers who is listed where; these cover the words.
   describe '#common_house_collection_email' do
-    let(:mail) { described_class.common_house_collection_email }
-    let(:residents_url) do
-      'http://admin.lvh.me:3000/residents?q%5Bactive_eq%5D=true&commit=Filter&subdomain=admin&order=name_asc' \
-        '&token=the-token&utf8=%E2%9C%93'
+    let(:latest) { Reconciliation.latest_cutoff(community.today) }
+    let(:unit) { create(:unit, community: community, name: 'Ash') }
+    let(:elm) { create(:unit, community: community, name: 'Elm') }
+    let(:eater) { create(:resident, community: community, unit: unit, name: 'Eater One') }
+    let(:gone) { create(:resident, community: community, unit: unit, name: 'Gone Away') }
+    # Sarah cooks for $30, and two people eat, one of whom moved out
+    # before the settlement. Idle Isa ate nothing, so she has no line.
+    let(:reconciliation) do
+      meal = create(:meal, community: community, date: latest)
+      create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('30'))
+      [eater, gone].each { |person| create(:meal_resident, meal: meal, resident: person, community: community) }
+      create(:resident, community: community, unit: elm, name: 'Idle Isa')
+      gone.update!(active: false)
+      settle!(cutoff: latest)
     end
-    let(:units_url) { 'http://admin.lvh.me:3000/units?token=the-token&utf8=%E2%9C%93' }
+    let(:mail) { described_class.common_house_collection_email(reconciliation) }
+    let(:settled_through) { latest.strftime('%b %-d, %Y') }
+    let(:url) do
+      "http://admin.lvh.me:3000/reconciliations/#{reconciliation.id}?subdomain=admin&token=the-token" \
+        '&utf8=%E2%9C%93'
+    end
+    let(:opening) do
+      "The common meals through #{settled_through} are settled. Here is what each person owes or is owed in " \
+        'this settlement, by unit. Please collect from each person who owes, and pay each person who is owed.'
+    end
 
     before do
       allow(ENV).to receive(:fetch).and_call_original
       allow(ENV).to receive(:fetch).with('READ_ONLY_ADMIN_TOKEN', nil).and_return('the-token')
     end
 
+    def text_lines(mail)
+      mail.text_part.body.decoded.rstrip.lines.map(&:chomp)
+    end
+
     it 'sends to the common house email' do
       expect(mail.to).to eq(['commonhouse@swansway.com'])
     end
 
-    it 'has the correct subject' do
-      expect(mail.subject).to eq('Reconciliation Balances')
+    it 'names the settlement in the subject' do
+      expect(mail.subject).to eq("Balances to collect: common meals settled through #{settled_through}")
     end
 
-    it 'links the balances under the configured admin root, with the read-only token' do
-      lines = mail.text_part.body.to_s.lines.map(&:chomp)
-
-      expect(lines).to include("Residents: #{residents_url}", "Units: #{units_url}")
+    it 'lists each unit and each person in it, then the people who moved out, in words' do
+      expect(text_lines(mail)).to eq(
+        ['Balances to Collect', '=' * 'Balances to Collect'.length, '', opening, '',
+         'Ash: is owed $15.00', '- Eater One: owes $15.00', '- Sarah Chen: is owed $30.00', '',
+         'Elm: $0.00', '- Idle Isa: $0.00', '',
+         'Moved out', '- Gone Away: owes $15.00', '',
+         "The settlement's page shows the meals in it: #{url}", '',
+         "~Swan's Way"]
+      )
     end
 
-    it 'names the resident and unit balance links in the HTML part' do
-      html = mail.html_part.body.to_s
+    it 'says the same in the HTML part, with a link to the settlement page' do
+      body = html_body(mail)
 
-      expect(html).to include(%(<a href="#{ERB::Util.html_escape(residents_url)}">Residents</a>))
-      expect(html).to include(%(<a href="#{ERB::Util.html_escape(units_url)}">Units</a>))
+      expect(body.text.squish).to eq(
+        "Balances to Collect #{opening} " \
+        'Ash: is owed $15.00 Eater One: owes $15.00 Sarah Chen: is owed $30.00 ' \
+        'Elm: $0.00 Idle Isa: $0.00 ' \
+        'Moved out Gone Away: owes $15.00 ' \
+        "The settlement's page shows the meals in it. ~Swan's Way"
+      )
+      expect(body.css('h2').map(&:text)).to eq(['Ash: is owed $15.00', 'Elm: $0.00', 'Moved out'])
+      expect(links_in(body)).to eq([["The settlement's page", url]])
+    end
+
+    it 'says whose units an old settlement shows, and has no moved-out list' do
+      reconciliation.update_columns(units_recorded_on: reconciliation.date + 1)
+      sentence = "This settlement was made before the app saved each person's unit. These are the units people " \
+                 "live in, or last lived in, on #{(reconciliation.date + 1).strftime('%b %-d, %Y')}."
+
+      expect(text_lines(mail)).to include(sentence, 'Ash: $0.00', '- Gone Away: owes $15.00')
+      expect(text_lines(mail)).not_to include('Moved out')
+      expect(html_body(mail).text.squish).to include(sentence)
     end
 
     it 'writes the token so that the admin reads back the same token, in both parts' do
       allow(ENV).to receive(:fetch).with('READ_ONLY_ADMIN_TOKEN', nil).and_return(token_with_url_characters)
 
-      expect(urls_in(mail).map { |url| token_read_from(url) }).to eq([token_with_url_characters] * 4)
-    end
-
-    it 'says that meal costs are locked and it is time to collect, in both parts' do
-      sentence = "Meal costs have now been locked and it's time to collect and distribute $. " \
-                 'Here are the final balances.'
-
-      expect(html_body(mail).text.squish).to include(sentence)
-      expect(mail.text_part.body.decoded.lines.map(&:chomp)).to include(sentence)
-    end
-
-    it 'underlines the title of the text part with = signs and nothing else' do
-      title = 'Resident / Unit Balances for Current Reconciliation'
-
-      expect(mail.text_part.body.decoded.lines.first(2).map(&:chomp)).to eq([title, '=' * title.length])
+      expect(urls_in(mail).map { |link| token_read_from(link) }).to eq([token_with_url_characters] * 2)
     end
 
     it_behaves_like 'an HTML part that is one HTML document'
-
-    it 'keeps the words and the two links in the HTML part' do
-      body = html_body(mail)
-
-      expect(body.text.squish).to eq(
-        'Resident / Unit Balances for Current Reconciliation ' \
-        "Meal costs have now been locked and it's time to collect and distribute $. " \
-        'Here are the final balances. Residents Units ~Admin'
-      )
-      expect(links_in(body)).to eq([['Residents', residents_url], ['Units', units_url]])
-    end
   end
 end

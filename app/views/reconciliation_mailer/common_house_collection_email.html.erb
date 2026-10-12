@@ -1,11 +1,29 @@
-<h1>Resident / Unit Balances for Current Reconciliation</h1>
+<h1>Balances to Collect</h1>
 <p>
-  Meal costs have now been locked and it's time to collect and distribute $. Here are the final balances.
+  The common meals through <%= @settled_through %> are settled. Here is what each person owes or is owed in this settlement, by unit. Please collect from each person who owes, and pay each person who is owed.
 </p>
+<% if @units_saved_on %>
 <p>
-  <%= link_to 'Residents', @resident_balances %>
+  This settlement was made before the app saved each person's unit. These are the units people live in, or last lived in, on <%= @units_saved_on %>.
 </p>
+<% end %>
+<% @list.units.each do |unit| %>
+<h2><%= unit.name %>: <%= balance_words(unit.total) %></h2>
+<ul>
+  <% unit.people.each do |person| %>
+  <li><%= person.name %>: <%= balance_words(person.amount) %></li>
+  <% end %>
+</ul>
+<% end %>
+<% if @list.moved_out.any? %>
+<h2>Moved out</h2>
+<ul>
+  <% @list.moved_out.each do |person| %>
+  <li><%= person.name %>: <%= balance_words(person.amount) %></li>
+  <% end %>
+</ul>
+<% end %>
 <p>
-  <%= link_to 'Units', @unit_balances %>
+  <%= link_to "The settlement's page", @url %> shows the meals in it.
 </p>
-<p>~Admin</p>
+<p>~<%= @community.name %></p>

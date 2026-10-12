@@ -1,12 +1,15 @@
 # frozen_string_literal: true
 
 namespace :reconciliations do
-  desc 'Send Common House Committee links to balance pages for current reconciliation period.'
+  desc 'Mail the common house what each person owes or is owed in the latest reconciliation.'
   task send_common_house_collection_email: :environment do
+    reconciliation = Reconciliation.last
+    abort 'There is no reconciliation yet, so there are no balances to mail.' if reconciliation.nil?
+
     start_time = Time.current
 
     begin
-      ReconciliationMailer.common_house_collection_email.deliver_now
+      ReconciliationMailer.common_house_collection_email(reconciliation).deliver_now
     rescue *MAIL_DELIVERY_ERRORS => e
       MailDeliveryFailure.report(e, mailer: 'common_house_collection_email')
     end

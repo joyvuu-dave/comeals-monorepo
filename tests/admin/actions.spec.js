@@ -919,6 +919,14 @@ test.describe("Read-only token", () => {
     await page.goto(`/residents/1?token=${READ_ONLY_TOKEN}`);
     await expect(panel(page, "Settlement statement")).toBeVisible();
 
+    // The common house email links to the settlement's page. The token
+    // sees Bob's mark and when it was made, not which admin made it.
+    await page.goto(`/reconciliations/1?token=${READ_ONLY_TOKEN}`);
+    await expect(panel(page, "Settlement Balances")).toContainText("Paid");
+    await expect(page.locator("#main_content")).not.toContainText(
+      "admin@example.com",
+    );
+
     // Admin accounts are not on the allowlist. The refusal sends the
     // visitor to the dashboard without the token, and the dashboard sends
     // a signed-out visitor to the login page.

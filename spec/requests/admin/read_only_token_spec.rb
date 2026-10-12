@@ -40,7 +40,7 @@ RSpec.describe 'Read-only admin token' do
       expect(response).to have_http_status(:ok)
     end
 
-    it 'reads residents and units, which the collection email links to' do
+    it 'reads the residents and units lists' do
       get '/residents', params: { token: token }
       expect(response).to have_http_status(:ok)
 

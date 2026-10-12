@@ -1,9 +1,26 @@
-Resident / Unit Balances for Current Reconciliation
-===================================================
+Balances to Collect
+===================
 
-Meal costs have now been locked and it's time to collect and distribute $. Here are the final balances.
+The common meals through <%= @settled_through %> are settled. Here is what each person owes or is owed in this settlement, by unit. Please collect from each person who owes, and pay each person who is owed.
+<% if @units_saved_on %>
 
-Residents: <%= @resident_balances %>
-Units: <%= @unit_balances %>
+This settlement was made before the app saved each person's unit. These are the units people live in, or last lived in, on <%= @units_saved_on %>.
+<% end %>
+<% @list.units.each do |unit| %>
 
-~Admin
+<%= unit.name %>: <%= balance_words(unit.total) %>
+<% unit.people.each do |person| %>
+- <%= person.name %>: <%= balance_words(person.amount) %>
+<% end %>
+<% end %>
+<% if @list.moved_out.any? %>
+
+Moved out
+<% @list.moved_out.each do |person| %>
+- <%= person.name %>: <%= balance_words(person.amount) %>
+<% end %>
+<% end %>
+
+The settlement's page shows the meals in it: <%= @url %>
+
+~<%= @community.name %>

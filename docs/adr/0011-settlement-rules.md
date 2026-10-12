@@ -1,6 +1,6 @@
 # ADR 0011: How settlements work from now on
 
-- **Status:** Accepted. Every rule is built except 9.
+- **Status:** Accepted. Every rule is built.
 - **Date:** 2026-10-12
 - **Issue:** #165 (the common house email)
 
@@ -166,7 +166,13 @@ needs a superuser, like every other decision about money (ADR 0004).
 After a settlement, the email to the common house address uses the
 settlement's own numbers. It lists everyone who lives here, by unit,
 even people at $0.00, so nobody thinks they were skipped. Then it lists
-everyone who moved out and still has a balance. Details are in #165.
+everyone who moved out and still has a balance. It links to the
+settlement's page. A settlement made before units were saved has no
+moved-out list, like its page (rule 7). The email used to link to the
+running balances, which leave out every meal the settlement settled
+(#165). `CollectionList` builds the list, and
+`rake reconciliations:send_common_house_collection_email` sends it for
+the latest settlement.
 
 ### 10. The old history is fixed once, then closed
 

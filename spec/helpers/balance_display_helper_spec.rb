@@ -51,6 +51,16 @@ RSpec.describe BalanceDisplayHelper do
     end
   end
 
+  # The plain words balance_tag wraps, for the text part of a mail.
+  describe '#balance_words' do
+    it 'says the direction in words, decided from the rounded cents, and no sign' do
+      expect(helper.balance_words(BigDecimal('12.504'))).to eq('is owed $12.50')
+      expect(helper.balance_words(BigDecimal('-12.506'))).to eq('owes $12.51')
+      expect(helper.balance_words(BigDecimal('-0.004'))).to eq('$0.00')
+      expect(helper.balance_words(BigDecimal('0.004'))).to eq('$0.00')
+    end
+  end
+
   describe '#balance_tag against MealLedger itself' do
     let(:community) { create(:community) }
     let(:unit) { create(:unit, community: community) }

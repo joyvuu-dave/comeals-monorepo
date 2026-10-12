@@ -7,8 +7,8 @@
 
 class ReconciliationMailer
   class << self
-    sig { returns(::ActionMailer::MessageDelivery) }
-    def common_house_collection_email; end
+    sig { params(reconciliation: T.untyped).returns(::ActionMailer::MessageDelivery) }
+    def common_house_collection_email(reconciliation); end
 
     sig { params(resident: T.untyped, reconciliation: T.untyped).returns(::ActionMailer::MessageDelivery) }
     def reconciliation_notify_email(resident, reconciliation); end

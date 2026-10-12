@@ -214,6 +214,8 @@ MUTANT_SPEC_ROWS = {
   # The admin settlement preview and its blank-cost button (ADR 0011
   # rule 4): the words, the warnings it lists, and the marking.
   'spec/requests/admin/settlement_preview_spec.rb' => %w[SettlementPreviewHelper ReconciliationWarnings NoCostMarking],
+  # The common house email's numbers are the settlement's own (#165).
+  'spec/requests/admin/collection_email_balances_spec.rb' => %w[CollectionList ReconciliationMailer],
   # Settlement line marks (ADR 0011 rule 8): the words on the page, the
   # form, who may set Let go, and the newest mark counting.
   'spec/requests/admin/settlement_marks_spec.rb' =>

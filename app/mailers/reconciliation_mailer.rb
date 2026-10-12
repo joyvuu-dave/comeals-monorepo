@@ -2,6 +2,8 @@
 # frozen_string_literal: true
 
 class ReconciliationMailer < ApplicationMailer
+  helper BalanceDisplayHelper
+
   # Sent to each cook after a settlement has committed, so the meals in
   # it are already locked (#106). The date in the mail is end_date, the
   # settlement's cutoff. A cook is someone who cooked a meal in the
@@ -27,15 +29,22 @@ class ReconciliationMailer < ApplicationMailer
     mail(to: @resident.email, subject: "Common meals settled through #{@settled_through}")
   end
 
-  def common_house_collection_email
-    @resident_balances = "#{root_admin_url}/residents?" \
-                         'q%5Bactive_eq%5D=true&commit=Filter' \
-                         '&subdomain=admin&order=name_asc' \
-                         "&token=#{read_only_token}" \
-                         '&utf8=%E2%9C%93'
-    @unit_balances = "#{root_admin_url}/units?token=#{read_only_token}&utf8=%E2%9C%93"
-
-    mail(to: 'commonhouse@swansway.com', subject: 'Reconciliation Balances')
+  # Sent to the common house after a settlement (ADR 0011 rule 9): what
+  # each person owes or is owed in it, by unit, then the people who had
+  # moved out (CollectionList), and a read-only link to the settlement's
+  # page. These are the settlement's own numbers. The running balances
+  # leave out every meal it settled (#165).
+  def common_house_collection_email(reconciliation)
+    @community = T.must(reconciliation.community)
+    @settled_through = T.must(reconciliation.end_date).strftime('%b %-d, %Y')
+    @list = CollectionList.new(reconciliation)
+    if reconciliation.units_recorded_later?
+      @units_saved_on = T.must(reconciliation.units_recorded_on).strftime('%b %-d, %Y')
+    end
+    @url = "#{root_admin_url}/reconciliations/#{reconciliation.id}?subdomain=admin&token=#{read_only_token}" \
+           '&utf8=%E2%9C%93'
+    mail(to: 'commonhouse@swansway.com',
+         subject: "Balances to collect: common meals settled through #{@settled_through}")
   end
 
   private

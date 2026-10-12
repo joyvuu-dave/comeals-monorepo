@@ -29,19 +29,34 @@ module BalanceDisplayHelper
 
   requires_ancestor { ActionView::Base }
 
-  # A signed balance, as words: "is owed $12.50", "owes $12.50", or "$0.00".
+  # A signed balance, as words in a span with a class for its direction:
+  # the words of balance_words.
+  def balance_tag(amount)
+    cents = amount.round(2)
+    direction = if cents.positive?
+                  'balance-is-owed'
+                elsif cents.negative?
+                  'balance-owes'
+                else
+                  'balance-zero'
+                end
+    tag.span(balance_words(amount), class: direction)
+  end
+
+  # A signed balance, as plain words: "is owed $12.50", "owes $12.50", or
+  # "$0.00". For mail, which has a text part, and for balance_tag.
   #
   # The direction is decided from the amount rounded to cents, not the raw
   # sign, so a balance of -$0.001 reads as "$0.00" rather than "owes $0.00".
-  def balance_tag(amount)
+  def balance_words(amount)
     cents = amount.round(2)
 
     if cents.positive?
-      tag.span("is owed #{number_to_currency(cents)}", class: 'balance-is-owed')
+      "is owed #{number_to_currency(cents)}"
     elsif cents.negative?
-      tag.span("owes #{number_to_currency(cents.abs)}", class: 'balance-owes')
+      "owes #{number_to_currency(cents.abs)}"
     else
-      tag.span(number_to_currency(0), class: 'balance-zero')
+      number_to_currency(0)
     end
   end
 

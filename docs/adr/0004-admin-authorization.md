@@ -115,8 +115,8 @@ A token request may read `Bill`, `Meal`, `Reconciliation`, `Resident` and
 already on the community calendar, and a balance is derived from exactly that
 data. A recipient who widens the filter to see everyone's balances is working
 as intended; the `q[resident_id_eq]` in the mailer link is a convenience
-filter, never a scope. The `common_house_collection_email` deliberately links
-to the unfiltered balance list.
+filter, never a scope. The `common_house_collection_email` lists every
+person's balance in the settlement and links to the settlement's page.
 
 The allowlist exists for a narrower reason: a link mailed to the whole
 community should not also be a way to enumerate admin email addresses and

@@ -44,6 +44,7 @@ matcher:
     # services
     - AuditDescription*
     - BillsPayload*
+    - CollectionList*
     - CorrectionWords*
     - DateRangeDescription*
     - GuestAdd*

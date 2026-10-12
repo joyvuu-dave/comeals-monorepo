@@ -112,18 +112,38 @@ RSpec.describe 'reconciliation email tasks' do
   describe 'reconciliations:send_common_house_collection_email' do
     after { Rake::Task['reconciliations:send_common_house_collection_email'].reenable }
 
-    it 'sends the common house collection email' do
+    def settled(date)
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      meal = create(:meal, community: community, date: date)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('40'))
+      create(:meal_resident, meal: meal, resident: cook, community: community)
+      settle!(cutoff: date)
+    end
+
+    it 'sends the common house the balances of the latest reconciliation' do
+      settled(last_cutoff - 3)
+      latest = settled(last_cutoff)
       mail_double = instance_double(ActionMailer::MessageDelivery)
       allow(ReconciliationMailer).to receive(:common_house_collection_email).and_return(mail_double)
       allow(mail_double).to receive(:deliver_now)
 
       Rake::Task['reconciliations:send_common_house_collection_email'].invoke
 
-      expect(ReconciliationMailer).to have_received(:common_house_collection_email).once
+      expect(ReconciliationMailer).to have_received(:common_house_collection_email).once.with(latest)
       expect(mail_double).to have_received(:deliver_now).once
     end
 
+    it 'stops with a plain message and a failure status when there is no reconciliation yet' do
+      allow(ReconciliationMailer).to receive(:common_house_collection_email)
+
+      expect { Rake::Task['reconciliations:send_common_house_collection_email'].invoke }
+        .to raise_error(SystemExit) { |exit| expect(exit.status).to eq(1) }
+        .and output("There is no reconciliation yet, so there are no balances to mail.\n").to_stderr
+      expect(ReconciliationMailer).not_to have_received(:common_house_collection_email)
+    end
+
     it 'handles email delivery failures gracefully' do
+      settled(last_cutoff)
       mail_double = instance_double(ActionMailer::MessageDelivery)
       allow(ReconciliationMailer).to receive(:common_house_collection_email).and_return(mail_double)
       allow(mail_double).to receive(:deliver_now).and_raise(Net::SMTPAuthenticationError.new('auth failed'))
