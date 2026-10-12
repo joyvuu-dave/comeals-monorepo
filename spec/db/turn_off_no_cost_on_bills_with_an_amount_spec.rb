@@ -247,7 +247,8 @@ RSpec.describe TurnOffNoCostOnBillsWithAnAmount do
         expect(out).to include('Turned No cost off on 2 bill(s) on 2 meal(s) not settled yet, $121.50 in all.')
         expect(out).to include('Turned No cost off on 1 bill(s) on 1 settled meal(s), $40.00 in all.')
         expect(out).to include("Worked out settlement #{settled_meal.reload.reconciliation_id} again for its " \
-                               '1 bill(s): 2 balance(s) changed. Its admin page lists them.')
+                               '1 bill(s): 2 balance(s) changed. ' \
+                               'The query in docs/runbooks/settled-data-repair.md lists them.')
       end
 
       it 'takes the meal locks before it writes a bill' do

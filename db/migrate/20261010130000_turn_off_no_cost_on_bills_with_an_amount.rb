@@ -339,7 +339,8 @@ class TurnOffNoCostOnBillsWithAnAmount < ActiveRecord::Migration[8.1]
   def report_corrected(corrected)
     corrected.each do |settlement|
       say "Worked out settlement #{settlement.reconciliation_id} again for its #{settlement.bills} bill(s): " \
-          "#{settlement.changed} balance(s) changed. Its admin page lists them."
+          "#{settlement.changed} balance(s) changed. " \
+          'The query in docs/runbooks/settled-data-repair.md lists them.'
     end
   end
 
