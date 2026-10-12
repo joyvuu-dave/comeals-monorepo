@@ -14,14 +14,16 @@
 class BalanceRecalculation
   extend T::Sig
 
-  sig { params(community: Community).returns(Integer) }
-  def self.call(community: Community.instance)
-    new(community).call
+  # wait_limit: how long to wait for the snapshot (SnapshotRead).
+  sig { params(community: Community, wait_limit: T.nilable(ActiveSupport::Duration)).returns(Integer) }
+  def self.call(community: Community.instance, wait_limit: nil)
+    new(community, wait_limit: wait_limit).call
   end
 
-  sig { params(community: Community).void }
-  def initialize(community)
+  sig { params(community: Community, wait_limit: T.nilable(ActiveSupport::Duration)).void }
+  def initialize(community, wait_limit: nil)
     @community = community
+    @wait_limit = wait_limit
   end
 
   # Returns the number of balances written.
@@ -35,7 +37,7 @@ class BalanceRecalculation
     # DEFERRABLE, which cannot abort with a serialization failure and so
     # still needs no retry. (The test environment leaves DEFERRABLE out;
     # the callers retry a conflict there.) See app/services/snapshot_read.rb.
-    unreconciled_meals, resident_ids = SnapshotRead.call do
+    unreconciled_meals, resident_ids = SnapshotRead.call(wait_limit: @wait_limit) do
       # Batch-load all unreconciled meals with their financial associations
       # (4 queries). Uses preload (not includes) to guarantee separate IN(?)
       # queries. The joins(:bills).distinct excludes meals without bills —

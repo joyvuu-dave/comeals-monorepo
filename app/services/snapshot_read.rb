@@ -58,6 +58,19 @@
 # for the nightly jobs, SettleAndNotify for the refresh after a
 # settlement.
 #
+# Production is the case the test environment cannot show. Heroku's
+# essential plans put many customers' databases on one server (855 of
+# them on ours on 2026-10-11), so the nightly jobs wait for any of their
+# SERIALIZABLE writers too. None of them used SERIALIZABLE when measured,
+# 20 sampled starts waited about 0 ms, and none of the 70 nightly runs
+# since 2026-08-02 failed. But the wait is
+# not ours to control, and under the 10 s statement timeout a 10 s write
+# by a stranger would fail the night's job. So a caller that nobody is
+# waiting on passes `wait_limit:` (NIGHTLY_WAIT for the two nightly jobs),
+# and the wait gets that long while the reads after it keep the 10 s
+# limit. The refresh after a settlement runs inside a person's request,
+# so it passes nothing and keeps 10 s for the wait too.
+#
 # Rails has no API for READ ONLY or DEFERRABLE, only for the isolation
 # level, so the other two modes are set with a second SET TRANSACTION.
 # Both must run before the transaction's first real query; PostgreSQL
@@ -65,14 +78,19 @@
 class SnapshotRead
   extend T::Sig
 
+  # How long a nightly job may wait for its snapshot. Long enough for a
+  # stranger's slow write on the shared server to finish, and well inside
+  # the hour that RecurringJob's limits_concurrency allows a run.
+  NIGHTLY_WAIT = T.let(5.minutes, ActiveSupport::Duration)
+
   # Returns whatever the block returns, so a caller can read several
   # values inside the snapshot and hand them out in one line.
   sig do
     type_parameters(:Result)
-      .params(blk: T.proc.returns(T.type_parameter(:Result)))
+      .params(wait_limit: T.nilable(ActiveSupport::Duration), blk: T.proc.returns(T.type_parameter(:Result)))
       .returns(T.type_parameter(:Result))
   end
-  def self.call(&blk) # rubocop:disable Naming/BlockForwarding -- the sig above has to name the block
+  def self.call(wait_limit: nil, &blk)
     connection = ActiveRecord::Base.connection
 
     # A transaction is already open. In production this does not happen —
@@ -90,7 +108,21 @@ class SnapshotRead
     ActiveRecord::Base.transaction(isolation: :serializable) do
       deferrable = Rails.configuration.x.snapshot_reads_deferrable ? ', DEFERRABLE' : ''
       connection.execute("SET TRANSACTION READ ONLY#{deferrable}")
+      take_snapshot(connection, wait_limit) if wait_limit
       yield
     end
   end
+
+  # Takes the transaction's snapshot now, with wait_limit as the statement
+  # timeout, then puts the old timeout back for the block's reads. SHOW and
+  # SET take no snapshot, so the wait happens at the SELECT and nowhere
+  # before it.
+  sig { params(connection: ActiveRecord::ConnectionAdapters::AbstractAdapter, wait_limit: ActiveSupport::Duration).void }
+  def self.take_snapshot(connection, wait_limit)
+    statement_limit = connection.select_value('SHOW statement_timeout')
+    connection.execute("SET LOCAL statement_timeout = '#{wait_limit.to_i}s'")
+    connection.execute('SELECT 1')
+    connection.execute("SET LOCAL statement_timeout = #{connection.quote(statement_limit)}")
+  end
+  private_class_method :take_snapshot
 end

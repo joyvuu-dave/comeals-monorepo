@@ -9,6 +9,6 @@ class RefreshBalancesJob < RecurringJob
   HEALTHCHECK = 'billing-recalculate'
 
   def run
-    { balances_written: BalanceRecalculation.call }
+    { balances_written: BalanceRecalculation.call(wait_limit: SnapshotRead::NIGHTLY_WAIT) }
   end
 end

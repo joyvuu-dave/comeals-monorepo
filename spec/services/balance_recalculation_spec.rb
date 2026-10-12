@@ -53,6 +53,18 @@ RSpec.describe BalanceRecalculation do
     expect(ResidentBalance.where(resident: eater).count).to eq(1)
   end
 
+  # SnapshotRead does the waiting (spec/services/snapshot_read_spec.rb).
+  # The nightly job passes a limit, the refresh after a settlement does not.
+  it 'hands its wait_limit to the snapshot, and none when given none' do
+    allow(SnapshotRead).to receive(:call).and_call_original
+
+    described_class.call(community: community, wait_limit: 42.seconds)
+    described_class.call(community: community)
+
+    expect(SnapshotRead).to have_received(:call).with(wait_limit: 42.seconds).ordered
+    expect(SnapshotRead).to have_received(:call).with(wait_limit: nil).ordered
+  end
+
   it 'writes nothing, and says so, for a community with no residents' do
     expect(described_class.call(community: community)).to eq(0)
     expect(ResidentBalance.count).to eq(0)

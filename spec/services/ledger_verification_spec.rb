@@ -29,6 +29,17 @@ RSpec.describe LedgerVerification do
     end
   end
 
+  # SnapshotRead does the waiting (spec/services/snapshot_read_spec.rb).
+  it 'hands its wait_limit to the snapshot, and none when given none' do
+    allow(SnapshotRead).to receive(:call).and_call_original
+
+    described_class.call(wait_limit: 42.seconds)
+    described_class.call
+
+    expect(SnapshotRead).to have_received(:call).with(wait_limit: 42.seconds).ordered
+    expect(SnapshotRead).to have_received(:call).with(wait_limit: nil).ordered
+  end
+
   describe 'a ledger where everything matches' do
     it 'passes and records the run' do
       settle

@@ -9,7 +9,7 @@ class VerifyLedgerJob < RecurringJob
   HEALTHCHECK = 'ledger-verify'
 
   def run
-    run = LedgerVerification.call
+    run = LedgerVerification.call(wait_limit: SnapshotRead::NIGHTLY_WAIT)
     { ledger_check_run_id: run.id, reconciliations_checked: run.reconciliations_checked }
   end
 end

@@ -89,9 +89,15 @@ class LedgerVerification
     end
   end
 
-  sig { returns(LedgerCheckRun) }
-  def self.call
-    new.call
+  # wait_limit: how long to wait for the snapshot (SnapshotRead).
+  sig { params(wait_limit: T.nilable(ActiveSupport::Duration)).returns(LedgerCheckRun) }
+  def self.call(wait_limit: nil)
+    new(wait_limit: wait_limit).call
+  end
+
+  sig { params(wait_limit: T.nilable(ActiveSupport::Duration)).void }
+  def initialize(wait_limit: nil)
+    @wait_limit = wait_limit
   end
 
   # One reconciliation can fail both checks, so the count is of findings, not
@@ -131,7 +137,7 @@ class LedgerVerification
     mismatches = T.let([], T::Array[Detail])
 
     begin
-      SnapshotRead.call do
+      SnapshotRead.call(wait_limit: @wait_limit) do
         Reconciliation.order(:id).each do |reconciliation|
           checked += 1
           check(reconciliation, mismatches)

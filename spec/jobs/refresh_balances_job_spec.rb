@@ -24,4 +24,15 @@ RSpec.describe RefreshBalancesJob do
     expect(run.outcome).to eq('ok')
     expect(run.details).to eq('balances_written' => 2)
   end
+
+  # Nobody waits on the nightly run, and on the shared production server
+  # its wait for a snapshot depends on other customers' writes.
+  it 'gives the wait for its snapshot the nightly limit' do
+    community # the one community the job reads
+    allow(BalanceRecalculation).to receive(:call).and_call_original
+
+    described_class.perform_now
+
+    expect(BalanceRecalculation).to have_received(:call).with(wait_limit: SnapshotRead::NIGHTLY_WAIT)
+  end
 end

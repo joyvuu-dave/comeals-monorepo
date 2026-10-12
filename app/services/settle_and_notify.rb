@@ -125,7 +125,9 @@ class SettleAndNotify
   # here (the nightly refresh running at the same moment) is tried again;
   # one that does not go away reaches after_commit_step and is reported.
   # The caller's patience again: this runs in the same request, so it must
-  # not spend the minutes the settlement was allowed to.
+  # not spend the minutes the settlement was allowed to. For the same
+  # reason it passes no wait_limit: its wait for a snapshot keeps the 10 s
+  # statement timeout (SnapshotRead).
   sig { params(community: Community, retries: Retries).void }
   def self.refresh_balances(community, retries)
     RetryOnConflict.call(attempts: retries.attempts, base_delay: retries.base_delay) do

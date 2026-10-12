@@ -50,6 +50,17 @@ RSpec.describe 'ledger:verify' do
     expect(Healthcheck).to have_received(:ping).with('ledger-verify')
   end
 
+  # Nobody waits on the nightly check, and on the shared production server
+  # its wait for a snapshot depends on other customers' writes.
+  it 'gives the wait for its snapshot the nightly limit' do
+    allow(Healthcheck).to receive(:ping)
+    allow(LedgerVerification).to receive(:call).and_call_original
+
+    Rake::Task['ledger:verify'].invoke
+
+    expect(LedgerVerification).to have_received(:call).with(wait_limit: SnapshotRead::NIGHTLY_WAIT)
+  end
+
   it 'records the run' do
     settle
 

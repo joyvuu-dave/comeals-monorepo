@@ -70,6 +70,9 @@ default: &default
   # own per-migration timeouts (config/initializers/strong_migrations.rb).
   # A rake task that proves it needs longer may raise its own limit with
   # SET statement_timeout at its start — a visible per-task exception.
+  # The two nightly jobs are one: their wait for a snapshot gets
+  # SnapshotRead::NIGHTLY_WAIT, because on a shared server that wait
+  # depends on other customers' writes. Their reads keep 10s.
   #
   # config/initializers/verify_transaction_isolation.rb checks at boot that
   # the isolation setting below actually reached the session, and
