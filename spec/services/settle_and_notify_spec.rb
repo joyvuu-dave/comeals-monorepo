@@ -16,6 +16,9 @@ RSpec.describe SettleAndNotify do
   around { |example| perform_enqueued_jobs { example.run } }
 
   let(:community) { create(:community) }
+  # The latest cutoff a settlement may have, 14 days back (ADR 0011 rule
+  # 2). The dates below count back from it.
+  let(:latest) { Reconciliation.latest_cutoff(community.today) }
   let(:unit) { create(:unit, community: community) }
   let(:resident) { create(:resident, community: community, unit: unit, multiplier: 2) }
   let(:cook) { create(:resident, community: community, unit: unit, multiplier: 2) }
@@ -32,9 +35,9 @@ RSpec.describe SettleAndNotify do
   end
 
   it 'settles, refreshes balances, and mails the cooks' do
-    settleable_meal(Date.yesterday)
+    settleable_meal(latest)
 
-    reconciliation = described_class.call(cutoff: Date.yesterday, community: community).reconciliation
+    reconciliation = described_class.call(cutoff: latest, community: community).reconciliation
 
     expect(reconciliation).to be_persisted
     expect(ResidentBalance.find_by(resident_id: resident.id).amount).to eq(BigDecimal('0'))
@@ -45,10 +48,10 @@ RSpec.describe SettleAndNotify do
     before { allow(Pusher).to receive(:trigger).and_raise(Pusher::HTTPError, 'Pusher is down') }
 
     it 'still refreshes balances and mails the cooks, and reports the outage' do
-      settleable_meal(Date.yesterday)
+      settleable_meal(latest)
       allow(Rails.error).to receive(:report).and_call_original
 
-      reconciliation = described_class.call(cutoff: Date.yesterday, community: community).reconciliation
+      reconciliation = described_class.call(cutoff: latest, community: community).reconciliation
 
       expect(reconciliation).to be_persisted
       expect(ResidentBalance.find_by(resident_id: resident.id).amount).to eq(BigDecimal('0'))
@@ -62,14 +65,14 @@ RSpec.describe SettleAndNotify do
       allow(Rails).to receive(:cache).and_return(store)
       # Two meals in two months, so the first month's failed push cannot
       # stop the second month's cache clear.
-      settleable_meal(Date.yesterday)
-      settleable_meal(Date.yesterday - 2.months)
-      keys = [Date.yesterday, Date.yesterday - 2.months].map do |d|
+      settleable_meal(latest)
+      settleable_meal(latest - 2.months)
+      keys = [latest, latest - 2.months].map do |d|
         community.calendar_cache_key(d.year, d.month)
       end
       keys.each { |key| store.write(key, 'stale') }
 
-      described_class.call(cutoff: Date.yesterday, community: community)
+      described_class.call(cutoff: latest, community: community)
 
       keys.each { |key| expect(store.read(key)).to be_nil }
     end
@@ -81,11 +84,11 @@ RSpec.describe SettleAndNotify do
     include_context 'with no test transaction'
 
     it 'gives up after three tries when the caller is a request, so nobody waits minutes' do
-      settleable_meal(Date.yesterday)
+      settleable_meal(latest)
       allow(RetryOnConflict).to receive(:sleep)
       allow(Settlement).to receive(:settle!).and_raise(ActiveRecord::SerializationFailure, 'conflict')
 
-      expect { described_class.call(cutoff: Date.yesterday, community: community, retries: described_class::REQUEST) }
+      expect { described_class.call(cutoff: latest, community: community, retries: described_class::REQUEST) }
         .to raise_error(ActiveRecord::SerializationFailure)
 
       expect(Settlement).to have_received(:settle!).exactly(3).times
@@ -108,7 +111,7 @@ RSpec.describe SettleAndNotify do
     end
 
     it 'keeps trying past a request\'s three attempts, waiting the batch delay' do
-      settleable_meal(Date.yesterday)
+      settleable_meal(latest)
       sleeps = []
       allow(RetryOnConflict).to receive(:sleep) { |seconds| sleeps << seconds }
       failures = 0
@@ -120,7 +123,7 @@ RSpec.describe SettleAndNotify do
       end
       base = described_class::BATCH.base_delay
 
-      reconciliation = described_class.call(cutoff: Date.yesterday, community: community).reconciliation
+      reconciliation = described_class.call(cutoff: latest, community: community).reconciliation
 
       expect(reconciliation).to be_persisted
       expect(failures).to eq(7)
@@ -143,7 +146,7 @@ RSpec.describe SettleAndNotify do
     before { allow(RetryOnConflict).to receive(:sleep) }
 
     it 'tries the refresh again' do
-      settleable_meal(Date.yesterday)
+      settleable_meal(latest)
       attempts = 0
       allow(BalanceRecalculation).to receive(:call).and_wrap_original do |original, **args|
         attempts += 1
@@ -152,7 +155,7 @@ RSpec.describe SettleAndNotify do
         original.call(**args)
       end
 
-      reconciliation = described_class.call(cutoff: Date.yesterday, community: community).reconciliation
+      reconciliation = described_class.call(cutoff: latest, community: community).reconciliation
 
       expect(reconciliation).to be_persisted
       expect(attempts).to eq(3)
@@ -161,7 +164,7 @@ RSpec.describe SettleAndNotify do
     end
 
     it 'gives the nightly refresh the batch budget, so it outlasts the tries a request would make' do
-      settleable_meal(Date.yesterday)
+      settleable_meal(latest)
       sleeps = []
       allow(RetryOnConflict).to receive(:sleep) { |seconds| sleeps << seconds }
       attempts = 0
@@ -173,7 +176,7 @@ RSpec.describe SettleAndNotify do
       end
       allow(Rails.error).to receive(:report).and_call_original
 
-      described_class.call(cutoff: Date.yesterday, community: community)
+      described_class.call(cutoff: latest, community: community)
 
       expect(attempts).to eq(described_class::REQUEST.attempts + 2)
       base = described_class::BATCH.base_delay
@@ -183,11 +186,11 @@ RSpec.describe SettleAndNotify do
     end
 
     it 'gives the refresh the same patience as the settlement, and names the step when it gives up' do
-      settleable_meal(Date.yesterday)
+      settleable_meal(latest)
       allow(BalanceRecalculation).to receive(:call).and_raise(ActiveRecord::SerializationFailure, 'conflict')
       allow(Rails.error).to receive(:report).and_call_original
 
-      described_class.call(cutoff: Date.yesterday, community: community, retries: described_class::REQUEST)
+      described_class.call(cutoff: latest, community: community, retries: described_class::REQUEST)
 
       expect(BalanceRecalculation).to have_received(:call).with(community: community)
                                                           .exactly(described_class::REQUEST.attempts).times
@@ -200,11 +203,11 @@ RSpec.describe SettleAndNotify do
     end
 
     it 'reports a refresh that keeps conflicting, and still returns the settlement and mails the cooks' do
-      settleable_meal(Date.yesterday)
+      settleable_meal(latest)
       allow(BalanceRecalculation).to receive(:call).and_raise(ActiveRecord::SerializationFailure, 'conflict')
       allow(Rails.error).to receive(:report).and_call_original
 
-      reconciliation = described_class.call(cutoff: Date.yesterday, community: community).reconciliation
+      reconciliation = described_class.call(cutoff: latest, community: community).reconciliation
 
       expect(reconciliation).to be_persisted
       expect(Reconciliation.count).to eq(1)
@@ -225,11 +228,11 @@ RSpec.describe SettleAndNotify do
   describe 'when a step after the commit fails' do
     [ActiveRecord::LockWaitTimeout, ActiveRecord::QueryCanceled, RuntimeError].each do |error|
       it "reports a #{error.name} from the balance refresh and still returns the settlement" do
-        settleable_meal(Date.yesterday)
+        settleable_meal(latest)
         allow(BalanceRecalculation).to receive(:call).and_raise(error, 'refused')
         allow(Rails.error).to receive(:report).and_call_original
 
-        settlement = described_class.call(cutoff: Date.yesterday, community: community)
+        settlement = described_class.call(cutoff: latest, community: community)
 
         expect(settlement.reconciliation).to be_persisted
         expect(settlement.meal_count).to eq(1)
@@ -241,11 +244,11 @@ RSpec.describe SettleAndNotify do
     end
 
     it 'reports an error from the cache clear, and still refreshes the balances' do
-      settleable_meal(Date.yesterday)
+      settleable_meal(latest)
       allow(LiveUpdate).to receive(:calendar).and_raise(ActiveRecord::QueryCanceled, 'canceling statement')
       allow(Rails.error).to receive(:report).and_call_original
 
-      settlement = described_class.call(cutoff: Date.yesterday, community: community)
+      settlement = described_class.call(cutoff: latest, community: community)
 
       expect(settlement.reconciliation).to be_persisted
       expect(ResidentBalance.find_by(resident_id: resident.id).amount).to eq(BigDecimal('0'))
@@ -272,9 +275,9 @@ RSpec.describe SettleAndNotify do
     end
 
     it 'is queued once for the settlement that was saved' do
-      settleable_meal(Date.yesterday)
+      settleable_meal(latest)
 
-      settlement = described_class.call(cutoff: Date.yesterday, community: community)
+      settlement = described_class.call(cutoff: latest, community: community)
 
       expect(queued_cook_mail).to eq([[{ '_aj_globalid' => settlement.reconciliation.to_global_id.to_s }]])
     end
@@ -284,10 +287,10 @@ RSpec.describe SettleAndNotify do
     # its own error instead, but a settlement must not commit without its
     # mail either way.
     it 'rolls the settlement back when the job was not queued' do
-      settleable_meal(Date.yesterday)
+      settleable_meal(latest)
       allow(NotifyCooksJob).to receive(:perform_later).and_return(false)
 
-      expect { described_class.call(cutoff: Date.yesterday, community: community) }
+      expect { described_class.call(cutoff: latest, community: community) }
         .to raise_error(SettleAndNotify::MailNotQueued, 'The cook mail could not be queued, so nothing was settled.')
 
       expect(Reconciliation.count).to eq(0)
@@ -298,7 +301,7 @@ RSpec.describe SettleAndNotify do
     # every one of its queries repeats once.
     it 'is rolled back with a settlement whose commit was refused, and queued once by the try that worked',
        prosopite: false do
-      settleable_meal(Date.yesterday)
+      settleable_meal(latest)
       allow(RetryOnConflict).to receive(:sleep)
       refused = false
       allow(NotifyCooksJob).to receive(:perform_later).and_wrap_original do |original, *args|
@@ -310,7 +313,7 @@ RSpec.describe SettleAndNotify do
         job
       end
 
-      settlement = described_class.call(cutoff: Date.yesterday, community: community)
+      settlement = described_class.call(cutoff: latest, community: community)
 
       expect(Reconciliation.pluck(:id)).to eq([settlement.reconciliation.id])
       expect(queued_cook_mail).to eq([[{ '_aj_globalid' => settlement.reconciliation.to_global_id.to_s }]])
@@ -320,7 +323,7 @@ RSpec.describe SettleAndNotify do
   it 'lets an error from the settlement itself through, so nothing is half done' do
     allow(Settlement).to receive(:settle!).and_raise(ActiveRecord::StatementInvalid, 'connection lost')
 
-    expect { described_class.call(cutoff: Date.yesterday, community: community) }
+    expect { described_class.call(cutoff: latest, community: community) }
       .to raise_error(ActiveRecord::StatementInvalid)
     expect(ReconciliationMailer).not_to have_received(:reconciliation_notify_email)
   end

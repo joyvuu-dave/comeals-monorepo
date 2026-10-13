@@ -222,8 +222,8 @@ RSpec.describe Community do
     end
 
     it 'leaves settled meals out' do
-      meal_on(community.today - 1, bills: %w[16], eaters: [cook, diner])
-      settle!(cutoff: community.today - 1)
+      meal_on(community.today - 14, bills: %w[16], eaters: [cook, diner])
+      settle!(cutoff: community.today - 14)
       meal_on(community.today - 2, bills: %w[6], eaters: [diner])
 
       # Only the open meal: $6 over a multiplier of 2 is $3 a unit, $6 an adult.
@@ -341,9 +341,9 @@ RSpec.describe Community do
     end
 
     it 'leaves settled meals and their attendance out' do
-      settled = meal_on(community.today - 1, bills: %w[16], eaters: [cook, diner])
+      settled = meal_on(community.today - 14, bills: %w[16], eaters: [cook, diner])
       create(:guest, meal: settled, resident: diner)
-      settle!(cutoff: community.today - 1)
+      settle!(cutoff: community.today - 14)
       meal_on(community.today - 2, bills: %w[16], eaters: [diner])
 
       expect(community.unreconciled_ave_number_of_attendees).to eq(1.0)

@@ -31,9 +31,15 @@
 #
 
 # The date a meal gets when a spec does not give one. Each such meal is
-# one day further back than the last, from yesterday to days_back days
-# ago, and then the dates start again at yesterday. The sequence number
-# is shared by the whole run and never reset. With no limit, the meals
+# one day further back than the last, from `newest` days ago to days_back
+# more, and then the dates start again at `newest`. The sequence number
+# is shared by the whole run and never reset.
+#
+# `newest` is the age of the latest cutoff a settlement may have today
+# (Reconciliation::DAYS_TO_WAIT, ADR 0011 rule 2), so settle! with no
+# cutoff claims every default meal, whichever date the sequence gave it.
+# Starting at yesterday, a meal from the last 13 days would wait, and
+# which meals those were would depend on the order the specs ran in. With no limit, the meals
 # of the last spec files were dated further and further back as the
 # suite grew. That changes prices: the resident factory counts a child's
 # birthday back from today (8 years for half price), and a price is read
@@ -47,7 +53,9 @@
 module DefaultMealDate
   def self.days_back = 730
 
-  def self.for(count) = (((count - 1) % days_back) + 1).days.ago.to_date
+  def self.newest = Reconciliation::DAYS_TO_WAIT
+
+  def self.for(count) = (((count - 1) % days_back) + newest).days.ago.to_date
 end
 
 FactoryBot.define do

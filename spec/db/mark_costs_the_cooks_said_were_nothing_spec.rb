@@ -107,7 +107,7 @@ RSpec.describe MarkCostsTheCooksSaidWereNothing do
     end
 
     it 'skips a settled dinner' do
-      settle!(cutoff: shared.date + 1)
+      settle_as_before_rule_3!(cutoff: shared.date + 1)
 
       expect(migrate(:up)).to include("#{shared.date}  skipped: the dinner is settled")
       expect(no_cost(shared, partner)).to be(false)

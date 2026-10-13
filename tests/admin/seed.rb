@@ -89,19 +89,21 @@ def seed_meals(community, cook, bob, carol)
   # Bill id 1, attached to meal 1.
   FactoryBot.create(:bill, community: community, meal: Meal.find(1), resident: cook, amount: BigDecimal('75'))
 
-  # Meals 3 (2026-01-10) and 4 (2026-01-17), in rotation 2. Every meal
+  # Meals 3 (2026-01-02) and 4 (2026-01-05), in rotation 2. Every meal
   # belongs to a rotation, and a rotation made with its meals is numbered
   # by their dates: rotation 2 is "Rotation 1" and rotation 1 is
   # "Rotation 2". The New Meal form's rotation menu then has a gap
   # between the two (actions.spec.js picks a date in it).
   community.rotations.create!(no_email: true,
-                              meals_attributes: [{ date: Date.new(2026, 1, 10) }, { date: Date.new(2026, 1, 17) }])
+                              meals_attributes: [{ date: Date.new(2026, 1, 2) }, { date: Date.new(2026, 1, 5) }])
 
   # A settled period: meal 3, with a bill over the cap, three eaters and a
-  # guest, swept by reconciliation 1 (dated SEED_NOW).
+  # guest, swept by reconciliation 1 (dated SEED_NOW). Both meals are at
+  # least 14 days before SEED_NOW (2026-01-20), so a settlement may cover
+  # them (Reconciliation::DAYS_TO_WAIT); actions.spec.js settles meal 4.
   seed_closed_meal(meal: Meal.find(3), cook: cook, amount: BigDecimal('75'),
                    eaters: [cook, bob, carol], guest_of: bob)
-  Settlement.run!(cutoff: Date.new(2026, 1, 15))
+  Settlement.run!(cutoff: Date.new(2026, 1, 3))
 
   # Meal 4: closed but not yet settled, so the dashboard's "closed meals"
   # panel and the averages have something to count.

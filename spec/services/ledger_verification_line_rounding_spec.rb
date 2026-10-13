@@ -35,7 +35,7 @@ RSpec.describe LedgerVerification do
 
     it 'passes a large correct ledger whose meals all share a repeating unit cost' do
       meals = Array.new(101) { cook_a_dollar_meal }
-      reconciliation = settle!(cutoff: Date.yesterday)
+      reconciliation = settle!
 
       per_meal = MealCharge.where(meal_id: meals.map(&:id)).group(:meal_id).sum(:amount)
       expect(per_meal.size).to eq(101)
@@ -49,7 +49,7 @@ RSpec.describe LedgerVerification do
 
     it 'reports stored lines that sum to one unit of the grain, not only to more than the old epsilon' do
       cook_a_dollar_meal
-      reconciliation = settle!(cutoff: Date.yesterday)
+      reconciliation = settle!
       line = MealCharge.for_reconciliation(reconciliation).where(kind: 'debit').order(:resident_id).first
 
       # Settled data is immutable by design, so this goes behind the guards

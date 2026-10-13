@@ -27,6 +27,9 @@ RSpec.describe 'inserts into the settled ledger' do
   include_context 'with no test transaction'
 
   let(:community) { create(:community) }
+  # The latest cutoff a settlement may have, 14 days back (ADR 0011 rule
+  # 2). The dates below count back from it.
+  let(:latest) { Reconciliation.latest_cutoff(community.today) }
   let(:unit) { create(:unit, community: community) }
   let(:carl) { create(:resident, community: community, unit: unit, multiplier: 2, name: 'Carl') }
   let(:ann) { create(:resident, community: community, unit: unit, multiplier: 2, name: 'Ann') }
@@ -34,8 +37,8 @@ RSpec.describe 'inserts into the settled ledger' do
 
   # Carl cooked for $80, and Ann and Bob ate. Carl is credited $80, Ann and
   # Bob are charged $40 each.
-  let!(:meal) { meal_on(Date.yesterday - 1) }
-  let!(:reconciliation) { settle!(cutoff: Date.yesterday - 1) }
+  let!(:meal) { meal_on(latest - 1) }
+  let!(:reconciliation) { settle!(cutoff: latest - 1) }
 
   def meal_on(date)
     meal = create(:meal, community: community, date: date)
@@ -135,8 +138,8 @@ RSpec.describe 'inserts into the settled ledger' do
     # The setting names one reconciliation. Setting it for a different one
     # does not open this one's meals.
     it "refuses a line while the setting names another reconciliation's settlement" do
-      meal_on(Date.yesterday)
-      other = settle!(cutoff: Date.yesterday)
+      meal_on(latest)
+      other = settle!
 
       expect { as_settlement_of(other) { insert_two_balancing_lines(meal) } }
         .to raise_error(ActiveRecord::StatementInvalid, /INSERT on meal_charges refused/)
@@ -159,8 +162,8 @@ RSpec.describe 'inserts into the settled ledger' do
     end
 
     it "refuses a balance while the setting names another reconciliation's settlement" do
-      meal_on(Date.yesterday)
-      other = settle!(cutoff: Date.yesterday)
+      meal_on(latest)
+      other = settle!
 
       expect { as_settlement_of(other) { insert_two_balancing_balances(reconciliation) } }
         .to raise_error(ActiveRecord::StatementInvalid, /INSERT on reconciliation_balances refused/)
@@ -186,22 +189,22 @@ RSpec.describe 'inserts into the settled ledger' do
     # per table, because the first refused insert ends the transaction.
     describe 'turning its setting off when it is done' do
       it 'refuses a later line item in the same transaction' do
-        later_meal = meal_on(Date.yesterday)
+        later_meal = meal_on(latest)
 
         expect do
           ActiveRecord::Base.transaction do
-            settle!(cutoff: Date.yesterday)
+            settle!
             insert_two_balancing_lines(later_meal)
           end
         end.to raise_error(ActiveRecord::StatementInvalid, /INSERT on meal_charges refused/)
       end
 
       it 'refuses a later balance in the same transaction' do
-        meal_on(Date.yesterday)
+        meal_on(latest)
 
         expect do
           ActiveRecord::Base.transaction do
-            settled = settle!(cutoff: Date.yesterday)
+            settled = settle!
             insert_two_balancing_balances(settled)
           end
         end.to raise_error(ActiveRecord::StatementInvalid, /INSERT on reconciliation_balances refused/)

@@ -13,12 +13,15 @@ require 'rails_helper'
 # Lock hunt, 2026-09-21; the first example was red when written.
 RSpec.describe ReconciledMealImmutability do
   let(:community) { create(:community) }
+  # The latest cutoff a settlement may have, 14 days back (ADR 0011 rule
+  # 2). The dates below count back from it.
+  let(:latest) { Reconciliation.latest_cutoff(community.today) }
   let(:unit) { create(:unit, community: community) }
   let(:cook) { create(:resident, community: community, unit: unit) }
-  let(:meal) { create(:meal, community: community, date: Date.yesterday) }
+  let(:meal) { create(:meal, community: community, date: latest) }
 
   def settle
-    Settlement.run!(cutoff: Date.yesterday)
+    Settlement.run!(cutoff: latest)
     expect(meal.reload).to be_reconciled
   end
 

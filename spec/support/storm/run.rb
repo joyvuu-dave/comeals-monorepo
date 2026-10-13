@@ -141,7 +141,7 @@ module Storm
 
     def settle_once
       Rails.application.executor.wrap do
-        settlement = SettleAndNotify.call(cutoff: @plan.community.yesterday)
+        settlement = SettleAndNotify.call(cutoff: @plan.latest_cutoff)
         [:settled, settlement.reconciliation.id]
       end
     rescue ActiveRecord::RecordInvalid
@@ -191,7 +191,7 @@ module Storm
         when 0 then admin_add(meal, resident)
         when 1 then admin_remove(meal, resident)
         else Bill.find_or_initialize_by(meal_id: meal.id, resident_id: resident.id)
-                 .update!(amount: BigDecimal(rng.rand(0..9999)) / 100, no_cost: false)
+                 .update!(amount: admin_amount(meal, rng), no_cost: false)
         end
       end
       :ok
@@ -210,6 +210,13 @@ module Storm
     # (app/admin/meal_resident.rb), so the closed-meal freeze lets it add
     # or remove on a closed meal, which is the usual real case: a meal is
     # corrected after dinner, while a settlement may be claiming it.
+    # May be $0, a blank cost, like an admin who clears one; never on the
+    # meal planted so a settlement has something to claim (Seed::Plan).
+    def admin_amount(meal, rng)
+      cents = meal.id == @plan.settleable_meal.id ? rng.rand(1..9999) : rng.rand(0..9999)
+      BigDecimal(cents) / 100
+    end
+
     def admin_add(meal, resident)
       row = MealResident.new(meal_id: meal.id, resident_id: resident.id)
       row.admin_correction = true

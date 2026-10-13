@@ -163,9 +163,8 @@ end
 # Bills — two cooks per meal, covering every shape a real meal takes:
 # both cooks entered a cost; one entered while the other declared no
 # cost (two cooks, one shopper); one entered while the other never put
-# anything in. In this batch that last shape settles at zero when the
-# reconciliation sweeps it — the outcome the close-time question now
-# exists to prevent.
+# anything in. The settlement below leaves that last shape open, waiting
+# for the cost (ADR 0011 rule 3).
 Meal.all.each_with_index do |meal, index|
   next if meal.date > community.today + 14
 
@@ -187,10 +186,10 @@ end
 
 Rails.logger.debug { "#{community.bills.count} Bills created" }
 
-# Reconciliation — sweeps the first batch of meals (26..8 weeks ago).
-# end_date must be strictly in the past (issue #3): a meal from a day that
-# is not over must not be settled. The cutoff sits on the first batch's
-# boundary so the sweep takes exactly that batch.
+# Reconciliation — sweeps the first batch of meals (26..8 weeks ago),
+# less the ones with a blank cost, which wait (ADR 0011 rule 3). end_date
+# must be at least 14 days before today (ADR 0011 rule 2). The cutoff sits
+# on the first batch's boundary so the sweep takes only that batch.
 Settlement.run!(cutoff: 8.weeks.ago.to_date)
 Rails.logger.debug { "#{community.reconciliations.count} Reconciliation created" }
 

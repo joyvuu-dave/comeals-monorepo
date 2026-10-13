@@ -30,11 +30,11 @@ RSpec.describe 'Admin: a child who eats free' do
 
   it "is labeled free on a settled meal's line items" do
     cook = create(:resident, community: community, unit: unit)
-    meal = create(:meal, community: community, date: community.today - 1)
+    meal = create(:meal, community: community, date: community.today - 14)
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('10'))
     create(:meal_resident, meal: meal, resident: cook, community: community)
     create(:meal_resident, meal: meal, resident: toddler, community: community)
-    settle!(cutoff: community.today - 1)
+    settle!(cutoff: community.today - 14)
 
     get "/meals/#{meal.id}"
 

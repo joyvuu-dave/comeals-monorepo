@@ -75,7 +75,7 @@ On the iOS side, all money is `Decimal`. A thin `Money` wrapper type may be just
 
 **Query parameters:**
 
-- `cutoff` (required, ISO date `YYYY-MM-DD`): meals on or before this date are included. Must match `Meal.settleable_by(cutoff)` exactly, which is `date <= cutoff` **and** `date < today` — a meal on a day that is not yet over is never swept, whatever the cutoff says (issue #3). A cutoff of today or later is not a valid reconciliation, so the endpoint should reject it the same way the model does.
+- `cutoff` (required, ISO date `YYYY-MM-DD`): meals on or before this date are included. Must match `Meal.settleable_by(cutoff)` exactly, which is `date <= cutoff` **and** `date < today` — a meal on a day that is not yet over is never swept, whatever the cutoff says (issue #3). The cutoff must be at least 14 days before today (ADR 0011 rule 2), so the endpoint rejects a later one the same way the model does: `400` with `cutoff must be on or before YYYY-MM-DD, 14 days before today`.
 
 **Auth:** `Authorization: Bearer <jwt>` header (see the Authentication section). No `token` query parameter.
 
@@ -176,6 +176,7 @@ On the iOS side, all money is `Decimal`. A thin `Money` wrapper type may be just
 - `bill_with_no_attendees`
 - `bill_with_only_free_eaters` (added 2026-10-09)
 - `attendance_without_bill`
+- `cost_not_entered` (added 2026-10-13)
 - `zero_bill_not_flagged`
 
 **The iOS client MUST render unknown kinds gracefully**, falling back to `title`/`body`. This is the forward-compatibility hinge — it lets us add `cost_outlier`, `date_outlier`, `cook_attending_zero_multiplier`, etc. in future iterations without breaking deployed binaries.
@@ -192,7 +193,7 @@ On the iOS side, all money is `Decimal`. A thin `Money` wrapper type may be just
 
 Contracts below are placeholders — each gets its own sketch when we get to it.
 
-- ~~`POST /api/v1/reconciliations`~~ — done 2026-08-23: `{ "cutoff": "YYYY-MM-DD" }`, calls `SettleAndNotify` (settle, refresh running balances, email cooks — the same service the nightly rake task calls), returns `201` with `id`, `date`, `cutoff_date`, `meal_count`; `400` for a non-past cutoff or nothing to settle; `409` when another writer got there first. Creating it is the lock: the row refuses update and destroy from that moment, and its meals' bills, attendance, and guests are frozen by database triggers. There is no separate finalize step and no unfinalize — see `RECONCILIATION_WORKFLOW.md` item 4.
+- ~~`POST /api/v1/reconciliations`~~ — done 2026-08-23: `{ "cutoff": "YYYY-MM-DD" }`, calls `SettleAndNotify` (settle, refresh running balances, email cooks — the same service the nightly rake task calls), returns `201` with `id`, `date`, `cutoff_date`, `meal_count`; `400` for a cutoff less than 14 days before today or nothing to settle; `409` when another writer got there first. Creating it is the lock: the row refuses update and destroy from that moment, and its meals' bills, attendance, and guests are frozen by database triggers. There is no separate finalize step and no unfinalize — see `RECONCILIATION_WORKFLOW.md` item 4.
 - `POST /api/v1/reconciliations/:id/balances/:balance_id/mark_paid` — sets `paid_at` on a `reconciliation_balance`, automatically triggers derived `settled_at` on the reconciliation if all balances are now paid. Both columns are still unbuilt; see `COLLECTION_WORKFLOW.md` items 1 and 2.
 - `GET /api/v1/reconciliations/:id` — historical view for a created reconciliation. What Collect's collection screen will consume.
 
@@ -237,7 +238,8 @@ v1 checks:
 1. **`bill_with_no_attendees`** — a bill with money on it exists on a meal with zero `meal_residents` and zero `guests`; the settlement holds that meal back until someone is signed up or the bill is removed (since 2026-09-10; before, it was settled with no lines and the cook got $0 back)
 2. **`bill_with_only_free_eaters`** — a bill with money on it exists on a meal where everyone who signed up eats free (every `meal_residents` row has multiplier 0, and there is no guest, because a guest always pays); nobody can be charged a share, so the settlement holds that meal back until someone who pays is signed up or the bill is removed (since 2026-10-09, #94; before, it was settled with every line at $0 and the cook got $0 back)
 3. **`attendance_without_bill`** — a meal has attendees but no bills
-4. **`zero_bill_not_flagged`** — a bill has `amount == 0` but `no_cost == false`
+4. **`cost_not_entered`** — a bill has `amount == 0` and `no_cost == false` on a meal where someone is charged; the settlement leaves that meal open until every cook enters a cost or marks No cost (since 2026-10-13, ADR 0011 rule 3; before, it was settled and the blank cost was locked at $0)
+5. **`zero_bill_not_flagged`** — a bill has `amount == 0` but `no_cost == false` on a meal the settlement claims, which happens only when nobody is charged, so it settles with no money moving
 
 The preview controller composes both: calculator for the money, warnings for the data quality, then renders a single JSON response.
 

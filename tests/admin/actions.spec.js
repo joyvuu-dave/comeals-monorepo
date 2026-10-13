@@ -61,8 +61,8 @@ test.describe("Meals", () => {
   reseedBeforeGroup();
 
   // The New Meal form's rotation menu (#100). The seed has two
-  // rotations: rotation 2 ("Rotation 1") with meals on 2026-01-10 and
-  // 2026-01-17, and rotation 1 ("Rotation 2") with meals on 2027-02-02
+  // rotations: rotation 2 ("Rotation 1") with meals on 2026-01-02 and
+  // 2026-01-05, and rotation 1 ("Rotation 2") with meals on 2027-02-02
   // and 2027-02-04. The script in active_admin.js chooses the rotation
   // whose dates contain the date typed.
   test("picks the rotation by date and creates a meal", async ({ page }) => {
@@ -119,7 +119,7 @@ test.describe("Meals", () => {
 
     // The admin chooses one, and the meal saves.
     await page.selectOption("#meal_rotation_id", {
-      label: "Rotation 1: Jan 10–17, 2026",
+      label: "Rotation 1: Jan 2–5, 2026",
     });
     await page.click('input[type="submit"]');
     await expect(notice(page)).toHaveText("Meal was successfully created.");
@@ -233,10 +233,10 @@ test.describe("Settlement", () => {
   test("settles a period from the reconciliation form", async ({ page }) => {
     await login(page);
     await page.goto("/reconciliations/new");
-    // Meal 4 (2026-01-17, closed, one $20 bill) is the only unsettled meal
-    // on or before this cutoff. The clock is frozen at 2026-01-20, so the
-    // cutoff is in the past.
-    await page.fill("#reconciliation_end_date", "2026-01-18");
+    // Meal 4 (2026-01-05, closed, one $20 bill) is the only unsettled meal
+    // on or before this cutoff. The clock is frozen at 2026-01-20, so this
+    // is the latest cutoff allowed, 14 days before today.
+    await page.fill("#reconciliation_end_date", "2026-01-06");
     await page.click('input[type="submit"]');
 
     await expect(page).toHaveURL(/\/reconciliations\/2$/);
@@ -264,15 +264,30 @@ test.describe("Settlement", () => {
     await expect(row(units, "B").locator("td").last()).toHaveText(
       "is owed $9.00",
     );
-    await expect(panel(page, "Meals")).toContainText("2026-01-17");
+    await expect(panel(page, "Meals")).toContainText("2026-01-05");
+  });
+
+  test("refuses a cutoff less than 14 days before today", async ({ page }) => {
+    await login(page);
+    await page.goto("/reconciliations/new");
+    // The clock is frozen at 2026-01-20, so the latest cutoff is
+    // 2026-01-06. A cook may still fix a cost on a newer dinner.
+    await page.fill("#reconciliation_end_date", "2026-01-07");
+    await page.click('input[type="submit"]');
+
+    // The form is shown again with the reason; nothing was created.
+    await expect(page).toHaveURL(/\/reconciliations$/);
+    await expect(page.locator(".errors, .inline-errors")).toContainText(
+      "must be on or before 2026-01-06, 14 days before today",
+    );
   });
 
   test("refuses a cutoff with nothing to settle", async ({ page }) => {
     await login(page);
     await page.goto("/reconciliations/new");
-    // Meal 3 (2026-01-10) is already settled; the next meal with a bill
-    // is on the 17th.
-    await page.fill("#reconciliation_end_date", "2026-01-16");
+    // Meal 3 (2026-01-02) is already settled; the next meal with a bill
+    // is on the 5th.
+    await page.fill("#reconciliation_end_date", "2026-01-04");
     await page.click('input[type="submit"]');
 
     // The form is shown again with the reason; nothing was created.
@@ -315,7 +330,7 @@ test.describe("Settlement", () => {
       "owes $22.50",
     );
     const meals = panel(page, "Meals");
-    await expect(meals).toContainText("2026-01-10");
+    await expect(meals).toContainText("2026-01-02");
     await expect(meals).toContainText("Alice Cook");
   });
 
@@ -331,11 +346,11 @@ test.describe("Settlement", () => {
       has: page.locator('a[href$="/reconciliations/1"]'),
     });
     await expect(heading).toHaveCount(1);
-    await expect(heading).toContainText("Jan 10, 2026");
+    await expect(heading).toContainText("Jan 2, 2026");
     await expect(heading).toContainText("settled: is owed $22.50");
     // Her two lines for meal 3 (another settlement in this group can add
     // lines for other meals): credited for cooking, charged for eating.
-    const lines = statement.locator("tbody tr", { hasText: "2026-01-10" });
+    const lines = statement.locator("tbody tr", { hasText: "2026-01-02" });
     await expect(lines).toHaveCount(2);
     await expect(lines.filter({ hasText: "Cooked" })).toContainText(
       "credited $31.50",

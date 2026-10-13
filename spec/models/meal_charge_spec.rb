@@ -45,7 +45,7 @@ RSpec.describe MealCharge do
     create(:meal_resident, meal: meal, resident: cook, community: community)
     create(:meal_resident, meal: meal, resident: eater, community: community)
 
-    settle!(cutoff: Date.yesterday)
+    settle!
   end
 
   describe 'what settlement writes' do
@@ -85,7 +85,7 @@ RSpec.describe MealCharge do
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('60'))
       create(:meal_resident, meal: meal, resident: cook, community: community)
       create(:meal_resident, meal: meal, resident: eater, community: community)
-      settle!(cutoff: Date.yesterday)
+      settle!
 
       credit = described_class.where(kind: 'credit').first
 
@@ -100,7 +100,7 @@ RSpec.describe MealCharge do
       create(:meal_resident, meal: meal, resident: eater, community: community)
       create(:guest, meal: meal, resident: eater, multiplier: 2)
       create(:guest, meal: meal, resident: eater, multiplier: 1)
-      settle!(cutoff: Date.yesterday)
+      settle!
 
       guest_lines = described_class.where(kind: 'guest_debit')
 
@@ -114,7 +114,7 @@ RSpec.describe MealCharge do
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('80'))
       no_cost_bill_with_an_amount(meal: meal, resident: eater, amount: '9')
       create(:meal_resident, meal: meal, resident: cook, community: community)
-      settle!(cutoff: Date.yesterday)
+      settle!
 
       expect(described_class.where(kind: 'credit').pluck(:resident_id)).to eq([cook.id])
     end
@@ -148,7 +148,7 @@ RSpec.describe MealCharge do
       other_eater = create(:resident, community: community, unit: unit, multiplier: 2, name: 'Other Eater')
       create(:meal_resident, meal: meal, resident: other_eater, community: community)
       expect(cook.id).to be < [eater.id, other_eater.id].min
-      reconciliation = settle!(cutoff: Date.yesterday)
+      reconciliation = settle!
 
       summed = described_class.for_reconciliation(reconciliation).group(:resident_id).sum(:amount)
       stored = reconciliation.reconciliation_balances.pluck(:resident_id, :amount).to_h

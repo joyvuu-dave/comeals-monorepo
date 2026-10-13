@@ -8,11 +8,14 @@ require 'rails_helper'
 # a superuser grants in admin.
 RSpec.describe 'reconciliation endpoints need the reconciler role' do
   let(:community) { create(:community) }
+  # The latest cutoff a settlement may have, 14 days back (ADR 0011 rule
+  # 2). The dates below count back from it.
+  let(:latest) { Reconciliation.latest_cutoff(community.today) }
   let(:unit) { create(:unit, community: community) }
   let(:cook) { create(:resident, community: community, unit: unit, multiplier: 2) }
 
   before do
-    meal = create(:meal, community: community, date: Date.yesterday)
+    meal = create(:meal, community: community, date: latest)
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
     create(:meal_resident, meal: meal, resident: cook, community: community)
   end
@@ -25,7 +28,7 @@ RSpec.describe 'reconciliation endpoints need the reconciler role' do
     let(:resident) { create(:resident, community: community, unit: unit) }
 
     it 'refuses the preview' do
-      get '/api/v1/reconciliations/preview', params: { cutoff: Date.yesterday.to_s }, headers: headers_for(resident)
+      get '/api/v1/reconciliations/preview', params: { cutoff: latest.to_s }, headers: headers_for(resident)
 
       expect(response).to have_http_status(:forbidden)
       expect(response.parsed_body['message']).to include('reconciler role')
@@ -33,7 +36,7 @@ RSpec.describe 'reconciliation endpoints need the reconciler role' do
 
     it 'refuses to settle, and writes nothing' do
       expect do
-        post '/api/v1/reconciliations', params: { cutoff: Date.yesterday.to_s }, headers: headers_for(resident)
+        post '/api/v1/reconciliations', params: { cutoff: latest.to_s }, headers: headers_for(resident)
       end.not_to change(Reconciliation, :count)
 
       expect(response).to have_http_status(:forbidden)
@@ -44,16 +47,16 @@ RSpec.describe 'reconciliation endpoints need the reconciler role' do
     let(:resident) { create(:resident, community: community, unit: unit, can_reconcile: true) }
 
     it 'allows the preview and the settlement' do
-      get '/api/v1/reconciliations/preview', params: { cutoff: Date.yesterday.to_s }, headers: headers_for(resident)
+      get '/api/v1/reconciliations/preview', params: { cutoff: latest.to_s }, headers: headers_for(resident)
       expect(response).to have_http_status(:ok)
 
-      post '/api/v1/reconciliations', params: { cutoff: Date.yesterday.to_s }, headers: headers_for(resident)
+      post '/api/v1/reconciliations', params: { cutoff: latest.to_s }, headers: headers_for(resident)
       expect(response).to have_http_status(:created)
     end
   end
 
   it 'still answers 401, not 403, with no token at all' do
-    get '/api/v1/reconciliations/preview', params: { cutoff: Date.yesterday.to_s }
+    get '/api/v1/reconciliations/preview', params: { cutoff: latest.to_s }
     expect(response).to have_http_status(:unauthorized)
   end
 

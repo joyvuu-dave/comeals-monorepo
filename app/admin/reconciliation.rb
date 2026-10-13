@@ -121,8 +121,11 @@ ActiveAdmin.register Reconciliation do
   # FORM
   form do |f|
     f.inputs do
+      latest = Reconciliation.latest_cutoff(Community.instance.today)
       f.input :end_date, as: :datepicker,
-                         hint: 'Settle all unreconciled meals up to this date.'
+                         hint: 'Settle all unreconciled meals up to this date. It must be on or before ' \
+                               "#{latest.iso8601}, #{Reconciliation::DAYS_TO_WAIT} days before today, so cooks " \
+                               'have time to fix their costs.'
     end
     f.actions
     f.semantic_errors

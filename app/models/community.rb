@@ -257,18 +257,21 @@ class Community < ApplicationRecord
   # Report Methods
 
   # The meals both dashboard averages read: the ones whose costs are
-  # final. That is what a settlement run today would claim
-  # (Meal.settleable_by: not settled, from a day that is over, at least
-  # one cook, and someone to charge or no money spent), less any meal
-  # with a cost not entered yet, and only meals someone ate at.
+  # final. That is what a settlement with yesterday as its cutoff would
+  # claim (Meal.settleable_by: not settled, from a day that is over, at
+  # least one cook, someone to charge or no money spent, and every cost
+  # entered when someone is charged), less any meal with a cost not
+  # entered yet, and only meals someone ate at.
   #
-  # The settlement does settle a $0 cost that is not marked no-cost, at
-  # $0, and only warns about it: it cannot wait for a cost forever. An
-  # average can, so it leaves the meal out until the cook enters the
-  # cost. Until 2026-10-10 the averages also counted tonight's meal
-  # before its receipt was in, and past meals with no cook or no cost,
-  # all at $0, so "Cost per adult" dropped every evening and after
-  # every settlement (#98 had already left out the upcoming meals).
+  # A settlement does not wait for a cost on a meal where nobody is
+  # charged (only people who eat free ate), so settleable_by keeps such
+  # a meal with a blank cost. The averages leave it out until the cook
+  # enters the cost, so that meals_left_out_of_averages counts it once,
+  # under "cost not entered". Until 2026-10-10 the averages also counted
+  # tonight's meal before its receipt was in, and past meals with no
+  # cook or no cost, all at $0, so "Cost per adult" dropped every
+  # evening and after every settlement (#98 had already left out the
+  # upcoming meals).
   def averaged_meals
     meals.settleable_by(today - 1, today: today).with_attendees.where(Meal.a_cost_not_entered.not)
   end
@@ -352,9 +355,6 @@ class Community < ApplicationRecord
     rotations.create!(meals_attributes: dates.map { |date| { date: date } })
   end
 
-  # Cache key for a specific calendar month. Same format as the Pusher channel
-  # name in data_store.js — one key serves both cache and real-time notification.
-  # Stale cache across deploys is handled by bin/deploy clearing the cache.
   # The community's calendar day, in its own time zone. This is the "today"
   # of the settlement path: a meal is settleable only when its day is over
   # for the people who ate it. Rake tasks run in the app time zone
@@ -364,10 +364,9 @@ class Community < ApplicationRecord
     Time.current.in_time_zone(timezone).to_date
   end
 
-  def yesterday
-    today - 1
-  end
-
+  # Cache key for a specific calendar month. Same format as the Pusher channel
+  # name in data_store.js — one key serves both cache and real-time notification.
+  # Stale cache across deploys is handled by bin/deploy clearing the cache.
   def calendar_cache_key(year, month)
     "community-#{id}-calendar-#{year}-#{month}"
   end

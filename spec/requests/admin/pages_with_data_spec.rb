@@ -9,9 +9,12 @@ require 'rails_helper'
 # never runs is a column block a rename can break unseen.
 RSpec.describe 'Admin pages with something to list' do
   let(:community) { create(:community) }
+  # The latest cutoff a settlement may have, 14 days back (ADR 0011 rule
+  # 2). The dates below count back from it.
+  let(:latest) { Reconciliation.latest_cutoff(community.today) }
   let(:unit) { create(:unit, community: community, name: 'Elm 12') }
   let(:resident) { create(:resident, community: community, unit: unit, name: 'Rosa Lister') }
-  let(:meal) { create(:meal, community: community, date: Date.yesterday) }
+  let(:meal) { create(:meal, community: community, date: latest) }
 
   before do
     host! 'admin.example.com'
@@ -29,7 +32,7 @@ RSpec.describe 'Admin pages with something to list' do
 
   it 'lists upcoming meals and closed meals on the dashboard' do
     upcoming = create(:meal, community: community, date: Date.tomorrow)
-    closed = create(:meal, community: community, date: Date.yesterday)
+    closed = create(:meal, community: community, date: latest)
     create(:meal_resident, meal: closed, resident: resident, community: community)
     create(:bill, meal: closed, resident: resident, community: community, amount: BigDecimal('20'))
     closed.update!(closed: true)
@@ -150,7 +153,7 @@ RSpec.describe 'Admin pages with something to list' do
     let!(:settled) do
       create(:meal_resident, meal: meal, resident: resident, community: community)
       create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('30'))
-      reconciliation = settle!(cutoff: Date.yesterday)
+      reconciliation = settle!
       meal.reload
       reconciliation
     end

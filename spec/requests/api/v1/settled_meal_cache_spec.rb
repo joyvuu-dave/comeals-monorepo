@@ -10,6 +10,9 @@ require 'rails_helper'
 # whatever serves it.
 RSpec.describe 'the cooks page after a settlement' do # -- a request contract across the API and Settlement
   let(:community) { create(:community) }
+  # The latest cutoff a settlement may have, 14 days back (ADR 0011 rule
+  # 2). The dates below count back from it.
+  let(:latest) { Reconciliation.latest_cutoff(community.today) }
   let(:unit) { create(:unit, community: community) }
   let(:resident) { create(:resident, community: community, unit: unit) }
   let(:token) { resident.keys.first.token }
@@ -18,7 +21,7 @@ RSpec.describe 'the cooks page after a settlement' do # -- a request contract ac
   before { allow(Rails).to receive(:cache).and_return(ActiveSupport::Cache::MemoryStore.new) }
 
   it 'stops saying the meal is open the moment it is settled' do
-    meal = create(:meal, community: community, date: Date.yesterday)
+    meal = create(:meal, community: community, date: latest)
     create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('30'))
     create(:meal_resident, meal: meal, resident: resident, community: community)
 

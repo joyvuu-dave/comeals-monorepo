@@ -70,7 +70,8 @@ module Storm
       hosts: READ, birthdays: READ, rotation: READ, login: READ,
       # This client's own events and previews can never be refused: an
       # event always has a title and ends an hour after it starts, and the
-      # preview asks for yesterday. So a 400 for either is a problem. A
+      # preview asks for the latest cutoff allowed. So a 400 for either is
+      # a problem. A
       # guest room or a common house booking can be taken already.
       event_create: READ, event_delete: READ,
       guest_room_create: [200, 400], guest_room_delete: READ,
@@ -250,12 +251,21 @@ module Storm
       return request_cooks(meal) + [:cooks] if seen.nil?
 
       cooks = @plan.residents.sample(@rng.rand(1..3), random: @rng)
-      wanted = cooks.to_h do |cook|
-        no_cost = @rng.rand < 0.15
-        [cook.id, { amount: no_cost ? BigDecimal('0') : BigDecimal(@rng.rand(0..999_999)) / 100, no_cost: no_cost }]
-      end
+      wanted = cooks.to_h { |cook| [cook.id, cost_for(meal)] }
       method, path, body = meal_write(meal, :patch, '/bills', { edits: BillEdits.between(seen, wanted) })
       [method, path, body, ->(response) { remember_bills(meal, response) }]
+    end
+
+    # No cost, a blank cost, or a cost with money on it. A blank cost makes
+    # a meal with someone to charge wait (ADR 0011 rule 3), so the
+    # settlement races it, and Checks finds a settled meal with one. Never
+    # on the meal planted so a settlement has something to claim.
+    def cost_for(meal)
+      roll = @rng.rand
+      return { amount: BigDecimal('0'), no_cost: true } if roll < 0.15
+      return { amount: BigDecimal('0'), no_cost: false } if roll < 0.25 && meal.id != @plan.settleable_meal.id
+
+      { amount: BigDecimal(@rng.rand(1..999_999)) / 100, no_cost: false }
     end
 
     # The bills in a meal form, or in a bills answer that has them: a save
@@ -405,11 +415,11 @@ module Storm
     end
 
     def request_preview(_meal)
-      [:get, "/api/v1/reconciliations/preview?cutoff=#{@plan.community.yesterday.iso8601}", nil, nil]
+      [:get, "/api/v1/reconciliations/preview?cutoff=#{@plan.latest_cutoff.iso8601}", nil, nil]
     end
 
     def request_settle(_meal)
-      [:post, '/api/v1/reconciliations', { cutoff: @plan.community.yesterday.iso8601 }, nil]
+      [:post, '/api/v1/reconciliations', { cutoff: @plan.latest_cutoff.iso8601 }, nil]
     end
   end
 end

@@ -85,10 +85,11 @@ class ReconciliationPreviewSerializer
   end
 
   # A warning's meal_id may name a meal that is not in `meals`: the
-  # attendance-without-bill and bill-with-no-attendees warnings are about
-  # meals the settlement leaves behind, which by definition are not in the
-  # list it would claim.
+  # attendance-without-bill, bill-with-no-attendees and cost-not-entered
+  # warnings are about meals the settlement leaves behind, which by
+  # definition are not in the list it would claim.
   attribute :warnings do |preview|
-    ReconciliationWarnings.for(preview.meals, skipped: preview.skipped_meals, held: preview.held_meals)
+    ReconciliationWarnings.for(preview.meals, skipped: preview.skipped_meals, held: preview.held_meals,
+                                              waiting: preview.waiting_meals)
   end
 end

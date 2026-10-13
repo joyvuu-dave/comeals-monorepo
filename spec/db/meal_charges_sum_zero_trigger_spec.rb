@@ -25,7 +25,7 @@ RSpec.describe 'meal charges sum-zero trigger' do
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('80'))
     create(:meal_resident, meal: meal, resident: cook, community: community)
     create(:meal_resident, meal: meal, resident: eater, community: community)
-    settle!(cutoff: Date.yesterday)
+    settle!
     meal.reload
   end
 

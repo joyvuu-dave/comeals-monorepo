@@ -12,35 +12,40 @@
 # kind it does not know by its title and body, which is how new kinds get
 # added without a client release.
 #
-# Three inputs, because the most important warnings are about meals that
+# Four inputs, because the most important warnings are about meals that
 # are NOT in the settlement. `meals` are the ones the settlement would
 # claim. `skipped` are the ones it would leave behind because people ate
 # and no cook billed (Settlement::Preview#skipped_meals). `held` are the
 # ones it would hold back because a cook entered money and nobody can be
 # charged: nobody signed up, or only people who eat free did
-# (Settlement::Preview#held_meals). A warning's meal_id can therefore name
-# a meal that is not in the preview's meal list.
+# (Settlement::Preview#held_meals). `waiting` are the ones it would leave
+# until each cook enters a cost or marks No cost
+# (Settlement::Preview#waiting_meals). A warning's meal_id can therefore
+# name a meal that is not in the preview's meal list.
 #
 # The meals must come with bills (and their residents), meal_residents,
 # and guests preloaded — Settlement.preview does that.
 class ReconciliationWarnings
   include ActionView::Helpers::NumberHelper
 
-  KINDS = %w[bill_with_no_attendees bill_with_only_free_eaters attendance_without_bill zero_bill_not_flagged].freeze
+  KINDS = %w[bill_with_no_attendees bill_with_only_free_eaters attendance_without_bill cost_not_entered
+             zero_bill_not_flagged].freeze
 
-  def self.for(meals, skipped: [], held: [])
-    new(meals, skipped: skipped, held: held).call
+  def self.for(meals, skipped: [], held: [], waiting: [])
+    new(meals, skipped: skipped, held: held, waiting: waiting).call
   end
 
-  def initialize(meals, skipped:, held:)
+  def initialize(meals, skipped:, held:, waiting:)
     @meals = meals
     @skipped = skipped
     @held = held
+    @waiting = waiting
   end
 
   def call
     @skipped.map { |meal| attendance_without_bill(meal) } +
       @held.flat_map { |meal| held_warnings(meal) } +
+      @waiting.flat_map { |meal| blank_bills(meal).map { |bill| cost_not_entered(meal, bill) } } +
       @meals.flat_map { |meal| warnings_for(meal) }
   end
 
@@ -63,13 +68,22 @@ class ReconciliationWarnings
     meal.bills.select { |bill| bill.amount.positive? && !bill.no_cost }
   end
 
+  # The bills whose cost is not entered yet: $0 and not no-cost
+  # (Meal.a_cost_not_entered).
+  def blank_bills(meal)
+    meal.bills.reject(&:no_cost).select { |bill| bill.amount.zero? }
+  end
+
   # A meal the settlement claims gets one kind of warning: a $0 bill not
-  # marked no-cost. A claimed meal nobody ate has only $0 or no-cost bills
-  # (Meal.settleable_by), so it settles with no effect, and saying it "will
-  # not be settled" would be false (#96). A meal with money on a bill and
-  # nobody to charge is not claimed; it is held, and warned about above.
+  # marked no-cost. A claimed meal can have one only when nobody is charged
+  # (Meal.settleable_by): it then has only $0 or no-cost bills, so it
+  # settles with no effect, and saying it "will not be settled" would be
+  # false (#96). A meal with money on a bill and nobody to charge is not
+  # claimed; it is held, and warned about above. A meal with someone to
+  # charge and a blank cost is not claimed either; it waits, and is warned
+  # about above.
   def warnings_for(meal)
-    meal.bills.reject(&:no_cost).select { |bill| bill.amount.zero? }.map { |bill| zero_bill_not_flagged(meal, bill) }
+    blank_bills(meal).map { |bill| zero_bill_not_flagged(meal, bill) }
   end
 
   # A cook spent money on a meal nobody ate. The settlement holds the meal
@@ -104,6 +118,17 @@ class ReconciliationWarnings
             title: 'Attendance without bill',
             body: "#{attendees} #{'person'.pluralize(attendees)} signed up to eat on #{meal.date.iso8601}, " \
                   'but no bill was submitted. This meal will not be settled until a cook enters a bill.')
+  end
+
+  # A cook has not said what they spent, and someone is charged. The
+  # settlement leaves the meal open rather than lock the cost at $0 (ADR
+  # 0011 rule 3).
+  def cost_not_entered(meal, bill)
+    warning('cost_not_entered', meal, bill,
+            severity: 'warning',
+            title: 'Cost not entered',
+            body: "#{bill.resident.name} has not entered a cost for #{meal.date.iso8601}. This meal will not be " \
+                  'settled until they enter a cost or mark No cost.')
   end
 
   # A $0 bill is probably a no-cost meal that was not marked as one.

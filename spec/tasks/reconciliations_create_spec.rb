@@ -17,6 +17,9 @@ RSpec.describe 'reconciliations:create' do
 
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
+  # The latest cutoff a settlement may have, 14 days back (ADR 0011 rule
+  # 2). The dates below count back from it.
+  let(:latest) { Reconciliation.latest_cutoff(community.today) }
 
   after do
     Rake::Task['reconciliations:create'].reenable
@@ -30,7 +33,7 @@ RSpec.describe 'reconciliations:create' do
   it 'creates a reconciliation and assigns unreconciled meals with bills' do
     cook = create(:resident, community: community, unit: unit, multiplier: 2)
     eater = create(:resident, community: community, unit: unit, multiplier: 2)
-    meal = create(:meal, community: community, date: Date.yesterday)
+    meal = create(:meal, community: community, date: community.today - 14)
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('60'))
     create(:meal_resident, meal: meal, resident: eater, community: community)
 
@@ -42,36 +45,60 @@ RSpec.describe 'reconciliations:create' do
     expect(meal.reload.reconciliation).to eq(reconciliation)
   end
 
-  it 'settles with a cutoff of yesterday, not today' do
+  # ADR 0011 rule 2: the cutoff is 14 days back, so a cook has time to
+  # fix a cost. A meal from 13 days back waits for the next settlement.
+  it 'settles with a cutoff 14 days back, and leaves a newer meal open' do
     cook = create(:resident, community: community, unit: unit, multiplier: 2)
-    meal = create(:meal, community: community, date: Date.yesterday)
-    create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('40'))
-    create(:meal_resident, meal: meal, resident: cook, community: community)
+    old, newer = [14, 13].map do |days|
+      create(:meal, community: community, date: community.today - days).tap do |meal|
+        create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('40'))
+        create(:meal_resident, meal: meal, resident: cook, community: community)
+      end
+    end
 
     Rake::Task['reconciliations:create'].invoke
 
-    expect(Reconciliation.last.end_date).to eq(community.yesterday)
+    expect(Reconciliation.last.end_date).to eq(community.today - 14)
+    expect([old.reload.reconciliation, newer.reload.reconciliation]).to eq([Reconciliation.last, nil])
+  end
+
+  # ADR 0011 rule 3: a blank cost means the cook has not said what they
+  # spent. The task settles the rest and leaves that meal open.
+  it 'leaves a meal with a blank cost open, and settles the others' do
+    cook = create(:resident, community: community, unit: unit, multiplier: 2)
+    helper = create(:resident, community: community, unit: unit, multiplier: 2)
+    paid, waiting = [20, 15].map do |days|
+      create(:meal, community: community, date: community.today - days).tap do |meal|
+        create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('40'))
+        create(:meal_resident, meal: meal, resident: cook, community: community)
+      end
+    end
+    create(:bill, meal: waiting, resident: helper, community: community, amount: 0)
+
+    Rake::Task['reconciliations:create'].invoke
+
+    expect([paid.reload.reconciliation, waiting.reload.reconciliation]).to eq([Reconciliation.last, nil])
   end
 
   # The task runs in the app's zone, Los Angeles. At 05:30 UTC on
   # 2026-04-10 it is April 10 in New York and still April 9 in Los
-  # Angeles. A New York community's yesterday is April 9, and that
-  # evening's meal is over for everyone who ate it. Date.yesterday would
-  # say April 8 and leave the meal open.
-  it "settles through the community's yesterday, not the app zone's" do
+  # Angeles. A New York community's latest cutoff is March 27, 14 days
+  # before its April 10. The app zone's would be March 26, and the meal
+  # of March 27 would wait one more day.
+  it "counts the 14 days from the community's today, not the app zone's" do
     travel_to(Time.utc(2026, 4, 10, 5, 30)) do
       new_york = create(:community, timezone: 'America/New_York')
       new_york_unit = create(:unit, community: new_york)
       cook = create(:resident, community: new_york, unit: new_york_unit, multiplier: 2)
       eater = create(:resident, community: new_york, unit: new_york_unit, multiplier: 2)
-      meal = create(:meal, community: new_york, date: Date.new(2026, 4, 9))
+      meal = create(:meal, community: new_york, date: Date.new(2026, 3, 27))
       create(:bill, meal: meal, resident: cook, community: new_york, amount: BigDecimal('40'))
       create(:meal_resident, meal: meal, resident: eater, community: new_york)
-      expect(Date.yesterday).to eq(Date.new(2026, 4, 8))
+      expect(Date.current - 14).to eq(Date.new(2026, 3, 26))
 
       Rake::Task['reconciliations:create'].invoke
 
-      expect(Reconciliation.pluck(:end_date)).to eq([Date.new(2026, 4, 9)])
+      expect(Reconciliation.pluck(:end_date)).to eq([Date.new(2026, 3, 27)])
       expect(meal.reload.reconciliation).to eq(Reconciliation.last)
     end
   end
@@ -79,7 +106,7 @@ RSpec.describe 'reconciliations:create' do
   it 'persists settlement balances' do
     cook = create(:resident, community: community, unit: unit, multiplier: 2)
     eater = create(:resident, community: community, unit: unit, multiplier: 2)
-    meal = create(:meal, community: community, date: Date.yesterday)
+    meal = create(:meal, community: community, date: latest)
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('60'))
     create(:meal_resident, meal: meal, resident: eater, community: community)
 
@@ -91,7 +118,7 @@ RSpec.describe 'reconciliations:create' do
 
   it 'sends notification emails to cooks' do
     cook = create(:resident, community: community, unit: unit, multiplier: 2)
-    meal = create(:meal, community: community, date: Date.yesterday)
+    meal = create(:meal, community: community, date: latest)
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('40'))
     create(:meal_resident, meal: meal, resident: cook, community: community)
 
@@ -141,7 +168,7 @@ RSpec.describe 'reconciliations:create' do
   end
 
   it 'skips meals that have no bills' do
-    create(:meal, community: community, date: Date.yesterday)
+    create(:meal, community: community, date: latest)
 
     expect { Rake::Task['reconciliations:create'].invoke }
       .not_to change(Reconciliation, :count)
@@ -150,7 +177,7 @@ RSpec.describe 'reconciliations:create' do
   it 'recalculates resident balances after reconciliation' do
     cook = create(:resident, community: community, unit: unit, multiplier: 2)
     eater = create(:resident, community: community, unit: unit, multiplier: 2)
-    meal = create(:meal, community: community, date: Date.yesterday)
+    meal = create(:meal, community: community, date: latest)
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('60'))
     create(:meal_resident, meal: meal, resident: eater, community: community)
 
@@ -168,11 +195,11 @@ RSpec.describe 'reconciliations:create' do
     twice = create(:resident, community: community, unit: unit, multiplier: 2)
     once = create(:resident, community: community, unit: unit, multiplier: 2)
     [3, 2].each do |days_ago|
-      meal = create(:meal, community: community, date: Date.yesterday - days_ago)
+      meal = create(:meal, community: community, date: latest - days_ago)
       create(:bill, meal: meal, resident: twice, community: community, amount: BigDecimal('20'))
       create(:meal_resident, meal: meal, resident: twice, community: community)
     end
-    meal = create(:meal, community: community, date: Date.yesterday)
+    meal = create(:meal, community: community, date: latest)
     create(:bill, meal: meal, resident: once, community: community, amount: BigDecimal('20'))
     create(:meal_resident, meal: meal, resident: once, community: community)
 
@@ -187,7 +214,7 @@ RSpec.describe 'reconciliations:create' do
     first = create(:resident, community: community, unit: unit, multiplier: 2, name: 'Aaron First')
     second = create(:resident, community: community, unit: unit, multiplier: 2, name: 'Zoe Second')
     [first, second].each_with_index do |cook, i|
-      meal = create(:meal, community: community, date: Date.yesterday - i)
+      meal = create(:meal, community: community, date: latest - i)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('20'))
       create(:meal_resident, meal: meal, resident: cook, community: community)
     end

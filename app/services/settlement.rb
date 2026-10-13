@@ -37,7 +37,7 @@ class Settlement
 
   # Raised by preview for a cutoff that run! would refuse. Its words are
   # the ones POST /reconciliations answers for the same cutoff: "cutoff",
-  # then the model validation's message.
+  # then the model validation's message (Reconciliation.cutoff_refusal).
   class InvalidCutoff < ArgumentError; end
 
   # Raised when a concurrent settlement claimed one of this settlement's
@@ -96,7 +96,7 @@ class Settlement
   # cooks preloaded, the ledger itself (for per-meal summaries), the
   # rounded per-resident balances for every resident in the community
   # (zero included, so a screen can show everyone), and the meals the
-  # settlement would leave behind.
+  # settlement would leave behind, by reason.
   #
   # skipped_meals are the meals in the period that people ate but no cook
   # billed. A settlement never claims a meal without a bill, so these stay
@@ -115,6 +115,10 @@ class Settlement
     # to charge, because nobody signed up or everyone who did eats free
     # (Meal.receipt_and_nobody_to_charge). Also not in `meals`.
     const :held_meals, T::Array[Meal]
+    # Left behind until every cook enters a cost or marks No cost: someone
+    # is charged and a cook's cost is blank (Meal.waiting_for_a_cost, ADR
+    # 0011 rule 3). Also not in `meals`.
+    const :waiting_meals, T::Array[Meal]
 
     sig { params(meal: Meal).returns(MealLedger::Summary) }
     def meal_summary(meal) = ledger.summary_for(meal)
@@ -122,7 +126,9 @@ class Settlement
 
   sig { params(cutoff: Date, community: Community).returns(Preview) }
   def self.preview(cutoff:, community: Community.instance)
-    raise InvalidCutoff, 'cutoff must be in the past' unless cutoff < community.today
+    today = community.today
+    refusal = Reconciliation.cutoff_refusal(cutoff, today)
+    raise InvalidCutoff, "cutoff #{refusal}" if refusal
 
     # settleable_by reads today from the one community itself, the same
     # value as community.today (mutant showed passing it changed nothing,
@@ -132,8 +138,8 @@ class Settlement
     raw = ledger.balances(community.residents.pluck(:id))
     Preview.new(cutoff: cutoff, meals: meals, ledger: ledger,
                 resident_balances: allocate_to_cents(raw, reconciliation_id: 'preview'),
-                skipped_meals: skipped_by(cutoff, today: community.today),
-                held_meals: held_by(cutoff, today: community.today))
+                skipped_meals: skipped_by(cutoff, today: today), held_meals: held_by(cutoff, today: today),
+                waiting_meals: waiting_by(cutoff, today: today))
   end
 
   # Unreconciled meals in the period with attendance and no bill at all.
@@ -154,6 +160,15 @@ class Settlement
   def self.held_by(cutoff, today:)
     Meal.unreconciled.where(date: ..cutoff).where(date: ...today)
         .receipt_and_nobody_to_charge.order(:date).preload({ bills: :resident }, :meal_residents).to_a
+  end
+
+  # Unreconciled meals in the period waiting for a cook's cost. The date
+  # rules are settleable_by's. The cooks come along so the warning can
+  # name each cook whose cost is blank.
+  sig { params(cutoff: Date, today: Date).returns(T::Array[Meal]) }
+  def self.waiting_by(cutoff, today:)
+    Meal.unreconciled.where(date: ..cutoff).where(date: ...today)
+        .waiting_for_a_cost.order(:date).preload(bills: :resident).to_a
   end
 
   sig { returns(Reconciliation) }
@@ -182,7 +197,7 @@ class Settlement
 
   # Create the row, claim the meals, write the ledger. Raises
   # ActiveRecord::RecordInvalid when the period is not settleable (cutoff
-  # not in the past, or no meal to settle), and Contested when a
+  # less than 14 days back, or no meal to settle), and Contested when a
   # concurrent settlement claimed a meal first; both roll everything back.
   # Does nothing after the commit; the caller runs forget_cached_meals.
   # Returns nothing: every caller already holds the row, as
@@ -341,9 +356,10 @@ class Settlement
   private
 
   # Assigns all unreconciled meals (with at least one bill) on or before the
-  # cutoff date. Meals from days that are not yet over are never swept,
-  # regardless of the cutoff — their receipts and attendance are not final.
-  # This backstops the end_date validation for rows that predate it.
+  # cutoff date that Meal.settleable_by does not hold back. Meals from days
+  # that are not yet over are never swept, regardless of the cutoff — their
+  # receipts and attendance are not final. This backstops the end_date
+  # validation for rows that predate it.
   #
   # The UPDATE re-asserts reconciliation_id IS NULL: under READ COMMITTED a
   # concurrent settlement can claim a plucked meal between the read and the

@@ -150,13 +150,14 @@ RSpec.describe 'Admin write authorization' do
       # A reconciliation must settle at least one meal, so set one up first.
       unit = create(:unit, community: community)
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
-      meal = create(:meal, community: community, date: 1.day.ago.to_date)
+      cutoff = Reconciliation.latest_cutoff(community.today)
+      meal = create(:meal, community: community, date: cutoff)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('25'))
       create(:meal_resident, meal: meal, resident: cook, community: community)
 
       expect do
         post '/reconciliations', params: {
-          reconciliation: { end_date: 1.day.ago.to_date }
+          reconciliation: { end_date: cutoff }
         }
       end.to change(Reconciliation, :count).by(1)
     end

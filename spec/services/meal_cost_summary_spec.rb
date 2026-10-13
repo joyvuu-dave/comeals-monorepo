@@ -193,7 +193,7 @@ RSpec.describe MealCostSummary do
       eater = create(:resident, community: community, unit: unit, multiplier: 2)
       create(:meal_resident, meal: meal, resident: eater, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('16'))
-      settle!(cutoff: Date.yesterday)
+      settle!
 
       # From the bills this would be 99 spent, 99 charged, 49.50 a unit.
       behind_the_guards { Bill.where(meal_id: meal.id).update_all(amount: BigDecimal('99')) }
@@ -212,7 +212,7 @@ RSpec.describe MealCostSummary do
       eater = create(:resident, community: capped_community, unit: capped_unit, multiplier: 2)
       create(:meal_resident, meal: meal, resident: eater, community: capped_community)
       create(:bill, meal: meal, resident: cook, community: capped_community, amount: BigDecimal('10'))
-      settle!(cutoff: Date.yesterday)
+      settle!
 
       # From the rows, a $100 cap allows $200, so the $10 spent would be
       # charged in full and the meal would not be subsidized.
@@ -235,7 +235,7 @@ RSpec.describe MealCostSummary do
       eater = create(:resident, community: capped_community, unit: capped_unit, multiplier: 2)
       create(:meal_resident, meal: meal, resident: eater, community: capped_community)
       create(:bill, meal: meal, resident: cook, community: capped_community, amount: BigDecimal('10'))
-      settle!(cutoff: Date.yesterday)
+      settle!
 
       settled = described_class.for(meal.reload)
       expect(settled.effective_cost).to eq(BigDecimal('5'))
@@ -304,7 +304,7 @@ RSpec.describe MealCostSummary do
       eater = create(:resident, community: community, unit: unit, multiplier: 2)
       create(:meal_resident, meal: meal, resident: eater, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('0'), no_cost: true)
-      settle!(cutoff: Date.yesterday)
+      settle!
 
       expect(meal.reload.meal_charges.map { |charge| [charge.kind, charge.resident_id, charge.amount] })
         .to eq([['debit', eater.id, BigDecimal('0')]])
@@ -318,7 +318,7 @@ RSpec.describe MealCostSummary do
       meal = create(:meal, community: community)
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('0'), no_cost: true)
-      settle!(cutoff: Date.yesterday)
+      settle!
 
       expect(meal.reload.reconciliation_id).not_to be_nil
       expect(meal.meal_charges).to be_empty

@@ -9,6 +9,9 @@ RSpec.describe 'reconciliation email tasks' do
   end
 
   let(:community) { create(:community) }
+  # The latest cutoff a settlement may have, 14 days back (ADR 0011 rule
+  # 2). The dates below count back from it.
+  let(:last_cutoff) { Reconciliation.latest_cutoff(community.today) }
   let(:unit) { create(:unit, community: community) }
 
   describe 'reconciliations:send_cooking_slot_email' do
@@ -31,10 +34,10 @@ RSpec.describe 'reconciliation email tasks' do
     # twice and then failed on the MailDelivery row the job had written.
     it 'queues NotifyCooksJob for the latest reconciliation and builds no mail itself' do
       cook = create(:resident, community: community, unit: unit, multiplier: 2)
-      cooked(cook, Date.yesterday - 3)
-      settle!(cutoff: Date.yesterday - 3)
-      cooked(cook, Date.yesterday)
-      latest = settle!(cutoff: Date.yesterday)
+      cooked(cook, last_cutoff - 3)
+      settle!(cutoff: last_cutoff - 3)
+      cooked(cook, last_cutoff)
+      latest = settle!
       allow(ReconciliationMailer).to receive(:reconciliation_notify_email)
         .and_return(instance_double(ActionMailer::MessageDelivery, deliver_now: nil))
       allow(Rails.logger).to receive(:info)
@@ -60,11 +63,11 @@ RSpec.describe 'reconciliation email tasks' do
       it 'mails each cook of the latest reconciliation once' do
         old_cook = create(:resident, community: community, unit: unit, multiplier: 2)
         new_cook = create(:resident, community: community, unit: unit, multiplier: 2)
-        cooked(old_cook, Date.yesterday - 3)
-        settle!(cutoff: Date.yesterday - 3)
-        cooked(new_cook, Date.yesterday - 1)
-        cooked(new_cook, Date.yesterday)
-        latest = settle!(cutoff: Date.yesterday)
+        cooked(old_cook, last_cutoff - 3)
+        settle!(cutoff: last_cutoff - 3)
+        cooked(new_cook, last_cutoff - 1)
+        cooked(new_cook, last_cutoff)
+        latest = settle!
 
         perform_enqueued_jobs { Rake::Task['reconciliations:send_cooking_slot_email'].invoke }
 
@@ -80,11 +83,11 @@ RSpec.describe 'reconciliation email tasks' do
       it 'mails only the cooks with no record of this mail about this settlement' do
         ann = create(:resident, community: community, unit: unit, multiplier: 2, name: 'Ann')
         bob = create(:resident, community: community, unit: unit, multiplier: 2, name: 'Bob')
-        cooked(bob, Date.yesterday - 3)
-        older = settle!(cutoff: Date.yesterday - 3)
-        cooked(ann, Date.yesterday - 1)
-        cooked(bob, Date.yesterday)
-        latest = settle!(cutoff: Date.yesterday)
+        cooked(bob, last_cutoff - 3)
+        older = settle!(cutoff: last_cutoff - 3)
+        cooked(ann, last_cutoff - 1)
+        cooked(bob, last_cutoff)
+        latest = settle!
         MailDelivery.record!(mailer: 'reconciliation_notify_email', about: older, resident: bob)
         MailDelivery.record!(mailer: 'reconciliation_notify_email', about: latest, resident: ann)
 

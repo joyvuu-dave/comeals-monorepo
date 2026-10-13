@@ -14,6 +14,9 @@ require 'rails_helper'
 RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass -- a contract on behavior, on purpose not tied to the class that happens to implement it today
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
+  # The latest cutoff a settlement may have, 14 days back (ADR 0011 rule
+  # 2). The dates below count back from it.
+  let(:latest) { Reconciliation.latest_cutoff(community.today) }
 
   def resident(multiplier: 2)
     create(:resident, community: community, unit: unit, multiplier: multiplier)
@@ -52,7 +55,7 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
   describe 'atomicity' do
     it 'writes nothing when the database refuses the charge lines' do
       cook = resident
-      meal = meal_on(Date.yesterday)
+      meal = meal_on(latest)
       bill(meal, cook, 50)
       attend(meal, resident)
       refuse_inserts_into('meal_charges')
@@ -68,7 +71,7 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
 
     it 'writes nothing, charge lines included, when the database refuses the balances' do
       cook = resident
-      meal = meal_on(Date.yesterday)
+      meal = meal_on(latest)
       bill(meal, cook, 50)
       attend(meal, resident)
       refuse_inserts_into('reconciliation_balances')
@@ -87,31 +90,31 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
   describe 'what gets claimed' do
     it 'claims exactly the meals that qualify, and no others, in one sweep' do
       cook = resident
-      settled_before = meal_on(Date.yesterday - 10)
+      settled_before = meal_on(latest - 10)
       bill(settled_before, cook, 10)
       attend(settled_before, cook)
-      earlier = settle!(cutoff: Date.yesterday - 5)
+      earlier = settle!(cutoff: latest - 5)
       expect(earlier.meals).to contain_exactly(settled_before)
 
-      cutoff = Date.yesterday - 1
+      cutoff = latest - 1
       eater = resident
       eligible = meal_on(cutoff)
       bill(eligible, cook, 20)
       attend(eligible, eater)
-      late_entry = meal_on(Date.yesterday - 8) # before the earlier cutoff, entered late
+      late_entry = meal_on(latest - 8) # before the earlier cutoff, entered late
       bill(late_entry, cook, 15)
       attend(late_entry, eater)
-      empty_slots = meal_on(Date.yesterday - 3) # nobody came, no money: settles with no effect
+      empty_slots = meal_on(latest - 3) # nobody came, no money: settles with no effect
       bill(empty_slots, cook, 0)
-      past_cutoff = meal_on(Date.yesterday)
+      past_cutoff = meal_on(latest)
       bill(past_cutoff, cook, 40)
       attend(past_cutoff, eater)
       today = meal_on(Time.zone.today)
       bill(today, cook, 30)
       attend(today, eater)
-      no_bill = meal_on(Date.yesterday - 2)
+      no_bill = meal_on(latest - 2)
       attend(no_bill, eater)
-      receipt_nobody_ate = meal_on(Date.yesterday - 4) # money at stake, nobody to charge: held back
+      receipt_nobody_ate = meal_on(latest - 4) # money at stake, nobody to charge: held back
       bill(receipt_nobody_ate, cook, 25)
 
       reconciliation = settle!(cutoff: cutoff)
@@ -127,33 +130,62 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
     it 'holds back a meal with money on a receipt that only free eaters ate, and claims one with no money' do
       cook = resident
       baby = resident(multiplier: 0)
-      paid = meal_on(Date.yesterday - 3)
+      paid = meal_on(latest - 3)
       bill(paid, cook, 20)
       attend(paid, resident)
-      free_with_money = meal_on(Date.yesterday - 2)
+      free_with_money = meal_on(latest - 2)
       bill(free_with_money, cook, 25)
       attend(free_with_money, baby)
-      free_without_money = meal_on(Date.yesterday - 1)
+      free_without_money = meal_on(latest - 1)
       bill(free_without_money, cook, 0)
       attend(free_without_money, baby)
 
-      reconciliation = settle!(cutoff: Date.yesterday)
+      reconciliation = settle!
 
       expect(reconciliation.meals).to contain_exactly(paid, free_without_money)
       expect(free_with_money.reload.reconciliation_id).to be_nil
       expect(free_with_money.meal_charges).to be_empty
     end
 
+    # ADR 0011 rule 3: a blank cost means the cook has not said what they
+    # spent. The meal waits, with nothing written for it, and the next
+    # settlement claims it once the cook has.
+    it 'leaves a meal with a blank cost for a later settlement, and claims it once the cost is in' do
+      cook = resident
+      helper = resident
+      eater = resident
+      paid = meal_on(latest - 2)
+      bill(paid, cook, 20)
+      attend(paid, eater)
+      waiting = meal_on(latest - 1)
+      bill(waiting, cook, 30)
+      blank = bill(waiting, helper, 0)
+      attend(waiting, eater)
+
+      first = settle!
+
+      expect(first.meals).to contain_exactly(paid)
+      expect(waiting.reload.reconciliation_id).to be_nil
+      expect(waiting.meal_charges).to be_empty
+
+      blank.update!(amount: 12)
+      second = settle!
+
+      expect(second.meals).to contain_exactly(waiting)
+      expect(second.reconciliation_balances.pluck(:resident_id, :amount).to_h)
+        .to eq(cook.id => BigDecimal('30'), helper.id => BigDecimal('12'), eater.id => BigDecimal('-42'))
+    end
+
     it 'leaves a meal dated after the cutoff for the next settlement' do
       cook = resident
-      inside = meal_on(Date.yesterday - 3)
+      inside = meal_on(latest - 3)
       bill(inside, cook, 20)
       attend(inside, cook)
-      past_cutoff = meal_on(Date.yesterday - 1)
+      past_cutoff = meal_on(latest - 1)
       bill(past_cutoff, cook, 20)
       attend(past_cutoff, cook)
 
-      reconciliation = settle!(cutoff: Date.yesterday - 2)
+      reconciliation = settle!(cutoff: latest - 2)
 
       expect(reconciliation.meals).to contain_exactly(inside)
       expect(past_cutoff.reload.reconciliation_id).to be_nil
@@ -164,16 +196,16 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
     it 'writes nothing and predicts exactly the balances a settlement then stores' do
       cook = resident
       eaters = Array.new(3) { resident }
-      meal = meal_on(Date.yesterday - 1)
+      meal = meal_on(latest - 1)
       bill(meal, cook, 50)
       eaters.each { |eater| attend(meal, eater) }
-      capped = meal_on(Date.yesterday - 2)
+      capped = meal_on(latest - 2)
       capped.update!(cap: BigDecimal('4'))
       bill(capped, cook, 70)
       eaters.each { |eater| attend(capped, eater) }
 
       predicted = nil
-      expect { predicted = Settlement.preview(cutoff: Date.yesterday) }
+      expect { predicted = Settlement.preview(cutoff: latest) }
         .not_to(change { [Reconciliation.count, MealCharge.count, ReconciliationBalance.count, Meal.where.not(reconciliation_id: nil).count] }) # rubocop:disable Layout/LineLength
       expect(predicted.meals).to contain_exactly(meal, capped)
 
@@ -185,7 +217,7 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
 
     it 'lists the skipped meals: in the period, with attendance, no bill, oldest first' do
       eater = resident
-      cutoff = Date.yesterday - 1
+      cutoff = latest - 1
 
       # An earlier period, settled before the meals below exist, so every
       # one of them is still open when the preview runs. Settling after
@@ -227,33 +259,33 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
 
     it 'leaves out a meal after the cutoff, even one whose day is over' do
       cook = resident
-      inside = meal_on(Date.yesterday - 3)
+      inside = meal_on(latest - 3)
       bill(inside, cook, 20)
       attend(inside, cook)
-      past_cutoff = meal_on(Date.yesterday - 1)
+      past_cutoff = meal_on(latest - 1)
       bill(past_cutoff, cook, 20)
       attend(past_cutoff, cook)
 
-      expect(Settlement.preview(cutoff: Date.yesterday - 2).meals).to eq([inside])
+      expect(Settlement.preview(cutoff: latest - 2).meals).to eq([inside])
     end
 
     # The later meal is entered first, so its row comes first in the table.
     it 'lists the meals it would settle oldest first' do
       cook = resident
-      later = meal_on(Date.yesterday - 1)
+      later = meal_on(latest - 1)
       bill(later, cook, 20)
       attend(later, cook)
-      earlier = meal_on(Date.yesterday - 2)
+      earlier = meal_on(latest - 2)
       bill(earlier, cook, 20)
       attend(earlier, cook)
 
-      expect(Settlement.preview(cutoff: Date.yesterday).meals).to eq([earlier, later])
+      expect(Settlement.preview(cutoff: latest).meals).to eq([earlier, later])
     end
 
     it 'lists the held meals: in the period, open, money on a receipt and nobody who ate, oldest first' do
       cook = resident
       eater = resident
-      cutoff = Date.yesterday - 1
+      cutoff = latest - 1
 
       # An earlier period, settled before the meals below exist.
       first_period = meal_on(cutoff - 6)
@@ -288,14 +320,14 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
     it 'lists a meal with money on a receipt that only free eaters ate as held, not as one it settles' do
       cook = resident
       baby = resident(multiplier: 0)
-      free_with_money = meal_on(Date.yesterday - 1)
+      free_with_money = meal_on(latest - 1)
       bill(free_with_money, cook, 25)
       attend(free_with_money, baby)
-      paid = meal_on(Date.yesterday - 2)
+      paid = meal_on(latest - 2)
       bill(paid, cook, 20)
       attend(paid, resident)
 
-      preview = Settlement.preview(cutoff: Date.yesterday)
+      preview = Settlement.preview(cutoff: latest)
       expect(preview.held_meals).to eq([free_with_money])
       expect(preview.meals).to eq([paid])
     end
@@ -314,6 +346,33 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
       expect(Settlement.skipped_by(today, today: today)).to eq([yesterday])
     end
 
+    it 'never lists a meal of today as waiting for a cost, whatever the cutoff' do
+      cook = resident
+      today = community.today
+      yesterday = meal_on(today - 1)
+      bill(yesterday, cook, 0)
+      attend(yesterday, cook)
+      tonight = meal_on(today)
+      bill(tonight, cook, 0)
+      attend(tonight, cook)
+
+      expect(Settlement.waiting_by(today, today: today)).to eq([yesterday])
+    end
+
+    it 'asks for the meals waiting for a cost oldest first' do
+      cook = resident
+      meal = meal_on(latest - 1)
+      bill(meal, cook, 0)
+      attend(meal, cook)
+      statements = []
+      callback = ->(*, payload) { statements << payload[:sql] }
+      ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') do
+        Settlement.waiting_by(latest, today: community.today)
+      end
+
+      expect(statements.grep(/\ASELECT "meals"\.\* FROM "meals"/)).to contain_exactly(/ ORDER BY "meals"\."date" ASC\z/)
+    end
+
     it 'never lists a meal of today as held, whatever the cutoff' do
       cook = resident
       today = community.today
@@ -329,11 +388,11 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
     # returned those rows in date order without being asked. So this reads
     # the statement.
     it 'asks for the held meals oldest first' do
-      bill(meal_on(Date.yesterday - 1), resident, 25)
+      bill(meal_on(latest - 1), resident, 25)
       statements = []
       callback = ->(*, payload) { statements << payload[:sql] }
       ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') do
-        Settlement.held_by(Date.yesterday, today: community.today)
+        Settlement.held_by(latest, today: community.today)
       end
 
       expect(statements.grep(/\ASELECT "meals"\.\* FROM "meals"/)).to contain_exactly(/ ORDER BY "meals"\."date" ASC\z/)
@@ -347,18 +406,18 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
       eaters = Array.new(3) { resident }
       child = resident(multiplier: 1)
 
-      plain = meal_on(Date.yesterday - 1)
+      plain = meal_on(latest - 1)
       bill(plain, cook, 50)
       eaters.each { |eater| attend(plain, eater) }
 
-      capped = meal_on(Date.yesterday - 2)
+      capped = meal_on(latest - 2)
       capped.update!(cap: BigDecimal('4'))
       bill(capped, cook, 70)
       bill(capped, cook2, 0, no_cost: true)
       eaters.each { |eater| attend(capped, eater) }
       attend(capped, child)
 
-      with_guest = meal_on(Date.yesterday - 3)
+      with_guest = meal_on(latest - 3)
       bill(with_guest, cook2, 33.33)
       attend(with_guest, eaters.first)
       create(:guest, meal: with_guest, resident: eaters.first, multiplier: 2)
@@ -389,7 +448,7 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
     # and returns the number of queries the settlement ran.
     def settle_a_batch_and_count_queries(meal_count, cook:, eaters:, days_back:)
       meal_count.times do |i|
-        meal = meal_on(Date.yesterday - days_back - i)
+        meal = meal_on(latest - days_back - i)
         bill(meal, cook, 40 + i)
         eaters.each { |eater| attend(meal, eater) }
         create(:guest, meal: meal, resident: eaters.first, multiplier: 2)

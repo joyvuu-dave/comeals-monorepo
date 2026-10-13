@@ -18,6 +18,9 @@ require 'rails_helper'
 # settlement all write the same rows.
 RSpec.describe 'live updates: every write reaches the screen that shows it' do
   let(:community) { create(:community) }
+  # The latest cutoff a settlement may have, 14 days back (ADR 0011 rule
+  # 2). The dates below count back from it.
+  let(:latest) { Reconciliation.latest_cutoff(community.today) }
   let(:unit) { create(:unit, community: community) }
   let(:resident) { create(:resident, community: community, unit: unit) }
   let(:other_resident) { create(:resident, community: community, unit: unit) }
@@ -184,7 +187,7 @@ RSpec.describe 'live updates: every write reaches the screen that shows it' do
     end
 
     it 'a settlement pushes the page of every meal it settles' do
-      settled = create(:meal, community: community, date: Date.yesterday)
+      settled = create(:meal, community: community, date: latest)
       create(:bill, meal: settled, resident: resident, community: community, amount: BigDecimal('30'))
       create(:meal_resident, meal: settled, resident: other_resident, community: community)
       RSpec::Mocks.space.proxy_for(Pusher).reset

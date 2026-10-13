@@ -38,7 +38,7 @@ RSpec.describe PutBackCostsAnOldCookFormDeleted do
     [bbq, pasta].each do |meal|
       eaters.each { |eater| create(:meal_resident, meal: meal, resident: eater, community: community) }
     end
-    settle!(cutoff: described_class::PASTA + 1)
+    settle_as_before_rule_3!(cutoff: described_class::PASTA + 1)
   end
 
   def person(name)

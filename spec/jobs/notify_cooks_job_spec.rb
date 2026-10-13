@@ -8,6 +8,9 @@ RSpec.describe NotifyCooksJob do
   include ActiveJob::TestHelper
 
   let(:community) { create(:community) }
+  # The latest cutoff a settlement may have, 14 days back (ADR 0011 rule
+  # 2). The dates below count back from it.
+  let(:latest) { Reconciliation.latest_cutoff(community.today) }
   let(:unit) { create(:unit, community: community) }
   let(:eater) { create(:resident, community: community, unit: unit, multiplier: 2) }
   let(:cooks) do
@@ -15,7 +18,7 @@ RSpec.describe NotifyCooksJob do
   end
   let(:reconciliation) do
     cooks.each_with_index do |cook, i|
-      meal = create(:meal, community: community, date: Date.yesterday - i)
+      meal = create(:meal, community: community, date: latest - i)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
       create(:meal_resident, meal: meal, resident: eater, community: community)
     end
@@ -210,7 +213,7 @@ RSpec.describe NotifyCooksJob do
     # Bob cooks twice: one line in the log for him, not two.
     let(:reconciliation) do
       [cooks[0], cooks[1], cooks[1], cooks[2]].each_with_index do |cook, i|
-        meal = create(:meal, community: community, date: Date.yesterday - i)
+        meal = create(:meal, community: community, date: latest - i)
         create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
         create(:meal_resident, meal: meal, resident: eater, community: community)
       end

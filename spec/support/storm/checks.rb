@@ -10,7 +10,9 @@ module Storm
   #     the plain ledger (the oracle) and sums to zero;
   #   - a settled meal's stored charges equal the ledger over its final
   #     rows, which is only true if no write got through after the
-  #     settlement; its stored balances sum to zero;
+  #     settlement; its stored balances sum to zero; it has no blank cost
+  #     if someone was charged (ADR 0011 rule 3), which is only true if
+  #     no settlement claimed it on an old read while a cost was cleared;
   #   - ledger:verify passes;
   #   - a capped meal holds no more than its cap, and an open meal has no
   #     cap (the meal lock is what makes the cap hold under load);
@@ -75,6 +77,15 @@ module Storm
                    "#{label}: stored charges differ from the final rows")
       balances = ReconciliationBalance.where(reconciliation_id: rows.reconciliation_id).sum(:amount)
       problem(label, "settled balances sum to #{balances}") unless balances.zero?
+      problem(label, 'settled with a blank cost and someone to charge') if blank_cost_and_someone_charged?(rows)
+    end
+
+    # Read from the rows, not from Meal.waiting_for_a_cost, so a mistake
+    # in that scope cannot hide itself.
+    def blank_cost_and_someone_charged?(rows)
+      blank = rows.bills.any? { |bill| !bill.no_cost && bill.amount.zero? }
+      charged = rows.guests.any? || rows.meal_residents.any? { |row| row.multiplier.positive? }
+      blank && charged
     end
 
     def expect_close(actual, expected, label)

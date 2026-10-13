@@ -28,7 +28,7 @@ RSpec.describe 'ledger:verify' do
     create(:meal_resident, meal: meal, resident: cook, community: community)
     create(:meal_resident, meal: meal, resident: eater, community: community)
 
-    settle!(cutoff: Date.yesterday)
+    settle!
   end
 
   it 'records which check run it made and how many reconciliations it looked at' do

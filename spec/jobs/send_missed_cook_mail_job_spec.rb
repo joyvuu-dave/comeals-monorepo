@@ -25,12 +25,13 @@ RSpec.describe SendMissedCookMailJob do
   # settlements in one example are more than three days apart.
   def settled(ago, cooks: [ann, bob, bob])
     travel_to(ago.ago) do
+      latest = Reconciliation.latest_cutoff(community.today)
       cooks.each_with_index do |cook, days_before|
-        meal = create(:meal, community: community, date: community.yesterday - days_before)
+        meal = create(:meal, community: community, date: latest - days_before)
         create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('20'))
         create(:meal_resident, meal: meal, resident: eater, community: community)
       end
-      settle!(cutoff: community.yesterday)
+      settle!(cutoff: latest)
     end
   end
 

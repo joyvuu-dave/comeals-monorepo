@@ -25,6 +25,28 @@ class Reconciliation < ApplicationRecord
   # Settlement. See refuse_create_outside_settlement.
   class NotSettled < StandardError; end
 
+  # A settlement covers only dinners at least this many days old, so a
+  # cook has time to fix a cost before the dinner is locked for good (ADR
+  # 0011 rule 2). Of the 64 cook costs entered from January to mid-August
+  # 2026, 9 were changed more than 1 day after the dinner, 2 more than 7
+  # days after, and 1 more than 14 days after (on day 15).
+  DAYS_TO_WAIT = 14
+
+  # The latest cutoff a settlement made on this day may have.
+  sig { params(today: Date).returns(Date) }
+  def self.latest_cutoff(today) = today - DAYS_TO_WAIT
+
+  # Why a settlement made on this day may not have this cutoff, or nil
+  # when it may. The model validation and Settlement.preview both read
+  # it, so the form, the API and the rake task give the same words.
+  sig { params(cutoff: Date, today: Date).returns(T.nilable(String)) }
+  def self.cutoff_refusal(cutoff, today)
+    latest = latest_cutoff(today)
+    return if cutoff <= latest
+
+    "must be on or before #{latest.iso8601}, #{DAYS_TO_WAIT} days before today"
+  end
+
   # Ransack allowlists for ActiveAdmin sorting
   sig { params(_auth_object: T.untyped).returns(T::Array[String]) }
   def self.ransackable_attributes(_auth_object = nil)
@@ -43,7 +65,7 @@ class Reconciliation < ApplicationRecord
   audited
 
   validates :end_date, presence: true
-  validate :end_date_before_today
+  validate :end_date_old_enough, on: :create
   validate :must_settle_at_least_one_meal, on: :create
 
   before_validation :set_date
@@ -176,16 +198,18 @@ class Reconciliation < ApplicationRecord
     self.date ||= T.must(community).today
   end
 
-  # A reconciliation may only settle days that are over. Meals on today's date
-  # (or later) may not have happened yet — cooks' receipts and attendance are
-  # not final — so the cutoff must be strictly in the past (issue #3).
+  # The cutoff must be at least DAYS_TO_WAIT days before today, in the
+  # community's time zone (ADR 0011 rule 2). This also keeps out today's
+  # meal and later ones, which may not have happened yet (issue #3). On
+  # create only: the rule is about making a settlement. A row that exists
+  # stays valid, whatever its cutoff.
   sig { void }
-  def end_date_before_today
+  def end_date_old_enough
     end_date = self.end_date
     return if end_date.nil?
-    return if end_date < T.must(community).today
 
-    errors.add(:end_date, 'must be in the past')
+    refusal = Reconciliation.cutoff_refusal(end_date, T.must(community).today)
+    errors.add(:end_date, refusal) if refusal
   end
 
   # A reconciliation is a settlement event. One that settles nothing is a
@@ -204,33 +228,49 @@ class Reconciliation < ApplicationRecord
   # guard of its own (mutant showed it dead, 2026-09-10).
   #
   # When the period has meals with bills but every one is held back (money
-  # on a bill and nobody who pays signed up, Meal.receipt_and_nobody_to_charge),
-  # "no meals with bills" would be false, so the answer names the held
-  # meals and says what has to change before they can settle.
+  # on a bill and nobody who pays signed up, Meal.receipt_and_nobody_to_charge)
+  # or waits for a cook's cost (Meal.waiting_for_a_cost), "no meals with
+  # bills" would be false, so the answer names those meals and says what
+  # has to change before they can settle.
   sig { void }
   def must_settle_at_least_one_meal
     return if errors[:end_date].any?
     return if eligible_meals.exists?
 
-    held = held_meal_dates
-    if held.empty?
+    held = left_behind_dates(Meal.unreconciled.receipt_and_nobody_to_charge)
+    waiting = left_behind_dates(Meal.unreconciled.waiting_for_a_cost)
+    if held.empty? && waiting.empty?
       errors.add(:base, 'No unreconciled meals with bills on or before this date. ' \
                         'A reconciliation must settle at least one meal.')
     else
-      errors.add(:base, 'No meal on or before this date can be settled yet. Meals held back because a bill has ' \
-                        "money on it and nobody who pays is signed up: #{held.map(&:iso8601).to_sentence}. " \
-                        'To settle one, sign up someone who pays or remove the bill. ' \
-                        'A reconciliation must settle at least one meal.')
+      errors.add(:base, ['No meal on or before this date can be settled yet.', held_words(held),
+                         waiting_words(waiting), 'A reconciliation must settle at least one meal.'].compact.join(' '))
     end
   end
 
-  # The unreconciled meals up to the cutoff that a settlement holds back,
-  # oldest first. Settlement.held_by also leaves out today and later, but
-  # this only runs once end_date is in the past, so the cutoff already
-  # does that.
-  sig { returns(T::Array[Date]) }
-  def held_meal_dates
-    Meal.unreconciled.where(date: ..end_date).receipt_and_nobody_to_charge.order(:date).pluck(:date)
+  sig { params(held: T::Array[Date]).returns(T.nilable(String)) }
+  def held_words(held)
+    return if held.empty?
+
+    'Meals held back because a bill has money on it and nobody who pays is signed up: ' \
+      "#{held.map(&:iso8601).to_sentence}. To settle one, sign up someone who pays or remove the bill."
+  end
+
+  sig { params(waiting: T::Array[Date]).returns(T.nilable(String)) }
+  def waiting_words(waiting)
+    return if waiting.empty?
+
+    "Meals waiting for a cook's cost: #{waiting.map(&:iso8601).to_sentence}. " \
+      'To settle one, each of its cooks enters a cost or marks No cost.'
+  end
+
+  # The dates of these unreconciled meals up to the cutoff, which a
+  # settlement leaves behind, oldest first. Settlement.held_by and
+  # waiting_by also leave out today and later, but this only runs once
+  # end_date is old enough, so the cutoff already does that.
+  sig { params(meals: ActiveRecord::Relation).returns(T::Array[Date]) }
+  def left_behind_dates(meals)
+    meals.where(date: ..end_date).order(:date).pluck(:date)
   end
 
   # A reconciliation row is only ever written by Settlement, in the same

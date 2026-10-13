@@ -1,6 +1,6 @@
 # ADR 0011: How settlements work from now on
 
-- **Status:** Accepted. Rules 2, 3, 4, 6, 7, 8 and 9 are not built yet.
+- **Status:** Accepted. Rules 4, 6, 7, 8 and 9 are not built yet.
 - **Date:** 2026-10-12
 - **Issue:** #165 (the common house email)
 
@@ -54,6 +54,14 @@ said yet. The meal page already calls it "pending". A settlement leaves
 such a dinner open. It already does the same for a dinner where people
 ate and no cook signed up, and for a dinner with a receipt and nobody to
 charge.
+
+A dinner with nobody to charge never waits for a cost (added
+2026-10-13). Nobody to charge means nobody signed up, or only people who
+eat free did. No money moves whatever the cook enters, so the next
+settlement closes the dinner with no money, blank costs and all. Two pot
+lucks in the audit were like this. If such a cook enters a cost with
+money on it before the settlement, the dinner waits anyway, for a
+person to charge (the rule for a receipt and nobody to charge).
 
 ### 4. The admin settlement form shows a preview first
 

@@ -35,7 +35,9 @@ RSpec.describe 'random action sequences against one meal, through the API' do
       create(:resident, community: community, unit: unit, multiplier: multiplier, can_reconcile: i.zero?)
     end
   end
-  let(:meal) { create(:meal, community: community, date: Date.yesterday) }
+  # The newest meal a settlement may cover, 14 days back (ADR 0011 rule 2).
+  let(:latest) { Reconciliation.latest_cutoff(community.today) }
+  let(:meal) { create(:meal, community: community, date: latest) }
   # "seed 3, step 7 (signup)": every failure message starts with it.
   let(:where) { +'' }
 
@@ -171,8 +173,11 @@ RSpec.describe 'random action sequences against one meal, through the API' do
   def set_bills(model, rng)
     cooks = residents.sample(rng.rand(model[:bills].empty? ? (1..3) : (0..3)), random: rng)
     wanted = cooks.to_h do |cook|
-      no_cost = rng.rand < 0.2
-      cents = no_cost ? 0 : rng.rand(0..999_999)
+      roll = rng.rand
+      no_cost = roll < 0.2
+      # About one cost in ten is left blank, which makes a meal with
+      # someone to charge wait (ADR 0011 rule 3).
+      cents = no_cost || roll < 0.3 ? 0 : rng.rand(1..999_999)
       [cook.id, { amount: BigDecimal(cents) / 100, no_cost: no_cost }]
     end
     edits = BillEdits.between(model[:bills], wanted)
@@ -251,25 +256,33 @@ RSpec.describe 'random action sequences against one meal, through the API' do
 
   def settle(model, _rng)
     reconciler = residents.first
-    post '/api/v1/reconciliations', params: { cutoff: Date.yesterday.to_s },
+    post '/api/v1/reconciliations', params: { cutoff: latest.to_s },
                                     headers: { 'Authorization' => "Bearer #{reconciler.keys.first.token}" }
     status = response.status
     expect(status).to be < 500, "#{where}: settling answered #{status}"
     if model[:settled]
       expect(status).to eq(400), "#{where}: settling twice answered #{status}"
-    elsif model[:bills].any? && (someone_to_charge?(model) || model[:bills].values.none? do |b|
-      b[:amount].positive? && !b[:no_cost]
-    end)
-      # Meal.settleable_by: a bill, a past date, and someone to charge or
-      # nothing owed. A receipt with money is held back when nobody signed
-      # up (seed 13 found it was settled and frozen, 2026-09-09; changed
-      # 2026-09-10) or when only the free resident did (#94, 2026-10-09).
+    elsif settleable?(model)
       expect(status).to eq(201), "#{where}: settling answered #{status}: #{response.body}"
       model[:settled] = true
     else
-      expect(status).to eq(400), "#{where}: settling with nothing to settle, or only a receipt nobody can be " \
-                                 "charged for, answered #{status}"
+      expect(status).to eq(400), "#{where}: settling with nothing to settle, a receipt nobody can be charged " \
+                                 "for, or a cost not entered, answered #{status}"
     end
+  end
+
+  # Meal.settleable_by: a bill, a past date, and then: with someone to
+  # charge, every cost entered or No cost (ADR 0011 rule 3, 2026-10-13);
+  # with nobody to charge, no money on any bill. A receipt with money is
+  # held back when nobody signed up (seed 13 found it was settled and
+  # frozen, 2026-09-09; changed 2026-09-10) or when only the free
+  # resident did (#94, 2026-10-09).
+  def settleable?(model)
+    bills = model[:bills].values
+    return false if bills.empty?
+    return bills.none? { |b| b[:amount].zero? && !b[:no_cost] } if someone_to_charge?(model)
+
+    bills.none? { |b| b[:amount].positive? && !b[:no_cost] }
   end
 
   def action_weights
@@ -277,11 +290,12 @@ RSpec.describe 'random action sequences against one meal, through the API' do
       close: 1, reopen: 1, set_max: 1, settle: 1 }
   end
 
-  # From step 22 the sequence is steered to the settled half: a bill
-  # whenever there is none, then the settlement from step 24 on.
+  # From step 22 the sequence is steered to the settled half: new bills
+  # whenever there are none, or a cost is blank on a meal someone ate,
+  # then the settlement from step 24 on.
   def pick_action(rng, model, step)
     if step >= 22 && !model[:settled]
-      return :set_bills if model[:bills].empty?
+      return :set_bills if model[:bills].empty? || (someone_to_charge?(model) && !settleable?(model))
       return :settle if step >= 24
     end
 

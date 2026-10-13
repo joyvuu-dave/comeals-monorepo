@@ -100,10 +100,11 @@ removed the slug.
   meal (or today), and creates one Rotation with those meals. This is why
   the admin meal forms refuse a date after the last meal (`Meal`, `date`).
 - `averaged_meals` — the meals both dashboard averages read: the ones
-  whose costs are final. That is what a settlement run today would claim
-  (`Meal.settleable_by`: not settled, from a day that is over, at least
-  one cook, and someone to charge or no money spent), less any meal with
-  a cook's cost not entered yet (`Meal.a_cost_not_entered`), and only
+  whose costs are final. That is what a settlement with yesterday as its
+  cutoff would claim (`Meal.settleable_by`: not settled, from a day that
+  is over, at least one cook, someone to charge or no money spent, and
+  every cost entered when someone is charged), less any meal with a
+  cook's cost not entered yet (`Meal.a_cost_not_entered`), and only
   meals someone ate at. Tonight's meal waits until its day is over. Until
   2026-10-10 the averages counted tonight's meal and every past meal with
   no cook or no cost at $0 (upcoming meals were left out by #98).
@@ -482,9 +483,16 @@ how the math once ended up in three places (#48).
 - `with_attendees` — at least one attendance or guest row.
 - `a_cost_not_entered` (an Arel condition, not a scope) — a bill of $0
   not marked no-cost: the cook has not entered a cost yet. The meal page
-  reads a bill the same way (`cooksMissingCost`), and a settlement
-  preview warns about one (`zero_bill_not_flagged`). The dashboard
-  averages leave such a meal out (`Community#averaged_meals`).
+  reads a bill the same way (`cooksMissingCost`). The dashboard averages
+  leave such a meal out (`Community#averaged_meals`).
+- `waiting_for_a_cost` — someone to charge (an attendance row with a
+  multiplier above 0, or a guest) and a cost not entered. A settlement
+  leaves such a meal open (`settleable_by`) until every cook enters a
+  cost or marks No cost, and the preview lists it as `cost_not_entered`
+  (ADR 0011 rule 3). Until 2026-10 it was settled and the blank cost was
+  locked at $0. A meal with nobody to charge does not wait for a cost:
+  no money moves whatever the cook enters, so it settles with no effect,
+  and the preview lists its blank cost as `zero_bill_not_flagged`.
 - `receipt_and_nobody_to_charge` — a bill with money on it, no
   attendance row with a multiplier above 0, and no guest (a guest always
   pays, as an adult or as a child): nobody signed up, or only residents
@@ -642,11 +650,15 @@ Reconciliation ----< ReconciliationBalance ---> Resident
 **Key fields:**
 
 - `date` — the day the settlement ran (defaults to today)
-- `end_date` — the cutoff. Required, and must be strictly before today.
+- `end_date` — the cutoff. Required, and must be at least 14 days before
+  today (`Reconciliation::DAYS_TO_WAIT`, ADR 0011 rule 2), so a cook has
+  time to fix a cost before the dinner is locked.
 
 **Validations:**
 
-- `end_date` present and in the past
+- `end_date` present and at least 14 days before today, in the
+  community's time zone (`Reconciliation.cutoff_refusal`, which
+  `Settlement.preview` also reads)
 - On create, at least one eligible meal must exist. An empty settlement could
   never be removed (the row is append-only), so it is refused up front.
 
@@ -661,8 +673,9 @@ Reconciliation ----< ReconciliationBalance ---> Resident
   1. save the row (validations run here);
   2. `assign_meals` — claim every meal in `eligible_meals`
      (`Meal.settleable_by(end_date)`: unreconciled, has a bill, someone
-     with a price to charge or nothing owed, dated on or before the cutoff,
-     and from a day that is over). It takes
+     with a price to charge or nothing owed, every cost entered or marked
+     No cost when someone is charged, dated on or before the cutoff, and
+     from a day that is over). It takes
      `SELECT ... FOR UPDATE` on those meals in id order first, then updates
      only rows whose `reconciliation_id` is still NULL, and raises if a rival
      settlement claimed any of them. See ADR 0003.

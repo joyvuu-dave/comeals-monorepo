@@ -43,7 +43,7 @@ RSpec.describe 'settled balance triggers' do
     create(:meal_resident, meal: meal, resident: cook, community: community)
     create(:meal_resident, meal: meal, resident: eater, community: community)
 
-    settle!(cutoff: Date.yesterday)
+    settle!
   end
 
   let(:balance) { reconciliation.reconciliation_balances.order(:resident_id).first }

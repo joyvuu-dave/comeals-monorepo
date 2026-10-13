@@ -57,20 +57,35 @@ class Meal < ApplicationRecord
   scope :unreconciled, -> { where(reconciliation_id: nil) }
   # The meals a settlement with this cutoff sweeps: not yet settled, with at
   # least one bill, on or before the cutoff, from a day that is over, and
-  # with either someone to charge or nothing owed. A meal where a cook
-  # entered a receipt with money on it and nobody with a price ate is held
-  # back (receipt_and_nobody_to_charge): settling it would credit the cook
-  # $0 and freeze the meal, taking the cook's money silently and for good.
-  # That covers a meal nobody signed up for, which settled with no lines
-  # until 2026-09-10 (three times since 2024, for $22.22), and a meal only
-  # people who eat free signed up for, which settled with every line at $0
-  # until 2026-10-09 (#94). A meal whose cook slots are all $0 or no-cost settles
-  # with no effect, as before. Meals on today's date are never swept,
-  # whatever the cutoff — their receipts and attendance are not final
-  # (issue #3).
+  # with every cost entered, unless nobody is charged.
+  #
+  # A meal where a cook entered a receipt with money on it and nobody with
+  # a price ate is held back (receipt_and_nobody_to_charge): settling it
+  # would credit the cook $0 and freeze the meal, and the cook's money
+  # would be gone for good, with no error. That covers a meal nobody
+  # signed up for, which settled with no lines until 2026-09-10 (three
+  # times since 2024, for $22.22), and a meal only people who eat free
+  # signed up for, which settled with every line at $0 until 2026-10-09
+  # (#94).
+  #
+  # A meal where someone is charged and a cook's cost is blank waits
+  # (waiting_for_a_cost, ADR 0011 rule 3): the cook has not said what they
+  # spent, and settling would lock their cost at $0. Until 2026-10 such a
+  # meal settled, and the audit of 2026-10-11 found 25 blank costs on 19
+  # past dinners. A meal with nobody to charge does not wait for a cost:
+  # no money moves whatever the cook enters, and a cost with money on it
+  # would hold the meal back anyway. So a meal with nobody to charge whose
+  # cook slots are all $0 or no-cost settles with no effect.
+  #
+  # Meals on today's date are never swept, whatever the cutoff — their
+  # receipts and attendance are not final (issue #3). A settlement's own
+  # cutoff is at least 14 days back (Reconciliation::DAYS_TO_WAIT); this
+  # scope does not check that, because the dashboard averages read it with
+  # yesterday as the cutoff.
   scope :settleable_by, lambda { |cutoff, today: Community.instance.today|
     unreconciled.joins(:bills).where(date: ..cutoff).where(date: ...today)
-                .where(someone_to_charge.or(a_receipt_with_money.not)).distinct
+                .where(someone_to_charge.or(a_receipt_with_money.not))
+                .where(someone_to_charge.not.or(a_cost_not_entered.not)).distinct
   }
   scope :open, -> { where(closed: false) }
   scope :closed_with_bills, -> { where(closed: true).joins(:bills).distinct }
@@ -87,6 +102,12 @@ class Meal < ApplicationRecord
   # bill_with_only_free_eaters) so the reconciler can add someone who pays
   # or remove the bill before settling.
   scope :receipt_and_nobody_to_charge, -> { where(someone_to_charge.not).where(a_receipt_with_money) }
+
+  # Held back from a settlement until every cook has entered a cost or
+  # marked No cost: someone is charged, and a cook's cost is blank (ADR
+  # 0011 rule 3). The preview lists these (ReconciliationWarnings,
+  # cost_not_entered). Never the same meal as receipt_and_nobody_to_charge.
+  scope :waiting_for_a_cost, -> { where(someone_to_charge).where(a_cost_not_entered) }
 
   # EXISTS, not JOIN, so a SUM over meals is not multiplied by the rows.
   # Public because a scope's lambda runs on the relation, which cannot
@@ -120,9 +141,9 @@ class Meal < ApplicationRecord
 
   # A cook whose cost is not entered yet: $0 and not marked no-cost. The
   # meal page reads a bill the same way (cooksMissingCost in
-  # data_store.js), and a settlement preview warns about one
-  # (ReconciliationWarnings, zero_bill_not_flagged). The dashboard
-  # averages wait for such a meal instead of counting it at $0.
+  # data_store.js). A settlement waits for such a meal when someone is
+  # charged (waiting_for_a_cost), and the dashboard averages wait for it
+  # instead of counting it at $0.
   sig { returns(Arel::Nodes::Node) }
   def self.a_cost_not_entered
     bills = Bill.arel_table

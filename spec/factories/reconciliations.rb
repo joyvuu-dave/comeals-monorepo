@@ -26,8 +26,9 @@ FactoryBot.define do
     # use this factory only to get a row they can point a meal at, and do not
     # care what it settled.
     #
-    # The cutoff stays Date.yesterday, so the sweep on create still claims
-    # every eligible meal a spec has already created. Many specs depend on
+    # The cutoff is the latest one allowed, 14 days before today (ADR 0011
+    # rule 2), so the sweep on create still claims every eligible meal a
+    # spec has already created with a default date. Many specs depend on
     # that: they build a meal, then create a reconciliation to settle it.
     #
     # The factory's own meal is dated in 2000, decades before the meal
@@ -38,7 +39,7 @@ FactoryBot.define do
       sequence(:settled_meal_date) { |n| Date.new(2000, 1, 1) + n.days }
     end
 
-    end_date { Date.yesterday }
+    end_date { Reconciliation.latest_cutoff(community.today) }
 
     # Creating a reconciliation means settling a period, so the factory goes
     # through Settlement like every other path does.

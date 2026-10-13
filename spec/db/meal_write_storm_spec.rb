@@ -58,7 +58,9 @@ RSpec.describe 'a write storm against one meal, with a settlement in it' do
   let(:residents) do
     [2, 2, 2, 1, 0, 2].map { |m| create(:resident, community: community, unit: unit, multiplier: m) }
   end
-  let(:meal) { create(:meal, community: community, date: Date.yesterday) }
+  # The newest meal a settlement may cover, 14 days back (ADR 0011 rule 2).
+  let(:latest) { Reconciliation.latest_cutoff(community.today) }
+  let(:meal) { create(:meal, community: community, date: latest) }
 
   # --- one write -------------------------------------------------------------
 
@@ -148,7 +150,9 @@ RSpec.describe 'a write storm against one meal, with a settlement in it' do
   # rows and the locks, not about what the page saw.
   def write_bills(meal_id, rng, how)
     cooks = residents.sample(rng.rand(1..3), random: rng)
-    amounts = cooks.to_h { |c| [c.id, BigDecimal(rng.rand(0..999_999)) / 100] }
+    # Never $0: a blank cost makes the meal wait (ADR 0011 rule 3), and
+    # the settler must settle it.
+    amounts = cooks.to_h { |c| [c.id, BigDecimal(rng.rand(1..999_999)) / 100] }
     meal_write(meal_id, how) do |meal|
       meal.bills.where.not(resident_id: cooks.map(&:id)).find_each(&:destroy!)
       amounts.each do |id, amount|
@@ -246,7 +250,7 @@ RSpec.describe 'a write storm against one meal, with a settlement in it' do
         # run_writers). Until then a settlement may be refused for having
         # nothing to settle, or contested, and is tried again.
         200.times do
-          settlement = SettleAndNotify.call(cutoff: Date.yesterday, retries: storm_retries)
+          settlement = SettleAndNotify.call(cutoff: latest, retries: storm_retries)
           log << [:settler, 0, :settle, [:settled, settlement.reconciliation.id]]
           break
         rescue ActiveRecord::RecordInvalid, Settlement::Contested

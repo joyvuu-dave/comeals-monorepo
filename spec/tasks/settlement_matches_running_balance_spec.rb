@@ -70,7 +70,7 @@ RSpec.describe 'settlement and running-balance arithmetic agree', type: :task do
     stored_running = ResidentBalance.pluck(:resident_id, :amount).to_h
     expect_running_tie(residents, stored_running, running)
 
-    reconciliation = settle!(cutoff: Date.yesterday)
+    reconciliation = settle!
     settled = reconciliation.reconciliation_balances.pluck(:resident_id, :amount).to_h
 
     # allocate_to_cents is private. Reaching past that is deliberate: the
@@ -100,6 +100,9 @@ RSpec.describe 'settlement and running-balance arithmetic agree', type: :task do
   # uncapped; meals above it are subsidized and exercise the proportional
   # credit branch. Setting it once here lets one community hold both kinds.
   let(:community) { create(:community, cap: BigDecimal('4.50')) }
+  # The latest cutoff a settlement may have, 14 days back (ADR 0011 rule
+  # 2). The dates below count back from it.
+  let(:latest) { Reconciliation.latest_cutoff(community.today) }
   let(:unit) { create(:unit, community: community) }
 
   def resident(name, multiplier: 2)
@@ -201,10 +204,10 @@ RSpec.describe 'settlement and running-balance arithmetic agree', type: :task do
     cook = resident('Cook')
     eater = resident('Eater')
     baby = resident('Baby', multiplier: 0)
-    held = create(:meal, community: community, date: Date.yesterday - 1)
+    held = create(:meal, community: community, date: latest - 1)
     create(:bill, meal: held, resident: cook, community: community, amount: BigDecimal('25'))
     create(:meal_resident, meal: held, resident: baby, community: community)
-    eaten = create(:meal, community: community, date: Date.yesterday)
+    eaten = create(:meal, community: community, date: latest)
     create(:bill, meal: eaten, resident: cook, community: community, amount: BigDecimal('20'))
     create(:meal_resident, meal: eaten, resident: eater, community: community)
 
@@ -220,9 +223,9 @@ RSpec.describe 'settlement and running-balance arithmetic agree', type: :task do
   it 'agrees when a receipt nobody ate is held back' do
     cook = resident('Cook')
     eater = resident('Eater')
-    held = create(:meal, community: community, date: Date.yesterday - 1)
+    held = create(:meal, community: community, date: latest - 1)
     create(:bill, meal: held, resident: cook, community: community, amount: BigDecimal('25'))
-    eaten = create(:meal, community: community, date: Date.yesterday)
+    eaten = create(:meal, community: community, date: latest)
     create(:bill, meal: eaten, resident: cook, community: community, amount: BigDecimal('20'))
     create(:meal_resident, meal: eaten, resident: eater, community: community)
 

@@ -87,7 +87,7 @@ RSpec.describe 'the stored ledger against the plain ledger', type: :task do
     recalculate!
     expect_close(ResidentBalance.pluck(:resident_id, :amount).to_h, expected, "#{label}, running balance of")
 
-    reconciliation = settle!(cutoff: Date.yesterday)
+    reconciliation = settle!
     settled = reconciliation.reconciliation_balances.pluck(:resident_id, :amount).to_h
     expect(settled).to eq(PlainLedger.round_to_cents(expected).reject { |_, amount| amount.zero? }),
                        "#{label}: settled balances disagree"

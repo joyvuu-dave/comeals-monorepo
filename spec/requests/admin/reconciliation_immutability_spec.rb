@@ -12,6 +12,9 @@ RSpec.describe 'Admin Reconciliation Immutability' do
   include ActiveJob::TestHelper
 
   let(:community) { create(:community) }
+  # The latest cutoff a settlement may have, 14 days back (ADR 0011 rule
+  # 2). The dates below count back from it.
+  let(:latest) { Reconciliation.latest_cutoff(community.today) }
   let(:unit) { create(:unit, community: community) }
   let(:admin_user) { create(:admin_user, community: community, superuser: true) }
 
@@ -70,7 +73,7 @@ RSpec.describe 'Admin Reconciliation Immutability' do
     allow(SettleAndNotify).to receive(:call).and_raise(Settlement::Contested, 'assign_meals: 0 of 3 claimed')
 
     expect do
-      post '/reconciliations', params: { reconciliation: { end_date: Date.yesterday } }
+      post '/reconciliations', params: { reconciliation: { end_date: latest } }
     end.not_to change(Reconciliation, :count)
 
     expect(response).to redirect_to('/reconciliations/new')
@@ -92,10 +95,29 @@ RSpec.describe 'Admin Reconciliation Immutability' do
   it 'refuses a reconciliation that would settle no meals' do
     expect do
       post '/reconciliations',
-           params: { reconciliation: { end_date: Date.yesterday } }
+           params: { reconciliation: { end_date: latest } }
     end.not_to change(Reconciliation, :count)
 
     expect(response.body).to include('must settle at least one meal')
+  end
+
+  # ADR 0011 rule 2: a cook may still fix a cost on a newer dinner. The
+  # form shows the latest cutoff allowed, and refuses a later one in the
+  # same words.
+  it 'refuses a cutoff less than 14 days back, and says which is the latest' do
+    meal = create(:meal, community: community, date: latest + 1)
+    create(:bill, meal: meal, resident: create(:resident, community: community, unit: unit), community: community,
+                  amount: BigDecimal('25'))
+
+    get '/reconciliations/new'
+    expect(response.body).to include("It must be on or before #{latest.iso8601}, 14 days before today")
+
+    expect do
+      post '/reconciliations', params: { reconciliation: { end_date: latest + 1 } }
+    end.not_to change(Reconciliation, :count)
+
+    expect(response.body).to include("must be on or before #{latest.iso8601}, 14 days before today")
+    expect(meal.reload.reconciliation_id).to be_nil
   end
 
   it 'still allows creating the next reconciliation — corrections are new entries' do
@@ -103,13 +125,13 @@ RSpec.describe 'Admin Reconciliation Immutability' do
     # next period a meal to settle.
     cook = create(:resident, community: community, unit: unit, multiplier: 2)
     eater = create(:resident, community: community, unit: unit, multiplier: 2)
-    meal = create(:meal, community: community, date: Date.yesterday)
+    meal = create(:meal, community: community, date: latest)
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('25'))
     create(:meal_resident, meal: meal, resident: eater, community: community)
 
     expect do
       post '/reconciliations',
-           params: { reconciliation: { end_date: Date.yesterday } }
+           params: { reconciliation: { end_date: latest } }
     end.to change(Reconciliation, :count).by(1)
 
     # The form must settle, not just insert a row: the meal is claimed and

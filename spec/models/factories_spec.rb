@@ -10,20 +10,25 @@ RSpec.describe 'the spec factories' do # rubocop:disable RSpec/DescribeClass -- 
 
   # The resident factory turns `multiplier: 0` and `multiplier: 1` into a
   # birthday counted back from today, and the meal factory dates a meal up
-  # to DefaultMealDate.days_back days back. A price is read on the meal's
-  # date, so these two promises only hold together while the window is
-  # short enough. A longer window or a younger factory child fails here
-  # (#117).
-  it 'dates default meals from yesterday back to the end of the window, and then starts again' do
+  # to DefaultMealDate.days_back days before its newest date. A price is
+  # read on the meal's date, so these two promises only hold together
+  # while the window is short enough. A longer window or a younger factory
+  # child fails here (#117).
+  it 'dates default meals from 14 days back to the end of the window, and then starts again' do
     days_back = DefaultMealDate.days_back
 
-    expect(DefaultMealDate.for(1)).to eq(1.day.ago.to_date)
-    expect(DefaultMealDate.for(days_back)).to eq(days_back.days.ago.to_date)
-    expect(DefaultMealDate.for(days_back + 1)).to eq(1.day.ago.to_date)
+    expect(DefaultMealDate.for(1)).to eq(14.days.ago.to_date)
+    expect(DefaultMealDate.for(days_back)).to eq((days_back + 13).days.ago.to_date)
+    expect(DefaultMealDate.for(days_back + 1)).to eq(14.days.ago.to_date)
+  end
+
+  # So settle! with no cutoff claims every meal a spec made without a date.
+  it 'dates the newest default meal on the latest cutoff a settlement may have today' do
+    expect(DefaultMealDate.for(1)).to eq(Reconciliation.latest_cutoff(community.today))
   end
 
   [1, DefaultMealDate.days_back].each do |n|
-    it "gives each factory price band its own price on a default meal #{n} days back" do
+    it "gives each factory price band its own price on default meal number #{n}" do
       meal = create(:meal, community: community, date: DefaultMealDate.for(n))
 
       prices = [Multiplier::FREE, Multiplier::HALF, Multiplier::FULL].to_h do |band|

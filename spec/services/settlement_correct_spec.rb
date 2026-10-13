@@ -60,7 +60,7 @@ RSpec.describe Settlement, '#correct!' do
     let!(:second) { meal(Date.new(2025, 3, 2), cook: cook, amount: '0', eaters: [dana]).last }
     let!(:reconciliation) do
       meal(Date.new(2025, 3, 1), cook: cook, amount: '30', eaters: [dana, eli])
-      settle!(cutoff: Date.new(2025, 3, 31))
+      settle_as_before_rule_3!(cutoff: Date.new(2025, 3, 31))
     end
 
     def fix(**)
@@ -347,7 +347,7 @@ RSpec.describe Settlement, '#correct!' do
     cook = person('Casey Cook')
     dana = person('Dana Diner')
     _, bill = meal(Date.new(2025, 3, 1), cook: cook, amount: '0', eaters: [dana])
-    reconciliation = settle!(cutoff: Date.new(2025, 3, 31))
+    reconciliation = settle_as_before_rule_3!(cutoff: Date.new(2025, 3, 31))
     expect(balances(reconciliation)).to eq({})
 
     correction = correct(reconciliation, bill: bill, amount: '12')
@@ -372,7 +372,7 @@ RSpec.describe Settlement, '#correct!' do
                                eaters: [uma, person('Vic Two'), person('Wes Three')])
     cleo = person('Cleo Cook')
     _, bill = meal(Date.new(2025, 3, 2), cook: cleo, amount: '0', eaters: second_eaters)
-    reconciliation = settle!(cutoff: Date.new(2025, 3, 31))
+    reconciliation = settle_as_before_rule_3!(cutoff: Date.new(2025, 3, 31))
     expect(balances(reconciliation).fetch(uma.id)).to eq(BigDecimal('-0.34'))
 
     correction = correct(reconciliation, bill: bill, amount: '2')

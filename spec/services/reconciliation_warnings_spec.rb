@@ -67,7 +67,9 @@ RSpec.describe ReconciliationWarnings do
 
   # A claimed meal nobody ate holds only $0 or no-cost bills
   # (Meal.settleable_by) and settles with no effect, so the one thing to
-  # say about it is the unmarked $0 bill (#96).
+  # say about it is the unmarked $0 bill (#96). A blank cost on a meal
+  # someone ate makes it wait instead (ADR 0011 rule 3), so a claimed
+  # meal has one only when nobody is charged.
   it 'says only that a $0 bill was not flagged as no cost, on a claimed meal nobody ate' do
     row = bill('0')
 
@@ -80,13 +82,45 @@ RSpec.describe ReconciliationWarnings do
                                               }])
   end
 
-  it 'says a $0 bill was not flagged as no cost on a claimed meal people ate, next to a bill with money' do
-    bill('20')
-    zero = create(:bill, meal: meal, resident: create(:resident, community: community, unit: unit),
-                         community: community, amount: BigDecimal('0'))
+  # Someone is charged and a cook's cost is blank, so the settlement
+  # leaves the meal open until the cook says what they spent (ADR 0011
+  # rule 3).
+  it 'warns that a cost is not entered on a waiting meal, naming the cook' do
+    row = bill('0')
     create(:meal_resident, meal: meal, resident: cook, community: community)
 
-    expect(described_class.for([meal]).pluck(:id)).to eq(["zero_bill_not_flagged:meal=#{meal.id}:bill=#{zero.id}"])
+    expect(described_class.for([], waiting: [meal])).to eq([{
+                                                             id: "cost_not_entered:meal=#{meal.id}:bill=#{row.id}",
+                                                             kind: 'cost_not_entered', severity: 'warning',
+                                                             meal_id: meal.id, title: 'Cost not entered',
+                                                             body: 'Cook Person has not entered a cost for ' \
+                                                                   '2026-04-10. This meal will not be settled ' \
+                                                                   'until they enter a cost or mark No cost.'
+                                                           }])
+  end
+
+  it 'names only the blank costs on a waiting meal, not the ones with money or No cost' do
+    bill('20')
+    blank = create(:bill, meal: meal, resident: create(:resident, community: community, unit: unit),
+                          community: community, amount: BigDecimal('0'))
+    create(:bill, meal: meal, resident: create(:resident, community: community, unit: unit),
+                  community: community, amount: BigDecimal('0'), no_cost: true)
+    create(:meal_resident, meal: meal, resident: cook, community: community)
+
+    expect(described_class.for([], waiting: [meal]).pluck(:id))
+      .to eq(["cost_not_entered:meal=#{meal.id}:bill=#{blank.id}"])
+  end
+
+  it 'lists the skipped, held and waiting meals before the claimed ones' do
+    skipped = create(:meal, community: community, date: Date.new(2026, 4, 1))
+    create(:meal_resident, meal: skipped, resident: cook, community: community)
+    held = create(:meal, community: community, date: Date.new(2026, 4, 2))
+    create(:bill, meal: held, resident: cook, community: community, amount: 9)
+    bill('0')
+
+    kinds = described_class.for([meal], skipped: [skipped], held: [held], waiting: [meal]).pluck(:kind)
+
+    expect(kinds).to eq(%w[attendance_without_bill bill_with_no_attendees cost_not_entered zero_bill_not_flagged])
   end
 
   it 'says nothing about a claimed meal with money on its bill and someone to charge' do

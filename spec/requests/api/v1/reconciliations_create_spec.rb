@@ -14,6 +14,8 @@ RSpec.describe 'POST /api/v1/reconciliations' do
   let(:resident) { create(:resident, community: community, unit: unit, multiplier: 2, can_reconcile: true) }
   let(:token) { resident.keys.first.token }
   let(:cook) { create(:resident, community: community, unit: unit, multiplier: 2) }
+  # The latest cutoff a settlement may have, 14 days back (ADR 0011 rule 2).
+  let(:latest) { community.today - 14 }
 
   before do
     allow(ReconciliationMailer).to receive_message_chain(:reconciliation_notify_email, :deliver_now) # rubocop:disable RSpec/MessageChain -- stubbing mailer delivery chain
@@ -25,7 +27,7 @@ RSpec.describe 'POST /api/v1/reconciliations' do
     response.parsed_body
   end
 
-  def settleable_meal(date = Date.yesterday)
+  def settleable_meal(date = latest)
     meal = create(:meal, community: community, date: date)
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
     create(:meal_resident, meal: meal, resident: resident, community: community)
@@ -34,14 +36,14 @@ RSpec.describe 'POST /api/v1/reconciliations' do
 
   it 'settles the period the same way the nightly task does: claims, ledger, balances, mail' do
     meal = settleable_meal
-    later = settleable_meal(Time.zone.today)
+    later = settleable_meal(latest + 1)
 
-    body = settle(Date.yesterday)
+    body = settle(latest)
 
     expect(response).to have_http_status(:created)
     reconciliation = Reconciliation.order(:id).last
     expect(body.deep_symbolize_keys).to eq(id: reconciliation.id, date: Time.zone.today.iso8601,
-                                           cutoff_date: Date.yesterday.iso8601, meal_count: 1)
+                                           cutoff_date: latest.iso8601, meal_count: 1)
 
     expect(reconciliation.meals).to contain_exactly(meal)
     expect(later.reload.reconciliation_id).to be_nil
@@ -49,7 +51,7 @@ RSpec.describe 'POST /api/v1/reconciliations' do
       .to eq(cook.id => BigDecimal('30'), resident.id => BigDecimal('-30'))
     expect(MealCharge.for_reconciliation(reconciliation).count).to eq(2)
 
-    # The running balance no longer counts the settled meal, only today's.
+    # The running balance no longer counts the settled meal, only the newer one.
     expect(ResidentBalance.find_by(resident_id: resident.id).amount).to eq(BigDecimal('-30'))
     expect(ReconciliationMailer).to have_received(:reconciliation_notify_email).with(cook, reconciliation).once
   end
@@ -60,7 +62,7 @@ RSpec.describe 'POST /api/v1/reconciliations' do
     # itself does.
     queue_adapter.perform_enqueued_jobs = false
 
-    settle(Date.yesterday)
+    settle(latest)
 
     expect(response).to have_http_status(:created)
     expect(ReconciliationMailer).not_to have_received(:reconciliation_notify_email)
@@ -71,7 +73,7 @@ RSpec.describe 'POST /api/v1/reconciliations' do
   it 'enqueues no mail when the settlement was refused' do
     queue_adapter.perform_enqueued_jobs = false
 
-    settle(Date.yesterday)
+    settle(latest)
 
     expect(response).to have_http_status(:bad_request)
     expect(NotifyCooksJob).not_to have_been_enqueued
@@ -80,24 +82,25 @@ RSpec.describe 'POST /api/v1/reconciliations' do
   # The caller sent `cutoff`, so the answer names `cutoff`, in the same
   # words the preview answers for the same day. The row's own name for it
   # (end_date) is not part of the API.
-  it 'refuses a cutoff that is not in the past, in the words the preview uses, and writes nothing' do
-    settleable_meal
+  it 'refuses a cutoff less than 14 days back, in the words the preview uses, and writes nothing' do
+    settleable_meal(latest + 1)
+    refusal = "cutoff must be on or before #{latest.iso8601}, 14 days before today"
 
-    [community.today, community.today + 1].each do |cutoff|
+    [latest + 1, community.today, community.today + 1].each do |cutoff|
       get '/api/v1/reconciliations/preview', params: { cutoff: cutoff.iso8601 },
                                              headers: { 'Authorization' => "Bearer #{token}" }
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body[:message]).to eq('cutoff must be in the past')
+      expect(response.parsed_body[:message]).to eq(refusal)
 
       expect { settle(cutoff) }.not_to change(Reconciliation, :count)
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body[:message]).to eq('cutoff must be in the past')
+      expect(response.parsed_body[:message]).to eq(refusal)
     end
   end
 
   it 'refuses a period with nothing to settle' do
-    settle(Date.yesterday)
+    settle(latest)
 
     expect(response).to have_http_status(:bad_request)
     expect(response.parsed_body[:message]).to eq('No unreconciled meals with bills on or before this date. ' \
@@ -107,18 +110,34 @@ RSpec.describe 'POST /api/v1/reconciliations' do
   # The cook spent $30 and only a baby ate, so the meal is held back. The
   # answer names it, and does not say there are no meals with bills.
   it 'refuses a period whose only meal with a bill is held back, and names that meal' do
-    meal = create(:meal, community: community, date: Date.yesterday)
+    meal = create(:meal, community: community, date: latest)
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
     baby = create(:resident, community: community, unit: unit, multiplier: 0)
     create(:meal_resident, meal: meal, resident: baby, community: community)
 
-    expect { settle(Date.yesterday) }.not_to change(Reconciliation, :count)
+    expect { settle(latest) }.not_to change(Reconciliation, :count)
 
     expect(response).to have_http_status(:bad_request)
     expect(response.parsed_body[:message])
       .to eq('No meal on or before this date can be settled yet. Meals held back because a bill has money on ' \
-             "it and nobody who pays is signed up: #{Date.yesterday.iso8601}. To settle one, sign up someone " \
+             "it and nobody who pays is signed up: #{latest.iso8601}. To settle one, sign up someone " \
              'who pays or remove the bill. A reconciliation must settle at least one meal.')
+    expect(meal.reload.reconciliation_id).to be_nil
+  end
+
+  # A second cook has not said what they spent, so the meal waits (ADR
+  # 0011 rule 3). The answer names it.
+  it 'refuses a period whose only meal waits for a cost, and names that meal' do
+    meal = settleable_meal
+    create(:bill, meal: meal, resident: resident, community: community, amount: 0)
+
+    expect { settle(latest) }.not_to change(Reconciliation, :count)
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.parsed_body[:message])
+      .to eq("No meal on or before this date can be settled yet. Meals waiting for a cook's cost: " \
+             "#{latest.iso8601}. To settle one, each of its cooks enters a cost or marks No cost. " \
+             'A reconciliation must settle at least one meal.')
     expect(meal.reload.reconciliation_id).to be_nil
   end
 
@@ -134,7 +153,7 @@ RSpec.describe 'POST /api/v1/reconciliations' do
     allow(Settlement).to receive(:settle!).and_raise(Settlement::Contested,
                                                      'a concurrent reconciliation settled the rest first')
 
-    settle(Date.yesterday)
+    settle(latest)
 
     expect(response).to have_http_status(:conflict)
     expect(response.parsed_body[:message]).to match(/Nothing was saved. Try again./)
@@ -145,7 +164,7 @@ RSpec.describe 'POST /api/v1/reconciliations' do
     settleable_meal
     allow(Settlement).to receive(:settle!).and_raise(ActiveRecord::SerializationFailure, 'could not serialize')
 
-    settle(Date.yesterday)
+    settle(latest)
 
     expect(response).to have_http_status(:conflict)
   end
@@ -167,7 +186,7 @@ RSpec.describe 'POST /api/v1/reconciliations' do
       allow(RetryOnConflict).to receive(:sleep)
       allow(Settlement).to receive(:settle!).and_raise(ActiveRecord::SerializationFailure, 'could not serialize')
 
-      settle(Date.yesterday)
+      settle(latest)
 
       expect(response).to have_http_status(:conflict)
       expect(Settlement).to have_received(:settle!).exactly(3).times

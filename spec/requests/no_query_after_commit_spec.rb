@@ -103,10 +103,13 @@ RSpec.describe 'what a write runs after its commit' do
     end.uniq
   end
 
-  # A meal from yesterday with a cook and someone who ate, so there is
-  # something to settle.
+  # The latest cutoff a settlement may have, 14 days back (ADR 0011 rule 2).
+  def latest = Reconciliation.latest_cutoff(community.today)
+
+  # A meal on the latest cutoff with a cook and someone who ate, so there
+  # is something to settle.
   def settleable_meal
-    settled = create(:meal, community: community, date: community.yesterday)
+    settled = create(:meal, community: community, date: latest)
     create(:bill, meal: settled, resident: cook, community: community, amount: BigDecimal('30'))
     create(:meal_resident, meal: settled, resident: resident, community: community)
   end
@@ -177,7 +180,7 @@ RSpec.describe 'what a write runs after its commit' do
 
   write 'POST /api/v1/reconciliations' do
     settleable_meal
-    -> { post '/api/v1/reconciliations', params: { token: token, cutoff: community.yesterday.iso8601 } }
+    -> { post '/api/v1/reconciliations', params: { token: token, cutoff: latest.iso8601 } }
   end
 
   write 'POST /api/v1/events' do
@@ -422,7 +425,7 @@ RSpec.describe 'what a write runs after its commit' do
 
   admin_write 'POST /reconciliations' do
     settleable_meal
-    -> { post '/reconciliations', params: { reconciliation: { end_date: community.yesterday } } }
+    -> { post '/reconciliations', params: { reconciliation: { end_date: latest } } }
   end
 
   admin_write 'PATCH /residents/:id/remove_birthday' do

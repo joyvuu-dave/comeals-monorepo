@@ -11,9 +11,9 @@ module Api
       # GET /api/v1/reconciliations/preview?cutoff=YYYY-MM-DD
       #
       # What a settlement at that cutoff would claim and store, without
-      # writing anything. The cutoff must be a past day, like the settlement
-      # itself requires. No meals to settle is a valid answer, not an error:
-      # the lists come back empty.
+      # writing anything. The cutoff must be at least 14 days before today,
+      # like the settlement itself requires (ADR 0011 rule 2). No meals to
+      # settle is a valid answer, not an error: the lists come back empty.
       sig { void }
       def preview
         cutoff = Date.iso8601(params.require(:cutoff))

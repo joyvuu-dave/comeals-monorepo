@@ -15,7 +15,7 @@ RSpec.describe LedgerVerification do
     create(:meal_resident, meal: meal, resident: cook, community: community)
     create(:meal_resident, meal: meal, resident: eater, community: community)
 
-    settle!(cutoff: Date.yesterday)
+    settle!
   end
 
   # Settled data is immutable by design, so the only way to set up the thing
@@ -149,7 +149,7 @@ RSpec.describe LedgerVerification do
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('90'))
       [cook, eater, other].each { |person| create(:meal_resident, meal: meal, resident: person, community: community) }
-      reconciliation = settle!(cutoff: Date.yesterday)
+      reconciliation = settle!
       behind_the_guards do
         ReconciliationBalance.where(reconciliation_id: reconciliation.id, resident_id: cook.id)
                              .update_all(amount: BigDecimal('61'))
@@ -286,7 +286,7 @@ RSpec.describe LedgerVerification do
       meal = create(:meal, community: community)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('100'))
       eaters.each { |person| create(:meal_resident, meal: meal, resident: person, community: community) }
-      settle!(cutoff: Date.yesterday)
+      settle!
 
       # The cook does not eat. $100 across three eaters: one owes 33.33333334
       # and two owe 33.33333333. Cut toward zero to cents, the balances are

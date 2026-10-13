@@ -7,8 +7,10 @@ RSpec.describe 'GET /api/v1/reconciliations/preview' do
   let(:unit) { create(:unit, community: community, name: '5B') }
   let(:resident) { create(:resident, community: community, unit: unit, multiplier: 2, can_reconcile: true) }
   let(:token) { resident.keys.first.token }
+  # The latest cutoff a settlement may have, 14 days back (ADR 0011 rule 2).
+  let(:latest) { community.today - 14 }
 
-  def preview(cutoff = Date.yesterday)
+  def preview(cutoff = latest)
     get '/api/v1/reconciliations/preview', params: { cutoff: cutoff.to_s },
                                            headers: { 'Authorization' => "Bearer #{token}" }
     response.parsed_body
@@ -22,7 +24,7 @@ RSpec.describe 'GET /api/v1/reconciliations/preview' do
     cook = create(:resident, community: community, unit: unit, multiplier: 2, name: 'Alice Cook')
     other_unit = create(:unit, community: community, name: '7A')
     eater = create(:resident, community: community, unit: other_unit, multiplier: 2, name: 'Bob Eater')
-    meal = create(:meal, community: community, date: Date.yesterday - 1, description: 'Thursday Dinner')
+    meal = create(:meal, community: community, date: latest - 1, description: 'Thursday Dinner')
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
     create(:meal_resident, meal: meal, resident: eater, community: community)
     create(:meal_resident, meal: meal, resident: resident, community: community)
@@ -36,7 +38,7 @@ RSpec.describe 'GET /api/v1/reconciliations/preview' do
               end)
 
     expect(response).to have_http_status(:ok)
-    expect(body[:cutoff_date]).to eq(Date.yesterday.iso8601)
+    expect(body[:cutoff_date]).to eq(latest.iso8601)
     expect(body[:summary]).to include(meal_count: 1, residents_affected: 3, units_affected: 2,
                                       earliest_meal_date: meal.date.iso8601, latest_meal_date: meal.date.iso8601)
     expect(money(body[:summary][:total_cost])).to eq(30)
@@ -75,17 +77,17 @@ RSpec.describe 'GET /api/v1/reconciliations/preview' do
 
   it 'uses the exact scope a settlement claims: not today, not after the cutoff, not without a bill' do
     cook = create(:resident, community: community, unit: unit, multiplier: 2)
-    inside = create(:meal, community: community, date: Date.yesterday - 2)
+    inside = create(:meal, community: community, date: latest - 2)
     create(:bill, meal: inside, resident: cook, community: community, amount: BigDecimal('10'))
     create(:meal_resident, meal: inside, resident: resident, community: community)
-    past_cutoff = create(:meal, community: community, date: Date.yesterday)
+    past_cutoff = create(:meal, community: community, date: latest)
     create(:bill, meal: past_cutoff, resident: cook, community: community, amount: BigDecimal('10'))
     today = create(:meal, community: community, date: Time.zone.today)
     create(:bill, meal: today, resident: cook, community: community, amount: BigDecimal('10'))
-    no_bill = create(:meal, community: community, date: Date.yesterday - 3)
+    no_bill = create(:meal, community: community, date: latest - 3)
     create(:meal_resident, meal: no_bill, resident: resident, community: community)
 
-    body = preview(Date.yesterday - 1)
+    body = preview(latest - 1)
 
     expect(body[:meals].pluck(:id)).to eq([inside.id])
   end
@@ -94,11 +96,11 @@ RSpec.describe 'GET /api/v1/reconciliations/preview' do
     let(:cook) { create(:resident, community: community, unit: unit, multiplier: 2, name: 'Charlie Cook') }
 
     it 'holds back a bill on a meal nobody attended, and says so' do
-      meal = create(:meal, community: community, date: Date.yesterday)
+      meal = create(:meal, community: community, date: latest)
       bill = create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('45'))
       # Empty cook slots on a meal nobody attended settle with no effect and
       # get no such warning (the $0 one is the zero_bill_not_flagged below).
-      empty = create(:meal, community: community, date: Date.yesterday - 1)
+      empty = create(:meal, community: community, date: latest - 1)
       create(:bill, meal: empty, resident: cook, community: community, amount: BigDecimal('0'), no_cost: true)
 
       body = preview
@@ -120,7 +122,7 @@ RSpec.describe 'GET /api/v1/reconciliations/preview' do
     # and the preview says why and leaves its cost out of the total (#94).
     it 'holds back a bill on a meal only free eaters attended, and says so' do
       baby = create(:resident, community: community, unit: unit, multiplier: 0)
-      meal = create(:meal, community: community, date: Date.yesterday)
+      meal = create(:meal, community: community, date: latest)
       bill = create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('45'))
       create(:meal_resident, meal: meal, resident: baby, community: community)
 
@@ -140,11 +142,11 @@ RSpec.describe 'GET /api/v1/reconciliations/preview' do
     end
 
     it 'does not say a meal it claims will not be settled, for a $0 cook slot nobody ate' do
-      meal = create(:meal, community: community, date: Date.yesterday)
+      meal = create(:meal, community: community, date: latest)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('0'))
 
       body = preview
-      settle!(cutoff: Date.yesterday)
+      settle!
 
       aggregate_failures do
         expect(body[:meals].pluck(:id)).to eq([meal.id])
@@ -154,16 +156,16 @@ RSpec.describe 'GET /api/v1/reconciliations/preview' do
     end
 
     it 'flags a meal people ate that no cook billed — a meal the settlement would leave behind' do
-      billed = create(:meal, community: community, date: Date.yesterday - 1)
+      billed = create(:meal, community: community, date: latest - 1)
       create(:bill, meal: billed, resident: cook, community: community, amount: BigDecimal('20'))
       create(:meal_resident, meal: billed, resident: resident, community: community)
-      unbilled = create(:meal, community: community, date: Date.yesterday)
+      unbilled = create(:meal, community: community, date: latest)
       create(:meal_resident, meal: unbilled, resident: resident, community: community)
       create(:guest, meal: unbilled, resident: resident, multiplier: 2)
       # Not in the period, and nobody ate: neither is a warning.
       create(:meal_resident, meal: create(:meal, community: community, date: Time.zone.today),
                              resident: resident, community: community, multiplier: 2)
-      create(:meal, community: community, date: Date.yesterday - 2)
+      create(:meal, community: community, date: latest - 2)
 
       body = preview
       expect(body[:meals].pluck(:id)).to eq([billed.id])
@@ -179,31 +181,55 @@ RSpec.describe 'GET /api/v1/reconciliations/preview' do
       expect(body[:warnings].map(&:deep_symbolize_keys)).to eq([expected])
     end
 
-    it 'flags a $0 bill that was not marked no-cost, and not one that was' do
-      meal = create(:meal, community: community, date: Date.yesterday)
-      zero = create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('0'))
+    # Someone ate and a cook's cost is blank, so the settlement waits for
+    # the cost (ADR 0011 rule 3). The preview says so, names the cook, and
+    # leaves the meal out. The cook who marked No cost is not named.
+    it 'leaves out a meal with a cost not entered, and says whose' do
+      meal = create(:meal, community: community, date: latest)
+      blank = create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('0'))
       helper = create(:resident, community: community, unit: unit, multiplier: 2)
       create(:bill, meal: meal, resident: helper, community: community, amount: BigDecimal('0'), no_cost: true)
       create(:meal_resident, meal: meal, resident: resident, community: community)
 
+      body = preview
       expected = {
-        id: "zero_bill_not_flagged:meal=#{meal.id}:bill=#{zero.id}",
-        kind: 'zero_bill_not_flagged',
-        severity: 'info',
+        id: "cost_not_entered:meal=#{meal.id}:bill=#{blank.id}",
+        kind: 'cost_not_entered',
+        severity: 'warning',
         meal_id: meal.id,
-        title: "Bill of $0 not flagged as 'no cost'",
-        body: "Charlie Cook submitted a $0.00 bill but didn't mark it as a no-cost meal."
+        title: 'Cost not entered',
+        body: "Charlie Cook has not entered a cost for #{meal.date.iso8601}. This meal will not be settled " \
+              'until they enter a cost or mark No cost.'
       }
-      expect(preview[:warnings].map(&:deep_symbolize_keys)).to eq([expected])
+      expect(body[:warnings].map(&:deep_symbolize_keys)).to eq([expected])
+      expect(body[:meals]).to eq([])
+    end
+
+    it 'leaves a meal that waits for a cost out of the balances, and settles the others' do
+      paid = create(:meal, community: community, date: latest - 1)
+      create(:bill, meal: paid, resident: cook, community: community, amount: BigDecimal('20'))
+      create(:meal_resident, meal: paid, resident: resident, community: community)
+      waiting = create(:meal, community: community, date: latest)
+      create(:bill, meal: waiting, resident: cook, community: community, amount: BigDecimal('50'))
+      create(:bill, meal: waiting, resident: create(:resident, community: community, unit: unit),
+                    community: community, amount: BigDecimal('0'))
+      create(:meal_resident, meal: waiting, resident: resident, community: community)
+
+      body = preview
+
+      expect(body[:meals].pluck(:id)).to eq([paid.id])
+      expect(money(body[:summary][:total_cost])).to eq(20)
+      expect(body[:warnings].pluck(:kind)).to eq(%w[cost_not_entered])
     end
   end
 
   describe 'bad input' do
-    it 'refuses a cutoff of today, the same way a settlement does' do
-      preview(Time.zone.today)
+    it 'refuses a cutoff less than 14 days back, the same way a settlement does' do
+      preview(latest + 1)
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body[:message]).to eq('cutoff must be in the past')
+      expect(response.parsed_body[:message]).to eq("cutoff must be on or before #{latest.iso8601}, " \
+                                                   '14 days before today')
     end
 
     it 'refuses a cutoff that is not a date' do

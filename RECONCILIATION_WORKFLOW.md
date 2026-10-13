@@ -21,7 +21,7 @@ A reconciliation is a settlement event: at a given moment in time, we compute wh
 
 When the person responsible for reconciliations runs one, their mental flow is:
 
-1. **Double-check the dates.** A reconciliation has one date filter: a cutoff (`end_date`), which must be strictly before today. Everything unreconciled and older gets swept, however old. So an old or stray meal is easy to pull in without noticing. A bill created manually for a meal from 3 years ago might be legitimate cleanup or might be a mistake. Either way, the reconciler wants to be made aware so they can investigate.
+1. **Double-check the dates.** A reconciliation has one date filter: a cutoff (`end_date`), which must be at least 14 days before today (ADR 0011 rule 2). Everything unreconciled and older gets swept, however old. So an old or stray meal is easy to pull in without noticing. A bill created manually for a meal from 3 years ago might be legitimate cleanup or might be a mistake. Either way, the reconciler wants to be made aware so they can investigate.
 
 2. **Double-check the costs.** Easy for a cook to mis-enter a bill (typo: $400 for a $40 meal, or $4 for a $40 meal). Outliers should be flagged based on the community's actual cost history, not hardcoded thresholds. Different communities will have different typical cost ranges, especially across currencies.
 

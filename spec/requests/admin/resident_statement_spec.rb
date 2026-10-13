@@ -7,6 +7,9 @@ require 'rails_helper'
 # I being charged for", the meal page answers "who was charged for this meal".
 RSpec.describe 'Admin settlement statement' do
   let(:community) { create(:community, cap: BigDecimal('4.50')) }
+  # The latest cutoff a settlement may have, 14 days back (ADR 0011 rule
+  # 2). The dates below count back from it.
+  let(:latest) { Reconciliation.latest_cutoff(community.today) }
   let(:unit) { create(:unit, community: community) }
   let(:cook) { create(:resident, community: community, unit: unit, multiplier: 2, name: 'Cook') }
   let(:eater) { create(:resident, community: community, unit: unit, multiplier: 2, name: 'Eater') }
@@ -24,7 +27,7 @@ RSpec.describe 'Admin settlement statement' do
     create(:meal_resident, meal: meal, resident: cook, community: community)
     create(:meal_resident, meal: meal, resident: eater, community: community)
 
-    settle!(cutoff: Date.yesterday)
+    settle!
   end
 
   # The cells of the line items table in the panel with this title, one
@@ -120,18 +123,18 @@ RSpec.describe 'Admin settlement statement' do
 
     it 'shows what a subsidized cook actually spent next to what they were credited' do
       # 4 units of multiplier * 4.50 = 18.00 allowed, against 60.00 spent.
-      meal = create(:meal, community: community, date: Date.yesterday)
+      meal = create(:meal, community: community, date: latest)
       create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('60'))
       create(:meal_resident, meal: meal, resident: cook, community: community)
       create(:meal_resident, meal: meal, resident: eater, community: community)
       # A meal under the cap in the same settlement. Its credit line also
       # stores what the cook spent, so its blank Cook spent cell is what
       # shows the cell is filled only for a capped credit.
-      plain = create(:meal, community: community, date: Date.yesterday - 1)
+      plain = create(:meal, community: community, date: latest - 1)
       create(:bill, meal: plain, resident: cook, community: community, amount: BigDecimal('16'))
       create(:meal_resident, meal: plain, resident: cook, community: community)
       create(:meal_resident, meal: plain, resident: eater, community: community)
-      settle!(cutoff: Date.yesterday)
+      settle!
 
       get "/residents/#{cook.id}"
 

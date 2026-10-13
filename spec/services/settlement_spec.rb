@@ -9,6 +9,9 @@ require 'rails_helper'
 # cause. Mutant showed each of these free on 2026-09-28.
 RSpec.describe Settlement do
   let(:community) { create(:community) }
+  # The latest cutoff a settlement may have, 14 days back (ADR 0011 rule
+  # 2). The dates below count back from it.
+  let(:latest) { Reconciliation.latest_cutoff(community.today) }
   let(:unit) { create(:unit, community: community) }
   let(:cook) { create(:resident, community: community, unit: unit, name: 'Cook') }
   let(:eater) { create(:resident, community: community, unit: unit, name: 'Eater') }
@@ -27,7 +30,7 @@ RSpec.describe Settlement do
     # it is not settling, and in id order, so two settlements cannot
     # deadlock.
     it 'locks the meals it claims, and no others, in id order' do
-      claimed = [settleable_meal(Date.yesterday - 2), settleable_meal(Date.yesterday - 1)]
+      claimed = [settleable_meal(latest - 2), settleable_meal(latest - 1)]
       settleable_meal(community.today)
       statements = []
       record = ->(*, payload) { statements << payload[:sql] }
@@ -48,7 +51,7 @@ RSpec.describe Settlement do
     # meals: two reads with a gap between them could see different rows,
     # and then the lines would not explain the balances.
     it 'builds one ledger, and writes the lines and the balances from it' do
-      settleable_meal(Date.yesterday)
+      settleable_meal(latest)
       allow(MealLedger).to receive(:new).and_call_original
 
       settle!
@@ -62,7 +65,7 @@ RSpec.describe Settlement do
     # the same amount, so the meal still adds up to zero, and the
     # settlement would commit with a line it never wrote.
     it 'refuses to settle a meal that already holds a line in the place of a real one' do
-      meal = settleable_meal(Date.yesterday)
+      meal = settleable_meal(latest)
       with_repair_bypass do
         MealCharge.create!(meal: meal, resident: eater, kind: 'debit', amount: BigDecimal('-30'),
                            multiplier: 2, unit_cost: BigDecimal('15'))
@@ -83,7 +86,7 @@ RSpec.describe Settlement do
     end
 
     it 'is off again once the ledger is written' do
-      settleable_meal(Date.yesterday)
+      settleable_meal(latest)
 
       ActiveRecord::Base.transaction do
         settle!
@@ -95,8 +98,8 @@ RSpec.describe Settlement do
     # undoes the setting. Without it, a caller that catches the error and
     # keeps its transaction would keep the setting too.
     it 'is off again when the write fails, even for a caller that catches the error' do
-      settleable_meal(Date.yesterday)
-      reconciliation = Reconciliation.new(end_date: Date.yesterday)
+      settleable_meal(latest)
+      reconciliation = Reconciliation.new(end_date: latest)
       allow(reconciliation).to receive(:settlement_balances).and_raise(RuntimeError, 'the write failed')
 
       ActiveRecord::Base.transaction do
@@ -119,7 +122,7 @@ RSpec.describe Settlement do
     # these meal pages, so it is told too: the push names no socket to
     # leave out, although the request has one.
     it "pushes each settled meal's page to every browser, the one that asked included" do
-      meal = settleable_meal(Date.yesterday)
+      meal = settleable_meal(latest)
       Current.socket_id = '123.456'
       RSpec::Mocks.space.proxy_for(Pusher).reset
       allow(Pusher).to receive(:trigger)
@@ -130,7 +133,7 @@ RSpec.describe Settlement do
     end
 
     it 'pushes no meal it did not settle' do
-      settled = settleable_meal(Date.yesterday)
+      settled = settleable_meal(latest)
       open = settleable_meal(community.today)
       RSpec::Mocks.space.proxy_for(Pusher).reset
       allow(Pusher).to receive(:trigger)
@@ -144,8 +147,8 @@ RSpec.describe Settlement do
     # The months are cleared and pushed together, after every meal is
     # noted, so a month two settled meals share is pushed once.
     it 'pushes a month once, however many of its meals it settled' do
-      first = settleable_meal(Date.yesterday - 2)
-      settleable_meal(Date.yesterday - 1)
+      first = settleable_meal(latest - 2)
+      settleable_meal(latest - 1)
       month = community.calendar_cache_key(first.date.year, first.date.month)
       RSpec::Mocks.space.proxy_for(Pusher).reset
       allow(Pusher).to receive(:trigger)
@@ -161,14 +164,14 @@ RSpec.describe Settlement do
     # replacing a part. The refusal must still say it came from a preview,
     # which has no reconciliation id of its own.
     it 'refuses to round them, and says it was a preview' do
-      settleable_meal(Date.yesterday)
+      settleable_meal(latest)
       allow(MealLedger).to receive(:new).and_wrap_original do |original, meals|
         original.call(meals).tap do |ledger|
           allow(ledger).to receive(:balances).and_return({ cook.id => BigDecimal('0.01') })
         end
       end
 
-      expect { described_class.preview(cutoff: Date.yesterday) }
+      expect { described_class.preview(cutoff: latest) }
         .to raise_error(RuntimeError, /do not sum to zero for reconciliation preview\. Sum: 0\.01\./)
     end
   end

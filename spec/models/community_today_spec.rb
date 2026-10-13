@@ -19,7 +19,7 @@ RSpec.describe 'the community day' do # rubocop:disable RSpec/DescribeClass -- a
     travel_to(Time.utc(2026, 8, 24, 7, 30)) do
       expect(Time.zone.today).to eq(Date.new(2026, 8, 24)) # Los Angeles
       expect(community.today).to eq(Date.new(2026, 8, 23)) # Honolulu, dinner still on the table
-      expect(community.yesterday).to eq(Date.new(2026, 8, 22))
+      expect(Reconciliation.latest_cutoff(community.today)).to eq(Date.new(2026, 8, 9))
     end
   end
 
@@ -37,19 +37,33 @@ RSpec.describe 'the community day' do # rubocop:disable RSpec/DescribeClass -- a
       create(:meal_resident, meal: finished, resident: cook, community: community)
 
       expect(Meal.settleable_by(Date.new(2026, 8, 23))).to contain_exactly(finished)
-
-      # August 23 is already over in Los Angeles, but not in Honolulu.
-      expect { Settlement.preview(cutoff: Date.new(2026, 8, 23)) }
-        .to raise_error(Settlement::InvalidCutoff, 'cutoff must be in the past')
-      expect { Settlement.run!(cutoff: Date.new(2026, 8, 23)) }
-        .to raise_error(ActiveRecord::RecordInvalid, /End date must be in the past/)
-
-      reconciliation = build(:reconciliation, community: community, end_date: Date.new(2026, 8, 23))
-      expect(reconciliation).not_to be_valid
-      expect(reconciliation.errors[:end_date]).to include('must be in the past')
-
-      expect(Settlement.run!(cutoff: community.yesterday).meals).to contain_exactly(finished)
       expect(tonight.reload.reconciliation_id).to be_nil
+    end
+  end
+
+  # A settlement's cutoff is 14 days back (ADR 0011 rule 2), counted from
+  # the community's today: August 9 in Honolulu. From Los Angeles' today
+  # it would be August 10, and a cook in Honolulu would have one day less.
+  it "counts a settlement's 14 days from the community day" do
+    travel_to(Time.utc(2026, 8, 24, 7, 30)) do
+      newer, oldest = [10, 9].map do |day|
+        create(:meal, community: community, date: Date.new(2026, 8, day)).tap do |meal|
+          create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
+          create(:meal_resident, meal: meal, resident: cook, community: community)
+        end
+      end
+
+      expect { Settlement.preview(cutoff: Date.new(2026, 8, 10)) }
+        .to raise_error(Settlement::InvalidCutoff, 'cutoff must be on or before 2026-08-09, 14 days before today')
+      expect { Settlement.run!(cutoff: Date.new(2026, 8, 10)) }
+        .to raise_error(ActiveRecord::RecordInvalid, /End date must be on or before 2026-08-09/)
+
+      reconciliation = build(:reconciliation, community: community, end_date: Date.new(2026, 8, 10))
+      expect(reconciliation).not_to be_valid
+      expect(reconciliation.errors[:end_date]).to eq(['must be on or before 2026-08-09, 14 days before today'])
+
+      expect(Settlement.run!(cutoff: Date.new(2026, 8, 9)).meals).to contain_exactly(oldest)
+      expect(newer.reload.reconciliation_id).to be_nil
     end
   end
 
@@ -57,16 +71,16 @@ RSpec.describe 'the community day' do # rubocop:disable RSpec/DescribeClass -- a
     let(:community) { create(:community, timezone: 'America/New_York') }
 
     # 2026-08-24 04:30 UTC = 2026-08-24 00:30 in New York = 2026-08-23 21:30 in Los Angeles.
-    it "settles last night's dinner as soon as the community's day is over" do
+    it "settles a dinner 14 days back as soon as the community's day is over" do
       travel_to(Time.utc(2026, 8, 24, 4, 30)) do
-        last_night = create(:meal, community: community, date: Date.new(2026, 8, 23))
-        create(:bill, meal: last_night, resident: cook, community: community, amount: BigDecimal('30'))
-        create(:meal_resident, meal: last_night, resident: cook, community: community)
+        old = create(:meal, community: community, date: Date.new(2026, 8, 10))
+        create(:bill, meal: old, resident: cook, community: community, amount: BigDecimal('30'))
+        create(:meal_resident, meal: old, resident: cook, community: community)
 
-        expect(community.yesterday).to eq(Date.new(2026, 8, 23))
-        expect(Meal.settleable_by(community.yesterday)).to contain_exactly(last_night)
-        expect(Settlement.preview(cutoff: community.yesterday).meals).to contain_exactly(last_night)
-        expect(Settlement.run!(cutoff: community.yesterday).meals).to contain_exactly(last_night)
+        expect(Reconciliation.latest_cutoff(community.today)).to eq(Date.new(2026, 8, 10))
+        expect(Meal.settleable_by(community.today - 1)).to contain_exactly(old)
+        expect(Settlement.preview(cutoff: Date.new(2026, 8, 10)).meals).to contain_exactly(old)
+        expect(Settlement.run!(cutoff: Date.new(2026, 8, 10)).meals).to contain_exactly(old)
       end
     end
   end

@@ -23,12 +23,15 @@ RSpec.describe SettleAndNotify do
   include_context 'with no test transaction'
 
   let(:community) { create(:community) }
+  # The latest cutoff a settlement may have, 14 days back (ADR 0011 rule
+  # 2). The dates below count back from it.
+  let(:latest) { Reconciliation.latest_cutoff(community.today) }
   let(:unit) { create(:unit, community: community) }
   let(:cook) { create(:resident, community: community, unit: unit, multiplier: 2, name: 'Cook') }
   let(:eater) { create(:resident, community: community, unit: unit, multiplier: 2, name: 'Eater') }
 
   before do
-    meal = create(:meal, community: community, date: Date.yesterday - 1)
+    meal = create(:meal, community: community, date: latest - 1)
     create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('80'))
     create(:meal_resident, meal: meal, resident: cook, community: community)
     create(:meal_resident, meal: meal, resident: eater, community: community)
@@ -54,7 +57,7 @@ RSpec.describe SettleAndNotify do
     reconciliation = nil
 
     expect do
-      reconciliation = described_class.call(cutoff: Date.yesterday, community: community,
+      reconciliation = described_class.call(cutoff: latest, community: community,
                                             retries: described_class::REQUEST).reconciliation
     end.to change(Reconciliation, :count).by(1)
 

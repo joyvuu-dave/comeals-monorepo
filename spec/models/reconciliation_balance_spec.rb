@@ -44,7 +44,7 @@ RSpec.describe ReconciliationBalance do
       create(:meal_resident, meal: meal, resident: cook, community: community)
       create(:meal_resident, meal: meal, resident: eater, community: community)
     end
-    settle!(cutoff: Date.yesterday)
+    settle!
   end
 
   describe 'associations' do

@@ -360,7 +360,7 @@ RSpec.describe Meal do
       create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('10'))
       create(:meal_resident, meal: meal, resident: resident, community: community)
 
-      reconciliation = settle!(cutoff: Date.yesterday)
+      reconciliation = settle!
       meal.reload
 
       expect(meal.reconciliation_id).to eq(reconciliation.id)
@@ -400,7 +400,8 @@ RSpec.describe Meal do
       meal = create(:meal, community: community)
       reconciliation = create(:reconciliation, community: community)
       meal.update!(reconciliation: reconciliation)
-      other = create(:reconciliation, community: community, end_date: Date.yesterday - 1.day)
+      other = create(:reconciliation, community: community,
+                                      end_date: Reconciliation.latest_cutoff(community.today) - 1)
 
       meal.reconciliation = other
       expect(meal.save).to be false
@@ -585,7 +586,7 @@ RSpec.describe Meal do
                     amount: BigDecimal('10'))
       create(:meal_resident, meal: reconciled_meal, resident: resident, community: community)
 
-      settle!(cutoff: Date.yesterday)
+      settle!
       reconciled_meal.reload
 
       results = community.meals.unreconciled
@@ -761,6 +762,82 @@ RSpec.describe Meal do
       expect(described_class.settleable_by(Date.yesterday)).not_to include(held)
     end
 
+    # ADR 0011 rule 3: a blank cost means the cook has not said what they
+    # spent, and settling would lock it at $0.
+    describe 'a meal with a blank cost' do
+      let(:helper) { create(:resident, community: community, unit: unit, multiplier: 2) }
+
+      def blank_cost(meal, cook: helper)
+        create(:bill, meal: meal, resident: cook, community: community, amount: 0)
+      end
+
+      it 'waits while someone is charged and the only cost is blank' do
+        waiting = meal_with('0', eaten: true)
+
+        expect(described_class.settleable_by(Date.yesterday)).not_to include(waiting)
+        expect(described_class.waiting_for_a_cost).to contain_exactly(waiting)
+      end
+
+      it "waits while one cook entered a receipt and another cook's cost is blank" do
+        waiting = meal_with('30', eaten: true)
+        blank_cost(waiting)
+
+        expect(described_class.settleable_by(Date.yesterday)).not_to include(waiting)
+        expect(described_class.waiting_for_a_cost).to contain_exactly(waiting)
+      end
+
+      # Any guest is someone to charge (Multiplier::GUEST_PRICES).
+      it 'waits when only a guest ate' do
+        waiting = meal_with('30', eaten: false)
+        blank_cost(waiting)
+        create(:guest, meal: waiting, resident: eater, multiplier: Multiplier::HALF)
+
+        expect(described_class.settleable_by(Date.yesterday)).not_to include(waiting)
+        expect(described_class.waiting_for_a_cost).to contain_exactly(waiting)
+      end
+
+      it 'settles once the cook marks No cost' do
+        meal = meal_with('30', eaten: true)
+        blank_cost(meal).update!(no_cost: true)
+
+        expect(described_class.settleable_by(Date.yesterday)).to include(meal)
+        expect(described_class.waiting_for_a_cost).to be_empty
+      end
+
+      it 'settles once the cook enters a cost' do
+        meal = meal_with('30', eaten: true)
+        blank_cost(meal).update!(amount: 12)
+
+        expect(described_class.settleable_by(Date.yesterday)).to include(meal)
+        expect(described_class.waiting_for_a_cost).to be_empty
+      end
+
+      # The change to rule 3 of 2026-10-13: with nobody to charge, no money
+      # moves whatever the cook enters, so the meal does not wait.
+      it 'settles with no effect when nobody ate, or only people who eat free' do
+        nobody = meal_with('0', eaten: false)
+        free = meal_with('0', eaten: false, date: Date.yesterday - 1)
+        create(:meal_resident, meal: free, resident: create(:resident, community: community, unit: unit,
+                                                                       multiplier: 0), community: community)
+
+        expect(described_class.settleable_by(Date.yesterday)).to include(nobody, free)
+        expect(described_class.waiting_for_a_cost).to be_empty
+      end
+
+      # Each EXISTS reads the meal's own rows: the blank cost of one meal
+      # does not hold back another, and the eater of one does not make
+      # another wait.
+      it 'judges each meal by its own costs and its own eaters' do
+        waiting = meal_with('30', eaten: true)
+        blank_cost(waiting)
+        paid = meal_with('30', eaten: true, date: Date.yesterday - 1)
+        nobody = meal_with('0', eaten: false, date: Date.yesterday - 2)
+
+        expect(described_class.waiting_for_a_cost).to contain_exactly(waiting)
+        expect(described_class.settleable_by(Date.yesterday)).to contain_exactly(paid, nobody)
+      end
+    end
+
     it 'leaves a meal with no bill, and one past the cutoff' do
       no_bill = create(:meal, community: community, date: Date.yesterday - 2)
       create(:meal_resident, meal: no_bill, resident: eater, community: community)
@@ -917,7 +994,7 @@ RSpec.describe Meal do
     it 'reports the reconciled message for a meal that is both closed and reconciled' do
       meal = build_meal_with_ledger
       meal.update!(closed: true)
-      settle!(cutoff: Date.yesterday)
+      settle!
       meal.reload
 
       expect(meal.destroy).to be false

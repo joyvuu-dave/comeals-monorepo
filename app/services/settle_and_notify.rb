@@ -6,17 +6,19 @@
 # the nightly rake task, the API, and the admin form, so the three cannot
 # drift.
 #
-#   SettleAndNotify.call(cutoff: community.yesterday)   # => the Settlement
+#   SettleAndNotify.call(cutoff: Reconciliation.latest_cutoff(community.today))
+#   # => the Settlement
 #
 # Raises ActiveRecord::RecordInvalid when there is nothing to settle or the
-# cutoff is not in the past (nothing was written), and Settlement::Contested
-# or ActiveRecord::TransactionRollbackError when another writer got there
-# first after the retries (nothing was written either). Two more raise
-# from inside the transaction when the cook mail job was not queued, so
-# nothing was written for them too: MailNotQueued, when the queue adapter
-# refused the job, and SolidQueue::Job::EnqueueError, when the database
-# refused its row for a reason that is not a conflict. Nobody rescues
-# those two, so the API and the admin form answer them with a 500.
+# cutoff is less than 14 days back (nothing was written), and
+# Settlement::Contested or ActiveRecord::TransactionRollbackError when
+# another writer got there first after the retries (nothing was written
+# either). Two more raise from inside the transaction when the cook mail
+# job was not queued, so nothing was written for them too: MailNotQueued,
+# when the queue adapter refused the job, and SolidQueue::Job::EnqueueError,
+# when the database refused its row for a reason that is not a conflict.
+# Nobody rescues those two, so the API and the admin form answer them with
+# a 500.
 #
 # Nothing after the commit raises. The settlement and the job that mails
 # its cooks commit together, in one transaction, and the callers answer

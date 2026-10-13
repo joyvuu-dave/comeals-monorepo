@@ -71,7 +71,8 @@ and be retried. Production's cannot. What must hold:
   refusals;
 - the rows and the ledger are right after (`Storm::Checks`): every meal
   agrees with the plain ledger, a settled meal's stored charges equal its
-  final rows, `ledger:verify` passes, a cap holds, the balance refresh is
+  final rows, a settled meal with someone charged has no blank cost,
+  `ledger:verify` passes, a cap holds, the balance refresh is
   stable, and every calendar month reads the same with the cache and
   without it;
 - the storm happened: meal writes were sent at a quarter or more of
@@ -104,10 +105,15 @@ one mutex, every meal write behind one database lock, a 50 ms sleep
 inside the meal lock, and a one-second wait before each retry after a
 conflict. The GVL already runs one request's Ruby at a time.
 
-A settlement always has something to claim: the seed plants yesterday's
-meal with a cook who spent money and a guest who pays (#131). Before,
-the settler waited for a client's bills save to go through on a past
-meal, and on a busy machine most of those end in 409.
+A settlement always has something to claim: the seed plants a meal 14
+days back, the newest a settlement may cover (ADR 0011 rule 2), with a
+cook who spent money and a guest who pays (#131). Before, the settler
+waited for a client's bills save to go through on a past meal, and on a
+busy machine most of those end in 409. Clients leave a cost blank on the
+other meals now and then, and the checks refuse a settled meal with a
+blank cost and someone to charge (ADR 0011 rule 3): a settlement that
+claimed a meal on an old read, while a cook cleared a cost, would show
+there.
 
 Knobs: `STORM_SECONDS`, `STORM_CLIENTS`, `STORM_SEED`, and `STORM_TALLY=1`
 to print the counts. The pool is widened for the group; Postgres allows

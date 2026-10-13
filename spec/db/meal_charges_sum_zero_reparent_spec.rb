@@ -16,6 +16,9 @@ RSpec.describe 'meal charges sum-zero trigger on a re-parented line' do
   include_context 'with no test transaction'
 
   let(:community) { create(:community) }
+  # The latest cutoff a settlement may have, 14 days back (ADR 0011 rule
+  # 2). The dates below count back from it.
+  let(:latest) { Reconciliation.latest_cutoff(community.today) }
   let(:unit) { create(:unit, community: community) }
   let(:cook) { create(:resident, community: community, unit: unit, multiplier: 2, name: 'Cook') }
   let(:eater) { create(:resident, community: community, unit: unit, multiplier: 2, name: 'Eater') }
@@ -27,10 +30,10 @@ RSpec.describe 'meal charges sum-zero trigger on a re-parented line' do
 
   # Two settled meals in one settlement, each balanced on its own: the cook
   # is credited what was spent and the two eaters are charged half each.
-  let!(:first_meal) { settled_meal(BigDecimal('80'), Date.yesterday - 1, cook, eater) }
-  let!(:second_meal) { settled_meal(BigDecimal('40'), Date.yesterday, other_cook, other_eater) }
+  let!(:first_meal) { settled_meal(BigDecimal('80'), latest - 1, cook, eater) }
+  let!(:second_meal) { settled_meal(BigDecimal('40'), latest, other_cook, other_eater) }
 
-  before { settle!(cutoff: Date.yesterday) }
+  before { settle! }
 
   def settled_meal(amount, date, cook, eater)
     meal = create(:meal, community: community, date: date)
