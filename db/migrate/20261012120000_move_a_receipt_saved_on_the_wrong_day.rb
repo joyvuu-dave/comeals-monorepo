@@ -45,8 +45,8 @@
 #
 # Runs in its own transaction and tries again on a conflict, like
 # 20261010130000. down puts the receipt back on 2025-12-09, with its old
-# id so its history joins up again, unless the moved receipt changed since
-# or the dinner was settled since.
+# id, so its old audit rows name it again, unless the moved receipt
+# changed since or the dinner was settled since.
 class MoveAReceiptSavedOnTheWrongDay < ActiveRecord::Migration[8.1]
   disable_ddl_transaction!
 
