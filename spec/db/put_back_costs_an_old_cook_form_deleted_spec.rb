@@ -118,7 +118,7 @@ RSpec.describe PutBackCostsAnOldCookFormDeleted do
       expect(rows.last(2).map(&:last))
         .to eq([{ 'amount' => ['0.0', '49.5'] }, { 'amount' => ['47.58', '0.0'], 'no_cost' => [false, true] }])
       expect(fix_rows).to all(have_attributes(user_id: nil, username: nil))
-      expect(Audited::Audit.where(auditable_type: 'Bill', auditable_id: deleted.first.id).pluck(:version))
+      expect(Audited::Audit.where(auditable_type: 'Bill', auditable_id: deleted.first.id).order(:id).pluck(:version))
         .to eq([1, 2, 3])
       expect(AuditSerializer.new(pasta.reload.total_audits).to_h.first).to include(user_name: 'Automatic fix')
     end
