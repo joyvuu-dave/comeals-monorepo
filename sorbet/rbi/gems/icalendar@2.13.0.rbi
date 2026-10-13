@@ -826,7 +826,7 @@ module Icalendar::HasProperties
 
   private
 
-  # pkg:gem/icalendar#lib/icalendar/has_properties.rb:174
+  # pkg:gem/icalendar#lib/icalendar/has_properties.rb:176
   def map_property_value(value, klass, multi_valued, new_property); end
 
   # pkg:gem/icalendar#lib/icalendar/has_properties.rb:73
@@ -844,7 +844,7 @@ module Icalendar::HasProperties::ClassMethods
   def default_property_types; end
 
   # pkg:gem/icalendar#lib/icalendar/has_properties.rb:144
-  def multi_property(prop, klass, new_property); end
+  def multi_property(prop, klass, new_property, single_line = T.unsafe(nil)); end
 
   # pkg:gem/icalendar#lib/icalendar/has_properties.rb:86
   def multiple_properties; end
@@ -856,7 +856,7 @@ module Icalendar::HasProperties::ClassMethods
   def mutually_exclusive_properties(*properties); end
 
   # pkg:gem/icalendar#lib/icalendar/has_properties.rb:126
-  def optional_property(prop, klass = T.unsafe(nil), suggested_single = T.unsafe(nil), new_property = T.unsafe(nil)); end
+  def optional_property(prop, klass = T.unsafe(nil), suggested_single = T.unsafe(nil), new_property = T.unsafe(nil), single_line = T.unsafe(nil)); end
 
   # pkg:gem/icalendar#lib/icalendar/has_properties.rb:118
   def optional_single_property(prop, klass = T.unsafe(nil), new_property = T.unsafe(nil)); end
@@ -2005,43 +2005,99 @@ Icalendar::Values::DateTime::FORMAT = T.let(T.unsafe(nil), String)
 # pkg:gem/icalendar#lib/icalendar/values/date_time.rb:52
 class Icalendar::Values::DateTime::FormatError < ::ArgumentError; end
 
-# pkg:gem/icalendar#lib/icalendar/values/duration.rb:8
+# pkg:gem/icalendar#lib/icalendar/values/duration.rb:6
 class Icalendar::Values::Duration < ::Icalendar::Value
-  # pkg:gem/icalendar#lib/icalendar/values/duration.rb:10
+  # pkg:gem/icalendar#lib/icalendar/values/duration.rb:9
   def initialize(value, *args); end
 
-  # pkg:gem/icalendar#lib/icalendar/values/duration.rb:18
+  # pkg:gem/icalendar#lib/icalendar/values/duration.rb:17
   def past?; end
 
-  # pkg:gem/icalendar#lib/icalendar/values/duration.rb:22
+  # pkg:gem/icalendar#lib/icalendar/values/duration.rb:21
   def value_ical; end
 
   private
 
-  # pkg:gem/icalendar#lib/icalendar/values/duration.rb:48
+  # pkg:gem/icalendar#lib/icalendar/values/duration.rb:47
   def parse_fields(value); end
 
-  # pkg:gem/icalendar#lib/icalendar/values/duration.rb:37
+  # pkg:gem/icalendar#lib/icalendar/values/duration.rb:36
   def time?; end
 end
 
-# pkg:gem/icalendar#lib/icalendar/values/duration.rb:43
+# pkg:gem/icalendar#lib/icalendar/values/duration.rb:42
 Icalendar::Values::Duration::DURATION_DAYS_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/values/duration.rb:44
+# pkg:gem/icalendar#lib/icalendar/values/duration.rb:43
 Icalendar::Values::Duration::DURATION_HOURS_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/values/duration.rb:45
+# pkg:gem/icalendar#lib/icalendar/values/duration.rb:44
 Icalendar::Values::Duration::DURATION_MINUTES_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/values/duration.rb:41
+# pkg:gem/icalendar#lib/icalendar/values/duration.rb:40
 Icalendar::Values::Duration::DURATION_PAST_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/values/duration.rb:46
+# pkg:gem/icalendar#lib/icalendar/values/duration.rb:45
 Icalendar::Values::Duration::DURATION_SECONDS_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/values/duration.rb:42
+# pkg:gem/icalendar#lib/icalendar/values/duration.rb:41
 Icalendar::Values::Duration::DURATION_WEEKS_REGEX = T.let(T.unsafe(nil), Regexp)
+
+# pkg:gem/icalendar#lib/icalendar/values/duration.rb:7
+class Icalendar::Values::Duration::Parts < ::Struct
+  # pkg:gem/icalendar#lib/icalendar/values/duration.rb:7
+  def days; end
+
+  # pkg:gem/icalendar#lib/icalendar/values/duration.rb:7
+  def days=(_); end
+
+  # pkg:gem/icalendar#lib/icalendar/values/duration.rb:7
+  def hours; end
+
+  # pkg:gem/icalendar#lib/icalendar/values/duration.rb:7
+  def hours=(_); end
+
+  # pkg:gem/icalendar#lib/icalendar/values/duration.rb:7
+  def minutes; end
+
+  # pkg:gem/icalendar#lib/icalendar/values/duration.rb:7
+  def minutes=(_); end
+
+  # pkg:gem/icalendar#lib/icalendar/values/duration.rb:7
+  def past; end
+
+  # pkg:gem/icalendar#lib/icalendar/values/duration.rb:7
+  def past=(_); end
+
+  # pkg:gem/icalendar#lib/icalendar/values/duration.rb:7
+  def seconds; end
+
+  # pkg:gem/icalendar#lib/icalendar/values/duration.rb:7
+  def seconds=(_); end
+
+  # pkg:gem/icalendar#lib/icalendar/values/duration.rb:7
+  def weeks; end
+
+  # pkg:gem/icalendar#lib/icalendar/values/duration.rb:7
+  def weeks=(_); end
+
+  class << self
+    # pkg:gem/icalendar#lib/icalendar/values/duration.rb:7
+    def [](*_arg0); end
+
+    # pkg:gem/icalendar#lib/icalendar/values/duration.rb:7
+    def inspect; end
+
+    # pkg:gem/icalendar#lib/icalendar/values/duration.rb:7
+    def keyword_init?; end
+
+    # pkg:gem/icalendar#lib/icalendar/values/duration.rb:7
+    def members; end
+
+    # pkg:gem/icalendar#lib/icalendar/values/duration.rb:7
+    def new(*_arg0); end
+  end
+end
 
 # pkg:gem/icalendar#lib/icalendar/values/float.rb:6
 class Icalendar::Values::Float < ::Icalendar::Value
@@ -2146,78 +2202,182 @@ end
 # pkg:gem/icalendar#lib/icalendar/values/period.rb:8
 Icalendar::Values::Period::PERIOD_LAST_PART_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/values/recur.rb:8
+# pkg:gem/icalendar#lib/icalendar/values/recur.rb:6
 class Icalendar::Values::Recur < ::Icalendar::Value
-  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:15
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:30
   def initialize(value, *args); end
 
-  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:23
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:38
   def valid?; end
 
-  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:29
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:44
   def value_ical; end
 
   private
 
-  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:64
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:79
   def parse_fields(value); end
 end
 
-# pkg:gem/icalendar#lib/icalendar/values/recur.rb:10
+# pkg:gem/icalendar#lib/icalendar/values/recur.rb:8
 Icalendar::Values::Recur::DAYNAME = T.let(T.unsafe(nil), String)
 
-# pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+# pkg:gem/icalendar#lib/icalendar/values/recur.rb:10
 Icalendar::Values::Recur::MONTHDAY = T.let(T.unsafe(nil), String)
 
-# pkg:gem/icalendar#lib/icalendar/values/recur.rb:9
+# pkg:gem/icalendar#lib/icalendar/values/recur.rb:7
 Icalendar::Values::Recur::NUM_LIST = T.let(T.unsafe(nil), String)
 
-# pkg:gem/icalendar#lib/icalendar/values/recur.rb:56
+# pkg:gem/icalendar#lib/icalendar/values/recur.rb:71
 Icalendar::Values::Recur::PARSE_FIELDS_BY_DAY_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/values/recur.rb:55
+# pkg:gem/icalendar#lib/icalendar/values/recur.rb:70
 Icalendar::Values::Recur::PARSE_FIELDS_BY_HOUR_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/values/recur.rb:54
+# pkg:gem/icalendar#lib/icalendar/values/recur.rb:69
 Icalendar::Values::Recur::PARSE_FIELDS_BY_MINUTE_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/values/recur.rb:57
+# pkg:gem/icalendar#lib/icalendar/values/recur.rb:72
 Icalendar::Values::Recur::PARSE_FIELDS_BY_MONTH_DAY_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/values/recur.rb:60
+# pkg:gem/icalendar#lib/icalendar/values/recur.rb:75
 Icalendar::Values::Recur::PARSE_FIELDS_BY_MONTH_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/values/recur.rb:53
+# pkg:gem/icalendar#lib/icalendar/values/recur.rb:68
 Icalendar::Values::Recur::PARSE_FIELDS_BY_SECOND_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/values/recur.rb:61
+# pkg:gem/icalendar#lib/icalendar/values/recur.rb:76
 Icalendar::Values::Recur::PARSE_FIELDS_BY_SET_POSITON_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/values/recur.rb:59
+# pkg:gem/icalendar#lib/icalendar/values/recur.rb:74
 Icalendar::Values::Recur::PARSE_FIELDS_BY_WEEK_NUMBER_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/values/recur.rb:62
+# pkg:gem/icalendar#lib/icalendar/values/recur.rb:77
 Icalendar::Values::Recur::PARSE_FIELDS_BY_WEEK_START_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/values/recur.rb:58
+# pkg:gem/icalendar#lib/icalendar/values/recur.rb:73
 Icalendar::Values::Recur::PARSE_FIELDS_BY_YEAR_DAY_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/values/recur.rb:51
+# pkg:gem/icalendar#lib/icalendar/values/recur.rb:66
 Icalendar::Values::Recur::PARSE_FIELDS_COUNT_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/values/recur.rb:49
+# pkg:gem/icalendar#lib/icalendar/values/recur.rb:64
 Icalendar::Values::Recur::PARSE_FIELDS_FREQUENCY_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/values/recur.rb:52
+# pkg:gem/icalendar#lib/icalendar/values/recur.rb:67
 Icalendar::Values::Recur::PARSE_FIELDS_INTERVAL_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/values/recur.rb:50
+# pkg:gem/icalendar#lib/icalendar/values/recur.rb:65
 Icalendar::Values::Recur::PARSE_FIELDS_UNTIL_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/values/recur.rb:11
+# pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+class Icalendar::Values::Recur::Parts < ::Struct
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+  def by_day; end
+
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+  def by_day=(_); end
+
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+  def by_hour; end
+
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+  def by_hour=(_); end
+
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+  def by_minute; end
+
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+  def by_minute=(_); end
+
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+  def by_month; end
+
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+  def by_month=(_); end
+
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+  def by_month_day; end
+
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+  def by_month_day=(_); end
+
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+  def by_second; end
+
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+  def by_second=(_); end
+
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+  def by_set_position; end
+
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+  def by_set_position=(_); end
+
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+  def by_week_number; end
+
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+  def by_week_number=(_); end
+
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+  def by_year_day; end
+
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+  def by_year_day=(_); end
+
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+  def count; end
+
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+  def count=(_); end
+
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+  def frequency; end
+
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+  def frequency=(_); end
+
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+  def interval; end
+
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+  def interval=(_); end
+
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+  def until; end
+
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+  def until=(_); end
+
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+  def week_start; end
+
+  # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+  def week_start=(_); end
+
+  class << self
+    # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+    def [](*_arg0); end
+
+    # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+    def inspect; end
+
+    # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+    def keyword_init?; end
+
+    # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+    def members; end
+
+    # pkg:gem/icalendar#lib/icalendar/values/recur.rb:12
+    def new(*_arg0); end
+  end
+end
+
+# pkg:gem/icalendar#lib/icalendar/values/recur.rb:9
 Icalendar::Values::Recur::WEEKDAY = T.let(T.unsafe(nil), String)
 
-# pkg:gem/icalendar#lib/icalendar/values/recur.rb:13
+# pkg:gem/icalendar#lib/icalendar/values/recur.rb:11
 Icalendar::Values::Recur::YEARDAY = T.let(T.unsafe(nil), String)
 
 # pkg:gem/icalendar#lib/icalendar/values/text.rb:5
@@ -2261,7 +2421,7 @@ end
 # pkg:gem/icalendar#lib/icalendar/values/uri.rb:9
 Icalendar::Values::Uri::CONTROL_BYTES_REGEX = T.let(T.unsafe(nil), Regexp)
 
-# pkg:gem/icalendar#lib/icalendar/values/utc_offset.rb:7
+# pkg:gem/icalendar#lib/icalendar/values/utc_offset.rb:5
 class Icalendar::Values::UtcOffset < ::Icalendar::Value
   # pkg:gem/icalendar#lib/icalendar/values/utc_offset.rb:8
   def initialize(value, *args); end
@@ -2289,3 +2449,47 @@ Icalendar::Values::UtcOffset::PARSE_FIELDS_MD_REGEX = T.let(T.unsafe(nil), Regex
 
 # pkg:gem/icalendar#lib/icalendar/values/utc_offset.rb:42
 Icalendar::Values::UtcOffset::PARSE_FIELDS_WHITESPACE_GSUB_REGEX = T.let(T.unsafe(nil), Regexp)
+
+# pkg:gem/icalendar#lib/icalendar/values/utc_offset.rb:6
+class Icalendar::Values::UtcOffset::Parts < ::Struct
+  # pkg:gem/icalendar#lib/icalendar/values/utc_offset.rb:6
+  def behind; end
+
+  # pkg:gem/icalendar#lib/icalendar/values/utc_offset.rb:6
+  def behind=(_); end
+
+  # pkg:gem/icalendar#lib/icalendar/values/utc_offset.rb:6
+  def hours; end
+
+  # pkg:gem/icalendar#lib/icalendar/values/utc_offset.rb:6
+  def hours=(_); end
+
+  # pkg:gem/icalendar#lib/icalendar/values/utc_offset.rb:6
+  def minutes; end
+
+  # pkg:gem/icalendar#lib/icalendar/values/utc_offset.rb:6
+  def minutes=(_); end
+
+  # pkg:gem/icalendar#lib/icalendar/values/utc_offset.rb:6
+  def seconds; end
+
+  # pkg:gem/icalendar#lib/icalendar/values/utc_offset.rb:6
+  def seconds=(_); end
+
+  class << self
+    # pkg:gem/icalendar#lib/icalendar/values/utc_offset.rb:6
+    def [](*_arg0); end
+
+    # pkg:gem/icalendar#lib/icalendar/values/utc_offset.rb:6
+    def inspect; end
+
+    # pkg:gem/icalendar#lib/icalendar/values/utc_offset.rb:6
+    def keyword_init?; end
+
+    # pkg:gem/icalendar#lib/icalendar/values/utc_offset.rb:6
+    def members; end
+
+    # pkg:gem/icalendar#lib/icalendar/values/utc_offset.rb:6
+    def new(*_arg0); end
+  end
+end

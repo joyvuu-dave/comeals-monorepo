@@ -218,11 +218,10 @@ GEM
       mutex_m
     i18n (1.15.2)
       concurrent-ruby (~> 1.0)
-    icalendar (2.12.5)
+    icalendar (2.13.0)
       base64
       ice_cube (~> 0.16)
       logger
-      ostruct
     ice_cube (0.17.0)
     ice_nine (0.11.2)
     inherited_resources (1.14.0)
@@ -240,7 +239,7 @@ GEM
       rails-dom-testing (>= 1, < 3)
       railties (>= 4.2.0)
       thor (>= 0.14, < 2.0)
-    json (3.0.2)
+    json (3.1.0)
     jwt (3.3.0)
       base64
     kaminari (1.2.2)
@@ -297,7 +296,7 @@ GEM
       mutant (= 0.17.0)
       rspec-core (>= 3.8.0, < 5.0.0)
     mutex_m (0.3.0)
-    net-imap (0.6.7)
+    net-imap (0.6.8)
       date
       net-protocol
     net-pop (0.1.2)
@@ -528,15 +527,15 @@ GEM
       fugit (~> 1.11)
       railties (>= 7.1)
       thor (>= 1.3.1)
-    sorbet (0.6.13550)
-      sorbet-static (= 0.6.13550)
-    sorbet-runtime (0.6.13550)
-    sorbet-static (0.6.13550-aarch64-linux)
-    sorbet-static (0.6.13550-universal-darwin)
-    sorbet-static (0.6.13550-x86_64-linux)
-    sorbet-static-and-runtime (0.6.13550)
-      sorbet (= 0.6.13550)
-      sorbet-runtime (= 0.6.13550)
+    sorbet (0.6.13554)
+      sorbet-static (= 0.6.13554)
+    sorbet-runtime (0.6.13554)
+    sorbet-static (0.6.13554-aarch64-linux)
+    sorbet-static (0.6.13554-universal-darwin)
+    sorbet-static (0.6.13554-x86_64-linux)
+    sorbet-static-and-runtime (0.6.13554)
+      sorbet (= 0.6.13554)
+      sorbet-runtime (= 0.6.13554)
     spoom (1.8.10)
       erubi (>= 1.10.0)
       prism (>= 0.28.0)
@@ -579,7 +578,7 @@ GEM
     unicode-display_width (3.3.0)
       unicode-emoji (~> 4.3)
     unicode-emoji (4.3.0)
-    uniform_notifier (1.18.0)
+    uniform_notifier (1.18.1)
     unparser (0.9.0)
       diff-lcs (>= 1.6, < 3)
       parser (>= 3.3.0)
@@ -756,14 +755,14 @@ CHECKSUMS
   has_scope (0.9.0) sha256=783a93006cf898525bb4899696f1d088c0f6ff897d6df2bf03fdbbe0d0b5124c
   httpclient (2.9.0) sha256=4b645958e494b2f86c2f8a2f304c959baa273a310e77a2931ddb986d83e498c8
   i18n (1.15.2) sha256=00f9eb62412fe593b2a65a97daa75300d37abb8f7202ec748e94b6d46a9dd1b5
-  icalendar (2.12.5) sha256=bda963d46bb08d9de1366eff05308c1e60a178532422fcc11d60360f84f58156
+  icalendar (2.13.0) sha256=dbfad06c1db3e85f20fa66271fb6b500e5a8915b20f3fb84e5389659e23cf1da
   ice_cube (0.17.0) sha256=32deb45dda4b4acc53505c2f581f6d32b5afc04d29b9004769944a0df5a5fcbe
   ice_nine (0.11.2) sha256=5d506a7d2723d5592dc121b9928e4931742730131f22a1a37649df1c1e2e63db
   inherited_resources (1.14.0) sha256=c90327c2898aa1354c0e4bc46616cb35eadef6d135746e23a83ca09987b2a308
   io-console (0.9.4) sha256=a403304f32928ee85e56d457b4612ca43f2703b561a3258844992bd24085fbb1
   irb (1.18.0) sha256=de9454a0703a54704b9811a5ef31a60c86949fbf4013fcf244fabc7c775248e3
   jquery-rails (4.6.1) sha256=619f3496cdcdeaae1fd6dafa52dbac3fc45b745d4e09712da4184a16b3a8d9c0
-  json (3.0.2) sha256=8e6d7e7b11384c21230430cef90b71f14849a34a1f4452796670f7c981bd19df
+  json (3.1.0) sha256=3ce7ccf8fde58960177a3a756c31f292a4c1e1dedee884547096a5b0604e3bd8
   jwt (3.3.0) sha256=44cc34fbc341c148233cf66641522b4bce0dfb1ce55e8073f05c56f44f4ee546
   kaminari (1.2.2) sha256=c4076ff9adccc6109408333f87b5c4abbda5e39dc464bd4c66d06d9f73442a3e
   kaminari-actionview (1.2.2) sha256=1330f6fc8b59a4a4ef6a549ff8a224797289ebf7a3a503e8c1652535287cc909
@@ -785,7 +784,7 @@ CHECKSUMS
   mutant (0.17.0) sha256=07d2e154367c349f9591a53f23af08c059cbe297c95dcf593f181c27cfdde909
   mutant-rspec (0.17.0) sha256=3a19f1de5c8dce9102b9adcbff63827461e12b96a2e78b436206990be52bb0a8
   mutex_m (0.3.0) sha256=cfcb04ac16b69c4813777022fdceda24e9f798e48092a2b817eb4c0a782b0751
-  net-imap (0.6.7) sha256=b5c9573be975d856de252ee851871724da66aa2d449b2482d5690bd12bc23660
+  net-imap (0.6.8) sha256=eb30bb62227b64a3af6b518b04b2375113d69f68f15de59b0193b07d98acf6d9
   net-pop (0.1.2) sha256=848b4e982013c15b2f0382792268763b748cce91c9e91e36b0f27ed26420dff3
   net-protocol (0.4.0) sha256=f9f90c8c6f64794a45160bf422177a336db12809de3beeeaa26b88fcd2e8c853
   net-smtp (0.5.2) sha256=35103cc04d6b2d94632f9928ede07483c24b70b9c0db1f231fea43909b678f3c
@@ -875,12 +874,12 @@ CHECKSUMS
   skylight (7.1.1) sha256=90b09ad73288ad11322f7db4e25b3f096b522d752a368d2c9e70bc346986e951
   solid_cache (1.0.10) sha256=bc05a2fb3ac78a6f43cbb5946679cf9db67dd30d22939ededc385cb93e120d41
   solid_queue (1.7.0) sha256=6566b70b801d1c317c81bba7bcdd5677c019afac584a30374b4164002ca356d3
-  sorbet (0.6.13550) sha256=6331521dd0fdd56b4105695ff59afb5f6f9c88e2179008b8009f281a4e04e7f7
-  sorbet-runtime (0.6.13550) sha256=2e1e14d9259063c2020d05652184b831b6a42b2e9d15109954358699e5c25cea
-  sorbet-static (0.6.13550-aarch64-linux) sha256=5739b66ee8410c84829a1a2d684d8b0b3b419b3ea6e88d789b764c3e9111f264
-  sorbet-static (0.6.13550-universal-darwin) sha256=59dd5070ae3dc95929b9dd462e1ff37e4a7fcab74564b475f7663c074d6ba3f1
-  sorbet-static (0.6.13550-x86_64-linux) sha256=e088908d1f804eb4af07a0340ce10928ae50a7d9852112787345bc360c7f79f1
-  sorbet-static-and-runtime (0.6.13550) sha256=1643a6d98b747ad57e2aeab3b3a66690b53e331bc9a13ccd84c085a34042d886
+  sorbet (0.6.13554) sha256=a9a33a5dd0120f395ce86d7b6c6d32ffb674490316814ea05280ddb77521a936
+  sorbet-runtime (0.6.13554) sha256=9333b02ed12e06a42006dfbfd9bda950a5fdbaa06af1687196b0b4384e99990e
+  sorbet-static (0.6.13554-aarch64-linux) sha256=4597530c84c776727e9f44296b9a53f2d93944c36374325b5b23cc4fc7a60e25
+  sorbet-static (0.6.13554-universal-darwin) sha256=c97cee8843b6171e05eb8bd50bc2dc607c4833431e516cf4269a1b9eab75e5ed
+  sorbet-static (0.6.13554-x86_64-linux) sha256=cf8ef040e496c28e5100e9b02dd598a446c22b93f915850c5cd5b4b4158f2bd7
+  sorbet-static-and-runtime (0.6.13554) sha256=5fe59348790ae7040168f838e2553bd9dc79ef18a8b0523a0845f1317974af2b
   spoom (1.8.10) sha256=58bdb16bdd193a6e72da4dd1bef85157b5649622749338fb13ddaa20a7dc36b7
   sprockets (4.4.1) sha256=fbd665edad0916de5c7abefef0fc616866a60c5e48ce2846f39ac3fc5df9e184
   sprockets-rails (3.5.2) sha256=a9e88e6ce9f8c912d349aa5401509165ec42326baf9e942a85de4b76dbc4119e
@@ -896,7 +895,7 @@ CHECKSUMS
   tzinfo (2.0.6) sha256=8daf828cc77bcf7d63b0e3bdb6caa47e2272dcfaf4fbfe46f8c3a9df087a829b
   unicode-display_width (3.3.0) sha256=4b7aa66a4b11db50f6f7e98411215cd0dd10eaecb665d36eec5bcacb3fa0b613
   unicode-emoji (4.3.0) sha256=11c02fa73290378c066bb0562cd4c87d8e1b706fbbe0059ca12746a4244de8ce
-  uniform_notifier (1.18.0) sha256=4787785556f66f6418486da0f1d78b3239aaff98e2e7938fb05e2062b0ffce9d
+  uniform_notifier (1.18.1) sha256=3745b83a6ed88daa5cf08c662f5b8786a8c438c21e103466519f1c6e641fd204
   unparser (0.9.0) sha256=4331f174a73a23b69250b13d47da3794ed1449711ee0f9ed8947dc020ba76067
   uri (1.1.2) sha256=89292e98eabbef6248b0a0ed5e7e398e152f83f17560023a6d94a7f492b169fb
   useragent (0.16.11) sha256=700e6413ad4bb954bb63547fa098dddf7b0ebe75b40cc6f93b8d54255b173844
