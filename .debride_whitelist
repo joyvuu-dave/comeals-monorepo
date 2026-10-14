@@ -50,6 +50,15 @@ storable_date?
 # .rb and .rake files:
 blank_cost_button_label
 free_dinner_note
+# The edits a correction makes (MealCorrecting::Edits), called inside the
+# block a MealCorrecting caller passes. Until the admin correction form
+# exists, that caller is the console (docs/runbooks/settled-data-repair.md):
+add_eater
+add_guest
+remove_cook
+remove_eater
+remove_guest
+reprice_eater
 # ActiveAdmin DSL blocks that override a controller method:
 find_resource
 scoped_collection

@@ -48,7 +48,8 @@ RSpec.describe 'Admin settlement statement' do
 
       expect(response).to have_http_status(:ok)
       expect(response.body).to include('Settlement statement')
-      expect(response.body).to include(reconciliation.date_range_description)
+      dates = reconciliation.meals.pluck(:date)
+      expect(response.body).to include(DateRangeDescription.for(dates.min, dates.max))
       # The eater's settled balance and their one line, in direction words —
       # never a signed number (BalanceDisplayHelper).
       expect(response.body).to include('settled:')

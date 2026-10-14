@@ -248,8 +248,9 @@ RSpec.describe LedgerVerification do
 
     # The case that only exists because line items exist. Nothing about the
     # source rows or the balances changed, so the recompute check is happy —
-    # it never looks at meal_charges. Only comparing the two stored tables
-    # against each other can see this.
+    # it never looks at meal_charges. Comparing the two stored tables
+    # against each other sees it, and so does the dinner check, which
+    # compares the meal's lines with its rows (ADR 0011 rule 6).
     it 'is found when a line item is rewritten and nothing else is' do
       settle
       charge = MealCharge.where(kind: 'credit').first
@@ -261,7 +262,7 @@ RSpec.describe LedgerVerification do
       expect { described_class.call }.to raise_error(described_class::MismatchError)
 
       details = LedgerCheckRun.recent.first.details
-      expect(details.pluck('check')).to eq(['line_items'])
+      expect(details.pluck('check')).to eq(%w[line_items dinners])
     end
 
     it 'is found when a line item is deleted' do
@@ -271,7 +272,7 @@ RSpec.describe LedgerVerification do
       behind_the_guards { MealCharge.where(id: charge.id).delete_all }
 
       expect { described_class.call }.to raise_error(described_class::MismatchError)
-      expect(LedgerCheckRun.recent.first.details.pluck('check')).to eq(['line_items'])
+      expect(LedgerCheckRun.recent.first.details.pluck('check')).to eq(%w[line_items dinners])
     end
 
     # A resident's stored balance is rounded to cents and their lines are not,
@@ -378,7 +379,9 @@ RSpec.describe LedgerVerification do
     # always less than one cent from its lines. A gap of exactly one cent
     # can only come from an edit. Here a cent is moved between two lines
     # with the repair bypass on: the lines still sum to zero, and the
-    # source rows did not change, so only this comparison can see it.
+    # source rows did not change, so the recompute check cannot see it.
+    # This comparison does, and so does the dinner check, which compares
+    # the lines with the rows.
     it 'reports a line sum exactly one cent from the balance, which rounding to cents can never produce' do
       reconciliation = settle
       behind_the_guards do
@@ -391,7 +394,7 @@ RSpec.describe LedgerVerification do
       expect { described_class.call }.to raise_error(described_class::MismatchError)
 
       details = LedgerCheckRun.recent.first.details
-      expect(details.pluck('check')).to eq(['line_items'])
+      expect(details.pluck('check')).to eq(%w[line_items dinners])
       expect(details.first['differences']).to eq([
                                                    { 'resident_id' => cook.id, 'stored' => '40.0',
                                                      'source' => '40.01' },
@@ -576,7 +579,9 @@ RSpec.describe LedgerVerification do
 
       expect(described_class.call).to be_passed
 
-      expect(seen.size).to eq(2)
+      # Twice for each reconciliation: the line item check and the dinner
+      # check each ask whether it has line items.
+      expect(seen.size).to eq(4)
       expect(seen.uniq.size).to eq(1)
       expect(seen.first.last).to eq('on')
     end

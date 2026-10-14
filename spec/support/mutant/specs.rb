@@ -61,6 +61,17 @@ MUTANT_SPEC_ROWS = {
   'spec/db/settlement_race_spec.rb' => %w[Settlement],
   # The only spec where a cook's cost is written while the marking runs.
   'spec/db/no_cost_marking_race_spec.rb' => %w[NoCostMarking],
+  # The only spec where a correction is claimed against a rival: a
+  # correction saved during a settlement, and a second settlement.
+  'spec/db/correction_claim_race_spec.rb' => %w[Settlement],
+  # Corrections to settled dinners (ADR 0011 rule 6). The service spec
+  # also proves the dinner check it reads first and the guard it opens;
+  # the carried spec proves each place a correction's lines go.
+  'spec/services/meal_correcting_spec.rb' =>
+    %w[MealCorrecting SettledDinnerDifference ReconciledMealImmutability MealCorrection],
+  'spec/services/settlement_carries_corrections_spec.rb' =>
+    %w[Settlement Reconciliation BalanceRecalculation LedgerVerification SettledDinnerDifference MealCorrection],
+  'spec/models/meal_correction_spec.rb' => %w[MealCorrection MealCorrectionLine AppendOnly],
   # A method-level entry runs only for that method, and for that method
   # nothing else runs: this is the one caller of rewrite!, a repair step.
   'spec/db/settled_balance_triggers_spec.rb' => %w[Settlement#rewrite!],
@@ -199,6 +210,8 @@ MUTANT_SPEC_ROWS = {
   # The admin settlement preview and its blank-cost button (ADR 0011
   # rule 4): the words, the warnings it lists, and the marking.
   'spec/requests/admin/settlement_preview_spec.rb' => %w[SettlementPreviewHelper ReconciliationWarnings NoCostMarking],
+  'spec/requests/admin/meal_corrections_display_spec.rb' =>
+    %w[MealCorrectionDetails CorrectionWords BalanceDisplayHelper MealCostSummary ApplicationHelper AdminUser],
   'spec/requests/admin/child_pricing_rule_spec.rb' => %w[Community Multiplier],
   'spec/requests/admin/community_form_spec.rb' => %w[Community],
   'spec/requests/admin/community_singleton_spec.rb' => %w[Community BelongsToTheCommunity],

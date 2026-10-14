@@ -151,7 +151,6 @@ class Rotation < ApplicationRecord
   def description
     DateRangeDescription.for(meals.minimum(:date), meals.maximum(:date))
   end
-  alias date_range_description description
 
   delegate :count, to: :meals, prefix: true
 

@@ -23,9 +23,12 @@ All money flows through Meal. A Meal has cooks (Bills), attendees
 (MealResidents), and visitors (Guests). The cost of each meal is split among
 attendees in proportion to their multiplier. At settlement, the result is
 written as MealCharge rows (one line per bill, attendee, and guest) and
-ReconciliationBalance rows (one total per resident). A settlement worked
-out again after its rows were fixed keeps a SettlementCorrection of what
-changed.
+ReconciliationBalance rows (one total per resident). A mistake found in a
+settled dinner later is fixed by a MealCorrection: the dinner's rows
+change, each person's change is a MealCorrectionLine, and the next
+settlement carries it (ADR 0011 rule 6). An old settlement worked out
+again during the October 2026 history fixes keeps a SettlementCorrection
+of what changed (rule 10).
 
 The arithmetic lives in one place, `MealLedger` (`app/services/meal_ledger.rb`).
 No model has a cost method. See "Where the money math lives" below.
@@ -659,8 +662,10 @@ Reconciliation ----< ReconciliationBalance ---> Resident
 - `end_date` present and at least 14 days before today, in the
   community's time zone (`Reconciliation.cutoff_refusal`, which
   `Settlement.preview` also reads)
-- On create, at least one eligible meal must exist. An empty settlement could
-  never be removed (the row is append-only), so it is refused up front.
+- On create, at least one eligible meal, or one correction no settlement
+  carries yet (`MealCorrection.waiting`), must exist. An empty settlement
+  could never be removed (the row is append-only), so it is refused up
+  front.
 
 **Behavior:**
 
@@ -680,7 +685,12 @@ Reconciliation ----< ReconciliationBalance ---> Resident
      `SELECT ... FOR UPDATE` on those meals in id order first, then updates
      only rows whose `reconciliation_id` is still NULL, and raises if a rival
      settlement claimed any of them. See ADR 0003.
-  3. `write_ledger!` — one `MealLedger` pass, then, in a savepoint inside
+  3. `claim_corrections` — claim every correction no settlement carries
+     yet (ADR 0011 rule 6), the same way: `SELECT ... FOR UPDATE` in id
+     order, then an update only where `reconciliation_id` is still NULL,
+     with `comeals.settling` on for that update, and `Contested` if a
+     rival claimed one first.
+  4. `write_ledger!` — one `MealLedger` pass, then, in a savepoint inside
      the settlement's transaction:
      every line (including zero lines) into `meal_charges` with
      `insert_all!`, and each non-zero rounded balance into
@@ -692,18 +702,21 @@ Reconciliation ----< ReconciliationBalance ---> Resident
      "Append-only ledger" below). `insert_all!` and not `insert_all`:
      without the bang, a line already on the meal would make it skip the
      real line with no error.
-  4. with the fingerprint of a preview (the admin form's Create button),
-     refuse when the claimed meals or the stored balances differ from what
-     that preview showed (`Settlement.fingerprint`, `Settlement::Changed`,
-     ADR 0011 rule 4). Everything rolls back.
-  5. after commit, clear the `meal-<id>` cache of every claimed meal and the
+  5. with the fingerprint of a preview (the admin form's Create button),
+     refuse when the claimed meals and corrections or the stored balances
+     differ from what that preview showed (`Settlement.fingerprint`,
+     `Settlement::Changed`, ADR 0011 rule 4). Everything rolls back.
+  6. after commit, clear the `meal-<id>` cache of every claimed meal and the
      calendar months they fall in (issue #70).
 - `eligible_meals` — the scope above; the create validation and the claim
   read the same one, so they cannot disagree.
 - `settlement_ledger` — a `MealLedger` over the claimed meals, with bills,
   attendance, and guests preloaded. The settlement writes from this.
-- `settlement_balances` — `MealLedger#balances` for every resident, then
-  `Settlement.allocate_to_cents`: largest-remainder rounding (Hamilton's
+- `settlement_balances` — `MealLedger#balances` for every resident, plus
+  the lines of the corrections this settlement carries, minus the lines
+  of every correction made later to one of its own meals (those changed
+  the meals' rows, which the ledger reads as they are now, so taking them
+  off keeps what it settled), then `Settlement.allocate_to_cents`: largest-remainder rounding (Hamilton's
   method) so the cent amounts sum to exactly zero. Each amount is within one
   cent of its exact value. Ties go to the lowest `resident_id`. It raises if
   the input does not already sum to exactly zero (a meal's lines always do,
@@ -783,6 +796,57 @@ on. CHECKs: the reason is not blank; a line's two amounts differ (the model
 checks that too); `earlier_differences` is a list, and empty unless
 `include_earlier_differences` (the model checks that too). One line per person per correction (unique
 index). The migration's down refuses while a correction is recorded.
+
+---
+
+### MealCorrection
+
+A correction to a settled dinner (ADR 0011 rule 6), written only by
+`MealCorrecting` (`app/services/meal_correcting.rb`): the dinner
+(`meal_id`), who made it (`admin_user_id`), why (`reason`), what changed
+(`edits`, one entry per edit: `what` is cost, eater or guest,
+`resident_id` the cook, eater or guest's host, `from` and `to` the value
+before and after, nil when a row was added or removed), and the
+settlement that carries it (`reconciliation_id`, empty until one does).
+A `MealCorrectionLine` for each person whose amount changed, at the
+ledger grain, signed like a line item; a correction's lines sum to
+exactly zero. `CorrectionWords` turns each edit into a sentence for the
+admin pages and the API preview.
+
+```
+MealCorrection ----> Meal (the dinner it corrects, settled)
+MealCorrection ----> AdminUser
+MealCorrection ----> Reconciliation (the settlement that carries it)
+MealCorrection ----< MealCorrectionLine ----> Resident
+```
+
+How a correction is made: `MealCorrecting.save!` locks the meal row FOR
+UPDATE, refuses an open meal (`NotSettled`) and a meal whose rows
+already differ from what it was settled at plus its earlier corrections
+(`EarlierDifference`, `SettledDinnerDifference`), works out what each
+person is credited or charged for the dinner from its rows
+(`MealLedger`), sets `comeals.correcting` to the meal's id, runs the
+edits (`MealCorrecting::Edits`: a cook's cost, add or remove a cook, add
+or remove an eater, an eater's price for their age on the dinner's date,
+add or remove a guest), works it out again, and records the difference
+for each person. `MealCorrecting.preview` does the same and rolls back;
+its `fingerprint` lets the save refuse (`Changed`) a correction that
+came out different from the preview. A correction that changes nothing
+is refused (`NothingChanged`); one that moves no money (a blank cost
+marked No cost) is recorded with no lines.
+
+The database keeps the rules for psql too (migrations `20261013130000`
+and `20261013130100`): a correction is inserted only for a settled meal
+that `comeals.correcting` names, with no settlement yet; its lines only
+while the same holds; the lines sum to zero
+(`meal_correction_lines_sum_zero`) and are never zero (CHECK). Nothing
+changes or is deleted, except that a settlement sets `reconciliation_id`
+once, from empty to itself, while `comeals.settling` names it, and only
+a settlement later than the meal's own. The settled-meal trigger
+(`comeals_reject_settled_child_write`) lets through writes to the bills,
+attendance and guests of the one meal `comeals.correcting` names. The
+repair bypass lets all of it through. The migration's down refuses while
+a correction is recorded.
 
 ---
 
@@ -881,10 +945,12 @@ what residents were actually told to pay.
 
 ### ResidentBalance
 
-Cached running balance for a resident over the unreconciled meals. Refreshed
-daily by `rake billing:recalculate`, which reads the meals in one
-SERIALIZABLE READ ONLY snapshot, runs `MealLedger#balances`, and writes the
-rows with `upsert_all` keyed on `resident_id`.
+Cached running balance for a resident over the unreconciled meals, plus
+the lines of the corrections no settlement carries yet (`MealCorrection`,
+ADR 0011 rule 6). Refreshed daily by `rake billing:recalculate`, which
+reads the meals and the waiting correction lines in one SERIALIZABLE READ
+ONLY snapshot, runs `MealLedger#balances`, adds the correction lines, and
+writes the rows with `upsert_all` keyed on `resident_id`.
 
 ```
 ResidentBalance ----> Resident (one-to-one)
@@ -1250,7 +1316,9 @@ AdminUser (see above), or the balance, charge, and check-run tables.
 refuses update and destroy with a readable message, with the destroy guard
 prepended (#26). Included by Reconciliation, ReconciliationBalance,
 MealCharge, LedgerCheckRun, SettlementCorrection,
-SettlementCorrectionLine and SettlementCorrectionCharge. Each has a
+SettlementCorrectionLine, SettlementCorrectionCharge, MealCorrection and
+MealCorrectionLine (whose triggers are `meal_corrections_guard` and
+`meal_correction_lines_guard`). Each has a
 database trigger that refuses the same writes for paths that skip
 callbacks (`update_all`, `delete_all`, psql):
 `reconciliation_balances_protect_settled`, `meal_charges_protect`,
@@ -1324,5 +1392,9 @@ time. `meal_charges` and `reconciliation_balances` are different: they are
 the settled record of what residents were billed, written once and never
 rebuilt, except by `Settlement#correct!` when the owner decides a settlement
 must be worked out again after its rows were fixed; that leaves a
-`SettlementCorrection`. `rake ledger:verify` checks every night that they
-still match their source data and each other.
+`SettlementCorrection`. A later mistake in a settled dinner changes the
+dinner's rows and is recorded as a `MealCorrection`, which the next
+settlement carries; the old settlement's rows stay as they were. `rake
+ledger:verify` checks every night that they still match their source data
+and each other, and that each settled dinner's rows add up to what it was
+settled at plus its corrections.

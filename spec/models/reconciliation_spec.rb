@@ -714,7 +714,7 @@ RSpec.describe Reconciliation do
       expect(recon).not_to be_valid
       expect(recon.errors[:base])
         .to include('No unreconciled meals with bills on or before this date. ' \
-                    'A reconciliation must settle at least one meal.')
+                    'A reconciliation must settle at least one meal or carry a correction.')
     end
 
     it 'accepts a period holding exactly one settleable meal' do
@@ -774,7 +774,7 @@ RSpec.describe Reconciliation do
       def held_answer(dates)
         'No meal on or before this date can be settled yet. Meals held back because a bill has money on it ' \
           "and nobody who pays is signed up: #{dates}. To settle one, sign up someone who pays or remove " \
-          'the bill. A reconciliation must settle at least one meal.'
+          'the bill. A reconciliation must settle at least one meal or carry a correction.'
       end
 
       it 'names a meal nobody signed up for' do
@@ -834,7 +834,7 @@ RSpec.describe Reconciliation do
 
         expect(recon).not_to be_valid
         expect(recon.errors[:base]).to eq(['No unreconciled meals with bills on or before this date. ' \
-                                           'A reconciliation must settle at least one meal.'])
+                                           'A reconciliation must settle at least one meal or carry a correction.'])
       end
 
       # Three meals nobody attended were settled with money on a bill
@@ -847,7 +847,7 @@ RSpec.describe Reconciliation do
 
         expect(recon).not_to be_valid
         expect(recon.errors[:base]).to eq(['No unreconciled meals with bills on or before this date. ' \
-                                           'A reconciliation must settle at least one meal.'])
+                                           'A reconciliation must settle at least one meal or carry a correction.'])
       end
 
       it 'says nothing about held meals when another meal can be settled' do
@@ -884,7 +884,7 @@ RSpec.describe Reconciliation do
         expect(recon).not_to be_valid
         expect(recon.errors[:base]).to eq(['No meal on or before this date can be settled yet. ' \
                                            "#{waiting_words('2025-03-02 and 2025-03-09')} " \
-                                           'A reconciliation must settle at least one meal.'])
+                                           'A reconciliation must settle at least one meal or carry a correction.'])
       end
 
       it 'names the held meals first, then the waiting ones' do
@@ -898,8 +898,8 @@ RSpec.describe Reconciliation do
         expect(recon).not_to be_valid
         expect(recon.errors[:base].sole).to start_with('No meal on or before this date can be settled yet. ' \
                                                        'Meals held back because a bill has money on it')
-        expect(recon.errors[:base].sole).to end_with("the bill. #{waiting_words('2025-03-02')} " \
-                                                     'A reconciliation must settle at least one meal.')
+        expect(recon.errors[:base].sole).to end_with("the bill. #{waiting_words('2025-03-02')} A reconciliation " \
+                                                     'must settle at least one meal or carry a correction.')
       end
 
       it 'does not name a waiting meal after the cutoff, or one already settled' do
@@ -912,7 +912,7 @@ RSpec.describe Reconciliation do
 
         expect(recon).not_to be_valid
         expect(recon.errors[:base]).to eq(['No unreconciled meals with bills on or before this date. ' \
-                                           'A reconciliation must settle at least one meal.'])
+                                           'A reconciliation must settle at least one meal or carry a correction.'])
       end
 
       it 'says nothing about waiting meals when another meal can be settled' do

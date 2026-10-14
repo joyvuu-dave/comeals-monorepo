@@ -163,6 +163,9 @@ class Meal < ApplicationRecord
   # check runs before anything is deleted.
   has_many :meal_charges, dependent: :restrict_with_error
   has_many :settlement_correction_charges, dependent: :restrict_with_error
+  # Corrections made after the meal was settled (ADR 0011 rule 6), oldest
+  # first. A meal with one is settled, and refuses destroy anyway.
+  has_many :meal_corrections, -> { order(:id) }, dependent: :restrict_with_error, inverse_of: :meal
 
   has_many :bills, inverse_of: :meal, dependent: :destroy
   has_many :cooks, through: :bills, source: :resident, dependent: :destroy

@@ -122,27 +122,30 @@ RSpec.describe Settlement do
 
   describe 'the fingerprint' do
     let(:balances) { { 5 => BigDecimal('1.5'), 3 => BigDecimal('-1.5') } }
-    let(:base) { described_class.fingerprint(cutoff: latest, meal_ids: [1, 2], balances: balances) }
+    let(:base) do
+      described_class.fingerprint(cutoff: latest, meal_ids: [1, 2], correction_ids: [3], balances: balances)
+    end
 
     it 'leaves out $0 balances, which a settlement does not store, and does not depend on order' do
-      same = described_class.fingerprint(cutoff: latest, meal_ids: [2, 1],
+      same = described_class.fingerprint(cutoff: latest, meal_ids: [2, 1], correction_ids: [3],
                                          balances: { 9 => BigDecimal('0'), 3 => BigDecimal('-1.50'),
                                                      5 => BigDecimal('1.50') })
 
       expect(same).to eq(base)
     end
 
-    it 'differs for another cutoff, another dinner, another amount, or another person' do
+    it 'differs for another cutoff, another dinner, another correction, another amount, or another person' do
       others = [
-        described_class.fingerprint(cutoff: latest - 1, meal_ids: [1, 2], balances: balances),
-        described_class.fingerprint(cutoff: latest, meal_ids: [1], balances: balances),
-        described_class.fingerprint(cutoff: latest, meal_ids: [1, 2],
+        described_class.fingerprint(cutoff: latest - 1, meal_ids: [1, 2], correction_ids: [3], balances: balances),
+        described_class.fingerprint(cutoff: latest, meal_ids: [1], correction_ids: [3], balances: balances),
+        described_class.fingerprint(cutoff: latest, meal_ids: [1, 2], correction_ids: [], balances: balances),
+        described_class.fingerprint(cutoff: latest, meal_ids: [1, 2], correction_ids: [3],
                                     balances: { 5 => BigDecimal('1.51'), 3 => BigDecimal('-1.51') }),
-        described_class.fingerprint(cutoff: latest, meal_ids: [1, 2],
+        described_class.fingerprint(cutoff: latest, meal_ids: [1, 2], correction_ids: [3],
                                     balances: { 6 => BigDecimal('1.5'), 3 => BigDecimal('-1.5') })
       ]
 
-      expect(others.uniq.size).to eq(4)
+      expect(others.uniq.size).to eq(5)
       expect(others).not_to include(base)
     end
   end

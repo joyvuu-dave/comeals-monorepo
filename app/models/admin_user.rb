@@ -59,6 +59,10 @@ class AdminUser < ApplicationRecord
   belongs_to :community, optional: true
   before_validation { self.community ||= Community.first }
 
+  # The corrections this admin made. They are records that name who made
+  # them, so an admin with one cannot be deleted; the page says so.
+  has_many :meal_corrections, dependent: :restrict_with_error
+
   # NOT NULL. Without this a nil (the box sent as "" by a request made by
   # hand, which Rails reads as nil) reached the database as a 500 (#139).
   validates :superuser, inclusion: { in: [true, false], message: TrueOrFalse::MESSAGE }

@@ -55,8 +55,9 @@ RSpec.describe 'Admin ledger check run page' do
     behind_the_guards do
       # The cook's credit drops by 50 cents, so the lines add up to 50
       # cents less than zero. The cook's balance drops with it, so only
-      # the recompute check sees the cook. The eater's balance moves
-      # alone, so both checks see the eater.
+      # the recompute check sees the cook's balance, and the dinner check
+      # sees the cook's line no longer match the dinner's rows. The
+      # eater's balance moves alone, so both balance checks see the eater.
       MealCharge.where(meal_id: reconciliation.meals.select(:id), resident_id: cook.id, kind: 'credit')
                 .update_all(amount: BigDecimal('79.5'))
       balances = ReconciliationBalance.where(reconciliation_id: reconciliation.id)
@@ -74,11 +75,13 @@ RSpec.describe 'Admin ledger check run page' do
         [settled, 'Balance rebuilt from bills and sign-ups', 'Omar Brandt', 'owes $39.90', 'owes $40.00'],
         [settled, 'Sum of their meal lines', 'Omar Brandt', 'owes $39.90', 'owes $40.00'],
         [settled, 'Sum of all meal lines', 'Whole settlement', '',
-         'Charges are $0.50 more than credits. They must be equal.']
+         'Charges are $0.50 more than credits. They must be equal.'],
+        [settled, "The #{reconciliation.meals.sole.date} dinner, settled plus corrections, against its rows now",
+         'Rosa Lister', 'is owed $39.50', 'is owed $40.00']
       ]
     )
     expect(response.parsed_body.css('td.col-resident a').pluck('href'))
-      .to eq(["/residents/#{cook.id}", "/residents/#{eater.id}", "/residents/#{eater.id}"])
+      .to eq(["/residents/#{cook.id}", "/residents/#{eater.id}", "/residents/#{eater.id}", "/residents/#{cook.id}"])
   end
 
   it 'shows every digit a difference has, so one smaller than a cent is not shown as $0.00' do
@@ -151,12 +154,34 @@ RSpec.describe 'Admin ledger check run page' do
     expect(statements.size).to eq(1)
   end
 
+  # A settled dinner whose rows changed with no correction to say so
+  # (ADR 0011 rule 6): the row names the dinner.
+  it 'names the dinner a dinner finding is about' do
+    reconciliation = settle
+    meal = reconciliation.meals.sole
+    behind_the_guards { Bill.where(meal_id: meal.id).update_all(amount: BigDecimal('84')) }
+
+    expect { LedgerVerification.call }.to raise_error(LedgerVerification::MismatchError)
+    get "/ledger_check_runs/#{LedgerCheckRun.order(:id).last.id}"
+
+    dinner_rows = findings_table.select { |row| row[1].start_with?('The ') }
+    expect(dinner_rows).to contain_exactly(
+      [a_string_starting_with("##{reconciliation.id}"),
+       "The #{meal.date} dinner, settled plus corrections, against its rows now", 'Rosa Lister',
+       'is owed $40.00', 'is owed $42.00'],
+      [a_string_starting_with("##{reconciliation.id}"),
+       "The #{meal.date} dinner, settled plus corrections, against its rows now", 'Omar Brandt',
+       'owes $40.00', 'owes $42.00']
+    )
+  end
+
   it 'explains both checks where it explains what "mismatched" means' do
     get '/ledger_check_runs'
 
     sidebar = response.parsed_body.at_css('#what-this-page-shows_sidebar_section').text.squish
     expect(sidebar).to include('Mismatched — a stored balance no longer agrees with the balance rebuilt from ' \
                                "bills and sign-ups, or with the sum of that person's meal lines, or a " \
-                               "settlement's meal lines no longer add up to $0.00.")
+                               "settlement's meal lines no longer add up to $0.00, or a settled dinner no " \
+                               'longer adds up to what it was settled at plus its corrections.')
   end
 end

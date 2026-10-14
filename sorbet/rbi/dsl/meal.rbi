@@ -516,6 +516,20 @@ class Meal
     def meal_charges=(value); end
 
     sig { returns(T::Array[T.untyped]) }
+    def meal_correction_ids; end
+
+    sig { params(ids: T::Array[T.untyped]).returns(T::Array[T.untyped]) }
+    def meal_correction_ids=(ids); end
+
+    # This method is created by ActiveRecord on the `Meal` class because it declared `has_many :meal_corrections`.
+    # 🔗 [Rails guide for `has_many` association](https://guides.rubyonrails.org/association_basics.html#the-has-many-association)
+    sig { returns(::MealCorrection::PrivateCollectionProxy) }
+    def meal_corrections; end
+
+    sig { params(value: T::Enumerable[::MealCorrection]).void }
+    def meal_corrections=(value); end
+
+    sig { returns(T::Array[T.untyped]) }
     def meal_resident_ids; end
 
     sig { params(ids: T::Array[T.untyped]).returns(T::Array[T.untyped]) }

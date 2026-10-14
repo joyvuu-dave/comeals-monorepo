@@ -188,17 +188,29 @@ ActiveAdmin.register Resident do
         lines_by_reconciliation = resident.meal_charges
                                           .includes(meal: :reconciliation)
                                           .group_by { |charge| charge.meal.reconciliation_id }
+        # The period each settlement covers: the dates of the meals it swept,
+        # in two queries for all of them. Neither date column is the start of
+        # that period — `date` is the day the settlement ran and `end_date` is
+        # the sweep cutoff — so a "date to end_date" display reads backwards
+        # ("2026-08-10 to 2026-06-15").
+        swept = Meal.where(reconciliation_id: balances.map(&:reconciliation_id)).group(:reconciliation_id)
+        firsts = swept.minimum(:date)
+        lasts = swept.maximum(:date)
+        ranges = firsts.to_h { |id, first| [id, DateRangeDescription.for(first, lasts[id])] }
+        # This person's changes from corrections (ADR 0011 rule 6), under
+        # the settlement that carries each one.
+        corrections_by_reconciliation = resident.meal_correction_lines
+                                                .includes(meal_correction: :meal)
+                                                .group_by { |line| line.meal_correction.reconciliation_id }
 
         balances.each do |balance|
           reconciliation = balance.reconciliation
           h3 do
-            # The meals' own date range, not "date to end_date" — those two
-            # columns are the settlement day and the sweep cutoff, which read
-            # backwards as a range (see Reconciliation#date_range_description).
-            # The fallback covers a settlement with no meals, which no normal
-            # path can create — without it the link text would be empty and
+            # The meals' own date range (above). The fallback covers a
+            # settlement with no meals: one that only carries corrections
+            # (ADR 0011 rule 6). Without it the link text would be empty and
             # the link invisible.
-            label = reconciliation.date_range_description.presence ||
+            label = ranges[reconciliation.id].presence ||
                     "through #{reconciliation.end_date.strftime('%b %-d, %Y')}"
             text_node link_to(label, admin_reconciliation_path(reconciliation))
             text_node ' — settled: '
@@ -207,6 +219,19 @@ ActiveAdmin.register Resident do
 
           lines = (lines_by_reconciliation[reconciliation.id] || []).sort_by { |charge| charge.meal.date }
           settlement_lines_table(lines, first_column: :meal)
+
+          corrected = (corrections_by_reconciliation[reconciliation.id] || [])
+                      .sort_by { |line| line.meal_correction.meal.date }
+          next if corrected.empty?
+
+          table_for corrected do
+            column('Correction') do |line|
+              meal = line.meal_correction.meal
+              link_to "To the #{meal.date.iso8601} dinner", admin_meal_path(meal)
+            end
+            column('Reason') { |line| line.meal_correction.reason }
+            column('Amount') { |line| correction_amount_tag(line.amount) }
+          end
         end
 
         para 'Credited amounts minus charged amounts come to less than one cent from the settled ' \

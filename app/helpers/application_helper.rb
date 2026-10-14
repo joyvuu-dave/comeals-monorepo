@@ -43,8 +43,12 @@ module ApplicationHelper
   # Blank covers two cases on purpose: the value is zero, or the meal
   # was settled before line items existed and MealCostSummary has
   # nothing for it. Both mean "no amount to show", not "$0.00".
-  def meal_cost_cell(meal, field)
-    summary = MealCostSummary.for(meal)
+  #
+  # now: true reads the meal's rows as they are now (MealCostSummary.now),
+  # for the meal's own page, where a corrected settled meal shows what it
+  # costs after the correction.
+  def meal_cost_cell(meal, field, now: false)
+    summary = now ? MealCostSummary.now(meal) : MealCostSummary.for(meal)
     return if summary.nil?
 
     value = summary.public_send(field)

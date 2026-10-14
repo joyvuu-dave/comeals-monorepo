@@ -189,6 +189,19 @@ ActiveAdmin.register Reconciliation do
         column('Total Cost') { |m| meal_cost_cell(m, :total_cost) }
       end
     end
+
+    # The corrections to earlier settlements' dinners that this settlement
+    # carries (ADR 0011 rule 6). Their lines are in the balances above.
+    corrections = reconciliation.meal_corrections.includes(:meal, :admin_user, lines: :resident).to_a
+    if corrections.any?
+      panel "Corrections Carried (#{corrections.size})" do
+        residents = CorrectionWords.residents_named_in(corrections)
+        corrections.each do |correction|
+          h4 { link_to "Correction to the #{correction.meal.date.iso8601} dinner", admin_meal_path(correction.meal) }
+          meal_correction_details(correction, residents: residents)
+        end
+      end
+    end
   end
 
   # FORM

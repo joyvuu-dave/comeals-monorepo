@@ -84,6 +84,18 @@ module BalanceDisplayHelper
     end
   end
 
+  # One person's change from a correction (MealCorrectionLine), as words.
+  # Signed like a line (MealLedger, "Signs"): positive means the community
+  # owes the person more, so "credited $5.00"; negative, "charged $5.00".
+  # A line is never zero (the CHECK meal_correction_lines_not_zero).
+  def correction_amount_tag(amount)
+    if amount.positive?
+      tag.span("credited #{number_to_currency(amount)}", class: 'balance-is-owed')
+    else
+      tag.span("charged #{number_to_currency(amount.abs)}", class: 'balance-owes')
+    end
+  end
+
   # The footer under a settlement table. A single "Total: $0.00" is true but
   # says nothing; splitting it shows the amounts moving in each direction and
   # makes the zero-sum check visible. The difference is always zero —

@@ -17,6 +17,11 @@ ActiveAdmin.register AdminUser do
   config.filters = false
 
   controller do
+    # A refused delete says why: an admin who made a correction to a
+    # settled dinner is named in its record (MealCorrection), and the last
+    # superuser is kept.
+    include RefusedDestroyMessage
+
     # SuperuserAdapter already restricts every AdminUser write to superusers.
     # This is the narrower rule it cannot express, because authorization there
     # is per resource and this is about one field and who is acting:

@@ -61,6 +61,9 @@ class Reconciliation < ApplicationRecord
   # made (Settlement#correct!), oldest first.
   has_many :settlement_corrections, -> { order(:created_at, :id) }, dependent: :restrict_with_exception,
                                                                     inverse_of: :reconciliation
+  # The corrections to earlier settlements' dinners that this settlement
+  # carries (ADR 0011 rule 6), oldest first.
+  has_many :meal_corrections, -> { order(:id) }, dependent: :restrict_with_exception, inverse_of: :reconciliation
 
   audited
 
@@ -96,15 +99,6 @@ class Reconciliation < ApplicationRecord
     meals.count
   end
 
-  # The period this settlement covers: the dates of the meals it swept.
-  # Neither date column is the start of that period — `date` is the day the
-  # settlement ran and `end_date` is the sweep cutoff — so a "date to
-  # end_date" display reads backwards ("2026-08-10 to 2026-06-15").
-  sig { returns(String) }
-  def date_range_description
-    DateRangeDescription.for(meals.minimum(:date), meals.maximum(:date))
-  end
-
   # Compute final settlement balances for this reconciliation period.
   # Returns a hash of { resident_id => rounded_balance }.
   # Uses largest-remainder method (Hamilton's method) to round to cents,
@@ -117,9 +111,19 @@ class Reconciliation < ApplicationRecord
   # Memory: loads all reconciled meals + associations into RAM. For a co-housing
   # community (~500 meals max), this is ~18K AR objects (~36 MB). Bounded by the
   # physical size of the community.
+  #
+  # Corrections (ADR 0011 rule 6) change it two ways. This settlement
+  # carries the corrections it claimed, so their lines are added. And a
+  # correction made later to one of this settlement's meals changed that
+  # meal's rows, which the ledger reads as they are now, so those lines
+  # are taken off again: this settlement keeps what it settled. While the
+  # settlement is being written, none of its meals has a correction yet
+  # (a meal is corrected only once settled), so only the first applies.
   sig { params(ledger: MealLedger).returns(T::Hash[Integer, BigDecimal]) }
   def settlement_balances(ledger = settlement_ledger)
     raw_balances = ledger.balances(T.must(community).residents.pluck(:id))
+    add_correction_lines!(raw_balances, MealCorrection.where(reconciliation_id: id))
+    add_correction_lines!(raw_balances, MealCorrection.where(meal_id: meals.select(:id)), sign: -1)
 
     # Round to cents using largest-remainder method (Hamilton's method).
     # This guarantees rounded balances sum to exactly zero — the standard
@@ -193,6 +197,16 @@ class Reconciliation < ApplicationRecord
 
   private
 
+  # Each person's lines from these corrections, added to their raw
+  # balance, or taken off it with sign -1.
+  sig { params(raw: T::Hash[Integer, BigDecimal], corrections: ActiveRecord::Relation, sign: Integer).void }
+  def add_correction_lines!(raw, corrections, sign: 1)
+    lines = MealCorrectionLine.where(meal_correction_id: corrections.select(:id)).group(:resident_id).sum(:amount)
+    T.cast(lines, T::Hash[Integer, BigDecimal]).each do |resident_id, amount|
+      raw[resident_id] = raw.fetch(resident_id, BigDecimal('0')) + (sign * amount)
+    end
+  end
+
   sig { void }
   def set_date
     self.date ||= T.must(community).today
@@ -232,19 +246,24 @@ class Reconciliation < ApplicationRecord
   # or waits for a cook's cost (Meal.waiting_for_a_cost), "no meals with
   # bills" would be false, so the answer names those meals and says what
   # has to change before they can settle.
+  #
+  # A settlement with no meal is allowed when it carries a correction (ADR
+  # 0011 rule 6): otherwise a correction made when there were no new
+  # dinners would wait with no end.
   sig { void }
   def must_settle_at_least_one_meal
     return if errors[:end_date].any?
-    return if eligible_meals.exists?
+    return if eligible_meals.exists? || MealCorrection.waiting.exists?
 
     held = left_behind_dates(Meal.unreconciled.receipt_and_nobody_to_charge)
     waiting = left_behind_dates(Meal.unreconciled.waiting_for_a_cost)
     if held.empty? && waiting.empty?
       errors.add(:base, 'No unreconciled meals with bills on or before this date. ' \
-                        'A reconciliation must settle at least one meal.')
+                        'A reconciliation must settle at least one meal or carry a correction.')
     else
       errors.add(:base, ['No meal on or before this date can be settled yet.', held_words(held),
-                         waiting_words(waiting), 'A reconciliation must settle at least one meal.'].compact.join(' '))
+                         waiting_words(waiting),
+                         'A reconciliation must settle at least one meal or carry a correction.'].compact.join(' '))
     end
   end
 

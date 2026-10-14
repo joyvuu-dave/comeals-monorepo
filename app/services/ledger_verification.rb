@@ -172,20 +172,25 @@ class LedgerVerification
 
   private
 
-  # Two independent checks per reconciliation, and they fail for different
-  # reasons, so both run and both are reported. Each finding is added as
-  # soon as it is made, so a crash in the second check keeps the first
-  # check's finding.
+  # Three independent checks per reconciliation, and they fail for
+  # different reasons, so all run and all are reported. Each finding is
+  # added as soon as it is made, so a crash in a later check keeps the
+  # earlier checks' findings.
   sig { params(reconciliation: Reconciliation, mismatches: T::Array[Detail]).void }
   def check(reconciliation, mismatches)
     recompute = recompute_check(reconciliation)
     mismatches << recompute if recompute
     line_items = line_item_check(reconciliation)
     mismatches << line_items if line_items
+    dinners = dinner_check(reconciliation)
+    mismatches << dinners if dinners
   end
 
   # Check one: recompute the settlement from source and compare. Catches
-  # source rows that changed after settlement.
+  # source rows that changed after settlement. The rows of a corrected
+  # dinner did change, and settlement_balances takes those corrections off
+  # again and adds the ones this settlement carries (ADR 0011 rule 6), so
+  # only a change no correction explains shows here.
   #
   # Zero balances are not stored — a resident who owes and is owed nothing
   # gets no row — so the recomputed side drops them too before comparing.
@@ -205,17 +210,25 @@ class LedgerVerification
   # check cannot: the recompute uses MealLedger, which is what produced the
   # stored values in the first place.
   #
+  # The lines are the settlement's meal lines and the lines of the
+  # corrections it carries (ADR 0011 rule 6).
+  #
   # Skipped for reconciliations settled before meal_charges existed. They
   # have no lines, and inventing some now would be recording today's belief
   # as though it were what happened then. Those keep the recompute check.
   sig { params(reconciliation: Reconciliation).returns(T.nilable(Detail)) }
   def line_item_check(reconciliation)
     charges = MealCharge.for_reconciliation(reconciliation)
-    return nil unless charges.exists?
+    carried = MealCorrectionLine.joins(:meal_correction)
+                                .where(meal_corrections: { reconciliation_id: reconciliation.id })
+    return nil unless charges.exists? || carried.exists?
 
     stored = stored_balances(reconciliation)
-    # Grouped sum: Sorbet's relation sigs only know the ungrouped, scalar form.
+    # Grouped sums: Sorbet's relation sigs only know the ungrouped, scalar form.
     summed = T.cast(charges.group(:resident_id).sum(:amount), Balances)
+    T.cast(carried.group(:resident_id).sum(:amount), Balances).each do |resident_id, amount|
+      summed[resident_id] = summed.fetch(resident_id, BigDecimal('0')) + amount
+    end
 
     differences = line_item_differences(stored, summed)
     total = summed.values.sum(BigDecimal('0'))
@@ -223,6 +236,33 @@ class LedgerVerification
     return nil if differences.empty?
 
     detail(reconciliation, 'line_items', differences)
+  end
+
+  # Check three: each settled dinner's rows add up to what it was settled
+  # at plus its corrections, exactly, for every person
+  # (SettledDinnerDifference). Catches a change to a settled dinner that no
+  # correction explains, and says which dinner. The recompute check sees
+  # such a change too, but only for the whole settlement and rounded to
+  # cents.
+  #
+  # Skipped for reconciliations settled before meal_charges existed, for
+  # the line item check's reason: there is nothing it was settled at to
+  # compare with.
+  sig { params(reconciliation: Reconciliation).returns(T.nilable(Detail)) }
+  def dinner_check(reconciliation)
+    return nil unless MealCharge.for_reconciliation(reconciliation).exists?
+
+    meals = reconciliation.meals.preload(:bills, :meal_residents, :guests).to_a
+    dates = meals.to_h { |meal| [T.must(meal.id), meal.date] }
+    differences = SettledDinnerDifference.for(meals).sort.flat_map do |meal_id, people|
+      people.sort.map do |resident_id, (expected, actual)|
+        { meal_id: meal_id, meal_date: dates.fetch(meal_id).to_s, resident_id: resident_id,
+          stored: expected.to_s('F'), source: actual.to_s('F') }
+      end
+    end
+    return nil if differences.empty?
+
+    detail(reconciliation, 'dinners', differences)
   end
 
   # The line items are at the ledger grain and the balances are rounded to
@@ -271,6 +311,9 @@ class LedgerVerification
   #   line_items  the sum of that resident's stored line items — or,
   #               with resident_id nil, the whole settlement's line
   #               total, which must be exactly zero
+  #   dinners     what that resident's rows on one dinner (meal_id,
+  #               meal_date) add up to now, against what the dinner
+  #               was settled at plus its corrections (`stored`)
   #
   # The key names are pinned by stored history: every past run in
   # ledger_check_runs.details already uses them, and the admin page

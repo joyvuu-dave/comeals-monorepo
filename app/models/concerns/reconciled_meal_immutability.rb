@@ -25,6 +25,12 @@
 # during the save is not this concern's job: at SERIALIZABLE the lock
 # LocksItsMealFirst takes on the changed meal row raises a serialization
 # failure, and the caller retries or shows "try again".
+#
+# One dinner is let through: the one a correction is changing (ADR 0011
+# rule 6). MealCorrecting names it in the database setting
+# comeals.correcting, for its own transaction only, and the trigger
+# reads the same setting (20261013130100). The setting is read in the
+# same query as the meal, so the two cannot disagree.
 module ReconciledMealImmutability
   extend ActiveSupport::Concern
   extend T::Helpers
@@ -33,6 +39,10 @@ module ReconciledMealImmutability
   requires_ancestor { ApplicationRecord }
 
   MESSAGE = 'Meal has been reconciled.'
+
+  # The dinner a correction is changing in this transaction, if any.
+  CORRECTING = "current_setting('comeals.correcting', true)"
+  private_constant :CORRECTING
 
   included do
     T.bind(self, T.class_of(ApplicationRecord))
@@ -75,8 +85,11 @@ module ReconciledMealImmutability
     reconciled_in_database?(old_meal_id)
   end
 
+  # Settled, and not the dinner being corrected.
   sig { params(id: Integer).returns(T::Boolean) }
   def reconciled_in_database?(id)
-    Meal.where(id: id).pick(:reconciliation_id).present?
+    row = T.let(Meal.where(id: id).pick(:reconciliation_id, Arel.sql(CORRECTING)), T.nilable([T.untyped, T.untyped]))
+    reconciliation_id, correcting = row
+    reconciliation_id.present? && correcting != id.to_s
   end
 end

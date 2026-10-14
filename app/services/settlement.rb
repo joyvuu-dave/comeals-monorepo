@@ -100,8 +100,8 @@ class Settlement
   end
 
   # A short code made from what a settlement at this cutoff claims and
-  # stores: the cutoff, the meals, and each person's amount rounded to
-  # cents. The admin form shows a preview, then sends the preview's code
+  # stores: the cutoff, the meals, the corrections it carries, and each
+  # person's amount rounded to cents. The admin form shows a preview, then sends the preview's code
   # with Create, and settle! makes the code again from what it is about to
   # commit. If a cook changed a cost or someone signed up in between, the
   # codes differ and nothing is saved, so an admin never settles amounts
@@ -113,10 +113,14 @@ class Settlement
   # when nothing did. The balances cannot: a spec pins that a preview's
   # balances are the rows a settlement stores. A $0 balance is left out
   # on both sides, because a settlement stores none.
-  sig { params(cutoff: Date, meal_ids: T::Array[Integer], balances: T::Hash[Integer, BigDecimal]).returns(String) }
-  def self.fingerprint(cutoff:, meal_ids:, balances:)
+  sig do
+    params(cutoff: Date, meal_ids: T::Array[Integer], correction_ids: T::Array[Integer],
+           balances: T::Hash[Integer, BigDecimal]).returns(String)
+  end
+  def self.fingerprint(cutoff:, meal_ids:, correction_ids:, balances:)
     amounts = balances.reject { |_, amount| amount.zero? }.sort.map { |id, amount| "#{id}:#{amount.to_s('F')}" }
-    Digest::SHA256.hexdigest([cutoff.iso8601, meal_ids.sort.join(','), amounts.join(',')].join('|'))
+    Digest::SHA256.hexdigest([cutoff.iso8601, meal_ids.sort.join(','), correction_ids.sort.join(','),
+                              amounts.join(',')].join('|'))
   end
 
   # What run! would settle and store for this cutoff, computed without
@@ -152,6 +156,10 @@ class Settlement
     # is charged and a cook's cost is blank (Meal.waiting_for_a_cost, ADR
     # 0011 rule 3). Also not in `meals`.
     const :waiting_meals, T::Array[Meal]
+    # Corrections to dinners already settled, which no settlement carries
+    # yet (ADR 0011 rule 6). The settlement carries every one of them, and
+    # their lines are in resident_balances.
+    const :corrections, T::Array[MealCorrection]
 
     sig { params(meal: Meal).returns(MealLedger::Summary) }
     def meal_summary(meal) = ledger.summary_for(meal)
@@ -160,6 +168,7 @@ class Settlement
     sig { returns(String) }
     def fingerprint
       Settlement.fingerprint(cutoff: cutoff, meal_ids: meals.map { |meal| T.must(meal.id) },
+                             correction_ids: corrections.map { |correction| T.must(correction.id) },
                              balances: resident_balances)
     end
   end
@@ -175,11 +184,15 @@ class Settlement
     # 2026-09-28: the check above already keeps today out of the period).
     meals = Meal.settleable_by(cutoff).order(:date).preload({ bills: :resident }, :meal_residents, :guests).to_a
     ledger = MealLedger.new(meals)
+    corrections = MealCorrection.waiting.order(:id).preload(:meal, :admin_user, lines: :resident).to_a
     raw = ledger.balances(community.residents.pluck(:id))
+    corrections.flat_map(&:lines).each do |line|
+      raw[T.must(line.resident_id)] = raw.fetch(T.must(line.resident_id), BigDecimal('0')) + T.must(line.amount)
+    end
     Preview.new(cutoff: cutoff, meals: meals, ledger: ledger,
                 resident_balances: allocate_to_cents(raw, reconciliation_id: 'preview'),
                 skipped_meals: skipped_by(cutoff, today: today), held_meals: held_by(cutoff, today: today),
-                waiting_meals: waiting_by(cutoff, today: today))
+                waiting_meals: waiting_by(cutoff, today: today), corrections: corrections)
   end
 
   # Unreconciled meals in the period with attendance and no bill at all.
@@ -218,6 +231,7 @@ class Settlement
   def initialize(reconciliation)
     @reconciliation = reconciliation
     @claimed_meals = T.let(nil, T.nilable(T::Array[[Integer, Date]]))
+    @claimed_corrections = T.let(nil, T.nilable(T::Array[Integer]))
   end
 
   # The id and date of each meal this settlement claimed, read under the
@@ -225,10 +239,15 @@ class Settlement
   # nothing after the commit has to read the meals again: the cache clear
   # and the answer to the person who settled both come from here, and a
   # read after the commit is a read that can fail for a settlement that
-  # is saved. Never empty: reconciliation.save! refuses a period with no
-  # meal before assign_meals runs.
+  # is saved. Empty only for a settlement that carries corrections and
+  # settles no meal: reconciliation.save! refuses one with neither.
   sig { returns(T::Array[[Integer, Date]]) }
   def claimed_meals = T.must(@claimed_meals)
+
+  # The ids of the corrections this settlement claimed (ADR 0011 rule 6),
+  # read under their row locks inside its transaction.
+  sig { returns(T::Array[Integer]) }
+  def claimed_corrections = T.must(@claimed_corrections)
 
   # How many meals this settlement claimed. The same number as
   # reconciliation.number_of_meals, without a query.
@@ -254,6 +273,7 @@ class Settlement
     Reconciliation.transaction do
       reconciliation.save!
       assign_meals
+      claim_corrections
       balances = write_ledger!
       refuse_what_the_preview_did_not_show!(fingerprint, balances) if fingerprint
     end
@@ -455,12 +475,42 @@ class Settlement
                      'settled the rest first. Rolling back to avoid settling the same meals twice.'
   end
 
+  # Claims every correction no settlement carries yet (ADR 0011 rule 6),
+  # the way assign_meals claims meals: FOR UPDATE in id order, then an
+  # UPDATE that sets reconciliation_id only where it is still empty, and
+  # Contested if a rival settlement claimed one first. So a correction
+  # saved while this settlement runs is carried by exactly one
+  # settlement: this one if it committed before the locking read, the
+  # next one otherwise. The database lets the claim through only while
+  # SETTLING_SETTING names this settlement (20261013130000), so the
+  # setting is on for the UPDATE only, in its own savepoint, as in
+  # write_ledger!.
+  sig { void }
+  def claim_corrections
+    ids = T.let(MealCorrection.waiting.order(:id).lock.pluck(:id), T::Array[Integer])
+    @claimed_corrections = ids
+    return if ids.empty?
+
+    claimed = Reconciliation.transaction(requires_new: true) do
+      write_settling_setting(T.must(reconciliation.id).to_s)
+      count = MealCorrection.where(id: ids, reconciliation_id: nil)
+                            .update_all(reconciliation_id: reconciliation.id, updated_at: Time.current)
+      write_settling_setting('')
+      count
+    end
+    return if claimed == ids.size
+
+    raise Contested, "claim_corrections: reconciliation #{reconciliation.id} locked #{ids.size} " \
+                     "#{'correction'.pluralize(ids.size)} but claimed #{claimed} — a concurrent reconciliation " \
+                     'claimed the rest first. Rolling back to avoid carrying a correction twice.'
+  end
+
   # The fingerprint of what this settlement wrote, against the one the
   # caller's preview had (Settlement.fingerprint).
   sig { params(fingerprint: String, balances: T::Hash[Integer, BigDecimal]).void }
   def refuse_what_the_preview_did_not_show!(fingerprint, balances)
-    written = Settlement.fingerprint(cutoff: T.must(reconciliation.end_date),
-                                     meal_ids: claimed_meals.map(&:first), balances: balances)
+    written = Settlement.fingerprint(cutoff: T.must(reconciliation.end_date), meal_ids: claimed_meals.map(&:first),
+                                     correction_ids: claimed_corrections, balances: balances)
     return if written == fingerprint
 
     raise Changed, 'The dinners or amounts changed after the preview was made, so nothing was settled.'

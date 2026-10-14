@@ -14,6 +14,9 @@
 #   line_items   `source` is the sum of the person's meal lines. With no
 #                resident, it is the sum of all of the settlement's meal
 #                lines, which must be zero, and there is no stored side.
+#   dinners      one dinner (meal_id, meal_date): `stored` is what it was
+#                settled at plus its corrections for the person, and
+#                `source` what its rows add up to for them now.
 #
 # The stored shape never changes, because every past run uses it. A run
 # from before the line items (2026-08-02) has no check label at all: the
@@ -29,10 +32,11 @@ class LedgerCheckFindingsTable < Arbre::Component
   # side the check found nothing on.
   CHECKS = {
     'recompute' => { name: 'Balance rebuilt from bills and sign-ups', nothing_found: 'No balance' },
-    'line_items' => { name: 'Sum of their meal lines', nothing_found: 'No meal lines' }
+    'line_items' => { name: 'Sum of their meal lines', nothing_found: 'No meal lines' },
+    'dinners' => { name: 'One dinner, against its rows now', nothing_found: 'Nothing' }
   }.freeze
 
-  Finding = Struct.new(:reconciliation, :check, :resident_id, :stored, :source, keyword_init: true)
+  Finding = Struct.new(:reconciliation, :check, :meal_date, :resident_id, :stored, :source, keyword_init: true)
 
   def build(run)
     findings = findings_of(run)
@@ -53,8 +57,8 @@ class LedgerCheckFindingsTable < Arbre::Component
     run.details.flat_map do |detail|
       detail['differences'].map do |difference|
         Finding.new(reconciliation: "##{detail['reconciliation_id']} (#{detail['date']})",
-                    check: detail.fetch('check', 'recompute'), resident_id: difference['resident_id'],
-                    stored: difference['stored'], source: difference['source'])
+                    check: detail.fetch('check', 'recompute'), meal_date: difference['meal_date'],
+                    resident_id: difference['resident_id'], stored: difference['stored'], source: difference['source'])
       end
     end
   end
@@ -62,6 +66,7 @@ class LedgerCheckFindingsTable < Arbre::Component
   # A label this page does not know is shown as stored.
   def check_name(finding)
     return 'Sum of all meal lines' if whole_settlement?(finding)
+    return "The #{finding.meal_date} dinner, settled plus corrections, against its rows now" if finding.meal_date
 
     CHECKS.dig(finding.check, :name) || finding.check
   end

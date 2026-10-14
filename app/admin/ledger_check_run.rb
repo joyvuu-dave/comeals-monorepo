@@ -29,6 +29,8 @@ ActiveAdmin.register LedgerCheckRun do
          '(bills, attendance, guests) and compares them to the balances ' \
          'stored at settlement time. It also adds up the per-meal charge ' \
          'lines and compares those sums to the same stored balances. ' \
+         'And for each settled dinner, it checks that its rows add up to ' \
+         'what it was settled at plus its corrections. ' \
          'Each run writes one row on this page, pass or fail.'
     para do
       status_tag 'all match', class: 'ok'
@@ -40,9 +42,11 @@ ActiveAdmin.register LedgerCheckRun do
       text_node ' — a stored balance no longer agrees with the balance ' \
                 'rebuilt from bills and sign-ups, or with the sum of that ' \
                 "person's meal lines, or a settlement's meal lines no longer " \
-                'add up to $0.00. Something changed settled data after ' \
-                'settlement. The run page lists each difference and the ' \
-                'check that found it. See docs/runbooks/settled-data-repair.md.'
+                'add up to $0.00, or a settled dinner no longer adds up to ' \
+                'what it was settled at plus its corrections. Something ' \
+                'changed settled data after settlement. The run page lists ' \
+                'each difference and the check that found it. See ' \
+                'docs/runbooks/settled-data-repair.md.'
     end
     para do
       status_tag 'did not finish', class: 'error'

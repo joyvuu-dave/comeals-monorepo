@@ -103,8 +103,8 @@ RSpec.describe 'POST /api/v1/reconciliations' do
     settle(latest)
 
     expect(response).to have_http_status(:bad_request)
-    expect(response.parsed_body[:message]).to eq('No unreconciled meals with bills on or before this date. ' \
-                                                 'A reconciliation must settle at least one meal.')
+    expect(response.parsed_body[:message]).to eq('No unreconciled meals with bills on or before this date. A ' \
+                                                 'reconciliation must settle at least one meal or carry a correction.')
   end
 
   # The cook spent $30 and only a baby ate, so the meal is held back. The
@@ -121,7 +121,7 @@ RSpec.describe 'POST /api/v1/reconciliations' do
     expect(response.parsed_body[:message])
       .to eq('No meal on or before this date can be settled yet. Meals held back because a bill has money on ' \
              "it and nobody who pays is signed up: #{latest.iso8601}. To settle one, sign up someone " \
-             'who pays or remove the bill. A reconciliation must settle at least one meal.')
+             'who pays or remove the bill. A reconciliation must settle at least one meal or carry a correction.')
     expect(meal.reload.reconciliation_id).to be_nil
   end
 
@@ -137,7 +137,7 @@ RSpec.describe 'POST /api/v1/reconciliations' do
     expect(response.parsed_body[:message])
       .to eq("No meal on or before this date can be settled yet. Meals waiting for a cook's cost: " \
              "#{latest.iso8601}. To settle one, each of its cooks enters a cost or marks No cost. " \
-             'A reconciliation must settle at least one meal.')
+             'A reconciliation must settle at least one meal or carry a correction.')
     expect(meal.reload.reconciliation_id).to be_nil
   end
 

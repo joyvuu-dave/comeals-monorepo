@@ -164,6 +164,21 @@ Built on top of this, and the reason it was worth doing:
 
 The old proposal follows, for the reasoning about rule 8.
 
+### Check three: each settled dinner against its rows — built 2026-10-13
+
+A correction changes a settled dinner's rows (ADR 0011 rule 6), so the
+recompute check reads those rows minus every correction made to the
+settlement's meals, plus the corrections the settlement carries. And
+`LedgerVerification` adds a third check, `dinners`: for each settled
+dinner and each person, the stored line plus every correction line must
+equal what the dinner's rows add up to now, exactly, at the ledger grain
+(`SettledDinnerDifference`). A change to a settled dinner that no
+correction explains shows here, with the dinner's date, where the
+recompute check sees it only for the whole settlement and rounded to
+cents. Skipped for a settlement with no line items, for the same reason as
+the line-item check. `MealCorrecting` asks the same question before it
+corrects a dinner, and refuses one that already disagrees.
+
 ### B (original proposal). What is this number made of?
 
 `Reconciliation#settlement_balances` computes every per-meal, per-resident debit

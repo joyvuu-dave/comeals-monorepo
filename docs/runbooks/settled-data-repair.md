@@ -53,19 +53,31 @@ what runs today.
 > choice, below — not with the trigger bypass. The stored balances are what
 > residents already paid; you correct forward, you do not rewrite them.
 
-## First choice: correcting entries
+## First choice: a correction
 
-You don't edit the ledger. You add to it (CLAUDE.md money rule 7).
+You don't edit the settled ledger. You add to it (CLAUDE.md money rule 7).
 
-If a settled amount is wrong — a cook was over- or under-credited, an
-attendee was charged in error — do not touch the settled rows. Put a
-correcting entry in the next billing period instead. Example: a cook's $50
-bill should have been $30. Add a $20 charge (or a -$20 bill adjustment
-entry) to an unreconciled meal in the current period, with a description
-saying what it corrects. The next reconciliation settles the difference.
+If a settled dinner was wrong — a cook's cost, who ate, an eater's price,
+a guest — a superuser corrects the dinner (ADR 0011 rule 6). The
+dinner's rows change, with history; each person's change is recorded as a
+`MealCorrectionLine`; and the next settlement carries the correction and
+adds those changes to its balances. Until the admin form exists, a
+correction is made from the console:
+
+```ruby
+meal = Meal.find(...)
+MealCorrecting.save!(meal, by: AdminUser.find_by!(email: '...'), reason: 'Typed $50 for $30') do |edits|
+  edits.cost(Resident.find(...), amount: BigDecimal('30'), no_cost: false)
+end
+```
+
+`MealCorrecting.preview(meal) { |edits| ... }` shows each person's change
+first and saves nothing. The edits are listed in `MealCorrecting::Edits`.
 
 This keeps every past reconciliation's books exactly as they were settled
-and exactly as they were emailed to residents.
+and exactly as they were emailed to residents. The nightly check then
+checks that each settled dinner's rows add up to what it was settled at
+plus its corrections, so a change made any other way is reported.
 
 ## Last resort: the trigger bypass
 

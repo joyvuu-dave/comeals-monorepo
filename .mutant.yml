@@ -44,6 +44,7 @@ matcher:
     # services
     - AuditDescription*
     - BillsPayload*
+    - CorrectionWords*
     - DateRangeDescription*
     - GuestAdd*
     - Healthcheck*
@@ -53,6 +54,7 @@ matcher:
     - LedgerVerification*
     - LiveUpdate*
     - MailDeliveryFailure*
+    - MealCorrecting*
     - MealCostSummary*
     - MealIcalFeed*
     - NoCostMarking*
@@ -63,6 +65,7 @@ matcher:
     - ResidentNameShortener*
     - RetryOnConflict*
     - SettleAndNotify*
+    - SettledDinnerDifference*
     - SettlementCorrecting*
     - SnapshotRead*
     - ThirdCookWarning*
@@ -87,6 +90,7 @@ matcher:
     - ScheduleWeekLabelHelper*
     - SettlementPreviewHelper*
     - SettlementLinesTable*
+    - MealCorrectionDetails*
     - LedgerCheckFindingsTable*
     - AdminOrderClause*
     - AssetCacheControl*
@@ -111,6 +115,8 @@ matcher:
     - MailDelivery*
     - Meal*
     - MealCharge*
+    - MealCorrection*
+    - MealCorrectionLine*
     - MealResident*
     - MealSchedule*
     - Multiplier*

@@ -106,7 +106,8 @@ RSpec.describe ReconciliationMailer do
           '====================',
           '',
           'The common meals in this settlement, through Sep 3, 2026, are now settled. ' \
-          'Their costs are final and can no longer be changed.',
+          'Their costs are final. If a cost was wrong, an admin can correct it, and the change goes into ' \
+          'the next settlement.',
           '',
           "Here are the meals you cooked in this settlement, and what you spent on each: #{url}",
           '',
@@ -120,7 +121,8 @@ RSpec.describe ReconciliationMailer do
       expect(html_body(mail).text.squish).to eq(
         'Common Meals Settled ' \
         'The common meals in this settlement, through Sep 3, 2026, are now settled. ' \
-        'Their costs are final and can no longer be changed. ' \
+        'Their costs are final. If a cost was wrong, an admin can correct it, and the change goes into ' \
+        'the next settlement. ' \
         'Here are the meals you cooked in this settlement, and what you spent on each. ' \
         "Have a great day! ~Swan's Way"
       )

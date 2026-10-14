@@ -31,6 +31,19 @@ class MealCostSummary
     end
   end
 
+  # What the meal costs by its rows as they are now, for the meal's own
+  # page. A settled meal that was corrected (ADR 0011 rule 6) has changed
+  # rows, so its stored lines show what it was settled at, not what it
+  # costs: this works it out from the rows, as for an open meal. The
+  # settlement's page keeps `for`, the numbers it settled. Every other
+  # meal reads the same as `for`.
+  sig { params(meal: Meal).returns(T.nilable(MealLedger::Summary)) }
+  def self.now(meal)
+    return self.for(meal) unless meal.reconciled? && meal.meal_corrections.any?
+
+    MealLedger.new([meal]).summary_for(meal)
+  end
+
   # The credit lines carry everything the summary needs: bill_amount is
   # what the cooks spent (no_cost bills produce no line, matching
   # total_cost's definition), the credit amounts sum to the effective

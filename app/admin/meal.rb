@@ -117,11 +117,13 @@ ActiveAdmin.register Meal do
       row :subsidized? do |meal|
         MealCostSummary.for(meal)&.subsidized
       end
+      # From the rows as they are now: a corrected settled meal shows what
+      # it costs after the correction (MealCostSummary.now).
       row :total_cost do |meal|
-        meal_cost_cell(meal, :total_cost)
+        meal_cost_cell(meal, :total_cost, now: true)
       end
       row :unit_cost do |meal|
-        meal_cost_cell(meal, :unit_cost)
+        meal_cost_cell(meal, :unit_cost, now: true)
       end
       table_for meal.guests.order(:created_at) do
         column 'Guests in Attendance' do |guest|
@@ -175,6 +177,30 @@ ActiveAdmin.register Meal do
         lines = meal.meal_charges.includes(:resident)
                     .sort_by { |charge| [charge.kind, charge.resident.name] }
         settlement_lines_table(lines, first_column: :resident)
+      end
+    end
+
+    # Corrections made after the meal was settled (ADR 0011 rule 6). The
+    # line items above are what it was settled at; each correction says
+    # what changed and who owes or is owed a different amount, and which
+    # settlement carries it.
+    corrections = meal.meal_corrections.includes(:reconciliation, :admin_user, lines: :resident).to_a
+    if corrections.any?
+      panel "Corrections (#{corrections.size})" do
+        residents = CorrectionWords.residents_named_in(corrections)
+        corrections.each do |correction|
+          h4 do
+            carrier = correction.reconciliation
+            if carrier
+              text_node 'Carried by '
+              text_node link_to("the settlement of #{carrier.date.strftime('%b %-d, %Y')}",
+                                admin_reconciliation_path(carrier))
+            else
+              text_node 'Waits for the next settlement'
+            end
+          end
+          meal_correction_details(correction, residents: residents)
+        end
       end
     end
   end

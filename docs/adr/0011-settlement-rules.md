@@ -1,6 +1,6 @@
 # ADR 0011: How settlements work from now on
 
-- **Status:** Accepted. Rules 6, 7, 8 and 9 are not built yet.
+- **Status:** Accepted. Rule 6 is built except its admin form. Rules 7, 8 and 9 are not built yet.
 - **Date:** 2026-10-12
 - **Issue:** #165 (the common house email)
 
@@ -97,6 +97,12 @@ and makes a correction: what was wrong, the right value, and a reason.
 Before saving, they see how much each person's amount will change. The
 changes add up to exactly $0.
 
+A correction can change a cook's cost, add or remove a cook, add or
+remove an eater, set an eater's price to the price for their age on the
+dinner's date, and add or remove a guest (decided 2026-10-13). Costs
+alone would not be enough: the October audit also found a child charged
+the adult price, which is a fix to who ate and at what price.
+
 The correction changes the dinner's rows, with history, and saves each
 person's change as a line of its own. So the dinner's page shows the
 corrected cost, its history shows the change, and the old settlement's
@@ -104,7 +110,9 @@ page still shows the dinner as it was settled. The next settlement includes ever
 correction made since the last one, each as a line that names the dinner
 ("Correction to the January 12 dinner"). A settlement claims corrections
 the same way it claims dinners, under a lock, so a correction saved
-during a settlement goes into exactly one settlement.
+during a settlement goes into exactly one settlement. A settlement may
+carry corrections and settle no dinner, so a correction made when there
+are no new dinners does not wait with no end (decided 2026-10-13).
 
 The ledger check then checks two things. Each settlement's lines equal
 its dinners plus the corrections it carries. And for each dinner, what

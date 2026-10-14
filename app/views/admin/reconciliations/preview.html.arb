@@ -76,6 +76,18 @@ panel "Dinners that will wait (#{waits.pluck(:meal_id).uniq.size})" do
   end
 end
 
+if preview.corrections.any?
+  # Corrections to dinners already settled, which this settlement carries
+  # (ADR 0011 rule 6). Their lines are in each person's amount above.
+  panel "Corrections this settlement will carry (#{preview.corrections.size})" do
+    residents = CorrectionWords.residents_named_in(preview.corrections)
+    preview.corrections.each do |correction|
+      h4 { link_to "Correction to the #{correction.meal.date.iso8601} dinner", admin_meal_path(correction.meal) }
+      meal_correction_details(correction, residents: residents)
+    end
+  end
+end
+
 if notes.any?
   panel 'Notes' do
     table_for notes do
@@ -88,7 +100,7 @@ if notes.any?
   end
 end
 
-if preview.meals.empty?
+if preview.meals.empty? && preview.corrections.empty?
   para 'Nothing can be settled with this date, so there is no Create button.'
 elsif authorized?(:create, Reconciliation)
   # data-disable-with turns the button off after the first click

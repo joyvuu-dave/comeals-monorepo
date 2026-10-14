@@ -154,6 +154,36 @@ RSpec.describe MealCostSummary do
     end
   end
 
+  # The meal's own page shows what a corrected settled meal costs after
+  # the correction (ADR 0011 rule 6); the settlement's page keeps what it
+  # settled.
+  describe '.now' do
+    let(:cook) { create(:resident, community: community, unit: unit) }
+    let(:meal) do
+      create(:meal, community: community).tap do |meal|
+        create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
+        create(:meal_resident, meal: meal, resident: create(:resident, community: community, unit: unit),
+                               community: community)
+        settle!
+      end.reload
+    end
+
+    it 'reads a corrected settled meal from its rows, where `for` keeps what it was settled at' do
+      MealCorrecting.save!(meal, by: create(:admin_user, community: community), reason: 'Typed $30 for $20') do |edits|
+        edits.cost(cook, amount: BigDecimal('20'), no_cost: false)
+      end
+      meal.reload
+
+      expect(described_class.now(meal).total_cost).to eq(BigDecimal('20'))
+      expect(described_class.for(meal).total_cost).to eq(BigDecimal('30'))
+    end
+
+    it 'reads a settled meal with no correction the same as `for`, from its stored lines' do
+      expect(described_class.now(meal).serialize).to eq(described_class.for(meal).serialize)
+      expect(described_class.now(meal).total_cost).to eq(BigDecimal('30'))
+    end
+  end
+
   describe 'a settled meal (from stored charges)' do
     # A settled meal nobody ate gets no charges; the summary then shows
     # what the cooks spent, from the bills, and a no-cost bill spends

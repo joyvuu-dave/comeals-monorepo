@@ -124,6 +124,38 @@ RSpec.describe BalanceDisplayHelper do
     end
   end
 
+  # A correction's change for one person (ADR 0011 rule 6). The direction
+  # comes from MealCorrecting's own arithmetic: a cook whose cost goes down
+  # gets less back, so is charged the difference, and the eater who pays
+  # less is credited it.
+  describe '#correction_amount_tag' do
+    let(:community) { create(:community) }
+    let(:unit) { create(:unit, community: community) }
+    let(:cook) { create(:resident, community: community, unit: unit, name: 'Cook') }
+    let(:eater) { create(:resident, community: community, unit: unit, name: 'Eater') }
+
+    it 'says "charged" to the cook whose cost went down and "credited" to the eater, derived from the arithmetic' do
+      meal = create(:meal, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('16'))
+      create(:meal_resident, meal: meal, resident: eater, community: community)
+      settle!
+      correction = MealCorrecting.save!(meal.reload, by: create(:admin_user, community: community),
+                                                     reason: 'Typed $16 for $10') do |edits|
+        edits.cost(cook, amount: BigDecimal('10'), no_cost: false)
+      end
+      changes = correction.lines.to_h { |line| [line.resident_id, line.amount] }
+
+      expect(helper.correction_amount_tag(changes.fetch(cook.id))).to include('charged $6.00')
+      expect(helper.correction_amount_tag(changes.fetch(eater.id))).to include('credited $6.00')
+    end
+
+    it 'carries the direction class, with no minus sign' do
+      expect(helper.correction_amount_tag(BigDecimal('2.5')))
+        .to eq('<span class="balance-is-owed">credited $2.50</span>')
+      expect(helper.correction_amount_tag(BigDecimal('-2.5'))).to eq('<span class="balance-owes">charged $2.50</span>')
+    end
+  end
+
   # The ledger check page shows a difference that can be smaller than a
   # cent, so it keeps every digit, where balance_tag rounds to cents.
   describe '#exact_balance_tag' do

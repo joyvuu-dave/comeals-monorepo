@@ -84,6 +84,28 @@ class ReconciliationPreviewSerializer
     }
   end
 
+  # The corrections to dinners already settled that this settlement would
+  # carry (ADR 0011 rule 6). Their changes are in `balances` already; this
+  # says where they come from. Each edit comes as a sentence (`words`),
+  # since the server owns the wording, and as data. A change is signed
+  # like a balance and is at the ledger grain: not rounded to cents.
+  attribute :corrections do |preview|
+    residents = CorrectionWords.residents_named_in(preview.corrections)
+    preview.corrections.map do |correction|
+      {
+        id: correction.id,
+        meal_id: correction.meal_id,
+        meal_date: T.must(correction.meal).date.iso8601,
+        reason: correction.reason,
+        made_at: correction.created_at.utc.iso8601,
+        edits: correction.edits.map { |edit| edit.merge('words' => CorrectionWords.edit(edit, residents)) },
+        changes: correction.lines.map do |line|
+          { resident_id: line.resident_id, name: T.must(line.resident).name, amount: line.amount }
+        end
+      }
+    end
+  end
+
   # A warning's meal_id may name a meal that is not in `meals`: the
   # attendance-without-bill, bill-with-no-attendees and cost-not-entered
   # warnings are about meals the settlement leaves behind, which by

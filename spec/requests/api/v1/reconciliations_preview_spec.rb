@@ -64,6 +64,34 @@ RSpec.describe 'GET /api/v1/reconciliations/preview' do
     expect(body[:warnings]).to eq([])
   end
 
+  # A correction to a dinner already settled (ADR 0011 rule 6): its
+  # changes are in the balances, and the list says where they come from.
+  it 'lists the corrections a settlement would carry, with their words' do
+    cook = create(:resident, community: community, unit: unit, name: 'Alice Cook')
+    meal = create(:meal, community: community, date: latest - 3)
+    create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
+    create(:meal_resident, meal: meal, resident: resident, community: community)
+    settle!(cutoff: latest - 3)
+    correction = MealCorrecting.save!(meal.reload, by: create(:admin_user, community: community),
+                                                   reason: 'Typed $30 for $20') do |edits|
+      edits.cost(cook, amount: BigDecimal('20'), no_cost: false)
+    end
+
+    body = preview
+
+    expect(body[:corrections].map(&:deep_symbolize_keys)).to eq(
+      [{ id: correction.id, meal_id: meal.id, meal_date: meal.date.iso8601, reason: 'Typed $30 for $20',
+         made_at: correction.created_at.utc.iso8601,
+         edits: [{ what: 'cost', resident_id: cook.id, from: { amount: '30.0', no_cost: false },
+                   to: { amount: '20.0', no_cost: false }, words: "Changed Alice Cook's cost from $30.00 to $20.00." }],
+         changes: [{ resident_id: cook.id, name: 'Alice Cook', amount: '-10.0' },
+                   { resident_id: resident.id, name: resident.name, amount: '10.0' }] }]
+    )
+    residents = body[:balances][:residents].index_by { |row| row[:resident_id] }
+    expect(money(residents[cook.id][:amount])).to eq(-10)
+    expect(money(residents[resident.id][:amount])).to eq(10)
+  end
+
   it 'answers with empty lists when nothing is settleable' do
     body = preview
 
@@ -73,6 +101,7 @@ RSpec.describe 'GET /api/v1/reconciliations/preview' do
     expect(body[:meals]).to eq([])
     expect(body[:balances][:residents]).to eq([])
     expect(body[:warnings]).to eq([])
+    expect(body[:corrections]).to eq([])
   end
 
   it 'uses the exact scope a settlement claims: not today, not after the cutoff, not without a bill' do

@@ -159,9 +159,33 @@ On the iOS side, all money is `Decimal`. A thin `Money` wrapper type may be just
       "title": "Bill of $0 not flagged as 'no cost'",
       "body": "David submitted a $0.00 bill but didn't mark it as a no-cost meal."
     }
+  ],
+  "corrections": [
+    {
+      "id": 7,
+      "meal_id": 1100,
+      "meal_date": "2026-01-12",
+      "reason": "Typed $170 for $17",
+      "made_at": "2026-03-02T18:04:11Z",
+      "edits": [
+        {
+          "what": "cost",
+          "resident_id": 42,
+          "from": { "amount": "170.0", "no_cost": false },
+          "to": { "amount": "17.0", "no_cost": false },
+          "words": "Changed Alice's cost from $170.00 to $17.00."
+        }
+      ],
+      "changes": [
+        { "resident_id": 42, "name": "Alice", "amount": "-153.0" },
+        { "resident_id": 43, "name": "Bob", "amount": "153.0" }
+      ]
+    }
   ]
 }
 ```
+
+`corrections` (added 2026-10-13, ADR 0011 rule 6) are corrections to dinners already settled, which this settlement would carry. Their `changes` are already in `balances`; this says where they come from. A change is signed like a balance and is at the ledger grain, not rounded to cents. Each edit comes with its sentence in `words`, since the server owns the wording; `what` is `cost`, `eater` or `guest`, and a client must show an edit it does not know by its `words`.
 
 #### Design decisions worth preserving
 

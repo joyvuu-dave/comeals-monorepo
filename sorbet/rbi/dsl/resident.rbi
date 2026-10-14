@@ -499,6 +499,20 @@ class Resident
     def meal_charges=(value); end
 
     sig { returns(T::Array[T.untyped]) }
+    def meal_correction_line_ids; end
+
+    sig { params(ids: T::Array[T.untyped]).returns(T::Array[T.untyped]) }
+    def meal_correction_line_ids=(ids); end
+
+    # This method is created by ActiveRecord on the `Resident` class because it declared `has_many :meal_correction_lines`.
+    # 🔗 [Rails guide for `has_many` association](https://guides.rubyonrails.org/association_basics.html#the-has-many-association)
+    sig { returns(::MealCorrectionLine::PrivateCollectionProxy) }
+    def meal_correction_lines; end
+
+    sig { params(value: T::Enumerable[::MealCorrectionLine]).void }
+    def meal_correction_lines=(value); end
+
+    sig { returns(T::Array[T.untyped]) }
     def meal_ids; end
 
     sig { params(ids: T::Array[T.untyped]).returns(T::Array[T.untyped]) }

@@ -5,8 +5,10 @@
 # it in resident_balances, the one cache on the money path.
 #
 # The running balance is what a resident owes or is owed for the meals not
-# yet settled. It is derived, never a source of truth: this can run at any
-# time and always produces the same answer for the same source rows.
+# yet settled, plus the corrections to settled meals that no settlement
+# carries yet (ADR 0011 rule 6): the next settlement will carry them. It
+# is derived, never a source of truth: this can run at any time and always
+# produces the same answer for the same source rows.
 #
 # Runs nightly (rake billing:recalculate) and right after every settlement
 # (SettleAndNotify), because a settlement moves meals out of the running
@@ -29,15 +31,16 @@ class BalanceRecalculation
   # Returns the number of balances written.
   sig { returns(Integer) }
   def call
-    # Read every source record inside one snapshot so all five queries
-    # (meals, three preloads, residents) see one instant. Unreconciled meals
+    # Read every source record inside one snapshot so all six queries
+    # (meals, three preloads, residents, waiting corrections) see one
+    # instant. Unreconciled meals
     # are mutable: without this, a meal edit committing between two of the
     # reads yields per-meal financials that match no real state of the
     # ledger. SnapshotRead opens the transaction SERIALIZABLE READ ONLY
     # DEFERRABLE, which cannot abort with a serialization failure and so
     # still needs no retry. (The test environment leaves DEFERRABLE out;
     # the callers retry a conflict there.) See app/services/snapshot_read.rb.
-    unreconciled_meals, resident_ids = SnapshotRead.call(wait_limit: @wait_limit) do
+    unreconciled_meals, resident_ids, corrections = SnapshotRead.call(wait_limit: @wait_limit) do
       # Batch-load all unreconciled meals with their financial associations
       # (4 queries). Uses preload (not includes) to guarantee separate IN(?)
       # queries. The joins(:bills).distinct excludes meals without bills —
@@ -48,13 +51,16 @@ class BalanceRecalculation
       meals = @community.meals.unreconciled.with_attendees
                         .joins(:bills).distinct
                         .preload(:bills, :meal_residents, :guests).to_a
-      [meals, @community.residents.pluck(:id)]
+      waiting = MealCorrectionLine.joins(:meal_correction).merge(MealCorrection.waiting)
+                                  .group(:resident_id).sum(:amount)
+      [meals, @community.residents.pluck(:id), T.cast(waiting, T::Hash[Integer, BigDecimal])]
     end
 
     # The arithmetic is MealLedger's, shared with Reconciliation#settlement_balances
     # so the running balance and the settled balance cannot follow different
     # rules (0 queries).
     balances = MealLedger.new(unreconciled_meals).balances(resident_ids)
+    corrections.each { |resident_id, amount| balances[resident_id] = balances.fetch(resident_id) + amount }
 
     # Persist balances via upsert, outside the read transaction (safe if two
     # runs overlap: each computes from its own consistent snapshot, the

@@ -37,10 +37,13 @@ RSpec.describe Settlement do
 
       ActiveSupport::Notifications.subscribed(record, 'sql.active_record') { settle! }
 
+      # The other lock is on the corrections no settlement carries yet
+      # (claim_corrections, ADR 0011 rule 6), which locks no meal.
       locks = statements.grep(/\bFOR UPDATE\b/)
-      expect(locks.size).to eq(1)
-      expect(locks.first).to match(
-        /FROM "meals" WHERE "meals"."id" IN \(\$1, \$2\) ORDER BY "meals"."id" ASC FOR UPDATE\z/
+      expect(locks).to contain_exactly(
+        /FROM "meals" WHERE "meals"."id" IN \(\$1, \$2\) ORDER BY "meals"."id" ASC FOR UPDATE\z/,
+        a_string_ending_with('FROM "meal_corrections" WHERE "meal_corrections"."reconciliation_id" IS NULL ' \
+                             'ORDER BY "meal_corrections"."id" ASC FOR UPDATE')
       )
       expect(Meal.where.not(reconciliation_id: nil)).to match_array(claimed)
     end

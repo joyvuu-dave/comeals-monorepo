@@ -223,9 +223,18 @@ RSpec.describe Settlement, '#correct!' do
         expect(correction.include_earlier_differences).to be(true)
         differences = [{ 'resident_id' => cook.id, 'stored' => '30.0', 'source' => '35.0' },
                        { 'resident_id' => dana.id, 'stored' => '-15.0', 'source' => '-20.0' }]
+        # The dinner check sees the same change, on the dinner whose
+        # receipt changed: its rows no longer add up to its lines.
+        meal = second.meal
+        dinner = [{ 'meal_id' => meal.id, 'meal_date' => meal.date.to_s, 'resident_id' => cook.id,
+                    'stored' => '0.0', 'source' => '5.0' },
+                  { 'meal_id' => meal.id, 'meal_date' => meal.date.to_s, 'resident_id' => dana.id,
+                    'stored' => '0.0', 'source' => '-5.0' }]
         expect(correction.reload.earlier_differences).to eq(
           [{ 'reconciliation_id' => reconciliation.id, 'date' => reconciliation.date.to_s, 'check' => 'recompute',
-             'differences' => differences }]
+             'differences' => differences },
+           { 'reconciliation_id' => reconciliation.id, 'date' => reconciliation.date.to_s, 'check' => 'dinners',
+             'differences' => dinner }]
         )
       end
     end

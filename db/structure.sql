@@ -180,6 +180,115 @@ $$;
 
 
 --
+-- Name: comeals_meal_correction_guard(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.comeals_meal_correction_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  meal_reconciliation_id bigint;
+BEGIN
+  IF current_setting('comeals.allow_settled_writes', true) = 'on' THEN
+    RETURN CASE TG_OP WHEN 'DELETE' THEN OLD ELSE NEW END;
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    SELECT reconciliation_id INTO meal_reconciliation_id FROM meals WHERE id = NEW.meal_id;
+    IF meal_reconciliation_id IS NULL THEN
+      RAISE EXCEPTION 'INSERT on meal_corrections refused: meal % is not settled. '
+        'An open dinner is changed directly.', NEW.meal_id;
+    END IF;
+    IF NEW.meal_id::text IS DISTINCT FROM current_setting('comeals.correcting', true) THEN
+      RAISE EXCEPTION 'INSERT on meal_corrections refused: meal % is not being corrected. '
+        'A correction is written only by MealCorrecting.', NEW.meal_id;
+    END IF;
+    IF NEW.reconciliation_id IS NOT NULL THEN
+      RAISE EXCEPTION 'INSERT on meal_corrections refused: a new correction is carried by no '
+        'settlement yet.';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP = 'UPDATE'
+     AND OLD.reconciliation_id IS NULL
+     AND NEW.reconciliation_id IS NOT NULL
+     AND NEW.reconciliation_id::text = current_setting('comeals.settling', true)
+     AND (NEW.id, NEW.meal_id, NEW.admin_user_id, NEW.reason, NEW.edits, NEW.created_at)
+         IS NOT DISTINCT FROM (OLD.id, OLD.meal_id, OLD.admin_user_id, OLD.reason, OLD.edits, OLD.created_at)
+  THEN
+    SELECT reconciliation_id INTO meal_reconciliation_id FROM meals WHERE id = NEW.meal_id;
+    IF NEW.reconciliation_id > meal_reconciliation_id THEN
+      RETURN NEW;
+    END IF;
+  END IF;
+
+  RAISE EXCEPTION '% on meal_corrections refused (correction %): a correction is a record and '
+    'cannot be changed. Only a later settlement claims it, once. '
+    'See docs/runbooks/settled-data-repair.md.',
+    TG_OP, OLD.id;
+END;
+$$;
+
+
+--
+-- Name: comeals_meal_correction_line_guard(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.comeals_meal_correction_line_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  correction_meal_id bigint;
+  carrier_id bigint;
+BEGIN
+  IF current_setting('comeals.allow_settled_writes', true) = 'on' THEN
+    RETURN CASE TG_OP WHEN 'DELETE' THEN OLD ELSE NEW END;
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    SELECT meal_id, reconciliation_id INTO correction_meal_id, carrier_id
+    FROM meal_corrections WHERE id = NEW.meal_correction_id;
+    IF carrier_id IS NULL
+       AND correction_meal_id::text = current_setting('comeals.correcting', true) THEN
+      RETURN NEW;
+    END IF;
+    RAISE EXCEPTION 'INSERT on meal_correction_lines refused: the lines of correction % are written '
+      'only by MealCorrecting, with the correction, before a settlement carries it.',
+      NEW.meal_correction_id;
+  END IF;
+
+  RAISE EXCEPTION '% on meal_correction_lines refused: a correction line is a record and cannot '
+    'be changed. See docs/runbooks/settled-data-repair.md.', TG_OP;
+END;
+$$;
+
+
+--
+-- Name: comeals_meal_correction_lines_sum_zero(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.comeals_meal_correction_lines_sum_zero() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  total numeric;
+BEGIN
+  SELECT COALESCE(SUM(amount), 0) INTO total
+  FROM meal_correction_lines WHERE meal_correction_id = NEW.meal_correction_id;
+
+  IF total <> 0 THEN
+    RAISE EXCEPTION 'correction % refused: its lines sum to %, not zero. '
+      'What one person is credited, the others are charged.',
+      NEW.meal_correction_id, total;
+  END IF;
+
+  RETURN NULL;
+END;
+$$;
+
+
+--
 -- Name: comeals_protect_job_run(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -398,6 +507,7 @@ CREATE FUNCTION public.comeals_reject_settled_child_write() RETURNS trigger
 DECLARE
   settled_meal_id bigint;
   meal_reconciliation_id bigint;
+  correcting text := current_setting('comeals.correcting', true);
 BEGIN
   IF current_setting('comeals.allow_settled_writes', true) = 'on' THEN
     RETURN CASE TG_OP WHEN 'DELETE' THEN OLD ELSE NEW END;
@@ -410,7 +520,7 @@ BEGIN
     SELECT reconciliation_id INTO meal_reconciliation_id FROM meals
     WHERE id = OLD.meal_id FOR KEY SHARE;
 
-    IF meal_reconciliation_id IS NOT NULL THEN
+    IF meal_reconciliation_id IS NOT NULL AND OLD.meal_id::text IS DISTINCT FROM correcting THEN
       settled_meal_id := OLD.meal_id;
     END IF;
   END IF;
@@ -423,15 +533,15 @@ BEGIN
     SELECT reconciliation_id INTO meal_reconciliation_id FROM meals
     WHERE id = NEW.meal_id FOR KEY SHARE;
 
-    IF meal_reconciliation_id IS NOT NULL THEN
+    IF meal_reconciliation_id IS NOT NULL AND NEW.meal_id::text IS DISTINCT FROM correcting THEN
       settled_meal_id := NEW.meal_id;
     END IF;
   END IF;
 
   IF settled_meal_id IS NOT NULL THEN
     RAISE EXCEPTION '% on % refused: meal % is reconciled and its ledger rows are immutable. '
-      'Corrections belong in the next reconciliation. For genuine data corruption see '
-      'docs/runbooks/settled-data-repair.md.',
+      'A mistake is fixed by a correction (MealCorrecting), which the next settlement carries. '
+      'For genuine data corruption see docs/runbooks/settled-data-repair.md.',
       TG_OP, TG_TABLE_NAME, settled_meal_id;
   END IF;
 
@@ -1128,6 +1238,77 @@ CREATE SEQUENCE public.meal_charges_id_seq
 --
 
 ALTER SEQUENCE public.meal_charges_id_seq OWNED BY public.meal_charges.id;
+
+
+--
+-- Name: meal_correction_lines; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.meal_correction_lines (
+    id bigint NOT NULL,
+    meal_correction_id bigint NOT NULL,
+    resident_id bigint NOT NULL,
+    amount numeric(16,8) NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT meal_correction_lines_not_zero CHECK ((amount <> (0)::numeric))
+);
+
+
+--
+-- Name: meal_correction_lines_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.meal_correction_lines_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: meal_correction_lines_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.meal_correction_lines_id_seq OWNED BY public.meal_correction_lines.id;
+
+
+--
+-- Name: meal_corrections; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.meal_corrections (
+    id bigint NOT NULL,
+    meal_id bigint NOT NULL,
+    admin_user_id bigint NOT NULL,
+    reason text NOT NULL,
+    edits jsonb DEFAULT '[]'::jsonb NOT NULL,
+    reconciliation_id bigint,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT meal_corrections_edits_list CHECK ((jsonb_typeof(edits) = 'array'::text)),
+    CONSTRAINT meal_corrections_reason_present CHECK ((btrim(reason) <> ''::text))
+);
+
+
+--
+-- Name: meal_corrections_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.meal_corrections_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: meal_corrections_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.meal_corrections_id_seq OWNED BY public.meal_corrections.id;
 
 
 --
@@ -2125,6 +2306,20 @@ ALTER TABLE ONLY public.meal_charges ALTER COLUMN id SET DEFAULT nextval('public
 
 
 --
+-- Name: meal_correction_lines id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.meal_correction_lines ALTER COLUMN id SET DEFAULT nextval('public.meal_correction_lines_id_seq'::regclass);
+
+
+--
+-- Name: meal_corrections id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.meal_corrections ALTER COLUMN id SET DEFAULT nextval('public.meal_corrections_id_seq'::regclass);
+
+
+--
 -- Name: meal_residents id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -2433,6 +2628,22 @@ ALTER TABLE ONLY public.mail_deliveries
 
 ALTER TABLE ONLY public.meal_charges
     ADD CONSTRAINT meal_charges_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: meal_correction_lines meal_correction_lines_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.meal_correction_lines
+    ADD CONSTRAINT meal_correction_lines_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: meal_corrections meal_corrections_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.meal_corrections
+    ADD CONSTRAINT meal_corrections_pkey PRIMARY KEY (id);
 
 
 --
@@ -2872,6 +3083,41 @@ CREATE UNIQUE INDEX index_meal_charges_one_credit_per_cook ON public.meal_charge
 --
 
 CREATE UNIQUE INDEX index_meal_charges_one_debit_per_attendee ON public.meal_charges USING btree (meal_id, resident_id) WHERE ((kind)::text = 'debit'::text);
+
+
+--
+-- Name: index_meal_correction_lines_on_resident_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_meal_correction_lines_on_resident_id ON public.meal_correction_lines USING btree (resident_id);
+
+
+--
+-- Name: index_meal_correction_lines_once_a_person; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_meal_correction_lines_once_a_person ON public.meal_correction_lines USING btree (meal_correction_id, resident_id);
+
+
+--
+-- Name: index_meal_corrections_on_admin_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_meal_corrections_on_admin_user_id ON public.meal_corrections USING btree (admin_user_id);
+
+
+--
+-- Name: index_meal_corrections_on_meal_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_meal_corrections_on_meal_id ON public.meal_corrections USING btree (meal_id);
+
+
+--
+-- Name: index_meal_corrections_on_reconciliation_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_meal_corrections_on_reconciliation_id ON public.meal_corrections USING btree (reconciliation_id);
 
 
 --
@@ -3323,6 +3569,27 @@ CREATE CONSTRAINT TRIGGER meal_charges_sum_zero AFTER INSERT OR DELETE OR UPDATE
 
 
 --
+-- Name: meal_correction_lines meal_correction_lines_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER meal_correction_lines_guard BEFORE INSERT OR DELETE OR UPDATE ON public.meal_correction_lines FOR EACH ROW EXECUTE FUNCTION public.comeals_meal_correction_line_guard();
+
+
+--
+-- Name: meal_correction_lines meal_correction_lines_sum_zero; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER meal_correction_lines_sum_zero AFTER INSERT ON public.meal_correction_lines FOR EACH ROW EXECUTE FUNCTION public.comeals_meal_correction_lines_sum_zero();
+
+
+--
+-- Name: meal_corrections meal_corrections_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER meal_corrections_guard BEFORE INSERT OR DELETE OR UPDATE ON public.meal_corrections FOR EACH ROW EXECUTE FUNCTION public.comeals_meal_correction_guard();
+
+
+--
 -- Name: meal_residents meal_residents_reject_settled_write; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -3431,6 +3698,14 @@ ALTER TABLE ONLY public.admin_users
 
 
 --
+-- Name: meal_corrections fk_rails_0fb1544a10; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.meal_corrections
+    ADD CONSTRAINT fk_rails_0fb1544a10 FOREIGN KEY (reconciliation_id) REFERENCES public.reconciliations(id);
+
+
+--
 -- Name: guest_add_keys fk_rails_176efa00a8; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3508,6 +3783,14 @@ ALTER TABLE ONLY public.meal_charges
 
 ALTER TABLE ONLY public.reconciliation_balances
     ADD CONSTRAINT fk_rails_4123ddbc11 FOREIGN KEY (reconciliation_id) REFERENCES public.reconciliations(id);
+
+
+--
+-- Name: meal_corrections fk_rails_45b09493a5; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.meal_corrections
+    ADD CONSTRAINT fk_rails_45b09493a5 FOREIGN KEY (meal_id) REFERENCES public.meals(id);
 
 
 --
@@ -3743,6 +4026,14 @@ ALTER TABLE ONLY public.meal_residents
 
 
 --
+-- Name: meal_correction_lines fk_rails_d098bea1d5; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.meal_correction_lines
+    ADD CONSTRAINT fk_rails_d098bea1d5 FOREIGN KEY (meal_correction_id) REFERENCES public.meal_corrections(id);
+
+
+--
 -- Name: rotations fk_rails_d1c6b2a31e; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3756,6 +4047,22 @@ ALTER TABLE ONLY public.rotations
 
 ALTER TABLE ONLY public.bills
     ADD CONSTRAINT fk_rails_d7e3fd1337 FOREIGN KEY (resident_id) REFERENCES public.residents(id);
+
+
+--
+-- Name: meal_correction_lines fk_rails_e3604ff287; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.meal_correction_lines
+    ADD CONSTRAINT fk_rails_e3604ff287 FOREIGN KEY (resident_id) REFERENCES public.residents(id);
+
+
+--
+-- Name: meal_corrections fk_rails_ef0fa9c961; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.meal_corrections
+    ADD CONSTRAINT fk_rails_ef0fa9c961 FOREIGN KEY (admin_user_id) REFERENCES public.admin_users(id);
 
 
 --
@@ -3781,6 +4088,8 @@ ALTER TABLE ONLY public.settlement_correction_charges
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261013130100'),
+('20261013130000'),
 ('20261013120400'),
 ('20261013120300'),
 ('20261013120200'),
