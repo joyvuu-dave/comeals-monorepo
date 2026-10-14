@@ -34,6 +34,32 @@ ActiveAdmin.register Meal do
                                   label: 'Reconciled?'
   config.sort_order = 'date_desc'
 
+  # ADR 0011 rule 6: a settled dinner is changed by a correction, which
+  # the next settlement carries. The GET shows the form. The Preview
+  # button shows what the correction would do (MealCorrecting.preview,
+  # which saves nothing). The Save button sends the preview's
+  # fingerprint, and saves only that: if the dinner or the form changed
+  # after the preview, it saves nothing and shows the new preview
+  # (app/views/admin/meals/correct.html.arb, MealCorrectionForm). A
+  # correction writes the ledger, so it needs a superuser.
+  member_action :correct, method: %i[get post] do
+    # Hand-written action: ActiveAdmin authorizes :read inside resource,
+    # and nothing else (the meal_resident.rb trap, ADR 0004).
+    authorize! :create, MealCorrection
+    unless resource.reconciled?
+      return redirect_to(admin_meal_path(resource),
+                         alert: 'This dinner is not settled yet, so it is changed directly, not corrected.')
+    end
+
+    @page_title = "Correct the #{resource.date.iso8601} Dinner"
+    @values = correction_values
+    correct_from_form if request.post?
+  end
+
+  action_item :correct, only: :show, if: -> { resource.reconciled? && authorized?(:create, MealCorrection) } do
+    link_to 'Correct this dinner', correct_admin_meal_path(resource)
+  end
+
   controller do
     include RefusedDestroyMessage
 
@@ -70,6 +96,53 @@ ActiveAdmin.register Meal do
     end
 
     private
+
+    # What the correction form sent, as plain data: each row by its id.
+    def correction_values
+      params.fetch(:correction, {})
+            .permit(:reason, new_eater_ids: [], cooks: {}, eaters: {}, guests: {},
+                             new_cook: %i[resident_id amount no_cost], new_guest: %i[host_id multiplier])
+            .to_h
+    end
+
+    # The Preview button, or the Save button with the preview's
+    # fingerprint. A Save with no fingerprint did not come from a
+    # preview, so it shows one.
+    def correct_from_form
+      form = MealCorrectionForm.new(resource, @values)
+      if params[:save].present? && params[:fingerprint].present?
+        save_correction(form)
+      else
+        preview_correction(form)
+      end
+    rescue MealCorrectionForm::Invalid, MealCorrecting::NothingChanged, MealCorrecting::EarlierDifference => e
+      flash.now[:alert] = e.message
+    rescue ActiveRecord::RecordNotFound
+      # Another correction took a row off between this form's read and
+      # its edit of that row (MealCorrecting::Edits finds each row again).
+      flash.now[:alert] = MealCorrectionForm::CHANGED
+    end
+
+    def preview_correction(form)
+      @preview = MealCorrecting.preview(resource) { |edits| form.apply(edits) }
+    rescue ActiveRecord::RecordInvalid => e
+      flash.now[:alert] = e.record.errors.full_messages.to_sentence
+    end
+
+    # A refused save shows why, and the preview again, so the Save button
+    # is still there once the admin has fixed what was wrong.
+    def save_correction(form)
+      MealCorrecting.save!(resource, by: current_admin_user_custom, reason: form.reason,
+                                     fingerprint: params[:fingerprint].to_s) { |edits| form.apply(edits) }
+      redirect_to admin_meal_path(resource), notice: 'The correction is saved. The next settlement carries it.'
+    rescue MealCorrecting::Changed
+      preview_correction(form)
+      flash.now[:alert] = 'The dinner or the form changed after the preview, so nothing was saved. This is the ' \
+                          'preview as it is now. Look it over, then click Save correction again.'
+    rescue ActiveRecord::RecordInvalid => e
+      preview_correction(form)
+      flash.now[:alert] = e.record.errors.full_messages.to_sentence
+    end
 
     # Back to the meal, not the list: a closed meal is reopened from its
     # own page, and that is the next step after "reopen it before

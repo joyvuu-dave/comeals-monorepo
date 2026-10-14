@@ -55,6 +55,7 @@ matcher:
     - LiveUpdate*
     - MailDeliveryFailure*
     - MealCorrecting*
+    - MealCorrectionForm*
     - MealCostSummary*
     - MealIcalFeed*
     - NoCostMarking*

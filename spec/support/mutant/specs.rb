@@ -228,6 +228,8 @@ MUTANT_SPEC_ROWS = {
   'spec/tasks/rotations_notify_new_spec.rb' => %w[PacedDelivery ResidentMailer MailDelivery],
   'spec/tasks/residents_notify_spec.rb' => %w[PacedDelivery ResidentMailer MailDeliveryFailure MailDelivery],
   'spec/jobs/recurring_job_spec.rb' => %w[RecurringJob RetryOnConflict Healthcheck JobRun],
+  # The admin form runs the reader and the correction it makes.
+  'spec/requests/admin/meal_correction_form_spec.rb' => %w[MealCorrectionForm MealCorrecting],
   # The cooks of a settlement are read through Reconciliation.settled_cooks.
   'spec/jobs/notify_cooks_job_spec.rb' => %w[NotifyCooksJob PacedDelivery MailDelivery Reconciliation],
   # NotifyCooksJob.cooks_owed has no other caller and no other examples.

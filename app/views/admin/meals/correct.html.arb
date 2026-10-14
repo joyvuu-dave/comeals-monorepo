@@ -1,0 +1,186 @@
+# frozen_string_literal: true
+
+# The form that corrects a settled dinner (ADR 0011 rule 6). It shows the
+# dinner as it is now: a row for each cook, eater and guest, a way to add
+# each, and the reason. Preview shows each change in words and each
+# person's change in money, and saves nothing. Save sends the preview's
+# fingerprint (MealCorrecting::Result#fingerprint), so it saves only what
+# the preview showed. MealCorrectionForm reads what this form sends; the
+# member action in app/admin/meal.rb runs it.
+meal = resource
+values = assigns.fetch(:values)
+preview = assigns[:preview]
+date = meal.date
+settlement = meal.reconciliation
+
+cooks = meal.bills.includes(:resident).sort_by { |bill| [bill.resident.name, bill.resident_id] }
+eaters = meal.meal_residents.includes(resident: :community).sort_by { |row| [row.resident.name, row.resident_id] }
+guests = meal.guests.includes(:resident).sort_by { |guest| [guest.resident.name, guest.id] }
+residents = Resident.order(:name, :id).to_a
+choices = ->(left_out) { residents.reject { |resident| left_out.include?(resident.id) }.map { |r| [r.name, r.id] } }
+
+# The width of a cost box: enough for 9999.99.
+cost_box = 'width: 7em'
+
+# A box that sends "1" when ticked and "0" when not, labelled for the
+# person it is about.
+tick_box = lambda do |name, checked, label|
+  safe_join([hidden_field_tag(name, '0', id: nil), check_box_tag(name, '1', checked, 'aria-label': label)])
+end
+
+para do
+  text_node 'This dinner was settled by '
+  text_node link_to("the settlement of #{settlement.date.strftime('%b %-d, %Y')}",
+                    admin_reconciliation_path(settlement))
+  text_node ', and that settlement keeps what it settled. A correction changes the dinner and records how much ' \
+            'more or less each person owes or is owed. The next settlement carries those changes.'
+end
+
+form action: correct_admin_meal_path(meal), method: 'post' do
+  input type: 'hidden', name: 'authenticity_token', value: form_authenticity_token
+
+  panel 'Cooks' do
+    table_for cooks do
+      column('Cook') { |bill| bill.resident.name }
+      column('Cost now') do |bill|
+        if bill.no_cost
+          'No cost'
+        elsif bill.cost_not_entered?
+          'Not entered'
+        else
+          number_to_currency(bill.amount)
+        end
+      end
+      column('New cost') do |bill|
+        sent = values.dig('cooks', bill.resident_id.to_s) || {}
+        now = bill.no_cost || bill.cost_not_entered? ? '' : number_with_precision(bill.amount, precision: 2)
+        text_field_tag("correction[cooks][#{bill.resident_id}][amount]", sent.fetch('amount', now),
+                       inputmode: 'decimal', style: cost_box, 'aria-label': "New cost for #{bill.resident.name}")
+      end
+      column('No cost') do |bill|
+        sent = values.dig('cooks', bill.resident_id.to_s) || {}
+        tick_box.call("correction[cooks][#{bill.resident_id}][no_cost]",
+                      sent.key?('no_cost') ? sent['no_cost'] == '1' : bill.no_cost,
+                      "No cost for #{bill.resident.name}")
+      end
+      column('Remove') do |bill|
+        tick_box.call("correction[cooks][#{bill.resident_id}][remove]",
+                      values.dig('cooks', bill.resident_id.to_s, 'remove') == '1',
+                      "Remove #{bill.resident.name} as a cook")
+      end
+    end
+    para do
+      text_node select_tag('correction[new_cook][resident_id]',
+                           options_for_select(choices.call(cooks.map(&:resident_id)),
+                                              values.dig('new_cook', 'resident_id')),
+                           include_blank: 'Add a cook', 'aria-label': 'Cook to add')
+      text_node ' '
+      text_node text_field_tag('correction[new_cook][amount]', values.dig('new_cook', 'amount'),
+                               inputmode: 'decimal', placeholder: 'Cost', style: cost_box,
+                               'aria-label': 'Cost of the cook to add')
+      text_node ' '
+      text_node label_tag(nil, safe_join([tick_box.call('correction[new_cook][no_cost]',
+                                                        values.dig('new_cook', 'no_cost') == '1',
+                                                        'No cost for the cook to add'), ' No cost']))
+    end
+  end
+
+  panel 'Eaters' do
+    table_for eaters do
+      column('Eater') { |row| row.resident.name }
+      column('Price') { |row| Multiplier.label(row.multiplier) }
+      column('Change') do |row|
+        name = "correction[eaters][#{row.resident_id}]"
+        chosen = values.dig('eaters', row.resident_id.to_s) || 'keep'
+        options = [%w[keep Keep], %w[remove Remove]]
+        by_age = row.resident.multiplier_on(date)
+        if by_age != row.multiplier
+          options << ['reprice', "Change to #{Multiplier.label(by_age)}, the price for their age on #{date.iso8601}"]
+        end
+        safe_join(options.map do |value, words|
+          label_tag(nil, safe_join([radio_button_tag(name, value, chosen == value,
+                                                     'aria-label': "#{words}: #{row.resident.name}"), " #{words}"]))
+        end, ' ')
+      end
+    end
+    others = choices.call(eaters.map(&:resident_id))
+    if others.empty?
+      para 'Everyone ate this dinner, so there is nobody to sign up.'
+    else
+      para do
+        text_node label_tag('correction_new_eater_ids', "Sign up (at the price for their age on #{date.iso8601}):")
+        text_node ' '
+        text_node select_tag('correction[new_eater_ids][]', options_for_select(others, values['new_eater_ids']),
+                             multiple: true, size: 5, id: 'correction_new_eater_ids',
+                             style: 'min-width: 16em; vertical-align: top')
+      end
+    end
+  end
+
+  panel 'Guests' do
+    if guests.empty?
+      para 'No guests.'
+    else
+      table_for guests do
+        column('Guest') { |guest| "Guest of #{guest.resident.name}" }
+        column('Price') { |guest| Multiplier.label(guest.multiplier) }
+        column('Remove') do |guest|
+          tick_box.call("correction[guests][#{guest.id}][remove]",
+                        values.dig('guests', guest.id.to_s, 'remove') == '1',
+                        "Remove the #{Multiplier.label(guest.multiplier).downcase} guest of #{guest.resident.name}")
+        end
+      end
+    end
+    para do
+      text_node select_tag('correction[new_guest][host_id]',
+                           options_for_select(choices.call([]), values.dig('new_guest', 'host_id')),
+                           include_blank: 'Add a guest of', 'aria-label': 'Host of the guest to add')
+      text_node ' '
+      prices = Multiplier::GUEST_PRICES.map { |price| [Multiplier.label(price), price] }
+      text_node select_tag('correction[new_guest][multiplier]',
+                           options_for_select(prices, values.dig('new_guest', 'multiplier')),
+                           'aria-label': 'Price of the guest to add')
+    end
+  end
+
+  panel 'Reason' do
+    para "Say what was wrong. The dinner's page shows the reason. The cook mail after the next settlement sends " \
+         'it to each cook whose cost changes.'
+    text_node text_area_tag('correction[reason]', values['reason'], rows: 3, required: true,
+                                                                    'aria-label': 'Reason', style: 'width: 100%')
+  end
+
+  if preview
+    panel 'What this correction does' do
+      named = Resident.where(id: preview.edits.pluck('resident_id') | preview.changes.keys).index_by(&:id)
+      ul do
+        preview.edits.each { |edit| li CorrectionWords.edit(edit, named) }
+      end
+      if preview.changes.empty?
+        para 'Nobody owes or is owed a different amount.'
+      else
+        table_for(preview.changes.sort_by { |id, _| [named.fetch(id).name, id] }) do
+          column('Resident') { |(id, _)| link_to named.fetch(id).name, admin_resident_path(id) }
+          column('Change') { |(_, amount)| correction_amount_tag(amount) }
+        end
+      end
+    end
+    input type: 'hidden', name: 'fingerprint', value: preview.fingerprint
+  end
+
+  # Laid out like ActiveAdmin's own form buttons. Enter in a box presses
+  # the first button, Preview, which saves nothing.
+  fieldset class: 'actions' do
+    ol do
+      li(class: 'action input_action') { input type: 'submit', name: 'preview', value: 'Preview correction' }
+      if preview
+        # Off after the first click, as on every form's submit button
+        # (data-disable-with, jquery_ujs).
+        li(class: 'action input_action') do
+          input type: 'submit', name: 'save', value: 'Save correction', 'data-disable-with': 'Save correction'
+        end
+      end
+      li(class: 'cancel') { a 'Cancel', href: admin_meal_path(meal) }
+    end
+  end
+end

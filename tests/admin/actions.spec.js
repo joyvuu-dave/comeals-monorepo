@@ -415,6 +415,57 @@ test.describe("Settlement", () => {
   });
 });
 
+test.describe("Corrections", () => {
+  reseedBeforeGroup();
+
+  // ADR 0011 rule 6: a settled dinner is fixed by a correction, which
+  // the next settlement carries. The preview shows each person's change
+  // and saves nothing; Save saves what the preview showed.
+  test("corrects a settled dinner from its page", async ({ page }) => {
+    await login(page);
+    // Meal 3 (2026-01-02) is settled. Alice spent $75, and Alice, Bob,
+    // Bob's guest and Carol, a child, ate: 7 units at the $4.50 cap,
+    // $31.50.
+    await page.goto("/meals/3");
+    await page.getByRole("link", { name: "Correct this dinner" }).click();
+    await expect(page.locator("#page_title")).toHaveText(
+      "Correct the 2026-01-02 Dinner",
+    );
+
+    await page.getByLabel("New cost for Alice Cook").fill("21");
+    await page.getByLabel("Reason").fill("The receipt says $21");
+    await page.getByRole("button", { name: "Preview correction" }).click();
+
+    // $21 is under the cap: $3.00 a unit. Alice is credited $21 and
+    // charged $6, where she was credited $31.50 and charged $9. Bob was
+    // charged $18 for himself and his guest and now $12; Carol $4.50 and
+    // now $3.
+    const shown = panel(page, "What this correction does");
+    await expect(shown.locator("li")).toHaveText([
+      "Changed Alice Cook's cost from $75.00 to $21.00.",
+    ]);
+    await expect(row(shown, "Alice Cook").locator("td").last()).toHaveText(
+      "charged $7.50",
+    );
+    await expect(row(shown, "Bob Baker").locator("td").last()).toHaveText(
+      "credited $6.00",
+    );
+    await expect(row(shown, "Carol Baker").locator("td").last()).toHaveText(
+      "credited $1.50",
+    );
+    await page.getByRole("button", { name: "Save correction" }).click();
+
+    await expect(page).toHaveURL(/\/meals\/3$/);
+    await expect(notice(page)).toHaveText(
+      "The correction is saved. The next settlement carries it.",
+    );
+    await expect(page.locator(".row-total_cost td")).toHaveText("$21.00");
+    const corrections = panel(page, "Corrections (1)");
+    await expect(corrections).toContainText("Waits for the next settlement");
+    await expect(corrections).toContainText("Reason: The receipt says $21");
+  });
+});
+
 test.describe("Residents", () => {
   reseedBeforeGroup();
 

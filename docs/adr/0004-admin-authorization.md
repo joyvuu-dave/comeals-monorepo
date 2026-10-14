@@ -59,7 +59,10 @@ Bills, attendance, guests, meals, reconciliations and balances are the ledger.
 Writing any of them changes what somebody owes or is owed, so it needs a
 superuser. (`LEDGER_MODELS` in `app/models/superuser_adapter.rb` also lists
 `MealCharge` and `LedgerCheckRun`, added later: a meal charge is a settled
-amount, and a ledger check run is the record of checking one.) Residents, units, events, rotations and both kinds of reservation
+amount, and a ledger check run is the record of checking one. It also lists
+`MealCorrection` and `MealCorrectionLine`, the correction to a settled dinner
+and each person's change, added with the admin form that writes them, ADR 0011
+rule 6.) Residents, units, events, rotations and both kinds of reservation
 are ordinary community admin, open to any admin.
 
 This matches how a co-housing group actually divides labor: some committee

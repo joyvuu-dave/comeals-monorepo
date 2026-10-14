@@ -151,6 +151,9 @@ module GeneratedUrlHelpersModule
   def api_v1_version_url(*args); end
 
   sig { params(args: T.untyped).returns(String) }
+  def correct_admin_meal_url(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
   def destroy_admin_user_session_url(*args); end
 
   sig { params(args: T.untyped).returns(String) }

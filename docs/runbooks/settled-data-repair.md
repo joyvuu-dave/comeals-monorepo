@@ -61,8 +61,18 @@ If a settled dinner was wrong — a cook's cost, who ate, an eater's price,
 a guest — a superuser corrects the dinner (ADR 0011 rule 6). The
 dinner's rows change, with history; each person's change is recorded as a
 `MealCorrectionLine`; and the next settlement carries the correction and
-adds those changes to its balances. Until the admin form exists, a
-correction is made from the console:
+adds those changes to its balances.
+
+The way to make one is the dinner's admin page: **Correct this dinner**
+(superusers only). The form shows each cook, eater and guest, and asks
+for a reason. **Preview correction** shows each change and each person's
+change in money, and saves nothing. **Save correction** saves only what
+the preview showed. The reason goes on the dinner's page, and the cook
+mail after the next settlement sends it to each cook whose cost changed.
+
+The form adds at most one cook and one guest at a time. For more, save
+one correction and make another. From the console, the same correction
+is:
 
 ```ruby
 meal = Meal.find(...)

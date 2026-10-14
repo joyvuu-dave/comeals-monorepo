@@ -34,9 +34,11 @@ class SuperuserAdapter < ActiveAdmin::AuthorizationAdapter
   # route today, and their model guards and database triggers refuse writes
   # anyway. They are listed so that if a write route ever appears, the adapter
   # fails closed instead of authorizing a plain admin by omission.
+  # MealCorrection is written by the "Correct this dinner" form on a settled
+  # meal (ADR 0011 rule 6); its lines are written with it.
   LEDGER_MODELS = %w[
-    Bill Guest LedgerCheckRun Meal MealCharge MealResident Reconciliation
-    ReconciliationBalance ResidentBalance
+    Bill Guest LedgerCheckRun Meal MealCharge MealCorrection MealCorrectionLine
+    MealResident Reconciliation ReconciliationBalance ResidentBalance
   ].freeze
 
   # Not money, but restricted for a related reason: these decide who may act.

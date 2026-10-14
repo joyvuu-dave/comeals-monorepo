@@ -1,6 +1,6 @@
 # ADR 0011: How settlements work from now on
 
-- **Status:** Accepted. Rule 6 is built except its admin form. Rules 7, 8 and 9 are not built yet.
+- **Status:** Accepted. Every rule is built except 7, 8 and 9.
 - **Date:** 2026-10-12
 - **Issue:** #165 (the common house email)
 

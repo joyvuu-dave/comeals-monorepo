@@ -413,6 +413,20 @@ RSpec.describe 'what a write runs after its commit' do
     -> { delete path }
   end
 
+  # The Save button of the correction form (ADR 0011 rule 6), with the
+  # fingerprint of the preview it follows.
+  admin_write 'POST /meals/:id/correct' do
+    settleable_meal
+    settle!(cutoff: latest)
+    settled = Meal.find_by!(date: latest)
+    correction = { reason: 'Typed $30 for $20',
+                   cooks: { cook.id.to_s => { amount: '20', no_cost: '0', remove: '0' } } }
+    form = MealCorrectionForm.new(settled, correction.deep_stringify_keys)
+    fingerprint = MealCorrecting.preview(settled) { |edits| form.apply(edits) }.fingerprint
+    params = { correction: correction, fingerprint: fingerprint, save: 'Save correction' }
+    -> { post "/meals/#{settled.id}/correct", params: params }
+  end
+
   admin_write 'POST /meals/:meal_id/meal_residents' do
     path = "/meals/#{meal.id}/meal_residents"
     -> { post path, params: { meal_resident: { resident_id: resident.id } } }

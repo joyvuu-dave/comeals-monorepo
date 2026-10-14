@@ -52,6 +52,8 @@ const SIGNED_IN_PAGES = [
   ["meals-show", "/meals/3"],
   ["meals-new", "/meals/new"],
   ["meals-edit", "/meals/1/edit"],
+  // The correction form for the settled meal.
+  ["meals-correct", "/meals/3/correct"],
   ["reconciliations-index", "/reconciliations"],
   ["reconciliations-show", "/reconciliations/1"],
   ["reconciliations-new", "/reconciliations/new"],

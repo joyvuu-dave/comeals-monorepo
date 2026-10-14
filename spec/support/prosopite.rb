@@ -55,6 +55,11 @@ Prosopite.allow_stack_paths = [
   # (the meal before and the meal after) so their pages can be refreshed.
   # Four lookups, once per move.
   /meal\.rb:\d+:in 'Meal#neighbour_ids'/,
+  # A correction to a settled dinner makes each edit on its own row,
+  # through the model, so the model's rules and the audit history run for
+  # that row (MealCorrecting::Edits): a correction that changes two cooks'
+  # costs reads and writes two bills. A correction makes a few edits, once.
+  /meal_correcting\.rb:\d+:in 'MealCorrecting::Edits#/,
   # The nightly check reads each settlement's rows on their own, on
   # purpose: one settlement's check must not depend on another's rows.
   # It runs once a night over every settlement, about twelve a year.

@@ -111,11 +111,13 @@ Rails/BulkChangeTable:
   Enabled: false
 
 # --- Metrics ---
-# ActiveAdmin DSL, spec files, config blocks, routes, seeds, rake tasks,
-# and migrations all have legitimately large blocks.
+# ActiveAdmin DSL (its resources and its Arbre page templates), spec
+# files, config blocks, routes, seeds, rake tasks, and migrations all have
+# legitimately large blocks.
 Metrics/BlockLength:
   Exclude:
     - "app/admin/**/*"
+    - "app/views/admin/**/*"
     - "config/**/*"
     - "db/**/*"
     - "lib/tasks/**/*"
