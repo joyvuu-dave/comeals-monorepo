@@ -29,7 +29,7 @@
 # One dinner is let through: the one a correction is changing (ADR 0011
 # rule 6). MealCorrecting names it in the database setting
 # comeals.correcting, for its own transaction only, and the trigger
-# reads the same setting (20261013130100). The setting is read in the
+# reads the same setting (20261010125952). The setting is read in the
 # same query as the meal, so the two cannot disagree.
 module ReconciledMealImmutability
   extend ActiveSupport::Concern

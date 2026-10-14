@@ -7,7 +7,11 @@
 # that, and lets through the one dinner the transaction is correcting:
 # MealCorrecting sets comeals.correcting to the dinner's id, for its own
 # transaction only (set_config(..., true)), and records the correction in
-# the same transaction (20261013130000).
+# the same transaction (20261010125951).
+#
+# Dated 20261010125952, right after 20261010125951 and before the data
+# fixes, for the reason given there. It was 20261013130100. No migration
+# between the two dates replaces this function.
 #
 # Both meals are checked when a row moves between meals, the way the
 # trigger checked them before. A row cannot move off the dinner being

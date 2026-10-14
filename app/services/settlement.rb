@@ -482,7 +482,7 @@ class Settlement
   # saved while this settlement runs is carried by exactly one
   # settlement: this one if it committed before the locking read, the
   # next one otherwise. The database lets the claim through only while
-  # SETTLING_SETTING names this settlement (20261013130000), so the
+  # SETTLING_SETTING names this settlement (20261010125951), so the
   # setting is on for the UPDATE only, in its own savepoint, as in
   # write_ledger!.
   sig { void }

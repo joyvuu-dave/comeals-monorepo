@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
 require 'rails_helper'
-require Rails.root.join('db/migrate/20261013130000_create_meal_corrections.rb')
+require Rails.root.join('db/migrate/20261010125951_create_meal_corrections.rb')
 
 # The database's own rules for corrections to settled dinners (ADR 0011
-# rule 6), migrations 20261013130000 and 20261013130100. Each statement
+# rule 6), migrations 20261010125951 and 20261010125952. Each statement
 # here is raw SQL, the way psql or update_all writes, so no model rule
 # runs: only the triggers and the CHECKs stand between it and the table.
 RSpec.describe 'meal correction triggers' do
@@ -173,7 +173,7 @@ RSpec.describe 'meal correction triggers' do
     end
   end
 
-  # 20261013130100: the dinner being corrected, and only it.
+  # 20261010125952: the dinner being corrected, and only it.
   describe 'the rows of a settled dinner' do
     let(:other) { create(:resident, community: community, unit: unit) }
     let(:carried_meal) { carrier.meals.sole }

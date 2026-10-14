@@ -32,7 +32,7 @@
 # dinner's rows. The old settlement keeps what it settled; the next
 # settlement carries this correction (reconciliation, empty until then)
 # and adds its lines to the balances it rounds to cents. The table
-# comment is in migration 20261013130000.
+# comment is in migration 20261010125951.
 class MealCorrection < ApplicationRecord
   extend T::Sig
 
@@ -64,7 +64,7 @@ class MealCorrection < ApplicationRecord
   validates :reason, presence: true
 
   # Append-only. A settlement claims a correction with update_all, which
-  # skips this; the database trigger in 20261013130000 allows that one
+  # skips this; the database trigger in 20261010125951 allows that one
   # change and refuses every other.
   include AppendOnly
 

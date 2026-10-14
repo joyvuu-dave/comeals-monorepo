@@ -8,6 +8,15 @@
 # as a line. The old settlement keeps what it settled. The next
 # settlement carries every correction made since the last one.
 #
+# Dated 20261010125951, before the day it was written (2026-10-13), on
+# purpose. The data fixes from 20261010130000 to 20261013120100 work old
+# settlements out again with Settlement#correct!, which reads
+# meal_corrections (Reconciliation#settlement_balances, the nightly
+# check). In production every one of those is still to run, and
+# migrations run in the order of their dates, so the table must come
+# first. It was 20261013130000 until 2026-10-14, when a run of every
+# migration on a copy of production failed at 20261010130000.
+#
 #   meal_corrections        the dinner, who corrected it and why, what
 #                           changed (edits), and the settlement that
 #                           carries it (empty until one does)
@@ -23,7 +32,7 @@
 #     dinner is being corrected: the transaction has set comeals.correcting
 #     to the dinner's id (MealCorrecting). The same setting is what lets
 #     the dinner's bills, attendance and guests change
-#     (20261013130100).
+#     (20261010125952).
 #   - Its lines are added only then, while no settlement carries it yet,
 #     and they add up to exactly zero: what one person is credited, the
 #     others are charged.

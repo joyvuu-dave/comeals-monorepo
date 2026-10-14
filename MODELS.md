@@ -835,8 +835,8 @@ came out different from the preview. A correction that changes nothing
 is refused (`NothingChanged`); one that moves no money (a blank cost
 marked No cost) is recorded with no lines.
 
-The database keeps the rules for psql too (migrations `20261013130000`
-and `20261013130100`): a correction is inserted only for a settled meal
+The database keeps the rules for psql too (migrations `20261010125951`
+and `20261010125952`): a correction is inserted only for a settled meal
 that `comeals.correcting` names, with no settlement yet; its lines only
 while the same holds; the lines sum to zero
 (`meal_correction_lines_sum_zero`) and are never zero (CHECK). Nothing
