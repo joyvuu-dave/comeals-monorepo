@@ -15,6 +15,12 @@ module Settle
     Settlement.run!(cutoff: cutoff)
   end
 
+  # What the Create button on the admin settlement preview sends: the
+  # cutoff, and the fingerprint of the preview for it (ADR 0011 rule 4).
+  def admin_settle_params(cutoff)
+    { reconciliation: { end_date: cutoff }, fingerprint: Settlement.preview(cutoff: cutoff).fingerprint }
+  end
+
   # A settlement made the way every one was before ADR 0011 rule 3
   # (2026-10-13): a dinner where someone was charged and a cook's cost was
   # blank was settled, and the blank cost was locked at $0. The old

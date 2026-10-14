@@ -59,6 +59,8 @@ MUTANT_SPEC_ROWS = {
   # they check database triggers, which mutant does not touch, and cost
   # 20 seconds a pass.
   'spec/db/settlement_race_spec.rb' => %w[Settlement],
+  # The only spec where a cook's cost is written while the marking runs.
+  'spec/db/no_cost_marking_race_spec.rb' => %w[NoCostMarking],
   # A method-level entry runs only for that method, and for that method
   # nothing else runs: this is the one caller of rewrite!, a repair step.
   'spec/db/settled_balance_triggers_spec.rb' => %w[Settlement#rewrite!],
@@ -194,6 +196,9 @@ MUTANT_SPEC_ROWS = {
   # and a wrong cook is fixed by delete and add, named in the history.
   'spec/requests/admin/bill_cook_and_meal_spec.rb' => %w[Bill AuditDescription],
   'spec/requests/admin/reconciliation_immutability_spec.rb' => %w[SettleAndNotify Reconciliation AppendOnly],
+  # The admin settlement preview and its blank-cost button (ADR 0011
+  # rule 4): the words, the warnings it lists, and the marking.
+  'spec/requests/admin/settlement_preview_spec.rb' => %w[SettlementPreviewHelper ReconciliationWarnings NoCostMarking],
   'spec/requests/admin/child_pricing_rule_spec.rb' => %w[Community Multiplier],
   'spec/requests/admin/community_form_spec.rb' => %w[Community],
   'spec/requests/admin/community_singleton_spec.rb' => %w[Community BelongsToTheCommunity],

@@ -156,9 +156,7 @@ RSpec.describe 'Admin write authorization' do
       create(:meal_resident, meal: meal, resident: cook, community: community)
 
       expect do
-        post '/reconciliations', params: {
-          reconciliation: { end_date: cutoff }
-        }
+        post '/reconciliations', params: admin_settle_params(cutoff)
       end.to change(Reconciliation, :count).by(1)
     end
   end

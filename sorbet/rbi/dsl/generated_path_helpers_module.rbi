@@ -187,6 +187,9 @@ module GeneratedPathHelpersModule
   def letter_opener_web_path(*args); end
 
   sig { params(args: T.untyped).returns(String) }
+  def mark_no_cost_admin_reconciliations_path(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
   def new_admin_admin_user_path(*args); end
 
   sig { params(args: T.untyped).returns(String) }
@@ -221,6 +224,9 @@ module GeneratedPathHelpersModule
 
   sig { params(args: T.untyped).returns(String) }
   def new_admin_user_session_path(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
+  def preview_admin_reconciliations_path(*args); end
 
   sig { params(args: T.untyped).returns(String) }
   def rails_info_notes_path(*args); end

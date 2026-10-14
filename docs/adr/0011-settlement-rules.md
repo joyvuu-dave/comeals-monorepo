@@ -1,6 +1,6 @@
 # ADR 0011: How settlements work from now on
 
-- **Status:** Accepted. Rules 4, 6, 7, 8 and 9 are not built yet.
+- **Status:** Accepted. Rules 6, 7, 8 and 9 are not built yet.
 - **Date:** 2026-10-12
 - **Issue:** #165 (the common house email)
 
@@ -68,6 +68,12 @@ person to charge (the rule for a receipt and nobody to charge).
 The admin picks a cutoff and sees the dinners that will settle, the
 dinners that will wait and why, and each person's amount. Then they
 click Create.
+
+Create settles only what the preview showed. The button sends a code
+made from the preview's dinners and amounts. If a cook changed a cost or
+someone signed up after the preview was made, the settlement's code
+differs, nothing is saved, and the admin sees the preview as it is now.
+The preview and its buttons need a superuser, like Create.
 
 Under the dinners that wait for a cost there is one button: "Mark these
 N blank costs as No cost". It shows the list (date and cook) and asks

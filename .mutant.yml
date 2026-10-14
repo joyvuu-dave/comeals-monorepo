@@ -55,6 +55,7 @@ matcher:
     - MailDeliveryFailure*
     - MealCostSummary*
     - MealIcalFeed*
+    - NoCostMarking*
     - PacedDelivery*
     - PasswordReset*
     - ReconciliationWarnings*
@@ -84,6 +85,7 @@ matcher:
     - PhoneDisplayHelper*
     - RotationChoicesHelper*
     - ScheduleWeekLabelHelper*
+    - SettlementPreviewHelper*
     - SettlementLinesTable*
     - LedgerCheckFindingsTable*
     - AdminOrderClause*

@@ -13,6 +13,10 @@
 #   Settlement.run!(cutoff: cutoff)           # the seeds
 #   Settlement.settle!(cutoff: cutoff)        # SettleAndNotify: the rake
 #                                             # task, the API, the admin form
+#   Settlement.settle!(cutoff: cutoff, fingerprint: preview.fingerprint)
+#                                             # the admin form: refuse if
+#                                             # anything changed since the
+#                                             # preview
 #   Settlement.new(reconciliation).settle!    # a built row (the factory)
 #   Settlement.new(reconciliation).rewrite!   # repair only: rewrite the
 #                                             # ledger of an existing row
@@ -43,6 +47,12 @@ class Settlement
   # Raised when a concurrent settlement claimed one of this settlement's
   # meals first. Everything rolls back; the request can simply be sent again.
   class Contested < RuntimeError; end
+
+  # Raised by settle! when the caller passed the fingerprint of a preview
+  # and the settlement would claim other meals, or store other amounts,
+  # than that preview showed. Someone changed a cost or a sign-up after
+  # the preview was made. Everything rolls back.
+  class Changed < RuntimeError; end
 
   # Raised by correct! when the settlement already disagreed with its rows
   # before the caller's fix. Nothing is written.
@@ -81,9 +91,32 @@ class Settlement
   # after the commit can be taken for a failed commit and settle the
   # period again. A caller that opens its own transaction around this
   # one adds its writes to the settlement's commit.
-  sig { params(cutoff: Date).returns(Settlement) }
-  def self.settle!(cutoff:)
-    new(Reconciliation.new(end_date: cutoff)).tap(&:settle!)
+  #
+  # With a fingerprint (Preview#fingerprint), it settles only what that
+  # preview showed, and raises Changed otherwise.
+  sig { params(cutoff: Date, fingerprint: T.nilable(String)).returns(Settlement) }
+  def self.settle!(cutoff:, fingerprint: nil)
+    new(Reconciliation.new(end_date: cutoff)).tap { |settlement| settlement.settle!(fingerprint: fingerprint) }
+  end
+
+  # A short code made from what a settlement at this cutoff claims and
+  # stores: the cutoff, the meals, and each person's amount rounded to
+  # cents. The admin form shows a preview, then sends the preview's code
+  # with Create, and settle! makes the code again from what it is about to
+  # commit. If a cook changed a cost or someone signed up in between, the
+  # codes differ and nothing is saved, so an admin never settles amounts
+  # they did not see (ADR 0011 rule 4).
+  #
+  # The amounts are the cent-rounded balances, not the meal lines. A
+  # preview's lines include a meal nobody ate (credits of $0), and a
+  # settlement writes no lines for it, so the lines of the two can differ
+  # when nothing did. The balances cannot: a spec pins that a preview's
+  # balances are the rows a settlement stores. A $0 balance is left out
+  # on both sides, because a settlement stores none.
+  sig { params(cutoff: Date, meal_ids: T::Array[Integer], balances: T::Hash[Integer, BigDecimal]).returns(String) }
+  def self.fingerprint(cutoff:, meal_ids:, balances:)
+    amounts = balances.reject { |_, amount| amount.zero? }.sort.map { |id, amount| "#{id}:#{amount.to_s('F')}" }
+    Digest::SHA256.hexdigest([cutoff.iso8601, meal_ids.sort.join(','), amounts.join(',')].join('|'))
   end
 
   # What run! would settle and store for this cutoff, computed without
@@ -122,6 +155,13 @@ class Settlement
 
     sig { params(meal: Meal).returns(MealLedger::Summary) }
     def meal_summary(meal) = ledger.summary_for(meal)
+
+    # What the admin form sends with Create (Settlement.fingerprint).
+    sig { returns(String) }
+    def fingerprint
+      Settlement.fingerprint(cutoff: cutoff, meal_ids: meals.map { |meal| T.must(meal.id) },
+                             balances: resident_balances)
+    end
   end
 
   sig { params(cutoff: Date, community: Community).returns(Preview) }
@@ -197,19 +237,25 @@ class Settlement
 
   # Create the row, claim the meals, write the ledger. Raises
   # ActiveRecord::RecordInvalid when the period is not settleable (cutoff
-  # less than 14 days back, or no meal to settle), and Contested when a
-  # concurrent settlement claimed a meal first; both roll everything back.
-  # Does nothing after the commit; the caller runs forget_cached_meals.
-  # Returns nothing: every caller already holds the row, as
-  # `reconciliation`, and the meals, as claimed_meals.
-  sig { void }
-  def settle!
+  # less than 14 days back, or no meal to settle), Contested when a
+  # concurrent settlement claimed a meal first, and Changed when a
+  # fingerprint was given and what this settlement wrote does not match
+  # it; each rolls everything back. Does nothing after the commit; the
+  # caller runs forget_cached_meals. Returns nothing: every caller already
+  # holds the row, as `reconciliation`, and the meals, as claimed_meals.
+  #
+  # The fingerprint is checked after the writes, from the meals claimed
+  # under their locks and the balances just stored, so it describes
+  # exactly what would commit.
+  sig { params(fingerprint: T.nilable(String)).void }
+  def settle!(fingerprint: nil)
     reconciliation.mark_settling!
 
     Reconciliation.transaction do
       reconciliation.save!
       assign_meals
-      write_ledger!
+      balances = write_ledger!
+      refuse_what_the_preview_did_not_show!(fingerprint, balances) if fingerprint
     end
   end
 
@@ -409,6 +455,17 @@ class Settlement
                      'settled the rest first. Rolling back to avoid settling the same meals twice.'
   end
 
+  # The fingerprint of what this settlement wrote, against the one the
+  # caller's preview had (Settlement.fingerprint).
+  sig { params(fingerprint: String, balances: T::Hash[Integer, BigDecimal]).void }
+  def refuse_what_the_preview_did_not_show!(fingerprint, balances)
+    written = Settlement.fingerprint(cutoff: T.must(reconciliation.end_date),
+                                     meal_ids: claimed_meals.map(&:first), balances: balances)
+    return if written == fingerprint
+
+    raise Changed, 'The dinners or amounts changed after the preview was made, so nothing was settled.'
+  end
+
   # The same scope the create validation reads (Reconciliation#eligible_meals),
   # so the two cannot disagree about which meals count.
   sig { returns(T::Array[Integer]) }
@@ -443,15 +500,18 @@ class Settlement
   # Without the savepoint, a caller that caught the error and kept its
   # transaction would also keep the setting, and could then add rows to
   # this reconciliation as if the settlement wrote them.
-  sig { void }
+  #
+  # Returns the balances it stored, for the fingerprint check in settle!.
+  sig { returns(T::Hash[Integer, BigDecimal]) }
   def write_ledger!
     ledger = reconciliation.settlement_ledger
 
     Reconciliation.transaction(requires_new: true) do
       write_settling_setting(T.must(reconciliation.id).to_s)
       persist_charges!(ledger)
-      persist_balances!(ledger)
+      balances = persist_balances!(ledger)
       write_settling_setting('')
+      balances
     end
   end
 
@@ -500,12 +560,14 @@ class Settlement
   # lives on the shared Community.instance, and once loaded it would
   # answer every later read in the same request or task, new residents
   # left out.
-  sig { params(ledger: MealLedger).void }
+  # Returns the balances it stored.
+  sig { params(ledger: MealLedger).returns(T::Hash[Integer, BigDecimal]) }
   def persist_balances!(ledger)
     balances = reconciliation.settlement_balances(ledger).reject { |_, amount| amount.zero? }
     residents = Resident.where(id: balances.keys).index_by { |resident| T.must(resident.id) }
     balances.each do |resident_id, amount|
       reconciliation.reconciliation_balances.create!(resident: residents.fetch(resident_id), amount: amount)
     end
+    balances
   end
 end

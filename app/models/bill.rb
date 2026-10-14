@@ -117,6 +117,13 @@ class Bill < ApplicationRecord
 
   delegate :reconciled?, to: :meal
 
+  # The cook has not entered a cost yet: $0 and not marked No cost. The
+  # same rule as Meal.a_cost_not_entered, for a bill already in hand.
+  sig { returns(T::Boolean) }
+  def cost_not_entered?
+    !no_cost && T.must(amount).zero?
+  end
+
   private
 
   sig { void }

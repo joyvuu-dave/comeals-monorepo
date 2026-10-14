@@ -1,0 +1,41 @@
+# frozen_string_literal: true
+
+# The yes or no for "Mark these blank costs as No cost" on the
+# settlement preview (ADR 0011 rule 4). The yes sends the costs listed
+# here, and NoCostMarking changes only those still blank by then.
+cutoff = assigns.fetch(:cutoff)
+blank = assigns.fetch(:waiting).flat_map do |meal|
+  meal.bills.select(&:cost_not_entered?).sort_by { |bill| bill.resident.name }
+end
+back = preview_admin_reconciliations_path(reconciliation: { end_date: cutoff.iso8601 })
+
+para 'These cooks have not entered a cost. No cost means the cook spent nothing. Once every cook on a ' \
+     'dinner has a cost or No cost, the dinner can settle. Do this only after you have asked these cooks.'
+
+panel "Blank costs (#{blank.size})" do
+  table_for blank do
+    column('Date') { |bill| link_to bill.date.iso8601, admin_meal_path(bill.meal) }
+    column('Cook') { |bill| bill.resident.name }
+    column('Note') { |bill| free_dinner_note(bill.meal) }
+  end
+end
+
+# One form, laid out like ActiveAdmin's own: the yes as its button and
+# the no as its cancel link.
+form action: mark_no_cost_admin_reconciliations_path, method: 'post' do
+  input type: 'hidden', name: 'authenticity_token', value: form_authenticity_token
+  input type: 'hidden', name: 'reconciliation[end_date]', value: cutoff.iso8601
+  blank.each { |bill| input type: 'hidden', name: 'bill_ids[]', value: bill.id }
+  para "Mark #{blank.size == 1 ? 'this cost' : "these #{blank.size} costs"} No cost?"
+  fieldset class: 'actions' do
+    ol do
+      li class: 'action input_action' do
+        # Off after the first click, as on every form's submit button
+        # (data-disable-with, jquery_ujs).
+        yes = "Yes, mark #{blank.size == 1 ? 'it' : 'them'} No cost"
+        input type: 'submit', value: yes, 'data-disable-with': yes
+      end
+      li(class: 'cancel') { a 'No, go back', href: back }
+    end
+  end
+end

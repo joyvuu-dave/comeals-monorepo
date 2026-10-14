@@ -55,6 +55,15 @@ const SIGNED_IN_PAGES = [
   ["reconciliations-index", "/reconciliations"],
   ["reconciliations-show", "/reconciliations/1"],
   ["reconciliations-new", "/reconciliations/new"],
+  // Meal 4 settles at this cutoff and meal 5 waits for Alice's cost.
+  [
+    "reconciliations-preview",
+    "/reconciliations/preview?reconciliation%5Bend_date%5D=2026-01-06",
+  ],
+  [
+    "reconciliations-mark_no_cost",
+    "/reconciliations/mark_no_cost?reconciliation%5Bend_date%5D=2026-01-06",
+  ],
   ["residents-index", "/residents"],
   ["residents-show", "/residents/1"],
   ["residents-new", "/residents/new"],

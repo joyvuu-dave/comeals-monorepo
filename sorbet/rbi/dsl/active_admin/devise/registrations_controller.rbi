@@ -19,6 +19,7 @@ class ActiveAdmin::Devise::RegistrationsController
     include ::PhoneDisplayHelper
     include ::RotationChoicesHelper
     include ::ScheduleWeekLabelHelper
+    include ::SettlementPreviewHelper
     include ::DeviseHelper
     include ::ApplicationController::HelperMethods
     include ::DeviseController::HelperMethods

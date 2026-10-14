@@ -73,14 +73,20 @@ class SettleAndNotify
     Retries.new(attempts: RetryOnConflict::MAX_ATTEMPTS, base_delay: RetryOnConflict::BASE_DELAY), Retries
   )
 
-  sig { params(cutoff: Date, community: Community, retries: Retries).returns(Settlement) }
-  def self.call(cutoff:, community: Community.instance, retries: BATCH)
+  # The fingerprint is the admin form's: the settlement must match the
+  # preview the admin saw, or it raises Settlement::Changed and nothing is
+  # written (Settlement.fingerprint). The task and the API pass none.
+  sig do
+    params(cutoff: Date, community: Community, retries: Retries, fingerprint: T.nilable(String))
+      .returns(Settlement)
+  end
+  def self.call(cutoff:, community: Community.instance, retries: BATCH, fingerprint: nil)
     # Only the settlement and its mail job are retried. The cache clear
     # and the recalculation run after the commit, so retrying past that
     # point would settle the next period by mistake (or fail because there
     # is nothing left).
     settlement = RetryOnConflict.call(attempts: retries.attempts, base_delay: retries.base_delay) do
-      settle_and_queue_mail(cutoff)
+      settle_and_queue_mail(cutoff, fingerprint)
     end
 
     after_commit_step('cache clear after settlement') { settlement.forget_cached_meals }
@@ -95,10 +101,10 @@ class SettleAndNotify
   # job would be a write after the commit again. perform_later answers
   # false, and raises nothing, when an adapter refuses a job through
   # ActiveJob's own EnqueueError; that rolls the settlement back too.
-  sig { params(cutoff: Date).returns(Settlement) }
-  def self.settle_and_queue_mail(cutoff)
+  sig { params(cutoff: Date, fingerprint: T.nilable(String)).returns(Settlement) }
+  def self.settle_and_queue_mail(cutoff, fingerprint)
     Reconciliation.transaction do
-      Settlement.settle!(cutoff: cutoff).tap do |settlement|
+      Settlement.settle!(cutoff: cutoff, fingerprint: fingerprint).tap do |settlement|
         unless NotifyCooksJob.perform_later(settlement.reconciliation)
           raise MailNotQueued, 'The cook mail could not be queued, so nothing was settled.'
         end

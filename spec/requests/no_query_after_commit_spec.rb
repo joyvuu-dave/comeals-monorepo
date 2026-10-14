@@ -425,7 +425,18 @@ RSpec.describe 'what a write runs after its commit' do
 
   admin_write 'POST /reconciliations' do
     settleable_meal
-    -> { post '/reconciliations', params: { reconciliation: { end_date: latest } } }
+    params = admin_settle_params(latest)
+    -> { post '/reconciliations', params: params }
+  end
+
+  # The notice names each cost from its dinner and cook, which the
+  # marking loaded inside its transaction (NoCostMarking).
+  admin_write 'POST /reconciliations/mark_no_cost' do
+    meal = create(:meal, community: community, date: latest)
+    entered = create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('12'))
+    blank = create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('0'))
+    params = { reconciliation: { end_date: latest.iso8601 }, bill_ids: [blank.id, entered.id] }
+    -> { post '/reconciliations/mark_no_cost', params: params }
   end
 
   admin_write 'PATCH /residents/:id/remove_birthday' do

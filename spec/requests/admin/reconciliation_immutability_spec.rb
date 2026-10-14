@@ -73,7 +73,7 @@ RSpec.describe 'Admin Reconciliation Immutability' do
     allow(SettleAndNotify).to receive(:call).and_raise(Settlement::Contested, 'assign_meals: 0 of 3 claimed')
 
     expect do
-      post '/reconciliations', params: { reconciliation: { end_date: latest } }
+      post '/reconciliations', params: { reconciliation: { end_date: latest }, fingerprint: 'from the preview' }
     end.not_to change(Reconciliation, :count)
 
     expect(response).to redirect_to('/reconciliations/new')
@@ -94,8 +94,7 @@ RSpec.describe 'Admin Reconciliation Immutability' do
   # reconciliations:send_cooking_slot_email mails cooks about.
   it 'refuses a reconciliation that would settle no meals' do
     expect do
-      post '/reconciliations',
-           params: { reconciliation: { end_date: latest } }
+      post '/reconciliations', params: admin_settle_params(latest)
     end.not_to change(Reconciliation, :count)
 
     expect(response.body).to include('must settle at least one meal')
@@ -113,7 +112,7 @@ RSpec.describe 'Admin Reconciliation Immutability' do
     expect(response.body).to include("It must be on or before #{latest.iso8601}, 14 days before today")
 
     expect do
-      post '/reconciliations', params: { reconciliation: { end_date: latest + 1 } }
+      post '/reconciliations', params: { reconciliation: { end_date: latest + 1 }, fingerprint: 'from a preview' }
     end.not_to change(Reconciliation, :count)
 
     expect(response.body).to include("must be on or before #{latest.iso8601}, 14 days before today")
@@ -130,8 +129,7 @@ RSpec.describe 'Admin Reconciliation Immutability' do
     create(:meal_resident, meal: meal, resident: eater, community: community)
 
     expect do
-      post '/reconciliations',
-           params: { reconciliation: { end_date: latest } }
+      post '/reconciliations', params: admin_settle_params(latest)
     end.to change(Reconciliation, :count).by(1)
 
     # The form must settle, not just insert a row: the meal is claimed and

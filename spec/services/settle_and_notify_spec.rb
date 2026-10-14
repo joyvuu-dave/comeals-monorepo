@@ -320,6 +320,23 @@ RSpec.describe SettleAndNotify do
     end
   end
 
+  # The admin form's Create button sends the fingerprint of the preview
+  # the admin saw (ADR 0011 rule 4).
+  it 'settles only what the preview showed, and mails nobody when something changed' do
+    meal = settleable_meal(latest)
+    fingerprint = Settlement.preview(cutoff: latest).fingerprint
+    meal.bills.sole.update!(amount: BigDecimal('31'))
+
+    expect { described_class.call(cutoff: latest, community: community, fingerprint: fingerprint) }
+      .to raise_error(Settlement::Changed)
+    expect(Reconciliation.count).to eq(0)
+    expect(ReconciliationMailer).not_to have_received(:reconciliation_notify_email)
+
+    settlement = described_class.call(cutoff: latest, community: community,
+                                      fingerprint: Settlement.preview(cutoff: latest).fingerprint)
+    expect(settlement.reconciliation.meals).to contain_exactly(meal)
+  end
+
   it 'lets an error from the settlement itself through, so nothing is half done' do
     allow(Settlement).to receive(:settle!).and_raise(ActiveRecord::StatementInvalid, 'connection lost')
 

@@ -61,9 +61,9 @@ test.describe("Meals", () => {
   reseedBeforeGroup();
 
   // The New Meal form's rotation menu (#100). The seed has two
-  // rotations: rotation 2 ("Rotation 1") with meals on 2026-01-02 and
-  // 2026-01-05, and rotation 1 ("Rotation 2") with meals on 2027-02-02
-  // and 2027-02-04. The script in active_admin.js chooses the rotation
+  // rotations: rotation 2 ("Rotation 1") with meals on 2026-01-02,
+  // 2026-01-05 and 2026-01-06, and rotation 1 ("Rotation 2") with meals
+  // on 2027-02-02 and 2027-02-04. The script in active_admin.js chooses the rotation
   // whose dates contain the date typed.
   test("picks the rotation by date and creates a meal", async ({ page }) => {
     await login(page);
@@ -119,7 +119,7 @@ test.describe("Meals", () => {
 
     // The admin chooses one, and the meal saves.
     await page.selectOption("#meal_rotation_id", {
-      label: "Rotation 1: Jan 2–5, 2026",
+      label: "Rotation 1: Jan 2–6, 2026",
     });
     await page.click('input[type="submit"]');
     await expect(notice(page)).toHaveText("Meal was successfully created.");
@@ -230,14 +230,30 @@ test.describe("Meals: a date after the last rotation", () => {
 test.describe("Settlement", () => {
   reseedBeforeGroup();
 
-  test("settles a period from the reconciliation form", async ({ page }) => {
+  // The form opens a preview, and the preview has the Create button
+  // (ADR 0011 rule 4).
+  test("settles a period from the preview", async ({ page }) => {
     await login(page);
     await page.goto("/reconciliations/new");
     // Meal 4 (2026-01-05, closed, one $20 bill) is the only unsettled meal
-    // on or before this cutoff. The clock is frozen at 2026-01-20, so this
-    // is the latest cutoff allowed, 14 days before today.
-    await page.fill("#reconciliation_end_date", "2026-01-06");
+    // on or before this cutoff. Meal 5, the next day, waits for a cost,
+    // and the next test marks it.
+    await page.fill("#reconciliation_end_date", "2026-01-05");
     await page.click('input[type="submit"]');
+
+    await expect(page).toHaveURL(/\/reconciliations\/preview\?/);
+    await expect(panel(page, "Dinners that will settle (1)")).toContainText(
+      "2026-01-05",
+    );
+    // The amounts the settlement will store, before anything is saved.
+    const amounts = panel(page, "Each person's amount");
+    await expect(row(amounts, "Bob Baker").locator("td").last()).toHaveText(
+      "is owed $9.00",
+    );
+    await expect(row(amounts, "Alice Cook").locator("td").last()).toHaveText(
+      "owes $9.00",
+    );
+    await page.getByRole("button", { name: "Create Reconciliation" }).click();
 
     await expect(page).toHaveURL(/\/reconciliations\/2$/);
     await expect(notice(page)).toHaveText(
@@ -267,6 +283,42 @@ test.describe("Settlement", () => {
     await expect(panel(page, "Meals")).toContainText("2026-01-05");
   });
 
+  // A cook signed up and left the cost blank. Once the admin has asked
+  // the cook, the preview's button marks it No cost, and the dinner can
+  // settle (ADR 0011 rule 4).
+  test("marks a blank cost No cost from the preview", async ({ page }) => {
+    await login(page);
+    // The clock is frozen at 2026-01-20, so 2026-01-06 is the latest
+    // cutoff allowed, 14 days before today.
+    await page.goto(
+      "/reconciliations/preview?reconciliation%5Bend_date%5D=2026-01-06",
+    );
+    await expect(panel(page, "Dinners that will wait (1)")).toContainText(
+      "Alice Cook has not entered a cost for 2026-01-06.",
+    );
+    await page
+      .getByRole("link", { name: "Mark this blank cost as No cost" })
+      .click();
+
+    // The list, and a yes or no.
+    await expect(page.locator("#page_title")).toHaveText(
+      "Mark Blank Costs as No Cost",
+    );
+    await expect(page.locator("tbody tr")).toHaveCount(1);
+    await expect(
+      row(page.locator("#main_content"), "Alice Cook"),
+    ).toContainText("After this, it is free for everyone who ate.");
+    await page.getByRole("button", { name: "Yes, mark it No cost" }).click();
+
+    // Back on the preview: the dinner no longer waits, and it settles.
+    await expect(page).toHaveURL(/\/reconciliations\/preview\?/);
+    await expect(notice(page)).toHaveText("Marked 1 cost as No cost.");
+    await expect(panel(page, "Dinners that will wait (0)")).toBeVisible();
+    await expect(
+      panel(page, /^Dinners that will settle \(\d\)$/),
+    ).toContainText("2026-01-06");
+  });
+
   test("refuses a cutoff less than 14 days before today", async ({ page }) => {
     await login(page);
     await page.goto("/reconciliations/new");
@@ -276,13 +328,13 @@ test.describe("Settlement", () => {
     await page.click('input[type="submit"]');
 
     // The form is shown again with the reason; nothing was created.
-    await expect(page).toHaveURL(/\/reconciliations$/);
+    await expect(page).toHaveURL(/\/reconciliations\/preview\?/);
     await expect(page.locator(".errors, .inline-errors")).toContainText(
       "must be on or before 2026-01-06, 14 days before today",
     );
   });
 
-  test("refuses a cutoff with nothing to settle", async ({ page }) => {
+  test("offers no Create button when nothing can settle", async ({ page }) => {
     await login(page);
     await page.goto("/reconciliations/new");
     // Meal 3 (2026-01-02) is already settled; the next meal with a bill
@@ -290,11 +342,13 @@ test.describe("Settlement", () => {
     await page.fill("#reconciliation_end_date", "2026-01-04");
     await page.click('input[type="submit"]');
 
-    // The form is shown again with the reason; nothing was created.
-    await expect(page).toHaveURL(/\/reconciliations$/);
-    await expect(page.locator(".errors, .inline-errors")).toContainText(
-      "No unreconciled meals with bills on or before this date.",
+    await expect(page).toHaveURL(/\/reconciliations\/preview\?/);
+    await expect(panel(page, "Dinners that will settle (0)")).toContainText(
+      "No dinner on or before 2026-01-04 can be settled now.",
     );
+    await expect(
+      page.getByRole("button", { name: "Create Reconciliation" }),
+    ).toHaveCount(0);
   });
 
   test("shows the reconciliation page with balances and meals", async ({
@@ -770,7 +824,7 @@ test.describe("Read-only token", () => {
     // No login: the token is the session.
     await page.goto(`/bills?token=${READ_ONLY_TOKEN}`);
     await expect(page.locator("#page_title")).toHaveText("Cooking Slots");
-    await expect(page.locator("tbody tr")).toHaveCount(3);
+    await expect(page.locator("tbody tr")).toHaveCount(4);
 
     await page.goto(`/residents/1?token=${READ_ONLY_TOKEN}`);
     await expect(panel(page, "Settlement statement")).toBeVisible();

@@ -69,9 +69,9 @@ class ReconciliationWarnings
   end
 
   # The bills whose cost is not entered yet: $0 and not no-cost
-  # (Meal.a_cost_not_entered).
+  # (Bill#cost_not_entered?).
   def blank_bills(meal)
-    meal.bills.reject(&:no_cost).select { |bill| bill.amount.zero? }
+    meal.bills.select(&:cost_not_entered?)
   end
 
   # A meal the settlement claims gets one kind of warning: a $0 bill not

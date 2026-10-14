@@ -19,6 +19,7 @@ class ActiveAdmin::BaseController
     include ::PhoneDisplayHelper
     include ::RotationChoicesHelper
     include ::ScheduleWeekLabelHelper
+    include ::SettlementPreviewHelper
     include ::DeviseHelper
     include ::ApplicationController::HelperMethods
     include ::InheritedResources::Base::HelperMethods

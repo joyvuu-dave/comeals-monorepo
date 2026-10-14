@@ -46,12 +46,13 @@ RSpec.describe 'admin visual goldens' do
   end
 
   # Playwright writes a golden's file name with every underscore turned
-  # into a hyphen, so admin/admin_users#index is admin-users-index.
+  # into a hyphen, so admin/admin_users#index is admin-users-index, and
+  # admin/reconciliations#mark_no_cost is reconciliations-mark-no-cost.
   let(:golden_names) do
     (admin_routes - not_a_page.keys).map do |page|
       devise_names.fetch(page) do
         controller, action = page.split('#')
-        "#{controller.delete_prefix('admin/').tr('_', '-')}-#{action}"
+        "#{controller.delete_prefix('admin/')}-#{action}".tr('_', '-')
       end
     end
   end
@@ -75,7 +76,8 @@ RSpec.describe 'admin visual goldens' do
     listed = %w[SIGNED_OUT_PAGES SIGNED_IN_PAGES].flat_map do |list|
       body = source[/^const #{list} = \[\n(.*?)^\];/m, 1]
       expect(body).not_to be_nil, "tests/admin/visual.spec.js has no #{list} list"
-      body.to_s.scan(/^\s*\["([^"]+)",/).flatten
+      # An entry is one line, or several when prettier splits a long one.
+      body.to_s.scan(/^\s*\[\s*"([^"]+)",/).flatten
     end
 
     expect(listed.map { |name| name.tr('_', '-') }).to match_array(golden_names)

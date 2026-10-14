@@ -106,6 +106,17 @@ RSpec.describe Bill do
     end
   end
 
+  # A cost the cook has not entered yet (Meal.a_cost_not_entered, for a
+  # bill in hand).
+  describe '#cost_not_entered?' do
+    it 'is true for $0 not marked No cost, and false for a cost or No cost' do
+      expect([build(:bill, amount: BigDecimal('0'), no_cost: false),
+              build(:bill, amount: BigDecimal('0.01'), no_cost: false),
+              build(:bill, amount: BigDecimal('0'), no_cost: true)].map(&:cost_not_entered?))
+        .to eq([true, false, false])
+    end
+  end
+
   describe '#destroy' do
     it 'blocks destruction when meal is reconciled' do
       meal = create(:meal, community: community)

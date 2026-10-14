@@ -187,6 +187,9 @@ module GeneratedUrlHelpersModule
   def letter_opener_web_url(*args); end
 
   sig { params(args: T.untyped).returns(String) }
+  def mark_no_cost_admin_reconciliations_url(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
   def new_admin_admin_user_url(*args); end
 
   sig { params(args: T.untyped).returns(String) }
@@ -221,6 +224,9 @@ module GeneratedUrlHelpersModule
 
   sig { params(args: T.untyped).returns(String) }
   def new_admin_user_session_url(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
+  def preview_admin_reconciliations_url(*args); end
 
   sig { params(args: T.untyped).returns(String) }
   def rails_info_notes_url(*args); end

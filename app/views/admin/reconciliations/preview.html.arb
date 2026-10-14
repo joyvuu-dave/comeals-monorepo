@@ -1,0 +1,102 @@
+# frozen_string_literal: true
+
+# The settlement preview (ADR 0011 rule 4), from Settlement.preview: the
+# dinners a settlement at this cutoff would settle, each person's amount,
+# and the dinners it would leave waiting and why. Nothing here is saved.
+# The Create button sends the preview's fingerprint, so the settlement
+# refuses to save anything this page did not show (Settlement.fingerprint).
+preview = assigns.fetch(:preview)
+cutoff = preview.cutoff
+settling_ids = preview.meals.to_set(&:id)
+warnings = ReconciliationWarnings.for(preview.meals, skipped: preview.skipped_meals, held: preview.held_meals,
+                                                     waiting: preview.waiting_meals)
+waits, notes = warnings.partition { |warning| settling_ids.exclude?(warning[:meal_id]) }
+blank_count = preview.waiting_meals.sum { |meal| meal.bills.count(&:cost_not_entered?) }
+
+para do
+  text_node "Dinners on or before #{cutoff.iso8601}. "
+  text_node link_to('Change the date', new_admin_reconciliation_path(reconciliation: { end_date: cutoff.iso8601 }))
+end
+
+panel "Dinners that will settle (#{preview.meals.size})" do
+  if preview.meals.empty?
+    para "No dinner on or before #{cutoff.iso8601} can be settled now."
+  else
+    table_for preview.meals do
+      column('Date') { |meal| link_to meal.date.iso8601, admin_meal_path(meal) }
+      column('Cooks') do |meal|
+        safe_join(meal.bills.sort_by { |bill| bill.resident.name }.map do |bill|
+          cost = bill.no_cost ? 'No cost' : number_to_currency(bill.amount)
+          "#{bill.resident.name} (#{cost})"
+        end, ', ')
+      end
+      column('Eaters') { |meal| meal.meal_residents.size + meal.guests.size }
+      column('Total Cost') { |meal| number_to_currency(preview.meal_summary(meal).total_cost) }
+    end
+  end
+end
+
+panel "Each person's amount" do
+  amounts = preview.resident_balances.reject { |_, amount| amount.zero? }
+  if amounts.empty?
+    para 'Nobody owes or is owed anything.'
+  else
+    residents = Resident.where(id: amounts.keys).joins(:unit).includes(:unit).order('units.name', :name)
+    # balance_tag turns the sign into words (BalanceDisplayHelper).
+    table_for residents do
+      column('Resident') { |resident| link_to resident.name, admin_resident_path(resident) }
+      column('Unit') { |resident| resident.unit.name }
+      column('Amount') { |resident| balance_tag(amounts.fetch(resident.id)) }
+    end
+    text_node settlement_totals_tag(amounts.values, 'residents')
+  end
+end
+
+panel "Dinners that will wait (#{waits.pluck(:meal_id).uniq.size})" do
+  if waits.empty?
+    para "No dinner on or before #{cutoff.iso8601} is waiting."
+  else
+    meal_dates = (preview.skipped_meals + preview.held_meals + preview.waiting_meals).to_h do |meal|
+      [meal.id, meal.date]
+    end
+    table_for waits do
+      column('Date') do |warning|
+        link_to meal_dates.fetch(warning[:meal_id]).iso8601, admin_meal_path(warning[:meal_id])
+      end
+      column('Why') { |warning| warning[:body] }
+    end
+    if blank_count.positive? && authorized?(:update, Bill)
+      para 'Ask these cooks first. If a cook spent nothing, mark their cost No cost, and the dinner can settle.'
+      para do
+        link_to blank_cost_button_label(blank_count),
+                mark_no_cost_admin_reconciliations_path(reconciliation: { end_date: cutoff.iso8601 }),
+                class: 'button'
+      end
+    end
+  end
+end
+
+if notes.any?
+  panel 'Notes' do
+    table_for notes do
+      column('Date') do |warning|
+        link_to preview.meals.find { |meal| meal.id == warning[:meal_id] }.date.iso8601,
+                admin_meal_path(warning[:meal_id])
+      end
+      column('Note') { |warning| warning[:body] }
+    end
+  end
+end
+
+if preview.meals.empty?
+  para 'Nothing can be settled with this date, so there is no Create button.'
+elsif authorized?(:create, Reconciliation)
+  # data-disable-with turns the button off after the first click
+  # (jquery_ujs), as Rails does for the submit button of every form.
+  # button_to does not add it. Without it a double click sends a second
+  # Create, which finds nothing left to settle and shows an error after
+  # the first one saved.
+  text_node button_to('Create Reconciliation', admin_reconciliations_path,
+                      params: { reconciliation: { end_date: cutoff.iso8601 }, fingerprint: preview.fingerprint },
+                      data: { disable_with: 'Create Reconciliation' })
+end

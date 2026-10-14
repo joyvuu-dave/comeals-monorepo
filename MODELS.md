@@ -668,8 +668,9 @@ Reconciliation ----< ReconciliationBalance ---> Resident
   (`app/services/settlement.rb`), in the same transaction that claims the
   meals and writes the ledger. `Reconciliation.create!` on its own raises
   `Reconciliation::NotSettled`, so no path can leave a settlement that
-  settled nothing. `Settlement.run!(cutoff:)` is what the rake task, the
-  admin form, and the specs call; the pipeline is:
+  settled nothing. The rake task, the API and the admin form call
+  `Settlement.settle!` through `SettleAndNotify`, and the seeds and the
+  specs call `Settlement.run!(cutoff:)`; the pipeline is:
   1. save the row (validations run here);
   2. `assign_meals` — claim every meal in `eligible_meals`
      (`Meal.settleable_by(end_date)`: unreconciled, has a bill, someone
@@ -691,7 +692,11 @@ Reconciliation ----< ReconciliationBalance ---> Resident
      "Append-only ledger" below). `insert_all!` and not `insert_all`:
      without the bang, a line already on the meal would make it skip the
      real line with no error.
-  4. after commit, clear the `meal-<id>` cache of every claimed meal and the
+  4. with the fingerprint of a preview (the admin form's Create button),
+     refuse when the claimed meals or the stored balances differ from what
+     that preview showed (`Settlement.fingerprint`, `Settlement::Changed`,
+     ADR 0011 rule 4). Everything rolls back.
+  5. after commit, clear the `meal-<id>` cache of every claimed meal and the
      calendar months they fall in (issue #70).
 - `eligible_meals` — the scope above; the create validation and the claim
   read the same one, so they cannot disagree.

@@ -10,8 +10,16 @@ This document captures the desired workflow for performing a reconciliation, the
 > bills, attendance, and guests are refused by database triggers on every path,
 > including `update_all` and psql. There is no unfinalize. Corrections settle
 > as new entries in the next period — see `docs/runbooks/settled-data-repair.md`.
+>
 > The `audited` gem also now records every write on the financial models, which
-> covers most of the "audit trail" idea. Items 1, 2, 3, and 5 are still open.
+> covers most of the "audit trail" idea.
+>
+> Item 5, the preview, shipped on 2026-10-13 (ADR 0011 rule 4), with the
+> warnings of item 1 on it. The admin form now opens a preview: the dinners
+> that will settle, each person's amount, and the dinners that will wait and
+> why. Its Create button settles only what the preview showed. Items 2 and 3
+> are still open, and so is item 1's check for a cook who eats at a
+> multiplier of 0.
 
 ## Background
 
@@ -25,13 +33,11 @@ When the person responsible for reconciliations runs one, their mental flow is:
 
 2. **Double-check the costs.** Easy for a cook to mis-enter a bill (typo: $400 for a $40 meal, or $4 for a $40 meal). Outliers should be flagged based on the community's actual cost history, not hardcoded thresholds. Different communities will have different typical cost ranges, especially across currencies.
 
-3. **Lock the numbers.** The reconciler used to do this by printing the numbers. The system now does it: creating the reconciliation is the lock. The row cannot be updated or destroyed, and its meals' bills, attendance, and guests are frozen by database triggers. The catch is that the lock happens at the same instant as the calculation, so there is still no moment between "see the numbers" and "commit to them." That is what item 5 is about.
+3. **Lock the numbers.** The reconciler used to do this by printing the numbers. The system now does it: creating the reconciliation is the lock. The row cannot be updated or destroyed, and its meals' bills, attendance, and guests are frozen by database triggers. The preview (item 5) shows the numbers first, and Create locks exactly those numbers.
 
 ## Pain points
 
 - **No outlier detection.** Errors only get caught if someone manually notices them.
-- **No data quality warnings.** Bills with no attendees, attendees with no bills, $0 bills not flagged as `no_cost` — all pass without comment.
-- **No preview / dry run.** The reconciler can only see what a reconciliation looks like _after_ creating it — and by then it is locked. They cannot delete it or fix it in place; the only path is a correcting entry in the next period. So the missing preview matters more now than it did before, not less.
 - **No comparison to history.** A 4× cost rise from the previous reconciliation should be obvious, but today you have to compare by hand.
 
 ## Improvement ideas
@@ -115,7 +121,7 @@ Two pieces of the reasoning above turned out to be right and are worth keeping:
 
 What we gave up by not building `finalized_at`: there is no review window. Creating the reconciliation and locking it are one act, so a mistake can only be corrected forward, in the next period. That cost is what makes item 5 the most valuable thing left on this list.
 
-### 5. Pre-flight preview ("dry run")
+### 5. Pre-flight preview ("dry run") — SHIPPED 2026-10-13 (ADR 0011 rule 4). Kept for the reasoning.
 
 The biggest workflow improvement of all. The reconciler's habit is "double-check dates, double-check costs, then lock." Currently they can only check _after_ creating the reconciliation, and creating it is the lock. If they find a problem, they cannot delete it or fix it in place — the only remedy is a correcting entry in the next period.
 
@@ -136,7 +142,7 @@ This turns reconciliation from "do it then fix problems" to "verify it then comm
 
 ## Recommended sequence
 
-1. **Mismatch warnings + thin pre-flight preview** — ship together. Deterministic checks surfaced on a read-only dry-run page. This is the first item that _prevents_ errors instead of just flagging them after the fact.
+1. ~~Mismatch warnings + thin pre-flight preview~~ — done, see item 5.
 2. **Cost outlier detection** — IQR-based, with a conservative hardcoded fallback band for the cold-start period. Layered into the preview from item 1.
 3. **Date outlier detection** — same UI surface as cost outliers, build together.
 4. ~~Finalized state~~ — done, see item 4.

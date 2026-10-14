@@ -89,13 +89,14 @@ def seed_meals(community, cook, bob, carol)
   # Bill id 1, attached to meal 1.
   FactoryBot.create(:bill, community: community, meal: Meal.find(1), resident: cook, amount: BigDecimal('75'))
 
-  # Meals 3 (2026-01-02) and 4 (2026-01-05), in rotation 2. Every meal
-  # belongs to a rotation, and a rotation made with its meals is numbered
-  # by their dates: rotation 2 is "Rotation 1" and rotation 1 is
-  # "Rotation 2". The New Meal form's rotation menu then has a gap
-  # between the two (actions.spec.js picks a date in it).
+  # Meals 3 (2026-01-02), 4 (2026-01-05) and 5 (2026-01-06), in rotation
+  # 2. Every meal belongs to a rotation, and a rotation made with its
+  # meals is numbered by their dates: rotation 2 is "Rotation 1" and
+  # rotation 1 is "Rotation 2". The New Meal form's rotation menu then has
+  # a gap between the two (actions.spec.js picks a date in it).
   community.rotations.create!(no_email: true,
-                              meals_attributes: [{ date: Date.new(2026, 1, 2) }, { date: Date.new(2026, 1, 5) }])
+                              meals_attributes: [{ date: Date.new(2026, 1, 2) }, { date: Date.new(2026, 1, 5) },
+                                                 { date: Date.new(2026, 1, 6) }])
 
   # A settled period: meal 3, with a bill over the cap, three eaters and a
   # guest, swept by reconciliation 1 (dated SEED_NOW). Both meals are at
@@ -109,6 +110,11 @@ def seed_meals(community, cook, bob, carol)
   # panel and the averages have something to count.
   seed_closed_meal(meal: Meal.find(4), cook: bob, amount: BigDecimal('20'),
                    eaters: [cook, bob])
+
+  # Meal 5: Bob ate, and Alice signed up to cook but has not entered a
+  # cost, so a settlement waits for it (ADR 0011 rule 3). The settlement
+  # preview lists it, and actions.spec.js marks her cost No cost there.
+  seed_closed_meal(meal: Meal.find(5), cook: cook, amount: BigDecimal('0'), eaters: [bob])
   BalanceRecalculation.call(community: community)
 end
 

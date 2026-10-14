@@ -45,6 +45,11 @@ refused_destroy_path
 # Named in an `if:` option, which debride does not read
 # (GuestRoomReservation's uniqueness rule):
 storable_date?
+# Called only from the settlement preview's templates
+# (app/views/admin/reconciliations/*.html.arb), and debride reads only
+# .rb and .rake files:
+blank_cost_button_label
+free_dinner_note
 # ActiveAdmin DSL blocks that override a controller method:
 find_resource
 scoped_collection

@@ -21,26 +21,90 @@ ActiveAdmin.register Reconciliation do
 
   permit_params :end_date
 
+  # ADR 0011 rule 4: the new form asks for a cutoff and shows a preview,
+  # and the Create button is on the preview. The preview shows the
+  # dinners that will settle, each person's amount, and the dinners that
+  # will wait and why (app/views/admin/reconciliations/preview.html.arb).
+  # It writes nothing, but it is the first step of a settlement, so it
+  # needs the same permission as the new form: a superuser. A plain admin
+  # reads the settlements once they are made.
+  collection_action :preview, method: :get do
+    # Hand-written action: ActiveAdmin authorizes inside resource and
+    # build_resource, neither of which runs here (the meal_resident.rb
+    # trap, ADR 0004).
+    authorize! :new, Reconciliation
+    @reconciliation = Reconciliation.new(end_date: params.dig(:reconciliation, :end_date))
+    cutoff = @reconciliation.end_date
+    refusal = cutoff ? Reconciliation.cutoff_refusal(cutoff, Community.instance.today) : "can't be blank"
+    if refusal
+      # The new form again, with the reason on the date, in the words the
+      # create validation would use.
+      @reconciliation.errors.add(:end_date, refusal)
+      render :new
+    else
+      @page_title = 'Settlement Preview'
+      @preview = Settlement.preview(cutoff: cutoff)
+    end
+  end
+
+  # The button under the dinners that wait for a cost: "Mark these N
+  # blank costs as No cost". The GET shows the list and asks yes or no;
+  # the yes posts the costs it showed, and NoCostMarking changes only
+  # those still blank (app/views/admin/reconciliations/mark_no_cost.html.arb).
+  # It writes bills, so it needs a superuser, like the bill form.
+  collection_action :mark_no_cost, method: %i[get post] do
+    authorize! :update, Bill
+    cutoff = Date.iso8601(params.dig(:reconciliation, :end_date).to_s)
+    preview_path = preview_admin_reconciliations_path(reconciliation: { end_date: cutoff.iso8601 })
+    if request.post?
+      result = NoCostMarking.call(bill_ids: Array(params[:bill_ids]).map { |id| Integer(id, 10) })
+      redirect_to preview_path, notice: helpers.no_cost_marking_words(result)
+    else
+      @page_title = 'Mark Blank Costs as No Cost'
+      @cutoff = cutoff
+      @waiting = Settlement.waiting_by(cutoff, today: Community.instance.today)
+      redirect_to preview_path, notice: 'No cost is blank on a dinner that waits.' if @waiting.empty?
+    end
+  rescue Date::Error
+    redirect_to new_resource_path, alert: 'Pick a cutoff date first.'
+  end
+
   controller do
-    # The form settles a period, the same way the nightly task and the API
-    # do: SettleAndNotify claims the meals, writes the ledger, queues the
-    # cook mail, and refreshes the running balances (#73). Nothing after
-    # its commit can raise, so the conflict rescue's "Nothing was saved"
-    # is only ever shown for a settlement that was not saved. build_resource
-    # runs the authorization check and permits the params; the row it
-    # builds is only read for its cutoff, because a retry after a conflict
-    # needs a fresh row each time (RetryOnConflict). A refused settlement
-    # comes back as RecordInvalid with the errors on its row, which the
-    # form renders like any failed save.
+    # The preview's Create button settles a period, the same way the
+    # nightly task and the API do: SettleAndNotify claims the meals,
+    # writes the ledger, queues the cook mail, and refreshes the running
+    # balances (#73). Nothing after its commit can raise, so the conflict
+    # rescue's "Nothing was saved" is only ever shown for a settlement
+    # that was not saved. build_resource runs the authorization check and
+    # permits the params; the row it builds is only read for its cutoff,
+    # because a retry after a conflict needs a fresh row each time
+    # (RetryOnConflict). A refused settlement comes back as RecordInvalid
+    # with the errors on its row, which the form renders like any failed
+    # save.
+    #
+    # The button sends the preview's fingerprint, and the settlement
+    # refuses to commit anything the preview did not show
+    # (Settlement.fingerprint). A create without one did not come from a
+    # preview, so it is sent to the preview first.
     def create
       cutoff = build_resource.end_date
+      fingerprint = params[:fingerprint].presence
+      unless fingerprint
+        return redirect_to(preview_for(cutoff), alert: 'Look over the preview first, then click Create.')
+      end
+
       # A person is waiting at a form, so the request's three quick tries,
       # not the nightly task's minutes (SettleAndNotify::REQUEST).
-      reconciliation = SettleAndNotify.call(cutoff: cutoff, retries: SettleAndNotify::REQUEST).reconciliation
+      reconciliation = SettleAndNotify.call(cutoff: cutoff, retries: SettleAndNotify::REQUEST,
+                                            fingerprint: fingerprint).reconciliation
       redirect_to resource_path(reconciliation), notice: 'Reconciliation was successfully created.'
     rescue ActiveRecord::RecordInvalid => e
       set_resource_ivar(e.record)
       render :new
+    rescue Settlement::Changed
+      redirect_to preview_for(cutoff),
+                  alert: 'A cost or a sign-up changed after this preview was made, so nothing was saved. ' \
+                         'This is the preview as it is now. Look it over, then click Create again.'
     rescue Settlement::Contested
       # Another settlement claimed the meals between this one's read and
       # its write. Nothing was written, and the period may be settled
@@ -51,6 +115,15 @@ ActiveAdmin.register Reconciliation do
       # answered 500 until now.
       redirect_to new_resource_path,
                   alert: 'Someone else was settling at the same time. Nothing was saved. Try again.'
+    end
+
+    private
+
+    # The preview for a cutoff, or the new form when there is no cutoff.
+    def preview_for(cutoff)
+      return new_resource_path unless cutoff
+
+      preview_admin_reconciliations_path(reconciliation: { end_date: cutoff.iso8601 })
     end
   end
 
@@ -119,7 +192,9 @@ ActiveAdmin.register Reconciliation do
   end
 
   # FORM
-  form do |f|
+  # The form asks for the cutoff and opens the preview, which has the
+  # Create button. A GET, because a preview writes nothing.
+  form url: '/reconciliations/preview', method: :get do |f|
     f.inputs do
       latest = Reconciliation.latest_cutoff(Community.instance.today)
       f.input :end_date, as: :datepicker,
@@ -127,7 +202,10 @@ ActiveAdmin.register Reconciliation do
                                "#{latest.iso8601}, #{Reconciliation::DAYS_TO_WAIT} days before today, so cooks " \
                                'have time to fix their costs.'
     end
-    f.actions
+    f.actions do
+      f.action :submit, label: 'Preview', button_html: { name: nil }
+      f.cancel_link
+    end
     f.semantic_errors
   end
 end
