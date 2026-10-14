@@ -114,6 +114,13 @@ during a settlement goes into exactly one settlement. A settlement may
 carry corrections and settle no dinner, so a correction made when there
 are no new dinners does not wait with no end (decided 2026-10-13).
 
+The cook mail of the settlement that carries a correction also goes to
+each person whose cost the correction changed, added or removed, even
+when they cooked nothing in that settlement. It says what changed, gives
+the reason, and links to the dinner's page. The settlement that settled
+the dinner keeps the cooks it settled: a cook that a correction adds
+later does not get that settlement's mail.
+
 The ledger check then checks two things. Each settlement's lines equal
 its dinners plus the corrections it carries. And for each dinner, what
 it was settled at plus its later corrections equals what its rows add up

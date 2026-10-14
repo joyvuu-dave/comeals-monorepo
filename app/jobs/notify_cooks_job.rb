@@ -42,14 +42,37 @@ class NotifyCooksJob < ApplicationJob
                       'SendMissedCookMailJob tries again each night.')
   end
 
-  # The cooks of this settlement who can get this mail: everyone with a
-  # bill in it who has an email address. A retired resident, a child, or
-  # someone who cannot cook may have none (Resident#email_presence), and a
-  # retired cook can still have a bill here. Mail to an empty address
-  # raises ArgumentError, which is not a delivery error, so one such cook
-  # used to stop the whole run.
+  # Each settlement in `reconciliations` (a relation) and each cook its
+  # mail is about, as the rows (reconciliation_id, resident_id) of a
+  # subquery named `cooks`. A cook is someone who cooked a dinner the
+  # settlement settled, as it settled it (Reconciliation.settled_cooks),
+  # or someone whose cost a correction it carries added, removed or
+  # changed (ADR 0011 rule 6), who may have cooked nothing in it. UNION,
+  # so a cook who is both is one row. The send, the log line and
+  # SendMissedCookMailJob all read this, so they agree on who is owed the
+  # mail.
+  def self.cook_rows(reconciliations)
+    corrected = MealCorrection.cost_edits.where(reconciliation_id: reconciliations.select(:id))
+                              .select(:reconciliation_id, MealCorrection::COOK_ID)
+    Arel::Nodes::TableAlias.new(Arel::Nodes::Union.new(Reconciliation.settled_cooks(reconciliations), corrected.arel),
+                                'cooks')
+  end
+
+  # Every cook this settlement's mail is about, with or without an email
+  # address.
+  def self.cooks(reconciliation)
+    rows = cook_rows(Reconciliation.where(id: reconciliation.id))
+    Resident.where(id: Resident.from(rows).select('cooks.resident_id'))
+  end
+
+  # The cooks of this settlement who can get this mail: everyone above
+  # who has an email address. A retired resident, a child, or someone who
+  # cannot cook may have none (Resident#email_presence), and a retired
+  # cook can still have a bill here. Mail to an empty address raises
+  # ArgumentError, which is not a delivery error, so one such cook used
+  # to stop the whole run.
   def self.recipients(reconciliation)
-    reconciliation.cooks.where.not(residents: { email: nil }).distinct
+    cooks(reconciliation).where.not(email: nil)
   end
 
   # For each of these settlements (a relation) that has a cook still owed
@@ -58,14 +81,14 @@ class NotifyCooksJob < ApplicationJob
   # One query for the whole set, for SendMissedCookMailJob.
   def self.cooks_owed(reconciliations)
     delivered = MailDelivery.where(mailer: MAILER, about_type: Reconciliation.polymorphic_name)
-                            .where('mail_deliveries.about_id = meals.reconciliation_id')
-                            .where('mail_deliveries.resident_id = bills.resident_id')
-    Bill.joins(:meal, :resident)
-        .where(meals: { reconciliation_id: reconciliations })
-        .where.not(residents: { email: nil })
-        .where(delivered.arel.exists.not)
-        .group('meals.reconciliation_id')
-        .distinct.count('bills.resident_id')
+                            .where('mail_deliveries.about_id = cooks.reconciliation_id')
+                            .where('mail_deliveries.resident_id = cooks.resident_id')
+    Resident.from(cook_rows(reconciliations))
+            .joins('JOIN residents ON residents.id = cooks.resident_id')
+            .where.not(residents: { email: nil })
+            .where(delivered.arel.exists.not)
+            .group('cooks.reconciliation_id')
+            .count
   end
 
   def perform(reconciliation)
@@ -95,7 +118,7 @@ class NotifyCooksJob < ApplicationJob
   # never got it" can be found in the log. Not a Bugsnag report: a cook
   # with no address is allowed, and nothing is broken.
   def log_cooks_without_email(reconciliation)
-    reconciliation.cooks.where(residents: { email: nil }).distinct.pluck(:id).each do |id|
+    self.class.cooks(reconciliation).where(email: nil).pluck(:id).each do |id|
       Rails.logger.info("#{MAILER}: not sent to resident ##{id}, who has no email address " \
                         "(reconciliation ##{reconciliation.id})")
     end

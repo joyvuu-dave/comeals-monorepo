@@ -459,20 +459,6 @@ class Reconciliation
     sig { returns(T::Boolean) }
     def community_previously_changed?; end
 
-    sig { returns(T::Array[T.untyped]) }
-    def cook_ids; end
-
-    sig { params(ids: T::Array[T.untyped]).returns(T::Array[T.untyped]) }
-    def cook_ids=(ids); end
-
-    # This method is created by ActiveRecord on the `Reconciliation` class because it declared `has_many :cooks, through: :bills`.
-    # 🔗 [Rails guide for `has_many_through` association](https://guides.rubyonrails.org/association_basics.html#the-has-many-through-association)
-    sig { returns(::Resident::PrivateCollectionProxy) }
-    def cooks; end
-
-    sig { params(value: T::Enumerable[::Resident]).void }
-    def cooks=(value); end
-
     sig { params(args: T.untyped, blk: T.untyped).returns(::Community) }
     def create_community(*args, &blk); end
 

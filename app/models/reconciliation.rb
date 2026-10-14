@@ -55,7 +55,6 @@ class Reconciliation < ApplicationRecord
 
   has_many :meals, dependent: :nullify
   has_many :bills, through: :meals
-  has_many :cooks, through: :bills, source: :resident
   has_many :reconciliation_balances, dependent: :destroy
   # Each time this settlement's numbers were worked out again after it was
   # made (Settlement#correct!), oldest first.
@@ -97,6 +96,42 @@ class Reconciliation < ApplicationRecord
   sig { returns(Integer) }
   def number_of_meals
     meals.count
+  end
+
+  # The people who cooked a dinner in these settlements (a relation), as
+  # each settlement settled it: rows of (reconciliation_id, resident_id).
+  #
+  # A dinner's bills now are not always the ones its settlement settled.
+  # A correction adds, removes or changes a cook's bill later (ADR 0011
+  # rule 6), and its record keeps each cook's cost before the change
+  # (MealCorrecting::Edits). So a cook no correction names on a dinner is
+  # one its bills show. For a cook a correction does name, the first such
+  # edit says whether they cooked when the dinner settled: their cost
+  # before it is an object if they did, and null if they were not a cook.
+  sig { params(reconciliations: ActiveRecord::Relation).returns(Arel::Nodes::Union) }
+  def self.settled_cooks(reconciliations)
+    named = MealCorrection.cost_edits.where('meal_corrections.meal_id = bills.meal_id')
+                          .where(MealCorrection::COOK_ID.eq(Bill.arel_table[:resident_id]))
+    unnamed = Bill.joins(:meal).where(meals: { reconciliation_id: reconciliations.select(:id) })
+                  .where(named.arel.exists.not)
+                  .select('meals.reconciliation_id', 'bills.resident_id')
+    first_edits = MealCorrection
+                  .cost_edits.joins(:meal).where(meals: { reconciliation_id: reconciliations.select(:id) })
+                  .select(Arel.sql('DISTINCT ON (meal_corrections.meal_id, cook_id) meals.reconciliation_id'),
+                          MealCorrection::COOK_ID.as('cook_id'), MealCorrection::COST_BEFORE.as('cost_before'))
+                  .order(Arel.sql('meal_corrections.meal_id, cook_id, meal_corrections.id, cost_edit.place'))
+    were_cooks = MealCorrection.from(first_edits, :first_edits)
+                               .where("jsonb_typeof(first_edits.cost_before) = 'object'")
+                               .select('first_edits.reconciliation_id', 'first_edits.cook_id')
+    Arel::Nodes::Union.new(unnamed.arel, were_cooks.arel)
+  end
+
+  # Whether this resident cooked a dinner in this settlement, as it
+  # settled it (settled_cooks).
+  sig { params(resident: Resident).returns(T::Boolean) }
+  def settled_cook?(resident)
+    cooks = Arel::Nodes::TableAlias.new(self.class.settled_cooks(self.class.where(id: id)), 'settled_cooks')
+    Resident.from(cooks).exists?(settled_cooks: { resident_id: resident.id })
   end
 
   # Compute final settlement balances for this reconciliation period.

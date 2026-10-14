@@ -38,11 +38,13 @@ MUTANT_SPEC_ROWS = {
   'spec/models/reconciliation_spec.rb' => %w[Reconciliation Settlement MealLedger AppendOnly BelongsToTheCommunity],
   'spec/models/reconciliation_awkward_bills_spec.rb' =>
     %w[Reconciliation Settlement MealLedger AppendOnly BelongsToTheCommunity],
+  'spec/models/reconciliation_settled_cooks_spec.rb' => %w[Reconciliation AppendOnly BelongsToTheCommunity],
   'spec/models/reconciliation_balance_spec.rb' => %w[ReconciliationBalance Reconciliation Settlement AppendOnly],
   'spec/models/settlement_correction_spec.rb' =>
     %w[SettlementCorrection SettlementCorrectionLine SettlementCorrectionCharge AppendOnly],
   'spec/helpers/balance_display_helper_spec.rb' => %w[BalanceDisplayHelper MealLedger],
-  'spec/mailers/reconciliation_mailer_spec.rb' => %w[ReconciliationMailer ApplicationMailer Reconciliation],
+  'spec/mailers/reconciliation_mailer_spec.rb' =>
+    %w[ReconciliationMailer ApplicationMailer Reconciliation MealCorrection],
   'spec/mailers/resident_mailer_spec.rb' => %w[ResidentMailer ApplicationMailer],
   'spec/jobs/refresh_balances_job_spec.rb' => %w[RefreshBalancesJob BalanceRecalculation],
   'spec/tasks/settlement_matches_running_balance_spec.rb' =>
@@ -226,7 +228,8 @@ MUTANT_SPEC_ROWS = {
   'spec/tasks/rotations_notify_new_spec.rb' => %w[PacedDelivery ResidentMailer MailDelivery],
   'spec/tasks/residents_notify_spec.rb' => %w[PacedDelivery ResidentMailer MailDeliveryFailure MailDelivery],
   'spec/jobs/recurring_job_spec.rb' => %w[RecurringJob RetryOnConflict Healthcheck JobRun],
-  'spec/jobs/notify_cooks_job_spec.rb' => %w[NotifyCooksJob PacedDelivery MailDelivery],
+  # The cooks of a settlement are read through Reconciliation.settled_cooks.
+  'spec/jobs/notify_cooks_job_spec.rb' => %w[NotifyCooksJob PacedDelivery MailDelivery Reconciliation],
   # NotifyCooksJob.cooks_owed has no other caller and no other examples.
   'spec/jobs/send_missed_cook_mail_job_spec.rb' => %w[SendMissedCookMailJob NotifyCooksJob MailDelivery],
   # The only spec that sees a query after a settlement's commit. Settlement

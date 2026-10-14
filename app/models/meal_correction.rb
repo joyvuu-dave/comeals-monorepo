@@ -47,6 +47,20 @@ class MealCorrection < ApplicationRecord
   # and the running balances add them in until it does.
   scope :waiting, -> { where(reconciliation_id: nil) }
 
+  # Each correction once for each edit in its record that added, removed
+  # or changed a cook's cost, with that edit as cost_edit.edit and its
+  # place in the record (from 1) as cost_edit.place. COOK_ID and
+  # COST_BEFORE read the edit.
+  scope :cost_edits, lambda {
+    joins('CROSS JOIN LATERAL jsonb_array_elements(meal_corrections.edits) WITH ORDINALITY AS cost_edit(edit, place)')
+      .where("cost_edit.edit ->> 'what' = 'cost'")
+  }
+  # The cook a cost edit names.
+  COOK_ID = T.let(Arel.sql("(cost_edit.edit ->> 'resident_id')::bigint"), Arel::Nodes::SqlLiteral)
+  # The cook's cost before the edit, as JSON: an object, or null when they
+  # were not a cook.
+  COST_BEFORE = T.let(Arel.sql("cost_edit.edit -> 'from'"), Arel::Nodes::SqlLiteral)
+
   validates :reason, presence: true
 
   # Append-only. A settlement claims a correction with update_all, which
@@ -57,4 +71,12 @@ class MealCorrection < ApplicationRecord
   append_only update_message: 'A correction is a record of what changed on a settled dinner, and cannot be modified.',
               destroy_message: 'A correction is a record of what changed on a settled dinner, and cannot be ' \
                                'destroyed.'
+
+  # The edits in this correction's record that added, removed or changed
+  # this resident's cost.
+  sig { params(resident: Resident).returns(T::Array[T::Hash[String, T.untyped]]) }
+  def cost_edits_of(resident)
+    T.let(edits, T::Array[T::Hash[String, T.untyped]])
+     .select { |edit| edit['what'] == 'cost' && edit['resident_id'] == resident.id }
+  end
 end

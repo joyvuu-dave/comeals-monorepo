@@ -83,6 +83,29 @@ RSpec.describe SendMissedCookMailJob do
       expect { described_class.perform_now }.to have_enqueued_job(NotifyCooksJob).with(owed).exactly(:once)
     end
 
+    # ADR 0011 rule 6: a cook whose cost a correction changed is owed the
+    # mail of the settlement that carries the correction. Ann cooked in
+    # that settlement too, and is owed one mail, not two.
+    it 'counts a cook whose cost a carried correction changed, once even when they also cooked' do
+      first = settled(20.days, cooks: [ann])
+      mailed(first, ann)
+      cid = create(:resident, community: community, unit: unit)
+      travel_to(3.days.ago) do
+        admin = create(:admin_user, community: community, superuser: true)
+        MealCorrecting.save!(first.meals.sole, by: admin, reason: 'Two cooks') do |edits|
+          edits.cost(ann, amount: BigDecimal('15'), no_cost: false)
+          edits.cost(cid, amount: BigDecimal('5'), no_cost: false)
+        end
+      end
+      owed = settled(2.days, cooks: [ann])
+
+      expect(NotifyCooksJob.cooks_owed(Reconciliation.where(id: [first.id, owed.id]))).to eq(owed.id => 2)
+      mailed(owed, ann)
+      expect { described_class.perform_now }.to have_enqueued_job(NotifyCooksJob).with(owed).exactly(:once)
+      mailed(owed, cid)
+      expect(NotifyCooksJob.cooks_owed(Reconciliation.where(id: owed.id))).to eq({})
+    end
+
     it 'queues nothing for a settlement older than 7 days' do
       old = settled(7.days + 1.hour)
 

@@ -250,4 +250,76 @@ RSpec.describe NotifyCooksJob do
     expect { described_class.perform_now(reconciliation) }.not_to have_enqueued_job
     expect(ReconciliationMailer).not_to have_received(:reconciliation_notify_email)
   end
+
+  # ADR 0011 rule 6. The settlement that carries a correction also mails
+  # each cook whose cost the correction added, removed or changed, who
+  # may have cooked nothing in it. Someone it names only as an eater gets
+  # nothing, as an eater gets nothing for a dinner the settlement settled.
+  context 'when the settlement carries a correction' do
+    let(:admin) { create(:admin_user, community: community, superuser: true) }
+    let(:removed) { create(:resident, community: community, unit: unit) }
+    let(:added) { create(:resident, community: community, unit: unit) }
+    let(:other_eater) { create(:resident, community: community, unit: unit) }
+    # Ann and `removed` cooked it, a settlement before `reconciliation`
+    # settled it, and then a correction changed Ann's cost, took
+    # `removed` off, put `added` on, and signed up one more eater.
+    let!(:corrected) do
+      create(:meal, community: community, date: latest - 10).tap do |meal|
+        create(:bill, meal: meal, resident: cooks[0], community: community, amount: BigDecimal('30'))
+        create(:bill, meal: meal, resident: removed, community: community, amount: BigDecimal('10'))
+        create(:meal_resident, meal: meal, resident: eater, community: community)
+        settle!(cutoff: latest - 10)
+        MealCorrecting.save!(meal.reload, by: admin, reason: 'The cooks were wrong') do |edits|
+          edits.cost(cooks[0], amount: BigDecimal('25'), no_cost: false)
+          edits.remove_cook(removed)
+          edits.cost(added, amount: BigDecimal('15'), no_cost: false)
+          edits.add_eater(other_eater)
+        end
+      end
+    end
+
+    it 'mails each cook it changed, and the cooks of the settled meals, once each' do
+      described_class.perform_now(reconciliation)
+
+      [*cooks, removed, added].each do |cook|
+        expect(ReconciliationMailer).to have_received(:reconciliation_notify_email).with(cook, reconciliation).once
+      end
+      expect(MailDelivery.where(about: reconciliation).pluck(:resident_id))
+        .to match_array([*cooks, removed, added].map(&:id))
+    end
+
+    it 'mails the cooks it changed when the settlement settles no meal' do
+      only_corrections = settle!(cutoff: latest)
+
+      described_class.perform_now(only_corrections)
+
+      expect(only_corrections.meals).to be_empty
+      expect(MailDelivery.where(about: only_corrections).pluck(:resident_id))
+        .to contain_exactly(cooks[0].id, removed.id, added.id)
+    end
+
+    it 'says so in the log when a cook it changed has no email address' do
+      reconciliation
+      removed.update!(active: false, email: nil)
+      allow(Rails.logger).to receive(:info).and_call_original
+
+      described_class.perform_now(reconciliation)
+
+      expect(Rails.logger).to have_received(:info)
+        .with("reconciliation_notify_email: not sent to resident ##{removed.id}, who has no email address " \
+              "(reconciliation ##{reconciliation.id})")
+      expect(MailDelivery.where(about: reconciliation, resident: removed)).to be_empty
+    end
+
+    # The settlement that settled the dinner keeps its own cooks: the ones
+    # it settled. Before, the job read the dinner's bills as they are now,
+    # so the nightly retry would mail `added` this old settlement's mail,
+    # for a dinner it did not cook when this settlement settled it.
+    it 'leaves the cooks of the settlement that settled the dinner as it settled them' do
+      first = corrected.reconciliation
+
+      expect(described_class.cooks(first)).to contain_exactly(cooks[0], removed)
+      expect(described_class.cooks_owed(Reconciliation.where(id: first.id))).to eq(first.id => 2)
+    end
+  end
 end

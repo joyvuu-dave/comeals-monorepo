@@ -1,9 +1,25 @@
 <h1>Common Meals Settled</h1>
+<% if @settles_meals %>
 <p>
   The common meals in this settlement, through <%= @settled_through %>, are now settled. Their costs are final. If a cost was wrong, an admin can correct it, and the change goes into the next settlement.
 </p>
+<% else %>
+<p>
+  This settlement, through <%= @settled_through %>, settles no new meals. It carries corrections to meals settled before.
+</p>
+<% end %>
+<% if @cooked %>
 <p>
   Here are <%= link_to 'the meals you cooked', @url %> in this settlement, and what you spent on each.
 </p>
+<% end %>
+<% if @corrections.any? %>
+<p><%= @corrections_heading %></p>
+<ul>
+  <% @corrections.each do |correction| %>
+  <li><%= link_to correction[:date], correction[:url] %>: <%= correction[:words] %> Reason: <%= correction[:reason] %></li>
+  <% end %>
+</ul>
+<% end %>
 <p>Have a great day!</p>
 <p>~<%= @community.name %></p>
