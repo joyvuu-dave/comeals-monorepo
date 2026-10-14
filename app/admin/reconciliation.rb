@@ -180,7 +180,8 @@ ActiveAdmin.register Reconciliation do
     end
 
     # Every mark on this settlement's lines, newest first: each change is
-    # kept (ADR 0011 rule 8).
+    # kept (ADR 0011 rule 8). The read-only token sees no By column
+    # (ApplicationHelper#names_admins?).
     marks = SettlementLineMark.joins(:reconciliation_balance)
                               .where(reconciliation_balances: { reconciliation_id: reconciliation.id })
                               .includes(:admin_user, reconciliation_balance: :resident)
@@ -192,7 +193,7 @@ ActiveAdmin.register Reconciliation do
           column('Resident') { |mark| mark.reconciliation_balance.resident.name }
           column('Mark', &:words)
           column('Note') { |mark| mark.note.to_s }
-          column('By') { |mark| mark.admin_user.email }
+          column('By') { |mark| mark.admin_user.email } if names_admins?
         end
       end
     end

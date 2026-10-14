@@ -15,8 +15,9 @@ class MealCorrectionDetails < Arbre::Component
   # Arbre passes builder options as a plain hash, not Ruby keywords.
   def build(correction, options = {})
     residents = options.fetch(:residents)
-    para "Made #{correction.created_at.strftime('%b %-d, %Y')} by #{correction.admin_user.email}. " \
-         "Reason: #{correction.reason}"
+    # The read-only token sees when, not who (ApplicationHelper#names_admins?).
+    who = names_admins? ? " by #{correction.admin_user.email}" : ''
+    para "Made #{correction.created_at.strftime('%b %-d, %Y')}#{who}. Reason: #{correction.reason}"
     ul do
       correction.edits.each { |edit| li CorrectionWords.edit(edit, residents) }
     end

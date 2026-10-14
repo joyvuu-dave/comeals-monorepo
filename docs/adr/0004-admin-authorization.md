@@ -121,7 +121,10 @@ to the unfiltered balance list.
 The allowlist exists for a narrower reason: a link mailed to the whole
 community should not also be a way to enumerate admin email addresses and
 sign-in activity, or resident birthdays. That is a different kind of
-information that happened to sit behind the same read permission.
+information that happened to sit behind the same read permission. For the
+same reason, a page the token reads says what a correction or a settlement
+mark did and when, but not which admin made it
+(`ApplicationHelper#names_admins?`).
 
 The Dashboard stays readable on the token path. ActiveAdmin redirects an
 unauthorized request to the admin root, so refusing the Dashboard would turn

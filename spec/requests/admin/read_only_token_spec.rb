@@ -88,6 +88,35 @@ RSpec.describe 'Read-only admin token' do
       expect_denied
     end
 
+    # A correction (ADR 0011 rule 6) and a mark (rule 8) save who made
+    # them. A signed-in admin sees who; the token sees what was done and
+    # when, so a mailed link shows no admin's email (ADR 0004 §3).
+    it 'does not show who made a correction or a mark' do
+      unit = create(:unit, community: community)
+      cook = create(:resident, community: community, unit: unit)
+      eater = create(:resident, community: community, unit: unit)
+      latest = Reconciliation.latest_cutoff(community.today)
+      meal = create(:meal, community: community, date: latest)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
+      create(:meal_resident, meal: meal, resident: eater, community: community)
+      reconciliation = settle!(cutoff: latest)
+      admin = create(:admin_user, community: community, superuser: true, email: 'books@example.com')
+      MealCorrecting.save!(meal.reload, by: admin, reason: 'Typed $30 for $20') do |edits|
+        edits.cost(cook, amount: BigDecimal('20'), no_cost: false)
+      end
+      line = reconciliation.reconciliation_balances.find_by!(resident: eater)
+      SettlementLineMarking.mark!(line, status: 'paid', note: nil, by: admin, seen: nil)
+
+      { "/reconciliations/#{reconciliation.id}" => 'Paid', "/meals/#{meal.id}" => 'Typed $30 for $20' }
+        .each do |path, shown|
+          get path, params: { token: token }
+
+          expect(response).to have_http_status(:ok)
+          expect(response.body).to include(shown)
+          expect(response.body).not_to include('books@example.com')
+        end
+    end
+
     it 'cannot read community settings' do
       # The index only redirects to the show page now, but a token must be
       # refused there too — refused means sent to the dashboard, not to the

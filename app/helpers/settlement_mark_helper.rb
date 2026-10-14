@@ -8,15 +8,18 @@ module SettlementMarkHelper
   extend T::Helpers
 
   requires_ancestor { ActionView::Base }
+  requires_ancestor { ApplicationHelper }
 
   # A line's mark in words: the mark, its note, and who made it and when.
+  # The read-only token sees when, not who (ApplicationHelper#names_admins?).
   # Empty for a line with no mark.
   def settlement_mark_words(mark)
     return '' if mark.nil?
 
     parts = [tag.strong(mark.words)]
     parts << tag.div(mark.note) if mark.note
-    parts << tag.div("by #{mark.admin_user.email}, #{mark.created_at.strftime('%b %-d, %Y')}", class: 'mark-by')
+    who = names_admins? ? "by #{mark.admin_user.email}, " : ''
+    parts << tag.div("#{who}#{mark.created_at.strftime('%b %-d, %Y')}", class: 'mark-by')
     safe_join(parts, ' ')
   end
 

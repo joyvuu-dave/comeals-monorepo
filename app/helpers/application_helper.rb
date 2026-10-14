@@ -12,6 +12,14 @@ module ApplicationHelper
 
   include ActiveSupport::NumberHelper
 
+  # Whether this page may name the admin who made a correction or a mark.
+  # A signed-in admin sees who. The read-only token sees what was done and
+  # when, because its links are mailed to cooks and the common house, and
+  # a mailed link must not show admin emails (ADR 0004 §3).
+  def names_admins?
+    !Current.read_only_admin_token
+  end
+
   # The words for a price ("Adult", "Child", "Child (free)"). They live
   # in Multiplier.label, because the meal history uses them too.
   def price_category_label(multiplier)

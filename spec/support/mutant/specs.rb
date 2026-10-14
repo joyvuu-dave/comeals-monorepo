@@ -187,7 +187,9 @@ MUTANT_SPEC_ROWS = {
   'spec/requests/admin/schedule_preview_spec.rb' => %w[MealSchedule Community],
   'spec/requests/admin/superuser_authorization_spec.rb' => %w[SuperuserAdapter],
   'spec/requests/admin/superuser_management_spec.rb' => %w[SuperuserAdapter AdminUser],
-  'spec/requests/admin/read_only_token_spec.rb' => %w[SuperuserAdapter ApplicationController],
+  # The token sees a correction's and a mark's date, not the admin's email.
+  'spec/requests/admin/read_only_token_spec.rb' =>
+    %w[SuperuserAdapter ApplicationController ApplicationHelper SettlementMarkHelper MealCorrectionDetails],
   'spec/requests/admin/csrf_failure_spec.rb' => %w[ApplicationController],
   'spec/requests/admin/bootstrap_guard_spec.rb' => %w[ApplicationController],
   'spec/requests/admin/session_persistence_spec.rb' => %w[ApplicationController],
@@ -212,6 +214,11 @@ MUTANT_SPEC_ROWS = {
   # The admin settlement preview and its blank-cost button (ADR 0011
   # rule 4): the words, the warnings it lists, and the marking.
   'spec/requests/admin/settlement_preview_spec.rb' => %w[SettlementPreviewHelper ReconciliationWarnings NoCostMarking],
+  # Settlement line marks (ADR 0011 rule 8): the words on the page, the
+  # form, who may set Let go, and the newest mark counting.
+  'spec/requests/admin/settlement_marks_spec.rb' =>
+    %w[SettlementMarkHelper SettlementLineMark ReconciliationBalance ApplicationHelper AdminUser],
+  'spec/services/settlement_line_marking_spec.rb' => %w[SettlementLineMarking SettlementLineMark ReconciliationBalance],
   'spec/requests/admin/meal_corrections_display_spec.rb' =>
     %w[MealCorrectionDetails CorrectionWords BalanceDisplayHelper MealCostSummary ApplicationHelper AdminUser],
   'spec/requests/admin/child_pricing_rule_spec.rb' => %w[Community Multiplier],

@@ -116,8 +116,10 @@ RSpec.describe 'Admin settlement line marks' do
     SettlementLineMarking.mark!(line, status: 'paid', note: nil, by: admin, seen: nil)
 
     get path, params: { token: 'the-token' }
-    expect(mark_cell('Dana Diner')).to start_with('Paid by helper@example.com')
+    expect(mark_cell('Dana Diner')).to eq("Paid #{Time.current.strftime('%b %-d, %Y')}")
     expect(page.css('td.col-change_mark, form.settlement-mark')).to be_empty
+    history = page.css('.panel').find { |panel| panel.at_css('h3').text == 'Marks (1)' }
+    expect(history.css('thead th').map { |th| th.text.strip }).to eq(%w[Made Resident Mark Note])
 
     expect do
       post '/settlement_line_marks', params: { token: 'the-token', line_id: line.id, status: 'none',
