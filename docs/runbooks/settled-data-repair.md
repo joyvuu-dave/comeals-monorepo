@@ -147,7 +147,11 @@ Settlement.new(reconciliation).correct!(reason: '3 costs on these meals were mar
 end
 ```
 
-`correct!` keeps the reconciliation row, its meals and its cutoff. Before
+`correct!` keeps the reconciliation row, its meals and its cutoff. It
+refuses a settlement with any line marked Paid or Let go
+(`Settlement::Marked`, ADR 0011 rule 8): once people have paid from a
+settlement, its numbers stay what they were, and a mistake goes into the
+next settlement as a correction (the section above). Before
 the block runs, it asks the nightly check about the settlement and
 refuses, writing nothing, if the settlement already disagrees with its
 rows or its line items: working it out again would fold that earlier

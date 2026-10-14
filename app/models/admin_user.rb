@@ -62,6 +62,9 @@ class AdminUser < ApplicationRecord
   # The corrections this admin made. They are records that name who made
   # them, so an admin with one cannot be deleted; the page says so.
   has_many :meal_corrections, dependent: :restrict_with_error
+  # The settlement line marks this admin made (ADR 0011 rule 8), for the
+  # same reason.
+  has_many :settlement_line_marks, dependent: :restrict_with_error
 
   # NOT NULL. Without this a nil (the box sent as "" by a request made by
   # hand, which Rails reads as nil) reached the database as a 500 (#139).

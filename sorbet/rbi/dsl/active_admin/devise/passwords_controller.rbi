@@ -19,6 +19,7 @@ class ActiveAdmin::Devise::PasswordsController
     include ::PhoneDisplayHelper
     include ::RotationChoicesHelper
     include ::ScheduleWeekLabelHelper
+    include ::SettlementMarkHelper
     include ::SettlementPreviewHelper
     include ::DeviseHelper
     include ::ApplicationController::HelperMethods

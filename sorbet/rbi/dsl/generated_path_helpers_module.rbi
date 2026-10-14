@@ -97,6 +97,9 @@ module GeneratedPathHelpersModule
   def admin_rotations_path(*args); end
 
   sig { params(args: T.untyped).returns(String) }
+  def admin_settlement_line_marks_path(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
   def admin_unit_path(*args); end
 
   sig { params(args: T.untyped).returns(String) }

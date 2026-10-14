@@ -136,6 +136,15 @@ RSpec.describe SuperuserAdapter do
       expect(MealResident.column_names).to include('multiplier')
     end
 
+    # ADR 0011 rule 8: marking a settlement line Paid records a fact, so
+    # any admin may. Let go is a decision about money: somebody covers the
+    # amount, so only a superuser.
+    it 'may mark a settlement line Paid, but only a superuser may let an amount go' do
+      expect(adapter_for(admin).authorized?(:create, SettlementLineMark)).to be true
+      expect(adapter_for(admin).authorized?(:let_go, SettlementLineMark)).to be false
+      expect(adapter_for(superuser).authorized?(:let_go, SettlementLineMark)).to be true
+    end
+
     it 'is refused a write it cannot identify, rather than allowed by default' do
       expect(adapter_for(admin).authorized?(:update, nil)).to be false
       expect(adapter_for(admin).authorized?(:update, Object.new)).to be false
@@ -163,7 +172,8 @@ RSpec.describe SuperuserAdapter do
     # request: pointing READ_ONLY_ADMIN_ID at a superuser must not turn a
     # mailed link into a write-capable one.
     it 'writes nothing even when the account behind the token is a superuser' do
-      expect_writes(superuser, [Bill, Event], allowed: false)
+      expect_writes(superuser, [Bill, Event, SettlementLineMark], allowed: false)
+      expect(adapter_for(superuser).authorized?(:let_go, SettlementLineMark)).to be false
     end
 
     # ActiveAdmin redirects an unauthorized request to the dashboard, so

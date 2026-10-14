@@ -145,8 +145,12 @@ RSpec.describe 'Admin Reconciliation Show' do
     response.parsed_body.css('.panel').find { |node| node.at_css('h3')&.text&.strip == title }
   end
 
+  # Each row's cells, without the marks (ADR 0011 rule 8;
+  # spec/requests/admin/settlement_marks_spec.rb).
   def panel_rows(title)
-    panel(title).css('tbody tr').map { |tr| tr.css('td').map { |td| td.text.strip } }
+    panel(title).css('tbody tr').map do |tr|
+      tr.css('td').reject { |td| td['class'].to_s.match?(/col-(change_)?mark/) }.map { |td| td.text.strip }
+    end
   end
 
   def panel_totals(title)

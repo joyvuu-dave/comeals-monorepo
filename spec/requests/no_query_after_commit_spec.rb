@@ -453,6 +453,14 @@ RSpec.describe 'what a write runs after its commit' do
     -> { post '/reconciliations/mark_no_cost', params: params }
   end
 
+  # A mark on a settlement line (ADR 0011 rule 8); the notice names the
+  # person from the line read inside the marking's transaction.
+  admin_write 'POST /settlement_line_marks' do
+    settleable_meal
+    line = settle!(cutoff: latest).reconciliation_balances.first
+    -> { post '/settlement_line_marks', params: { line_id: line.id, status: 'paid', seen: '' } }
+  end
+
   admin_write 'PATCH /residents/:id/remove_birthday' do
     resident.update!(birthday: Date.new(1980, 4, 15))
     -> { patch "/residents/#{resident.id}/remove_birthday" }

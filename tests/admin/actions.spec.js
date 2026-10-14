@@ -267,12 +267,12 @@ test.describe("Settlement", () => {
     // person's row: a swap is the worst display bug this app can have.
     const balances = panel(page, "Settlement Balances");
     await expect(balances.locator("tbody tr")).toHaveCount(2);
-    await expect(row(balances, "Bob Baker").locator("td").last()).toHaveText(
-      "is owed $9.00",
-    );
-    await expect(row(balances, "Alice Cook").locator("td").last()).toHaveText(
-      "owes $9.00",
-    );
+    await expect(
+      row(balances, "Bob Baker").locator("td.col-balance"),
+    ).toHaveText("is owed $9.00");
+    await expect(
+      row(balances, "Alice Cook").locator("td.col-balance"),
+    ).toHaveText("owes $9.00");
     // Alice lives in unit A, Bob in unit B. Nobody has moved out, so the
     // Moved out line is $0.00 (ADR 0011 rule 7).
     const units = panel(page, "Unit Balances");
@@ -369,15 +369,15 @@ test.describe("Settlement", () => {
     // $4.50.
     const residents = panel(page, "Settlement Balances");
     await expect(residents.locator("tbody tr")).toHaveCount(3);
-    await expect(row(residents, "Alice Cook").locator("td").last()).toHaveText(
-      "is owed $22.50",
-    );
-    await expect(row(residents, "Bob Baker").locator("td").last()).toHaveText(
-      "owes $18.00",
-    );
-    await expect(row(residents, "Carol Baker").locator("td").last()).toHaveText(
-      "owes $4.50",
-    );
+    await expect(
+      row(residents, "Alice Cook").locator("td.col-balance"),
+    ).toHaveText("is owed $22.50");
+    await expect(
+      row(residents, "Bob Baker").locator("td.col-balance"),
+    ).toHaveText("owes $18.00");
+    await expect(
+      row(residents, "Carol Baker").locator("td.col-balance"),
+    ).toHaveText("owes $4.50");
     // Alice lives in unit A; Bob and Carol in unit B. Nobody has moved
     // out (ADR 0011 rule 7).
     const units = panel(page, "Unit Balances");
@@ -416,6 +416,40 @@ test.describe("Settlement", () => {
     );
     await expect(lines.filter({ hasText: "Attended" })).toContainText(
       "charged $9.00",
+    );
+  });
+});
+
+test.describe("Settlement marks", () => {
+  reseedBeforeGroup();
+
+  // ADR 0011 rule 8: after a settlement, each line can be marked Paid or
+  // Let go, with a note. The seed marks Bob's line in settlement 1 Paid;
+  // this marks Carol's.
+  test("marks a settlement line Paid from the settlement page", async ({
+    page,
+  }) => {
+    await login(page);
+    await page.goto("/reconciliations/1");
+    const balances = panel(page, "Settlement Balances");
+    await expect(
+      row(balances, "Bob Baker").locator("td.col-mark"),
+    ).toContainText("Paid");
+
+    await page
+      .getByLabel("Mark for Carol Baker", { exact: true })
+      .selectOption("paid");
+    await page.getByLabel("Note for Carol Baker").fill("Cash, at the meeting");
+    await page
+      .getByRole("button", { name: "Save the mark for Carol Baker" })
+      .click();
+
+    await expect(notice(page)).toHaveText("Carol Baker: Paid.");
+    await expect(
+      row(balances, "Carol Baker").locator("td.col-mark"),
+    ).toContainText("Paid Cash, at the meeting by admin@example.com");
+    await expect(panel(page, "Marks (2)")).toContainText(
+      "Cash, at the meeting",
     );
   });
 });

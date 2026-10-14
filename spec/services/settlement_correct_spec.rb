@@ -350,6 +350,26 @@ RSpec.describe Settlement, '#correct!' do
       .to eq([[cook.id, BigDecimal('10'), BigDecimal('0')], [dana.id, BigDecimal('-10'), BigDecimal('0')]])
   end
 
+  # ADR 0011 rules 6 and 8: once a line is marked Paid or Let go, people
+  # have paid from the settlement, and its numbers stay what they were.
+  it 'refuses a settlement with a marked line, before the fix runs, and writes nothing' do
+    cook = person('Casey Cook')
+    _, bill = meal(Date.new(2025, 3, 1), cook: cook, amount: '0', eaters: [person('Dana Diner'), cook])
+    meal(Date.new(2025, 3, 2), cook: cook, amount: '9', eaters: [person('Eli Eater')])
+    reconciliation = settle_as_before_rule_3!(cutoff: Date.new(2025, 3, 31))
+    line = reconciliation.reconciliation_balances.first
+    SettlementLineMarking.mark!(line, status: 'paid', note: nil, by: create(:admin_user, community: community),
+                                      seen: nil)
+    fixed = false
+
+    expect do
+      described_class.new(reconciliation).correct!(reason: reason) { fixed = true }
+    end.to raise_error(Settlement::Marked, /has lines marked Paid or Let go/)
+    expect(fixed).to be(false)
+    expect(SettlementCorrection.count).to eq(0)
+    expect(bill.reload.amount).to eq(0)
+  end
+
   # ADR 0011 rule 7: the units on a settlement are the ones of its day.
   # Working it out again keeps each person's saved unit and lived-here,
   # whatever they are now. Someone with no line before (Casey, whose

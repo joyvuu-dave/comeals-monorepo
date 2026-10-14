@@ -105,6 +105,11 @@ def seed_meals(community, cook, bob, carol)
   seed_closed_meal(meal: Meal.find(3), cook: cook, amount: BigDecimal('75'),
                    eaters: [cook, bob, carol], guest_of: bob)
   Settlement.run!(cutoff: Date.new(2026, 1, 3))
+  # Bob's line is marked Paid (ADR 0011 rule 8), so the settlement page
+  # shows a mark and its history; actions.spec.js marks Carol's.
+  SettlementLineMarking.mark!(ReconciliationBalance.find_by!(resident: bob), status: SettlementLineMark::PAID,
+                                                                             note: 'Check', by: AdminUser.first!,
+                                                                             seen: nil)
 
   # Meal 4: closed but not yet settled, so the dashboard's "closed meals"
   # panel and the averages have something to count.

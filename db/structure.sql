@@ -424,6 +424,26 @@ $$;
 
 
 --
+-- Name: comeals_protect_settlement_line_mark(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.comeals_protect_settlement_line_mark() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF current_setting('comeals.allow_settled_writes', true) = 'on' THEN
+    RETURN CASE TG_OP WHEN 'DELETE' THEN OLD ELSE NEW END;
+  END IF;
+
+  RAISE EXCEPTION '% on settlement_line_marks refused: a mark is a record of what happened after '
+    'a settlement, and cannot be changed. Mark the line again; the newest mark counts. '
+    'See docs/runbooks/settled-data-repair.md.',
+    TG_OP;
+END;
+$$;
+
+
+--
 -- Name: comeals_reconciliation_balances_sum_zero(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1696,6 +1716,42 @@ ALTER SEQUENCE public.settlement_corrections_id_seq OWNED BY public.settlement_c
 
 
 --
+-- Name: settlement_line_marks; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.settlement_line_marks (
+    id bigint NOT NULL,
+    reconciliation_balance_id bigint NOT NULL,
+    status character varying NOT NULL,
+    note text,
+    admin_user_id bigint NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT settlement_line_marks_note_not_blank CHECK (((note IS NULL) OR (btrim(note) <> ''::text))),
+    CONSTRAINT settlement_line_marks_status_known CHECK (((status)::text = ANY ((ARRAY['paid'::character varying, 'let_go'::character varying, 'none'::character varying])::text[])))
+);
+
+
+--
+-- Name: settlement_line_marks_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.settlement_line_marks_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: settlement_line_marks_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.settlement_line_marks_id_seq OWNED BY public.settlement_line_marks.id;
+
+
+--
 -- Name: solid_cache_entries; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2393,6 +2449,13 @@ ALTER TABLE ONLY public.settlement_corrections ALTER COLUMN id SET DEFAULT nextv
 
 
 --
+-- Name: settlement_line_marks id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.settlement_line_marks ALTER COLUMN id SET DEFAULT nextval('public.settlement_line_marks_id_seq'::regclass);
+
+
+--
 -- Name: solid_cache_entries id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -2735,6 +2798,14 @@ ALTER TABLE ONLY public.settlement_correction_lines
 
 ALTER TABLE ONLY public.settlement_corrections
     ADD CONSTRAINT settlement_corrections_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: settlement_line_marks settlement_line_marks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.settlement_line_marks
+    ADD CONSTRAINT settlement_line_marks_pkey PRIMARY KEY (id);
 
 
 --
@@ -3243,6 +3314,20 @@ CREATE INDEX index_settlement_corrections_on_reconciliation_id ON public.settlem
 
 
 --
+-- Name: index_settlement_line_marks_on_admin_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_settlement_line_marks_on_admin_user_id ON public.settlement_line_marks USING btree (admin_user_id);
+
+
+--
+-- Name: index_settlement_line_marks_on_reconciliation_balance_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_settlement_line_marks_on_reconciliation_balance_id ON public.settlement_line_marks USING btree (reconciliation_balance_id);
+
+
+--
 -- Name: index_solid_cache_entries_on_byte_size; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3684,6 +3769,13 @@ CREATE TRIGGER settlement_corrections_protect BEFORE DELETE OR UPDATE ON public.
 
 
 --
+-- Name: settlement_line_marks settlement_line_marks_protect; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER settlement_line_marks_protect BEFORE DELETE OR UPDATE ON public.settlement_line_marks FOR EACH ROW EXECUTE FUNCTION public.comeals_protect_settlement_line_mark();
+
+
+--
 -- Name: meals fk_rails_0336f048cd; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3721,6 +3813,14 @@ ALTER TABLE ONLY public.meal_corrections
 
 ALTER TABLE ONLY public.guest_add_keys
     ADD CONSTRAINT fk_rails_176efa00a8 FOREIGN KEY (meal_id) REFERENCES public.meals(id) ON DELETE CASCADE;
+
+
+--
+-- Name: settlement_line_marks fk_rails_22b3b3eff4; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.settlement_line_marks
+    ADD CONSTRAINT fk_rails_22b3b3eff4 FOREIGN KEY (admin_user_id) REFERENCES public.admin_users(id);
 
 
 --
@@ -3889,6 +3989,14 @@ ALTER TABLE ONLY public.reconciliation_balances
 
 ALTER TABLE ONLY public.bills_save_keys
     ADD CONSTRAINT fk_rails_594e3a0a91 FOREIGN KEY (meal_id) REFERENCES public.meals(id) ON DELETE CASCADE;
+
+
+--
+-- Name: settlement_line_marks fk_rails_5aa449e320; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.settlement_line_marks
+    ADD CONSTRAINT fk_rails_5aa449e320 FOREIGN KEY (reconciliation_balance_id) REFERENCES public.reconciliation_balances(id);
 
 
 --
@@ -4118,6 +4226,7 @@ INSERT INTO "schema_migrations" (version) VALUES
 ('20261012120000'),
 ('20261010130200'),
 ('20261010130000'),
+('20261010125953'),
 ('20261010125952'),
 ('20261010125951'),
 ('20261010125950'),

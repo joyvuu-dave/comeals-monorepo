@@ -475,6 +475,20 @@ class ReconciliationBalance
     sig { params(args: T.untyped, blk: T.untyped).returns(::Unit) }
     def create_unit!(*args, &blk); end
 
+    sig { returns(T::Array[T.untyped]) }
+    def mark_ids; end
+
+    sig { params(ids: T::Array[T.untyped]).returns(T::Array[T.untyped]) }
+    def mark_ids=(ids); end
+
+    # This method is created by ActiveRecord on the `ReconciliationBalance` class because it declared `has_many :marks`.
+    # 🔗 [Rails guide for `has_many` association](https://guides.rubyonrails.org/association_basics.html#the-has-many-association)
+    sig { returns(::SettlementLineMark::PrivateCollectionProxy) }
+    def marks; end
+
+    sig { params(value: T::Enumerable[::SettlementLineMark]).void }
+    def marks=(value); end
+
     sig { returns(T.nilable(::Reconciliation)) }
     def reconciliation; end
 

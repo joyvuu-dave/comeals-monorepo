@@ -58,6 +58,12 @@ class Settlement
   # before the caller's fix. Nothing is written.
   class EarlierDifference < RuntimeError; end
 
+  # Settlement#correct! was asked to work out again a settlement with a
+  # line marked Paid or Let go (ADR 0011 rule 8). Once people pay from a
+  # settlement, its numbers stay what they were; a mistake found later is
+  # a correction in the next settlement (rule 6).
+  class Marked < RuntimeError; end
+
   # Raised by correct! when its fix block was left by return, break or
   # throw. Rails commits a transaction block that is left without an
   # error, so the fix would stay on the settled rows with no correction

@@ -25,6 +25,10 @@ required?
 # Alba calls it by name (one :guest_as_added in
 # app/serializers/guest_replayed_serializer.rb):
 guest_as_added
+# An association that exists for its dependent: :restrict_with_error rule,
+# which refuses to delete an admin who made a settlement line mark
+# (app/models/admin_user.rb, ADR 0011 rule 8). Rails calls it on destroy:
+settlement_line_marks
 # ActiveAdmin calls it by name (column and row :number_of_meals in
 # app/admin/reconciliation.rb):
 number_of_meals

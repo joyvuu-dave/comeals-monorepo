@@ -17,7 +17,9 @@ ADMIN_PAGE_ACTIONS = %i[index show new edit].freeze
 # The record is created before every page, including index, so index
 # column blocks run against at least one row. MealResident serves no
 # pages: it allows only :create and :destroy (per-row attendance
-# corrections nested under Meal).
+# corrections nested under Meal). SettlementLineMark serves none either:
+# it allows only :create, from the form on a settlement page (ADR 0011
+# rule 8).
 #
 # `unrendered` lists pages a resource routes but that never render here:
 # either they are only reachable in a state this spec cannot be in, or they
@@ -67,6 +69,9 @@ ADMIN_PAGE_RESOURCES = {
     record: -> { meal }
   },
   'MealResident' => {
+    pages: []
+  },
+  'SettlementLineMark' => {
     pages: []
   },
   'Reconciliation' => {

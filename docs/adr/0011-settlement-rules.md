@@ -1,6 +1,6 @@
 # ADR 0011: How settlements work from now on
 
-- **Status:** Accepted. Every rule is built except 8 and 9.
+- **Status:** Accepted. Every rule is built except 9.
 - **Date:** 2026-10-12
 - **Issue:** #165 (the common house email)
 

@@ -69,6 +69,7 @@ module SettlementCorrecting
   def correct!(reason:, include_earlier_differences: false, &fix)
     Reconciliation.transaction(requires_new: true) do
       reconciliation.lock!
+      refuse_a_marked_settlement!
       earlier = earlier_differences(reason, include_earlier_differences)
       run_fix(fix)
       before = stored_balances
@@ -82,6 +83,24 @@ module SettlementCorrecting
   end
 
   private
+
+  # Once a line is marked Paid or Let go, people have paid from this
+  # settlement, and its numbers stay what they were (ADR 0011 rules 6 and
+  # 8). Checked after the settlement row is locked; a mark is added
+  # without that lock, but a marked line cannot be deleted (the marks'
+  # foreign key), so a mark made at the same moment stops the correction
+  # anyway.
+  sig { void }
+  def refuse_a_marked_settlement!
+    marked = SettlementLineMark.joins(:reconciliation_balance)
+                               .where(reconciliation_balances: { reconciliation_id: reconciliation.id })
+    return unless marked.exists?
+
+    raise Settlement::Marked,
+          "Refused: settlement #{reconciliation.id} has lines marked Paid or Let go, so people have paid " \
+          'from it and its numbers stay what they were. Correct the dinner instead; the next settlement ' \
+          'carries it (ADR 0011 rule 6). Nothing was written.'
+  end
 
   # The settlement's balances as stored, by resident id.
   sig { returns(T::Hash[Integer, BigDecimal]) }

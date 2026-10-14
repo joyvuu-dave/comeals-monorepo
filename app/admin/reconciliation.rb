@@ -157,18 +157,44 @@ ActiveAdmin.register Reconciliation do
     panel 'Settlement Balances' do
       order = moved_out_known ? 'reconciliation_balances.lived_here DESC, ' : ''
       balances = reconciliation.reconciliation_balances
-                               .includes(:resident, :unit)
+                               .includes(:resident, :unit, marks: :admin_user)
                                .joins(:resident, :unit)
                                .order(Arel.sql("#{order}units.name, residents.name"))
 
       # balance_tag turns the stored sign into words — see BalanceDisplayHelper.
+      # The marks are ADR 0011 rule 8 (SettlementMarkHelper). A read-only
+      # token sees them, and no form.
       table_for balances do
         column('Resident') { |rb| link_to rb.resident.name, admin_resident_path(rb.resident) }
         column('Unit') { |rb| rb.lived_here || !moved_out_known ? rb.unit.name : 'Moved out' }
         column('Balance') { |rb| balance_tag(rb.amount) }
+        column('Mark') { |rb| settlement_mark_words(rb.current_mark) }
+        if authorized?(:create, SettlementLineMark)
+          let_go_allowed = authorized?(:let_go, SettlementLineMark)
+          action = admin_settlement_line_marks_path
+          column('Change mark') { |rb| settlement_mark_form(action, rb, let_go_allowed: let_go_allowed) }
+        end
       end
 
       text_node settlement_totals_tag(balances.map(&:amount), 'residents')
+    end
+
+    # Every mark on this settlement's lines, newest first: each change is
+    # kept (ADR 0011 rule 8).
+    marks = SettlementLineMark.joins(:reconciliation_balance)
+                              .where(reconciliation_balances: { reconciliation_id: reconciliation.id })
+                              .includes(:admin_user, reconciliation_balance: :resident)
+                              .order(id: :desc).to_a
+    if marks.any?
+      panel "Marks (#{marks.size})" do
+        table_for marks do
+          column('Made') { |mark| mark.created_at.strftime('%b %-d, %Y %-l:%M %p') }
+          column('Resident') { |mark| mark.reconciliation_balance.resident.name }
+          column('Mark', &:words)
+          column('Note') { |mark| mark.note.to_s }
+          column('By') { |mark| mark.admin_user.email }
+        end
+      end
     end
 
     # The people who had moved out by the day of the settlement are on a

@@ -97,6 +97,9 @@ module GeneratedUrlHelpersModule
   def admin_rotations_url(*args); end
 
   sig { params(args: T.untyped).returns(String) }
+  def admin_settlement_line_marks_url(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
   def admin_unit_url(*args); end
 
   sig { params(args: T.untyped).returns(String) }

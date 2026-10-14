@@ -48,9 +48,15 @@
 # people who had moved out under "Moved out", not in a unit
 # (Reconciliation#records_who_moved_out?).
 class ReconciliationBalance < ApplicationRecord
+  extend T::Sig
+
   belongs_to :reconciliation
   belongs_to :resident
   belongs_to :unit
+  # What happened to the line after the settlement, oldest first: Paid or
+  # Let go (ADR 0011 rule 8). A marked line stays: the marks name it.
+  has_many :marks, -> { order(:id) }, class_name: 'SettlementLineMark', dependent: :restrict_with_exception,
+                                      inverse_of: :reconciliation_balance
 
   validates :amount, numericality: true
   validates :lived_here, inclusion: { in: [true, false], message: TrueOrFalse::MESSAGE }
@@ -75,4 +81,18 @@ class ReconciliationBalance < ApplicationRecord
   append_only update_message: 'Settled balances are what residents have already been billed and cannot be ' \
                               'modified. Corrections settle as new entries in the next reconciliation.',
               destroy_message: 'Settled balances are what residents have already been billed and cannot be destroyed.'
+
+  # The line's newest mark, the one a change must have seen, or nil when it
+  # has never been marked. Reads the loaded marks when they are loaded.
+  sig { returns(T.nilable(SettlementLineMark)) }
+  def newest_mark
+    marks.max_by { |mark| T.must(mark.id) }
+  end
+
+  # The line's mark now: the newest, unless it took the mark off.
+  sig { returns(T.nilable(SettlementLineMark)) }
+  def current_mark
+    newest = newest_mark
+    newest unless newest.nil? || newest.status == SettlementLineMark::NONE
+  end
 end

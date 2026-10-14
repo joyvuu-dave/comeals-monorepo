@@ -457,6 +457,20 @@ class AdminUser
 
     sig { void }
     def reset_community; end
+
+    sig { returns(T::Array[T.untyped]) }
+    def settlement_line_mark_ids; end
+
+    sig { params(ids: T::Array[T.untyped]).returns(T::Array[T.untyped]) }
+    def settlement_line_mark_ids=(ids); end
+
+    # This method is created by ActiveRecord on the `AdminUser` class because it declared `has_many :settlement_line_marks`.
+    # 🔗 [Rails guide for `has_many` association](https://guides.rubyonrails.org/association_basics.html#the-has-many-association)
+    sig { returns(::SettlementLineMark::PrivateCollectionProxy) }
+    def settlement_line_marks; end
+
+    sig { params(value: T::Enumerable[::SettlementLineMark]).void }
+    def settlement_line_marks=(value); end
   end
 
   module GeneratedAssociationRelationMethods

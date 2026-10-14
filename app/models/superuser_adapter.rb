@@ -61,6 +61,10 @@ class SuperuserAdapter < ActiveAdmin::AuthorizationAdapter
 
   READ_ACTIONS = %i[read].freeze
 
+  # Actions that decide about money without writing a ledger model. See
+  # authorized?.
+  MONEY_DECISIONS = %i[let_go].freeze
+
   # The two actions that make a new record. ActiveAdmin asks about :new to
   # decide whether to draw the "New" button and about :create to run the form
   # submit, so a rule has to cover both.
@@ -78,6 +82,10 @@ class SuperuserAdapter < ActiveAdmin::AuthorizationAdapter
     return false if creating_a_second_community?(action, subject)
     return true if READ_ACTIONS.include?(action)
     return true if user.superuser?
+    # Decisions about money that are not a write to a ledger model: marking
+    # a settlement line Let go means somebody covers the amount (ADR 0011
+    # rule 8). Only a superuser, like every other decision about money.
+    return false if MONEY_DECISIONS.include?(action)
 
     # Rotations are open to any admin — except destroy. Destroying a rotation
     # deletes its meals (Rotation's dependent: :destroy), and Meal writes are

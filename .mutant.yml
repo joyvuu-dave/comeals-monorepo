@@ -68,6 +68,7 @@ matcher:
     - SettleAndNotify*
     - SettledDinnerDifference*
     - SettlementCorrecting*
+    - SettlementLineMarking*
     - SnapshotRead*
     - ThirdCookWarning*
     - TrueOrFalse*
@@ -90,6 +91,7 @@ matcher:
     - RotationChoicesHelper*
     - ScheduleWeekLabelHelper*
     - SettlementPreviewHelper*
+    - SettlementMarkHelper*
     - SettlementLinesTable*
     - MealCorrectionDetails*
     - LedgerCheckFindingsTable*
@@ -128,6 +130,7 @@ matcher:
     - SettlementCorrection*
     - SettlementCorrectionCharge*
     - SettlementCorrectionLine*
+    - SettlementLineMark*
     - StorableTime*
     - StorableTimeValidator*
     - Unit*

@@ -23,6 +23,7 @@ class ApplicationController
     include ::PhoneDisplayHelper
     include ::RotationChoicesHelper
     include ::ScheduleWeekLabelHelper
+    include ::SettlementMarkHelper
     include ::SettlementPreviewHelper
     include ::DeviseHelper
   end

@@ -954,6 +954,31 @@ what residents were actually told to pay.
 
 ---
 
+### SettlementLineMark
+
+What happened to a settlement line after the settlement (ADR 0011 rule 8):
+Paid, Let go, or none (a mark taken off), with an optional note ("paid $20
+of $40"), the admin who made it, and when. A mark never changes what anyone
+owes. Each change is a new row; the newest counts
+(`ReconciliationBalance#current_mark`), and the rest are the history the
+settlement page shows. Written only by `SettlementLineMarking`, which locks
+the line and refuses a change made on a page that did not see the newest
+mark.
+
+```
+SettlementLineMark ----> ReconciliationBalance
+SettlementLineMark ----> AdminUser
+```
+
+Any admin may mark a line Paid. Setting or changing a Let go mark needs a
+superuser (`SuperuserAdapter`, the `:let_go` action). Append-only:
+`AppendOnly` in the model and the trigger `settlement_line_marks_protect`
+(migration 20261010125953), with the repair bypass. The foreign key keeps a
+marked line from being deleted, and `Settlement#correct!` refuses a
+settlement with a mark.
+
+---
+
 ### ResidentBalance
 
 Cached running balance for a resident over the unreconciled meals, plus
