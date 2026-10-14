@@ -454,6 +454,9 @@ class ReconciliationBalance
     sig { params(args: T.untyped, blk: T.untyped).returns(::Resident) }
     def build_resident(*args, &blk); end
 
+    sig { params(args: T.untyped, blk: T.untyped).returns(::Unit) }
+    def build_unit(*args, &blk); end
+
     sig { params(args: T.untyped, blk: T.untyped).returns(::Reconciliation) }
     def create_reconciliation(*args, &blk); end
 
@@ -465,6 +468,12 @@ class ReconciliationBalance
 
     sig { params(args: T.untyped, blk: T.untyped).returns(::Resident) }
     def create_resident!(*args, &blk); end
+
+    sig { params(args: T.untyped, blk: T.untyped).returns(::Unit) }
+    def create_unit(*args, &blk); end
+
+    sig { params(args: T.untyped, blk: T.untyped).returns(::Unit) }
+    def create_unit!(*args, &blk); end
 
     sig { returns(T.nilable(::Reconciliation)) }
     def reconciliation; end
@@ -484,11 +493,17 @@ class ReconciliationBalance
     sig { returns(T.nilable(::Resident)) }
     def reload_resident; end
 
+    sig { returns(T.nilable(::Unit)) }
+    def reload_unit; end
+
     sig { void }
     def reset_reconciliation; end
 
     sig { void }
     def reset_resident; end
+
+    sig { void }
+    def reset_unit; end
 
     sig { returns(T.nilable(::Resident)) }
     def resident; end
@@ -501,6 +516,18 @@ class ReconciliationBalance
 
     sig { returns(T::Boolean) }
     def resident_previously_changed?; end
+
+    sig { returns(T.nilable(::Unit)) }
+    def unit; end
+
+    sig { params(value: T.nilable(::Unit)).void }
+    def unit=(value); end
+
+    sig { returns(T::Boolean) }
+    def unit_changed?; end
+
+    sig { returns(T::Boolean) }
+    def unit_previously_changed?; end
   end
 
   module GeneratedAssociationRelationMethods
@@ -837,6 +864,51 @@ class ReconciliationBalance
     sig { void }
     def id_will_change!; end
 
+    sig { returns(T.nilable(T::Boolean)) }
+    def lived_here; end
+
+    sig { params(value: T.nilable(T::Boolean)).returns(T.nilable(T::Boolean)) }
+    def lived_here=(value); end
+
+    sig { returns(T::Boolean) }
+    def lived_here?; end
+
+    sig { returns(T.nilable(T::Boolean)) }
+    def lived_here_before_last_save; end
+
+    sig { returns(T.untyped) }
+    def lived_here_before_type_cast; end
+
+    sig { returns(T::Boolean) }
+    def lived_here_came_from_user?; end
+
+    sig { returns(T.nilable([T.nilable(T::Boolean), T.nilable(T::Boolean)])) }
+    def lived_here_change; end
+
+    sig { returns(T.nilable([T.nilable(T::Boolean), T.nilable(T::Boolean)])) }
+    def lived_here_change_to_be_saved; end
+
+    sig { params(from: T.untyped, to: T.untyped).returns(T::Boolean) }
+    def lived_here_changed?(from: T.unsafe(nil), to: T.unsafe(nil)); end
+
+    sig { returns(T.nilable(T::Boolean)) }
+    def lived_here_in_database; end
+
+    sig { returns(T.nilable([T.nilable(T::Boolean), T.nilable(T::Boolean)])) }
+    def lived_here_previous_change; end
+
+    sig { params(from: T.untyped, to: T.untyped).returns(T::Boolean) }
+    def lived_here_previously_changed?(from: T.unsafe(nil), to: T.unsafe(nil)); end
+
+    sig { returns(T.nilable(T::Boolean)) }
+    def lived_here_previously_was; end
+
+    sig { returns(T.nilable(T::Boolean)) }
+    def lived_here_was; end
+
+    sig { void }
+    def lived_here_will_change!; end
+
     sig { returns(T.nilable(::Integer)) }
     def reconciliation_id; end
 
@@ -940,10 +1012,16 @@ class ReconciliationBalance
     def restore_id_value!; end
 
     sig { void }
+    def restore_lived_here!; end
+
+    sig { void }
     def restore_reconciliation_id!; end
 
     sig { void }
     def restore_resident_id!; end
+
+    sig { void }
+    def restore_unit_id!; end
 
     sig { void }
     def restore_updated_at!; end
@@ -972,6 +1050,12 @@ class ReconciliationBalance
     sig { params(from: T.untyped, to: T.untyped).returns(T::Boolean) }
     def saved_change_to_id_value?(from: T.unsafe(nil), to: T.unsafe(nil)); end
 
+    sig { returns(T.nilable([T.nilable(T::Boolean), T.nilable(T::Boolean)])) }
+    def saved_change_to_lived_here; end
+
+    sig { params(from: T.untyped, to: T.untyped).returns(T::Boolean) }
+    def saved_change_to_lived_here?(from: T.unsafe(nil), to: T.unsafe(nil)); end
+
     sig { returns(T.nilable([T.nilable(::Integer), T.nilable(::Integer)])) }
     def saved_change_to_reconciliation_id; end
 
@@ -984,11 +1068,62 @@ class ReconciliationBalance
     sig { params(from: T.untyped, to: T.untyped).returns(T::Boolean) }
     def saved_change_to_resident_id?(from: T.unsafe(nil), to: T.unsafe(nil)); end
 
+    sig { returns(T.nilable([T.nilable(::Integer), T.nilable(::Integer)])) }
+    def saved_change_to_unit_id; end
+
+    sig { params(from: T.untyped, to: T.untyped).returns(T::Boolean) }
+    def saved_change_to_unit_id?(from: T.unsafe(nil), to: T.unsafe(nil)); end
+
     sig { returns(T.nilable([T.nilable(::ActiveSupport::TimeWithZone), T.nilable(::ActiveSupport::TimeWithZone)])) }
     def saved_change_to_updated_at; end
 
     sig { params(from: T.untyped, to: T.untyped).returns(T::Boolean) }
     def saved_change_to_updated_at?(from: T.unsafe(nil), to: T.unsafe(nil)); end
+
+    sig { returns(T.nilable(::Integer)) }
+    def unit_id; end
+
+    sig { params(value: T.nilable(::Integer)).returns(T.nilable(::Integer)) }
+    def unit_id=(value); end
+
+    sig { returns(T::Boolean) }
+    def unit_id?; end
+
+    sig { returns(T.nilable(::Integer)) }
+    def unit_id_before_last_save; end
+
+    sig { returns(T.untyped) }
+    def unit_id_before_type_cast; end
+
+    sig { returns(T::Boolean) }
+    def unit_id_came_from_user?; end
+
+    sig { returns(T.nilable([T.nilable(::Integer), T.nilable(::Integer)])) }
+    def unit_id_change; end
+
+    sig { returns(T.nilable([T.nilable(::Integer), T.nilable(::Integer)])) }
+    def unit_id_change_to_be_saved; end
+
+    sig { params(from: T.untyped, to: T.untyped).returns(T::Boolean) }
+    def unit_id_changed?(from: T.unsafe(nil), to: T.unsafe(nil)); end
+
+    sig { returns(T.nilable(::Integer)) }
+    def unit_id_in_database; end
+
+    sig { returns(T.nilable([T.nilable(::Integer), T.nilable(::Integer)])) }
+    def unit_id_previous_change; end
+
+    sig { params(from: T.untyped, to: T.untyped).returns(T::Boolean) }
+    def unit_id_previously_changed?(from: T.unsafe(nil), to: T.unsafe(nil)); end
+
+    sig { returns(T.nilable(::Integer)) }
+    def unit_id_previously_was; end
+
+    sig { returns(T.nilable(::Integer)) }
+    def unit_id_was; end
+
+    sig { void }
+    def unit_id_will_change!; end
 
     sig { returns(T.nilable(::ActiveSupport::TimeWithZone)) }
     def updated_at; end
@@ -1048,10 +1183,16 @@ class ReconciliationBalance
     def will_save_change_to_id_value?(from: T.unsafe(nil), to: T.unsafe(nil)); end
 
     sig { params(from: T.untyped, to: T.untyped).returns(T::Boolean) }
+    def will_save_change_to_lived_here?(from: T.unsafe(nil), to: T.unsafe(nil)); end
+
+    sig { params(from: T.untyped, to: T.untyped).returns(T::Boolean) }
     def will_save_change_to_reconciliation_id?(from: T.unsafe(nil), to: T.unsafe(nil)); end
 
     sig { params(from: T.untyped, to: T.untyped).returns(T::Boolean) }
     def will_save_change_to_resident_id?(from: T.unsafe(nil), to: T.unsafe(nil)); end
+
+    sig { params(from: T.untyped, to: T.untyped).returns(T::Boolean) }
+    def will_save_change_to_unit_id?(from: T.unsafe(nil), to: T.unsafe(nil)); end
 
     sig { params(from: T.untyped, to: T.untyped).returns(T::Boolean) }
     def will_save_change_to_updated_at?(from: T.unsafe(nil), to: T.unsafe(nil)); end

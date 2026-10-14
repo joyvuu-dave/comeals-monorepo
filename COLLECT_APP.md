@@ -122,6 +122,7 @@ On the iOS side, all money is `Decimal`. A thin `Money` wrapper type may be just
         "name": "Alice",
         "unit_id": 5,
         "unit_name": "5B",
+        "lived_here": true,
         "amount": "47.32"
       }
     ],
@@ -132,7 +133,8 @@ On the iOS side, all money is `Decimal`. A thin `Money` wrapper type may be just
         "amount": "47.32",
         "resident_count": 2
       }
-    ]
+    ],
+    "moved_out": { "amount": "-3.10", "resident_count": 1 }
   },
   "warnings": [
     {

@@ -283,9 +283,13 @@ class Settlement
   # that already exists and already claimed its meals. Not re-runnable on
   # its own — the caller clears both tables first, inside one transaction,
   # with the settled-write bypass on. See the runbook.
-  sig { void }
-  def rewrite!
-    write_ledger!
+  #
+  # `units` is the saved unit of each person (Reconciliation#saved_units),
+  # read before the caller cleared the lines; anyone it leaves out gets
+  # their unit as it is now (ADR 0011 rule 7).
+  sig { params(units: T::Hash[Integer, Reconciliation::SavedUnit]).void }
+  def rewrite!(units: {})
+    write_ledger!(units: units)
   end
 
   # The name a preview passes as the reconciliation id in error messages,
@@ -552,14 +556,14 @@ class Settlement
   # this reconciliation as if the settlement wrote them.
   #
   # Returns the balances it stored, for the fingerprint check in settle!.
-  sig { returns(T::Hash[Integer, BigDecimal]) }
-  def write_ledger!
+  sig { params(units: T::Hash[Integer, Reconciliation::SavedUnit]).returns(T::Hash[Integer, BigDecimal]) }
+  def write_ledger!(units: {})
     ledger = reconciliation.settlement_ledger
 
     Reconciliation.transaction(requires_new: true) do
       write_settling_setting(T.must(reconciliation.id).to_s)
       persist_charges!(ledger)
-      balances = persist_balances!(ledger)
+      balances = persist_balances!(ledger, units)
       write_settling_setting('')
       balances
     end
@@ -610,13 +614,29 @@ class Settlement
   # lives on the shared Community.instance, and once loaded it would
   # answer every later read in the same request or task, new residents
   # left out.
+  #
+  # Each line saves the person's unit and whether they lived here, as they
+  # are now, on the day of the settlement (ADR 0011 rule 7). `units`
+  # overrides that for the people a settlement worked out again had lines
+  # for (Reconciliation#saved_units), so they keep the unit they settled in.
   # Returns the balances it stored.
-  sig { params(ledger: MealLedger).returns(T::Hash[Integer, BigDecimal]) }
-  def persist_balances!(ledger)
+  sig do
+    params(ledger: MealLedger, units: T::Hash[Integer, Reconciliation::SavedUnit])
+      .returns(T::Hash[Integer, BigDecimal])
+  end
+  def persist_balances!(ledger, units)
     balances = reconciliation.settlement_balances(ledger).reject { |_, amount| amount.zero? }
     residents = Resident.where(id: balances.keys).index_by { |resident| T.must(resident.id) }
+    saved = balances.keys.to_h do |resident_id|
+      resident = residents.fetch(resident_id)
+      [resident_id, units.fetch(resident_id) { [T.must(resident.unit_id), T.must(resident.active)] }]
+    end
+    # The units go in as records too, read in one query, for the same reason.
+    unit_records = Unit.where(id: saved.values.map(&:first)).index_by { |unit| T.must(unit.id) }
     balances.each do |resident_id, amount|
-      reconciliation.reconciliation_balances.create!(resident: residents.fetch(resident_id), amount: amount)
+      unit_id, lived_here = saved.fetch(resident_id)
+      reconciliation.reconciliation_balances.create!(resident: residents.fetch(resident_id), amount: amount,
+                                                     unit: unit_records.fetch(unit_id), lived_here: lived_here)
     end
     balances
   end

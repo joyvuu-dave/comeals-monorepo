@@ -273,9 +273,13 @@ test.describe("Settlement", () => {
     await expect(row(balances, "Alice Cook").locator("td").last()).toHaveText(
       "owes $9.00",
     );
-    // Alice lives in unit A, Bob in unit B.
+    // Alice lives in unit A, Bob in unit B. Nobody has moved out, so the
+    // Moved out line is $0.00 (ADR 0011 rule 7).
     const units = panel(page, "Unit Balances");
-    await expect(units.locator("tbody tr")).toHaveCount(2);
+    await expect(units.locator("tbody tr")).toHaveCount(3);
+    await expect(row(units, "Moved out").locator("td").last()).toHaveText(
+      "$0.00",
+    );
     await expect(row(units, "A").locator("td").last()).toHaveText("owes $9.00");
     await expect(row(units, "B").locator("td").last()).toHaveText(
       "is owed $9.00",
@@ -374,9 +378,10 @@ test.describe("Settlement", () => {
     await expect(row(residents, "Carol Baker").locator("td").last()).toHaveText(
       "owes $4.50",
     );
-    // Alice lives in unit A; Bob and Carol in unit B.
+    // Alice lives in unit A; Bob and Carol in unit B. Nobody has moved
+    // out (ADR 0011 rule 7).
     const units = panel(page, "Unit Balances");
-    await expect(units.locator("tbody tr")).toHaveCount(2);
+    await expect(units.locator("tbody tr")).toHaveCount(3);
     await expect(row(units, "A").locator("td").last()).toHaveText(
       "is owed $22.50",
     );

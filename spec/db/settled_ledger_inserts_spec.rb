@@ -72,9 +72,10 @@ RSpec.describe 'inserts into the settled ledger' do
     dee = create(:resident, community: community, unit: unit, name: 'Dee')
     eve = create(:resident, community: community, unit: unit, name: 'Eve')
     sql(<<~SQL.squish)
-      INSERT INTO reconciliation_balances (reconciliation_id, resident_id, amount, created_at, updated_at)
-      VALUES (#{reconciliation.id}, #{dee.id}, 5, now(), now()),
-             (#{reconciliation.id}, #{eve.id}, -5, now(), now())
+      INSERT INTO reconciliation_balances
+        (reconciliation_id, resident_id, amount, unit_id, lived_here, created_at, updated_at)
+      VALUES (#{reconciliation.id}, #{dee.id}, 5, #{unit.id}, true, now(), now()),
+             (#{reconciliation.id}, #{eve.id}, -5, #{unit.id}, true, now(), now())
     SQL
   end
 

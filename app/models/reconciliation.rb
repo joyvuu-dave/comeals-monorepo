@@ -5,12 +5,13 @@
 #
 # Table name: reconciliations
 #
-#  id           :bigint           not null, primary key
-#  date         :date             not null
-#  end_date     :date             not null
-#  created_at   :datetime         not null
-#  updated_at   :datetime         not null
-#  community_id :bigint           not null
+#  id                :bigint           not null, primary key
+#  date              :date             not null
+#  end_date          :date             not null
+#  units_recorded_on :date             not null
+#  created_at        :datetime         not null
+#  updated_at        :datetime         not null
+#  community_id      :bigint           not null
 #
 # Foreign Keys
 #
@@ -67,6 +68,7 @@ class Reconciliation < ApplicationRecord
   audited
 
   validates :end_date, presence: true
+  validates :units_recorded_on, presence: true
   validate :end_date_old_enough, on: :create
   validate :must_settle_at_least_one_meal, on: :create
 
@@ -190,17 +192,21 @@ class Reconciliation < ApplicationRecord
     MealLedger.new(meals.with_attendees.preload(:bills, :meal_residents, :guests).to_a)
   end
 
-  # Settlement balances grouped by unit. Returns { [unit_id, unit_name] => BigDecimal }
-  # for every community unit, including units whose residents all have $0.00 balances.
+  # Settlement balances by unit, from each line's saved unit (ADR 0011
+  # rule 7): { [unit_id, unit_name] => BigDecimal } for every unit of the
+  # community, a unit whose people all settled at $0.00 included. When the
+  # settlement records who had moved out (records_who_moved_out?), only the
+  # lines of people who lived here that day count, and moved_out_balance is
+  # the rest, so the units and it add up to $0.00. When it does not, every
+  # line counts in its unit.
   UnitKey = T.type_alias { [Integer, String] }
 
   sig { returns(T::Hash[UnitKey, BigDecimal]) }
   def unit_balances
+    lines = reconciliation_balances
+    lines = lines.where(lived_here: true) if records_who_moved_out?
     # Grouped sum: Sorbet's relation sigs only know the ungrouped, scalar form.
-    grouped = T.cast(reconciliation_balances
-                       .joins(resident: :unit)
-                       .group('units.id', 'units.name')
-                       .sum(:amount), T::Hash[UnitKey, BigDecimal])
+    grouped = T.cast(lines.joins(:unit).group('units.id', 'units.name').sum(:amount), T::Hash[UnitKey, BigDecimal])
 
     result = T.let({}, T::Hash[UnitKey, BigDecimal])
     T.must(community).units.order(:name).each do |unit|
@@ -208,6 +214,55 @@ class Reconciliation < ApplicationRecord
       result[key] = grouped.fetch(key, BigDecimal('0'))
     end
     result
+  end
+
+  # What the people who had moved out by the day of the settlement owe or
+  # are owed together, from the lines' saved lived_here. Zero when nobody
+  # had, and on a settlement that does not record who had
+  # (records_who_moved_out?).
+  sig { returns(BigDecimal) }
+  def moved_out_balance
+    return BigDecimal('0') unless records_who_moved_out?
+
+    # The amount column is NUMERIC, so the sum is a BigDecimal (zero with
+    # no rows too); Sorbet's sig for sum also allows Integer and Float.
+    T.cast(reconciliation_balances.where(lived_here: false).sum(:amount), BigDecimal)
+  end
+
+  # Each person's saved unit and whether they lived here, as this
+  # settlement's lines hold them: { resident_id => [unit_id, lived_here] }.
+  # Settlement#correct! reads them before it replaces the lines and writes
+  # them back, so working a settlement out again moves nobody to another
+  # unit. Read from the table, not the association, which may hold lines
+  # a correction has already deleted.
+  SavedUnit = T.type_alias { [Integer, T::Boolean] }
+
+  sig { returns(T::Hash[Integer, SavedUnit]) }
+  def saved_units
+    ReconciliationBalance.where(reconciliation_id: id).pluck(:resident_id, :unit_id, :lived_here)
+                         .to_h { |resident_id, unit_id, lived_here| [resident_id, [unit_id, lived_here]] }
+  end
+
+  # The units of this settlement's lines were saved after the day it was
+  # made: it was made before settlements saved them, and migration
+  # 20261010125950 filled in each person's unit as it was on the day that
+  # migration ran. Its page says so.
+  sig { returns(T::Boolean) }
+  def units_recorded_later?
+    T.must(units_recorded_on) > T.must(date)
+  end
+
+  # Whether this settlement's lines say who had moved out on its own day.
+  # A line's lived_here is the person's active flag on the day the units
+  # were saved. For a settlement made before migration 20261010125950 that
+  # is the day the migration ran, years later, and the app did not record
+  # who lived here before then: someone who moved out after the settlement
+  # would read as moved out at the time. So such a settlement counts
+  # everyone in the unit they live in, or last lived in, with no Moved out
+  # line (decided 2026-10-14).
+  sig { returns(T::Boolean) }
+  def records_who_moved_out?
+    !units_recorded_later?
   end
 
   # The meals this reconciliation would sweep. The create validation and
@@ -245,6 +300,9 @@ class Reconciliation < ApplicationRecord
   sig { void }
   def set_date
     self.date ||= T.must(community).today
+    # The settlement saves each person's unit on the day it is made
+    # (ADR 0011 rule 7).
+    self.units_recorded_on ||= date
   end
 
   # The cutoff must be at least DAYS_TO_WAIT days before today, in the

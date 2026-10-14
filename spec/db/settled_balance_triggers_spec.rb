@@ -53,6 +53,13 @@ RSpec.describe 'settled balance triggers' do
     create(:resident, community: community, unit: unit, multiplier: 2, name: name)
   end
 
+  # A balance written the way a settlement writes one, with the person's
+  # unit and whether they live here (ADR 0011 rule 7).
+  def add_balance(resident, amount)
+    ReconciliationBalance.create!(reconciliation: reconciliation, resident: resident, amount: BigDecimal(amount),
+                                  unit: resident.unit, lived_here: true)
+  end
+
   describe 'rewriting a settled amount' do
     it 'refuses an UPDATE that skips Rails' do
       expect { ReconciliationBalance.where(id: balance.id).update_all(amount: BigDecimal('5')) }
@@ -90,9 +97,7 @@ RSpec.describe 'settled balance triggers' do
     it 'refuses an inserted balance that unbalances the reconciliation' do
       expect do
         as_settlement_of(reconciliation) do
-          ReconciliationBalance.create!(
-            reconciliation: reconciliation, resident: new_resident('Stranger'), amount: BigDecimal('10')
-          )
+          add_balance(new_resident('Stranger'), '10')
         end
       end.to raise_error(ActiveRecord::StatementInvalid, /sum to 10\.0*, not zero/)
     end
@@ -102,9 +107,7 @@ RSpec.describe 'settled balance triggers' do
 
       suppress(ActiveRecord::StatementInvalid) do
         as_settlement_of(reconciliation) do
-          ReconciliationBalance.create!(
-            reconciliation: reconciliation, resident: new_resident('Stranger'), amount: BigDecimal('10')
-          )
+          add_balance(new_resident('Stranger'), '10')
         end
       end
 
@@ -121,12 +124,12 @@ RSpec.describe 'settled balance triggers' do
 
       expect do
         as_settlement_of(reconciliation) do
-          ReconciliationBalance.create!(reconciliation: reconciliation, resident: one, amount: BigDecimal('10'))
+          add_balance(one, '10')
 
           # Unbalanced right here, and nothing has complained.
           expect(reconciliation.reconciliation_balances.sum(:amount)).to eq(BigDecimal('10'))
 
-          ReconciliationBalance.create!(reconciliation: reconciliation, resident: two, amount: BigDecimal('-10'))
+          add_balance(two, '-10')
         end
       end.not_to raise_error
 

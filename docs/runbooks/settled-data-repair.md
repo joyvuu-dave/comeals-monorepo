@@ -261,12 +261,18 @@ also records what changed. Prefer it. The steps by hand leave no record.
 reconciliation = Reconciliation.find(ID)
 
 ActiveRecord::Base.transaction do
+  # Each person's unit on the day of the settlement (ADR 0011 rule 7),
+  # read before the lines that hold it are deleted.
+  units = reconciliation.saved_units
   ActiveRecord::Base.connection.execute("SET LOCAL comeals.allow_settled_writes = 'on'")
   MealCharge.for_reconciliation(reconciliation).delete_all
   reconciliation.reconciliation_balances.delete_all
-  Settlement.new(reconciliation).rewrite!
+  Settlement.new(reconciliation).rewrite!(units: units)
 end
 ```
+
+Without `units:`, `rewrite!` saves each person's unit as it is now, and
+the settlement's unit totals move to the units people live in today.
 
 All of it must be in the one transaction, and both tables must be cleared.
 The delete alone leaves the reconciliation with no rows, which sums to zero

@@ -61,7 +61,32 @@ RSpec.describe 'GET /api/v1/reconciliations/preview' do
     expect(money(units['5B'][:amount])).to eq(20)
     expect(units['5B'][:resident_count]).to eq(2)
     expect(money(units['7A'][:amount])).to eq(-20)
+    expect(residents.values.pluck(:lived_here)).to all(be(true))
+    expect(body[:balances][:moved_out]).to eq('amount' => '0.0', 'resident_count' => 0)
     expect(body[:warnings]).to eq([])
+  end
+
+  # ADR 0011 rule 7: the preview says what the settlement would save. Bob
+  # has moved out: he is in no unit, and moved_out has his amount, so the
+  # units and moved_out add up to zero.
+  it 'counts someone who has moved out under moved_out, not in their unit' do
+    cook = create(:resident, community: community, unit: unit, multiplier: 2, name: 'Alice Cook')
+    other_unit = create(:unit, community: community, name: '7A')
+    gone = create(:resident, community: community, unit: other_unit, multiplier: 2, name: 'Bob Eater')
+    meal = create(:meal, community: community, date: latest - 1)
+    create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
+    create(:meal_resident, meal: meal, resident: gone, community: community)
+    gone.update!(active: false)
+
+    body = preview
+
+    expect(body[:summary]).to include(residents_affected: 2, units_affected: 1)
+    residents = body[:balances][:residents].index_by { |row| row[:resident_id] }
+    expect(residents[gone.id]).to include(unit_name: '7A', lived_here: false)
+    expect(residents[cook.id]).to include(lived_here: true)
+    units = body[:balances][:units].to_h { |row| [row[:unit_name], [money(row[:amount]), row[:resident_count]]] }
+    expect(units).to eq('5B' => [30, 1], '7A' => [0, 0])
+    expect(body[:balances][:moved_out]).to eq('amount' => '-30.0', 'resident_count' => 1)
   end
 
   # A correction to a dinner already settled (ADR 0011 rule 6): its

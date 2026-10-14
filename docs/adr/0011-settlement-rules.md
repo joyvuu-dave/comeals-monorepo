@@ -1,6 +1,6 @@
 # ADR 0011: How settlements work from now on
 
-- **Status:** Accepted. Every rule is built except 7, 8 and 9.
+- **Status:** Accepted. Every rule is built except 8 and 9.
 - **Date:** 2026-10-12
 - **Issue:** #165 (the common house email)
 
@@ -143,7 +143,11 @@ the same rule. It shows a "Moved out" line, so its totals still add up
 to $0.
 
 The app has no history of anyone's unit, so the old settlements use
-each person's unit today, and their pages say so.
+each person's unit today, and their pages say so. They have no "Moved
+out" line: the app did not record who lived here at the time, and
+someone who moved out years later would read as moved out then. So an
+old settlement counts everyone in the unit they live in, or last lived
+in (decided 2026-10-14).
 
 ### 8. Each settlement line can be marked "Paid" or "Let go"
 

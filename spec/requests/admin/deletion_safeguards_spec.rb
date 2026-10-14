@@ -32,6 +32,22 @@ RSpec.describe 'Admin deletion safeguards' do
       expect(flash[:alert]).to include('residents')
     end
 
+    # ADR 0011 rule 7: a settlement line saves the person's unit on the day
+    # of the settlement. The unit stays after everyone has moved to other
+    # units, because the settlement still names it.
+    it 'refuses a unit a settlement names, after everyone has moved to other units, and says why' do
+      person = create(:resident, community: community, unit: unit)
+      meal = create(:meal, community: community, date: Reconciliation.latest_cutoff(community.today))
+      create(:bill, meal: meal, resident: person, community: community, amount: BigDecimal('20'))
+      create(:meal_resident, meal: meal, resident: create(:resident, community: community, unit: unit),
+                             community: community)
+      settle!
+      unit.residents.each { |resident| resident.update!(unit: create(:unit, community: community)) }
+
+      expect { delete "/units/#{unit.id}" }.not_to change(Unit, :count)
+      expect(flash[:alert]).to eq('Cannot delete record because dependent reconciliation balances exist')
+    end
+
     it 'deletes an empty unit' do
       empty = create(:unit, community: community)
 

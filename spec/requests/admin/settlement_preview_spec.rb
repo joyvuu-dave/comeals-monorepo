@@ -94,6 +94,13 @@ RSpec.describe 'Admin settlement preview' do
         .to contain_exactly(['Cook One', 'Unit A', 'is owed $30.00'], ['Eater One', 'Unit A', 'owes $30.00'])
       expect(panel("Each person's amount").text).to include('Difference: $0.00')
 
+      # ADR 0011 rule 7: the unit the settlement will save. Someone who has
+      # moved out is under Moved out, after the units.
+      eater.update!(active: false)
+      get preview_path
+      expect(rows(panel("Each person's amount")))
+        .to eq([['Cook One', 'Unit A', 'is owed $30.00'], ['Eater One', 'Moved out', 'owes $30.00']])
+
       expect(panel('Dinners that will wait (3)').at_css('h3').text).to eq('Dinners that will wait (3)')
       expect(rows(panel('Dinners that will wait')).map(&:first))
         .to contain_exactly(waits.date.iso8601, held.date.iso8601, skipped.date.iso8601)

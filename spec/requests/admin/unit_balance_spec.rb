@@ -30,6 +30,22 @@ RSpec.describe 'Admin unit balance' do
     expect(response.body).to include('is owed $37.75')
   end
 
+  # ADR 0011 rule 7: someone who has moved out is in no unit's balance.
+  # The units list shows everyone who has moved out on a line of its own,
+  # so the units and that line add up to $0.00.
+  it 'leaves the people who moved out out of their unit, and shows them on a line of their own' do
+    gone = create(:resident, community: community, unit: unit, name: 'Gone Person', active: false)
+    ResidentBalance.create!(resident: gone, amount: BigDecimal('-37.75'))
+
+    get '/units'
+
+    expect(response.parsed_body.at_css('tbody td.col-balance').text.squish).to eq('is owed $37.75')
+    sidebar = response.parsed_body.at_css('#moved-out_sidebar_section')
+    expect(sidebar.at_css('p').text.squish).to eq('Everyone who has moved out, together: owes $37.75')
+    expect(sidebar.css('.settlement-total div').map { |div| div.text.strip })
+      .to eq(['Owed to units: $37.75', 'Owed by units: $37.75', 'Difference: $0.00 ✓'])
+  end
+
   it 'shows each resident on the residents list with the balance that the unit sums' do
     get '/residents'
 

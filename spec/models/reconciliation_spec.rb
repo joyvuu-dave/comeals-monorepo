@@ -4,12 +4,13 @@
 #
 # Table name: reconciliations
 #
-#  id           :bigint           not null, primary key
-#  date         :date             not null
-#  end_date     :date             not null
-#  created_at   :datetime         not null
-#  updated_at   :datetime         not null
-#  community_id :bigint           not null
+#  id                :bigint           not null, primary key
+#  date              :date             not null
+#  end_date          :date             not null
+#  units_recorded_on :date             not null
+#  created_at        :datetime         not null
+#  updated_at        :datetime         not null
+#  community_id      :bigint           not null
 #
 # Foreign Keys
 #
@@ -1280,6 +1281,43 @@ RSpec.describe Reconciliation do
 
       expect(result.size).to eq(2)
       expect(result.values).to all(eq(BigDecimal('0')))
+    end
+  end
+
+  # ADR 0011 rule 7. Elm's Dana is charged $15, and her line says she
+  # did not live here when the units were saved.
+  describe 'the people who had moved out' do
+    let(:elm) { create(:unit, community: community, name: 'Elm') }
+    let(:cook) { create(:resident, community: community, unit: elm) }
+    let(:dana) { create(:resident, community: community, unit: elm) }
+    let(:eli) { create(:resident, community: community, unit: create(:unit, community: community, name: 'Oak')) }
+    let!(:reconciliation) do
+      meal = create(:meal, community: community, date: latest)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('30'))
+      [dana, eli].each { |person| create(:meal_resident, meal: meal, resident: person, community: community) }
+      dana.update!(active: false)
+      settle!(cutoff: latest)
+    end
+
+    def by_name(balances)
+      balances.transform_keys(&:last)
+    end
+
+    it 'are on a line of their own when the units were saved on the day of the settlement' do
+      expect(reconciliation.records_who_moved_out?).to be(true)
+      expect(by_name(reconciliation.unit_balances)).to eq('Elm' => BigDecimal('30'), 'Oak' => BigDecimal('-15'))
+      expect(reconciliation.moved_out_balance).to eq(BigDecimal('-15'))
+    end
+
+    # The units were filled in later, so the line's lived_here is about
+    # that later day, not the settlement's.
+    it 'count in their unit, with no line of their own, when the units were saved later' do
+      reconciliation.update_columns(units_recorded_on: reconciliation.date + 1)
+
+      expect(reconciliation.units_recorded_later?).to be(true)
+      expect(reconciliation.records_who_moved_out?).to be(false)
+      expect(by_name(reconciliation.unit_balances)).to eq('Elm' => BigDecimal('15'), 'Oak' => BigDecimal('-15'))
+      expect(reconciliation.moved_out_balance).to eq(BigDecimal('0')).and be_a(BigDecimal)
     end
   end
 

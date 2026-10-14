@@ -350,6 +350,29 @@ RSpec.describe Settlement, '#correct!' do
       .to eq([[cook.id, BigDecimal('10'), BigDecimal('0')], [dana.id, BigDecimal('-10'), BigDecimal('0')]])
   end
 
+  # ADR 0011 rule 7: the units on a settlement are the ones of its day.
+  # Working it out again keeps each person's saved unit and lived-here,
+  # whatever they are now. Someone with no line before (Casey, whose
+  # receipt read $0) gets theirs as they are now: nothing else says it.
+  it 'keeps the unit each person settled in, and gives someone new to it their unit now' do
+    oak = create(:unit, community: community, name: 'Oak')
+    cook = person('Casey Cook')
+    dana = person('Dana Diner')
+    eli = person('Eli Eater')
+    _, bill = meal(Date.new(2025, 3, 1), cook: cook, amount: '0', eaters: [dana, eli])
+    meal(Date.new(2025, 3, 2), cook: eli, amount: '8', eaters: [dana])
+    reconciliation = settle_as_before_rule_3!(cutoff: Date.new(2025, 3, 31))
+    expect(reconciliation.saved_units).to eq(dana.id => [unit.id, true], eli.id => [unit.id, true])
+    dana.update!(unit: oak, active: false)
+    cook.update!(unit: oak)
+
+    correct(reconciliation, bill: bill, amount: '12')
+
+    expect(balances(reconciliation).keys).to contain_exactly(cook.id, dana.id, eli.id)
+    expect(reconciliation.saved_units)
+      .to eq(dana.id => [unit.id, true], eli.id => [unit.id, true], cook.id => [oak.id, true])
+  end
+
   # A cook whose receipt was read as $0 had no balance before, and is
   # credited after.
   it 'records a cook credited for the first time' do

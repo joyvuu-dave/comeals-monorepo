@@ -34,7 +34,9 @@ class ReconciliationPreviewSerializer
       earliest_meal_date: meals.first&.date&.iso8601,
       latest_meal_date: meals.last&.date&.iso8601,
       residents_affected: balances.size,
-      units_affected: Resident.where(id: balances.keys).distinct.count(:unit_id)
+      # The units of the people who live here; someone who has moved out
+      # is in no unit (ADR 0011 rule 7).
+      units_affected: Resident.where(id: balances.keys, active: true).distinct.count(:unit_id)
     }
   end
 
@@ -66,21 +68,28 @@ class ReconciliationPreviewSerializer
   # model is per unit, and a unit at $0.00 is a fact worth showing).
   # resident_count is how many of the unit's residents have a non-zero
   # balance.
+  #
+  # A settlement saves each person's unit and whether they live here on
+  # the day it is made (ADR 0011 rule 7), and the preview says what it
+  # would save: lived_here for each resident, units that count only the
+  # people who live here, and moved_out for everyone who has moved out,
+  # so the units and moved_out add up to zero.
   attribute :balances do |preview|
     nonzero = preview.resident_balances.reject { |_, amount| amount.zero? }
     residents = Resident.where(id: nonzero.keys).includes(:unit).index_by(&:id)
+    here, gone = residents.values.partition(&:active)
+    total = ->(people) { people.sum(BigDecimal('0')) { |resident| nonzero[resident.id] } }
     {
       residents: nonzero.keys.sort.map do |resident_id|
         resident = residents.fetch(resident_id)
         { resident_id: resident_id, name: resident.name, unit_id: resident.unit_id,
-          unit_name: T.must(resident.unit).name, amount: nonzero[resident_id] }
+          unit_name: T.must(resident.unit).name, lived_here: resident.active, amount: nonzero[resident_id] }
       end,
       units: Unit.order(:name).map do |unit|
-        in_unit = residents.values.select { |resident| resident.unit_id == unit.id }
-        { unit_id: unit.id, unit_name: unit.name,
-          amount: in_unit.sum(BigDecimal('0')) { |resident| nonzero[resident.id] },
-          resident_count: in_unit.size }
-      end
+        in_unit = here.select { |resident| resident.unit_id == unit.id }
+        { unit_id: unit.id, unit_name: unit.name, amount: total.call(in_unit), resident_count: in_unit.size }
+      end,
+      moved_out: { amount: total.call(gone), resident_count: gone.size }
     }
   end
 

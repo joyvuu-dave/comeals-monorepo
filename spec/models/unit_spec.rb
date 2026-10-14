@@ -53,6 +53,35 @@ RSpec.describe Unit do
     end
   end
 
+  # ADR 0011 rule 7: a unit's balance counts the people who live in it
+  # now, and moved_out_balance is everyone who has moved out.
+  describe 'the people who have moved out' do
+    let(:here) { create(:resident, community: community, unit: unit) }
+    let(:gone) { create(:resident, community: community, unit: unit, active: false) }
+    let(:elsewhere) { create(:resident, community: community, unit: create(:unit, community: community)) }
+
+    before do
+      ResidentBalance.create!(resident: here, amount: BigDecimal('7'))
+      ResidentBalance.create!(resident: gone, amount: BigDecimal('-3'))
+      ResidentBalance.create!(resident: elsewhere, amount: BigDecimal('-4'))
+    end
+
+    it 'are left out of the balance of the unit they lived in' do
+      expect(unit.balance).to eq(BigDecimal('7'))
+    end
+
+    it 'are counted together, so the units and they add up to zero' do
+      expect(described_class.moved_out_balance).to eq(BigDecimal('-3'))
+      expect(described_class.all.sum(&:balance) + described_class.moved_out_balance).to eq(0)
+    end
+
+    it 'count as zero when nobody has moved out' do
+      gone.update!(active: true)
+
+      expect(described_class.moved_out_balance).to eq(BigDecimal('0')).and be_a(BigDecimal)
+    end
+  end
+
   # ---------------------------------------------------------------------------
   # Deletion safeguards
   # ---------------------------------------------------------------------------

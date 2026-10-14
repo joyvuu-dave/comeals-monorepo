@@ -41,11 +41,14 @@ panel "Each person's amount" do
   if amounts.empty?
     para 'Nobody owes or is owed anything.'
   else
-    residents = Resident.where(id: amounts.keys).joins(:unit).includes(:unit).order('units.name', :name)
+    # The unit the settlement will save with each line (ADR 0011 rule 7):
+    # someone who has moved out is under Moved out, not in a unit.
+    residents = Resident.where(id: amounts.keys).joins(:unit).includes(:unit)
+                        .order(Arel.sql('residents.active DESC, units.name, residents.name'))
     # balance_tag turns the sign into words (BalanceDisplayHelper).
     table_for residents do
       column('Resident') { |resident| link_to resident.name, admin_resident_path(resident) }
-      column('Unit') { |resident| resident.unit.name }
+      column('Unit') { |resident| resident.active ? resident.unit.name : 'Moved out' }
       column('Amount') { |resident| balance_tag(amounts.fetch(resident.id)) }
     end
     text_node settlement_totals_tag(amounts.values, 'residents')

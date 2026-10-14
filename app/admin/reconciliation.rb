@@ -143,31 +143,46 @@ ActiveAdmin.register Reconciliation do
       row :number_of_meals
     end
 
+    # Each line's unit is the one saved with it, on the day of the
+    # settlement (ADR 0011 rule 7), so these totals never change later.
+    # A settlement made before units were saved says whose units it shows,
+    # and has no Moved out line (Reconciliation#records_who_moved_out?).
+    moved_out_known = reconciliation.records_who_moved_out?
+    unless moved_out_known
+      para "This settlement was made before the app saved each person's unit. These are the units people " \
+           "live in, or last lived in, on #{reconciliation.units_recorded_on.strftime('%b %-d, %Y')}. The app " \
+           'did not record who had moved out at the time.'
+    end
+
     panel 'Settlement Balances' do
+      order = moved_out_known ? 'reconciliation_balances.lived_here DESC, ' : ''
       balances = reconciliation.reconciliation_balances
-                               .includes(resident: :unit)
-                               .joins(resident: :unit)
-                               .order('units.name, residents.name')
+                               .includes(:resident, :unit)
+                               .joins(:resident, :unit)
+                               .order(Arel.sql("#{order}units.name, residents.name"))
 
       # balance_tag turns the stored sign into words — see BalanceDisplayHelper.
       table_for balances do
         column('Resident') { |rb| link_to rb.resident.name, admin_resident_path(rb.resident) }
-        column('Unit') { |rb| rb.resident.unit.name }
+        column('Unit') { |rb| rb.lived_here || !moved_out_known ? rb.unit.name : 'Moved out' }
         column('Balance') { |rb| balance_tag(rb.amount) }
       end
 
       text_node settlement_totals_tag(balances.map(&:amount), 'residents')
     end
 
+    # The people who had moved out by the day of the settlement are on a
+    # line of their own, not in any unit, so the lines still add up to $0.00.
     panel 'Unit Balances' do
       unit_bals = reconciliation.unit_balances
-
-      table_for unit_bals.to_a do
-        column('Unit') { |(unit_id, unit_name), _| link_to unit_name, admin_unit_path(unit_id) }
+      rows = unit_bals.map { |(unit_id, unit_name), amount| [link_to(unit_name, admin_unit_path(unit_id)), amount] }
+      rows << ['Moved out', reconciliation.moved_out_balance] if moved_out_known
+      table_for rows do
+        column('Unit') { |name, _| name }
         column('Balance') { |_, amount| balance_tag(amount) }
       end
 
-      text_node settlement_totals_tag(unit_bals.values, 'units')
+      text_node settlement_totals_tag(rows.map(&:last), 'units')
     end
 
     panel 'Meals' do

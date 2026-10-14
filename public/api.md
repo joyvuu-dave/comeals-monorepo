@@ -536,8 +536,11 @@ names a meal that is not in `meals`: a cook entered money, and nobody
 signed up or only people who eat free did, so nobody can be charged and
 the meal is held back until someone who pays signs up or the bill is
 removed. Money is a string; the sign is the
-direction: positive means the community owes the resident. No meals to
-settle is a `200` with empty lists, not an error.
+direction: positive means the community owes the resident. Each resident
+has `lived_here`. A unit's `amount` counts only the people who live there,
+and `balances.moved_out` is everyone who has moved out, so the units and
+`moved_out` add up to zero, the way the settlement will store them. No
+meals to settle is a `200` with empty lists, not an error.
 
 ```
 POST /reconciliations

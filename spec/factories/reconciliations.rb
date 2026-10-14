@@ -4,12 +4,13 @@
 #
 # Table name: reconciliations
 #
-#  id           :bigint           not null, primary key
-#  date         :date             not null
-#  end_date     :date             not null
-#  created_at   :datetime         not null
-#  updated_at   :datetime         not null
-#  community_id :bigint           not null
+#  id                :bigint           not null, primary key
+#  date              :date             not null
+#  end_date          :date             not null
+#  units_recorded_on :date             not null
+#  created_at        :datetime         not null
+#  updated_at        :datetime         not null
+#  community_id      :bigint           not null
 #
 # Foreign Keys
 #
@@ -19,6 +20,11 @@ FactoryBot.define do
   factory :reconciliation do
     community
     date { Time.zone.today }
+    # The day each line's unit was saved: the day the settlement is made
+    # (ADR 0011 rule 7). Set here as well as by the model, for the specs
+    # that save a row with validations off, which skips the model's
+    # before_validation.
+    units_recorded_on { date }
 
     # A reconciliation must settle at least one meal, so the factory builds one
     # for itself: a unit, a cook, a meal, a bill on that meal, and the cook

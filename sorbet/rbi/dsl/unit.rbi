@@ -382,6 +382,20 @@ class Unit
     sig { params(args: T.untyped, blk: T.untyped).returns(::Community) }
     def create_community!(*args, &blk); end
 
+    sig { returns(T::Array[T.untyped]) }
+    def reconciliation_balance_ids; end
+
+    sig { params(ids: T::Array[T.untyped]).returns(T::Array[T.untyped]) }
+    def reconciliation_balance_ids=(ids); end
+
+    # This method is created by ActiveRecord on the `Unit` class because it declared `has_many :reconciliation_balances`.
+    # 🔗 [Rails guide for `has_many` association](https://guides.rubyonrails.org/association_basics.html#the-has-many-association)
+    sig { returns(::ReconciliationBalance::PrivateCollectionProxy) }
+    def reconciliation_balances; end
+
+    sig { params(value: T::Enumerable[::ReconciliationBalance]).void }
+    def reconciliation_balances=(value); end
+
     sig { returns(T.nilable(::Community)) }
     def reload_community; end
 

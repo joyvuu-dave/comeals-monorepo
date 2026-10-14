@@ -34,6 +34,10 @@ class Unit < ApplicationRecord
   # hosts dropdown on its own. Only an empty unit, one created by mistake,
   # can be destroyed.
   has_many :residents, dependent: :restrict_with_error
+  # The settlement lines that name this unit as a person's unit on the day
+  # the settlement was made (ADR 0011 rule 7). A settlement keeps them, so
+  # a unit a settlement names stays, even with nobody living in it now.
+  has_many :reconciliation_balances, dependent: :restrict_with_error
 
   validates :name, presence: true, uniqueness: true
 
@@ -41,14 +45,24 @@ class Unit < ApplicationRecord
   after_save :note_live_update
 
   # DERIVED DATA
-  # The sum of its residents' cached balances (Resident#balance), so the
-  # unit page and each resident's page always agree.
+  # The sum of the cached balances (Resident#balance) of the people who
+  # live in it now, so the unit page and each resident's page always agree.
+  # The people who have moved out are in no unit's balance (ADR 0011 rule
+  # 7): moved_out_balance is theirs, and the units and it add up to $0.00.
   # Signed: positive means the community owes this unit, negative means the
   # unit owes the community (the MealLedger sign convention). Show it to a
   # person only through BalanceDisplayHelper#balance_tag, never as a raw
   # signed number.
   def balance
-    residents.reduce(BigDecimal('0')) { |sum, resident| sum + resident.balance }
+    # select, not the `active` scope: the units page loads every unit's
+    # residents in one query (goldiloader), and a scope would query again.
+    residents.select(&:active).reduce(BigDecimal('0')) { |sum, resident| sum + resident.balance }
+  end
+
+  # The cached balances of everyone who has moved out, together.
+  def self.moved_out_balance
+    # NUMERIC, so a BigDecimal (zero with no rows too).
+    ResidentBalance.joins(:resident).where(residents: { active: false }).sum(:amount)
   end
 
   private

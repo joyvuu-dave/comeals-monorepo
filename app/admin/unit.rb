@@ -19,6 +19,18 @@ ActiveAdmin.register Unit do
     include RefusedDestroyMessage
   end
 
+  # ADR 0011 rule 7: a unit's balance counts the people who live in it
+  # now. The people who have moved out are on a line of their own, so the
+  # units and it add up to $0.00.
+  sidebar 'Moved out', only: :index do
+    moved_out = Unit.moved_out_balance
+    para do
+      text_node 'Everyone who has moved out, together: '
+      text_node balance_tag(moved_out)
+    end
+    text_node settlement_totals_tag(Unit.all.map(&:balance) + [moved_out], 'units')
+  end
+
   # INDEX
   index do
     column 'Unit', :name

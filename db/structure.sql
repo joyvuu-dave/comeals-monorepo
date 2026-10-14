@@ -1399,7 +1399,9 @@ CREATE TABLE public.reconciliation_balances (
     created_at timestamp(6) without time zone NOT NULL,
     reconciliation_id bigint NOT NULL,
     resident_id bigint NOT NULL,
-    updated_at timestamp(6) without time zone NOT NULL
+    updated_at timestamp(6) without time zone NOT NULL,
+    unit_id bigint NOT NULL,
+    lived_here boolean NOT NULL
 );
 
 
@@ -1432,7 +1434,8 @@ CREATE TABLE public.reconciliations (
     created_at timestamp without time zone NOT NULL,
     date date NOT NULL,
     end_date date NOT NULL,
-    updated_at timestamp without time zone NOT NULL
+    updated_at timestamp without time zone NOT NULL,
+    units_recorded_on date NOT NULL
 );
 
 
@@ -3170,6 +3173,13 @@ CREATE INDEX index_reconciliation_balances_on_resident_id ON public.reconciliati
 
 
 --
+-- Name: index_reconciliation_balances_on_unit_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_reconciliation_balances_on_unit_id ON public.reconciliation_balances USING btree (unit_id);
+
+
+--
 -- Name: index_resident_balances_on_resident_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3722,6 +3732,14 @@ ALTER TABLE ONLY public.guest_add_keys
 
 
 --
+-- Name: reconciliation_balances fk_rails_2791dcc954; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.reconciliation_balances
+    ADD CONSTRAINT fk_rails_2791dcc954 FOREIGN KEY (unit_id) REFERENCES public.units(id);
+
+
+--
 -- Name: solid_queue_recurring_executions fk_rails_318a5533ed; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4102,6 +4120,7 @@ INSERT INTO "schema_migrations" (version) VALUES
 ('20261010130000'),
 ('20261010125952'),
 ('20261010125951'),
+('20261010125950'),
 ('20261010125900'),
 ('20261010125800'),
 ('20261010120000'),

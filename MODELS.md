@@ -918,6 +918,7 @@ What one resident owed or was owed at one settlement. Written by
 ```
 ReconciliationBalance ----> Reconciliation
 ReconciliationBalance ----> Resident
+ReconciliationBalance ----> Unit
 ```
 
 **Key fields:**
@@ -925,6 +926,16 @@ ReconciliationBalance ----> Resident
 - `amount` DECIMAL(16,8) — signed: positive means the community owes the
   resident ("is owed"), negative means the resident owes ("owes"). Show it
   only through `BalanceDisplayHelper#balance_tag`.
+- `unit_id` and `lived_here` — the person's unit and active flag on the
+  day of the settlement (ADR 0011 rule 7). The settlement page adds up
+  each unit from these, and the lines with `lived_here` false on a line of
+  their own, "Moved out", so the totals never change later. A rework
+  (`Settlement#correct!`) keeps them (`Reconciliation#saved_units`).
+  `reconciliations.units_recorded_on` is the day they were saved; for the
+  settlements made before migration 20261010125950 it is the day that
+  migration filled them in. Such a settlement's `lived_here` is about that
+  later day, so its page counts everyone in their unit, with no "Moved
+  out" line, and says so (`Reconciliation#records_who_moved_out?`).
 - `(reconciliation_id, resident_id)` is unique
   (`index_recon_balances_on_recon_id_and_resident_id`). There is also
   `index_reconciliation_balances_on_resident_id`. The single-column

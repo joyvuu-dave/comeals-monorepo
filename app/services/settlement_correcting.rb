@@ -72,9 +72,10 @@ module SettlementCorrecting
       earlier = earlier_differences(reason, include_earlier_differences)
       run_fix(fix)
       before = stored_balances
+      units = reconciliation.saved_units
       correction = keep_old_ledger!(reason, include_earlier_differences, earlier)
       clear_ledger!
-      write_ledger!
+      write_ledger!(units: units)
       record_lines!(correction, before, stored_balances)
       correction
     end
