@@ -242,7 +242,7 @@ MUTANT_SPEC_ROWS = {
   # The cooks of a settlement are read through Reconciliation.settled_cooks.
   'spec/jobs/notify_cooks_job_spec.rb' => %w[NotifyCooksJob PacedDelivery MailDelivery Reconciliation],
   # NotifyCooksJob.cooks_owed has no other caller and no other examples.
-  'spec/jobs/send_missed_cook_mail_job_spec.rb' => %w[SendMissedCookMailJob NotifyCooksJob MailDelivery],
+  'spec/jobs/send_missed_settlement_mail_job_spec.rb' => %w[SendMissedSettlementMailJob NotifyCooksJob MailDelivery],
   # The only spec that sees a query after a settlement's commit. Settlement
   # is not named: its mutations are many, and this file runs some 60
   # requests with no test transaction; settle_and_notify_spec checks what

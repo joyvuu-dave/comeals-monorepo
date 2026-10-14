@@ -34,7 +34,7 @@ RSpec.describe SettleAndNotify do
     meal
   end
 
-  it 'settles, refreshes balances, and mails the cooks' do
+  it 'settles, refreshes balances, and mails the cooks and the common house' do
     settleable_meal(latest)
 
     reconciliation = described_class.call(cutoff: latest, community: community).reconciliation
@@ -42,6 +42,8 @@ RSpec.describe SettleAndNotify do
     expect(reconciliation).to be_persisted
     expect(ResidentBalance.find_by(resident_id: resident.id).amount).to eq(BigDecimal('0'))
     expect(ReconciliationMailer).to have_received(:reconciliation_notify_email).with(cook, reconciliation).once
+    expect(MailDelivery.where(mailer: CommonHouseMailJob::MAILER, about: reconciliation).pluck(:resident_id))
+      .to eq([nil])
   end
 
   context 'when Pusher is down' do
@@ -259,27 +261,31 @@ RSpec.describe SettleAndNotify do
     end
   end
 
-  # The cook mail is queued in the settlement's own transaction. Solid
-  # Queue keeps its jobs in this database, so the job row commits with
-  # the settlement or not at all: a settlement that is saved always has
-  # its cook mail queued, even when the process stops right after the
-  # commit, and one that rolls back mails nobody. The real adapter here,
-  # because the test adapter keeps jobs in memory, where a rollback
-  # cannot reach them.
-  describe 'the cook mail job, with Solid Queue' do
+  # The cook mail and the common house mail are queued in the
+  # settlement's own transaction. Solid Queue keeps its jobs in this
+  # database, so the job rows commit with the settlement or not at all: a
+  # settlement that is saved always has its mail queued, even when the
+  # process stops right after the commit, and one that rolls back mails
+  # nobody. The real adapter here, because the test adapter keeps jobs in
+  # memory, where a rollback cannot reach them.
+  describe 'the mail jobs, with Solid Queue' do
     include_context 'with no test transaction'
     include_context 'with Solid Queue as the job adapter'
 
-    def queued_cook_mail
-      SolidQueue::Job.where(class_name: 'NotifyCooksJob').map { |job| job.arguments.fetch('arguments') }
+    def queued(job_class)
+      SolidQueue::Job.where(class_name: job_class.name).map { |job| job.arguments.fetch('arguments') }
     end
 
-    it 'is queued once for the settlement that was saved' do
+    def queued_cook_mail = queued(NotifyCooksJob)
+
+    it 'queues each once for the settlement that was saved' do
       settleable_meal(latest)
 
       settlement = described_class.call(cutoff: latest, community: community)
 
-      expect(queued_cook_mail).to eq([[{ '_aj_globalid' => settlement.reconciliation.to_global_id.to_s }]])
+      about = [[{ '_aj_globalid' => settlement.reconciliation.to_global_id.to_s }]]
+      expect(queued_cook_mail).to eq(about)
+      expect(queued(CommonHouseMailJob)).to eq(about)
     end
 
     # ActiveJob answers false, and raises nothing, when an adapter refuses
@@ -292,6 +298,18 @@ RSpec.describe SettleAndNotify do
 
       expect { described_class.call(cutoff: latest, community: community) }
         .to raise_error(SettleAndNotify::MailNotQueued, 'The cook mail could not be queued, so nothing was settled.')
+
+      expect(Reconciliation.count).to eq(0)
+      expect(queued_cook_mail).to eq([])
+    end
+
+    it 'rolls the settlement and the cook mail back when the common house mail was not queued' do
+      settleable_meal(latest)
+      allow(CommonHouseMailJob).to receive(:perform_later).and_return(false)
+
+      expect { described_class.call(cutoff: latest, community: community) }
+        .to raise_error(SettleAndNotify::MailNotQueued,
+                        'The common house mail could not be queued, so nothing was settled.')
 
       expect(Reconciliation.count).to eq(0)
       expect(queued_cook_mail).to eq([])

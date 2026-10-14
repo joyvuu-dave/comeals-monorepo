@@ -11,6 +11,10 @@
 # can run again and reach only the people it missed. The row is written
 # after the send, not before: if the process dies between the two, that
 # one person gets a second copy, which is better than never getting one.
+#
+# A row with no resident is a mail to a fixed address that is not a
+# person's: the common house email after a settlement (CommonHouseMailJob).
+# A partial unique index allows one such row per mailer and record.
 # == Schema Information
 #
 # Table name: mail_deliveries
@@ -22,19 +26,20 @@
 #  created_at  :datetime         not null
 #  updated_at  :datetime         not null
 #  about_id    :bigint           not null
-#  resident_id :bigint           not null
+#  resident_id :bigint
 #
 # Indexes
 #
-#  index_mail_deliveries_on_resident_id  (resident_id)
-#  index_mail_deliveries_one_per_person  (mailer,about_type,about_id,resident_id) UNIQUE
+#  index_mail_deliveries_on_resident_id    (resident_id)
+#  index_mail_deliveries_one_per_person    (mailer,about_type,about_id,resident_id) UNIQUE
+#  index_mail_deliveries_one_to_no_person  (mailer,about_type,about_id) UNIQUE WHERE (resident_id IS NULL)
 #
 # Foreign Keys
 #
 #  fk_rails_...  (resident_id => residents.id)
 #
 class MailDelivery < ApplicationRecord
-  belongs_to :resident
+  belongs_to :resident, optional: true
   belongs_to :about, polymorphic: true
 
   validates :mailer, :sent_at, presence: true

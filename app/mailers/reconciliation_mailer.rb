@@ -4,6 +4,9 @@
 class ReconciliationMailer < ApplicationMailer
   helper BalanceDisplayHelper
 
+  # Where the common house email goes.
+  COMMON_HOUSE = 'commonhouse@swansway.com'
+
   # Sent to each cook after a settlement has committed, so the meals in
   # it are already locked (#106). The date in the mail is end_date, the
   # settlement's cutoff. A cook is someone who cooked a meal in the
@@ -43,7 +46,7 @@ class ReconciliationMailer < ApplicationMailer
     end
     @url = "#{root_admin_url}/reconciliations/#{reconciliation.id}?subdomain=admin&token=#{read_only_token}" \
            '&utf8=%E2%9C%93'
-    mail(to: 'commonhouse@swansway.com',
+    mail(to: COMMON_HOUSE,
          subject: "Balances to collect: common meals settled through #{@settled_through}")
   end
 

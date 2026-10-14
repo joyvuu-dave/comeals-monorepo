@@ -1193,7 +1193,7 @@ CREATE TABLE public.mail_deliveries (
     mailer character varying NOT NULL,
     about_type character varying NOT NULL,
     about_id bigint NOT NULL,
-    resident_id bigint NOT NULL,
+    resident_id bigint,
     sent_at timestamp(6) without time zone NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL
@@ -3132,6 +3132,13 @@ CREATE UNIQUE INDEX index_mail_deliveries_one_per_person ON public.mail_deliveri
 
 
 --
+-- Name: index_mail_deliveries_one_to_no_person; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_mail_deliveries_one_to_no_person ON public.mail_deliveries USING btree (mailer, about_type, about_id) WHERE (resident_id IS NULL);
+
+
+--
 -- Name: index_meal_charges_on_meal_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4214,6 +4221,7 @@ ALTER TABLE ONLY public.settlement_correction_charges
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261014230000'),
 ('20261013120400'),
 ('20261013120300'),
 ('20261013120200'),

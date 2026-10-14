@@ -8,7 +8,7 @@ RSpec.describe RecurringCatchUp do
   before { create(:community) }
 
   # 2026-08-24 12:00 UTC: refresh_balances (03:00) and verify_ledger (05:00)
-  # have ticked today; ensure_rotations (22:30) and send_missed_cook_mail
+  # have ticked today; ensure_rotations (22:30) and send_missed_settlement_mail
   # (16:00) last ticked yesterday.
   let(:now) { Time.utc(2026, 8, 24, 12, 0) }
 
@@ -18,14 +18,14 @@ RSpec.describe RecurringCatchUp do
 
   it 'is due for every job that has never succeeded' do
     expect(described_class.new(now).due)
-      .to contain_exactly(RefreshBalancesJob, VerifyLedgerJob, EnsureRotationsJob, SendMissedCookMailJob)
+      .to contain_exactly(RefreshBalancesJob, VerifyLedgerJob, EnsureRotationsJob, SendMissedSettlementMailJob)
   end
 
   it 'is not due for a job that succeeded since its last tick, and due for one that missed it' do
-    succeeded(RefreshBalancesJob, Time.utc(2026, 8, 24, 3, 0, 30))   # ran at today's tick
-    succeeded(VerifyLedgerJob, Time.utc(2026, 8, 23, 5, 0, 30))      # yesterday's; today's 05:00 was missed
-    succeeded(EnsureRotationsJob, Time.utc(2026, 8, 23, 22, 31))     # last tick was yesterday 22:30: fine
-    succeeded(SendMissedCookMailJob, Time.utc(2026, 8, 23, 16, 1))   # last tick was yesterday 16:00: fine
+    succeeded(RefreshBalancesJob, Time.utc(2026, 8, 24, 3, 0, 30))           # ran at today's tick
+    succeeded(VerifyLedgerJob, Time.utc(2026, 8, 23, 5, 0, 30))              # yesterday's; today's 05:00 was missed
+    succeeded(EnsureRotationsJob, Time.utc(2026, 8, 23, 22, 31))             # last tick was yesterday 22:30: fine
+    succeeded(SendMissedSettlementMailJob, Time.utc(2026, 8, 23, 16, 1))     # last tick was yesterday 16:00: fine
 
     expect(described_class.new(now).due).to contain_exactly(VerifyLedgerJob)
   end
@@ -58,7 +58,7 @@ RSpec.describe RecurringCatchUp do
                    outcome: 'failed', error: 'boom')
     succeeded(VerifyLedgerJob, now - 1.hour)
     succeeded(EnsureRotationsJob, now - 1.hour)
-    succeeded(SendMissedCookMailJob, now - 1.hour)
+    succeeded(SendMissedSettlementMailJob, now - 1.hour)
 
     expect(described_class.new(now).due).to contain_exactly(RefreshBalancesJob)
   end
@@ -68,7 +68,7 @@ RSpec.describe RecurringCatchUp do
   it 'enqueues exactly the due jobs, and returns them' do
     succeeded(RefreshBalancesJob, now - 1.hour)
     succeeded(VerifyLedgerJob, now - 1.hour)
-    succeeded(SendMissedCookMailJob, now - 1.hour)
+    succeeded(SendMissedSettlementMailJob, now - 1.hour)
 
     returned = nil
     expect { returned = described_class.call(now: now) }

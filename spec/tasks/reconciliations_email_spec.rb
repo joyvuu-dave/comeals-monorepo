@@ -110,6 +110,8 @@ RSpec.describe 'reconciliation email tasks' do
   end
 
   describe 'reconciliations:send_common_house_collection_email' do
+    include ActiveJob::TestHelper
+
     after { Rake::Task['reconciliations:send_common_house_collection_email'].reenable }
 
     def settled(date)
@@ -120,37 +122,25 @@ RSpec.describe 'reconciliation email tasks' do
       settle!(cutoff: date)
     end
 
-    it 'sends the common house the balances of the latest reconciliation' do
+    # Queued, not sent here: CommonHouseMailJob sends it once per
+    # settlement, so the task cannot send a second copy.
+    it 'queues the common house mail about the latest reconciliation, which sends it once' do
       settled(last_cutoff - 3)
       latest = settled(last_cutoff)
-      mail_double = instance_double(ActionMailer::MessageDelivery)
-      allow(ReconciliationMailer).to receive(:common_house_collection_email).and_return(mail_double)
-      allow(mail_double).to receive(:deliver_now)
-
-      Rake::Task['reconciliations:send_common_house_collection_email'].invoke
-
-      expect(ReconciliationMailer).to have_received(:common_house_collection_email).once.with(latest)
-      expect(mail_double).to have_received(:deliver_now).once
-    end
-
-    it 'stops with a plain message and a failure status when there is no reconciliation yet' do
+      MailDelivery.record!(mailer: CommonHouseMailJob::MAILER, about: latest, resident: nil)
       allow(ReconciliationMailer).to receive(:common_house_collection_email)
 
       expect { Rake::Task['reconciliations:send_common_house_collection_email'].invoke }
-        .to raise_error(SystemExit) { |exit| expect(exit.status).to eq(1) }
-        .and output("There is no reconciliation yet, so there are no balances to mail.\n").to_stderr
+        .to have_enqueued_job(CommonHouseMailJob).with(latest).exactly(:once)
+      perform_enqueued_jobs
       expect(ReconciliationMailer).not_to have_received(:common_house_collection_email)
     end
 
-    it 'handles email delivery failures gracefully' do
-      settled(last_cutoff)
-      mail_double = instance_double(ActionMailer::MessageDelivery)
-      allow(ReconciliationMailer).to receive(:common_house_collection_email).and_return(mail_double)
-      allow(mail_double).to receive(:deliver_now).and_raise(Net::SMTPAuthenticationError.new('auth failed'))
-      allow(Rails.logger).to receive(:error)
-
-      expect { Rake::Task['reconciliations:send_common_house_collection_email'].invoke }.not_to raise_error
-      expect(Rails.logger).to have_received(:error).with(/common_house_collection_email failed/).once
+    it 'stops with a plain message and a failure status when there is no reconciliation yet' do
+      expect { Rake::Task['reconciliations:send_common_house_collection_email'].invoke }
+        .to raise_error(SystemExit) { |exit| expect(exit.status).to eq(1) }
+        .and output("There is no reconciliation yet, so there are no balances to mail.\n").to_stderr
+      expect(CommonHouseMailJob).not_to have_been_enqueued
     end
   end
 end

@@ -3,11 +3,13 @@
 require 'rails_helper'
 
 # Each night, every settlement from the last 7 days that still has a cook
-# without the cook mail gets another NotifyCooksJob. This covers the
-# three ways a cook can miss it: every quick try failed (a mail server
-# down for hours), the job was never run (a worker that died), or the
-# settlement is not the latest one, which is all the rake task reaches.
-RSpec.describe SendMissedCookMailJob do
+# without the cook mail gets another NotifyCooksJob, and every one whose
+# common house mail has not gone out gets another CommonHouseMailJob.
+# This covers the three ways a mail can be missed: every quick try failed
+# (a mail server down for hours), the job was never run (a worker that
+# died), or the settlement is not the latest one, which is all the rake
+# tasks reach.
+RSpec.describe SendMissedSettlementMailJob do
   include ActiveJob::TestHelper
   include ActiveSupport::Testing::TimeHelpers
 
@@ -22,8 +24,10 @@ RSpec.describe SendMissedCookMailJob do
   # A settlement made `ago` before now. Each cook in the list cooks one
   # meal, on the days before it: Bob cooks two, so a cook with two bills
   # in one settlement still counts once. One meal a day, so two
-  # settlements in one example are more than three days apart.
-  def settled(ago, cooks: [ann, bob, bob])
+  # settlements in one example are more than three days apart. Its common
+  # house mail went out, unless house_mailed is false, so the examples
+  # about the cook mail are about the cook mail only.
+  def settled(ago, cooks: [ann, bob, bob], house_mailed: true)
     travel_to(ago.ago) do
       latest = Reconciliation.latest_cutoff(community.today)
       cooks.each_with_index do |cook, days_before|
@@ -31,7 +35,9 @@ RSpec.describe SendMissedCookMailJob do
         create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('20'))
         create(:meal_resident, meal: meal, resident: eater, community: community)
       end
-      settle!(cutoff: latest)
+      settle!(cutoff: latest).tap do |reconciliation|
+        MailDelivery.record!(mailer: CommonHouseMailJob::MAILER, about: reconciliation, resident: nil) if house_mailed
+      end
     end
   end
 
@@ -67,8 +73,8 @@ RSpec.describe SendMissedCookMailJob do
       expect(NotifyCooksJob).not_to have_been_enqueued.with(done)
       run = JobRun.where(name: described_class.run_name).order(:id).last
       expect(run.outcome).to eq('ok')
-      expect(run.details).to eq('queued' => [owed.id], 'gave_up' => [])
-      expect(Healthcheck).to have_received(:ping).with('send-missed-cook-mail')
+      expect(run.details).to include('cook_mail_queued' => [owed.id], 'cook_mail_gave_up' => [])
+      expect(Healthcheck).to have_received(:ping).with('send-missed-settlement-mail')
     end
 
     # Another mail about the same settlement, or this mail about another
@@ -124,6 +130,55 @@ RSpec.describe SendMissedCookMailJob do
       expect { described_class.perform_now }.not_to have_enqueued_job(NotifyCooksJob)
     end
 
+    # ADR 0011 rule 9: the common house mail goes out once per settlement.
+    it 'queues the common house mail again for a settlement from the last 7 days that has not sent it' do
+      owed = settled(2.days, house_mailed: false)
+      mailed(owed, ann, bob)
+      done = settled(6.days)
+      mailed(done, ann, bob)
+
+      expect { described_class.perform_now }.to have_enqueued_job(CommonHouseMailJob).with(owed).exactly(:once)
+
+      expect(CommonHouseMailJob).not_to have_been_enqueued.with(done)
+      expect(NotifyCooksJob).not_to have_been_enqueued
+      expect(JobRun.where(name: described_class.run_name).order(:id).last.details)
+        .to eq('cook_mail_queued' => [], 'cook_mail_gave_up' => [],
+               'common_house_mail_queued' => [owed.id], 'common_house_mail_gave_up' => [])
+    end
+
+    # Another mail about the same settlement, or a resident's copy of this
+    # one, is not the common house mail about this settlement.
+    it 'counts only the common house mail about this settlement, with no resident, as sent' do
+      owed = settled(2.days, house_mailed: false)
+      mailed(owed, ann, bob)
+      MailDelivery.record!(mailer: CommonHouseMailJob::MAILER, about: owed, resident: ann)
+      MailDelivery.record!(mailer: 'new_rotation_email', about: owed, resident: nil)
+      MailDelivery.new(mailer: CommonHouseMailJob::MAILER, about_type: 'Rotation', about_id: owed.id,
+                       sent_at: Time.current).save!(validate: false)
+
+      expect { described_class.perform_now }.to have_enqueued_job(CommonHouseMailJob).with(owed).exactly(:once)
+    end
+
+    it 'reports, once, a settlement that leaves the 7 days with the common house mail not sent' do
+      allow(Rails.error).to receive(:report).and_call_original
+      ran(at: 1.day.ago)
+      left = settled(7.days + 1.hour, house_mailed: false)
+      mailed(left, ann, bob)
+
+      described_class.perform_now
+      described_class.perform_now
+
+      expect(Rails.error).to have_received(:report).with(
+        an_instance_of(described_class::GaveUp)
+          .and(having_attributes(message: "Reconciliation ##{left.id}: the common house mail is still not sent " \
+                                          'after 7 days, and nothing tries again. To send it: ' \
+                                          "CommonHouseMailJob.perform_later(Reconciliation.find(#{left.id}))")),
+        handled: true, severity: :error, context: { reconciliation_id: left.id, common_house_not_mailed: true }
+      ).once
+      expect(JobRun.where(name: described_class.run_name).order(:id).second_to_last.details)
+        .to include('common_house_mail_queued' => [], 'common_house_mail_gave_up' => [left.id])
+    end
+
     describe 'a settlement that leaves the 7 days with a cook still not mailed' do
       before { allow(Rails.error).to receive(:report).and_call_original }
 
@@ -146,7 +201,7 @@ RSpec.describe SendMissedCookMailJob do
           handled: true, severity: :error, context: { reconciliation_id: left.id, cooks_not_mailed: 1 }
         ).once
         expect(JobRun.where(name: described_class.run_name).order(:id).last.details)
-          .to eq('queued' => [], 'gave_up' => [left.id])
+          .to include('cook_mail_queued' => [], 'cook_mail_gave_up' => [left.id])
 
         # The next night it is not reported again.
         described_class.perform_now
@@ -225,9 +280,9 @@ RSpec.describe SendMissedCookMailJob do
   # deploy, and report them all a week later.
   it 'leaves alone the settlements made before its own first run' do
     other_job_ran(at: 30.days.ago)
-    before_the_first_run = settled(1.day)
+    before_the_first_run = settled(1.day, house_mailed: false)
 
-    expect { described_class.perform_now }.not_to have_enqueued_job(NotifyCooksJob)
+    expect { described_class.perform_now }.not_to have_enqueued_job
 
     travel_to(8.days.from_now) do
       allow(Rails.error).to receive(:report).and_call_original

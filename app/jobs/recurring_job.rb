@@ -68,7 +68,7 @@ class RecurringJob < ApplicationJob
   # When this run started, as its run record says. A `run` that looks at
   # earlier runs' started_at uses this as its own "now", so that this run
   # and the next one draw the line at the same moment
-  # (SendMissedCookMailJob).
+  # (SendMissedSettlementMailJob).
   attr_reader :started_at
 
   def record(started_at, outcome:, details: nil, error: nil)

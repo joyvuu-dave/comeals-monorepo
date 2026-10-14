@@ -17,6 +17,16 @@ AdminUser:
     UniqueIndexChecker:
       enabled: false
 
+MailDelivery:
+  # The uniqueness validator on resident_id, scoped to mailer and record,
+  # covers a row with no resident too: Rails finds the first one by
+  # resident_id IS NULL. Postgres counts two NULLs as different, so the
+  # partial index is the database's rule for those rows
+  # (spec/models/mail_delivery_spec.rb).
+  index_mail_deliveries_one_to_no_person:
+    UniqueIndexChecker:
+      enabled: false
+
 Reconciliation:
   # set_date fills date in before_validation, so a validator would never
   # see it blank.

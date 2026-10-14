@@ -13,12 +13,13 @@ require 'rails_helper'
 #  created_at  :datetime         not null
 #  updated_at  :datetime         not null
 #  about_id    :bigint           not null
-#  resident_id :bigint           not null
+#  resident_id :bigint
 #
 # Indexes
 #
-#  index_mail_deliveries_on_resident_id  (resident_id)
-#  index_mail_deliveries_one_per_person  (mailer,about_type,about_id,resident_id) UNIQUE
+#  index_mail_deliveries_on_resident_id    (resident_id)
+#  index_mail_deliveries_one_per_person    (mailer,about_type,about_id,resident_id) UNIQUE
+#  index_mail_deliveries_one_to_no_person  (mailer,about_type,about_id) UNIQUE WHERE (resident_id IS NULL)
 #
 # Foreign Keys
 #
@@ -50,6 +51,24 @@ RSpec.describe MailDelivery do
     expect do
       described_class.insert_all!([{ mailer: 'new_rotation_email', about_type: 'Rotation', about_id: rotation.id,
                                      resident_id: ann.id, sent_at: Time.current,
+                                     created_at: Time.current, updated_at: Time.current }])
+    end.to raise_error(ActiveRecord::RecordNotUnique)
+  end
+
+  # A mail to a fixed address, not a person (the common house mail), has
+  # no resident. Postgres counts two NULLs as different, so the partial
+  # index index_mail_deliveries_one_to_no_person holds it to one row; the
+  # model's check finds the first row by resident_id IS NULL.
+  it 'refuses a second row with no resident for the same mailer and record' do
+    described_class.record!(mailer: 'common_house_collection_email', about: rotation, resident: nil)
+    expect(described_class.record!(mailer: 'common_house_collection_email', about: rotation, resident: ann))
+      .to be_persisted
+
+    expect { described_class.record!(mailer: 'common_house_collection_email', about: rotation, resident: nil) }
+      .to raise_error(ActiveRecord::RecordInvalid, /already been taken/)
+    expect do
+      described_class.insert_all!([{ mailer: 'common_house_collection_email', about_type: 'Rotation',
+                                     about_id: rotation.id, resident_id: nil, sent_at: Time.current,
                                      created_at: Time.current, updated_at: Time.current }])
     end.to raise_error(ActiveRecord::RecordNotUnique)
   end

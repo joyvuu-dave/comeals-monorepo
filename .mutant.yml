@@ -77,10 +77,11 @@ matcher:
     - ApplicationJob*
     - EnsureRotationsJob*
     - LivePushJob*
+    - CommonHouseMailJob*
     - NotifyCooksJob*
     - RecurringJob*
     - RefreshBalancesJob*
-    - SendMissedCookMailJob*
+    - SendMissedSettlementMailJob*
     - VerifyLedgerJob*
     - ApplicationMailer*
     - ReconciliationMailer*

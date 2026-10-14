@@ -22,8 +22,8 @@ class NotifyCooksJob < ApplicationJob
   # How long to wait before each new try after a run with a failed send.
   # A mail server that is down for a few minutes, or an hour, should not
   # cost a cook the mail until the next night. After the last of these
-  # the job ends without an error, and SendMissedCookMailJob tries again
-  # each night for a week.
+  # the job ends without an error, and SendMissedSettlementMailJob tries
+  # again each night for a week.
   RETRY_WAITS = [5.minutes, 30.minutes, 2.hours].freeze
 
   limits_concurrency key: ->(reconciliation) { reconciliation.id }, duration: 1.hour
@@ -39,7 +39,7 @@ class NotifyCooksJob < ApplicationJob
   retry_on SendsFailed, attempts: RETRY_WAITS.size + 1,
                         wait: ->(executions) { RETRY_WAITS.fetch(executions - 1) } do |job, error|
     Rails.logger.warn("#{MAILER}: #{error.message}. Tried #{job.executions} times; " \
-                      'SendMissedCookMailJob tries again each night.')
+                      'SendMissedSettlementMailJob tries again each night.')
   end
 
   # Each settlement in `reconciliations` (a relation) and each cook its
@@ -49,8 +49,8 @@ class NotifyCooksJob < ApplicationJob
   # or someone whose cost a correction it carries added, removed or
   # changed (ADR 0011 rule 6), who may have cooked nothing in it. UNION,
   # so a cook who is both is one row. The send, the log line and
-  # SendMissedCookMailJob all read this, so they agree on who is owed the
-  # mail.
+  # SendMissedSettlementMailJob all read this, so they agree on who is
+  # owed the mail.
   def self.cook_rows(reconciliations)
     corrected = MealCorrection.cost_edits.where(reconciliation_id: reconciliations.select(:id))
                               .select(:reconciliation_id, MealCorrection::COOK_ID)
@@ -78,7 +78,7 @@ class NotifyCooksJob < ApplicationJob
   # For each of these settlements (a relation) that has a cook still owed
   # this mail, how many cooks: { reconciliation_id => count }. Owed means
   # a recipient as above with no MailDelivery row about that settlement.
-  # One query for the whole set, for SendMissedCookMailJob.
+  # One query for the whole set, for SendMissedSettlementMailJob.
   def self.cooks_owed(reconciliations)
     delivered = MailDelivery.where(mailer: MAILER, about_type: Reconciliation.polymorphic_name)
                             .where('mail_deliveries.about_id = cooks.reconciliation_id')

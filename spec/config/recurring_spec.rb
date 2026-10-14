@@ -42,9 +42,9 @@ RSpec.describe 'config/recurring.yml' do # -- a config file
   # MailDelivery rows. Morning in California, so the mail it sends
   # arrives in the morning.
   it 'queues the missed cook mail each morning in California' do
-    task = tasks.fetch(:send_missed_cook_mail)
+    task = tasks.fetch(:send_missed_settlement_mail)
 
-    expect(task[:class]).to eq('SendMissedCookMailJob')
+    expect(task[:class]).to eq('SendMissedSettlementMailJob')
     expect(Fugit.parse(task[:schedule]).to_cron_s).to eq('0 16 * * * UTC')
   end
 
@@ -90,7 +90,7 @@ RSpec.describe 'config/recurring.yml' do # -- a config file
     Rails.application.eager_load!
     jobs = RecurringJob.descendants.select(&:name)
 
-    expect(jobs).to include(RefreshBalancesJob, VerifyLedgerJob, EnsureRotationsJob, SendMissedCookMailJob)
+    expect(jobs).to include(RefreshBalancesJob, VerifyLedgerJob, EnsureRotationsJob, SendMissedSettlementMailJob)
     jobs.each do |job|
       expect(job::HEALTHCHECK).to be_present, "#{job} has no healthchecks.io slug"
     end

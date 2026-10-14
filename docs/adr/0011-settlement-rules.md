@@ -170,9 +170,14 @@ everyone who moved out and still has a balance. It links to the
 settlement's page. A settlement made before units were saved has no
 moved-out list, like its page (rule 7). The email used to link to the
 running balances, which leave out every meal the settlement settled
-(#165). `CollectionList` builds the list, and
-`rake reconciliations:send_common_house_collection_email` sends it for
-the latest settlement.
+(#165). `CollectionList` builds the list.
+
+The email goes out on its own after every settlement, like the cook
+mail (decided 2026-10-14): a step that only a server command does gets
+skipped. `CommonHouseMailJob` is queued in the settlement's own
+transaction and sends the email once. A failed send is tried again
+within hours, and `SendMissedSettlementMailJob` tries again each night
+for a week.
 
 ### 10. The old history is fixed once, then closed
 

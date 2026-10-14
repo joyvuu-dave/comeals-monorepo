@@ -33,7 +33,7 @@ RSpec.describe NotifyCooksJob do
     cooks.each do |cook|
       expect(ReconciliationMailer).to have_received(:reconciliation_notify_email).with(cook, reconciliation).once
     end
-    expect(MailDelivery.where(about: reconciliation).pluck(:resident_id)).to match_array(cooks.map(&:id))
+    expect(cook_mail_rows.pluck(:resident_id)).to match_array(cooks.map(&:id))
   end
 
   it 'skips the cooks already mailed, so a second run sends nothing twice' do
@@ -45,6 +45,12 @@ RSpec.describe NotifyCooksJob do
     expect(ReconciliationMailer).not_to have_received(:reconciliation_notify_email).with(cooks[0], reconciliation)
     expect(ReconciliationMailer).to have_received(:reconciliation_notify_email).with(cooks[1], reconciliation).once
     expect(ReconciliationMailer).to have_received(:reconciliation_notify_email).with(cooks[2], reconciliation).once
+  end
+
+  # The rows this mail wrote. The nightly job also sends the common house
+  # mail, whose row has no resident.
+  def cook_mail_rows
+    MailDelivery.where(mailer: described_class::MAILER, about: reconciliation)
   end
 
   # Each cook in `mailed` once per send that went out. A send to a cook
@@ -75,7 +81,7 @@ RSpec.describe NotifyCooksJob do
     # The report names this mail, so the alert says which mail failed.
     expect(Rails.error).to have_received(:report)
       .with(an_instance_of(Net::ReadTimeout), hash_including(context: { mailer: 'reconciliation_notify_email' })).once
-    expect(MailDelivery.where(about: reconciliation).pluck(:resident_id)).to contain_exactly(cooks[0].id, cooks[2].id)
+    expect(cook_mail_rows.pluck(:resident_id)).to contain_exactly(cooks[0].id, cooks[2].id)
 
     # The mail server works again. The next run mails only the cook whose
     # send failed.
@@ -83,13 +89,14 @@ RSpec.describe NotifyCooksJob do
     described_class.perform_now(reconciliation)
 
     expect(mailed.drop(2)).to eq([cooks[1]])
-    expect(MailDelivery.where(about: reconciliation).pluck(:resident_id)).to match_array(cooks.map(&:id))
+    expect(cook_mail_rows.pluck(:resident_id)).to match_array(cooks.map(&:id))
   end
 
   # A send that failed is tried again soon, by the job itself: a mail
   # server that is down for a few minutes should not cost a cook the mail
-  # until the nightly SendMissedCookMailJob runs. After the last quick try
-  # the job ends without an error, and the nightly job takes over.
+  # until the nightly SendMissedSettlementMailJob runs. After the last
+  # quick try the job ends without an error, and the nightly job takes
+  # over.
   describe 'the quick tries after a failed send' do
     include ActiveSupport::Testing::TimeHelpers
 
@@ -115,7 +122,7 @@ RSpec.describe NotifyCooksJob do
                                                                                  .exactly(4).times
       expect(Rails.logger).to have_received(:warn).with(
         "reconciliation_notify_email: 1 cook email not sent for reconciliation ##{reconciliation.id}. " \
-        'Tried 4 times; SendMissedCookMailJob tries again each night.'
+        'Tried 4 times; SendMissedSettlementMailJob tries again each night.'
       ).once
     end
 
@@ -131,7 +138,7 @@ RSpec.describe NotifyCooksJob do
       perform_enqueued_jobs
 
       expect(mailed).to match_array(cooks)
-      expect(MailDelivery.where(about: reconciliation).pluck(:resident_id)).to match_array(cooks.map(&:id))
+      expect(cook_mail_rows.pluck(:resident_id)).to match_array(cooks.map(&:id))
       expect(queue_adapter.enqueued_jobs).to be_empty
     end
   end
@@ -139,8 +146,8 @@ RSpec.describe NotifyCooksJob do
   # The row for a send that went out can be refused for a conflict like
   # any other write (ADR 0005). Before 2026-10-10 nothing tried it again:
   # the refusal ended the run, so the cook had the mail but no row, and
-  # the cooks after them had neither. SendMissedCookMailJob then queued
-  # the job again for the missing rows, and the first cook got the mail a
+  # the cooks after them had neither. SendMissedSettlementMailJob then
+  # queued the job again for the missing rows, and the first cook got the mail a
   # second time. The row is now tried again like any other refused write.
   # No test transaction, because a retry can only happen outside one
   # (RetryOnConflict).
@@ -153,7 +160,7 @@ RSpec.describe NotifyCooksJob do
       allow(Rails.error).to receive(:report)
       allow(Healthcheck).to receive(:ping)
       # The nightly job has run before, so this settlement is one it looks at.
-      JobRun.create!(name: SendMissedCookMailJob.run_name, started_at: 30.days.ago, finished_at: 30.days.ago,
+      JobRun.create!(name: SendMissedSettlementMailJob.run_name, started_at: 30.days.ago, finished_at: 30.days.ago,
                      outcome: 'ok')
       refused = false
       allow(MailDelivery).to receive(:create!).and_wrap_original do |original, **attributes|
@@ -165,11 +172,11 @@ RSpec.describe NotifyCooksJob do
       end
 
       described_class.perform_now(reconciliation)
-      SendMissedCookMailJob.perform_now
+      SendMissedSettlementMailJob.perform_now
       perform_enqueued_jobs
 
       expect(mailed).to match_array(cooks)
-      expect(MailDelivery.where(about: reconciliation).pluck(:resident_id)).to match_array(cooks.map(&:id))
+      expect(cook_mail_rows.pluck(:resident_id)).to match_array(cooks.map(&:id))
     end
   end
 
@@ -235,7 +242,7 @@ RSpec.describe NotifyCooksJob do
 
       expect(ActionMailer::Base.deliveries.flat_map(&:to))
         .to contain_exactly(cooks[0].email, cooks[2].email)
-      expect(MailDelivery.where(about: reconciliation).pluck(:resident_id)).to contain_exactly(cooks[0].id, cooks[2].id)
+      expect(cook_mail_rows.pluck(:resident_id)).to contain_exactly(cooks[0].id, cooks[2].id)
       line = "reconciliation_notify_email: not sent to resident ##{cooks[1].id}, who has no email address " \
              "(reconciliation ##{reconciliation.id})"
       expect(logged.grep(/not sent to/)).to eq([line])
@@ -284,7 +291,7 @@ RSpec.describe NotifyCooksJob do
       [*cooks, removed, added].each do |cook|
         expect(ReconciliationMailer).to have_received(:reconciliation_notify_email).with(cook, reconciliation).once
       end
-      expect(MailDelivery.where(about: reconciliation).pluck(:resident_id))
+      expect(cook_mail_rows.pluck(:resident_id))
         .to match_array([*cooks, removed, added].map(&:id))
     end
 
