@@ -2740,7 +2740,7 @@ DatabaseConsistency::VERSION = T.let(T.unsafe(nil), String)
 # pkg:gem/database_consistency#lib/database_consistency/writers/base_writer.rb:4
 module DatabaseConsistency::Writers; end
 
-# pkg:gem/database_consistency#lib/database_consistency/writers/autofix/helpers/migration.rb:5
+# pkg:gem/database_consistency#lib/database_consistency/writers/autofix/helpers/migration.rb:7
 module DatabaseConsistency::Writers::Autofix; end
 
 # pkg:gem/database_consistency#lib/database_consistency/writers/autofix/association_missing_index.rb:6
@@ -2786,22 +2786,27 @@ class DatabaseConsistency::Writers::Autofix::HasOneMissingUniqueIndex < ::Databa
   def template_path; end
 end
 
-# pkg:gem/database_consistency#lib/database_consistency/writers/autofix/helpers/migration.rb:6
+# pkg:gem/database_consistency#lib/database_consistency/writers/autofix/helpers/migration.rb:8
 module DatabaseConsistency::Writers::Autofix::Helpers; end
 
-# pkg:gem/database_consistency#lib/database_consistency/writers/autofix/helpers/migration.rb:7
+# pkg:gem/database_consistency#lib/database_consistency/writers/autofix/helpers/migration.rb:9
 module DatabaseConsistency::Writers::Autofix::Helpers::Migration
-  # pkg:gem/database_consistency#lib/database_consistency/writers/autofix/helpers/migration.rb:19
+  # pkg:gem/database_consistency#lib/database_consistency/writers/autofix/helpers/migration.rb:31
   def migration_configuration(name); end
 
-  # pkg:gem/database_consistency#lib/database_consistency/writers/autofix/helpers/migration.rb:26
+  # pkg:gem/database_consistency#lib/database_consistency/writers/autofix/helpers/migration.rb:38
   def migration_context; end
 
-  # pkg:gem/database_consistency#lib/database_consistency/writers/autofix/helpers/migration.rb:8
+  # pkg:gem/database_consistency#lib/database_consistency/writers/autofix/helpers/migration.rb:10
   def migration_path(name); end
 
-  # pkg:gem/database_consistency#lib/database_consistency/writers/autofix/helpers/migration.rb:15
+  # pkg:gem/database_consistency#lib/database_consistency/writers/autofix/helpers/migration.rb:27
   def migration_path_pattern(name); end
+
+  # Adds one second to a timestamp version, so a batch of migrations keeps valid times.
+  #
+  # pkg:gem/database_consistency#lib/database_consistency/writers/autofix/helpers/migration.rb:18
+  def next_version_number(last_version); end
 end
 
 # pkg:gem/database_consistency#lib/database_consistency/writers/autofix/inconsistent_types.rb:6
@@ -2811,11 +2816,29 @@ class DatabaseConsistency::Writers::Autofix::InconsistentTypes < ::DatabaseConsi
 
   private
 
-  # pkg:gem/database_consistency#lib/database_consistency/writers/autofix/inconsistent_types.rb:17
+  # Symbol literals keep names such as "billing.orders" and "character varying" valid Ruby.
+  #
+  # pkg:gem/database_consistency#lib/database_consistency/writers/autofix/inconsistent_types.rb:28
+  def change_columns; end
+
+  # Composite keys are joined with "+" and have one type for each column.
+  #
+  # pkg:gem/database_consistency#lib/database_consistency/writers/autofix/inconsistent_types.rb:39
+  def fk_names; end
+
+  # Types such as "character varying" have characters that are not valid in a migration name.
+  #
+  # pkg:gem/database_consistency#lib/database_consistency/writers/autofix/inconsistent_types.rb:19
   def migration_name; end
 
-  # pkg:gem/database_consistency#lib/database_consistency/writers/autofix/inconsistent_types.rb:21
+  # pkg:gem/database_consistency#lib/database_consistency/writers/autofix/inconsistent_types.rb:34
+  def symbol(name); end
+
+  # pkg:gem/database_consistency#lib/database_consistency/writers/autofix/inconsistent_types.rb:23
   def template_path; end
+
+  # pkg:gem/database_consistency#lib/database_consistency/writers/autofix/inconsistent_types.rb:43
+  def types; end
 end
 
 # pkg:gem/database_consistency#lib/database_consistency/writers/autofix/migration_base.rb:6
