@@ -593,8 +593,48 @@ RSpec.describe AuditDescription do
 
     it 'falls back to the type and action for a meal change it does not recognize' do
       audit = instance_double(Audited::Audit, auditable_type: 'Meal', action: 'update',
-                                              audited_changes: { 'start_time' => [nil, '18:00'] })
+                                              audited_changes: { 'a_column_from_later' => [nil, 1] })
       expect(described_class.describe(audit)).to eq('Meal, update')
+    end
+
+    # The rows #155 found the history could not read. A date move is the
+    # one an admin can still write today (the admin meal form).
+    it 'says a meal moved to another day' do
+      meal.update!(date: Date.new(2026, 11, 6))
+      moved = meal.audits.where(action: 'update').last
+      expect(moved.audited_changes.keys).to eq(['date'])
+
+      expect(described_class.describe(moved))
+        .to eq("Meal moved from #{meal.date_previously_was.strftime('%a %b %-d, %Y')} to Fri Nov 6, 2026")
+    end
+
+    # Settlements claim their meals with one UPDATE, which writes no row.
+    # These rows come from the four settlements rebuilt by hand from the
+    # console in August 2023, one meal at a time.
+    it 'says a meal was settled, moved to another settlement, or taken out of one' do
+      words = [[nil, 6], [9, 3], [6, nil]].map do |change|
+        described_class.describe(instance_double(Audited::Audit, auditable_type: 'Meal', action: 'update',
+                                                                 audited_changes: { 'reconciliation_id' => change }))
+      end
+
+      expect(words).to eq(['Meal settled (settlement 6)', 'Meal moved from settlement 9 to settlement 3',
+                           'Meal taken out of settlement 6'])
+    end
+
+    # One row in production: a hand edit of the closed time, 2023-03-06.
+    # Shown in the community's zone, whatever zone the request runs in.
+    it 'says the close time was changed, set or cleared, in the community zone' do
+      community.update!(timezone: 'America/New_York')
+      words = Time.use_zone('UTC') do
+        [['2023-03-06T22:00:00.000Z', '2023-03-07T00:15:00.000Z'], [nil, '2023-03-07T00:15:00.000Z'],
+         ['2023-03-07T00:15:00.000Z', nil]].map do |change|
+          described_class.describe(instance_double(Audited::Audit, auditable_type: 'Meal', action: 'update',
+                                                                   audited_changes: { 'closed_at' => change }))
+        end
+      end
+
+      expect(words).to eq(['Close time changed to Mon Mar 6, 2023, 7:15 pm',
+                           'Close time set to Mon Mar 6, 2023, 7:15 pm', 'Close time cleared'])
     end
 
     it 'falls back for a closed change with no true on either side' do

@@ -198,8 +198,9 @@ class AuditDescription
         return 'Extras count set'
       end
 
-      # Meal added to Rotation
-      return 'Meal assigned to a rotation' if changes['rotation_id'].present?
+      # A rotation, a day, a settlement or a close time
+      words = rarer_meal_change_words(changes)
+      return words if words
 
       # Other
       return fallback_description(audit)
@@ -211,6 +212,51 @@ class AuditDescription
   # A cancelled_at change: set is a cancel, cleared is a restore.
   def cancelled_words(change)
     change[1].nil? ? 'Dinner restored' : 'Dinner cancelled'
+  end
+
+  # The words for the rarer meal changes, or nil. The last three are the
+  # ones the history could not read until #155:
+  # - moved to another day, by an admin (the admin meal form can still);
+  # - settled, or moved between settlements. A settlement writes no row
+  #   (its UPDATE skips the model); these come from the four settlements
+  #   rebuilt by hand in August 2023, one meal at a time;
+  # - the close time alone, by a hand edit (one row, 2023-03-06).
+  def rarer_meal_change_words(changes)
+    return 'Meal assigned to a rotation' if changes['rotation_id'].present?
+    return date_words(changes['date']) if changes['date'].instance_of?(Array)
+    return settlement_words(changes['reconciliation_id']) if changes['reconciliation_id'].instance_of?(Array)
+
+    close_time_words(changes['closed_at']) if changes['closed_at'].instance_of?(Array)
+  end
+
+  # "Meal moved from Sun Aug 6, 2017 to Tue Aug 1, 2017". The row holds
+  # each day as "YYYY-MM-DD".
+  def date_words(change)
+    from, to = change.map { |day| Date.iso8601(day.to_s).strftime('%a %b %-d, %Y') }
+    "Meal moved from #{from} to #{to}"
+  end
+
+  # A settlement by its id, the number its admin page shows.
+  def settlement_words(change)
+    from, to = change
+    return "Meal settled (settlement #{to})" if from.nil?
+    return "Meal taken out of settlement #{from}" if to.nil?
+
+    "Meal moved from settlement #{from} to settlement #{to}"
+  end
+
+  # In the community's zone, the way the rest of the history shows a
+  # time, whatever zone the request runs in.
+  def close_time_words(change)
+    to = change[1]
+    return 'Close time cleared' if to.nil?
+
+    at = Time.iso8601(to.to_s).in_time_zone(community_zone).strftime('%a %b %-d, %Y, %-l:%M %P')
+    change[0].nil? ? "Close time set to #{at}" : "Close time changed to #{at}"
+  end
+
+  def community_zone
+    @community_zone ||= ActiveSupport::TimeZone[T.must(Community.instance.timezone)]
   end
 
   def describe_bill(audit)

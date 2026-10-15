@@ -1092,6 +1092,27 @@ RSpec.describe Meal do
       soup.update_column(:created_at, bill.created_at)
       expect(meal.reload.total_audits.first(2)).to eq([bill, soup])
     end
+
+    # Two columns that are gone: start_time (a script set it on every meal
+    # in 2018) and bills_count (an old counter). A row that changed only
+    # those says nothing a person did, and "Start time set to 6:00 pm"
+    # could disagree with the community's dinner time (#155). The rows
+    # stay in the table.
+    it 'leaves out rows that changed only columns that are gone' do
+      meal = create(:meal, community: community)
+      start_time = meal.audits.create!(action: 'update', audited_changes: { 'start_time' => [nil, '18:00'] })
+      counter = meal.audits.create!(action: 'update', audited_changes: { 'bills_count' => [0, 1] })
+      both = meal.audits.create!(action: 'update',
+                                 audited_changes: { 'start_time' => [nil, '18:00'], 'description' => ['', 'Soup'] })
+
+      nothing = meal.audits.create!(action: 'update', audited_changes: {})
+
+      ids = meal.reload.total_audits.map(&:id)
+
+      expect(ids).to include(both.id, nothing.id)
+      expect(ids).not_to include(start_time.id, counter.id)
+      expect(Audited::Audit.where(id: [start_time.id, counter.id]).count).to eq(2)
+    end
   end
 
   # The meal page links to the previous and the next meal, so a meal that

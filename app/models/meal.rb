@@ -550,10 +550,21 @@ class Meal < ApplicationRecord
     throw(:abort)
   end
 
+  # Columns that are gone. A row that changed only these says nothing a
+  # person did: a script set start_time on every meal in 2018, and
+  # bills_count was a counter. "Start time set to 6:00 pm" could also
+  # disagree with the community's dinner time. So the history leaves such
+  # rows out; they stay in the table (#155).
+  COLUMNS_GONE = T.let(%w[start_time bills_count].freeze, T::Array[String])
+
   sig { returns(T::Array[Audited::Audit]) }
   def total_audits
     # Newest first; two audits written in the same instant keep id order.
-    (associated_audits + audits).sort_by { |audit| [audit.created_at, audit.id] }.reverse
+    shown = audits.reject do |audit|
+      changed = audit.audited_changes.keys
+      changed.any? && (changed - COLUMNS_GONE).empty?
+    end
+    (associated_audits + shown).sort_by { |audit| [audit.created_at, audit.id] }.reverse
   end
 
   # HELPERS
