@@ -57,6 +57,8 @@ class Bill < ApplicationRecord
   # ActiveAdmin's Bill form would otherwise allow a superuser to quietly
   # rewrite a reconciled bill's amount.
   include ReconciledMealImmutability
+  # Nor changed on a cancelled dinner, until it is restored.
+  include CancelledDinnerFreeze
   include NotesMealLiveUpdate
 
   # A bill is "this cook on this meal" (ADR 0009, #135), so a saved bill

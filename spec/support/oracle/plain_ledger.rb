@@ -184,9 +184,13 @@ module PlainLedger
     # every one of its lines is 0: each cook is credited 0 and each eater
     # is charged 0. The lines still exist, each at $0" (MODELS.md, The
     # Multiplier System). See assumption 2.
+    # "A cancelled meal ... charges nobody: its effective cost is 0, so
+    # every one of its lines is 0, whatever its multiplier and whatever
+    # its cooks entered. The lines still exist" (MODELS.md, The
+    # Multiplier System). Added 2026-10-15 with that rule.
     cap = meal.fetch(:cap)
     effective_cost =
-      if total_multiplier.zero?
+      if meal.fetch(:cancelled) || total_multiplier.zero?
         0
       elsif cap.nil?
         total_cost

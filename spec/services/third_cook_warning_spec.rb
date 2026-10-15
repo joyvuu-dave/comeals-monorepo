@@ -55,6 +55,15 @@ RSpec.describe ThirdCookWarning do
       .to eq('Warning: third cooks should not be added until all meals in the rotation have at least two cooks.')
   end
 
+  # A cancelled dinner needs no cook (ADR 0011 rule 11), so it is not a
+  # meal in the rotation that still needs one.
+  it 'says nothing for a third cook when the only meal short of cooks is cancelled' do
+    Meal.where.not(id: meal.id).sole.cancel!
+    cook_on(meal, *cooks)
+
+    expect(described_class.for(meal, cooks.first(2).map(&:id))).to be_nil
+  end
+
   it 'says nothing for a third cook when every other meal in the rotation has two' do
     cook_on(Meal.where.not(id: meal.id).sole, cooks[1])
     cook_on(meal, *cooks)

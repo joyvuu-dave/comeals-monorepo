@@ -75,6 +75,11 @@ Two membership decisions are worth writing down because they are not obvious:
   admin. Its `closed` and `max` fields and its nested guests all feed the cost
   split, and ActiveAdmin authorizes per resource, not per field. Erring the
   other way would put a money-changing field behind a non-money permission.
+  One exception (2026-10-12): any admin may cancel or restore a dinner
+  (`SuperuserAdapter::DINNER_ACTIONS`). Neither moves money: a dinner a cook
+  spent money on cannot be cancelled, and a cancelled one charges nobody
+  (ADR 0011 rule 11). Anyone on the meal page can do the same, so it would be
+  odd to refuse a plain admin.
 - **Resident is not on the restricted list**, even though a resident's
   birthday decides their price band (computed, since 2026-09-26; before
   that a `multiplier` column). Attendance snapshots the band into

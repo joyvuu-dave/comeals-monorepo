@@ -203,9 +203,11 @@ class Settlement
 
   # Unreconciled meals in the period with attendance and no bill at all.
   # The date rules are settleable_by's; the difference is the missing bill.
+  # A cancelled dinner is not skipped: it settles with no cook (ADR 0011
+  # rule 11).
   sig { params(cutoff: Date, today: Date).returns(T::Array[Meal]) }
   def self.skipped_by(cutoff, today:)
-    Meal.unreconciled.where(date: ..cutoff).where(date: ...today)
+    Meal.unreconciled.not_cancelled.where(date: ..cutoff).where(date: ...today)
         .where.missing(:bills).with_attendees
         .order(:date).preload(:meal_residents, :guests).to_a
   end

@@ -272,8 +272,11 @@ class Community < ApplicationRecord
   # cook or no cost, all at $0, so "Cost per adult" dropped every
   # evening and after every settlement (#98 had already left out the
   # upcoming meals).
+  #
+  # A cancelled dinner settles with every line at $0 (ADR 0011 rule 11).
+  # Nobody ate it, so the averages leave it out, under "cancelled".
   def averaged_meals
-    meals.settleable_by(today - 1, today: today).with_attendees.where(Meal.a_cost_not_entered.not)
+    meals.settleable_by(today - 1, today: today).not_cancelled.with_attendees.where(Meal.a_cost_not_entered.not)
   end
 
   def averaged_meal_count
@@ -287,8 +290,10 @@ class Community < ApplicationRecord
   # averaged_meals are all of the unsettled meals people ate at on a day
   # that is over.
   def meals_left_out_of_averages
-    past = meals.unreconciled.where(date: ...today).with_attendees
+    signed_up = meals.unreconciled.where(date: ...today).with_attendees
+    past = signed_up.not_cancelled
     {
+      cancelled: signed_up.cancelled.count,
       no_cook: past.where.missing(:bills).count,
       cost_not_entered: past.where(Meal.a_cost_not_entered).count,
       nobody_to_charge: past.receipt_and_nobody_to_charge.where(Meal.a_cost_not_entered.not).count

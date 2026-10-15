@@ -6,7 +6,7 @@ The app at https://comeals.com is a React single-page app. Its pages hold no tex
 
 ## API
 
-- [API reference](https://comeals.com/api.md): how to sign in, every endpoint, the rules a meal enforces (closed, full, reconciled), and how the cost is split.
+- [API reference](https://comeals.com/api.md): how to sign in, every endpoint, the rules a meal enforces (closed, full, cancelled, reconciled), and how the cost is split.
 
 ## Source and design
 

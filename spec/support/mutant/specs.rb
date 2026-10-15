@@ -141,8 +141,8 @@ MUTANT_SPEC_ROWS = {
     %w[IdempotencyKeyHeader GuestAdd GuestAddKey GuestReplayedSerializer Api::V1::MealsController],
   'spec/requests/api/v1/guest_idempotency_key_race_spec.rb' => %w[GuestAdd Api::V1::MealsController],
   'spec/requests/api/v1/meals_controller_spec.rb' =>
-    %w[Api::V1::MealsController AuditDescription MealFormSerializer MealCostSummary Meal MealResident Guest
-       TrueOrFalse GuestAdd],
+    %w[Api::V1::MealsController MealStatusActions AuditDescription MealFormSerializer MealCostSummary Meal
+       MealResident Guest TrueOrFalse GuestAdd],
   'spec/requests/api/v1/meals_refused_writes_spec.rb' =>
     %w[Api::V1::MealsController ReconciledMealImmutability ClosedMealAttendanceFreeze],
   'spec/requests/api/v1/meals_unknown_resident_spec.rb' => %w[Api::V1::MealsController],
@@ -214,6 +214,15 @@ MUTANT_SPEC_ROWS = {
   # The admin settlement preview and its blank-cost button (ADR 0011
   # rule 4): the words, the warnings it lists, and the marking.
   'spec/requests/admin/settlement_preview_spec.rb' => %w[SettlementPreviewHelper ReconciliationWarnings NoCostMarking],
+  # Cancelling a dinner (ADR 0011 rule 11): the API, the admin buttons,
+  # the model rules and the settlement of a cancelled dinner.
+  'spec/requests/api/v1/meal_cancel_spec.rb' =>
+    %w[Api::V1::MealsController MealStatusActions Meal CancelledDinnerFreeze MealSerializer MealFormSerializer
+       AuditDescription],
+  'spec/requests/admin/meal_cancel_spec.rb' => %w[SuperuserAdapter Meal],
+  'spec/models/meal_cancelled_spec.rb' => %w[Meal LiveUpdate BelongsToTheCommunity CancelledDinnerFreeze Settlement],
+  'spec/services/settlement_cancelled_dinner_spec.rb' =>
+    %w[Settlement MealLedger ReconciliationWarnings Reconciliation MealCorrecting NoCostMarking Community],
   # The common house email's numbers are the settlement's own (#165).
   'spec/requests/admin/collection_email_balances_spec.rb' => %w[CollectionList ReconciliationMailer],
   # Settlement line marks (ADR 0011 rule 8): the words on the page, the
@@ -277,12 +286,14 @@ MUTANT_SPEC_ROWS = {
   'spec/models/rotation_spec.rb' => %w[Rotation LiveUpdate BelongsToTheCommunity],
   'spec/models/meal_spec.rb' => %w[Meal LiveUpdate BelongsToTheCommunity],
   'spec/models/bill_spec.rb' =>
-    %w[Bill LiveUpdate BelongsToTheCommunity LocksItsMealFirst ReconciledMealImmutability NotesMealLiveUpdate],
+    %w[Bill LiveUpdate BelongsToTheCommunity LocksItsMealFirst ReconciledMealImmutability CancelledDinnerFreeze
+       NotesMealLiveUpdate],
   'spec/models/meal_resident_spec.rb' =>
     %w[MealResident LiveUpdate BelongsToTheCommunity LocksItsMealFirst ReconciledMealImmutability
-       ClosedMealAttendanceFreeze NotesMealLiveUpdate],
+       CancelledDinnerFreeze ClosedMealAttendanceFreeze NotesMealLiveUpdate],
   'spec/models/guest_spec.rb' =>
-    %w[Guest LiveUpdate LocksItsMealFirst ReconciledMealImmutability ClosedMealAttendanceFreeze NotesMealLiveUpdate],
+    %w[Guest LiveUpdate LocksItsMealFirst ReconciledMealImmutability CancelledDinnerFreeze ClosedMealAttendanceFreeze
+       NotesMealLiveUpdate],
   'spec/models/resident_spec.rb' => %w[Resident LiveUpdate BelongsToTheCommunity HasPhoneNumber],
   'spec/models/resident_price_band_spec.rb' => %w[Resident Community LiveUpdate BelongsToTheCommunity HasPhoneNumber],
   'spec/models/resident_birthday_chip_spec.rb' => %w[Resident BelongsToTheCommunity HasPhoneNumber],

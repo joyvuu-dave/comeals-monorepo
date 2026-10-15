@@ -221,6 +221,13 @@ class MealLedger
   # has money on it (Meal.settleable_by), so a settled one with money on
   # a receipt is from before 2026-10-09.
   #
+  # A cancelled dinner charges nobody (ADR 0011 rule 11). The eaters are
+  # charged for nothing, so every line is zero, the same as a meal with
+  # nobody to charge, and the lines still exist as the record of who
+  # signed up. No cook can have money on it (the trigger
+  # comeals_protect_settled_meal refuses cancelling one that does), so no
+  # cook loses money to this.
+  #
   # unit_cost is the one quotient in the ledger, and it is cut to the grain
   # (rounded down) here, in one place, for screens. No line is computed
   # from it.
@@ -230,6 +237,10 @@ class MealLedger
   def financials_for(meal, people, spent)
     total_multiplier = people.sum { |eater| T.must(eater.multiplier) }
     total_units = spent.sum
+    if meal.cancelled?
+      return Financials.new(total_multiplier: total_multiplier, total_units: total_units, effective_units: 0,
+                            unit_cost: ZERO)
+    end
     if total_multiplier.zero?
       return Financials.new(total_multiplier: 0, total_units: total_units, effective_units: 0, unit_cost: ZERO)
     end

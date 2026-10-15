@@ -65,6 +65,12 @@ class SuperuserAdapter < ActiveAdmin::AuthorizationAdapter
   # authorized?.
   MONEY_DECISIONS = %i[let_go].freeze
 
+  # Cancelling a dinner and restoring one write a Meal, but move no money:
+  # a dinner a cook spent money on cannot be cancelled, and a cancelled one
+  # charges nobody (ADR 0011 rule 11). So any admin may, like anyone on the
+  # meal page. The exception is written in ADR 0004.
+  DINNER_ACTIONS = %i[cancel restore].freeze
+
   # The two actions that make a new record. ActiveAdmin asks about :new to
   # decide whether to draw the "New" button and about :create to run the form
   # submit, so a rule has to cover both.
@@ -82,24 +88,33 @@ class SuperuserAdapter < ActiveAdmin::AuthorizationAdapter
     return false if creating_a_second_community?(action, subject)
     return true if READ_ACTIONS.include?(action)
     return true if user.superuser?
-    # Decisions about money that are not a write to a ledger model: marking
-    # a settlement line Let go means somebody covers the amount (ADR 0011
-    # rule 8). Only a superuser, like every other decision about money.
-    return false if MONEY_DECISIONS.include?(action)
 
-    # Rotations are open to any admin — except destroy. Destroying a rotation
-    # deletes its meals (Rotation's dependent: :destroy), and Meal writes are
-    # superuser-only, so the destroy inherits the meal bar.
-    return false if action == :destroy && model_name(subject) == 'Rotation'
+    model = model_name(subject)
+    ruling = action_rule(action, model)
+    return ruling unless ruling.nil?
 
     # Any signed-in admin may write, except on the restricted models. A nil or
     # unrecognized subject fails closed: if we cannot tell what is being
     # written, we do not let a non-superuser write it.
-    model = model_name(subject)
     model.present? && SUPERUSER_ONLY_MODELS.exclude?(model)
   end
 
   private
+
+  # The answer for a plain admin when a rule names the action, ahead of
+  # the rule by model. nil when no rule names it.
+  def action_rule(action, model)
+    # Decisions about money that are not a write to a ledger model: marking
+    # a settlement line Let go means somebody covers the amount (ADR 0011
+    # rule 8). Only a superuser, like every other decision about money.
+    return false if MONEY_DECISIONS.include?(action)
+    return model == 'Meal' if DINNER_ACTIONS.include?(action)
+
+    # Rotations are open to any admin — except destroy. Destroying a rotation
+    # deletes its meals (Rotation's dependent: :destroy), and Meal writes are
+    # superuser-only, so the destroy inherits the meal bar.
+    false if action == :destroy && model == 'Rotation'
+  end
 
   # The communities table holds exactly one row. Creating it is a bootstrap
   # step on an empty database, and once the row exists there is nothing left

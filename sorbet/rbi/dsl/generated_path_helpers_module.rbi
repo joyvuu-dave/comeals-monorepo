@@ -154,6 +154,9 @@ module GeneratedPathHelpersModule
   def api_v1_version_path(*args); end
 
   sig { params(args: T.untyped).returns(String) }
+  def cancel_admin_meal_path(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
   def correct_admin_meal_path(*args); end
 
   sig { params(args: T.untyped).returns(String) }
@@ -251,6 +254,9 @@ module GeneratedPathHelpersModule
 
   sig { params(args: T.untyped).returns(String) }
   def remove_birthday_admin_resident_path(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
+  def restore_admin_meal_path(*args); end
 
   sig { params(args: T.untyped).returns(String) }
   def root_path(*args); end

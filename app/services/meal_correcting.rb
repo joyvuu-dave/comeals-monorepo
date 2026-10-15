@@ -43,6 +43,10 @@ class MealCorrecting
   # The dinner is not settled. An open dinner is changed directly.
   class NotSettled < StandardError; end
 
+  # The dinner was cancelled, so it charged nobody whatever its rows say,
+  # and a correction has nothing to change (ADR 0011 rule 11).
+  class Cancelled < StandardError; end
+
   # The dinner's rows already differ from what it was settled at plus its
   # corrections. The nightly check reports the same difference.
   class EarlierDifference < StandardError; end
@@ -121,6 +125,10 @@ class MealCorrecting
     meal.lock!
     if meal.reconciliation_id.nil?
       raise NotSettled, "Meal #{meal.id} is not settled. An open dinner is changed directly."
+    end
+    if meal.cancelled?
+      raise Cancelled,
+            "Meal #{meal.id} was cancelled, so it charged nobody and has nothing to correct."
     end
 
     refuse_an_earlier_difference!(meal)

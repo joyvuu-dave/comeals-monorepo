@@ -154,6 +154,9 @@ module GeneratedUrlHelpersModule
   def api_v1_version_url(*args); end
 
   sig { params(args: T.untyped).returns(String) }
+  def cancel_admin_meal_url(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
   def correct_admin_meal_url(*args); end
 
   sig { params(args: T.untyped).returns(String) }
@@ -251,6 +254,9 @@ module GeneratedUrlHelpersModule
 
   sig { params(args: T.untyped).returns(String) }
   def remove_birthday_admin_resident_url(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
+  def restore_admin_meal_url(*args); end
 
   sig { params(args: T.untyped).returns(String) }
   def root_url(*args); end

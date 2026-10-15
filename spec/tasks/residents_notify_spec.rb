@@ -101,14 +101,17 @@ RSpec.describe 'residents:notify' do
   end
 
   # Open means fewer than 2 cooks. A meal with no cook at all is open too:
-  # only the left join keeps it in the list.
+  # only the left join keeps it in the list. A cancelled dinner needs no
+  # cook (ADR 0011 rule 11), so it is not open.
   it 'correctly identifies open meals (fewer than 2 cooks)' do
     no_cook_date = community.today + 3.days
     open_date = community.today + 4.days
     full_date = community.today + 5.days
+    cancelled_date = community.today + 6.days
     rotation = create_rotation_with_meals(community: community,
                                           start_date: no_cook_date,
-                                          meal_dates: [full_date, open_date, no_cook_date])
+                                          meal_dates: [full_date, open_date, no_cook_date, cancelled_date])
+    rotation.meals.find_by!(date: cancelled_date).cancel!
 
     open_meal = rotation.meals.find_by(date: open_date)
     full_meal = rotation.meals.find_by(date: full_date)

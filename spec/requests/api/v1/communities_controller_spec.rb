@@ -322,5 +322,19 @@ RSpec.describe 'Communities API' do
       expect(response.body).to include('BEGIN:VCALENDAR')
       expect(response.body).to include('Common Dinner')
     end
+
+    # RFC 5545 marks an event that was called off with STATUS:CANCELLED,
+    # and the summary says so for a calendar app that does not show it
+    # (ADR 0011 rule 11).
+    it 'marks a cancelled dinner, and not the others' do
+      create(:meal, community: community, date: Date.new(2026, 5, 1)).cancel!
+      create(:meal, community: community, date: Date.new(2026, 5, 3))
+
+      get "/api/v1/communities/#{community.id}/ical"
+
+      events = Icalendar::Calendar.parse(response.body).sole.events.sort_by(&:dtstart)
+      expect(events.map { |event| [event.summary.to_s, event.status&.to_s] })
+        .to eq([['Cancelled: Common Dinner', 'CANCELLED'], ['Common Dinner', nil]])
+    end
   end
 end

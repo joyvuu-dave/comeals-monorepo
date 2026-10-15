@@ -6,6 +6,7 @@
   "closed_at": null,
   "date": "2026-01-15",
   "reconciled": false,
+  "cancelled": false,
   "next_id": 43,
   "prev_id": 41,
   "bills": [

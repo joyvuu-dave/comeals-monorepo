@@ -57,9 +57,22 @@ module RandomLedger
     BigDecimal(Random.new((rng.seed * 100_000) + (index * 10) + row).rand(0..cents_max)) / 100
   end
 
+  # About one meal in ten is cancelled (ADR 0011 rule 11), whatever its
+  # bills: the ledger's rule is that a cancelled meal charges nobody, and
+  # in memory nothing stops a cook's money being on one. The draw comes
+  # from a generator of its own, like no_cost_amount (whose places are 0
+  # to 2), so every seed's ledger is otherwise what it was before.
+  def self.cancelled?(rng, index)
+    Random.new((rng.seed * 100_000) + (index * 10) + 9).rand < 0.1
+  end
+
   def self.meals(seed, cents_max: 999_999)
     rng = Random.new(seed)
-    Array.new(rng.rand(1..40)) { |i| meal(rng, i + 1, cents_max: cents_max) }
+    Array.new(rng.rand(1..40)) do |i|
+      meal(rng, i + 1, cents_max: cents_max).tap do |drafted|
+        drafted.cancelled_at = Time.utc(2026, 4, 1) if cancelled?(rng, i + 1)
+      end
+    end
   end
 
   # The same meal as plain hashes, the shape the oracle reads.
@@ -67,6 +80,7 @@ module RandomLedger
     {
       id: meal.id,
       cap: meal.cap,
+      cancelled: !meal.cancelled_at.nil?,
       bills: meal.bills.map { |b| { id: b.id, resident_id: b.resident_id, amount: b.amount, no_cost: b.no_cost } },
       attendees: meal.meal_residents.map { |a| { id: a.id, resident_id: a.resident_id, multiplier: a.multiplier } },
       guests: meal.guests.map { |g| { id: g.id, host_id: g.resident_id, multiplier: g.multiplier } }

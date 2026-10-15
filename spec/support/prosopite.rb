@@ -40,6 +40,8 @@ Prosopite.allow_stack_paths = [
   # is written or destroyed: one read per row write, for the same reason
   # (the row's loaded meal can be stale; the table is not).
   'app/models/concerns/reconciled_meal_immutability.rb',
+  # And whether its dinner is cancelled, for the same reason.
+  'app/models/concerns/cancelled_dinner_freeze.rb',
   # The audited gem reads the last version number before it writes each
   # audit row: one read per audited write. The file, not the gem: audited
   # also puts an around_action on every controller, so a pattern on the

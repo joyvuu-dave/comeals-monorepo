@@ -417,16 +417,22 @@ RSpec.describe Community do
       meal_on(community.today - 9)
       meal_on(community.today, eaters: [diner])
       meal_on(community.today + 1, bills: %w[0], eaters: [diner])
+      # Cancelled (ADR 0011 rule 11): one with no cook and one with a
+      # blank cost, each counted once, as cancelled only.
+      meal_on(community.today - 10, eaters: [diner]).cancel!
+      meal_on(community.today - 11, bills: %w[0], eaters: [diner]).cancel!
 
       expect(community.averaged_meal_count).to eq(2)
-      expect(community.meals_left_out_of_averages).to eq(no_cook: 1, cost_not_entered: 3, nobody_to_charge: 1)
+      expect(community.meals_left_out_of_averages)
+        .to eq(cancelled: 2, no_cook: 1, cost_not_entered: 3, nobody_to_charge: 1)
     end
 
     it 'counts nothing and leaves nothing out when no meal is past' do
       meal_on(community.today, bills: %w[0], eaters: [diner])
 
       expect(community.averaged_meal_count).to eq(0)
-      expect(community.meals_left_out_of_averages).to eq(no_cook: 0, cost_not_entered: 0, nobody_to_charge: 0)
+      expect(community.meals_left_out_of_averages)
+        .to eq(cancelled: 0, no_cook: 0, cost_not_entered: 0, nobody_to_charge: 0)
     end
   end
 

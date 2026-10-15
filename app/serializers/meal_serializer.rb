@@ -6,6 +6,7 @@
 # Table name: meals
 #
 #  id                :bigint           not null, primary key
+#  cancelled_at      :datetime
 #  cap               :decimal(12, 8)
 #  closed            :boolean          default(FALSE), not null
 #  closed_at         :datetime
@@ -53,7 +54,11 @@ class MealSerializer
     meal.class.to_s
   end
 
+  # A cancelled dinner says so, and nothing else: its count is the record
+  # of who meant to come, not who is coming (ADR 0011 rule 11).
   def title(meal)
+    return "Dinner\nCancelled" if meal.cancelled?
+
     message = "Dinner\n#{meal.attendees_count}"
 
     today = Community.instance.today

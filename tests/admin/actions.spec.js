@@ -174,6 +174,27 @@ test.describe("Meals", () => {
     ).toHaveCount(0);
   });
 
+  // ADR 0011 rule 11. Meal 5's cook has not entered a cost, so it can be
+  // cancelled. Each button asks first, and Restore brings it back.
+  test("cancels a dinner and restores it", async ({ page }) => {
+    await login(page);
+    await page.goto("/meals/5");
+    const questions = [];
+    page.on("dialog", (dialog) => {
+      questions.push(dialog.message());
+      dialog.accept();
+    });
+
+    await page.locator(".action_items a", { hasText: /^Cancel$/ }).click();
+    await expect(notice(page)).toHaveText("Dinner cancelled.");
+    await expect(page.locator("tr.row-cancelled")).toHaveCount(1);
+
+    await page.locator(".action_items a", { hasText: /^Restore$/ }).click();
+    await expect(notice(page)).toHaveText("Dinner restored.");
+    await expect(page.locator("tr.row-cancelled")).toHaveCount(0);
+    expect(questions).toEqual(["Cancel this dinner?", "Restore this dinner?"]);
+  });
+
   test("refuses to delete a closed meal, with the reason", async ({ page }) => {
     await login(page);
     // Meal 4 is closed and not yet settled.

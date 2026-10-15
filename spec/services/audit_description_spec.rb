@@ -22,6 +22,15 @@ RSpec.describe AuditDescription do
     expect(described_class.describe(audit)).to eq('Meal closed')
   end
 
+  it 'names a cancelled and a restored dinner (ADR 0011 rule 11)' do
+    meal.cancel!
+    meal.restore!
+    cancelled, restored = meal.audits.where(action: 'update').order(:id).last(2)
+
+    expect([cancelled, restored].map { |audit| described_class.describe(audit) })
+      .to eq(['Dinner cancelled', 'Dinner restored'])
+  end
+
   it 'parses meal opened audit' do
     meal.update!(closed: true)
     meal.update!(closed: false)

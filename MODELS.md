@@ -106,15 +106,16 @@ removed the slug.
   whose costs are final. That is what a settlement with yesterday as its
   cutoff would claim (`Meal.settleable_by`: not settled, from a day that
   is over, at least one cook, someone to charge or no money spent, and
-  every cost entered when someone is charged), less any meal with a
-  cook's cost not entered yet (`Meal.a_cost_not_entered`), and only
-  meals someone ate at. Tonight's meal waits until its day is over. Until
+  every cost entered when someone is charged, or cancelled), less any
+  cancelled dinner, any meal with a cook's cost not entered yet
+  (`Meal.a_cost_not_entered`), and only meals someone ate at. Tonight's meal waits until its day is over. Until
   2026-10-10 the averages counted tonight's meal and every past meal with
   no cook or no cost at $0 (upcoming meals were left out by #98).
 - `meals_left_out_of_averages` — how many unsettled meals people ate at,
-  on a day that is over, the averages leave out, by reason: a cost not
-  entered, no cook, or nobody to charge. Each meal is counted once, under
-  the first reason that fits. The dashboard shows these counts next to
+  on a day that is over, the averages leave out, by reason: cancelled, a
+  cost not entered, no cook, or nobody to charge. Each meal is counted
+  once: a cancelled dinner only as cancelled, and any other under the
+  first reason that fits. The dashboard shows these counts next to
   `averaged_meal_count`, so a missing receipt stays in view.
 - `unreconciled_ave_cost` — dashboard "cost per adult" over
   `averaged_meals`. It reads `MealLedger#summary_for`, so it cannot
@@ -465,12 +466,25 @@ Meal ----< MealCharge (written at settlement; empty until then)
   the current attendee count. The check runs only when max changes,
   because an admin attendance correction can add a person past it, and the
   meal must still take a menu edit or a reopen then (#93).
+- `cancelled_at` — when the dinner was cancelled; NULL for one that was not
+  (ADR 0011 rule 11). `cancel!` sets it and `restore!` clears it; each
+  does nothing when the dinner is already that way. A cancelled dinner
+  keeps its sign-ups, guests and cooks and charges nobody (every line is
+  $0, see "The Multiplier System"). While it is cancelled, only its
+  description can change: its sign-ups, guests and costs are frozen
+  (`CancelledDinnerFreeze`, and the trigger
+  `comeals_reject_settled_child_write`), and so are `closed`, `max`, `date`,
+  `cap` and `rotation_id`. A dinner with a cost over $0 not marked no-cost
+  cannot be cancelled (the model, and the trigger `meals_protect_settled`).
+  It refuses destroy until it is restored. The next settlement takes it in
+  whatever its costs and sign-ups, and then `cancelled_at` is frozen like
+  `cap` and `date`.
 
 **Derived counts (no cached columns):**
 
 - `multiplier` — sum of `meal_residents.multiplier` and `guests.multiplier`
 - `attendees_count` — number of attendance rows plus guest rows
-- `capped?`, `reconciled?`
+- `capped?`, `reconciled?`, `cancelled?`
 
 **No cost methods, on purpose.** `total_cost`, `unit_cost`,
 `effective_total_cost`, `max_cost`, and `subsidized?` do not exist on Meal.
@@ -481,6 +495,7 @@ how the math once ended up in three places (#48).
 **Scopes:**
 
 - `unreconciled` — reconciliation_id IS NULL
+- `cancelled` / `not_cancelled` — cancelled_at set or NULL
 - `open` — closed = false
 - `closed_with_bills` — closed meals that have at least one bill
 - `with_attendees` — at least one attendance or guest row.
@@ -508,8 +523,9 @@ how the math once ended up in three places (#48).
   2026-10-09 a meal only free eaters ate was settled with every line at
   $0, #94.)
 
-**Immutability:** once `reconciliation_id` is set, `cap`, `date`, and
-`reconciliation_id` itself can no longer change (`FROZEN_WHEN_RECONCILED`),
+**Immutability:** once `reconciliation_id` is set, `cancelled_at`, `cap`,
+`date`, and `reconciliation_id` itself can no longer change
+(`FROZEN_WHEN_RECONCILED`),
 and the meal refuses destroy. A closed meal also refuses destroy: reopen it
 first. Both destroy guards are `prepend: true` so the bill and attendance
 cascades never run before the refusal (#26). The `meals_protect_settled`
@@ -678,10 +694,10 @@ Reconciliation ----< ReconciliationBalance ---> Resident
   specs call `Settlement.run!(cutoff:)`; the pipeline is:
   1. save the row (validations run here);
   2. `assign_meals` — claim every meal in `eligible_meals`
-     (`Meal.settleable_by(end_date)`: unreconciled, has a bill, someone
-     with a price to charge or nothing owed, every cost entered or marked
-     No cost when someone is charged, dated on or before the cutoff, and
-     from a day that is over). It takes
+     (`Meal.settleable_by(end_date)`: unreconciled, dated on or before the
+     cutoff, from a day that is over, and either cancelled, or with a bill,
+     someone with a price to charge or nothing owed, and every cost
+     entered or marked No cost when someone is charged). It takes
      `SELECT ... FOR UPDATE` on those meals in id order first, then updates
      only rows whose `reconciliation_id` is still NULL, and raises if a rival
      settlement claimed any of them. See ADR 0003.
@@ -1280,6 +1296,13 @@ back when a receipt has money on it (`Meal.receipt_and_nobody_to_charge`),
 so the cook is not credited 0 for good; it settles only when its cook
 slots hold no money (#94). In the nightly running balance the cook is
 credited 0 while the meal waits.
+
+A cancelled meal (`cancelled_at` set, ADR 0011 rule 11) charges nobody:
+its effective cost is 0, so every one of its lines is 0, whatever its
+multiplier and whatever its cooks entered. The lines still exist, the same
+as on a meal nobody can be charged for. No cook can have money on a
+cancelled meal (a meal with a bill over $0 that is not no-cost cannot be
+cancelled), so no cook loses money to this.
 
 Example: $60 meal, 3 adults (residents 1, 2, 3) and 1 half-price child
 (resident 4) attending:

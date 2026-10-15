@@ -138,6 +138,7 @@ matcher:
     - Unit*
     - AppendOnly*
     - BelongsToTheCommunity*
+    - CancelledDinnerFreeze*
     - ClosedMealAttendanceFreeze*
     - ConstraintMessages*
     - HasPhoneNumber*
@@ -148,6 +149,7 @@ matcher:
     - ApiController*
     - ApplicationController*
     - FallbackController*
+    - MealStatusActions*
     - RefusedDestroyMessage*
     - SuperuserAdapter*
     - Api::V1::CommonHouseReservationsController*

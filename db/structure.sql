@@ -386,14 +386,23 @@ BEGIN
     RETURN OLD;
   END IF;
 
+  IF NEW.cancelled_at IS NOT NULL AND OLD.cancelled_at IS NULL AND EXISTS (
+    SELECT 1 FROM bills WHERE meal_id = NEW.id AND amount > 0 AND NOT no_cost
+  ) THEN
+    RAISE EXCEPTION 'UPDATE on meals refused: meal % has a cost with money on it, so it cannot be '
+      'cancelled. The cook would be credited nothing for that money.',
+      NEW.id;
+  END IF;
+
   IF OLD.reconciliation_id IS NULL THEN
     RETURN NEW;
   END IF;
 
   IF NEW.reconciliation_id IS DISTINCT FROM OLD.reconciliation_id
      OR NEW.cap IS DISTINCT FROM OLD.cap
-     OR NEW.date IS DISTINCT FROM OLD.date THEN
-    RAISE EXCEPTION 'UPDATE on meals refused: meal % is reconciled; cap, date, and '
+     OR NEW.date IS DISTINCT FROM OLD.date
+     OR NEW.cancelled_at IS DISTINCT FROM OLD.cancelled_at THEN
+    RAISE EXCEPTION 'UPDATE on meals refused: meal % is reconciled; cap, date, cancelled_at and '
       'reconciliation_id are frozen. For genuine data corruption see '
       'docs/runbooks/settled-data-repair.md.',
       OLD.id;
@@ -526,7 +535,9 @@ CREATE FUNCTION public.comeals_reject_settled_child_write() RETURNS trigger
     AS $$
 DECLARE
   settled_meal_id bigint;
+  cancelled_meal_id bigint;
   meal_reconciliation_id bigint;
+  meal_cancelled_at timestamp;
   correcting text := current_setting('comeals.correcting', true);
 BEGIN
   IF current_setting('comeals.allow_settled_writes', true) = 'on' THEN
@@ -537,24 +548,30 @@ BEGIN
     -- Unconditional, like the branch below. A DELETE takes no
     -- foreign-key lock on the parent, so this SELECT is the only thing
     -- that can make it wait for a settlement mid-flight on this meal.
-    SELECT reconciliation_id INTO meal_reconciliation_id FROM meals
+    SELECT reconciliation_id, cancelled_at INTO meal_reconciliation_id, meal_cancelled_at FROM meals
     WHERE id = OLD.meal_id FOR KEY SHARE;
 
     IF meal_reconciliation_id IS NOT NULL AND OLD.meal_id::text IS DISTINCT FROM correcting THEN
       settled_meal_id := OLD.meal_id;
     END IF;
+    IF meal_cancelled_at IS NOT NULL THEN
+      cancelled_meal_id := OLD.meal_id;
+    END IF;
   END IF;
 
-  IF settled_meal_id IS NULL AND TG_OP IN ('INSERT', 'UPDATE') THEN
+  IF settled_meal_id IS NULL AND cancelled_meal_id IS NULL AND TG_OP IN ('INSERT', 'UPDATE') THEN
     -- Unconditional: the lock is the point. Testing reconciliation_id in
     -- the WHERE clause would match no row on an unreconciled meal, take
     -- no lock, and let this trigger decide before a running settlement
     -- commits.
-    SELECT reconciliation_id INTO meal_reconciliation_id FROM meals
+    SELECT reconciliation_id, cancelled_at INTO meal_reconciliation_id, meal_cancelled_at FROM meals
     WHERE id = NEW.meal_id FOR KEY SHARE;
 
     IF meal_reconciliation_id IS NOT NULL AND NEW.meal_id::text IS DISTINCT FROM correcting THEN
       settled_meal_id := NEW.meal_id;
+    END IF;
+    IF meal_cancelled_at IS NOT NULL THEN
+      cancelled_meal_id := NEW.meal_id;
     END IF;
   END IF;
 
@@ -563,6 +580,12 @@ BEGIN
       'A mistake is fixed by a correction (MealCorrecting), which the next settlement carries. '
       'For genuine data corruption see docs/runbooks/settled-data-repair.md.',
       TG_OP, TG_TABLE_NAME, settled_meal_id;
+  END IF;
+
+  IF cancelled_meal_id IS NOT NULL THEN
+    RAISE EXCEPTION '% on % refused: meal % is cancelled, and its sign-ups, guests and costs stay '
+      'as they were. Restore the dinner to change them.',
+      TG_OP, TG_TABLE_NAME, cancelled_meal_id;
   END IF;
 
   RETURN CASE TG_OP WHEN 'DELETE' THEN OLD ELSE NEW END;
@@ -1385,6 +1408,7 @@ CREATE TABLE public.meals (
     reconciliation_id bigint,
     rotation_id bigint NOT NULL,
     updated_at timestamp without time zone NOT NULL,
+    cancelled_at timestamp(6) without time zone,
     CONSTRAINT meals_cap_positive_or_null CHECK (((cap IS NULL) OR (cap > (0)::numeric))),
     CONSTRAINT meals_closed_at_matches_closed CHECK ((closed = (closed_at IS NOT NULL)))
 );
@@ -1728,7 +1752,7 @@ CREATE TABLE public.settlement_line_marks (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT settlement_line_marks_note_not_blank CHECK (((note IS NULL) OR (btrim(note) <> ''::text))),
-    CONSTRAINT settlement_line_marks_status_known CHECK (((status)::text = ANY ((ARRAY['paid'::character varying, 'let_go'::character varying, 'none'::character varying])::text[])))
+    CONSTRAINT settlement_line_marks_status_known CHECK (((status)::text = ANY (ARRAY[('paid'::character varying)::text, ('let_go'::character varying)::text, ('none'::character varying)::text])))
 );
 
 
@@ -4234,6 +4258,7 @@ INSERT INTO "schema_migrations" (version) VALUES
 ('20261012120000'),
 ('20261010130200'),
 ('20261010130000'),
+('20261010125954'),
 ('20261010125953'),
 ('20261010125952'),
 ('20261010125951'),

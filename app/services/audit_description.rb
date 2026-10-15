@@ -163,6 +163,9 @@ class AuditDescription
     if audit.action == 'update'
       changes = audit.audited_changes
 
+      # Dinner cancelled or restored (ADR 0011 rule 11)
+      return cancelled_words(changes['cancelled_at']) if changes['cancelled_at'].instance_of?(Array)
+
       # Meal Opened / Closed
       if changes['closed'].instance_of?(Array)
         return 'Meal closed' if changes['closed'][1] == true
@@ -203,6 +206,11 @@ class AuditDescription
     end
 
     fallback_description(audit) # Shouldn't happen?
+  end
+
+  # A cancelled_at change: set is a cancel, cleared is a restore.
+  def cancelled_words(change)
+    change[1].nil? ? 'Dinner restored' : 'Dinner cancelled'
   end
 
   def describe_bill(audit)

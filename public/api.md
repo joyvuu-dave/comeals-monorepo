@@ -176,6 +176,7 @@ GET /meals/:meal_id/cooks
   "closed_at": null,
   "max": null,
   "reconciled": false,
+  "cancelled": false,
   "next_id": 43,
   "prev_id": 41,
   "bills": [
@@ -208,8 +209,8 @@ GET /meals/:meal_id/cooks
   be chosen as a cook only for the bill they already have.
 - `guests` lists guests. Each guest belongs to a resident, the host. A
   host does not have to be signed up for the meal.
-- `closed`, `max`, and `reconciled` are the meal's state. See "Rules"
-  below.
+- `closed`, `max`, `reconciled` and `cancelled` are the meal's state. See
+  "Rules" below.
 - `next_id` and `prev_id` are the ids of the meals just after and just
   before this one, by date. They are never `null`. At the last meal,
   `next_id` is the meal's own `id`. At the first meal, `prev_id` is the
@@ -285,6 +286,7 @@ was not, the server adds the guest.
 | ------- | ----------------------------- | ---------------------------- | ---------------------------------------------------------------------- |
 | `PATCH` | `/meals/:meal_id/description` | `{ "description": "Tacos" }` | Sets the menu text.                                                    |
 | `PATCH` | `/meals/:meal_id/closed`      | `{ "closed": true }`         | Closes or reopens the meal. `closed` is required.                      |
+| `PATCH` | `/meals/:meal_id/cancelled`   | `{ "cancelled": true }`      | Cancels the dinner, or restores it. `cancelled` is required.           |
 | `PATCH` | `/meals/:meal_id/max`         | `{ "max": 30 }`              | Sets a cap on a closed meal. `null` removes it. `400` on an open meal. |
 | `PATCH` | `/meals/:meal_id/bills`       | see below                    | Adds, changes or removes cooks and their costs.                        |
 
@@ -442,14 +444,23 @@ see "Bills".
    signup or guest added after the meal closed can be removed again.
    One added before the close cannot. `max` cannot be set below the
    current headcount, and cannot be set at all on an open meal.
-4. **Bills are whole cents, 0 to 9999.99, sent as text.** See "Bills".
-5. **Writes to one meal take a lock on that meal.** If a settlement is
+4. **A cancelled dinner charges nobody, and its headcount and costs are
+   frozen.** While `cancelled` is true, every write to its signups, its
+   guests and its bills is refused, and so is opening, closing or a new
+   `max` (`"This dinner is cancelled. Restore it before changing it."`).
+   Its description can still change. Restoring it brings it back as it
+   was. A dinner a cook spent money on cannot be cancelled (`"A cook
+spent money on this dinner, so it can't be cancelled."`). Sending
+   the state the dinner is in already changes nothing and answers `200`.
+   A settled dinner can be neither cancelled nor restored.
+5. **Bills are whole cents, 0 to 9999.99, sent as text.** See "Bills".
+6. **Writes to one meal take a lock on that meal.** If a settlement is
    running, or another write collides, you get `409` with no `type`.
    Nothing was saved. Resend the same request (a bills save or a guest
    add with the same `Idempotency-Key`). A bills save can also get a
    `409` with `"type": "stale"`: then read the meal form again before
    you build a new save.
-6. **Every write is recorded.** `GET /meals/:meal_id/history` shows who
+7. **Every write is recorded.** `GET /meals/:meal_id/history` shows who
    changed what, by the resident whose token was used. A change no
    person made, such as a fix of old data that ran during a deploy,
    shows a name that says so in place of a resident's name.
@@ -527,10 +538,15 @@ with its cost numbers, counts, and `cooks`), `balances` per resident and
 per unit, and `warnings` about data that settles fine but usually means
 someone forgot a step (`kind` is one of `bill_with_no_attendees`,
 `bill_with_only_free_eaters`, `attendance_without_bill`,
-`zero_bill_not_flagged`; show `title` and `body` for a kind you do not
-know). An `attendance_without_bill` warning names a meal that is not in
-`meals`: people ate, no cook billed, and a settlement never claims a meal
-without a bill, so it is left behind until someone enters one. A
+`cost_not_entered`, `zero_bill_not_flagged`, `dinner_cancelled`; show
+`title` and `body` for a kind you do not know). An
+`attendance_without_bill` warning names a meal that is not in `meals`:
+people ate, no cook billed, and a settlement never claims a meal without
+a bill unless it was cancelled, so it is left behind until someone
+enters one. A `cost_not_entered` warning names a meal that is not in
+`meals` either: someone is charged and a cook's cost is blank, so it
+waits for the cost. A `dinner_cancelled` warning names a meal in `meals`
+that was cancelled: it is settled, and nobody is charged for it. A
 `bill_with_no_attendees` or `bill_with_only_free_eaters` warning also
 names a meal that is not in `meals`: a cook entered money, and nobody
 signed up or only people who eat free did, so nobody can be charged and

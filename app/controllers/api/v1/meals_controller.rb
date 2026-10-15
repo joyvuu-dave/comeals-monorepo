@@ -31,11 +31,14 @@ module Api
       before_action :reject_if_reconciled, only: %i[
         create_meal_resident destroy_meal_resident update_meal_resident
         create_guest destroy_guest
-        update_description update_max update_bills update_closed
+        update_description update_max update_bills
       ]
       before_action :verify_resident_exists, only: %i[create_meal_resident create_guest]
       before_action :set_guest, only: [:destroy_guest]
       before_action :set_meal_resident, only: %i[destroy_meal_resident update_meal_resident]
+      # PATCH closed and PATCH cancelled. After the lines above, so its own
+      # settled check runs after the meal is found.
+      include MealStatusActions
 
       # GET /api/v1/meals/next
       sig { void }
@@ -255,21 +258,6 @@ module Api
         # 9999.99, which fits DECIMAL(12,8)) — kept so a value that would
         # overflow the column can never surface as a 500.
         render json: { message: 'Invalid amount. Amounts are whole cents, 0 to 9999.99.' }, status: :bad_request
-      end
-
-      # PATCH /api/v1/meals/:meal_id/closed { closed }
-      # closed is required, and must be a value TrueOrFalse takes. Before
-      # #138 "no" closed the meal, and before #139 a missing closed was a
-      # 500.
-      sig { void }
-      def update_closed
-        flags = TrueOrFalse.from_params(params, %i[closed], required: true)
-        return render_refused(flags) if flags.is_a?(String)
-
-        render_write_under_lock do
-          meal.update!(closed: flags.fetch(:closed))
-          { json: { message: 'Meal closed value updated.' } }
-        end
       end
 
       private

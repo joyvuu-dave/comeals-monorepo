@@ -54,6 +54,7 @@ export interface MealForm {
   closed_at: string | null;
   date: string;
   reconciled: boolean;
+  cancelled: boolean;
   next_id: number;
   prev_id: number;
   bills: MealFormBill[];

@@ -41,6 +41,7 @@ Rails.application.routes.draw do
       patch '/meals/:meal_id/max', to: 'meals#update_max'
       patch '/meals/:meal_id/bills', to: 'meals#update_bills'
       patch '/meals/:meal_id/closed', to: 'meals#update_closed'
+      patch '/meals/:meal_id/cancelled', to: 'meals#update_cancelled'
       get '/rotations/:id', to: 'rotations#show'
       get '/reconciliations/preview', to: 'reconciliations#preview'
       post '/reconciliations', to: 'reconciliations#create'

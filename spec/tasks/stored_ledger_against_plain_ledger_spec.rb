@@ -54,9 +54,16 @@ RSpec.describe 'the stored ledger against the plain ledger', type: :task do
       draft.guests.each do |guest|
         create(:guest, meal: meal, resident: residents.fetch(guest.resident_id), multiplier: guest.multiplier)
       end
+      cancel_if_drafted(meal, draft)
       meal
     end
     [residents.values.map(&:id), meals.map(&:id)]
+  end
+
+  # A dinner a cook spent money on cannot be cancelled in the database,
+  # so only the cancelled drafts with no money on a cost are.
+  def cancel_if_drafted(meal, draft)
+    meal.cancel! if draft.cancelled_at && meal.bills.none? { |bill| !bill.no_cost && bill.amount.positive? }
   end
 
   # A no-cost bill with an amount is written the way the app wrote one

@@ -27,8 +27,9 @@ namespace :residents do
 
       eligible_cooks = Resident.eligible_cooks.where.not(email: nil).joins(:unit).order('units.name')
 
-      # Meals with less than 2 cooks
-      open_meal_dates = Meal.order(:date)
+      # Meals with less than 2 cooks. A cancelled dinner needs no cook
+      # (ADR 0011 rule 11).
+      open_meal_dates = Meal.not_cancelled.order(:date)
                             .where(rotation_id: rotation.id)
                             .left_joins(:bills)
                             .group(:id)

@@ -58,6 +58,17 @@ module ReconciledMealImmutability
   def will_save_change_to_meal_id?; end
 end
 
+module CancelledDinnerFreeze
+  sig { returns(T.nilable(Integer)) }
+  def meal_id; end
+
+  sig { returns(T.nilable(Integer)) }
+  def meal_id_in_database; end
+
+  sig { returns(T::Boolean) }
+  def will_save_change_to_meal_id?; end
+end
+
 module NotesMealLiveUpdate
   sig { returns(T.nilable(Meal)) }
   def meal; end
@@ -103,4 +114,23 @@ module RefusedDestroyMessage
 
   sig { params(args: T.untyped).returns(String) }
   def collection_path(*args); end
+end
+
+module MealStatusActions
+  sig { returns(ActionController::Parameters) }
+  def params; end
+
+  sig { returns(Meal) }
+  def meal; end
+
+  sig { params(message: String).void }
+  def render_refused(message); end
+
+  sig { void }
+  def reject_if_reconciled; end
+
+  sig do
+    params(before_settled_check: T.untyped, blk: T.proc.returns(T::Hash[Symbol, T.untyped])).void
+  end
+  def render_write_under_lock(before_settled_check: nil, &blk); end
 end

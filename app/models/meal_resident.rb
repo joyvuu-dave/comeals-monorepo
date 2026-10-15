@@ -47,6 +47,9 @@ class MealResident < ApplicationRecord
 
   # No new attendees, no toggling late/vegetarian, no removals once reconciled.
   include ReconciledMealImmutability
+  # Nor on a cancelled dinner, until it is restored. Before the closed
+  # freeze, so a dinner that is both says it is cancelled.
+  include CancelledDinnerFreeze
   # Nor signups on or removals from a closed (but unsettled) meal, beyond the
   # host's explicit extras. Included after ReconciledMealImmutability so the
   # reconciled check runs first.

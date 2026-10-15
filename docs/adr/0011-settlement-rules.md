@@ -1,6 +1,7 @@
 # ADR 0011: How settlements work from now on
 
-- **Status:** Accepted. Every rule is built.
+- **Status:** Accepted. Rules 1 to 10 are built. Rule 11 is built except the
+  meal page's Cancel and Restore buttons and the settlement preview's button.
 - **Date:** 2026-10-12
 - **Issue:** #165 (the common house email)
 
@@ -196,6 +197,38 @@ through rule 6. The migrations that used it have run in production by
 then, and a new database loads `db/structure.sql`, so nothing runs them
 again.
 
+### 11. A dinner can be cancelled
+
+A dinner that does not happen is marked cancelled, not deleted (decided
+2026-10-12). Its sign-ups and guests stay, as the record of who meant to
+come, and nobody is charged for it: every line the ledger writes for it
+is $0. The calendar and the iCal feeds still show it, marked cancelled.
+
+While it is cancelled, nobody can sign up, add a guest, change a cost or
+open and close it; only its description can change. Anyone can restore
+it until it is settled, and it is back as it was. The next settlement
+takes it in whatever its costs and sign-ups, and then it is locked like
+every other dinner. It never waits for a cost (rule 3), and its cooks
+get no settlement email about it, because nobody cooked it.
+
+A dinner a cook spent money on cannot be cancelled. Someone has to
+decide who pays for food that was bought, and cancelling would credit
+the cook $0 for it. So a cook's cost over $0 must be taken off, or the
+dinner kept, first. The database holds this rule too.
+
+Who can cancel and restore: anyone on the meal page, like signing
+people up, and any admin on the admin meal page. Neither moves money,
+so neither needs a superuser (an exception written in ADR 0004). Each
+button asks a short yes/no question first. The words are "Cancel" and
+"Restore": "Re-open" would mean two things on a page that already has
+an Open / Close button.
+
+The settlement preview gets a button for past dinners people signed up
+for and nobody cooked: "Mark these N dinners as cancelled". It lists
+them, asks yes or no, and marks only the ones that still have no cost
+at the moment of the yes. It needs a superuser, like settling. A deploy
+migration marks the 27 such dinners from before October 2026.
+
 ## Options we did not take
 
 - **Leaving people who moved out out of a correction.** We chose this
@@ -207,6 +240,9 @@ again.
   mistake.** Once people pay from a settlement, its numbers have to stay
   what they were. Rule 10 allows it once, for the old settlements
   nobody kept payment records for.
+- **Deleting a dinner that did not happen.** Simpler, but it erases the
+  record that it was planned and who signed up, and it cannot be undone.
+  A cancelled dinner can be restored if it turns out it did happen.
 - **Recording each payment with its amount.** Most people pay the full
   amount at once. A note covers the rare partial payment.
 

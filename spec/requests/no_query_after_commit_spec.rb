@@ -178,6 +178,11 @@ RSpec.describe 'what a write runs after its commit' do
     -> { patch path, params: { token: token, closed: true } }
   end
 
+  write 'PATCH /api/v1/meals/:meal_id/cancelled' do
+    path = "/api/v1/meals/#{meal.id}/cancelled"
+    -> { patch path, params: { token: token, cancelled: true } }
+  end
+
   write 'POST /api/v1/reconciliations' do
     settleable_meal
     -> { post '/api/v1/reconciliations', params: { token: token, cutoff: latest.iso8601 } }
@@ -425,6 +430,17 @@ RSpec.describe 'what a write runs after its commit' do
     fingerprint = MealCorrecting.preview(settled) { |edits| form.apply(edits) }.fingerprint
     params = { correction: correction, fingerprint: fingerprint, save: 'Save correction' }
     -> { post "/meals/#{settled.id}/correct", params: params }
+  end
+
+  admin_write 'POST /meals/:id/cancel' do
+    path = "/meals/#{meal.id}/cancel"
+    -> { post path }
+  end
+
+  admin_write 'POST /meals/:id/restore' do
+    meal.cancel!
+    path = "/meals/#{meal.id}/restore"
+    -> { post path }
   end
 
   admin_write 'POST /meals/:meal_id/meal_residents' do

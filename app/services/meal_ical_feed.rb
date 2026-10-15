@@ -17,11 +17,16 @@ class MealIcalFeed
     @calendar.x_wr_calname = calendar_name
   end
 
+  # A cancelled dinner (ADR 0011 rule 11) stays in the feed with
+  # STATUS:CANCELLED, the way RFC 5545 marks an event that was called
+  # off, and its summary says so for a calendar app that does not show
+  # the status.
   def add_meal(meal, summary:, description:)
     event = Icalendar::Event.new
     event.dtstart = Icalendar::Values::DateTime.new(dinner_start(meal.date), 'tzid' => @tzid)
     event.dtend = Icalendar::Values::DateTime.new(dinner_end(meal.date), 'tzid' => @tzid)
-    event.summary = summary
+    event.summary = meal.cancelled? ? "Cancelled: #{summary}" : summary
+    event.status = 'CANCELLED' if meal.cancelled?
     event.description = description
     @calendar.add_event(event)
   end

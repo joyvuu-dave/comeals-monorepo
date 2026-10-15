@@ -5,6 +5,7 @@
 # Table name: meals
 #
 #  id                :bigint           not null, primary key
+#  cancelled_at      :datetime
 #  cap               :decimal(12, 8)
 #  closed            :boolean          default(FALSE), not null
 #  closed_at         :datetime

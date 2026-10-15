@@ -41,6 +41,9 @@ class Guest < ApplicationRecord
 
   # A guest can't be added, altered, or removed after settlement.
   include ReconciledMealImmutability
+  # Nor on a cancelled dinner, until it is restored. Before the closed
+  # freeze, so a dinner that is both says it is cancelled.
+  include CancelledDinnerFreeze
   # Nor added to or removed from a closed (but unsettled) meal, beyond the
   # host's explicit extras. Included after ReconciledMealImmutability so the
   # reconciled check runs first.

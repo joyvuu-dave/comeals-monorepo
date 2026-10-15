@@ -47,7 +47,10 @@ ActiveAdmin.register_page 'Dashboard' do
         panel "Upcoming Meals - #{upcoming.size}" do
           ul do
             upcoming.map do |meal|
-              li link_to(meal.date, admin_meal_path(meal))
+              li do
+                text_node link_to(meal.date, admin_meal_path(meal))
+                text_node ' (cancelled)' if meal.cancelled?
+              end
             end
           end
         end
@@ -56,7 +59,10 @@ ActiveAdmin.register_page 'Dashboard' do
         panel "Closed Meals People Attended (unreconciled) - #{closed.size}" do
           ul do
             closed.map do |meal|
-              li link_to(meal.date, admin_meal_path(meal))
+              li do
+                text_node link_to(meal.date, admin_meal_path(meal))
+                text_node ' (cancelled)' if meal.cancelled?
+              end
             end
           end
         end
@@ -71,7 +77,7 @@ ActiveAdmin.register_page 'Dashboard' do
           left_out_counts = community.meals_left_out_of_averages
           left_out = {
             cost_not_entered: "waiting for a cook's cost", no_cook: 'with no cook',
-            nobody_to_charge: 'where only free eaters ate'
+            nobody_to_charge: 'where only free eaters ate', cancelled: 'that were cancelled'
           }.filter_map do |reason, words|
             count = left_out_counts.fetch(reason)
             "#{count} #{'meal'.pluralize(count)} #{words}" if count.positive?

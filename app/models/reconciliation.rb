@@ -110,11 +110,15 @@ class Reconciliation < ApplicationRecord
   # one its bills show. For a cook a correction does name, the first such
   # edit says whether they cooked when the dinner settled: their cost
   # before it is an object if they did, and null if they were not a cook.
+  #
+  # A cancelled dinner has no cooks: nobody cooked it, whoever had signed
+  # up to (ADR 0011 rule 11). It cannot be corrected (MealCorrecting), so
+  # no correction names one of its cooks either.
   sig { params(reconciliations: ActiveRecord::Relation).returns(Arel::Nodes::Union) }
   def self.settled_cooks(reconciliations)
     named = MealCorrection.cost_edits.where('meal_corrections.meal_id = bills.meal_id')
                           .where(MealCorrection::COOK_ID.eq(Bill.arel_table[:resident_id]))
-    unnamed = Bill.joins(:meal).where(meals: { reconciliation_id: reconciliations.select(:id) })
+    unnamed = Bill.joins(:meal).where(meals: { reconciliation_id: reconciliations.select(:id), cancelled_at: nil })
                   .where(named.arel.exists.not)
                   .select('meals.reconciliation_id', 'bills.resident_id')
     first_edits = MealCorrection

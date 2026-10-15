@@ -7,7 +7,7 @@
 # blank at that moment. A cost that changed after the list was shown is
 # left alone, and the result says why, so the page can tell the admin:
 # the cook entered a cost, it was marked No cost already, or its dinner
-# was settled. A cost deleted in between is counted.
+# was settled or cancelled. A cost deleted in between is counted.
 #
 # Each change is an ordinary save. So the cost's history records it with
 # the admin who said yes (audited reads the admin from the controller),
@@ -48,12 +48,12 @@ class NoCostMarking
   # (spec/requests/no_query_after_commit_spec.rb).
   sig { params(bill_ids: T::Array[Integer]).returns(Result) }
   def self.mark(bill_ids)
-    settled = lock_meals(Bill.where(id: bill_ids).distinct.pluck(:meal_id))
+    closed_to_changes = lock_meals(Bill.where(id: bill_ids).distinct.pluck(:meal_id))
     bills = Bill.where(id: bill_ids).order(:id).preload(:meal, :resident).to_a
     marked = T.let([], T::Array[Bill])
     left_alone = T.let([], T::Array[LeftAlone])
     bills.each do |bill|
-      reason = reason_to_leave(bill, settled)
+      reason = reason_to_leave(bill, closed_to_changes)
       if reason
         left_alone << LeftAlone.new(bill: bill, reason: reason)
       else
@@ -64,17 +64,25 @@ class NoCostMarking
     Result.new(marked: marked, left_alone: left_alone, gone: bill_ids.size - bills.size)
   end
 
-  # Locks the meals and returns the ids of those already settled.
-  sig { params(meal_ids: T::Array[Integer]).returns(T::Set[Integer]) }
+  # Locks the meals and returns, for each one whose costs cannot change,
+  # why: it was settled, or cancelled (ADR 0011 rule 11).
+  sig { params(meal_ids: T::Array[Integer]).returns(T::Hash[Integer, String]) }
   def self.lock_meals(meal_ids)
-    rows = T.let(Meal.where(id: meal_ids).order(:id).lock.pluck(:id, :reconciliation_id),
-                 T::Array[[Integer, T.nilable(Integer)]])
-    rows.filter_map { |id, reconciliation_id| id if reconciliation_id }.to_set
+    rows = T.let(Meal.where(id: meal_ids).order(:id).lock.pluck(:id, :reconciliation_id, :cancelled_at),
+                 T::Array[[Integer, T.nilable(Integer), T.nilable(Time)]])
+    rows.each_with_object({}) do |(id, reconciliation_id, cancelled_at), reasons|
+      if reconciliation_id
+        reasons[id] = 'the dinner was settled'
+      elsif cancelled_at
+        reasons[id] = 'the dinner was cancelled'
+      end
+    end
   end
 
-  sig { params(bill: Bill, settled: T::Set[Integer]).returns(T.nilable(String)) }
-  def self.reason_to_leave(bill, settled)
-    return 'the dinner was settled' if settled.include?(T.must(bill.meal_id))
+  sig { params(bill: Bill, closed_to_changes: T::Hash[Integer, String]).returns(T.nilable(String)) }
+  def self.reason_to_leave(bill, closed_to_changes)
+    meal_reason = closed_to_changes[T.must(bill.meal_id)]
+    return meal_reason if meal_reason
     return 'it was marked No cost already' if bill.no_cost
 
     'the cook entered a cost' if T.must(bill.amount).positive?

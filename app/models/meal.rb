@@ -6,6 +6,7 @@
 # Table name: meals
 #
 #  id                :bigint           not null, primary key
+#  cancelled_at      :datetime
 #  cap               :decimal(12, 8)
 #  closed            :boolean          default(FALSE), not null
 #  closed_at         :datetime
@@ -38,18 +39,24 @@ class Meal < ApplicationRecord
   # Ransack allowlists for ActiveAdmin filtering and sorting
   sig { params(_auth_object: T.untyped).returns(T::Array[String]) }
   def self.ransackable_attributes(_auth_object = nil)
-    %w[id cap closed closed_at created_at date description max reconciliation_id rotation_id updated_at]
+    %w[id cancelled_at cap closed closed_at created_at date description max reconciliation_id rotation_id updated_at]
   end
 
   # Attributes frozen once the meal is reconciled. Bills and attendance rows
   # carry their own reconciled guards; this protects the meal row itself.
   # cap feeds max_cost, so editing it would rewrite settled charges; date
   # fixes which settlement period the meal belongs to; reconciliation_id is
-  # the pointer to the settlement itself (no re-pointing, no un-reconciling).
+  # the pointer to the settlement itself (no re-pointing, no un-reconciling);
+  # cancelled_at decides whether the settled lines charge anyone.
   # community_id is deliberately absent: Community is a DB-enforced singleton
   # (unique singleton_guard), so there is no other community to move to and
   # belongs_to already rejects nonexistent ids before before_save runs.
-  FROZEN_WHEN_RECONCILED = T.let(%w[cap date reconciliation_id].freeze, T::Array[String])
+  FROZEN_WHEN_RECONCILED = T.let(%w[cancelled_at cap date reconciliation_id].freeze, T::Array[String])
+
+  # What may change on a cancelled dinner: its description, and
+  # cancelled_at itself, which a restore clears (ADR 0011 rule 11).
+  # Everything else waits until it is restored.
+  CHANGEABLE_WHEN_CANCELLED = T.let(%w[cancelled_at description updated_at].freeze, T::Array[String])
 
   audited
   has_associated_audits
@@ -77,18 +84,26 @@ class Meal < ApplicationRecord
   # would hold the meal back anyway. So a meal with nobody to charge whose
   # cook slots are all $0 or no-cost settles with no effect.
   #
+  # A cancelled dinner is swept whatever its bills and sign-ups (ADR 0011
+  # rule 11): it charges nobody, so it is never held back and never
+  # waits, and it may have no cook at all. A cook cannot have money on it
+  # (comeals_protect_settled_meal refuses cancelling one that does).
+  #
   # Meals on today's date are never swept, whatever the cutoff — their
   # receipts and attendance are not final (issue #3). A settlement's own
   # cutoff is at least 14 days back (Reconciliation::DAYS_TO_WAIT); this
   # scope does not check that, because the dashboard averages read it with
   # yesterday as the cutoff.
   scope :settleable_by, lambda { |cutoff, today: Community.instance.today|
-    unreconciled.joins(:bills).where(date: ..cutoff).where(date: ...today)
-                .where(someone_to_charge.or(a_receipt_with_money.not))
-                .where(someone_to_charge.not.or(a_cost_not_entered.not)).distinct
+    ready = a_bill.and(someone_to_charge.or(a_receipt_with_money.not))
+                  .and(someone_to_charge.not.or(a_cost_not_entered.not))
+    unreconciled.where(date: ..cutoff).where(date: ...today).where(marked_cancelled.or(ready))
   }
   scope :open, -> { where(closed: false) }
   scope :closed_with_bills, -> { where(closed: true).joins(:bills).distinct }
+  # Cancelled dinners (ADR 0011 rule 11), and the ones that were not.
+  scope :cancelled, -> { where.not(cancelled_at: nil) }
+  scope :not_cancelled, -> { where(cancelled_at: nil) }
 
   # Meals where at least one person ate (meal_resident or guest).
   # A bill on a meal with no attendees has zero financial impact —
@@ -101,13 +116,14 @@ class Meal < ApplicationRecord
   # preview lists these (ReconciliationWarnings, bill_with_no_attendees and
   # bill_with_only_free_eaters) so the reconciler can add someone who pays
   # or remove the bill before settling.
-  scope :receipt_and_nobody_to_charge, -> { where(someone_to_charge.not).where(a_receipt_with_money) }
+  scope :receipt_and_nobody_to_charge, -> { not_cancelled.where(someone_to_charge.not).where(a_receipt_with_money) }
 
   # Held back from a settlement until every cook has entered a cost or
   # marked No cost: someone is charged, and a cook's cost is blank (ADR
   # 0011 rule 3). The preview lists these (ReconciliationWarnings,
   # cost_not_entered). Never the same meal as receipt_and_nobody_to_charge.
-  scope :waiting_for_a_cost, -> { where(someone_to_charge).where(a_cost_not_entered) }
+  # A cancelled dinner never waits: it charges nobody.
+  scope :waiting_for_a_cost, -> { not_cancelled.where(someone_to_charge).where(a_cost_not_entered) }
 
   # EXISTS, not JOIN, so a SUM over meals is not multiplied by the rows.
   # Public because a scope's lambda runs on the relation, which cannot
@@ -131,6 +147,18 @@ class Meal < ApplicationRecord
     g = Guest.arel_table
     MealResident.where(mr[:meal_id].eq(arel_table[:id])).where(mr[:multiplier].gt(0)).arel.exists
                 .or(Guest.where(g[:meal_id].eq(arel_table[:id])).arel.exists)
+  end
+
+  # At least one cook slot, whatever its cost.
+  sig { returns(Arel::Nodes::Node) }
+  def self.a_bill
+    bills = Bill.arel_table
+    Bill.where(bills[:meal_id].eq(arel_table[:id])).arel.exists
+  end
+
+  sig { returns(Arel::Nodes::Node) }
+  def self.marked_cancelled
+    arel_table[:cancelled_at].not_eq(nil)
   end
 
   sig { returns(Arel::Nodes::Node) }
@@ -194,6 +222,15 @@ class Meal < ApplicationRecord
 
   validates :date, uniqueness: true
 
+  # A cancelled dinner (ADR 0011 rule 11) charges nobody, so a cook's
+  # money on it would be credited $0: a dinner with money on a cost cannot
+  # be cancelled. While it is cancelled, only its description changes;
+  # its sign-ups, guests and costs have their own freeze
+  # (CancelledDinnerFreeze). The trigger comeals_protect_settled_meal
+  # holds the money rule for a write that skips the model.
+  validate :refuse_cancelling_with_money, if: :cancelling?
+  validate :refuse_changes_while_cancelled
+
   # Set by the admin New Meal form and the meal edit form (app/admin/meal.rb),
   # and by nothing else. Never saved, and not a form field.
   sig { returns(T.nilable(T::Boolean)) }
@@ -226,9 +263,11 @@ class Meal < ApplicationRecord
   # that partial delete rolls back, but inside an enclosing transaction
   # (console, rake task, test transaction) the swallowed inner rollback
   # never reaches the outer transaction and the bills stay deleted.
-  # Reconciled is declared second so it runs first — its message wins for
-  # meals that are both reconciled and closed.
+  # Reconciled is declared last so it runs first — its message wins for
+  # meals that are both reconciled and closed — and cancelled runs before
+  # closed for the same reason.
   before_destroy :reject_destroy_if_closed, prepend: true
+  before_destroy :reject_destroy_if_cancelled, prepend: true
   before_destroy :reject_destroy_if_reconciled, prepend: true
   # Every write, from any path, tells the clients (LiveUpdate). Bills,
   # attendance and guests note themselves; `touch: true` on their
@@ -419,6 +458,62 @@ class Meal < ApplicationRecord
     reconciliation_id.present?
   end
 
+  sig { returns(T::Boolean) }
+  def cancelled?
+    !cancelled_at.nil?
+  end
+
+  # Cancel this dinner (ADR 0011 rule 11). Its sign-ups and guests stay,
+  # and nobody is charged for it. Nothing happens to a dinner that is
+  # cancelled already, so a second tap or a retry keeps the first time.
+  sig { void }
+  def cancel!
+    update!(cancelled_at: Time.current) unless cancelled?
+  end
+
+  # Bring a cancelled dinner back as it was. Nothing happens to one that
+  # is not cancelled. A settled dinner refuses both (FROZEN_WHEN_RECONCILED).
+  sig { void }
+  def restore!
+    update!(cancelled_at: nil) if cancelled?
+  end
+
+  sig { returns(T::Boolean) }
+  def cancelling?
+    will_save_change_to_cancelled_at? && cancelled_at_in_database.nil? && !cancelled_at.nil?
+  end
+
+  # Read from the bills table, not the loaded bills: a cook may have
+  # entered a cost since this meal was loaded, and the meal lock every
+  # bill write takes first (LocksItsMealFirst) makes this read the one
+  # that counts.
+  sig { void }
+  def refuse_cancelling_with_money
+    return unless Bill.where(meal_id: id, no_cost: false).where(Bill.arel_table[:amount].gt(0)).exists?
+
+    errors.add(:base, "A cook spent money on this dinner, so it can't be cancelled.")
+  end
+
+  sig { void }
+  def refuse_changes_while_cancelled
+    return if cancelled_at_in_database.nil? || cancelled_at.nil?
+    return if (changes_to_save.keys - CHANGEABLE_WHEN_CANCELLED).empty?
+
+    errors.add(:base, CancelledDinnerFreeze::MESSAGE)
+  end
+
+  # Its sign-ups and guests are frozen while it is cancelled, so the
+  # destroy cascade would stop at the first one. Refuse up front instead.
+  # A cancelled dinner is the record that it was planned and called off;
+  # to delete it, restore it first.
+  sig { void }
+  def reject_destroy_if_cancelled
+    return unless cancelled?
+
+    errors.add(:base, 'This dinner is cancelled. Restore it before deleting it.')
+    throw(:abort)
+  end
+
   # Guards the meal row itself once settled. Checks the DATABASE value of
   # reconciliation_id, not the in-memory one, so reconciling an unreconciled
   # meal (nil -> id) stays legal at the model layer.
@@ -464,7 +559,7 @@ class Meal < ApplicationRecord
   # HELPERS
   sig { returns(T::Boolean) }
   def another_meal_in_this_rotation_has_less_than_two_cooks?
-    Meal.where(rotation_id: rotation_id).where.not(id: id)
+    Meal.not_cancelled.where(rotation_id: rotation_id).where.not(id: id)
         .left_joins(:bills)
         .group(:id)
         .having('COUNT(bills.id) < 2')

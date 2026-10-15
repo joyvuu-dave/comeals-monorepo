@@ -29,7 +29,7 @@ class ReconciliationWarnings
   include ActionView::Helpers::NumberHelper
 
   KINDS = %w[bill_with_no_attendees bill_with_only_free_eaters attendance_without_bill cost_not_entered
-             zero_bill_not_flagged].freeze
+             zero_bill_not_flagged dinner_cancelled].freeze
 
   def self.for(meals, skipped: [], held: [], waiting: [])
     new(meals, skipped: skipped, held: held, waiting: waiting).call
@@ -82,7 +82,13 @@ class ReconciliationWarnings
   # claimed; it is held, and warned about above. A meal with someone to
   # charge and a blank cost is not claimed either; it waits, and is warned
   # about above.
+  #
+  # A cancelled dinner the settlement claims gets one note instead, that
+  # it was cancelled: it charges nobody whatever its costs say (ADR 0011
+  # rule 11), so a blank cost on it means nothing.
   def warnings_for(meal)
+    return [dinner_cancelled(meal)] if meal.cancelled?
+
     blank_bills(meal).map { |bill| zero_bill_not_flagged(meal, bill) }
   end
 
@@ -129,6 +135,16 @@ class ReconciliationWarnings
             title: 'Cost not entered',
             body: "#{bill.resident.name} has not entered a cost for #{meal.date.iso8601}. This meal will not be " \
                   'settled until they enter a cost or mark No cost.')
+  end
+
+  # The settlement takes in a cancelled dinner and charges nobody for it.
+  def dinner_cancelled(meal)
+    people = meal.meal_residents.size + meal.guests.size
+    warning('dinner_cancelled', meal, nil,
+            severity: 'info',
+            title: 'Dinner cancelled',
+            body: "The dinner on #{meal.date.iso8601} was cancelled. #{people} #{'person'.pluralize(people)} " \
+                  'signed up, and nobody is charged for it.')
   end
 
   # A $0 bill is probably a no-cost meal that was not marked as one.

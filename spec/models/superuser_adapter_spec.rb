@@ -145,6 +145,16 @@ RSpec.describe SuperuserAdapter do
       expect(adapter_for(superuser).authorized?(:let_go, SettlementLineMark)).to be true
     end
 
+    # ADR 0011 rule 11 and ADR 0004's exception: cancelling and restoring
+    # a dinner move no money, so any admin may, on a meal and nothing else.
+    it 'may cancel and restore a dinner, though not write a Meal otherwise' do
+      %i[cancel restore].each do |action|
+        expect(adapter_for(admin).authorized?(action, Meal)).to be true
+        expect(adapter_for(admin).authorized?(action, Bill)).to be false
+      end
+      expect(adapter_for(admin).authorized?(:update, Meal)).to be false
+    end
+
     it 'is refused a write it cannot identify, rather than allowed by default' do
       expect(adapter_for(admin).authorized?(:update, nil)).to be false
       expect(adapter_for(admin).authorized?(:update, Object.new)).to be false
@@ -173,6 +183,7 @@ RSpec.describe SuperuserAdapter do
     # mailed link into a write-capable one.
     it 'writes nothing even when the account behind the token is a superuser' do
       expect_writes(superuser, [Bill, Event, SettlementLineMark], allowed: false)
+      expect(adapter_for(superuser).authorized?(:cancel, Meal)).to be false
       expect(adapter_for(superuser).authorized?(:let_go, SettlementLineMark)).to be false
     end
 

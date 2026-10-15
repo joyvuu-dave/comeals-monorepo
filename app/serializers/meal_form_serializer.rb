@@ -99,6 +99,7 @@ class MealFormSerializer
              :closed_at,
              :date,
              :reconciled,
+             :cancelled,
              :next_id,
              :prev_id
 
@@ -113,6 +114,12 @@ class MealFormSerializer
 
   def reconciled(meal)
     meal.reconciliation_id.present?
+  end
+
+  # ADR 0011 rule 11. The page freezes the sign-ups, guests and costs of
+  # a cancelled dinner, and offers Restore until it is settled.
+  def cancelled(meal)
+    meal.cancelled?
   end
 
   def next_id(meal)

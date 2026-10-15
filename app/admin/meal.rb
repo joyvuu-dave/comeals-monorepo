@@ -50,14 +50,47 @@ ActiveAdmin.register Meal do
       return redirect_to(admin_meal_path(resource),
                          alert: 'This dinner is not settled yet, so it is changed directly, not corrected.')
     end
+    if resource.cancelled?
+      return redirect_to(admin_meal_path(resource),
+                         alert: 'This dinner was cancelled, so it charged nobody and has nothing to correct.')
+    end
 
     @page_title = "Correct the #{resource.date.iso8601} Dinner"
     @values = correction_values
     correct_from_form if request.post?
   end
 
-  action_item :correct, only: :show, if: -> { resource.reconciled? && authorized?(:create, MealCorrection) } do
+  action_item :correct, only: :show, if: lambda {
+    resource.reconciled? && !resource.cancelled? && authorized?(:create, MealCorrection)
+  } do
     link_to 'Correct this dinner', correct_admin_meal_path(resource)
+  end
+
+  # Cancel a dinner, or restore one (ADR 0011 rule 11). Any admin may,
+  # because neither moves money: a dinner a cook spent money on cannot be
+  # cancelled, and a cancelled one charges nobody (SuperuserAdapter,
+  # DINNER_ACTIONS). Each button asks first, and the meal page has the
+  # same two.
+  member_action :cancel, method: :post do
+    authorize! :cancel, resource
+    change_cancelled(cancel: true)
+  end
+
+  member_action :restore, method: :post do
+    authorize! :restore, resource
+    change_cancelled(cancel: false)
+  end
+
+  action_item :cancel, only: :show, if: lambda {
+    !resource.reconciled? && !resource.cancelled? && authorized?(:cancel, resource)
+  } do
+    link_to 'Cancel', cancel_admin_meal_path(resource), method: :post, data: { confirm: 'Cancel this dinner?' }
+  end
+
+  action_item :restore, only: :show, if: lambda {
+    !resource.reconciled? && resource.cancelled? && authorized?(:restore, resource)
+  } do
+    link_to 'Restore', restore_admin_meal_path(resource), method: :post, data: { confirm: 'Restore this dinner?' }
   end
 
   controller do
@@ -96,6 +129,18 @@ ActiveAdmin.register Meal do
     end
 
     private
+
+    # Under the meal's row lock, like every write to a meal's rows
+    # (LocksItsMealFirst): a cost saved at the same moment either commits
+    # first, and the cancel sees its money, or waits and is then refused.
+    # with_lock reads the meal again, so a dinner settled or cancelled
+    # since the page was drawn answers with its own sentence.
+    def change_cancelled(cancel:)
+      resource.with_lock { cancel ? resource.cancel! : resource.restore! }
+      redirect_to admin_meal_path(resource), notice: cancel ? 'Dinner cancelled.' : 'Dinner restored.'
+    rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotSaved => e
+      redirect_to admin_meal_path(resource), alert: e.record.errors.full_messages.to_sentence
+    end
 
     # What the correction form sent, as plain data: each row by its id.
     def correction_values
@@ -176,6 +221,7 @@ ActiveAdmin.register Meal do
       meal_cost_cell(meal, :unit_cost)
     end
     column 'Number of Bills', :bills_count
+    column :cancelled?, sortable: false
     column :reconciled?, sortable: false
 
     actions
@@ -185,6 +231,7 @@ ActiveAdmin.register Meal do
   show do
     attributes_table do
       row :date
+      row('Cancelled') { meal.cancelled_at.strftime('%b %-d, %Y %-l:%M %p') } if meal.cancelled?
       row :closed
       row :max
       row :subsidized? do |meal|

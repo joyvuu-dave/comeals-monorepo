@@ -21,6 +21,7 @@
   "GuestRoomReservationForm": ["date", "id", "resident_id"],
   "MealForm": [
     "bills",
+    "cancelled",
     "closed",
     "closed_at",
     "date",

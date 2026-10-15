@@ -82,6 +82,7 @@ const manifests: Record<string, string[]> = {
     closed_at: true,
     date: true,
     reconciled: true,
+    cancelled: true,
     next_id: true,
     prev_id: true,
     bills: true,
