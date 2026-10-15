@@ -81,15 +81,19 @@ describe("MealsEdit", () => {
     renderPage(store);
 
     // DateBox's mount fetches meal 42; the fixture then populates
-    // every box on the page. The long timeout covers a cold first run,
-    // where importing the whole store graph eats most of the default
-    // second.
+    // every box on the page. The wait is for Jane's row, which only the
+    // meal's data draws: the date box says OPEN while the meal still
+    // loads, so a wait for OPEN could end before the data (#167). The
+    // long timeout covers a cold first run, where importing the whole
+    // store graph eats most of the default second.
     expect(
-      await screen.findByText("OPEN", {}, { timeout: 5000 }),
+      await screen.findByRole(
+        "cell",
+        { name: "A - Jane Smith" },
+        { timeout: 5000 },
+      ),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("cell", { name: "A - Jane Smith" }),
-    ).toBeInTheDocument();
+    expect(screen.getByText("OPEN")).toBeInTheDocument();
     expect(screen.getByLabelText("Enter meal description")).toHaveDisplayValue(
       "Pasta night with garlic bread",
     );
