@@ -76,6 +76,17 @@ panel "Dinners that will wait (#{waits.pluck(:meal_id).uniq.size})" do
                 class: 'button'
       end
     end
+    # Only a superuser sees this page, and only a superuser may use this
+    # button, so it needs no check of its own (ADR 0011 rule 11).
+    if preview.skipped_meals.any?
+      para 'If a dinner with no cook did not happen, mark it cancelled. Its sign-ups stay, nobody is charged ' \
+           'for it, and it can settle.'
+      para do
+        link_to cancel_dinners_button_label(preview.skipped_meals.size),
+                mark_cancelled_admin_reconciliations_path(reconciliation: { end_date: cutoff.iso8601 }),
+                class: 'button'
+      end
+    end
   end
 end
 

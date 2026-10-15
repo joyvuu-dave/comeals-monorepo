@@ -2,8 +2,9 @@
 
 require 'rails_helper'
 
-# The words on the admin settlement preview's "Mark these blank costs as
-# No cost" button and its answer (ADR 0011 rule 4).
+# The words on the admin settlement preview's two buttons and their
+# answers: "Mark these blank costs as No cost" (ADR 0011 rule 4) and
+# "Mark these dinners as cancelled" (rule 11).
 RSpec.describe SettlementPreviewHelper do
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
@@ -59,6 +60,37 @@ RSpec.describe SettlementPreviewHelper do
 
     it 'says it marked none when every cost changed' do
       expect(helper.no_cost_marking_words(result)).to eq('Marked 0 costs as No cost.')
+    end
+  end
+
+  describe '#cancel_dinners_button_label' do
+    it 'says "this" for one dinner and the number for more' do
+      expect([1, 2, 7].map { |count| helper.cancel_dinners_button_label(count) })
+        .to eq(['Mark this dinner as cancelled', 'Mark these 2 dinners as cancelled',
+                'Mark these 7 dinners as cancelled'])
+    end
+  end
+
+  describe '#dinner_cancelling_words' do
+    def result(cancelled: [], left_alone: [], gone: 0)
+      DinnerCancelling::Result.new(cancelled: cancelled, left_alone: left_alone, gone: gone)
+    end
+
+    it 'says how many it cancelled, which it left alone and why, and how many were deleted' do
+      left = DinnerCancelling::LeftAlone.new(meal: meal, reason: 'a cook signed up for it')
+
+      expect(helper.dinner_cancelling_words(result(cancelled: [build(:meal)], left_alone: [left], gone: 1)))
+        .to eq('Marked 1 dinner as cancelled. Left alone: 2026-03-05, because a cook signed up for it. ' \
+               '1 dinner on the list was deleted after the list was shown.')
+    end
+
+    it 'counts more than one in the plural' do
+      expect(helper.dinner_cancelling_words(result(cancelled: [build(:meal), build(:meal)], gone: 2)))
+        .to eq('Marked 2 dinners as cancelled. 2 dinners on the list were deleted after the list was shown.')
+    end
+
+    it 'says it cancelled none when every dinner changed' do
+      expect(helper.dinner_cancelling_words(result)).to eq('Marked 0 dinners as cancelled.')
     end
   end
 end

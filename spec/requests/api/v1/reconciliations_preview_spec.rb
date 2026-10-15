@@ -230,7 +230,7 @@ RSpec.describe 'GET /api/v1/reconciliations/preview' do
         meal_id: unbilled.id,
         title: 'Attendance without bill',
         body: "2 people signed up to eat on #{unbilled.date.iso8601}, but no bill was submitted. " \
-              'This meal will not be settled until a cook enters a bill.'
+              'This meal will not be settled until a cook enters a bill, or it is cancelled.'
       }
       expect(body[:warnings].map(&:deep_symbolize_keys)).to eq([expected])
     end

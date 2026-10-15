@@ -196,6 +196,9 @@ module GeneratedUrlHelpersModule
   def letter_opener_web_url(*args); end
 
   sig { params(args: T.untyped).returns(String) }
+  def mark_cancelled_admin_reconciliations_url(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
   def mark_no_cost_admin_reconciliations_url(*args); end
 
   sig { params(args: T.untyped).returns(String) }

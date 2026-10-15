@@ -1,7 +1,7 @@
 # ADR 0011: How settlements work from now on
 
 - **Status:** Accepted. Rules 1 to 10 are built. Rule 11 is built except the
-  settlement preview's button.
+  deploy migration that marks the 27 old dinners.
 - **Date:** 2026-10-12
 - **Issue:** #165 (the common house email)
 
@@ -225,7 +225,7 @@ an Open / Close button.
 
 The settlement preview gets a button for past dinners people signed up
 for and nobody cooked: "Mark these N dinners as cancelled". It lists
-them, asks yes or no, and marks only the ones that still have no cost
+them, asks yes or no, and marks only the ones that still have no cook
 at the moment of the yes. It needs a superuser, like settling. A deploy
 migration marks the 27 such dinners from before October 2026.
 

@@ -53,6 +53,7 @@ storable_date?
 # (app/views/admin/reconciliations/*.html.arb), and debride reads only
 # .rb and .rake files:
 blank_cost_button_label
+cancel_dinners_button_label
 free_dinner_note
 # Called only from the common house email's templates
 # (app/views/reconciliation_mailer/common_house_collection_email.*.erb):

@@ -141,7 +141,7 @@ RSpec.describe ReconciliationWarnings do
                              severity: 'warning',
                              meal_id: meal.id, title: 'Attendance without bill',
                              body: '2 people signed up to eat on 2026-04-10, but no bill was submitted. ' \
-                                   'This meal will not be settled until a cook enters a bill.'
+                                   'This meal will not be settled until a cook enters a bill, or it is cancelled.'
                            }])
   end
 

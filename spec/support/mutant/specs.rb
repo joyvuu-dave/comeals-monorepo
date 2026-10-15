@@ -63,6 +63,8 @@ MUTANT_SPEC_ROWS = {
   'spec/db/settlement_race_spec.rb' => %w[Settlement],
   # The only spec where a cook's cost is written while the marking runs.
   'spec/db/no_cost_marking_race_spec.rb' => %w[NoCostMarking],
+  # The only spec where a cook signs up while the cancelling runs.
+  'spec/db/dinner_cancelling_race_spec.rb' => %w[DinnerCancelling],
   # The only spec where a correction is claimed against a rival: a
   # correction saved during a settlement, and a second settlement.
   'spec/db/correction_claim_race_spec.rb' => %w[Settlement],
@@ -214,6 +216,9 @@ MUTANT_SPEC_ROWS = {
   # The admin settlement preview and its blank-cost button (ADR 0011
   # rule 4): the words, the warnings it lists, and the marking.
   'spec/requests/admin/settlement_preview_spec.rb' => %w[SettlementPreviewHelper ReconciliationWarnings NoCostMarking],
+  # Its button for dinners nobody cooked (ADR 0011 rule 11): the words,
+  # and the cancelling.
+  'spec/requests/admin/settlement_cancel_dinners_spec.rb' => %w[SettlementPreviewHelper DinnerCancelling],
   # Cancelling a dinner (ADR 0011 rule 11): the API, the admin buttons,
   # the model rules and the settlement of a cancelled dinner.
   'spec/requests/api/v1/meal_cancel_spec.rb' =>

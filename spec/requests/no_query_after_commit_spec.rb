@@ -469,6 +469,19 @@ RSpec.describe 'what a write runs after its commit' do
     -> { post '/reconciliations/mark_no_cost', params: params }
   end
 
+  # The notice names each dinner left alone by its date, from the meals
+  # the cancelling locked inside its transaction (DinnerCancelling).
+  admin_write 'POST /reconciliations/mark_cancelled' do
+    nobody_cooked = create(:meal, community: community, date: latest - 1)
+    cooked = create(:meal, community: community, date: latest)
+    [nobody_cooked, cooked].each do |dinner|
+      create(:meal_resident, meal: dinner, resident: resident, community: community)
+    end
+    create(:bill, meal: cooked, resident: cook, community: community, amount: BigDecimal('0'))
+    params = { reconciliation: { end_date: latest.iso8601 }, meal_ids: [nobody_cooked.id, cooked.id] }
+    -> { post '/reconciliations/mark_cancelled', params: params }
+  end
+
   # A mark on a settlement line (ADR 0011 rule 8); the notice names the
   # person from the line read inside the marking's transaction.
   admin_write 'POST /settlement_line_marks' do

@@ -57,6 +57,12 @@ Prosopite.allow_stack_paths = [
   # (the meal before and the meal after) so their pages can be refreshed.
   # Four lookups, once per move.
   /meal\.rb:\d+:in 'Meal#neighbour_ids'/,
+  # Cancelling a dinner reads whether a cook spent money on it from the
+  # bills table, not the loaded bills, because a cost may have been
+  # entered since the meal was loaded. One read per cancel; the
+  # settlement preview's button cancels a few dinners, once
+  # (DinnerCancelling).
+  /meal\.rb:\d+:in 'Meal#refuse_cancelling_with_money'/,
   # A correction to a settled dinner makes each edit on its own row,
   # through the model, so the model's rules and the audit history run for
   # that row (MealCorrecting::Edits): a correction that changes two cooks'

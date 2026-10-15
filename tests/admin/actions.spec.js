@@ -62,8 +62,8 @@ test.describe("Meals", () => {
 
   // The New Meal form's rotation menu (#100). The seed has two
   // rotations: rotation 2 ("Rotation 1") with meals on 2026-01-02,
-  // 2026-01-05 and 2026-01-06, and rotation 1 ("Rotation 2") with meals
-  // on 2027-02-02 and 2027-02-04. The script in active_admin.js chooses the rotation
+  // 2026-01-04, 2026-01-05 and 2026-01-06, and rotation 1 ("Rotation 2")
+  // with meals on 2027-02-02 and 2027-02-04. The script in active_admin.js chooses the rotation
   // whose dates contain the date typed.
   test("picks the rotation by date and creates a meal", async ({ page }) => {
     await login(page);
@@ -256,9 +256,10 @@ test.describe("Settlement", () => {
   test("settles a period from the preview", async ({ page }) => {
     await login(page);
     await page.goto("/reconciliations/new");
-    // Meal 4 (2026-01-05, closed, one $20 bill) is the only unsettled meal
-    // on or before this cutoff. Meal 5, the next day, waits for a cost,
-    // and the next test marks it.
+    // Meal 4 (2026-01-05, closed, one $20 bill) is the only meal on or
+    // before this cutoff that can settle. Meal 6 (2026-01-04) has no
+    // cook, and meal 5, the next day, waits for a cost; the next two
+    // tests deal with them.
     await page.fill("#reconciliation_end_date", "2026-01-05");
     await page.click('input[type="submit"]');
 
@@ -318,7 +319,7 @@ test.describe("Settlement", () => {
     await page.goto(
       "/reconciliations/preview?reconciliation%5Bend_date%5D=2026-01-06",
     );
-    await expect(panel(page, "Dinners that will wait (1)")).toContainText(
+    await expect(panel(page, "Dinners that will wait (2)")).toContainText(
       "Alice Cook has not entered a cost for 2026-01-06.",
     );
     await page
@@ -336,12 +337,56 @@ test.describe("Settlement", () => {
     await page.getByRole("button", { name: "Yes, mark it No cost" }).click();
 
     // Back on the preview: the dinner no longer waits, and it settles.
+    // Meal 6 still waits for a cook.
     await expect(page).toHaveURL(/\/reconciliations\/preview\?/);
     await expect(notice(page)).toHaveText("Marked 1 cost as No cost.");
-    await expect(panel(page, "Dinners that will wait (0)")).toBeVisible();
+    await expect(panel(page, "Dinners that will wait (1)")).not.toContainText(
+      "2026-01-06",
+    );
     await expect(
       panel(page, /^Dinners that will settle \(\d\)$/),
     ).toContainText("2026-01-06");
+  });
+
+  // Carol signed up for meal 6 and no cook did. If the dinner did not
+  // happen, the preview's button marks it cancelled, and it settles with
+  // nobody charged (ADR 0011 rule 11).
+  test("marks a dinner nobody cooked as cancelled from the preview", async ({
+    page,
+  }) => {
+    await login(page);
+    await page.goto(
+      "/reconciliations/preview?reconciliation%5Bend_date%5D=2026-01-06",
+    );
+    await expect(panel(page, "Dinners that will wait (1)")).toContainText(
+      "1 person signed up to eat on 2026-01-04, but no bill was submitted.",
+    );
+    await page
+      .getByRole("link", { name: "Mark this dinner as cancelled" })
+      .click();
+
+    // The list, and a yes or no.
+    await expect(page.locator("#page_title")).toHaveText(
+      "Mark Dinners as Cancelled",
+    );
+    await expect(page.locator("tbody tr")).toHaveCount(1);
+    await expect(
+      row(page.locator("#main_content"), "2026-01-04").locator("td").last(),
+    ).toHaveText("1");
+    await page
+      .getByRole("button", { name: "Yes, mark it as cancelled" })
+      .click();
+
+    // Back on the preview: nothing waits, and the dinner settles.
+    await expect(page).toHaveURL(/\/reconciliations\/preview\?/);
+    await expect(notice(page)).toHaveText("Marked 1 dinner as cancelled.");
+    await expect(panel(page, "Dinners that will wait (0)")).toBeVisible();
+    await expect(
+      panel(page, /^Dinners that will settle \(\d\)$/),
+    ).toContainText("2026-01-04");
+    await expect(panel(page, "Notes")).toContainText(
+      "The dinner on 2026-01-04 was cancelled.",
+    );
   });
 
   test("refuses a cutoff less than 14 days before today", async ({ page }) => {
@@ -362,14 +407,14 @@ test.describe("Settlement", () => {
   test("offers no Create button when nothing can settle", async ({ page }) => {
     await login(page);
     await page.goto("/reconciliations/new");
-    // Meal 3 (2026-01-02) is already settled; the next meal with a bill
-    // is on the 5th.
-    await page.fill("#reconciliation_end_date", "2026-01-04");
+    // Meal 3 (2026-01-02) is already settled; the next meal is on the
+    // 4th.
+    await page.fill("#reconciliation_end_date", "2026-01-03");
     await page.click('input[type="submit"]');
 
     await expect(page).toHaveURL(/\/reconciliations\/preview\?/);
     await expect(panel(page, "Dinners that will settle (0)")).toContainText(
-      "No dinner on or before 2026-01-04 can be settled now.",
+      "No dinner on or before 2026-01-03 can be settled now.",
     );
     await expect(
       page.getByRole("button", { name: "Create Reconciliation" }),

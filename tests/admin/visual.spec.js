@@ -57,7 +57,8 @@ const SIGNED_IN_PAGES = [
   ["reconciliations-index", "/reconciliations"],
   ["reconciliations-show", "/reconciliations/1"],
   ["reconciliations-new", "/reconciliations/new"],
-  // Meal 4 settles at this cutoff and meal 5 waits for Alice's cost.
+  // Meal 4 settles at this cutoff, meal 5 waits for Alice's cost, and
+  // meal 6 waits for a cook.
   [
     "reconciliations-preview",
     "/reconciliations/preview?reconciliation%5Bend_date%5D=2026-01-06",
@@ -65,6 +66,11 @@ const SIGNED_IN_PAGES = [
   [
     "reconciliations-mark_no_cost",
     "/reconciliations/mark_no_cost?reconciliation%5Bend_date%5D=2026-01-06",
+  ],
+  // Meal 6 (2026-01-04): Carol signed up, and no cook did.
+  [
+    "reconciliations-mark_cancelled",
+    "/reconciliations/mark_cancelled?reconciliation%5Bend_date%5D=2026-01-06",
   ],
   ["residents-index", "/residents"],
   ["residents-show", "/residents/1"],

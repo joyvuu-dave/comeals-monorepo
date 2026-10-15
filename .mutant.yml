@@ -47,6 +47,7 @@ matcher:
     - CollectionList*
     - CorrectionWords*
     - DateRangeDescription*
+    - DinnerCancelling*
     - GuestAdd*
     - Healthcheck*
     - IdempotencyKeyHeader*

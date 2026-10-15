@@ -1,0 +1,39 @@
+# frozen_string_literal: true
+
+# The yes or no for "Mark these dinners as cancelled" on the settlement
+# preview (ADR 0011 rule 11). The yes sends the dinners listed here, and
+# DinnerCancelling cancels only those that still have no cook by then.
+cutoff = assigns.fetch(:cutoff)
+skipped = assigns.fetch(:skipped)
+back = preview_admin_reconciliations_path(reconciliation: { end_date: cutoff.iso8601 })
+
+para 'People signed up for these dinners, and no cook signed up. A cancelled dinner keeps its sign-ups, ' \
+     'nobody is charged for it, and the next settlement includes it. Do this only for dinners that did not ' \
+     'happen.'
+
+panel "Dinners with no cook (#{skipped.size})" do
+  table_for skipped do
+    column('Date') { |meal| link_to meal.date.iso8601, admin_meal_path(meal) }
+    column('Signed up') { |meal| meal.meal_residents.size + meal.guests.size }
+  end
+end
+
+# One form, laid out like ActiveAdmin's own: the yes as its button and
+# the no as its cancel link.
+form action: mark_cancelled_admin_reconciliations_path, method: 'post' do
+  input type: 'hidden', name: 'authenticity_token', value: form_authenticity_token
+  input type: 'hidden', name: 'reconciliation[end_date]', value: cutoff.iso8601
+  skipped.each { |meal| input type: 'hidden', name: 'meal_ids[]', value: meal.id }
+  para "Mark #{skipped.size == 1 ? 'this dinner' : "these #{skipped.size} dinners"} as cancelled?"
+  fieldset class: 'actions' do
+    ol do
+      li class: 'action input_action' do
+        # Off after the first click, as on every form's submit button
+        # (data-disable-with, jquery_ujs).
+        yes = "Yes, mark #{skipped.size == 1 ? 'it' : 'them'} as cancelled"
+        input type: 'submit', value: yes, 'data-disable-with': yes
+      end
+      li(class: 'cancel') { a 'No, go back', href: back }
+    end
+  end
+end

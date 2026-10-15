@@ -123,7 +123,8 @@ class ReconciliationWarnings
             severity: 'warning',
             title: 'Attendance without bill',
             body: "#{attendees} #{'person'.pluralize(attendees)} signed up to eat on #{meal.date.iso8601}, " \
-                  'but no bill was submitted. This meal will not be settled until a cook enters a bill.')
+                  'but no bill was submitted. This meal will not be settled until a cook enters a bill, ' \
+                  'or it is cancelled.')
   end
 
   # A cook has not said what they spent, and someone is charged. The

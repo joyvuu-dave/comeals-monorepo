@@ -69,6 +69,30 @@ ActiveAdmin.register Reconciliation do
     redirect_to new_resource_path, alert: 'Pick a cutoff date first.'
   end
 
+  # The button under the dinners nobody cooked: "Mark these N dinners as
+  # cancelled" (ADR 0011 rule 11). The GET shows the list and asks yes
+  # or no; the yes posts the dinners it showed, and DinnerCancelling
+  # cancels only those that still have no cook
+  # (app/views/admin/reconciliations/mark_cancelled.html.arb). Any admin
+  # may cancel one dinner from its own page, but this button is part of
+  # settling, so it needs a superuser, like the preview it is on.
+  collection_action :mark_cancelled, method: %i[get post] do
+    authorize! :new, Reconciliation
+    cutoff = Date.iso8601(params.dig(:reconciliation, :end_date).to_s)
+    preview_path = preview_admin_reconciliations_path(reconciliation: { end_date: cutoff.iso8601 })
+    if request.post?
+      result = DinnerCancelling.call(meal_ids: Array(params[:meal_ids]).map { |id| Integer(id, 10) })
+      redirect_to preview_path, notice: helpers.dinner_cancelling_words(result)
+    else
+      @page_title = 'Mark Dinners as Cancelled'
+      @cutoff = cutoff
+      @skipped = Settlement.skipped_by(cutoff, today: Community.instance.today)
+      redirect_to preview_path, notice: 'No dinner that waits is missing a cook.' if @skipped.empty?
+    end
+  rescue Date::Error
+    redirect_to new_resource_path, alert: 'Pick a cutoff date first.'
+  end
+
   controller do
     # The preview's Create button settles a period, the same way the
     # nightly task and the API do: SettleAndNotify claims the meals,
