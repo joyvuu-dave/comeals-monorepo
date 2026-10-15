@@ -4245,6 +4245,7 @@ ALTER TABLE ONLY public.settlement_correction_charges
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261015120000'),
 ('20261014230000'),
 ('20261013120400'),
 ('20261013120300'),
