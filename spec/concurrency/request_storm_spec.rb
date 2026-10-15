@@ -37,6 +37,12 @@ require 'rails_helper'
 #     client sent some, rows were written under them, and a settlement
 #     won while they did.
 #
+# A run prints "WARNING:  there is no transaction in progress" many times
+# (about 60 at the defaults). Each is one COMMIT PostgreSQL refused for a
+# conflict: the refusal ends the transaction, and Rails sends a ROLLBACK
+# after it anyway. Nothing was saved, and the caller saw the conflict
+# (spec/db/commit_refused_spec.rb, #164).
+#
 # Knobs, for turning it up: STORM_SECONDS (15), STORM_CLIENTS (24),
 # STORM_SEED (1). Every client thread needs a connection, so the pool is
 # widened for this group; Postgres allows 100 by default.
