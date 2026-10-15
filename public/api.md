@@ -712,6 +712,11 @@ calendar app's subscribe-by-URL feature.
 | `GET`  | `/communities/:id/ical` | Every meal as a "Common Dinner" event.                                                                            |
 | `GET`  | `/residents/:id/ical`   | That resident's meals: "Cook Common Dinner" on days they cook, "Attend Common Dinner" on days they are signed up. |
 
+Each event keeps the same UID on every fetch, `meal-<meal id>-community@comeals.com`
+or `meal-<meal id>-resident-<resident id>@comeals.com`, so a calendar app
+keeps a reminder someone set on a dinner. A cancelled dinner stays in the
+feed with `STATUS:CANCELLED`, and its summary starts with "Cancelled:".
+
 ## Version
 
 ```

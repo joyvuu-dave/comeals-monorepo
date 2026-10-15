@@ -336,5 +336,23 @@ RSpec.describe 'Communities API' do
       expect(events.map { |event| [event.summary.to_s, event.status&.to_s] })
         .to eq([['Cancelled: Common Dinner', 'CANCELLED'], ['Common Dinner', nil]])
     end
+
+    # RFC 5545 tells events apart by UID. A new one on every fetch made a
+    # calendar app read each dinner as a new event and drop the reminders
+    # people had put on it (#166).
+    it 'gives each dinner the same UID on every fetch, one of its own' do
+      meals = [Date.new(2026, 5, 1), Date.new(2026, 5, 3)].map do |date|
+        create(:meal, community: community, date: date)
+      end
+      uids = lambda do
+        get "/api/v1/communities/#{community.id}/ical"
+        Icalendar::Calendar.parse(response.body).sole.events.sort_by(&:dtstart).map { |event| event.uid.to_s }
+      end
+
+      first = uids.call
+
+      expect(first).to eq(meals.map { |meal| "meal-#{meal.id}-community@comeals.com" })
+      expect(uids.call).to eq(first)
+    end
   end
 end

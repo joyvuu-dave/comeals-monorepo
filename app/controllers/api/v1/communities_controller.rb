@@ -9,7 +9,7 @@ module Api
       # GET /api/v1/communities/:id/ical
       def ical
         community = Community.instance
-        feed = MealIcalFeed.new(community, calendar_name: community.name)
+        feed = MealIcalFeed.new(community, calendar_name: community.name, feed: 'community')
 
         community.meals.find_each do |meal|
           feed.add_meal(meal,

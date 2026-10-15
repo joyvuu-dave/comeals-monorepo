@@ -8,9 +8,12 @@
 class MealIcalFeed
   DINNER_HOURS = 2
 
-  def initialize(community, calendar_name:)
+  # `feed` names this feed in each event's UID: "community", or
+  # "resident-<id>" for a person's own feed.
+  def initialize(community, calendar_name:, feed:)
     require 'icalendar/tzinfo'
     @community = community
+    @feed = feed
     @tzid = community.timezone
     @calendar = Icalendar::Calendar.new
     @calendar.add_timezone TZInfo::Timezone.get(@tzid).ical_timezone(DateTime.new(2017, 6, 1, 8, 0, 0))
@@ -23,6 +26,7 @@ class MealIcalFeed
   # the status.
   def add_meal(meal, summary:, description:)
     event = Icalendar::Event.new
+    event.uid = uid(meal)
     event.dtstart = Icalendar::Values::DateTime.new(dinner_start(meal.date), 'tzid' => @tzid)
     event.dtend = Icalendar::Values::DateTime.new(dinner_end(meal.date), 'tzid' => @tzid)
     event.summary = meal.cancelled? ? "Cancelled: #{summary}" : summary
@@ -34,6 +38,15 @@ class MealIcalFeed
   delegate :to_ical, to: :@calendar
 
   private
+
+  # The same on every fetch. RFC 5545 tells events apart by UID, so a new
+  # one each time (the gem's default, a random one) made a calendar app
+  # read every dinner as a new event and drop the reminders people had
+  # put on it (#166). The feed part keeps a person's event apart from the
+  # community feed's for the same dinner, for someone subscribed to both.
+  def uid(meal)
+    "meal-#{meal.id}-#{@feed}@comeals.com"
+  end
 
   # Icalendar wants the wall-clock value and gets the zone from `tzid`,
   # so these are built from the community's moment field by field: a

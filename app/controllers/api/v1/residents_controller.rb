@@ -112,7 +112,7 @@ module Api
       def ical
         resident = Resident.find(params[:id]) # rubocop:disable Rails/StrongParametersExpect --routed :id is read directly, matching this codebase's bare params[] convention
         community = T.must(resident.community)
-        feed = MealIcalFeed.new(community, calendar_name: "My #{community.name}")
+        feed = MealIcalFeed.new(community, calendar_name: "My #{community.name}", feed: "resident-#{resident.id}")
 
         # Precompute cook dates to avoid a query per meal_resident in the loop below
         cook_dates = Bill.joins(:meal)

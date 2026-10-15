@@ -114,6 +114,25 @@ RSpec.describe 'Residents iCal API' do
       expect(response.body).to include('DTEND;TZID=America/Los_Angeles:20260405T193000')
     end
 
+    # The same dinner keeps its UID on every fetch (#166), and a person's
+    # event for it is not the community feed's: someone may subscribe to
+    # both. It keeps the UID when the person goes from eating to cooking,
+    # so the app changes the event instead of making a second one.
+    it 'gives each dinner the same UID on every fetch, apart from the community feed' do
+      create(:meal_resident, meal: weekday_meal, resident: resident, community: community)
+      uid = lambda do
+        get "/api/v1/residents/#{resident.id}/ical"
+        Icalendar::Calendar.parse(response.body).sole.events.sole.uid.to_s
+      end
+
+      first = uid.call
+      expect(first).to eq("meal-#{weekday_meal.id}-resident-#{resident.id}@comeals.com")
+      expect(uid.call).to eq(first)
+
+      create(:bill, meal: weekday_meal, resident: resident, community: community)
+      expect(uid.call).to eq(first)
+    end
+
     it 'returns an empty calendar for a resident with no meals' do
       get "/api/v1/residents/#{resident.id}/ical"
 
