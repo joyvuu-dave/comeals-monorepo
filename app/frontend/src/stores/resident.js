@@ -243,8 +243,9 @@ const Resident = types
         self.late = false;
         self.root.meal.incrementExtras();
         store
-          .waitForSignupRequest(
+          .waitForTakeOff(
             mealId,
+            self.id,
             api.meals.residents.remove(self.meal_id, self.id, {
               socketId: window.Comeals.socketId,
             }),

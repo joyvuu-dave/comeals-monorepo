@@ -11,6 +11,7 @@ interface MealRoot {
   attendeesCount: number;
   signupRequestWaiting(mealId: number): boolean;
   guestAddsWaitingOn(mealId: number): number;
+  takeOffsWaitingOn(mealId: number): number;
   loadDataAsync(): void;
 }
 
@@ -109,14 +110,20 @@ const Meal = types
       return self.extrasPending || self.root.signupRequestWaiting(self.id);
     },
     // The seats a tap on the sign-up list can still take: Extras, less
-    // one for each guest add on this meal that waits for its answer.
-    // Such an add shows nothing until the server says yes (S4), but the
-    // server takes its seat then, so no other tap may take it now. Only
-    // whether a tap can go out reads this; the screen shows Extras.
-    // null while the meal has no cap.
+    // one for each guest add and each take-off on this meal that waits
+    // for its answer. A guest add shows nothing until the server says
+    // yes (S4), but the server takes its seat then, so no other tap may
+    // take it now. A take-off shows its seat at the tap, but if it fails
+    // the person is put back in that seat (#158). Only whether a tap can
+    // go out reads this; the screen shows Extras. null while the meal
+    // has no cap.
     get openSeats(): number | null {
       if (self.extras === null) return null;
-      return self.extras - self.root.guestAddsWaitingOn(self.id);
+      return (
+        self.extras -
+        self.root.guestAddsWaitingOn(self.id) -
+        self.root.takeOffsWaitingOn(self.id)
+      );
     },
     // The "not saved" marker: there is unsaved text AND a save has
     // failed. Plain dirty is not enough — every normal save round-trip

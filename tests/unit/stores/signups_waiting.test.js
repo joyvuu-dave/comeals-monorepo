@@ -953,4 +953,92 @@ describe("while a request from the sign-up list waits", () => {
       expect(store.canAdd).toBe(true);
     });
   });
+
+  // A take-off shows its seat in Extras at the tap, before the server
+  // says yes. If it fails, the person is put back in that seat, so no
+  // other tap may take the seat while it waits (#158).
+  describe("a take-off that waits", () => {
+    // Cap 3: Alice, Bob and Alice's guest 100 eat, no seat is left, and
+    // Carol, who is not signed up, wants one.
+    function full() {
+      const store = closedStore();
+      stage(store, () => {
+        store.meal.extras = 0;
+        store.residents.put({
+          id: 12,
+          meal_id: 1,
+          name: "C - Carol Diaz",
+          short_name: "Carol Diaz",
+        });
+      });
+      return store;
+    }
+    const carol = (store) => store.residents.get("12");
+
+    // A request this group set up and no tap sent would answer the next
+    // test's first request.
+    afterEach(() => {
+      axios.mockReset();
+    });
+
+    // The case in #158: with no answer, Alice is put back, and Extras
+    // went to -1 when Carol, whose own sign-up waits, had taken her seat.
+    it("never shows Extras below 0 when it gets no answer", async () => {
+      const store = full();
+      const counts = watchCounts(store);
+      const later = answerLater();
+      answerLater();
+
+      alice(store).toggleAttending();
+      carol(store).toggleAttending();
+      later.refuse(NO_ANSWER);
+      await settle();
+      counts.stop();
+
+      expect(counts.seen.every(([extras]) => extras >= 0)).toBe(true);
+      expect(counts.seen.at(-1)).toEqual([0, 3, 3]);
+      expect(carol(store).attending).toBe(false);
+      expect(axios).toHaveBeenCalledTimes(1);
+    });
+
+    it("shows the seat while it waits, and opens it to other taps once the server says yes", async () => {
+      const store = full();
+      const later = answerLater();
+
+      alice(store).toggleAttending();
+      expect(store.meal.extras).toBe(1);
+      expect(store.meal.openSeats).toBe(0);
+      expect(store.canAdd).toBe(false);
+
+      later.answer({ status: 200 });
+      await settle();
+      expect(store.meal.openSeats).toBe(1);
+      axios.mockResolvedValueOnce(MEAL_RESIDENT);
+      carol(store).toggleAttending();
+      expect(carol(store).attending).toBe(true);
+      expect(store.meal.extras).toBe(0);
+    });
+
+    // A tap back on and off again sends a second take-off for the same
+    // person. The first answer must not open the second one's seat.
+    it("counts each take-off that waits, the same person's too", async () => {
+      const store = full();
+      let first;
+      store.waitForTakeOff(
+        1,
+        10,
+        new Promise((resolve) => {
+          first = resolve;
+        }),
+      );
+      store.waitForTakeOff(1, 10, new Promise(() => {}));
+      expect(store.takeOffsWaitingOn(1)).toBe(2);
+
+      first();
+      await settle();
+
+      expect(store.takeOffsWaitingOn(1)).toBe(1);
+      expect(store.takeOffsWaitingOn(2)).toBe(0);
+    });
+  });
 });

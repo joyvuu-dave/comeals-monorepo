@@ -29,9 +29,11 @@ export interface SignupRequestsStore extends ReturnType<
   loadDataAsync(): void;
   signupRequestAnswered(mealId: number): void;
   guestRemovalAnswered(mealId: number, hostId: number): void;
+  takeOffAnswered(mealId: number, residentId: number): void;
+  waitForSignupRequest<T>(mealId: number, request: Promise<T>): Promise<T>;
 }
 
-// A host on a meal.
+// A host, or a person taking themselves off, on a meal.
 function hostOn(mealId: number, hostId: number): string {
   return `${mealId}:${hostId}`;
 }
@@ -62,6 +64,11 @@ export function signupRequestsVolatile() {
     // here, not on the host's row, for the same reason as
     // guestAddsWaiting in data_store_guest_adds.ts.
     guestRemovalsWaiting: [] as string[],
+    // One entry, by hostOn, for each take-off with no answer yet. A
+    // take-off shows its seat in Extras at the tap, but if it fails the
+    // person is put back in that seat, so no other tap may take it until
+    // the server says yes (Meal#openSeats, #158).
+    takeOffsWaiting: [] as string[],
   };
 }
 
@@ -75,6 +82,12 @@ export function signupRequestsViews(self: SignupRequestsStore) {
     },
     guestRemovalWaiting(mealId: number, hostId: number): boolean {
       return self.guestRemovalsWaiting.includes(hostOn(mealId, hostId));
+    },
+    // How many take-offs on the meal wait.
+    takeOffsWaitingOn(mealId: number): number {
+      return self.takeOffsWaiting.filter((person) =>
+        person.startsWith(`${mealId}:`),
+      ).length;
     },
   };
 }
@@ -124,6 +137,32 @@ export function signupRequestsActions(self: SignupRequestsStore) {
       const wanted = { ...self.signupReloadsWanted };
       delete wanted[mealId];
       self.signupReloadsWanted = wanted;
+    },
+    // A take-off for this person went out. It counts as a request from
+    // the sign-up list too, and its seat stays closed to other taps
+    // until `request` settles.
+    waitForTakeOff<T>(
+      mealId: number,
+      residentId: number,
+      request: Promise<T>,
+    ): Promise<T> {
+      self.takeOffsWaiting = [
+        ...self.takeOffsWaiting,
+        hostOn(mealId, residentId),
+      ];
+      return self.waitForSignupRequest(
+        mealId,
+        request.finally(function () {
+          self.takeOffAnswered(mealId, residentId);
+        }),
+      );
+    },
+    // Takes off one entry: the same person can have a second take-off
+    // out (a tap back on, then off again), and it still waits.
+    takeOffAnswered(mealId: number, residentId: number) {
+      const waiting = [...self.takeOffsWaiting];
+      waiting.splice(waiting.indexOf(hostOn(mealId, residentId)), 1);
+      self.takeOffsWaiting = waiting;
     },
     // A guest removal for this host went out. It waits until `request`,
     // with its own callbacks, settles.
