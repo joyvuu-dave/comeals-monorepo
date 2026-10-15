@@ -122,11 +122,12 @@ const Resident = types
       return val;
     },
     toggleAttending(options = { late: false, veg: false }) {
-      // A settled meal's sign-ups are final. The screen locks the name
-      // cell only with pointer-events: none, which a click sent to the
-      // cell itself (a screen reader, a script) does not go through, so
-      // this action and the four below check the meal themselves.
-      if (self.root.meal.reconciled) {
+      // A settled or cancelled meal's sign-ups can't change. The screen
+      // locks the name cell only with pointer-events: none, which a click
+      // sent to the cell itself (a screen reader, a script) does not go
+      // through, so this action and the four below check the meal
+      // themselves.
+      if (self.root.meal.frozen) {
         return;
       }
 
@@ -268,7 +269,7 @@ const Resident = types
       }
     },
     toggleLate() {
-      if (self.root.meal.reconciled) {
+      if (self.root.meal.frozen) {
         return;
       }
       if (self.attending === false) {
@@ -302,7 +303,7 @@ const Resident = types
         });
     },
     toggleVeg() {
-      if (self.root.meal.reconciled) {
+      if (self.root.meal.frozen) {
         return;
       }
       if (self.attending === false) {
@@ -340,7 +341,7 @@ const Resident = types
     // answer means, and the lock that keeps a second tap from sending a
     // second guest are in data_store_guest_adds.ts (S2, S4).
     addGuest(options = { vegetarian: false }) {
-      if (self.root.meal.reconciled) {
+      if (self.root.meal.frozen) {
         return;
       }
       self.root.startGuestAdd({
@@ -353,7 +354,7 @@ const Resident = types
       });
     },
     removeGuest() {
-      if (self.root.meal.reconciled || !self.canRemoveGuest) {
+      if (self.root.meal.frozen || !self.canRemoveGuest) {
         return false;
       }
       // A removal of this host's guest waits for its answer. A second

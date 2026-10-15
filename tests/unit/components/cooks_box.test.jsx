@@ -58,7 +58,7 @@ function makeBill(overrides = {}) {
 function makeStore(bills, overrides = {}) {
   return observable(
     {
-      meal: { reconciled: false },
+      meal: { frozen: false },
       mealLoading: false,
       waitingToReload: false,
       bills: new Map(bills.map((bill) => [bill.id, bill])),
@@ -155,8 +155,9 @@ describe("CooksBox", () => {
     expect(offered(blankRow)).not.toContain("Bob");
   });
 
-  it("freezes every control when the meal is reconciled", () => {
-    renderBox(makeEditStore([makeBill()], { meal: { reconciled: true } }));
+  // Meal#frozen: the meal is settled or cancelled.
+  it("freezes every control when the meal is frozen", () => {
+    renderBox(makeEditStore([makeBill()], { meal: { frozen: true } }));
     expect(
       screen.getByRole("combobox", { name: "Select meal cook" }),
     ).toBeDisabled();

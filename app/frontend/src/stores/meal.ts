@@ -47,6 +47,10 @@ const Meal = types
     // day depends on the zone it is read in (#129).
     date: types.maybeNull(types.string),
     reconciled: false,
+    // The dinner is cancelled (ADR 0011 rule 11): its sign-ups stay,
+    // nobody is charged, and only the menu can change until someone
+    // restores it.
+    cancelled: false,
     nextId: types.maybeNull(types.number),
     prevId: types.maybeNull(types.number),
   })
@@ -89,6 +93,13 @@ const Meal = types
       } else {
         return Number(self.extras) + self.root.attendeesCount;
       }
+    },
+    // The sign-ups, guests, costs, Extras and Open / Close can't
+    // change: the dinner is settled, or it is cancelled. The server
+    // refuses those writes; the page dims their controls so nobody
+    // tries. A cancelled dinner's menu can still change.
+    get frozen(): boolean {
+      return self.reconciled || self.cancelled;
     },
     // The Extras boxes take no picks: an Extras save waits, or a request
     // from the sign-up list on this meal waits (S4). A pick sends the

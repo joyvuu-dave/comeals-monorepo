@@ -12,7 +12,7 @@ import {
 // itself is still JavaScript (data_store.js), so this is the typed slice
 // of it a bill depends on, and nothing more.
 interface BillRoot {
-  meal: { closed: boolean; reconciled: boolean } | null;
+  meal: { closed: boolean; frozen: boolean } | null;
   saveBillRowSoon(row: { id: string }): void;
   billsRowSaving(rowId: string): boolean;
   billsRowSlowToSave(rowId: string): boolean;
@@ -107,13 +107,14 @@ const Bill = types
     // The cook had the chance to enter a cost — the meal closed over a
     // deliberate Yes — and hasn't yet. Shows as the word "pending" in
     // the UI. Ends at reconciliation: a reconciled blank is settled
-    // history, not pending anything.
+    // history, not pending anything. A cancelled dinner waits for no
+    // cost either (ADR 0011 rule 11).
     get costPending() {
       const store = self.root;
       return (
         !!store.meal &&
         store.meal.closed &&
-        !store.meal.reconciled &&
+        !store.meal.frozen &&
         self.resident_id !== "" &&
         self.no_cost === false &&
         isZeroAmountString(self.amount)

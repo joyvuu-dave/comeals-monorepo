@@ -42,6 +42,25 @@ describe("Meal model", () => {
     };
   });
 
+  // ── frozen computed view ──
+
+  // ADR 0011 rule 11: a cancelled dinner's sign-ups, guests, costs,
+  // Extras and Open / Close can't change, the same as a settled one's.
+  describe("frozen", () => {
+    it.each([
+      [false, false, false],
+      [true, false, true],
+      [false, true, true],
+      [true, true, true],
+    ])(
+      "reconciled %s, cancelled %s: frozen is %s",
+      (reconciled, cancelled, frozen) => {
+        const store = createStore({ reconciled, cancelled });
+        expect(store.meal.frozen).toBe(frozen);
+      },
+    );
+  });
+
   // ── max computed view ──
 
   describe("max", () => {

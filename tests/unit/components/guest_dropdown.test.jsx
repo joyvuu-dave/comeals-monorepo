@@ -16,7 +16,7 @@ function renderDropdown(props = {}) {
     <GuestDropdown
       resident={makeResident()}
       canAdd={true}
-      reconciled={false}
+      frozen={false}
       addWaiting={false}
       {...props}
     />,
@@ -61,19 +61,19 @@ describe("GuestDropdown", () => {
     ).toBeDisabled();
   });
 
-  it("disables the button once the meal is reconciled", () => {
-    renderDropdown({ reconciled: true });
+  it("disables the button once the meal is settled or cancelled", () => {
+    renderDropdown({ frozen: true });
     expect(
       screen.getByLabelText("Add Guest of Jane Smith").closest("button"),
     ).toBeDisabled();
   });
 
   // A Pusher refresh can change the props while the menu is open: the
-  // last seat went to someone else, or the meal was reconciled. The
+  // last seat went to someone else, or the meal was settled or cancelled. The
   // open menu closes, stays closed when a seat frees up again, and its
   // cow and carrot add nothing (issue #116).
   it("an open menu closes and adds no guest once guests cannot be added", () => {
-    for (const blocked of [{ canAdd: false }, { reconciled: true }]) {
+    for (const blocked of [{ canAdd: false }, { frozen: true }]) {
       const resident = makeResident();
       const { container, rerender, unmount } = renderDropdown({ resident });
       fireEvent.click(screen.getByLabelText("Add Guest of Jane Smith"));
@@ -83,7 +83,7 @@ describe("GuestDropdown", () => {
         <GuestDropdown
           resident={resident}
           canAdd={true}
-          reconciled={false}
+          frozen={false}
           {...blocked}
         />,
       );
@@ -94,7 +94,7 @@ describe("GuestDropdown", () => {
       expect(resident.addGuest, label).not.toHaveBeenCalled();
 
       rerender(
-        <GuestDropdown resident={resident} canAdd={true} reconciled={false} />,
+        <GuestDropdown resident={resident} canAdd={true} frozen={false} />,
       );
       expect(container.firstChild, label).not.toHaveClass("active");
       unmount();
@@ -105,7 +105,7 @@ describe("GuestDropdown", () => {
   // 1rem right margin belongs to the wrapper, so a tap just beside the
   // grayed-out button reached it.
   it("the menu does not open while guests cannot be added", () => {
-    for (const blocked of [{ canAdd: false }, { reconciled: true }]) {
+    for (const blocked of [{ canAdd: false }, { frozen: true }]) {
       const { container, unmount } = renderDropdown(blocked);
       fireEvent.click(container.firstChild);
       expect(container.firstChild, JSON.stringify(blocked)).not.toHaveClass(

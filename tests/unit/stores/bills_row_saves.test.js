@@ -10,6 +10,7 @@ import { stubRandomUUID } from "../mocks/uuid.js";
 stubRandomUUID();
 import axios from "axios";
 import * as idbKeyval from "idb-keyval";
+import { autorun } from "mobx";
 import toastStore from "../../../app/frontend/src/stores/toast_store";
 import { createDataStore, stubAction } from "../helpers/create_data_store.js";
 import { BOB, CAROL, billsServer, editsSent } from "../helpers/bills_server.js";
@@ -115,6 +116,25 @@ describe("when a row saves", () => {
     expect(editsSent(axios)).toEqual([
       [{ op: "add", resident_id: DAN, to: { amount: "25", no_cost: false } }],
     ]);
+  });
+
+  // The Cancel button reads it while it renders (cancel_button.tsx), so
+  // it must be a view: MobX does not track what an action reads, and
+  // the button would stay disabled after the save.
+  it("tells a reader that watches it when a row starts and stops waiting", async () => {
+    const store = createStore();
+    const seen = [];
+    const stop = autorun(() => seen.push(store.billsPendingFor(1)));
+
+    rowOf(store, BOB).setAmount("5");
+    await vi.advanceTimersByTimeAsync(2000);
+    await server.answerSave();
+    await vi.advanceTimersByTimeAsync(0);
+    stop();
+
+    expect(seen[0]).toBe(false);
+    expect(seen).toContain(true);
+    expect(seen.at(-1)).toBe(false);
   });
 
   it("starts no wait when the person comes to the cost box of a row that does not wait", async () => {

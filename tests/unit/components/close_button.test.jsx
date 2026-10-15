@@ -10,7 +10,7 @@ function makeStore(overrides = {}) {
       mealLoading: false,
       closedPending: false,
       cooksMissingCost: [],
-      meal: { closed: false, reconciled: false },
+      meal: { closed: false, frozen: false },
       toggleClosed: vi.fn(),
       ...overrides,
     },
@@ -68,8 +68,9 @@ describe("CloseButton", () => {
     expect(store.toggleClosed).toHaveBeenCalledTimes(1);
   });
 
-  it("is disabled once the meal is reconciled", () => {
-    const store = makeStore({ meal: { closed: true, reconciled: true } });
+  // Meal#frozen: the meal is settled or cancelled.
+  it("is disabled once the meal is frozen", () => {
+    const store = makeStore({ meal: { closed: true, frozen: true } });
     renderButton(store);
     expect(
       screen.getByRole("button", { name: "Open / Close Meal" }),

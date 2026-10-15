@@ -41,6 +41,7 @@ function makeStore(overrides = {}) {
     {
       mealLoading: false,
       communityToday: "2026-01-15",
+      cancelledPending: false,
       meal: {
         id: 42,
         date: "2026-01-15",
@@ -48,12 +49,20 @@ function makeStore(overrides = {}) {
         nextId: 43,
         closed: false,
         reconciled: false,
+        cancelled: false,
       },
       goToMeal: vi.fn(),
       teardownCalendarPage: vi.fn(),
+      billsPendingFor: vi.fn(() => false),
+      setCancelled: vi.fn(),
       ...overrides,
     },
-    { goToMeal: false, teardownCalendarPage: false },
+    {
+      goToMeal: false,
+      teardownCalendarPage: false,
+      billsPendingFor: false,
+      setCancelled: false,
+    },
   );
 }
 
@@ -106,6 +115,35 @@ describe("DateBox", () => {
     reconciled.meal.reconciled = true;
     renderBox(reconciled);
     expect(screen.getByText("RECONCILED")).toBeInTheDocument();
+  });
+
+  // ADR 0011 rule 11. A settled cancelled dinner still says CANCELLED:
+  // that is why nobody was charged for it.
+  it("shows CANCELLED over CLOSED, and over RECONCILED", () => {
+    for (const reconciled of [false, true]) {
+      const store = makeStore();
+      store.meal.closed = true;
+      store.meal.cancelled = true;
+      store.meal.reconciled = reconciled;
+      const { unmount } = renderBox(store);
+      expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+        /^CANCELLED$/,
+      );
+      unmount();
+    }
+  });
+
+  it("shows the Cancel button under the state, and none while no meal is loaded", () => {
+    const { unmount } = renderBox(makeStore());
+    expect(
+      screen.getByRole("button", { name: "Cancel this dinner" }),
+    ).toHaveTextContent("Cancel");
+    unmount();
+
+    renderBox(makeStore({ meal: null }));
+    expect(
+      screen.queryByRole("button", { name: "Cancel this dinner" }),
+    ).not.toBeInTheDocument();
   });
 
   it("the arrows navigate to the neighbor meals", () => {

@@ -29,6 +29,7 @@ function mealPayload(overrides = {}) {
     closed: false,
     closed_at: null,
     reconciled: false,
+    cancelled: false,
     max: null,
     next_id: id,
     prev_id: id,
@@ -628,6 +629,7 @@ describe("DataStore", () => {
         closed: true,
         closed_at: "2023-06-15T18:00:00Z",
         reconciled: true,
+        cancelled: true,
         next_id: 2,
         prev_id: 1,
       });
@@ -637,6 +639,7 @@ describe("DataStore", () => {
       expect(store.meal.description).toBe("Taco Tuesday");
       expect(store.meal.closed).toBe(true);
       expect(store.meal.reconciled).toBe(true);
+      expect(store.meal.cancelled).toBe(true);
       expect(store.meal.nextId).toBe(2);
       expect(store.meal.prevId).toBe(1);
     });
@@ -2142,6 +2145,14 @@ describe("DataStore", () => {
     it("is not pending once the meal is reconciled", () => {
       const store = storeWith({
         mealProps: { closed: true, reconciled: true },
+      });
+      expect(bill(store).costPending).toBe(false);
+    });
+
+    // A cancelled dinner waits for no cost (ADR 0011 rule 11).
+    it("is not pending while the dinner is cancelled", () => {
+      const store = storeWith({
+        mealProps: { closed: true, cancelled: true },
       });
       expect(bill(store).costPending).toBe(false);
     });
@@ -3907,6 +3918,93 @@ describe("DataStore", () => {
       await new Promise((r) => setTimeout(r, 0));
 
       expect(store.closedPending).toBe(false);
+    });
+  });
+
+  // ADR 0011 rule 11. The page changes nothing at the Yes: the
+  // server may refuse (a cook spent money), so only the refetch shows
+  // the answer.
+  describe("setCancelled", () => {
+    it("sends what the person said Yes to, and changes nothing until the answer", async () => {
+      const store = createDataStore({ mealProps: { cancelled: false } });
+      window.Comeals.socketId = "socket-1";
+
+      store.setCancelled(1, true);
+
+      expect(axios).toHaveBeenCalledExactlyOnceWith({
+        method: "patch",
+        url: "/api/v1/meals/1/cancelled",
+        withCredentials: true,
+        data: { cancelled: true, socket_id: "socket-1" },
+      });
+      expect(store.meal.cancelled).toBe(false);
+      expect(store.cancelledPending).toBe(true);
+
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(store.cancelledPending).toBe(false);
+      expect(axios.get).toHaveBeenCalledWith("/api/v1/meals/1/cooks");
+    });
+
+    it("sends cancelled: false to restore, even when the page shows it restored", () => {
+      const store = createDataStore({ mealProps: { cancelled: false } });
+
+      store.setCancelled(1, false);
+
+      expect(axios.mock.calls[0][0].data.cancelled).toBe(false);
+    });
+
+    it("shows the server's sentence and refetches when it refuses", async () => {
+      const store = createDataStore({ mealProps: { cancelled: false } });
+      axios.mockRejectedValueOnce({
+        response: {
+          data: {
+            message:
+              "A cook spent money on this dinner, so it can't be cancelled.",
+          },
+        },
+      });
+      toastStore.clearAll();
+
+      store.setCancelled(1, true);
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(store.meal.cancelled).toBe(false);
+      expect(store.cancelledPending).toBe(false);
+      expect(
+        toastStore.toasts.map((toast) => [toast.type, toast.message]),
+      ).toEqual([
+        [
+          "error",
+          "A cook spent money on this dinner, so it can't be cancelled.",
+        ],
+      ]);
+      expect(axios.get).toHaveBeenCalledWith("/api/v1/meals/1/cooks");
+    });
+
+    it("sends nothing while one is on its way, for another meal, or with no meal", async () => {
+      const store = createDataStore();
+      let answer;
+      axios.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      );
+
+      store.setCancelled(1, true);
+      store.setCancelled(1, true);
+      expect(axios).toHaveBeenCalledTimes(1);
+      answer({ status: 200 });
+      await new Promise((r) => setTimeout(r, 0));
+
+      store.setCancelled(2, true);
+      stage(store, () => {
+        store.meal = null;
+      });
+      store.setCancelled(1, true);
+      expect(axios).toHaveBeenCalledTimes(1);
+      expect(store.cancelledPending).toBe(false);
     });
   });
 

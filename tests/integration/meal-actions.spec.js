@@ -394,6 +394,92 @@ test.describe("Meal actions (real backend)", () => {
     await expect(status).toHaveText("OPEN");
   });
 
+  // ADR 0011 rule 11. The seeded cost is blank, so the dinner can be
+  // cancelled. While cancelled, the sign-ups, the cost and Open / Close
+  // can't change; Restore brings them back.
+  test("cancelling and restoring a dinner persists across reload", async ({
+    page,
+  }) => {
+    const mealId = auth.meals.cancel_test.id;
+    const description = page.locator('[aria-label="Enter meal description"]');
+    const status = page.locator("h1");
+    const lateSwitch = page.locator(`#late_switch_${auth.resident_id}`);
+    const closeButton = page.getByRole("button", { name: "Open / Close Meal" });
+
+    async function answer(buttonName) {
+      const refetched = mealLoaded(page, mealId);
+      const saved = patched(page, mealId, "cancelled");
+      await page.getByRole("button", { name: buttonName }).click();
+      await page.getByRole("button", { name: "Yes" }).click();
+      await saved;
+      await refetched;
+      await reloadMeal(page, mealId);
+      await expect(description).toHaveValue("Cancel-test curry", {
+        timeout: 10000,
+      });
+    }
+
+    await gotoMeal(page, mealId);
+    await expect(description).toHaveValue("Cancel-test curry", {
+      timeout: 10000,
+    });
+    await expect(status).toHaveText("OPEN");
+
+    await answer("Cancel this dinner");
+    await expect(status).toHaveText("CANCELLED");
+    await expect(lateSwitch).toBeDisabled();
+    await expect(closeButton).toBeDisabled();
+    await expect(
+      page.getByRole("spinbutton", { name: "Set meal cost" }).first(),
+    ).toBeDisabled();
+
+    await answer("Restore this dinner");
+    await expect(status).toHaveText("OPEN");
+    await expect(lateSwitch).toBeEnabled();
+    await expect(closeButton).toBeEnabled();
+  });
+
+  // A cook spent $35.50 on the closed meal, so the server refuses, and
+  // its sentence shows. The browser logs the refused request.
+  test.describe(() => {
+    test.use({ allowedConsoleErrors: httpFailurePattern });
+
+    test("a dinner a cook spent money on is not cancelled", async ({
+      page,
+    }) => {
+      const mealId = auth.meals.closed.id;
+      await gotoMeal(page, mealId);
+      await expect(page.locator("h1")).toHaveText("CLOSED", {
+        timeout: 10000,
+      });
+
+      // Nothing changed, so WebKit's reload of the meal can come back
+      // as 304 Not Modified, which mealLoaded and reloadMeal do not
+      // take.
+      const refetched = page.waitForResponse(
+        (r) =>
+          r.request().method() === "GET" &&
+          r.url().includes(`/api/v1/meals/${mealId}/cooks`) &&
+          [200, 304].includes(r.status()),
+      );
+      const refused = page.waitForResponse(
+        (r) =>
+          r.request().method() === "PATCH" &&
+          r.url().includes(`/api/v1/meals/${mealId}/cancelled`),
+      );
+      await page.getByRole("button", { name: "Cancel this dinner" }).click();
+      await page.getByRole("button", { name: "Yes" }).click();
+      expect((await refused).status()).toBe(400);
+      await refetched;
+
+      await expect(page.locator(".toast--error")).toHaveText(
+        /A cook spent money on this dinner, so it can't be cancelled\./,
+      );
+      // The page reloaded the meal from the server after the refusal.
+      await expect(page.locator("h1")).toHaveText("CLOSED");
+    });
+  });
+
   test("setting extras on a closed meal persists across reload", async ({
     page,
   }) => {

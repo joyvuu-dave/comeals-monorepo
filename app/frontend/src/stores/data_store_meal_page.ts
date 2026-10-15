@@ -46,6 +46,7 @@ export interface MealPageStore extends ReturnType<typeof mealPageVolatile> {
   mealLoadFailed: boolean;
   mealLoadNotFound: boolean;
   closedPending: boolean;
+  cancelledPending: boolean;
   // data_store_bills.ts: bumped on every bill edit.
   billsEdits: ReturnType<typeof createVersionGuard>;
   // data_store_signup_requests.ts: bumped on every answer to a request
@@ -57,6 +58,7 @@ export interface MealPageStore extends ReturnType<typeof mealPageVolatile> {
   billsPendingFor(mealId: number): boolean;
   ensureResidentsChannel(): void;
   settleClosed(): void;
+  settleCancelled(): void;
   loadDataAsync(): void;
   loadMealAgain(): void;
   holdMealAnswer(
@@ -181,6 +183,38 @@ export function mealPageActions(self: MealPageStore) {
         })
         .then(function () {
           self.settleClosed();
+        });
+    },
+    // Runs when a Cancel or Restore settles, either way. Nothing on the
+    // page changed at the tap, so the refetch is what shows the answer.
+    settleCancelled() {
+      self.cancelledPending = false;
+      self.loadDataAsync();
+    },
+    // Cancel the dinner, or restore it (ADR 0011 rule 11). The page
+    // changes nothing until the server answers: a dinner a cook spent
+    // money on is refused, and showing CANCELLED for a moment before
+    // that would be wrong. `cancelled` is what the person said Yes to,
+    // not the opposite of what the page shows now, so a live update
+    // that lands between the question and the Yes can't turn a Cancel
+    // into a Restore. The server takes a value it already has as a
+    // change that does nothing.
+    setCancelled(mealId: number, cancelled: boolean) {
+      if (self.cancelledPending) return;
+      const meal = self.meal;
+      if (!meal || meal.id !== mealId) return;
+      self.cancelledPending = true;
+
+      api.meals
+        .updateCancelled(meal.id, {
+          cancelled,
+          socketId: window.Comeals.socketId,
+        })
+        .catch(function (error: unknown) {
+          handleAxiosError(error);
+        })
+        .then(function () {
+          self.settleCancelled();
         });
     },
     loadDataAsync() {
@@ -401,6 +435,7 @@ export function mealPageActions(self: MealPageStore) {
       meal.closed = data.closed;
       meal.closed_at = data.closed_at ? new Date(data.closed_at) : null;
       meal.reconciled = data.reconciled;
+      meal.cancelled = data.cancelled;
       meal.nextId = data.next_id;
       meal.prevId = data.prev_id;
 

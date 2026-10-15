@@ -38,7 +38,7 @@ const CloseButton = observer(() => {
           store.toggleClosed();
         }}
         className={buttonClass()}
-        disabled={(meal && meal.reconciled) || store.closedPending}
+        disabled={(meal && meal.frozen) || store.closedPending}
       >
         Open / Close Meal
       </button>

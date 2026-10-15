@@ -197,6 +197,27 @@ namespace :test do
     )
 
     # ------------------------------------------------------------------
+    # CANCEL-TEST MEAL (5 days out, cook cost blank)
+    # ------------------------------------------------------------------
+    # Owned by the cancel/restore integration test (meal-actions.spec.js):
+    # it cancels and restores this meal and no other test touches it. The
+    # cost is blank, so the dinner can be cancelled.
+    cancel_test_meal = Meal.create!(
+      date: 5.days.from_now.to_date,
+      description: 'Cancel-test curry',
+      rotation: seeded_rotation
+    )
+    [jane, bob].each do |r|
+      MealResident.create!(
+        resident: r, meal: cancel_test_meal
+      )
+    end
+    Bill.create!(
+      meal: cancel_test_meal, resident: bob,
+      amount: BigDecimal('0')
+    )
+
+    # ------------------------------------------------------------------
     # FUTURE MEAL (7 days out, empty)
     # ------------------------------------------------------------------
     # The description integration test uses this meal: it starts blank,
@@ -272,6 +293,7 @@ namespace :test do
                               today: { id: today_meal.id, date: today_meal.date.iso8601 },
                               tomorrow: { id: tomorrow_meal.id, date: tomorrow_meal.date.iso8601 },
                               close_test: { id: close_test_meal.id, date: close_test_meal.date.iso8601 },
+                              cancel_test: { id: cancel_test_meal.id, date: cancel_test_meal.date.iso8601 },
                               future: { id: future_meal.id, date: future_meal.date.iso8601 }
                             }
                           ))

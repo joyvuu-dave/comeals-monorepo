@@ -14,6 +14,7 @@ import dayjs from "dayjs";
 import Modal from "react-modal";
 
 import Icon from "../icon";
+import CancelButton from "./cancel_button";
 
 const styles = {
   main: {
@@ -148,8 +149,29 @@ const DateBox = observer(() => {
     return mealDayLabel(store.meal.date);
   }
 
+  // The word for the meal's state. A cancelled dinner says so even
+  // after it is settled: that is why nobody was charged for it.
+  function statusHeading() {
+    const meal = store.meal;
+    if (meal && meal.cancelled) {
+      return <h1 className="text-black">CANCELLED</h1>;
+    }
+    if (meal && meal.reconciled) {
+      return <h1 className="text-black">RECONCILED</h1>;
+    }
+    if (meal && meal.closed) {
+      return <h1 className="text-primary">CLOSED</h1>;
+    }
+    return <h1 className="text-green">OPEN</h1>;
+  }
+
   return (
-    <div style={styles.main} className="button-border-radius background-yellow">
+    // The anchor lets the Cancel button's question float under the box
+    // without moving anything.
+    <div
+      style={styles.main}
+      className="button-border-radius background-yellow confirm-bar-anchor"
+    >
       <div className="flex nowrap middle space-between">
         <div
           className="arrow"
@@ -199,17 +221,8 @@ const DateBox = observer(() => {
         </div>
       </div>
       <h3 className="text-black">{displayDate()}</h3>
-      {store.meal && store.meal.reconciled ? (
-        <h1 className="text-black">RECONCILED</h1>
-      ) : (
-        <h1
-          className={
-            store.meal && store.meal.closed ? "text-primary" : "text-green"
-          }
-        >
-          {store.meal && store.meal.closed ? "CLOSED" : "OPEN"}
-        </h1>
-      )}
+      {statusHeading()}
+      <CancelButton />
       <div>
         <Routes>
           <Route

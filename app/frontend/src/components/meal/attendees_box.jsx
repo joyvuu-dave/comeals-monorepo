@@ -102,7 +102,7 @@ export const AttendeeComponent = observer(({ resident }) => {
         style={Object.assign(
           {},
           ((resident.attending && !resident.canRemove) ||
-            meal.reconciled ||
+            meal.frozen ||
             cannotJoin) &&
             (resident.attending
               ? styles.disabledAttending
@@ -133,7 +133,7 @@ export const AttendeeComponent = observer(({ resident }) => {
             className="switch"
             checked={resident.late}
             onChange={() => resident.toggleLate()}
-            disabled={meal.reconciled || cannotJoin}
+            disabled={meal.frozen || cannotJoin}
             aria-label={`Toggle Late for ${resident.name}`}
           />
           <label htmlFor={`late_switch_${resident.id}`} />
@@ -152,7 +152,7 @@ export const AttendeeComponent = observer(({ resident }) => {
             checked={resident.attending && resident.vegetarian}
             onChange={() => resident.toggleVeg()}
             disabled={
-              meal.reconciled ||
+              meal.frozen ||
               (meal.closed && resident.attending && !resident.canRemove) ||
               cannotJoin
             }
@@ -164,7 +164,7 @@ export const AttendeeComponent = observer(({ resident }) => {
       <td>
         <GuestDropdown
           resident={resident}
-          reconciled={meal.reconciled}
+          frozen={meal.frozen}
           canAdd={store.canAdd}
           addWaiting={store.guestAddWaiting(meal.id, resident.id)}
         />
@@ -173,9 +173,9 @@ export const AttendeeComponent = observer(({ resident }) => {
           aria-label={`Remove Guest of ${resident.name}`}
           style={styles.monospace}
           onClick={() => resident.removeGuest()}
-          disabled={meal.reconciled || !resident.canRemoveGuest}
+          disabled={meal.frozen || !resident.canRemoveGuest}
           aria-disabled={
-            meal.reconciled || !resident.canRemoveGuest || removalWaiting
+            meal.frozen || !resident.canRemoveGuest || removalWaiting
           }
         />
       </td>

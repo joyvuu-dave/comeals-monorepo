@@ -521,66 +521,67 @@ describe("AttendeesBox", () => {
     expect(screen.getByLabelText("Remove Guest of Bob Johnson")).toBeDisabled();
   });
 
-  // Only the reconciled flag can lock anything here: the meal has seats
-  // left, Jane joined after the close and added her guest after it, and
-  // Bob can still join. With the flag off the same rows are all usable,
-  // so the flag is what locks them.
-  it.each([true, false])(
-    "reconciled %s: the flag alone locks every control in every row",
-    (reconciled) => {
-      renderBox(
-        createDataStore({
-          mealProps: {
-            closed: true,
-            closed_at: new Date("2026-01-14T12:00:00Z"),
-            extras: 2,
-            reconciled: reconciled,
+  // Only the reconciled or cancelled flag can lock anything here: the
+  // meal has seats left, Jane joined after the close and added her guest
+  // after it, and Bob can still join. With both flags off the same rows
+  // are all usable, so the flag is what locks them.
+  it.each([
+    [{ reconciled: true }, true],
+    [{ cancelled: true }, true],
+    [{}, false],
+  ])("%o: the flag alone locks every control in every row", (flag, locked) => {
+    renderBox(
+      createDataStore({
+        mealProps: {
+          closed: true,
+          closed_at: new Date("2026-01-14T12:00:00Z"),
+          extras: 2,
+          ...flag,
+        },
+        residents: [
+          {
+            id: 1,
+            meal_id: 1,
+            name: "Jane Smith",
+            attending: true,
+            attending_at: new Date("2026-01-14T13:00:00Z"),
           },
-          residents: [
-            {
-              id: 1,
-              meal_id: 1,
-              name: "Jane Smith",
-              attending: true,
-              attending_at: new Date("2026-01-14T13:00:00Z"),
-            },
-            { id: 2, meal_id: 1, name: "Bob Johnson" },
-          ],
-          guests: [
-            {
-              id: 100,
-              meal_id: 1,
-              resident_id: 1,
-              vegetarian: false,
-              created_at: new Date("2026-01-14T14:00:00Z"),
-            },
-          ],
-        }),
-      );
+          { id: 2, meal_id: 1, name: "Bob Johnson" },
+        ],
+        guests: [
+          {
+            id: 100,
+            meal_id: 1,
+            resident_id: 1,
+            vegetarian: false,
+            created_at: new Date("2026-01-14T14:00:00Z"),
+          },
+        ],
+      }),
+    );
 
-      const controls = [
-        screen.getByLabelText("Toggle Late for Jane Smith"),
-        screen.getByLabelText("Toggle Veg for Jane Smith"),
-        screen.getByLabelText("Add Guest of Jane Smith").closest("button"),
-        screen.getByLabelText("Remove Guest of Jane Smith"),
-        screen.getByLabelText("Toggle Late for Bob Johnson"),
-        screen.getByLabelText("Toggle Veg for Bob Johnson"),
-        screen.getByLabelText("Add Guest of Bob Johnson").closest("button"),
-      ];
-      const names = [
-        screen.getByRole("cell", { name: "Jane Smith" }),
-        screen.getByRole("cell", { name: "Bob Johnson" }),
-      ];
-      for (const control of controls) {
-        expect(control.disabled, control.outerHTML).toBe(reconciled);
-      }
-      for (const name of names) {
-        expect(name.style.pointerEvents, name.textContent).toBe(
-          reconciled ? "none" : "",
-        );
-      }
-    },
-  );
+    const controls = [
+      screen.getByLabelText("Toggle Late for Jane Smith"),
+      screen.getByLabelText("Toggle Veg for Jane Smith"),
+      screen.getByLabelText("Add Guest of Jane Smith").closest("button"),
+      screen.getByLabelText("Remove Guest of Jane Smith"),
+      screen.getByLabelText("Toggle Late for Bob Johnson"),
+      screen.getByLabelText("Toggle Veg for Bob Johnson"),
+      screen.getByLabelText("Add Guest of Bob Johnson").closest("button"),
+    ];
+    const names = [
+      screen.getByRole("cell", { name: "Jane Smith" }),
+      screen.getByRole("cell", { name: "Bob Johnson" }),
+    ];
+    for (const control of controls) {
+      expect(control.disabled, control.outerHTML).toBe(locked);
+    }
+    for (const name of names) {
+      expect(name.style.pointerEvents, name.textContent).toBe(
+        locked ? "none" : "",
+      );
+    }
+  });
 
   // pointer-events: none stops a mouse. It does not stop a click event
   // sent to the cell itself, the way a screen reader's activate action

@@ -59,6 +59,9 @@ export const DataStore = types
     monthLoading: true,
     // True while an open/close save is in flight; the button is disabled.
     closedPending: false,
+    // True while a Cancel or Restore save is in flight; the button is
+    // disabled.
+    cancelledPending: false,
     // The first load of the meal on screen failed and automatic
     // retries are running. Shows the "Trouble loading" notice.
     mealLoadFailed: false,

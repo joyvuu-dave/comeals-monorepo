@@ -39,7 +39,7 @@ const Extras = observer(() => {
                 }
                 disabled={
                   store.meal
-                    ? store.meal.reconciled || store.meal.extrasLocked
+                    ? store.meal.frozen || store.meal.extrasLocked
                     : false
                 }
                 aria-label={`Set Extras to ${val}`}

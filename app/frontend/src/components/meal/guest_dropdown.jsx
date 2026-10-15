@@ -8,12 +8,12 @@ const styles = {
   },
 };
 
-function GuestDropdown({ resident, canAdd, reconciled, addWaiting }) {
+function GuestDropdown({ resident, canAdd, frozen, addWaiting }) {
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef(null);
-  // No guest can be added: the meal has no seat left, or it is
-  // reconciled. The button looks disabled.
-  const blocked = reconciled || !canAdd;
+  // No guest can be added: the meal has no seat left, or it is settled
+  // or cancelled. The button looks disabled.
+  const blocked = frozen || !canAdd;
   // The control takes no taps. That is so when guests are blocked, and
   // also while this host's guest add waits for its answer, so a second
   // tap cannot send a second guest (S4). While the add waits, the button

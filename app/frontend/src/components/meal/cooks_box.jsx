@@ -86,6 +86,7 @@ const BillEdit = observer(({ bill }) => {
   // Bills freeze at reconciliation, not at close — the server has
   // always allowed bill edits on a closed meal. Costs are often not
   // known until after the shopping, which is often after the close.
+  // They also freeze while the dinner is cancelled (meal.frozen).
   // No meal loaded also freezes: rows must never be editable while
   // there is no meal to save them to. So does a meal loading again
   // after a bills save for it failed: until it arrives, a row may show
@@ -96,7 +97,7 @@ const BillEdit = observer(({ bill }) => {
   // it.
   const frozen =
     !store.meal ||
-    store.meal.reconciled ||
+    store.meal.frozen ||
     store.mealLoading ||
     store.waitingToReload;
 

@@ -36,6 +36,7 @@ function mealPayload(overrides = {}) {
     closed: false,
     closed_at: null,
     reconciled: false,
+    cancelled: false,
     max: null,
     next_id: id,
     prev_id: id,

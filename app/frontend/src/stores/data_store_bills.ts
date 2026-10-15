@@ -306,10 +306,38 @@ export function billsVolatile() {
   };
 }
 
-// What the cook rows read about their saves. Views, not actions: a row
-// reads them while it renders.
+// What the cook rows and the Cancel button read about the saves. Views,
+// not actions: they are read while a component renders, and MobX does
+// not track what an action reads, so the component would not render
+// again when the answer changes.
 export function billsViews(self: BillsStore) {
   return {
+    // True while this page has a bills edit for the meal that the server
+    // may not have yet: sent and not answered, in a row's wait before
+    // its save, or on a row that differs from its base with no save to
+    // carry it. While it is true, the meal's rows must not be built
+    // again from the server (#136): the server's answer may be older
+    // than the edit, and new rows would drop it, so no save would ever
+    // send it.
+    //
+    // While the meal on screen loads again after a failed save, a row
+    // that differs from its base and does not wait to save does not
+    // count. Its edit was refused before it could be sent (one cook in
+    // two rows), and the rows are frozen until the meal loads, so nobody
+    // could change it, and waiting for it would keep the meal from ever
+    // loading.
+    billsPendingFor(mealId: number): boolean {
+      if (self.billsSavesOnTheirWay.some((save) => save.mealId === mealId)) {
+        return true;
+      }
+      // The waits and the rows are always about the meal on screen.
+      if (self.meal?.id !== mealId) return false;
+      return (
+        Object.keys(self.billsSaveTimers).length > 0 ||
+        (!self.mealLoading &&
+          Array.from(self.bills.values()).some((bill) => bill.unsent))
+      );
+    },
     // True while this row's save is on its way. The row takes no edit
     // until it is answered (#150).
     billsRowSaving(rowId: string): boolean {
@@ -881,32 +909,6 @@ export function billsActions(self: BillsStore) {
         (key) => key !== save.key,
       );
       self.afterBillsIdle();
-    },
-    // True while this page has a bills edit for the meal that the server
-    // may not have yet: sent and not answered, in a row's wait before
-    // its save, or on a row that differs from its base with no save to
-    // carry it. While it is true, the meal's rows must not be built
-    // again from the server (#136): the server's answer may be older
-    // than the edit, and new rows would drop it, so no save would ever
-    // send it.
-    //
-    // While the meal on screen loads again after a failed save, a row
-    // that differs from its base and does not wait to save does not
-    // count. Its edit was refused before it could be sent (one cook in
-    // two rows), and the rows are frozen until the meal loads, so nobody
-    // could change it, and waiting for it would keep the meal from ever
-    // loading.
-    billsPendingFor(mealId: number): boolean {
-      if (self.billsSavesOnTheirWay.some((save) => save.mealId === mealId)) {
-        return true;
-      }
-      // The waits and the rows are always about the meal on screen.
-      if (self.meal?.id !== mealId) return false;
-      return (
-        Object.keys(self.billsSaveTimers).length > 0 ||
-        (!self.mealLoading &&
-          Array.from(self.bills.values()).some((bill) => bill.unsent))
-      );
     },
   };
 }

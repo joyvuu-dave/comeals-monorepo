@@ -1426,6 +1426,80 @@ test.describe("Visual Baselines", () => {
     });
   });
 
+  // A cancelled dinner (ADR 0011 rule 11): the date box says CANCELLED
+  // and offers Restore, every control but the menu is frozen, and a
+  // blank cost does not say "pending". It was closed before it was
+  // cancelled, which Restore brings back.
+  test("cancelled meal page", async ({ page, context }) => {
+    await setupAuthenticatedPage(page, context, {
+      mealData: {
+        ...mealFixture,
+        closed: true,
+        closed_at: "2026-01-15T08:00:00Z",
+        cancelled: true,
+        bills: [
+          ...mealFixture.bills,
+          {
+            id: 202,
+            meal_id: 42,
+            resident_id: 2,
+            amount: "",
+            no_cost: false,
+          },
+        ],
+      },
+    });
+    await page.clock.setFixedTime(FROZEN_NOW);
+
+    await page.goto("/meals/42/edit/");
+    await page.waitForLoadState("networkidle");
+    await expect(page.locator("h1", { hasText: "CANCELLED" })).toBeVisible({
+      timeout: 10000,
+    });
+    await expect(
+      page.getByRole("button", { name: "Restore this dinner" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Open / Close Meal" }),
+    ).toBeDisabled();
+    await page.waitForTimeout(500);
+
+    await expect(page).toHaveScreenshot("meal-cancelled.png", {
+      fullPage: true,
+    });
+
+    await page.getByRole("button", { name: "Restore this dinner" }).click();
+    await expect(
+      page.getByRole("alertdialog", { name: "Restore this dinner?" }),
+    ).toBeVisible();
+    await page.waitForTimeout(500);
+
+    await expect(page).toHaveScreenshot("restore-confirm-bar.png", {
+      fullPage: true,
+    });
+  });
+
+  test("cancel confirm bar", async ({ page, context }) => {
+    await setupAuthenticatedPage(page, context);
+    await page.clock.setFixedTime(FROZEN_NOW);
+
+    await page.goto("/meals/42/edit/");
+    await page.waitForLoadState("networkidle");
+    await expect(page.locator("h1", { hasText: "OPEN" })).toBeVisible({
+      timeout: 10000,
+    });
+
+    await page.getByRole("button", { name: "Cancel this dinner" }).click();
+    await expect(
+      page.getByRole("alertdialog", { name: "Cancel this dinner?" }),
+    ).toBeVisible();
+    await page.waitForTimeout(500);
+
+    await expect(page).toHaveScreenshot("cancel-confirm-bar.png", {
+      fullPage: true,
+    });
+  });
+
   // A closed meal with no seat left: the name and switches of someone not
   // signed up are locked, and a cook who has not entered a cost shows
   // "pending".

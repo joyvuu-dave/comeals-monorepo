@@ -79,6 +79,18 @@ export const api = {
       });
     },
 
+    updateCancelled(
+      mealId: number,
+      { cancelled, socketId }: { cancelled: boolean } & SocketBound,
+    ): Promise<AxiosResponse<Ack>> {
+      return axios({
+        method: "patch",
+        url: `/api/v1/meals/${mealId}/cancelled`,
+        withCredentials: true,
+        data: { cancelled, socket_id: socketId },
+      });
+    },
+
     updateDescription(
       mealId: number,
       { description, socketId }: { description: string } & SocketBound,

@@ -10,7 +10,7 @@ function makeStore(mealOverrides = {}) {
   const meal = observable(
     {
       closed: true,
-      reconciled: false,
+      frozen: false,
       extras: null,
       extrasLocked: false,
       setExtras: vi.fn(),
@@ -50,8 +50,9 @@ describe("Extras", () => {
     expect(store.meal.setExtras).toHaveBeenCalledWith("5");
   });
 
-  it("disables the boxes once the meal is reconciled", () => {
-    renderExtras(makeStore({ reconciled: true }));
+  // Meal#frozen: the meal is settled or cancelled.
+  it("disables the boxes once the meal is frozen", () => {
+    renderExtras(makeStore({ frozen: true }));
     expect(screen.getByLabelText("Set Extras to 1")).toBeDisabled();
   });
 

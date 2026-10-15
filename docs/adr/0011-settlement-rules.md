@@ -1,7 +1,7 @@
 # ADR 0011: How settlements work from now on
 
 - **Status:** Accepted. Rules 1 to 10 are built. Rule 11 is built except the
-  meal page's Cancel and Restore buttons and the settlement preview's button.
+  settlement preview's button.
 - **Date:** 2026-10-12
 - **Issue:** #165 (the common house email)
 

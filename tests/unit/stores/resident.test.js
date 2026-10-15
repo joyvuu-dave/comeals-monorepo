@@ -646,28 +646,35 @@ describe("Resident model", () => {
     });
   });
 
-  // ── a reconciled meal ──
+  // ── a settled or cancelled meal ──
 
-  // A settled meal's sign-ups and guests are final. The screen locks
-  // its controls, but the name cell is locked only by the CSS rule
-  // pointer-events: none, and a click sent to the cell itself (a screen
-  // reader's activate action, or a script) does not go through that
-  // rule. So every action checks the meal and sends nothing. A meal can
-  // be settled while it is still open (Meal.settleable_by does not look
-  // at closed), so both states are here. In the closed one Alice signed
-  // up after the close and there are seats left, so only the settlement
-  // stops each action.
-  describe("on a reconciled meal", () => {
+  // A settled meal's sign-ups and guests are final, and a cancelled
+  // one's can't change until it is restored (ADR 0011 rule 11). The
+  // screen locks its controls, but the name cell is locked only by the
+  // CSS rule pointer-events: none, and a click sent to the cell itself
+  // (a screen reader's activate action, or a script) does not go
+  // through that rule. So every action checks the meal and sends
+  // nothing. A meal can be settled or cancelled while it is still open
+  // (Meal.settleable_by does not look at closed), so both states are
+  // here. In the closed one Alice signed up after the close and there
+  // are seats left, so only the settlement or the cancel stops each
+  // action.
+  describe("on a settled or cancelled meal", () => {
     const CLOSED_AT = new Date(2023, 0, 1, 12, 0, 0).getTime();
     const AFTER_CLOSE = new Date(2023, 0, 1, 13, 0, 0).getTime();
     const signedUp = { attending: true, attending_at: AFTER_CLOSE };
     const notSignedUp = { attending: false };
 
     describe.each([
-      ["open", { closed: false, reconciled: true }],
+      ["settled and open", { closed: false, reconciled: true }],
       [
-        "closed with seats left",
+        "settled and closed with seats left",
         { closed: true, closed_at: CLOSED_AT, extras: 3, reconciled: true },
+      ],
+      ["cancelled and open", { closed: false, cancelled: true }],
+      [
+        "cancelled and closed with seats left",
+        { closed: true, closed_at: CLOSED_AT, extras: 3, cancelled: true },
       ],
     ])("that is %s", (_, mealProps) => {
       it.each([
