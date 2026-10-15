@@ -6,6 +6,17 @@ name: Rollback
 # makes the durable part unavoidable: it sets DEPLOY_HOLD so the daily
 # deploy refuses to re-ship the same sha tomorrow, and files an issue
 # holding the reason.
+#
+# Rolling back only the code is safe only when no migration ran since
+# the release it goes back to: the older code may not run on what a
+# migration made (#133). So the workflow refuses that, unless it is given
+# the backup taken before the deploy, which it restores first, or told
+# that every migration since is one the older code runs beside
+# (docs/runbooks/undo-a-deploy.md). A restore loses every write made
+# after the backup.
+#
+# It can also run on staging, to practise the undo in the rehearsal; then
+# it only rolls back and smokes, and leaves the bookkeeping alone.
 
 on:
   workflow_dispatch:
@@ -18,6 +29,21 @@ on:
         description: "Heroku release to roll back to (e.g. v612; empty = previous)"
         type: string
         required: false
+      backup:
+        description: "Backup to restore first, from heroku pg:backups (e.g. b245). Needed when a migration ran since that release; loses every write after it"
+        type: string
+        required: false
+      code_only_is_safe:
+        description: "Every migration since that release is one the older code runs beside: roll back only the code"
+        type: boolean
+        default: false
+      app:
+        description: "The app to roll back"
+        type: choice
+        options:
+          - comeals-monorepo
+          - comeals-staging
+        default: comeals-monorepo
 
 concurrency:
   group: deploy
@@ -28,45 +54,109 @@ permissions:
   actions: write
   issues: write
 
+# The inputs reach the shell as variables, never pasted into a script.
 env:
-  PROD_APP: comeals-monorepo
-  PROD_URL: https://comeals.com
+  APP: ${{ inputs.app }}
+  RELEASE: ${{ inputs.release }}
+  BACKUP: ${{ inputs.backup }}
+  REASON: ${{ inputs.reason }}
   HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
 
 jobs:
   rollback:
     runs-on: ubuntu-latest
-    # The heroku rollback itself runs in the first step, seconds in;
-    # everything after it is bookkeeping. If a later step hangs, fail
-    # in 15 minutes — production is already fixed by then — instead of
-    # holding the shared "deploy" concurrency group for 6 hours.
+    # The restore and the heroku rollback run in the first minutes (the
+    # database is about 33 MB); everything after them is bookkeeping. If
+    # a later step hangs, fail in 15 minutes — production is already
+    # fixed by then — instead of holding the shared "deploy" concurrency
+    # group for 6 hours.
     timeout-minutes: 15
     environment: production
     steps:
+      # The whole history: bin/rollback-check compares the two commits.
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Install Heroku CLI
         run: curl -s https://cli-assets.heroku.com/install.sh | sh
+
+      - name: Find the release to go back to
+        id: find
+        run: |
+          set -euo pipefail
+          case "$APP" in
+            comeals-monorepo) echo "url=https://comeals.com" >> "$GITHUB_OUTPUT" ;;
+            comeals-staging) echo "url=https://comeals-staging-ad51b8a1eb64.herokuapp.com" >> "$GITHUB_OUTPUT" ;;
+          esac
+          api() {
+            curl -sf -H "Accept: application/vnd.heroku+json; version=3" \
+              -H "Authorization: Bearer $HEROKU_API_KEY" "$@"
+          }
+          releases=$(api -H "Range: version ..; order=desc, max=2" "https://api.heroku.com/apps/$APP/releases")
+          if [ -n "$RELEASE" ]; then
+            target="${RELEASE#v}"
+          else
+            # What `heroku rollback` with no release goes back to.
+            target=$(echo "$releases" | python3 -c "import json,sys; print(json.load(sys.stdin)[1]['version'])")
+          fi
+          slug=$(api "https://api.heroku.com/apps/$APP/releases/$target" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['slug']['id'])")
+          target_sha=$(api "https://api.heroku.com/apps/$APP/slugs/$slug" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['commit'])")
+          bad_sha=$(heroku config:get HEROKU_SLUG_COMMIT -a "$APP")
+          echo "target=v$target" >> "$GITHUB_OUTPUT"
+          echo "target_sha=$target_sha" >> "$GITHUB_OUTPUT"
+          echo "bad_sha=$bad_sha" >> "$GITHUB_OUTPUT"
+          echo "$APP runs $bad_sha; v$target runs $target_sha."
+
+      - name: Check the migrations
+        run: |
+          set -euo pipefail
+          if bin/rollback-check "${{ steps.find.outputs.target_sha }}" "${{ steps.find.outputs.bad_sha }}"; then
+            exit 0
+          fi
+          if [ -n "$BACKUP" ]; then
+            echo "Backup $BACKUP is restored first, so the old code gets the database it was written for."
+          elif [ "${{ inputs.code_only_is_safe }}" = "true" ]; then
+            echo "Told that the old code runs beside every migration above: rolling back only the code."
+          else
+            echo "Refusing to roll back only the code. Run this again with the backup taken before"
+            echo "the deploy (heroku pg:backups -a $APP), or with code_only_is_safe once every"
+            echo "migration above is checked. See docs/runbooks/undo-a-deploy.md."
+            exit 1
+          fi
+
+      # Maintenance from before the restore until the old code serves, so
+      # nobody writes to the restored database through the new code.
+      - name: Restore the backup
+        if: inputs.backup != ''
+        run: |
+          set -euo pipefail
+          heroku maintenance:on -a "$APP"
+          # The database as the new code left it, so the writes the restore
+          # takes away can still be read afterwards.
+          heroku pg:backups:capture -a "$APP"
+          heroku pg:backups:restore "$BACKUP" DATABASE_URL -a "$APP" --confirm "$APP"
 
       - name: Roll back
         id: roll
         run: |
           set -euo pipefail
-          bad_sha=$(heroku config:get HEROKU_SLUG_COMMIT -a "$PROD_APP")
+          bad_sha="${{ steps.find.outputs.bad_sha }}"
+          heroku rollback "${{ steps.find.outputs.target }}" -a "$APP"
+          live_sha=$(heroku config:get HEROKU_SLUG_COMMIT -a "$APP")
           echo "bad_sha=$bad_sha" >> "$GITHUB_OUTPUT"
-          echo "Production currently runs $bad_sha."
-          if [ -n "${{ inputs.release }}" ]; then
-            heroku rollback "${{ inputs.release }}" -a "$PROD_APP"
-          else
-            heroku rollback -a "$PROD_APP"
-          fi
-          live_sha=$(heroku config:get HEROKU_SLUG_COMMIT -a "$PROD_APP")
           echo "live_sha=$live_sha" >> "$GITHUB_OUTPUT"
           if [ "$live_sha" = "$bad_sha" ]; then
             echo "Rollback did not change the running slug."
             exit 1
           fi
-          echo "Production now runs $live_sha."
+          echo "$APP now runs $live_sha."
+
+      - name: End maintenance
+        if: inputs.backup != ''
+        run: heroku maintenance:off -a "$APP"
 
       - name: Set up Node and browsers for the smoke test
         uses: actions/setup-node@v6
@@ -77,21 +167,23 @@ jobs:
         run: |
           npm ci
           npx playwright install --with-deps chromium
-          bin/smoke "$PROD_URL"
+          bin/smoke "${{ steps.find.outputs.url }}"
 
       # The daily deploy refuses while this is set. It clears when a
       # person fixes main (usually git revert) and removes the variable.
       - name: Hold the daily deploy
+        if: inputs.app == 'comeals-monorepo'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh variable set DEPLOY_HOLD \
-            --body "rolled back $(date -u +%Y-%m-%d): ${{ inputs.reason }}"
+            --body "rolled back $(date -u +%Y-%m-%d): $REASON"
 
       # Make the GitHub Releases tell the truth: mark the release that
       # pointed at the rolled-back sha. Deploys older than the release
       # process have no release to mark — say so and move on.
       - name: Mark the release notes
+        if: inputs.app == 'comeals-monorepo'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -110,7 +202,7 @@ jobs:
           fi
           gh release view "$tag" --json body --jq '.body' > body.md
           {
-            echo "> **Rolled back on $(date -u +%Y-%m-%d)** — ${{ inputs.reason }}"
+            echo "> **Rolled back on $(date -u +%Y-%m-%d)** — $REASON"
             echo
             cat body.md
           } > new_body.md
@@ -118,14 +210,15 @@ jobs:
           echo "Marked release $tag as rolled back."
 
       - name: File the follow-up issue
+        if: inputs.app == 'comeals-monorepo'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh issue create \
-            --title "Production rolled back: ${{ inputs.reason }}" \
+            --title "Production rolled back: $REASON" \
             --body "Production was rolled back from \`${{ steps.roll.outputs.bad_sha }}\` to \`${{ steps.roll.outputs.live_sha }}\` on $(date -u +%Y-%m-%d).
 
-          Reason: ${{ inputs.reason }}
+          Reason: $REASON
 
           The Heroku rollback is only the mitigation — main still contains the change. Until it is fixed, the \`DEPLOY_HOLD\` repository variable blocks the daily deploy.
 

@@ -78,6 +78,7 @@ RSpec/DescribeClass:
     - "spec/concurrency/**/*"
     - "spec/tasks/**/*"
     - "spec/requests/**/*"
+    - "spec/bin/**/*"
     - "spec/db/**/*"
     - "spec/config/**/*"
     - "spec/serializers/api_contract_spec.rb"

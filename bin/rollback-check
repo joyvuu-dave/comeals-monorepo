@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Lists the migrations that rolling back only the code would leave in the
+# database: the files in db/migrate at the commit production runs now
+# that the commit it would go back to does not have. Each one changed the
+# database for the newer code, and the older code may not run on what it
+# made (#133). The Rollback and Deploy workflows run this before they roll
+# back; docs/runbooks/undo-a-deploy.md says what to do when it finds any.
+#
+# Usage: bin/rollback-check <commit to go back to> <commit running now>
+# Run from the repository root, with both commits fetched.
+#
+# Exits 0 when no migration was added, 1 when one was (and lists them),
+# 2 when it was not given two commits.
+set -euo pipefail
+
+if [ "$#" -ne 2 ]; then
+  echo "Usage: bin/rollback-check <commit to go back to> <commit running now>" >&2
+  exit 2
+fi
+
+target="$1"
+live="$2"
+added=$(git diff --name-only --diff-filter=A "$target" "$live" -- db/migrate)
+
+if [ -z "$added" ]; then
+  echo "No migration was added after $target, so its code runs on this database."
+  exit 0
+fi
+
+echo "Migrations added after $target, which rolling back only the code leaves in the database:"
+echo "$added" | sed 's/^/  /'
+exit 1

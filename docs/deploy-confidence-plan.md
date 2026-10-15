@@ -214,10 +214,13 @@ The weekly job:
    second build that could differ from the one that passed.
 6. **Watch production.** The read-only smoke (bin/smoke) plus a few
    minutes of log watching. A failed smoke or 5xx spew triggers
-   `heroku rollback` — one command, code only. Rollback can always be
-   code-only because migrations are backward-compatible for one
-   release, enforced at author time by strong_migrations. The
-   pre-deploy database backup stays as the catastrophe option.
+   `heroku rollback`, code only, when the release ran no migration.
+   When it ran one, the workflow leaves production as it is and fails:
+   the old code may not run on what a migration made, and
+   strong_migrations does not catch every such case (#133, a column
+   dropped in the same release that stops using it). A person then
+   restores the pre-deploy backup and rolls back, or fixes forward
+   (`docs/runbooks/undo-a-deploy.md`, `bin/rollback-check`).
 7. **Mark it live.** Publish the draft release. `/api/v1/version`
    shows the running sha for cross-checking.
 

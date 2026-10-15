@@ -173,7 +173,9 @@ jobs:
             echo "visible; say 'Nothing looks different.' if not), How to undo (one"
             echo "line: to undo this release, run the Rollback workflow on the"
             echo "repo's GitHub Actions page with a one-line reason; it rolls"
-            echo "production back and pauses future deploys). Do not invent"
+            echo "production back and pauses future deploys; if a commit adds a file"
+            echo "under db/migrate, add that it also needs the backup taken before"
+            echo "the deploy, as docs/runbooks/undo-a-deploy.md says). Do not invent"
             echo "anything not in the commits. Output only the note, in Markdown,"
             echo "with no code fences around it."
             echo "Some fixes are described across several commits: one commit names a"
@@ -272,8 +274,13 @@ jobs:
 
       # Promote the slug staging just ran — production never gets a
       # second build. The Procfile release phase migrates production
-      # during the promote; strong_migrations guarantees the old code
-      # keeps working against the new schema, so no maintenance mode.
+      # during the promote, with no maintenance mode: the old code serves
+      # while the migration runs. That is safe only for a migration the old
+      # code runs beside. strong_migrations refuses the dangerous kinds,
+      # but not all: a column dropped in the same release that stops using
+      # it is not caught (#133). A release whose migrations the old code
+      # cannot run beside goes out through bin/deploy, with maintenance
+      # mode, never through this workflow.
       - name: Promote to production
         if: steps.compare.outputs.proceed == 'true'
         id: promote
@@ -285,6 +292,8 @@ jobs:
             exit 1
           fi
           echo "started=$(date -u +%Y-%m-%dT%H:%M:%S)" >> "$GITHUB_OUTPUT"
+          # What production ran before, for bin/rollback-check.
+          echo "previous=$(heroku config:get HEROKU_SLUG_COMMIT -a "$PROD_APP")" >> "$GITHUB_OUTPUT"
           heroku pipelines:promote -a "$STAGING_APP"
 
       - name: Watch production
@@ -292,6 +301,17 @@ jobs:
         run: |
           set -euo pipefail
           candidate="${{ steps.compare.outputs.candidate }}"
+          # Rolls back only the code, and only when the release ran no
+          # migration: the old code may not run on what a migration made
+          # (#133). Otherwise production stays as it is, the run fails,
+          # and a person follows docs/runbooks/undo-a-deploy.md.
+          roll_back() {
+            if bin/rollback-check "${{ steps.promote.outputs.previous }}" "$candidate"; then
+              heroku rollback -a "$PROD_APP"
+            else
+              echo "Not rolling back only the code. Follow docs/runbooks/undo-a-deploy.md."
+            fi
+          }
           # Wait for the release (including its migration) to finish.
           live=""
           for _ in $(seq 1 60); do
@@ -310,7 +330,7 @@ jobs:
             current=$(heroku config:get HEROKU_SLUG_COMMIT -a "$PROD_APP")
             if [ "$current" = "$candidate" ]; then
               echo "The slug is current but not serving — rolling back."
-              heroku rollback -a "$PROD_APP"
+              roll_back
             else
               echo "Production still runs the old release — nothing to roll back."
             fi
@@ -319,7 +339,7 @@ jobs:
           echo "Production serves the candidate."
           if ! bin/smoke "$PROD_URL"; then
             echo "Smoke failed on production. Rolling back."
-            heroku rollback -a "$PROD_APP"
+            roll_back
             exit 1
           fi
           # Live updates and the nightly jobs run in Solid Queue, whose
@@ -330,7 +350,7 @@ jobs:
           # need the supervisor, so rolling back restores live updates.
           if ! heroku run --exit-code bin/rake deploy:verify_solid_queue -a "$PROD_APP"; then
             echo "Solid Queue is not running on production. Rolling back."
-            heroku rollback -a "$PROD_APP"
+            roll_back
             exit 1
           fi
           # The soak: watch the logs for a few minutes of real traffic.
@@ -345,7 +365,7 @@ jobs:
             echo "Worrying production log lines after the deploy:"
             echo "$hits" | head -20
             echo "Rolling back."
-            heroku rollback -a "$PROD_APP"
+            roll_back
             exit 1
           fi
           echo "Logs are quiet."
