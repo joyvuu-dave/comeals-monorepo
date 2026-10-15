@@ -168,3 +168,119 @@ describe("a crash outside the error page", () => {
     expect(sessionStorage.getItem("crashReloads")).toBeNull();
   });
 });
+
+// A crash in the start-up code, before React draws anything (#162).
+// OuterErrorBoundary covers only what React draws, so the root stayed
+// empty and nothing loaded the page again.
+describe("a crash before React draws anything", () => {
+  let restoreLocation;
+
+  beforeEach(() => {
+    // notifyError is one mock for the whole file, so it still holds the
+    // calls of the tests above.
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    vi.stubGlobal("__BUILD_ID__", "test-build");
+    localStorage.setItem("cacheVersion", "test-build");
+    sessionStorage.clear();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    restoreLocation = () => {};
+  });
+
+  afterEach(() => {
+    restoreLocation();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    vi.doUnmock("../../app/frontend/src/stores/data_store.js");
+    vi.useRealTimers();
+    sessionStorage.clear();
+  });
+
+  it("shows the crash page, reports it, and loads '/' after five minutes", async () => {
+    vi.doMock("../../app/frontend/src/stores/data_store.js", () => ({
+      DataStore: {
+        create() {
+          throw new Error("the store broke");
+        },
+      },
+    }));
+    let location;
+    ({ location, restore: restoreLocation } = fakeLocation({
+      assign: vi.fn(),
+      reload: vi.fn(),
+    }));
+
+    const { root, thrown } = await bootApp();
+
+    expect(thrown).toBeNull();
+    expect(root.outerHTML).not.toBe(EMPTY_ROOT);
+    expect(crashPage()).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "david.paul.riddle@gmail.com" }),
+    ).toHaveAttribute("href", "mailto:david.paul.riddle@gmail.com");
+    const { notifyError } =
+      await import("../../app/frontend/src/helpers/bugsnag");
+    expect(notifyError).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(notifyError).mock.lastCall[0].message).toBe(
+      "the store broke",
+    );
+
+    screen.getByRole("button", { name: "Refresh" }).click();
+    expect(location.reload).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5 * MINUTE - 1);
+    });
+    expect(location.assign).not.toHaveBeenCalled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(location.assign).toHaveBeenCalledWith("/");
+  });
+
+  // The wait grows when the page keeps crashing, the same as for a
+  // crash inside React (helpers/crash_reload_wait.ts).
+  it("waits longer when the page crashed just before", async () => {
+    sessionStorage.setItem("crashReloads", "1");
+    vi.doMock("../../app/frontend/src/stores/data_store.js", () => ({
+      DataStore: {
+        create() {
+          throw new Error("the store broke");
+        },
+      },
+    }));
+    let location;
+    ({ location, restore: restoreLocation } = fakeLocation({
+      assign: vi.fn(),
+    }));
+
+    await bootApp();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10 * MINUTE - 1);
+    });
+    expect(location.assign).not.toHaveBeenCalled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(location.assign).toHaveBeenCalledWith("/");
+  });
+
+  // A browser set to block site data throws on any use of localStorage.
+  // Only the check of the device's copies uses it, and sign-in uses a
+  // cookie, so the app starts without that check.
+  it("starts the app when the browser blocks localStorage", async () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new DOMException("The operation is insecure.", "SecurityError");
+    });
+
+    const { thrown } = await bootApp();
+
+    expect(thrown).toBeNull();
+    expect(screen.getByLabelText("email")).toBeInTheDocument();
+    expect(crashPage()).not.toBeInTheDocument();
+    const { notifyError } =
+      await import("../../app/frontend/src/helpers/bugsnag");
+    expect(notifyError).not.toHaveBeenCalled();
+  });
+});

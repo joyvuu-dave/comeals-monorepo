@@ -59,6 +59,7 @@ import ScrollToTop from "./components/app/scroll_to_top";
 import ErrorBoundary from "./components/app/error_boundary";
 import OuterErrorBoundary from "./components/app/outer_error_boundary";
 import { forgetCrashesAfterAnHourWithout } from "./helpers/crash_reload_wait";
+import { showBootCrash } from "./helpers/boot_crash";
 import { CALENDAR_PATH, MEAL_EDIT_PATH, LOGIN_PATH } from "./routes";
 
 function TrailingSlash() {
@@ -91,19 +92,30 @@ const MealsEdit = React.lazy(
   }, sendBillsBeforeChunkReload),
 );
 
-document.addEventListener("DOMContentLoaded", () => {
-  // Clear all cached calendar/meal data the first time a browser loads
-  // a new build. A deploy can change any cached payload — the Aug 2026
-  // migration that darkened rotation red did, and every stale month
-  // then flashed the old color before revalidation replaced it — and
-  // nothing else tells a browser its copies are stale: Pusher only
-  // covers the month on screen and its two neighbors. Keying on the
-  // build id (vite.config.mjs bakes one into each production build)
-  // makes this automatic; it used to be a hand-bumped constant, and
-  // the hand forgot. clear() is async but completes well before any
-  // user navigation triggers a data load, so no race in practice.
+// Clear all cached calendar/meal data the first time a browser loads
+// a new build. A deploy can change any cached payload — the Aug 2026
+// migration that darkened rotation red did, and every stale month
+// then flashed the old color before revalidation replaced it — and
+// nothing else tells a browser its copies are stale: Pusher only
+// covers the month on screen and its two neighbors. Keying on the
+// build id (vite.config.mjs bakes one into each production build)
+// makes this automatic; it used to be a hand-bumped constant, and
+// the hand forgot. clear() is async but completes well before any
+// user navigation triggers a data load, so no race in practice.
+function clearCachesForNewBuild() {
   const CACHE_VERSION = __BUILD_ID__;
-  if (localStorage.getItem("cacheVersion") !== CACHE_VERSION) {
+  // A browser set to block site data throws on any use of localStorage.
+  // The device's copies then cannot be checked, and the app starts
+  // without the check: nothing else uses localStorage, and sign-in uses
+  // a cookie (#162).
+  let seen;
+  try {
+    seen = localStorage.getItem("cacheVersion");
+  } catch (error) {
+    console.warn("This browser blocks localStorage:", error);
+    return;
+  }
+  if (seen !== CACHE_VERSION) {
     clear();
     // Cache version 3 (2026) switched from localforage to idb-keyval,
     // which uses its own IndexedDB database. Delete the old localforage
@@ -112,6 +124,18 @@ document.addEventListener("DOMContentLoaded", () => {
     indexedDB.deleteDatabase("localforage");
     localStorage.setItem("cacheVersion", CACHE_VERSION);
   }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  try {
+    startApp();
+  } catch (error) {
+    showBootCrash(document.getElementById("root"), error);
+  }
+});
+
+function startApp() {
+  clearCachesForNewBuild();
 
   const store = DataStore.create();
   appStore = store;
@@ -214,4 +238,4 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     });
   }
-});
+}
