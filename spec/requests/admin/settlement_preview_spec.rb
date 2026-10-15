@@ -197,6 +197,9 @@ RSpec.describe 'Admin settlement preview' do
 
       expect(response).to redirect_to("/reconciliations/#{Reconciliation.sole.id}")
       expect(meal.reload.reconciliation_id).to eq(Reconciliation.sole.id)
+      # The meal's history says it was settled, and by whom (Settlement#record_meals_settled).
+      expect(meal.audits.where(action: 'update').reorder(:id).last)
+        .to have_attributes(user: admin, audited_changes: { 'reconciliation_id' => [nil, Reconciliation.sole.id] })
     end
 
     it 'saves nothing, and shows the preview as it is now, when a cost changed after the preview' do

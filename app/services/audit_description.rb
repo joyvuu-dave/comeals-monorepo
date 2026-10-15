@@ -217,9 +217,9 @@ class AuditDescription
   # The words for the rarer meal changes, or nil. The last three are the
   # ones the history could not read until #155:
   # - moved to another day, by an admin (the admin meal form can still);
-  # - settled, or moved between settlements. A settlement writes no row
-  #   (its UPDATE skips the model); these come from the four settlements
-  #   rebuilt by hand in August 2023, one meal at a time;
+  # - settled (each settlement writes this row, through
+  #   SettledMealHistory), or moved between settlements (only the four
+  #   settlements rebuilt by hand in August 2023 wrote these);
   # - the close time alone, by a hand edit (one row, 2023-03-06).
   def rarer_meal_change_words(changes)
     return 'Meal assigned to a rotation' if changes['rotation_id'].present?

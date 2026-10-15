@@ -608,9 +608,9 @@ RSpec.describe AuditDescription do
         .to eq("Meal moved from #{meal.date_previously_was.strftime('%a %b %-d, %Y')} to Fri Nov 6, 2026")
     end
 
-    # Settlements claim their meals with one UPDATE, which writes no row.
-    # These rows come from the four settlements rebuilt by hand from the
-    # console in August 2023, one meal at a time.
+    # A settlement writes the first kind for each meal it claims
+    # (SettledMealHistory). The other two come only from the four
+    # settlements rebuilt by hand from the console in August 2023.
     it 'says a meal was settled, moved to another settlement, or taken out of one' do
       words = [[nil, 6], [9, 3], [6, nil]].map do |change|
         described_class.describe(instance_double(Audited::Audit, auditable_type: 'Meal', action: 'update',

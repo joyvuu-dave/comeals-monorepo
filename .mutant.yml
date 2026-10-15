@@ -69,6 +69,7 @@ matcher:
     - RetryOnConflict*
     - SettleAndNotify*
     - SettledDinnerDifference*
+    - SettledMealHistory*
     - SettlementCorrecting*
     - SettlementLineMarking*
     - SnapshotRead*

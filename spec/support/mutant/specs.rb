@@ -63,6 +63,8 @@ MUTANT_SPEC_ROWS = {
   'spec/db/settlement_race_spec.rb' => %w[Settlement],
   # The only spec where a cook's cost is written while the marking runs.
   'spec/db/no_cost_marking_race_spec.rb' => %w[NoCostMarking],
+  # The history row a settlement writes for each meal it claims.
+  'spec/services/settlement_history_spec.rb' => %w[Settlement SettledMealHistory],
   # The only spec where PostgreSQL refuses a COMMIT, not a statement.
   'spec/db/commit_refused_spec.rb' => %w[RetryOnConflict],
   # The only spec where a cook signs up while the cancelling runs.

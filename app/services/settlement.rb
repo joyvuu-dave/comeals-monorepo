@@ -281,6 +281,7 @@ class Settlement
     Reconciliation.transaction do
       reconciliation.save!
       assign_meals
+      SettledMealHistory.record(meal_ids: claimed_meals.map(&:first), reconciliation_id: T.must(reconciliation.id))
       claim_corrections
       balances = write_ledger!
       refuse_what_the_preview_did_not_show!(fingerprint, balances) if fingerprint
