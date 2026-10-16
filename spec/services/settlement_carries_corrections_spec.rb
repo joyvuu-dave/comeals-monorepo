@@ -159,6 +159,29 @@ RSpec.describe Settlement do
 
     # Rule 4: Create settles only what the preview showed. A correction
     # saved after the preview changes what the settlement carries.
+    it 'leaves a correction a settlement carried out of the next preview' do
+      settle!(cutoff: latest)
+      dinner(latest, cost: 12)
+
+      preview = described_class.preview(cutoff: latest)
+
+      expect(preview.corrections).to be_empty
+      expect(preview.resident_balances.slice(cook.id, eater.id))
+        .to eq(cook.id => BigDecimal('12'), eater.id => BigDecimal('-12'))
+    end
+
+    # Two corrections of one dinner come back in the order they were made
+    # whether or not the query asks, so this reads the statement.
+    it 'asks for the corrections it shows oldest first' do
+      statements = []
+      callback = ->(*, payload) { statements << payload[:sql] }
+      ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') { described_class.preview(cutoff: latest) }
+
+      waiting = '"meal_corrections"."reconciliation_id" IS NULL'
+      expect(statements.grep(/\ASELECT "meal_corrections"\.\* FROM "meal_corrections"/))
+        .to contain_exactly(a_string_ending_with(%(WHERE #{waiting} ORDER BY "meal_corrections"."id" ASC)))
+    end
+
     it 'refuses the preview\'s fingerprint when a correction was saved after the preview' do
       dinner(latest, cost: 12)
       fingerprint = described_class.preview(cutoff: latest).fingerprint
