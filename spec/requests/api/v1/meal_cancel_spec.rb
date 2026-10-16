@@ -112,6 +112,12 @@ RSpec.describe 'Cancelling a dinner through the API' do
            headers: { 'Idempotency-Key' => SecureRandom.uuid }
       expect(response).to have_http_status(:bad_request)
 
+      edits = [{ op: 'add', resident_id: cook.id, to: { amount: '0.00', no_cost: true } }]
+      patch "/api/v1/meals/#{meal.id}/bills", params: { edits: edits, token: token },
+                                              headers: BillEdits.key_header, as: :json
+      expect(response).to have_http_status(:bad_request)
+      expect(message).to eq('This dinner is cancelled. Restore it before changing it.')
+
       patch "/api/v1/meals/#{meal.id}/closed", params: { token: token, closed: true }
       expect(response).to have_http_status(:bad_request)
       expect(message).to eq('This dinner is cancelled. Restore it before changing it.')
@@ -119,6 +125,7 @@ RSpec.describe 'Cancelling a dinner through the API' do
       expect(meal.reload).to have_attributes(closed: false)
       expect(meal.meal_residents.pluck(:resident_id)).to eq([cook.id])
       expect(meal.guests).to be_empty
+      expect(meal.bills).to be_empty
     end
 
     it 'takes a new description' do

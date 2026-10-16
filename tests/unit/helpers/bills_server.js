@@ -80,6 +80,7 @@ export function billsServer(axios) {
       closed: false,
       closed_at: null,
       reconciled: false,
+      cancelled: false,
       max: null,
       next_id: mealId,
       prev_id: mealId,
