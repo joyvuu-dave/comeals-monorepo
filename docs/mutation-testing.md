@@ -3370,3 +3370,196 @@ month` and `while last`: the set of dates grows until the process
 
 Run 3, on the final code, left 16 alive: the 15 noise above and the
 finding. No timeouts.
+
+### 2026-10-16, the community and the cooking schedule
+
+Run on `Community*`, `MealSchedule*`, `Rotation*`,
+`Api::V1::RotationsController*`, `EnsureRotationsJob*`,
+`RecurringJob*`, `RecurringCatchUp*`, `ScheduleWeekLabelHelper*` and
+`Multiplier*`: 66 subjects (65 once `Community#cap` was removed), in
+three pieces of four workers each.
+
+| Run                                                                | Subjects | Mutations | Killed | Alive | Timeouts |
+| ------------------------------------------------------------------ | -------- | --------- | ------ | ----- | -------- |
+| 1, 38926234930, on main (f6856730); piece 1 was lost, see below    | 44       | 1,847     | 1,775  | 72    | 7        |
+| 2, 38933947066, the subjects piece 1 lost, after the first answers | 21       | 1,165     | 1,130  | 35    | 1        |
+| 3, 38937982185, every subject, before the rebase on main           | 65       | 2,974     | 2,903  | 71    | 1        |
+| 4, 38946037168, every subject, after the rebase on main            | 65       | 2,985     | 2,910  | 75    | 1        |
+| 5, 38952053607, every subject, at the end of the branch            | 65       | 2,985     | 2,914  | 71    | 1        |
+
+Run 4 had five survivors run 3 did not (and lost run 3's
+`with_attendees` one, now killed). Main had put the running release into
+`Community#calendar_cache_version`, and `ENV.fetch` with a default of
+nil for "" is the same text after `join` (1, noise). And main's new row
+for `spec/requests/api/v1/ical_daylight_saving_spec.rb` names
+`Community#dinner_start_at`, so mutant ran only that one example for
+the method: the row for `community_dinner_start_times_spec.rb` had
+turned its `describe '#dinner_start_at'` group into class-level
+examples (rule 2). That row now names the method too, and a new example
+with 18:30 on the day the clocks move forward kills the four changes
+that dropped the minutes (`split` with no argument or nil, the minute
+left out or nil). `spec/config/mutant_selection_spec.rb` did not fail
+for the hidden group.
+
+For the 22 subjects of the lost piece, the "before" is the full run of
+the same morning (38904964429, on 532ac4be, where these classes had the
+same code): 1,118 mutations, 52 alive, 10 of them timeouts. So 124
+alive before, 72 + 52, with 17 timeouts, not counting
+`ScheduleWeekLabelHelper#schedule_grid_data`, which no run had
+finished. The counts by kind below are of those 124.
+
+A piece that stopped the machine. Mutant changes
+`(1..MealSchedule::MAX_WEEKS).map` in
+`ScheduleWeekLabelHelper#schedule_grid_data` to `(1..nil).map`, and the
+map then makes a new string for every whole number, until the machine
+runs out of memory. GitHub then stops the runner with exit code 143 and
+the piece uploads nothing. That happened in piece 30 of the morning's
+full run ("The runner has received a shutdown signal") and in piece 1
+of run 1, after 50 minutes. Both pieces held that method. Its examples
+now stub `schedule_repeat_note` to raise when asked for a cycle longer
+than six weeks, so the change fails at once; run 2 killed all 61 of the
+method's mutations. The same kind of change made a list of dates with
+no end in `MealSchedule#dates_between` and of nils in
+`Community#dinner_start_times=`, both timeouts. Their examples now stop
+them too (below).
+
+Missing examples, each with one now (18):
+
+- `Community#averaged_meals` (2): the filter for a cost not entered
+  removed, or `where(nil)`. The examples read these meals only through
+  the two averages, inside `describe '#unreconciled_ave_cost'` and the
+  other method groups, so mutant ran none of them for this method
+  (rule 2 above). New groups read the list of meals, one of each kind,
+  and `#averaged_meal_count`. Run 3 then showed `with_attendees`
+  removed: the one meal nobody ate had a receipt with money, which
+  `settleable_by` holds back anyway. The example now also has a no-cost
+  dinner nobody ate.
+- `#meals_left_out_of_averages` (2): without `.unreconciled`, a settled
+  cancelled dinner and a settled dinner with a blank cost were counted;
+  and the count of meals with nobody to charge was the same 1 when it
+  read the meals waiting for a cost instead, until the example had two
+  such meals.
+- `#unreconciled_ave_cost` (5, the preloads): `Meal#multiplier` sums
+  sign-ups and guests in SQL, one query per meal, unless both are
+  loaded. A new example counts the queries for one meal and for three.
+- `#unreconciled_ave_number_of_attendees`, seen while reading, not
+  from a survivor: `eq(1.3)` passed for `Rational(13, 10)` too, which
+  the dashboard prints as 13/10. The example now expects the Float.
+- `#calendar_cache_version` (1): `.beginning_of_day` removed. Given a
+  time on the first day, a morning event that day was left out. The
+  example uses March 8, 2026, the day the clocks move forward.
+- `Rotation#set_color` (1) and `#set_place_value` (1): without the
+  `ORDER BY id`, PostgreSQL returns rows in the order they are stored,
+  and an update stores a new copy of a row after the others. Each new
+  example updates the first rotation first.
+- `RecurringJob#record` (2): every job returns a plain Hash, so a test
+  for any Hash, for a truthy value, or for a plain Hash only were the
+  same. The new example returns a number, an Array and a Hash with
+  indifferent access.
+- `RecurringCatchUp.call` (4): config/puma.rb calls it with no time,
+  and no example did. Fugit raises for a nil time.
+- `ScheduleWeekLabelHelper#schedule_grid_data`: only the first two
+  labels and notes were checked; now all six of each are.
+
+Lines removed, because they did nothing the rest of the method did not
+already do (20):
+
+- `Community#cap` (1): it only called `read_attribute(:cap)`, which is
+  what the reader Rails defines does. Without it, Sorbet reads `cap` as
+  a nilable BigDecimal, so `cap_in_whole_cents` now says `T.must(cap)`
+  after its nil check.
+- `.distinct` in `Rotation#note_live_update` (1) and
+  `#set_place_value` (1): `meals.date` has a unique index, so a
+  rotation's meals never share a date.
+- `return if renumbered.empty?` in `#set_place_value` (5): with no
+  rotation renumbered, the meals query matches nothing and pushes
+  nothing. It saved one query.
+- `last_color &&` in `Rotation#set_color` (1): `COLORS.index(nil)` is
+  nil too.
+- `precision: 1` in `Multiplier.label` (5): a whole number over 2 ends
+  in .0 or .5, so every precision of 1 or more prints the same words.
+- The `:bills` preload in `Community#unreconciled_ave_cost` (2):
+  goldiloader reads every meal's bills in one query when the ledger
+  reads the first meal's. The new query-count example passes without
+  it.
+- `.select(:id)` in `#unreconciled_ave_number_of_attendees` (4): given
+  a relation in a `where` hash, Rails selects its primary key on its
+  own.
+
+Loops that never end (17). Each one ran until the 300-second limit,
+and every example that reached it hung. All but one now fail in
+seconds, because the examples stop the loop with an error of their own:
+
+- `EnsureRotationsJob#run` (6): the loop's check made always true, or
+  the call that makes a rotation removed. `spec/support/rotation_limit.rb` raises at the
+  31st rotation or the 201st read of the community's meals, in the
+  job's two spec files and the task's.
+- `MealSchedule#upcoming_dates` (8): the scan limit's check removed,
+  made false, or not raising, and the count of days scanned not moving
+  up. The examples that refuse every day raise once the walk passes
+  three years.
+- `MealSchedule#dates_between` (1) and `Community#dinner_start_times=`
+  (1), the lists with no end above. The `dates_between` examples raise
+  past 2030; the first dinner-time example writes a hash that raises
+  when asked for a day after Saturday.
+- Left (1): `upcoming_dates` with the whole loop body removed. Nothing
+  is called inside the loop, so no example can stop it.
+
+Noise, left (69 of the 124 before; 70 in run 5 with the release default):
+
+- `size` or `length` for `count` on a relation that is not loaded
+  (16): `#averaged_meal_count` (2), the four counts of
+  `#meals_left_out_of_averages` (8), and the three counts of
+  `#unreconciled_ave_number_of_attendees` (6). The same number, read
+  another way.
+- `instance_of?` for `is_a?` (10): `Community#dinner_start_times=` (1),
+  `#schedule=` (2), `#dinner_start_times_shape` (2), `#schedule_shape`
+  (3), `MealSchedule#initialize` (1), `RecurringCatchUp#tasks` (1).
+  The values are plain Arrays, Strings, Integers and Hashes: read from a
+  JSON column, from the admin form, from `config_for`, or written in
+  the console. Only a subclass would tell the two apart, and nothing
+  makes one.
+- `.fetch` or `.at` for `[]` where the index or the key is always there
+  (10): `#dinner_start_time_on` (2; seven times, by the validation and
+  the CHECK), `MealSchedule#meal_day?` (2; the index is taken modulo
+  the cycle length), `Rotation.recolor_community` (2; modulo the
+  number of colors), `#schedule=` (1; the keys come from `value.keys`),
+  `RecurringCatchUp#due` (2; every task kept has a class, and one with
+  no schedule raises either way), and
+  `Api::V1::RotationsController#set_resource` (1; `:id` is part of the
+  route).
+- The same value written another way (19 in run 5): `.to_int` or `Integer()`
+  for `.to_i` on a whole number of days (2,
+  `MealSchedule.weeks_since_epoch`); `each` or no `map` in
+  `#dinner_start_at` (2), because `Time.utc` reads "19" as 19;
+  `lstrip` or `rstrip` for `strip`, and `all?` with no argument, in
+  `#normalize_schedule_week` (3): a field of only spaces is empty after
+  any of them, and the list holds only whole numbers and nils;
+  `today` for `today.to_s`, the values not spread out, and a nil
+  default for the release, in `#calendar_cache_version` (3; 2 before
+  the release was added), because `join` writes a date as the same
+  text, flattens a nested list and writes nil as nothing; `to_ary`
+  for `to_a`, and `sum` with no BigDecimal to start from, in
+  `#unreconciled_ave_cost` (2): the first cost is a BigDecimal, and an
+  empty list returned "--" before the sum; `free_below_age()` for
+  `self.free_below_age` and the same for `full_price_age`, in
+  `#child_ages_ordered` (2); `self.class::HEALTHCHECK` for
+  `const_get(:HEALTHCHECK)` (Sorbet refuses that form, "Dynamic
+  constant references are unsupported") and `"#{e}"` for
+  `"#{e.message}"` in `RecurringJob#perform` (2); the class for its
+  name in `RecurringJob#run`'s message (1); `self` for `Rotation` in
+  `Rotation.recolor_community` (1); and the order string without
+  `Arel.sql` in `#set_place_value` (1), which Rails accepts as it is.
+- `Community#averaged_meals` (6): a cutoff of nil, today, tomorrow or
+  `today - 0`, and `today:` nil or left out. `Meal.settleable_by`
+  stops at the cutoff and before today, and with yesterday as the
+  cutoff those two bounds are the same day. So either one alone gives
+  the same meals, and left out, `today:` reads the same row through
+  `Community.instance`.
+- `Community#backfill_orphan_admin_users` (1): without the
+  `community_id: nil` filter. The hook runs once, when the one
+  community is created, and no admin user can have a community before
+  it exists.
+- `EnsureRotationsJob#run` (8): the `if` around the log line. The log
+  line itself is ignored (`ignore_patterns`), so its condition only
+  decides whether a line nobody checks is written.
