@@ -91,8 +91,8 @@ RSpec.configure do |config|
   # until someone runs it alone. RSpec prints the seed at the start and
   # the end of the run ("Randomized with seed 1234"), and
   # `bundle exec rspec --seed 1234` runs the same order again. Under
-  # bin/mutant, spec/support/mutant_selection.rb replaces this order with
-  # its own, after this file loads.
+  # bin/mutant, mutant replaces this order with its own before each
+  # mutation: the order the files load, by path, then by line (#185).
   config.order = :random
 
   # Seed Ruby's own random numbers with the same number, so Faker's names

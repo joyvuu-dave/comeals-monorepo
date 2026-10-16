@@ -397,16 +397,6 @@ MUTANT_SPECS = MUTANT_SPEC_ROWS.to_h do |path, expressions|
   [path, (expressions.empty? || base.nil? ? expressions : (expressions | [base])).freeze]
 end.freeze
 
-# Mutant runs the selected examples with --fail-fast, so a mutation is
-# killed as soon as one example fails. The cheap, exact examples should
-# come first: a unit spec on a service fails in a fraction of a second,
-# a request spec or the race spec takes seconds to get to the same
-# assertion. Ranked by directory; within a directory, by path and line.
-MUTANT_DIRECTORY_ORDER = %w[
-  spec/services spec/models spec/helpers spec/tasks spec/jobs
-  spec/mailers spec/requests spec/db
-].freeze
-
 # The runtime type-check specs. Each one calls a method with the wrong
 # type and expects the Sorbet sig to raise. Mutant cannot run them: it
 # reinserts the method from its own copy of the source, without the

@@ -19,8 +19,13 @@
 # file, so a class named there should be one whose behaviour the file
 # checks, not one it only calls on the way. Add a row there when a new
 # spec checks a class under a sentence description. That file also
-# orders the examples by directory and lists the specs mutant must
-# never run.
+# lists the specs mutant must never run.
+#
+# This file does not set the order the examples run in. mutant-rspec
+# 0.17 sets its own order before each mutation: the order the files
+# load, by path, then by line (#185). Mutant stops at the first example
+# that fails, so an example meant to end a mutation that never stops
+# must be in the first of the selected files by path.
 #
 # The first run (2026-09-08) had 12 examples selected for
 # Settlement.truncate_toward_zero, none of which read its result, and
@@ -30,14 +35,6 @@ return unless ENV['MUTANT']
 require_relative 'mutant/specs'
 
 RSpec.configure do |config|
-  config.register_ordering(:global) do |items|
-    items.sort_by do |item|
-      path = item.metadata[:file_path].delete_prefix('./')
-      rank = MUTANT_DIRECTORY_ORDER.index { |dir| path.start_with?("#{dir}/") } || MUTANT_DIRECTORY_ORDER.size
-      [rank, path, item.metadata[:line_number]]
-    end
-  end
-
   selections = MUTANT_SPECS.merge(MUTANT_SIG_CHECK_SPECS.index_with([]))
   selections.each do |path, expressions|
     absolute = Rails.root.join(path).to_s

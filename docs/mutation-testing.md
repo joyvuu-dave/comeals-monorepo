@@ -127,7 +127,12 @@ runtime type-check specs (mutant reinserts a method without its `sig`,
 so those fail on the unmutated code).
 
 Mutant runs the examples with `--fail-fast`, so a killed mutation stops
-at the first failing example. Only a survivor pays for the whole list.
+at the first failing example. Only a survivor runs the whole list.
+Mutant sets the order itself, before each mutation: the order the
+files load, by path, then by line. An RSpec ordering of our own is
+replaced, so `spec/db/...` runs before `spec/services/...` (#185). An
+example meant to end a mutation that never stops must be in the first
+of the selected files by path.
 
 Three rules about which examples reach a method, each learned from a
 survivor and each pinned by `spec/config/mutant_selection_spec.rb`:
@@ -3250,8 +3255,9 @@ them both `MailDelivery` methods, every `SuperuserAdapter` method but
 own `:global` RSpec ordering before each mutation runs
 (`Mutant::Integration::Rspec#install_ordering`), in the order it chose
 the examples, which is the order their files load: by path, then by
-line. So `MUTANT_DIRECTORY_ORDER` in `spec/support/mutant/specs.rb`
-changes nothing, and for `RetryOnConflict.call` the first file is
+line. So the order by directory that `spec/support/mutant_selection.rb`
+set then (`MUTANT_DIRECTORY_ORDER`, removed in #185) changed nothing,
+and for `RetryOnConflict.call` the first file is
 `spec/db/commit_refused_spec.rb`. Mutant stops at the first example that
 fails, so an example meant to end a mutation that never stops must be
 in the first file that runs (#185).
