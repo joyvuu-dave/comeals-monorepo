@@ -31,9 +31,10 @@ class BugsnagErrorSubscriber
   def report(error, handled:, severity:, context:, source: nil)
     Bugsnag.notify(error) do |report|
       # Rails uses :error, :warning and :info; Bugsnag uses the same three
-      # words as strings. Anything unexpected becomes an error rather than
-      # being dropped or raising inside the reporter.
-      report.severity = %i[error warning info].include?(severity) ? severity.to_s : 'error'
+      # words as strings. :warning and :info are passed on as they are.
+      # :error, and anything unexpected, becomes 'error' rather than being
+      # dropped or raising inside the reporter.
+      report.severity = %i[warning info].include?(severity) ? severity.to_s : 'error'
 
       # Bugsnag decides handled vs unhandled itself: anything sent through
       # notify is handled, and report.unhandled is read-only. Everything
