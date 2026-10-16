@@ -46,6 +46,20 @@ RSpec.describe Reconciliation do
     expect(settled.settled_cooks_by_meal).to eq(meal.id => [bob, ann])
   end
 
+  # Four cooks whose name order is neither their id order nor its
+  # reverse, so an order that follows the rows, in either direction,
+  # does not match it by chance.
+  it 'lists four cooks of a dinner by name, not in the order they were added' do
+    cooks = %w[Cat Abe Dee Bea].map { |name| create(:resident, community: community, unit: unit, name: "#{name} Cook") }
+    later = create(:meal, community: community, date: latest)
+    cooks.each do |cook|
+      create(:bill, meal: later, resident: cook, community: community, amount: BigDecimal('0'), no_cost: true)
+    end
+    create(:meal_resident, meal: later, resident: eater, community: community)
+
+    expect(settle!(cutoff: latest).settled_cooks_by_meal).to eq(later.id => cooks.values_at(1, 3, 0, 2))
+  end
+
   it 'stays as it settled after a correction changes a cost, removes a cook and adds one' do
     correct('Wrong cooks') do |edits|
       edits.cost(ann, amount: BigDecimal('25'), no_cost: false)
