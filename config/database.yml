@@ -58,8 +58,8 @@ default: &default
   # for the batch reads, which are stricter still.
   # The two timeouts turn "stuck forever" into "raises an error in seconds".
   # A statement that runs 10 seconds on a 33 MB database is a bug, and an
-  # error that comes early and is reported is the correct response to a bug. A lock wait that
-  # lasts 5 seconds means another writer holds the row; the API and admin
+  # error that comes early and is reported is the correct response to a
+  # bug. A lock wait that lasts 5 seconds means another writer holds the row; the API and admin
   # render ActiveRecord::LockWaitTimeout as "try again"
   # (Api::V1::MealsController#with_meal_lock,
   # config/initializers/active_admin_conflict_rescue.rb).

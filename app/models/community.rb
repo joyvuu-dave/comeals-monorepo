@@ -421,9 +421,9 @@ class Community < ApplicationRecord
   # The version is read from the rows themselves, before the rows are
   # serialized: the row count and the newest updated_at of every table
   # the month is drawn from, plus today's date and the running release.
-  # That is what makes the
-  # cache safe against a write that lands while a request is building
-  # the month (spec/requests/api/v1/calendar_cache_race_spec.rb). Deleting
+  # That is what makes the cache safe against a write that lands while a
+  # request is building the month
+  # (spec/requests/api/v1/calendar_cache_race_spec.rb). Deleting
   # the entry on write cannot close that window — the slow request
   # stores its stale copy after the delete — but a stale copy stored
   # under the old version is a miss for every later reader, so it serves
