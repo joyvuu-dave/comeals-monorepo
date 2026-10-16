@@ -64,6 +64,12 @@ class Settlement
   # a correction in the next settlement (rule 6).
   class Marked < RuntimeError; end
 
+  # Settlement#correct! was asked to work out again a settlement one of
+  # whose dinners has a correction (ADR 0011 rule 6). From that
+  # correction on, the settlement keeps what it settled and the
+  # corrections carry every change. Nothing is written.
+  class DinnerCorrected < RuntimeError; end
+
   # Raised by correct! when its fix block was left by return, break or
   # throw. Rails commits a transaction block that is left without an
   # error, so the fix would stay on the settled rows with no correction

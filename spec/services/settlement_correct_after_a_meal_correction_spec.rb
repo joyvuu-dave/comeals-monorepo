@@ -7,22 +7,18 @@ require 'rails_helper'
 #
 # correct! works the settlement out again from its meals' rows as they are
 # now. Its balances come from Reconciliation#settlement_balances, which
-# takes every correction to the settlement's meals off again, so they are
-# what the settlement settled plus the new fix. But its line items come
-# straight from the ledger's lines, and the ledger reads the corrected
-# dinner's rows, correction included. So after correct! the corrected
-# dinner's stored lines already hold the correction, and the correction's
-# own lines are counted on top of them.
+# takes every correction to the settlement's meals off again, so they
+# would be what the settlement settled plus the new fix. But its line
+# items come straight from the ledger's lines, and the ledger reads the
+# corrected dinner's rows, correction included. So the corrected dinner's
+# stored lines would hold the correction, the correction's own lines would
+# be counted on top of them, and the nightly check's dinner and line item
+# checks would fail for this settlement every night.
 #
-# The runbook (docs/runbooks/settled-data-repair.md) says to use correct!
-# "the same way for the next repair of this kind" and that "ledger:verify
-# then finds the settlement matching its rows". Until rule 10 removes
-# correct!, both can be in use at once.
-#
-# Bug hunt 2026-10-16 (money). After correct!, the nightly check fails for
-# this settlement every night: the dinner check (stored line plus
-# correction is not what the rows add up to) and the line item check (the
-# lines no longer add up to the balances).
+# Bug hunt 2026-10-16 (money) found that correct! went ahead. It now
+# refuses such a settlement before it writes anything
+# (Settlement::DinnerCorrected): the settlement keeps what it settled, and
+# the corrections carry every change.
 RSpec.describe Settlement, '#correct!' do
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
@@ -58,17 +54,20 @@ RSpec.describe Settlement, '#correct!' do
     settle!(cutoff: latest)
   end
 
-  it 'leaves the settlement matching its rows when one of its dinners was corrected before' do
+  it 'refuses, writing nothing, when one of its dinners was corrected before' do
     expect(findings).to eq([])
 
-    described_class.new(reconciliation).correct!(reason: 'The $12 receipt was $15') do
-      SettledWrites.with_repair_bypass { repaired.bills.sole.update_columns(amount: BigDecimal('15')) }
-    end
+    expect do
+      described_class.new(reconciliation).correct!(reason: 'The $12 receipt was $15') do
+        SettledWrites.with_repair_bypass { repaired.bills.sole.update_columns(amount: BigDecimal('15')) }
+      end
+    end.to raise_error(described_class::DinnerCorrected, /settlement #{reconciliation.id} has a correction/)
 
-    # What the settlement settled ($42) plus the repair ($3). The $10
-    # correction is carried by the next settlement, not this one.
+    # What the settlement settled: $30 and $12, and the fix did not run.
+    expect(repaired.bills.sole.amount).to eq(BigDecimal('12'))
     expect(reconciliation.reconciliation_balances.pluck(:resident_id, :amount).to_h)
-      .to eq(cook.id => BigDecimal('45'), eater.id => BigDecimal('-45'))
+      .to eq(cook.id => BigDecimal('42'), eater.id => BigDecimal('-42'))
+    expect(SettlementCorrection.count).to eq(0)
     expect(findings).to eq([])
   end
 end

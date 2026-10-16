@@ -151,7 +151,11 @@ end
 refuses a settlement with any line marked Paid or Let go
 (`Settlement::Marked`, ADR 0011 rule 8): once people have paid from a
 settlement, its numbers stay what they were, and a mistake goes into the
-next settlement as a correction (the section above). Before
+next settlement as a correction (the section above). It also refuses a
+settlement one of whose dinners already has such a correction
+(`Settlement::DinnerCorrected`): that settlement keeps what it settled,
+and the corrections carry every change; its line items written again
+from the corrected rows would count the correction twice. Before
 the block runs, it asks the nightly check about the settlement and
 refuses, writing nothing, if the settlement already disagrees with its
 rows or its line items: working it out again would fold that earlier

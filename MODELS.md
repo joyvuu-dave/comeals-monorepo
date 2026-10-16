@@ -744,7 +744,12 @@ Reconciliation ----< ReconciliationBalance ---> Resident
 - `Settlement#correct!(reason:) { fix the rows }` — fixes a settled
   period's rows in the block and works the period out again from them,
   when the owner decides the settlement must show the right numbers. In
-  its own savepoint: it locks the reconciliation row; asks the nightly
+  its own savepoint: it locks the reconciliation row; refuses, writing
+  nothing, a settlement with a line marked Paid or Let go
+  (`Settlement::Marked`) or with a dinner that has a correction
+  (`Settlement::DinnerCorrected`: that settlement keeps what it settled,
+  and its line items written again from the corrected rows would count
+  the correction twice); asks the nightly
   check about the settlement (`LedgerVerification#findings_for`) and
   refuses with `Settlement::EarlierDifference`, writing nothing, if it
   already disagrees with its rows or its line items, since the correction

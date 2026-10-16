@@ -31,6 +31,8 @@ MUTANT_SPEC_ROWS = {
   # Settlement#correct! lives in SettlementCorrecting, which Settlement
   # includes; the spec describes it through Settlement.
   'spec/services/settlement_correct_spec.rb' => %w[Settlement SettlementCorrecting LedgerVerification],
+  'spec/services/settlement_correct_after_a_meal_correction_spec.rb' =>
+    %w[Settlement SettlementCorrecting LedgerVerification],
   'spec/services/ledger_verification_spec.rb' => %w[LedgerVerification Settlement Reconciliation MealLedger],
   'spec/services/settle_and_notify_spec.rb' =>
     %w[SettleAndNotify Settlement Reconciliation BalanceRecalculation RetryOnConflict NotifyCooksJob],

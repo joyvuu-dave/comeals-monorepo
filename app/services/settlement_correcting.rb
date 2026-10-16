@@ -26,6 +26,12 @@ module SettlementCorrecting
   #
   #   Settlement.new(reconciliation).correct!(reason: '...') { fix the rows }
   #
+  # It refuses, writing nothing, a settlement with a line marked Paid or
+  # Let go (Settlement::Marked, ADR 0011 rule 8) and a settlement one of
+  # whose dinners has a correction (Settlement::DinnerCorrected, rule 6):
+  # people may have paid from the first, and the second keeps what it
+  # settled while the corrections carry every change.
+  #
   # Before the block runs, correct! asks the nightly check about this
   # settlement (LedgerVerification#findings_for) and refuses, writing
   # nothing, if it already disagrees with its rows or its line items. A
@@ -70,6 +76,7 @@ module SettlementCorrecting
     Reconciliation.transaction(requires_new: true) do
       reconciliation.lock!
       refuse_a_marked_settlement!
+      refuse_a_corrected_dinner!
       earlier = earlier_differences(reason, include_earlier_differences)
       run_fix(fix)
       before = stored_balances
@@ -100,6 +107,24 @@ module SettlementCorrecting
           "Refused: settlement #{reconciliation.id} has lines marked Paid or Let go, so people have paid " \
           'from it and its numbers stay what they were. Correct the dinner instead; the next settlement ' \
           'carries it (ADR 0011 rule 6). Nothing was written.'
+  end
+
+  # Once a dinner of this settlement has a correction (ADR 0011 rule 6),
+  # the settlement keeps what it settled, and the corrections carry every
+  # change to the dinner. Working it out again cannot keep both: the line
+  # items would be written from the corrected rows and so hold the
+  # correction, and the correction's own lines would be counted on top of
+  # them. The nightly check's dinner and line item checks would then fail
+  # for this settlement every night. Checked after the settlement row is
+  # locked.
+  sig { void }
+  def refuse_a_corrected_dinner!
+    return unless MealCorrection.exists?(meal_id: reconciliation.meals.select(:id))
+
+    raise Settlement::DinnerCorrected,
+          "Refused: a dinner of settlement #{reconciliation.id} has a correction, so the settlement keeps " \
+          'what it settled and the corrections carry every change. Correct the dinner instead; the next ' \
+          'settlement carries it (ADR 0011 rule 6). Nothing was written.'
   end
 
   # The settlement's balances as stored, by resident id.
