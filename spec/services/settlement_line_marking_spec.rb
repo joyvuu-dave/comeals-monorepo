@@ -38,6 +38,19 @@ RSpec.describe SettlementLineMarking do
     expect(line.amount).to eq(BigDecimal('-30'))
   end
 
+  # The marks are oldest first when read through the line, so the last one
+  # is the newest. A query that loads them in another order must not
+  # change which mark counts.
+  it 'finds the newest mark when the marks were loaded newest first' do
+    paid = mark('paid')
+    let_go = mark('let_go')
+    loaded = ReconciliationBalance.eager_load(:marks).order('settlement_line_marks.id DESC').find(line.id)
+
+    expect(loaded.marks).to eq([let_go, paid])
+    expect(loaded.newest_mark).to eq(let_go)
+    expect(loaded.current_mark).to eq(let_go)
+  end
+
   it 'takes a mark off, and keeps the old one in the history' do
     paid = mark('paid')
     off = mark('none', note: 'Marked by mistake')
