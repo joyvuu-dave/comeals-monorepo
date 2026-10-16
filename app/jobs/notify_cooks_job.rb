@@ -52,7 +52,7 @@ class NotifyCooksJob < ApplicationJob
   # SendMissedSettlementMailJob all read this, so they agree on who is
   # owed the mail.
   def self.cook_rows(reconciliations)
-    corrected = MealCorrection.cost_edits.where(reconciliation_id: reconciliations.select(:id))
+    corrected = MealCorrection.cost_edits.where(reconciliation_id: reconciliations)
                               .select(:reconciliation_id, MealCorrection::COOK_ID)
     Arel::Nodes::TableAlias.new(Arel::Nodes::Union.new(Reconciliation.settled_cooks(reconciliations), corrected.arel),
                                 'cooks')

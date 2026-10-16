@@ -48,9 +48,9 @@ class SendMissedSettlementMailJob < RecurringJob
     open_from = [now - WINDOW, first_run].max
     open = settled(from: open_from)
 
-    cooks_queued = Reconciliation.where(id: NotifyCooksJob.cooks_owed(open).keys).to_a
+    cooks_queued = Reconciliation.where(id: NotifyCooksJob.cooks_owed(open).keys)
     cooks_queued.each { |reconciliation| NotifyCooksJob.perform_later(reconciliation) }
-    house_queued = CommonHouseMailJob.not_sent(open).to_a
+    house_queued = CommonHouseMailJob.not_sent(open)
     house_queued.each { |reconciliation| CommonHouseMailJob.perform_later(reconciliation) }
 
     left = left_the_window_since_the_last_run(first_run, open_from)
