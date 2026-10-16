@@ -73,7 +73,7 @@ module DeployConfigCheck
 
   sig { void }
   def self.verify_processes!
-    alive = SolidQueue::Process.where(last_heartbeat_at: HEARTBEAT_WITHIN.ago..).distinct.pluck(:kind)
+    alive = SolidQueue::Process.where(last_heartbeat_at: HEARTBEAT_WITHIN.ago..).pluck(:kind)
     problem = process_problem(alive)
     raise problem if problem
   end

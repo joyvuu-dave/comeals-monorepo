@@ -52,6 +52,16 @@ RSpec.describe DeployConfigCheck do
     it 'holds nothing against a laptop running the production environment' do
       expect(described_class.config_problem({ 'LOCAL_PRODUCTION' => '1' }, production: true)).to be_nil
     end
+
+    # config/environments/production.rb reads the two vars with present?,
+    # so a blank one does not make a staging app or a laptop there. It
+    # must not excuse a release here either.
+    it 'holds a release to the rule when COMEALS_STAGING or LOCAL_PRODUCTION is blank' do
+      %w[COMEALS_STAGING LOCAL_PRODUCTION].product(['', ' ']).each do |name, blank|
+        expect(described_class.config_problem({ name => blank }, production: true))
+          .to include('RAILS_DB_POOL=4, SOLID_QUEUE_IN_PUMA=true'), "#{name}=#{blank.inspect}"
+      end
+    end
   end
 
   describe '.process_problem' do
@@ -97,6 +107,13 @@ RSpec.describe DeployConfigCheck do
       allow(ENV).to receive(:to_h).and_return({})
 
       expect { described_class.verify_config! }.to raise_error(/RAILS_DB_POOL=4, SOLID_QUEUE_IN_PUMA=true/)
+    end
+
+    it 'passes a production release that has both vars' do
+      allow(Rails.env).to receive(:production?).and_return(true)
+      allow(ENV).to receive(:to_h).and_return({ 'RAILS_DB_POOL' => '4', 'SOLID_QUEUE_IN_PUMA' => 'true' })
+
+      expect { described_class.verify_config! }.not_to raise_error
     end
 
     it 'passes outside production' do
