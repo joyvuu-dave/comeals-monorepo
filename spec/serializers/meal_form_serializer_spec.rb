@@ -214,6 +214,20 @@ RSpec.describe MealFormSerializer do
     end
   end
 
+  # ADR 0011 rule 11: the page freezes a cancelled dinner's rows and
+  # offers Restore, so the flag must be false for every other dinner.
+  describe 'the cancelled flag' do
+    it 'is a plain false for a dinner that goes ahead, and true once it is cancelled' do
+      meal = create(:meal, community: community)
+
+      expect(described_class.new(meal).to_h[:cancelled]).to be(false)
+
+      meal.cancel!
+
+      expect(described_class.new(meal.reload).to_h[:cancelled]).to be(true)
+    end
+  end
+
   describe 'a resident row' do
     let(:home) { create(:unit, community: community, name: 'B7') }
 

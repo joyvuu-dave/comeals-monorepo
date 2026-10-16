@@ -122,16 +122,16 @@ class MealFormSerializer
     meal.cancelled?
   end
 
+  # Two meals never share a date (the unique index index_meals_on_date),
+  # so the date alone puts them in order.
   def next_id(meal)
     # Next meal by date, or self if this is the last meal
-    Meal.where('date > ? OR (date = ? AND id > ?)', meal.date, meal.date, meal.id)
-        .order(:date, :id).pick(:id) || meal.id
+    Meal.where('date > ?', meal.date).order(:date).pick(:id) || meal.id
   end
 
   def prev_id(meal)
     # Previous meal by date, or self if this is the first meal
-    Meal.where('date < ? OR (date = ? AND id < ?)', meal.date, meal.date, meal.id)
-        .order(date: :desc, id: :desc).pick(:id) || meal.id
+    Meal.where(date: ...meal.date).order(date: :desc).pick(:id) || meal.id
   end
 
   # Every active resident (for the sign-up list), plus anyone signed up
