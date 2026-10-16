@@ -147,4 +147,18 @@ RSpec.describe 'Cancelling a dinner through the API' do
       expect(response.parsed_body['items'].pluck('description')).to include('Dinner cancelled')
     end
   end
+
+  # A dinner closed before it was cancelled refuses a new sign-up for two
+  # reasons. The answer gives both, each on its own line.
+  it 'gives every reason a sign-up is refused, one per line' do
+    meal.update!(closed: true)
+    cancelled(true)
+
+    post "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: { token: token, late: false,
+                                                                        vegetarian: false }
+
+    expect(response).to have_http_status(:bad_request)
+    expect(message).to eq("This dinner is cancelled. Restore it before changing it.\nMeal has been closed.")
+    expect(meal.meal_residents.reload).to be_empty
+  end
 end
