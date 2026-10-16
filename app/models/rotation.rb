@@ -170,16 +170,14 @@ class Rotation < ApplicationRecord
       Rotation.where(id: rot_id).update_all(place_value: index + 1, updated_at: Time.current)
       renumbered << rot_id
     end
-    return if renumbered.empty?
-
-    Meal.where(rotation_id: renumbered).distinct.pluck(:date).each { |date| LiveUpdate.calendar(date) }
+    Meal.where(rotation_id: renumbered).pluck(:date).each { |date| LiveUpdate.calendar(date) }
   end
 
   # Rotations appear as colored bars on the calendar, one per meal date.
   # A direct query, not the `meals` association, so the association proxy
   # is not loaded here. See LiveUpdate.
   def note_live_update
-    Meal.where(rotation_id: id).distinct.pluck(:date).each { |date| LiveUpdate.calendar(date) }
+    Meal.where(rotation_id: id).pluck(:date).each { |date| LiveUpdate.calendar(date) }
   end
 
   # Mark auto-created rotations as already notified so the
