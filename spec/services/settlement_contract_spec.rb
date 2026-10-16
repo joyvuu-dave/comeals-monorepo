@@ -317,6 +317,29 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
       expect(preview.meals).to contain_exactly(eaten, no_money)
     end
 
+    # A meal waits when someone is charged and a cook's cost is blank (ADR
+    # 0011 rule 3). Only the open meals in the period are listed: not one
+    # after the cutoff, and not one a settlement took before rule 3, when a
+    # blank cost was settled at $0.
+    it 'lists the waiting meals: in the period, open, someone to charge and a blank cost' do
+      cook = resident
+      eater = resident
+      cutoff = latest - 1
+      settled = meal_on(cutoff - 6)
+      bill(settled, cook, 0)
+      attend(settled, eater)
+      settle_as_before_rule_3!(cutoff: cutoff - 6)
+      waiting = meal_on(cutoff - 2)
+      bill(waiting, cook, 0)
+      attend(waiting, eater)
+      after_cutoff = meal_on(cutoff + 1)
+      bill(after_cutoff, cook, 0)
+      attend(after_cutoff, eater)
+
+      expect(settled.reload.reconciliation_id).not_to be_nil
+      expect(Settlement.preview(cutoff: cutoff).waiting_meals).to eq([waiting])
+    end
+
     it 'lists a meal with money on a receipt that only free eaters ate as held, not as one it settles' do
       cook = resident
       baby = resident(multiplier: 0)
