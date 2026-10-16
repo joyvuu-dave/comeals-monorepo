@@ -79,6 +79,11 @@ class CollectionList
   # lower(residents.name)), so no two people tie.
   sig { params(list: T::Array[Person]).returns(T::Array[Person]) }
   def by_name(list)
-    list.sort_by { |person| person.name.downcase }
+    # downcase(:fold), not downcase: plain downcase leaves ß as one letter
+    # that sorts after every other, so "Straße" came after "Strauss".
+    # Folding reads it as "ss", the order the database and a person use.
+    # T.unsafe: Sorbet's String#downcase takes no argument, though Ruby's
+    # takes :fold, and a shim may not change a core method's arguments.
+    list.sort_by { |person| T.unsafe(person.name).downcase(:fold) }
   end
 end
