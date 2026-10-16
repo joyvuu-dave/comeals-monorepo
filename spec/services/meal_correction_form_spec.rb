@@ -113,14 +113,18 @@ RSpec.describe MealCorrectionForm do
       .to eq([amos.id, other.id])
   end
 
-  # The example above has the ids in the other order from the names. This
-  # one has them in the same order, so a sort by anything but the name
-  # (the order Ruby made the records in, say) cannot pass both.
-  it 'signs up in name order when the ids are in name order too' do
-    ann = create(:resident, community: community, unit: unit, name: 'Ann First')
-    bob = create(:resident, community: community, unit: unit, name: 'Bob Second')
+  # Six people made in an order that is neither their name order nor its
+  # reverse, so a sort by anything but the name (the id, or where Ruby
+  # put each record in memory) is very unlikely to pass. Two people were
+  # not enough: in a mutant run, a sort by memory address passed both
+  # examples with two.
+  it 'signs up six people in name order, whatever order they were made in' do
+    people = %w[Cara Abby Ezra Bart Fern Dale].map do |name|
+      create(:resident, community: community, unit: unit, name: "#{name} Six")
+    end
 
-    expect(edits(new_eater_ids: [bob.id.to_s, ann.id.to_s]).pluck('resident_id')).to eq([ann.id, bob.id])
+    expect(edits(new_eater_ids: people.map { |person| person.id.to_s }).pluck('resident_id'))
+      .to eq(people.sort_by(&:name).map(&:id))
   end
 
   it 'refuses a resident that does not exist, in each menu' do
