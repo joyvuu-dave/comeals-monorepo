@@ -49,6 +49,18 @@ RSpec.describe BalanceDisplayHelper do
       expect(helper.balance_tag(BigDecimal('-12.50'))).to include('class="balance-owes"')
       expect(helper.balance_tag(BigDecimal('0'))).to include('class="balance-zero"')
     end
+
+    # The class comes from the same rounded cents as the words. An amount
+    # under a dollar, or one that only rounding makes a whole cent, still
+    # has a direction, and the class must agree with the words.
+    it 'picks the class from the amount rounded to cents, the same as the words' do
+      expect(helper.balance_tag(BigDecimal('0.40'))).to eq('<span class="balance-is-owed">is owed $0.40</span>')
+      expect(helper.balance_tag(BigDecimal('-0.40'))).to eq('<span class="balance-owes">owes $0.40</span>')
+      expect(helper.balance_tag(BigDecimal('0.006'))).to eq('<span class="balance-is-owed">is owed $0.01</span>')
+      expect(helper.balance_tag(BigDecimal('-0.006'))).to eq('<span class="balance-owes">owes $0.01</span>')
+      expect(helper.balance_tag(BigDecimal('0.004'))).to eq('<span class="balance-zero">$0.00</span>')
+      expect(helper.balance_tag(BigDecimal('-0.004'))).to eq('<span class="balance-zero">$0.00</span>')
+    end
   end
 
   # The plain words balance_tag wraps, for the text part of a mail.
