@@ -870,6 +870,16 @@ dinner with money on a cost and nobody who pays is refused
 the scope a settlement holds an open dinner back by: the next settlement
 would credit the cook $0 for that money.
 
+The admin form (`MealCorrectionForm`) sends every row of the dinner, so
+it also sends a code made from the rows it showed when it was opened
+(`correction[seen]`, `MealCorrectionForm::Rows#seen`: each cook and
+their cost, each eater and their price, each guest). Preview and Save
+are refused (`MealCorrectionForm::STALE`) when the dinner's rows now
+make another code, or when the form sent none, so a row the admin did
+not touch never writes back a value someone corrected after the form
+was opened. The rows are checked when the form is read and again under
+the meal's lock.
+
 A settlement made before line items existed (2026-08-02) stored nothing
 its dinners were settled at, so for a dinner of such a settlement the
 refusal comes from the nightly check's own checks of the whole

@@ -112,9 +112,20 @@ the adult price, which is a fix to who ate and at what price.
 The correction changes the dinner's rows, with history, and saves each
 person's change as a line of its own. So the dinner's page shows the
 corrected cost, its history shows the change, and the old settlement's
-page still shows the dinner as it was settled. The next settlement includes every
-correction made since the last one, each as a line that names the dinner
-("Correction to the January 12 dinner"). A settlement claims corrections
+page still shows the dinner as it was settled.
+
+The correction form sends every row of the dinner, changed or not. So
+it also sends a code made from the rows it showed when it was opened,
+and the server refuses a preview or a save when the dinner's rows no
+longer make that code, or when the form sent no code (decided
+2026-10-16). Without this, a form opened before another admin saved a
+correction sent the old value of a row it did not touch, and its save
+wrote that value back over the other correction. The admin reloads the
+page and enters the correction again.
+
+The next settlement includes every correction made since the last one,
+each as a line that names the dinner ("Correction to the January 12
+dinner"). A settlement claims corrections
 the same way it claims dinners, under a lock, so a correction saved
 during a settlement goes into exactly one settlement. A settlement may
 carry corrections and settle no dinner, so a correction made when there
