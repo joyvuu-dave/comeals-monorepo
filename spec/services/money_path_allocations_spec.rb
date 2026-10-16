@@ -36,7 +36,7 @@ RSpec.describe 'what the money path allocates' do # rubocop:disable RSpec/Descri
   it 'rounds 30 balances to cents in under 3,000 objects' do
     balances = MealLedger.new(meals).balances(RandomLedger::RESIDENTS)
 
-    report = MemoryProfiler.report { Settlement.allocate_to_cents(balances) }
+    report = MemoryProfiler.report { Settlement.allocate_to_cents(balances, reconciliation_id: 'spec') }
 
     expect(report.total_allocated).to be <= 3_000
   end

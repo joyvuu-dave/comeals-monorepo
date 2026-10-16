@@ -336,7 +336,7 @@ class Settlement
     params(raw_balances: T::Hash[Integer, BigDecimal], reconciliation_id: ReconciliationRef)
       .returns(T::Hash[Integer, BigDecimal])
   end
-  def self.allocate_to_cents(raw_balances, reconciliation_id: nil)
+  def self.allocate_to_cents(raw_balances, reconciliation_id:)
     assert_balanced_input!(raw_balances, reconciliation_id)
 
     one_cent = BigDecimal('0.01')
