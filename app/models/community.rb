@@ -329,8 +329,8 @@ class Community < ApplicationRecord
     meal_count = final.count
     return '--' if meal_count.zero?
 
-    mr_count = MealResident.where(meal_id: final.select(:id)).count
-    g_count = Guest.where(meal_id: final.select(:id)).count
+    mr_count = MealResident.where(meal_id: final).count
+    g_count = Guest.where(meal_id: final).count
     ((mr_count + g_count).to_f / meal_count).round(1)
   end
 
