@@ -138,7 +138,7 @@ class Bill < ApplicationRecord
   sig { void }
   def refuse_no_cost_with_an_amount
     amount = self.amount
-    errors.add(:base, NO_COST_MEANS_NO_AMOUNT) if no_cost == true && !amount.nil? && amount.positive?
+    errors.add(:base, NO_COST_MEANS_NO_AMOUNT) if no_cost && !amount.nil? && amount.positive?
   end
 
   sig { void }

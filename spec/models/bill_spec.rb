@@ -305,6 +305,20 @@ RSpec.describe Bill do
       expect(bill.errors.full_messages).to eq([described_class::NO_COST_MEANS_NO_AMOUNT])
     end
 
+    # A blank amount (Rails reads "" as nil) or a negative one already
+    # has its own error. No cost adds nothing to it, and must not fail
+    # trying to compare a nil.
+    it 'leaves a missing or negative amount on a No cost bill to the amount\'s own error' do
+      missing = build(:bill, meal: meal, resident: cook, community: community, amount: nil, no_cost: true)
+      negative = build(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('-1'),
+                              no_cost: true)
+
+      expect(missing).not_to be_valid
+      expect(missing.errors.full_messages).to eq(['Amount is not a number'])
+      expect(negative).not_to be_valid
+      expect(negative.errors.full_messages).to eq(['Amount must be greater than or equal to 0'])
+    end
+
     it 'takes No cost with $0, and an amount without No cost' do
       expect(build(:bill, meal: meal, resident: cook, community: community, amount: 0, no_cost: true)).to be_valid
       expect(build(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('12'))).to be_valid
