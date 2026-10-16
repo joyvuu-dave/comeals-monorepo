@@ -68,8 +68,49 @@ RSpec.describe SettlementLineMarking do
     expect(line.reload.marks).to be_empty
   end
 
+  it 'saves a new status that keeps the same note' do
+    paid = mark('paid', note: 'Cash')
+    let_go = mark('let_go', note: 'Cash')
+
+    expect(line.reload.marks).to eq([paid, let_go])
+  end
+
+  it 'saves nothing when a line whose mark was taken off is given No mark again' do
+    mark('paid')
+    off = mark('none')
+
+    expect { mark('none') }.to raise_error(described_class::NothingChanged, 'This line has no mark already.')
+    expect(line.reload.newest_mark).to eq(off)
+  end
+
   it 'refuses a status it does not know' do
     expect { mark('forgiven') }
       .to raise_error(ActiveRecord::RecordInvalid, /Status must be Paid, Let go or No mark/)
+  end
+
+  # At SERIALIZABLE the database may refuse a write that conflicts with
+  # another transaction (ADR 0005). The whole change is tried again, so
+  # the admin's click is not lost. No test transaction, because a retry
+  # can only happen outside one (RetryOnConflict).
+  context 'when the database refuses the first try for a conflict' do
+    include_context 'with no test transaction'
+
+    # Unwatched by prosopite: the second try reads the newest mark again
+    # on purpose, which is the repeat prosopite looks for.
+    it 'tries the change again and saves the mark once', prosopite: false do
+      allow(Rails.error).to receive(:report)
+      tries = 0
+      allow(SettlementLineMark).to receive(:new).and_wrap_original do |original, **attributes|
+        tries += 1
+        raise ActiveRecord::SerializationFailure, 'could not serialize access' if tries == 1
+
+        original.call(**attributes)
+      end
+
+      made = mark('paid', note: 'Cash')
+
+      expect(tries).to eq(2)
+      expect(line.reload.marks).to eq([made])
+    end
   end
 end
