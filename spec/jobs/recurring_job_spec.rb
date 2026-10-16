@@ -58,6 +58,27 @@ RSpec.describe RecurringJob do
     expect(Healthcheck).to have_received(:ping).with('billing-recalculate', state: 'fail')
   end
 
+  # `run` may return a Hash of details, of any kind of Hash. Anything
+  # else, such as the last value of a loop returned by accident, is not
+  # written to the run record.
+  it 'stores what run returns only when it is a Hash' do
+    allow(Healthcheck).to receive(:ping)
+    returned = nil
+    job = Class.new(described_class) do
+      const_set(:HEALTHCHECK, 'returning')
+      define_method(:run) { returned }
+    end
+    stub_const('ReturningJob', job)
+
+    details = [42, ['made', 3], ActiveSupport::HashWithIndifferentAccess.new(made: 3)].map do |value|
+      returned = value
+      job.perform_now
+      JobRun.last.details
+    end
+
+    expect(details).to eq([{}, {}, { 'made' => 3 }])
+  end
+
   it 'names runs after the job class' do
     expect(RefreshBalancesJob.run_name).to eq('refresh_balances')
     expect(EnsureRotationsJob.run_name).to eq('ensure_rotations')
