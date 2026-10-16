@@ -106,10 +106,24 @@ jobs:
           target_sha=$(api "https://api.heroku.com/apps/$APP/slugs/$slug" \
             | python3 -c "import json,sys; print(json.load(sys.stdin)['commit'])")
           bad_sha=$(heroku config:get HEROKU_SLUG_COMMIT -a "$APP")
+          echo "$APP runs ${bad_sha:-an unknown commit}; v$target runs $target_sha."
+          # Checked here, before any step changes production. The Roll back
+          # step checks again that the running commit changed, but by then
+          # a backup may already be restored, and a wrong target would leave
+          # the restored database under the new code.
+          if [ -z "$bad_sha" ] || [ -z "$target_sha" ] || [ "$target_sha" = "None" ]; then
+            echo "Could not read the commit of the running release or of v$target, so nothing was changed."
+            exit 1
+          fi
+          if [ "$target_sha" = "$bad_sha" ]; then
+            echo "v$target runs the same commit as $APP runs now, so rolling back to it would change"
+            echo "nothing. Nothing was changed. Run this again with the release $APP ran before the"
+            echo "deploy (heroku releases -a $APP)."
+            exit 1
+          fi
           echo "target=v$target" >> "$GITHUB_OUTPUT"
           echo "target_sha=$target_sha" >> "$GITHUB_OUTPUT"
           echo "bad_sha=$bad_sha" >> "$GITHUB_OUTPUT"
-          echo "$APP runs $bad_sha; v$target runs $target_sha."
 
       - name: Check the migrations
         run: |

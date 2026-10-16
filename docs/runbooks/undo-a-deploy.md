@@ -49,7 +49,9 @@ day of sign-ups and costs that nobody can type in again from memory.
    - `release`: the release production ran before the deploy (for the
      deploy after v613, `v614`, which runs v613's code). Empty means the
      release before the current one, which still runs the new code if a
-     config var was set after the deploy;
+     config var was set after the deploy. If the release runs the same
+     commit as production runs now, the workflow stops before it turns
+     maintenance on or restores anything, and says so;
    - `backup`: the id from step 1.
 
    It turns maintenance mode on, captures a backup of the database as it
