@@ -39,9 +39,12 @@ RSpec.describe 'Admin ledger check run page' do
     settle!
   end
 
+  def findings_panel
+    response.parsed_body.css('.panel').find { |node| node.at_css('h3')&.text == 'What disagreed' }
+  end
+
   def findings_table
-    panel = response.parsed_body.css('.panel').find { |node| node.at_css('h3')&.text == 'What disagreed' }
-    panel.css('tbody tr').map { |row| row.css('td').map { |cell| cell.text.squish } }
+    findings_panel.css('tbody tr').map { |row| row.css('td').map { |cell| cell.text.squish } }
   end
 
   def run_page(details)
@@ -69,6 +72,8 @@ RSpec.describe 'Admin ledger check run page' do
     get "/ledger_check_runs/#{LedgerCheckRun.recent.first.id}"
 
     settled = "##{reconciliation.id} (#{reconciliation.date.iso8601})"
+    expect(findings_panel.css('thead th').map { |th| th.text.squish })
+      .to eq(['Reconciliation', 'Check', 'Resident', 'Stored balance', 'What the check found'])
     expect(findings_table).to eq(
       [
         [settled, 'Balance rebuilt from bills and sign-ups', 'Rosa Lister', 'is owed $39.50', 'is owed $40.00'],

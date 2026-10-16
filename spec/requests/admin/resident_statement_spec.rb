@@ -124,6 +124,7 @@ RSpec.describe 'Admin settlement statement' do
       get "/residents/#{eater.id}"
 
       expect(response.body).to include('No line items were recorded for this settlement.')
+      expect(panel('Settlement statement').css('table')).to be_empty
     end
 
     it 'shows what a subsidized cook actually spent next to what they were credited' do
