@@ -324,4 +324,39 @@ RSpec.describe 'Admin correction form for a settled dinner' do
       expect(alert).to eq('This dinner changed after the form was opened. Open the form again.')
     end
   end
+
+  # Two admins open the form for the same dinner. B corrects the cook's
+  # cost and saves. A's page still shows the old cost, and A's form sends
+  # every row. So A's change to something else would also write the old
+  # cost back, and undo B's correction.
+  describe 'a form opened before another correction was saved' do
+    # What the form carries from when it was opened: the hidden field the
+    # page has, or nil when it has none.
+    def opened_form
+      get path
+      page.at_css("input[name='correction[seen]']")&.[]('value')
+    end
+
+    let(:stale) do
+      'Someone changed this dinner after you opened the form. Nothing was saved. ' \
+        'Reload the page and enter your correction again.'
+    end
+
+    it "refuses A's preview and save, and keeps B's correction" do
+      seen = opened_form
+      MealCorrecting.save!(meal, by: admin, reason: 'The receipt was $25') do |edits|
+        edits.cost(cook, amount: BigDecimal('25'), no_cost: false)
+      end
+      a_form = untouched.merge(seen: seen, reason: 'Other One ate', new_eater_ids: [other.id.to_s])
+
+      expect { preview(a_form) }.not_to change(MealCorrection, :count)
+      expect(alert).to eq(stale)
+      expect(panel('What this correction does')).to be_nil
+
+      expect { save(a_form, fingerprint: 'x') }.not_to change(MealCorrection, :count)
+      expect(alert).to eq(stale)
+      expect(meal.bills.sole.reload.amount).to eq(25)
+      expect(meal.meal_residents.map(&:resident)).not_to include(other)
+    end
+  end
 end
