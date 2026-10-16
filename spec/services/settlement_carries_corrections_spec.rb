@@ -81,6 +81,24 @@ RSpec.describe Settlement do
       expect(claimed.reload.reconciliation_id).to eq(rival.id)
     end
 
+    # The claim sets the database setting that names this settlement, and
+    # runs in its own savepoint, as the ledger's write does
+    # (settlement_spec.rb). Rolling the savepoint back undoes the setting
+    # too. Without it, a caller that catches the error and keeps its
+    # transaction would keep the setting.
+    it 'turns the setting off again when the claim fails, even for a caller that catches the error' do
+      allow(MealCorrection).to receive(:where).and_call_original
+      allow(MealCorrection).to receive(:where).with(id: [correction.id], reconciliation_id: nil)
+                                              .and_raise(RuntimeError, 'the claim failed')
+
+      ActiveRecord::Base.transaction do
+        expect { settle!(cutoff: latest) }.to raise_error(RuntimeError, 'the claim failed')
+        expect(ActiveRecord::Base.connection.select_value(
+                 "SELECT current_setting('#{described_class::SETTLING_SETTING}', true)"
+               )).to be_blank
+      end
+    end
+
     it 'carries each correction once' do
       second = settle!(cutoff: latest)
 
