@@ -3787,3 +3787,97 @@ cap). A local run on the two methods, 153 mutations, left 3: `fetch` for
 `[]` on `max`, twice, where the new guard has already checked the key,
 and `instance_of?(String)` for `is_a?(String)`, which agree for every
 value JSON or a form sends.
+
+### 2026-10-16, the meal history words
+
+Run on `AuditDescription*` and `AuditSerializer*`: the sentences the
+meal history shows for each audit row, and the serializer that sends
+them to the page. Four pieces, four workers each, on GitHub.
+
+| Run                                 | Subjects | Mutations | Killed | Alive | Timeouts | Time |
+| ----------------------------------- | -------- | --------- | ------ | ----- | -------- | ---- |
+| 1, 38925102467, before              | 35       | 2,472     | 2,293  | 179   | 0        | 1h58 |
+| 2, 38932580689, after the answers   | 35       | 2,447     | 2,392  | 55    | 0        | 1h54 |
+| 3, RUN3_ID, the same after a rebase | RUN3_ROW |
+
+Run 1 had the same 179 survivors as the full run on 532ac4be; nothing
+in these two classes had changed since. `AuditSerializer#describer`,
+which that run did not reach, had none.
+
+Missing examples (113), each now with one. Most were rows the audited
+gem never writes: every change in an update row is a list of two
+values, and every flag in one is true or false. So is every update row
+in a copy of production from October 2026. But the code checks for
+other rows on purpose, because a history that raises shows nothing at
+all, and no example gave it one. New examples in
+`audit_description_spec.rb`:
+
+- `created_amount` (40) and `walk` (9): the No cost line read the
+  amount from later rows only. Now a bill's create row gives it, in
+  dollars or in cents; a create row whose amount is not a number gives
+  none (this also kills `dollars` without `exception: false`, 2); and a
+  row whose amount change is not a list keeps the amount from before.
+- `describe_bill_update` (2): when the same row changes the amount and
+  turns No cost off, the line does not name the old amount.
+- A change that is not a list of two values, or a list that is too
+  short, falls back or still gets an answer (33): `describe_meal` (9),
+  `describe_meal_resident_update` (10), `rarer_meal_change_words` (5),
+  `no_cost_change` (2), `describe_bill_update` (2), and one each in
+  `moved`, `price_change`, `walk`, `cancelled_words` and
+  `close_time_words`.
+- A flag held as the text `t` or `f` is not true (7: 2 in
+  `describe_meal`, 4 in `describe_meal_resident_update`, 1 in
+  `no_cost_change`).
+- The first change a meal or attendance row names decides its words,
+  even when the row changed something else too (the fallback inside
+  the `closed` and `late` branches, 6).
+- A meal row with an action the audited gem never writes falls back,
+  even with a change the describer knows (`action == 'update'`, 4).
+- A created or deleted row that names no resident says "unknown"
+  (`.fetch('resident_id')` in `describe_bill`, `describe_meal_resident`,
+  `describe_guest` and `walk`, 6).
+- `before_each_update` (3): a describer loads only the create and
+  update rows of the records its update rows point at. Without the
+  type, the ids or the actions in the query, it loaded rows of another
+  kind with the same id, other bills, or a destroy row. The example
+  counts the rows loaded.
+- `AuditSerializer#user_name` (1): an empty username names nobody, so
+  a data fix row is named from its comment.
+
+Code that did nothing, removed (11):
+
+- `AuditDescription#initialize` (2): `to_a` on a list that is always an
+  Array (`Meal#total_audits`, or one row in a list).
+- `name_or_unknown` (1): `present?` on a Resident record or nil.
+- `describe_meal` (3) and `describe_meal_resident_update` (3): a
+  `return` of the fallback at the end of a branch, before the same
+  fallback the method ends with.
+- `AuditSerializer#user_name` (2): `to_s` on `username`, a text column,
+  after checking that it is present.
+
+Noise (55), changes no row can show:
+
+- `.at(i)` for `[i]` on a list (18): `Array#at` is the same call.
+- `.fetch(key)` for `[key]` on a change whose key is known to be there,
+  because the line before checked its value (19).
+- `change.fetch(0)` in `close_time_words` (1): it runs only when
+  `change[1]` is not nil, so the list has a first value.
+- `to_s` dropped or `to_str` on a day or a time (5), and `to_s` dropped
+  in `dollars` (1). The audited gem writes a date and a time as text,
+  and `BigDecimal` reads a number from the JSON the same with or
+  without `to_s`. In `close_time_words`, `String#in_time_zone` for
+  `Time.iso8601` reads the same instant from the text the gem writes,
+  with its offset (the one such row in production is like that).
+- The `else nil` of the ternary in `describe_bill_update` (1): an `if`
+  with no `else` gives nil. `instance_of?(Integer)` for `is_a?` in
+  `created_amount` (1).
+- `before_each_update` (2): `[{}]` or `[{}, nil]` for `[{}, {}]` when no
+  row updates a bill, an attendance row or a guest. A describer only
+  describes the rows it was built from, so then nothing reads the
+  amounts.
+- `named_resident_ids` (7), as on 2026-09-27: `map` for `filter_map`,
+  the type check removed, `uniq` or `compact` removed. Of the audited
+  models only bills, attendance rows and guests have a `resident_id`,
+  and nil or repeated ids in the `IN` list find the same residents.
+
+No run had a timeout.
