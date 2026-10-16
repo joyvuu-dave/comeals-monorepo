@@ -50,8 +50,10 @@ module Multiplier
     return 'Child' if multiplier == HALF
     return 'Adult' if multiplier == FULL
 
+    # A whole number over 2 ends in .0 or .5, so the default rounding
+    # keeps it exact, and the zeros after the point are dropped.
     adults = ActiveSupport::NumberHelper.number_to_rounded(BigDecimal(multiplier) / FULL,
-                                                           precision: 1, strip_insignificant_zeros: true)
+                                                           strip_insignificant_zeros: true)
     "Adult x #{adults}"
   end
 end
