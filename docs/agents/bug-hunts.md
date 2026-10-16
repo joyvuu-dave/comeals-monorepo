@@ -5,6 +5,56 @@ One entry per run of the `bug-hunt` skill
 and what they found, including "found nothing". The next run reads this
 to pick the hunt that has waited longest.
 
+## 2026-10-16 (money, invariant, lock, cache, frontend seam, time, dead column)
+
+Hunts run, four at once, each in its own worktree, on 532ac4be, after the
+merges from 2026-09-21 to 2026-10-16 (ADR 0011 rules 1 to 11, the settled
+history row, #133's undo plan). Six findings, each a red spec; the lock
+findings were fixed in #176 and the others in #175.
+
+- Money (`agent/bug-hunt-2026-10-16-money`): every edge has a spec; the
+  property spec passes on seeds 1 to 1600; no Float on the money path; the
+  oracle agrees on seeds 1 to 1700 in memory and 1 to 36 in the database
+  (seed 28 has nothing to settle). **Three findings:** a dinner of a
+  settlement with no line items cannot be corrected
+  (`meal_correcting_old_settlement_spec.rb`); `Settlement#correct!` after a
+  rule 6 correction counts the correction twice
+  (`settlement_correct_after_a_meal_correction_spec.rb`); the settlement page
+  names the cooks a correction set, not the ones it settled
+  (`reconciliation_show_corrected_cooks_spec.rb`). Four green pins for
+  corrections beside a cancelled dinner, a move out, a unit move and a cap.
+- Invariant, delta since 2026-09-21 (`agent/bug-hunt-2026-10-16-invariant`):
+  104 rows over ADR 0011, the ADR 0004 cancel and Let go parts, ADR 0009,
+  ADR 0010, every sentence added since, the undo runbook and the deploy plan.
+  **One finding:** a cancel and a cost with money written from psql at the
+  same moment both commit (`cancel_while_a_cost_is_written_spec.rb`, same
+  cause as the lock finding below). Also noticed: the preview code does
+  not change for a change that moves no cent; MODELS names two ledger checks
+  of three; maintenance mode does not stop jobs during a restore.
+- Lock, cache and frontend seam, deltas (`agent/bug-hunt-2026-10-16-lock-cache`):
+  every write to the meal tables, corrections and marks since 2026-09-21
+  tabled; every app path locks the meal first, in id order; storm seeds 61 to
+  63 green. **Two lock findings, one cause:** a psql write (READ COMMITTED)
+  held only FOR KEY SHARE on the meal and changed no meal row, so a
+  SERIALIZABLE cancel or settlement that waited for it still read its old
+  snapshot: a cancel went through with $12 on a cost
+  (`cancel_against_a_cost_race_spec.rb`), and a settlement missed a sign-up
+  that started first (`settlement_after_a_raw_write_race_spec.rb`, #43's
+  other order, open since ADR 0005). Cache: found nothing. Frontend seam:
+  every new piece of meal-page state has a refresh path; **one finding:** a
+  cost refused on a cancelled dinner said "enter them again"
+  (`bills_save_cancelled_dinner.test.js`).
+- Time and dead column (`agent/bug-hunt-2026-10-16-time`): every grep hit in
+  app, lib and the SPA has a zone; the iCal feed is right on both DST days
+  (checked by hand; no spec); the one date column compared with timestamps
+  (`Community#calendar_cache_version`) counts one extra day, which is
+  harmless. Every unread column's writer is right. Found nothing.
+
+Issues filed for what needs a decision: #171 (the common house email can go
+out twice), #172 (a correction can leave a dinner with a cost and nobody to
+charge), #173 (events a zone change makes uneditable), #174 (Cancel and
+Restore gaps on the meal page).
+
 ## 2026-09-21 (invariant, lock and cache, deltas)
 
 Hunts run: invariant (delta since 2026-08-26), lock, and cache, one
