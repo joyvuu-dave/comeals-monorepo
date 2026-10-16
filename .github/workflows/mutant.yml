@@ -148,8 +148,12 @@ jobs:
         with:
           pattern: mutant-piece-*
           path: pieces
+      # The number of pieces started, so a piece whose machine was stopped
+      # (no artifact at all) is named in the report.
       - name: Add the pieces up
-        run: ruby bin/mutant-report pieces mutant-report.md >> "$GITHUB_STEP_SUMMARY"
+        env:
+          PIECES: ${{ inputs.pieces }}
+        run: ruby bin/mutant-report pieces mutant-report.md "$PIECES" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
         with:
           name: mutant-report

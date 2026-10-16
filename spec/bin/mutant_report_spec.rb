@@ -72,7 +72,7 @@ RSpec.describe 'bin/mutant-report' do
     out = run_report
 
     expect(out).to include('51 mutations, 48 killed, 3 alive, 0 timed out: 94.12% killed.')
-    expect(out).to include('1 piece(s) stopped before mutating: mutant-piece-1.')
+    expect(out).to include('Stopped before mutating: mutant-piece-1.')
     expect(out).to include('| mutant-piece-0 | 2 | 51 | 3 | 1 min |')
     expect(out).to include('| mutant-piece-1 | 1 | stopped |  |  |')
   end
@@ -87,6 +87,38 @@ RSpec.describe 'bin/mutant-report' do
     expect(out).to include('### ResidentNameShortener#last_word (1 alive), app/services/resident_name_shortener.rb:69')
     expect(out).to include("```diff\n@@ -1,3 +1,3 @@\n def same?(left, right)\n-  left.to_s.casecmp?(right.to_s)")
     expect(out.index('#last_word')).to be < out.index('#same?')
+  end
+
+  # #181: the workflow writes mutant's stderr into the same log, and once
+  # its last line landed right after an id, with no line break.
+  it 'reads a survivor whose evil: line has other output after its id' do
+    joined = log.sub('resident_name_shortener.rb:76:43c33',
+                     'resident_name_shortener.rb:76:43c33Uncovered mutations detected, exiting nonzero!')
+    piece('mutant-piece-0', subjects: %w[ResidentNameShortener#same?], log: joined)
+
+    out = run_report
+
+    expect(out).to include('## Survivors (2 subjects)')
+    expect(out).to include('### ResidentNameShortener#same? (2 alive), app/services/resident_name_shortener.rb:76')
+  end
+
+  it 'names each piece the run started that left nothing, when given the number of pieces' do
+    piece('mutant-piece-0', subjects: %w[ResidentNameShortener#same?], log: log)
+    piece('mutant-piece-2', subjects: %w[Settlement#settle!], log: log)
+
+    out, status = Open3.capture2e(script, File.join(dir, 'pieces'), File.join(dir, 'report.md'), '4')
+
+    expect(status.exitstatus).to eq(0), out
+    expect(out).to include('Left nothing, so their subjects have no result: mutant-piece-1, mutant-piece-3.')
+    expect(out).to include('| mutant-piece-1 |  | left nothing |  |  |')
+    expect(out).not_to include('Stopped before mutating')
+  end
+
+  it 'refuses a number of pieces that is not a whole number' do
+    out, status = Open3.capture2e(script, 'pieces', 'report.md', 'four')
+
+    expect(status.exitstatus).to eq(2)
+    expect(out).to include('Usage: bin/mutant-report')
   end
 
   it 'refuses to run without a directory and a report file' do

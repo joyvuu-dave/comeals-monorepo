@@ -18,7 +18,9 @@ The whole run belongs on GitHub: Actions, **Mutant**, Run workflow
 run at the same time, 36 by default, each taking every 36th subject, and
 adds them up at the end: the totals and each survivor are in the run's
 summary and in its `mutant-report` artifact, and each piece's log and
-mutant session are in its own artifact. The `subjects` input narrows it
+mutant session are in its own artifact. A piece whose machine was
+stopped leaves no artifact at all; the report names it ("Left nothing"),
+and its subjects need a run of their own. The `subjects` input narrows it
 to some expressions, the same ones `bin/mutant` takes. The repository is
 public, so the machines cost nothing; GitHub Pro runs 40 jobs at once,
 and a job may run 6 hours.

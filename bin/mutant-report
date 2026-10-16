@@ -6,21 +6,28 @@
 # Markdown report, for the run's summary, and writes the same to a file:
 # the totals, each piece, and each survivor with the first change mutant
 # showed for it. A piece with no log stopped before mutating anything,
-# and the report says so.
+# and the report says so. Given the number of pieces the run started, it
+# also names each piece that left no directory at all: a machine that
+# was stopped, as two were on 2026-10-16, uploads nothing, so without
+# the number the report cannot tell that a piece is missing.
 #
-# Usage: bin/mutant-report <directory of pieces> <report file>
+# Usage: bin/mutant-report <directory of pieces> <report file> [<pieces started>]
 #
 # Ruby's standard library only: the workflow's last job runs it without
 # the bundle.
 
 SUMMARY = /\A(Mutations|Kills|Alive|Timeouts|Runtime):\s+(\S+)/
 # "evil:Settlement#settle!:/home/runner/work/x/x/app/services/settlement.rb:278:4e5c4"
-EVIL = %r{\Aevil:(?<subject>.+):(?<path>/[^:]+):(?<line>\d+):\h+\z}
+# The id is always 5 hex digits (Mutant::Mutation::CODE_RANGE). The line
+# may go on after it: the workflow writes mutant's stderr into the same
+# log, and "Uncovered mutations detected, exiting nonzero!" once landed
+# right after an id, with no line break between them (#181).
+EVIL = %r{\Aevil:(?<subject>.+):(?<path>/[^:]+):(?<line>\d+):\h{5}}
 # "(2 more alive mutation(s), use `mutant session subject Foo#bar` to see all details)"
 MORE = /\A\((?<count>\d+) more alive mutation\(s\), use `mutant session subject (?<subject>[^`]+)`/
 RULE = '-----------------------'
 
-Piece = Struct.new(:name, :subjects, :summary, :survivors) do
+Piece = Struct.new(:name, :subjects, :summary, :survivors, :missing) do
   def ran? = !summary.nil?
   def number(key) = summary ? summary.fetch(key, '0').to_f : 0
 end
@@ -88,10 +95,18 @@ def totals(pieces)
   ran = pieces.select(&:ran?)
   counts = %w[Mutations Kills Alive Timeouts].to_h { |key| [key, ran.sum { |piece| piece.number(key) }.to_i] } # rubocop:disable Rails/IndexWith -- plain Ruby here, no ActiveSupport
   killed = counts['Mutations'].zero? ? 0 : 100.0 * counts['Kills'] / counts['Mutations']
-  lines = ["#{counts['Mutations']} mutations, #{counts['Kills']} killed, #{counts['Alive']} alive, " \
-           "#{counts['Timeouts']} timed out: #{format('%.2f', killed)}% killed."]
-  stopped = pieces.reject(&:ran?).map(&:name).sort
-  lines << "#{stopped.size} piece(s) stopped before mutating: #{stopped.join(', ')}." if stopped.any?
+  ["#{counts['Mutations']} mutations, #{counts['Kills']} killed, #{counts['Alive']} alive, " \
+   "#{counts['Timeouts']} timed out: #{format('%.2f', killed)}% killed.", *pieces_without_results(pieces)]
+end
+
+# A line for the pieces that stopped before mutating, and one for the
+# pieces that left nothing at all.
+def pieces_without_results(pieces)
+  stopped = pieces.reject { |piece| piece.ran? || piece.missing }.map(&:name).sort.join(', ')
+  missing = pieces.select(&:missing).map(&:name).join(', ')
+  lines = []
+  lines << "Stopped before mutating: #{stopped}." unless stopped.empty?
+  lines << "Left nothing, so their subjects have no result: #{missing}." unless missing.empty?
   lines
 end
 
@@ -100,6 +115,8 @@ def pieces_table(pieces)
     cells = if piece.ran?
               [piece.summary.fetch('Mutations', '0'), piece.summary.fetch('Alive', '0'),
                "#{(piece.number('Runtime') / 60).round} min"]
+            elsif piece.missing
+              ['left nothing', '', '']
             else
               ['stopped', '', '']
             end
@@ -122,12 +139,20 @@ def report(pieces)
   "#{['# Mutant run', '', *totals(pieces), '', *pieces_table(pieces), '', *survivors_section(pieces)].join("\n")}\n"
 end
 
-if ARGV.size != 2
-  warn 'Usage: bin/mutant-report <directory of pieces> <report file>'
+# A piece the run started that left no directory.
+def missing_pieces(found, started)
+  names = (0...started).map { |number| "mutant-piece-#{number}" } - found.map(&:name)
+  names.map { |name| Piece.new(name, '', nil, [], true) }
+end
+
+unless [2, 3].include?(ARGV.size) && (ARGV.size == 2 || ARGV[2].match?(/\A\d+\z/))
+  warn 'Usage: bin/mutant-report <directory of pieces> <report file> [<pieces started>]'
   exit 2
 end
 
 dirs = Dir.children(ARGV[0]).map { |child| File.join(ARGV[0], child) }.select { |path| File.directory?(path) }
-text = report(dirs.map { |dir| read_piece(dir) })
+pieces = dirs.map { |dir| read_piece(dir) }
+pieces += missing_pieces(pieces, Integer(ARGV[2], 10)) if ARGV[2]
+text = report(pieces)
 File.write(ARGV[1], text)
 puts text
