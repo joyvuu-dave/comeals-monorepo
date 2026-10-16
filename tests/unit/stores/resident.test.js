@@ -1172,7 +1172,8 @@ describe("Resident model", () => {
   //
   // A raced refetch can destroy a resident node while its mutation request
   // is in flight. The server still saved the change. Every success callback
-  // must then refetch through the root store instead of returning silently.
+  // must then refetch through the root store instead of returning and
+  // leaving the screen out of date.
 
   describe("dead-node repair on mutation success", () => {
     const flush = () => new Promise((r) => setTimeout(r, 0));

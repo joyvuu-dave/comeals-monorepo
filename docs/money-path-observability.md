@@ -64,15 +64,15 @@ production rather than only in a test.
 
 **Every run is recorded, pass or fail**, in `ledger_check_runs` — start, finish,
 how many reconciliations were checked, how many disagreed, and what disagreed.
-That table is the actual deliverable. A check that only speaks up on failure
+That table is the actual deliverable. A check that only reports a failure
 cannot answer the question an auditor asks, which is not "would you have
-noticed?" but "show me that you looked". A silent night and a night the job
-never ran look identical without it. The rows are append-only, guarded the same
-way the balances are, because a check record that can be edited afterwards is
-not evidence. `admin/ledger_check_runs` shows the history. A run's page
-says which check found each difference, in words, and shows each amount
-with every digit and its direction ("owes", "is owed"), never a sign
-(`LedgerCheckFindingsTable`).
+noticed?" but "show me that you looked". A night when the check found nothing
+wrong and a night the job never ran look identical without it. The rows are
+append-only, guarded the same way the balances are, because a check record
+that can be edited afterwards is not evidence. `admin/ledger_check_runs` shows
+the history. A run's page says which check found each difference, in words,
+and shows each amount with every digit and its direction ("owes", "is owed"),
+never a sign (`LedgerCheckFindingsTable`).
 
 There are three outcomes, not two. A run that could not finish and found
 nothing is recorded with its error and is neither passed nor failed: it says

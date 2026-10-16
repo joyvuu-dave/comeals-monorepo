@@ -8,7 +8,7 @@
 # cost across the eaters by multiplier, and on a subsidized meal across the
 # cooks by what each spent (MODELS.md, "The ledger grain"). Dividing would
 # leave a remainder that has to go somewhere, and the column would round
-# it away silently, so a meal's stored lines would not sum to zero (#85).
+# it away with no error, so a meal's stored lines would not sum to zero (#85).
 #
 # Largest remainder (Hamilton's method), the same rule
 # Settlement.allocate_to_cents uses at the cent:

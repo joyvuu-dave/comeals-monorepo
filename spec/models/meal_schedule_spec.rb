@@ -11,8 +11,8 @@ RSpec.describe MealSchedule do
   describe 'EPOCH' do
     it 'is a Sunday and never changes' do
       # Stored schedules were arranged against this exact date (migration
-      # 20260808120000). Changing it would silently rephase every multi-week
-      # schedule.
+      # 20260808120000). Changing it would move the days of every
+      # multi-week schedule to different weeks, with no error.
       expect(described_class::EPOCH).to eq(Date.new(2000, 1, 2))
       expect(described_class::EPOCH.wday).to eq(0)
     end

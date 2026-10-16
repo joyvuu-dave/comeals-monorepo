@@ -4,8 +4,8 @@ require 'rails_helper'
 require Rails.root.join('spec/support/mutant/specs')
 
 # The lists that tell mutant which examples prove which classes
-# (spec/support/mutant/specs.rb). Two things can go quietly wrong with
-# them, and both make a mutant run report survivors that mean nothing.
+# (spec/support/mutant/specs.rb). Two mistakes in them raise no error,
+# and both make a mutant run report survivors that mean nothing.
 RSpec.describe 'the mutant spec selection' do
   def described_class_of(path)
     Rails.root.join(path).read.match(/RSpec\.describe\s+([A-Z][A-Za-z0-9:]*)\b/)&.captures&.first
@@ -21,7 +21,8 @@ RSpec.describe 'the mutant spec selection' do
   # names other classes and forgets this one turns that off, and every
   # mutation of the class then survives with "tests: 0" — 661 of them
   # for LedgerVerification on 2026-09-12, and the MealLedger oracle
-  # comparison had been silently off since the row was written.
+  # comparison had not run since the row was written, with nothing to
+  # report it.
   it 'keeps the class a file describes in that file\'s row' do
     wrong = MUTANT_SPECS.filter_map do |path, expressions|
       next if expressions.empty?

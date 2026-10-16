@@ -20,8 +20,8 @@ ActiveAdmin.register Rotation do
     # Deleting a rotation is how a schedule change reaches the calendar
     # early: delete upcoming rotations newest-first and the nightly task
     # recreates them under the current schedule. The model guards refuse
-    # anything unsafe; RefusedDestroyMessage shows their reason instead of
-    # a silent bounce.
+    # anything unsafe; RefusedDestroyMessage shows their reason, instead of
+    # a redirect that does not say why nothing was deleted.
     include RefusedDestroyMessage
   end
 

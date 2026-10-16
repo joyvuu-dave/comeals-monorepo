@@ -206,8 +206,8 @@ RSpec.describe 'Sessions API' do
     it 'leaves the legacy Key intact if the user logs in without logging out first' do
       # Some users will just re-log-in without explicitly logging out (the
       # frontend overwrites the token cookie). The old Key row is orphaned —
-      # harmless, but assert it's still present so we'd notice if a future
-      # change silently started destroying it.
+      # harmless, but assert it's still present so this test fails if a
+      # future change starts destroying it.
       legacy_token = legacy_key.token
       original_keys = resident.keys.pluck(:id)
 

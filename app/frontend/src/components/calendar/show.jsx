@@ -528,9 +528,9 @@ const MainCalendar = observer(() => {
         // (its handleDayClick calls e.stopPropagation()), so the click
         // never bubbles to the overlay — and the overlay's click
         // handler is the only place react-modal resets its internal
-        // shouldClose flag. The flag sticks at false and the next
-        // click outside the form is silently eaten (one dead click,
-        // then the gate fires). So the built-in path is off, and the
+        // shouldClose flag. The flag stays false, and the next click
+        // outside the form does nothing and shows nothing. Only a
+        // second click reaches the gate. So the built-in path is off, and the
         // overlay closes on its own mousedown instead: a press that
         // starts on the overlay itself is a close request, and no
         // widget inside the form can stop a mousedown it never sees.

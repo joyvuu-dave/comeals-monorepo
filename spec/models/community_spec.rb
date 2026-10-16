@@ -70,8 +70,8 @@ RSpec.describe Community do
 
   describe 'timezone' do
     # The DB column default was dropped (see 20260423170000 migration) so
-    # operators must explicitly pick a tz at create time. This prevents
-    # silently deploying a Berlin community on Pacific time.
+    # operators must explicitly pick a tz at create time. This stops a
+    # Berlin community from being set up on Pacific time with no error.
     it 'requires a timezone at creation' do
       community_without_tz = described_class.new(name: 'No TZ', timezone: nil)
 
@@ -877,7 +877,7 @@ RSpec.describe Community do
     # Pusher channels and cache keys use the same format, which must match
     # the frontend subscription in data_store.js: "community-{id}-calendar-{year}-{month}".
     # If these ever diverge (e.g., someone adds a version prefix to cache keys),
-    # Pusher notifications would go to the wrong channel and real-time updates break silently.
+    # Pusher notifications would go to the wrong channel, and real-time updates would stop with no error.
     it 'uses the same key format for both Pusher channels and cache keys' do
       LiveUpdate.calendar(Date.new(2026, 4, 15))
 

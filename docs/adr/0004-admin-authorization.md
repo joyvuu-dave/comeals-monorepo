@@ -17,8 +17,8 @@ half that was missing had a hole in it. What we found on 2026-07-28:
 `app/admin/admin_user.rb` never listed `:superuser` in `permit_params` and
 never rendered it in the form. A superuser creating another superuser got an
 account with the flag off. Promoting a plain admin returned success and
-changed nothing, because strong parameters drop silently. Every superuser in
-production was made from a console.
+changed nothing, because strong parameters drop a field with no error. Every
+superuser in production was made from a console.
 
 **The last superuser could delete their own account.** Destroy was allowed for
 superusers with no guard. Verified by request spec before the fix: the count
@@ -189,11 +189,11 @@ The rule for anything added later: **if an admin action does not call
 `resource` or `build_resource`, it is unauthorized until it calls `authorize!`
 itself.**
 
-### 6. Refusing beats silently dropping
+### 6. Refuse with a message, never drop with no error
 
 Setting `superuser` without the right to do it is refused with a flash message,
-not dropped by strong parameters. A silent drop looks like success, which is
-how the flag came to be unmanageable in the first place.
+not dropped by strong parameters. A drop with no error looks like success,
+which is how the flag came to be unmanageable in the first place.
 
 ## Consequences
 

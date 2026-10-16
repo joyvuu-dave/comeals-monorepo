@@ -169,7 +169,8 @@ RSpec.describe 'a request storm against the whole API, with the nightly jobs and
   # finds them by what the calendar shows, and client 0 is "Storm 0"
   # there, not "Storm Client 0". Until 2026-09-28 it looked for the full
   # name, so eight of the 24 clients never sent a guest room or common
-  # house delete: each one quietly became a create.
+  # house delete: each one was sent as a create instead, and nothing
+  # reported it.
   it 'lets a client find its own calendar rows by what the calendar shows, and delete them' do
     plan = Storm::Seed.plant(clients: clients)
     resident = plan.residents.first

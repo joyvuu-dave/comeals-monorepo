@@ -77,7 +77,7 @@ test.describe("Form CRUD", () => {
       await expect(modal).toHaveCount(0);
     });
 
-    // The discard gate (ADR 0006): a dirty form never closes silently.
+    // The discard gate (ADR 0006): a dirty form never closes without asking.
     test("dismissing a dirty form asks, Keep editing keeps it, Discard closes it", async ({
       page,
     }) => {
@@ -396,9 +396,9 @@ test.describe("Form CRUD", () => {
     });
 
     // Regression: react-day-picker stops its day click's propagation,
-    // which used to strand react-modal's shouldClose flag at false —
-    // after picking a day, the first click outside the form was
-    // silently eaten and only the second one raised the discard
+    // which used to leave react-modal's shouldClose flag at false —
+    // after picking a day, the first click outside the form did nothing
+    // and showed nothing, and only the second one raised the discard
     // question. The overlay now closes on its own mousedown (see
     // calendar/show.jsx), so ONE click must ask.
     test("after picking a day, one click outside the form asks", async ({

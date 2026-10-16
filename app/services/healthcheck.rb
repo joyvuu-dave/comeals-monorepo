@@ -15,7 +15,7 @@ require 'net/http'
 # Pings are off unless HEALTHCHECKS_PING_KEY is set (production only).
 # A ping must never break the job it watches: the pinger swallows its
 # own errors. A lost success ping turns into a missed check on the
-# healthchecks.io side — a false alarm, not a silent failure.
+# healthchecks.io side — a false alarm, not a failure nobody is told about.
 class Healthcheck
   BASE_URL = 'https://hc-ping.com'
   OPEN_TIMEOUT = 5
@@ -44,8 +44,9 @@ class Healthcheck
                                read_timeout: READ_TIMEOUT) do |http|
       http.get(uri.request_uri)
     end
-    # A rejected ping (bad key, deleted check) means the job is silently
-    # unmonitored — the log line is the only trace of that.
+    # A rejected ping (bad key, deleted check) means healthchecks.io no
+    # longer tracks this job, and no alert says so — the log line is the only
+    # record of it.
     Rails.logger.warn("Healthcheck ping for #{slug} returned #{response.code}") unless response.is_a?(Net::HTTPSuccess)
     response
   rescue StandardError => e

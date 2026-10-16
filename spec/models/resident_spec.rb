@@ -347,10 +347,11 @@ RSpec.describe Resident do
   # Real-time notifications
   # ---------------------------------------------------------------------------
   describe 'the residents channel (note_live_update)' do
-    # Pusher is stubbed silently across all examples. Positive assertions use
-    # `.at_least(:once)`; negative assertions use `.exactly(:once)` to allow
-    # the single trigger from the initial `create` while forbidding any
-    # further trigger from the mutation under test.
+    # rails_helper.rb stubs Pusher for every example, so a trigger sends
+    # nothing. Positive assertions use `.at_least(:once)`; negative
+    # assertions use `.exactly(:once)` to allow the single trigger from the
+    # initial `create` while forbidding any further trigger from the
+    # mutation under test.
     let(:expected_channel) { "community-#{community.id}-residents" }
 
     # Units push the same channel when they are created, so every unit an

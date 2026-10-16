@@ -24,7 +24,7 @@ RSpec.describe 'API contract (tests/fixtures/api_contract.json)', type: :seriali
   let(:contract) { JSON.parse(Rails.root.join('tests/fixtures/api_contract.json').read) }
 
   # Every fixture entry must be asserted below; a new entry without a matching
-  # test here should fail loudly, not pass silently.
+  # test here must make this spec fail, not pass.
   let(:covered) do
     %w[MealForm MealFormBill MealFormResident MealFormGuest MealResident Guest GuestReplayed
        EventForm CommonHouseReservationForm GuestRoomReservationForm]

@@ -96,7 +96,8 @@ function fireCalendarUpdate(year, month) {
 }
 
 // Waits until the given month is on screen, then lets the prefetch and
-// revalidation chains finish so the next step starts from a quiet state.
+// revalidation chains finish so the next step starts with no request
+// still running.
 async function settleOn(store, year, month) {
   await vi.waitFor(() => {
     expect(store.calendarEvents[0].title).toBe(titleFor(year, month));

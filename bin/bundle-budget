@@ -68,7 +68,7 @@ report("total     ", totalKB, budgets.totalKB);
 // The calendar chunk must be preloaded from index.html (#44).
 // vite.config's preloadCalendarPlugin finds the chunk by the literal
 // file name calendar/show.jsx, so renaming or moving that file would
-// silently drop the preload and the boot-time download would start
+// drop the preload with no error, and the boot-time download would start
 // late — no test would fail. Fail here instead.
 const calendarKey = Object.keys(manifest).find((k) =>
   k.endsWith("calendar/show.jsx"),

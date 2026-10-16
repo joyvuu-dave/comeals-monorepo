@@ -125,7 +125,7 @@ export function mealPageActions(self: MealPageStore) {
     // another meal. The menu box binds these two actions to the node it
     // rendered: a debounced flush that fires after a meal switch must
     // land on the meal the text was typed on — landing on store.meal
-    // silently replaced the NEW meal's menu.
+    // replaced the NEW meal's menu, and the page showed no message.
     setDescriptionOn(node: MealNode | null, val: string) {
       if (!node || !isAlive(node)) return;
       node.setDescription(val);

@@ -187,8 +187,8 @@ class Reconciliation < ApplicationRecord
   # arithmetic needs.
   #
   # Uses preload (not includes) to guarantee separate IN(?) queries — includes
-  # can silently switch to LEFT JOIN if a .where is later chained on an
-  # included table, which would produce a cartesian product across 3
+  # switches to a LEFT JOIN, with no warning, if a .where is later chained on
+  # an included table, which would produce a cartesian product across 3
   # associations. MealLedger runs no queries of its own, so these three
   # associations must be loaded before it sees the meals.
   sig { returns(MealLedger) }

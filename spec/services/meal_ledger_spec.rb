@@ -401,8 +401,8 @@ RSpec.describe MealLedger do
     # The rake task reads its meals inside one SERIALIZABLE READ ONLY snapshot
     # (SnapshotRead), then computes outside it. A query fired from in here
     # would run outside that snapshot and could see a different state of the
-    # ledger, so the answer would match no real state of the books. This is
-    # the assertion that keeps that from happening quietly.
+    # ledger, so the answer would match no real state of the books. If that
+    # ever happens, this assertion fails.
     it 'runs none, given meals with the three associations preloaded' do
       cook = resident('Cook')
       host = resident('Host')

@@ -50,8 +50,8 @@ steps below are still the record of what happens and why.
 
 Do not delete anything on the Scheduler dashboard until step 6. If Solid
 Queue fails to start, the jobs still run from Scheduler while you fix it;
-deleting first would leave the jobs silently unrun until
-healthchecks.io's grace period (1 hour) expires and emails you.
+deleting first would mean the jobs do not run, and nothing tells you,
+until healthchecks.io's grace period (1 hour) ends and it emails you.
 
 1. Deploy (`bin/deploy`). The migration creates Solid Queue's tables and
    `job_runs` in the primary database. Scheduler is still running the

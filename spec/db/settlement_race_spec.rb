@@ -183,9 +183,9 @@ RSpec.describe 'settlement race against unlocked write paths' do
   end
 
   # Fires `sql` on a second session while the settlement holds its claim, then
-  # asserts the outcome in the order that matters. First the money: the
-  # settled ledger must still match its source data, which is the thing that
-  # silently broke. Then the mechanism — the trigger refused the write (part
+  # asserts the outcome, most important first. First the money: the settled
+  # ledger must still match its source data, which is the thing that broke
+  # with no error. Then the mechanism — the trigger refused the write (part
   # 2 decided after the wait), and the write really did wait (part 1 gave it
   # something to wait on).
   def expect_racing_write_refused(sql, params)

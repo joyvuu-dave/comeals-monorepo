@@ -57,7 +57,7 @@ test.describe("Authentication", () => {
   test.describe("with a failing login endpoint", () => {
     // The mocked 400 makes the browser log a request failure. The
     // server's message goes to a toast, not to the console, because the
-    // login calls handleAxiosError without silent.
+    // login calls handleAxiosError without `silent: true`.
     test.use({ allowedConsoleErrors: httpFailurePattern });
 
     test("login with a wrong password shows the server's message and no signed-out banner", async ({

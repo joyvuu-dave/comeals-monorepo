@@ -121,8 +121,9 @@ module.exports = [
   },
 
   // -----------------------------------------------------------
-  // Unit test files -- Node ESM (Vitest). The .jsx glob matters: with
-  // only *.js here, every component test was silently unlinted (#52).
+  // Unit test files -- Node ESM (Vitest). The glob must include .jsx:
+  // with only *.js here, ESLint skipped every component test and
+  // reported nothing (#52).
   // -----------------------------------------------------------
   {
     files: ["tests/unit/**/*.{js,jsx}"],

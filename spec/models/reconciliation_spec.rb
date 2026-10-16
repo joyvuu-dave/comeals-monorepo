@@ -54,7 +54,7 @@ RSpec.describe Reconciliation do
   describe '#settlement_balances when allocation returns an unbalanced result' do
     # allocate_to_cents refuses to return this, so the second check can only
     # be reached by replacing it. It is here so that a future allocator
-    # cannot write books that do not balance and stay silent about it.
+    # cannot write books that do not balance and raise no error.
     it 'raises and names the reconciliation' do
       settleable_meal
       reconciliation = settle!
@@ -392,7 +392,7 @@ RSpec.describe Reconciliation do
       settle!
     end
 
-    it 'raises when raw balances carry a sub-cent imbalance instead of silently absorbing it' do
+    it 'raises when raw balances carry a sub-cent imbalance instead of rounding it away with no error' do
       unbalanced = { 1 => BigDecimal('0.004') }
 
       expect { Settlement.allocate_to_cents(unbalanced, reconciliation_id: reconciliation.id) }
@@ -536,8 +536,9 @@ RSpec.describe Reconciliation do
       # Simulate the READ COMMITTED race (issue #8): after `loser` plucks its
       # eligible meal ids but before its UPDATE runs, a concurrent settlement
       # claims one of those meals and commits. Without re-asserting
-      # reconciliation_id IS NULL, the UPDATE would silently overwrite the
-      # rival's assignment and both ledgers would charge for the same meal.
+      # reconciliation_id IS NULL, the UPDATE would overwrite the rival's
+      # assignment with no error, and both ledgers would charge for the same
+      # meal.
       settlement = Settlement.new(loser)
       allow(settlement).to receive(:eligible_meal_ids).and_wrap_original do |original|
         original.call.tap { contested.update_column(:reconciliation_id, rival.id) }

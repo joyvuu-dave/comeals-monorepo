@@ -171,8 +171,8 @@ const CommonHouseReservationsEdit = observer(
             >
               {/* Empty placeholder so the controlled value="" (pre-fetch
                   or if the selected resident disappears from a mid-edit
-                  Pusher refresh) always matches an option — silences
-                  React's "value does not match any option" warning. */}
+                  Pusher refresh) always matches an option, so React does
+                  not print its "value does not match any option" warning. */}
               <option />
               {residents.map((resident) => (
                 <option key={resident.id} value={resident.id}>

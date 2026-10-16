@@ -3,8 +3,8 @@ import handleAxiosError from "../../../app/frontend/src/helpers/handle_axios_err
 import toastStore from "../../../app/frontend/src/stores/toast_store";
 
 // What every failed request turns into: a message the person sees, on
-// top of the ones on screen, or a console line when the caller asked for
-// silence.
+// top of the ones on screen, or a console line when the caller passed
+// `silent: true`.
 describe("handleAxiosError", () => {
   beforeEach(() => {
     toastStore.clearAll();

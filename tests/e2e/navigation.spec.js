@@ -165,9 +165,9 @@ test.describe("Navigation", () => {
 
   // Menu text typed just before a meal switch used to follow the
   // switch: the textarea's 500ms debounce fired after store.meal had
-  // moved on, so the text saved onto the NEW meal — silently replacing
-  // that meal's real menu (verified by probe, 2026-07-22). The text
-  // must save to the meal it was typed on.
+  // moved on, so the text saved onto the NEW meal and replaced that
+  // meal's real menu, with no message on the page (verified by probe,
+  // 2026-07-22). The text must save to the meal it was typed on.
   test("menu text typed just before a meal switch saves to the meal it was typed on", async ({
     page,
   }) => {

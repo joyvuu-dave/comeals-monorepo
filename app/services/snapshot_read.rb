@@ -20,8 +20,9 @@
 #
 #   READ ONLY     The block may not write. This is a real guard, not a
 #                 hint: an INSERT or UPDATE inside the block is refused by
-#                 PostgreSQL, so a later edit cannot quietly turn a
-#                 consistent read into a half-committed write.
+#                 PostgreSQL. If a later code change adds a write here, it
+#                 raises an error; it cannot turn a consistent read into a
+#                 half-committed write.
 #
 #   DEFERRABLE    The transaction waits at the start until PostgreSQL can
 #                 hand it a snapshot that is already free of serialization

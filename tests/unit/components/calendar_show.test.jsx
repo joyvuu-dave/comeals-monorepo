@@ -234,7 +234,7 @@ describe("MainCalendar", () => {
     expect(screen.getByText("OFFLINE")).toBeInTheDocument();
   });
 
-  // The discard gate (ADR 0006): a dirty form never closes silently.
+  // The discard gate (ADR 0006): a dirty form never closes without asking.
   // Every close path — the X, Escape, a click outside — runs through
   // the same handleCloseModal, so the X stands in for all of them.
   describe("the discard gate", () => {

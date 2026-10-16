@@ -182,8 +182,8 @@ belongs to the gem, so the app's reloader never unloads it.
 Four new examples: the constant holds the class, the list can still be
 appended to, a refused read answers with a miss instead of raising, and the
 refusal is reported through `Rails.error` so Bugsnag counts it. That last one
-matters — a cache that quietly misses every read looks exactly like a cache
-that works.
+is needed because a cache that misses every read with no error looks exactly
+like a cache that works.
 
 Verified by `bin/check`: 1121 examples, 0 failures, RuboCop clean.
 

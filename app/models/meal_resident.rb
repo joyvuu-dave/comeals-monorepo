@@ -75,7 +75,7 @@ class MealResident < ApplicationRecord
   # changed age rule never changes a past charge. Nothing in production
   # passes one: the API assigns late and vegetarian, the admin create
   # takes a resident id. So a value given here is filled in when missing
-  # and refused when different. It used to be replaced silently, and 76
+  # and refused when different. It used to be replaced with no error, so 76
   # spec lines passed a value that did nothing (2026-09-09).
   sig { void }
   def set_multiplier

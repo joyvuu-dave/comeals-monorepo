@@ -72,8 +72,9 @@ Rails.application.configure do
   end
 
   # Kill a request that runs longer than 15 seconds. With one Puma thread,
-  # a hung request stops the whole site, so a bounded loud failure beats an
-  # unbounded quiet one. The three timers fire in a deliberate order:
+  # a hung request stops the whole site, so a request that fails with an
+  # error after 15 seconds is better than one that hangs with no error and
+  # no limit. The three timers fire in a deliberate order:
   # Postgres cancels a stuck statement at 10s (config/database.yml) with a
   # precise error; this frees the thread at 15s for anything not stuck in
   # the database; Heroku's router gives up at 30s, which now never happens.
@@ -99,7 +100,8 @@ Rails.application.configure do
 
   config.action_mailer.perform_caching = false
 
-  # Raise delivery errors so failed emails aren't silently swallowed.
+  # Raise delivery errors. Otherwise an email that fails to send raises no
+  # error, and nobody learns it was not sent.
   config.action_mailer.raise_delivery_errors = true
 
   # Jobs run through Solid Queue in the primary database (no `connects_to`,

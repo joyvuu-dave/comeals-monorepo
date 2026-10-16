@@ -47,7 +47,7 @@ The reasons, so nobody re-opens this:
    gets undo for free — every action is a toggle. These forms would
    need real undo machinery, which costs more than the problem.
 
-### Dismissing a dirty form asks first. A clean form closes silently.
+### Dismissing a dirty form asks first. A clean form closes without asking.
 
 One rule, the same for New and Edit, on all three resources:
 
@@ -118,12 +118,13 @@ contract as `ConfirmBar` (see `confirm_bar.jsx`):
 
 ## Consequences
 
-- No path loses typed work silently. The worst case is one extra tap.
+- No path throws away typed work without asking first. The worst case is
+  one extra tap.
 - The forms keep their Create/Update buttons forever; any future
   request to make them real-time should be answered by pointing here.
 - Every modal form that creates or edits a record must accept
   `setDirty` and report through `useDirtyReport`, or its changes are
-  silently discarded — the exact bug this ADR removes. Not only when
+  thrown away without asking — the exact bug this ADR removes. Not only when
   someone closes it: the idle timer, the move to the new month at
   midnight, and the page load for a new version also close a form that
   reports nothing typed. Before October 2026 the screen kept every

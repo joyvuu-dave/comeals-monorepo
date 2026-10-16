@@ -211,7 +211,7 @@ if [ -n "$log_hits" ]; then
   echo "$log_hits" | head -20
   exit 1
 fi
-ok "Logs are quiet"
+ok "No worrying lines in the staging logs"
 
 step "Smoke test (read-only checks, logged in)"
 

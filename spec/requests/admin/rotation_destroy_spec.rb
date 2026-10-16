@@ -4,7 +4,7 @@ require 'rails_helper'
 
 # Deleting a rotation is how a schedule change reaches the calendar early.
 # The model refuses anything unsafe; the admin page must show that reason,
-# not bounce silently.
+# not just redirect without saying why nothing was deleted.
 RSpec.describe 'Admin rotation destroy' do
   let(:community) { create(:community) }
   let(:admin_user) { create(:admin_user, community: community, superuser: true) }

@@ -252,8 +252,9 @@ export function appActions(self) {
         self.loadMonthAsync();
       }
       // A hosts list may have missed an invalidation pushed while
-      // offline — silently refresh it so the next modal to open shows
-      // current data.
+      // offline — fetch it again so the next modal to open shows current
+      // data. The old list stays on screen meanwhile, and a failed fetch
+      // shows no message.
       if (!leftToConfirmation) {
         self.refetchHostsIfAskedFor();
       }

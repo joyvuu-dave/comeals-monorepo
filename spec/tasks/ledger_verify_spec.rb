@@ -6,7 +6,7 @@ require 'rake'
 # The task is a thin wrapper: LedgerVerification does the work and is covered
 # in spec/services/ledger_verification_spec.rb. What is only true here is the
 # wiring — that the check runs, and that a night the books do not tie out
-# reaches healthchecks.io instead of dying quietly in a dyno log.
+# reaches healthchecks.io, instead of being only a line in a dyno log.
 RSpec.describe 'ledger:verify' do
   before(:all) do
     RakeTasks.ensure_loaded

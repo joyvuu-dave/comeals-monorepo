@@ -22,9 +22,10 @@ const {
 const mealFixture = require("../fixtures/meal.json");
 
 // Every test here makes the app hit a mocked failure, so the
-// browser's request-failed log lines are the point. A silent caller
-// (the meal load) logs the server's message verbatim, and
-// handle_axios_error logs any error answer that has no message.
+// browser's request-failed log lines are the point. A caller that
+// passes `silent: true` (the meal load) logs the server's message
+// verbatim, and handle_axios_error logs any error answer that has no
+// message.
 test.use({
   allowedConsoleErrors: combinePatterns(
     httpFailurePattern,
@@ -135,10 +136,10 @@ test.describe("Error Handling & Edge Cases", () => {
       });
     });
 
-    // A failed FIRST load of a meal used to stay silent forever: the
-    // page said "loading..." with nothing to tap and no retry. Now it
-    // shows a notice, retries on its own with a growing wait, and
-    // offers a retry button.
+    // A failed FIRST load of a meal used to show no error at all: the
+    // page said "loading..." forever, with nothing to tap and no retry.
+    // Now it shows a notice, retries on its own with a growing wait,
+    // and offers a retry button.
 
     test("a failed meal load shows a retry notice and heals on its own", async ({
       page,
@@ -200,8 +201,8 @@ test.describe("Error Handling & Edge Cases", () => {
       });
 
       // Wait out the first automatic retry (2s), which also fails. The
-      // next automatic one comes 4s after that — a quiet window in
-      // which only the button can heal the page.
+      // next automatic one comes 4s after that. Until then the page
+      // sends no request on its own, so only the button can load it.
       await expect
         .poll(() => cooksRequests, { timeout: 5000 })
         .toBeGreaterThanOrEqual(2);

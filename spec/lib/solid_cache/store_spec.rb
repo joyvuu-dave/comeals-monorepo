@@ -33,8 +33,8 @@ RSpec.describe SolidCache::Store do
 
   # A store that trims old entries on its own thread deadlocks against the
   # single connection RSpec pins to the running example, and hangs the whole
-  # suite. spec/support/solid_cache.rb explains it in full. Pinned here so
-  # nobody quietly goes back to plain SolidCache::Store.new in a spec.
+  # suite. spec/support/solid_cache.rb explains it in full. Pinned here, so
+  # a change back to plain SolidCache::Store.new in a spec fails this test.
   it 'does not trim old entries on a background thread' do
     expect(cache.expiry_method).to eq(:job)
   end
@@ -164,9 +164,10 @@ RSpec.describe SolidCache::Store do
       expect(cache.read('meal-7')).to be_nil
     end
 
-    # Swallowed is not the same as unnoticed. A cache that quietly misses
-    # every read looks exactly like a cache that works, so the refusal has to
-    # reach Bugsnag through Rails.error like every other handled error.
+    # The error is caught here, but it must still be reported. A cache that
+    # misses every read with no error looks exactly like a cache that works,
+    # so the refusal has to reach Bugsnag through Rails.error like every
+    # other handled error.
     # Stubbed rather than subscribed: Rails.error has no way to unsubscribe,
     # so a real subscriber would stay for the rest of the run.
     it 'reports the refusal so it can be counted' do

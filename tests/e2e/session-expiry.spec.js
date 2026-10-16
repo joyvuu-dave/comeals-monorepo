@@ -81,7 +81,7 @@ test.describe("Session Expiry", () => {
     });
 
     // The month fetch handles its failure by logging this line
-    // (handleAxiosError, silent). Waiting for it proves the aborted
+    // (handleAxiosError with `silent: true`). Waiting for it proves the aborted
     // request happened and went through the error path. The 401 check
     // runs earlier on that path, in the axios response interceptor, so
     // if this error were going to raise the banner, it would show now.

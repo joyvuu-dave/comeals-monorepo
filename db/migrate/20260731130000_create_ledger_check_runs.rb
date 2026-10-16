@@ -7,12 +7,12 @@
 # compares the result to the balances that were stored at settlement. This
 # table is what it leaves behind.
 #
-# Why store a row when nothing is wrong. A check that only speaks up on
+# Why store a row when nothing is wrong. A check that only reports a
 # failure cannot answer the question an auditor actually asks, which is not
-# "would you have noticed?" but "show me that you looked". A silent night and
-# a night the job never ran look identical without this table. With it, the
-# ledger has a dated, unbroken record of having been checked and having tied
-# out.
+# "would you have noticed?" but "show me that you looked". A night when the
+# check found nothing wrong and a night the job never ran look identical
+# without this table. With it, the ledger has a dated, unbroken record of
+# having been checked and having tied out.
 #
 # Append-only, for the same reason the balances are: a check record that can
 # be edited afterwards is not evidence. The trigger honours the same

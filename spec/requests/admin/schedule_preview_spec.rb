@@ -5,8 +5,8 @@ require 'rails_helper'
 # The live preview under the schedule grid (app/admin/community.rb,
 # collection_action :schedule_preview). It is a hand-written admin action, so
 # it must call authorize! itself — the examples below pin that a plain admin
-# and a read-only token are refused, which is exactly what silently breaks if
-# that line is ever dropped (the meal_resident.rb trap, ADR 0004).
+# and a read-only token are refused. If that line were ever dropped, they would
+# be let in, with no error (the meal_resident.rb trap, ADR 0004).
 RSpec.describe 'Admin schedule preview' do
   include ActiveSupport::Testing::TimeHelpers
 

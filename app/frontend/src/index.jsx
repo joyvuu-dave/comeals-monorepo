@@ -149,8 +149,9 @@ function startApp() {
   // calendar mounts. The mount's own goToMonth then finds the month
   // cached, or adopts the still-in-flight request — see revalidate in
   // stores/month_fetch.js — instead of starting the download from zero.
-  // Matched against CALENDAR_PATH itself, so a route change cannot
-  // silently strand this prefetch on a stale hand-written pattern.
+  // Matched against CALENDAR_PATH itself, not a hand-written copy of it.
+  // A copy would stop matching after a route change, and then the
+  // prefetch would stop running with no error.
   // The store is made above, so it hears the zone this prefetch's
   // answer carries (onServerZone in stores/month_fetch.js).
   const calendarBoot = matchPath(CALENDAR_PATH, window.location.pathname);

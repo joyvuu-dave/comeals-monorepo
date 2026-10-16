@@ -72,10 +72,10 @@ undo it — the co-housing way, not the firewall way.
   ownership plumbing.
 - A stolen or shared session is as powerful as the resident it belongs to. We
   accept this; sessions live inside a trusted group.
-- Two things are load-bearing and must not regress silently: **authentication is
-  required on every write**, and **admin writes require a superuser**. These are
-  the boundaries we actually keep, so they are pinned by request specs
-  (`spec/requests/api/v1/authentication_pinning_spec.rb` and
+- Two rules must hold, and breaking either one must fail a test:
+  **authentication is required on every write**, and **admin writes require a
+  superuser**. These are the boundaries we actually keep, so they are pinned by
+  request specs (`spec/requests/api/v1/authentication_pinning_spec.rb` and
   `spec/requests/admin/superuser_authorization_spec.rb`).
   _Superseded by ADR 0004 for the second boundary: only ledger writes (Bill,
   Guest, Meal, MealResident, Reconciliation, the balance tables, MealCharge,
@@ -84,8 +84,8 @@ undo it — the co-housing way, not the firewall way.
   reservations. `SuperuserAdapter` holds the rule._
 - The open cross-resident behavior is _also_ pinned
   (`spec/requests/api/v1/high_trust_authorization_spec.rb`), so that a future
-  change which quietly adds an ownership check fails a test and forces a
-  conscious decision rather than a silent shift in the model.
+  change which adds an ownership check fails a test. Then the model changes
+  only by a decision made on purpose, never by a change no test catches.
 
 ## When to revisit
 

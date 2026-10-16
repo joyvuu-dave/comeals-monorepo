@@ -150,7 +150,7 @@ production:
   # CAUTION: this hash REPLACES the default one — YAML merge keys are
   # shallow, so a `variables:` key here throws away everything the default
   # block set. Every line from the default block must be repeated here, or
-  # production silently loses it. Losing `default_transaction_isolation`
+  # production loses it with no error. Losing `default_transaction_isolation`
   # would be the worst regression this file can have, which is why
   # config/initializers/verify_transaction_isolation.rb refuses to boot
   # without it and spec/config/database_config_spec.rb pins this hash.

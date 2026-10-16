@@ -18,7 +18,7 @@ require 'bigdecimal'
 # Never edit this file to make it agree with the app. Fix the rules or the
 # app instead.
 #
-# Assumptions. Each one is a place where the documents are silent or could
+# Assumptions. Each one is a place where the documents say nothing or could
 # be read two ways, and the reading this file takes.
 #
 # 1. A bill with no_cost = true is skipped completely: it adds nothing to

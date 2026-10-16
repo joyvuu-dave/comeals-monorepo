@@ -47,7 +47,8 @@ function VersionBanner() {
           }
         })
         .catch(function () {
-          // Silently ignore fetch failures (user might be briefly offline)
+          // A failed fetch shows nothing and logs nothing (the user might
+          // be offline for a moment). The next poll tries again.
         });
     }, POLL_INTERVAL);
 

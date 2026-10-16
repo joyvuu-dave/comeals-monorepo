@@ -4,7 +4,7 @@
 # Check every settled balance against its source data. LedgerVerification
 # records its own detailed run in ledger_check_runs and raises on a
 # mismatch, so a failed check is a failed job, a failed ping, and a
-# Bugsnag report — never a quiet log line.
+# Bugsnag report — never only a log line.
 class VerifyLedgerJob < RecurringJob
   HEALTHCHECK = 'ledger-verify'
 

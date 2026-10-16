@@ -7,14 +7,14 @@
 # These triggers make PostgreSQL itself refuse writes that skip callbacks —
 # update_all, delete_all, update_columns, raw SQL, a psql session.
 #
-# CORRECTION (2026-07-27, issue #43): the last clause of that sentence used to
-# read "so a settled ledger cannot be corrupted silently from any path." That
-# is not true, and this migration is left as-shipped rather than edited in
-# place. Both lookups below are non-locking reads, so a write that begins
-# while `reconciliations:create` is still running is judged against
-# pre-settlement state and allowed through — it then commits onto a meal that
-# is reconciled by the time it lands, adding a row no reconciliation counts or
-# removing one a reconciliation already counted.
+# CORRECTION (2026-07-27, issue #43): that sentence used to end with a clause
+# saying that no path could change a settled ledger with no error. That is not
+# true, and this migration is left as-shipped rather than edited in place.
+# Both lookups below are non-locking reads, so a write that begins while
+# `reconciliations:create` is still running is judged against pre-settlement
+# state and allowed through — it then commits onto a meal that is reconciled
+# by the time it lands, adding a row no reconciliation counts or removing one
+# a reconciliation already counted.
 #
 # Closing it needs three things together, and each alone was tested and does
 # not work: a `FOR UPDATE` lock in Reconciliation#assign_meals, and BOTH

@@ -120,7 +120,7 @@ RSpec.describe JwtAuth do
 
       it 'accepts a token whose iat equals keys_valid_since (inclusive boundary)' do
         # The check is `issued_at < keys_valid_since` → equality passes. Locks in
-        # the inclusive boundary so a future refactor doesn't silently flip it.
+        # the inclusive boundary, so a future refactor that flips it fails here.
         #
         # Boundary chosen as a round float so the Time → Float → Time round-trip
         # is lossless. A Time built with microsecond precision can drift by a

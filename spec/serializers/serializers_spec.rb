@@ -19,10 +19,10 @@ RSpec.describe 'Serializers', type: :serializer do
     # BigDecimal amounts must serialize as JSON strings, not floats.
     # Floats lose precision (0.1 + 0.2 != 0.3). This test ensures the
     # Oj Rails-mode encoder (Alba.backend in config/initializers/alba.rb)
-    # keeps the string convention. If this test fails, financial data is
-    # being silently corrupted in transit.
+    # keeps the string convention. If this test fails, money amounts lose
+    # precision on the way to the client, with no error.
     # (Bill amounts are whole cents since issue #29, so the fixture is a
-    # two-decimal value; the string-on-the-wire rule is what matters here.)
+    # two-decimal value; the string-on-the-wire rule is what this checks.)
     it 'serializes BigDecimal amounts as strings, not floats' do
       meal = create(:meal, community: community)
       bill = create(:bill, meal: meal, resident: resident, community: community,

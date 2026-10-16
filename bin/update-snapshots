@@ -4,8 +4,8 @@
 # Why delete first: --update-snapshots only rewrites a golden when the
 # comparison fails. A small intentional change can sit inside the diff
 # tolerance (a moved modal title is ~3,100 sparse pixels against the
-# ~2,700-pixel budget), so its golden silently keeps showing the old
-# UI. Deleting the golden forces a fresh capture.
+# ~2,700-pixel budget), so the test passes and its golden still shows the
+# old UI. Deleting the golden forces a fresh capture.
 #
 # This script only automates the mechanics. A golden is a recorded
 # human judgment — review every changed PNG before committing.

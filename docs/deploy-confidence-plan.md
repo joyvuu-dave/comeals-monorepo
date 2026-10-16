@@ -170,7 +170,8 @@ Design decisions (approved 2026-08-09):
 The original sketch had a person approve each release. The goal has
 changed: deploy automatically when everything is green, with no human
 in the loop. If the pipeline stops at any step, it stops and notifies
-— it never retries on its own and never ships silently.
+— it never retries on its own, and every deploy it makes publishes a
+release note.
 
 **Status 2026-08-16: the cron is on, weekly.** The design of 2026-08-10
 said daily; the decision (2026-08-16) is once a week instead: every
@@ -186,9 +187,10 @@ The weekly job:
 1. **Green gate.** Every CI check on the tip of main must have
    completed successfully — the same rule bin/deploy's preflight_ci
    enforces. Nothing to deploy (prod already runs this sha) also stops
-   here, quietly. The gate also refuses while the `DEPLOY_HOLD` repo
-   variable is set (see rollbacks below) — a hold means a person
-   decided production should not follow main until main is fixed.
+   here, as a success: no alert is sent. The gate also refuses while
+   the `DEPLOY_HOLD` repo variable is set (see rollbacks below) — a
+   hold means a person decided production should not follow main
+   until main is fixed.
 2. **Release note.** A Claude call turns the commit messages between
    the live sha and the candidate into a plain-language note: what
    changed, what you will see, how to undo. Saved as a draft GitHub

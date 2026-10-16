@@ -623,10 +623,10 @@ RSpec.describe CommonHouseReservation do
     it 'passes the options of save on' do
       stamped = booking.reload.updated_at
 
-      booking.title = 'Quiet change'
+      booking.title = 'New title'
       expect(booking.save(touch: false)).to be(true)
 
-      expect(booking.reload).to have_attributes(title: 'Quiet change', updated_at: stamped)
+      expect(booking.reload).to have_attributes(title: 'New title', updated_at: stamped)
     end
 
     it 'raises for a database rule it has no words for' do

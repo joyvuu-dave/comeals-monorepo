@@ -3,9 +3,9 @@
 
 # Closing a meal freezes its headcount — attendance rows (MealResident,
 # Guest) feed Meal#multiplier and unit_cost, so late additions or removals
-# silently shift every other attendee's charge. The only sanctioned
-# exceptions, in both directions, are the "extras" the host explicitly
-# opens up by setting max:
+# would change every other attendee's charge, and nobody would be told. The
+# only sanctioned exceptions, in both directions, are the "extras" the host
+# explicitly opens up by setting max:
 #
 #   * additions are allowed while max is set and spots remain;
 #   * removals are allowed only for rows created after the meal closed

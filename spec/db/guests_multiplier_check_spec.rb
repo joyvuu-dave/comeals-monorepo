@@ -7,8 +7,8 @@ require 'rails_helper'
 # price"); this CHECK makes PostgreSQL refuse it from every write that
 # skips the model (update_columns, update_all, a rake task, psql). Before
 # it, the column took any number of 0 or more, and the admin meal form,
-# which offers only Adult and Child, would quietly turn any other value
-# into Adult on the next save.
+# which offers only Adult and Child, would turn any other value into Adult
+# on the next save, with no message.
 RSpec.describe 'guests multiplier check constraint' do
   let(:community) { create(:community) }
   let!(:guest) { create(:guest, meal: create(:meal, community: community)) }

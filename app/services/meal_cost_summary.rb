@@ -9,10 +9,10 @@
 # meal copies the community cap when it is made), but the ledger's rules
 # are not. ADR 0008 changed how a share is split, so a meal settled
 # before that change can compute to different lines today, and a screen
-# that computed them would quietly disagree with the ledger. A meal
-# settled before 2026-08-02 has no charges on purpose (the backfill
-# decision in docs/money-path-observability.md); `for` returns nil
-# there, and the screen shows nothing rather than a number nobody
+# that computed them would show other numbers than the ledger, with no
+# warning. A meal settled before 2026-08-02 has no charges on purpose (the
+# backfill decision in docs/money-path-observability.md); `for` returns
+# nil there, and the screen shows nothing rather than a number nobody
 # vouched for.
 #
 # An open meal computes through MealLedger, the one place the money

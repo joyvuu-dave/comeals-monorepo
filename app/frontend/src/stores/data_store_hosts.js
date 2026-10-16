@@ -36,9 +36,10 @@ export function hostsActions(self) {
     // offline). Supersedes any in-flight ensureHosts fetch so we don't
     // serve a potentially-stale response.
     //
-    // On failure: silently keeps the previously-loaded list visible. The
-    // next Pusher `update` event (or reconnect) will re-trigger this path,
-    // so transient network blips self-heal without user-visible errors.
+    // On failure: keeps the list it already had on screen, shows no
+    // message, and only logs the error to the console. The next Pusher
+    // `update` event (or reconnect) runs this path again, so after a short
+    // network failure the list is fetched again with no error on screen.
     refetchHostsSilently() {
       return self._fetchHosts({ supersede: true });
     },

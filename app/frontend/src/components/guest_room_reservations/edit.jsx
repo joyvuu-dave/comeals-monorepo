@@ -162,8 +162,8 @@ const GuestRoomReservationsEdit = observer(
             >
               {/* Empty placeholder so the controlled value="" (pre-fetch
                 or if the selected host disappears from a mid-edit
-                Pusher refresh) always matches an option — silences
-                React's "value does not match any option" warning. */}
+                Pusher refresh) always matches an option, so React does
+                not print its "value does not match any option" warning. */}
               <option />
               {hosts.map((host) => (
                 <option key={host.id} value={host.id}>

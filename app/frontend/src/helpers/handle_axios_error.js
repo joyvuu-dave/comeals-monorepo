@@ -18,7 +18,7 @@ function showInStack(message, type) {
 // messages, and its id is handed back. A calendar form passes
 // `options.show`, its own way to show a message inside the form
 // (use_form_messages.ts), and the message goes there instead (#137).
-// Hands back what `show` hands back, or null when silent.
+// Hands back what `show` hands back, or null when `options.silent` is true.
 export default function handleAxiosError(error, options) {
   var silent = options && options.silent;
   var show = (options && options.show) || showInStack;

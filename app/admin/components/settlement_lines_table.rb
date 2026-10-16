@@ -45,7 +45,7 @@ class SettlementLinesTable < Arbre::Component
 
   # Checked before the empty-lines return in build, so a bad symbol
   # raises on every render — not just the first one with real charge
-  # lines (an empty-data render would otherwise pass silently).
+  # lines (otherwise a render with no lines would raise nothing).
   def validated_first_column(options)
     first_column = options.fetch(:first_column)
     return first_column if %i[resident meal].include?(first_column)

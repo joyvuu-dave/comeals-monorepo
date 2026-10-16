@@ -38,10 +38,10 @@ ActiveAdmin.register Bill do
     # This check is a plain, non-locking read, and this resource never takes
     # the meal row lock that the API's with_meal_lock takes. So it can be
     # wrong: `reconciliations:create` may settle the meal between this read
-    # and the write. That used to lose money silently (issue #43) — the write
-    # landed on a meal that was reconciled by the time it finished, and
-    # billing:recalculate skipped it because that task only sums unreconciled
-    # meals.
+    # and the write. That used to lose money with no error (issue #43) — the
+    # write was saved on a meal that was reconciled by the time it finished,
+    # and billing:recalculate skipped it because that task only sums
+    # unreconciled meals.
     #
     # It no longer does. The database catches it now, from any path: the
     # settlement holds FOR UPDATE on every meal it claims, and the child-write
@@ -58,8 +58,9 @@ ActiveAdmin.register Bill do
       # eager_load (not includes) guarantees LEFT OUTER JOINs, which is required
       # because index columns sort on associated tables: meals.date, residents.name,
       # units.name. includes uses a heuristic to choose between separate queries and
-      # JOINs — if it chooses separate queries, ORDER BY on an associated table's
-      # column will fail silently or error.
+      # JOINs — if it chooses separate queries, an ORDER BY on an associated
+      # table's column names a table the query does not join, and PostgreSQL
+      # refuses it with an error.
       # preload (not eager_load) for has_many associations to avoid cartesian product
       end_of_association_chain
         .eager_load(:meal, :resident, resident: :unit)
@@ -124,8 +125,9 @@ ActiveAdmin.register Bill do
       # The column is DECIMAL(12,8), so the raw value renders as "16.0" —
       # render it as money instead (MoneyFieldHelper). A new bill's amount
       # is the column default 0, which renders blank so the cook's real
-      # cost must be typed. (A jQuery line used to clear the zero; its
-      # field id went stale and it silently stopped working.)
+      # cost must be typed. (A jQuery line used to clear the zero. The
+      # field's id changed, so the line found no field and did nothing,
+      # with no error.)
       f.input :amount,
               label: '$',
               input_html: {

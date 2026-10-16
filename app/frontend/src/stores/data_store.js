@@ -103,8 +103,9 @@ export const DataStore = types
     // Shape: [{ id, name, unitName }, ...] — transformed from the API's
     // tuple shape ([residents.id, residents.name, units.name]) at the store
     // boundary in setHosts.
-    // Kept fresh by Pusher `community-<id>-residents` real-time refetch
-    // and silent refetch on reconnect. See ensureHosts.
+    // Kept fresh by a refetch on each Pusher `community-<id>-residents`
+    // push, and by a refetch on reconnect that keeps the old list on
+    // screen and shows no error. See ensureHosts.
     hosts: types.optional(types.array(types.frozen()), []),
     // Non-null timestamp means the hosts array reflects a completed fetch.
     hostsLoadedAt: types.maybeNull(types.number),

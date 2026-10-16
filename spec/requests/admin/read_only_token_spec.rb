@@ -8,9 +8,9 @@ require 'rails_helper'
 # The rule under test is that the token path is read-only BY CONSTRUCTION —
 # it does not depend on the backing account being a plain admin. Before this,
 # read-only was a property of that account, so setting READ_ONLY_ADMIN_ID to a
-# superuser's id would silently turn every mailed link into a write-capable
-# one, with CSRF checking skipped as well. Production has it pointed at a
-# plain admin today; nothing made that mandatory.
+# superuser's id would turn every mailed link into a write-capable one, with
+# no error or warning, and with CSRF checking skipped as well. Production has
+# it pointed at a plain admin today; nothing made that mandatory.
 RSpec.describe 'Read-only admin token' do
   let(:community) { create(:community) }
   let(:token) { 'test-readonly-token' }

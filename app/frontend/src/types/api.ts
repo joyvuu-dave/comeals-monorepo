@@ -6,9 +6,9 @@
 
 // Money values cross the wire as strings (Rails serializes BigDecimal as JSON
 // string, e.g. "12.34000000"). The brand prevents accidental Number arithmetic
-// like `bill.amount + 1` — which would yield "12.340000001" and silently corrupt
-// money. To compute on a MoneyString, parse it explicitly (BigNumber, etc.) at
-// the point of use.
+// like `bill.amount + 1` — which would yield "12.340000001", a wrong amount,
+// with no error. To compute on a MoneyString, parse it explicitly (BigNumber,
+// etc.) at the point of use.
 declare const moneyBrand: unique symbol;
 export type MoneyString = string & { readonly [moneyBrand]: true };
 

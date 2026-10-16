@@ -107,9 +107,9 @@ class Resident < ApplicationRecord
 
   # Ledger rows are permanent. A resident who has any of these can never be
   # deleted — mark them inactive instead. restrict_with_error makes destroy
-  # fail with a clear error instead of silently deleting open-meal rows or
-  # hitting a raw foreign key error on reconciled ones. Declared before the
-  # destroy cascades below so these checks run first.
+  # fail with a clear error instead of deleting open-meal rows and reporting
+  # success, or hitting a raw foreign key error on reconciled ones. Declared
+  # before the destroy cascades below so these checks run first.
   has_many :bills, dependent: :restrict_with_error
   has_many :meal_residents, dependent: :restrict_with_error
   has_many :meals, through: :meal_residents

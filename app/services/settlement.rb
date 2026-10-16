@@ -378,8 +378,9 @@ class Settlement
   # First defensive layer: the largest-remainder allocation is only
   # meaningful when the input already balances. A meal's lines sum to
   # exactly zero (MODELS.md, "The ledger grain"), so a nonzero input sum,
-  # however small, means an upstream bug — allocating anyway would silently
-  # spread the imbalance across residents' settled amounts.
+  # however small, means an upstream bug — allocating anyway would spread
+  # the imbalance across residents' settled amounts, and nothing would
+  # report it.
   sig { params(raw_balances: T::Hash[Integer, BigDecimal], reconciliation_id: ReconciliationRef).void }
   def self.assert_balanced_input!(raw_balances, reconciliation_id)
     input_sum = raw_balances.values.sum(BigDecimal('0'))
@@ -387,7 +388,7 @@ class Settlement
 
     raise "allocate_to_cents: raw balances do not sum to zero for reconciliation #{reconciliation_id}. " \
           "Sum: #{input_sum.to_s('F')}. This indicates an upstream bug in balance computation; " \
-          'allocating pennies would silently redistribute the imbalance onto residents.'
+          'allocating pennies anyway would move the imbalance onto the residents, and nothing would report it.'
   end
 
   # Second defensive layer behind the zero-sum input guard. With an input
@@ -443,24 +444,24 @@ class Settlement
   # The UPDATE re-asserts reconciliation_id IS NULL: under READ COMMITTED a
   # concurrent settlement can claim a plucked meal between the read and the
   # write, and PostgreSQL re-evaluates the predicate on the committed row
-  # version after the lock wait, excluding claimed rows instead of silently
-  # overwriting the rival's assignment (which would double-charge every
-  # resident on those meals — both ledgers sum to zero, so no later check
-  # fires). Claiming fewer rows than were plucked means that race happened:
-  # raise so this settlement rolls back whole.
+  # version after the lock wait, excluding claimed rows instead of
+  # overwriting the other settlement's assignment with no error (which would
+  # double-charge every resident on those meals — both ledgers sum to zero,
+  # so no later check fails). Claiming fewer rows than were plucked means
+  # that race happened: raise so this settlement rolls back whole.
   #
-  # The FOR UPDATE lock before the UPDATE is not redundant, and removing it
-  # reopens silent corruption of the settled ledger (issue #43). The UPDATE
-  # alone takes only FOR NO KEY UPDATE on the meal row, and FOR KEY SHARE —
-  # what the immutability trigger's lookups take — does not conflict with
-  # that. So a write from a path that skips the meal lock (ActiveAdmin's
-  # forms) would have nothing to wait on, and could change a meal's ledger
-  # rows while this settlement was in the middle of claiming it. Added rows
-  # end up in no reconciliation's balances, and billing:recalculate skips
-  # them because that task only sums unreconciled meals; deleted rows leave
-  # balances behind that nothing justifies. FOR UPDATE does conflict with
-  # FOR KEY SHARE, so the rival write waits here and is then refused by the
-  # trigger.
+  # The FOR UPDATE lock before the UPDATE is not redundant. Removing it
+  # brings back issue #43: the settled ledger can be changed with no error.
+  # The UPDATE alone takes only FOR NO KEY UPDATE on the meal row, and FOR
+  # KEY SHARE — what the immutability trigger's lookups take — does not
+  # conflict with that. So a write from a path that skips the meal lock
+  # (ActiveAdmin's forms) would have nothing to wait on, and could change a
+  # meal's ledger rows while this settlement was in the middle of claiming
+  # it. Added rows end up in no reconciliation's balances, and
+  # billing:recalculate skips them because that task only sums unreconciled
+  # meals; deleted rows leave balances behind that nothing justifies. FOR
+  # UPDATE does conflict with FOR KEY SHARE, so the rival write waits here
+  # and is then refused by the trigger.
   #
   # This works only together with the trigger's two unconditional locking
   # lookups (20260727120000). Without the NEW.meal_id one, an insert decides

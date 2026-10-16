@@ -7,10 +7,10 @@ ActiveAdmin.register AdminUser do
 
   # STRONG PARAMS
   # :superuser is permitted so the flag can be granted through the UI at all —
-  # before this it was missing, so the form silently dropped it and the tier
-  # could only be set from a console. The controller below refuses the
+  # before this it was missing, so the form dropped it with no error and the
+  # tier could only be set from a console. The controller below refuses the
   # parameter rather than dropping it when the actor may not set it, because a
-  # silent drop looks like success.
+  # drop with no error looks like a successful save.
   permit_params :email, :phone, :password, :password_confirmation, :superuser
 
   # CONFIG

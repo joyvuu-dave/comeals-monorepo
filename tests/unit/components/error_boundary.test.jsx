@@ -27,8 +27,8 @@ function EffectBomb({ message }) {
 }
 
 describe("ErrorBoundary", () => {
-  // React and the boundary itself both log the caught error. Silence
-  // that inside these tests so the output stays readable. The
+  // React and the boundary itself both log the caught error. These
+  // tests stub console.error so those lines do not fill the output. The
   // notifyError mock is a vi.fn(), which restoreAllMocks leaves alone,
   // so clear its calls here: each test then sees only its own render.
   beforeEach(() => {

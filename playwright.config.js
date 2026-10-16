@@ -119,11 +119,12 @@ module.exports = defineConfig({
   ],
   // Its own port, not 3036, and never reuse: 3036 is the dev server's port.
   // With reuseExistingServer on 3036, running bin/check while bin/dev was
-  // up silently ran the whole E2E suite against the dev server (dev-mode
-  // React, on-demand transforms, HMR reloads on file edits) instead of the
-  // production build — nondeterministic and not what deploys ship (#21).
+  // up ran the whole E2E suite against the dev server (dev-mode React,
+  // on-demand transforms, HMR reloads on file edits) instead of the
+  // production build, and nothing in the output said so. Those runs were
+  // nondeterministic and did not test what deploys ship (#21).
   // A dedicated port with reuse off means the suite always tests a fresh
-  // production build, and a port collision fails loudly instead.
+  // production build, and a port collision stops the run with an error.
   // The build is the same `npm run build` every other path runs — one
   // layout everywhere. bin/check builds once for the whole run and sets
   // E2E_SKIP_BUILD so this server just serves that build; a standalone

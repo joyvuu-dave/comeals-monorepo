@@ -192,7 +192,7 @@ module Api
       # Locked so the max >= attendees_count validation reads the fresh
       # attendance, not the request-start snapshot.
       #
-      # A cap on an open meal is an error, not a silent no-op. Without the
+      # A cap on an open meal is refused with an error. Without the
       # guard, conditionally_set_max nils the value inside before_save and
       # the client gets a 200 for a cap the server will never enforce.
       sig { void }

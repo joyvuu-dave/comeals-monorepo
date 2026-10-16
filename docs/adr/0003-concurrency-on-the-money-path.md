@@ -124,8 +124,9 @@ _unreconciled_ meals. **The cook is never reimbursed and nothing raises** —
 `allocate_to_cents` still sums to zero, because the row is simply not in its
 input.
 
-This is silent money loss. It has nothing to do with Puma's thread count: a
-single-threaded web dyno plus `heroku run rake` reproduces it exactly.
+This loses money, and nothing reports it. It has nothing to do with Puma's
+thread count: a single-threaded web dyno plus `heroku run rake` reproduces it
+exactly.
 
 ### Deleting a row that a reconciliation already counted
 
@@ -155,10 +156,10 @@ meal — same damage, same missing lock.
 
 It is not as bad as the first hole. The stored balances are what residents
 actually pay, so this corrupts the audit trail rather than losing a cook's
-money outright. But "the settled ledger silently stops matching its own source
-data" is the specific thing the money rules exist to prevent, and a later
-audit that recomputes a reconciliation would find a mismatch with no way to
-tell which side is right.
+money outright. But a settled ledger that stops matching its own source data,
+with no error, is the specific thing the money rules exist to prevent, and a
+later audit that recomputes a reconciliation would find a mismatch with no way
+to tell which side is right.
 
 The fix is symmetric: the `OLD.meal_id` lookup becomes unconditional and
 locking too. The self-lock case stays free — a path holding `FOR UPDATE` on
@@ -202,8 +203,9 @@ Both together do close it, and this combination was verified end to end:
    (`WHERE id = ... AND reconciliation_id IS NOT NULL`) matches no row when the
    meal is still unreconciled, so it takes no lock and never waits.
 
-With both in place the admin insert blocks on the settlement and then fails
-loudly with the trigger's exception. Silent loss becomes a visible error.
+With both in place the admin insert waits for the settlement and then fails
+with the trigger's exception. A loss that nothing reported becomes an error
+the admin sees.
 (That was at READ COMMITTED. Since ADR 0005 every Rails session runs at
 SERIALIZABLE, and since `LocksItsMealFirst` an admin write asks for the meal's
 lock before its row, so in this race an admin write is now cancelled as a
@@ -286,8 +288,8 @@ reads. They all block, and are all refused.)
   correctness guarantee.
 - Anyone raising the thread or worker count must not assume it is safe _because
   of_ this ADR. The hole above is closed, so the unlocked admin paths now fail
-  loudly instead of losing money quietly — but that is one race, found by
-  reading one code path, not a general guarantee.
+  with an error, where before they lost money and reported nothing — but that
+  is one race, found by reading one code path, not a general guarantee.
 - Settlement now holds `FOR UPDATE` on every swept meal for the whole
   transaction. Writes to those meals wait for it. Measured on a warm local
   database: 64 ms for 30 residents and 25 meals (about a month), 241 ms for
@@ -347,9 +349,10 @@ without the meal lock, and the models must refuse every write._
   mechanism that only works if applied everywhere.
 - **Take the meal lock inside ActiveAdmin too.** Reasonable, and it would close
   the same hole for the paths that exist today. Rejected as the primary fix
-  because it is a per-call-site discipline that the next new admin resource
-  will silently forget. The trigger is enforced by the database for every path,
-  present and future.
+  because each call site has to remember it, and the next new admin resource
+  may leave it out with no test failing. The trigger is enforced by the
+  database for every path, present and future.
 - **Do nothing, on the grounds that the race needs a human running a manual
-  rake task at exactly the wrong moment.** Rejected. The failure is silent, and
-  silent is the specific thing this codebase's money rules exist to prevent.
+  rake task at exactly the wrong moment.** Rejected. The failure reports
+  nothing, and a money failure that reports nothing is the specific thing this
+  codebase's money rules exist to prevent.

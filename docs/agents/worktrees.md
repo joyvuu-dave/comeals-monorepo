@@ -55,7 +55,7 @@ it.
 
 1. Rebase on `main`. If the rebase conflicts in shared files
    (`Gemfile.lock`, `db/structure.sql`, factories, shared CSS), stop and
-   report the conflict instead of resolving it silently.
+   report the conflict; do not resolve it yourself.
 2. Run `bin/check` in the worktree. Commit.
 3. Report, in this order:
    - what changed and why, in a few sentences;

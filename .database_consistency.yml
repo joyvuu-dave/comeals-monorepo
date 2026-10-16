@@ -36,7 +36,8 @@ Reconciliation:
   # The model's dependent: :nullify is the cleanup path through callbacks,
   # and Reconciliation's destroy guard refuses a settled reconciliation
   # before it runs. The foreign key has no ON DELETE on purpose: a raw
-  # DELETE that skips the model must fail, not quietly unsettle meals.
+  # DELETE that skips the model must fail with an error. It must not set
+  # the meals' reconciliation_id to NULL and report nothing.
   meals:
     ForeignKeyCascadeChecker:
       enabled: false

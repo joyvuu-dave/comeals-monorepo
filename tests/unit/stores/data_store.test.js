@@ -1341,11 +1341,12 @@ describe("DataStore", () => {
 
   // ── meal load retry (stuck loading) ──
   //
-  // A failed FIRST load of a meal used to stay silent: mealLoading
+  // A failed FIRST load of a meal used to show no error: mealLoading
   // never settled and the page said "loading..." forever. Now it
   // retries with a capped growing wait and shows an honest notice.
-  // Background refetch failures (data already on screen) stay silent —
-  // the reconnect and online handlers already cover them.
+  // Background refetch failures (data already on screen) show no
+  // message and do not retry — the reconnect and online handlers
+  // already cover them.
 
   describe("meal load retry (stuck loading)", () => {
     beforeEach(() => {
@@ -1399,7 +1400,7 @@ describe("DataStore", () => {
       }
     });
 
-    it("a background refetch failure stays silent", async () => {
+    it("a background refetch failure shows no message and does not retry", async () => {
       const store = createDataStore();
       store.loadData(mealPayload(), "server");
       expect(store.mealLoading).toBe(false);
@@ -2236,9 +2237,9 @@ describe("DataStore", () => {
 
     // A legacy sub-cent amount (data older than the whole-cents CHECK)
     // displays exactly as stored and must never leave the client: that
-    // is the write-back that used to silently rewrite the ledger. Its
-    // text breaks the whole-cents grammar, and it still must not block a
-    // save of another cook.
+    // is the write-back that used to rewrite the ledger with no error or
+    // message. Its text breaks the whole-cents grammar, and it still must
+    // not block a save of another cook.
     it("never sends a stored amount nobody changed, and an amount like that does not block the save", () => {
       const store = createDataStore({ mealProps: { closed: false } });
       store.loadData(
@@ -4264,7 +4265,8 @@ describe("DataStore", () => {
     // Regression: the handler required previous === "unavailable", but
     // pusher-js only reaches "unavailable" after ~10s. A shorter drop
     // reconnects as connecting → connected, and events broadcast during
-    // the gap were silently lost (Pusher does not replay them).
+    // the gap were lost, so the page kept showing old data with no message
+    // (Pusher does not replay them).
     it("refetches after a short blip that never reached unavailable", async () => {
       createDataStore();
       const handler = await stateChangeHandler();
@@ -4520,7 +4522,8 @@ describe("DataStore", () => {
     // The menu box binds its callbacks to the meal node it rendered.
     // A debounced flush that fires after a meal switch must land on the
     // meal the text was typed on — it used to land on store.meal, which
-    // silently replaced the NEW meal's menu (probe, 2026-07-22).
+    // replaced the NEW meal's menu, and the page showed no message (probe,
+    // 2026-07-22).
 
     it("noteMenuTyping keeps the typed-on node alive across a meal switch", () => {
       const store = createDataStore();

@@ -14,7 +14,8 @@
 # attempt read. It would write again from the read the database just refused,
 # which is the opposite of retrying — a retry has to re-read. Clearing those
 # instance variables by hand would work only for as long as the gem keeps using
-# the same names, and would fail quietly after an upgrade.
+# the same names. An upgrade that renamed them would make it stop working,
+# with no error.
 #
 # So the person retries instead, by submitting the form again. That is
 # acceptable in admin and not in the API: admin has one person using it at a

@@ -5,7 +5,7 @@ require 'rails_helper'
 # Granting and removing admin access, end to end through ActiveAdmin.
 #
 # Every example here was a live gap before this spec existed. The superuser
-# flag was missing from permit_params, so the form silently dropped it: a
+# flag was missing from permit_params, so the form dropped it with no error: a
 # superuser could not create another superuser, could not promote anyone, and
 # got a success response either way. Nothing guarded the last superuser
 # either, so one click on "Delete" took the community from one superuser to

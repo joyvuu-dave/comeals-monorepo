@@ -10,7 +10,7 @@
 # would be the audit rows, which the same session can delete.
 #
 # That is the first question anyone asks about a settled number: can this be
-# changed? It should not be answerable with "yes, quietly".
+# changed? The answer must not be "yes, with no error and no record".
 #
 # Two triggers, doing two different jobs.
 #

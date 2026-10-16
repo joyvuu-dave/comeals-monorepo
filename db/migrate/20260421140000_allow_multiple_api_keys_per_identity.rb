@@ -25,7 +25,8 @@ class AllowMultipleApiKeysPerIdentity < ActiveRecord::Migration[8.1]
 
   def down
     # Irreversible: converting many-per-identity back to one would require
-    # choosing which key survives. Refuse rather than silently destroy data.
+    # choosing which key survives. Refuse with an error, rather than delete
+    # keys and report success.
     raise ActiveRecord::IrreversibleMigration
   end
 end

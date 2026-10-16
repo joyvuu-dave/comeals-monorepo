@@ -245,7 +245,7 @@ RSpec.describe 'settled-meal database triggers' do
     # fresh database created from the dumped schema carries the triggers.
     # If it fails, the schema format has regressed to one that cannot
     # represent triggers (issue #26) — databases built from it would
-    # silently lack the backstop.
+    # lack the triggers, with no error.
     it 'carries every settled-data trigger in a database built from structure.sql' do
       trigger_names = ActiveRecord::Base.connection.select_values(<<~SQL.squish)
         SELECT tgname FROM pg_trigger WHERE NOT tgisinternal ORDER BY tgname

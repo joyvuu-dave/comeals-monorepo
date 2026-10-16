@@ -16,7 +16,8 @@ namespace :bugsnag do
     # The first is what a crash looks like. The second goes through
     # Rails.error, which reaches Bugsnag only via BugsnagErrorSubscriber —
     # that is the path a retried transaction and a swallowed cache failure
-    # will use, and the one that silently went nowhere before this existed.
+    # will use. Before this existed, that path sent nothing to Bugsnag and
+    # raised no error.
     Bugsnag.notify(RuntimeError.new('bugsnag:verify — direct notify')) do |report|
       report.severity = 'info'
       report.add_tab(:verify, { path: 'Bugsnag.notify', task: 'bugsnag:verify' })

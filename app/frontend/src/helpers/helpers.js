@@ -149,8 +149,9 @@ export function mealDayLabel(day) {
 // The value space is a compile-time constant (~56 15-minute slots, 8am–10pm),
 // so we build the array once and freeze it. Callers map over it to render
 // <option> elements on every modal render; returning the same frozen
-// reference lets React skip reconciliation work for the options list and
-// makes accidental mutation a hard error instead of a silent one.
+// reference lets React skip reconciliation work for the options list. It
+// also makes an accidental mutation throw a TypeError, instead of changing
+// the shared array with no error.
 // See tests/e2e/perf-modals.spec.js for the benchmark harness.
 let CACHED_TIMES = null;
 export function generateTimes() {

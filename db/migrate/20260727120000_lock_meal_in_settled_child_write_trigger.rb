@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-# Closes the settlement race that let a settled ledger silently stop matching
-# its own source data (issue #43).
+# Closes the settlement race that let a settled ledger stop matching its own
+# source data, with no error (issue #43).
 #
 # ## What was wrong
 #
@@ -45,7 +45,8 @@
 # Both lookups become unconditional locking reads. FOR KEY SHARE conflicts
 # with the FOR UPDATE that Reconciliation#assign_meals now takes, so a racing
 # write waits for the settlement and then decides against committed state —
-# and is refused, loudly, instead of losing money quietly.
+# and is refused with an error. Before, it was saved, and money was lost with
+# no error.
 #
 # The lock must be taken UNCONDITIONALLY. That is the whole point, and it is
 # easy to "tidy" back into a bug: putting `AND reconciliation_id IS NOT NULL`

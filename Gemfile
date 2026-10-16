@@ -46,8 +46,8 @@ gem 'rack-attack'
 gem 'rack-timeout', require: 'rack/timeout/base'
 
 # Error tracking. Reports unhandled exceptions, and anything sent through
-# Rails.error, to the Bugsnag project. Silent unless BUGSNAG_API_KEY is set,
-# which is production only. See config/initializers/bugsnag.rb.
+# Rails.error, to the Bugsnag project. Sends nothing unless BUGSNAG_API_KEY is
+# set, which is production only. See config/initializers/bugsnag.rb.
 gem 'bugsnag'
 
 gem 'devise'

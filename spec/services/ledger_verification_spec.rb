@@ -54,7 +54,8 @@ RSpec.describe LedgerVerification do
     end
 
     # The whole reason the table exists. A check that only writes on failure
-    # cannot tell a quiet night from a night the job never ran.
+    # cannot tell a night when nothing was wrong from a night the job never
+    # ran.
     it 'leaves a dated record even though nothing was wrong' do
       settle
 
@@ -450,7 +451,7 @@ RSpec.describe LedgerVerification do
 
     # Nothing was found before the crash, so the crash itself is what is
     # raised, and nothing is logged as a failed check.
-    it 'records the error and re-raises, so the failure is never silent' do
+    it 'records the error and raises it again, so the caller sees the failure' do
       settle
       allow_any_instance_of(Reconciliation).to receive(:settlement_balances) # rubocop:disable RSpec/AnyInstance -- the failure has to come from inside the loop
         .and_raise(ActiveRecord::StatementInvalid, 'connection lost')

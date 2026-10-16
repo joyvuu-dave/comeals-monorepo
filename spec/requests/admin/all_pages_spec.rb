@@ -3,9 +3,10 @@
 require 'rails_helper'
 
 # Renders every page (index, show, new, edit) of every registered ActiveAdmin
-# resource against a real record. ActiveAdmin breaks quietly: renaming a model
-# method passes every model spec, then 500s the admin page that uses it the
-# next time an admin opens it. Rendering each page here catches that.
+# resource against a real record. ActiveAdmin breaks with no failing test:
+# renaming a model method passes every model spec, then 500s the admin page
+# that uses it the next time an admin opens it. Rendering each page here
+# catches that.
 #
 # ADMIN_PAGE_RESOURCES is an explicit table. The two registry examples
 # compare it against what ActiveAdmin actually has registered, so this

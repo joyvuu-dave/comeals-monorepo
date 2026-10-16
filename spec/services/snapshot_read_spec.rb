@@ -175,7 +175,7 @@ RSpec.describe SnapshotRead do
   # The test-suite path, and the honest cost of it: inside an open
   # transaction the block runs with no snapshot of its own. Pinned so that
   # a change to the guard shows up as a failing spec rather than as specs
-  # that quietly stop testing what they claim to.
+  # that still pass but no longer test what they claim to.
   describe 'with a transaction already open' do
     it 'runs the block without changing the transaction' do
       expect(ActiveRecord::Base.connection.transaction_open?).to be(true)

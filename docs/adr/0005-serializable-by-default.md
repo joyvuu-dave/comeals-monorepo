@@ -227,8 +227,8 @@ before any code we write. An `around_action` retries inside the same controller
 instance, so the second attempt reuses the row the first attempt read. It would
 write again from the read the database just refused, which is the opposite of
 retrying — a retry has to re-read. Clearing those instance variables by hand
-would work only while the gem keeps using the same names, and would fail
-quietly after an upgrade.
+would work only while the gem keeps using the same names. An upgrade that
+renamed them would make it stop working, with no error.
 
 So `config/initializers/active_admin_conflict_rescue.rb` rescues
 `ActiveRecord::TransactionRollbackError` on `ActiveAdmin::BaseController` and

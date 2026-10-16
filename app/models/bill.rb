@@ -54,8 +54,8 @@ class Bill < ApplicationRecord
   # their answer and the write together. See the concern.
   include LocksItsMealFirst
 
-  # ActiveAdmin's Bill form would otherwise allow a superuser to quietly
-  # rewrite a reconciled bill's amount.
+  # ActiveAdmin's Bill form would otherwise let a superuser change a
+  # reconciled bill's amount with no error.
   include ReconciledMealImmutability
   # Nor changed on a cancelled dinner, until it is restored.
   include CancelledDinnerFreeze

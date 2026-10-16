@@ -35,7 +35,7 @@ FactoryBot.define do
     # Applies only what the caller gave (`__override_names__`, FactoryBot's list
     # of the attributes passed in) to the existing record, so an explicit
     # override like `create(:community, cap: BigDecimal('4.50'))` is not
-    # silently swallowed, and the defaults above never overwrite a row a spec
+    # dropped with no error, and the defaults above never overwrite a row a spec
     # has changed: every other factory asks for a community with no overrides.
     # The names are read before `attributes`: FactoryBot caches each default
     # in the same hash it keeps the overrides in, so once `attributes` has

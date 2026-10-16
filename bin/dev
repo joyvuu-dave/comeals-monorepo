@@ -11,7 +11,7 @@ echo "  Mail inbox:    http://localhost:3000/letter_opener"
 echo ""
 
 # A leftover dev session from an earlier run holds our ports: Rails
-# refuses to boot, and Vite silently moves to another port. The pid
+# refuses to boot, and Vite moves to another port with no error. The pid
 # file is not a reliable sign of this (a killed terminal leaves the
 # processes alive but can lose the file), so check the ports directly.
 # If the listener is ours, stop it. If it belongs to something else,

@@ -6,9 +6,9 @@
 #
 # Before this change that flow was impossible:
 #   - admin_users.community_id was NOT NULL, so step 1 failed.
-#   - communities.timezone defaulted to "America/Los_Angeles", silently pinning
-#     every new deployment to Pacific unless the operator remembered to change
-#     it post-seed.
+#   - communities.timezone defaulted to "America/Los_Angeles", which set every
+#     new deployment to Pacific, with no question or warning, unless the
+#     operator remembered to change it post-seed.
 class SupportBootstrapViaActiveAdmin < ActiveRecord::Migration[8.1]
   def up
     # Allow orphan admin users during bootstrap. Once the singleton Community
@@ -20,8 +20,8 @@ class SupportBootstrapViaActiveAdmin < ActiveRecord::Migration[8.1]
     # Force operators to make an explicit timezone choice when they create the
     # community. The ActiveAdmin form exposes Community::SUPPORTED_TIMEZONES
     # as a dropdown, and the model validates inclusion, so "explicit" doesn't
-    # cost the operator anything — it just stops us silently defaulting to
-    # Pacific for communities that aren't in Pacific.
+    # cost the operator anything — it just stops us from setting Pacific, with
+    # no question asked, for communities that aren't in Pacific.
     change_column_default :communities, :timezone, from: 'America/Los_Angeles', to: nil
   end
 

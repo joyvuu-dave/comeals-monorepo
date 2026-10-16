@@ -141,9 +141,9 @@ export default defineConfig(({ command }) => ({
     // NOT the default "assets": Sprockets writes ActiveAdmin's files to
     // public/assets, and Vite deletes everything inside its own assets
     // directory on each build even with emptyOutDir false. Sharing the
-    // directory meant every Vite build silently broke the admin styles
-    // until the next `rake assets:precompile`. Separate directories,
-    // no collision. AssetCacheControl covers both.
+    // directory meant every Vite build deleted the admin styles, with no
+    // error or warning, until the next `rake assets:precompile`. Separate
+    // directories, no collision. AssetCacheControl covers both.
     assetsDir: "vite-assets",
     // Ship source maps: production stack traces then point at real
     // source lines instead of minified positions. Browsers fetch .map

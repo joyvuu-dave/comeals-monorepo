@@ -8,7 +8,7 @@ require 'rails_helper'
 # global `permit_all_parameters` flag is enabled, these declarations are
 # decorative — any param flows through. With strong params enforced, every
 # attribute submitted by an admin form must appear in `permit_params` or it's
-# silently dropped, leaving records partially populated and tests passing.
+# dropped with no error, leaving records partially populated and tests passing.
 #
 # These specs POST to each admin create endpoint with the actual fields the
 # admin form submits and verify the resulting record has every attribute set.

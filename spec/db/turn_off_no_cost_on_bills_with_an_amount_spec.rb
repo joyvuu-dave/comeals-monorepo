@@ -457,7 +457,7 @@ RSpec.describe TurnOffNoCostOnBillsWithAnAmount do
     # The harm if it did not refuse: Casey and Dana, who have nothing to
     # do with Eve's No cost bill, would get correction lines under the
     # reason "1 cost on these meals was marked No cost by mistake", and
-    # the nightly check would go quiet about the earlier change.
+    # the nightly check would stop reporting the earlier change.
     it 'does not blame the fix for a change it did not make, or hide that change from the nightly check' do
       begin
         migrate(:up)

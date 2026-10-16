@@ -5,11 +5,12 @@
 #
 # The isolation level is set per session by the `variables:` block in
 # config/database.yml, and everything in ADR 0005 depends on it. The block
-# is easy to break quietly: YAML merge keys are shallow, so an environment
-# block that declares its own `variables:` hash replaces the whole default
-# hash — including the isolation line — and nothing would notice until the
-# money code misbehaved. This check notices: a deploy with the wrong
-# isolation fails its release health check instead of serving traffic.
+# is easy to break with no error: YAML merge keys are shallow, so an
+# environment block that declares its own `variables:` hash replaces the
+# whole default hash — including the isolation line — and nothing would
+# notice until the money code misbehaved. This check notices: a deploy with
+# the wrong isolation fails its release health check instead of serving
+# traffic.
 #
 # The check runs after initialization, not lazily, so the very first thing
 # a booted process knows is that its sessions are SERIALIZABLE. When the

@@ -184,9 +184,9 @@ const Resident = types
       // A raced refetch can destroy this node while the request is in
       // flight. Capture the root store, the meal id, and whose row this
       // is now — a dead node cannot reach its parents or its fields — so
-      // the callbacks below can repair by refetching instead of silently
-      // dropping the server's change, and a failure can still say whose
-      // tap failed (S2).
+      // the callbacks below can refetch and show the server's change,
+      // instead of returning with the screen still out of date, and a
+      // failure can still say whose tap failed (S2).
       const store = getRoot(self);
       const mealId = self.meal_id;
       const tapped = tappedOf(self);

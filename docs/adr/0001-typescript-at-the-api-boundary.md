@@ -13,7 +13,7 @@ A full TypeScript rewrite is tempting but mostly cosmetic for this codebase:
 - MobX `types.model(...)` stores type cleanly only with non-trivial scaffolding. A sloppy migration leaks `any` and produces worse-than-JS code.
 - One developer. The cost is weeks; the realized safety is small.
 
-The bugs that _actually_ bite a thin client like this one happen at the API seam: a serializer drops a field, renames it, or starts returning `null` where it didn't before, and the SPA quietly breaks.
+The bugs that _actually_ bite a thin client like this one happen at the API seam: a serializer drops a field, renames it, or starts returning `null` where it didn't before, and the SPA breaks, with no error at build time.
 
 ## Decision
 

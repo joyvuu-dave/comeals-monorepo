@@ -95,8 +95,8 @@ function toSentence(parts) {
 }
 
 // ApiController#not_found_api: the 404 for a record that is not there.
-// A silent caller logs it as it is, so a test that expects it lets
-// NOT_FOUND_LOG through its allowedConsoleErrors.
+// A caller that passes `silent: true` logs it as it is, so a test that
+// expects it lets NOT_FOUND_LOG through its allowedConsoleErrors.
 const NOT_FOUND_MESSAGE =
   "The page you were looking for doesn't exist. You may have mistyped the address or the page may have moved.";
 const NOT_FOUND_LOG = new RegExp(
@@ -219,8 +219,8 @@ async function throttleCpu(page) {
  * Ordering convention: Playwright matches routes last-registered-first,
  * so a test that wants to specialize an endpoint (error response, delay)
  * must register its route AFTER calling this helper (or
- * setupAuthenticatedPage). A route registered before is silently
- * shadowed by the stubs here.
+ * setupAuthenticatedPage). A route registered before is never used:
+ * the stubs here answer first, with no error or warning.
  *
  * Options:
  *   mealData    - override meal fixture

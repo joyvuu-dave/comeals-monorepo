@@ -6,10 +6,11 @@ require 'rails_helper'
 #
 # Two hazards make these worth a spec. First, YAML merge keys are shallow:
 # an environment block that declares its own `variables:` hash replaces the
-# default hash entirely, so adding one key there can silently drop
-# `default_transaction_isolation` — the single most important line in the
-# file (ADR 0005). Second, the settings are issued as SET SESSION on each
-# new connection, so a typo fails quietly at connection time, not at boot.
+# default hash entirely, so adding one key there can drop
+# `default_transaction_isolation` with no error — the single most important
+# line in the file (ADR 0005). Second, the settings are issued as SET SESSION
+# on each new connection, so a typo does not stop the boot; it fails only
+# later, when a connection is made.
 # config/initializers/verify_transaction_isolation.rb catches the isolation
 # regression at boot in every environment; this spec catches all of them at
 # test time, per environment, including production's block which no test

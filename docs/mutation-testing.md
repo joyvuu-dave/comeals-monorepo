@@ -2475,8 +2475,8 @@ strict`).
 - Neutral failures (3): `Settlement#initialize`, `#claimed_meals` and
   `#meal_count` select 815 examples, the race specs among them, and the
   unmutated code failed under the load of two full suites in other
-  worktrees. Run 2, on a quiet machine, had none, and killed every
-  mutation of the three but the `T.let` above.
+  worktrees. Run 2, on a machine with no other suites running, had
+  none, and killed every mutation of the three but the `T.let` above.
 
 Mutant cannot reach class bodies. Ten changes were made there by hand,
 and each failed examples: `retry_on` with one try fewer (1 failed) or

@@ -77,7 +77,7 @@ So a reconciliation goes: created → settled → done. The settled state is rar
 
 Note that adding `settled_at` means the reconciliation row gains a legal update, and today it refuses every update. That guard would have to learn about this one column.
 
-**Dependency on bill immutability — already satisfied.** `settled_at` is only meaningful if the underlying ledger can't drift. If someone edited a bill on a reconciled meal after payouts had been disbursed, the published balances would no longer match the source data, and we'd be silently lying to residents about what they were paid. That is exactly what `ReconciledMealImmutability` and the database triggers prevent, so this document's hard prerequisite is met.
+**Dependency on bill immutability — already satisfied.** `settled_at` is only meaningful if the underlying ledger can't drift. If someone edited a bill on a reconciled meal after payouts had been disbursed, the published balances would no longer match the source data, and the amounts we showed residents would be wrong, with no error or warning. That is exactly what `ReconciledMealImmutability` and the database triggers prevent, so this document's hard prerequisite is met.
 
 **Priority:** Tightly coupled with the MVP. Probably implement together.
 

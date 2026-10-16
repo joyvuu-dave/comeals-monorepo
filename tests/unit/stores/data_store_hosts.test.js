@@ -99,9 +99,9 @@ describe("hosts cache", () => {
   });
 
   it("refetchHostsSilently supersedes an in-flight fetch", async () => {
-    // First request hangs until released; the silent refetch starts a
+    // First request hangs until released; refetchHostsSilently starts a
     // second request that resolves first with newer data. The slow
-    // response must NOT overwrite the newer list when it finally lands.
+    // response must NOT overwrite the newer list when it finally arrives.
     let releaseFirst;
     const firstResponse = new Promise((resolve) => {
       releaseFirst = resolve;
@@ -132,7 +132,7 @@ describe("hosts cache", () => {
   // The refetch runs in the background (a Pusher update, a reconnect,
   // midnight), so a network failure must not put a toast on the shared
   // screen: the next update or reconnect fetches again.
-  it("a failed refetch keeps the previously loaded list, silently", async () => {
+  it("a failed refetch keeps the previously loaded list and shows no message", async () => {
     mockHostsResponse();
     await store.ensureHosts();
     toastStore.clearAll();

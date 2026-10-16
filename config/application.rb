@@ -50,7 +50,7 @@ module Comeals
     # config.app_middleware, which lands in the default stack — before
     # anything added here with plain `use`. Warden must run inside the
     # session middleware, or a sign_in written to the session before
-    # Session::CookieStore runs is silently thrown away (issue #19). So
+    # Session::CookieStore runs is thrown away with no error (issue #19). So
     # insert each one before Warden::Manager, in the same order a non-API
     # Rails app uses: Cookies, then Session, then Flash.
     config.middleware.insert_before Warden::Manager, Rack::MethodOverride
@@ -70,7 +70,7 @@ module Comeals
     # Dump the schema as SQL. The database is the last line of defense
     # (CLAUDE.md): reconciled-meal immutability lives in triggers, and
     # schema.rb cannot represent triggers, so a schema.rb-built database
-    # would silently lack them (issue #26).
+    # would lack them, with no error or warning (issue #26).
     config.active_record.schema_format = :sql
 
     # Set Time Zone

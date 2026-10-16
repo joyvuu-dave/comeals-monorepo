@@ -62,7 +62,7 @@ const Meal = types
   .volatile(() => ({
     // True from an edit until a save of that exact text returns 200.
     // While set, loadData leaves the description alone, so a reload
-    // cannot silently replace unsaved typing.
+    // cannot write the server's text over typing that is not saved yet.
     descriptionDirty: false,
     // Stale-response guard: bumped on every edit, captured at send; the
     // 200 clears the dirty flag only if nothing was typed since — so an

@@ -4,9 +4,10 @@ require 'rails_helper'
 
 # Regression tests for the reconciled-meal immutability contract. Before these
 # guards existed, ActiveAdmin's Bill form would let a superuser rewrite a
-# reconciled bill's amount, silently breaking the invariant that reconciled
-# records are append-only. The model-layer before_save catches the write; the
-# ActiveAdmin controller layer intercepts earlier for better UX.
+# reconciled bill's amount with no error, which broke the invariant that
+# reconciled records are append-only. The model-layer before_save catches
+# the write; the ActiveAdmin controller layer intercepts earlier for better
+# UX.
 RSpec.describe 'Admin reconciled immutability' do
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }

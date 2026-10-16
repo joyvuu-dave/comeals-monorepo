@@ -49,7 +49,7 @@ Router access migrates the same way: a function component calls `useNavigate`/`u
 
 ## Rules that keep this safe
 
-1. **Render test first.** No component is converted until it has a render test under `tests/unit/components/`. The harness (stub store in a `Provider`, `@testing-library/react`) was set up 2026-08-04; six components are covered already. The test is written against the class version, must pass, and must pass unchanged against the hooks version. The test pins behavior, so the conversion cannot silently change it.
+1. **Render test first.** No component is converted until it has a render test under `tests/unit/components/`. The harness (stub store in a `Provider`, `@testing-library/react`) was set up 2026-08-04; six components are covered already. The test is written against the class version, must pass, and must pass unchanged against the hooks version. The test pins behavior, so a conversion that changes it fails the test.
 2. **One component per commit.** A conversion commit changes one component file and, if needed, its test's `Provider` wrapper. Nothing else. A bad conversion reverts cleanly.
 3. **Behavior changes are separate commits.** If a conversion exposes something worth fixing, fix it before or after, never inside the conversion commit.
 4. **Every commit passes the full gate:** `npx vitest run`, `npm run lint`, and the Playwright suites (`npm run test:e2e`, `npm run test:integration`). The visual snapshots in `tests/e2e/visual.spec.js` catch layout drift the unit tests cannot.
@@ -70,7 +70,7 @@ Router access migrates the same way: a function component calls `useNavigate`/`u
 Watch for two traps:
 
 - `observer` must wrap the function component itself, or store changes stop re-rendering it. The render tests catch this: several assert that the component updates when the store changes after mount.
-- An empty `useEffect` dependency array is not the same as `componentDidMount` when the effect reads props or store values. Let the eslint `react-hooks` plugin (already configured) decide the array; do not silence it.
+- An empty `useEffect` dependency array is not the same as `componentDidMount` when the effect reads props or store values. Let the eslint `react-hooks` plugin (already configured) decide the array; do not turn its warning off.
 
 ## Order of work
 

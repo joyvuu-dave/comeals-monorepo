@@ -1,10 +1,10 @@
 /**
  * Drop-in replacement for @playwright/test whose `page` fixture fails
  * any test whose page produced an uncaught error OR wrote to
- * console.error. The error boundary turns a crash into a quiet
- * "Something went wrong" screen, and rendering bugs usually log
- * before a person notices them — this makes every test double as a
- * crash-and-error detector and report the real message.
+ * console.error. The error boundary turns a crash into a "Something
+ * went wrong" screen that fails no test by itself, and rendering bugs
+ * usually log before a person notices them — this makes every test
+ * double as a crash-and-error detector and report the real message.
  *
  * Use it in specs instead of @playwright/test:
  *
@@ -17,10 +17,10 @@
  *   test.use({ allowedConsoleErrors: /Failed to load resource/ });
  *
  * The option is ONE RegExp, not an array — test.use() unwraps an
- * array value as a [value, options] tuple, which silently mangles
- * pattern lists. Combine patterns with alternation (see
- * combinePatterns below). Anything not matching still fails the
- * test.
+ * array value as a [value, options] tuple, so only the first pattern
+ * is used and nothing reports an error. Combine patterns with
+ * alternation (see combinePatterns below). Anything not matching still
+ * fails the test.
  */
 const base = require("@playwright/test");
 const { saveCoverage } = require("./visual_coverage");
