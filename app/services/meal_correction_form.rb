@@ -13,9 +13,10 @@
 # admin changed. Nothing is written here: apply runs the edits, inside
 # MealCorrecting's preview or save.
 #
-# The rows are read in one order (by name, then id), so a preview and
-# the save that follows it make the same edits in the same order, and
-# their fingerprints agree.
+# The rows are read in one order, so a preview and the save that follows
+# it make the same edits in the same order, and their fingerprints agree:
+# by name, which is unique (index_residents_on_lower_name), and a host's
+# guests in the order they were added.
 class MealCorrectionForm
   extend T::Sig
 
@@ -71,7 +72,7 @@ class MealCorrectionForm
   sig { void }
   def read_cooks
     sent = section('cooks')
-    bills = @bills.sort_by { |bill| [name_of(bill.resident), bill.resident_id.to_i] }
+    bills = @bills.sort_by { |bill| name_of(bill.resident) }
     refuse_unknown(sent, bills.map(&:resident_id))
     bills.each do |bill|
       row = sent[bill.resident_id.to_s]
@@ -109,7 +110,7 @@ class MealCorrectionForm
   sig { void }
   def read_eaters
     sent = section('eaters')
-    rows = @eaters.sort_by { |row| [name_of(row.resident), row.resident_id.to_i] }
+    rows = @eaters.sort_by { |row| name_of(row.resident) }
     refuse_unknown(sent, rows.map(&:resident_id))
     rows.each do |row|
       choice = sent.fetch(row.resident_id.to_s, 'keep').to_s
@@ -138,7 +139,7 @@ class MealCorrectionForm
   sig { void }
   def read_guests
     sent = section('guests')
-    guests = @guests.sort_by { |guest| [name_of(guest.resident), guest.id.to_i] }
+    guests = @guests.sort_by { |guest| [name_of(guest.resident), guest.id] }
     refuse_unknown(sent, guests.map(&:id))
     guests.each do |guest|
       row = sent[guest.id.to_s]
@@ -154,7 +155,7 @@ class MealCorrectionForm
     return if host.nil?
 
     multiplier = T.let(Integer(row['multiplier'].to_s, 10, exception: false), T.nilable(Integer))
-    raise Invalid, 'A guest is an adult or a child.' unless multiplier && Multiplier::GUEST_PRICES.include?(multiplier)
+    raise Invalid, 'A guest is an adult or a child.' unless Multiplier::GUEST_PRICES.include?(multiplier)
 
     @steps << ->(edits) { edits.add_guest(host, multiplier: multiplier) }
   end
@@ -195,10 +196,8 @@ class MealCorrectionForm
   sig { params(raw: T::Array[T.untyped]).returns(T::Array[Resident]) }
   def residents(raw)
     texts = raw.map(&:to_s).reject(&:empty?).uniq
-    return [] if texts.empty?
-
     ids = texts.map { |text| T.let(Integer(text, 10, exception: false), T.nilable(Integer)) }
-    found = Resident.where(id: ids.compact).sort_by { |resident| [name_of(resident), resident.id.to_i] }
+    found = Resident.where(id: ids).sort_by { |resident| name_of(resident) }
     raise Invalid, "The form named a resident who does not exist. #{CHANGED}" if found.size != texts.size
 
     found
@@ -211,7 +210,7 @@ class MealCorrectionForm
     return if text.empty?
 
     id = T.let(Integer(text, 10, exception: false), T.nilable(Integer))
-    found = id && Resident.find_by(id: id)
+    found = Resident.find_by(id: id)
     raise Invalid, "The form named a resident who does not exist. #{CHANGED}" if found.nil?
 
     found
