@@ -60,6 +60,18 @@ RSpec.describe 'Guest Room Reservations API' do
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body).to eq('message' => "Resident must exist\nDate has already been taken")
     end
+
+    # A part left out of the body is a missing value, and the model says
+    # which one in words, as for a value sent empty. The SPA shows the
+    # message, so an error page with no message would leave the person
+    # with nothing to read.
+    it 'names the host and the day in words when the body leaves them out' do
+      post '/api/v1/guest-room-reservations', params: { token: token }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq('message' => "Resident must exist\nDate can't be blank")
+      expect(GuestRoomReservation.count).to eq(0)
+    end
   end
 
   # PostgreSQL stores a date from November 24, 4714 BC (Ruby's year
@@ -131,6 +143,18 @@ RSpec.describe 'Guest Room Reservations API' do
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body['message']).to eq("Resident must exist\nDate has already been taken")
+      expect(moving.reload).to have_attributes(date: Date.new(2026, 6, 2), resident_id: resident.id)
+    end
+
+    # An update sends the host and the day each time (the edit form sends
+    # both). One left out is read as no value, and refused in words.
+    it 'names the host and the day in words when the body leaves them out, and changes nothing' do
+      moving = create(:guest_room_reservation, community: community, resident: resident, date: Date.new(2026, 6, 2))
+
+      patch "/api/v1/guest-room-reservations/#{moving.id}/update", params: { token: token }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq('message' => "Resident must exist\nDate can't be blank")
       expect(moving.reload).to have_attributes(date: Date.new(2026, 6, 2), resident_id: resident.id)
     end
   end
