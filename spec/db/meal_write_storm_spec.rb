@@ -270,6 +270,7 @@ RSpec.describe 'a write storm against one meal, with a settlement in it' do
 
   def write_once(meal_id, (thread, index), action, rng, how = :api)
     entry = [thread, index, action, write(meal_id, action, rng, how)]
+    oks.increment if entry.last == :ok
     sleep(rng.rand * 0.002)
     entry
   end
@@ -283,14 +284,25 @@ RSpec.describe 'a write storm against one meal, with a settlement in it' do
   # is an :error outcome, and the storm asserts there are none.
   def storm_retries = SettleAndNotify::Retries.new(attempts: SettleAndNotify::BATCH.attempts, base_delay: 0.01)
 
-  def run_settler(seed, log)
+  # Writes that went through, counted as they happen, so the settler can
+  # wait for them. Made before any thread starts: a `let` is not safe to
+  # make from two threads at once.
+  def oks = @oks ||= Concurrent::AtomicFixnum.new(0)
+
+  def run_settler(seed, log, rounds)
     Thread.new do
       Thread.current.report_on_exception = false
       rng = Random.new(seed)
       ActiveRecord::Base.connection_pool.with_connection do
         # Not before the writers have done a good part of their work, so
-        # phase 1 always has writes on both sides of the settlement.
-        sleep(0.005) until log.size >= 40 + rng.rand(20)
+        # phase 1 always has writes on both sides of the settlement: some
+        # tries, and at least ten writes that went through, unless the
+        # writers finish their rounds first. Counting tries alone was not
+        # enough: a dinner cancelled early refuses the writes that follow,
+        # and on 2026-10-16 storm 1 went through only 8 or 9 times in
+        # about one run in twelve, below the floor the example checks.
+        tries = 40 + rng.rand(20)
+        sleep(0.005) until (log.size >= tries && oks.value >= 10) || log.size >= 4 * rounds
         # Up to 200 settlements, about five seconds: the writers make the
         # meal settleable at the latest once their rounds are done (see
         # run_writers). Until then a settlement may be refused for having
@@ -363,8 +375,9 @@ RSpec.describe 'a write storm against one meal, with a settlement in it' do
       residents
       meal_id = meal.id
       log = Queue.new
+      oks
 
-      settler = run_settler(seed, log)
+      settler = run_settler(seed, log, 25)
       writers = run_writers(meal_id, seed, 25, log, settler)
       join_all(writers + [settler], "storm #{seed}, phase 1")
       first = Array.new(log.size) { log.pop }
