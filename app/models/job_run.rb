@@ -41,8 +41,4 @@ class JobRun < ApplicationRecord
   def self.last_success_at(names)
     succeeded.where(name: names).group(:name).maximum(:finished_at)
   end
-
-  def duration
-    T.must(finished_at) - T.must(started_at)
-  end
 end
