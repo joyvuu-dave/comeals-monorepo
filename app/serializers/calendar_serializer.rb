@@ -193,8 +193,17 @@ class CalendarSerializer
   # The window's dates are strings. Compared with a date column that is
   # fine. Compared with a datetime column, `..end_date` means midnight
   # at the start of the last day, so an event at 10:00 that day was
-  # left out (#79). The datetime queries compare against these instants
-  # instead, the same ones Community#calendar_cache_version uses.
+  # left out (#79). The datetime queries here compare against these
+  # instants instead.
+  #
+  # Community#calendar_cache_version makes the same two instants, but
+  # compares every table with them, the date columns too (meals and
+  # guest room bookings). The instants go to PostgreSQL in UTC, and a
+  # date column compared with one reads its UTC date. In a zone behind
+  # UTC, like the community's, the window's last instant is already the
+  # next day in UTC, so the version also counts the meals and guest room
+  # bookings of the day after the six weeks. That only makes a stored
+  # month a miss more often; it never serves a stale one.
   def window_start
     Time.zone.parse(start_date).beginning_of_day
   end
