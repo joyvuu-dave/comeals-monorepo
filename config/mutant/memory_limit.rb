@@ -17,11 +17,15 @@
 # so the mutation is listed with the other survivors.
 #
 # Linux enforces RLIMIT_DATA: an allocation past it fails, and Ruby raises
-# NoMemoryError. macOS accepts the limit but does not enforce it, so there
-# a thread checks the size of the process once a second and ends the
-# process when it is over the limit. A process can pass the limit there by
-# what it allocates in one second (about 1 GB in the spec's loop), which is
-# still far less than five minutes of it.
+# NoMemoryError. When the allocation that fails is Ruby's own (growing the
+# heap during garbage collection), Ruby cannot raise, so it prints a [BUG]
+# report and aborts. Mutant counts either ending as a process abort.
+#
+# macOS accepts the limit but does not enforce it, so there a thread
+# checks the size of the process once a second and ends the process when
+# it is over the limit. A process can pass the limit there by what it
+# allocates in one second (about 1 GB in the spec's loop), which is still
+# far less than five minutes of it.
 #
 # 2 GiB is about seven times what a worker uses after it has loaded every
 # spec file (290 MB, measured 2026-10-16), and four workers at the limit

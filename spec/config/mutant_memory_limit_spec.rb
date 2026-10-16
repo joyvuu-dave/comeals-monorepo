@@ -10,8 +10,11 @@ require Rails.root.join('config/mutant/memory_limit').to_s
 # and not run on.
 #
 # CI runs this on Linux, where the kernel refuses the allocation that would
-# pass the limit. bin/check runs it on macOS, where the watch thread ends
-# the child at its next check, up to a second after it passed the limit. The child leaves with
+# pass the limit. Ruby then raises NoMemoryError, or, when the allocation
+# that failed was Ruby's own and cannot raise, prints a [BUG] report and
+# aborts (SIGABRT; CI saw this on 2026-10-16). Both end the child. bin/check
+# runs it on macOS, where the watch thread ends the child at its next
+# check, up to a second after it passed the limit. The child leaves with
 # exit!, so it never runs the at_exit hooks it shares with this process
 # (SimpleCov's among them).
 RSpec.describe MutantMemoryLimit do
@@ -20,6 +23,8 @@ RSpec.describe MutantMemoryLimit do
 
   def child_status
     pid = fork do
+      # The [BUG] report of an abort is long; it is not this spec's output.
+      $stderr.reopen(File::NULL)
       described_class.apply(described_class.current_bytes + (100 * (1024**2)))
       list = []
       begin
@@ -36,8 +41,14 @@ RSpec.describe MutantMemoryLimit do
   end
 
   it 'ends a process that grows past the limit' do
-    expected = RUBY_PLATFORM.include?('linux') ? ended_by_the_kernel : described_class::WATCH_EXIT_STATUS
-    expect(child_status.exitstatus).to eq(expected)
+    status = child_status
+    ending = status.signaled? ? Signal.signame(status.termsig) : status.exitstatus
+    expected = if RUBY_PLATFORM.include?('linux')
+                 [ended_by_the_kernel, 'ABRT']
+               else
+                 [described_class::WATCH_EXIT_STATUS]
+               end
+    expect(expected).to include(ending)
   end
 
   it 'leaves a process under the limit alone' do
