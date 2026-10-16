@@ -77,7 +77,10 @@ RSpec.describe 'a correction while another correction of the same dinner is save
     edited = Queue.new
     go = Queue.new
     first = first_correction(edited, go)
-    edited.pop
+    # The first correction reaches its edit in well under a second. When a
+    # change to the code means it never does, this fails here, and does not
+    # wait with no end.
+    expect(edited.pop(timeout: 10)).to be(true)
     second = on_a_thread { yield Meal.find(meal.id) }
     expect(wait_for_blocked_session(observer, 'FOR UPDATE')).to be(true)
     go << true
@@ -85,6 +88,7 @@ RSpec.describe 'a correction while another correction of the same dinner is save
     second.value
   ensure
     go&.push(true)
+    [first, second].compact.each { |thread| thread.join(20) }
     observer&.close
   end
 
