@@ -119,11 +119,11 @@ class Reconciliation < ApplicationRecord
   def self.settled_dinner_cooks(reconciliations)
     named = MealCorrection.cost_edits.where('meal_corrections.meal_id = bills.meal_id')
                           .where(MealCorrection::COOK_ID.eq(Bill.arel_table[:resident_id]))
-    unnamed = Bill.joins(:meal).where(meals: { reconciliation_id: reconciliations.select(:id), cancelled_at: nil })
+    unnamed = Bill.joins(:meal).where(meals: { reconciliation_id: reconciliations, cancelled_at: nil })
                   .where(named.arel.exists.not)
                   .select('meals.reconciliation_id', 'bills.meal_id', 'bills.resident_id')
     first_edits = MealCorrection
-                  .cost_edits.joins(:meal).where(meals: { reconciliation_id: reconciliations.select(:id) })
+                  .cost_edits.joins(:meal).where(meals: { reconciliation_id: reconciliations })
                   .select(Arel.sql('DISTINCT ON (meal_corrections.meal_id, cook_id) meals.reconciliation_id'),
                           'meal_corrections.meal_id', MealCorrection::COOK_ID.as('cook_id'),
                           MealCorrection::COST_BEFORE.as('cost_before'))
