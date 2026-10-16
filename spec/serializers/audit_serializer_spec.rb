@@ -67,6 +67,16 @@ RSpec.describe AuditSerializer do
     expect(described_class.new(audit).to_h).to include(user_name: 'Automatic fix')
   end
 
+  # An empty username names nobody, so the comment says who made the row,
+  # as it does for a row with no username.
+  it 'names a data fix from the comment when the username is empty' do
+    meal = create(:meal, community: community)
+    audit = Audited::Audit.create!(auditable: meal, action: 'update', audited_changes: { 'description' => %w[a b] },
+                                   username: '', comment: 'Automatic fix (migration 20261010130000).')
+
+    expect(described_class.new(audit).to_h).to include(user_name: 'Automatic fix')
+  end
+
   it 'leaves the name empty for a change nobody was signed in for' do
     meal = create(:meal, community: community)
 

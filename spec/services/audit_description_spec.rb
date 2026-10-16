@@ -181,6 +181,62 @@ RSpec.describe AuditDescription do
       expect(describer.describe(zero)).to eq("Bill for #{name} no longer marked as no cost")
       expect(describer.describe(unknown)).to eq('Bill for unknown no longer marked as no cost')
     end
+
+    # A bill whose amount never changed after it was made: the amount is
+    # the one its create row holds, in dollars or, before migration
+    # 20260326000001, in cents.
+    it "reads the amount from the bill's create row, in dollars or in cents" do
+      row(999_981, 'create', { 'meal_id' => meal.id, 'resident_id' => resident.id, 'amount' => '86.0',
+                               'no_cost' => true })
+      in_dollars = row(999_981, 'update', { 'no_cost' => [true, false] })
+      row(999_982, 'create', { 'meal_id' => meal.id, 'resident_id' => resident.id, 'amount_cents' => 3550,
+                               'no_cost' => true })
+      in_cents = row(999_982, 'update', { 'no_cost' => [true, false] })
+      describer = described_class.for([in_dollars, in_cents])
+
+      expect([in_dollars, in_cents].map { |fix| describer.describe(fix) }).to eq(
+        ["Bill for #{name} no longer marked as no cost, so the $86.00 now counts in the meal's cost",
+         "Bill for #{name} no longer marked as no cost, so the $35.50 now counts in the meal's cost"]
+      )
+    end
+
+    # Both columns held only numbers, so no real create row holds anything
+    # else. The history still answers, because a history that raises shows
+    # nothing at all.
+    it 'reads no amount from a create row whose amount is not a number' do
+      amounts = [{ 'amount' => nil }, { 'amount' => 'none' }, { 'amount_cents' => '3550' }]
+      fixes = amounts.each_with_index.map do |amount, index|
+        row(999_985 + index, 'create', { 'meal_id' => meal.id, 'resident_id' => resident.id, 'no_cost' => true }
+                                         .merge(amount))
+        row(999_985 + index, 'update', { 'no_cost' => [true, false] })
+      end
+      describer = described_class.for(fixes)
+
+      expect(fixes.map { |fix| describer.describe(fix) }).to all(eq("Bill for #{name} no longer marked as no cost"))
+    end
+
+    # The audited gem writes an amount change as a list of two. A row
+    # with anything else changes no amount.
+    it 'keeps the amount from before a row whose amount change is not a list' do
+      row(999_983, 'create', { 'meal_id' => meal.id, 'resident_id' => resident.id, 'amount' => '86.0',
+                               'no_cost' => true })
+      row(999_983, 'update', { 'amount' => '12.0' })
+      fix = row(999_983, 'update', { 'no_cost' => [true, false] })
+
+      expect(described_class.describe(fix))
+        .to eq("Bill for #{name} no longer marked as no cost, so the $86.00 now counts in the meal's cost")
+    end
+
+    # A row that changes the amount says the new amount itself, so the
+    # amount from before it is not named again.
+    it 'says no more about the amount when the same row changed it' do
+      row(999_984, 'create', { 'meal_id' => meal.id, 'resident_id' => resident.id, 'amount' => '30.0',
+                               'no_cost' => true })
+      both = row(999_984, 'update', { 'amount' => ['30.0', '40.0'], 'no_cost' => [true, false] })
+
+      expect(described_class.describe(both))
+        .to eq("Bill for #{name} changed from $30.00 to $40.00 and no longer marked as no cost")
+    end
   end
 
   # Until 2026-10-10 the admin bill form could change a bill's cook in
@@ -643,6 +699,15 @@ RSpec.describe AuditDescription do
       expect(described_class.describe(audit)).to eq('Meal, update')
     end
 
+    # The first change it knows decides the row. When that change cannot
+    # be read, the row falls back, even if it also changed something else.
+    it 'falls back for a closed change it cannot read, even when the row changed the menu too' do
+      audit = instance_double(Audited::Audit, auditable_type: 'Meal', action: 'update',
+                                              audited_changes: { 'closed' => [false, false],
+                                                                 'description' => %w[Soup Stew] })
+      expect(described_class.describe(audit)).to eq('Meal, update')
+    end
+
     it 'says a bill changed in an unknown way when neither amount nor no_cost moved' do
       bill = create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('30'))
       audit = instance_double(Audited::Audit, id: nil, auditable_type: 'Bill', action: 'update',
@@ -697,8 +762,77 @@ RSpec.describe AuditDescription do
       expect(described_class.describe(deleted)).to eq('Meal record deleted')
     end
 
-    it 'falls back for a meal row with an action it does not know' do
-      expect(described_class.describe(audit('Meal', 'touch', {}))).to eq('Meal, touch')
+    # A stored row, so it is in the history of its record.
+    def stored(type, action, changes, id:)
+      Audited::Audit.create!(auditable_type: type, auditable_id: id, action: action, audited_changes: changes)
+    end
+
+    it 'falls back for a meal row with an action it does not know, even with a change it knows' do
+      rows = [audit('Meal', 'touch', {}), audit('Meal', 'touch', { 'closed' => [false, true] })]
+      expect(rows.map { |row| described_class.describe(row) }).to all(eq('Meal, touch'))
+    end
+
+    # Every change the audited gem writes is a list of two values, and
+    # every flag in one is true or false. So is every update row in a copy
+    # of production from October 2026. A row written by hand can hold
+    # anything; the history then says it cannot read the change.
+    it 'falls back for a change that is not a list of two values' do
+      changes = [['Meal', { 'cancelled_at' => '2026-10-16T18:00:00.000Z' }], ['Meal', { 'closed' => true }],
+                 ['Meal', { 'closed' => [] }], ['Meal', { 'description' => '' }], ['Meal', { 'max' => 4 }],
+                 ['Meal', { 'rotation_id' => '' }], ['Meal', { 'date' => '2026-11-06' }],
+                 ['Meal', { 'reconciliation_id' => 6 }], ['Meal', { 'closed_at' => '2023-03-07T00:15:00.000Z' }],
+                 ['MealResident', { 'multiplier' => 2 }], ['Bill', { 'no_cost' => true }],
+                 ['Bill', { 'resident_id' => resident.id }]] +
+                %w[late vegetarian].product([true, [], [false], [true]]).map do |field, value|
+                  ['MealResident', { field => value }]
+                end
+      rows = changes.each_with_index.map { |(type, change), index| stored(type, 'update', change, id: 990_000 + index) }
+      describer = described_class.for(rows)
+
+      expect(rows.map { |row| describer.describe(row) })
+        .to eq(changes.map { |type, _| type == 'Bill' ? 'unknown bill changed' : "#{type}, update" })
+    end
+
+    # A flag held as the text 't' or 'f' is neither true nor false.
+    it 'reads only true as true' do
+      changes = [['Meal', { 'closed' => %w[t f] }], ['Bill', { 'no_cost' => [true, 'f'] }]] +
+                %w[late vegetarian].product([[false, 't'], ['t', false]]).map do |field, value|
+                  ['MealResident', { field => value }]
+                end
+      rows = changes.each_with_index.map { |(type, change), index| stored(type, 'update', change, id: 990_050 + index) }
+      describer = described_class.for(rows)
+
+      expect(rows.map { |row| describer.describe(row) })
+        .to eq(['Meal, update', 'Bill for unknown no longer marked as no cost'] + (['MealResident, update'] * 4))
+    end
+
+    # These have no right words. The history must still answer, because a
+    # history that raises shows nothing at all.
+    it 'answers a change that holds fewer than two values, without raising' do
+      changes = [['Meal', { 'max' => [] }], ['Meal', { 'cancelled_at' => [] }], ['Meal', { 'closed_at' => [] }],
+                 ['Bill', { 'no_cost' => [] }], ['Bill', { 'amount' => [] }]]
+      rows = changes.each_with_index.map { |(type, change), index| stored(type, 'update', change, id: 990_080 + index) }
+      describer = described_class.for(rows)
+
+      expect(rows.map { |row| describer.describe(row) }).to all(be_a(String))
+    end
+
+    # The audited gem writes every column of a row it creates or deletes,
+    # so such a row always names its resident. One written by hand might
+    # not.
+    it 'names an unknown resident on a created or deleted row that names none' do
+      rows = [stored('Bill', 'create', { 'amount' => '30.0' }, id: 990_100),
+              stored('Bill', 'update', { 'amount' => ['30.0', '50.0'] }, id: 990_100),
+              stored('Bill', 'destroy', { 'amount' => '50.0' }, id: 990_100),
+              stored('MealResident', 'create', { 'late' => false }, id: 990_101),
+              stored('MealResident', 'destroy', { 'late' => false }, id: 990_101),
+              stored('Guest', 'create', { 'vegetarian' => false }, id: 990_102)]
+      describer = described_class.for(rows)
+
+      expect(rows.map { |row| describer.describe(row) }).to eq(
+        ['unknown added as cook', 'Bill for unknown changed from $30.00 to $50.00', 'unknown removed as cook',
+         'unknown added', 'unknown removed', 'Omnivore guest of unknown added']
+      )
     end
 
     it 'says the extras count was set when the row records the same count twice' do
@@ -767,6 +901,14 @@ RSpec.describe AuditDescription do
         end
         describer = described_class.for(rows)
         expect(rows.map { |row| describer.describe(row) }).to all(eq('MealResident, update'))
+      end
+
+      # The late change decides the row, as the closed change does for a
+      # meal.
+      it 'falls back for a late change it cannot read, even when the row changed vegetarian too' do
+        row = audit('MealResident', 'update', { 'late' => [true, true], 'vegetarian' => [false, true] },
+                    id: attendance.id)
+        expect(described_class.describe(row)).to eq('MealResident, update')
       end
 
       it 'falls back for an update that touched none of late, vegetarian and the price' do
@@ -861,6 +1003,23 @@ RSpec.describe AuditDescription do
       expect(statements.size).to eq(2)
       expect(statements.first).to include('FROM "audits"')
       expect(statements.second).to include('FROM "residents"')
+    end
+
+    # The audits table holds every change ever made (58,000 rows in
+    # October 2026). A describer loads only the create and update rows of
+    # the records its update rows point at: not another bill, not a row of
+    # another kind with the same id, and not a deleted bill's destroy row.
+    it 'loads only the create and update rows of the records its update rows point at' do
+      bill, audit = bill_update(resident, from: '30', to: '50')
+      bill_update(other, from: '10', to: '20')
+      create(:meal_resident, id: bill.id, meal: meal, resident: other, community: community)
+      bill.destroy!
+      loaded = Hash.new(0)
+      counter = ->(*, payload) { loaded[payload[:class_name]] += payload[:record_count] }
+
+      ActiveSupport::Notifications.subscribed(counter, 'instantiation.active_record') { described_class.for([audit]) }
+
+      expect(loaded['Audited::Audit']).to eq(2)
     end
 
     # Ids are counted per table, so a gone bill can share its id with an
