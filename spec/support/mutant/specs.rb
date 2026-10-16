@@ -194,6 +194,9 @@ MUTANT_SPEC_ROWS = {
     %w[CalendarSerializer Community Api::V1::CommunitiesController],
   'spec/requests/api/v1/calendar_last_day_spec.rb' => %w[CalendarSerializer],
   'spec/requests/api/v1/calendar_midnight_spec.rb' => %w[CalendarSerializer Community],
+  # A month stored by one release is a miss for the next (the release is
+  # in the version).
+  'spec/requests/api/v1/calendar_cache_release_spec.rb' => %w[Community#calendar_cache_version],
   # A rotation's chip on a month whose six weeks do not hold the meal
   # that changed it: the version must see that meal (#144).
   'spec/requests/api/v1/calendar_rotation_chip_spec.rb' => %w[Community#calendar_cache_version CalendarSerializer],

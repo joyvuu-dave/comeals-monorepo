@@ -47,16 +47,34 @@ RSpec.describe Community do
       community.calendar_cache_version(from, to)
     end
 
-    it 'starts with the community day, then a count and a newest change for each table' do
+    it 'starts with the community day and the release, then a count and a newest change for each table' do
       create(:unit, community: community)
       parts = version.delete_prefix("#{community.today}-").split('-', -1)
 
-      # The newest change of the community, then a count and a newest
-      # change for residents, units, meals, rotations, every meal of
-      # those rotations, events, common house and guest room.
-      expect(parts.length).to eq(17)
-      expect(parts.values_at(1, 3, 5, 7, 9, 11, 13, 15)).to all(match(/\A\d+\z/))
-      expect(parts[3]).to eq('1')
+      # The release (empty where Heroku does not set it), the newest
+      # change of the community, then a count and a newest change for
+      # residents, units, meals, rotations, every meal of those
+      # rotations, events, common house and guest room.
+      expect(parts.length).to eq(18)
+      expect(parts[0]).to eq(ENV.fetch('HEROKU_RELEASE_VERSION', ''))
+      expect(parts.values_at(2, 4, 6, 8, 10, 12, 14, 16)).to all(match(/\A\d+\z/))
+      expect(parts[4]).to eq('1')
+    end
+
+    # Every release (a deploy, a rollback, a config change) gets a new
+    # HEROKU_RELEASE_VERSION from Heroku's Dyno Metadata, and a deploy can
+    # change the code that builds the month. Not every deploy path clears
+    # the cache (spec/requests/api/v1/calendar_cache_release_spec.rb).
+    it 'changes when the release changes, with no row changed' do
+      before = ENV.fetch('HEROKU_RELEASE_VERSION', nil)
+      ENV['HEROKU_RELEASE_VERSION'] = 'v100'
+      old_release = version
+      ENV['HEROKU_RELEASE_VERSION'] = 'v101'
+
+      expect(version).not_to eq(old_release)
+      expect(version).to start_with("#{community.today}-v101-")
+    ensure
+      ENV['HEROKU_RELEASE_VERSION'] = before
     end
 
     it 'changes when the day changes, with no row changed' do
@@ -164,8 +182,8 @@ RSpec.describe Community do
                                             end_date: Time.zone.local(2026, *end_parts))
         listed = CalendarSerializer.new(community, params: april).to_h[:common_house_reservations].any?
         # The common house count and newest change, after the community
-        # day (see the first example for the order).
-        count, newest = version.delete_prefix("#{community.today}-").split('-', -1).values_at(13, 14)
+        # day and the release (see the first example for the order).
+        count, newest = version.delete_prefix("#{community.today}-").split('-', -1).values_at(14, 15)
         newest_is_it = newest == booking.reload.updated_at.utc.strftime('%Y%m%d%H%M%S%6N')
         booking.destroy!
         { listed: listed, count: count, newest_is_it: newest_is_it }

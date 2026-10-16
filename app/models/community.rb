@@ -371,7 +371,8 @@ class Community < ApplicationRecord
 
   # Cache key for a specific calendar month. Same format as the Pusher channel
   # name in data_store.js — one key serves both cache and real-time notification.
-  # Stale cache across deploys is handled by bin/deploy clearing the cache.
+  # A month stored by an earlier release is a miss, because the release is in
+  # the version (#calendar_cache_version).
   def calendar_cache_key(year, month)
     "community-#{id}-calendar-#{year}-#{month}"
   end
@@ -419,7 +420,8 @@ class Community < ApplicationRecord
   #
   # The version is read from the rows themselves, before the rows are
   # serialized: the row count and the newest updated_at of every table
-  # the month is drawn from, plus today's date. That is what makes the
+  # the month is drawn from, plus today's date and the running release.
+  # That is what makes the
   # cache safe against a write that lands while a request is building
   # the month (spec/requests/api/v1/calendar_cache_race_spec.rb). Deleting
   # the entry on write cannot close that window — the slow request
@@ -428,6 +430,17 @@ class Community < ApplicationRecord
   # no one. Today's date is in the version because a meal chip's words
   # depend on it ("signed up" becomes "attending" at midnight,
   # MealSerializer#title) and nothing writes at midnight.
+  #
+  # The release is in the version because a deploy or a rollback can
+  # change the code that builds the month, and no row changes then.
+  # bin/deploy clears the whole cache, but the Deploy and Rollback
+  # workflows do not, so before this a month the old code built was
+  # served for up to an hour after a release. HEROKU_RELEASE_VERSION
+  # ("v42") comes from Heroku's Dyno Metadata, the same value
+  # GET /api/v1/version reports and Bugsnag groups errors by. It is fixed
+  # for the life of a dyno, and every release (a deploy, a rollback, a
+  # config change) gets a new one. Where it is not set (development,
+  # test) it is empty.
   #
   # The tables, and why each is here:
   #
@@ -464,7 +477,7 @@ class Community < ApplicationRecord
     # microsecond, because Time#to_s stops at whole seconds and two saves in
     # the same second would then share a version.
     values = row.values.map { |value| value.respond_to?(:strftime) ? value.strftime('%Y%m%d%H%M%S%6N') : value }
-    [today.to_s, *values].join('-')
+    [today.to_s, ENV.fetch('HEROKU_RELEASE_VERSION', ''), *values].join('-')
   end
 
   # A changed zone moves every time the SPA shows and its "today". The

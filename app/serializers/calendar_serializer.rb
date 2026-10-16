@@ -14,6 +14,9 @@
 #      next reader — even a write that lands while a request is still
 #      building the month. The tables are listed in
 #      Community#calendar_cache_version; a new table here goes there.
+#      It also includes today's date (a chip's words change at midnight)
+#      and the running Heroku release (a deploy or a rollback can change
+#      this code while no row changes).
 #   2. The push. Clients refetch only when told. Every model here notes
 #      itself in LiveUpdate from its save and destroy callbacks (and
 #      after_remove for rotation membership), which deletes the entry
@@ -38,8 +41,13 @@
 #                                                             drops every cached month)
 #   Community (timezone)       communities.updated_at         Community#note_zone_change
 #                                                             (the residents channel)
+#   This code (a deploy or a   HEROKU_RELEASE_VERSION         none: no row changed
+#   rollback)
 #
-# The deploy script (bin/deploy) also flushes the entire cache on every deploy.
+# bin/deploy also clears the whole cache, but the Deploy and Rollback
+# workflows do not. The release in the version is what makes a month the
+# old code built a miss after every kind of release
+# (spec/requests/api/v1/calendar_cache_release_spec.rb).
 class CalendarSerializer
   include Alba::Resource
 

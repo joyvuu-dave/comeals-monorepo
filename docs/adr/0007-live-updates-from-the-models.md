@@ -127,6 +127,13 @@ writes the version cannot see (`update_all`), and the one-hour expiry
 is the last resort. Today's date in the version is what rolls the
 chips' words at midnight.
 
+_Changed 2026-10-16: the version also includes the running Heroku
+release (`HEROKU_RELEASE_VERSION`). A deploy or a rollback can change
+the code that builds the month while no row changes. `bin/deploy` clears
+the whole cache, but the Deploy and Rollback workflows do not, so a
+month the old code built was served for up to an hour after a release
+(`spec/requests/api/v1/calendar_cache_release_spec.rb`)._
+
 ### A resident change reaches every screen.
 
 `Resident#note_live_update` pushes the residents channel for any change
