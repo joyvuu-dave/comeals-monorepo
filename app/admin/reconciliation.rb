@@ -153,9 +153,12 @@ ActiveAdmin.register Reconciliation do
 
   # INDEX
   index do
+    # One grouped count for the whole page. Reconciliation#number_of_meals
+    # would run one COUNT per row (spec/requests/admin/reconciliation_index_spec.rb).
+    meal_counts = Meal.where(reconciliation_id: collection.map(&:id)).group(:reconciliation_id).count
     column :date
     column :end_date
-    column :number_of_meals, sortable: false
+    column(:number_of_meals, sortable: false) { |reconciliation| meal_counts.fetch(reconciliation.id, 0) }
     actions
   end
 
