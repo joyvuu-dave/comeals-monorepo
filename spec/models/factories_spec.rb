@@ -27,6 +27,46 @@ RSpec.describe 'the spec factories' do # rubocop:disable RSpec/DescribeClass -- 
     expect(DefaultMealDate.for(1)).to eq(Reconciliation.latest_cutoff(community.today))
   end
 
+  # A spec that gives one meal a date in the window and then makes meals
+  # with no date must not get "Date has already been taken" (meals.date is
+  # unique). The fixed date is the second date in the cycle, so the second
+  # meal with no date skips it and takes the third.
+  it 'never gives a default meal a date that a meal already has' do
+    fixed = Reconciliation.latest_cutoff(community.today) - 1
+    create(:meal, community: community, date: fixed)
+
+    dates = Array.new(2) { create(:meal, community: community).date }
+
+    expect(dates).to eq([fixed + 1, fixed - 1])
+  end
+
+  # When every date in the window has a meal, the factory says so. It does
+  # not try the same dates again and again.
+  it 'refuses a default meal when every date in the window has a meal' do
+    allow(DefaultMealDate).to receive(:days_back).and_return(3)
+    create(:meal, community: community, date: DefaultMealDate.for(2))
+    create_list(:meal, 2, community: community)
+
+    expect { create(:meal, community: community) }.to raise_error(RuntimeError, /All 3 dates/)
+  end
+
+  # The count starts again before every example, so the meals an example
+  # makes with no date get the same dates on every run, whatever examples
+  # ran before it. The first example here moves the count on, and the
+  # second checks that it starts at the newest date again. They run in
+  # this order.
+  describe 'the default dates of an example', order: :defined do
+    it 'start at the newest date in the window' do
+      dates = Array.new(3) { create(:meal, community: community).date }
+
+      expect(dates).to eq([DefaultMealDate.for(1), DefaultMealDate.for(2), DefaultMealDate.for(3)])
+    end
+
+    it 'start at the newest date again in the next example' do
+      expect(create(:meal, community: community).date).to eq(DefaultMealDate.for(1))
+    end
+  end
+
   [1, DefaultMealDate.days_back].each do |n|
     it "gives each factory price band its own price on default meal number #{n}" do
       meal = create(:meal, community: community, date: DefaultMealDate.for(n))
