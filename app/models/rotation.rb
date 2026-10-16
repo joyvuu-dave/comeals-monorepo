@@ -105,7 +105,7 @@ class Rotation < ApplicationRecord
 
   def set_color
     last_color = Rotation.order(:id).pluck(:color).last
-    last_index = last_color && COLORS.index(last_color)
+    last_index = COLORS.index(last_color)
     self.color = if last_index
                    COLORS.fetch((last_index + 1) % COLORS.length)
                  else
