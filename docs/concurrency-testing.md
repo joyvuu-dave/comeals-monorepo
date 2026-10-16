@@ -180,9 +180,11 @@ Three more, found while fixing those:
   its own, so it wrote the child row first and the settled-meal trigger
   then asked for the meal from inside that write — the opposite order.
   PostgreSQL broke it after a second and one side was told to try again.
-  Now every child row takes the trigger's own lock before it writes
-  itself (`LocksItsMealFirst`), so both paths lock meal first, row second
-  (`spec/requests/admin/meal_lock_order_spec.rb`).
+  Now every child row locks its meal before it writes itself
+  (`LocksItsMealFirst`), so both paths lock meal first, row second
+  (`spec/requests/admin/meal_lock_order_spec.rb`). The admin write then
+  waits for the API's write and is told to try again, because the API's
+  write changed the meal row; it never deadlocks.
 - The calendar read answered 500 when PostgreSQL refused it. A read can
   be refused at SERIALIZABLE too, and the calendar month reads nine
   tables and then writes a cache entry, which makes it a likely pick. It
@@ -240,3 +242,28 @@ thread's first signup (2026-09-12). The spec now does what a client
 does, tries a 409 again, and raises on any other answer than 200, so a
 request that did not happen is reported as that and not as a push that
 never came.
+
+## What the database races found (2026-10-16)
+
+Beside the storms, `spec/db/` races one write against another on two
+sessions, in the exact order that matters (`settlement_race_spec.rb`,
+`dinner_cancelling_race_spec.rb`, `no_cost_marking_race_spec.rb`), and
+runs a storm of writers against one meal while it is settled
+(`meal_write_storm_spec.rb`, which since 2026-10-16 also cancels and
+restores the dinner). A bug hunt found a case none of them covered: a
+write from psql, at READ COMMITTED, that starts before a settlement or a
+cancel and changes only rows that the settlement or the cancel reads,
+not rows it writes. (In the No cost race both sides write the same
+bill, and in the dinner cancelling race the cook writes through the
+models, whose `touch: true` changes the meal row; both end in a
+conflict.) The settlement or the cancel waited for it at its `FOR UPDATE`,
+but at SERIALIZABLE its snapshot was taken before the wait. The trigger
+only read the meal row `FOR KEY SHARE`, a lock changes no row, and
+PostgreSQL's conflict check does not see a READ COMMITTED writer, so
+after the wait it decided from the rows as they were: a settlement
+without a sign-up added at that moment, and a dinner cancelled with a
+cost of $12 on it. Now the trigger updates the meal row
+(`updated_at = updated_at`, migration `20261016120000`), so the waiting
+transaction fails as a conflict and is tried again with a fresh
+snapshot (`settlement_after_a_raw_write_race_spec.rb`,
+`cancel_against_a_cost_race_spec.rb`; ADR 0003, "The other order").

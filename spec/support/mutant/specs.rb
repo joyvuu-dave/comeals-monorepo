@@ -363,7 +363,11 @@ MUTANT_SPEC_ROWS = {
   'spec/requests/api/v1/meal_random_actions_spec.rb' => [],
   'spec/requests/api/v1/calendar_performance_spec.rb' => [],
   # Proves a database trigger, which mutant does not change.
-  'spec/requests/admin/superuser_demotion_race_spec.rb' => []
+  'spec/requests/admin/superuser_demotion_race_spec.rb' => [],
+  # Each proves the child-write trigger's update of the meal row
+  # (20261016120000) against a write from psql, on real sessions.
+  'spec/db/cancel_against_a_cost_race_spec.rb' => [],
+  'spec/db/settlement_after_a_raw_write_race_spec.rb' => []
 }.freeze
 
 MUTANT_SPECS = MUTANT_SPEC_ROWS.to_h do |path, expressions|

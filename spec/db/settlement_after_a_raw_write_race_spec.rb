@@ -9,15 +9,16 @@ require 'rails_helper'
 # way psql writes, at READ COMMITTED, and its transaction is still open
 # when the settlement starts.
 #
-# The trigger's lookup holds the meal FOR KEY SHARE, so the settlement
-# waits at its FOR UPDATE until the write commits. Then it must count the
-# new row. ADR 0003 says it does: "under READ COMMITTED each statement
-# takes a fresh snapshot". But since ADR 0005 the settlement runs at
-# SERIALIZABLE, so its snapshot is taken when its first statement starts,
-# before the wait, and it does not see the row. The raw write ran at READ
-# COMMITTED, so PostgreSQL's conflict check does not see it either, and
-# the lock it held changed no row of meals, so the wait ends with no
-# conflict. The settlement then commits balances that leave the row out.
+# The settlement waits at its FOR UPDATE until the write commits, and it
+# must then count the write. It runs at SERIALIZABLE (ADR 0005), so its
+# snapshot was taken when its first statement started, before the wait.
+# Until 20261016120000 the trigger only read the meal row FOR KEY SHARE.
+# That lock changed no row, so the wait ended with no conflict, and
+# PostgreSQL's conflict check does not see a READ COMMITTED writer either.
+# The settlement then stored balances from the rows as they were before
+# the write. Now the trigger updates the meal row, so the settlement fails
+# as a conflict after the wait, and SettleAndNotify tries it again with a
+# fresh snapshot that has the write in it.
 RSpec.describe 'a settlement that starts while a raw write to its meal is still open' do
   include_context 'with no test transaction'
 

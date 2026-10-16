@@ -1417,10 +1417,15 @@ that writes these rows by hand uses `SettledWrites`
 update, and destroy on Bill, MealResident, and Guest once their meal (or the
 meal they are being moved from) is reconciled. The
 `*_reject_settled_write` triggers on those three tables do the same in the
-database, and both of their meal lookups take `FOR KEY SHARE`
-unconditionally so an unlocked write waits for a running settlement and is
-then refused. `Meal` freezes its own `cap`, `date`, and `reconciliation_id`,
-backed by `meals_protect_settled`. See ADR 0003 and CLAUDE.md.
+database. Both of their meal lookups run unconditionally, and each one
+updates the meal row (`updated_at = updated_at`, migration 20261016120000)
+rather than only reading it. So an unlocked write that comes after a running
+settlement waits for it and is then refused, and a settlement or a cancel
+that waited for a write that came first finds the meal row changed: at
+SERIALIZABLE it fails as a conflict and is tried again with a fresh
+snapshot, and at READ COMMITTED (psql) it reads the new row. `Meal` freezes
+its own `cap`, `date`, and `reconciliation_id`, backed by
+`meals_protect_settled`. See ADR 0003 and CLAUDE.md.
 
 The protect, reject and insert triggers all step aside when the session
 setting `comeals.allow_settled_writes` is `on`. That is for deliberate

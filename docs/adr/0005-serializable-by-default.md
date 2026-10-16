@@ -459,6 +459,21 @@ is needed by the specs before it is needed by the application.
   `RetryOnConflict` retry a conflict that Solid Queue wraps in its own
   `EnqueueError`; before that, a refused push enqueue was dropped after
   one try.
+- **2026-10-16** — a lock is not a change. ADR 0003's trigger read the
+  meal row `FOR KEY SHARE`, and at READ COMMITTED that was enough: the
+  settlement waited for a racing write and then took a fresh snapshot.
+  At SERIALIZABLE its snapshot was taken before the wait, a lock changes
+  no row, and a write from psql runs at READ COMMITTED, outside the
+  conflict check. So a settlement that waited for a psql write that
+  started first settled without it, and a cancel that waited for a psql
+  cost with money went through. The trigger now updates the meal row
+  (`updated_at = updated_at`, migration `20261016120000`), so the
+  waiting transaction fails as a conflict and is tried again with a
+  fresh snapshot (`spec/db/settlement_after_a_raw_write_race_spec.rb`,
+  `spec/db/cancel_against_a_cost_race_spec.rb`; ADR 0003, "The other
+  order"). The 2026-09-11 entry above still holds for the order of the
+  locks: `LocksItsMealFirst` locks the meal `FOR KEY SHARE` before the
+  row, and the trigger's update comes after the row.
 
 The full record of the rollout, step by step, is in
 [docs/serializable-rollout.md](../serializable-rollout.md).

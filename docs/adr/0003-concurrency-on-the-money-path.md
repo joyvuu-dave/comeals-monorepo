@@ -203,6 +203,17 @@ Both together do close it, and this combination was verified end to end:
    (`WHERE id = ... AND reconciliation_id IS NOT NULL`) matches no row when the
    meal is still unreconciled, so it takes no lock and never waits.
 
+   _Amended 2026-10-16: each lookup now updates the meal row instead of
+   reading it, still unconditionally (migration `20261016120000`):_
+
+   ```sql
+   UPDATE meals SET updated_at = updated_at WHERE id = NEW.meal_id
+   RETURNING reconciliation_id, cancelled_at INTO meal_reconciliation_id, meal_cancelled_at;
+   ```
+
+   _The read was enough at READ COMMITTED. It is not at SERIALIZABLE (ADR
+   0005); see "The other order" below._
+
 With both in place the admin insert waits for the settlement and then fails
 with the trigger's exception. A loss that nothing reported becomes an error
 the admin sees.
@@ -212,6 +223,34 @@ lock before its row, so in this race an admin write is now cancelled as a
 serialization failure before the trigger decides. A raw SQL write, as from
 psql, still gets the trigger's exception. `spec/db/settlement_race_spec.rb`
 checks both.)
+
+### The other order: a raw write that starts first (2026-10-16)
+
+`spec/db/settlement_race_spec.rb` starts the settlement first. The other
+order went wrong once the settlement ran at SERIALIZABLE. A write from psql
+(READ COMMITTED, no lock of its own) opens a transaction and adds or removes
+a sign-up. Its trigger lookup holds the meal `FOR KEY SHARE`. The settlement
+starts, and its `FOR UPDATE` waits for that lock, as intended. But a
+SERIALIZABLE transaction takes its snapshot when its first statement starts,
+before the wait. A lock changes no row, so the wait ended with no conflict,
+and PostgreSQL's conflict check does not see a READ COMMITTED writer. The
+settlement stored balances from the rows as they were before the write: a
+sign-up added was never charged, and one removed was still charged. The
+nightly ledger check reported it the next morning. The same gap let a
+dinner be cancelled while a cost with money on it was written from psql, and
+the cook was credited $0 for it, both with a raw cancel and with the app's
+own cancel under `FOR UPDATE`.
+
+The fix is the lookup above: it updates the meal row
+(`updated_at = updated_at`), so the row changes. A SERIALIZABLE settlement or
+cancel that waited for it then fails as a conflict, and is tried again with a
+fresh snapshot that has the write in it. A READ COMMITTED one, from psql,
+reads the new row after the wait. The update takes `FOR NO KEY UPDATE`, so a
+raw cancel's UPDATE waits for it too, in either order. A write through the
+models already did this: `touch: true` on the row's `belongs_to` updates the
+meal row in the same transaction. Pinned by
+`spec/db/settlement_after_a_raw_write_race_spec.rb` and
+`spec/db/cancel_against_a_cost_race_spec.rb`.
 
 **This fix shipped on 2026-07-27** (issue #43). Part 1 is in
 `Settlement#assign_meals` (it was `Reconciliation#assign_meals` until
@@ -245,7 +284,10 @@ committing before those reads was picked up by the settlement itself, since
 under `READ COMMITTED` each statement takes a fresh snapshot. After the fix
 the distinction is moot — `assign_meals` holds `FOR UPDATE` for the whole
 transaction, so no racing write commits anywhere between the claim and the
-reads. They all block, and are all refused.)
+reads. They all block, and are all refused. _Amended 2026-10-16: that holds
+for a write that starts after the claim. Since ADR 0005 the settlement does
+not take a fresh snapshot per statement, so a write that started before it
+was missed until migration `20261016120000`; see "The other order" above._)
 
 ## Decision
 

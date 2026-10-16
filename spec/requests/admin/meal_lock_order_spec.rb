@@ -14,12 +14,16 @@ require 'rails_helper'
 # for that bill. PostgreSQL broke it after a second and one side was told
 # to try again.
 #
-# LocksItsMealFirst takes the trigger's own lock before the row instead of
-# after it, so both paths now lock meal first, row second. What that buys
-# is below: a write to another row of the same meal waits and then
-# applies, and a write to the same row is refused at once as a conflict
-# instead of hanging until the deadlock detector fires. Neither example
-# may ever see ActiveRecord::Deadlocked.
+# LocksItsMealFirst locks the meal before the row, so both paths now lock
+# meal first, row second. An admin write waits for the API's write, and
+# then is refused as a conflict ("try again"), whichever row the API
+# wrote: the API's write changed the meal row, and the admin request's
+# SERIALIZABLE snapshot is older than that change. A write through the
+# models changes the meal row with `touch: true`, and since
+# 20261016120000 the child-write trigger changes it too, so the API side
+# below, which writes raw SQL, changes it the same way the real API does.
+# What one lock order buys is that this is a wait and one conflict,
+# never a deadlock: no example may ever see ActiveRecord::Deadlocked.
 #
 # The API's side is a session of its own: it holds the meal the way the
 # API does, waits until the admin request is waiting on a lock, writes,
@@ -119,9 +123,13 @@ RSpec.describe 'the lock order of an admin write against an API write on the sam
     expect(reported).to contain_exactly(an_instance_of(ActiveRecord::SerializationFailure))
   end
 
-  # The common case: two people editing one meal's different rows. With
-  # one lock order this is a wait, and both writes go through.
-  it 'lets an admin bill edit wait for the API and then apply, when the API wrote another bill' do
+  # The common case: two people editing one meal's different rows. The
+  # admin edit waits for the API, then is told to try again, because the
+  # API's write changed the meal row. Before 20261016120000 a raw write
+  # here left the meal row as it was, and this example said the admin edit
+  # then applied; the real API's write, which touches the meal, never
+  # allowed that.
+  it 'refuses an admin bill edit as a conflict, without a deadlock, when the API wrote another bill' do
     bill = create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('10'))
     others_bill = create(:bill, meal: meal, resident: other, community: community, amount: BigDecimal('20'))
     outcome = Queue.new
@@ -131,13 +139,14 @@ RSpec.describe 'the lock order of an admin write against an API write on the sam
     patch "/bills/#{bill.id}", params: { bill: { amount: '5.00' } }
 
     expect(finish(api, outcome)).to eq([:committed])
-    expect(response).to redirect_to(admin_bill_path(bill))
-    expect(bill.reload.amount).to eq(BigDecimal('5'))
+    expect(response).to redirect_to(admin_root_path)
+    expect(flash[:alert]).to include('Someone else was changing this at the same time')
+    expect(bill.reload.amount).to eq(BigDecimal('10'))
     expect(others_bill.reload.amount).to eq(BigDecimal('99'))
-    expect(reported).not_to include(an_instance_of(ActiveRecord::Deadlocked))
+    expect(reported).to contain_exactly(an_instance_of(ActiveRecord::SerializationFailure))
   end
 
-  it 'lets an admin attendance removal wait for the API and then apply, when the API wrote a bill' do
+  it 'refuses an admin attendance removal as a conflict, without a deadlock, when the API wrote a bill' do
     row = create(:meal_resident, meal: meal, resident: cook, community: community)
     bill = create(:bill, meal: meal, resident: other, community: community, amount: BigDecimal('20'))
     outcome = Queue.new
@@ -147,9 +156,10 @@ RSpec.describe 'the lock order of an admin write against an API write on the sam
     delete "/meals/#{meal.id}/meal_residents/#{row.id}"
 
     expect(finish(api, outcome)).to eq([:committed])
-    expect(response).to redirect_to(admin_meal_path(meal))
-    expect(flash[:notice]).to include('Removed')
-    expect(MealResident.exists?(row.id)).to be(false)
-    expect(reported).not_to include(an_instance_of(ActiveRecord::Deadlocked))
+    expect(response).to redirect_to(admin_root_path)
+    expect(flash[:alert]).to include('Someone else was changing this at the same time')
+    expect(MealResident.exists?(row.id)).to be(true)
+    expect(bill.reload.amount).to eq(BigDecimal('99'))
+    expect(reported).to contain_exactly(an_instance_of(ActiveRecord::SerializationFailure))
   end
 end

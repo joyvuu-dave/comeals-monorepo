@@ -5,11 +5,12 @@
 # the meal's lock before it writes itself.
 #
 # The settled-meal trigger already locks the meal from inside every write
-# to these tables (comeals_reject_settled_child_write, migration
-# 20260727120000): it reads meals FOR KEY SHARE so an unlocked write waits
-# for a running settlement and is then refused. But a trigger fires on the
-# row write, which means the row lock is taken first and the meal lock
-# second. The API locks them the other way round — the meal row with
+# to these tables (comeals_reject_settled_child_write): it updates the
+# meal row (updated_at = updated_at, migration 20261016120000; until then
+# it read the row FOR KEY SHARE, 20260727120000), so an unlocked write
+# waits for a running settlement and is then refused. But a trigger fires
+# on the row write, which means the row lock is taken first and the meal
+# lock second. The API locks them the other way round — the meal row with
 # FOR UPDATE, then the child row (Api::V1::MealsController#with_meal_lock).
 # Two lock orders on the same pair is a deadlock, and a request storm
 # found it: an admin bill edit held the bill and waited for the meal while
@@ -18,12 +19,17 @@
 # lost — but a wait is better than an abort, and one order everywhere is
 # what turns the second into the first.
 #
-# So this takes the trigger's own lock, before the row instead of after
-# it. FOR KEY SHARE, exactly what the trigger asks for, for two reasons:
-# the trigger's later request is then already held, and two writes to
-# different rows of one meal still run at the same time — only a writer
-# that wants the whole meal (a settlement's FOR UPDATE, the API's
-# with_lock) makes them wait.
+# So this locks the meal before the row instead of after it, with FOR
+# KEY SHARE. When a writer that wants the whole meal holds it (a
+# settlement's FOR UPDATE, the API's with_lock), this waits before it
+# touches any row. The trigger then updates the meal row, after the row
+# write, and `touch: true` on the row's belongs_to updates it again; each
+# of those asks for FOR NO KEY UPDATE, which no FOR KEY SHARE blocks.
+# Two writes to different rows of one meal therefore still meet on the
+# meal row: the second waits for the first's update and, at SERIALIZABLE,
+# fails as a conflict once the first commits. That is the same wait and
+# conflict `touch: true` caused before 20261016120000. What this lock
+# adds is the order, meal before row, so the wait is never a deadlock.
 #
 # Both meals when meal_id is changing, in id order, so two writers moving
 # rows between the same two meals cannot deadlock against each other

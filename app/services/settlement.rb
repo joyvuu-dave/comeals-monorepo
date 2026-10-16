@@ -459,23 +459,35 @@ class Settlement
   # The FOR UPDATE lock before the UPDATE is not redundant. Removing it
   # brings back issue #43: the settled ledger can be changed with no error.
   # The UPDATE alone takes only FOR NO KEY UPDATE on the meal row, and FOR
-  # KEY SHARE — what the immutability trigger's lookups take — does not
+  # KEY SHARE — what LocksItsMealFirst takes before a model write — does not
   # conflict with that. So a write from a path that skips the meal lock
   # (ActiveAdmin's forms) would have nothing to wait on, and could change a
   # meal's ledger rows while this settlement was in the middle of claiming
   # it. Added rows end up in no reconciliation's balances, and
   # billing:recalculate skips them because that task only sums unreconciled
   # meals; deleted rows leave balances behind that nothing justifies. FOR
-  # UPDATE does conflict with FOR KEY SHARE, so the rival write waits here
-  # and is then refused by the trigger.
+  # UPDATE conflicts with FOR KEY SHARE and with the trigger's update of the
+  # meal row, so the rival write waits here and is then refused by the
+  # trigger.
   #
-  # This works only together with the trigger's two unconditional locking
-  # lookups (20260727120000). Without the NEW.meal_id one, an insert decides
-  # too early — Postgres fires BEFORE INSERT triggers before the foreign-key
-  # check — and lands anyway once the FK wait ends. Without the OLD.meal_id
-  # one, a delete never waits at all, because a DELETE takes no foreign-key
-  # lock on the parent. Each piece alone was tested and does not close the
-  # hole. See docs/adr/0003-concurrency-on-the-money-path.md.
+  # This works only together with the trigger's two unconditional meal
+  # lookups. Without the NEW.meal_id one, an insert decides too early —
+  # Postgres fires BEFORE INSERT triggers before the foreign-key check — and
+  # lands anyway once the FK wait ends. Without the OLD.meal_id one, a
+  # delete never waits at all, because a DELETE takes no foreign-key lock on
+  # the parent. Each piece alone was tested and does not close the hole.
+  #
+  # Each lookup updates the meal row (updated_at = updated_at, migration
+  # 20261016120000), not only reads it (20260727120000). That covers the
+  # other order: a raw write, from psql at READ COMMITTED, that started
+  # before this settlement. This settlement waits for it at FOR UPDATE, but
+  # its SERIALIZABLE snapshot was taken before the wait. A lock changes no
+  # row, so after a read-only lookup the wait ended with no conflict, and
+  # this settlement stored balances without the write. The update changes
+  # the meal row, so this FOR UPDATE now fails as a conflict, and
+  # SettleAndNotify tries again with a fresh snapshot
+  # (spec/db/settlement_after_a_raw_write_race_spec.rb). See
+  # docs/adr/0003-concurrency-on-the-money-path.md.
   #
   # ORDER BY id keeps the lock order deterministic so two concurrent
   # settlements cannot deadlock against each other.

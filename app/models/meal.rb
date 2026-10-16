@@ -484,9 +484,16 @@ class Meal < ApplicationRecord
   end
 
   # Read from the bills table, not the loaded bills: a cook may have
-  # entered a cost since this meal was loaded, and the meal lock every
-  # bill write takes first (LocksItsMealFirst) makes this read the one
-  # that counts.
+  # entered a cost since this meal was loaded. Every bill write changes
+  # the meal row (the child-write trigger, 20261016120000, and `touch:
+  # true`). So when this cancel locks the meal first, as every cancel in
+  # the app does (FOR UPDATE), a cost saved at the same moment either
+  # commits while this cancel waits for the lock, and the cancel then
+  # fails as a conflict (the API tries again and reads the cost; admin
+  # says to try again), or the cost waits for the cancel and is then
+  # refused. Without that lock (Meal#cancel! from the console), the
+  # cancel's own UPDATE waits for the cost's change to the meal row and
+  # then fails as a conflict (spec/db/cancel_against_a_cost_race_spec.rb).
   sig { void }
   def refuse_cancelling_with_money
     return unless Bill.where(meal_id: id, no_cost: false).where(Bill.arel_table[:amount].gt(0)).exists?

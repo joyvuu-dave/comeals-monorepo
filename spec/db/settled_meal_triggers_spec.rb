@@ -304,9 +304,10 @@ RSpec.describe 'settled-meal database triggers' do
       expect(bill.reload.amount).to eq(BigDecimal('42'))
     end
 
-    # The INSERT branch now takes a FOR KEY SHARE lock on the parent meal
-    # before it decides (20260727120000, issue #43). The bypass has to short
-    # out that whole branch, lock included, not just the refusal.
+    # The INSERT branch locks the parent meal before it decides (a FOR KEY
+    # SHARE read from 20260727120000, issue #43; an UPDATE of the meal row
+    # since 20261016120000). The bypass has to short out that whole branch,
+    # lock included, not just the refusal.
     it 'allows an insert onto a reconciled meal' do
       meal = settled_meal
       other_cook = create(:resident, community: community)

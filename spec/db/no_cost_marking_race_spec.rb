@@ -9,12 +9,14 @@ require 'rails_helper'
 #
 # The cook's write is raw SQL on a libpq session of its own, at READ
 # COMMITTED, the way psql writes: it takes no meal lock of its own, only
-# the one the settled-meal trigger takes, and it does not touch the meal
-# row. That is the hardest case. The marking's transaction began before
-# the write committed, so its first read of the cost is the old, blank
-# one, and only the database's conflict check stops it from writing over
-# the new cost. RetryOnConflict then reads the cost again and leaves it
-# alone.
+# the one the settled-meal trigger takes. The marking's transaction began
+# before the write committed, so its first read of the cost is the old,
+# blank one, and only the database's conflict check stops it from writing
+# over the new cost: the trigger updated the meal row (20261016120000),
+# so the marking's FOR UPDATE on the meal fails as a conflict once the
+# cook commits. (Before that migration the trigger left the meal row as
+# it was, and the conflict came later, at the marking's write to the same
+# bill.) RetryOnConflict then reads the cost again and leaves it alone.
 RSpec.describe 'marking blank costs No cost, against a cost entered at the same moment' do
   include_context 'with no test transaction'
 
@@ -60,8 +62,8 @@ RSpec.describe 'marking blank costs No cost, against a cost entered at the same 
       Thread.current.report_on_exception = false
       ActiveRecord::Base.connection_pool.with_connection { NoCostMarking.call(bill_ids: [bill.id]) }
     end
-    # The cook's update holds the meal's FOR KEY SHARE lock (the trigger),
-    # so the marking waits at its FOR UPDATE until the cook commits.
+    # The cook's update has updated the meal row (the trigger), so the
+    # marking waits at its FOR UPDATE until the cook commits.
     expect(wait_for_blocked_session(observer, 'FOR UPDATE')).to be(true)
     cook.exec('COMMIT')
     result = marking.value

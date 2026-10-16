@@ -3,25 +3,34 @@
 require 'rails_helper'
 
 # A dinner a cook spent money on cannot be cancelled (ADR 0011 rule 11).
-# Migration 20261010125954 holds that rule in the database too, for a
-# write that skips the model:
+# The database holds that rule too, for a write that skips the model
+# (20261010125954):
 #
 #   - comeals_protect_settled_meal refuses a cancel when a bill of the
 #     dinner has money on it;
 #   - comeals_reject_settled_child_write refuses a cost on a cancelled
 #     dinner.
 #
-# Each rule reads the other writer's row. A cost and a cancel at the same
-# moment must not both go through: whichever comes second must wait for
-# the first and then be refused, the way a write waits for a settlement
-# (spec/db/settlement_race_spec.rb).
+# Each rule reads the other writer's row, so a cost and a cancel at the
+# same moment must not both go through: whichever comes second must wait
+# for the first, and then be refused.
 #
 # The cost here is raw SQL on a libpq session of its own, the way psql
-# writes: no model, no lock of its own, at READ COMMITTED. The cancel is
-# raw SQL the same way, or the app's own cancel: the meal row locked FOR
-# UPDATE and Meal#cancel! under it, retried on a conflict, as
-# MealStatusActions (PATCH /meals/:id/cancelled) and the admin Cancel
-# button do it.
+# writes: no model, no lock of its own, at READ COMMITTED. Until
+# 20261016120000 both orders went wrong. The trigger read the meal row
+# FOR KEY SHARE, which a cancel's UPDATE (FOR NO KEY UPDATE) does not wait
+# for. The app's cancel did wait, at its FOR UPDATE, but it runs at
+# SERIALIZABLE: its snapshot was taken before the wait, a lock changes no
+# row, and PostgreSQL's conflict check does not see a READ COMMITTED
+# writer, so after the wait it still read the cost as $0. Each time the
+# dinner ended cancelled with $12 on a cost, and the cook was credited $0
+# for it.
+#
+# Now the trigger updates the meal row (updated_at = updated_at). A raw
+# cancel waits for that update and then reads the cost; a raw cost waits
+# for a raw cancel and then reads the cancel; and an app cancel that
+# waited finds the meal row changed, fails as a conflict, and is tried
+# again with a fresh snapshot (or, from the console with no retry, fails).
 RSpec.describe 'cancelling a dinner, against a cost with money entered at the same moment from raw SQL' do
   include_context 'with no test transaction'
 
@@ -61,23 +70,37 @@ RSpec.describe 'cancelling a dinner, against a cost with money entered at the sa
     end
   end
 
-  # The app's own cancel, in a thread, on a Rails connection of its own
+  # A Rails write, in a thread, on a Rails connection of its own
   # (SERIALIZABLE, like every Rails session). The thread's value is
-  # :written, or the error.
-  def app_cancel_alone
+  # :written, or the error's class and first line.
+  def app_write_alone
     Thread.new do
       Thread.current.report_on_exception = false
       ActiveRecord::Base.connection_pool.with_connection do
-        dinner = Meal.find(meal.id)
-        RetryOnConflict.call do
-          dinner.restore_attributes
-          dinner.with_lock { dinner.cancel! }
-        end
+        yield Meal.find(meal.id)
         :written
       end
     rescue StandardError => e
       "#{e.class}: #{e.message.lines.first&.strip}"
     end
+  end
+
+  # The app's own cancel: the meal row locked FOR UPDATE, Meal#cancel!
+  # under it, retried on a conflict, as MealStatusActions (PATCH
+  # /meals/:id/cancelled) and the admin Cancel button run it.
+  def app_cancel_alone
+    app_write_alone do |dinner|
+      RetryOnConflict.call do
+        dinner.restore_attributes
+        dinner.with_lock { dinner.cancel! }
+      end
+    end
+  end
+
+  # Meal#cancel! as someone would call it from the console: no meal lock
+  # and no retry.
+  def console_cancel_alone
+    app_write_alone(&:cancel!)
   end
 
   # Waits until the thread has finished, or a session waits for a lock.
@@ -127,23 +150,34 @@ RSpec.describe 'cancelling a dinner, against a cost with money entered at the sa
     outcome, seen = race(cost_sql) { raw_write_alone(cancel_sql) }
 
     expect(money_on_a_cancelled_dinner?).to be(false), failure('cancel', outcome, seen)
+    expect(seen).to eq(:waited)
+    expect(outcome).to include('has a cost with money on it, so it cannot be cancelled')
   end
 
   it 'refuses a raw cost with money on it that comes while the dinner is being cancelled from raw SQL' do
     outcome, seen = race(cancel_sql) { raw_write_alone(cost_sql) }
 
     expect(money_on_a_cancelled_dinner?).to be(false), failure('cost', outcome, seen)
+    expect(seen).to eq(:waited)
+    expect(outcome).to include("meal #{meal.id} is cancelled")
   end
 
-  # The app's cancel takes the meal lock first, so it waits for the raw
-  # cost's FOR KEY SHARE. But at SERIALIZABLE its snapshot is taken when
-  # that first statement starts, before the wait, so after the wait it
-  # still reads the bill at $0. The raw cost ran at READ COMMITTED, so
-  # PostgreSQL's conflict check does not see it, and the lock it held
-  # changed no row, so the wait ends without a conflict either.
   it "refuses the app's own cancel when it comes while a raw cost with money on it is being saved" do
     outcome, seen = race(cost_sql) { app_cancel_alone }
 
     expect(money_on_a_cancelled_dinner?).to be(false), failure('cancel', outcome, seen)
+    expect(seen).to eq(:waited)
+    # The first try failed as a conflict; the second read the cost.
+    expect(outcome).to eq('ActiveRecord::RecordInvalid: Validation failed: ' \
+                          "A cook spent money on this dinner, so it can't be cancelled.")
+  end
+
+  it 'refuses Meal#cancel! from the console when it comes while a raw cost with money on it is being saved' do
+    outcome, seen = race(cost_sql) { console_cancel_alone }
+
+    expect(money_on_a_cancelled_dinner?).to be(false), failure('cancel', outcome, seen)
+    expect(seen).to eq(:waited)
+    # Nothing retries a console call, so the conflict is the answer.
+    expect(outcome).to start_with('ActiveRecord::SerializationFailure')
   end
 end

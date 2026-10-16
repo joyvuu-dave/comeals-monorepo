@@ -459,7 +459,7 @@ module Api
       # skip it (ActiveAdmin's bill and attendance forms) are not
       # unprotected: the model takes the meal lock (LocksItsMealFirst), the
       # reconciled guard reads the meals table, and the immutability
-      # triggers take locking reads, so a racing write waits for the
+      # trigger updates the meal row, so a racing write waits for the
       # settlement and is then refused with the guard's sentence or the
       # admin conflict alert. See
       # docs/adr/0003-concurrency-on-the-money-path.md.

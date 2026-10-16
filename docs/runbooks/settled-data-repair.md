@@ -20,8 +20,10 @@ what runs today.
 > credited with no source row behind it).
 >
 > Both are closed now — the settlement holds `FOR UPDATE` on every meal it
-> claims, and both of the trigger's lookups are locking reads (migration
-> `20260727120000`). A racing write waits and is then refused. See
+> claims, and both of the trigger's lookups update the meal row (migration
+> `20261016120000`; locking reads from `20260727120000`). A racing write
+> waits and is then refused, and a raw write that started before the
+> settlement makes the settlement fail as a conflict and try again. See
 > `docs/adr/0003-concurrency-on-the-money-path.md` (issue #43).
 >
 > Rows written before that date can still be wrong, and nothing raised at the

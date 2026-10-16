@@ -546,10 +546,12 @@ BEGIN
 
   IF TG_OP IN ('UPDATE', 'DELETE') THEN
     -- Unconditional, like the branch below. A DELETE takes no
-    -- foreign-key lock on the parent, so this SELECT is the only thing
-    -- that can make it wait for a settlement mid-flight on this meal.
-    SELECT reconciliation_id, cancelled_at INTO meal_reconciliation_id, meal_cancelled_at FROM meals
-    WHERE id = OLD.meal_id FOR KEY SHARE;
+    -- foreign-key lock on the parent, so this UPDATE is the only thing
+    -- that can make it wait for a settlement mid-flight on this meal,
+    -- and it changes the meal row, so a SERIALIZABLE settlement or
+    -- cancel that waited for it fails as a conflict and tries again.
+    UPDATE meals SET updated_at = updated_at WHERE id = OLD.meal_id
+    RETURNING reconciliation_id, cancelled_at INTO meal_reconciliation_id, meal_cancelled_at;
 
     IF meal_reconciliation_id IS NOT NULL AND OLD.meal_id::text IS DISTINCT FROM correcting THEN
       settled_meal_id := OLD.meal_id;
@@ -560,12 +562,12 @@ BEGIN
   END IF;
 
   IF settled_meal_id IS NULL AND cancelled_meal_id IS NULL AND TG_OP IN ('INSERT', 'UPDATE') THEN
-    -- Unconditional: the lock is the point. Testing reconciliation_id in
-    -- the WHERE clause would match no row on an unreconciled meal, take
-    -- no lock, and let this trigger decide before a running settlement
-    -- commits.
-    SELECT reconciliation_id, cancelled_at INTO meal_reconciliation_id, meal_cancelled_at FROM meals
-    WHERE id = NEW.meal_id FOR KEY SHARE;
+    -- Unconditional: the lock and the change to the meal row are the
+    -- point. Testing reconciliation_id in the WHERE clause would match
+    -- no row on an unreconciled meal, take no lock, and let this trigger
+    -- decide before a running settlement commits.
+    UPDATE meals SET updated_at = updated_at WHERE id = NEW.meal_id
+    RETURNING reconciliation_id, cancelled_at INTO meal_reconciliation_id, meal_cancelled_at;
 
     IF meal_reconciliation_id IS NOT NULL AND NEW.meal_id::text IS DISTINCT FROM correcting THEN
       settled_meal_id := NEW.meal_id;
@@ -4245,6 +4247,7 @@ ALTER TABLE ONLY public.settlement_correction_charges
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261016120000'),
 ('20261015120000'),
 ('20261014230000'),
 ('20261013120400'),

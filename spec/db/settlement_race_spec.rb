@@ -18,17 +18,22 @@ require 'rails_helper'
 # Closing it took three things, and each was tested alone and fails:
 #
 #   1. Settlement#assign_meals takes FOR UPDATE before claiming, so a rival
-#      write's FOR KEY SHARE on the parent meal has something to wait on. Its
-#      UPDATE alone takes only FOR NO KEY UPDATE, which FOR KEY SHARE does not
-#      conflict with — there would be no wait at all.
-#   2. The trigger's NEW.meal_id lookup is an unconditional FOR KEY SHARE read
-#      (20260727120000), so an INSERT decides after that wait against committed
-#      state. Without it the trigger decides first — Postgres fires BEFORE
-#      INSERT triggers before the foreign-key check — and the insert proceeds
-#      once the FK wait ends.
+#      write's lock on the parent meal has something to wait on. Its UPDATE
+#      alone takes only FOR NO KEY UPDATE, which FOR KEY SHARE (the lock a
+#      foreign-key check and LocksItsMealFirst take) does not conflict with —
+#      there would be no wait at all.
+#   2. The trigger's NEW.meal_id lookup is unconditional and locks the meal
+#      row (a FOR KEY SHARE read from 20260727120000; an UPDATE of the meal
+#      row since 20261016120000), so an INSERT decides after that wait against
+#      committed state. Without it the trigger decides first — Postgres fires
+#      BEFORE INSERT triggers before the foreign-key check — and the insert
+#      proceeds once the FK wait ends.
 #   3. The trigger's OLD.meal_id lookup locks the same way, so a DELETE or a
 #      re-parent waits too. A DELETE takes no foreign-key lock on the parent at
 #      all, so this lookup is the only thing that can stop it.
+#
+# These examples start the settlement first. A raw write that starts first
+# is spec/db/settlement_after_a_raw_write_race_spec.rb.
 #
 # The racing writes below are raw SQL on a libpq session of their own: no
 # model, no lock of its own, the way psql or a task with update_all writes.
@@ -315,7 +320,7 @@ RSpec.describe 'settlement race against unlocked write paths' do
 
   describe 'the API path (control)' do
     # with_meal_lock takes FOR UPDATE and then inserts a child row in the same
-    # transaction. The trigger's new FOR KEY SHARE lookup hits a row this same
+    # transaction. The trigger's lookup updates a meal row this same
     # transaction already holds FOR UPDATE, which is a self-lock and never
     # waits. If that were wrong, every attendance write in the app would hang.
     it 'still writes a child row inside its own meal lock' do
