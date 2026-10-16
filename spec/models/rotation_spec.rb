@@ -64,6 +64,21 @@ RSpec.describe Rotation do
       expect(pushed).to include(community.calendar_cache_key(2027, 4), community.calendar_cache_key(2027, 6))
     end
 
+    # Rotations with no meals have no first date, so they come last, in
+    # the order they were made. An update stores a new copy of the
+    # first rotation's row after the others, so without the order by id
+    # PostgreSQL would hand that rotation back last.
+    it 'numbers rotations with no meals last, by id' do
+      first, second, third = Array.new(3) { create(:rotation, community: community, no_email: true) }
+      first.update_column(:residents_notified, true)
+      dated = create(:rotation, community: community, no_email: true)
+      create(:meal, community: community, rotation: dated, date: Date.new(2027, 4, 15))
+
+      create(:rotation, community: community, no_email: true)
+
+      expect([dated, first, second, third].map { |rotation| rotation.reload.place_value }).to eq([1, 2, 3, 4])
+    end
+
     it 'leaves a rotation whose place is already right alone' do
       r1 = create(:rotation, community: community, no_email: true)
       create(:meal, community: community, rotation: r1, date: Date.new(2027, 4, 15))
