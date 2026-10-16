@@ -56,7 +56,7 @@ class Healthcheck
   # create=1 makes healthchecks.io create the check on first ping
   # (daily period, 1-hour grace), so a new job needs no manual setup.
   def self.ping_uri(key, slug, state)
-    state_segment = state ? "/#{state}" : ''
+    state_segment = "/#{state}" if state
     URI("#{BASE_URL}/#{key}/#{slug}#{state_segment}?create=1")
   end
 end

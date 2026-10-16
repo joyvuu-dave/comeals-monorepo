@@ -80,6 +80,18 @@ RSpec.describe Healthcheck do
         expect(described_class.ping('some-job')).to be(ok)
       end
 
+      # The warning is the only record of a check healthchecks.io no longer
+      # tracks, so it must not also be written for every ping that worked.
+      it 'writes no warning when the ping is accepted' do
+        http = instance_double(Net::HTTP, get: Net::HTTPOK.new('1.1', '200', 'OK'))
+        allow(Net::HTTP).to receive(:start).and_yield(http)
+        allow(Rails.logger).to receive(:warn)
+
+        described_class.ping('some-job')
+
+        expect(Rails.logger).not_to have_received(:warn)
+      end
+
       it 'warns when the ping is rejected' do
         rejected = Net::HTTPNotFound.new('1.1', '404', 'Not Found')
         allow(Net::HTTP).to receive(:start).and_return(rejected)
