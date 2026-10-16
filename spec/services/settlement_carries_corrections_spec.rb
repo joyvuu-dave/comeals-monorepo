@@ -81,6 +81,45 @@ RSpec.describe Settlement do
       expect(claimed.reload.reconciliation_id).to eq(rival.id)
     end
 
+    it 'marks the time a correction was carried' do
+      written = correction.updated_at
+
+      settle!(cutoff: latest)
+
+      expect(correction.reload.updated_at).to be > written
+    end
+
+    # A correction saved after the locking read is not locked, so this
+    # settlement must not claim it: the next one carries it. Here the
+    # locking read is made to miss the second correction, the way a
+    # correction saved between the read and the claim is missed.
+    it 'claims only the corrections its locking read returned' do
+      later = MealCorrecting.save!(corrected.reload, by: admin, reason: 'Then $21') do |edits|
+        edits.cost(cook, amount: BigDecimal('21'), no_cost: false)
+      end
+      allow(MealCorrection).to receive(:waiting).and_return(MealCorrection.where(id: correction.id))
+
+      second = settle!(cutoff: latest)
+
+      expect(correction.reload.reconciliation).to eq(second)
+      expect(later.reload.reconciliation_id).to be_nil
+    end
+
+    # The setting is turned off once the claim is done, not left for the
+    # ledger's write to turn off. When that write fails, its savepoint puts
+    # the setting back to what it was before the write, which must be off.
+    it 'turns the setting off after the claim, so a failed ledger write leaves it off' do
+      reconciliation = Reconciliation.new(end_date: latest)
+      allow(reconciliation).to receive(:settlement_balances).and_raise(RuntimeError, 'the write failed')
+
+      ActiveRecord::Base.transaction do
+        expect { described_class.new(reconciliation).settle! }.to raise_error(RuntimeError, 'the write failed')
+        expect(ActiveRecord::Base.connection.select_value(
+                 "SELECT current_setting('#{described_class::SETTLING_SETTING}', true)"
+               )).to be_blank
+      end
+    end
+
     # The claim sets the database setting that names this settlement, and
     # runs in its own savepoint, as the ledger's write does
     # (settlement_spec.rb). Rolling the savepoint back undoes the setting
