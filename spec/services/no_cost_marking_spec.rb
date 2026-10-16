@@ -110,17 +110,24 @@ RSpec.describe NoCostMarking do
       .to eq([[true, true], [true, true]])
   end
 
-  # In id order, whatever order the table holds the rows in, so the page
-  # lists them the same way every time. The update moves the first row
-  # after the second in the table.
+  # In id order, so the page lists them the same way every time. The
+  # table's own order cannot show it: moving a row to the end of the
+  # table changed the answer without the ORDER BY on this machine, and
+  # not on GitHub's. So this reads the query too.
   it 'gives the costs in id order' do
     first = cost(dinner(latest - 1))
     second = cost(dinner)
     first.update_columns(updated_at: first.updated_at + 1)
+    statements = []
+    callback = ->(*, payload) { statements << payload[:sql] }
 
-    result = described_class.call(bill_ids: [second.id, first.id])
+    result = ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') do
+      described_class.call(bill_ids: [second.id, first.id])
+    end
 
     expect(result.marked).to eq([first, second])
+    read = statements.find { |sql| sql.start_with?('SELECT "bills".* FROM "bills" WHERE "bills"."id" IN ') }
+    expect(read).to end_with('ORDER BY "bills"."id" ASC')
   end
 
   # The same lock and order as a settlement's claim, taken before the
