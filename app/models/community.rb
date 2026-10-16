@@ -304,8 +304,13 @@ class Community < ApplicationRecord
   #
   # Rounded as a BigDecimal, half up, like number_to_currency: 8.125 shows
   # as 8.13. format('%.2f') turned it into a Float first and showed 8.12.
+  #
+  # The sign-ups and guests are preloaded because Meal#multiplier sums
+  # them in SQL, one query per meal, unless both are loaded. The bills
+  # need no preload: goldiloader reads every meal's bills in one query
+  # when the ledger reads the first meal's.
   def unreconciled_ave_cost
-    final = averaged_meals.preload(:meal_residents, :guests, :bills).to_a
+    final = averaged_meals.preload(:meal_residents, :guests).to_a
     total_multiplier = final.sum(&:multiplier)
     return '--' if total_multiplier.zero?
 
