@@ -51,6 +51,32 @@ RSpec.describe PacedDelivery do
       expect(messages[cooks[2]]).to have_received(:deliver_now)
     end
 
+    # The cap's log line is an error, so it must not be written for a run
+    # that sent everyone.
+    it 'logs nothing about the cap when everyone fits under it' do
+      messages = cooks.index_with { |cook| message_for(cook) }
+      allow(Rails.logger).to receive(:error)
+
+      described_class.deliver(cooks, mailer: 'reconciliation_notify_email') { |cook| messages[cook] }
+
+      expect(Rails.logger).not_to have_received(:error)
+    end
+
+    # The messages went out one by one already. A session opened after
+    # them would send nothing new, but over a real SMTP server it could
+    # fail and report a failure for a run that sent everyone.
+    it 'opens no SMTP session' do
+      messages = cooks.index_with { |cook| message_for(cook) }
+      allow(Net::SMTP).to receive(:new)
+      allow(MailDeliveryFailure).to receive(:report)
+
+      result = described_class.deliver(cooks, mailer: 'reconciliation_notify_email') { |cook| messages[cook] }
+
+      expect(result).to eq(described_class::Result.new(sent: 3, failed: 0, skipped: 0))
+      expect(Net::SMTP).not_to have_received(:new)
+      expect(MailDeliveryFailure).not_to have_received(:report)
+    end
+
     it 'counts every person past the cap as skipped, not only the first' do
       stub_const('PacedDelivery::CAP', 1)
       messages = cooks.index_with { |cook| message_for(cook) }
@@ -107,6 +133,37 @@ RSpec.describe PacedDelivery do
 
       expect(result).to eq(described_class::Result.new(sent: 1, failed: 0, skipped: 0))
       expect(smtp).to have_received(:start).once.with(nil, nil, nil, nil)
+    end
+  end
+
+  # A setting that is there but false or nil is not a setting to apply.
+  # By default Net::SMTP waits 30 seconds to connect and 60 to read; a nil
+  # timeout would make it wait with no limit.
+  describe 'over smtp with STARTTLS off and empty timeouts' do
+    let(:session) { instance_double(Net::SMTP, send_message: nil) }
+    let(:smtp) { instance_double(Net::SMTP, :enable_starttls_auto => nil, :open_timeout= => nil, :read_timeout= => nil) }
+
+    before do
+      allow(ActionMailer::Base).to receive_messages(
+        delivery_method: :smtp,
+        smtp_settings: { address: 'smtp.example.com', port: 25, enable_starttls_auto: false,
+                         open_timeout: nil, read_timeout: nil }
+      )
+      allow(Net::SMTP).to receive(:new).and_return(smtp)
+      allow(smtp).to receive(:start).and_yield(session)
+      allow(described_class).to receive(:pause)
+    end
+
+    it 'does not turn STARTTLS on or set a timeout' do
+      cook = cooks.first.tap { |c| c.reset_password_token = 't' }
+      described_class.deliver([cook], mailer: 'x') do
+        ActionMailer::MessageDelivery.new(ResidentMailer, :password_reset_email, cook)
+      end
+
+      expect(smtp).not_to have_received(:enable_starttls_auto)
+      expect(smtp).not_to have_received(:open_timeout=)
+      expect(smtp).not_to have_received(:read_timeout=)
+      expect(session).to have_received(:send_message).once
     end
   end
 
