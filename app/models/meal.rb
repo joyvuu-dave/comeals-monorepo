@@ -280,12 +280,7 @@ class Meal < ApplicationRecord
     attributes['resident_id'].blank?
   }
 
-  # NULL cap means "no cap". No more Float::INFINITY.
-  sig { returns(T.nilable(BigDecimal)) }
-  def cap
-    read_attribute(:cap)
-  end
-
+  # A NULL cap means "no cap".
   sig { returns(T::Boolean) }
   def capped?
     cap.present?
@@ -478,9 +473,12 @@ class Meal < ApplicationRecord
     update!(cancelled_at: nil) if cancelled?
   end
 
+  # The save that cancels the dinner: no cancelled_at in the database, and
+  # one now. The trigger comeals_protect_settled_meal asks the same two
+  # things.
   sig { returns(T::Boolean) }
   def cancelling?
-    will_save_change_to_cancelled_at? && cancelled_at_in_database.nil? && !cancelled_at.nil?
+    cancelled_at_in_database.nil? && !cancelled_at.nil?
   end
 
   # Read from the bills table, not the loaded bills: a cook may have

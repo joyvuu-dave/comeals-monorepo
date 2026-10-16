@@ -48,14 +48,12 @@ module CancelledDinnerFreeze
 
   private
 
-  # A row with no meal is refused by belongs_to; nil here is that case.
+  # The meal the row has now, and the one it has in the database: the
+  # same meal unless the row moves. A nil matches no meal (Rails reads it
+  # as IS NULL): a row with no meal is refused by belongs_to, and a new
+  # row has no meal in the database.
   sig { returns(T::Boolean) }
   def either_dinner_cancelled?
-    ids = [meal_id]
-    ids << meal_id_in_database if will_save_change_to_meal_id?
-    ids.compact!
-    return false if ids.empty?
-
-    Meal.where(id: ids).where.not(cancelled_at: nil).exists?
+    Meal.where(id: [meal_id, meal_id_in_database]).where.not(cancelled_at: nil).exists?
   end
 end
