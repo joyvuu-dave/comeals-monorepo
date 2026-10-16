@@ -148,6 +148,30 @@ RSpec.describe 'POST /api/v1/reconciliations' do
     expect(response.parsed_body[:message]).to eq('cutoff must be a date, YYYY-MM-DD')
   end
 
+  # RED ON PURPOSE (2026-10-16): this example fails, and shows a bug.
+  # public/api.md says the cutoff is YYYY-MM-DD. Date.iso8601 also takes
+  # "--10-12", with no year, and fills the year in from the machine's own
+  # clock, not from the community's today; and "2026-10", with no day,
+  # which it reads as the 1st. On October 20, 2026, "2026-10" settles the
+  # dinner of September 30, and a settlement has no undo.
+  describe 'a cutoff with no year or no day' do
+    include ActiveSupport::Testing::TimeHelpers
+
+    it 'is refused, and nothing is settled', :aggregate_failures do
+      travel_to Time.zone.local(2026, 10, 20, 12, 0) do
+        meal = settleable_meal(Date.new(2026, 9, 30))
+
+        %w[--10-12 2026-10].each do |cutoff|
+          settle(cutoff)
+
+          expect(response).to have_http_status(:bad_request), "cutoff #{cutoff}"
+          expect(response.parsed_body[:message]).to eq('cutoff must be a date, YYYY-MM-DD'), "cutoff #{cutoff}"
+        end
+        expect(meal.reload.reconciliation_id).to be_nil
+      end
+    end
+  end
+
   it 'answers 409 when another settlement got there first' do
     settleable_meal
     allow(Settlement).to receive(:settle!).and_raise(Settlement::Contested,

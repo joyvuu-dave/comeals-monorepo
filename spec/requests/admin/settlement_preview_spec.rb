@@ -282,6 +282,18 @@ RSpec.describe 'Admin settlement preview' do
       expect(response).to redirect_to('/reconciliations/new')
       expect(flash[:alert]).to eq('Pick a cutoff date first.')
     end
+
+    # RED ON PURPOSE (2026-10-16): this example fails, and shows a bug.
+    # Date.iso8601 takes "--10-12", with no year, and fills the year in
+    # from the machine's own clock, not from the community's today. The
+    # preview page links here with the cutoff written as YYYY-MM-DD, so
+    # anything else did not come from it.
+    it 'sends a cutoff with no year back to the new form' do
+      get '/reconciliations/mark_no_cost?reconciliation[end_date]=--10-12'
+
+      expect(response).to redirect_to('/reconciliations/new')
+      expect(flash[:alert]).to eq('Pick a cutoff date first.')
+    end
   end
 
   describe 'who may use them' do
