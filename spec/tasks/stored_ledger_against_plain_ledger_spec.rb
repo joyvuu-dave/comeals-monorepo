@@ -90,6 +90,15 @@ RSpec.describe 'the stored ledger against the plain ledger', type: :task do
     plain = rows.map { |meal| RandomLedger.plain(meal) }
     expected = PlainLedger.balances(plain, resident_ids)
     label = "seed #{seed}#{' small' if cents_max < 999_999}"
+    # A seed whose ledger moves no money checks nothing: every balance is
+    # zero on both sides, and when no meal has a bill the settlement is
+    # refused with "No unreconciled meals" before anything is compared
+    # (seed 28 is one). The seeds below are picked by hand, and the oracle
+    # is not asked which meals settle (see the top of this file), so such
+    # a seed fails here and says why, instead of passing with nothing
+    # compared or stopping at the settlement's refusal.
+    nonzero = expected.values.reject(&:zero?)
+    expect(nonzero).not_to be_empty, "#{label} moves no money, so it checks nothing. Pick another seed."
 
     recalculate!
     expect_close(ResidentBalance.pluck(:resident_id, :amount).to_h, expected, "#{label}, running balance of")
