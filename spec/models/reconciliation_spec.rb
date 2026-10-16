@@ -426,6 +426,17 @@ RSpec.describe Reconciliation do
         .to raise_error(/books do not balance/)
     end
 
+    # The second guard refuses only when a penny would have no balance to
+    # go to. One penny and one balance that lost something is enough, and
+    # the penny goes there.
+    it 'rounds, with the input guard off, when there are exactly as many candidates as pennies' do
+      allow(Settlement).to receive(:assert_balanced_input!)
+      unbalanced = { 1 => BigDecimal('0.01'), 2 => BigDecimal('-0.005') }
+
+      expect(Settlement.allocate_to_cents(unbalanced, reconciliation_id: reconciliation.id))
+        .to eq(1 => BigDecimal('0.01'), 2 => BigDecimal('-0.01'))
+    end
+
     it 'raises a named error when residual pennies exhaust the award candidates' do
       allow(Settlement).to receive(:assert_balanced_input!)
       unbalanced = { 1 => BigDecimal('-0.055') }
