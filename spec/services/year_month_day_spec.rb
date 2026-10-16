@@ -46,6 +46,17 @@ RSpec.describe YearMonthDay do
       expect_refused(%w[2026/10/16 2026.10.16 2026_10_16])
     end
 
+    # PostgreSQL counts days in the Gregorian calendar, before 1582 too.
+    # Ruby's Date counts a day before October 15, 1582 in the Julian
+    # calendar unless told otherwise (StorableTime says more). So
+    # February 29, 1500, a Julian leap day, reached the database as a day
+    # it does not have, and the settlement cutoff answered 500.
+    it 'reads a day in the Gregorian calendar, as PostgreSQL does, before 1582 too', :aggregate_failures do
+      expect_refused(%w[1500-02-29])
+      expect(described_class.parse('1582-10-10')).to eq(Date.new(1582, 10, 10, Date::GREGORIAN))
+      expect(described_class.parse('1500-03-01')).to eq(Date.new(1500, 3, 1, Date::GREGORIAN))
+    end
+
     it 'refuses digits that are not ASCII' do
       expect_refused(['２０２６-１０-１６'])
     end

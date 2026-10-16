@@ -144,6 +144,17 @@ RSpec.describe 'Admin settlement preview, marking dinners cancelled' do
       expect(response).to redirect_to('/reconciliations/new')
       expect(flash[:alert]).to eq('Pick a cutoff date first.')
     end
+
+    # RED ON PURPOSE (2026-10-16): this example fails, and shows a bug.
+    # February 29, 1500 is a Julian leap day that PostgreSQL, which reads
+    # days in the Gregorian calendar, does not have. The page answered
+    # with an error.
+    it 'sends a day only the Julian calendar has back to the new form' do
+      get '/reconciliations/mark_cancelled?reconciliation[end_date]=1500-02-29'
+
+      expect(response).to redirect_to('/reconciliations/new')
+      expect(flash[:alert]).to eq('Pick a cutoff date first.')
+    end
   end
 
   describe 'who may use it' do
