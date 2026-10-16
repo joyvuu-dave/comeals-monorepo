@@ -33,17 +33,18 @@ RSpec.describe LiveUpdate do
     # reaches mutant's time limit. The limit here makes that a failure in
     # seconds; the real walk takes well under a millisecond. It is the
     # first example of the group because mutant stops at the first
-    # example that fails, and the examples below would hang first.
+    # example that fails, and the examples below would hang first. The
+    # batch is set by hand and never flushed: a flush of the millions of
+    # days a runaway loop notes would itself run past mutant's limit.
     it 'walks the months from the first day to the last, and stops' do
-      calls = pushed do
-        described_class.batch do
-          Timeout.timeout(2) { described_class.calendar_range(Date.new(2026, 2, 10), Date.new(2026, 3, 20)) }
-        end
-      end
+      batch = described_class::Batch.new
+      Current.live_update_manual_batch = batch
 
-      # January too: February 1 is on January's six-week grid.
-      expect(calendar_channels(calls))
-        .to eq(%w[2026-1 2026-2 2026-3].map { |m| "community-#{community.id}-calendar-#{m}" })
+      Timeout.timeout(2) { described_class.calendar_range(Date.new(2026, 2, 10), Date.new(2026, 3, 20)) }
+
+      expect(batch.dates).to eq(Set[Date.new(2026, 2, 1), Date.new(2026, 3, 1), Date.new(2026, 3, 20)])
+    ensure
+      Current.live_update_manual_batch = nil
     end
 
     it 'notes nothing for a range with no start' do
