@@ -3563,3 +3563,114 @@ Noise, left (69 of the 124 before; 70 in run 5 with the release default):
 - `EnsureRotationsJob#run` (8): the `if` around the log line. The log
   line itself is ignored (`ignore_patterns`), so its condition only
   decides whether a line nobody checks is written.
+
+### 2026-10-16, how a request is signed in
+
+Run on `JwtAuth*` (the resident tokens), `ApiController*` (finding the
+resident from a token, the community zone around an API request, the
+start and end date parts), `ApplicationController*` (the admin
+read-only token, the admin zone, the admin 404 page) and
+`IdempotencyKeyHeader*`. 35 subjects, four pieces of four workers on
+GitHub. Run 1 is main before this branch; run 2 is this branch. A run
+of this branch before its rebase on main (38932505628) had the same
+numbers as run 2.
+
+| Run                                     | Mutations | Killed | Alive | Timeouts | Time   |
+| --------------------------------------- | --------- | ------ | ----- | -------- | ------ |
+| 1, main (GitHub run 38925175528)        | 1,321     | 1,242  | 79    | 0        | 52 min |
+| 2, this branch (GitHub run 38945964961) | 1,321     | 1,281  | 40    | 0        | 60 min |
+
+Run 1's 79, by kind.
+
+Missing examples (39), each with an example now:
+
+- `JwtAuth.secret` (6): another name or length for the key. A test
+  makes a token and reads it back in one process, with the same key,
+  so any key passed. But a phone or a browser keeps its token with no
+  end date, and a change to the key would sign every resident out at
+  once. `jwt_auth_spec.rb` now keeps one token, made on 2026-10-16 with
+  a fixed `secret_key_base`, and expects it to still sign its resident
+  in. The test environment's own `secret_key_base` is made at random
+  for each checkout (`tmp/local_secret.txt`), so the example sets one.
+  `.gitleaks.toml` allows that one token, since its secret is made up.
+- `JwtAuth.decode` (3): `algorithm:` dropped, renamed or nil. ruby-jwt
+  3.3 then takes the list in its own settings, which is HS256 alone,
+  the same as ours. The new example changes that list to HS512 and
+  none, and expects HS256 to be accepted and the other two refused.
+- `JwtAuth.authenticate` (1): `.fetch` for `[]` on the `resident_id`
+  claim. A token with no `resident_id` is refused now in an example;
+  with `fetch` it raised.
+- `ApiController#resolve_current_session` (9): the guard that reads
+  the session once per request, removed or never true, or its flag not
+  set (6); and a key looked up for no token or an empty one (3). The
+  examples: a request that asks who is signed in three times reads the
+  token once, and a request with no token, or an empty one, looks for
+  no key.
+- `ApiController#current_api_key` (2): its own read of the session.
+  Its one caller runs after `authenticate`, which has read it already.
+  An example now calls it first, on a new controller.
+- `ApiController#signed_in_resident_api?` (1): the resident instead of
+  true. An example now expects true or false.
+- `ApiController#set_community_timezone` (13): the check for a token
+  made always true or dropped (9), and the check that the column names
+  a zone dropped or made always true (4). The examples: a public request
+  with no token, or an empty one, reads no session; and a signed-in
+  request is still answered, in the app zone, when the column holds a
+  name that is no zone (written past the model, which only saves a
+  supported zone). On 2026-09-27 the token check was left as redundant
+  code; the first example is what it is for.
+- `ApplicationController#not_found` (2): `layout: false` dropped or
+  renamed. The app has no application layout, so nothing was put
+  around the page either way. The example adds a layout for itself and
+  expects `public/404.html` as it is.
+- `ApplicationController#current_admin_user_custom` (1): `.to_str` for
+  `.to_s`, which raises `NoMethodError` when `READ_ONLY_ADMIN_ID` is not
+  set. An example now expects `RecordNotFound`, a 404.
+- `IdempotencyKeyHeader#read` (1): `force_encoding(Encoding::UTF_8)`
+  dropped. On 2026-10-08 this was called noise, since the key is ASCII
+  either way. Its encoding is still what `key` gives back, so an example
+  now checks it.
+
+Left (40), the 40 of run 2, changes no caller can see:
+
+- The algorithm in `JwtAuth.encode` (1). `JWT.encode` signs with HS256
+  when no algorithm is named. That is a default argument, not a
+  setting, so no example can change it the way the decode example
+  does. If a gem update changed it, the `.encode` examples would fail:
+  they read the token back, and decode accepts only HS256.
+- The blank-token return in `JwtAuth.authenticate` (6). `JWT.decode`
+  refuses nil and a blank string with a `DecodeError`, which `decode`
+  rescues. Kept, so a request with no token is refused without raising
+  and rescuing an error.
+- `Time.at` for `Time.zone.at` in `JwtAuth.authenticate` (1): two
+  instants compare the same in any zone.
+- The memos in `ApiController` (11). In `bearer_token_from_header`, the
+  `defined?` guard removed, never true, written as
+  `instance_variable_defined?`, or its `return` dropped (7): the header
+  gives the same token when it is read twice. In
+  `resolve_current_session` (4): `instance_variable_defined?` for
+  `defined?`, and the flag set to false, which `defined?` still sees;
+  `@current_api_key = nil`, which is nil already, since the session is
+  read once; and the `else nil` dropped, since an `if` with no `else`
+  gives nil.
+- In `ApiController#set_community_timezone` (2): `.present?` dropped on
+  the header's token, which is nil or text with no spaces; and
+  `.presence` dropped on the zone, since `ActiveSupport::TimeZone['']`
+  is nil too.
+- In `ApiController#start_end_times` (10), the kinds of 2026-09-28: a
+  month of 0 or 13, a day of 0 or 32, and no upper end, all refused by
+  `Date.valid_date?` anyway (8); and the `end_date: nil` key of an
+  all-day event dropped or renamed (2), since the callers read
+  `times[:end_date]`, nil either way.
+- `instance_of?` for `is_a?` in `ApiController#parse_start_end_params`
+  (1): the parser answers a Hash or one of its two message constants,
+  never a subclass of String.
+- `ApplicationController#use_community_timezone`, the return for no
+  zone (6). `Time.use_zone(nil)` keeps the app zone, so the method does
+  the same without it. Kept, the way Rails' own docs for `use_zone`
+  write it, so the code says what happens before the community exists.
+- `ApplicationController#current_admin_user_custom`, `.to_s` dropped
+  (1): `AdminUser.find(nil)` and `AdminUser.find('')` both raise
+  `RecordNotFound`.
+- `ApplicationController#read_only_admin_token?`, `params.fetch(:token)`
+  (1): it runs only after `present?` has found the key.
