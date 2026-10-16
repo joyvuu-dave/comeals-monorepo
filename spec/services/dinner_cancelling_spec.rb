@@ -76,6 +76,17 @@ RSpec.describe DinnerCancelling do
     expect(result.left_alone.map(&:meal)).to eq([cooked])
   end
 
+  it 'leaves a dinner that is not on the list as it is, though nobody cooked it' do
+    listed = dinner(latest - 1)
+    not_listed = dinner
+
+    result = described_class.call(meal_ids: [listed.id])
+
+    expect(result.cancelled).to eq([listed])
+    expect(result.left_alone).to eq([])
+    expect(not_listed.reload.cancelled?).to be(false)
+  end
+
   it 'counts a listed dinner that was deleted, once, however often it is listed' do
     deleted = create(:meal, community: community, date: latest - 1)
     deleted_id = deleted.id

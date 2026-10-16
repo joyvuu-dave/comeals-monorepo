@@ -86,4 +86,45 @@ RSpec.describe 'marking dinners cancelled, against a cook signing up at the same
     signing_up&.join
     observer&.close
   end
+
+  # The other order. The cancelling holds the meal's lock from its read
+  # of the cooks to its commit, so a cook who signs up in between waits,
+  # and then finds the dinner cancelled. Without one transaction around
+  # the whole of it, the lock would end with the read, and the dinner
+  # would be cancelled with a cook signed up.
+  it 'makes a cook who signs up while it runs wait, and then the dinner is cancelled' do
+    observer = open_session
+    read = Queue.new
+    go = Queue.new
+    allow(DinnerCancelling).to receive(:reason_to_leave).and_wrap_original do |original, *args|
+      read << true
+      go.pop
+      original.call(*args)
+    end
+    cancelling = Thread.new do
+      Thread.current.report_on_exception = false
+      ActiveRecord::Base.connection_pool.with_connection { DinnerCancelling.call(meal_ids: [meal.id]) }
+    end
+    read.pop
+
+    signing_up = Thread.new do
+      Thread.current.report_on_exception = false
+      ActiveRecord::Base.connection_pool.with_connection { Bill.create!(meal: meal, resident: cook, amount: 0) }
+    end
+    # The cook's save locks the meal first (LocksItsMealFirst).
+    waited = wait_for_blocked_session(observer, 'FOR KEY SHARE')
+    go << true
+    result = cancelling.value
+
+    expect(waited).to be(true)
+    expect(result.cancelled).to eq([meal])
+    expect { signing_up.join }.to raise_error(ActiveRecord::ActiveRecordError)
+    expect(meal.reload.cancelled?).to be(true)
+    expect(meal.bills).to be_empty
+  ensure
+    go&.push(true)
+    cancelling&.join
+    signing_up&.join rescue nil # rubocop:disable Style/RescueModifier -- its error was checked above
+    observer&.close
+  end
 end
