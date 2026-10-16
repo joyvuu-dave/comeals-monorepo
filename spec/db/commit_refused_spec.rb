@@ -74,6 +74,9 @@ RSpec.describe 'a COMMIT that PostgreSQL refuses' do
 
   it 'is tried again by RetryOnConflict, and the next try saves' do
     allow(Rails.error).to receive(:report).and_call_original
+    # A base delay of 0 is a wait of 0 seconds. A wait with no number
+    # would sleep with no end.
+    allow(RetryOnConflict).to receive(:sleep).with(0.0)
     other = open_session
     tries = 0
 
@@ -89,6 +92,31 @@ RSpec.describe 'a COMMIT that PostgreSQL refuses' do
     expect(Meal.where(id: [first.id, second.id]).order(:id).pluck(:description)).to eq(%w[other app])
     expect(Rails.error).to have_received(:report)
       .with(an_instance_of(ActiveRecord::SerializationFailure), hash_including(handled: true)).once
+  ensure
+    other&.close
+  end
+
+  # Mutant runs this file before the other examples of RetryOnConflict,
+  # and stops at the first one that fails. A change that never gives up
+  # would run this block until mutant's time limit, so the block raises a
+  # plain error, which is not retried, on one try too many.
+  it 'is given up after the tries RetryOnConflict allows when every COMMIT is refused, and raises the conflict' do
+    allow(Rails.error).to receive(:report)
+    allow(RetryOnConflict).to receive(:sleep).with(0.0)
+    other = open_session
+    tries = 0
+
+    expect do
+      RetryOnConflict.call(base_delay: 0.0) do
+        tries += 1
+        raise "tried #{tries} times" if tries > RetryOnConflict::MAX_ATTEMPTS
+
+        write_second(other, cross: true)
+      end
+    end.to raise_error(ActiveRecord::SerializationFailure)
+
+    expect(tries).to eq(RetryOnConflict::MAX_ATTEMPTS)
+    expect(Meal.where(id: [first.id, second.id]).order(:id).pluck(:description)).to eq(%w[other second])
   ensure
     other&.close
   end
