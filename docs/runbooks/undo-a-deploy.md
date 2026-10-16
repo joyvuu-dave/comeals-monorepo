@@ -14,9 +14,14 @@ cancelled, which v613 does not know about.
 
 `bin/rollback-check <commit to go back to> <commit running now>` lists
 the migrations in between. The Rollback workflow runs it for you and
-refuses a code-only rollback when it finds any. So does the Deploy
-workflow's automatic rollback, which then leaves production as it is and
-fails the run.
+refuses a code-only rollback when it finds any, unless you give it a
+backup to restore first (below) or tick its `code_only_is_safe` input.
+`code_only_is_safe` rolls back only the code even though migrations ran:
+nothing is restored and nothing is lost. Tick it only after you have read
+each migration the check lists and know the old code runs on what it
+made, for example an index, or a table the old code never reads. The
+Deploy workflow's automatic rollback runs the same check. When it finds
+a migration, it leaves production as it is and fails the run.
 
 ## No migration: roll back the code
 
@@ -57,9 +62,23 @@ day of sign-ups and costs that nobody can type in again from memory.
    It turns maintenance mode on, captures a backup of the database as it
    is, restores the backup from step 1, rolls back the code, turns
    maintenance off, and runs the smoke test, then does the same
-   bookkeeping as a code-only rollback. Nobody can write while
-   maintenance is on, so no write reaches the restored database through
-   the new code.
+   bookkeeping as a code-only rollback. While maintenance is on, Heroku
+   answers every web request with the maintenance page, so nobody can
+   write through a page or the API.
+
+   Maintenance mode does not stop the background jobs. Solid Queue runs
+   inside the web dyno (`SOLID_QUEUE_IN_PUMA`), and the web dyno keeps
+   running under maintenance mode. So a job that starts between the
+   restore and the rollback runs the new code on the restored database.
+   The jobs that delete old Idempotency-Keys run every hour, at minutes
+   41 and 43, and the nightly jobs run at their times
+   (`config/recurring.yml`). The only thing that stops the jobs is
+   having no web dyno: `heroku ps:scale web=0 -a comeals-monorepo`
+   before the restore, and `heroku ps:scale web=1 -a comeals-monorepo`
+   after the rollback. The maintenance page still shows with no web
+   dyno. The workflow does not scale web to 0 today (#179). To stop the
+   jobs, do the restore and the rollback by hand, as in "If it stops
+   half way", with those two commands around them.
 
 3. If the deploy deleted Heroku Scheduler entries, add them back. The
    schedule moves to Solid Queue at the deploy after v613

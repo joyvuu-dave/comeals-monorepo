@@ -240,19 +240,27 @@ loud — typed confirmation, the same notification the pipeline sends,
 and a mark left behind (an auto-filed issue) so every use gets looked
 at afterward.
 
-**Manual rollbacks** (agreed 2026-08-10): production is downstream of
-main, so a raw `heroku rollback` is temporary by construction — the
-next Monday run would redeploy the same sha. `rollback.yml`
-(workflow_dispatch; inputs: target release, required one-line reason)
-does all three parts: Heroku rollback, then the read-only smoke and
-an `/api/v1/version` cross-check; edit the GitHub Releases so they
-tell the truth (loud "rolled back — reason" note on the bad one, the
-live-again one annotated as current); set `DEPLOY_HOLD` with the
-reason and file an issue. The hold clears when main is fixed —
-usually `git revert`, which is the durable rollback; Heroku rollback
-is only the mitigation. Caveat that belongs in the runbook: rolling
-back code does not roll back data the bad version wrote — that is a
-correcting-entries problem, not a deploy-tooling problem.
+**Manual rollbacks** (agreed 2026-08-10): production runs what main
+has, so a raw `heroku rollback` lasts only until the next Monday run,
+which would deploy the same sha again. `rollback.yml`
+(workflow_dispatch) takes a required one-line reason, the release to go
+back to (empty means the one before the current one), a backup to
+restore first, `code_only_is_safe`, and the app (production or
+staging). It stops before it changes anything when the target release
+runs the commit production runs now, and when `bin/rollback-check`
+finds a migration since the target and it has neither a backup nor
+`code_only_is_safe`. With a backup, it turns maintenance mode on,
+captures a backup of the database as it is, and restores the given
+one. Then it runs `heroku rollback`, checks that the running commit
+changed, turns maintenance off, and runs the read-only smoke. On
+production it then sets `DEPLOY_HOLD` with the reason, adds a "rolled
+back — reason" note to the top of the GitHub release that points at
+the bad commit, and files an issue. The hold clears when main is
+fixed, usually with `git revert`. Fixing main is what keeps the bad
+change out of production; the Heroku rollback only takes it out until
+the next deploy. Rolling back the code does not undo the data the bad
+version wrote. That needs correcting entries, and the issue the
+workflow files has a box for it. The steps: `docs/runbooks/undo-a-deploy.md`.
 
 Secrets: `HEROKU_API_KEY` and `ANTHROPIC_API_KEY` as environment
 secrets in a GitHub environment named `production`, which only the
