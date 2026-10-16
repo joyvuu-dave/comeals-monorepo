@@ -30,6 +30,16 @@ RSpec.describe LargestRemainderSplit do
       expect(described_class.call(2, [1, 1, 1])).to eq([1, 1, 0])
     end
 
+    # Ruby does not promise to keep tied items in order when it sorts. On
+    # macOS, Ruby's own sort moves the last of eight tied items to the
+    # front, so without the tie-break by position the last share gets a
+    # unit. On Linux, Ruby uses the C library's sort, which keeps ties in
+    # order, so there this example passes with or without the tie-break.
+    it 'breaks a tie by position among many tied shares, earlier first' do
+      expect(described_class.call(3, [1] * 8)).to eq([1, 1, 1, 0, 0, 0, 0, 0])
+      expect(described_class.call(83, [10] * 12)).to eq(([7] * 11) + [6])
+    end
+
     it 'ranks by what each share lost, not by its weight' do
       # 10 across weights 1 and 3: exact shares 2.5 and 7.5, both lose a
       # half, so the tie goes to the first. 10 across 1 and 2: exact 3.33
