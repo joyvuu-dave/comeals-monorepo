@@ -6,7 +6,7 @@ require 'rake'
 RSpec.describe 'community:create_rotations' do
   include ActiveSupport::Testing::TimeHelpers
 
-  include_context 'with at most 30 rotations made'
+  include_context 'with a stop for a rotation loop that never ends'
 
   before(:all) do
     RakeTasks.ensure_loaded
