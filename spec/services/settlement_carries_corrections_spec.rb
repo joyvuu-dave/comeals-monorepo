@@ -223,5 +223,20 @@ RSpec.describe Settlement do
       expect(MealCharge.for_reconciliation(second)).to be_empty
       expect(findings).to eq([])
     end
+
+    # A settlement that carries a correction and settles no dinner has no
+    # meal lines, only the correction's lines. The line item check still
+    # compares those with its balances.
+    it 'checks the line items of a settlement that carries a correction and settles no dinner' do
+      second = settle!(cutoff: latest)
+      connection = ActiveRecord::Base.connection
+      connection.execute("SELECT set_config('comeals.allow_settled_writes', 'on', true)")
+      second.reconciliation_balances.where(resident: cook).update_all(amount: BigDecimal('-9'))
+      second.reconciliation_balances.where(resident: eater).update_all(amount: BigDecimal('9'))
+      connection.execute("SELECT set_config('comeals.allow_settled_writes', '', true)")
+
+      expect(findings.select { |detail| detail['reconciliation_id'] == second.id }.pluck('check'))
+        .to contain_exactly('recompute', 'line_items')
+    end
   end
 end
