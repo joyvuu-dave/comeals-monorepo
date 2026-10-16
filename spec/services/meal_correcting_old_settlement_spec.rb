@@ -55,6 +55,23 @@ RSpec.describe MealCorrecting do
     expect(LedgerVerification.call).to be_passed
   end
 
+  # In production every settlement after the old ones has line items. The
+  # question is whether this dinner's own settlement has them, not
+  # whether any settlement does.
+  it 'corrects such a dinner when a later settlement has line items' do
+    later = create(:meal, community: community, date: latest)
+    create(:bill, meal: later, resident: cook, community: community, amount: BigDecimal('12'))
+    create(:meal_resident, meal: later, resident: eater, community: community)
+    expect(MealCharge.for_reconciliation(settle!(cutoff: latest))).to exist
+
+    correction = described_class.save!(meal, by: admin, reason: 'Typed $30 for $20') do |edits|
+      edits.cost(cook, amount: BigDecimal('20'), no_cost: false)
+    end
+
+    expect(correction.lines.pluck(:resident_id, :amount).to_h)
+      .to eq(cook.id => BigDecimal('-10'), eater.id => BigDecimal('10'))
+  end
+
   # A change no correction explains, made with the repair bypass: the
   # nightly check's recompute check reports it, so the correction is
   # refused, as for a dinner of any other settlement.

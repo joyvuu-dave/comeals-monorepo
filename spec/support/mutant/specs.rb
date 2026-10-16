@@ -82,6 +82,9 @@ MUTANT_SPEC_ROWS = {
   # A dinner of a settlement with no line items: the refusal asks the
   # nightly check about the whole settlement instead.
   'spec/services/meal_correcting_old_settlement_spec.rb' => %w[MealCorrecting LedgerVerification],
+  # The only spec where a correction's lock is refused as a conflict, so
+  # the only one that fails when its RetryOnConflict is taken away.
+  'spec/db/meal_correcting_retry_spec.rb' => %w[MealCorrecting],
   'spec/services/settlement_carries_corrections_spec.rb' =>
     %w[Settlement Reconciliation BalanceRecalculation LedgerVerification SettledDinnerDifference MealCorrection],
   'spec/models/meal_correction_spec.rb' => %w[MealCorrection MealCorrectionLine AppendOnly],

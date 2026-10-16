@@ -70,7 +70,8 @@ RSpec.describe Settlement do
         MealCorrecting.save!(cancelled.reload, by: admin, reason: 'It happened after all') do |edits|
           edits.cost(cid, amount: BigDecimal('10'), no_cost: false)
         end
-      end.to raise_error(MealCorrecting::Cancelled, /was cancelled, so it charged nobody/)
+      end.to raise_error(MealCorrecting::Cancelled,
+                         "Meal #{cancelled.id} was cancelled, so it charged nobody and has nothing to correct.")
     end
 
     it 'leaves its blank cost alone when the No cost button is pressed' do

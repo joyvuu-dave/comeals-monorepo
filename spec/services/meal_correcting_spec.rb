@@ -130,6 +130,98 @@ RSpec.describe MealCorrecting do
       expect(correction.edits.sole['to']).to eq('amount' => '0.0', 'no_cost' => true)
       expect(correction.lines).to be_empty
     end
+
+    it 'changes a cost to No cost, and the row says No cost' do
+      correction = save! { |edits| edits.cost(cook, amount: BigDecimal('0'), no_cost: true) }
+
+      expect(meal.bills.sole).to have_attributes(amount: BigDecimal('0'), no_cost: true)
+      expect(correction.edits.sole['to']).to eq('amount' => '0.0', 'no_cost' => true)
+      expect(lines_of(correction)).to eq(cook.id => BigDecimal('-30'), eater.id => BigDecimal('30'))
+    end
+
+    # The admin form loads the dinner when the request starts. A settlement
+    # can commit after that, in another process. The correction reads the
+    # dinner again when it takes the dinner's lock, so it works from the
+    # row as it is now, not from the copy it was given.
+    it 'reads the dinner again under its lock, so a copy loaded before the settlement still corrects' do
+      dinner = create(:meal, community: community, date: latest - 1)
+      create(:bill, meal: dinner, resident: cook, community: community, amount: BigDecimal('30'))
+      create(:meal_resident, meal: dinner, resident: eater, community: community)
+      loaded_before = Meal.find(dinner.id)
+      settle!(cutoff: latest)
+
+      correction = described_class.save!(loaded_before, by: admin, reason: 'Typed $30 for $20') do |edits|
+        edits.cost(cook, amount: BigDecimal('20'), no_cost: false)
+      end
+
+      expect(lines_of(correction)).to eq(cook.id => BigDecimal('-10'), eater.id => BigDecimal('10'))
+    end
+
+    # A settled dinner is usually closed too. A correction changes its
+    # sign-ups and guests all the same (admin_correction). Each person here
+    # also has a row on another dinner, made first, and the row each edit
+    # removes is not the first row on this dinner. So an edit that found
+    # its row by the person alone, or by the dinner alone, would change the
+    # wrong row.
+    it 'corrects the sign-ups and guests of a closed dinner, and only that dinner\'s rows' do
+      kid = create(:resident, community: community, unit: unit, name: 'Kid')
+      leaver = create(:resident, community: community, unit: unit, name: 'Leaver')
+      another = create(:meal, community: community, date: community.today + 3)
+      [kid, leaver].each { |person| create(:meal_resident, meal: another, resident: person, community: community) }
+      dinner = create(:meal, community: community, date: latest - 1)
+      create(:bill, meal: dinner, resident: cook, community: community, amount: BigDecimal('36'))
+      [eater, kid, leaver].each do |person|
+        create(:meal_resident, meal: dinner, resident: person, community: community)
+      end
+      create(:guest, meal: dinner, resident: eater, multiplier: 2)
+      gone = create(:guest, meal: dinner, resident: eater, multiplier: 1)
+      dinner.update!(closed: true)
+      settle!(cutoff: latest)
+      kid.update!(birthday: dinner.date - 8.years, kind: 'child')
+
+      correction = described_class.save!(dinner.reload, by: admin, reason: 'Leaver was away') do |edits|
+        edits.remove_eater(leaver)
+        edits.remove_guest(gone)
+        edits.reprice_eater(kid)
+        edits.add_eater(other)
+        edits.add_guest(other, multiplier: 1)
+      end
+
+      expect(dinner.meal_residents.order(:resident_id).pluck(:resident_id, :multiplier))
+        .to eq([[eater.id, 2], [kid.id, 1], [other.id, 2]])
+      expect(dinner.guests.order(:resident_id).pluck(:resident_id, :multiplier)).to eq([[eater.id, 2], [other.id, 1]])
+      expect(another.meal_residents.order(:resident_id).pluck(:resident_id)).to eq([kid.id, leaver.id])
+      expect(correction.edits.pluck('what', 'resident_id', 'from', 'to'))
+        .to eq([['eater', leaver.id, 2, nil], ['guest', eater.id, 1, nil], ['eater', kid.id, 2, 1],
+                ['eater', other.id, nil, 2], ['guest', other.id, nil, 1]])
+      # $36 over 9 units ($4 each) before, over 8 units ($4.50 each) after.
+      expect(lines_of(correction)).to eq(eater.id => BigDecimal('2'), kid.id => BigDecimal('3.5'),
+                                         leaver.id => BigDecimal('8'), other.id => BigDecimal('-13.5'))
+    end
+
+    # The same for costs: each cook also cooked another dinner, made first,
+    # and the cook removed is not the first cook on this dinner.
+    it 'changes and removes the costs of this dinner only' do
+      helper = create(:resident, community: community, unit: unit, name: 'Helper')
+      another = create(:meal, community: community, date: community.today + 3)
+      create(:bill, meal: another, resident: helper, community: community, amount: BigDecimal('10'))
+      dinner = create(:meal, community: community, date: latest - 1)
+      create(:bill, meal: dinner, resident: cook, community: community, amount: BigDecimal('30'))
+      create(:bill, meal: dinner, resident: helper, community: community, amount: BigDecimal('6'))
+      create(:meal_resident, meal: dinner, resident: eater, community: community)
+      settle!(cutoff: latest)
+
+      correction = described_class.save!(dinner.reload, by: admin, reason: 'Helper bought nothing') do |edits|
+        edits.remove_cook(helper)
+        edits.cost(cook, amount: BigDecimal('24'), no_cost: false)
+      end
+
+      expect(dinner.bills.pluck(:resident_id, :amount)).to eq([[cook.id, BigDecimal('24')]])
+      expect(another.bills.pluck(:resident_id, :amount)).to eq([[helper.id, BigDecimal('10')]])
+      expect(meal.bills.pluck(:resident_id, :amount)).to eq([[cook.id, BigDecimal('30')]])
+      expect(lines_of(correction)).to eq(cook.id => BigDecimal('-6'), helper.id => BigDecimal('-6'),
+                                         eater.id => BigDecimal('12'))
+    end
   end
 
   describe 'what it refuses' do
@@ -138,7 +230,8 @@ RSpec.describe MealCorrecting do
 
       expect do
         described_class.save!(open, by: admin, reason: 'x') { |edits| edits.add_eater(eater) }
-      end.to raise_error(described_class::NotSettled)
+      end.to raise_error(described_class::NotSettled,
+                         "Meal #{open.id} is not settled. An open dinner is changed directly.")
       expect(MealCorrection.count).to eq(0)
       expect(open.meal_residents).to be_empty
     end
@@ -154,8 +247,14 @@ RSpec.describe MealCorrecting do
     end
 
     it 'refuses a blank reason before it changes any row' do
-      expect { save!(reason: ' ') { |edits| edits.cost(cook, amount: BigDecimal('20'), no_cost: false) } }
-        .to raise_error(ActiveRecord::RecordInvalid, /Reason can't be blank/)
+      edited = false
+      expect do
+        save!(reason: ' ') do |edits|
+          edited = true
+          edits.cost(cook, amount: BigDecimal('20'), no_cost: false)
+        end
+      end.to raise_error(ActiveRecord::RecordInvalid, /Reason can't be blank/)
+      expect(edited).to be(false)
       expect(meal.bills.sole.amount).to eq(BigDecimal('30'))
     end
 
@@ -167,6 +266,31 @@ RSpec.describe MealCorrecting do
         end
       end.to raise_error(ActiveRecord::RecordInvalid, /must be whole cents/)
       expect(meal.meal_residents.pluck(:resident_id)).to eq([eater.id])
+      expect(MealCorrection.count).to eq(0)
+    end
+
+    # The correction runs in a savepoint of its own. A caller that has a
+    # transaction open, and goes on after the refusal, keeps none of the
+    # correction's edits either.
+    it 'keeps nothing of a refused correction inside a caller\'s transaction' do
+      ActiveRecord::Base.transaction do
+        expect do
+          save! do |edits|
+            edits.add_eater(other)
+            edits.cost(cook, amount: BigDecimal('20.001'), no_cost: false)
+          end
+        end.to raise_error(ActiveRecord::RecordInvalid, /must be whole cents/)
+        expect(meal.meal_residents.pluck(:resident_id)).to eq([eater.id])
+      end
+    end
+
+    # Rows are found on the dinner being corrected, so a row of another
+    # dinner is not one this correction can remove.
+    it 'refuses to remove a guest of another dinner, and leaves it there' do
+      guest = create(:guest, meal: create(:meal, community: community, date: community.today + 3), resident: other)
+
+      expect { save! { |edits| edits.remove_guest(guest) } }.to raise_error(ActiveRecord::RecordNotFound)
+      expect(Guest.exists?(guest.id)).to be(true)
       expect(MealCorrection.count).to eq(0)
     end
 
@@ -201,9 +325,23 @@ RSpec.describe MealCorrecting do
       result = described_class.preview(meal) { |edits| edits.cost(cook, amount: BigDecimal('20'), no_cost: false) }
 
       expect(result.changes).to eq(cook.id => BigDecimal('-10'), eater.id => BigDecimal('10'))
+      # The edits as the save records them, amounts written as text.
+      expect(result.edits).to eq([{ 'what' => 'cost', 'resident_id' => cook.id,
+                                    'from' => { 'amount' => '30.0', 'no_cost' => false },
+                                    'to' => { 'amount' => '20.0', 'no_cost' => false } }])
       expect(meal.bills.sole.amount).to eq(BigDecimal('30'))
       expect(MealCorrection.count).to eq(0)
       expect(meal.bills.sole.audits.where(action: 'update')).not_to exist
+    end
+
+    # The preview rolls back a savepoint of its own. A caller that has a
+    # transaction open keeps none of its edits either.
+    it 'saves nothing inside a caller\'s transaction' do
+      ActiveRecord::Base.transaction do
+        described_class.preview(meal) { |edits| edits.cost(cook, amount: BigDecimal('20'), no_cost: false) }
+
+        expect(meal.bills.sole.amount).to eq(BigDecimal('30'))
+      end
     end
 
     it 'saves what it showed when nothing changed in between' do
@@ -215,7 +353,12 @@ RSpec.describe MealCorrecting do
       expect(lines_of(correction)).to eq(result.changes)
     end
 
+    # Other is made before the preview. Made inside it, the preview's
+    # rollback would take the row back, and the save would add Other again
+    # under a new id: the edits would differ, and this would not show that
+    # a change in the amounts alone refuses the save.
     it 'refuses the save, and saves nothing, when the dinner changed after the preview' do
+      other
       edit = ->(edits) { edits.add_eater(other) }
       result = described_class.preview(meal, &edit)
       described_class.save!(meal, by: admin, reason: 'First') do |edits|
@@ -227,6 +370,44 @@ RSpec.describe MealCorrecting do
                         'The dinner changed after the preview was made, so nothing was saved.')
       expect(meal.meal_residents.pluck(:resident_id)).to eq([eater.id])
       expect(MealCorrection.count).to eq(1)
+    end
+  end
+
+  # The code the correction form sends with Save (Result#fingerprint). It
+  # is the same for the same edits and changes, and differs when either
+  # differs.
+  describe 'the code of a preview' do
+    let(:cost_edit) do
+      [{ 'what' => 'cost', 'resident_id' => 1, 'from' => { 'amount' => '30.0', 'no_cost' => false },
+         'to' => { 'amount' => '20.0', 'no_cost' => false } }]
+    end
+
+    def code(changes, edits: cost_edit)
+      amounts = changes.transform_values { |amount| BigDecimal(amount) }
+      described_class::Result.new(edits: edits, changes: amounts).fingerprint
+    end
+
+    it 'is short, and the same for the same changes in any order' do
+      expect(code({ 1 => '5', 2 => '-5' })).to match(/\A\h{64}\z/)
+      expect(code({ 2 => '-5', 1 => '5' })).to eq(code({ 1 => '5', 2 => '-5' }))
+    end
+
+    it 'differs when a change differs, names another person, or is not there' do
+      codes = [code({ 1 => '5', 2 => '-5' }), code({ 1 => '6', 2 => '-6' }), code({ 1 => '5', 3 => '-5' }), code({})]
+
+      expect(codes.uniq.size).to eq(4)
+    end
+
+    # Written one after the other with nothing between, both lists read
+    # "1:5.023:-7.025:2.0".
+    it 'keeps each person\'s change apart from the next' do
+      expect(code({ 1 => '5', 23 => '-7', 25 => '2' })).not_to eq(code({ 1 => '5.02', 3 => '-7.02', 5 => '2' }))
+    end
+
+    it 'differs when the edits differ and the changes do not' do
+      eater_edit = [{ 'what' => 'eater', 'resident_id' => 1, 'from' => nil, 'to' => 2 }]
+
+      expect(code({ 1 => '5', 2 => '-5' }, edits: eater_edit)).not_to eq(code({ 1 => '5', 2 => '-5' }))
     end
   end
 end
