@@ -66,6 +66,51 @@ RSpec.describe 'Sessions API' do
       expect(response).to have_http_status(:ok)
     end
 
+    # The zone wrapper, the sign-in check and the action each ask who is
+    # signed in. The token is read once, the first time, and the answer
+    # is kept for the rest of the request.
+    it 'reads the token once in a request that asks for the resident three times' do
+      allow(JwtAuth).to receive(:authenticate).and_call_original
+
+      get '/api/v1/residents/id', headers: jwt_auth(resident)
+
+      expect(response.parsed_body).to eq(resident.id)
+      expect(JwtAuth).to have_received(:authenticate).once
+    end
+
+    it 'looks for no key when the request has no token, or an empty one' do
+      allow(Key).to receive(:find_by).and_call_original
+
+      get '/api/v1/residents/id'
+      expect(response).to have_http_status(:unauthorized)
+      get '/api/v1/residents/id', params: { token: '' }
+      expect(response).to have_http_status(:unauthorized)
+
+      expect(Key).not_to have_received(:find_by)
+    end
+
+    # The two public readers of the session, called on a controller that
+    # has not read it yet: each reads it itself, so neither depends on
+    # what ran before it.
+    describe 'the session readers on a new controller' do
+      def controller_for(headers)
+        env = Rack::MockRequest.env_for('/api/v1/residents/id', headers)
+        ApiController.new.tap { |controller| controller.set_request!(ActionDispatch::Request.new(env)) }
+      end
+
+      it 'finds the legacy key when it is the first thing asked' do
+        controller = controller_for('HTTP_AUTHORIZATION' => "Bearer #{legacy_key.token}")
+
+        expect(controller.current_api_key).to eq(legacy_key)
+      end
+
+      it 'answers true or false for whether a resident is signed in' do
+        expect(controller_for('HTTP_AUTHORIZATION' => "Bearer #{JwtAuth.encode(resident)}")
+                 .signed_in_resident_api?).to be(true)
+        expect(controller_for({}).signed_in_resident_api?).to be(false)
+      end
+    end
+
     it "rejects a JWT whose iat predates the resident's keys_valid_since" do
       token = JwtAuth.encode(resident)
       resident.update_column(:keys_valid_since, 1.hour.from_now)
