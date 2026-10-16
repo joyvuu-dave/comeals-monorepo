@@ -96,6 +96,33 @@ RSpec.describe NoCostMarking do
       .to eq([[true, true], [true, true]])
   end
 
+  # Nothing is saved here, so no save loads a cost's dinner or cook on
+  # the way.
+  it "comes back with each cost's dinner and cook loaded when it changes none" do
+    entered = cost(dinner, 12)
+    marked_already = cost(dinner(latest - 1), 0, no_cost: true)
+
+    result = described_class.call(bill_ids: [entered.id, marked_already.id])
+
+    expect(result.marked).to eq([])
+    bills = result.left_alone.map(&:bill)
+    expect(bills.map { |bill| [bill.association(:meal).loaded?, bill.association(:resident).loaded?] })
+      .to eq([[true, true], [true, true]])
+  end
+
+  # In id order, whatever order the table holds the rows in, so the page
+  # lists them the same way every time. The update moves the first row
+  # after the second in the table.
+  it 'gives the costs in id order' do
+    first = cost(dinner(latest - 1))
+    second = cost(dinner)
+    first.update_columns(updated_at: first.updated_at + 1)
+
+    result = described_class.call(bill_ids: [second.id, first.id])
+
+    expect(result.marked).to eq([first, second])
+  end
+
   # The same lock and order as a settlement's claim, taken before the
   # costs are read, so a cook's save waits for it (ADR 0003).
   it 'locks the meals FOR UPDATE in id order before it reads the costs' do

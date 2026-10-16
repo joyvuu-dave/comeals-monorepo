@@ -79,4 +79,46 @@ RSpec.describe 'marking blank costs No cost, against a cost entered at the same 
     cook&.close
     observer&.close
   end
+
+  # It locks only the dinners of the listed costs. A sign-up for another
+  # dinner, one with a cost of its own, goes ahead while it runs. (The
+  # marking may then fail as a conflict and try again; only its first try
+  # waits here.)
+  it 'does not make a write to another dinner wait' do
+    other = create(:meal, community: community, date: meal.date - 1)
+    create(:bill, meal: other, resident: create(:resident, community: community, unit: unit), community: community,
+                  amount: BigDecimal('0'))
+    person = create(:resident, community: community, unit: unit)
+    listed = bill
+    read = Queue.new
+    go = Queue.new
+    tries = 0
+    allow(NoCostMarking).to receive(:reason_to_leave).and_wrap_original do |original, *args|
+      tries += 1
+      if tries == 1
+        read << true
+        go.pop
+      end
+      original.call(*args)
+    end
+    marking = Thread.new do
+      Thread.current.report_on_exception = false
+      ActiveRecord::Base.connection_pool.with_connection { NoCostMarking.call(bill_ids: [listed.id]) }
+    end
+    read.pop
+
+    signing_up = Thread.new do
+      Thread.current.report_on_exception = false
+      ActiveRecord::Base.connection_pool.with_connection { MealResident.create!(meal: other, resident: person) }
+    end
+    finished = signing_up.join(2)
+    go << true
+
+    expect(finished).not_to be_nil
+    expect(marking.value.marked).to eq([listed])
+  ensure
+    go&.push(true)
+    marking&.join
+    signing_up&.join
+  end
 end
