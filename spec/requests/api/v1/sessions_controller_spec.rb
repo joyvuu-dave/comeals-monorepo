@@ -319,4 +319,23 @@ RSpec.describe 'Sessions API' do
       expect(response.parsed_body).to eq(resident.id)
     end
   end
+
+  # RED: this example fails on main (found 2026-10-16). It is not fixed
+  # here. A `token` query parameter can arrive as a list (?token[]=x) or
+  # as a hash (?token[a]=x). Today the request then ends in an
+  # ArgumentError from the JWT gem, which expects a String: a 500 in
+  # production, on every API path, the public ones too. Such a token is
+  # no token: a path that needs a sign-in should answer 401, and a
+  # public path should answer as it does with no token.
+  describe 'a token parameter that is not a string' do
+    it 'is treated as no token' do
+      [['abc'], { 'a' => 'b' }].each do |token|
+        get '/api/v1/residents/id', params: { token: token }
+        expect(response).to have_http_status(:unauthorized)
+
+        get '/api/v1/version', params: { token: token }
+        expect(response).to have_http_status(:ok)
+      end
+    end
+  end
 end
