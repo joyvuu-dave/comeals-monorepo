@@ -245,7 +245,7 @@ never came.
 ## What the database races found (2026-10-16)
 
 Beside the storms, `spec/db/` races one write against another on two
-sessions, in the exact order that matters (`settlement_race_spec.rb`,
+sessions, in the exact order that causes the race (`settlement_race_spec.rb`,
 `dinner_cancelling_race_spec.rb`, `no_cost_marking_race_spec.rb`), and
 runs a storm of writers against one meal while it is settled
 (`meal_write_storm_spec.rb`, which since 2026-10-16 also cancels and

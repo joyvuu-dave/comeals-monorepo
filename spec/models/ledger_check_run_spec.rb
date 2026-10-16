@@ -99,8 +99,9 @@ RSpec.describe LedgerCheckRun do
                                        'be destroyed.'])
     end
 
-    # The trigger, not the model. This is the path that matters — a record
-    # anyone can rewrite from psql is not evidence of anything.
+    # The trigger, not the model. The trigger is what makes a run a
+    # record: a record anyone can rewrite from psql is not evidence of
+    # anything.
     it 'refuses an update that skips Rails' do
       run = build_run(mismatch_count: 0)
 

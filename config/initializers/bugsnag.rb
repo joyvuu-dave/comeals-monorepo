@@ -58,7 +58,7 @@ if api_key.present?
   end
 
   # Handled errors reported through Rails.error. See the subscriber for why
-  # this is separate from the Rack middleware and why it matters here.
+  # this is separate from the Rack middleware and why the money code needs it.
   Rails.error.subscribe(BugsnagErrorSubscriber.new)
 else
   # Session tracking is the one thing the gem turns on by itself: the Rails

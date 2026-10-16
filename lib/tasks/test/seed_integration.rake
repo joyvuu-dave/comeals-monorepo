@@ -179,7 +179,7 @@ namespace :test do
     # ------------------------------------------------------------------
     # Owned by the close/reopen integration test (meal-actions.spec.js):
     # it closes and reopens this meal and no other test touches it. The
-    # bill matters — closing with a blank cook cost asks a question the
+    # bill is there on purpose — closing with a blank cook cost asks a question the
     # close test is not about (bill-entry.spec.js covers that ask).
     close_test_meal = Meal.create!(
       date: 3.days.from_now.to_date,

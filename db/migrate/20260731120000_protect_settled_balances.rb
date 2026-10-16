@@ -37,7 +37,7 @@
 #    It is a CONSTRAINT TRIGGER, DEFERRABLE INITIALLY DEFERRED, so it runs at
 #    COMMIT rather than per row. That is what lets settlement insert thirty
 #    rows one at a time: the ledger is unbalanced in the middle and balanced
-#    at the end, which is the only moment that matters.
+#    at the end, and only the end is checked.
 #
 # The escape hatch (comeals.allow_settled_writes) applies to trigger 1 only,
 # exactly as it does for the meal triggers. Trigger 2 ignores it on purpose:

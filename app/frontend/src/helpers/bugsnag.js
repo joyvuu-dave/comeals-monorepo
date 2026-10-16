@@ -10,8 +10,8 @@ import Bugsnag from "@bugsnag/js";
 //                        nothing.
 //   the build is prod    import.meta.env.PROD is false under `vite dev`
 //                        and under vitest, so neither reports. This is the
-//                        one that matters if the key ever does end up in a
-//                        local .env.
+//                        check that stops reports if the key ever does end
+//                        up in a local .env.
 //
 // The key is baked into the JavaScript bundle at build time and is public.
 // That is how every browser error tracker works — the key identifies the

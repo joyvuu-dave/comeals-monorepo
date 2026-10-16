@@ -19,7 +19,7 @@
 #
 # It cleans with one TRUNCATE rather than ordered delete_all calls:
 #
-# * One statement for every table, so foreign-key order cannot matter.
+# * One statement for every table, so foreign-key order has no effect.
 #   delete_all had to run children before parents, and a table missing from
 #   the list aborted everything after it.
 # * Row-level triggers do not fire on TRUNCATE. So this one statement can
@@ -45,8 +45,8 @@
 # of inheriting the mess.
 module NonTransactionalCleanup
   # Every table the non-transactional groups can write, directly or through
-  # their factories. Adding a table means adding one line here — order does
-  # not matter, it is all one TRUNCATE. Table names rather than model
+  # their factories. Adding a table means adding one line here — the order of
+  # the list has no effect, it is all one TRUNCATE. Table names rather than model
   # classes, because this file loads before the app's autoloading is ready
   # for some of them (Audited::Audit, for one).
   TABLES = %w[

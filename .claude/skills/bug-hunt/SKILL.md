@@ -6,8 +6,8 @@ description: Look for subtle bugs on purpose, one seam at a time, and prove each
 # Bug hunt
 
 This is the method that found #76 (a cache nobody cleared) and #77, and
-the eight-year-old wrong `meals.start_time`. The method matters more
-than effort. Vague "look for bugs" prompts find nothing; a list of named
+the eight-year-old wrong `meals.start_time`. The method finds more
+than effort does. Vague "look for bugs" prompts find nothing; a list of named
 seams, each checked to a done condition, does.
 
 ## Rules

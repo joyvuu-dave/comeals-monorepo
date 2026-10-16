@@ -13,7 +13,7 @@
 # end of the transaction, not each statement: a settlement inserts its lines
 # in one insert_all, and a repair may delete and re-insert a meal's lines in
 # several statements. Both are unbalanced in the middle and balanced at
-# commit, which is the only moment that matters.
+# commit, and only the commit is checked.
 #
 # The escape hatch (comeals.allow_settled_writes) does not turn this off, the
 # same as for the balances: a repair may rewrite a settled line, but no

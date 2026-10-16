@@ -74,7 +74,7 @@ Watch for two traps:
 
 ## Order of work
 
-Small and already-tested first, so the routine is proven before it touches anything that matters.
+Small and already-tested first, so the steps are proven on easy components before they reach the screens people use most.
 
 1. **Bootstrap.** Add `store_context.jsx`. In `app/frontend/src/index.jsx`, wrap the tree in `<StoreContext.Provider value={store}>` alongside the existing mobx-react `<Provider>`. Both coexist for the whole migration.
 2. **Already-tested components** (render tests exist): `toast_container.jsx`, `session_expired_banner.jsx`, `load_status.jsx`, `cooks_box.jsx`.

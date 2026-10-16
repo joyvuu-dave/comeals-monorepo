@@ -74,7 +74,7 @@ RSpec.describe 'Admin smoke tests' do
     # The dashboard once ran one bills query per unreconciled meal (222
     # queries in production). Guard the fix: the query count must not grow
     # with the number of meals.
-    it 'runs the same number of queries no matter how many meals exist' do
+    it 'runs the same number of queries for one meal and for many' do
       resident = create(:resident, community: community, unit: create(:unit, community: community))
       add_meals = lambda do |count|
         count.times do

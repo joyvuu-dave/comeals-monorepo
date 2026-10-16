@@ -134,7 +134,7 @@ RSpec.describe 'settlement race against unlocked write paths' do
   # the meals and the given query has run, with the settlement transaction
   # still open.
   #
-  # Which query to wait for matters. 'Meal Update All' is the claim itself —
+  # Pick the query to wait for with care. 'Meal Update All' is the claim itself —
   # use it to start something that must see the meals as still unreconciled.
   # 'Guest Load' is the last of settlement_ledger's three child-row preloads
   # (bills, then attendance, then guests). It is the latest point a racing

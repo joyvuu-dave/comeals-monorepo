@@ -145,8 +145,8 @@ are rare; the superuser bar is fine.
 A table would keep a history of schedule changes and could open
 editing to plain admins. Neither is needed: the meals themselves are
 the durable record of what the schedule produced, and the superuser
-bar is right (see above). Columns are less to build. If schedule-change
-history ever matters, add the table then.
+bar is right (see above). Columns are less to build. If anyone ever
+needs the history of schedule changes, add the table then.
 
 ## Rejected ideas
 

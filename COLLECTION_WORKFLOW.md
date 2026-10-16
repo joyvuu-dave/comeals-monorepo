@@ -101,7 +101,7 @@ Collection and payout are different problems with different difficulty levels.
 
 This asymmetry forces a decision: how much onboarding are we willing to require from residents in exchange for how much automation?
 
-#### Stripe products that matter for us
+#### Stripe products we could use
 
 - **Stripe Invoicing** — Hosted invoices sent via email. Recipients pay with card or bank (ACH). Money lands in the sender's Stripe balance. ~0.4% per invoice (capped at $2) on top of payment fees. Built-in reminders and dunning.
 - **Stripe Payment Links** — Even simpler. Create a URL, share it, person pays. No customer object, no tracking. Free to use; just payment fees.

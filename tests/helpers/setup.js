@@ -343,7 +343,7 @@ async function mockApi(page, options = {}) {
   });
 
   // Guests (POST .../residents/:r/guests, DELETE .../guests/:id). The
-  // "**" matters: a "*" stops at a slash, so "guests*" never matched a
+  // "**" is needed: a "*" stops at a slash, so "guests*" never matched a
   // delete. A new guest belongs to the resident in the URL, with the
   // vegetarian flag that was sent (GuestSerializer), and a new id each
   // time, as the store keys guests by id.

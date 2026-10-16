@@ -11,7 +11,7 @@
 #                              sends it to whatever has subscribed. Without
 #                              a subscriber it goes nowhere at all.
 #
-# The second path is the one that matters for the money code. It is how a
+# The money code needs the second path. It is how a
 # failure that we caught and handled still gets counted — a retried
 # transaction, a swallowed cache failure. Those are not crashes, so nothing
 # else will ever tell us they happened, and "how often does this fire" is

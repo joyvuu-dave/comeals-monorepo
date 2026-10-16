@@ -101,7 +101,7 @@ test("every month of 2024-2028 renders the correct grid", async ({
         // 150 ms pause left the difference to test overhead — enough
         // on CI, not on a fast machine (failed locally 2026-08-16).
         // 400 ms caps the rate at 5 writes per second, half the
-        // budget, no matter how fast the machine is.
+        // budget, however fast the machine is.
         await page.waitForTimeout(400);
       }
     }

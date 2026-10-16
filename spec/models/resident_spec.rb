@@ -208,8 +208,8 @@ RSpec.describe Resident do
   describe 'name uniqueness' do
     let(:other_unit) { create(:unit, community: community, name: 'B7') }
 
-    # A missing name matters most: the clash query downcases the name,
-    # and nil has no downcase.
+    # A missing name is the case most likely to break: the clash query
+    # downcases the name, and nil has no downcase.
     it 'reports a blank or missing name once, without looking for a clash' do
       ['', nil].each do |name|
         resident = build(:resident, community: community, unit: unit, name: name)

@@ -66,7 +66,7 @@ module.exports = defineConfig({
   reporter: "list",
   use: {
     baseURL: `http://localhost:${E2E_PORT}`,
-    // The browser always runs in the community's timezone, no matter what
+    // The browser always runs in the community's timezone, whatever zone
     // the machine is set to. Without this, the visual goldens encode the
     // timezone of the machine that recorded them: the fixture rotation
     // ends at 2026-01-17T23:59 -08:00, and a machine set to Chicago drew

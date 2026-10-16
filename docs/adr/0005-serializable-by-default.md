@@ -155,7 +155,7 @@ one that could show it.
 ### 1. Set the isolation level per connection, not per transaction
 
 `variables: { default_transaction_isolation: serializable }` in the `default:`
-block of `config/database.yml`. This is applied at connect time, which matters
+block of `config/database.yml`. This is applied at connect time, which is needed
 for a reason found the hard way while shipping `SnapshotRead`: `SET
 TRANSACTION` is refused once a transaction has run any query, so setting
 isolation from application code hits a wall on every nested transaction,
@@ -201,7 +201,7 @@ change cheap into the thing that breaks.
 
 Retries: a small fixed count, three to five, with jitter. Out of retries
 returns a 409 with a message the shared screen can show. That last part is a UX
-decision, not only a technical one. The rule that matters: the message says
+decision, not only a technical one. The rule: the message says
 what happened in plain words, and the safe action (tap again) stays under the
 tap.
 
@@ -303,7 +303,7 @@ it; a broken cache breaking a request is a stupid way to find out.
 
 At 1 thread and 0 workers, with `FOR UPDATE` held on every ledger write path,
 the production abort rate will be near zero. That is the good news and the bad
-news: the retry path would be code that never runs until the day it matters.
+news: the retry path would be code that never runs until the day it is needed.
 It needs deliberate fault injection, not "the suite still passes."
 
 **The fault injection already exists.** `spec/db/settlement_race_spec.rb` runs

@@ -35,7 +35,7 @@ as deliberate design, not defects:
    (close, max, description) are all open to every signed-in resident.
 
 2. **Any authenticated resident may set the bills on any unreconciled meal.**
-   The books are collaborative. The guard that matters is immutability after
+   The books are collaborative. The guard we rely on is immutability after
    reconciliation, not who does the entry before it.
 
 3. **iCal feeds stay unauthenticated.** Calendar clients cannot send a bearer

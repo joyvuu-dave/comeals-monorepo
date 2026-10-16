@@ -36,7 +36,7 @@ Cell values:
 - `—`: the path does not exist for this action (no route, no form, no
   task), and that is by design;
 - **EMPTY**: the path exists and nothing tests it;
-- **THIN**: something tests it, but not the guard or edge that matters,
+- **THIN**: something tests it, but not the guard or edge case the action depends on,
   and the cell says which.
 
 Model specs (`spec/models/`) and database specs (`spec/db/`) are not

@@ -185,7 +185,7 @@ RSpec.describe 'Sessions API' do
     end
 
     it 'prefers the Bearer header over a conflicting ?token= query param' do
-      # When both are present, the header wins. This matters during the
+      # When both are present, the header wins. This case can happen during the
       # transition: a browser with a legacy ?token= pattern somewhere AND a
       # new Bearer interceptor installed should always use the header.
       other_resident = create(:resident, community: community, unit: unit)

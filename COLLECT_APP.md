@@ -12,7 +12,7 @@ The alternative was to add reconciliation tooling to the existing ActiveAdmin pa
 
 - **The form factor matches the activity.** The reconciler is literally walking around the co-housing community — standing at doors, collecting cash and checks, marking things off. Desktop web is the wrong form factor. It's why the current process uses paper. A mobile app is ergonomically correct here, not just a "nice to have native feel" argument.
 
-- **Native polish matters for infrequent, high-stakes workflows.** Reconciliation happens every few weeks. When it does, it needs to feel good and be error-resistant. SwiftUI gives us haptics on "mark paid," swipe-to-complete, fluid navigation, pull-to-refresh — all painful to replicate in ActiveAdmin or in a responsive mobile web view.
+- **Native polish helps a workflow that is rare and where mistakes cost money.** Reconciliation happens every few weeks. When it does, it needs to feel good and be error-resistant. SwiftUI gives us haptics on "mark paid," swipe-to-complete, fluid navigation, pull-to-refresh — all painful to replicate in ActiveAdmin or in a responsive mobile web view.
 
 - **The API decoupling is independently valuable.** Outlier detection, mismatch warnings, and paid-tracking logic should live as clean JSON endpoints on the Rails backend regardless — not tangled into ActiveAdmin view code. Building Collect _forces_ that discipline. Even if the Swift app stalls halfway through, the Rails work is a strict improvement.
 
@@ -342,7 +342,7 @@ Build the Rails work fully before opening Xcode. **This is the single most impor
 
 - **Apple Developer Program ($99/year).** Needed for running on a physical device for more than 7 days, and for TestFlight distribution. Budget accordingly if the plan is real production use.
 - **Who is the collector?** Always one person, or does it rotate? Affects whether Collect needs a "handoff" story or can assume single-user. Tied to the "collector as formal role" idea in `COLLECTION_WORKFLOW.md` §11.
-- **Does Collect also support the resident view** (checking your own balance, seeing what you owe for the current cycle)? Or is that strictly the `comeals-monorepo` SPA's job? This is a scope decision that should be made before the login flow is built — it affects whether "who am I as a logged-in user" matters beyond auth.
+- **Does Collect also support the resident view** (checking your own balance, seeing what you owe for the current cycle)? Or is that strictly the `comeals-monorepo` SPA's job? This is a scope decision that should be made before the login flow is built — it decides whether the app needs to know "who am I as a logged-in user" for anything beyond auth.
 - **Offline support.** For walking-around-the-community use, partial connectivity is realistic. Should `paid_at` marks be queued locally and synced, or require live connection? Defer until the collection screens are being designed, but decide early enough that the data layer can still change.
 - **Push notifications.** "Reminder: reconciliation X has 3 unpaid balances" would be useful. Requires APNs setup, which is non-trivial. Not v1.
 - **Permissioning:** any authenticated resident can preview, or restricted? See auth section. Flagging for future discussion if the community grows or the role becomes more formal.

@@ -1440,7 +1440,7 @@ uncovered:
 - `CommonHouseReservation#note_live_update` (5) and
   `Event#note_live_update` (1). With the return gone, the second call
   covers a save that does not move the dates, so the first call
-  matters only after a move, and every move example stayed inside the
+  changes the result only after a move, and every move example stayed inside the
   old range. A new example in each spec moves the booking or event
   from May 15 to an overnight stretch from February 28 to March 1.
   March 2026 starts on a Sunday, so its calendar begins on March 1,

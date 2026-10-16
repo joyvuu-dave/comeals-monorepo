@@ -303,7 +303,7 @@ test.describe("Form CRUD", () => {
       await expect(modal).toBeVisible({ timeout: 5000 });
 
       // Pick Bob (id 2 in hosts.json), not the first host, so a select
-      // that sent the first option no matter what would fail.
+      // that always sent the first option would fail.
       const residentSelect = modal.locator("#ch-new-resident");
       await expect(residentSelect).toBeVisible({ timeout: 3000 });
       await residentSelect.selectOption({ label: "B - Bob Johnson" });

@@ -99,8 +99,8 @@ Two things this control does **not** prove, both worth keeping straight:
 
 One design note that has not bitten yet: recomputing every reconciliation gets
 slower as history grows. A 2026-08 measurement ran 200 meals in 0.14s, so a
-decade of history is under a minute. Do not optimize this until it matters. If
-it ever does, check the most recent N plus a rotating sample of older ones.
+decade of history is under a minute. Do not optimize this until it is slow enough to see. If
+it ever is, check the most recent N plus a rotating sample of older ones.
 
 ### ~~B. What is this number made of?~~ — built 2026-08-02
 
@@ -200,7 +200,7 @@ What it buys:
 - **A cross-check in pure SQL.** `reconciliation_balances.amount` must equal the sum
   of that resident's charges across that reconciliation's meals. Two tables
   written by different code, checked against each other with no recomputation.
-- **Failures that point at one meal.** For the test harness this matters a lot.
+- **Failures that point at one meal.** This helps the test harness most.
   Today a mismatch says "resident 7 is off by $0.03" and you bisect thirteen
   meals. With line items it says "meal 2026-07-05, resident 7, debit differs."
 

@@ -362,8 +362,8 @@ know where the conflict is.
 - ~~Is the role-level isolation setting still there after Heroku rotates
   credentials?~~ Resolved 2026-08-23: the question no longer applies. The
   role-level setting was reset to `read committed` on 2026-07-29 (see "Is the
-  production role back to READ COMMITTED?" above). The only setting that
-  matters is the one in `database.yml`.
+  production role back to READ COMMITTED?" above). The only setting the app
+  uses is the one in `database.yml`.
 - Whether the shared screen needs a "Try again" button when a signup runs out
   of retries. It shows the message and reverts the change today. Decide from
   what Bugsnag reports now that production is at SERIALIZABLE.

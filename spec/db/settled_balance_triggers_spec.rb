@@ -116,7 +116,7 @@ RSpec.describe 'settled balance triggers' do
 
     # This is also what makes the check usable at all: the ledger is allowed
     # to be unbalanced in the middle of a transaction, because the only state
-    # that matters is the one that commits. Settlement itself depends on it —
+    # anyone else can see is the one that commits. Settlement itself depends on it —
     # it inserts one row at a time, and is unbalanced until the last one.
     it 'judges the end of the transaction, not each statement' do
       one = new_resident('One')

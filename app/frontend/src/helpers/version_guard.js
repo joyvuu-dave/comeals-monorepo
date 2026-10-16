@@ -3,7 +3,7 @@
 // moves (an edit, a new fetch, a navigation), capture current() when a
 // request goes out, and apply the response only if isCurrent(token)
 // still holds. One shared shape so every use site reads the same way;
-// the differences that matter (what bumps, what checks) stay visible
+// the parts that differ (what bumps, what checks) stay visible
 // at the call sites.
 export default function createVersionGuard() {
   let version = 0;

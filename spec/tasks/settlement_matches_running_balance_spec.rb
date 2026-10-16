@@ -39,7 +39,7 @@ RSpec.describe 'settlement and running-balance arithmetic agree', type: :task do
   end
 
   # Computes every running balance, settles every eligible meal, and asserts
-  # the two agree. Order matters: the rake task reads Meal.unreconciled, so
+  # the two agree. The order is fixed: the rake task reads Meal.unreconciled, so
   # it must run before the settlement claims the meals.
   #
   # The settlement runs through settle! (spec/support/settle.rb), not the
@@ -267,7 +267,7 @@ RSpec.describe 'settlement and running-balance arithmetic agree', type: :task do
     reconciliation = expect_settlement_to_match_running_balances(community)
 
     # Guard against the whole example passing vacuously: if every balance
-    # were zero, the comparison above would hold no matter what the
+    # were zero, the comparison above would hold whatever the
     # arithmetic did.
     expect(reconciliation.reconciliation_balances.count).to be >= 4
     expect(reconciliation.reconciliation_balances.sum(:amount)).to eq(BigDecimal('0'))

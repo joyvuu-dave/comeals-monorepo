@@ -48,7 +48,7 @@ class RetryOnConflict
   # job can afford more (SettleAndNotify passes its own).
   MAX_ATTEMPTS = T.let(3, Integer)
 
-  # Doubling, from 10ms, with jitter. The jitter matters: two transactions
+  # Doubling, from 10ms, with jitter. The jitter is needed: two transactions
   # that conflicted once and then wait the same length of time are likely to
   # conflict again on the retry.
   BASE_DELAY = T.let(0.01, Float)

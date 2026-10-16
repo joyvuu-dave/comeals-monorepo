@@ -54,7 +54,7 @@ env:
   ADMIN_E2E_DATABASE_URL: postgres://postgres:postgres@localhost:5432/comeals_admin_e2e
   VITE_PUSHER_KEY: "test-key-for-ci"
   VITE_PUSHER_CLUSTER: "us2"
-  # bin/tapioca dsl boots the app in development no matter what
+  # bin/tapioca dsl boots the app in development whatever
   # RAILS_ENV says (tapioca sets RAILS_ENV from its own --environment
   # option, default development), and outside test
   # config/initializers/pusher.rb refuses to boot without these four.

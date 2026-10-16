@@ -26,8 +26,8 @@ RSpec.describe 'Read-only admin token' do
   end
 
   # ActiveAdmin refuses with a redirect to the dashboard and a flash error
-  # (superuser_authorization_spec.rb does the same). Naming the target
-  # matters: a token that did not sign in at all is also a redirect, to
+  # (superuser_authorization_spec.rb does the same). The target is named
+  # on purpose: a token that did not sign in at all is also a redirect, to
   # /login, and must not pass as a refusal.
   def expect_denied
     expect(response).to redirect_to('http://admin.example.com/')
@@ -52,7 +52,7 @@ RSpec.describe 'Read-only admin token' do
     # already on the community calendar, and a balance is derived from exactly
     # that data. A recipient widening the filter to see everyone's balances is
     # working as intended, not a leak.
-    # The statement is the reason the resident page matters to a mailed link:
+    # The statement is why a mailed link needs the resident page: it shows
     # the line items behind "you owe $X", not just the number.
     it 'reads a resident\'s settlement statement' do
       resident_unit = create(:unit, community: community)
