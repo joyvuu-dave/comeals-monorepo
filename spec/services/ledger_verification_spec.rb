@@ -435,6 +435,43 @@ RSpec.describe LedgerVerification do
                                                  ])
     end
 
+    # The dinner check lists its differences dinner by dinner and person by
+    # person, lowest id first. The rows behind it come in another order:
+    # a person whose line is gone is found only after every person who
+    # still has one. So here the first dinner and the second dinner's cook
+    # each lose a line, and the second dinner's eater has a changed line.
+    # That person is found first, and only the sort puts the first dinner,
+    # and then the cook, ahead.
+    it 'lists the dinners and the people in the dinner check lowest id first' do
+      dinners = Array.new(2) do
+        create(:meal, community: community).tap do |meal|
+          create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('80'))
+          create(:meal_resident, meal: meal, resident: eater, community: community)
+        end
+      end
+      settle!
+      first, second = dinners
+      behind_the_guards do
+        MealCharge.where(meal: first, resident: eater).delete_all
+        MealCharge.where(meal: second, resident: cook).delete_all
+        MealCharge.where(meal: second, resident: eater).update_all(amount: BigDecimal('-79'))
+      end
+
+      suppress(described_class::MismatchError) { described_class.call }
+
+      detail = LedgerCheckRun.recent.first.details.find { |d| d['check'] == 'dinners' }
+      expect(first.id).to be < second.id
+      expect(cook.id).to be < eater.id
+      expect(detail['differences']).to eq(
+        [{ 'meal_id' => first.id, 'meal_date' => first.date.iso8601, 'resident_id' => eater.id,
+           'stored' => '0.0', 'source' => '-80.0' },
+         { 'meal_id' => second.id, 'meal_date' => second.date.iso8601, 'resident_id' => cook.id,
+           'stored' => '0.0', 'source' => '80.0' },
+         { 'meal_id' => second.id, 'meal_date' => second.date.iso8601, 'resident_id' => eater.id,
+           'stored' => '-79.0', 'source' => '-80.0' }]
+      )
+    end
+
     it 'reports line items that no longer sum to zero as a finding with no resident' do
       reconciliation = settle
       behind_the_guards do
