@@ -144,14 +144,47 @@ jobs:
 
       # Maintenance from before the restore until the old code serves, so
       # nobody writes to the restored database through the new code.
-      - name: Restore the backup
+      # Maintenance stops web requests only. The jobs run inside the web
+      # dyno (SOLID_QUEUE_IN_PUMA), so web goes to 0 before the restore and
+      # comes back after the rollback: no job of the new code runs on the
+      # restored database (#179). The maintenance page shows with no web
+      # dyno too.
+      - name: Stop the web dyno and restore the backup
+        id: restore
         if: inputs.backup != ''
         run: |
           set -euo pipefail
+          api() {
+            curl -sf -H "Accept: application/vnd.heroku+json; version=3" \
+              -H "Authorization: Bearer $HEROKU_API_KEY" "$@"
+          }
           heroku maintenance:on -a "$APP"
           # The database as the new code left it, so the writes the restore
           # takes away can still be read afterwards.
           heroku pg:backups:capture -a "$APP"
+          # How many web dynos to start again after the rollback.
+          web_count=$(api "https://api.heroku.com/apps/$APP/formation/web" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['quantity'])")
+          echo "web_count=$web_count" >> "$GITHUB_OUTPUT"
+          echo "$APP runs $web_count web dyno(s). Scaling web to 0."
+          heroku ps:scale web=0 -a "$APP"
+          # A dyno takes up to 30 seconds to stop after ps:scale returns.
+          # Restore only when no web dyno runs, so no job is still running.
+          tries=0
+          while :; do
+            running=$(heroku ps -a "$APP" --json \
+              | python3 -c "import json,sys; print(sum(1 for d in json.load(sys.stdin) if d['type'] == 'web'))")
+            if [ "$running" = "0" ]; then
+              break
+            fi
+            tries=$((tries + 1))
+            if [ "$tries" -ge 36 ]; then
+              echo "A web dyno still runs 3 minutes after web was scaled to 0, so the backup was not restored."
+              exit 1
+            fi
+            sleep 5
+          done
+          echo "No web dyno runs. Restoring $BACKUP."
           heroku pg:backups:restore "$BACKUP" DATABASE_URL -a "$APP" --confirm "$APP"
 
       - name: Roll back
@@ -160,6 +193,29 @@ jobs:
           set -euo pipefail
           bad_sha="${{ steps.find.outputs.bad_sha }}"
           heroku rollback "${{ steps.find.outputs.target }}" -a "$APP"
+          # A rollback makes a new release, and Heroku runs the release
+          # phase for it (rake deploy:verify_config db:migrate of the old
+          # code) in a one-off dyno, whatever the web formation is. If it
+          # fails, the release fails and the app keeps the new code. Wait
+          # for it, and stop before web is started again.
+          tries=0
+          while :; do
+            status=$(heroku releases -a "$APP" --json \
+              | python3 -c "import json,sys; print(json.load(sys.stdin)[0]['status'])")
+            if [ "$status" != "pending" ]; then
+              break
+            fi
+            tries=$((tries + 1))
+            if [ "$tries" -ge 36 ]; then
+              break
+            fi
+            sleep 5
+          done
+          if [ "$status" != "succeeded" ]; then
+            echo "The release phase of the rollback did not succeed (status: $status). Its output:"
+            heroku releases:output -a "$APP" | tail -30 || true
+            exit 1
+          fi
           live_sha=$(heroku config:get HEROKU_SLUG_COMMIT -a "$APP")
           echo "bad_sha=$bad_sha" >> "$GITHUB_OUTPUT"
           echo "live_sha=$live_sha" >> "$GITHUB_OUTPUT"
@@ -169,9 +225,79 @@ jobs:
           fi
           echo "$APP now runs $live_sha."
 
+      - name: Start the web dyno
+        id: start
+        if: inputs.backup != ''
+        env:
+          WEB_COUNT: ${{ steps.restore.outputs.web_count }}
+        run: |
+          set -euo pipefail
+          heroku ps:scale "web=$WEB_COUNT" -a "$APP"
+          # Turn maintenance off only when the web dynos are up, so the
+          # smoke test does not meet a dyno that is still booting.
+          tries=0
+          while :; do
+            up=$(heroku ps -a "$APP" --json \
+              | python3 -c "import json,sys; print(sum(1 for d in json.load(sys.stdin) if d['type'] == 'web' and d['state'] == 'up'))")
+            if [ "$up" -ge "$WEB_COUNT" ]; then
+              break
+            fi
+            tries=$((tries + 1))
+            if [ "$tries" -ge 36 ]; then
+              echo "Web was scaled to $WEB_COUNT, but only $up web dyno(s) are up after 3 minutes."
+              exit 1
+            fi
+            sleep 5
+          done
+          echo "$WEB_COUNT web dyno(s) up."
+
       - name: End maintenance
         if: inputs.backup != ''
         run: heroku maintenance:off -a "$APP"
+
+      # Says which state a stopped undo left production in, and what to run
+      # by hand. It does not start web again: after the restore and before
+      # the rollback, web would run the new code's jobs on the restored
+      # database. Maintenance on with web at 0 is safe; nobody can write.
+      - name: Say what to do by hand
+        if: (failure() || cancelled()) && inputs.backup != '' && steps.restore.outcome != 'skipped'
+        env:
+          RESTORE: ${{ steps.restore.outcome }}
+          ROLL: ${{ steps.roll.outcome }}
+          START: ${{ steps.start.outcome }}
+          WEB_COUNT: ${{ steps.restore.outputs.web_count }}
+          TARGET: ${{ steps.find.outputs.target }}
+          URL: ${{ steps.find.outputs.url }}
+        run: |
+          count="${WEB_COUNT:-1}"
+          echo "The undo stopped part way (see docs/runbooks/undo-a-deploy.md, \"If it stops half way\")."
+          if [ "$START" = "success" ]; then
+            echo "The backup is restored, the old code runs, and web is up. Only maintenance mode"
+            echo "may still be on. Run:"
+            echo "  heroku maintenance:off -a $APP"
+            echo "  bin/smoke $URL"
+            exit 0
+          fi
+          echo "Maintenance mode is on. Web may be at 0: then no dyno runs and no job runs."
+          echo "That is safe; nobody can write. This step did not start web again."
+          echo "Do not start web until the old code runs: the new code's jobs would run on the"
+          echo "restored database. Check with: heroku ps -a $APP; heroku releases -a $APP"
+          if [ "$RESTORE" != "success" ]; then
+            echo "The step that stops web and restores the backup failed, so the database may or"
+            echo "may not be restored. Check that a backup of the database as it was got captured"
+            echo "(heroku pg:backups -a $APP), capture one if not, then run:"
+            echo "  heroku ps:scale web=0 -a $APP"
+            echo "  heroku pg:backups:restore $BACKUP DATABASE_URL -a $APP --confirm $APP"
+            echo "  heroku rollback $TARGET -a $APP"
+          elif [ "$ROLL" != "success" ]; then
+            echo "The backup is restored, but the old code may not run yet. If heroku releases"
+            echo "shows the rollback to $TARGET as failed or missing, run:"
+            echo "  heroku rollback $TARGET -a $APP"
+          fi
+          echo "Then, once heroku releases shows the rollback to $TARGET succeeded:"
+          echo "  heroku ps:scale web=$count -a $APP"
+          echo "  heroku maintenance:off -a $APP"
+          echo "  bin/smoke $URL"
 
       - name: Set up Node and browsers for the smoke test
         uses: actions/setup-node@v6

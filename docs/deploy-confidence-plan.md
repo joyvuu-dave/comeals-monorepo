@@ -251,9 +251,11 @@ staging). It stops before it changes anything when the target release
 runs the commit production runs now, and when `bin/rollback-check`
 finds a migration since the target and it has neither a backup nor
 `code_only_is_safe`. With a backup, it turns maintenance mode on,
-captures a backup of the database as it is, and restores the given
-one. Then it runs `heroku rollback`, checks that the running commit
-changed, turns maintenance off, and runs the read-only smoke. On
+captures a backup of the database as it is, scales web to 0 so no
+background job runs (#179), and restores the given one. Then it runs
+`heroku rollback`, waits for its release phase to succeed, checks that
+the running commit changed, scales web back up, turns maintenance off,
+and runs the read-only smoke. On
 production it then sets `DEPLOY_HOLD` with the reason, adds a "rolled
 back — reason" note to the top of the GitHub release that points at
 the bad commit, and files an issue. The hold clears when main is

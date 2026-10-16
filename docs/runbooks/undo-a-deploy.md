@@ -60,25 +60,21 @@ day of sign-ups and costs that nobody can type in again from memory.
    - `backup`: the id from step 1.
 
    It turns maintenance mode on, captures a backup of the database as it
-   is, restores the backup from step 1, rolls back the code, turns
-   maintenance off, and runs the smoke test, then does the same
-   bookkeeping as a code-only rollback. While maintenance is on, Heroku
-   answers every web request with the maintenance page, so nobody can
-   write through a page or the API.
+   is, scales web to 0, waits until no web dyno runs, restores the backup
+   from step 1, and rolls back the code. It waits for the rollback's
+   release phase to succeed, scales web back to the number of web dynos
+   it had, waits until they are up, turns maintenance off, and runs the
+   smoke test. Then it does the same bookkeeping as a code-only rollback.
+   While maintenance is on, Heroku answers every web request with the
+   maintenance page, so nobody can write through a page or the API.
 
-   Maintenance mode does not stop the background jobs. Solid Queue runs
-   inside the web dyno (`SOLID_QUEUE_IN_PUMA`), and the web dyno keeps
-   running under maintenance mode. So a job that starts between the
-   restore and the rollback runs the new code on the restored database.
-   The jobs that delete old Idempotency-Keys run every hour, at minutes
-   41 and 43, and the nightly jobs run at their times
-   (`config/recurring.yml`). The only thing that stops the jobs is
-   having no web dyno: `heroku ps:scale web=0 -a comeals-monorepo`
-   before the restore, and `heroku ps:scale web=1 -a comeals-monorepo`
-   after the rollback. The maintenance page still shows with no web
-   dyno. The workflow does not scale web to 0 today (#179). To stop the
-   jobs, do the restore and the rollback by hand, as in "If it stops
-   half way", with those two commands around them.
+   Web goes to 0 because maintenance mode does not stop the background
+   jobs. Solid Queue runs inside the web dyno (`SOLID_QUEUE_IN_PUMA`),
+   and the web dyno keeps running under maintenance mode. With web at 0,
+   no job of the new code runs on the restored database (#179). The
+   maintenance page still shows with no web dyno. Heroku Scheduler jobs
+   run in one-off dynos, not in the web dyno, so web at 0 does not stop
+   them; if one is due in the next few minutes, wait until it ends.
 
 3. If the deploy deleted Heroku Scheduler entries, add them back. The
    schedule moves to Solid Queue at the deploy after v613
@@ -95,16 +91,35 @@ day of sign-ups and costs that nobody can type in again from memory.
 
 ### If it stops half way
 
+The workflow's last step before the smoke test, "Say what to do by
+hand", prints which state it left and the commands to run. It never
+starts web again by itself.
+
 - Maintenance is still on: production shows the maintenance page. That
   is the safe state; nobody can write.
+- Web is at 0 (`heroku ps -a comeals-monorepo` lists no web dyno): no
+  job runs. Leave it at 0 until the old code runs, because the new
+  code's jobs would run on the restored database. Start it with
+  `heroku ps:scale web=1 -a comeals-monorepo` as the last step before
+  maintenance goes off.
 - The restore failed: check that a backup of the database as it was got
   captured (`heroku pg:backups -a comeals-monorepo`), capture one if not,
-  then run the restore by hand,
+  then run by hand, in this order:
+  `heroku ps:scale web=0 -a comeals-monorepo`,
   `heroku pg:backups:restore <id> DATABASE_URL -a comeals-monorepo --confirm comeals-monorepo`,
-  then `heroku rollback <release> -a comeals-monorepo`, then
-  `heroku maintenance:off -a comeals-monorepo`, then `bin/smoke https://comeals.com`.
+  `heroku rollback <release> -a comeals-monorepo`, wait until
+  `heroku releases -a comeals-monorepo` shows that release as succeeded,
+  then `heroku ps:scale web=1 -a comeals-monorepo`,
+  `heroku maintenance:off -a comeals-monorepo`, and
+  `bin/smoke https://comeals.com`.
 - The rollback failed after the restore: the old database is back under
-  the new code. Run the rollback by hand, then turn maintenance off.
+  the new code, with web at 0. Run the rollback by hand, wait until its
+  release succeeded, then scale web to 1 and turn maintenance off. A
+  rollback runs the release phase of the old code
+  (`rake deploy:verify_config db:migrate`); if that is what failed,
+  `heroku releases:output -a comeals-monorepo` shows why.
+- Web is up but maintenance is still on: the old code runs on the
+  restored database. Turn maintenance off and run the smoke test.
 
 ## Practise it on staging
 
