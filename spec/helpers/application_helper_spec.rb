@@ -95,5 +95,32 @@ RSpec.describe ApplicationHelper do
 
       expect(helper.meal_cost_cell(meal, :total_cost)).to be_nil
     end
+
+    # A settled dinner that was corrected (ADR 0011 rule 6) has two costs:
+    # the one it was settled at, which the settlement's page shows, and
+    # the one its rows add up to now, which the meal's own page shows.
+    context 'when a settled dinner was corrected' do
+      let(:latest) { Reconciliation.latest_cutoff(community.today) }
+      let(:admin) { create(:admin_user, community: community, superuser: true) }
+      let(:eater) { create(:resident, community: community, unit: unit) }
+      let(:meal) do
+        create(:meal, community: community, date: latest).tap do |meal|
+          create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('30'))
+          create(:meal_resident, meal: meal, resident: eater, community: community)
+          settle!(cutoff: latest)
+          MealCorrecting.save!(meal.reload, by: admin, reason: 'Typed the wrong amount', fingerprint: nil) do |edits|
+            edits.cost(resident, amount: BigDecimal('20'), no_cost: false)
+          end
+        end.reload
+      end
+
+      it 'shows the settled cost when not asked for now' do
+        expect(helper.meal_cost_cell(meal, :total_cost)).to eq('$30.00')
+      end
+
+      it 'shows the cost of the rows as they are now when asked for now' do
+        expect(helper.meal_cost_cell(meal, :total_cost, now: true)).to eq('$20.00')
+      end
+    end
   end
 end
