@@ -78,6 +78,15 @@ RSpec.describe 'Residents API' do
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body['message']).to eq('Email required.')
     end
+
+    # A request made by hand can leave the email field out. It gets the
+    # same words as an empty email.
+    it 'returns 400 with no email field at all' do
+      post '/api/v1/residents/token', params: { password: 'anything' }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Email required.')
+    end
   end
 
   # ---------------------------------------------------------------------------
