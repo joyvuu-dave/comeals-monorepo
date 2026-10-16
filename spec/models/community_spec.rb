@@ -345,6 +345,18 @@ RSpec.describe Community do
       expect(community.unreconciled_ave_cost).to eq('$8.00/adult')
     end
 
+    # Every meal's sign-ups, guests and bills are read in one query each,
+    # for all the meals at once, so three meals cost no more queries
+    # than one.
+    it 'reads three meals with as many queries as one' do
+      meal_on(community.today - 1, bills: %w[16], eaters: [cook, diner])
+      one = count_queries { community.unreconciled_ave_cost }
+      meal_on(community.today - 2, bills: %w[8], eaters: [diner])
+      meal_on(community.today - 3, bills: %w[8], eaters: [cook])
+
+      expect(count_queries { community.unreconciled_ave_cost }).to eq(one)
+    end
+
     it 'rounds a half cent the way BigDecimal and number_to_currency do' do
       meal_on(community.today - 1, bills: %w[16.25], eaters: [cook, diner])
 
