@@ -83,6 +83,14 @@ RSpec.describe IdempotencyKeyHeader do
     expect(key_of(%("#{'\\"' * 255}"))).to eq('"' * 255)
   end
 
+  # The header is matched as bytes (binary), so a byte that is not UTF-8
+  # fails the match instead of raising. The key it gives back is marked
+  # UTF-8 again, like every other string in a request.
+  it 'gives the key back as UTF-8 text, from a header read as bytes' do
+    expect(key_of('"abc"'.b).encoding).to eq(Encoding::UTF_8)
+    expect(key_of('"abc"').encoding).to eq(Encoding::UTF_8)
+  end
+
   {
     'an empty header' => '',
     'a value with no quotes' => '8e03978e-40d5-43e8-bc93-6894a57f9324',
