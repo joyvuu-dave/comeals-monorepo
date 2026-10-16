@@ -24,7 +24,7 @@ class AuditSerializer
   def user_name(audit)
     person = audit.user_as_model
     return ResidentNameShortener.short(person.name) unless person.nil?
-    return audit.username.to_s if audit.username.present?
+    return audit.username if audit.username.present?
 
     audit.comment.to_s.start_with?(AUTOMATIC_FIX) ? AUTOMATIC_FIX : ''
   end

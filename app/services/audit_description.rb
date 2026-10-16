@@ -29,8 +29,7 @@ class AuditDescription
     new(audits)
   end
 
-  def initialize(audits)
-    rows = audits.to_a
+  def initialize(rows)
     @named_before, @amount_before = before_each_update(rows)
     @residents = Resident.where(id: named_resident_ids(rows)).index_by(&:id)
   end
@@ -54,7 +53,7 @@ class AuditDescription
   # The shortened resident name, or 'unknown' when the resident is gone
   # and the audit trail cannot recover them.
   def name_or_unknown(resident)
-    resident.present? ? short_name(resident.name) : 'unknown'
+    resident ? short_name(resident.name) : 'unknown'
   end
 
   # What we say about a change no branch above recognized.
@@ -201,12 +200,10 @@ class AuditDescription
       # A rotation, a day, a settlement or a close time
       words = rarer_meal_change_words(changes)
       return words if words
-
-      # Other
-      return fallback_description(audit)
     end
 
-    fallback_description(audit) # Shouldn't happen?
+    # A change it does not know, or an action the audited gem never writes
+    fallback_description(audit)
   end
 
   # A cancelled_at change: set is a cancel, cleared is a restore.
@@ -352,8 +349,6 @@ class AuditDescription
     if changes['vegetarian'].instance_of?(Array)
       return "#{name} marked veg" if changes['vegetarian'][0] == false && changes['vegetarian'][1] == true
       return "#{name} marked not veg" if changes['vegetarian'][0] == true && changes['vegetarian'][1] == false
-
-      return fallback_description(audit)
     end
 
     fallback_description(audit)
