@@ -437,6 +437,20 @@ RSpec.describe Reconciliation do
         .to eq(1 => BigDecimal('0.01'), 2 => BigDecimal('-0.01'))
     end
 
+    # A penny may go only to a balance whose cut to cents dropped
+    # something. Here no cut dropped anything, so the pennies have nowhere
+    # to go, however many balances there are.
+    it 'refuses, with the input guard off, when no balance lost anything to the cut' do
+      allow(Settlement).to receive(:assert_balanced_input!)
+      too_high = { 1 => BigDecimal('0.01'), 2 => BigDecimal('0'), 3 => BigDecimal('0') }
+      too_low = { 1 => BigDecimal('-0.01'), 2 => BigDecimal('0'), 3 => BigDecimal('0') }
+
+      expect { Settlement.allocate_to_cents(too_high, reconciliation_id: reconciliation.id) }
+        .to raise_error(/1 residual penny to allocate but only 0 fractional remainders available/)
+      expect { Settlement.allocate_to_cents(too_low, reconciliation_id: reconciliation.id) }
+        .to raise_error(/1 residual penny to allocate but only 0 fractional remainders available/)
+    end
+
     it 'raises a named error when residual pennies exhaust the award candidates' do
       allow(Settlement).to receive(:assert_balanced_input!)
       unbalanced = { 1 => BigDecimal('-0.055') }
