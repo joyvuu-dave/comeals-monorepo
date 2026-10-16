@@ -50,6 +50,9 @@ module DatabasePoolCheck
     pool = ActiveRecord::Base.connection_db_config.max_connections
     return if pool.nil?
 
-    call(pool: pool, threads: ENV.fetch('RAILS_MAX_THREADS', 1).to_i)
+    # Integer(), not to_i: Puma reads the variable with Integer()
+    # (Puma::DSL#threads), so "0x10" is 16 threads and "010" is 8. to_i
+    # read them as 0 and 10, and a pool too small for Puma passed.
+    call(pool: pool, threads: Integer(ENV.fetch('RAILS_MAX_THREADS', 1)))
   end
 end
