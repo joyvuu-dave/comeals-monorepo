@@ -171,9 +171,38 @@ RSpec.describe 'settled balance triggers' do
     # as written. A runbook step nobody has run is a guess, and this one is
     # only ever reached during an incident, which is the worst moment to find
     # out that Settlement#rewrite! no longer clears the tables for you.
+    #
+    # After the settlement, one person moved to another unit and the other
+    # moved out. The rebuilt lines must keep the unit and the lived-here
+    # flag they were settled with (ADR 0011 rule 7), which is what the
+    # runbook's `units` is for.
     it 'rebuilds one reconciliation the way the runbook says' do
-      before_amounts = reconciliation.reconciliation_balances.order(:resident_id).pluck(:amount)
+      before = reconciliation.reconciliation_balances.order(:resident_id).pluck(:resident_id, :amount, :unit_id,
+                                                                                :lived_here)
       before_lines = MealCharge.for_reconciliation(reconciliation).count
+      first, second = reconciliation.reconciliation_balances.order(:resident_id).map(&:resident)
+      first.update!(unit: create(:unit, community: community, name: 'Moved To'))
+      second.update!(active: false)
+
+      ActiveRecord::Base.transaction do
+        units = reconciliation.saved_units
+        ActiveRecord::Base.connection.execute("SET LOCAL comeals.allow_settled_writes = 'on'")
+        MealCharge.for_reconciliation(reconciliation).delete_all
+        reconciliation.reconciliation_balances.delete_all
+        Settlement.new(reconciliation).rewrite!(units: units)
+      end
+
+      expect(reconciliation.reconciliation_balances.order(:resident_id)
+                           .pluck(:resident_id, :amount, :unit_id, :lived_here)).to eq(before)
+      expect(before.map(&:last)).to eq([true, true])
+      expect(MealCharge.for_reconciliation(reconciliation).count).to eq(before_lines)
+    end
+
+    # Without `units:`, each line gets the person's unit as it is now.
+    it 'saves each unit as it is now when the rebuild is given no units' do
+      moved_to = create(:unit, community: community, name: 'Moved To')
+      first = reconciliation.reconciliation_balances.order(:resident_id).first.resident
+      first.update!(unit: moved_to)
 
       repair do
         MealCharge.for_reconciliation(reconciliation).delete_all
@@ -181,8 +210,7 @@ RSpec.describe 'settled balance triggers' do
         Settlement.new(reconciliation).rewrite!
       end
 
-      expect(reconciliation.reconciliation_balances.order(:resident_id).pluck(:amount)).to eq(before_amounts)
-      expect(MealCharge.for_reconciliation(reconciliation).count).to eq(before_lines)
+      expect(reconciliation.reconciliation_balances.find_by!(resident: first).unit).to eq(moved_to)
     end
 
     # The runbook says a rebuild that skips the deletes writes nothing.
