@@ -126,6 +126,20 @@ RSpec.describe Community do
       expect(version).not_to eq(moved)
     end
 
+    # The end is read to the end of its day, and the start from the start
+    # of its day, even when it comes with an hour: a morning event on the
+    # first day is on the calendar. March 8, 2026 is the day the clocks
+    # move forward in the app zone.
+    it 'reads the first day from its start when it is given as a time' do
+      noon = Time.zone.local(2026, 3, 8, 12, 0)
+      before = community.calendar_cache_version(noon, to)
+
+      create(:event, community: community, start_date: Time.zone.local(2026, 3, 8, 9, 0),
+                     end_date: Time.zone.local(2026, 3, 8, 10, 0))
+
+      expect(community.calendar_cache_version(noon, to)).not_to eq(before)
+    end
+
     it 'counts an event on the last day of the six weeks, whatever the hour' do
       before = version
 
