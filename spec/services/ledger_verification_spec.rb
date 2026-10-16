@@ -339,23 +339,54 @@ RSpec.describe LedgerVerification do
       end
     end
 
+    # A run checks the settlements in id order, so its findings come in id
+    # order too. The summary sorts the ids anyway, so a run whose findings
+    # came in any other order still names them lowest first, each once.
+    it 'names each reconciliation in the summary once, lowest id first, whatever order the findings are in' do
+      run = LedgerCheckRun.new(
+        mismatch_count: 3, reconciliations_checked: 12, error: nil,
+        details: [{ 'reconciliation_id' => 9, 'check' => 'recompute' },
+                  { 'reconciliation_id' => 4, 'check' => 'line_items' },
+                  { 'reconciliation_id' => 9, 'check' => 'dinners' }]
+      )
+
+      expect(described_class.summary_for(run)).to eq(
+        'Ledger check failed: 3 findings (dinners and line_items and recompute) across 2 of 12 reconciliations ' \
+        '— 4, 9. Settled balances were changed after settlement, or the source rows behind them were. ' \
+        'See docs/runbooks/settled-data-repair.md.'
+      )
+    end
+
+    # The eater's row is changed first. PostgreSQL writes a changed row
+    # as a new row at the end of the table, so with no ORDER BY it now
+    # reads the eater's balance before the cook's. Only the sort puts the
+    # cook, who has the lower id, first.
     it 'dates each finding and writes the amounts as plain decimals, lowest resident id first' do
       reconciliation = settle
       behind_the_guards do
-        ReconciliationBalance.where(reconciliation_id: reconciliation.id, resident_id: cook.id)
-                             .update_all(amount: BigDecimal('39.5'))
         ReconciliationBalance.where(reconciliation_id: reconciliation.id, resident_id: eater.id)
                              .update_all(amount: BigDecimal('-39.5'))
+        ReconciliationBalance.where(reconciliation_id: reconciliation.id, resident_id: cook.id)
+                             .update_all(amount: BigDecimal('39.5'))
       end
 
       suppress(described_class::MismatchError) { described_class.call }
 
-      detail = LedgerCheckRun.recent.first.details.find { |d| d['check'] == 'recompute' }
-      expect(detail['date']).to eq(reconciliation.date.iso8601)
-      expect(detail['differences']).to eq([
-                                            { 'resident_id' => cook.id, 'stored' => '39.5', 'source' => '40.0' },
-                                            { 'resident_id' => eater.id, 'stored' => '-39.5', 'source' => '-40.0' }
-                                          ])
+      details = LedgerCheckRun.recent.first.details.index_by { |d| d['check'] }
+      expect(details.keys).to contain_exactly('recompute', 'line_items')
+      expect(details.values.pluck('date')).to all(eq(reconciliation.date.iso8601))
+      expect(details['recompute']['differences']).to eq([
+                                                          { 'resident_id' => cook.id, 'stored' => '39.5',
+                                                            'source' => '40.0' },
+                                                          { 'resident_id' => eater.id, 'stored' => '-39.5',
+                                                            'source' => '-40.0' }
+                                                        ])
+      expect(details['line_items']['differences']).to eq([
+                                                           { 'resident_id' => cook.id, 'stored' => '39.5',
+                                                             'source' => '40.0' },
+                                                           { 'resident_id' => eater.id, 'stored' => '-39.5',
+                                                             'source' => '-40.0' }
+                                                         ])
     end
 
     it 'reports lines that sum below zero the same as lines that sum above it' do
