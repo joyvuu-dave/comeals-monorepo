@@ -148,11 +148,11 @@ RSpec.describe 'POST /api/v1/reconciliations' do
     expect(response.parsed_body[:message]).to eq('cutoff must be a date, YYYY-MM-DD')
   end
 
-  # RED ON PURPOSE (2026-10-16): this example fails, and shows a bug.
-  # Date.iso8601 reads a day before October 15, 1582 in the Julian
+  # Date.iso8601 read a day before October 15, 1582 in the Julian
   # calendar, and PostgreSQL reads it in the Gregorian one. February 29,
   # 1500 is a Julian leap day the Gregorian calendar does not have, so
-  # the database refused the query and the answer was a 500.
+  # the database refused the query and the answer was a 500
+  # (YearMonthDay reads the day in the Gregorian calendar).
   it 'refuses a day only the Julian calendar has' do
     settle('1500-02-29')
 
