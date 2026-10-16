@@ -29,7 +29,10 @@ import type {
   MealFormResident,
   MealResident,
 } from "../../app/frontend/src/types/api";
-import { SETTLED_MEAL_REFUSAL } from "../../app/frontend/src/stores/data_store_bills";
+import {
+  CANCELLED_DINNER_REFUSAL,
+  SETTLED_MEAL_REFUSAL,
+} from "../../app/frontend/src/stores/data_store_bills";
 
 const { messages, ...shapes } = contractJson;
 const contract: Record<string, string[]> = shapes;
@@ -142,6 +145,8 @@ describe("types/api.ts matches tests/fixtures/api_contract.json", () => {
 const messageConstants: Record<string, string> = {
   // spec/requests/api/v1/update_bills_spec.rb
   reconciled_rejection: SETTLED_MEAL_REFUSAL,
+  // spec/requests/api/v1/update_bills_spec.rb
+  cancelled_dinner_rejection: CANCELLED_DINNER_REFUSAL,
 };
 
 describe("the words the SPA compares match tests/fixtures/api_contract.json", () => {

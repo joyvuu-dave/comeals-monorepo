@@ -57,6 +57,7 @@
     "vegetarian"
   ],
   "messages": {
-    "reconciled_rejection": "Change not permitted. Meal has already been reconciled."
+    "reconciled_rejection": "Change not permitted. Meal has already been reconciled.",
+    "cancelled_dinner_rejection": "This dinner is cancelled. Restore it before changing it."
   }
 }

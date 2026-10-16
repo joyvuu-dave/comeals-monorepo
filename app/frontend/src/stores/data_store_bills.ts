@@ -45,13 +45,19 @@ interface MealNamed {
   mealDay: string;
 }
 
+// Why the server refused a save for a meal, when the refusal says what
+// is true of the meal itself: it was settled, or its dinner was
+// cancelled (ADR 0011 rule 11). Entering the costs again cannot work in
+// either case, so the message says so. null for every other failure.
+type RefusalReason = "settled" | "cancelled" | null;
+
 // One meal the "not saved" message names.
 interface MealNotSaved extends MealNamed {
-  // True when the server refused a save for this meal because the meal
-  // was settled. It stays true when a later save for the meal fails for
-  // another reason: a 409 or a lost network does not mean the meal is
-  // open again.
-  settled: boolean;
+  // Why the server refused a save for this meal (RefusalReason). A
+  // later refusal with a reason replaces it. A later save that fails for
+  // another reason keeps it: a 409 or a lost network does not mean the
+  // meal is open again.
+  reason: RefusalReason;
 }
 
 // A message in the stack that names meals, and the meals it names, in
@@ -70,9 +76,12 @@ function notSavedMessage(meals: MealNotSaved[]): string {
     const mealDays = meals.map((meal) => meal.mealDay).join(" and ");
     return `The cooks and costs you entered for ${mealDays} were not saved. Please open those meals and enter them again.`;
   }
-  const [{ mealDay, settled }] = meals;
-  if (settled) {
+  const [{ mealDay, reason }] = meals;
+  if (reason === "settled") {
     return `The cooks and costs you entered for ${mealDay} were not saved, because that meal has already been settled.`;
+  }
+  if (reason === "cancelled") {
+    return `The cooks and costs you entered for ${mealDay} were not saved, because that dinner was cancelled. To enter them, open it and restore it first.`;
   }
   return `The cooks and costs you entered for ${mealDay} were not saved. Please open that meal and enter them again.`;
 }
@@ -126,6 +135,23 @@ function inStack<T extends { toastId: number }>(message: T | null): T | null {
 // sends them, and tests/unit/api_contract.test.ts checks this constant.
 export const SETTLED_MEAL_REFUSAL =
   "Change not permitted. Meal has already been reconciled.";
+
+// The words the server answers a write to a cancelled dinner with
+// (CancelledDinnerFreeze::MESSAGE in
+// app/models/concerns/cancelled_dinner_freeze.rb). Compared the same way,
+// and kept in the same file under "messages": update_bills_spec.rb checks
+// that the server sends them, and tests/unit/api_contract.test.ts checks
+// this constant.
+export const CANCELLED_DINNER_REFUSAL =
+  "This dinner is cancelled. Restore it before changing it.";
+
+// Why the server refused this save, read from its words (see the two
+// constants above).
+function refusalReason(message: string | undefined): RefusalReason {
+  if (message === SETTLED_MEAL_REFUSAL) return "settled";
+  if (message === CANCELLED_DINNER_REFUSAL) return "cancelled";
+  return null;
+}
 
 // The server's answer to a save that failed, or undefined when there
 // was no answer. Read by shape, not by class: the response is what the
@@ -499,7 +525,7 @@ export function billsActions(self: BillsStore) {
       const words = cookInTwoRowsMessage(built.cook.plainName);
       if (leaving) {
         console.warn(words);
-        self.showBillsNotSaved({ mealId: meal.id, mealDay, settled: false });
+        self.showBillsNotSaved({ mealId: meal.id, mealDay, reason: null });
       } else {
         self.billsCookInTwoRows = {
           toastId: toastStore.show(words, "error"),
@@ -762,7 +788,7 @@ export function billsActions(self: BillsStore) {
         } else {
           self.showBillsNotSaved({
             ...meal,
-            settled: answerIn(error)?.message === SETTLED_MEAL_REFUSAL,
+            reason: refusalReason(answerIn(error)?.message),
           });
         }
       } else if (noAnswerFromApp(error)) {
@@ -805,8 +831,9 @@ export function billsActions(self: BillsStore) {
     // A save for a meal the person left was not saved. Show the message
     // that names it, with the meals the message on screen already names
     // if that message still shows (see billsNotSaved). A meal the
-    // message already names keeps its place, and keeps the settled words
-    // once a save for it was refused as settled (see MealNotSaved).
+    // message already names keeps its place, and keeps the words of a
+    // refusal with a reason until a newer one replaces them (see
+    // MealNotSaved).
     showBillsNotSaved(meal: MealNotSaved) {
       unnameMaybe(meal.mealId);
       const earlier = inStack(self.billsNotSaved);
@@ -814,7 +841,7 @@ export function billsActions(self: BillsStore) {
       const meals = named.some((other) => other.mealId === meal.mealId)
         ? named.map((other) =>
             other.mealId === meal.mealId
-              ? { ...meal, settled: other.settled || meal.settled }
+              ? { ...meal, reason: meal.reason ?? other.reason }
               : other,
           )
         : [...named, meal];
@@ -837,7 +864,7 @@ export function billsActions(self: BillsStore) {
         self.showBillsNotSaved({
           mealId: meal.mealId,
           mealDay: meal.mealDay,
-          settled: false,
+          reason: null,
         });
         return;
       }

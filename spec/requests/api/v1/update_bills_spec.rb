@@ -23,6 +23,11 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
     JSON.parse(Rails.root.join('tests/fixtures/api_contract.json').read)
         .fetch('messages').fetch('reconciled_rejection')
   end
+  # The same, for a write to a cancelled dinner (ADR 0011 rule 11).
+  let(:cancelled_dinner_rejection) do
+    JSON.parse(Rails.root.join('tests/fixtures/api_contract.json').read)
+        .fetch('messages').fetch('cancelled_dinner_rejection')
+  end
 
   # JSON, as the page sends it, with a new Idempotency-Key. A
   # form-encoded body has its own examples, and the key its own file
@@ -498,6 +503,22 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
 
       patch "/api/v1/meals/#{meal.id}/bills", params: { bills: [], token: token }, as: :json
       expect(response.parsed_body).to eq('message' => reconciled_rejection)
+    end
+  end
+
+  describe 'cancelled dinner rejection' do
+    before { meal.cancel! }
+
+    # The meal page reads this exact sentence to tell a cancelled dinner
+    # from the other 400s. A save for a meal the person has left then says
+    # that the dinner was cancelled, and how to enter the costs. The
+    # sentence comes from the contract file, as for a settled meal above.
+    it 'returns 400 with the exact sentence the meal page reads, and keeps the bill' do
+      save_edits([changing(cook, seen, values('50.00'))])
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq('message' => cancelled_dinner_rejection)
+      expect(bill.reload.amount).to eq(BigDecimal('0'))
     end
   end
 
