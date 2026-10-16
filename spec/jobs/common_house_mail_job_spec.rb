@@ -41,13 +41,14 @@ RSpec.describe CommonHouseMailJob do
     end
   end
 
-  it 'sends the mail to the common house and records it with no resident' do
+  it 'sends the mail to the common house and records it with no resident, and queues no new try' do
     described_class.perform_now(reconciliation)
 
     mail = ActionMailer::Base.deliveries.sole
     expect(mail.to).to eq([ReconciliationMailer::COMMON_HOUSE])
     expect(mail.subject).to start_with('Balances to collect')
     expect(rows.pluck(:resident_id)).to eq([nil])
+    expect(queue_adapter.enqueued_jobs).to be_empty
   end
 
   it 'sends nothing when the mail already went out, so a second run sends no second copy' do
@@ -56,6 +57,24 @@ RSpec.describe CommonHouseMailJob do
 
     expect(ActionMailer::Base.deliveries.size).to eq(1)
     expect(rows.count).to eq(1)
+  end
+
+  # The job asks whether this settlement's mail went out, not whether
+  # every settlement's did.
+  it "sends nothing when this settlement's mail went out, while an earlier settlement still waits for its own" do
+    meal = create(:meal, community: community, date: latest - 7)
+    create(:bill, meal: meal, resident: create(:resident, community: community, unit: unit), community: community,
+                  amount: BigDecimal('20'))
+    create(:meal_resident, meal: meal, resident: create(:resident, community: community, unit: unit),
+                           community: community)
+    waiting = settle!(cutoff: latest - 7)
+    described_class.perform_now(reconciliation)
+    ActionMailer::Base.deliveries.clear
+
+    described_class.perform_now(reconciliation)
+
+    expect(ActionMailer::Base.deliveries).to be_empty
+    expect(described_class.not_sent(Reconciliation.all)).to eq([waiting])
   end
 
   # A row with no resident is one per mailer and record: the partial
@@ -98,6 +117,12 @@ RSpec.describe CommonHouseMailJob do
       # The report names this mail, so the alert says which mail failed.
       expect(Rails.error).to have_received(:report)
         .with(an_instance_of(Net::ReadTimeout), hash_including(context: { mailer: described_class::MAILER }))
+        .exactly(4).times
+      # The log line names the address, so a person reading the log knows
+      # which mail did not go out (MailDeliveryFailure).
+      expect(Rails.logger).to have_received(:error)
+        .with("common_house_collection_email failed for #{ReconciliationMailer::COMMON_HOUSE}: " \
+              'Net::ReadTimeout - Net::ReadTimeout')
         .exactly(4).times
       expect(Rails.logger).to have_received(:warn).with(
         'common_house_collection_email: the common house email was not sent for reconciliation ' \
