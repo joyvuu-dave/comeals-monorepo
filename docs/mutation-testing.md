@@ -4070,3 +4070,149 @@ Two more, each with an answer:
   method. It passes alone and in the plain suite. So run 2's kills for
   this method mean nothing, and in run 1 the unmutated code ran past the
   time limit. The method is one line that hands the meal to the ledger.
+
+### 2026-10-16, the meal models, cancelled dinners and the settled history rows
+
+Run on `Meal* Reconciliation* CancelledDinnerFreeze* DinnerCancelling*
+NoCostMarking* MealStatusActions* MealCostSummary* SettledMealHistory*`:
+the Meal and Reconciliation models, the freeze on a cancelled dinner's
+rows, the two buttons on the settlement preview (cancel the dinners
+nobody cooked, mark the blank costs No cost), the meal page's close and
+cancel writes, the cost summary a screen shows, and the history row a
+settlement writes for each meal it claims. `Meal*` takes only `Meal`
+itself: `MealLedger`, `MealCorrecting` and the others are other
+classes. Four pieces of four workers on GitHub.
+
+| Run                                      | Run id      | Subjects | Mutations | Killed | Alive | Timeouts |
+| ---------------------------------------- | ----------- | -------- | --------- | ------ | ----- | -------- |
+| 1, before (main at 14320264)             | 38925089053 | 75       | 3,565     | 3,349  | 216   | 0        |
+| 2, after the tests and removals below    | 38946158867 | 74       | 3,478     | 3,426  | 52    | 0        |
+| 3, after three more examples (the final) | 38957202454 | 74       | 3,478     | 3,432  | 46    | 0        |
+
+Run 1 had the 203 survivors of the full run of 532ac4be, and 13 in code
+changed since: `Reconciliation#settled_cooks_by_meal` (12, new) and
+`NoCostMarking.call` (1). No run had a timeout.
+
+A test now kills it (most of the 216):
+
+- `Meal`. `#multiplier` and `#attendees_count` sum and count in the
+  database unless both lists are loaded, so a row saved after one list
+  was loaded counts. `#neighbour_ids` never names the meal itself or a
+  meal on the day. A cancelled meal needs no cooks
+  (`#another_meal_in_this_rotation_has_less_than_two_cooks?`). A
+  `closed_at` written by hand on an open meal is refused by the
+  database, not cleared. A restore of a dinner that is not cancelled
+  saves nothing: a save with no change runs no query, so run 2 still
+  had these two, and the example now checks that the meal's page is not
+  told. Money on another dinner's cost, or on a No cost bill with an
+  amount, does not stop a cancel. The save that cancels or restores a
+  dinner may change other values. A cancelled dinner nobody signed up
+  for refuses delete: with sign-ups, the frozen rows stopped the delete
+  anyway. A cancelled dinner is not checked for money again on a later
+  save (set up with the meals trigger off, because nothing else can put
+  money on a cancelled dinner's cost).
+- `CancelledDinnerFreeze`. A row moved off a cancelled dinner is
+  refused, and a row with no meal is not called cancelled.
+- `Reconciliation`. `#settlement_ledger` loads everything the ledger
+  reads, and leaves out a meal nobody ate. `#number_of_meals` does not
+  load the meals. `#saved_units` reads only its own settlement's lines,
+  by person. `#settled_cooks_by_meal` lists each dinner's cooks by name;
+  with two cooks an order that follows the rows matched by chance, so
+  the example has four whose name order is neither their id order nor
+  its reverse. `.settled_dinner_cooks` orders the edits before DISTINCT
+  ON keeps the first. PostgreSQL's sort kept the rows in id order in
+  every case tried, even with the first rows moved to the end of the
+  table, so that example reads the query's ORDER BY.
+- `DinnerCancelling` and `NoCostMarking`. A cook who signs up, or saves
+  a cost, while either runs waits for its commit and then finds the
+  dinner cancelled or the cost marked: the lock lasts to the commit only
+  inside the one transaction (two new race examples; the old ones, cook
+  first, could not tell, because the FOR UPDATE outside a transaction
+  failed as a conflict and was retried the same way). A dinner not on
+  the list is left alone. A sign-up for another dinner does not wait for
+  the marking. The costs come back in id order (moving a row to the end
+  of the table showed it here and not on GitHub, so the example also
+  reads the ORDER BY), and with their dinner and cook loaded when
+  nothing is saved, where no save loads them on the way.
+- `MealStatusActions`. A settled dinner gets the settled words before
+  the value is read, and a close answers with its message.
+- `MealCostSummary`. An open meal's summary asks nothing about
+  corrections, and a settled meal's lines are read with one query.
+- `SettledMealHistory`, in a new spec: the row names the person, the
+  request id and the address that the audited gem's own row names for a
+  save in the same admin request (`Audited::Sweeper` around a stand-in
+  controller); outside a request it names nobody and has a request id
+  of its own; a meal with no history gets version 1; and no meals means
+  no query.
+
+Removed, with the same behavior (answer 2):
+
+- `Meal#cap`, which only read the column.
+- `will_save_change_to_cancelled_at?` in `Meal#cancelling?`. "Empty in
+  the database and set now" is always a change, and the trigger
+  `comeals_protect_settled_meal` asks the same two things.
+- In `CancelledDinnerFreeze#either_dinner_cancelled?`, the condition on
+  a meal change, the `compact!` and the empty check. It is one query on
+  `[meal_id, meal_id_in_database]` now: without a move the two are the
+  same meal, and a nil matches no meal.
+- The id after the date in `Meal#neighbour_ids`'s two orders. No two
+  meals share a date (`index_meals_on_date`).
+  `MealFormSerializer#next_id` and `#prev_id` have the same id
+  tiebreak; they are outside this run.
+- `select(:id)` on a relation given to a where hash, in
+  `Reconciliation#settlement_balances`, `#add_correction_lines!` and
+  `.settled_dinner_cooks`: Rails reads the relation's primary key.
+- The default of `raw.fetch` in `#add_correction_lines!`: the raw
+  balances have an entry for every resident of the community
+  (`MealLedger#balances`), so every line's person has one.
+
+Run 2's 52, all noise of kinds earlier entries name:
+
+- `to_ary` for `to_a`, or no `to_a` where the relation loads once
+  anyway: `#settlement_ledger`, `MealCostSummary.from_charges`,
+  `DinnerCancelling.cancel` (2), `NoCostMarking.mark`.
+- The type arguments of `T.cast` (4, `#unit_balances` and
+  `#add_correction_lines!`): `T.cast` checks nothing at runtime.
+- `instance_of?` for `is_a?` on the String `TrueOrFalse` returns (3,
+  `MealStatusActions` and `SettledMealHistory.writer`).
+- `Audited` for `::Audited` (4, `SettledMealHistory.writer`): the same
+  constant. And a nil key left out of the one row `insert_all!` writes,
+  or the class for its name in `user_type` (7): the column is NULL, or
+  the name, either way.
+- `.iso8601` removed from a Date in a string (`cutoff_refusal`);
+  `end_date()` for `self.end_date`; `errors.any?` for
+  `errors[:end_date].any?`, when `set_date` has filled the only other
+  required value; `meals.size` for `meals.count`; a sum with no
+  `BigDecimal('0')` start that is only asked `zero?`.
+- A record for its id in a where hash (`#settled_cook?`,
+  `DinnerCancelling.cancel` (2)), a read of every meal's cooks where
+  only the listed meals are looked up (`DinnerCancelling.cancel`), and
+  `distinct` dropped from an id list that goes into IN
+  (`NoCostMarking.mark`).
+- `#settled_cooks_by_meal`: `name` or `name.to_str` for `name.to_s` on
+  a NOT NULL name, and the two ways to take a pair apart in a block (3).
+  Its `resident.to_s` (1) is killed in run 3.
+- `.settled_dinner_cooks`: the order as a plain string, `Arel.sql`
+  dropped in the select, and `self.from` for `MealCorrection.from` on a
+  subquery that names its columns (3): the same SQL.
+- `audit` for `audit.id` as the second sort key of `Meal#total_audits`:
+  ActiveRecord compares two records of one class by id.
+- `closed` for `closed == true` and `closed_was` for
+  `closed_was == true` in `#conditionally_set_closed_at`, on a NOT NULL
+  boolean (2).
+- `MealLedger.new([])` or `([nil])` for `MealLedger.new([meal])` before
+  `summary_for(meal)` (4, `MealCostSummary.for` and `.now`):
+  `summary_for` reads only its argument.
+
+Run 3's 46 are run 2's noise without the six the new examples kill: the
+two of `Meal#restore!`, the two `order` mutations of `NoCostMarking.mark`,
+the `resident.to_s` of `#settled_cooks_by_meal`, and one of the two
+`to_a` mutations of `DinnerCancelling.cancel`. That last one was alive in run 2 and killed in run 3 with the same
+examples; why it differs between runs is not known.
+
+While answering these, a sign-up or a guest with no meal turned out to
+raise `TypeError` (`T.must(meal)` in
+`ClosedMealAttendanceFreeze#meal_has_open_spots`) instead of being
+refused by `belongs_to`. No page of the app builds such a row; the
+console can. The red spec is
+`spec/models/concerns/closed_meal_attendance_freeze_without_a_meal_spec.rb`.
