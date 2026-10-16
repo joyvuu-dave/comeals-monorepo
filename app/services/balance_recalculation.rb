@@ -22,8 +22,9 @@ class BalanceRecalculation
     new(community, wait_limit: wait_limit).call
   end
 
+  # Only .call makes one, and it always passes wait_limit.
   sig { params(community: Community, wait_limit: T.nilable(ActiveSupport::Duration)).void }
-  def initialize(community, wait_limit: nil)
+  def initialize(community, wait_limit:)
     @community = community
     @wait_limit = wait_limit
   end
