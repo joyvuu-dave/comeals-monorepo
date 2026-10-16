@@ -94,22 +94,28 @@ RSpec.describe 'marking dinners cancelled, against a cook signing up at the same
   # would be cancelled with a cook signed up.
   it 'makes a cook who signs up while it runs wait, and then the dinner is cancelled' do
     observer = open_session
+    dinner = meal
+    person = cook
     read = Queue.new
     go = Queue.new
+    tries = 0
     allow(DinnerCancelling).to receive(:reason_to_leave).and_wrap_original do |original, *args|
-      read << true
-      go.pop
+      tries += 1
+      if tries == 1
+        read << true
+        go.pop
+      end
       original.call(*args)
     end
     cancelling = Thread.new do
       Thread.current.report_on_exception = false
-      ActiveRecord::Base.connection_pool.with_connection { DinnerCancelling.call(meal_ids: [meal.id]) }
+      ActiveRecord::Base.connection_pool.with_connection { DinnerCancelling.call(meal_ids: [dinner.id]) }
     end
     read.pop
 
     signing_up = Thread.new do
       Thread.current.report_on_exception = false
-      ActiveRecord::Base.connection_pool.with_connection { Bill.create!(meal: meal, resident: cook, amount: 0) }
+      ActiveRecord::Base.connection_pool.with_connection { Bill.create!(meal: dinner, resident: person, amount: 0) }
     end
     # The cook's save locks the meal first (LocksItsMealFirst).
     waited = wait_for_blocked_session(observer, 'FOR KEY SHARE')
@@ -117,7 +123,7 @@ RSpec.describe 'marking dinners cancelled, against a cook signing up at the same
     result = cancelling.value
 
     expect(waited).to be(true)
-    expect(result.cancelled).to eq([meal])
+    expect(result.cancelled).to eq([dinner])
     expect { signing_up.join }.to raise_error(ActiveRecord::ActiveRecordError)
     expect(meal.reload.cancelled?).to be(true)
     expect(meal.bills).to be_empty
