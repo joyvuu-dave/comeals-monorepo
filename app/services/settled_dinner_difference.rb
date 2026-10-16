@@ -48,10 +48,10 @@ class SettledDinnerDifference
   end
 
   # A grouped sum, keyed [meal_id, resident_id]. Sorbet's relation sigs
-  # know only the ungrouped, scalar form.
+  # know only the ungrouped, scalar form, so this sig says what it is.
   sig { params(grouped: T.untyped).returns(T::Hash[[Integer, Integer], BigDecimal]) }
   def self.sums(grouped)
-    T.cast(grouped, T::Hash[[Integer, Integer], BigDecimal])
+    grouped
   end
 
   sig do

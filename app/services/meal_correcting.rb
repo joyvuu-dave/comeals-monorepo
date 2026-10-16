@@ -148,8 +148,9 @@ class MealCorrecting
     lines = result.changes.map do |resident_id, amount|
       { meal_correction_id: correction.id, resident_id: resident_id, amount: amount }
     end
-    # One statement, so the sum-zero trigger sees every line at once.
-    MealCorrectionLine.insert_all!(lines) if lines.any?
+    # One statement, so the sum-zero trigger sees every line at once. An
+    # empty list (a correction that moves no money) sends no statement.
+    MealCorrectionLine.insert_all!(lines)
     write_setting('')
     correction
   end
@@ -209,7 +210,7 @@ class MealCorrecting
   end
   def self.changes(before, after)
     zero = BigDecimal('0')
-    (before.keys | after.keys).sort.index_with { |id| after.fetch(id, zero) - before.fetch(id, zero) }
+    (before.keys | after.keys).index_with { |id| after.fetch(id, zero) - before.fetch(id, zero) }
                               .reject { |_, amount| amount.zero? }
   end
 
