@@ -248,7 +248,7 @@ class ApiController < ActionController::API
     return if defined?(@session_resolved)
 
     @session_resolved = true
-    token = bearer_token_from_header || params[:token].presence
+    token = bearer_token_from_header || token_param
 
     if (resident = JwtAuth.authenticate(token))
       @current_api_key = nil
@@ -273,8 +273,16 @@ class ApiController < ActionController::API
     @bearer_token_from_header = match && match[:token]
   end
 
+  # The ?token= query parameter, or nil. Only a String counts: Rack turns
+  # ?token[]=x into a list and ?token[a]=x into a hash, and neither is a
+  # token.
+  def token_param
+    token = params[:token]
+    token.presence if token.is_a?(String)
+  end
+
   def set_community_timezone(&)
-    if bearer_token_from_header.present? || params[:token].present?
+    if bearer_token_from_header.present? || token_param
       tz = current_resident_api&.community&.timezone.presence
       return Time.use_zone(tz, &) if tz && ActiveSupport::TimeZone[tz]
     end

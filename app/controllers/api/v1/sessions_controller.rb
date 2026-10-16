@@ -6,8 +6,8 @@ module Api
     # Session (API key) management. Each Key is an active login.
     #
     # Only "log out this device" is exposed. Broader revocation is achieved
-    # by changing the password — which destroys every session except the
-    # caller's (see Resident#revoke_all_sessions_if_password_changed).
+    # by changing the password, which ends every session, the caller's too
+    # (see Resident#revoke_all_sessions_if_password_changed).
     class SessionsController < ApiController
       before_action :authenticate
 
