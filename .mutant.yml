@@ -213,10 +213,12 @@ mutation:
   # `x` and nothing can fail, because the value was never nil; `T.let`
   # is a no-op at runtime. Skipping the call skips its arguments too,
   # which is fine for T.let (every use wraps a literal) and cheap for
-  # T.must (every use wraps a column read). T.cast is not skipped: one
-  # use wraps a query that should be mutated. The other, in
-  # GuestAdd#vegetarian, leaves two survivors, its type arguments: T.cast
-  # checks nothing at runtime (2026-10-09).
+  # T.must (every use wraps a column read). T.cast is not skipped,
+  # because skipping a call skips its arguments, and the first argument
+  # of a T.cast is often a query that should be mutated. The cost: a
+  # mutation of a T.cast's type argument always survives, because
+  # T.cast checks nothing at runtime (2026-10-09: two such survivors in
+  # GuestAdd#vegetarian). Read those survivors as noise.
   ignore_patterns:
     - send{receiver=const{name=T} selector=must}
     - send{receiver=const{name=T} selector=let}
