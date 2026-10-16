@@ -123,11 +123,20 @@ RSpec.describe Settlement do
   describe 'the fingerprint' do
     let(:balances) { { 5 => BigDecimal('1.5'), 3 => BigDecimal('-1.5') } }
     let(:base) do
-      described_class.fingerprint(cutoff: latest, meal_ids: [1, 2], correction_ids: [3], balances: balances)
+      described_class.fingerprint(cutoff: latest, meal_ids: [1, 2], correction_ids: [3, 4], balances: balances)
+    end
+
+    # The code is made from text in one fixed layout. Each example below
+    # compares two codes, which cannot tell one layout from another; this
+    # one writes the layout out.
+    it 'is the SHA-256 of the cutoff, the dinners, the corrections and each amount, in that order' do
+      text = "#{latest.iso8601}|1,2|3,4|3:-1.5,5:1.5"
+
+      expect(base).to eq(Digest::SHA256.hexdigest(text))
     end
 
     it 'leaves out $0 balances, which a settlement does not store, and does not depend on order' do
-      same = described_class.fingerprint(cutoff: latest, meal_ids: [2, 1], correction_ids: [3],
+      same = described_class.fingerprint(cutoff: latest, meal_ids: [2, 1], correction_ids: [4, 3],
                                          balances: { 9 => BigDecimal('0'), 3 => BigDecimal('-1.50'),
                                                      5 => BigDecimal('1.50') })
 
@@ -136,12 +145,12 @@ RSpec.describe Settlement do
 
     it 'differs for another cutoff, another dinner, another correction, another amount, or another person' do
       others = [
-        described_class.fingerprint(cutoff: latest - 1, meal_ids: [1, 2], correction_ids: [3], balances: balances),
-        described_class.fingerprint(cutoff: latest, meal_ids: [1], correction_ids: [3], balances: balances),
-        described_class.fingerprint(cutoff: latest, meal_ids: [1, 2], correction_ids: [], balances: balances),
-        described_class.fingerprint(cutoff: latest, meal_ids: [1, 2], correction_ids: [3],
+        described_class.fingerprint(cutoff: latest - 1, meal_ids: [1, 2], correction_ids: [3, 4], balances: balances),
+        described_class.fingerprint(cutoff: latest, meal_ids: [1], correction_ids: [3, 4], balances: balances),
+        described_class.fingerprint(cutoff: latest, meal_ids: [1, 2], correction_ids: [3], balances: balances),
+        described_class.fingerprint(cutoff: latest, meal_ids: [1, 2], correction_ids: [3, 4],
                                     balances: { 5 => BigDecimal('1.51'), 3 => BigDecimal('-1.51') }),
-        described_class.fingerprint(cutoff: latest, meal_ids: [1, 2], correction_ids: [3],
+        described_class.fingerprint(cutoff: latest, meal_ids: [1, 2], correction_ids: [3, 4],
                                     balances: { 6 => BigDecimal('1.5'), 3 => BigDecimal('-1.5') })
       ]
 
