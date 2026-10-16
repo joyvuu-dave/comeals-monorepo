@@ -3882,3 +3882,191 @@ Noise (55), changes no row can show:
   and nil or repeated ids in the `IN` list find the same residents.
 
 No run had a timeout.
+
+### 2026-10-16, the settlement core
+
+Run on GitHub, four pieces of four workers, on the classes that turn
+bills and attendance into the amounts on a settlement and check them
+afterwards: `Settlement*`, `LargestRemainderSplit*`, `MealLedger*`,
+`BalanceRecalculation*`, `ReconciliationBalance*`, `CollectionList*`,
+`LedgerVerification*`, `ReconciliationWarnings*`,
+`SettlementPreviewHelper*`, `BalanceDisplayHelper*` and
+`Api::V1::ReconciliationsController*`: 106 subjects.
+
+| Run                                                | Mutations | Killed | Alive | Timeouts | Time |
+| -------------------------------------------------- | --------- | ------ | ----- | -------- | ---- |
+| 1, run 38925071449, on main, 300-second limit      | 5,104     | 4,909  | 195   | 37       | 2h45 |
+| 2, run 38946208665, after the answers, 600 seconds | 5,096     | 4,981  | 115   | 0        | 2h45 |
+
+Run 1's 195 were in 46 subjects, run 2's 115 in 34. Run 2 is on
+babe5300; after it, one example and this entry were added. Its piece logs show only the first
+survivor of each subject; the full list came from each piece's
+`.mutant/results/*.json`.
+
+**The time limit.** All 37 timeouts in run 1 were in `Settlement`
+methods, and for nine of them the unmutated code timed out too. On
+GitHub's runners with four workers, the 913 examples of a `Settlement`
+method took 283 to 299 seconds, so any mutation that no example failed
+ran into the 300-second limit, and so did the unmutated code. None was
+a loop that never ends. `.mutant.yml` now allows 600 seconds.
+
+**The order of rows.** Several examples relied on PostgreSQL returning
+rows in the order they were written. In mutant's workers on GitHub it
+did not always: the bills of a meal came back lowest resident id first,
+so dropping `MealLedger#cooks`'s sort passed the example written for it.
+That example now loads the bills highest id first on purpose, and the
+two comparisons of the ledger check are also called directly with the
+residents out of order. An order that only the database decides is not
+something an example can rely on.
+
+Missing assertions, each now with an example that fails on it (checked
+by making each change by hand, or by a local run of the method):
+
+- `BalanceDisplayHelper#balance_tag` (3): `round`, `round(0)` and
+  `round(1)` for `round(2)`. No class example used an amount under a
+  dollar; one now uses $0.40, $0.006 and $0.004.
+- `Settlement.fingerprint` (20 of 23): every example compared two codes,
+  so any layout of the same parts passed. One example now writes the
+  layout out, and the order example has two corrections out of order.
+- `Settlement#claim_corrections` (7): the savepoint, the ids in the
+  claim, `updated_at`, and the line that turns the setting off. New
+  examples: a failed claim leaves the setting off; a failed ledger write
+  after a claim leaves it off; a correction the locking read did not
+  return stays for the next settlement; a carried correction's
+  `updated_at` moves.
+- `Settlement.waiting_by` (2): the cutoff and `unreconciled`. A new
+  example has a waiting meal after the cutoff and a settled meal with a
+  blank cost (settled the way it was before rule 3).
+- `Settlement.preview` (3): `MealCorrection.waiting` dropped, and
+  `order(:id)` dropped or `order(nil)`. New examples preview after a
+  settlement carried a correction, and read the statement.
+- `Settlement.allocate_to_cents` (8): the `select` before each sort,
+  dropped or made always true (6), and `nil` for the reconciliation id
+  in the second guard (2). New examples turn the input guard off: a
+  penny with no balance whose cut dropped something is refused, and the
+  refusal names the settlement.
+- `Settlement.assert_candidates_cover_pennies!` (1): `<` for `<=`. With
+  the input guard off, exactly as many candidates as pennies is enough.
+  The 2026-09-09 entry called this noise because a balanced input
+  cannot reach it, but the guard's own examples already turn the first
+  guard off.
+- `Settlement#rewrite!` (1): `write_ledger!` without the units. The spec
+  that says it runs the runbook's rebuild "exactly as written" did not
+  pass `units:`, which the runbook does. It does now, after one person
+  moved and one moved out, and a second example rebuilds with no units.
+- `BalanceRecalculation#call` (1): the correction replacing a person's
+  balance instead of adding to it. A new example has an open meal and a
+  waiting correction for the same people.
+- `LargestRemainderSplit.call` (4): the tie-break by position dropped.
+  See "Only on Linux" below.
+- `MealLedger#cooks` (2): the sort by resident id. See "The order of
+  rows" above.
+- `LedgerVerification` (15): `.summary_for` (1), the sort of the ids:
+  a run built with its findings out of order. `#dinner_check` (2), the
+  two sorts: an example where a person whose line is gone is found after
+  one whose line changed. `#differences_between` and
+  `#line_item_differences` (2), the sort: called directly with the
+  residents out of order. `#line_item_check` (3): the check
+  skipped for a settlement with only a correction's lines. `#record`
+  (1): `"#{error}"` for `error.message`, with an error class whose
+  message says more than its `to_s`, as `Net::ReadTimeout`'s does.
+  `#log` (4): the condition around the line a passing run logs; the
+  call is ignored, the condition is not, and an example now reads the
+  line.
+- `ReconciliationBalance#newest_mark` (1): `last` for `max_by(&:id)`.
+  An example loads the marks newest first.
+
+Redundant code, removed (5):
+
+- `BalanceRecalculation#initialize` (1): the default of `wait_limit`.
+  Only `.call` makes one, and it always passes it.
+- `Settlement.allocate_to_cents` (1): the default of
+  `reconciliation_id`. Both callers in the app pass one; one spec did
+  not, and does now.
+- `Settlement.preview` (3, the default dropped, `nil` or `"0"`): the default of zero in the sum of the
+  corrections. The preview starts from a balance for every resident, so
+  every correction line's person has one.
+
+Noise, changes no example can see (108 of run 2's 115):
+
+- `to_a` to `to_ary`, and the preloads dropped or emptied, in
+  `Settlement.preview`, `.held_by`, `.skipped_by`, `.waiting_by`,
+  `BalanceRecalculation#call`, `LedgerVerification#dinner_check` and
+  `CollectionList#initialize` (`.to_a` dropped too there: a relation
+  loads once). goldiloader loads the same rows anyway, as on 2026-09-27.
+- `to_s('F')` to `to_s` or to the bare BigDecimal, and `date.to_s` or
+  `.iso8601` to the bare Date, wherever the value then becomes text or
+  JSON: `MealLedger.units`, `Settlement.fingerprint` (and the bare
+  cutoff Date in its text),
+  `LedgerVerification` (`#dinner_check`, `#lines_do_not_balance`,
+  `#detail`, the two comparisons), `SettlementPreviewHelper` (2) and the
+  settle action (2). ActiveSupport makes a BigDecimal's `to_s` plain
+  digits, and a Date's text and JSON are YYYY-MM-DD.
+- A record for its id (1): `reconciliation` for `reconciliation.id` in
+  `LedgerVerification#line_item_check`'s `where` hash. Rails reads the
+  id.
+- A sum's start value: `Settlement.allocate_to_cents`,
+  `.assert_balanced_input!`, `LedgerVerification#line_item_check`,
+  `BalanceDisplayHelper#settlement_totals_tag` (2). An empty sum is then
+  Integer 0, which reads and prints the same.
+- `.to_int` and `Integer()` for `.to_i` (`MealLedger.units`,
+  `Settlement.allocate_to_cents`); `raw > 0` for `raw >= 0` in
+  `truncate_toward_zero` (zero cut either way is zero); the
+  `elsif pennies.negative?` rewrites, which with no penny to move do
+  nothing.
+- `MealLedger`: `instance_of?` for `is_a?` (no class inherits from
+  `Guest`), the guest's rank as 2 or 167 or the attendee's as -1 (only
+  the order is read), `multiplier: nil` and `bill_amount: nil` dropped
+  (a T::Struct fills a nilable field with nil), and the `T.let` line in
+  `#initialize`.
+- `Settlement#initialize` (2): the two `T.let(nil, ...)` lines. An
+  unset instance variable reads nil, and `srb tc` needs the lines.
+- `Settlement#persist_charges!`: `line.kind` for `line.kind.to_s`,
+  kept on purpose since 2026-09-08. `#persist_balances!`: `balances`
+  for `balances.keys` before `to_h` (the block reads only the key).
+- `ReconciliationWarnings#warning` (3): `fetch` for `[]` on keys every
+  caller passes. `#warnings_for` (1): the cancelled dinner's warning
+  without its array; `call` reads it with `flat_map`, which keeps a Hash
+  as one item.
+- The preview action (1): `e` for `e.message`; JSON writes an error as
+  its message.
+- `BalanceRecalculation#call` (2): the `T.cast` type arguments.
+
+Only on Linux, so alive on GitHub (4):
+
+- `LargestRemainderSplit.call` (4): the tie-break by position. Ruby
+  sorts with the C library's sort on Linux, which keeps tied items in
+  the order given (checked with Ruby on glibc 2.39), and the order given
+  is the position. On macOS Ruby uses its own sort, which moves the last
+  of eight tied items to the front; the new example with eight and
+  twelve tied shares fails there on all four (local run: 99 mutations,
+  99 killed). The tie-break stays: production must not depend on which
+  sort the C library has.
+
+A finding, left alive and reported, not fixed (1):
+
+- `CollectionList#by_name`: `upcase` for `downcase`. The two differ only
+  for a few characters. One is 'ß', which has no capital of its own: a
+  person reads 'Straße' as 'Strasse', and the database sorts 'Jo
+  Straße' before 'Jo Strauss', but `downcase` keeps 'ß', which comes
+  after every plain letter, so the common house list puts 'Jo Strauss'
+  first. `upcase` happens to give the right order. The red example is
+  the last commit of the branch. `downcase(:fold)` (Unicode case
+  folding) would give the database's order for 'ß'.
+
+Two more, each with an answer:
+
+- `Settlement.skipped_by` (1): `order(:date)` dropped. The example of
+  the skipped meals passes without it in mutant's workers, where
+  PostgreSQL returned the rows in date order anyway (the caveat of
+  2026-09-08). After run 2, an example reads the statement, as the held
+  and waiting lists' examples do; it fails without the ORDER BY.
+- `Settlement::Preview#meal_summary` (1): a neutral failure, not a
+  survivor. In run 2 the unmutated code failed one race example,
+  `settlement_race_spec.rb`'s "a model write from a second Rails
+  connection ... is refused in words when sent again", with a
+  serialization failure in `LocksItsMealFirst#lock_its_meals`. The old
+  run of 2026-10-16 (on 532ac4be) failed the same example for the same
+  method. It passes alone and in the plain suite. So run 2's kills for
+  this method mean nothing, and in run 1 the unmutated code ran past the
+  time limit. The method is one line that hands the meal to the ledger.
