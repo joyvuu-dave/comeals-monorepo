@@ -71,7 +71,7 @@ class MealSchedule
     # A schedule with at least one day can always fill `count` dates: the six
     # holidays are single days a year, never a whole weekday forever. The cap
     # exists so a bad row that somehow got past every validation and database
-    # constraint fails loudly instead of looping forever.
+    # constraint raises an error instead of looping forever.
     scan_limit = (count * cycle_length * 7) + 366
     scanned = 0
     while dates.length < count

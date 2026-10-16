@@ -104,9 +104,9 @@ class LedgerVerification
     @wait_limit = wait_limit
   end
 
-  # One reconciliation can fail both checks, so the count is of findings, not
-  # of reconciliations. Naming which reconciliations are involved matters more
-  # than the count anyway — that is what someone acts on.
+  # One reconciliation can fail more than one check, so the count is of
+  # findings, not of reconciliations. The ids of the reconciliations are
+  # more useful than the count anyway: they are what someone acts on.
   sig { params(run: LedgerCheckRun).returns(String) }
   def self.summary_for(run)
     ids = run.details.pluck('reconciliation_id').uniq.sort

@@ -100,7 +100,7 @@ RSpec.describe 'Sessions API' do
   # ---------------------------------------------------------------------------
   # Authorization header parsing — the exact production risk surface if the
   # parsing regex is ever relaxed or tightened. Locks in the accepted/rejected
-  # shapes so regressions fail loudly.
+  # shapes, so a change to either fails a spec here.
   # ---------------------------------------------------------------------------
   describe 'Authorization header parsing' do
     it 'accepts lowercase "bearer" (scheme is case-insensitive per RFC 7235)' do

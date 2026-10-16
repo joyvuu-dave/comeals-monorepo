@@ -32,7 +32,7 @@ doc is the full rulebook; the short version lives in CLAUDE.md.
 So: every suite — linters, RSpec, Vitest, and the browser suites — runs
 in any number of worktrees at once. The port guards stay as the last
 defense (`bin/test-integration` refuses a taken port,
-`reuseExistingServer: false` fails loudly), but with each worktree on
+`reuseExistingServer: false` stops with an error), but with each worktree on
 its own block they should fire only when something is truly wrong: a
 leftover server from a crashed run, or two checkouts sharing one `.env`.
 

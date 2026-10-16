@@ -152,7 +152,7 @@ RSpec.describe SolidCache::Store do
 
     # The initializer appends to the constant, so it has to stay an array
     # that can be appended to. A future version that freezes it would raise
-    # at boot instead, but this says why out loud.
+    # at boot instead, but this example's name says why.
     it 'keeps that list appendable' do
       expect(SolidCache::Store::Failsafe::TRANSIENT_ACTIVE_RECORD_ERRORS).not_to be_frozen
     end

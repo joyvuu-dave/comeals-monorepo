@@ -415,7 +415,7 @@ RSpec.describe Reconciliation do
         .to raise_error(/do not sum to zero/)
     end
 
-    it 'fails loudly when residual pennies exhaust the deduction candidates' do
+    it 'raises a named error when residual pennies exhaust the deduction candidates' do
       # The input guard above makes this path unreachable; switch it off to
       # prove the second defensive layer raises descriptively instead of
       # crashing with NoMethodError on a nil candidate.
@@ -426,7 +426,7 @@ RSpec.describe Reconciliation do
         .to raise_error(/books do not balance/)
     end
 
-    it 'fails loudly when residual pennies exhaust the award candidates' do
+    it 'raises a named error when residual pennies exhaust the award candidates' do
       allow(Settlement).to receive(:assert_balanced_input!)
       unbalanced = { 1 => BigDecimal('-0.055') }
 

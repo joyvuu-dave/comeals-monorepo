@@ -236,7 +236,8 @@ having — a manual run now waits the same 3 minutes as the Monday
 run.) The break-glass
 (`DEPLOY_WITHOUT_CI=1` on bin/deploy) stays for the one case where
 the pipeline itself is the casualty (CI or Actions down); it must be
-loud — typed confirmation, the same notification the pipeline sends,
+hard to use by mistake and easy to see afterward — typed confirmation,
+the same notification the pipeline sends,
 and a mark left behind (an auto-filed issue) so every use gets looked
 at afterward.
 
@@ -294,9 +295,9 @@ Build order:
       with guarded auto-rollback, publish, healthchecks ping.
 - [x] rollback.yml (537c1e6): Heroku rollback → slug check → smoke →
       release-note marking → `DEPLOY_HOLD` + follow-up issue.
-- [x] Break-glass is loud: typed "break glass" phrase, auto-filed
-      review issue (or a warning to file one by hand when GitHub
-      itself is down).
+- [x] Break-glass is hard to use by mistake: typed "break glass"
+      phrase, auto-filed review issue (or a warning to file one by
+      hand when GitHub itself is down).
 - [ ] A few supervised runs before trusting it unattended.
 
 ## Order

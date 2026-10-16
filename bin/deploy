@@ -167,8 +167,9 @@ preflight_ci() {
   if [ "${DEPLOY_WITHOUT_CI:-}" = "1" ]; then
     # The break-glass. Legitimate only when the pipeline itself is the
     # casualty: GitHub or CI is down AND rollback cannot fix production.
-    # It is loud on purpose: a typed phrase, and a follow-up issue so
-    # every use gets looked at afterward. A red build is never a reason.
+    # It is hard to use by mistake, on purpose: a typed phrase, and a
+    # follow-up issue so every use gets looked at afterward. A red build
+    # is never a reason.
     warn "DEPLOY_WITHOUT_CI=1 — the break-glass. Every CI result will be ignored."
     warn "Legitimate only when GitHub/CI is itself down and rollback cannot fix prod."
     if [ ! -t 0 ]; then

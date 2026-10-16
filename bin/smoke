@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Post-deploy smoke test: drive the LIVE site with a real browser and
-# fail loudly if it is broken (docs/deploy-confidence-plan.md item 6).
+# Post-deploy smoke test: drive the LIVE site with a real browser, and
+# exit with an error that names the broken check if it is broken
+# (docs/deploy-confidence-plan.md item 6).
 # This catches the class of bug no local test can: the code is fine
 # but the deploy is not (env vars, asset serving, a stale build).
 #

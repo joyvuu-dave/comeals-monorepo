@@ -13,7 +13,7 @@ class AddWholeCentsCheckToBills < ActiveRecord::Migration[8.1]
     violations = select_values('SELECT id FROM bills WHERE amount <> round(amount, 2)')
     if violations.any?
       raise "Cannot add whole-cents CHECK: bills #{violations.join(', ')} have sub-cent amounts. " \
-            'Correct them first (an accounting decision — do not round silently).'
+            'Correct them first (an accounting decision — do not just round them).'
     end
 
     add_check_constraint :bills, 'amount = round(amount, 2)', name: 'bills_amount_whole_cents'
