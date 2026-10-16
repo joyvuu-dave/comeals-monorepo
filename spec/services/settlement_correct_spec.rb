@@ -41,6 +41,12 @@ RSpec.describe Settlement, '#correct!' do
     ActiveRecord::Base.connection.select_value("SELECT current_setting('comeals.allow_settled_writes', true)")
   end
 
+  # The setting that lets a settlement add rows to its own settled tables
+  # (Settlement::SETTLING_SETTING).
+  def settling_setting
+    ActiveRecord::Base.connection.select_value("SELECT current_setting('comeals.settling', true)")
+  end
+
   # A repair's change to a row of a settled meal.
   def change_amount(bill, amount)
     SettledWrites.with_repair_bypass { bill.update_columns(amount: BigDecimal(amount)) }
@@ -152,6 +158,15 @@ RSpec.describe Settlement, '#correct!' do
         .to raise_error(ActiveRecord::StatementInvalid, /reconciliation_balances refused/)
     end
 
+    # While the setting names the settlement, the database lets anything
+    # add balances and line items to it. So it is empty again when correct!
+    # returns, and the rest of the caller's transaction cannot add any.
+    it 'turns the settlement\'s own setting off again after its last write' do
+      fix
+
+      expect(settling_setting).to eq('')
+    end
+
     # A caller that had the bypass on for its own repair keeps it on.
     it 'puts the bypass back to what it was' do
       SettledWrites.with_repair_bypass do
@@ -184,6 +199,68 @@ RSpec.describe Settlement, '#correct!' do
       expect(SettlementCorrection.count).to eq(0)
     end
 
+    # A migration or a rake task can call correct! inside a transaction of
+    # its own, and go on after an error. correct! opens its own savepoint,
+    # so its writes go back even then.
+    it 'keeps none of its writes after it fails inside a transaction the caller keeps' do
+      books = balances(reconciliation)
+      allow(SettlementCorrectionLine).to receive(:insert_all!).and_raise(ActiveRecord::StatementInvalid, 'boom')
+
+      ActiveRecord::Base.transaction do
+        expect { fix }.to raise_error(ActiveRecord::StatementInvalid, 'boom')
+        expect(balances(reconciliation)).to eq(books)
+        expect(second.reload.amount).to eq(BigDecimal('0'))
+        expect(SettlementCorrection.count).to eq(0)
+      end
+    end
+
+    # The next month is settled too, with the same three people in it.
+    # Correcting March reads, deletes and writes only March's rows.
+    describe 'with a later settlement of the same people' do
+      let!(:april) do
+        meal(Date.new(2025, 4, 1), cook: cook, amount: '20', eaters: [dana, eli])
+        settle!(cutoff: Date.new(2025, 4, 30))
+      end
+
+      it 'works out and records only its own settlement, and leaves the later one as it was' do
+        april_books = balances(april)
+        april_charges = MealCharge.for_reconciliation(april).order(:id).pluck(:id, :resident_id, :amount)
+
+        correction = fix
+
+        expect(lines(correction))
+          .to eq([[cook.id, BigDecimal('30'), BigDecimal('40')], [dana.id, BigDecimal('-15'), BigDecimal('-25')]])
+        expect(balances(april)).to eq(april_books)
+        expect(april_books).to eq(cook.id => BigDecimal('20'), dana.id => BigDecimal('-10'),
+                                  eli.id => BigDecimal('-10'))
+        expect(MealCharge.for_reconciliation(april).order(:id).pluck(:id, :resident_id, :amount)).to eq(april_charges)
+        expect(LedgerVerification.call).to be_passed
+      end
+
+      # A correction of an April dinner (ADR 0011 rule 6) keeps April as it
+      # settled. It says nothing about March.
+      it 'is not stopped by a correction of a dinner of the later settlement' do
+        april_dinner = april.meals.sole
+        MealCorrecting.save!(april_dinner, by: create(:admin_user, community: community, superuser: true),
+                                           reason: 'Typed $20 for $22') do |edits|
+          edits.cost(cook, amount: BigDecimal('22'), no_cost: false)
+        end
+
+        expect(fix.lines.count).to eq(2)
+        expect(LedgerVerification.call).to be_passed
+      end
+
+      # A mark is about one settlement's line. People paid from April, not
+      # from March.
+      it 'is not stopped by a line of the later settlement marked Paid' do
+        line = april.reconciliation_balances.find_by!(resident: dana)
+        SettlementLineMarking.mark!(line, status: 'paid', note: nil, by: create(:admin_user, community: community),
+                                          seen: nil)
+
+        expect(fix.lines.count).to eq(2)
+      end
+    end
+
     # A correction works the settlement out again from all of its rows. A
     # difference that was there before the fix would be folded in under
     # the caller's reason, and the nightly check would stop reporting it.
@@ -193,8 +270,14 @@ RSpec.describe Settlement, '#correct!' do
       it 'refuses before the fix runs, names the settlement, and writes nothing' do
         books = balances(reconciliation)
 
-        expect { fix }.to raise_error(Settlement::EarlierDifference,
-                                      /\ARefused: settlement #{reconciliation.id} already disagrees.*recompute/)
+        expect { fix }.to raise_error(
+          Settlement::EarlierDifference,
+          "Refused: settlement #{reconciliation.id} already disagrees with its rows, before this correction " \
+          'changed anything (the nightly check finds: recompute (2 difference(s)), dinners (2 difference(s))). ' \
+          "A correction would fold that in under the reason \"#{reason}\", and the nightly check would stop " \
+          'reporting it. Find out where it came from first (docs/runbooks/settled-data-repair.md). Nothing was ' \
+          'written.'
+        )
         expect(second.reload.amount).to eq(BigDecimal('5'))
         expect(balances(reconciliation)).to eq(books)
         expect(SettlementCorrection.count).to eq(0)
@@ -203,6 +286,16 @@ RSpec.describe Settlement, '#correct!' do
       it 'refuses a call with no block, whose rows were changed before it' do
         expect { described_class.new(reconciliation).correct!(reason: reason) }
           .to raise_error(Settlement::EarlierDifference)
+      end
+
+      # The one caller that can work without a block: its rows were fixed
+      # before the call, and it says to fold that in.
+      it 'works without a block when the caller says to fold in the rows it fixed before' do
+        correction = described_class.new(reconciliation).correct!(reason: reason, include_earlier_differences: true)
+
+        expect(lines(correction))
+          .to eq([[cook.id, BigDecimal('30'), BigDecimal('35')], [dana.id, BigDecimal('-15'), BigDecimal('-20')]])
+        expect(LedgerVerification.call).to be_passed
       end
 
       # A caller that means to fold an earlier difference in says so.
@@ -348,6 +441,28 @@ RSpec.describe Settlement, '#correct!' do
     expect(balances(reconciliation)).to eq({})
     expect(lines(correction))
       .to eq([[cook.id, BigDecimal('10'), BigDecimal('0')], [dana.id, BigDecimal('-10'), BigDecimal('0')]])
+  end
+
+  # Every settlement writes only balances that are not zero. A settlement
+  # repaired by hand can still hold a row of exactly zero, and the nightly
+  # check reports it, because it expects no row. A correction told to fold
+  # that in drops the row, and a zero before and no row after are the same
+  # amount, so there is no line for it.
+  it 'records no line for a balance stored at zero that the correction drops' do
+    cook = person('Casey Cook')
+    dana = person('Dana Diner')
+    _, bill = meal(Date.new(2025, 3, 1), cook: cook, amount: '10', eaters: [dana])
+    reconciliation = settle!(cutoff: Date.new(2025, 3, 31))
+    zero = person('Zoe Zero')
+    SettledWrites.with_repair_bypass do
+      reconciliation.reconciliation_balances.create!(resident: zero, amount: 0, unit: unit, lived_here: true)
+    end
+
+    correction = correct(reconciliation, bill: bill, amount: '12', include_earlier_differences: true)
+
+    expect(balances(reconciliation)).to eq(cook.id => BigDecimal('12'), dana.id => BigDecimal('-12'))
+    expect(lines(correction))
+      .to eq([[cook.id, BigDecimal('10'), BigDecimal('12')], [dana.id, BigDecimal('-10'), BigDecimal('-12')]])
   end
 
   # ADR 0011 rules 6 and 8: once a line is marked Paid or Let go, people

@@ -119,7 +119,7 @@ module SettlementCorrecting
   # locked.
   sig { void }
   def refuse_a_corrected_dinner!
-    return unless MealCorrection.exists?(meal_id: reconciliation.meals.select(:id))
+    return unless MealCorrection.exists?(meal_id: reconciliation.meals)
 
     raise Settlement::DinnerCorrected,
           "Refused: a dinner of settlement #{reconciliation.id} has a correction, so the settlement keeps " \
@@ -231,7 +231,7 @@ module SettlementCorrecting
   end
   def record_lines!(correction, before, after)
     zero = BigDecimal('0')
-    lines = (before.keys | after.keys).sort.filter_map do |resident_id|
+    lines = (before.keys | after.keys).filter_map do |resident_id|
       old_amount = before.fetch(resident_id, zero)
       new_amount = after.fetch(resident_id, zero)
       next if old_amount == new_amount
@@ -239,8 +239,6 @@ module SettlementCorrecting
       { settlement_correction_id: correction.id, resident_id: resident_id, old_amount: old_amount,
         new_amount: new_amount }
     end
-    return if lines.empty?
-
     write_settling_setting(T.must(reconciliation.id).to_s)
     SettlementCorrectionLine.insert_all!(lines)
     write_settling_setting('')
