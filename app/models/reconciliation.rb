@@ -192,7 +192,7 @@ class Reconciliation < ApplicationRecord
   def settlement_balances(ledger = settlement_ledger)
     raw_balances = ledger.balances(T.must(community).residents.pluck(:id))
     add_correction_lines!(raw_balances, MealCorrection.where(reconciliation_id: id))
-    add_correction_lines!(raw_balances, MealCorrection.where(meal_id: meals.select(:id)), sign: -1)
+    add_correction_lines!(raw_balances, MealCorrection.where(meal_id: meals), sign: -1)
 
     # Round to cents using largest-remainder method (Hamilton's method).
     # This guarantees rounded balances sum to exactly zero — the standard
@@ -320,12 +320,14 @@ class Reconciliation < ApplicationRecord
   private
 
   # Each person's lines from these corrections, added to their raw
-  # balance, or taken off it with sign -1.
+  # balance, or taken off it with sign -1. The raw balances have an entry
+  # for every resident of the community (MealLedger#balances), so every
+  # line's person has one.
   sig { params(raw: T::Hash[Integer, BigDecimal], corrections: ActiveRecord::Relation, sign: Integer).void }
   def add_correction_lines!(raw, corrections, sign: 1)
-    lines = MealCorrectionLine.where(meal_correction_id: corrections.select(:id)).group(:resident_id).sum(:amount)
+    lines = MealCorrectionLine.where(meal_correction_id: corrections).group(:resident_id).sum(:amount)
     T.cast(lines, T::Hash[Integer, BigDecimal]).each do |resident_id, amount|
-      raw[resident_id] = raw.fetch(resident_id, BigDecimal('0')) + (sign * amount)
+      raw[resident_id] = raw.fetch(resident_id) + (sign * amount)
     end
   end
 
