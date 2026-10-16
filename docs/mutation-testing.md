@@ -2700,3 +2700,125 @@ so it is noise too. Run 3's 15 are those 15 noise survivors; the
 six-person example killed the `to_s`.
 
 No run had a timeout.
+
+### 2026-10-16, the calendar
+
+Run on the calendar's classes, by name: `Api::V1::CommunitiesController*`,
+`CalendarSerializer*`, `Api::V1::EventsController*`,
+`Api::V1::CommonHouseReservationsController*`,
+`Api::V1::GuestRoomReservationsController*`, `Event*`,
+`CommonHouseReservation*`, `GuestRoomReservation*`,
+`StorableTimeValidator*`, `Holidays*` and `EventSerializer*`: the
+calendar month and its cache, events, common house and guest room
+bookings, the time rules for them, and holidays. 65 subjects. Both runs
+on GitHub, three pieces of four workers, 300-second limit.
+
+| Run                                                        | Mutations | Killed | Alive | Timeouts | Time   |
+| ---------------------------------------------------------- | --------- | ------ | ----- | -------- | ------ |
+| 1, 38926242829, before the answers                         | 3,307     | 3,208  | 99    | 0        | 24 min |
+| 2, 38930461914, after the answers, before the red examples | 3,307     | 3,218  | 89    | 0        | 23 min |
+
+Run 1 had as many survivors in each of the same 27 subjects as the
+full run of the morning (38904964429, on 532ac4be). The other 38
+subjects had none, among them every `EventSerializer` method, `hosts`,
+`ical`, and the `show` and `destroy` actions.
+
+Run 1, 99 alive, by kind:
+
+- A bug (8). `Date.parse` in `CommunitiesController#calendar` and
+  `#birthdays`, where `Date.strptime`, `Date.iso8601`, `Date.xmlschema`
+  and `Date.jisx0301` each survive (4 in each action). public/api.md
+  says the date is `YYYY-MM-DD`. `Date.parse` also takes a date with no
+  year or no month, such as `12`, `Sunday` or `October`, and fills in
+  the rest from the machine's own clock, in the machine's own zone, not
+  from the community's today (CLAUDE.md, "Every wall-clock time is a
+  community setting"). So on a dyno in UTC, at 6 PM on October 31 in
+  Los Angeles, `/calendar/12` answers with November. `travel_to` does
+  not change that clock, because Ruby's date library reads it inside
+  C. The four other parsers raise on those dates, so the actions
+  answer 400 "Invalid date", as they do for any date they cannot read.
+  The two examples in `communities_controller_spec.rb` marked "RED ON
+  PURPOSE" expect that 400, and fail. The 2026-09-12 and 2026-09-27
+  entries counted these rewrites as noise.
+- Missing assertions (10), each now with an example that fails on it:
+  - `params.fetch` for `params[]` on a part of the body that no example
+    left out (7): `resident_id` and `date` in both guest room actions
+    (4), `resident_id` in both common house actions (2), and `title` in
+    `EventsController#create` (1). With `fetch`, a body without the
+    part raises `ParameterMissing`, and the answer is an error page
+    with no message. The code answers in the model's words ("Resident
+    must exist", "Date can't be blank", "Title can't be blank"), and the
+    SPA shows those words. The 2026-09-27 and 2026-10-06 entries
+    counted these as noise because both answers are a 400, but the
+    bodies are not the same.
+  - `Holidays.easter?` (3): `m` divided by 452 or by 450, and `f`
+    divided by 24. These change no Easter before 2500, so the check
+    against Gauss's algorithm for 1583 to 2499 passed with each. They
+    first change an Easter in 3165, 7515 and 6412. A new example takes
+    Gauss's day as Easter in every year from 2500 to 9999.
+- Noise (81), changes no caller can see:
+  - `Holidays.easter?` (8), each the same Sunday in every year. `f`
+    with `b + 9` for `b + 8`: `f` changes only when `b` is `25j + 16`
+    for a whole number `j`, from `j` to `j + 1`. Then `b - f + 1` goes
+    from `24j + 17` to `24j + 16`, and both give the same `g`. Nothing
+    else reads `f`. `- 15` for `+ 15` before `% 30`: the two differ
+    by 30. And the `m` term in the month (6): dropped, or `7 * m` made
+    `m`, `0 * m`, `1 * m`, `6 * m` or `8 * m`. `m` is 1 only when `l`
+    is 6 and `h` is 28 or 29, and then the month is April whatever is
+    taken off. All 8 were also checked by running them for every year
+    from 1583 to 6,000,000; Easter dates repeat every 5,700,000 years.
+  - `self.start_date`, `self.end_date` and `self.date` written as
+    `start_date()` and the rest (11): both `start_date_is_before_end_date`
+    methods (4), both `starts_and_ends_on_one_day` methods (4),
+    `CommonHouseReservation#period_is_free` (2) and
+    `GuestRoomReservation#storable_date?` (1), as on 2026-09-28.
+  - `instance_of?` for `is_a?` (7): on the parser's answer and on
+    `TrueOrFalse.from_params`'s answer in the event and common house
+    actions (6), which are a Hash or a String, never a subclass; and on
+    the value in `StorableTimeValidator` (1), which is a Date from a date
+    column and a TimeWithZone from a datetime column, never a DateTime.
+  - `.fetch` for `[]` where the key is always there (19): the two parsed
+    times, which the parser always answers with both keys (8); the
+    route's `:id` in the three `set_resource` methods (3) and `:date`
+    in `calendar` (1); `start` inside `if params[:start]` (1); `title`
+    and `description` in `EventsController#update` after
+    `params.key?` (2); and the four serializer params in `cached_month`,
+    which its one caller always passes (4).
+  - `cached_month` with the whole params Hash as the start date (1), as
+    on 2026-09-27: `Community#calendar_cache_version` parses its text,
+    and the first date in that text is the start date.
+  - `calendar`'s grid arithmetic (7), as on 2026-09-27: `+ 41` and
+    `+ 20` for `.days` (3), since a Date adds days; and 19 or 21 days
+    for 20 (4), since the grid starts at most six days before the 1st.
+  - The `stale?` call (6): `public: false`, which is the default, left
+    out (1); and the call with no ETag, a nil ETag, made always true, or
+    taken away (5). Rack::ETag and Rack::ConditionalGet are in this
+    app's middleware: they set an ETag from the body and answer the
+    same 304 with the same private Cache-Control. The call only skips
+    building the JSON body when the ETag matches.
+  - The query shapes (20), as on 2026-09-27: the `includes` and
+    `joins` of the cook slots (8) and of the common house and guest room
+    bookings (8), since goldiloader loads the same rows and a `where` on
+    `meals` joins the table anyway; and in `rotations_in_range`, the
+    `.uniq` and `.to_a` dropped or `to_ary` (3), since a repeated id in
+    `IN` finds the same rows and the serializer reads a relation and an
+    Array the same way. And `..` for `...` before the window's first
+    instant in `events_in_range` (1): the first clause takes that event.
+  - `beginning_of_day` dropped in `CalendarSerializer#window_start` (1):
+    `Time.zone.parse` of a date gives its first instant. Checked for
+    every zone Rails lists and every day from 1970 to 2039, the days
+    on which a zone skips midnight included (Brasilia on November 4,
+    2018): no difference.
+  - `end_date` for `end_date.present?` in `Event#end_date_or_allday`
+    (1): the column gives a time or nil.
+
+Run 2's 89 alive are the 8 of the bug and the 81 of noise above, and
+no other. Each of the 10 missing assertions is killed. Before run 2,
+`Holidays.easter?` was run alone on this laptop (379 mutations, 8
+alive, the 8 above), and so were both guest room actions (150
+mutations, none alive). The three other new examples were checked by
+making each change by hand: each fails with `ParameterMissing`. The two
+red examples pass with `Date.iso8601` in both actions.
+
+No `ignore_patterns` entry was added. Mutant makes each of these
+rewrites in other places too, where it is not noise.
