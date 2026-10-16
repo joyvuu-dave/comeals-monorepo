@@ -2953,3 +2953,130 @@ database gave them, which is the order they were made, so the tie on
 the id cannot be seen there.
 
 No mutation timed out in any of the three runs.
+
+### 2026-10-16, residents and the rows of a meal
+
+Run on residents and their API, admin users, phone numbers, short
+names, bills, settlement lines, the two concerns that freeze a closed
+or settled meal's rows, the guest add, the third-cook warning, the
+bill, meal and meal form serializers, and two view helpers:
+`Api::V1::ResidentsController* Resident* AdminUser* HasPhoneNumber*
+ResidentNameShortener* Bill* MealCharge* ClosedMealAttendanceFreeze*
+ReconciledMealImmutability* GuestAdd* ThirdCookWarning* BillSerializer*
+MealFormSerializer* MealSerializer* MoneyFieldHelper* ApplicationHelper*`.
+The star takes in nested names only, so `Bill*` does not take in
+`BillsPayload` and `Resident*` does not take in `ResidentNameShortener`
+(checked with `mutant environment subject list`: 100 subjects, each
+once). On GitHub, three pieces of four workers, 300-second limit.
+
+| Run                                                | Subjects | Mutations | Killed | Alive | Timeouts | Time   |
+| -------------------------------------------------- | -------- | --------- | ------ | ----- | -------- | ------ |
+| 1, GitHub run 38926241386, main                    | 100      | 3,665     | 3,575  | 90    | 0        | 37 min |
+| 2, GitHub run 38946065862, after the work, on main | 100      | 3,600     | 3,557  | 43    | 0        | 39 min |
+
+`GuestAdd#initialize` and `MealSerializer#url`, which the 2026-10-16
+whole-app run did not finish, had no survivor.
+
+Run 1, 90 alive, by kind:
+
+- Missing examples (21), each with an example now:
+  - `ApplicationHelper#meal_cost_cell` (13): every change to the `now:`
+    choice. No example had a settled dinner that was corrected, the one
+    case where `MealCostSummary.now` and `.for` give different costs.
+    Now a dinner settled at $30 and corrected to $20 shows $30, and $20
+    with `now: true`.
+  - `Api::V1::ResidentsController#token` (2): `params.fetch` for
+    `params[]` on the email in the blank check, and on the password.
+    `fetch` raises for a missing field. Two examples now log in with no
+    email field ("Email required.") and with no password field
+    ("Incorrect password").
+  - `Bill#refuse_no_cost_with_an_amount` (3): the nil check dropped, or
+    written as `!false` or `!self.nil?`. No example had a No cost bill
+    with no amount, where `positive?` is then called on nil. An example
+    now has one with no amount and one with a negative amount, and
+    expects only the amount's own error.
+  - `MealFormSerializer#cancelled` (1): `true`. An example now reads the
+    flag before and after a cancel.
+  - `ReconciledMealImmutability#previous_meal_reconciled?` (2): the
+    `will_save_change_to_meal_id?` check dropped, or `true`. The answer
+    is the same, but every save of a bill, a sign-up or a guest then
+    reads its meal a second time. An example now records which meal
+    each check reads: one meal twice (the validation and the
+    before_save) for a save that keeps the row on its meal, and both
+    meals twice for a move.
+- Redundant code, removed (26):
+  - `MealFormSerializer#next_id` (5) and `#prev_id` (4): the tie-break
+    on the id between two meals on one date. Two meals never share a
+    date (the unique index `index_meals_on_date`), so both now go by the
+    date alone.
+  - `BillSerializer` (8): `bill.date` for `bill.meal.date`, and
+    `bill.unit` for `bill.resident.unit`. Bill delegates both, so the
+    serializer now calls the delegates.
+  - `AdminUser#refuse_demoting_last_superuser` (2):
+    `superuser_changed?(to: false)` and `(from: true)` for
+    `(from: true, to: false)`. The column is NOT NULL, so a change to
+    false is a change from true, and the method now asks `(to: false)`.
+    The second mutation differs only for a nil saved without
+    validation, which the database refuses, and mutant cannot make it
+    from the new line.
+  - `ResidentNameShortener` (4): the `else nil` in `last_word` (an `if`
+    with no `else` gives nil), `right` and `right.to_str` for
+    `right.to_s` in `same?` (every caller passes a String there), and
+    `slice(0)` for `slice(0, 1)` in `short` (a word from `split` is
+    never empty).
+  - `Bill#refuse_no_cost_with_an_amount` (1): `no_cost` for
+    `no_cost == true`. Rails reads the column as true, false or nil.
+  - `ReconciledMealImmutability#previous_meal_reconciled?` (1) and
+    `MealSerializer#title` (1): `.present?` on an Integer or nil. Ruby
+    treats 0 as true, and `0.present?` is true too.
+- Noise (43), changes no caller can see:
+  - `params.fetch` for `params[]` (6) where the key is always there:
+    the `:id` and `:token` in the path of `ical`, `show_name` and
+    `password_new`, and the email after the blank check in `token` (2)
+    and `password_reset`.
+  - `self.x` written as `x()` (8): `Resident#name_unique_with_helpful_message`,
+    `#age_on` and `#birthday_not_in_the_future`,
+    `HasPhoneNumber#normalize_phone` and `#phone_must_be_a_real_number`,
+    and on the money path `Bill#amount_in_whole_cents`,
+    `Bill#refuse_no_cost_with_an_amount` and `MealCharge#subsidized?`.
+    Ruby calls the same public method on the same object either way,
+    so no test can tell them apart.
+  - `eql?` for `==` or `!=` (3): on Strings in
+    `ResidentNameShortener#short`, and in
+    `ReconciledMealImmutability#reconciled_in_database?`, where the
+    setting is a String or nil (`nil.eql?` a String is false, as
+    `nil !=` a String is true); and on two Arrays of Integers in
+    `ThirdCookWarning#switching?`.
+  - In `GuestAdd`, as on 2026-10-09 (4): `instance_of?` for `is_a?` in
+    `#error`, `meal` for `meal.id` in `#seen_key`, and the two `T.cast`
+    type arguments in `#vegetarian`.
+  - A record for its id in a `where` (5): `ical` (3) and
+    `ClosedMealAttendanceFreeze#attendees_in_database` (2). Rails
+    reads the id.
+  - `size` or `length` for `count` in `attendees_in_database` (4), on
+    the money path. On a relation that is not loaded, `size` runs the
+    same COUNT. `length` loads the rows, in the same transaction, and
+    counts the same rows. Only the SQL text differs.
+  - The preloads (6): `includes(:meal)` dropped or `includes(nil)` in
+    the two loops of `ical` (4), and `includes(:unit)` in
+    `MealFormSerializer#residents` (2), as on 2026-10-07. goldiloader
+    loads the same rows in one query without them. Kept, because they
+    name what the code reads.
+  - `to_set` dropped in `ical` (1): `include?` gives the same answer on
+    an Array. The Set only makes each look-up faster.
+  - `last.at(0)` for `last[0]` in `ResidentNameShortener#short` (2):
+    ActiveSupport adds `String#at`, which is `[]`.
+  - `parsed` for `parsed.e164` in `HasPhoneNumber#normalize_phone` (1):
+    Phonelib's `to_s` is the E.164 form of a valid number, and Rails
+    stores a value in a string column through `to_s`.
+  - `MoneyFieldHelper#money_field_value` (3): `round(1)` for
+    `round(2)`, `to_s` for `to_s('F')`, and `self.number_to_rounded`.
+    With `round(1)`, a whole-cent amount whose second decimal is not
+    zero goes to `to_s('F')`, which writes the same two decimals as
+    `number_to_rounded` ("16.05" either way). ActiveSupport makes `'F'`
+    the default of `BigDecimal#to_s`. And the admin view has the same
+    `number_to_rounded`, from ActionView.
+
+Run 2's 43 alive are the 43 noise survivors above, and nothing else:
+no line this work added or changed left a survivor. A run before the
+rebase onto main (GitHub run 38934736870) had the same 43.
