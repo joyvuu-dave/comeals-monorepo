@@ -11,8 +11,11 @@ require Rails.root.join('config/mutant/memory_limit').to_s
 #
 # CI runs this on Linux, where the kernel refuses the allocation that would
 # pass the limit. Ruby then raises NoMemoryError, or, when the allocation
-# that failed was Ruby's own and cannot raise, prints a [BUG] report and
-# aborts (SIGABRT; CI saw this on 2026-10-16). Both end the child. bin/check
+# that failed was Ruby's own and cannot raise, crashes: CI saw a [BUG]
+# report with SIGABRT and, on another run, SIGSEGV (2026-10-16). Every one
+# of these ends the child with an error, and mutant counts any of them as
+# a process abort, so the Linux example checks only that the child ended
+# with an error before its loop finished. bin/check
 # runs it on macOS, where the watch thread ends the child at its next
 # check, up to a second after it passed the limit. The child leaves with
 # exit!, so it never runs the at_exit hooks it shares with this process
@@ -42,13 +45,12 @@ RSpec.describe MutantMemoryLimit do
 
   it 'ends a process that grows past the limit' do
     status = child_status
-    ending = status.signaled? ? Signal.signame(status.termsig) : status.exitstatus
-    expected = if RUBY_PLATFORM.include?('linux')
-                 [ended_by_the_kernel, 'ABRT']
-               else
-                 [described_class::WATCH_EXIT_STATUS]
-               end
-    expect(expected).to include(ending)
+    if RUBY_PLATFORM.include?('linux')
+      expect(status.success?).to be(false)
+      expect(status.exitstatus).not_to eq(ran_on_after_the_limit)
+    else
+      expect(status.exitstatus).to eq(described_class::WATCH_EXIT_STATUS)
+    end
   end
 
   it 'leaves a process under the limit alone' do

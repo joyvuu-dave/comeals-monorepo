@@ -18,8 +18,9 @@
 #
 # Linux enforces RLIMIT_DATA: an allocation past it fails, and Ruby raises
 # NoMemoryError. When the allocation that fails is Ruby's own (growing the
-# heap during garbage collection), Ruby cannot raise, so it prints a [BUG]
-# report and aborts. Mutant counts either ending as a process abort.
+# heap during garbage collection), Ruby cannot raise, and the process
+# crashes instead (a [BUG] report with SIGABRT, or SIGSEGV). Mutant counts
+# every one of these endings as a process abort.
 #
 # macOS accepts the limit but does not enforce it, so there a thread
 # checks the size of the process once a second and ends the process when
