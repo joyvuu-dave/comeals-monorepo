@@ -465,8 +465,10 @@ RSpec.describe Community do
       meal_on(community.today - 4, bills: %w[0], eaters: [diner])
       meal_on(community.today - 5, bills: %w[20 0], eaters: [diner])
       meal_on(community.today - 6, bills: %w[10 0], eaters: [child])
-      # Nobody to charge: only a free eater ate.
+      # Nobody to charge: only a free eater ate, at two meals, so this
+      # count is not the one meal above that also waits for a cost.
       meal_on(community.today - 7, bills: %w[10], eaters: [child])
+      meal_on(community.today - 12, bills: %w[5], eaters: [child])
       # Neither: nobody ate, tonight, tomorrow.
       meal_on(community.today - 8, bills: %w[25])
       meal_on(community.today - 9)
@@ -479,7 +481,7 @@ RSpec.describe Community do
 
       expect(community.averaged_meal_count).to eq(2)
       expect(community.meals_left_out_of_averages)
-        .to eq(cancelled: 2, no_cook: 1, cost_not_entered: 3, nobody_to_charge: 1)
+        .to eq(cancelled: 2, no_cook: 1, cost_not_entered: 3, nobody_to_charge: 2)
     end
 
     # A cancelled dinner and a dinner where only a child who eats free
