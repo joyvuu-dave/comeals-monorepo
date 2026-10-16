@@ -505,6 +505,21 @@ RSpec.describe LedgerVerification do
 
       expect(Rails.logger).to have_received(:error).with(/Ledger check failed: 2 findings/)
     end
+
+    # A passing run writes one line to the log: how many settlements it
+    # checked, and that they all match.
+    it 'logs a passed run at info level, with how many it checked' do
+      settle
+      settle
+      allow(Rails.logger).to receive(:info)
+      allow(Rails.logger).to receive(:error)
+
+      described_class.call
+
+      expect(Rails.logger).to have_received(:info)
+        .with(/\Aledger:verify checked 2 reconciliations in .*s — all match\z/)
+      expect(Rails.logger).not_to have_received(:error)
+    end
   end
 
   describe 'a run that cannot finish' do
