@@ -124,5 +124,17 @@ RSpec.describe Holidays do
         expect(spring).to eq([gauss_easter(year)]), "year #{year}"
       end
     end
+
+    # Some wrong constants in easter? change no Easter before 2500. They
+    # are in f, the moon correction, and in m, which moves an Easter that
+    # would fall on April 25 or 26 a week earlier. Dividing m by 452
+    # changes Easter first in 3165, f by 24 in 6412, m by 450 in 7515.
+    # So this checks every year with four digits, but only the one day
+    # per year, to keep it fast.
+    it 'takes Gauss\'s Easter Sunday as Easter in every year from 2500 to 9999' do
+      wrong = (2500..9999).reject { |year| described_class.easter?(gauss_easter(year)) }
+
+      expect(wrong).to eq([])
+    end
   end
 end
