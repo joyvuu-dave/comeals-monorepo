@@ -3080,3 +3080,142 @@ Run 1, 90 alive, by kind:
 Run 2's 43 alive are the 43 noise survivors above, and nothing else:
 no line this work added or changed left a survivor. A run before the
 rebase onto main (GitHub run 38934736870) had the same 43.
+
+### 2026-10-16, corrections to a settled dinner (ADR 0011 rule 6)
+
+Run on GitHub on every class of the corrections: `MealCorrecting*` (the
+preview, the save, and each edit), `SettledDinnerDifference*` (whether a
+dinner's rows still add up to what it was settled at plus its
+corrections), `CorrectionWords*`, `MealCorrectionDetails*` (the admin
+table for one correction) and `MealCorrection*` (`#cost_edits_of`, which
+the cook mail reads). Four pieces, four workers each, 300-second limit.
+Run 1 was on main at 14320264, before this branch.
+
+| Run                                     | Subjects | Mutations | Killed | Alive | Timeouts | Time   |
+| --------------------------------------- | -------- | --------- | ------ | ----- | -------- | ------ |
+| 1, GitHub run 38925033688               | 32       | 1,808     | 1,640  | 168   | 0        | 25 min |
+| 2, after the new examples, 38930907758  | 32       | 1,765     | 1,714  | 44    | 7        | 52 min |
+| 3, after the race spec fix, 38938024798 | 32       | 1,765     | 1,721  | 44    | 0        | 22 min |
+| 4, after a rebase on main, 38946046233  | 32       | 1,765     | 1,721  | 44    | 0        | 23 min |
+
+Run 2 has fewer mutations because of the code removed below. Its 7
+timeouts were all in `MealCorrecting.save!`: the mutations that make it
+do nothing (the `RetryOnConflict` block or the transaction emptied, or
+`nil`). The new race spec then waited with no end for the first
+correction to reach its edit. Each was killed in run 1, by examples
+that the race spec now runs before. The spec now waits at most 10
+seconds, and fails. Run 3 is after that change. Run 4 is the same
+branch on the newer main, with the same 44 alive.
+
+In run 2 the first try of one piece stopped before its first mutation:
+mutant's parser failed on the name of some loaded module while it listed
+the scopes ("unterminated string meets end of file"). The same commit
+listed its subjects with no error on a laptop, and the piece run again
+by itself did its work, so the time above counts that piece twice. It
+is not this code.
+
+Run 1's 168 alive, by kind.
+
+Missing examples (109), each with an example now:
+
+- An edit on a closed dinner (30): `admin_correction = true` removed or
+  changed, six ways each, in `add_eater`, `remove_eater`,
+  `reprice_eater`, `add_guest` and `remove_guest`. Every example
+  corrected a dinner that was never closed, where the closed-dinner
+  rules let the write through anyway. A settled dinner can be closed,
+  and one example now corrects a closed one.
+- A row found by the person alone, or by the dinner alone (8), in
+  `cost`, `remove_cook`, `remove_eater`, `reprice_eater` and
+  `remove_guest`. In every example each person had one row of each
+  kind, and the row an edit changed was the first on its dinner. Now
+  each person also has a row on another dinner, made first, and the row
+  each edit removes is not the first on its dinner. A guest of another
+  dinner is refused.
+- `SettledDinnerDifference` (15): every example asked about a dinner
+  where each person was settled, and is on the rows now. A new spec
+  (`settled_dinner_difference_spec.rb`) adds or removes a sign-up with
+  the repair bypass, removes one that a correction added, has a cook
+  who also ate (two lines to add up: 2 in `.for`), and asks about a
+  dinner that agrees next to one that does not (`break` for `next`).
+- `Result#fingerprint`, the preview's code (17). The examples compared
+  only the code of one dinner before and after a change. New examples
+  build a `Result` and check that the code is 64 hex digits, does not
+  depend on the order of the changes, and differs when a change, a
+  person or an edit differs. The order check also kills the whole
+  `Result` as JSON in place of its edits, which writes the changes in
+  the order of the hash. One checks the comma between people:
+  without it, the changes 1: 5.00, 23: -7.00, 25: 2.00 and 1: 5.02,
+  3: -7.02, 5: 2.00 are both written `1:5.023:-7.025:2.0`.
+- `MealCorrectionDetails#build` (15): no example read the list of
+  edits (`ul`), the column titles, the order of the table (by name, not
+  by id) or the link on each name. A request example does now. It makes
+  a resident who is in no line first, so that no line has the id of its
+  resident: with equal ids, a link built from the line looks right.
+- `MealCorrecting.apply` (9): `lock!` removed (3), and the words of the
+  NotSettled and Cancelled refusals (6). `lock!` also reads the dinner
+  again; a new example corrects a copy of the dinner loaded before its
+  settlement.
+- `MealCorrecting.save!` (6) and `.preview` (3): the `RetryOnConflict`
+  around each (2), `requires_new: true` (4), and the `validate!` of the
+  reason (3). A new race spec, `spec/db/meal_correcting_retry_spec.rb`
+  (a new row maps it to `MealCorrecting`), saves two corrections of one
+  dinner at once: the second waits at the dinner's lock, is refused as
+  a conflict, and is run again. Two examples run a refused save and a
+  preview inside a caller's transaction, and expect nothing kept. The
+  blank reason example now checks that no edit runs.
+- The rest (6): `update!(amount:)` with no `no_cost:` in `cost`, now an
+  example that changes a cost to No cost; the amount as a number, not
+  text, in `cost_of`, now checked in the preview's edits;
+  `MealCharge.exists?` for this settlement's line items in
+  `refuse_an_earlier_difference!`, now an example with a later
+  settlement that has line items; and the `what` test in
+  `MealCorrection#cost_edits_of` (3), now an example where the cook also
+  ate.
+
+One existing example was weaker than it read. "Refuses the save ...
+when the dinner changed after the preview" made Other inside the
+preview, so the preview's rollback took the row back, and the save
+added Other again under a new id. The edits differed, so the example
+never showed that a change in the amounts alone refuses the save.
+Other is now made before the preview.
+
+Code that did nothing, removed (15):
+
+- `MealCorrecting.record!`: the `if lines.any?` (4). In Rails 8.1,
+  `insert_all!` with an empty list sends no statement.
+- `MealCorrecting.changes`: the `.sort` (1). `Result#fingerprint` sorts
+  the people itself, and nothing else reads their order: the admin
+  pages sort by name.
+- `SettledDinnerDifference.sums`: the type arguments of its `T.cast`
+  (6). The method now returns its argument. Its sig names the hash and
+  checks it at runtime, which is all the `T.cast` did there.
+- `MealCorrectionDetails#build`: the `= {}` default (2), which every
+  caller passes, and the `''` for the read-only token (2), which prints
+  the same as nil.
+
+Noise, left (44), the same 44 that run 2 has:
+
+- A record for its id (11): `meal_id: @meal`, `resident_id: cook` and
+  `id: guest` in the five edits that find a row (10), and
+  `where(id: meal)` in `loaded` (1). Rails reads the record's id.
+- The preloads in `MealCorrecting.loaded` (7): goldiloader loads the
+  same three tables with the same queries when MealLedger first reads
+  them, as for `Settlement.preview` on 2026-09-27.
+- `.fetch` for `[]` (10), in `CorrectionWords.edit` (6) and
+  `.cost_words` (2) and `MealCorrection#cost_edits_of` (2).
+  `Edits#record` writes all four keys of every edit, and `cost_of` both
+  keys of every cost.
+- `SettledDinnerDifference.for` (4): the meals for their ids, or `each`
+  for `map` (2), since Rails reads the ids; and no `sums` call (2),
+  which is there only to give Sorbet the type.
+- `to_s` for `to_s('F')` (4): in `cost_of` and `fingerprint`, and
+  `"#{amount}"` and `to_s('')` in `fingerprint`. ActiveSupport makes
+  `F` the default for `BigDecimal#to_s`, and `to_s('')` writes
+  `0.5e1`, which is as exact.
+- Other ways to write the same code in `fingerprint` (7): the pairs
+  without the `map` (`changes.sort`, `changes.sort.each`), the edits as
+  Ruby hashes in place of JSON, the amounts as an array (which `join`
+  flattens), and no `|` between the edits and the amounts (3), where
+  JSON ends at its last closing bracket. Each code still differs whenever the edits or the
+  changes differ.
+- `eql?` for `!=` in `save!` (1): both are strings.
