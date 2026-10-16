@@ -280,9 +280,12 @@ RSpec.describe ReconciliationMailer do
         expect(text_lines(mail).grep(/^Aug/).map { |line| line[/\AAug \d+/] }).to eq(['Aug 26', 'Aug 27'])
       end
 
-      # Eight corrections of one dinner. Ruby's sort happens to keep up to
-      # seven equal dates in the order it was given them, which is the
-      # order they were made, so fewer would not show that order is kept.
+      # Eight corrections of one dinner, all with one date. The database
+      # gives them in the order they were made. Ruby's sort does not
+      # promise to keep equal dates in that order: on macOS it keeps up
+      # to seven and mixes up eight, so the tie on the id is what keeps
+      # the order here. (On GitHub's Linux machines it kept all eight in
+      # order, so there this example passes even without the tie.)
       it 'lists the corrections of one dinner in the order they were made' do
         amounts = (21..28).to_a
         amounts.each do |amount|

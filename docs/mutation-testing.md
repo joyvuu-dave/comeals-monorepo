@@ -2856,3 +2856,98 @@ are gone with `Date.parse`, and `YearMonthDay` had no survivor.
 
 No `ignore_patterns` entry was added. Mutant makes each of these
 rewrites in other places too, where it is not noise.
+
+### 2026-10-16, settlement line marks and the settlement mail
+
+Run on the marks on a settlement's lines (ADR 0011 rule 8), the two
+admin tables that show settlement lines and ledger check findings, and
+the mail after a settlement: `SettlementMarkHelper*`,
+`SettlementLineMarking*`, `SettlementLinesTable*`,
+`LedgerCheckFindingsTable*`, `ReconciliationMailer*`,
+`SendMissedSettlementMailJob*`, `NotifyCooksJob*`,
+`CommonHouseMailJob*` and `MailDeliveryFailure*`. On GitHub, four
+pieces of four workers.
+
+| Run                                     | Subjects | Mutations | Killed | Alive | Timeouts | Time   |
+| --------------------------------------- | -------- | --------- | ------ | ----- | -------- | ------ |
+| 1, 38925086367, main as of 14320264     | 34       | 2,195     | 1,999  | 196   | 0        | 28 min |
+| 2, 38930823322, after the answers below | 34       | 2,162     | 2,140  | 22    | 0        | 27 min |
+
+Run 1's 196, by kind:
+
+- Missing examples (160), each with an example now:
+  - `SettlementMarkHelper` (95). The page spec read only the names of
+    the choices and the Let go refusal. A new helper spec reads every
+    word of a mark (its note, who made it, the date as "Jan 5, 2027",
+    an empty string for no mark, and no email for the read-only link)
+    and every field of the form: the line, the newest mark it showed
+    (also one that took the mark off), the value of each choice, the
+    starting choice, the note, the aria-labels, no id on any field, the
+    spaces between the fields, and the form a superuser gets for a line
+    marked Let go.
+  - `SettlementLinesTable#build` (22). No example read the Category
+    column, the column names or the links. One example now reads them
+    on the resident page and on the meal page, with a cook, a child and
+    a guest. Two more: a settlement with no line items shows the
+    sentence and no table after it, and a table with no first column
+    raises KeyError.
+  - `LedgerCheckFindingsTable` (15): the column names (12), and a
+    finding with no resident from a check other than the line items
+    check, which is not the sum of all meal lines (3).
+  - `CommonHouseMailJob` (13). The examples that tell the common house
+    mail apart from other rows in `mail_deliveries` are in the nightly
+    job's spec, and its row in `spec/support/mutant/specs.rb` did not
+    name this class (4). In `perform`: another settlement still waiting
+    for its mail (1); a good send queues no new try (5, the `unless`
+    around the raise); and the failure log line names the address (3,
+    the recipient).
+  - `ReconciliationMailer#corrections_of` (6): sorting by the meal, not
+    its date (1), now two dinners entered in the opposite order of their
+    dates; the tie on the id (2), now eight corrections of one dinner;
+    and `join` with no space (3), now two changes to one cook in one
+    correction.
+  - `SettlementLineMarking.mark!` (6): `RetryOnConflict` removed (1), now
+    a conflict on the first try; the transaction or the line's lock
+    removed (4), now `spec/db/settlement_line_mark_race_spec.rb`, where
+    a second mark starts while the first holds the lock; and the newest
+    mark read from every line (1), now a mark on another line.
+  - `SettlementLineMarking.refuse_no_change!` (3): a new status with the
+    same note.
+- Redundant code, removed (16):
+  - `settlement_mark_form`: `method: :post` (3), because `form_tag`
+    posts already, and `data: { disable_with: 'Save' }` (5), because
+    `submit_tag` adds `data-disable-with` with the button's value.
+  - `SettlementLineMarking.mark!`: `.order(:id)` before `.last` (2).
+    `last` orders by the primary key already.
+  - `NotifyCooksJob.cook_rows`: `.select(:id)` (2), and
+    `SendMissedSettlementMailJob#run`: two `.to_a` (4). The same calls
+    were removed on 2026-10-09; the job's rename put them back.
+- Noise (20), alive in run 2 too:
+  - `nil` for `''` inside a string (4), in `settlement_mark_words` and
+    `MailDeliveryFailure.report`, as on 2026-09-27.
+  - A record for its id in a `where` (3), in `mark!`,
+    `NotifyCooksJob.cooks` and `CommonHouseMailJob#perform`. Rails
+    writes the same SQL.
+  - `eql?` and `equal?` for `!=` on two ids (2), in `mark!`.
+  - `size` for `count` on a grouped relation that is not loaded (1), in
+    `cooks_owed`: `size` runs the same count.
+  - `.fetch` for `[]` (6), in `LedgerCheckFindingsTable#findings_of`:
+    every detail and difference `LedgerVerification` stores has these
+    keys. `meal_date` is the one key some differences do not have, and
+    `.fetch` there is killed.
+  - `map` for `filter_map` (1), in `LedgerCheckFindingsTable#build`:
+    `Resident.where(id: [nil, 5])` finds the same residents.
+  - The `includes(:meal)` in `corrections_of` (2): goldiloader loads the
+    meals in one query without it.
+  - `[date, correction]` for `[date, correction.id]` (1): a record
+    compares by its id.
+
+Run 2 had the 20 above and two more, both in `corrections_of`: `[date]`
+and `[date, nil]` for `[date, correction.id]`. The example with eight
+corrections of one dinner kills them on macOS, where Ruby's sort mixes
+up eight equal dates (checked with a local run of the method: 3 alive,
+the three noise mutations of this method above). On GitHub's Linux machines the sort kept all eight in
+the order the database gave them, which is the order they were made,
+so the tie on the id cannot be seen there.
+
+No mutation timed out in either run.
