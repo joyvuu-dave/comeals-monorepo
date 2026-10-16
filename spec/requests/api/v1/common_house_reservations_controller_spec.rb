@@ -326,6 +326,25 @@ RSpec.describe 'Common House Reservations API' do
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body).to eq('message' => "Resident must exist\nTime period is already taken")
     end
+
+    # A part left out of the body is read as no value. The title is
+    # optional, so a booking without one is saved; the host is not, and
+    # the model says so in words, which the SPA shows.
+    it 'saves a booking whose body leaves out the title, and names a host left out in words' do
+      times = { start_year: 2026, start_month: 5, start_day: 1, start_hours: 14, start_minutes: 0,
+                end_hours: 17, end_minutes: 0 }
+
+      post '/api/v1/common-house-reservations', params: { token: token, resident_id: resident.id }.merge(times)
+
+      expect(response).to have_http_status(:ok)
+      expect(CommonHouseReservation.sole).to have_attributes(resident_id: resident.id, title: nil)
+
+      post '/api/v1/common-house-reservations', params: { token: token, title: 'No host' }.merge(times, start_day: 2)
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq('message' => 'Resident must exist')
+      expect(CommonHouseReservation.count).to eq(1)
+    end
   end
 
   describe 'PATCH /api/v1/common-house-reservations/:id/update' do
@@ -382,6 +401,22 @@ RSpec.describe 'Common House Reservations API' do
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body['message']).to eq("Resident must exist\nTime period is already taken")
       expect(moving.reload).to have_attributes(resident_id: resident.id, start_date: taken + 5.hours)
+    end
+
+    # The edit form sends the host each time. A body that leaves it out
+    # is read as no host, and the model says so in words.
+    it 'names a host left out of the body in words, and changes nothing' do
+      chr = create(:common_house_reservation, community: community, resident: resident, title: 'Book club')
+      before = chr.reload.attributes
+
+      patch "/api/v1/common-house-reservations/#{chr.id}/update", params: {
+        token: token, title: 'Moved', start_year: 2026, start_month: 6, start_day: 1,
+        start_hours: 10, start_minutes: 0, end_hours: 12, end_minutes: 0
+      }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq('message' => 'Resident must exist')
+      expect(chr.reload.attributes).to eq(before)
     end
 
     # The same parser as create (#102).
