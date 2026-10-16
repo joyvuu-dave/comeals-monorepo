@@ -154,14 +154,37 @@ class MealCorrecting
     correction
   end
 
+  # The dinner's rows must add up to what it was settled at plus its
+  # earlier corrections, the nightly check's dinner check
+  # (SettledDinnerDifference). A settlement made before line items
+  # existed (2026-08-02) stored nothing a dinner was settled at, and the
+  # nightly check skips the dinner check for it. For a dinner of such a
+  # settlement this asks what the nightly check does ask about it: its
+  # checks of the whole settlement (LedgerVerification#findings_for),
+  # where the recompute check compares the cent balances with the rows.
   sig { params(meal: Meal).void }
   def self.refuse_an_earlier_difference!(meal)
+    reconciliation = T.must(meal.reconciliation)
+    return refuse_a_settlement_that_differs!(meal, reconciliation) unless
+      MealCharge.for_reconciliation(reconciliation).exists?
+
     difference = SettledDinnerDifference.for([loaded(meal)])[T.must(meal.id)]
     return if difference.nil?
 
     raise EarlierDifference,
           "Meal #{meal.id}'s rows already differ from what it was settled at plus its corrections, for " \
           "#{difference.size} #{'person'.pluralize(difference.size)}. The nightly ledger check reports it. " \
+          'See docs/runbooks/settled-data-repair.md.'
+  end
+
+  sig { params(meal: Meal, reconciliation: Reconciliation).void }
+  def self.refuse_a_settlement_that_differs!(meal, reconciliation)
+    findings = LedgerVerification.new.findings_for(reconciliation)
+    return if findings.empty?
+
+    raise EarlierDifference,
+          "Meal #{meal.id} was settled by settlement #{reconciliation.id}, which was made before line items " \
+          'existed, and that settlement already differs from its rows. The nightly ledger check reports it. ' \
           'See docs/runbooks/settled-data-repair.md.'
   end
 
@@ -196,8 +219,8 @@ class MealCorrecting
   def self.write_setting(value)
     Meal.connection.execute(Meal.sanitize_sql_array(['SELECT set_config(?, ?, true)', CORRECTING_SETTING, value]))
   end
-  private_class_method :apply, :record!, :refuse_an_earlier_difference!, :per_person, :loaded, :changes,
-                       :write_setting
+  private_class_method :apply, :record!, :refuse_an_earlier_difference!, :refuse_a_settlement_that_differs!,
+                       :per_person, :loaded, :changes, :write_setting
 
   # The edits a correction may make to the dinner it corrects. Each one
   # saves through the model, so the model's rules apply (a cost in whole

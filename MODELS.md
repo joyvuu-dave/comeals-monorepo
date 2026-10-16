@@ -851,6 +851,12 @@ came out different from the preview. A correction that changes nothing
 is refused (`NothingChanged`); one that moves no money (a blank cost
 marked No cost) is recorded with no lines.
 
+A settlement made before line items existed (2026-08-02) stored nothing
+its dinners were settled at, so for a dinner of such a settlement the
+refusal comes from the nightly check's own checks of the whole
+settlement instead (`LedgerVerification#findings_for`: the recompute
+check, at the cent). Such a dinner can be corrected like any other.
+
 The database keeps the rules for psql too (migrations `20261010125951`
 and `20261010125952`): a correction is inserted only for a settled meal
 that `comeals.correcting` names, with no settlement yet; its lines only

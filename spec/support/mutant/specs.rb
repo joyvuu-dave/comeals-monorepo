@@ -77,6 +77,9 @@ MUTANT_SPEC_ROWS = {
   # the carried spec proves each place a correction's lines go.
   'spec/services/meal_correcting_spec.rb' =>
     %w[MealCorrecting SettledDinnerDifference ReconciledMealImmutability MealCorrection],
+  # A dinner of a settlement with no line items: the refusal asks the
+  # nightly check about the whole settlement instead.
+  'spec/services/meal_correcting_old_settlement_spec.rb' => %w[MealCorrecting LedgerVerification],
   'spec/services/settlement_carries_corrections_spec.rb' =>
     %w[Settlement Reconciliation BalanceRecalculation LedgerVerification SettledDinnerDifference MealCorrection],
   'spec/models/meal_correction_spec.rb' => %w[MealCorrection MealCorrectionLine AppendOnly],

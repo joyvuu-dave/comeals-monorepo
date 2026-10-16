@@ -13,12 +13,12 @@ require 'rails_helper'
 # mistake goes through rule 6: a correction in the next settlement. So a
 # superuser must be able to correct a dinner of such a settlement.
 #
-# Bug hunt 2026-10-16 (money). MealCorrecting compares the dinner's rows
-# with its stored lines (SettledDinnerDifference) whatever the settlement,
-# so with no stored lines every person on the dinner reads as a
-# difference, and the correction is refused with EarlierDifference. Its
-# message says "The nightly ledger check reports it", and the nightly
-# check reports nothing.
+# Bug hunt 2026-10-16 (money): MealCorrecting compared the dinner's rows
+# with its stored lines whatever the settlement, so with no stored lines
+# every person on the dinner read as a difference, and the correction was
+# refused, with a message that said the nightly check reported it. Now
+# such a dinner is checked the way the nightly check checks it: the
+# whole settlement, recomputed.
 RSpec.describe MealCorrecting do
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
@@ -53,5 +53,19 @@ RSpec.describe MealCorrecting do
     expect(second.reconciliation_balances.pluck(:resident_id, :amount).to_h)
       .to eq(cook.id => BigDecimal('-10'), eater.id => BigDecimal('10'))
     expect(LedgerVerification.call).to be_passed
+  end
+
+  # A change no correction explains, made with the repair bypass: the
+  # nightly check's recompute check reports it, so the correction is
+  # refused, as for a dinner of any other settlement.
+  it 'refuses a dinner of such a settlement when the settlement already differs from its rows' do
+    with_repair_bypass { Bill.where(meal_id: meal.id).update_all(amount: BigDecimal('40')) }
+
+    expect do
+      described_class.save!(meal, by: admin, reason: 'Typed $30 for $20') do |edits|
+        edits.cost(cook, amount: BigDecimal('20'), no_cost: false)
+      end
+    end.to raise_error(described_class::EarlierDifference, /made before line items existed, and that settlement/)
+    expect(MealCorrection.count).to eq(0)
   end
 end

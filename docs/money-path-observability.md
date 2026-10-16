@@ -177,7 +177,10 @@ correction explains shows here, with the dinner's date, where the
 recompute check sees it only for the whole settlement and rounded to
 cents. Skipped for a settlement with no line items, for the same reason as
 the line-item check. `MealCorrecting` asks the same question before it
-corrects a dinner, and refuses one that already disagrees.
+corrects a dinner, and refuses one that already disagrees. For a dinner
+of a settlement with no line items it asks what the nightly check asks
+of that settlement (the recompute check), so such a dinner can still be
+corrected.
 
 ### B (original proposal). What is this number made of?
 
