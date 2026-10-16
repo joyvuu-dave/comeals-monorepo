@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 # typed: false
 
-# Loaded by mutant from .mutant.yml. Four jobs.
+# Loaded by mutant from .mutant.yml. Five jobs.
 #
 # 1. Load every class before mutant looks for subjects. The test
 #    environment autoloads, so `Settlement*` would match nothing until
@@ -75,10 +75,29 @@ end
 # 4. Limit the memory of the process that tests one mutation
 #    (config/mutant/memory_limit.rb says why and how). It is set here,
 #    in that process, so it ends only that process.
+#
+# 5. Turn Thread.abort_on_exception back off in the process that tests
+#    one mutation. Mutant sets it to true when it loads
+#    (mutant/lib/mutant.rb), for its own threads. With it on, an
+#    exception that ends any thread is also raised in the main thread,
+#    at whatever line the main thread is on. The race specs in spec/db
+#    start threads that are meant to fail, such as a write that the
+#    settlement cancels, and read the error later with Thread#value.
+#    Under mutant the same error was also raised in the main thread
+#    before it reached #value, outside the rescue that expects it, and
+#    the unmutated code failed: spec/db/settlement_race_spec.rb's
+#    "refused in words when sent again" example in GitHub runs
+#    38925071449 and 38946208665. It happened only when the main thread
+#    was slow to get from its COMMIT to #value, which is why it was rare.
+#    Plain rspec and bin/check leave the setting off, as Ruby does, and
+#    the specs are written for that. This hook runs only in the forked
+#    process, so mutant's own threads in its main process keep the
+#    setting it chose.
 require_relative 'memory_limit'
 
 hooks.register(:mutation_insert_pre) do |mutation:| # rubocop:disable Lint/UnusedBlockArgument
   MutantMemoryLimit.apply
+  Thread.abort_on_exception = false
   connection = ActiveRecord::Base.connection
   connection.execute(<<~SQL.squish)
     SELECT pg_terminate_backend(pid) FROM pg_stat_activity
