@@ -575,6 +575,16 @@ RSpec.describe 'Events API' do
       expect(response.parsed_body).to eq('message' => "Title can't be blank")
     end
 
+    # A title left out of the body is no title, the same as an empty one,
+    # and the model says so in words, which the SPA shows.
+    it 'returns 400 when the body leaves out the title, and says so' do
+      post '/api/v1/events', params: { token: token, all_day: true, start_year: 2026, start_month: 5, start_day: 1 }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq('message' => "Title can't be blank")
+      expect(Event.count).to eq(0)
+    end
+
     it 'lists every problem, one per line, when there is more than one' do
       post '/api/v1/events', params: {
         token: token, title: '', all_day: false,
