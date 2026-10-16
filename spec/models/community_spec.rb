@@ -211,6 +211,7 @@ RSpec.describe Community do
       meal_on(community.today - 5, bills: %w[0], eaters: [child])
       meal_on(community.today - 6, bills: %w[10], eaters: [child])
       meal_on(community.today - 7, bills: %w[25])
+      meal_on(community.today - 9, bills: %w[0], no_cost: true)
       meal_on(community.today - 8, bills: %w[0], eaters: [diner], no_cost: true).cancel!
       meal_on(community.today, bills: %w[16], eaters: [diner])
       meal_on(community.today + 1, bills: %w[16], eaters: [diner])
