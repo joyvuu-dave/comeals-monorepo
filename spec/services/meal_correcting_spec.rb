@@ -157,7 +157,7 @@ RSpec.describe MealCorrecting do
       expect(lines_of(correction)).to eq(cook.id => BigDecimal('-10'), eater.id => BigDecimal('10'))
     end
 
-    # A settled dinner is usually closed too. A correction changes its
+    # A settled dinner can be closed too. A correction changes its
     # sign-ups and guests all the same (admin_correction). Each person here
     # also has a row on another dinner, made first, and the row each edit
     # removes is not the first row on this dinner. So an edit that found
