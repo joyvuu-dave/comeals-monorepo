@@ -233,6 +233,14 @@ RSpec.describe JwtAuth do
         expect(described_class.authenticate(token)).to be_nil
       end
 
+      # Signed with our secret, so it gets past decode; there is no
+      # resident to look up, and the answer is nil, not an error.
+      it 'rejects a token missing the resident_id claim' do
+        token = JWT.encode({ iat: Time.current.to_f, iss: 'comeals' }, described_class.send(:secret), 'HS256')
+
+        expect(described_class.authenticate(token)).to be_nil
+      end
+
       it 'rejects a token whose iat is a non-numeric string' do
         # ruby-jwt validates iat at encode time, so we hand-build the token to
         # simulate a malicious/malformed client. On decode, to_f on a non-numeric

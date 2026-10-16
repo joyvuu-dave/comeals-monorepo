@@ -237,4 +237,15 @@ RSpec.describe 'Read-only admin token' do
       expect(response).to redirect_to('/login')
     end
   end
+
+  # The token is set but READ_ONLY_ADMIN_ID is not: there is no account to
+  # run the request as. It must stop with "not found" (a 404 in
+  # production), and not with an error from reading a missing value.
+  describe 'with no account named for the token' do
+    it 'finds no admin account and stops' do
+      allow(ENV).to receive(:fetch).with('READ_ONLY_ADMIN_ID', nil).and_return(nil)
+
+      expect { get '/bills', params: { token: token } }.to raise_error(ActiveRecord::RecordNotFound)
+    end
+  end
 end
