@@ -1,0 +1,152 @@
+name: Mutant
+
+# The full mutation run (docs/mutation-testing.md), split into pieces
+# that run at the same time on GitHub's machines. On one laptop the
+# whole run takes days; here each piece takes every Nth subject of
+# `mutant environment subject list`, so the slow classes' methods spread
+# across all the pieces, and the run takes hours.
+#
+# A piece fails when its subjects have a survivor; the others keep
+# going (fail-fast is off). The last job adds every piece up: the totals
+# and each survivor, in the run's summary and in the mutant-report
+# artifact. Each piece's own log and mutant session are its artifact.
+#
+# The repository is public, so GitHub's standard machines cost nothing.
+# GitHub Pro runs 40 jobs at once; the default of 36 pieces leaves room
+# for CI on a pull request. A job may run 6 hours at most.
+
+on:
+  workflow_dispatch:
+    inputs:
+      pieces:
+        description: "How many pieces run at once (40 jobs at once on Pro; leave some for CI)"
+        type: number
+        default: 36
+      subjects:
+        description: "Mutant expressions, separated by spaces (empty = every subject in .mutant.yml)"
+        type: string
+        default: ""
+      workers:
+        description: "Mutant workers in each piece (a machine has 4 CPUs)"
+        type: number
+        default: 4
+
+concurrency:
+  group: mutant
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      pieces: ${{ steps.plan.outputs.pieces }}
+    steps:
+      - id: plan
+        env:
+          PIECES: ${{ inputs.pieces }}
+        run: |
+          echo "pieces=$(python3 -c 'import json, os; print(json.dumps(list(range(int(os.environ["PIECES"])))))')" >> "$GITHUB_OUTPUT"
+
+  piece:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        piece: ${{ fromJSON(needs.plan.outputs.pieces) }}
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: comeals_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    # The inputs reach the shell as variables, never pasted into a script.
+    # The PG* variables are for createdb and dropdb, which bin/mutant runs
+    # to give each worker its own copy of the test database.
+    env:
+      RAILS_ENV: test
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/comeals_test
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PIECE: ${{ matrix.piece }}
+      PIECES: ${{ inputs.pieces }}
+      SUBJECTS: ${{ inputs.subjects }}
+      WORKERS: ${{ inputs.workers }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+      - run: bin/rails db:schema:load
+
+      # Every Nth subject, starting at this piece's number. A subject is a
+      # line like "Settlement#settle!" or "MealLedger.units"; the header
+      # lines have spaces in them.
+      - name: Choose this piece's subjects
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2086 # the expressions are separate words on purpose
+          MUTANT=1 bundle exec mutant environment subject list $SUBJECTS > all-subjects.txt
+          grep -E '^[A-Z][^ ]*[#.][^ ]+$' all-subjects.txt \
+            | awk -v n="$PIECES" -v i="$PIECE" '(NR - 1) % n == i' > subjects.txt
+          echo "Piece $PIECE of $PIECES: $(wc -l < subjects.txt) of $(grep -cE '^[A-Z][^ ]*[#.][^ ]+$' all-subjects.txt) subjects."
+          cat subjects.txt
+
+      - name: Mutate
+        run: |
+          set -o pipefail
+          # A method name like same? or [] must not be read as a file pattern.
+          set -f
+          if [ ! -s subjects.txt ]; then
+            echo "No subject for this piece."
+            exit 0
+          fi
+          # shellcheck disable=SC2046 # one subject per word
+          MUTANT_JOBS="$WORKERS" bin/mutant -- $(cat subjects.txt) 2>&1 | tr '\r' '\n' | grep -v '^progress: ' | tee mutant.log
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mutant-piece-${{ matrix.piece }}
+          path: |
+            subjects.txt
+            mutant.log
+            .mutant/
+          include-hidden-files: true
+          retention-days: 30
+          if-no-files-found: ignore
+
+  report:
+    needs: piece
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      # The project's Ruby, without the bundle: the script needs no gem.
+      - uses: ruby/setup-ruby@v1
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: mutant-piece-*
+          path: pieces
+      - name: Add the pieces up
+        run: ruby bin/mutant-report pieces mutant-report.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mutant-report
+          path: mutant-report.md
+          retention-days: 90

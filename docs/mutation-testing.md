@@ -13,17 +13,32 @@ public open-source projects; this repository is public under MIT).
 
 ## Running it
 
+The whole run belongs on GitHub: Actions, **Mutant**, Run workflow
+(`.github/workflows/mutant.yml`). It splits the subjects into pieces that
+run at the same time, 36 by default, each taking every 36th subject, and
+adds them up at the end: the totals and each survivor are in the run's
+summary and in its `mutant-report` artifact, and each piece's log and
+mutant session are in its own artifact. The `subjects` input narrows it
+to some expressions, the same ones `bin/mutant` takes. The repository is
+public, so the machines cost nothing; GitHub Pro runs 40 jobs at once,
+and a job may run 6 hours.
+
+On one laptop the whole run no longer fits in a night. On 2026-10-15 it
+was 768 subjects and 35,121 mutations, and a laptop with six workers did
+250 to 500 mutations an hour. Use `bin/mutant` here for one class or
+one stage:
+
 ```bash
-bin/mutant                                   # every subject in .mutant.yml (hours)
+bin/mutant                                   # every subject in .mutant.yml (days here)
 bin/mutant -- Settlement.allocate_to_cents   # one method
 bin/mutant -- 'MealLedger*'                  # one class
 MUTANT_JOBS=8 bin/mutant                     # more workers (default 4)
 ```
 
-The whole app is about 19,500 mutations, so a full run is a night's
-work and is usually run one stage at a time, each stage being the
-subjects of one part of the app. The stages, and roughly what each
-costs on six workers:
+Locally it is usually run one stage at a time, each stage being the
+subjects of one part of the app. The stages, and what each cost on six
+workers in September 2026, when the whole app was about 19,500
+mutations:
 
 | Stage                                 | Subjects                                                        | Mutations | Time                                                         |
 | ------------------------------------- | --------------------------------------------------------------- | --------- | ------------------------------------------------------------ |

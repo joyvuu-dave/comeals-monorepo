@@ -1,0 +1,133 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Adds up the pieces of a Mutant workflow run (.github/workflows/mutant.yml).
+# Each piece left a directory with subjects.txt and mutant.log. Prints a
+# Markdown report, for the run's summary, and writes the same to a file:
+# the totals, each piece, and each survivor with the first change mutant
+# showed for it. A piece with no log stopped before mutating anything,
+# and the report says so.
+#
+# Usage: bin/mutant-report <directory of pieces> <report file>
+#
+# Ruby's standard library only: the workflow's last job runs it without
+# the bundle.
+
+SUMMARY = /\A(Mutations|Kills|Alive|Timeouts|Runtime):\s+(\S+)/
+# "evil:Settlement#settle!:/home/runner/work/x/x/app/services/settlement.rb:278:4e5c4"
+EVIL = %r{\Aevil:(?<subject>.+):(?<path>/[^:]+):(?<line>\d+):\h+\z}
+# "(2 more alive mutation(s), use `mutant session subject Foo#bar` to see all details)"
+MORE = /\A\((?<count>\d+) more alive mutation\(s\), use `mutant session subject (?<subject>[^`]+)`/
+RULE = '-----------------------'
+
+Piece = Struct.new(:name, :subjects, :summary, :survivors) do
+  def ran? = !summary.nil?
+  def number(key) = summary ? summary.fetch(key, '0').to_f : 0
+end
+
+Survivor = Struct.new(:subject, :place, :alive, :first_change)
+
+# One piece's log, line by line: the totals at its end, and each
+# survivor, counted and with the first change shown for it.
+class Log
+  def initialize(lines)
+    @lines = lines
+    @summary = {}
+    @survivors = {}
+  end
+
+  def read
+    @lines.each_with_index { |line, index| read_line(line, index) }
+    [@summary, @survivors.values]
+  end
+
+  private
+
+  def read_line(line, index)
+    if (total = line.match(SUMMARY))
+      @summary[total[1]] = total[2]
+    elsif (evil = line.match(EVIL))
+      survivor = @survivors[evil[:subject]] ||= Survivor.new(evil[:subject], place(evil), 0, nil)
+      survivor.alive += 1
+      survivor.first_change ||= change_after(index)
+    elsif (more = line.match(MORE))
+      @survivors[more[:subject]]&.alive += more[:count].to_i
+    end
+  end
+
+  # "app/services/settlement.rb:278", whatever directory the run was in.
+  def place(evil)
+    path = evil[:path][%r{/((?:app|lib|config)/.+)\z}, 1] || evil[:path]
+    "#{path}:#{evil[:line]}"
+  end
+
+  # The diff between the two rules after an evil: line.
+  def change_after(index)
+    start = rule_after(index)
+    return nil unless start
+
+    finish = rule_after(start) || @lines.size
+    @lines[(start + 1)...finish].join("\n")
+  end
+
+  def rule_after(index)
+    ((index + 1)...@lines.size).find { |at| @lines[at] == RULE }
+  end
+end
+
+def read_piece(dir)
+  subjects_path = File.join(dir, 'subjects.txt')
+  subjects = File.exist?(subjects_path) ? File.readlines(subjects_path).size : 0
+  log_path = File.join(dir, 'mutant.log')
+  return Piece.new(File.basename(dir), subjects, nil, []) unless File.exist?(log_path)
+
+  Piece.new(File.basename(dir), subjects, *Log.new(File.readlines(log_path, chomp: true)).read)
+end
+
+def totals(pieces)
+  ran = pieces.select(&:ran?)
+  counts = %w[Mutations Kills Alive Timeouts].to_h { |key| [key, ran.sum { |piece| piece.number(key) }.to_i] } # rubocop:disable Rails/IndexWith -- plain Ruby here, no ActiveSupport
+  killed = counts['Mutations'].zero? ? 0 : 100.0 * counts['Kills'] / counts['Mutations']
+  lines = ["#{counts['Mutations']} mutations, #{counts['Kills']} killed, #{counts['Alive']} alive, " \
+           "#{counts['Timeouts']} timed out: #{format('%.2f', killed)}% killed."]
+  stopped = pieces.reject(&:ran?).map(&:name).sort
+  lines << "#{stopped.size} piece(s) stopped before mutating: #{stopped.join(', ')}." if stopped.any?
+  lines
+end
+
+def pieces_table(pieces)
+  rows = pieces.sort_by { |piece| piece.name[/\d+\z/].to_i }.map do |piece|
+    cells = if piece.ran?
+              [piece.summary.fetch('Mutations', '0'), piece.summary.fetch('Alive', '0'),
+               "#{(piece.number('Runtime') / 60).round} min"]
+            else
+              ['stopped', '', '']
+            end
+    "| #{piece.name} | #{piece.subjects} | #{cells.join(' | ')} |"
+  end
+  ['## Pieces', '', '| Piece | Subjects | Mutations | Alive | Runtime |', '| --- | ---: | ---: | ---: | ---: |', *rows]
+end
+
+def survivors_section(pieces)
+  survivors = pieces.flat_map(&:survivors).sort_by { |survivor| [survivor.place, survivor.subject] }
+  lines = ["## Survivors (#{survivors.size} subjects)"]
+  survivors.each do |survivor|
+    lines += ['', "### #{survivor.subject} (#{survivor.alive} alive), #{survivor.place}"]
+    lines += ['', '```diff', survivor.first_change, '```'] if survivor.first_change
+  end
+  lines
+end
+
+def report(pieces)
+  "#{['# Mutant run', '', *totals(pieces), '', *pieces_table(pieces), '', *survivors_section(pieces)].join("\n")}\n"
+end
+
+if ARGV.size != 2
+  warn 'Usage: bin/mutant-report <directory of pieces> <report file>'
+  exit 2
+end
+
+dirs = Dir.children(ARGV[0]).map { |child| File.join(ARGV[0], child) }.select { |path| File.directory?(path) }
+text = report(dirs.map { |dir| read_piece(dir) })
+File.write(ARGV[1], text)
+puts text
