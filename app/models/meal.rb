@@ -380,13 +380,15 @@ class Meal < ApplicationRecord
     LiveUpdate.calendar_range(first, last)
   end
 
-  # The meals just before and just after `day`, other than this one.
+  # The meals just before and just after `day`, other than this one. No
+  # two meals share a date (index_meals_on_date), so the date alone
+  # orders them.
   sig { params(day: Date).returns(T::Array[Integer]) }
   def neighbour_ids(day)
     others = Meal.where.not(id: id)
     [
-      others.where(date: ...day).order(date: :desc, id: :desc).pick(:id),
-      others.where(date: (day + 1)..).order(:date, :id).pick(:id)
+      others.where(date: ...day).order(date: :desc).pick(:id),
+      others.where(date: (day + 1)..).order(:date).pick(:id)
     ].compact
   end
 
