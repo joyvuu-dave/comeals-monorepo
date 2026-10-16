@@ -121,9 +121,20 @@ RSpec.describe MealSchedule do
       expect(dates).to eq [Date.new(2026, 11, 19), Date.new(2026, 12, 3), Date.new(2026, 12, 10)]
     end
 
+    # Every day is a holiday here, so no date is ever found. A scan with
+    # no limit would walk on forever; past three years the stub raises an
+    # error of its own, so the example fails instead of hanging.
+    def refuse_every_day
+      allow(Holidays).to receive(:holiday?) do |date|
+        raise "walked on to #{date}" if date > Date.new(2029, 8, 2)
+
+        true
+      end
+    end
+
     it 'raises instead of walking forever when every candidate is refused' do
       schedule = described_class.new(weeks: [[4]])
-      allow(Holidays).to receive(:holiday?).and_return(true)
+      refuse_every_day
 
       expect { schedule.upcoming_dates(from: Date.new(2026, 8, 2), count: 1) }
         .to raise_error(/looks broken/)
@@ -135,7 +146,7 @@ RSpec.describe MealSchedule do
     # of a short cycle) still gets a whole year to find its dates. The
     # message says how far it looked, which pins the limit.
     it 'gives up after the cycles asked for plus a year, and says so' do
-      allow(Holidays).to receive(:holiday?).and_return(true)
+      refuse_every_day
 
       one_week = described_class.new(weeks: [[4]])
       expect { one_week.upcoming_dates(from: Date.new(2026, 8, 2), count: 1) }
@@ -176,6 +187,17 @@ RSpec.describe MealSchedule do
   end
 
   describe '#dates_between' do
+    # A range with no end would make every example here walk forever.
+    # Past 2030 the check raises an error of its own, so the example
+    # fails instead of hanging.
+    before do
+      allow(Holidays).to receive(:holiday?).and_wrap_original do |original, date|
+        raise "walked on to #{date}" if date.year > 2030
+
+        original.call(date)
+      end
+    end
+
     it 'returns every meal date in the range, skipping holidays' do
       # Christmas 2026 and New Year's Day 2027 are both Fridays — both skipped.
       schedule = described_class.new(weeks: [[5]])
