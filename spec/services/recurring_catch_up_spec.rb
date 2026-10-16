@@ -4,6 +4,7 @@ require 'rails_helper'
 
 RSpec.describe RecurringCatchUp do
   include ActiveJob::TestHelper
+  include ActiveSupport::Testing::TimeHelpers
 
   before { create(:community) }
 
@@ -74,5 +75,21 @@ RSpec.describe RecurringCatchUp do
     expect { returned = described_class.call(now: now) }
       .to have_enqueued_job(EnsureRotationsJob).once.and have_enqueued_job.once
     expect(returned).to eq([EnsureRotationsJob])
+  end
+
+  # config/puma.rb calls it with no time. At 02:00 today's 03:00 run is
+  # not due yet, so the clock has to be read for yesterday's run to count.
+  it 'reads the clock when no time is given' do
+    succeeded(RefreshBalancesJob, Time.utc(2026, 8, 23, 3, 0, 30))
+    succeeded(VerifyLedgerJob, now - 1.hour)
+    succeeded(EnsureRotationsJob, now - 1.hour)
+    succeeded(SendMissedSettlementMailJob, now - 1.hour)
+
+    travel_to(Time.utc(2026, 8, 24, 2, 0)) do
+      expect(described_class.call).to be_empty
+    end
+    travel_to(Time.utc(2026, 8, 24, 3, 1)) do
+      expect(described_class.call).to eq([RefreshBalancesJob])
+    end
   end
 end
