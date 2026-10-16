@@ -423,7 +423,7 @@ RSpec.describe Reconciliation do
       unbalanced = { 1 => BigDecimal('0.055') }
 
       expect { Settlement.allocate_to_cents(unbalanced, reconciliation_id: reconciliation.id) }
-        .to raise_error(/books do not balance/)
+        .to raise_error(/books do not balance for reconciliation #{reconciliation.id}\./)
     end
 
     # The second guard refuses only when a penny would have no balance to
@@ -456,7 +456,7 @@ RSpec.describe Reconciliation do
       unbalanced = { 1 => BigDecimal('-0.055') }
 
       expect { Settlement.allocate_to_cents(unbalanced, reconciliation_id: reconciliation.id) }
-        .to raise_error(/books do not balance/)
+        .to raise_error(/books do not balance for reconciliation #{reconciliation.id}\./)
     end
 
     it 'refuses an imbalance of one unit of the ledger grain, and accepts exact zero' do
