@@ -25,4 +25,23 @@ RSpec.describe 'admin comments routes' do
     post '/comments'
     expect(response).to have_http_status(:not_found)
   end
+
+  # The 404 page is public/404.html as it is, a whole HTML page. The app
+  # has no application layout today, so this example adds one for itself:
+  # if a later change adds one, the page must still not be put inside it.
+  it 'sends the 404 page as it is, with no layout around it' do
+    original = ApplicationController.view_paths
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir_p(File.join(dir, 'layouts'))
+      File.write(File.join(dir, 'layouts', 'application.html.erb'), "<main>a layout</main>\n<%= yield %>")
+      ApplicationController.prepend_view_path(dir)
+
+      get '/comments'
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.body).to eq(Rails.public_path.join('404.html').read)
+    ensure
+      ApplicationController.view_paths = original
+    end
+  end
 end
