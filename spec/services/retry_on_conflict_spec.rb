@@ -48,17 +48,39 @@ RSpec.describe RetryOnConflict do
       expect(calls).to eq(2)
     end
 
+    # A block that always conflicts. On one try more than `allowed` it
+    # raises a plain error instead, which is not retried. So a change
+    # that stops counting the tries, or never gives up, fails the example
+    # at once instead of running the block forever.
+    def always_conflicting(allowed, &on_call)
+      calls = 0
+      lambda do
+        calls += 1
+        on_call&.call(calls)
+        raise "the block ran #{calls} times, more than the #{allowed} allowed" if calls > allowed
+
+        raise ActiveRecord::SerializationFailure, 'conflict'
+      end
+    end
+
     it 'gives up after MAX_ATTEMPTS and re-raises' do
       calls = 0
+      block = always_conflicting(described_class::MAX_ATTEMPTS) { |n| calls = n }
 
-      expect do
-        described_class.call do
-          calls += 1
-          raise ActiveRecord::SerializationFailure, 'conflict'
-        end
-      end.to raise_error(ActiveRecord::SerializationFailure)
+      expect { described_class.call(&block) }.to raise_error(ActiveRecord::SerializationFailure)
 
       expect(calls).to eq(described_class::MAX_ATTEMPTS)
+    end
+
+    # A count of 0 is a mistake, but it must not mean "retry forever".
+    it 'runs the block once and gives up when asked for fewer than one try' do
+      [0, -1].each do |attempts|
+        calls = 0
+        block = always_conflicting(1) { |n| calls = n }
+
+        expect { described_class.call(attempts: attempts, &block) }.to raise_error(ActiveRecord::SerializationFailure)
+        expect(calls).to eq(1)
+      end
     end
 
     # Solid Queue's enqueue wraps every database error in its own
@@ -87,6 +109,8 @@ RSpec.describe RetryOnConflict do
       expect do
         described_class.call do
           calls += 1
+          raise "the block ran #{calls} times" if calls > described_class::MAX_ATTEMPTS
+
           enqueue_refused(ActiveRecord::Deadlocked.new('deadlock'))
         end
       end.to raise_error(ActiveRecord::Deadlocked, 'deadlock')
@@ -142,15 +166,9 @@ RSpec.describe RetryOnConflict do
       delays = []
       allow(described_class).to receive(:sleep) { |seconds| delays << seconds }
       calls = 0
+      block = always_conflicting(5) { |n| calls = n }
 
-      begin
-        described_class.call(attempts: 5, base_delay: 1.0) do
-          calls += 1
-          raise ActiveRecord::SerializationFailure, 'conflict'
-        end
-      rescue ActiveRecord::SerializationFailure
-        nil
-      end
+      suppress(ActiveRecord::SerializationFailure) { described_class.call(attempts: 5, base_delay: 1.0, &block) }
 
       expect(calls).to eq(5)
       expect(delays.size).to eq(4)
@@ -164,7 +182,7 @@ RSpec.describe RetryOnConflict do
       allow(described_class).to receive(:sleep) { |seconds| delays << seconds }
 
       begin
-        described_class.call { raise ActiveRecord::SerializationFailure, 'conflict' }
+        described_class.call(&always_conflicting(described_class::MAX_ATTEMPTS))
       rescue ActiveRecord::SerializationFailure
         nil
       end
@@ -177,7 +195,7 @@ RSpec.describe RetryOnConflict do
       delays = []
       allow(described_class).to receive(:sleep) { |seconds| delays << seconds }
       suppress(ActiveRecord::SerializationFailure) do
-        described_class.call(attempts: 4, base_delay: 1.0) { raise ActiveRecord::SerializationFailure, 'conflict' }
+        described_class.call(attempts: 4, base_delay: 1.0, &always_conflicting(4))
       end
 
       expect(delays.size).to eq(3)
@@ -186,13 +204,27 @@ RSpec.describe RetryOnConflict do
       expect(delays[2]).to be_between(4.0, 8.0)
     end
 
+    # The jitter is Kernel.rand, from 0 up to 1, added to 1. With it held
+    # at one half, every wait is exact.
+    it 'waits the delay times 1 plus the jitter, doubling each time' do
+      delays = []
+      allow(described_class).to receive(:sleep) { |seconds| delays << seconds }
+      allow(Kernel).to receive(:rand).and_return(0.5)
+
+      suppress(ActiveRecord::SerializationFailure) do
+        described_class.call(attempts: 4, base_delay: 1.0, &always_conflicting(4))
+      end
+
+      expect(delays).to eq([1.5, 3.0, 6.0])
+    end
+
     # Counting retries is the point. An error tracker sees a crash; it never
     # sees the retry that stopped one, and "how often is this firing" is the
     # number that says whether the change is behaving.
     it 'says which attempt failed and how many there are, so a retry that fires constantly can be seen' do
       allow(Rails.error).to receive(:report)
       suppress(ActiveRecord::SerializationFailure) do
-        described_class.call(attempts: 2) { raise ActiveRecord::SerializationFailure, 'conflict' }
+        described_class.call(attempts: 2, &always_conflicting(2))
       end
 
       expect(Rails.error).to have_received(:report).with(
