@@ -20,11 +20,13 @@ Rails.application.routes.draw do
   # API
   namespace :api do
     namespace :v1 do
-      post '/residents/token', to: 'residents#token'
+      # No format suffix: config/initializers/rack_attack.rb counts these
+      # paths exactly as written here.
+      post '/residents/token', to: 'residents#token', format: false
       get '/residents/id', to: 'residents#show_id'
       get '/residents/name/:token', to: 'residents#show_name'
-      post '/residents/password-reset', to: 'residents#password_reset'
-      post '/residents/password-reset/:token', to: 'residents#password_new'
+      post '/residents/password-reset', to: 'residents#password_reset', format: false
+      post '/residents/password-reset/:token', to: 'residents#password_new', format: false
       delete '/sessions/current', to: 'sessions#destroy_current'
       get '/communities/:id/birthdays', to: 'communities#birthdays'
       get '/communities/:id/hosts', to: 'communities#hosts'

@@ -43,6 +43,16 @@ RSpec.describe 'Rack::Attack throttles, for other spellings of the path' do
     response.media_type == 'application/json' && response.parsed_body['message'] == message
   end
 
+  # Whether the request in the block reached the action. A path that no
+  # route matches reaches nothing: the test environment raises for it,
+  # and production answers 404.
+  def reaches?(message)
+    yield
+    answered_with?(message)
+  rescue ActionController::RoutingError
+    false
+  end
+
   it 'checks for the answer the login and the reset request give' do
     login('/api/v1/residents/token')
     expect(answered_with?(login_answer)).to be(true)
@@ -52,10 +62,7 @@ RSpec.describe 'Rack::Attack throttles, for other spellings of the path' do
 
   %w[/api/v1/residents/token.json /api/v1/residents/token.xml].each do |path|
     it "lets at most 20 logins in 5 minutes reach the login, sent to #{path}" do
-      reached = Array.new(25) do
-        login(path)
-        answered_with?(login_answer)
-      end
+      reached = Array.new(25) { reaches?(login_answer) { login(path) } }
 
       expect(reached.count(true)).to be <= 20
     end
@@ -63,10 +70,7 @@ RSpec.describe 'Rack::Attack throttles, for other spellings of the path' do
 
   %w[/api/v1/residents/password-reset.json /api/v1/residents/password-reset.xml].each do |path|
     it "lets at most 10 reset requests in an hour reach the reset, sent to #{path}" do
-      reached = Array.new(15) do
-        reset(path)
-        answered_with?(reset_answer)
-      end
+      reached = Array.new(15) { reaches?(reset_answer) { reset(path) } }
 
       expect(reached.count(true)).to be <= 10
     end
