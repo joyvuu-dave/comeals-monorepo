@@ -75,6 +75,7 @@ matcher:
     - SnapshotRead*
     - ThirdCookWarning*
     - TrueOrFalse*
+    - YearMonthDay*
     # jobs, mailers, helpers, lib
     - ApplicationJob*
     - EnsureRotationsJob*

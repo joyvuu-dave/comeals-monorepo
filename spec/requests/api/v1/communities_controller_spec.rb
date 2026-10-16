@@ -111,16 +111,16 @@ RSpec.describe 'Communities API' do
       end
     end
 
-    # RED ON PURPOSE (2026-10-16): this example fails, and shows a bug.
-    # public/api.md says start is YYYY-MM-DD. Date.parse also takes a
+    # public/api.md says start is YYYY-MM-DD (YearMonthDay). Until
+    # 2026-10-16 the action read it with Date.parse, which also takes a
     # start with no year or no month, such as "12", "--10-12", "Sunday"
     # or "October", and fills in the rest from the machine's own clock,
     # in the machine's own zone, not from the community's today
     # (CLAUDE.md, "Every wall-clock time is a community setting").
     # travel_to cannot change that clock: Ruby's date library reads it
-    # inside C. Found by mutant: Date.strptime, Date.iso8601,
-    # Date.xmlschema and Date.jisx0301 each refuse "12", and each
-    # survived. Date.iso8601 alone is not the fix: it takes "--10-12".
+    # inside C. Found by mutant, which swapped in Date.iso8601 and three
+    # other parsers that refuse "12". Date.iso8601 alone is not enough:
+    # it takes "--10-12".
     it 'returns 400 for a start with no year or no month', :aggregate_failures do
       %w[12 --10-12 Sunday October].each do |start|
         birthdays(start: start)
@@ -182,9 +182,9 @@ RSpec.describe 'Communities API' do
       expect(response.parsed_body['message']).to eq('Invalid date')
     end
 
-    # RED ON PURPOSE (2026-10-16): this example fails, and shows the bug
-    # the birthdays example above shows. At 6 PM on October 31 in Los
-    # Angeles, a server in UTC answers /calendar/12 with November.
+    # The same rule as the birthdays start above. Before it, at 6 PM on
+    # October 31 in Los Angeles, a server in UTC answered /calendar/12
+    # with November.
     it 'returns 400 for a date with no year or no month', :aggregate_failures do
       %w[12 --10-12 Sunday October].each do |date|
         get "/api/v1/communities/#{community.id}/calendar/#{date}", params: { token: token }

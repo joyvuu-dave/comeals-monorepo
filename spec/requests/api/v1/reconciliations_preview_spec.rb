@@ -300,13 +300,12 @@ RSpec.describe 'GET /api/v1/reconciliations/preview' do
       expect(response).to have_http_status(:bad_request)
     end
 
-    # RED ON PURPOSE (2026-10-16): this example fails, and shows a bug.
-    # public/api.md says the cutoff is YYYY-MM-DD. Date.iso8601 also takes
-    # "--10-12", with no year, and fills the year in from the machine's
-    # own clock, not from the community's today; and "2026-10", with no
-    # day, which it reads as the 1st. A settlement must not guess either.
-    # On October 20, 2026, "2026-10" is a cutoff 19 days back, and the
-    # preview answers for October 1.
+    # public/api.md says the cutoff is YYYY-MM-DD (YearMonthDay). Until
+    # 2026-10-16 Date.iso8601 also took "--10-12", with no year, and
+    # filled the year in from the machine's own clock, not from the
+    # community's today; and "2026-10", with no day, which it read as the
+    # 1st. On October 20, 2026, "2026-10" was a cutoff 19 days back, and
+    # the preview answered for October 1.
     describe 'a cutoff with no year or no day' do
       include ActiveSupport::Testing::TimeHelpers
 
@@ -322,9 +321,9 @@ RSpec.describe 'GET /api/v1/reconciliations/preview' do
       end
     end
 
-    # RED ON PURPOSE (2026-10-16): this example fails. A cutoff sent as a
-    # list (cutoff[]=...) reached Date.iso8601, which raises TypeError for
-    # a list, and nothing turned that into a 400.
+    # A cutoff sent as a list (cutoff[]=...) once reached Date.iso8601,
+    # which raises TypeError for a list, and nothing turned that into a
+    # 400.
     it 'refuses a cutoff sent as a list' do
       get '/api/v1/reconciliations/preview', params: { cutoff: [latest.iso8601] },
                                              headers: { 'Authorization' => "Bearer #{token}" }

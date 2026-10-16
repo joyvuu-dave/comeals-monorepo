@@ -54,7 +54,7 @@ ActiveAdmin.register Reconciliation do
   # It writes bills, so it needs a superuser, like the bill form.
   collection_action :mark_no_cost, method: %i[get post] do
     authorize! :update, Bill
-    cutoff = Date.iso8601(params.dig(:reconciliation, :end_date).to_s)
+    cutoff = YearMonthDay.parse(params.dig(:reconciliation, :end_date))
     preview_path = preview_admin_reconciliations_path(reconciliation: { end_date: cutoff.iso8601 })
     if request.post?
       result = NoCostMarking.call(bill_ids: Array(params[:bill_ids]).map { |id| Integer(id, 10) })
@@ -78,7 +78,7 @@ ActiveAdmin.register Reconciliation do
   # settling, so it needs a superuser, like the preview it is on.
   collection_action :mark_cancelled, method: %i[get post] do
     authorize! :new, Reconciliation
-    cutoff = Date.iso8601(params.dig(:reconciliation, :end_date).to_s)
+    cutoff = YearMonthDay.parse(params.dig(:reconciliation, :end_date))
     preview_path = preview_admin_reconciliations_path(reconciliation: { end_date: cutoff.iso8601 })
     if request.post?
       result = DinnerCancelling.call(meal_ids: Array(params[:meal_ids]).map { |id| Integer(id, 10) })

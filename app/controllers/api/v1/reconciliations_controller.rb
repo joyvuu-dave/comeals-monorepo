@@ -14,9 +14,10 @@ module Api
       # writing anything. The cutoff must be at least 14 days before today,
       # like the settlement itself requires (ADR 0011 rule 2). No meals to
       # settle is a valid answer, not an error: the lists come back empty.
+      # A cutoff not written as YYYY-MM-DD (YearMonthDay) is a 400.
       sig { void }
       def preview
-        cutoff = Date.iso8601(params.require(:cutoff))
+        cutoff = YearMonthDay.parse(params.require(:cutoff))
         preview = Settlement.preview(cutoff: cutoff)
         render json: ReconciliationPreviewSerializer.new(preview)
       rescue Date::Error, ActionController::ParameterMissing
@@ -43,7 +44,7 @@ module Api
       # (spec/requests/no_query_after_commit_spec.rb).
       sig { void }
       def create
-        cutoff = Date.iso8601(params.require(:cutoff))
+        cutoff = YearMonthDay.parse(params.require(:cutoff))
         # A person is waiting, so three quick tries and then the 409 below,
         # not the rake task's minutes of waiting (SettleAndNotify::REQUEST).
         settlement = SettleAndNotify.call(cutoff: cutoff, retries: SettleAndNotify::REQUEST)

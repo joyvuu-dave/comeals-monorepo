@@ -148,12 +148,12 @@ RSpec.describe 'POST /api/v1/reconciliations' do
     expect(response.parsed_body[:message]).to eq('cutoff must be a date, YYYY-MM-DD')
   end
 
-  # RED ON PURPOSE (2026-10-16): this example fails, and shows a bug.
-  # public/api.md says the cutoff is YYYY-MM-DD. Date.iso8601 also takes
-  # "--10-12", with no year, and fills the year in from the machine's own
-  # clock, not from the community's today; and "2026-10", with no day,
-  # which it reads as the 1st. On October 20, 2026, "2026-10" settles the
-  # dinner of September 30, and a settlement has no undo.
+  # public/api.md says the cutoff is YYYY-MM-DD (YearMonthDay). Until
+  # 2026-10-16 Date.iso8601 also took "--10-12", with no year, and filled
+  # the year in from the machine's own clock, not from the community's
+  # today; and "2026-10", with no day, which it read as the 1st. On
+  # October 20, 2026, "2026-10" settled the dinner of September 30, and a
+  # settlement has no undo.
   describe 'a cutoff with no year or no day' do
     include ActiveSupport::Testing::TimeHelpers
 

@@ -25,12 +25,13 @@ module Api
       # The month two weeks after `start` (the middle of the calendar's
       # six weeks), or this month. The chips are dated in that month's
       # year, and a person has one there only from their first birthday
-      # on (Resident.with_birthday_chip_on). A start that is not a date
-      # is a 400, the same answer #calendar gives.
+      # on (Resident.with_birthday_chip_on). A start not written as
+      # YYYY-MM-DD (YearMonthDay) is a 400, the same answer #calendar
+      # gives.
       def birthdays
         begin
-          day = params[:start] ? Date.parse(params[:start]) + 2.weeks : Community.instance.today
-        rescue ArgumentError, TypeError
+          day = params[:start] ? YearMonthDay.parse(params[:start]) + 2.weeks : Community.instance.today
+        rescue Date::Error
           return render json: { message: 'Invalid date' }, status: :bad_request
         end
         days = day.all_month
@@ -53,10 +54,13 @@ module Api
       # (see CLAUDE.md), so this always answers for Community.instance. The
       # path keeps the :id only so existing links and the SPA's cookie-based
       # URLs stay valid.
+      #
+      # The date must be written as YYYY-MM-DD (YearMonthDay), or the
+      # answer is a 400.
       def calendar
         begin
-          date = Date.parse(params[:date])
-        rescue ArgumentError, TypeError
+          date = YearMonthDay.parse(params[:date])
+        rescue Date::Error
           return render json: { message: 'Invalid date' }, status: :bad_request
         end
 
