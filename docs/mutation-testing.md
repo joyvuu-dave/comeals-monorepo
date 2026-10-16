@@ -3219,3 +3219,154 @@ Noise, left (44), the same 44 that run 2 has:
   JSON ends at its last closing bracket. Each code still differs whenever the edits or the
   changes differ.
 - `eql?` for `!=` in `save!` (1): both are strings.
+
+### 2026-10-16, the code under everything else
+
+Run on the classes the rest of the app stands on: `RetryOnConflict*`,
+`SnapshotRead*`, `Healthcheck*`, `PacedDelivery*`, `MailDelivery*`
+(which takes `not_yet_sent` and `record!`, not `MailDeliveryFailure`),
+`LiveUpdate*`, `FallbackController*`, `AssetCacheControl*`,
+`DatabasePoolCheck*`, `DeployConfigCheck*`, `BugsnagErrorSubscriber*`
+and `SuperuserAdapter*`: 51 subjects. GitHub runs, three pieces of four
+workers each, 300-second limit.
+
+Run 1 left out `LiveUpdate.calendar_range`. Two mutations of its month
+loop add a month to a set forever, and the machine ran out of memory
+and stopped the whole piece. Its first numbers come from run
+38928059791, on the branch that gives each mutant process a 2 GiB limit
+(`agent/mutant-memory-limit`), which this branch merged before run 2.
+
+| Run                                                 | Subjects | Mutations | Killed | Not killed                               | Time   |
+| --------------------------------------------------- | -------- | --------- | ------ | ---------------------------------------- | ------ |
+| 1 (38927062603), every subject but `calendar_range` | 50       | 2,311     | 2,252  | 59: 49 alive, 10 timeouts                | 63 min |
+| 38928059791, `calendar_range` alone                 | 1        | 74        | 69     | 5: 1 alive, 2 timeouts, 2 process aborts |        |
+| 2 (38937715000), every subject                      | 51       | 2,363     | 2,345  | 18: 16 alive, 2 timeouts                 | 52 min |
+| 3 (38946078004), every subject                      | 51       | 2,363     | 2,347  | 16 alive                                 | 49 min |
+
+Every subject not named below had no survivor in the first runs, among
+them both `MailDelivery` methods, every `SuperuserAdapter` method but
+`#model_name`, and every `LiveUpdate` method but `calendar_range`.
+
+**The order mutant runs examples in.** mutant-rspec 0.17 registers its
+own `:global` RSpec ordering before each mutation runs
+(`Mutant::Integration::Rspec#install_ordering`), in the order it chose
+the examples, which is the order their files load: by path, then by
+line. So `MUTANT_DIRECTORY_ORDER` in `spec/support/mutant/specs.rb`
+changes nothing, and for `RetryOnConflict.call` the first file is
+`spec/db/commit_refused_spec.rb`. Mutant stops at the first example that
+fails, so an example meant to end a mutation that never stops must be
+in the first file that runs (#185).
+
+The first runs' 64, by kind.
+
+- Missing examples (37), each with an example now.
+  - `RetryOnConflict.call` (14). Ten timeouts. Eight never give up: the
+    count does not grow (`-= 1`, `+= 0`), or the raise at the last try
+    is gone (removed, `nil`, the conflict alone, `if nil`, `if false`,
+    the whole `if`). Two wait with no number (`sleep`, `sleep(nil)`),
+    which sleeps with no end. The eight hung in
+    `spec/jobs/recurring_job_spec.rb`, whose "gives up" example has no
+    limit on its tries, and the two in the commit spec's retry, which
+    sleeps for real. Now the retry example there allows only
+    `sleep(0.0)`, and a new example has every COMMIT refused and raises
+    a plain error, which is not retried, on one try too many. The
+    examples in `retry_on_conflict_spec.rb` do the same. Four alive:
+    `==`, `eql?` and `equal?` for `>=`, which the 2026-09-27 entry
+    called noise because the count goes up by one from 1. A count of
+    tries below 1 tells them apart: the code gives up after one try,
+    the mutation never does. A new example asks for 0 and for -1.
+    `self.rand` for `Kernel.rand` (1): a new example holds `Kernel.rand`
+    at one half and expects waits of exactly 1.5, 3 and 6 seconds;
+    `self.rand` calls Kernel's own `rand`, which the example does not
+    hold.
+  - `Healthcheck.ping` (5): the condition on the warning removed,
+    `nil`, `false`, `self.is_a?`, or `instance_of?` (a 200 is
+    `Net::HTTPOK`, a subclass of `Net::HTTPSuccess`). Each writes the
+    warning for a ping that worked. The 2026-09-27 entry called these
+    noise, but the log-line `ignore_patterns` skip only the logger call,
+    not the condition around it, and a warning for every ping would
+    bury the one that says a check is gone. New example: an accepted
+    ping writes no warning.
+  - `PacedDelivery` (8). `#send_each` (3): the condition on the cap's
+    log line (removed, `true`, `if @skipped`); a run that sent everyone
+    logged the cap error. `#with_session` (1): without the `return`, a
+    run not over SMTP sent its messages and then opened an SMTP session
+    as well. `#open_smtp` (3): `key?` for the value of STARTTLS and of
+    both timeouts. A STARTTLS of `false` turned it on, and a timeout of
+    `nil` took away Net::SMTP's own 30 and 60 seconds. `#initialize`
+    (1): without the `to_a`, a relation is counted again when the
+    session cannot be opened, and a delivery row that another run wrote
+    in between changes the failed count.
+  - `SnapshotRead.call` (2): `isolation: nil`, or no isolation. Every
+    session of the app starts at SERIALIZABLE (ADR 0005), so no example
+    saw it. A new example lowers the session's default to READ
+    COMMITTED first.
+  - `DeployConfigCheck` (4). `config_problem` (2): truthiness for
+    `present?` on `COMEALS_STAGING` and on `LOCAL_PRODUCTION`; a blank
+    one let the release through. `verify_config!` (1): `{}` for
+    `ENV.to_h`. The only example in production stubbed `ENV.to_h` to
+    `{}`; a new one passes a release that has both vars. It also fails
+    `ENV.to_hash` for `ENV.to_h` (1), because it holds `to_h` only.
+  - `LiveUpdate.calendar_range` (4), loops that never end. `while
+month` and `while last`: the set of dates grows until the process
+    runs out of memory (process aborts). `month = month` and the loop's
+    body removed: the month never moves (timeouts). A new first example
+    in the group runs the walk under a two-second `Timeout`; the real
+    walk takes well under a millisecond. In run 2 the two that grow the
+    set still timed out: the limit ended the walk, and then
+    `LiveUpdate.batch` flushed the batch in its `ensure`, naming the
+    cache keys of millions of days. The example now sets its own batch
+    and never flushes it, and run 3 killed both.
+- Redundant code, removed (11).
+  - `FallbackController#index` (3): the `type:` argument (removed,
+    `type: ""`, `type__mutant__:`), which the 2026-09-27 entry left for
+    the owner. `send_file` reads text/html from the name `index.html`;
+    the answer's headers are the same without it (checked).
+  - `Healthcheck.ping_uri` (2) and `SnapshotRead.call` (2): an
+    `else ''` (removed, or `nil`). A nil prints as nothing in a string.
+  - `BugsnagErrorSubscriber#report` (3): `:error` in the list of
+    severities passed on (removed, `nil`, `:error__mutant__`). Anything
+    not in the list becomes `'error'` anyway.
+  - `DeployConfigCheck.verify_processes!` (1): `.distinct`. The dead
+    kinds are the expected kinds minus the list, and a kind that is in
+    the list twice is taken away the same.
+- Noise (15).
+  - `AssetCacheControl#call` (2): `env.fetch('PATH_INFO')`, as on
+    2026-09-12. The Rack SPEC requires `PATH_INFO` in every request's
+    env, so `fetch` never raises.
+  - `SnapshotRead.take_snapshot` (3): the wait limit written as
+    `wait_limit`, `wait_limit.to_int` or `Integer(wait_limit)` for
+    `wait_limit.to_i`. For a Duration of whole seconds all four print
+    the same number, and the one caller passes 5 minutes.
+  - `PacedDelivery#open_smtp` (4): `fetch` for `[]`. On the two
+    timeouts it is inside an `if` that has already found a value. The
+    settings always hold an address and a port: production.rb sets
+    both, and so do ActionMailer's own defaults.
+  - `PacedDelivery#with_session` (1): `message.delivery_method` for
+    `message.message.delivery_method`, as on 2026-09-12: ActionMailer
+    hands the call to the Mail object.
+  - `PacedDelivery#initialize` (1): `to_ary` for `to_a`. For a relation
+    and for an Array, the two kinds of list the callers pass, both give
+    the same Array.
+  - `DeployConfigCheck.present?` (2): `lstrip` or `rstrip` for `strip`.
+    A value made only of spaces is empty after any of the three, and
+    any other value is not.
+  - `SuperuserAdapter#model_name` (1): `instance_of?(Class)` for
+    `is_a?(Class)`, as on 2026-09-27. Ruby refuses a subclass of Class
+    (`Class.new(Class)` raises TypeError), so nothing is a Class
+    without being an instance of Class itself, and the change cannot
+    alter who may do what.
+  - `LiveUpdate.calendar_range` (1): `<` for `<=` in the month loop, as
+    on 2026-09-25. The month equals the last day only when the last day
+    is the first of its month, and the line after the loop adds the
+    last day itself.
+- A finding (1): `DatabasePoolCheck.verify!`, `Integer()` for `.to_i`.
+  Puma reads `RAILS_MAX_THREADS` with `Integer()` (`Puma::DSL#threads`),
+  so the mutation is the right code. For `0x10` Puma runs 16 threads
+  and `verify!` counts 0, so a pool of 5 passes; for `010` Puma runs 8
+  and `verify!` counts 10. The failing example "counts the threads the
+  way Puma does" (`spec/lib/database_pool_check_spec.rb`) is the last
+  commit on the branch, after run 3.
+
+Run 3, on the final code, left 16 alive: the 15 noise above and the
+finding. No timeouts.
