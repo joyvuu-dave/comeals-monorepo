@@ -200,9 +200,10 @@ class Settlement
     meals = Meal.settleable_by(cutoff).order(:date).preload({ bills: :resident }, :meal_residents, :guests).to_a
     ledger = MealLedger.new(meals)
     corrections = MealCorrection.waiting.order(:id).preload(:meal, :admin_user, lines: :resident).to_a
+    # Every resident has an entry, so every correction line's person does.
     raw = ledger.balances(community.residents.pluck(:id))
     corrections.flat_map(&:lines).each do |line|
-      raw[T.must(line.resident_id)] = raw.fetch(T.must(line.resident_id), BigDecimal('0')) + T.must(line.amount)
+      raw[T.must(line.resident_id)] = raw.fetch(T.must(line.resident_id)) + T.must(line.amount)
     end
     Preview.new(cutoff: cutoff, meals: meals, ledger: ledger,
                 resident_balances: allocate_to_cents(raw, reconciliation_id: 'preview'),
