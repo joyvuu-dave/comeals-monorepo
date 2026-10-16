@@ -55,6 +55,17 @@ RSpec.describe ScheduleWeekLabelHelper do
   end
 
   describe '#schedule_grid_data' do
+    # A list of notes with no end would make new strings until the
+    # machine runs out of memory. Asked for a cycle longer than the
+    # longest, the note raises instead, so the example fails at once.
+    before do
+      allow(helper).to receive(:schedule_repeat_note).and_wrap_original do |original, count|
+        raise "asked for a note for #{count} weeks" if count > MealSchedule::MAX_WEEKS
+
+        original.call(count)
+      end
+    end
+
     it 'ships finished labels and notes so the JS never composes wording' do
       travel_to Date.new(2026, 8, 7) do
         data = helper.schedule_grid_data(community)
