@@ -44,7 +44,7 @@ RSpec.describe MutantMemoryLimit do
     RUBY
 
     if RUBY_PLATFORM.include?('linux')
-      expect(status.success?).to be(false)
+      expect(status.success?).not_to be(true) # nil when a signal ended it
       expect(status.exitstatus).not_to eq(ran_on_after_the_limit)
     else
       expect(status.exitstatus).to eq(described_class::WATCH_EXIT_STATUS)
