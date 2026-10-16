@@ -197,6 +197,48 @@ RSpec.describe Community do
     end
   end
 
+  # The examples of the two averages read these meals through a number.
+  # These read the list itself, one meal of each kind.
+  describe '#averaged_meals' do
+    include_context 'with meals for the dashboard averages'
+
+    it 'is the past meals people ate at whose costs are final, and no other' do
+      child = create(:resident, community: community, unit: unit, multiplier: 0)
+      receipt = meal_on(community.today - 1, bills: %w[16], eaters: [cook, diner])
+      no_cost = meal_on(community.today - 2, bills: %w[0], eaters: [diner], no_cost: true)
+      meal_on(community.today - 3, eaters: [diner])
+      meal_on(community.today - 4, bills: %w[20 0], eaters: [diner])
+      meal_on(community.today - 5, bills: %w[0], eaters: [child])
+      meal_on(community.today - 6, bills: %w[10], eaters: [child])
+      meal_on(community.today - 7, bills: %w[25])
+      meal_on(community.today - 8, bills: %w[0], eaters: [diner], no_cost: true).cancel!
+      meal_on(community.today, bills: %w[16], eaters: [diner])
+      meal_on(community.today + 1, bills: %w[16], eaters: [diner])
+
+      expect(community.averaged_meals).to contain_exactly(receipt, no_cost)
+    end
+
+    it 'leaves out a settled meal' do
+      meal_on(community.today - 14, bills: %w[16], eaters: [cook, diner])
+      settle!(cutoff: community.today - 14)
+      open = meal_on(community.today - 2, bills: %w[6], eaters: [diner])
+
+      expect(community.averaged_meals).to contain_exactly(open)
+    end
+  end
+
+  describe '#averaged_meal_count' do
+    include_context 'with meals for the dashboard averages'
+
+    it 'counts the meals the averages read' do
+      meal_on(community.today - 1, bills: %w[16], eaters: [cook, diner])
+      meal_on(community.today - 2, bills: %w[0], eaters: [diner], no_cost: true)
+      meal_on(community.today - 3, bills: %w[0], eaters: [diner])
+
+      expect(community.averaged_meal_count).to eq(2)
+    end
+  end
+
   describe '#unreconciled_ave_cost' do
     include_context 'with meals for the dashboard averages'
 
@@ -425,6 +467,19 @@ RSpec.describe Community do
       expect(community.averaged_meal_count).to eq(2)
       expect(community.meals_left_out_of_averages)
         .to eq(cancelled: 2, no_cook: 1, cost_not_entered: 3, nobody_to_charge: 1)
+    end
+
+    # A cancelled dinner and a dinner where only a child who eats free
+    # ate both settle, the second with its cost still blank. Once
+    # settled, neither is waiting for anything.
+    it 'leaves settled meals out of every count' do
+      child = create(:resident, community: community, unit: unit, multiplier: 0)
+      meal_on(community.today - 15, bills: %w[0], eaters: [diner]).cancel!
+      meal_on(community.today - 16, bills: %w[0], eaters: [child])
+      settle!(cutoff: community.today - 14)
+
+      expect(community.meals_left_out_of_averages)
+        .to eq(cancelled: 0, no_cook: 0, cost_not_entered: 0, nobody_to_charge: 0)
     end
 
     it 'counts nothing and leaves nothing out when no meal is past' do
