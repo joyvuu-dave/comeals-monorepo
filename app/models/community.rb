@@ -245,11 +245,7 @@ class Community < ApplicationRecord
 
   accepts_nested_attributes_for :admin_users
 
-  # NULL cap means "no cap"
-  def cap
-    read_attribute(:cap)
-  end
-
+  # A NULL cap means "no cap".
   def capped?
     cap.present?
   end
@@ -530,7 +526,7 @@ class Community < ApplicationRecord
   end
 
   def cap_in_whole_cents
-    return if cap.nil? || cap == cap.round(2)
+    return if cap.nil? || cap == T.must(cap).round(2)
 
     errors.add(:cap, 'must be whole cents')
   end
