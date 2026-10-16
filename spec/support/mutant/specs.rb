@@ -85,6 +85,10 @@ MUTANT_SPEC_ROWS = {
   'spec/services/settlement_carries_corrections_spec.rb' =>
     %w[Settlement Reconciliation BalanceRecalculation LedgerVerification SettledDinnerDifference MealCorrection],
   'spec/models/meal_correction_spec.rb' => %w[MealCorrection MealCorrectionLine AppendOnly],
+  # Corrections next to a cancelled dinner, a move out, a unit move and a
+  # cap, each through a settlement and the nightly check.
+  'spec/services/settlement_correction_edges_spec.rb' =>
+    %w[Settlement Reconciliation MealCorrecting CollectionList LedgerVerification MealCostSummary],
   # A method-level entry runs only for that method, and for that method
   # nothing else runs: this is the one caller of rewrite!, a repair step.
   'spec/db/settled_balance_triggers_spec.rb' => %w[Settlement#rewrite!],
