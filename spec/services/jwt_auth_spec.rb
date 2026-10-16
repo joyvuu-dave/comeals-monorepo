@@ -100,6 +100,47 @@ RSpec.describe JwtAuth do
       end
     end
 
+    # A phone or a browser keeps a resident's token with no end date
+    # (the top of app/services/jwt_auth.rb says why). So a token made
+    # today must still sign in after every later change to this code.
+    # If the key's name ('comeals-jwt-auth-v1') or length, the way Rails
+    # turns secret_key_base into that key, the algorithm, the issuer or
+    # a claim's name changed, every saved token would stop working at
+    # once, and every resident would be signed out. The rule here is to
+    # never break a current user.
+    #
+    # The token below was made once, on 2026-10-16, by JwtAuth.encode,
+    # with the secret_key_base below, for resident 1000042 at
+    # 1792108800.25 (2026-10-16 00:00:00.25 UTC). The test environment's
+    # own secret_key_base is made at random for each checkout
+    # (tmp/local_secret.txt), so the example sets a fixed one; production
+    # signs with its own SECRET_KEY_BASE the same way. If this example
+    # fails, do not make a new token to make it pass: the failure means
+    # every token saved in production has stopped working.
+    describe 'a token saved before today' do
+      let(:saved_token) do
+        'eyJhbGciOiJIUzI1NiJ9.eyJyZXNpZGVudF9pZCI6MTAwMDA0MiwiaWF0IjoxNzkyMTA4ODAwLjI1LCJpc3MiOiJjb21lYWxzIn0.' \
+          'YSwca71mBtZubwkOb4PknjtTnRGvIKlFVGF8yhb-MXo'
+      end
+
+      before do
+        allow(Rails.application).to receive(:secret_key_base)
+          .and_return('a fixed secret_key_base, only for the saved-token example')
+        # JwtAuth.secret keeps the key it made from the real
+        # secret_key_base; forget it here, and again after the example.
+        described_class.instance_variable_set(:@secret, nil)
+      end
+
+      after { described_class.instance_variable_set(:@secret, nil) }
+
+      it 'still signs the resident in' do
+        saved = create(:resident, id: 1_000_042, community: community, unit: unit)
+        saved.update_column(:keys_valid_since, Time.zone.at(1_792_108_800))
+
+        expect(described_class.authenticate(saved_token)).to eq(saved)
+      end
+    end
+
     describe 'the keys_valid_since revocation lever' do
       it 'rejects a token whose iat is earlier than resident.keys_valid_since' do
         token = described_class.encode(resident)
@@ -237,6 +278,30 @@ RSpec.describe JwtAuth do
         unsigned_token = "#{header}.#{payload}."
 
         expect(described_class.authenticate(unsigned_token)).to be_nil
+      end
+
+      # When decode names no algorithm, ruby-jwt takes the list in its own
+      # settings. In jwt 3.3 that list is HS256 alone, the same as ours, so
+      # under the gem's settings the example above passes with or without
+      # the `algorithm:` in JwtAuth.decode. This one changes the gem's list
+      # to HS512 and none for one example. A gem update that changes the
+      # default list must not change which tokens are accepted here.
+      it 'accepts only HS256 even when the gem would accept other algorithms by default' do
+        claims = { 'resident_id' => resident.id, 'iat' => Time.current.to_f, 'iss' => described_class::ISSUER }
+        ours = JWT.encode(claims, described_class.send(:secret), 'HS256')
+        unsigned = JWT.encode(claims, nil, 'none')
+        other_algorithm = JWT.encode(claims, described_class.send(:secret), 'HS512')
+        gem_default = JWT.configuration.decode.algorithms
+
+        begin
+          JWT.configuration.decode.algorithms = %w[HS512 none]
+
+          expect(described_class.authenticate(ours)).to eq(resident)
+          expect(described_class.authenticate(unsigned)).to be_nil
+          expect(described_class.authenticate(other_algorithm)).to be_nil
+        ensure
+          JWT.configuration.decode.algorithms = gem_default
+        end
       end
 
       it 'rejects a token signed with RS256 when we only accept HS256' do
