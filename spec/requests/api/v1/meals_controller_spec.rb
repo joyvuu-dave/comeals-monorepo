@@ -925,6 +925,17 @@ RSpec.describe 'Meals API' do
 
       expect(meal.reload.description).to eq('Soup')
     end
+
+    it 'refuses a description sent as a list or a hash, and keeps the description' do
+      meal.update!(description: 'Soup')
+
+      [['Tacos'], { 'text' => 'Tacos' }].each do |description|
+        patch "/api/v1/meals/#{meal.id}/description", params: { token: token, description: description }, as: :json
+        expect(response).to have_http_status(:bad_request), description.inspect
+        expect(response.parsed_body['message']).to eq('Send the description as text.')
+      end
+      expect(meal.reload.description).to eq('Soup')
+    end
   end
 
   # ---------------------------------------------------------------------------

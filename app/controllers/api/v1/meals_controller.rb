@@ -182,8 +182,14 @@ module Api
       # PATCH /api/v1/meals/:meal_id/description { description }
       sig { void }
       def update_description
+        # The column is NOT NULL, so a body with no description, null, or
+        # a list or hash in its place is refused here, in words. An empty
+        # string clears the description.
+        description = params[:description]
+        return render_refused('Send the description as text.') unless description.is_a?(String)
+
         render_write_under_lock do
-          meal.update!(description: params[:description])
+          meal.update!(description: description)
           { json: { message: 'Description updated.' } }
         end
       end
@@ -197,6 +203,12 @@ module Api
       # the client gets a 200 for a cap the server will never enforce.
       sig { void }
       def update_max
+        # A body with no max key is a client mistake, not a request to
+        # remove the cap: a field left out never removes anything (the
+        # rule of the bills save, ADR 0009). The page sends max: null to
+        # remove a cap.
+        return render_refused('Send max: a number, or null to remove the cap.') unless params.key?(:max)
+
         render_write_under_lock do
           if !meal.closed? && params[:max].present?
             { json: { message: 'Meal is open. A cap can only be set on a closed meal.' },

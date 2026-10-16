@@ -282,13 +282,13 @@ was not, the server adds the guest.
 
 ### Change the meal
 
-| Method  | Path                          | Body                         | What it does                                                           |
-| ------- | ----------------------------- | ---------------------------- | ---------------------------------------------------------------------- |
-| `PATCH` | `/meals/:meal_id/description` | `{ "description": "Tacos" }` | Sets the menu text.                                                    |
-| `PATCH` | `/meals/:meal_id/closed`      | `{ "closed": true }`         | Closes or reopens the meal. `closed` is required.                      |
-| `PATCH` | `/meals/:meal_id/cancelled`   | `{ "cancelled": true }`      | Cancels the dinner, or restores it. `cancelled` is required.           |
-| `PATCH` | `/meals/:meal_id/max`         | `{ "max": 30 }`              | Sets a cap on a closed meal. `null` removes it. `400` on an open meal. |
-| `PATCH` | `/meals/:meal_id/bills`       | see below                    | Adds, changes or removes cooks and their costs.                        |
+| Method  | Path                          | Body                         | What it does                                                                                     |
+| ------- | ----------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------ |
+| `PATCH` | `/meals/:meal_id/description` | `{ "description": "Tacos" }` | Sets the menu text. `400` when `description` is missing, null, or not text.                      |
+| `PATCH` | `/meals/:meal_id/closed`      | `{ "closed": true }`         | Closes or reopens the meal. `closed` is required.                                                |
+| `PATCH` | `/meals/:meal_id/cancelled`   | `{ "cancelled": true }`      | Cancels the dinner, or restores it. `cancelled` is required.                                     |
+| `PATCH` | `/meals/:meal_id/max`         | `{ "max": 30 }`              | Sets a cap on a closed meal. `null` removes it. `400` on an open meal, or when `max` is missing. |
+| `PATCH` | `/meals/:meal_id/bills`       | see below                    | Adds, changes or removes cooks and their costs.                                                  |
 
 ### Bills
 

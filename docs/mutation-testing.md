@@ -3779,3 +3779,11 @@ Run 2 left 31: the 28 noise survivors above, and the 3 findings. Run 2
 has one subject less, `MealIcalFeed#wall_clock`, which is gone. It ran
 on this branch after a rebase on main; a run before the rebase gave the
 same 31.
+
+After the run, the two findings were fixed: a description save refuses a
+body whose description is missing, null, a list or a hash (400), and a
+max save refuses a body with no `max` key (400; `null` still removes the
+cap). A local run on the two methods, 153 mutations, left 3: `fetch` for
+`[]` on `max`, twice, where the new guard has already checked the key,
+and `instance_of?(String)` for `is_a?(String)`, which agree for every
+value JSON or a form sends.
