@@ -182,6 +182,18 @@ RSpec.describe MealCostSummary do
       expect(described_class.now(meal).serialize).to eq(described_class.for(meal).serialize)
       expect(described_class.now(meal).total_cost).to eq(BigDecimal('30'))
     end
+
+    # A meal is corrected only once it is settled, so `now` does not ask
+    # about corrections for an open meal: with its rows loaded, it runs no
+    # query at all.
+    it 'reads no correction for an open meal' do
+      open_meal = create(:meal, community: community)
+      create(:bill, meal: open_meal, resident: cook, community: community, amount: BigDecimal('12'))
+      create(:meal_resident, meal: open_meal, resident: cook, community: community)
+      loaded = Meal.preload(:bills, :meal_residents, :guests).find(open_meal.id)
+
+      expect(count_queries { expect(described_class.now(loaded).total_cost).to eq(BigDecimal('12')) }).to eq(0)
+    end
   end
 
   describe 'a settled meal (from stored charges)' do
@@ -233,6 +245,18 @@ RSpec.describe MealCostSummary do
       expect(summary.effective_cost).to eq(BigDecimal('16'))
       expect(summary.unit_cost).to eq(BigDecimal('8'))
       expect(summary.subsidized).to be false
+    end
+
+    it 'reads the stored lines with one query' do
+      meal = create(:meal, community: community)
+      cook = create(:resident, community: community, unit: unit, multiplier: 2)
+      eater = create(:resident, community: community, unit: unit, multiplier: 2)
+      create(:meal_resident, meal: meal, resident: eater, community: community)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('16'))
+      settle!
+      meal.reload
+
+      expect(count_queries { expect(described_class.for(meal).total_cost).to eq(BigDecimal('16')) }).to eq(1)
     end
 
     it "reads the stored subsidy, not the meal's cap" do
