@@ -58,7 +58,7 @@ module Api
       def history
         render json: {
           date: meal.date,
-          items: AuditSerializer.new(meal.total_audits).to_h
+          items: AuditSerializer.new(meal.total_audits)
         }
       end
 
@@ -355,7 +355,7 @@ module Api
       def seen_guest_key_answer
         seen = guest_add.seen_key(meal)
         return nil if seen.nil?
-        return { json: GuestReplayedSerializer.new(seen), status: :ok } if guest_add.same_add?(seen)
+        return { json: GuestReplayedSerializer.new(seen) } if guest_add.same_add?(seen)
 
         { json: { message: GuestAdd::KEY_REUSED }, status: :unprocessable_content }
       end
@@ -390,7 +390,7 @@ module Api
       sig { params(seen: BillsSaveKey, payload: BillsPayload).returns(Rendering) }
       def answer_seen_key(seen, payload)
         if seen.edits_sha256 == payload.fingerprint
-          { json: { message: REPLAYED, type: 'replayed', bills: bill_rows(meal.bills.reload) }, status: :ok }
+          { json: { message: REPLAYED, type: 'replayed', bills: bill_rows(meal.bills.reload) } }
         else
           { json: { message: KEY_REUSED }, status: :unprocessable_content }
         end
@@ -407,7 +407,7 @@ module Api
         body = { message: warning || 'Form submitted.' }
         body[:type] = 'warning' if warning
         body[:bills] = bill_rows(meal.bills.reload)
-        { json: body, status: :ok }
+        { json: body }
       end
 
       sig { params(bills: T::Enumerable[Bill]).returns(T::Array[T::Hash[String, T.untyped]]) }
