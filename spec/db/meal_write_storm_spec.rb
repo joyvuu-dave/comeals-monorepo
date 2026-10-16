@@ -189,9 +189,17 @@ RSpec.describe 'a write storm against one meal, with a settlement in it' do
   # Every cost marked No cost, the way the settlement preview's button
   # marks blank ones (NoCostMarking). A cancel is refused while a cost has
   # money on it, and write_bills always leaves money on one.
+  # A dinner with no cook rows has nothing to mark: nil, so it counts as
+  # :noop. It answered true (:ok) until 2026-10-16, and phase 2 then failed
+  # about one run in eleven: when phase 1 ended with the dinner cancelled
+  # and every cost removed, these did nothing on the settled dinner but
+  # were counted as writes.
   def mark_every_cost_no_cost(meal_id, how)
     meal_write(meal_id, how) do |meal|
-      meal.bills.to_a.find { |bill| !bill.update(amount: 0, no_cost: true) } || true
+      bills = meal.bills.to_a
+      next nil if bills.empty?
+
+      bills.find { |bill| !bill.update(amount: 0, no_cost: true) } || true
     end
   end
 
