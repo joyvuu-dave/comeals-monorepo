@@ -2713,10 +2713,11 @@ calendar month and its cache, events, common house and guest room
 bookings, the time rules for them, and holidays. 65 subjects. Both runs
 on GitHub, three pieces of four workers, 300-second limit.
 
-| Run                                                        | Mutations | Killed | Alive | Timeouts | Time   |
-| ---------------------------------------------------------- | --------- | ------ | ----- | -------- | ------ |
-| 1, 38926242829, before the answers                         | 3,307     | 3,208  | 99    | 0        | 24 min |
-| 2, 38930461914, after the answers, before the red examples | 3,307     | 3,218  | 89    | 0        | 23 min |
+| Run                                                                            | Mutations | Killed | Alive | Timeouts | Time   |
+| ------------------------------------------------------------------------------ | --------- | ------ | ----- | -------- | ------ |
+| 1, 38926242829, before the answers                                             | 3,307     | 3,208  | 99    | 0        | 24 min |
+| 2, 38930461914, after the answers, before the red examples                     | 3,307     | 3,218  | 89    | 0        | 23 min |
+| 3, 38937871915, after the fix, with `YearMonthDay*` and the two cutoff actions | 3,517     | 3,433  | 84    | 0        | 27 min |
 
 Run 1 had as many survivors in each of the same 27 subjects as the
 full run of the morning (38904964429, on 532ac4be). The other 38
@@ -2725,21 +2726,32 @@ subjects had none, among them every `EventSerializer` method, `hosts`,
 
 Run 1, 99 alive, by kind:
 
-- A bug (8). `Date.parse` in `CommunitiesController#calendar` and
-  `#birthdays`, where `Date.strptime`, `Date.iso8601`, `Date.xmlschema`
-  and `Date.jisx0301` each survive (4 in each action). public/api.md
-  says the date is `YYYY-MM-DD`. `Date.parse` also takes a date with no
-  year or no month, such as `12`, `Sunday` or `October`, and fills in
-  the rest from the machine's own clock, in the machine's own zone, not
-  from the community's today (CLAUDE.md, "Every wall-clock time is a
-  community setting"). So on a dyno in UTC, at 6 PM on October 31 in
-  Los Angeles, `/calendar/12` answers with November. `travel_to` does
-  not change that clock, because Ruby's date library reads it inside
-  C. The four other parsers raise on those dates, so the actions
-  answer 400 "Invalid date", as they do for any date they cannot read.
-  The two examples in `communities_controller_spec.rb` marked "RED ON
-  PURPOSE" expect that 400, and fail. The 2026-09-12 and 2026-09-27
-  entries counted these rewrites as noise.
+- A bug (8), fixed on this branch. `Date.parse` in
+  `CommunitiesController#calendar` and `#birthdays`, where
+  `Date.strptime`, `Date.iso8601`, `Date.xmlschema` and `Date.jisx0301`
+  each survive (4 in each action). public/api.md says the date is
+  `YYYY-MM-DD`. `Date.parse` also takes a date with no year or no month,
+  such as `12`, `Sunday` or `October`, and fills in the rest from the
+  machine's own clock, in the machine's own zone, not from the
+  community's today (CLAUDE.md, "Every wall-clock time is a community
+  setting"). So on a dyno in UTC, at 6 PM on October 31 in Los Angeles,
+  `/calendar/12` answered with November. `travel_to` does not change
+  that clock, because Ruby's date library reads it inside C. The four
+  other parsers refuse `12`, but `Date.iso8601` is not the fix either:
+  it takes `--10-12` the same way, and `2026-10` as October 1. The
+  settlement cutoff had that hole: `ReconciliationsController#preview`
+  and `#create`, and the two admin buttons for blank costs and cancelled
+  dinners, read it with `Date.iso8601`. So on October 20, 2026, a POST
+  with cutoff `2026-10` settled the dinner of September 30. A cutoff
+  sent as a list answered 500, and so did a cutoff of `1500-02-29`: Ruby
+  reads a day before October 15, 1582 in the Julian calendar, and
+  PostgreSQL in the Gregorian one, which has no such day. The examples
+  that show each were red in commits of their own. The fix is
+  `YearMonthDay.parse` (`app/services/year_month_day.rb`), which takes
+  exactly YYYY-MM-DD, reads it in the Gregorian calendar, and raises
+  `Date::Error` for anything else; all six places use it. Mutant on
+  `YearMonthDay` alone, on this laptop: 56 mutations, 56 killed. The
+  2026-09-12 and 2026-09-27 entries counted these rewrites as noise.
 - Missing assertions (10), each now with an example that fails on it:
   - `params.fetch` for `params[]` on a part of the body that no example
     left out (7): `resident_id` and `date` in both guest room actions
@@ -2817,8 +2829,16 @@ no other. Each of the 10 missing assertions is killed. Before run 2,
 `Holidays.easter?` was run alone on this laptop (379 mutations, 8
 alive, the 8 above), and so were both guest room actions (150
 mutations, none alive). The three other new examples were checked by
-making each change by hand: each fails with `ParameterMissing`. The two
-red examples pass with `Date.iso8601` in both actions.
+making each change by hand: each fails with `ParameterMissing`.
+
+Run 3 is on the fixed code, and adds `YearMonthDay*` and
+`ReconciliationsController#preview` and `#create`, the two cutoff
+actions. Its 84 alive are the 81 of noise above and 3 in the cutoff
+actions, kinds answered before: `.iso8601` removed on the two dates of
+the created settlement (2), which JSON writes the same way
+(2026-10-09), and the error for its message in the preview's refusal
+(1), which Rails writes as its message in JSON (2026-09-27). The 8 of the bug
+are gone with `Date.parse`, and `YearMonthDay` had no survivor.
 
 No `ignore_patterns` entry was added. Mutant makes each of these
 rewrites in other places too, where it is not noise.
