@@ -517,6 +517,19 @@ RSpec.describe LedgerVerification do
       expect(LedgerCheckRun.recent.first.error).to eq('ActiveRecord::StatementInvalid: connection lost')
     end
 
+    # An error class can say more in its message than in its to_s: Ruby's
+    # own Net::ReadTimeout names the socket only in its message. The run
+    # keeps the message.
+    it 'records the error message, which can say more than the error as text' do
+      settle
+      stub_const('LostReadError', Class.new(StandardError) { def message = "#{super} on the second read" })
+      allow(Reconciliation).to receive(:order).and_raise(LostReadError, 'connection lost')
+
+      suppress(LostReadError) { described_class.call }
+
+      expect(LedgerCheckRun.recent.first.error).to eq('LostReadError: connection lost on the second read')
+    end
+
     # Nothing was found before the crash, so the crash itself is what is
     # raised, and nothing is logged as a failed check.
     it 'records the error and raises it again, so the caller sees the failure' do
