@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 # typed: false
 
-# Loaded by mutant from .mutant.yml. Three jobs.
+# Loaded by mutant from .mutant.yml. Four jobs.
 #
 # 1. Load every class before mutant looks for subjects. The test
 #    environment autoloads, so `Settlement*` would match nothing until
@@ -71,7 +71,14 @@ end
 #    process exits with the failure it already reported. This session is
 #    the one the examples run on: the fork gets a fresh connection, and
 #    every example in the process uses it.
+#
+# 4. Limit the memory of the process that tests one mutation
+#    (config/mutant/memory_limit.rb says why and how). It is set here,
+#    in that process, so it ends only that process.
+require_relative 'memory_limit'
+
 hooks.register(:mutation_insert_pre) do |mutation:| # rubocop:disable Lint/UnusedBlockArgument
+  MutantMemoryLimit.apply
   connection = ActiveRecord::Base.connection
   connection.execute(<<~SQL.squish)
     SELECT pg_terminate_backend(pid) FROM pg_stat_activity

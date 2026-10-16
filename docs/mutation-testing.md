@@ -170,6 +170,18 @@ never moves, `sleep` with no argument). Every example that reaches that
 loop hangs, which is a failure mutant cannot count. Say so in the
 results; it is not a missing assertion. Any other timeout is a finding.
 
+A loop that never ends and adds to a list on every turn does not reach
+the timeout: it uses up the machine's memory first. On 2026-10-16 the
+mutation `while month <= last` to `while true` in
+`LiveUpdate.calendar_range` did that twice on GitHub, and each time the
+whole piece ended with exit code 143 and no artifact, so the results of
+every other subject in it were lost. So the process that tests one
+mutation now has a memory limit of 2 GiB (`config/mutant/memory_limit.rb`,
+set by hook 4 in `config/mutant/hooks.rb`). A process that passes it ends
+with an error, and mutant lists the mutation as alive with "process
+abort" (`process_abort: false` in `.mutant.yml`). Read it the same way
+as a timeout: say which loop never ends.
+
 A survivor on the money path is never "fine as it is": every method
 there is on the path to a number on a settlement statement. Elsewhere
 the same three kinds apply, and the third — noise — is more common:
