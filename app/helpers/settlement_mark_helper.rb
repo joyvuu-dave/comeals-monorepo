@@ -27,7 +27,8 @@ module SettlementMarkHelper
   # newest mark it showed, so a change made by someone else after the page
   # was loaded is not overwritten (SettlementLineMarking). Let go is
   # offered only to an admin who may set it, and a line marked Let go can
-  # be changed only by one. form_tag adds the authenticity token.
+  # be changed only by one. form_tag posts and adds the authenticity
+  # token, and submit_tag adds data-disable-with, on their own.
   def settlement_mark_form(action, line, let_go_allowed:)
     current = line.current_mark
     if current&.status == SettlementLineMark::LET_GO && !let_go_allowed
@@ -35,7 +36,7 @@ module SettlementMarkHelper
     end
 
     name = line.resident.name
-    form_tag(action, method: :post, class: 'settlement-mark') do
+    form_tag(action, class: 'settlement-mark') do
       safe_join([
                   hidden_field_tag(:line_id, line.id, id: nil),
                   hidden_field_tag(:seen, line.newest_mark&.id, id: nil),
@@ -43,8 +44,7 @@ module SettlementMarkHelper
                                                          current&.status || SettlementLineMark::PAID),
                              id: nil, 'aria-label': "Mark for #{name}"),
                   text_field_tag(:note, current&.note, id: nil, placeholder: 'Note', 'aria-label': "Note for #{name}"),
-                  submit_tag('Save', name: nil, 'aria-label': "Save the mark for #{name}",
-                                     data: { disable_with: 'Save' })
+                  submit_tag('Save', name: nil, 'aria-label': "Save the mark for #{name}")
                 ], ' ')
     end
   end
