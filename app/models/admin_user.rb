@@ -87,8 +87,9 @@ class AdminUser < ApplicationRecord
   # writes behind. A database trigger backstops both paths — see
   # 20260728120000_refuse_removing_the_last_superuser.rb.
   #
-  # superuser? and superuser_changed?(from:, to:) are the methods Rails
-  # makes for the superuser column.
+  # superuser? and superuser_changed?(to:) are the methods Rails makes
+  # for the superuser column. The column is NOT NULL, so a change to false
+  # is always a change from true.
   before_update :refuse_demoting_last_superuser, prepend: true
   before_destroy :refuse_destroying_last_superuser, prepend: true
 
@@ -101,7 +102,7 @@ class AdminUser < ApplicationRecord
   private
 
   def refuse_demoting_last_superuser
-    return unless superuser_changed?(from: true, to: false)
+    return unless superuser_changed?(to: false)
     return if other_superuser_exists?
 
     errors.add(:superuser, 'cannot be removed from the last superuser — the community would ' \
