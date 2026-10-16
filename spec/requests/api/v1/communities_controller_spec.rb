@@ -111,6 +111,24 @@ RSpec.describe 'Communities API' do
       end
     end
 
+    # RED ON PURPOSE (2026-10-16): this example fails, and shows a bug.
+    # public/api.md says start is YYYY-MM-DD. Date.parse also takes a
+    # start with no year or no month, such as "12", "Sunday" or
+    # "October", and fills in the rest from the machine's own clock, in
+    # the machine's own zone, not from the community's today (CLAUDE.md,
+    # "Every wall-clock time is a community setting"). travel_to cannot
+    # change that clock: Ruby's date library reads it inside C. Found by
+    # mutant: Date.strptime, Date.iso8601, Date.xmlschema and
+    # Date.jisx0301 each refuse these, and each survived.
+    it 'returns 400 for a start with no year or no month' do
+      %w[12 Sunday October].each do |start|
+        birthdays(start: start)
+
+        expect(response).to have_http_status(:bad_request), "start #{start}"
+        expect(response.parsed_body).to eq('message' => 'Invalid date')
+      end
+    end
+
     # An adult with no birthday must never appear — this is the fix for the
     # old 1900-01-01 placeholder, which put a dozen fake birthdays on Jan 1.
     it 'excludes residents with no birthday' do
@@ -161,6 +179,18 @@ RSpec.describe 'Communities API' do
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body['message']).to eq('Invalid date')
+    end
+
+    # RED ON PURPOSE (2026-10-16): this example fails, and shows the bug
+    # the birthdays example above shows. At 6 PM on October 31 in Los
+    # Angeles, a server in UTC answers /calendar/12 with November.
+    it 'returns 400 for a date with no year or no month' do
+      %w[12 Sunday October].each do |date|
+        get "/api/v1/communities/#{community.id}/calendar/#{date}", params: { token: token }
+
+        expect(response).to have_http_status(:bad_request), "date #{date}"
+        expect(response.parsed_body).to eq('message' => 'Invalid date')
+      end
     end
 
     # The clock is in September 2026, so neither month on screen is in
