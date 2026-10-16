@@ -3794,15 +3794,16 @@ Run on `AuditDescription*` and `AuditSerializer*`: the sentences the
 meal history shows for each audit row, and the serializer that sends
 them to the page. Four pieces, four workers each, on GitHub.
 
-| Run                                 | Subjects | Mutations | Killed | Alive | Timeouts | Time |
-| ----------------------------------- | -------- | --------- | ------ | ----- | -------- | ---- |
-| 1, 38925102467, before              | 35       | 2,472     | 2,293  | 179   | 0        | 1h58 |
-| 2, 38932580689, after the answers   | 35       | 2,447     | 2,392  | 55    | 0        | 1h54 |
-| 3, RUN3_ID, the same after a rebase | RUN3_ROW |
+| Run                                    | Subjects | Mutations | Killed | Alive | Timeouts | Time |
+| -------------------------------------- | -------- | --------- | ------ | ----- | -------- | ---- |
+| 1, 38925102467, before                 | 35       | 2,472     | 2,293  | 179   | 0        | 1h58 |
+| 2, 38932580689, after the answers      | 35       | 2,447     | 2,392  | 55    | 0        | 1h54 |
+| 3, 38955101017, after a rebase on main | 35       | 2,447     | 2,392  | 55    | 0        | 1h46 |
 
 Run 1 had the same 179 survivors as the full run on 532ac4be; nothing
 in these two classes had changed since. `AuditSerializer#describer`,
-which that run did not reach, had none.
+which that run did not reach, had none. Run 3 had the same 55
+survivors as run 2.
 
 Missing examples (113), each now with one. Most were rows the audited
 gem never writes: every change in an update row is a list of two
