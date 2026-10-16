@@ -41,6 +41,20 @@ RSpec.describe DatabasePoolCheck do
       expect { described_class.verify! }.to raise_error(/too small for 40 Puma thread/)
     end
 
+    # RED: a finding, left failing on purpose (mutant, 2026-10-16). Puma
+    # reads RAILS_MAX_THREADS with Integer() (Puma::DSL#threads), so
+    # "0x10" is 16 threads there. verify! reads it with to_i, which gives
+    # 0, so a pool of 5 passes for 16 threads. The fix is to read it with
+    # Integer() too.
+    it 'counts the threads the way Puma does' do
+      config = instance_double(ActiveRecord::DatabaseConfigurations::HashConfig, max_connections: 5)
+      allow(ActiveRecord::Base).to receive(:connection_db_config).and_return(config)
+      allow(ENV).to receive(:fetch).and_call_original
+      allow(ENV).to receive(:fetch).with('RAILS_MAX_THREADS', 1).and_return('0x10')
+
+      expect { described_class.verify! }.to raise_error(/too small for 16 Puma thread/)
+    end
+
     # Rails reads a negative max_connections in database.yml as no limit:
     # the config gives nil, and the pool opens as many connections as the
     # threads ask for. A pool with no limit is never too small.
