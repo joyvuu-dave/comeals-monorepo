@@ -98,8 +98,13 @@ RSpec.describe 'a correction while another correction of the same dinner is save
     allow(Rails.error).to receive(:report).and_call_original
   end
 
-  # The second correction's first try was refused, and its second try
-  # worked.
+  # Checks that RetryOnConflict ran the second correction exactly twice.
+  # RetryOnConflict reports each conflict it retries to Rails.error as a
+  # handled SerializationFailure. So one report means the first try was
+  # refused as a conflict and the second try worked, which is the path
+  # the comment at the top describes. No report would mean the right
+  # answer came some other way, with no retry; two would mean the retry
+  # conflicted again.
   def expect_one_retry
     expect(Rails.error).to have_received(:report)
       .with(an_instance_of(ActiveRecord::SerializationFailure), hash_including(handled: true)).once
