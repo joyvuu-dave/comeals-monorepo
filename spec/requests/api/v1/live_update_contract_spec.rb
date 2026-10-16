@@ -205,6 +205,97 @@ RSpec.describe 'live updates: every write reaches the screen that shows it' do
     # (data_store_app.js scheduleMidnightRecompute).
   end
 
+  # The writers the settlement rules added (ADR 0011). Each one writes
+  # through the models, so the callbacks above push, and these examples
+  # keep it that way.
+  describe 'writes from the settlement rules' do
+    let(:admin) { create(:admin_user, community: community, superuser: true) }
+
+    def watch_pushes
+      RSpec::Mocks.space.proxy_for(Pusher).reset
+      allow(Pusher).to receive(:trigger)
+    end
+
+    it 'a cancel pushes the meal page and the calendar month' do
+      meal
+      watch_pushes
+
+      meal.cancel!
+
+      expect_pushed(meal_channel(meal))
+      expect_pushed(calendar_channel(meal.date))
+    end
+
+    it 'a restore pushes the meal page and the calendar month' do
+      meal.cancel!
+      watch_pushes
+
+      meal.restore!
+
+      expect_pushed(meal_channel(meal))
+      expect_pushed(calendar_channel(meal.date))
+    end
+
+    # "Mark these N dinners as cancelled" on the settlement preview: past
+    # dinners people signed up for and no cook did.
+    it 'marking dinners as cancelled pushes the page and the month of each one' do
+      april = create(:meal, community: community, date: Date.new(2026, 4, 10))
+      june = create(:meal, community: community, date: Date.new(2026, 6, 10))
+      [april, june].each { |dinner| create(:meal_resident, meal: dinner, resident: resident, community: community) }
+      watch_pushes
+
+      DinnerCancelling.call(meal_ids: [april.id, june.id])
+
+      expect_pushed(meal_channel(april))
+      expect_pushed(meal_channel(june))
+      expect_pushed(calendar_channel(april.date))
+      expect_pushed(calendar_channel(june.date))
+    end
+
+    # "Mark these N blank costs as No cost" on the settlement preview.
+    it 'marking blank costs as No cost pushes the meal page and the calendar month' do
+      blank = create(:bill, meal: meal, resident: resident, community: community, amount: BigDecimal('0'))
+      watch_pushes
+
+      NoCostMarking.call(bill_ids: [blank.id])
+
+      expect(blank.reload.no_cost).to be(true)
+      expect_pushed(meal_channel(meal))
+      expect_pushed(calendar_channel(meal.date))
+    end
+
+    # A settled dinner's page and its chip show its costs and sign-ups,
+    # and a correction changes them (ADR 0011 rule 6).
+    it 'a correction of a settled dinner pushes its page and its calendar month' do
+      settled = create(:meal, community: community, date: latest)
+      create(:bill, meal: settled, resident: resident, community: community, amount: BigDecimal('30'))
+      create(:meal_resident, meal: settled, resident: other_resident, community: community)
+      settle!
+      watch_pushes
+
+      MealCorrecting.save!(settled.reload, by: admin, reason: 'Typed the wrong amount') do |edits|
+        edits.cost(resident, amount: BigDecimal('20'), no_cost: false)
+      end
+
+      expect_pushed(meal_channel(settled))
+      expect_pushed(calendar_channel(settled.date))
+    end
+
+    # Paid and Let go are on the admin settlement page only. No screen of
+    # the app shows a settlement line, so a mark has nothing to push.
+    it 'a Paid or Let go mark on a settlement line pushes nothing: no screen of the app shows it' do
+      settled = create(:meal, community: community, date: latest)
+      create(:bill, meal: settled, resident: resident, community: community, amount: BigDecimal('30'))
+      create(:meal_resident, meal: settled, resident: other_resident, community: community)
+      line = settle!.reconciliation_balances.first
+      watch_pushes
+
+      SettlementLineMarking.mark!(line, status: 'paid', note: nil, by: admin, seen: nil)
+
+      expect(Pusher).not_to have_received(:trigger)
+    end
+  end
+
   describe 'a meal page also shows its neighbours' do
     # next_id and prev_id come from the meals on either side by date, so
     # adding or removing a meal changes the arrows on its neighbours'
