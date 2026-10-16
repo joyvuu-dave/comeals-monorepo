@@ -435,11 +435,14 @@ RSpec.describe LiveUpdate do
       expect(Current.live_update_batches).to be_empty
     end
 
-    # No app code opens a savepoint (there is no requires_new anywhere in
-    # app/ or lib/). If one ever does, this is what it costs: a note inside
-    # the savepoint is its own batch, flushed after the outer commit, so a
-    # meal noted on both sides is pushed twice. Harmless — a client
-    # refetches twice — and pinned here so the choice is a known one.
+    # App code opens savepoints: ConstraintMessages wraps each save of a
+    # model that includes it in one, and Settlement, SettlementCorrecting
+    # and MealCorrecting use
+    # requires_new. Each is a savepoint when a transaction is already open.
+    # This is what it costs: a note inside the savepoint is its own batch,
+    # flushed after the outer commit, so a meal noted on both sides is
+    # pushed twice. A client then fetches twice, which does no harm, and
+    # this example pins it so the choice is a known one.
     it 'push a savepoint\'s notes as a batch of their own, after the outer commit' do
       calls = pushed do
         ActiveRecord::Base.transaction do
