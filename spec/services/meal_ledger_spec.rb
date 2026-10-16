@@ -314,8 +314,10 @@ RSpec.describe MealLedger do
     # Three cooks spent $1 each on a meal capped at $0.50 for its one child,
     # so they share $0.50: 16,666,666 units each, and 2 units left over. The
     # leftover units go to the two lowest resident ids. The bills are
-    # entered highest id first, so a ledger that kept the bills in the order
-    # it loaded them would give the units to the wrong cooks.
+    # loaded highest id first, so a ledger that kept the bills in the order
+    # it loaded them would give the units to the wrong cooks. The order is
+    # asked for: with no ORDER BY, mutant's workers on 2026-10-16 got the
+    # bills lowest id first, and the example passed without the sort.
     it 'gives the leftover units of a shared credit to the lowest cook ids, whatever order the bills came in' do
       cooks = %w[A B C].map { |name| resident("Cook #{name}") }
       child = resident('Child', multiplier: 1)
@@ -327,9 +329,11 @@ RSpec.describe MealLedger do
         create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('1'))
       end
       create(:meal_resident, meal: meal, resident: child, community: community)
-      expect(meal.bills.order(:id).map(&:resident_id)).to eq(cooks.map(&:id).reverse)
+      loaded = Meal.where(id: meal.id).preload(:meal_residents, :guests).eager_load(:bills)
+                   .order('bills.resident_id DESC').to_a
+      expect(loaded.first.bills.map(&:resident_id)).to eq(cooks.map(&:id).reverse)
 
-      credits = ledger_for(meal).lines.select { |line| line.kind == :credit }
+      credits = described_class.new(loaded).lines.select { |line| line.kind == :credit }
 
       expect(credits.to_h { |line| [line.resident_id, line.amount] }).to eq(
         cooks[0].id => BigDecimal('0.16666667'),
