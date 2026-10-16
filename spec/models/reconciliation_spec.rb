@@ -646,6 +646,9 @@ RSpec.describe Reconciliation do
 
       expect(meal.reload.reconciliation).to eq(reconciliation)
       expect(reconciliation.reconciliation_balances).to be_empty
+      # Nobody ate, so the settlement has no lines for it (MealCostSummary
+      # reads such a meal from its bills).
+      expect(MealCharge.where(meal: meal)).to be_empty
     end
 
     it 'excludes zero-attendee meals from the running balance' do
@@ -1231,6 +1234,31 @@ RSpec.describe Reconciliation do
     end
   end
 
+  describe '#settlement_ledger' do
+    # MealLedger runs no queries of its own, so the meals come with all
+    # it reads: working out the lines runs no query.
+    it "loads each settled meal's costs, sign-ups and guests with it" do
+      meal = settleable_meal(date: latest)
+      create(:guest, meal: meal, resident: meal.meal_residents.sole.resident, multiplier: 1)
+      reconciliation = settle!
+
+      ledger = reconciliation.settlement_ledger
+
+      expect(count_queries { expect(ledger.lines.size).to eq(3) }).to eq(0)
+    end
+  end
+
+  describe '#number_of_meals' do
+    it 'counts the settled meals in the database, without loading them' do
+      settleable_meal(date: latest - 1)
+      settleable_meal(date: latest)
+      reconciliation = settle!
+
+      expect(count_queries { expect(reconciliation.number_of_meals).to eq(2) }).to eq(1)
+      expect(reconciliation.meals).not_to be_loaded
+    end
+  end
+
   describe '#unit_balances' do
     it 'groups settlement balances by unit and sums to exactly zero' do
       unit_a = create(:unit, community: community, name: 'Unit A')
@@ -1344,6 +1372,21 @@ RSpec.describe Reconciliation do
       expect(reconciliation.records_who_moved_out?).to be(false)
       expect(by_name(reconciliation.unit_balances)).to eq('Elm' => BigDecimal('15'), 'Oak' => BigDecimal('-15'))
       expect(reconciliation.moved_out_balance).to eq(BigDecimal('0')).and be_a(BigDecimal)
+    end
+
+    # Settlement#correct! writes these back, so a settlement worked out
+    # again moves nobody. Only this settlement's lines count: Fay is on a
+    # later one.
+    it "keep each person's unit and whether they lived here, for this settlement only (saved_units)" do
+      fay = create(:resident, community: community, unit: eli.unit)
+      later = create(:meal, community: community, date: latest - 5)
+      create(:bill, meal: later, resident: fay, community: community, amount: BigDecimal('10'))
+      create(:meal_resident, meal: later, resident: eli, community: community)
+      settle!(cutoff: latest)
+
+      expect(reconciliation.saved_units).to eq(
+        cook.id => [elm.id, true], dana.id => [elm.id, false], eli.id => [eli.unit_id, true]
+      )
     end
   end
 
