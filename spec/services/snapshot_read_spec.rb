@@ -82,6 +82,16 @@ RSpec.describe SnapshotRead do
       connection.execute("SET statement_timeout = #{connection.quote(was)}")
     end
 
+    # This session's default isolation, set for the block and put back.
+    def with_session_isolation(value)
+      connection = ActiveRecord::Base.connection
+      was = session_default_isolation
+      connection.execute("SET default_transaction_isolation = #{connection.quote(value)}")
+      yield
+    ensure
+      connection.execute("SET default_transaction_isolation = #{connection.quote(was)}")
+    end
+
     it 'opens the transaction SERIALIZABLE READ ONLY DEFERRABLE when the setting is on, as in production' do
       modes = with_serializable_transaction_open_elsewhere do
         with_deferrable(true) { described_class.call { transaction_modes } }
@@ -104,6 +114,16 @@ RSpec.describe SnapshotRead do
       expect(modes['isolation']).to eq('serializable')
       expect(modes['read_only']).to eq('on')
       expect(modes['deferrable']).to eq('off')
+    end
+
+    # config/database.yml makes every session of this app SERIALIZABLE
+    # (ADR 0005), so the examples above would pass without the isolation
+    # SnapshotRead asks for. It asks anyway, so a session that starts
+    # lower, as psql does, still gets one snapshot for the whole read.
+    it 'opens the transaction SERIALIZABLE when the session starts at a lower level' do
+      modes = with_session_isolation('read committed') { described_class.call { transaction_modes } }
+
+      expect(modes['isolation']).to eq('serializable')
     end
 
     it 'refuses a write inside the block' do
