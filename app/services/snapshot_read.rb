@@ -107,7 +107,7 @@ class SnapshotRead
     return yield if connection.transaction_open?
 
     ActiveRecord::Base.transaction(isolation: :serializable) do
-      deferrable = Rails.configuration.x.snapshot_reads_deferrable ? ', DEFERRABLE' : ''
+      deferrable = ', DEFERRABLE' if Rails.configuration.x.snapshot_reads_deferrable
       connection.execute("SET TRANSACTION READ ONLY#{deferrable}")
       take_snapshot(connection, wait_limit) if wait_limit
       yield
