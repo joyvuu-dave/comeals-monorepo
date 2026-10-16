@@ -129,6 +129,35 @@ RSpec.describe 'API write responses' do
       expect(response).to have_http_status(:ok)
       expect(response.body.scan('BEGIN:VCALENDAR').size).to eq(1)
     end
+
+    # The wrapper looks for the signed-in resident only when the request
+    # sends a token. A public request with none, or with an empty one,
+    # never reads the session.
+    it 'reads no session for a request with no token, or an empty one' do
+      allow(JwtAuth).to receive(:authenticate).and_call_original
+      allow(Key).to receive(:find_by).and_call_original
+
+      get '/api/v1/version'
+      expect(response).to have_http_status(:ok)
+      get '/api/v1/version', params: { token: '' }
+      expect(response).to have_http_status(:ok)
+
+      expect(JwtAuth).not_to have_received(:authenticate)
+      expect(Key).not_to have_received(:find_by)
+    end
+
+    # The model only saves a supported zone, but psql or update_column can
+    # write any text. A name that is no zone is not used: the request runs
+    # in the app zone and is answered, instead of failing in Time.use_zone.
+    it 'answers a signed-in request when the zone column holds a name that is no zone' do
+      headers = { 'Authorization' => "Bearer #{JwtAuth.encode(resident)}" }
+      community.update_column(:timezone, 'Not/A_Zone')
+
+      get '/api/v1/residents/id', headers: headers
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq(resident.id)
+    end
   end
 
   describe 'the calendar month' do
