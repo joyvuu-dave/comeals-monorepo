@@ -50,6 +50,13 @@ RSpec.describe YearMonthDay do
       expect_refused(['２０２６-１０-１６'])
     end
 
+    # The words Date.iso8601 uses for a day it cannot read, so a log
+    # reads the same as before this parser.
+    it 'refuses in the words of Ruby\'s own date parsers' do
+      expect { described_class.parse('2026-10') }.to raise_error(Date::Error, 'invalid date')
+      expect { Date.iso8601('2026-02-30') }.to raise_error(Date::Error, 'invalid date')
+    end
+
     it 'refuses nil, an empty text, a list and a hash', :aggregate_failures do
       expect_refused([nil, '', ['2026-10-16'], { 'date' => '2026-10-16' }])
     end
