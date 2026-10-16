@@ -2586,3 +2586,117 @@ the two examples for `calendar_range(start_date, nil)` above. Without
 that, their save is refused and nothing is told. With the trigger on,
 that mutation does the same as the code for every save the model and
 the trigger allow: the end is on the start's day.
+
+### 2026-10-16, the admin correction form and settlement corrections
+
+Run on `MealCorrectionForm*` and `SettlementCorrecting*`: the reader of
+the admin form that corrects a settled dinner (ADR 0011 rule 6), and
+`Settlement#correct!` with its steps (rule 10). 24 subjects, on GitHub,
+four pieces of four workers.
+
+| Run                                                         | Subjects | Mutations | Killed | Alive | Timeouts | Time   |
+| ----------------------------------------------------------- | -------- | --------- | ------ | ----- | -------- | ------ |
+| 1, run 38925018904, main at 14320264                        | 24       | 1,592     | 1,465  | 127   | 0        | 23 min |
+| 2, run 38928755044, after the new examples and the removals | 24       | 1,509     | 1,493  | 16    | 0        | 24 min |
+| 3, run 38932548024, after one more example                  | 24       | 1,509     | 1,494  | 15    | 0        | 21 min |
+
+The full run of the day (run 38904964429, on 532ac4be) had 117 alive in
+17 of these subjects, and did not finish `MealCorrectionForm#initialize`.
+Two merges since then changed `Settlement#correct!`, so run 1 is the list
+this entry answers. `#initialize` had no survivor in it.
+
+Run 1's 127, by kind:
+
+- Missing examples (78), each with an example now.
+  - `MealCorrectionForm#read_cooks` (21). A row left out or sent as
+    text, with `break` for `next` or `unless row` for
+    `unless row.is_a?(Hash)` (2): the rows after it are still read. A
+    row with Remove ticked and a cost, with `break`, `nil` or no `next`
+    after Remove (3). And the check that skips a row sent as it is (16):
+    every way to weaken it survived, because `Edits#cost` records nothing
+    for a cost that does not change. Two examples tell them apart. A
+    cost never entered (settled before rule 3) and then ticked No cost
+    keeps its amount and changes No cost. And a row sent as it is, whose
+    cook another correction took off after the form was read: without
+    the check, the edits add the cook back.
+  - `MealCorrectionForm#read_guests` (17): no example had a guest. The
+    sort (11): no sort, `sort` for `sort_by`, an empty or nil key, the
+    id alone, and nil or the record for the host's name. The row checks
+    (6): `fetch` for `[]` on the row and on its Remove box, and the
+    `is_a?(Hash)` check weakened or dropped. A host's guests are now
+    read once with the database returning rows newest first (a stub of
+    `where`), so the id in the sort shows.
+  - `MealCorrectionForm#residents` (8): ids sent as numbers or nil, with
+    `map(&:to_s)` dropped or changed (5), and the text for the parsed
+    ids (3), which read `"#{id}x"` as that id.
+  - `MealCorrectionForm#cost` (3): a cook row with no amount box.
+  - `MealCorrectionForm#read_eaters` (2): a choice sent as a symbol.
+  - `MealCorrectionForm#checked?` (1): a tick sent as the number 1.
+  - `MealCorrectionForm#read_new_eaters` (1): `all?` for `any?`. No
+    example had two eaters.
+  - `MealCorrectionForm#name_of` (1): the record's `to_s` for its name,
+    a sort by memory address. Run 2 still had it: the examples with two
+    people came back in name order by chance. Run 3 has an example with
+    six people made in a mixed order.
+  - A second settlement of the same people (5). `stored_balances`, both
+    deletes in `clear_ledger!`, `refuse_a_marked_settlement!` and
+    `refuse_a_corrected_dinner!` read or changed every settlement, not
+    this one, with the scope dropped. A new context settles April too,
+    marks a line of it Paid and corrects one of its dinners, and expects
+    a correction of March to leave April as it was.
+  - `SettlementCorrecting#correct!` (2): `requires_new` dropped, or
+    false. A spec's own transaction is never joinable, so a plain
+    `transaction` makes a savepoint there anyway. The new example calls
+    `correct!` inside a transaction of its own and rescues the error
+    inside it.
+  - `SettlementCorrecting#run_fix` (6): no example called `correct!`
+    without a block on a settlement it could correct.
+  - `SettlementCorrecting#earlier_differences` (7): the example matched
+    the refusal with a pattern. It now names the whole sentence.
+  - `SettlementCorrecting#record_lines!` (4): the settling setting left
+    on at the end (3), and `'0'` for `BigDecimal('0')` (1). The second
+    shows only for a balance stored at exactly zero. No settlement
+    writes one, but a repair by hand can, and the nightly check reports
+    it.
+- Redundant code, removed (35).
+  - The id after the name in the sorts of cooks, eaters and residents
+    (15). Names are unique (`index_residents_on_lower_name`), so the id
+    never decided an order. Guests keep theirs: one host can have two.
+  - The `.to_i` on a guest's id (3). A saved guest's id is an Integer.
+  - The nil checks before `Multiplier::GUEST_PRICES.include?` and
+    `Resident.find_by` (2): `include?(nil)` is false, and
+    `find_by(id: nil)` finds nobody. The early return for no ids in
+    `residents` (6): `where(id: [])` finds nobody, without a query. Its
+    `.compact` (1): a nil in the list adds `OR id IS NULL`, which finds
+    nobody.
+  - `.select(:id)` on the meals in `refuse_a_corrected_dinner!` (2):
+    Rails selects the key of a relation in a `where` hash.
+  - The `.sort` of the resident ids in `record_lines!` (1): nothing
+    reads the lines in the order they were written. The early return for
+    no lines (5): `insert_all!` with an empty list writes nothing.
+- Noise (14).
+  - A record for its id (5): `reconciliation` for `reconciliation.id` in
+    the `where` hashes of `stored_balances`, `clear_ledger!` and
+    `refuse_a_marked_settlement!`, and `correction` and `reconciliation`
+    for their ids in the binds of `keep_old_ledger!`. Rails reads the id.
+  - `keep_old_ledger!`: no `.squish` (1); the database reads the
+    statement the same with its line breaks. And the last
+    `write_settling_setting('')` dropped or replaced (3).
+    `write_ledger!`, two steps later in `correct!`, sets the same setting
+    and clears it at its end, and a failure in between rolls the
+    savepoint back, the setting with it. So nothing after `correct!` can
+    tell. The call stays, so each step clears what it set.
+  - `name_of` (2): `.to_s` dropped, or `.to_str`. The name column is
+    NOT NULL, so the name is already a String. `.to_s` is there for
+    Sorbet, which reads every column as nilable.
+  - `residents` (2): `!eql?` and `!equal?` for `!=` on two Integers.
+  - `run_fix` (1): `ended` for `T.unsafe(ended)`. `T.unsafe` returns its
+    argument; it only tells Sorbet not to check it.
+
+Run 2's 16 are the 14 above, the `to_s` in `name_of`, and one new one:
+the guest record for its id in the guest sort, after the `.to_i` was
+removed. ActiveRecord compares two records of one class by their ids,
+so it is noise too. Run 3's 15 are those 15 noise survivors; the
+six-person example killed the `to_s`.
+
+No run had a timeout.
