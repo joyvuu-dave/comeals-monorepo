@@ -344,7 +344,10 @@ MUTANT_SPEC_ROWS = {
   'spec/requests/admin/pages_with_data_spec.rb' =>
     %w[BalanceDisplayHelper SettlementLinesTable LedgerCheckFindingsTable MoneyFieldHelper PhoneDisplayHelper
        ApplicationHelper MealCostSummary],
-  'spec/models/community_dinner_start_times_spec.rb' => %w[Community],
+  # Community#dinner_start_at by name too: the iCal row names it, and
+  # mutant then runs only examples tagged with the method, so without it
+  # this file's '#dinner_start_at' group never ran for the method.
+  'spec/models/community_dinner_start_times_spec.rb' => %w[Community Community#dinner_start_at],
   # Checks the version against the common house bookings
   # CalendarSerializer lists, edge by edge. Its two groups are Community
   # methods, named one by one: with plain Community here they would be

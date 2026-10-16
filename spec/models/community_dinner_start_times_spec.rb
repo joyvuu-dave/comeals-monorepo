@@ -92,6 +92,14 @@ RSpec.describe Community do
       expect(community.dinner_start_at(dst_sunday).utc.iso8601).to eq('2026-03-09T01:00:00Z')
     end
 
+    # The minutes count too. March 8, 2026 is the day the clocks move
+    # forward, so the offset is the summer one.
+    it 'keeps the minutes of a time that is not on the hour' do
+      community.update!(dinner_start_times: %w[18:30 19:00 19:00 19:00 19:00 19:00 19:00])
+
+      expect(community.dinner_start_at(Date.new(2026, 3, 8)).iso8601).to eq('2026-03-08T18:30:00-07:00')
+    end
+
     it 'uses the community zone, not the app zone' do
       community.update!(timezone: 'America/New_York')
 
