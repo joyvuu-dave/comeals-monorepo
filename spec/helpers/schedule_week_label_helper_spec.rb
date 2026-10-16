@@ -60,11 +60,13 @@ RSpec.describe ScheduleWeekLabelHelper do
         data = helper.schedule_grid_data(community)
 
         expect(data['data-epoch-weeks']).to eq(1387)
-        expect(JSON.parse(data['data-week-labels']).first).to eq('Week of Aug 2 (this week)')
-        expect(JSON.parse(data['data-week-labels']).second).to eq('Week of Aug 9')
+        expect(JSON.parse(data['data-week-labels']))
+          .to eq(['Week of Aug 2 (this week)', 'Week of Aug 9', 'Week of Aug 16', 'Week of Aug 23',
+                  'Week of Aug 30', 'Week of Sep 6'])
         expect(JSON.parse(data['data-repeat-notes']))
-          .to start_with('This pattern repeats every week.',
-                         'This pattern repeats every 2 weeks.')
+          .to eq(['This pattern repeats every week.', 'This pattern repeats every 2 weeks.',
+                  'This pattern repeats every 3 weeks.', 'This pattern repeats every 4 weeks.',
+                  'This pattern repeats every 5 weeks.', 'This pattern repeats every 6 weeks.'])
       end
     end
 
