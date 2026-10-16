@@ -382,6 +382,20 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
       expect(Settlement.waiting_by(today, today: today)).to eq([yesterday])
     end
 
+    # The skipped meals example above passes without ORDER BY in mutant's
+    # workers, where PostgreSQL returned those rows in date order without
+    # being asked. So this reads the statement.
+    it 'asks for the skipped meals oldest first' do
+      attend(meal_on(latest - 1), resident)
+      statements = []
+      callback = ->(*, payload) { statements << payload[:sql] }
+      ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') do
+        Settlement.skipped_by(latest, today: community.today)
+      end
+
+      expect(statements.grep(/\ASELECT "meals"\.\* FROM "meals"/)).to contain_exactly(/ ORDER BY "meals"\."date" ASC\z/)
+    end
+
     it 'asks for the meals waiting for a cost oldest first' do
       cook = resident
       meal = meal_on(latest - 1)
