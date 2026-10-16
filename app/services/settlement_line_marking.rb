@@ -31,7 +31,7 @@ class SettlementLineMarking
     RetryOnConflict.call do
       ReconciliationBalance.transaction do
         line.lock!
-        newest = SettlementLineMark.where(reconciliation_balance_id: line.id).order(:id).last
+        newest = SettlementLineMark.where(reconciliation_balance_id: line.id).last
         if newest&.id != seen
           raise Changed, "Someone changed this line's mark after the page was loaded, so nothing was saved. " \
                          'This is the page as it is now.'

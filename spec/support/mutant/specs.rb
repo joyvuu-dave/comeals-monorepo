@@ -257,6 +257,9 @@ MUTANT_SPEC_ROWS = {
   'spec/requests/admin/settlement_marks_spec.rb' =>
     %w[SettlementMarkHelper SettlementLineMark ReconciliationBalance ApplicationHelper AdminUser],
   'spec/services/settlement_line_marking_spec.rb' => %w[SettlementLineMarking SettlementLineMark ReconciliationBalance],
+  # The only spec where two marks on one line run at once: the line's lock
+  # and the transaction around it.
+  'spec/db/settlement_line_mark_race_spec.rb' => %w[SettlementLineMarking],
   'spec/requests/admin/meal_corrections_display_spec.rb' =>
     %w[MealCorrectionDetails CorrectionWords BalanceDisplayHelper MealCostSummary ApplicationHelper AdminUser],
   'spec/requests/admin/child_pricing_rule_spec.rb' => %w[Community Multiplier],

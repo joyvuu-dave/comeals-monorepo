@@ -55,6 +55,13 @@ RSpec.describe SettlementLineMarking do
     expect(line.reload.marks.size).to eq(1)
   end
 
+  it "reads only this line's marks, not another line's" do
+    cook_line = line.reconciliation.reconciliation_balances.find_by!(resident: cook)
+    described_class.mark!(cook_line, status: 'paid', note: nil, by: admin, seen: nil)
+
+    expect(mark('paid', seen: nil)).to have_attributes(reconciliation_balance_id: line.id, status: 'paid')
+  end
+
   it "saves nothing when the mark and the note are the line's already" do
     mark('paid', note: 'Cash')
 
