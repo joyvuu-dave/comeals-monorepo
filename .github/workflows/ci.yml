@@ -15,8 +15,16 @@ jobs:
   # The two Playwright jobs get 25 instead of 2-3x: on a Playwright
   # version bump they download browsers, and on 2026-08-19 a slow CDN
   # stretched that download to 12 minutes.
+  #
+  # Every workflow names ubuntu-24.04, not ubuntu-latest. GitHub moves
+  # ubuntu-latest to Ubuntu 26 from 2026-10-19. A new image changes the
+  # system libraries and fonts the browser suites use, and the Linux
+  # screenshots are made in the Playwright "noble" image, which is
+  # Ubuntu 24.04 (bin/visual-linux). Move to a newer image on purpose,
+  # in its own change, so a failure it causes is not mixed up with one
+  # from the code.
   ruby-lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -26,7 +34,7 @@ jobs:
       - run: bundle exec rubocop
 
   ruby-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     services:
       postgres:
@@ -70,7 +78,7 @@ jobs:
           include-hidden-files: true
 
   node-lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -87,7 +95,7 @@ jobs:
   # bites here. Without this job, a type-level drift at the API
   # boundary merges green.
   node-typecheck:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -99,7 +107,7 @@ jobs:
       - run: npm run typecheck
 
   node-audit:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -114,7 +122,7 @@ jobs:
   # token shapes. Free for a personal account; an organization would
   # need GITLEAKS_LICENSE.
   secrets:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -125,7 +133,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   ruby-security:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -138,7 +146,7 @@ jobs:
   # The same quality gate bin/check runs: complexity, duplication, and
   # smells averaged over app and lib, minimum score 80.
   ruby-quality:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -148,7 +156,7 @@ jobs:
       - run: bundle exec rubycritic app lib --no-browser --format console --minimum-score 80
 
   bundle-budget:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
       VITE_PUSHER_KEY: "test-key-for-ci"
@@ -167,7 +175,7 @@ jobs:
   # (rake test:generate_fixtures). Regenerate and fail on any diff: a
   # commit that changes an API response must carry its fixture change.
   api-fixtures:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     services:
       postgres:
@@ -209,7 +217,7 @@ jobs:
           fi
 
   node-unit-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -222,7 +230,7 @@ jobs:
       - run: npm run test:coverage
 
   node-e2e-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     # The admin Playwright project boots a real Rails server
     # (tests/admin/server.sh), so this job needs Ruby and Postgres in
@@ -289,7 +297,7 @@ jobs:
           retention-days: 7
 
   visual-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     # The admin pages are in the visual suite, and their Rails server runs
     # on the runner (the Playwright container has no Ruby), so this job
@@ -334,7 +342,7 @@ jobs:
           retention-days: 7
 
   integration-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     services:
       postgres:

@@ -76,7 +76,8 @@ env:
 
 jobs:
   nightly-update:
-    runs-on: ubuntu-latest
+    # ubuntu-24.04, not ubuntu-latest: the note at the top of ci.yml's jobs.
+    runs-on: ubuntu-24.04
     # bin/check alone takes about 25 minutes here (it runs every CI
     # job's work in sequence), plus the updates and the visual
     # container. 60 is about twice a normal run.

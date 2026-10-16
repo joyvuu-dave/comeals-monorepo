@@ -64,7 +64,8 @@ env:
 
 jobs:
   rollback:
-    runs-on: ubuntu-latest
+    # ubuntu-24.04, not ubuntu-latest: the note at the top of ci.yml's jobs.
+    runs-on: ubuntu-24.04
     # The restore and the heroku rollback run in the first minutes (the
     # database is about 33 MB); everything after them is bookkeeping. If
     # a later step hangs, fail in 15 minutes — production is already

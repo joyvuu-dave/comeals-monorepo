@@ -44,7 +44,8 @@ permissions:
 
 jobs:
   plan:
-    runs-on: ubuntu-latest
+    # ubuntu-24.04, not ubuntu-latest: the note at the top of ci.yml's jobs.
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       pieces: ${{ steps.plan.outputs.pieces }}
@@ -57,7 +58,7 @@ jobs:
 
   piece:
     needs: plan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 360
     strategy:
       fail-fast: false
@@ -137,7 +138,7 @@ jobs:
   report:
     needs: piece
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
