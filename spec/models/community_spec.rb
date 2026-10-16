@@ -408,8 +408,9 @@ RSpec.describe Community do
       meal_on(community.today - 2, bills: %w[16], eaters: [cook])
       meal_on(community.today - 3, bills: %w[16], eaters: [cook])
 
-      # 4 attendees over 3 meals is 1.333..., shown as 1.3.
-      expect(community.unreconciled_ave_number_of_attendees).to eq(1.3)
+      # 4 attendees over 3 meals is 1.333..., shown as 1.3. A Float, so
+      # the dashboard prints 1.3: a Rational would print as 13/10.
+      expect(community.unreconciled_ave_number_of_attendees).to be(1.3)
     end
 
     it 'counts guests in addition to residents' do
