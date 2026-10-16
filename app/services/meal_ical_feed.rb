@@ -16,7 +16,11 @@ class MealIcalFeed
     @feed = feed
     @tzid = community.timezone
     @calendar = Icalendar::Calendar.new
-    @calendar.add_timezone TZInfo::Timezone.get(@tzid).ical_timezone(DateTime.new(2017, 6, 1, 8, 0, 0))
+    # The zone as the rules in force on one summer day: the summer and
+    # winter offsets, and a yearly rule for each switch. Any day between
+    # the two switches of a year with today's rules gives the same block
+    # (spec/requests/api/v1/residents_ical_spec.rb pins it).
+    @calendar.add_timezone TZInfo::Timezone.get(@tzid).ical_timezone(DateTime.new(2017, 6, 1))
     @calendar.x_wr_calname = calendar_name
   end
 
@@ -48,19 +52,14 @@ class MealIcalFeed
     "meal-#{meal.id}-#{@feed}@comeals.com"
   end
 
-  # Icalendar wants the wall-clock value and gets the zone from `tzid`,
-  # so these are built from the community's moment field by field: a
-  # DateTime with its own offset would be read as that offset, not as
-  # the zone's.
+  # Icalendar writes the clock time of the value it is given and names
+  # the zone with `tzid`. dinner_start_at answers in the community's zone,
+  # so its clock time is that zone's.
   def dinner_start(date)
-    wall_clock(@community.dinner_start_at(date))
+    @community.dinner_start_at(date)
   end
 
   def dinner_end(date)
-    wall_clock(@community.dinner_start_at(date) + DINNER_HOURS.hours)
-  end
-
-  def wall_clock(time)
-    DateTime.new(time.year, time.month, time.day, time.hour, time.min)
+    @community.dinner_start_at(date) + DINNER_HOURS.hours
   end
 end

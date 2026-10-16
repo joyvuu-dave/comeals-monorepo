@@ -39,6 +39,39 @@ RSpec.describe 'Residents iCal API' do
       expect(response.body).to include("/meals/#{weekday_meal.id}/edit")
     end
 
+    # A calendar app reads each DTSTART in the offset the VTIMEZONE gives
+    # for that day. MealIcalFeed builds the VTIMEZONE from the zone's rules
+    # around one day in 2017: the summer and winter offsets, and the rule
+    # for each switch. Built from a day before 1883, it would hold only
+    # the old local mean time (-0752), and every dinner would be read
+    # minutes off, in summer and winter alike.
+    it 'gives the zone its summer and winter offsets, and the rule for each switch' do
+      get "/api/v1/residents/#{resident.id}/ical"
+
+      unfolded = response.body.gsub(/\r?\n[ \t]/, '')
+      expect(unfolded[/BEGIN:VTIMEZONE.*?END:VTIMEZONE/m].split(/\r?\n/)).to eq(
+        %w[
+          BEGIN:VTIMEZONE
+          TZID:America/Los_Angeles
+          BEGIN:DAYLIGHT
+          DTSTART:20170312T020000
+          TZOFFSETFROM:-0800
+          TZOFFSETTO:-0700
+          RRULE:FREQ=YEARLY;BYDAY=2SU;BYMONTH=3
+          TZNAME:PDT
+          END:DAYLIGHT
+          BEGIN:STANDARD
+          DTSTART:20171105T020000
+          TZOFFSETFROM:-0700
+          TZOFFSETTO:-0800
+          RRULE:FREQ=YEARLY;BYDAY=1SU;BYMONTH=11
+          TZNAME:PST
+          END:STANDARD
+          END:VTIMEZONE
+        ]
+      )
+    end
+
     it 'includes Cook events for meals where the resident has a bill' do
       create(:bill, meal: sunday_meal, resident: resident, community: community)
 
@@ -112,6 +145,27 @@ RSpec.describe 'Residents iCal API' do
 
       expect(response.body).to include('DTSTART;TZID=America/Los_Angeles:20260405T173000')
       expect(response.body).to include('DTEND;TZID=America/Los_Angeles:20260405T193000')
+    end
+
+    # The two days in 2026 the clocks change in Los Angeles. Each event
+    # says the dinner's clock time in the community's zone, and read back
+    # it is the moment Community#dinner_start_at names.
+    it 'writes the clock time of each dinner on the days the clocks change' do
+      spring = create(:meal, community: community, date: Date.new(2026, 3, 8))
+      fall = create(:meal, community: community, date: Date.new(2026, 11, 1))
+      [spring, fall].each { |meal| create(:bill, meal: meal, resident: resident, community: community) }
+
+      get "/api/v1/residents/#{resident.id}/ical"
+
+      expect(response.body).to include('DTSTART;TZID=America/Los_Angeles:20260308T180000',
+                                       'DTEND;TZID=America/Los_Angeles:20260308T200000',
+                                       'DTSTART;TZID=America/Los_Angeles:20261101T180000',
+                                       'DTEND;TZID=America/Los_Angeles:20261101T200000')
+      events = Icalendar::Calendar.parse(response.body).sole.events
+      expect(events.map { |event| [event.dtstart.to_time, event.dtend.to_time] }).to contain_exactly(
+        [community.dinner_start_at(spring.date), community.dinner_start_at(spring.date) + 2.hours],
+        [community.dinner_start_at(fall.date), community.dinner_start_at(fall.date) + 2.hours]
+      )
     end
 
     # The same dinner keeps its UID on every fetch (#166), and a person's
