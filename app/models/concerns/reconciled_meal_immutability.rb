@@ -80,7 +80,7 @@ module ReconciledMealImmutability
   sig { returns(T::Boolean) }
   def previous_meal_reconciled?
     old_meal_id = meal_id_in_database
-    return false unless will_save_change_to_meal_id? && old_meal_id.present?
+    return false unless will_save_change_to_meal_id? && old_meal_id
 
     reconciled_in_database?(old_meal_id)
   end

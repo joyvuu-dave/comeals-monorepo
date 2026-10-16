@@ -61,6 +61,34 @@ RSpec.describe ReconciledMealImmutability do
     expect(guest.errors[:base].first).to eq('Meal has been reconciled.')
   end
 
+  # The statements that ask whether a meal is settled, with the meal id
+  # each one asks about. Each is one read of the meals table with the
+  # comeals.correcting setting.
+  def settled_checks_during(&)
+    checks = []
+    subscriber = lambda { |*, payload|
+      next unless payload[:sql].include?("current_setting('comeals.correcting'")
+
+      checks << payload[:type_casted_binds].first
+    }
+    ActiveSupport::Notifications.subscribed(subscriber, 'sql.active_record', &)
+    checks
+  end
+
+  # Every save of a bill, a sign-up or a guest runs the check twice: once
+  # in the validation and once in the before_save. A row that stays on its
+  # meal has one meal to check, so asking about "the meal it was on" again
+  # would read the same row a second time for the same answer.
+  it 'reads the meal once per check when the row stays on it, and both meals when the row moves' do
+    other = create(:meal, community: community, date: latest - 7)
+    eater = create(:resident, community: community, unit: unit)
+    bill = create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('10'))
+    attendance = create(:meal_resident, meal: other, resident: eater, community: community)
+
+    expect(settled_checks_during { bill.update!(amount: BigDecimal('12')) }).to eq([meal.id, meal.id])
+    expect(settled_checks_during { attendance.update!(meal: meal) }).to eq([meal.id, other.id, meal.id, other.id])
+  end
+
   it 'refuses a save that skips validation, with the sentence and not the trigger' do
     bill = create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('10'))
     create(:meal_resident, meal: meal, resident: cook, community: community)
