@@ -357,10 +357,9 @@ RSpec.describe LedgerVerification do
       )
     end
 
-    # The eater's row is changed first. PostgreSQL writes a changed row
-    # as a new row at the end of the table, so with no ORDER BY it now
-    # reads the eater's balance before the cook's. Only the sort puts the
-    # cook, who has the lower id, first.
+    # The eater's row is changed first, so a read of the whole table finds
+    # it first. The group 'the order of the residents in a finding' below
+    # checks the same order without a database.
     it 'dates each finding and writes the amounts as plain decimals, lowest resident id first' do
       reconciliation = settle
       behind_the_guards do
@@ -660,6 +659,29 @@ RSpec.describe LedgerVerification do
   # started, so one value for every reconciliation means one transaction.
   # The group commits for real: inside the test transaction, the snapshot
   # would be a savepoint and prove nothing.
+  # Each comparison lists the residents lowest id first, whatever order
+  # the two sides were read in. With no ORDER BY, PostgreSQL may read the
+  # rows in any order: a read of the whole table finds a changed row last,
+  # and a read through an index finds the rows lowest id first. So the two
+  # methods are called here with the residents out of order.
+  describe 'the order of the residents in a finding' do
+    let(:out_of_order) { { 9 => BigDecimal('-3'), 4 => BigDecimal('3') } }
+
+    it 'lists the differences of the recompute check lowest id first' do
+      differences = described_class.new.send(:differences_between, out_of_order, {})
+
+      expect(differences).to eq([{ resident_id: 4, stored: '3.0', source: nil },
+                                 { resident_id: 9, stored: '-3.0', source: nil }])
+    end
+
+    it 'lists the differences of the line item check lowest id first' do
+      differences = described_class.new.send(:line_item_differences, out_of_order, {})
+
+      expect(differences).to eq([{ resident_id: 4, stored: '3.0', source: nil },
+                                 { resident_id: 9, stored: '-3.0', source: nil }])
+    end
+  end
+
   describe 'the snapshot it reads from' do
     include_context 'with no test transaction'
 
