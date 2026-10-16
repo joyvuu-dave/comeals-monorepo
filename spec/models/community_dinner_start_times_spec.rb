@@ -10,9 +10,13 @@ RSpec.describe Community do
   end
 
   describe 'the writer' do
+    # The form hash raises when asked for a day it does not have, so a
+    # writer that read on past Saturday fails here instead of reading
+    # forever. It is the first example that writes a hash.
     it 'accepts the admin form hash, keyed by weekday' do
-      community.dinner_start_times = { '0' => '18:00', '1' => '19:00', '2' => '19:00', '3' => '19:00',
-                                       '4' => '19:00', '5' => '19:00', '6' => '19:00' }
+      form = Hash.new { |_hash, day| raise "read day #{day}, after Saturday" }
+      community.dinner_start_times = form.merge!('0' => '18:00', '1' => '19:00', '2' => '19:00', '3' => '19:00',
+                                                 '4' => '19:00', '5' => '19:00', '6' => '19:00')
 
       expect(community.dinner_start_times).to eq(%w[18:00 19:00 19:00 19:00 19:00 19:00 19:00])
     end
