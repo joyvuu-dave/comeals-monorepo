@@ -45,7 +45,8 @@ module Api
       # (updated_start_end), so a body that sends it is read for a day.
       # description is NOT NULL in the database and has no presence
       # validation, so passing a missing param through as nil used to
-      # raise from the database and return a 500 (#69).
+      # raise from the database and return a 500 (#69). A description sent
+      # as null is read as "", the way create reads it (#203).
       def update
         flags = TrueOrFalse.from_params(params, %i[all_day], required: false)
         return render_refused(flags) if flags.is_a?(String)
@@ -55,7 +56,9 @@ module Api
         return render_refused(times) if times.is_a?(String)
 
         render_retrying_on_conflict do
-          if @event.update(**times, allday: allday, **sent_fields(:title, :description))
+          fields = sent_fields(:title, :description)
+          fields[:description] = '' if fields.key?(:description) && fields[:description].nil?
+          if @event.update(**times, allday: allday, **fields)
             { json: { message: 'Event has been updated' } }
           else
             { json: { message: @event.errors.full_messages.join("\n") }, status: :bad_request }

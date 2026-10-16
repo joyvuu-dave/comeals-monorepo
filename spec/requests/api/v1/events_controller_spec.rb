@@ -687,6 +687,17 @@ RSpec.describe 'Events API' do
       expect(event.start_date.hour).to eq(18)
     end
 
+    # #203: null reached the NOT NULL column and answered 500. Create
+    # reads null as "", and update now does the same.
+    it 'reads a description sent as null as an empty description, as create does' do
+      event.update!(description: 'Bring gloves')
+
+      patch "/api/v1/events/#{event.id}/update", params: { token: token, description: nil }, as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(event.reload.description).to eq('')
+    end
+
     it 'keeps the stored all_day when the body leaves it out' do
       event.update!(allday: true, start_date: Time.zone.local(2026, 5, 1, 0, 0), end_date: nil)
 
