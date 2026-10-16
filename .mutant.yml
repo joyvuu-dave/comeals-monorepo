@@ -243,7 +243,13 @@ mutation:
   # counted them as kills. With room above the slowest list, a timeout
   # means a mutation made a loop or a lock wait that never ends, and
   # that is worth reading.
-  timeout: 300.0
+  #
+  # 600, not 300, since 2026-10-16. On GitHub's runners with four
+  # workers, the 908 examples of a Settlement method took 283 to 299
+  # seconds, and for some methods the unmutated code ran past 300. Then
+  # every mutation no example failed was counted as a timeout, and the
+  # unmutated code was too.
+  timeout: 600.0
 coverage_criteria:
   test_result: true
   timeout: false
