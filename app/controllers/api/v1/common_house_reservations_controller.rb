@@ -34,13 +34,13 @@ module Api
       end
 
       # PATCH /api/v1/common-house-reservations/:id/update
+      # A field left out of the body keeps its stored value.
       def update
-        times = parse_start_end_params
+        times = updated_start_end
         return render_refused(times) if times.is_a?(String)
 
         render_retrying_on_conflict do
-          if @chr.update(start_date: times[:start_date], end_date: times[:end_date], resident_id: params[:resident_id],
-                         title: params[:title])
+          if @chr.update(**times, **sent_fields(:resident_id, :title))
             { json: { message: 'Common House Reservation has been updated' } }
           else
             { json: { message: @chr.errors.full_messages.join("\n") }, status: :bad_request }

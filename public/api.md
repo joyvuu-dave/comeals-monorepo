@@ -589,7 +589,7 @@ end or the `all_day` flag.
 | -------- | -------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `GET`    | `/events/:id`        | `id`, `title`, `description`, `start_date`, `end_date` (null when all day), `allday`, `created_at`, `updated_at`. |
 | `POST`   | `/events`            | Creates. Body below.                                                                                              |
-| `PATCH`  | `/events/:id/update` | Updates. Same body.                                                                                               |
+| `PATCH`  | `/events/:id/update` | Updates. Same body. A field left out keeps its stored value (below).                                              |
 | `DELETE` | `/events/:id/delete` | Deletes.                                                                                                          |
 
 Create and update body:
@@ -602,7 +602,14 @@ Create and update body:
   "end_hours": 12, "end_minutes": 30 }
 ```
 
-On update, a field left out of the body keeps its stored value.
+On update, a field left out of the body keeps its stored value. Only
+the fields sent change. A field sent as `null` or `""` is not left out:
+it means what it says, the same as on create. The day, the four hour
+and minute fields and `all_day` are one group. An update that sends
+none of them keeps the stored start, end and `all_day`. An update that
+sends any of them is read the way create reads them, so the day must be
+there, and hour and minute fields left out mean empty time menus (see
+below).
 
 An event is one day. With `"all_day": true` the hour fields are ignored.
 Without `all_day` on create, it is false; on update, the stored value
@@ -650,7 +657,7 @@ One reservation per day. `resident_id` is the host.
 | -------- | ------------------------------------- | --------------------------------------------------- |
 | `GET`    | `/guest-room-reservations/:id`        | `{ "event": { "id", "resident_id", "date" } }`.     |
 | `POST`   | `/guest-room-reservations`            | Body `{ "resident_id": 12, "date": "2026-09-05" }`. |
-| `PATCH`  | `/guest-room-reservations/:id/update` | Same body.                                          |
+| `PATCH`  | `/guest-room-reservations/:id/update` | Same body. A field left out keeps its stored value. |
 | `DELETE` | `/guest-room-reservations/:id/delete` | Deletes.                                            |
 
 A day that is already taken returns `400`. So does a day the database
@@ -668,7 +675,7 @@ booked it. `title` is optional.
 | -------- | --------------------------------------- | -------------------------------------------------------------------------- |
 | `GET`    | `/common-house-reservations/:id`        | `{ "event": { "id", "resident_id", "title", "start_date", "end_date" } }`. |
 | `POST`   | `/common-house-reservations`            | Body below.                                                                |
-| `PATCH`  | `/common-house-reservations/:id/update` | Same body.                                                                 |
+| `PATCH`  | `/common-house-reservations/:id/update` | Same body. A field left out keeps its stored value (below).                |
 | `DELETE` | `/common-house-reservations/:id/delete` | Deletes.                                                                   |
 
 Body:
@@ -679,6 +686,11 @@ Body:
   "start_hours": 19, "start_minutes": 0,
   "end_hours": 21, "end_minutes": 0 }
 ```
+
+On update, a field left out of the body keeps its stored value, and
+the day and times are one group, as for an event: an update that sends
+none of their parts keeps the stored start and end. A `title` sent as
+`""` clears it.
 
 The date and time parts follow the rules for timed events: both times
 empty means midnight to midnight, one time empty returns

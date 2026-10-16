@@ -41,23 +41,21 @@ module Api
       # PATCH /api/v1/events/:id/update
       #
       # A field left out of the body keeps its stored value, the same rule
-      # as all_day above. description is NOT NULL in the database and has
-      # no presence validation, so passing a missing param through as nil
-      # used to raise from the database and return a 500 (#69).
+      # as all_day above. all_day belongs to the day and times group
+      # (updated_start_end), so a body that sends it is read for a day.
+      # description is NOT NULL in the database and has no presence
+      # validation, so passing a missing param through as nil used to
+      # raise from the database and return a 500 (#69).
       def update
         flags = TrueOrFalse.from_params(params, %i[all_day], required: false)
         return render_refused(flags) if flags.is_a?(String)
 
         allday = flags.fetch(:all_day, @event.allday)
-        times = parse_start_end_params(allday: allday)
+        times = updated_start_end(allday: allday, more_keys: %i[all_day])
         return render_refused(times) if times.is_a?(String)
 
-        description = params.key?(:description) ? params[:description] : @event.description
-        title = params.key?(:title) ? params[:title] : @event.title
-
         render_retrying_on_conflict do
-          if @event.update(start_date: times[:start_date], end_date: times[:end_date], allday: allday,
-                           description: description, title: title)
+          if @event.update(**times, allday: allday, **sent_fields(:title, :description))
             { json: { message: 'Event has been updated' } }
           else
             { json: { message: @event.errors.full_messages.join("\n") }, status: :bad_request }

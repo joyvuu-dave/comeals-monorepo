@@ -403,20 +403,66 @@ RSpec.describe 'Common House Reservations API' do
       expect(moving.reload).to have_attributes(resident_id: resident.id, start_date: taken + 5.hours)
     end
 
-    # The edit form sends the host each time. A body that leaves it out
-    # is read as no host, and the model says so in words.
-    it 'names a host left out of the body in words, and changes nothing' do
+    # A field the body leaves out keeps its stored value. Only the fields
+    # sent change, the same rule as for an event.
+    it 'keeps the stored host when the body leaves it out' do
       chr = create(:common_house_reservation, community: community, resident: resident, title: 'Book club')
-      before = chr.reload.attributes
 
       patch "/api/v1/common-house-reservations/#{chr.id}/update", params: {
         token: token, title: 'Moved', start_year: 2026, start_month: 6, start_day: 1,
         start_hours: 10, start_minutes: 0, end_hours: 12, end_minutes: 0
       }
 
+      expect(response.parsed_body).to eq('message' => 'Common House Reservation has been updated')
+      expect(chr.reload).to have_attributes(resident_id: resident.id, title: 'Moved',
+                                            start_date: Time.zone.local(2026, 6, 1, 10, 0))
+    end
+
+    it 'refuses a host sent empty, in words, and changes nothing' do
+      chr = create(:common_house_reservation, community: community, resident: resident, title: 'Book club')
+      before = chr.reload.attributes
+
+      patch "/api/v1/common-house-reservations/#{chr.id}/update", params: { token: token, resident_id: '' }
+
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body).to eq('message' => 'Resident must exist')
       expect(chr.reload.attributes).to eq(before)
+    end
+
+    it 'keeps the stored title when the body leaves it out, and clears it when the body sends ""' do
+      chr = create(:common_house_reservation, community: community, resident: resident, title: 'Book club')
+      times = { start_year: 2026, start_month: 6, start_day: 1,
+                start_hours: 10, start_minutes: 0, end_hours: 12, end_minutes: 0 }
+
+      patch "/api/v1/common-house-reservations/#{chr.id}/update",
+            params: { token: token, resident_id: resident.id, **times }
+
+      expect(response.parsed_body).to eq('message' => 'Common House Reservation has been updated')
+      expect(chr.reload).to have_attributes(title: 'Book club', start_date: Time.zone.local(2026, 6, 1, 10, 0))
+
+      patch "/api/v1/common-house-reservations/#{chr.id}/update",
+            params: { token: token, resident_id: resident.id, title: '', **times }
+
+      expect(response.parsed_body).to eq('message' => 'Common House Reservation has been updated')
+      expect(chr.reload.title).to eq('')
+    end
+
+    # The day and the times are one group: a body that sends none of
+    # their parts keeps the stored start and end. On an ordinary day and
+    # on both daylight saving days.
+    it 'keeps the stored day and times when the body sends none of their parts' do
+      chr = create(:common_house_reservation, community: community, resident: resident)
+
+      [[2026, 5, 1], [2026, 3, 8], [2026, 11, 1]].each do |year, month, day|
+        start_date = Time.zone.local(year, month, day, 1, 30)
+        end_date = Time.zone.local(year, month, day, 4, 0)
+        chr.update!(start_date: start_date, end_date: end_date)
+
+        patch "/api/v1/common-house-reservations/#{chr.id}/update", params: { token: token, title: "Kept #{month}" }
+
+        expect(response.parsed_body).to eq('message' => 'Common House Reservation has been updated')
+        expect(chr.reload).to have_attributes(title: "Kept #{month}", start_date: start_date, end_date: end_date)
+      end
     end
 
     # The same parser as create (#102).

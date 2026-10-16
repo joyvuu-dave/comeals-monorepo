@@ -91,7 +91,8 @@ class ApiController < ActionController::API
 
   INVALID_DATE = 'Error: Invalid date'
   PICK_BOTH_TIMES = 'Pick both a start and an end time.'
-  private_constant :INVALID_DATE, :PICK_BOTH_TIMES
+  START_END_KEYS = %i[start_year start_month start_day start_hours start_minutes end_hours end_minutes].freeze
+  private_constant :INVALID_DATE, :PICK_BOTH_TIMES, :START_END_KEYS
 
   # The start/end wire shape the calendar modals send (the frontend's
   # buildStartEndPayload): one day split into parts, plus start and end
@@ -145,6 +146,25 @@ class ApiController < ActionController::API
     return INVALID_DATE unless times.values.compact.all? { |time| StorableTime.timestamp?(time) }
 
     times
+  end
+
+  # An update's start and end. The day and the times are one group: a
+  # body that sends none of their parts, and none of more_keys (an
+  # event's all_day), gets {}, so the update keeps the stored start and
+  # end. A body that sends any of them is read as a whole, the way
+  # create reads it.
+  def updated_start_end(allday: false, more_keys: [])
+    return {} if (START_END_KEYS + more_keys).none? { |key| params.key?(key) }
+
+    parse_start_end_params(allday: allday)
+  end
+
+  # An update's other fields, as column => value, for the keys the body
+  # sends. A key left out is not in the hash, so the update keeps its
+  # stored value. A key sent as null or "" is in it, and means what it
+  # says.
+  def sent_fields(*keys)
+    keys.select { |key| params.key?(key) }.index_with { |key| params[key] }
   end
 
   def start_end_times(allday)

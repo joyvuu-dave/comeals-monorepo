@@ -119,6 +119,38 @@ RSpec.describe 'Guest Room Reservations API' do
       expect(response).to have_http_status(:ok)
       expect(grr.reload.date).to eq(Time.zone.today + 10)
     end
+
+    # A field the body leaves out keeps its stored value. Only the fields
+    # sent change, the same rule as for an event.
+    it 'keeps the stored host when the body leaves it out' do
+      grr = create(:guest_room_reservation, community: community, resident: resident, date: Date.new(2026, 6, 2))
+
+      patch "/api/v1/guest-room-reservations/#{grr.id}/update", params: { token: token, date: '2026-06-03' }
+
+      expect(response.parsed_body).to eq('message' => 'Guest Room Reservation has been updated')
+      expect(grr.reload).to have_attributes(date: Date.new(2026, 6, 3), resident_id: resident.id)
+    end
+
+    it 'keeps the stored day when the body leaves it out' do
+      other = create(:resident, community: community, unit: unit)
+      grr = create(:guest_room_reservation, community: community, resident: resident, date: Date.new(2026, 6, 2))
+
+      patch "/api/v1/guest-room-reservations/#{grr.id}/update", params: { token: token, resident_id: other.id }
+
+      expect(response.parsed_body).to eq('message' => 'Guest Room Reservation has been updated')
+      expect(grr.reload).to have_attributes(date: Date.new(2026, 6, 2), resident_id: other.id)
+    end
+
+    # A field sent with no value still means no value.
+    it 'refuses a host and a day sent empty, in words, and changes nothing' do
+      grr = create(:guest_room_reservation, community: community, resident: resident, date: Date.new(2026, 6, 2))
+
+      patch "/api/v1/guest-room-reservations/#{grr.id}/update", params: { token: token, resident_id: '', date: '' }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq('message' => "Resident must exist\nDate can't be blank")
+      expect(grr.reload).to have_attributes(date: Date.new(2026, 6, 2), resident_id: resident.id)
+    end
   end
 
   describe 'PATCH to a date that is already taken' do
@@ -143,18 +175,6 @@ RSpec.describe 'Guest Room Reservations API' do
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body['message']).to eq("Resident must exist\nDate has already been taken")
-      expect(moving.reload).to have_attributes(date: Date.new(2026, 6, 2), resident_id: resident.id)
-    end
-
-    # An update sends the host and the day each time (the edit form sends
-    # both). One left out is read as no value, and refused in words.
-    it 'names the host and the day in words when the body leaves them out, and changes nothing' do
-      moving = create(:guest_room_reservation, community: community, resident: resident, date: Date.new(2026, 6, 2))
-
-      patch "/api/v1/guest-room-reservations/#{moving.id}/update", params: { token: token }
-
-      expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq('message' => "Resident must exist\nDate can't be blank")
       expect(moving.reload).to have_attributes(date: Date.new(2026, 6, 2), resident_id: resident.id)
     end
   end

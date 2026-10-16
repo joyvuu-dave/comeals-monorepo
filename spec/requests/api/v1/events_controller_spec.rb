@@ -699,6 +699,47 @@ RSpec.describe 'Events API' do
                                               end_date: nil)
     end
 
+    # The day, the times and all_day are one group: a body that sends
+    # none of them keeps the stored start, end and all_day. On an ordinary
+    # day and on both daylight saving days.
+    it 'keeps the stored day and times of a timed event when the body sends none of their parts' do
+      [[2026, 5, 1], [2026, 3, 8], [2026, 11, 1]].each do |year, month, day|
+        start_date = Time.zone.local(year, month, day, 1, 30)
+        end_date = Time.zone.local(year, month, day, 4, 0)
+        event.update!(allday: false, start_date: start_date, end_date: end_date)
+
+        patch "/api/v1/events/#{event.id}/update", params: { token: token, title: "Kept #{month}" }
+
+        expect(response.parsed_body).to eq('message' => 'Event has been updated')
+        expect(event.reload).to have_attributes(title: "Kept #{month}", allday: false,
+                                                start_date: start_date, end_date: end_date)
+      end
+    end
+
+    it 'keeps the stored day of an all-day event when the body sends none of its parts' do
+      [[2026, 5, 1], [2026, 3, 8], [2026, 11, 1]].each do |year, month, day|
+        event.update!(allday: true, start_date: Time.zone.local(year, month, day), end_date: nil)
+
+        patch "/api/v1/events/#{event.id}/update", params: { token: token, description: "Kept #{month}" }
+
+        expect(response.parsed_body).to eq('message' => 'Event has been updated')
+        expect(event.reload).to have_attributes(description: "Kept #{month}", allday: true,
+                                                start_date: Time.zone.local(year, month, day), end_date: nil)
+      end
+    end
+
+    # all_day belongs to the group, so a body that sends it is read for a
+    # day too, and a day left out is refused.
+    it 'refuses all_day sent without the day, and leaves the event as it was' do
+      before = event.reload.attributes
+
+      patch "/api/v1/events/#{event.id}/update", params: { token: token, all_day: true }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq('message' => 'Error: Invalid date')
+      expect(event.reload.attributes).to eq(before)
+    end
+
     # Issue #138: before, "no" was read as false and the event became a
     # timed one, with a 200.
     it 'refuses all_day "no" or "", and leaves the event as it was' do

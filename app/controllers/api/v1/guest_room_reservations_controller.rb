@@ -28,9 +28,10 @@ module Api
       end
 
       # PATCH /api/v1/guest-room-reservations/:id/update
+      # A field left out of the body keeps its stored value.
       def update
         render_retrying_on_conflict do
-          if @grr.update(date: params[:date], resident_id: params[:resident_id])
+          if @grr.update(sent_fields(:date, :resident_id))
             { json: { message: 'Guest Room Reservation has been updated' } }
           else
             { json: { message: @grr.errors.full_messages.join("\n") }, status: :bad_request }
