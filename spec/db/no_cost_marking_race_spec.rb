@@ -80,6 +80,51 @@ RSpec.describe 'marking blank costs No cost, against a cost entered at the same 
     observer&.close
   end
 
+  # The other order, through the app. The marking holds the meal's lock
+  # from its read of the costs to its commit, so a cook who saves a cost
+  # in between waits, and then finds it marked No cost. Without one
+  # transaction around the whole of it, the lock would end with the read,
+  # and the marking would write over a cost it never read.
+  it 'makes a cook who saves a cost while it runs wait, and then the cost is marked' do
+    observer = open_session
+    listed = bill
+    read = Queue.new
+    go = Queue.new
+    tries = 0
+    allow(NoCostMarking).to receive(:reason_to_leave).and_wrap_original do |original, *args|
+      tries += 1
+      if tries == 1
+        read << true
+        go.pop
+      end
+      original.call(*args)
+    end
+    marking = Thread.new do
+      Thread.current.report_on_exception = false
+      ActiveRecord::Base.connection_pool.with_connection { NoCostMarking.call(bill_ids: [listed.id]) }
+    end
+    read.pop
+
+    entering = Thread.new do
+      Thread.current.report_on_exception = false
+      ActiveRecord::Base.connection_pool.with_connection { Bill.find(listed.id).update!(amount: BigDecimal('12')) }
+    end
+    # The cook's save locks the meal first (LocksItsMealFirst).
+    waited = wait_for_blocked_session(observer, 'FOR KEY SHARE')
+    go << true
+    result = marking.value
+
+    expect(waited).to be(true)
+    expect(result.marked).to eq([listed])
+    expect { entering.join }.to raise_error(ActiveRecord::ActiveRecordError)
+    expect(listed.reload).to have_attributes(amount: BigDecimal('0'), no_cost: true)
+  ensure
+    go&.push(true)
+    marking&.join
+    entering&.join rescue nil # rubocop:disable Style/RescueModifier -- its error was checked above
+    observer&.close
+  end
+
   # It locks only the dinners of the listed costs. A sign-up for another
   # dinner, one with a cost of its own, goes ahead while it runs. (The
   # marking may then fail as a conflict and try again; only its first try
