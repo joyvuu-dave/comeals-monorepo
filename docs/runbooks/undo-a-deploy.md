@@ -84,9 +84,9 @@ day of sign-ups and costs that nobody can type in again from memory.
    schedule moves to Solid Queue at the deploy after v613
    (`docs/runbooks/scheduler-cutover.md`); its entries are deleted a day
    later (step 6 there), so inside the watch window they are still
-   there. The one that goes at the deploy itself is `rake
-residents:set_multiplier`: add it back (daily), and run it once at
-   once, as that runbook says.
+   there. The one that goes at the deploy itself is
+   `rake residents:set_multiplier`: add it back (daily), and run it one
+   time right away, as that runbook says.
 4. Tell the community what was lost. The backup the workflow captured
    just before the restore holds every write made after the deploy:
    restore it into a local database (`heroku pg:backups:download`, then
