@@ -3674,3 +3674,108 @@ Left (40), the 40 of run 2, changes no caller can see:
   `RecordNotFound`.
 - `ApplicationController#read_only_admin_token?`, `params.fetch(:token)`
   (1): it runs only after `present?` has found the key.
+
+### 2026-10-16, the meal API
+
+The survivors of the full run on 532ac4be (GitHub run 38904964429) in
+the meal API: `Api::V1::MealsController*` (sign-ups, guests, the bills
+save, the history), `BillsPayload*` (the bills save's body, ADR 0009)
+and `MealIcalFeed*` (the iCal feeds, #166). Run 1 is a fresh run of
+those expressions on this branch before any change, on GitHub with 4
+pieces and 4 workers. Run 2 is the same after the changes below. The
+cancel and restore actions live in `MealStatusActions`, a concern with
+its own expression, so they are not in these runs.
+
+| Run                       | Subjects | Mutations | Killed | Alive | Timeouts | Time |
+| ------------------------- | -------- | --------- | ------ | ----- | -------- | ---- |
+| 1, GitHub run 38925120420 | 61       | 2,576     | 2,511  | 65    | 0        | 1h05 |
+| 2, GitHub run 38946113679 | 60       | 2,504     | 2,473  | 31    | 0        | 1h03 |
+
+Run 1's 65, by kind.
+
+Missing examples (12), each with an example now:
+
+- `MealIcalFeed#initialize` (9 of its 23): the day the VTIMEZONE block
+  is built from. A day before 1883 gives a block with only the old
+  local mean time (-0752), and a calendar app would read every dinner
+  minutes off. A day in another year, or in winter, gives other
+  onsets. The only example read the block's TZID. A new example in
+  `residents_ical_spec.rb` pins the whole block.
+- `render_write_under_lock` (3): `join`, `join(nil)` and `join("")` for
+  `join("\n")`. The 2026-10-09 entry said no API write fails under the
+  lock with two messages. One does: a sign-up on a dinner that was
+  closed and then cancelled is refused as cancelled and as closed. A
+  new example in `meal_cancel_spec.rb` expects both, one per line. A
+  local run of the method killed all 32 of its mutations.
+
+Code that did nothing, removed (22):
+
+- `MealIcalFeed#dinner_start` and `#dinner_end` (2): `wall_clock`
+  removed. The 2026-09-12 entry left this to the owner. Icalendar
+  writes the clock time of the value it is given, and
+  `dinner_start_at` answers in the community's zone, so the text and
+  the moment are the same with or without it. A script compared both
+  for 10 zones, 13 dinner times and every day of 2026, and found no
+  difference. A new example checks a dinner on each day the clocks
+  change in 2026, by its text and by the moment a calendar app reads.
+- `MealIcalFeed#initialize` (10 of its 23): the hour, minute and second
+  of the day the block is built from, changed or left out. Any time of
+  that day gives the same block, so the day is now
+  `DateTime.new(2017, 6, 1)`.
+- `status: :ok` in `seen_guest_key_answer`, `answer_seen_key` and
+  `bills_written` (9): dropped, nil, or another key. Rails answers 200
+  without it. The 2026-10-09 entry kept them because "the answer names
+  its status the way every other answer there does", but no other 200
+  answer in the app names its status.
+- `.to_h` in `history` (1): an Alba serializer inside a hash is written
+  as the same JSON (`Alba::Resource#as_json`).
+
+Findings (3), each with a failing example in the branch's last commit:
+
+- `update_description`, `params.fetch(:description)` (1). A body with
+  no description, or with null, writes nil to a NOT NULL column, and
+  the answer is a 500. With `fetch`, a body with no description is a 400.
+- `update_max`, `params.fetch(:max)` in the condition and in the write
+  (2). A body with no max is read as max: null, so it removes the cap
+  of a closed meal and answers 200. With `fetch` it is a 400. The page
+  always sends max (null to remove the cap), and a field left out is
+  never a removal: the rule of the bills save (ADR 0009).
+
+Noise, a change no example can see (28):
+
+- `instance_of?` for `is_a?` (11): `BillsPayload#check` (2), `#edit`
+  (2), `#side` (1), `#amount` (2) and `#resident_id` (2), and the flags
+  in `create_meal_resident` and `update_meal_resident` (2), the kind of
+  2026-10-08. Each value is a plain Array, String or Integer read from
+  JSON or a form, or a String the method built, never a subclass.
+- `fetch` for `[]` where the key is always there (4): `amount` and
+  `no_cost` in `BillsPayload#side`, after `key?` checked both, and
+  `resident_id` in `create_meal_resident` and `verify_resident_exists`,
+  which every route to them has in its path.
+- `BillsPayload#sides`, `side.amount` or `side.amount.to_s` for
+  `side.amount.to_s('F')` (2), and `#fingerprint`, `edit.op` for
+  `edit.op.serialize` (1). JSON writes a BigDecimal as the same plain
+  digits (ActiveSupport's `BigDecimal#to_s`) and a `T::Enum` as its
+  serialized value, so the hash is the same. The explicit calls stay:
+  a hash is kept for 7 days, and it must not change with a gem.
+- `BillsPayload#write_to`, `name` or `name.to_str` for `name.to_s` (2).
+  `residents.name` is NOT NULL. The `to_s` is there because the column
+  reader is nilable, and `srb tc` refuses a nilable String for
+  `change_seen`.
+- `BillsPayload#initialize`, the `@residents` line removed (1).
+  `unknown_cook` sets it before a valid payload can read it, and
+  `srb tc` refuses the file without it (`typed: strict`).
+- `seen_bills_key_answer`, `meal_id: meal` for `meal_id: meal.id` (1):
+  Rails reads the record's id, the kind of 2026-10-09.
+- `update_bills`, `message: e` for `message: e.message` (1):
+  ActiveSupport writes an exception as its message.
+- `set_meal`, the `return` before `not_found_api` dropped (1). Then
+  `Current.socket_id` is also set on a 404, and nothing reads it there.
+- `MealIcalFeed#initialize` (4): the month (5 or 7), the day (2), or
+  the day left out (which is then the 1st). Each is in the same
+  summer as 2017-06-01, and gives the same block.
+
+Run 2 left 31: the 28 noise survivors above, and the 3 findings. Run 2
+has one subject less, `MealIcalFeed#wall_clock`, which is gone. It ran
+on this branch after a rebase on main; a run before the rebase gave the
+same 31.
