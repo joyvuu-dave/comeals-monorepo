@@ -38,6 +38,14 @@ RSpec.describe Reconciliation do
     expect(settled_cooks).to eq([ann, bob])
   end
 
+  # The settlement's page lists each dinner's cooks in name order.
+  it 'lists the cooks of each dinner by name (settled_cooks_by_meal)' do
+    ann.update!(name: 'Zoe Ann')
+    bob.update!(name: 'Abe Bob')
+
+    expect(settled.settled_cooks_by_meal).to eq(meal.id => [bob, ann])
+  end
+
   it 'stays as it settled after a correction changes a cost, removes a cook and adds one' do
     correct('Wrong cooks') do |edits|
       edits.cost(ann, amount: BigDecimal('25'), no_cost: false)
