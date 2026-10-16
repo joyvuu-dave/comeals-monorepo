@@ -130,6 +130,17 @@ RSpec.describe 'Admin ledger check run page' do
     expect(findings_table).to eq([['#4 (2026-09-30)', 'cents_rounding', 'Rosa Lister', 'is owed $40.00', 'No row']])
   end
 
+  # Only the line items check stores a finding with no resident: the sum
+  # of all of a settlement's meal lines. A finding with no resident from
+  # any other check is not that sum, and keeps its stored balance.
+  it 'reads a finding with no resident as the sum of all meal lines only when the line items check found it' do
+    run_page([{ 'reconciliation_id' => 4, 'date' => '2026-09-30', 'check' => 'cents_rounding',
+                'differences' => [{ 'resident_id' => nil, 'stored' => '40.0', 'source' => '39.0' }] }])
+
+    expect(findings_table)
+      .to eq([['#4 (2026-09-30)', 'cents_rounding', 'Whole settlement', 'is owed $40.00', 'is owed $39.00']])
+  end
+
   # A settled resident cannot be deleted, but a run is a record of what
   # was true, and it names residents by id. The page still renders.
   it 'names a resident it cannot find by id' do
