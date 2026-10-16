@@ -65,6 +65,29 @@ RSpec.describe BalanceRecalculation do
     expect(SnapshotRead).to have_received(:call).with(wait_limit: nil).ordered
   end
 
+  # A correction no settlement carries yet is part of the running balance
+  # (ADR 0011 rule 6), on top of what the open meals add up to.
+  it 'adds a waiting correction to what the open meals add up to' do
+    latest = Reconciliation.latest_cutoff(community.today)
+    settled = create(:meal, community: community, date: latest - 5)
+    create(:bill, meal: settled, resident: cook, community: community, amount: BigDecimal('30'))
+    create(:meal_resident, meal: settled, resident: eater, community: community)
+    settle!(cutoff: latest - 5)
+    MealCorrecting.save!(settled.reload, by: create(:admin_user, community: community, superuser: true),
+                                         reason: 'Typed $30 for $20') do |edits|
+      edits.cost(cook, amount: BigDecimal('20'), no_cost: false)
+    end
+    open = create(:meal, community: community, date: latest)
+    create(:bill, meal: open, resident: cook, community: community, amount: BigDecimal('12'))
+    create(:meal_resident, meal: open, resident: eater, community: community)
+
+    described_class.call(community: community)
+
+    # $12 for the open dinner, and $10 back the other way for the old one.
+    expect(ResidentBalance.pluck(:resident_id, :amount).to_h)
+      .to eq(cook.id => BigDecimal('2'), eater.id => BigDecimal('-2'))
+  end
+
   it 'writes nothing, and says so, for a community with no residents' do
     expect(described_class.call(community: community)).to eq(0)
     expect(ResidentBalance.count).to eq(0)
