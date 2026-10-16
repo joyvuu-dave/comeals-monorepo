@@ -185,6 +185,17 @@ RSpec.describe Rotation do
       r = create(:rotation, community: community, no_email: true)
       expect(r.color).to eq(Rotation::COLORS[0])
     end
+
+    # With no ORDER BY, PostgreSQL returns rows in the order they are
+    # stored, and an update stores a new copy of the row after the
+    # others. So after the first rotation is updated, an unordered read
+    # ends on its green, and the new rotation would be blue again.
+    it 'follows the newest rotation by id, even after an older one is updated' do
+      first, = Array.new(3) { create(:rotation, community: community, no_email: true) }
+      first.update_column(:residents_notified, true)
+
+      expect(create(:rotation, community: community, no_email: true).color).to eq(Rotation::COLORS[3])
+    end
   end
 
   describe '.recolor_community' do
