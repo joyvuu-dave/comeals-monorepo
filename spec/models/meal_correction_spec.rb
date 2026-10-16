@@ -80,6 +80,23 @@ RSpec.describe MealCorrection do
                                                 'and cannot be destroyed.')
   end
 
+  # The cook mail lists the edits to that cook's own cost
+  # (ReconciliationMailer): not the cook's sign-up, and not another cook's
+  # cost.
+  it 'gives one resident\'s cost edits, and none of their other edits' do
+    helper = create(:resident, community: community, unit: unit)
+    correction = MealCorrecting.save!(meal, by: admin, reason: 'The cook ate, and a helper cooked') do |edits|
+      edits.add_eater(cook)
+      edits.cost(cook, amount: BigDecimal('20'), no_cost: false)
+      edits.cost(helper, amount: BigDecimal('5'), no_cost: false)
+    end
+
+    expect(correction.cost_edits_of(cook)).to eq([{ 'what' => 'cost', 'resident_id' => cook.id,
+                                                    'from' => { 'amount' => '30.0', 'no_cost' => false },
+                                                    'to' => { 'amount' => '20.0', 'no_cost' => false } }])
+    expect(correction.cost_edits_of(helper).pluck('resident_id')).to eq([helper.id])
+  end
+
   describe MealCorrectionLine do
     it 'cannot be changed or destroyed, is never zero, and is one a person' do
       line = correct.lines.first

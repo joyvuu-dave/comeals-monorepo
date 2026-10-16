@@ -74,6 +74,25 @@ RSpec.describe 'Admin pages for a corrected dinner' do
       .to include('Added Eater One as a cook (No cost).').and include('Nobody owes or is owed a different amount.')
   end
 
+  # The lines are saved in the order of the people's ids. The table lists
+  # them by name, and links each name to that person's page. A resident
+  # who is in no line is made first, so no line has its resident's id.
+  it 'lists a correction\'s edits, and its people by name, each linked to their page' do
+    create(:resident, community: community, unit: unit, name: 'Not In It')
+    able = create(:resident, community: community, unit: unit, name: 'Able Eater')
+    MealCorrecting.save!(meal.reload, by: admin, reason: 'Able Eater ate too') { |edits| edits.add_eater(able) }
+
+    get "/meals/#{meal.id}"
+
+    details = panel('Corrections (2)').css('.meal_correction_details').last
+    expect(details.css('ul > li').map(&:text)).to eq(['Signed up Able Eater (Adult).'])
+    expect(details.css('thead th').map(&:text)).to eq(%w[Resident Change])
+    # $20 after the first correction: the eater was charged all of it, and
+    # now each of the two is charged $10.
+    expect(rows(details)).to eq([['Able Eater', 'charged $10.00'], ['Eater One', 'credited $10.00']])
+    expect(details.css('tbody a').pluck('href')).to eq(["/residents/#{able.id}", "/residents/#{eater.id}"])
+  end
+
   it 'says which settlement carries it once one does' do
     second = settle!(cutoff: latest)
 
