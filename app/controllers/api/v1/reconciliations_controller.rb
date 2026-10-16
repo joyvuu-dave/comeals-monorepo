@@ -27,8 +27,9 @@ module Api
 
       # POST /api/v1/reconciliations { "cutoff": "YYYY-MM-DD" }
       #
-      # Settles the period: the same thing rake reconciliations:create does
-      # nightly, with the cutoff chosen by the caller. Claims the meals,
+      # Settles the period: the same thing the admin form's Create and
+      # rake reconciliations:create (run by hand) do, with the cutoff chosen
+      # by the caller. Claims the meals,
       # writes the ledger, and refreshes the running balances before it
       # answers; the cook emails go out from a job right after (#71), so
       # the answer does not wait on SMTP. Creating it is the lock — the row
@@ -44,7 +45,7 @@ module Api
       def create
         cutoff = Date.iso8601(params.require(:cutoff))
         # A person is waiting, so three quick tries and then the 409 below,
-        # not the nightly task's minutes of patience (SettleAndNotify::REQUEST).
+        # not the rake task's minutes of waiting (SettleAndNotify::REQUEST).
         settlement = SettleAndNotify.call(cutoff: cutoff, retries: SettleAndNotify::REQUEST)
         reconciliation = settlement.reconciliation
         # Both dates are NOT NULL on a saved row, which this is.

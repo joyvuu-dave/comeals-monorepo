@@ -3,9 +3,9 @@
 
 # Settling a period, as a person means it: settle, queue the cook mail
 # and the common house mail, clear the caches, refresh the running
-# balances. One entry point for
-# the nightly rake task, the API, and the admin form, so the three cannot
-# drift.
+# balances. One entry point for the rake task (reconciliations:create,
+# which a person runs by hand), the API, and the admin form, so the three
+# always do the same thing.
 #
 #   SettleAndNotify.call(cutoff: Reconciliation.latest_cutoff(community.today))
 #   # => the Settlement
@@ -54,12 +54,13 @@ class SettleAndNotify
   # its mail queued.
   class MailNotQueued < StandardError; end
 
-  # The nightly task's. Nobody is waiting on the answer at five in the
-  # morning, and a conflict means someone is editing yesterday's meal
-  # right now, so it is worth waiting out: ten tries, from a quarter
-  # second, doubling. Three quick tries lost three in a row in two of five
-  # write storms (spec/db/meal_write_storm_spec.rb, 2026-09-09), and a lost
-  # settlement is a failed task and a period that waits a day.
+  # The rake task's (reconciliations:create, run by hand in its own dyno).
+  # No browser waits on its answer, and a conflict means someone is
+  # editing a meal of the period right now, so it is worth waiting out:
+  # ten tries, from a quarter second, doubling. Three quick tries lost
+  # three in a row in two of five write storms
+  # (spec/db/meal_write_storm_spec.rb, 2026-09-09), and a lost settlement
+  # is a failed task that the person has to run again.
   BATCH = T.let(Retries.new(attempts: 10, base_delay: 0.25), Retries)
 
   # A person's, for the settle button. The same three quick tries every
@@ -122,7 +123,7 @@ class SettleAndNotify
   # A step after the commit. Its error is reported, never raised: the
   # settlement is in the database, and a raise would reach a rescue that
   # answers "Nothing was saved" (the API's 409, the admin form's alert)
-  # or fail the nightly task for a period that is settled. Every error,
+  # or fail the rake task for a period that is settled. Every error,
   # not only conflicts: a lock wait that ran out, a statement cancelled
   # by statement_timeout (the refresh's DEFERRABLE read waits against
   # it), or a bug. Each step has a backup: the calendar months are keyed

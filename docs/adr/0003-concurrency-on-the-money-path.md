@@ -372,9 +372,9 @@ runs forty random write sequences through the API against a model of the
 rules. Both pass. One thing the storm showed: `RetryOnConflict` gives up
 after three serialization failures, and under a storm on the meal being
 settled the settlement itself lost three times in two of five runs. Nothing
-is written then, but the nightly task fails and no reconciliation is made
-until the next night. So `SettleAndNotify` now retries as a batch job can:
-ten attempts, waiting from a quarter second up to about a minute. The
+is written then, but the rake task fails and no reconciliation is made
+until a person runs it again. So `SettleAndNotify` now retries as a batch
+job can: ten attempts, waiting from a quarter second up to about a minute. The
 request paths keep three quick attempts and a 409._
 
 _Changed 2026-09-28: the storm's settler keeps `BATCH`'s ten attempts but

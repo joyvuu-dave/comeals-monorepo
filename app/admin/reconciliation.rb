@@ -95,7 +95,7 @@ ActiveAdmin.register Reconciliation do
 
   controller do
     # The preview's Create button settles a period, the same way the
-    # nightly task and the API do: SettleAndNotify claims the meals,
+    # reconciliations:create task and the API do: SettleAndNotify claims the meals,
     # writes the ledger, queues the cook mail, and refreshes the running
     # balances (#73). Nothing after its commit can raise, so the conflict
     # rescue's "Nothing was saved" is only ever shown for a settlement
@@ -118,7 +118,7 @@ ActiveAdmin.register Reconciliation do
       end
 
       # A person is waiting at a form, so the request's three quick tries,
-      # not the nightly task's minutes (SettleAndNotify::REQUEST).
+      # not the rake task's minutes (SettleAndNotify::REQUEST).
       reconciliation = SettleAndNotify.call(cutoff: cutoff, retries: SettleAndNotify::REQUEST,
                                             fingerprint: fingerprint).reconciliation
       redirect_to resource_path(reconciliation), notice: 'Reconciliation was successfully created.'

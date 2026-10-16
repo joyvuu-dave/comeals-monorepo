@@ -356,9 +356,11 @@ class Reconciliation < ApplicationRecord
   # remove it afterwards: it stays in the admin list and in every resident's
   # history as a settlement that settled no meals, and it becomes
   # `Reconciliation.last`, which is the row `reconciliations:send_cooking_slot_email`
-  # emails cooks about. The nightly `reconciliations:create` task already
-  # refuses this case and logs a skip; this validation closes the same hole on
-  # the ActiveAdmin form, which is the only other way to create one.
+  # emails cooks about. All three ways to settle meet this validation,
+  # because each goes through SettleAndNotify and Settlement: the
+  # `reconciliations:create` task, which a person runs by hand, logs the
+  # refusal as a skip; POST /api/v1/reconciliations answers it with a 400;
+  # and the admin form shows it on the form.
   #
   # This reads the same eligible_meals scope that assign_meals sweeps, so the
   # two cannot disagree about which meals count.

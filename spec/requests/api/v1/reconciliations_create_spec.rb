@@ -34,7 +34,7 @@ RSpec.describe 'POST /api/v1/reconciliations' do
     meal
   end
 
-  it 'settles the period the same way the nightly task does: claims, ledger, balances, mail' do
+  it 'settles the period the same way the rake task does: claims, ledger, balances, mail' do
     meal = settleable_meal
     later = settleable_meal(latest + 1)
 

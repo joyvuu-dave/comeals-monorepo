@@ -192,9 +192,8 @@ Three more, found while fixing those:
   `before_action` or in any read — is answered 409 by `ApiController`
   instead of 500 (`spec/requests/api/v1/calendar_read_conflict_spec.rb`). This one
   predates the branch; the storm finds it about one run in three.
-- The nightly settlement task exited 1 and paged healthchecks.io when a
-  reconciler settled from the app at the same moment and claimed the
-  meals first. That is a period settled by someone else, not a failure,
+- The settlement rake task exited 1 when a reconciler settled from the
+  app at the same moment and claimed the meals first. That is a period settled by someone else, not a failure,
   so it is logged and skipped like an empty period.
 
 Three more, from the runs at 128 to 256 clients:
@@ -211,7 +210,7 @@ Three more, from the runs at 128 to 256 clients:
   `spec/requests/api/v1/pool_exhaustion_spec.rb`,
   `spec/requests/admin/pool_exhaustion_spec.rb`).
 
-- The settle button used the nightly task's patience. Both web callers,
+- The settle button used the rake task's patience. Both web callers,
   the API endpoint and the admin form, went through the same entry point
   as the rake task, which tries ten times with the delay doubling from a
   quarter second — two to four minutes of sleeping before it gives up.
@@ -219,7 +218,7 @@ Three more, from the runs at 128 to 256 clients:
   held the only thread and stopped the app for everyone, while Heroku's
   router gave up at 30 seconds and showed the reconciler an error for a
   settlement that was still running. The caller picks now:
-  `SettleAndNotify::BATCH` for the nightly task, `::REQUEST` for a person
+  `SettleAndNotify::BATCH` for the rake task, `::REQUEST` for a person
   — three quick tries, then the 409 the controller already had
   (`spec/requests/api/v1/reconciliations_create_spec.rb`).
 - The admin settle form answered 500 for `Settlement::Contested`. Nothing
