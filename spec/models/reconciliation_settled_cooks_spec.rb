@@ -70,6 +70,17 @@ RSpec.describe Reconciliation do
     expect(settled_cooks).to eq([ann, bob])
   end
 
+  # DISTINCT ON keeps the first row of each dinner and cook in the
+  # query's order, so the order is what makes it the first edit. Without
+  # it PostgreSQL may keep any of the rows: the example above passes by
+  # chance then, because its sort happens to keep the rows in id order.
+  # So this reads the query itself.
+  it 'orders the edits by dinner, cook, correction id and place before it keeps the first' do
+    sql = described_class.settled_dinner_cooks(described_class.where(id: settled.id)).to_sql
+
+    expect(sql).to include('ORDER BY meal_corrections.meal_id, cook_id, meal_corrections.id, cost_edit.place')
+  end
+
   # Within one correction, the order of its record. Added and then
   # removed in one correction, Cid was no cook when the dinner settled.
   it 'reads the first edit of a correction that names a cook twice' do
