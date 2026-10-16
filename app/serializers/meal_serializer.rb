@@ -71,7 +71,7 @@ class MealSerializer
 
     message << ' signed up' if today < meal.date
 
-    if meal.max.present?
+    if meal.max
       count = meal.max - meal.attendees_count
       message << "\n #{count} extra#{'s' unless count == 1}"
     end

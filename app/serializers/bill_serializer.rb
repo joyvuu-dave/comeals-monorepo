@@ -46,21 +46,21 @@ class BillSerializer
   end
 
   def title(bill)
-    if bill.amount.positive? && bill.meal.date < Community.instance.today
+    if bill.amount.positive? && bill.date < Community.instance.today
       name = ResidentNameShortener.short(bill.resident.name)
-      unit_name = bill.resident.unit.name
+      unit_name = bill.unit.name
       "Cook\n#{name} - Unit #{unit_name}\n#{number_to_currency(bill.amount)}"
     else
-      "Cook\n#{ResidentNameShortener.short(bill.resident.name)} - Unit #{bill.resident.unit.name}"
+      "Cook\n#{ResidentNameShortener.short(bill.resident.name)} - Unit #{bill.unit.name}"
     end
   end
 
   def start(bill)
-    bill.meal.date + 1.minute
+    bill.date + 1.minute
   end
 
   def end(bill)
-    bill.meal.date + 1.minute
+    bill.date + 1.minute
   end
 
   def url(bill)
@@ -68,12 +68,12 @@ class BillSerializer
   end
 
   def description(bill)
-    if bill.amount.positive? && bill.meal.date < Community.instance.today
+    if bill.amount.positive? && bill.date < Community.instance.today
       name = ResidentNameShortener.short(bill.resident.name)
-      unit_name = bill.resident.unit.name
+      unit_name = bill.unit.name
       "Cook:  #{name} - Unit #{unit_name} - #{number_to_currency(bill.amount)}"
     else
-      "Cook:  #{ResidentNameShortener.short(bill.resident.name)} - Unit #{bill.resident.unit.name}"
+      "Cook:  #{ResidentNameShortener.short(bill.resident.name)} - Unit #{bill.unit.name}"
     end
   end
 end
