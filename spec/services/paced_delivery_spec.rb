@@ -233,6 +233,24 @@ RSpec.describe PacedDelivery do
       expect(described_class).to have_received(:pause).exactly(2).times
     end
 
+    # The list is read once, when the run starts. So when the session
+    # cannot be opened, the people counted as failed are the ones this run
+    # meant to mail, even if the list would read differently by then.
+    it 'counts the list as it was at the start when the session cannot be opened' do
+      rotation = create(:rotation, community: community)
+      list = MailDelivery.not_yet_sent(Resident.where(id: cooks.map(&:id)), mailer: 'x', about: rotation)
+      allow(smtp).to receive(:start) do
+        # Another run mails the first cook while this one logs in.
+        MailDelivery.record!(mailer: 'x', about: rotation, resident: cooks.first)
+        raise Net::SMTPAuthenticationError, '535 bad credentials'
+      end
+      allow(MailDeliveryFailure).to receive(:report)
+
+      result = described_class.deliver(list, mailer: 'x') { |cook| message_for(cook) }
+
+      expect(result).to eq(described_class::Result.new(sent: 0, failed: 3, skipped: 0))
+    end
+
     it 'counts every message as failed when the session cannot be opened, and reports once' do
       allow(smtp).to receive(:start).and_raise(Net::SMTPAuthenticationError.new('535 bad credentials'))
       allow(MailDeliveryFailure).to receive(:report)
