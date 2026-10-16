@@ -7,6 +7,11 @@ require Rails.root.join('spec/support/oracle/plain_ledger')
 # dinner time, while another thread settles it. The settlement is the real
 # one (SettleAndNotify), with short retries.
 #
+# The writes are the ones the meal page makes: sign-ups, guests, cooks
+# and costs, closing and reopening, and cancelling and restoring the
+# dinner (ADR 0011 rule 11), with a write that marks every cost No cost so
+# that a cancel is not always refused for a cost with money on it.
+#
 # Two phases. In the first the writers and the settler run together. Each
 # writer takes the meal row lock and re-checks the settlement under it,
 # exactly as Api::V1::MealsController#with_meal_lock does, and retries a
@@ -85,7 +90,10 @@ RSpec.describe 'a write storm against one meal, with a settlement in it' do
       end
     end
   rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotDestroyed => e
-    settled_refusal?(e.record) ? :refused_settled : [:error, "#{e.class}: #{e.message}"]
+    if settled_refusal?(e.record) then :refused_settled
+    elsif cancelled_refusal?(e.record) then :refused
+    else [:error, "#{e.class}: #{e.message}"]
+    end
   rescue ActiveRecord::TransactionRollbackError
     :conflict
   rescue ActiveRecord::LockWaitTimeout
@@ -109,7 +117,13 @@ RSpec.describe 'a write storm against one meal, with a settlement in it' do
     end
   end
 
-  def settled_refusal?(record) = record.errors[:base].include?(ReconciledMealImmutability::MESSAGE)
+  # The rows' guard says "Meal has been reconciled."; the meal's own says
+  # that and which of its columns cannot change.
+  def settled_refusal?(record)
+    record.errors[:base].any? { |message| message.start_with?(ReconciledMealImmutability::MESSAGE) }
+  end
+
+  def cancelled_refusal?(record) = record.errors[:base].include?(CancelledDinnerFreeze::MESSAGE)
 
   # The row after its destroy (its errors say why, when a guard refused),
   # or nil when there was none.
@@ -120,6 +134,8 @@ RSpec.describe 'a write storm against one meal, with a settlement in it' do
     when :set_bills then write_bills(meal_id, rng, how)
     when :close then meal_write(meal_id, how) { |meal| meal.tap { |m| m.update(closed: true) } }
     when :reopen then meal_write(meal_id, how) { |meal| meal.tap { |m| m.update(closed: false) } }
+    when :cancel, :restore then cancel_or_restore(meal_id, action, how)
+    when :no_cost then mark_every_cost_no_cost(meal_id, how)
     else write_person(meal_id, action, residents.sample(random: rng), rng, how)
     end
   end
@@ -162,7 +178,27 @@ RSpec.describe 'a write storm against one meal, with a settlement in it' do
     end
   end
 
-  def actions = %i[signup signup signup leave leave add_guest remove_guest set_bills set_bills close reopen]
+  # Nothing to do when the dinner is already the way the write asks.
+  def cancel_or_restore(meal_id, action, how)
+    cancel = action == :cancel
+    meal_write(meal_id, how) do |meal|
+      meal.tap { |m| m.update(cancelled_at: cancel ? Time.current : nil) } unless meal.cancelled? == cancel
+    end
+  end
+
+  # Every cost marked No cost, the way the settlement preview's button
+  # marks blank ones (NoCostMarking). A cancel is refused while a cost has
+  # money on it, and write_bills always leaves money on one.
+  def mark_every_cost_no_cost(meal_id, how)
+    meal_write(meal_id, how) do |meal|
+      meal.bills.to_a.find { |bill| !bill.update(amount: 0, no_cost: true) } || true
+    end
+  end
+
+  def actions
+    %i[signup signup signup leave leave add_guest remove_guest set_bills set_bills close reopen
+       cancel restore restore no_cost]
+  end
 
   # Phase 2 leaves out close and reopen: `closed` is not settled data, so
   # a settled meal may still be closed or reopened.
@@ -189,10 +225,11 @@ RSpec.describe 'a write storm against one meal, with a settlement in it' do
   # kept writing could make the settler lose try after try.
   #
   # Before that wait, once every writer has done its rounds, the first
-  # writer reopens the meal and signs someone up. A closed meal refuses a
-  # sign-up, and a meal with a receipt and nobody who ate is held back
-  # from settlement, so without this the storm could end with a meal no
-  # settlement may take, and the settler would give up.
+  # writer restores the dinner, reopens the meal and signs someone up. A
+  # cancelled dinner and a closed meal refuse a sign-up, and a meal with a
+  # receipt and nobody who ate is held back from settlement, so without
+  # this the storm could end with a meal no settlement may take, and the
+  # settler would give up.
   def run_writers(meal_id, seed, rounds, log, settler)
     rounds_done = Concurrent::AtomicFixnum.new(0)
     writer_threads(seed) do |t, rng|
@@ -200,12 +237,13 @@ RSpec.describe 'a write storm against one meal, with a settlement in it' do
       rounds_done.increment
       if t.zero?
         sleep(0.005) until rounds_done.value == 4
-        log << write_once(meal_id, [t, rounds], :reopen, rng)
-        log << write_once(meal_id, [t, rounds + 1], :signup, rng)
+        log << write_once(meal_id, [t, rounds], :restore, rng)
+        log << write_once(meal_id, [t, rounds + 1], :reopen, rng)
+        log << write_once(meal_id, [t, rounds + 2], :signup, rng)
       end
       sleep(0.005) while settler.alive?
       writes_after_settler.times do |i|
-        log << write_once(meal_id, [t, rounds + 2 + i], actions.sample(random: rng), rng)
+        log << write_once(meal_id, [t, rounds + 3 + i], actions.sample(random: rng), rng)
       end
     end
   end
@@ -276,7 +314,7 @@ RSpec.describe 'a write storm against one meal, with a settlement in it' do
     { attendance: rows.meal_residents.map { |a| [a.resident_id, a.late] }.sort,
       guests: rows.guests.map { |g| [g.id, g.resident_id] }.sort,
       bills: rows.bills.map { |b| [b.resident_id, b.amount, b.no_cost] }.sort,
-      closed: rows.closed, reconciled: rows.reconciled? }
+      closed: rows.closed, reconciled: rows.reconciled?, cancelled_at: rows.cancelled_at }
   end
 
   def expect_outcomes_clean(log, label)
@@ -344,10 +382,15 @@ RSpec.describe 'a write storm against one meal, with a settlement in it' do
       # Refused by the models (or the triggers), nothing to do (a leave for
       # someone not signed up, a guest removal with no guests), or a
       # conflict after the retries, which writes nothing either. Never
-      # written.
+      # written. A cancel of a settled dinner that has a cost with money
+      # on it is refused by the money rule, not the settled one: the
+      # meal's validations run before its before_save.
       outcomes = second.map(&:last)
       unwritten = %i[refused_settled refused_by_trigger noop conflict]
-      expect(outcomes - unwritten).to be_empty, "storm #{seed}, phase 2: #{outcomes.tally}"
+      written = second.reject do |_, _, action, outcome|
+        unwritten.include?(outcome) || (action == :cancel && outcome == :refused)
+      end
+      expect(written).to be_empty, "storm #{seed}, phase 2: #{outcomes.tally}"
       expect(outcomes).to include(:refused_settled)
       expect(snapshot(meal_id)).to eq(settled_rows), "storm #{seed}, phase 2: the settled rows changed"
       expect_ledger_sound(meal_id, "storm #{seed}, phase 2")
