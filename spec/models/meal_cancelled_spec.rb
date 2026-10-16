@@ -29,12 +29,60 @@ RSpec.describe Meal do
         expect(meal.reload.cancelled_at).to be_nil
       end
 
+      # A restore of a dinner that is not cancelled does not save it at
+      # all, so no query runs: no history row, no push to its page.
+      it 'saves nothing when it restores a dinner that is not cancelled' do
+        meal
+
+        expect(count_queries { meal.restore! }).to eq(0)
+      end
+
       it 'refuses to cancel a dinner a cook spent money on, read from the bills table' do
         create(:bill, meal: meal, resident: cid, community: community, amount: BigDecimal('0.01'))
 
         expect { meal.cancel! }
           .to raise_error(ActiveRecord::RecordInvalid, /A cook spent money on this dinner, so it can't be cancelled/)
         expect(meal.reload.cancelled_at).to be_nil
+      end
+
+      # Only this dinner's costs count, and a cost marked No cost spent
+      # nothing whatever its amount (a bill from before 2026-10-10 can
+      # have both).
+      it "cancels a dinner when the money is on another dinner's cost, or on a cost marked No cost" do
+        other = create(:meal, community: community, date: meal.date + 1)
+        create(:bill, meal: other, resident: cid, community: community, amount: BigDecimal('12'))
+        no_cost_bill_with_an_amount(meal: meal, resident: ann, amount: '5')
+
+        meal.cancel!
+
+        expect(meal.reload).to be_cancelled
+      end
+
+      # The money is checked on the save that cancels, and only then. The
+      # model and the database never let a cancelled dinner's cost get
+      # money, so the dinner here is made with the meals trigger off: the
+      # cost first, then the cancel.
+      it 'does not check the money again on a later save of a cancelled dinner' do
+        create(:bill, meal: meal, resident: cid, community: community, amount: BigDecimal('8'))
+        connection = ActiveRecord::Base.connection
+        described_class.transaction(requires_new: true) do
+          connection.execute('ALTER TABLE meals DISABLE TRIGGER meals_protect_settled')
+          meal.update_columns(cancelled_at: Time.current)
+          connection.execute('ALTER TABLE meals ENABLE TRIGGER meals_protect_settled')
+        end
+
+        expect(meal.reload.update(description: 'Cook is sick')).to be(true)
+      end
+
+      # The freeze is for a dinner that is cancelled before the save and
+      # after it. The save that cancels it, and the save that restores
+      # it, may change more than cancelled_at.
+      it 'lets the save that cancels or restores a dinner change other values too' do
+        meal.update!(cancelled_at: Time.current, closed: true)
+        expect(meal.reload).to have_attributes(cancelled?: true, closed: true)
+
+        meal.update!(cancelled_at: nil, closed: false)
+        expect(meal.reload).to have_attributes(cancelled?: false, closed: false)
       end
 
       it 'cancels a dinner whose costs are blank or No cost' do
@@ -118,6 +166,17 @@ RSpec.describe Meal do
         expect(bill.errors.full_messages).to include('This dinner is cancelled. Restore it before changing it.')
       end
 
+      it 'refuses a row moved off it to another dinner' do
+        other = create(:meal, community: community, date: meal.date + 1)
+        row = MealResident.find_by!(meal: meal, resident: ann)
+
+        row.meal = other
+
+        expect(row.save).to be(false)
+        expect(row.errors.full_messages).to include('This dinner is cancelled. Restore it before changing it.')
+        expect(row.reload.meal_id).to eq(meal.id)
+      end
+
       it 'refuses to be deleted until it is restored' do
         expect(meal.destroy).to be(false)
         expect(meal.errors.full_messages).to eq(['This dinner is cancelled. Restore it before deleting it.'])
@@ -126,6 +185,26 @@ RSpec.describe Meal do
         meal.meal_residents.destroy_all
         expect(meal.destroy).to be_truthy
       end
+
+      # With nobody signed up, no frozen row stops the delete on the way:
+      # the guard on the dinner is the only thing that does.
+      it 'refuses to delete a cancelled dinner nobody signed up for' do
+        nobody = create(:meal, community: community, date: meal.date + 1)
+        nobody.cancel!
+
+        expect(nobody.destroy).to be(false)
+        expect(nobody.errors.full_messages).to eq(['This dinner is cancelled. Restore it before deleting it.'])
+        expect(described_class.exists?(nobody.id)).to be(true)
+      end
+    end
+
+    # A row with no meal is refused by belongs_to, and no meal of it is
+    # cancelled.
+    it 'does not call a row with no dinner cancelled' do
+      row = Bill.new(resident: cid, community: community, amount: 0)
+
+      expect(row).not_to be_valid
+      expect(row.errors.full_messages).not_to include('This dinner is cancelled. Restore it before changing it.')
     end
 
     describe '.settleable_by' do

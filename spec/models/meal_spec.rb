@@ -220,6 +220,16 @@ RSpec.describe Meal do
         meal.update!(description: 'Updated description')
         expect(meal.closed_at).to eq(original_closed_at)
       end
+
+      # It changes closed_at only when closed changes. A closed_at written
+      # by hand on an open meal is not thrown away: the database refuses
+      # the save.
+      it 'leaves a closed_at written by hand on an open meal for the database to refuse' do
+        meal = create(:meal, community: community)
+
+        expect { meal.update!(closed_at: Time.current) }
+          .to raise_error(ActiveRecord::StatementInvalid, /meals_closed_at_matches_closed/)
+      end
     end
   end
 
@@ -279,6 +289,24 @@ RSpec.describe Meal do
       expect(count_queries { loaded.multiplier }).to eq(0)
       expect(count_queries { loaded.attendees_count }).to eq(0)
     end
+
+    # With one list loaded and not the other, it sums both in the
+    # database. So a row saved after the one list was loaded counts.
+    %i[meal_residents guests].each do |list|
+      it "sums both in the database when only #{list} is loaded" do
+        meal = create(:meal, community: community)
+        host = create(:resident, community: community, unit: unit, multiplier: 2)
+        create(:meal_resident, meal: meal, resident: host, community: community)
+        create(:guest, meal: meal, resident: host, multiplier: 1)
+        loaded = described_class.preload(list).find(meal.id)
+
+        late = create(:resident, community: community, unit: unit, multiplier: 2)
+        create(:meal_resident, meal: described_class.find(meal.id), resident: late, community: community)
+        create(:guest, meal: described_class.find(meal.id), resident: late, multiplier: 1)
+
+        expect(loaded.multiplier).to eq(6)
+      end
+    end
   end
 
   describe '#attendees_count' do
@@ -313,6 +341,49 @@ RSpec.describe Meal do
       mem_count = loaded.attendees_count
 
       expect(mem_count).to eq(sql_count)
+    end
+
+    # With one list loaded and not the other, it counts both in the
+    # database. So a row saved after the one list was loaded counts.
+    %i[meal_residents guests].each do |list|
+      it "counts both in the database when only #{list} is loaded" do
+        meal = create(:meal, community: community)
+        host = create(:resident, community: community, unit: unit, multiplier: 2)
+        create(:meal_resident, meal: meal, resident: host, community: community)
+        create(:guest, meal: meal, resident: host, multiplier: 1)
+        loaded = described_class.preload(list).find(meal.id)
+
+        late = create(:resident, community: community, unit: unit, multiplier: 2)
+        create(:meal_resident, meal: described_class.find(meal.id), resident: late, community: community)
+        create(:guest, meal: described_class.find(meal.id), resident: late, multiplier: 1)
+
+        expect(loaded.attendees_count).to eq(4)
+      end
+    end
+  end
+
+  # The meals just before and just after a day, other than this one. A
+  # meal on the day itself is neither. The day is not always this meal's
+  # own date: when the meal moves, the meals on either side of its old
+  # date are told too.
+  describe '#neighbour_ids' do
+    it 'names the meal just before and just after the day, and not a meal on the day' do
+      meal = create(:meal, community: community, date: Date.new(2026, 3, 20))
+      create(:meal, community: community, date: Date.new(2026, 3, 8))
+      before = create(:meal, community: community, date: Date.new(2026, 3, 9))
+      create(:meal, community: community, date: Date.new(2026, 3, 10))
+      after = create(:meal, community: community, date: Date.new(2026, 3, 11))
+      create(:meal, community: community, date: Date.new(2026, 3, 12))
+
+      expect(meal.neighbour_ids(Date.new(2026, 3, 10))).to eq([before.id, after.id])
+    end
+
+    it 'never names the meal itself' do
+      meal = create(:meal, community: community, date: Date.new(2026, 3, 20))
+      before = create(:meal, community: community, date: Date.new(2026, 3, 12))
+
+      expect(meal.neighbour_ids(Date.new(2026, 3, 19))).to eq([before.id])
+      expect(meal.neighbour_ids(Date.new(2026, 3, 21))).to eq([before.id])
     end
   end
 
@@ -943,6 +1014,14 @@ RSpec.describe Meal do
       meal = create(:meal, community: community, rotation: rotation)
       other_rotation = create(:rotation, community: community, no_email: true)
       create(:meal, community: community, rotation: other_rotation) # no cooks, but not this rotation
+
+      expect(meal.another_meal_in_this_rotation_has_less_than_two_cooks?).to be false
+    end
+
+    # A cancelled dinner needs no cooks.
+    it 'leaves out a cancelled meal' do
+      meal = create(:meal, community: community, rotation: rotation)
+      create(:meal, community: community, rotation: rotation).cancel!
 
       expect(meal.another_meal_in_this_rotation_has_less_than_two_cooks?).to be false
     end
