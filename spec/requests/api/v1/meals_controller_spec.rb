@@ -907,6 +907,24 @@ RSpec.describe 'Meals API' do
       expect(response).to have_http_status(:ok)
       expect(meal.reload.description).to eq('Pasta night')
     end
+
+    # RED, a finding of the mutant run of 2026-10-16. The description
+    # column is NOT NULL, and a body with no description, or with null,
+    # reaches the database with nil: the database refuses it, and the
+    # answer is a 500 instead of a refusal in words.
+    it 'refuses a body with no description, or with null, in words, and keeps the description' do
+      meal.update!(description: 'Soup')
+
+      patch "/api/v1/meals/#{meal.id}/description", params: { token: token }
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to be_present
+
+      patch "/api/v1/meals/#{meal.id}/description", params: { token: token, description: nil }, as: :json
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to be_present
+
+      expect(meal.reload.description).to eq('Soup')
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -963,6 +981,23 @@ RSpec.describe 'Meals API' do
 
       expect(response).to have_http_status(:ok)
       expect(meal.reload.max).to be_nil
+    end
+
+    # RED, a finding of the mutant run of 2026-10-16. A body with no max
+    # key is read as max: null, so it removes the cap and answers 200.
+    # The page always sends max (null to remove the cap), so a body
+    # without it is a client mistake, and it should not remove a cap
+    # nobody asked to remove: a field left out is never a removal (the
+    # rule of the bills save, ADR 0009).
+    it 'refuses a body with no max, and keeps the cap' do
+      meal.update!(closed: true)
+      meal.update!(max: 10)
+
+      patch "/api/v1/meals/#{meal.id}/max", params: { token: token }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to be_present
+      expect(meal.reload.max).to eq(10)
     end
 
     # A form-encoded body has no null: an empty max is how it clears one.
