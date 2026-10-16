@@ -15,6 +15,7 @@ require 'rails_helper'
 RSpec.describe EnsureRotationsJob do
   context 'when the database refuses a new rotation number once' do
     include_context 'with no test transaction'
+    include_context 'with at most 30 rotations made'
 
     let!(:community) { create(:community) }
 

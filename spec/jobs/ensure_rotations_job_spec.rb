@@ -8,6 +8,8 @@ require 'rails_helper'
 RSpec.describe EnsureRotationsJob do
   include ActiveSupport::Testing::TimeHelpers
 
+  include_context 'with at most 30 rotations made'
+
   let!(:community) { create(:community) }
 
   it 'creates rotations until meals exist six months out, and records how many' do
