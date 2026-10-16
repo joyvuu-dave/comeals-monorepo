@@ -113,11 +113,14 @@ class Settlement
 
   # A short code made from what a settlement at this cutoff claims and
   # stores: the cutoff, the meals, the corrections it carries, and each
-  # person's amount rounded to cents. The admin form shows a preview, then sends the preview's code
-  # with Create, and settle! makes the code again from what it is about to
-  # commit. If a cook changed a cost or someone signed up in between, the
-  # codes differ and nothing is saved, so an admin never settles amounts
-  # they did not see (ADR 0011 rule 4).
+  # person's amount rounded to cents. The admin form shows a preview, then
+  # sends the preview's code with Create, and settle! makes the code again
+  # from what it is about to commit. If a cost or a sign-up changed in
+  # between and that changed which meals settle or moved a cent for
+  # someone, the codes differ and nothing is saved, so an admin never
+  # settles amounts they did not see (ADR 0011 rule 4). A change that
+  # moves no cent (a sign-up on a meal whose cooks all marked No cost)
+  # leaves the code the same, and the settlement saves it.
   #
   # The amounts are the cent-rounded balances, not the meal lines. A
   # preview's lines include a meal nobody ate (credits of $0), and a

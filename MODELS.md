@@ -461,8 +461,11 @@ Meal ----< MealCharge (written at settlement; empty until then)
   NULL means no cap. CHECK `meals_cap_positive_or_null`.
 - `closed` / `closed_at` — closing freezes attendance. `closed_at` is set
   when `closed` flips to true and cleared when it flips back.
-- `max` — extra spots allowed after close. Always NULL while the meal is
-  open: a reopen clears it before validation. A new max cannot be less than
+- `max` — extra spots allowed after close. NULL while the meal is open:
+  any save through the model of an open meal sets it to NULL before
+  validation (`conditionally_set_max`), so a reopen clears it. Only the
+  model does this. The database has no CHECK for it, so `update_all` or
+  psql can store a max on an open meal. A new max cannot be less than
   the current attendee count. The check runs only when max changes,
   because an admin attendance correction can add a person past it, and the
   meal must still take a menu edit or a reopen then (#93).
@@ -557,12 +560,17 @@ MealResident ----> Community
   row's creation (`Resident#multiplier_on`), copied in when none is given
   (`set_multiplier`) and refused when a different one is given
   (`multiplier_is_the_residents`). A later birthday or a changed age rule
-  never changes a past charge. The one thing that changes it is an admin
+  never changes a past charge. Two things change it. One is an admin
   moving the meal to another date: every row then gets the band for the
   new date (`Meal#restamp_attendance_for_new_date`). The meal history
   names each such change in the price words, for example "Sam: Child to
-  Adult" (`AuditDescription`). Required; CHECK
-  `meal_residents_multiplier_non_negative`.
+  Adult" (`AuditDescription`). The other is a superuser's correction of
+  a settled dinner that reprices the sign-up
+  (`MealCorrecting::Edits#reprice_eater`, ADR 0011 rule 6), for a price
+  that was wrong when the person signed up: the row gets the resident's
+  band for the meal's date as the rule stands at the correction, and
+  the correction saves the change in what each person owes. Required;
+  CHECK `meal_residents_multiplier_non_negative`.
 - `late` — arrived late. Required: true or false. A nil (a flag left out
   of a sign-up, or sent as `""`) is refused with "must be true or false"
   (#121).
@@ -1033,10 +1041,20 @@ bills, attendance, and guests.
 ### LedgerCheckRun
 
 One night's record of `rake ledger:verify`. The task (`LedgerVerification`)
-recomputes every reconciliation from its source rows and compares the result
-to the stored balances, and checks that the stored `meal_charges` add up to
-the stored `reconciliation_balances`. Every run is recorded, pass or fail.
-See `docs/money-path-observability.md`.
+runs three checks on every reconciliation:
+
+1. `recompute`: it works the settlement out again from its source rows and
+   compares the result to the stored balances.
+2. `line_items`: it checks that the stored `meal_charges`, plus the lines
+   of the corrections the settlement carries, add up to the stored
+   `reconciliation_balances`.
+3. `dinners`: it checks that each settled dinner's rows add up to what the
+   dinner was settled at plus its corrections, for every person
+   (`SettledDinnerDifference`).
+
+A settlement made before `meal_charges` existed has no lines, so it gets
+the first check only. Every run is recorded, pass or fail. See
+`docs/money-path-observability.md`.
 
 No associations.
 
@@ -1442,8 +1460,14 @@ value left out or sent as `""` (Rails reads `""` as nil) is a form error
 in admin and a 400 in the API, not a 500: `meals.closed`, `bills.no_cost`,
 `residents.active`, `can_cook`, `vegetarian` and `can_reconcile`,
 `meal_residents.late` and `vegetarian`, `guests.late` and `vegetarian`,
-`events.allday`, `rotations.residents_notified`, `admin_users.superuser`
-(#121, #139). The API reads a true/false value from a request by one
+`events.allday`, `rotations.residents_notified`, `admin_users.superuser`,
+`reconciliation_balances.lived_here`,
+`settlement_corrections.include_earlier_differences` (#121, #139). Two
+NOT NULL true/false columns have no such model check.
+`guest_add_keys.vegetarian` is written only by `GuestAdd`, which has
+already read the flag with `TrueOrFalse` and refused a missing one.
+`solid_queue_recurring_tasks.static` belongs to Solid Queue, not to the
+app. The API reads a true/false value from a request by one
 rule, `TrueOrFalse` (`app/services/true_or_false.rb`): it takes `true`,
 `false`, `1`, `0`, `"true"`, `"false"`, `"1"` and `"0"`, and refuses
 everything else (#138). Rails would read `"no"` or `"False"` as true.

@@ -283,9 +283,11 @@ message when the page reloaded or closed.)
 - **Removing a cook that no other menu offers asks first.** A cook who
   was retired, or whose "can cook" was turned off, after cooking is
   offered only in their own row (#91). Picking another name there, or
-  the blank, is a `remove` of their bill, and once the meal loads again
-  only an admin can add it back. So that pick asks first, with the
-  app's yes/no bar. Until the meal loads again, their row still offers
+  the blank, is a `remove` of their bill. Once the meal loads again, the
+  meal page no longer offers them, so of the app's screens only the
+  admin site can add the bill back. The API itself still takes an `add`
+  for them: it checks only that the resident exists, not `active` or
+  `can_cook`. So that pick asks first, with the app's yes/no bar. Until the meal loads again, their row still offers
   them, so the person can undo the pick.
 - **The blank clears the row's cost.** A row with no cook has no cost, so
   picking the blank clears the cost and the No cost switch too, and the

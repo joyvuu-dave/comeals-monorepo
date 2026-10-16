@@ -15,7 +15,7 @@
 # every guard allowed, and this check would have found it in production
 # instead of only in a test.
 #
-# == Two checks, which fail for different reasons
+# == Three checks, which fail for different reasons
 #
 # 1. Recompute. Rebuild the settlement from source with MealLedger and compare
 #    it to the stored balances. Catches source rows that changed after
@@ -28,13 +28,17 @@
 #    do (MODELS.md, "The ledger grain"). No arithmetic happens in Ruby here:
 #    both sides are read and PostgreSQL does the sums.
 #
-# The second is the stronger one, and it is why line items exist. The
+# 3. Dinners. Each settled dinner's rows must add up to what it was settled
+#    at plus its corrections, for every person (SettledDinnerDifference).
+#    Catches a change no correction explains, and says which dinner.
+#
+# The second is stronger than the first, and it is why line items exist. The
 # recompute check uses MealLedger, which is what wrote the stored values, so
 # the same mistake would be made twice and agree with itself. The line-item
 # check compares two tables written by different code at settlement time,
 # with nothing recomputed.
 #
-# Neither proves the arithmetic is right in the first place. That is the
+# None of them proves the arithmetic is right in the first place. That is the
 # plain ledger's job (spec/support/oracle/plain_ledger.rb), compared in
 # spec/services/meal_ledger_against_plain_ledger_spec.rb and
 # spec/tasks/stored_ledger_against_plain_ledger_spec.rb.

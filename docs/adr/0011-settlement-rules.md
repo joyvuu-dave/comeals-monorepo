@@ -70,9 +70,15 @@ dinners that will wait and why, and each person's amount. Then they
 click Create.
 
 Create settles only what the preview showed. The button sends a code
-made from the preview's dinners and amounts. If a cook changed a cost or
-someone signed up after the preview was made, the settlement's code
-differs, nothing is saved, and the admin sees the preview as it is now.
+made from the preview's dinners, the corrections it carries, and each
+person's amount in cents. Create makes the code again from what it is
+about to save. If the two codes differ, nothing is saved, and the admin
+sees the preview as it is now. So a cost or a sign-up changed after the
+preview stops Create when it changes which dinners settle or moves a
+cent for someone. A change that moves no cent, such as a sign-up on a
+dinner whose cooks all marked No cost, leaves the code the same, and
+Create saves it with the rest: every amount is still the one the admin
+saw.
 The preview and its buttons need a superuser, like Create.
 
 Under the dinners that wait for a cost there is one button: "Mark these
