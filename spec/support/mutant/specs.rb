@@ -198,6 +198,9 @@ MUTANT_SPEC_ROWS = {
   # A month stored by one release is a miss for the next (the release is
   # in the version).
   'spec/requests/api/v1/calendar_cache_release_spec.rb' => %w[Community#calendar_cache_version],
+  # The feed's start instants on the two days the clocks change.
+  'spec/requests/api/v1/ical_daylight_saving_spec.rb' =>
+    %w[MealIcalFeed Community#dinner_start_at Api::V1::CommunitiesController],
   # A rotation's chip on a month whose six weeks do not hold the meal
   # that changed it: the version must see that meal (#144).
   'spec/requests/api/v1/calendar_rotation_chip_spec.rb' => %w[Community#calendar_cache_version CalendarSerializer],
