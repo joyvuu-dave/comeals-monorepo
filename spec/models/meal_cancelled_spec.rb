@@ -30,11 +30,15 @@ RSpec.describe Meal do
       end
 
       # A restore of a dinner that is not cancelled does not save it at
-      # all, so no query runs: no history row, no push to its page.
+      # all: no query, and no push to its page. A save with no change
+      # runs no query either, but it still runs the save callbacks, and
+      # they tell the meal's page.
       it 'saves nothing when it restores a dinner that is not cancelled' do
         meal
+        allow(LiveUpdate).to receive(:meal)
 
         expect(count_queries { meal.restore! }).to eq(0)
+        expect(LiveUpdate).not_to have_received(:meal)
       end
 
       it 'refuses to cancel a dinner a cook spent money on, read from the bills table' do
