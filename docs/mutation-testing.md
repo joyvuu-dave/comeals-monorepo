@@ -58,7 +58,7 @@ batch of merges the way a bug hunt runs
 counts as not killed, and the browser suites are load.
 
 Every run prints "parser/current is loading parser/ruby33 ... but you
-are running 4.0.6". The line is noise. Mutant reads Ruby through
+are running 4.0.7". The line is noise. Mutant reads Ruby through
 `unparser`, and on Ruby 3.5 and later `unparser` parses with Prism
 (`Prism::Translation::Parser40` here), the same parser Ruby itself and
 RuboCop use, so syntax newer than 3.3 is read correctly: the implicit
@@ -115,12 +115,13 @@ never ran them: the first run selected 12 examples for
 `Settlement.truncate_toward_zero`, none of which read its result, and
 "drop the rounding" survived.
 
-`spec/support/mutant_selection.rb` is the fix. It lists each such spec
-file with the classes it proves, and tags its examples so mutant runs
-them for every method of those classes. When you write a spec that
-checks a class under a sentence description — a request spec for a
-controller, a task spec for a job — add a row. The same file gives an
-empty list to the specs mutant must never run: the storms, the random
+`spec/support/mutant/specs.rb` is the fix. It lists each such spec
+file with the classes it proves, and `spec/support/mutant_selection.rb`
+tags that file's examples so mutant runs them for every method of
+those classes. When you write a spec that checks a class under a
+sentence description — a request spec for a controller, a task spec
+for a job — add a row to `spec/support/mutant/specs.rb`. The same file
+gives an empty list to the specs mutant must never run: the storms, the random
 sequences, the query-count budget, the thread-safety probes, and the
 runtime type-check specs (mutant reinserts a method without its `sig`,
 so those fail on the unmutated code).
@@ -425,8 +426,6 @@ the survivors taught.
 | A                                        | 3, specs added                                     | 6,860     | 6,477  | 383 (94.4%)   | 20       | 47 min                                |
 | B: models and concerns                   | 1                                                  | 5,378     | 4,410  | 968 (82.0%)   | 29       |                                       |
 | B                                        | 2, rows and specs                                  | 5,378     | 5,005  | 373 (93.1%)   | 11       | 37 min                                |
-| B                                        | 3, touched classes                                 | B3M       | B3K    | B3A (B3P%)    | B3T      | B3T2                                  |
-| A                                        | 4, touched classes                                 | A4M       | A4K    | A4A (A4P%)    | A4T      | A4T2                                  |
 | C: controllers and serializers           | 1                                                  | 6,719     | 5,313  | 1,406 (79.1%) | 194      | 1h20 awake (the laptop slept mid-run) |
 | C                                        | 2, rows and specs                                  | 6,719     | 5,960  | 759 (88.7%)   | 2        | 2h07                                  |
 | C                                        | 3, the 91 subjects the pass touched                | 4,206     | 3,793  | 413 (90.2%)   | 2        | 1h53                                  |

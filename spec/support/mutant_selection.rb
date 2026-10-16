@@ -1,7 +1,8 @@
 # frozen_string_literal: true
 
-# Which examples mutant runs for the money path. Only active under
-# bin/mutant (ENV['MUTANT']); plain rspec never reads this metadata.
+# Tags spec files so mutant runs their examples for the classes they
+# prove. Only active under bin/mutant (ENV['MUTANT']); plain rspec never
+# reads this metadata.
 #
 # Mutant picks the examples for a subject by the first word of each
 # example's description: `describe Settlement` examples run for every
@@ -12,13 +13,14 @@
 # so mutant would never run them. A survivor from such a run means
 # nothing.
 #
-# This list says, for each such spec file, which classes it proves.
-# Every method of a named class runs the whole file, so a class named
-# here should be one whose behaviour the file checks, not one it merely
-# calls on the way. Add a row when a new spec checks a class under a
-# sentence description. The first block is the money path; the second
-# is everything else, added when mutant's subjects grew to the whole
-# app (2026-09-12).
+# The list in spec/support/mutant/specs.rb says, for each such spec
+# file, which classes it proves, and this file tags the examples of
+# that file with them. Every method of a named class runs the whole
+# file, so a class named there should be one whose behaviour the file
+# checks, not one it only calls on the way. Add a row there when a new
+# spec checks a class under a sentence description. That file also
+# orders the examples by directory and lists the specs mutant must
+# never run.
 #
 # The first run (2026-09-08) had 12 examples selected for
 # Settlement.truncate_toward_zero, none of which read its result, and
@@ -39,7 +41,7 @@ RSpec.configure do |config|
   selections = MUTANT_SPECS.merge(MUTANT_SIG_CHECK_SPECS.index_with([]))
   selections.each do |path, expressions|
     absolute = Rails.root.join(path).to_s
-    raise "spec/support/mutant_selection.rb names a file that does not exist: #{path}" unless File.exist?(absolute)
+    raise "spec/support/mutant/specs.rb names a file that does not exist: #{path}" unless File.exist?(absolute)
 
     config.define_derived_metadata(file_path: ->(file) { File.expand_path(file) == absolute }) do |metadata|
       metadata[:mutant_expression] = expressions
