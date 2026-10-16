@@ -53,6 +53,15 @@ RSpec.describe 'Residents API' do
       expect(response.parsed_body['message']).to include('Incorrect password')
     end
 
+    # A request made by hand can leave the password field out. For a
+    # resident with a password that is a wrong password, in the same words.
+    it 'returns 400 with no password field at all' do
+      post '/api/v1/residents/token', params: { email: 'alice@example.com' }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body['message']).to eq('Incorrect password')
+    end
+
     it 'returns 400 with unknown email' do
       post '/api/v1/residents/token', params: {
         email: 'nobody@example.com',
