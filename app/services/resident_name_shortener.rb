@@ -53,7 +53,7 @@ class ResidentNameShortener
     # Shared first name: last initial if that is unambiguous, else the
     # full name.
     initial_unique = same_first.none? do |n|
-      n != name && same?(last_word(n)&.slice(0, 1), last[0])
+      n != name && same?(last_word(n)&.slice(0), last[0])
     end
     initial_unique ? "#{first} #{last[0]}" : name
   end
@@ -68,12 +68,14 @@ class ResidentNameShortener
   # not the same as sharing an initial with someone.
   def last_word(name)
     words = name.split
-    words.length > 1 ? words.last : nil
+    words.last if words.length > 1
   end
 
   # Case-insensitive, because name uniqueness is case-insensitive too:
-  # "alice smith" and "Alice Jones" share a first name.
+  # "alice smith" and "Alice Jones" share a first name. The right side
+  # is always a word of the name being shortened. The left side is a
+  # word of another name, and is nil when that name has no last word.
   def same?(left, right)
-    left.to_s.casecmp?(right.to_s)
+    left.to_s.casecmp?(right)
   end
 end
