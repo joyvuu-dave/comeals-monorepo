@@ -424,7 +424,7 @@ RSpec.describe 'what a write runs after its commit' do
     settleable_meal
     settle!(cutoff: latest)
     settled = Meal.find_by!(date: latest)
-    correction = { reason: 'Typed $30 for $20',
+    correction = { seen: MealCorrectionForm::Rows.of(settled).seen, reason: 'Typed $30 for $20',
                    cooks: { cook.id.to_s => { amount: '20', no_cost: '0', remove: '0' } } }
     form = MealCorrectionForm.new(settled, correction.deep_stringify_keys)
     fingerprint = MealCorrecting.preview(settled) { |edits| form.apply(edits) }.fingerprint

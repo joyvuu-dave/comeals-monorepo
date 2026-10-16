@@ -7,15 +7,25 @@
 # fingerprint (MealCorrecting::Result#fingerprint), so it saves only what
 # the preview showed. MealCorrectionForm reads what this form sends; the
 # member action in app/admin/meal.rb runs it.
+#
+# The form also carries a code made from the rows it shows
+# (MealCorrectionForm::Rows#seen), made when the form is opened. Preview
+# and Save are refused when the dinner's rows no longer make that code,
+# so a row the admin did not touch cannot write back a value someone
+# else has corrected since. After a Preview or a Save the page sends the
+# code back as it came, never a new one: the boxes still hold what the
+# admin typed against the rows of the first code.
 meal = resource
 values = assigns.fetch(:values)
 preview = assigns[:preview]
 date = meal.date
 settlement = meal.reconciliation
 
-cooks = meal.bills.includes(:resident).sort_by { |bill| [bill.resident.name, bill.resident_id] }
-eaters = meal.meal_residents.includes(resident: :community).sort_by { |row| [row.resident.name, row.resident_id] }
-guests = meal.guests.includes(:resident).sort_by { |guest| [guest.resident.name, guest.id] }
+rows = MealCorrectionForm::Rows.of(meal)
+cooks = rows.bills
+eaters = rows.eaters
+guests = rows.guests
+seen = request.get? ? rows.seen : values['seen'].to_s
 residents = Resident.order(:name, :id).to_a
 choices = ->(left_out) { residents.reject { |resident| left_out.include?(resident.id) }.map { |r| [r.name, r.id] } }
 
@@ -38,6 +48,7 @@ end
 
 form action: correct_admin_meal_path(meal), method: 'post' do
   input type: 'hidden', name: 'authenticity_token', value: form_authenticity_token
+  input type: 'hidden', name: 'correction[seen]', value: seen
 
   panel 'Cooks' do
     table_for cooks do

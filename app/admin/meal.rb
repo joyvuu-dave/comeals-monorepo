@@ -40,8 +40,10 @@ ActiveAdmin.register Meal do
   # which saves nothing). The Save button sends the preview's
   # fingerprint, and saves only that: if the dinner or the form changed
   # after the preview, it saves nothing and shows the new preview
-  # (app/views/admin/meals/correct.html.arb, MealCorrectionForm). A
-  # correction writes the ledger, so it needs a superuser.
+  # (app/views/admin/meals/correct.html.arb, MealCorrectionForm). Both
+  # buttons are refused when the dinner's rows changed after the form
+  # was opened (MealCorrectionForm::STALE). A correction writes the
+  # ledger, so it needs a superuser.
   member_action :correct, method: %i[get post] do
     # Hand-written action: ActiveAdmin authorizes :read inside resource,
     # and nothing else (the meal_resident.rb trap, ADR 0004).
@@ -145,8 +147,8 @@ ActiveAdmin.register Meal do
     # What the correction form sent, as plain data: each row by its id.
     def correction_values
       params.fetch(:correction, {})
-            .permit(:reason, new_eater_ids: [], cooks: {}, eaters: {}, guests: {},
-                             new_cook: %i[resident_id amount no_cost], new_guest: %i[host_id multiplier])
+            .permit(:reason, :seen, new_eater_ids: [], cooks: {}, eaters: {}, guests: {},
+                                    new_cook: %i[resident_id amount no_cost], new_guest: %i[host_id multiplier])
             .to_h
     end
 

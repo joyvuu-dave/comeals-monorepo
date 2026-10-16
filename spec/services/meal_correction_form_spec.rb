@@ -26,14 +26,20 @@ RSpec.describe MealCorrectionForm do
     end.reload
   end
 
+  # The form as a page opened now sends it: with the code of the rows it
+  # shows, unless the values name their own.
+  def opened(values, dinner: meal)
+    described_class.new(dinner, { 'seen' => described_class::Rows.of(dinner).seen }.merge(values.deep_stringify_keys))
+  end
+
   # The edits the form makes, by running them in a preview.
   def edits(values)
-    form = described_class.new(meal, values.deep_stringify_keys)
+    form = opened(values)
     MealCorrecting.preview(meal) { |edits| form.apply(edits) }.edits
   end
 
   def refusal(values)
-    described_class.new(meal, values.deep_stringify_keys)
+    opened(values)
     nil
   rescue described_class::Invalid => e
     e.message
@@ -164,8 +170,8 @@ RSpec.describe MealCorrectionForm do
   end
 
   it 'reads the reason without spaces around it' do
-    expect(described_class.new(meal, { 'reason' => "  Typed $30\n" }).reason).to eq('Typed $30')
-    expect(described_class.new(meal, {}).reason).to eq('')
+    expect(opened({ 'reason' => "  Typed $30\n" }).reason).to eq('Typed $30')
+    expect(opened({}).reason).to eq('')
   end
 
   # A caller other than the page (the console, a spec) can send a number
@@ -184,17 +190,75 @@ RSpec.describe MealCorrectionForm do
     expect(edits(new_eater_ids: [nil, other.id]).sole).to include('what' => 'eater', 'resident_id' => other.id)
   end
 
-  # Another admin's correction takes Zed off as a cook after this form
-  # read the dinner and before its edits run. This form sent Zed's row as
-  # it was, so it makes no edit for Zed, and Zed stays off.
-  it 'makes no edit for a row sent as it is, even when the row is gone by the time the edits run' do
-    form = described_class.new(meal, cooks.merge(new_eater_ids: [other.id.to_s]).deep_stringify_keys)
-    MealCorrecting.save!(meal, by: create(:admin_user, community: community, superuser: true),
-                               reason: 'Zed did not cook') { |edits| edits.remove_cook(zed) }
+  describe 'the code of the rows the page showed' do
+    let(:admin) { create(:admin_user, community: community, superuser: true) }
 
-    result = MealCorrecting.preview(meal.reload) { |edits| form.apply(edits) }
+    def correct_zed_to(amount)
+      MealCorrecting.save!(meal, by: admin, reason: 'The receipt') do |edits|
+        edits.cost(zed, amount: BigDecimal(amount), no_cost: false)
+      end
+    end
 
-    expect(result.edits.pluck('what', 'resident_id')).to eq([['eater', other.id]])
+    it 'refuses a form with no code, or a blank one' do
+      expect(refusal(cooks.merge(seen: nil))).to eq(described_class::STALE)
+      expect(refusal(cooks.merge(seen: ''))).to eq(described_class::STALE)
+      expect(refusal(cooks.merge(seen: ' '))).to eq(described_class::STALE)
+    end
+
+    # The code the form had when it was opened, before another admin's
+    # correction changed Zed's cost.
+    it 'refuses a form opened before the dinner changed' do
+      seen = described_class::Rows.of(meal).seen
+      correct_zed_to('25')
+
+      expect(refusal(cooks.merge(seen: seen, new_eater_ids: [other.id.to_s]))).to eq(described_class::STALE)
+    end
+
+    # Another admin's correction is saved after this form read the dinner
+    # and before its edits run under the meal's lock.
+    it 'refuses again under the lock when the dinner changed after the form was read' do
+      form = opened(cooks.merge(new_eater_ids: [other.id.to_s]))
+      correct_zed_to('25')
+
+      expect { MealCorrecting.preview(meal.reload) { |edits| form.apply(edits) } }
+        .to raise_error(described_class::Invalid, described_class::STALE)
+      expect(meal.bills.find_by(resident: zed).amount).to eq(25)
+    end
+
+    # Each thing the page shows of a row changes the code: a cook's cost
+    # and No cost, an eater's price, which eaters and cooks there are, and
+    # each guest. It reads the rows again after each write, which is the
+    # repeat prosopite would refuse.
+    it 'changes with each thing the page shows of the rows', prosopite: false do
+      codes = [described_class::Rows.of(meal).seen]
+      writes = [
+        -> { Bill.where(resident: zed).update_all(amount: BigDecimal('25')) },
+        -> { Bill.where(resident: amy).update_all(no_cost: false) },
+        -> { MealResident.where(resident: eater).update_all(multiplier: Multiplier::HALF) },
+        -> { MealResident.where(resident: eater).update_all(resident_id: other.id) },
+        -> { Bill.where(resident: amy).delete_all },
+        lambda do
+          Guest.insert_all!([{ meal_id: meal.id, resident_id: eater.id, multiplier: Multiplier::FULL }])
+        end
+      ]
+      # Each write is a repair from psql, rolled back after its code is read.
+      writes.each do |write|
+        with_repair_bypass do
+          write.call
+          codes << described_class::Rows.of(meal).seen
+          raise ActiveRecord::Rollback
+        end
+      end
+
+      expect(codes.uniq.size).to eq(writes.size + 1)
+    end
+
+    it 'is the same for a form opened after the dinner changed, which reads as usual' do
+      correct_zed_to('25')
+
+      expect(edits(cooks(zed: { amount: '20' })).sole).to include('from' => { 'amount' => '25.0', 'no_cost' => false },
+                                                                  'to' => { 'amount' => '20.0', 'no_cost' => false })
+    end
   end
 
   # Before ADR 0011 rule 3, a dinner whose cook had not entered a cost was
@@ -207,7 +271,7 @@ RSpec.describe MealCorrectionForm do
       create(:meal_resident, meal: meal, resident: eater, community: community)
     end
     settle_as_before_rule_3!(cutoff: latest - 2)
-    form = described_class.new(dinner.reload, { 'cooks' => { blank.id.to_s => { 'amount' => '', 'no_cost' => '1' } } })
+    form = opened({ 'cooks' => { blank.id.to_s => { 'amount' => '', 'no_cost' => '1' } } }, dinner: dinner.reload)
 
     expect(MealCorrecting.preview(dinner) { |edits| form.apply(edits) }.edits).to eq(
       [{ 'what' => 'cost', 'resident_id' => blank.id, 'from' => { 'amount' => '0.0', 'no_cost' => false },
@@ -239,7 +303,7 @@ RSpec.describe MealCorrectionForm do
     def read_newest_first(values)
       newest_first = ->(original, *args) { original.call(*args).order(id: :desc) }
       [Bill, MealResident, Guest].each { |model| allow(model).to receive(:where).and_wrap_original(&newest_first) }
-      form = described_class.new(meal, values.deep_stringify_keys)
+      form = opened(values)
       [Bill, MealResident, Guest].each { |model| allow(model).to receive(:where).and_call_original }
       MealCorrecting.preview(meal) { |edits| form.apply(edits) }.edits
     end

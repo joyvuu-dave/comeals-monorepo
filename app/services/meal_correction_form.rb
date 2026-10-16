@@ -13,10 +13,19 @@
 # admin changed. Nothing is written here: apply runs the edits, inside
 # MealCorrecting's preview or save.
 #
-# The rows are read in one order, so a preview and the save that follows
-# it make the same edits in the same order, and their fingerprints agree:
-# by name, which is unique (index_residents_on_lower_name), and a host's
-# guests in the order they were added.
+# The rows are read in one order (Rows.of), so a preview and the save
+# that follows it make the same edits in the same order, and their
+# fingerprints agree: by name, which is unique
+# (index_residents_on_lower_name), and a host's guests in the order they
+# were added.
+#
+# Because the form sends every row, a row the admin did not touch still
+# sends what the page showed. If someone saved a correction after this
+# page was opened, that row would write the old value back. So the page
+# carries a code made from the rows it shows (Rows#seen, in the hidden
+# field correction[seen]), and the form is refused when the dinner's
+# rows now make another code: once when the form is read, and again
+# under the meal's lock, just before the edits run.
 class MealCorrectionForm
   extend T::Sig
 
@@ -32,6 +41,55 @@ class MealCorrectionForm
   # took it off after the form was opened.
   CHANGED = T.let('This dinner changed after the form was opened. Open the form again.', String)
 
+  # The dinner's rows are not the ones the page showed when it was
+  # opened, or the page sent no code for them.
+  STALE = T.let('Someone changed this dinner after you opened the form. Nothing was saved. ' \
+                'Reload the page and enter your correction again.', String)
+
+  # The dinner's rows the form shows, read from the database, in the
+  # order the form shows them. The page and this reader both use them.
+  class Rows < T::Struct
+    extend T::Sig
+
+    const :bills, T::Array[Bill]
+    const :eaters, T::Array[MealResident]
+    const :guests, T::Array[Guest]
+
+    # Read from the database, not from the meal's loaded associations: a
+    # preview adds rows and rolls them back, and a loaded association can
+    # still hold what it added.
+    sig { params(meal: Meal).returns(Rows) }
+    def self.of(meal)
+      new(
+        bills: Bill.where(meal_id: meal.id).includes(:resident).sort_by { |bill| name_of(bill.resident) },
+        eaters: MealResident.where(meal_id: meal.id).includes(resident: :community)
+                            .sort_by { |row| name_of(row.resident) },
+        guests: Guest.where(meal_id: meal.id).includes(:resident)
+                     .sort_by { |guest| [name_of(guest.resident), guest.id] }
+      )
+    end
+
+    # A row's resident, who is always there (a NOT NULL foreign key).
+    sig { params(resident: T.nilable(Resident)).returns(String) }
+    def self.name_of(resident)
+      T.must(resident).name.to_s
+    end
+
+    # A code made from what the form shows of each row: each cook and
+    # their cost, each eater and their price, and each guest, its host
+    # and its price. The price for an eater's age is left out: it comes
+    # from the resident, not from the dinner, and the preview shows the
+    # price a change to it would set.
+    sig { returns(String) }
+    def seen
+      Digest::SHA256.hexdigest(
+        [bills.map { |bill| [bill.resident_id, T.must(bill.amount).to_s('F'), bill.no_cost] },
+         eaters.map { |row| [row.resident_id, row.multiplier] },
+         guests.map { |guest| [guest.id, guest.resident_id, guest.multiplier] }].to_json
+      )
+    end
+  end
+
   Values = T.type_alias { T::Hash[String, T.untyped] }
   Step = T.type_alias { T.proc.params(edits: MealCorrecting::Edits).void }
 
@@ -42,15 +100,16 @@ class MealCorrectionForm
 
   sig { params(meal: Meal, values: Values).void }
   def initialize(meal, values)
+    @meal = meal
     @values = values
     @reason = T.let(values['reason'].to_s.strip, String)
+    @seen = T.let(values['seen'].to_s, String)
     @steps = T.let([], T::Array[Step])
-    # The dinner's rows, read once from the database, not from the meal's
-    # loaded associations: a preview adds rows and rolls them back, and a
-    # loaded association can still hold what it added.
-    @bills = T.let(Bill.where(meal_id: meal.id).includes(:resident).to_a, T::Array[Bill])
-    @eaters = T.let(MealResident.where(meal_id: meal.id).includes(:resident).to_a, T::Array[MealResident])
-    @guests = T.let(Guest.where(meal_id: meal.id).includes(:resident).to_a, T::Array[Guest])
+    rows = Rows.of(meal)
+    refuse_unless_seen(rows)
+    @bills = T.let(rows.bills, T::Array[Bill])
+    @eaters = T.let(rows.eaters, T::Array[MealResident])
+    @guests = T.let(rows.guests, T::Array[Guest])
     read_cooks
     read_new_cook
     read_eaters
@@ -59,22 +118,32 @@ class MealCorrectionForm
     read_new_guest
   end
 
-  # Make the edits the form asked for, in the order they were read.
+  # Make the edits the form asked for, in the order they were read. This
+  # runs under the meal's lock (MealCorrecting), so the rows are checked
+  # again here: a correction saved after the form was read and before the
+  # lock was taken refuses this one.
   sig { params(edits: MealCorrecting::Edits).void }
   def apply(edits)
+    refuse_unless_seen(Rows.of(@meal))
     @steps.each { |step| step.call(edits) }
   end
 
   private
+
+  # A blank or missing code never matches, so a page opened before this
+  # rule cannot skip it.
+  sig { params(rows: Rows).void }
+  def refuse_unless_seen(rows)
+    raise Invalid, STALE unless rows.seen == @seen
+  end
 
   # Each cook's row: Remove, or a cost (an amount or No cost). A row
   # whose cost is the one the cook has now changes nothing.
   sig { void }
   def read_cooks
     sent = section('cooks')
-    bills = @bills.sort_by { |bill| name_of(bill.resident) }
-    refuse_unknown(sent, bills.map(&:resident_id))
-    bills.each do |bill|
+    refuse_unknown(sent, @bills.map(&:resident_id))
+    @bills.each do |bill|
       row = sent[bill.resident_id.to_s]
       next unless row.is_a?(Hash)
 
@@ -110,9 +179,8 @@ class MealCorrectionForm
   sig { void }
   def read_eaters
     sent = section('eaters')
-    rows = @eaters.sort_by { |row| name_of(row.resident) }
-    refuse_unknown(sent, rows.map(&:resident_id))
-    rows.each do |row|
+    refuse_unknown(sent, @eaters.map(&:resident_id))
+    @eaters.each do |row|
       choice = sent.fetch(row.resident_id.to_s, 'keep').to_s
       raise Invalid, "The form sent \"#{choice}\" for an eater. #{CHANGED}" unless EATER_CHOICES.include?(choice)
 
@@ -139,9 +207,8 @@ class MealCorrectionForm
   sig { void }
   def read_guests
     sent = section('guests')
-    guests = @guests.sort_by { |guest| [name_of(guest.resident), guest.id] }
-    refuse_unknown(sent, guests.map(&:id))
-    guests.each do |guest|
+    refuse_unknown(sent, @guests.map(&:id))
+    @guests.each do |guest|
       row = sent[guest.id.to_s]
       @steps << ->(edits) { edits.remove_guest(guest) } if row.is_a?(Hash) && checked?(row['remove'])
     end
@@ -197,7 +264,7 @@ class MealCorrectionForm
   def residents(raw)
     texts = raw.map(&:to_s).reject(&:empty?).uniq
     ids = texts.map { |text| T.let(Integer(text, 10, exception: false), T.nilable(Integer)) }
-    found = Resident.where(id: ids).sort_by { |resident| name_of(resident) }
+    found = Resident.where(id: ids).sort_by { |resident| Rows.name_of(resident) }
     raise Invalid, "The form named a resident who does not exist. #{CHANGED}" if found.size != texts.size
 
     found
@@ -219,11 +286,5 @@ class MealCorrectionForm
   sig { params(value: T.untyped).returns(T::Boolean) }
   def checked?(value)
     value.to_s == '1'
-  end
-
-  # A row's resident, who is always there (a NOT NULL foreign key).
-  sig { params(resident: T.nilable(Resident)).returns(String) }
-  def name_of(resident)
-    T.must(resident).name.to_s
   end
 end
