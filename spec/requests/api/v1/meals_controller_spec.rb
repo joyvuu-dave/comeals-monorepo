@@ -1034,6 +1034,7 @@ RSpec.describe 'Meals API' do
       }
 
       expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq('message' => 'Meal closed value updated.')
       meal.reload
       expect(meal.closed).to be(true)
       expect(meal.closed_at).to be_present

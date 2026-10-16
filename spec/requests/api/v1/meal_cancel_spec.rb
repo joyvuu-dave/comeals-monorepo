@@ -92,6 +92,23 @@ RSpec.describe 'Cancelling a dinner through the API' do
     expect(meal.reload.cancelled_at).to be_nil
   end
 
+  # The settled check runs before the value is read, so a settled dinner
+  # gets the settled words whatever was sent.
+  it 'answers a settled dinner with the settled words before it reads the value' do
+    meal.update!(date: Reconciliation.latest_cutoff(community.today))
+    create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('10'))
+    create(:meal_resident, meal: meal, resident: resident, community: community)
+    settle!
+
+    cancelled('maybe')
+    expect(response).to have_http_status(:bad_request)
+    expect(message).to eq('Change not permitted. Meal has already been reconciled.')
+
+    patch "/api/v1/meals/#{meal.id}/closed", params: { token: token, closed: 'maybe' }
+    expect(response).to have_http_status(:bad_request)
+    expect(message).to eq('Change not permitted. Meal has already been reconciled.')
+  end
+
   describe 'while the dinner is cancelled' do
     before do
       create(:meal_resident, meal: meal, resident: cook, community: community)
