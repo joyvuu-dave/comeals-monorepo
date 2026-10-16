@@ -45,6 +45,25 @@ RSpec.describe CollectionList do
     expect(moved_out(list)).to be_empty
   end
 
+  # RED: a finding from the mutant run of 2026-10-16, not fixed here.
+  # 'ß' is a small letter with no capital of its own: a person reads
+  # 'Straße' as 'Strasse', and the database sorts 'Jo Straße' before
+  # 'Jo Strauss'. downcase leaves 'ß' as it is, a character after every
+  # plain letter, so this list puts 'Jo Strauss' first. Unicode case
+  # folding (downcase(:fold)) turns 'ß' into 'ss' and agrees with the
+  # database.
+  it 'sorts a name with ß the way a person reads it, and the way the database sorts it' do
+    dinner(eater)
+    create(:resident, community: community, unit: oak, name: 'Jo Strauss')
+    create(:resident, community: community, unit: oak, name: 'Jo Straße')
+
+    list = described_class.new(settle!(cutoff: latest))
+
+    names = list.units.find { |unit| unit.name == 'Oak' }.people.map(&:name)
+    expect(Resident.where(unit: oak).order(:name).pluck(:name)).to eq(['Dana Diner', 'Jo Straße', 'Jo Strauss'])
+    expect(names).to eq(['Dana Diner', 'Jo Straße', 'Jo Strauss'])
+  end
+
   it 'lists the people who had moved out by the day of the settlement on their own, outside every unit' do
     dinner(eater, gone)
     gone.update!(active: false)
