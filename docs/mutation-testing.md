@@ -2872,6 +2872,7 @@ pieces of four workers.
 | --------------------------------------- | -------- | --------- | ------ | ----- | -------- | ------ |
 | 1, 38925086367, main as of 14320264     | 34       | 2,195     | 1,999  | 196   | 0        | 28 min |
 | 2, 38930823322, after the answers below | 34       | 2,162     | 2,140  | 22    | 0        | 27 min |
+| 3, 38934632445, the final branch        | 34       | 2,162     | 2,140  | 22    | 0        | 25 min |
 
 Run 1's 196, by kind:
 
@@ -2922,7 +2923,7 @@ Run 1's 196, by kind:
   - `NotifyCooksJob.cook_rows`: `.select(:id)` (2), and
     `SendMissedSettlementMailJob#run`: two `.to_a` (4). The same calls
     were removed on 2026-10-09; the job's rename put them back.
-- Noise (20), alive in run 2 too:
+- Noise (20), alive in runs 2 and 3 too:
   - `nil` for `''` inside a string (4), in `settlement_mark_words` and
     `MailDeliveryFailure.report`, as on 2026-09-27.
   - A record for its id in a `where` (3), in `mark!`,
@@ -2942,12 +2943,13 @@ Run 1's 196, by kind:
   - `[date, correction]` for `[date, correction.id]` (1): a record
     compares by its id.
 
-Run 2 had the 20 above and two more, both in `corrections_of`: `[date]`
-and `[date, nil]` for `[date, correction.id]`. The example with eight
-corrections of one dinner kills them on macOS, where Ruby's sort mixes
-up eight equal dates (checked with a local run of the method: 3 alive,
-the three noise mutations of this method above). On GitHub's Linux machines the sort kept all eight in
-the order the database gave them, which is the order they were made,
-so the tie on the id cannot be seen there.
+Runs 2 and 3 had the 20 above and two more, both in `corrections_of`:
+`[date]` and `[date, nil]` for `[date, correction.id]`. The example
+with eight corrections of one dinner kills them on macOS, where Ruby's
+sort mixes up eight equal dates (checked with a local run of the
+method: 3 alive, the three noise mutations of this method above). On
+GitHub's Linux machines the sort kept all eight in the order the
+database gave them, which is the order they were made, so the tie on
+the id cannot be seen there.
 
-No mutation timed out in either run.
+No mutation timed out in any of the three runs.
