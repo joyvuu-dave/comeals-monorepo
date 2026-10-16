@@ -61,6 +61,9 @@ module ClosedMealAttendanceFreeze
   def meal_has_open_spots
     # Scenario: Admin attendance correction — the freeze does not apply
     return if admin_correction
+    # No meal: belongs_to refuses the row in words ("Meal must exist"),
+    # and there are no spots to count.
+    return if meal.nil?
 
     message = refusal_to_join(T.must(meal))
     errors.add(:base, message) if message
@@ -77,6 +80,8 @@ module ClosedMealAttendanceFreeze
     return unless meal_id_changed?
     # Scenario: Admin attendance correction — the freeze does not apply
     return if admin_correction
+    # Moved to no meal: belongs_to refuses it in words.
+    return if meal.nil?
 
     old_meal = Meal.find(T.must(meal_id_in_database))
     return errors.add(:base, 'Meal has been closed.') unless can_leave?(old_meal)

@@ -28,4 +28,16 @@ RSpec.describe ClosedMealAttendanceFreeze do
       expect(row.errors.full_messages).to include('Meal must exist')
     end
   end
+
+  it 'lets belongs_to refuse moving a sign-up or a guest to no meal, in words' do
+    meal = create(:meal, community: community)
+    sign_up = create(:meal_resident, meal: meal, resident: resident, community: community)
+    guest = create(:guest, meal: meal, resident: resident)
+
+    [sign_up, guest].each do |row|
+      row.meal = nil
+      expect(row).not_to be_valid
+      expect(row.errors.full_messages).to include('Meal must exist')
+    end
+  end
 end
