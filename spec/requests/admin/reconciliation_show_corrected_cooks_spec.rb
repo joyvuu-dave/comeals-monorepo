@@ -8,12 +8,13 @@ require 'rails_helper'
 # the stored line items, so it stays as settled. Cooks comes from the
 # dinner's bills as they are now.
 #
-# Bug hunt 2026-10-16 (money). A correction moved a $30 cost from the cook
-# it was typed under (Casey) to the cook who really paid (Robin). The old
-# settlement credited Casey $30, and its own balances panel says so, but
-# its Meals panel now names Robin as the cook. Reconciliation.settled_cooks
-# already answers "who cooked this dinner, as the settlement settled it";
-# the panel does not use it.
+# Bug hunt 2026-10-16 (money) found the Cooks column reading the bills.
+# A correction moved a $30 cost from the cook it was typed under (Casey)
+# to the cook who really paid (Robin). The old settlement credited Casey
+# $30, and its own balances panel says so, but its Meals panel named
+# Robin. The column now reads the cooks each dinner had when the
+# settlement settled it (Reconciliation#settled_cooks_by_meal), and shows
+# none for a cancelled dinner, which nobody cooked (ADR 0011 rule 11).
 RSpec.describe 'Admin Reconciliation Show, a dinner corrected later' do
   let(:community) { create(:community) }
   let(:admin_user) { create(:admin_user, community: community, superuser: true) }
@@ -54,5 +55,21 @@ RSpec.describe 'Admin Reconciliation Show, a dinner corrected later' do
     expect(panel_rows('Settlement Balances')).to eq([['Casey Cook', 'Elm', 'is owed $30.00'],
                                                      ['Dana Diner', 'Elm', 'owes $30.00']])
     expect(panel_rows('Meals')).to eq([[meal.date.to_s, 'Casey Cook', '$30.00']])
+  end
+
+  it 'shows no cook for a cancelled dinner, whoever had signed up to cook it' do
+    unit = create(:unit, community: community, name: 'Elm')
+    casey = create(:resident, community: community, unit: unit, name: 'Casey Cook')
+    dana = create(:resident, community: community, unit: unit, name: 'Dana Diner')
+    meal = create(:meal, community: community, date: latest - 5)
+    create(:bill, meal: meal, resident: casey, community: community, amount: BigDecimal('0'))
+    create(:meal_resident, meal: meal, resident: dana, community: community)
+    meal.cancel!
+    reconciliation = settle!(cutoff: latest - 5)
+
+    get "/reconciliations/#{reconciliation.id}", params: { token: token }, headers: { 'Host' => 'admin.example.com' }
+
+    expect(response).to have_http_status(:ok)
+    expect(panel_rows('Meals')).to eq([[meal.date.to_s, '—', '']])
   end
 end

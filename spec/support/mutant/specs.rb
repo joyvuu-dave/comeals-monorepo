@@ -96,6 +96,8 @@ MUTANT_SPEC_ROWS = {
   # the mailer.
   'spec/tasks/reconciliations_email_spec.rb' => %w[NotifyCooksJob PacedDelivery MailDelivery],
   'spec/requests/admin/reconciliation_show_spec.rb' => %w[Reconciliation BalanceDisplayHelper MealCostSummary],
+  # The only spec of the cooks a settlement's page shows for each dinner.
+  'spec/requests/admin/reconciliation_show_corrected_cooks_spec.rb' => %w[Reconciliation],
   'spec/requests/admin/resident_statement_spec.rb' =>
     %w[Reconciliation BalanceDisplayHelper SettlementLinesTable MealCostSummary],
 

@@ -240,12 +240,16 @@ ActiveAdmin.register Reconciliation do
       # Read-only record of the meals this settlement swept. Corrections are
       # never made by editing the set — they settle as new entries in the next
       # reconciliation.
-      settled_meals = reconciliation.meals.includes(:meal_charges, bills: :resident).order(:date)
+      settled_meals = reconciliation.meals.includes(:meal_charges, :bills).order(:date)
+      # The cooks each dinner had when this settlement settled it, not its
+      # bills now: a later correction can add or remove a cook (ADR 0011
+      # rule 6). A cancelled dinner has none (rule 11).
+      cooks_by_meal = reconciliation.settled_cooks_by_meal
 
       table_for settled_meals do
         column('Date') { |m| link_to m.date.to_s, admin_meal_path(m) }
         column('Cooks') do |m|
-          cooks = m.bills.map(&:resident).uniq.sort_by(&:name)
+          cooks = cooks_by_meal.fetch(m.id, [])
           cooks.empty? ? '—' : safe_join(cooks.map { |c| link_to(c.name, admin_resident_path(c)) }, ', ')
         end
         # From the stored charges — what this settlement actually used.

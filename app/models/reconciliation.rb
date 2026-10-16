@@ -100,8 +100,9 @@ class Reconciliation < ApplicationRecord
     meals.count
   end
 
-  # The people who cooked a dinner in these settlements (a relation), as
-  # each settlement settled it: rows of (reconciliation_id, resident_id).
+  # The people who cooked each dinner in these settlements (a relation),
+  # as each settlement settled it: rows of (reconciliation_id, meal_id,
+  # resident_id).
   #
   # A dinner's bills now are not always the ones its settlement settled.
   # A correction adds, removes or changes a cook's bill later (ADR 0011
@@ -115,21 +116,48 @@ class Reconciliation < ApplicationRecord
   # up to (ADR 0011 rule 11). It cannot be corrected (MealCorrecting), so
   # no correction names one of its cooks either.
   sig { params(reconciliations: ActiveRecord::Relation).returns(Arel::Nodes::Union) }
-  def self.settled_cooks(reconciliations)
+  def self.settled_dinner_cooks(reconciliations)
     named = MealCorrection.cost_edits.where('meal_corrections.meal_id = bills.meal_id')
                           .where(MealCorrection::COOK_ID.eq(Bill.arel_table[:resident_id]))
     unnamed = Bill.joins(:meal).where(meals: { reconciliation_id: reconciliations.select(:id), cancelled_at: nil })
                   .where(named.arel.exists.not)
-                  .select('meals.reconciliation_id', 'bills.resident_id')
+                  .select('meals.reconciliation_id', 'bills.meal_id', 'bills.resident_id')
     first_edits = MealCorrection
                   .cost_edits.joins(:meal).where(meals: { reconciliation_id: reconciliations.select(:id) })
                   .select(Arel.sql('DISTINCT ON (meal_corrections.meal_id, cook_id) meals.reconciliation_id'),
-                          MealCorrection::COOK_ID.as('cook_id'), MealCorrection::COST_BEFORE.as('cost_before'))
+                          'meal_corrections.meal_id', MealCorrection::COOK_ID.as('cook_id'),
+                          MealCorrection::COST_BEFORE.as('cost_before'))
                   .order(Arel.sql('meal_corrections.meal_id, cook_id, meal_corrections.id, cost_edit.place'))
     were_cooks = MealCorrection.from(first_edits, :first_edits)
                                .where("jsonb_typeof(first_edits.cost_before) = 'object'")
-                               .select('first_edits.reconciliation_id', 'first_edits.cook_id')
+                               .select('first_edits.reconciliation_id', 'first_edits.meal_id', 'first_edits.cook_id')
     Arel::Nodes::Union.new(unnamed.arel, were_cooks.arel)
+  end
+
+  # The people who cooked a dinner in these settlements (a relation), as
+  # each settlement settled it: rows of (reconciliation_id, resident_id),
+  # one per cook and settlement. See settled_dinner_cooks.
+  sig { params(reconciliations: ActiveRecord::Relation).returns(Arel::SelectManager) }
+  def self.settled_cooks(reconciliations)
+    dinner_cooks = Arel::Nodes::TableAlias.new(settled_dinner_cooks(reconciliations), 'dinner_cooks')
+    T.let(Arel::SelectManager.new(dinner_cooks)
+                             .project(Arel.sql('dinner_cooks.reconciliation_id'), Arel.sql('dinner_cooks.resident_id'))
+                             .distinct, Arel::SelectManager)
+  end
+
+  # The cooks of each dinner of this settlement, as it settled it
+  # (settled_dinner_cooks), by name: { meal_id => residents }. A dinner
+  # with no cook, such as a cancelled one, has no entry. The settlement's
+  # page shows these, not the dinner's bills now.
+  sig { returns(T::Hash[Integer, T::Array[Resident]]) }
+  def settled_cooks_by_meal
+    rows = Arel::Nodes::TableAlias.new(self.class.settled_dinner_cooks(self.class.where(id: id)), 'dinner_cooks')
+    pairs = T.let(Resident.from(rows).pluck('dinner_cooks.meal_id', 'dinner_cooks.resident_id'),
+                  T::Array[[Integer, Integer]])
+    residents = Resident.where(id: pairs.map(&:last)).index_by { |resident| T.must(resident.id) }
+    pairs.group_by(&:first).transform_values do |list|
+      list.map { |(_, resident_id)| residents.fetch(resident_id) }.sort_by { |resident| resident.name.to_s }
+    end
   end
 
   # Whether this resident cooked a dinner in this settlement, as it
