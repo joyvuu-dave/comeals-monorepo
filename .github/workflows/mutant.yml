@@ -31,8 +31,12 @@ on:
         type: number
         default: 4
 
+# One run at a time on each branch. A group holds one running run and
+# one waiting run, and a third run cancels the one that is waiting, so
+# one group for every branch would cancel runs started from several
+# branches at once.
 concurrency:
-  group: mutant
+  group: mutant-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
