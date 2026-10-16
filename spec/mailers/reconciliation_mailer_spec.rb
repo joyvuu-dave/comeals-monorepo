@@ -266,6 +266,49 @@ RSpec.describe ReconciliationMailer do
         expect(links_in(html_body(two)).map(&:last)).to eq([meal_url(earlier), meal_url(corrected)])
       end
 
+      # The dinner entered first is the later one, so the order of entry
+      # is not the order of the dates.
+      it 'lists the dinners by date, not in the order they were entered' do
+        later = dinner(Date.new(2026, 8, 27))
+        sooner = dinner(Date.new(2026, 8, 26))
+        settle!(cutoff: Date.new(2026, 8, 27))
+        [sooner, later].each do |meal|
+          correct(meal, 'Typed $30 for $20') { |edits| edits.cost(resident, amount: BigDecimal('20'), no_cost: false) }
+        end
+        mail = described_class.reconciliation_notify_email(resident, settle!(cutoff: Date.new(2026, 9, 3)))
+
+        expect(text_lines(mail).grep(/^Aug/).map { |line| line[/\AAug \d+/] }).to eq(['Aug 26', 'Aug 27'])
+      end
+
+      # Eight corrections of one dinner. Ruby's sort happens to keep up to
+      # seven equal dates in the order it was given them, which is the
+      # order they were made, so fewer would not show that order is kept.
+      it 'lists the corrections of one dinner in the order they were made' do
+        amounts = (21..28).to_a
+        amounts.each do |amount|
+          correct(corrected, "Fix #{amount}") do |edits|
+            edits.cost(resident, amount: BigDecimal(amount), no_cost: false)
+          end
+        end
+        mail = described_class.reconciliation_notify_email(resident, settle!(cutoff: Date.new(2026, 9, 3)))
+
+        expect(text_lines(mail).grep(/^Aug 20/).map { |line| line[/Reason: (.*)\z/, 1] })
+          .to eq(amounts.map { |amount| "Fix #{amount}" })
+      end
+
+      it 'puts a space between two changes to the cook in one correction' do
+        correct(corrected, 'Two fixes') do |edits|
+          edits.cost(resident, amount: BigDecimal('25'), no_cost: false)
+          edits.cost(resident, amount: BigDecimal('20'), no_cost: false)
+        end
+        mail = described_class.reconciliation_notify_email(resident, settle!(cutoff: Date.new(2026, 9, 3)))
+
+        expect(text_lines(mail).grep(/^Aug 20/)).to eq(
+          ["Aug 20, 2026: Changed Sarah Chen's cost from $30.00 to $25.00. " \
+           "Changed Sarah Chen's cost from $25.00 to $20.00. Reason: Two fixes"]
+        )
+      end
+
       it 'says a settlement that settles no new meal carries only corrections, in both parts' do
         correct(corrected, 'Typed $30 for $20') do |edits|
           edits.cost(resident, amount: BigDecimal('20'), no_cost: false)
