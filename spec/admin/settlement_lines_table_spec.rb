@@ -11,4 +11,10 @@ RSpec.describe 'SettlementLinesTable' do
     expect { component.build([], first_column: :cook) }
       .to raise_error(ArgumentError, 'first_column must be :resident or :meal, got :cook')
   end
+
+  it 'refuses a table with no first column, and names the missing option' do
+    component = SettlementLinesTable.new(Arbre::Context.new)
+
+    expect { component.build([]) }.to raise_error(KeyError, 'key not found: :first_column')
+  end
 end

@@ -30,10 +30,14 @@ RSpec.describe 'Admin settlement statement' do
     settle!
   end
 
+  def panel(title)
+    response.parsed_body.css('.panel').find { |node| node.at_css('h3')&.text&.strip == title }
+  end
+
   # The cells of the line items table in the panel with this title, one
   # array per row, in the order of the given column headers.
   def line_rows(title, columns)
-    panel = response.parsed_body.css('.panel').find { |node| node.at_css('h3')&.text&.strip == title }
+    panel = panel(title)
     headers = panel.css('thead th').map { |th| th.text.strip }
     panel.css('tbody tr').map do |tr|
       headers.zip(tr.css('td').map { |td| td.text.strip }).to_h.values_at(*columns)
@@ -154,6 +158,40 @@ RSpec.describe 'Admin settlement statement' do
         .to contain_exactly(['Cook', 'Cooked', 'credited $18.00', '$60.00'],
                             ['Cook', 'Attended', 'charged $9.00', ''],
                             ['Eater', 'Attended', 'charged $9.00', ''])
+    end
+
+    # Every column of the table, read as the page shows it: the dinner
+    # with a link to it, what the line is, the price the person paid at,
+    # and the amount in words. The meal page names the person instead.
+    it 'shows each line with its dinner, what it is, its price and its amount, and the meal page names the person' do
+      child = create(:resident, community: community, unit: unit, multiplier: 1, name: 'Child')
+      meal = create(:meal, community: community, date: latest)
+      create(:bill, meal: meal, resident: cook, community: community, amount: BigDecimal('15'))
+      create(:meal_resident, meal: meal, resident: cook, community: community)
+      create(:meal_resident, meal: meal, resident: child, community: community)
+      create(:guest, meal: meal, resident: child, multiplier: 2)
+      settle!
+
+      get "/residents/#{child.id}"
+
+      expect(panel('Settlement statement').css('thead th').map { |th| th.text.strip })
+        .to eq(%w[Meal What Category Amount])
+      expect(line_rows('Settlement statement', %w[Meal What Category Amount]))
+        .to contain_exactly([meal.date.to_s, 'Attended', 'Child', 'charged $3.00'],
+                            [meal.date.to_s, 'Guest', 'Adult', 'charged $6.00'])
+      expect(panel('Settlement statement').css('tbody td.col-meal a').pluck('href').uniq).to eq(["/meals/#{meal.id}"])
+
+      get "/meals/#{meal.id}"
+
+      items = panel('Settlement line items')
+      expect(items.css('thead th').map { |th| th.text.strip }).to eq(%w[Resident What Category Amount])
+      expect(line_rows('Settlement line items', %w[Resident What Category Amount]))
+        .to contain_exactly(['Cook', 'Cooked', '', 'credited $15.00'], ['Cook', 'Attended', 'Adult', 'charged $6.00'],
+                            ['Child', 'Attended', 'Child', 'charged $3.00'],
+                            ['Child', 'Guest', 'Adult', 'charged $6.00'])
+      expect(items.css('tbody td.col-resident a').pluck('href'))
+        .to contain_exactly("/residents/#{cook.id}", "/residents/#{cook.id}", "/residents/#{child.id}",
+                            "/residents/#{child.id}")
     end
 
     it 'shows nothing but a plain sentence for a resident with no settled history' do
