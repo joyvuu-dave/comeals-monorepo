@@ -4292,3 +4292,85 @@ survived):
 - `ResidentNameShortener#short` (3): `!n.eql?(name)` for `n != name` on
   two Strings, and `last.at(0)` for `last[0]` in two places.
   ActiveSupport adds `String#at`, which is `[]`.
+
+### 2026-10-17, the API helpers, the zone change and the calendar feeds
+
+Run on the 18 subjects that had a survivor in the full run 39014862807
+(on af232aff) that no earlier section answered: `ApiController` (the
+token, the zone around a request, the start and end of an update, and
+the check of the stored times from #173), `ZoneChange`, `MealIcalFeed`,
+`LiveUpdate.calendar_range`, `StorableTimeValidator`, two
+`CalendarSerializer` queries and five API actions. The full run had 43
+survivors in them. Two runs on GitHub, four pieces of four workers.
+
+| Run                                                        | Mutations | Killed | Alive | Timeouts | Time   |
+| ---------------------------------------------------------- | --------- | ------ | ----- | -------- | ------ |
+| 1, this branch (GitHub run 39034373031)                    | 1,156     | 1,107  | 49    | 0        | 24 min |
+| 2, `#stored_times_if_shown` alone (GitHub run 39036415791) | 105       | 105    | 0     | 0        | 12 min |
+
+The 43, by kind.
+
+Missing examples (2), each with an example now:
+
+- `.in_time_zone` dropped on the stored start or end in
+  `ApiController#stored_times_if_shown` (2). Rails keeps a time column's
+  value in the zone that was current when the column was first read. A
+  request reads its record inside the community's zone, so no request
+  showed a difference. The new example in `events_controller_spec.rb`
+  reads an event in the app's zone, Los Angeles, and runs the check in
+  New York, where 22:00 to 23:00 shows as 01:00 to 02:00 on the next
+  day, on an ordinary day and on both daylight saving days. It expects
+  the stored times kept. Each mutation, made by hand, fails it.
+
+Redundant code, removed (8):
+
+- The memo in `ApiController#bearer_token_from_header` (7): the guard
+  removed, never true, written as `instance_variable_defined?`, or its
+  `return` dropped. Reading the header twice gives the same token.
+- `.present?` on that token in `#set_community_timezone` (1): the
+  token is nil or text with no spaces.
+
+Changes no caller can see (33):
+
+- `.fetch` for `[]` where the key is always there (4): `:date` from the
+  route in `CommunitiesController#calendar`, `:start` inside
+  `if params[:start]` in `#birthdays`, a key in `sent_fields` after
+  `params.key?`, and `:description` in `EventsController#update` after
+  `fields.key?`.
+- `instance_of?` for `is_a?` (5): on a param in `token_param` and
+  `MealsController#update_description`, which Rack and the JSON parser
+  give as a plain String; on the parser's answer in `updated_start_end`,
+  a Hash or one of two message constants; and on the value in
+  `StorableTimeValidator`, a Date from a date column or a TimeWithZone,
+  never a DateTime.
+- `nil` for `{}` in `updated_start_end` and `stored_times_if_shown`,
+  and the `if` turned to an `unless` with no `else` (3). Both callers
+  pass the answer as `**times`, and Ruby 3.4 and later read `**nil` as
+  no keywords.
+- `!eql?` and `!equal?` for `!=` in `ZoneChange` (3): a Date's `eql?`
+  is `==`, and two UTC offsets are small Integers, which are the same
+  object when equal.
+- The two `T.let(nil, ...)` lines in `ZoneChange#initialize` (2): Ruby
+  reads an unset instance variable as nil. The lines give Sorbet the
+  type of each memo.
+- `<` for `<=` in `LiveUpdate.calendar_range` (1): the two differ only
+  when `last` is the 1st of a month, and the line after the loop adds
+  `last` to the same Set.
+- The day in `MealIcalFeed#initialize` (4): May 1, June 2, July 1, or
+  June 1 written as `DateTime.new(2017, 6)`. For all 15 zones in
+  `Community::SUPPORTED_TIMEZONES` the VTIMEZONE block is the same
+  text, since each day is between the same two switches of 2017.
+- The preloads in `CalendarSerializer#bills_in_range` (8) and
+  `#guest_room_reservations_in_range` (4), as on 2026-10-16:
+  goldiloader loads the same rows, and a `where` on `meals` with
+  `includes(:meal)` joins the table anyway.
+
+Run 1's 49 alive (on the branch that had also removed the two
+`.in_time_zone` calls) are the 33 above, and 16 the 2026-10-16 sections
+answered, in subjects run here whole: the grid arithmetic (7) and the
+`stale?` call (6) in `CommunitiesController#calendar`, `instance_of?`
+on the two parser answers in `EventsController#update` (2), and
+`.presence` dropped on the zone in `set_community_timezone` (1).
+
+Run 2 is on the branch with `.in_time_zone` put back and the new
+example. Every mutation of `#stored_times_if_shown` is killed.
