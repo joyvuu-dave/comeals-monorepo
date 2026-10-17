@@ -3515,8 +3515,13 @@ Noise, left (69 of the 124 before; 70 in run 5 with the release default):
 - `size` or `length` for `count` on a relation that is not loaded
   (16): `#averaged_meal_count` (2), the four counts of
   `#meals_left_out_of_averages` (8), and the three counts of
-  `#unreconciled_ave_number_of_attendees` (6). The same number, read
-  another way.
+  `#unreconciled_ave_number_of_attendees` (6). This entry called all 16
+  the same number read another way. That is true of `size`, which runs
+  the same COUNT, but not of `length`: it loads every row to count
+  them. On 2026-10-17 each of the three methods got an example that
+  reads its statements and expects a `SELECT COUNT(*)`, which kills the
+  8 `length` mutations ("2026-10-17, the models and the name lists").
+  The 8 `size` mutations are still noise.
 - `instance_of?` for `is_a?` (10): `Community#dinner_start_times=` (1),
   `#schedule=` (2), `#dinner_start_times_shape` (2), `#schedule_shape`
   (3), `MealSchedule#initialize` (1), `RecurringCatchUp#tasks` (1).
@@ -4229,8 +4234,9 @@ methods that were new since the 2026-10-16 runs: `Community`'s
 dashboard averages and calendar version, `Meal#neighbour_ids`,
 `MealFormSerializer#next_id`, `Rotation#set_place_value`,
 `SuperuserAdapter#model_name`, `CollectionList#by_name` and
-`ResidentNameShortener#short`. Each run below is of those nine methods,
-in four pieces on GitHub.
+`ResidentNameShortener#short`. Runs 1 and 2 are of those nine methods,
+in four pieces on GitHub. Run 3 adds `#averaged_meal_count` and
+`#meals_left_out_of_averages`, for their `length` mutations.
 
 | Run                                     | Run id      | Subjects | Mutations | Killed | Alive | Timeouts |
 | --------------------------------------- | ----------- | -------- | --------- | ------ | ----- | -------- |
@@ -4243,7 +4249,7 @@ count of dinners in `#unreconciled_ave_number_of_attendees`, the sum
 with no `BigDecimal('0')` start in `#unreconciled_ave_cost`, and
 `last.at(0)` in the name `#short` returns.
 
-A missing example, each with one now (5):
+A missing example, each with one now (10):
 
 - `Meal#neighbour_ids` and `MealFormSerializer#next_id` (2): `order(nil)`
   for the date order of the meal after. Without an ORDER BY, PostgreSQL
@@ -4258,6 +4264,10 @@ A missing example, each with one now (5):
   checks that all three are a `SELECT COUNT(*)`. The `size` for
   `count` mutations stay noise: on a relation that is not loaded,
   `size` runs the same COUNT.
+- `#averaged_meal_count` (1) and `#meals_left_out_of_averages` (4):
+  `length` for `count`, killed in run 3. The 2026-10-16 round had
+  called these noise with the `size` ones. The same kind of example now
+  reads each method's statements. Their `size` mutations (5) stay noise.
 
 No test can see it (all as on 2026-10-16, where these lines first
 survived):
@@ -4268,7 +4278,8 @@ survived):
 - `#unreconciled_ave_cost` (2): `to_ary` for `to_a`, and the sum with no
   `BigDecimal('0')` start. The first cost is a BigDecimal, and an empty
   list returned "--" before the sum.
-- `#unreconciled_ave_number_of_attendees` (3): `size` for `count`, above.
+- `#unreconciled_ave_number_of_attendees` (3), `#averaged_meal_count`
+  (1) and `#meals_left_out_of_averages` (4): `size` for `count`, above.
 - `Rotation#set_place_value` (1): the order string without `Arel.sql`,
   which Rails accepts as it is.
 - `SuperuserAdapter#model_name` (1): `instance_of?(Class)` for
