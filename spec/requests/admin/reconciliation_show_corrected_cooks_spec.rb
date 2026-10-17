@@ -72,4 +72,34 @@ RSpec.describe 'Admin Reconciliation Show, a dinner corrected later' do
     expect(response).to have_http_status(:ok)
     expect(panel_rows('Meals')).to eq([[meal.date.to_s, '—', '']])
   end
+
+  # A dinner nobody ate has no stored lines, so its Total Cost comes from
+  # its receipts. A later correction changes them, and the record keeps
+  # each cook's cost before (#177). Two such dinners, so the page shows
+  # it reads them without a query per dinner (prosopite).
+  it 'shows the Total Cost each dinner nobody ate was settled at, not what a later correction made it' do
+    unit = create(:unit, community: community, name: 'Elm')
+    casey = create(:resident, community: community, unit: unit, name: 'Casey Cook')
+    dana = create(:resident, community: community, unit: unit, name: 'Dana Diner')
+    reconciliation = create(:reconciliation, community: community)
+    dinners = [latest - 6, latest - 5].map do |date|
+      create(:meal, community: community, date: date).tap do |meal|
+        create(:bill, meal: meal, resident: casey, community: community, amount: BigDecimal('40'))
+        # Swept before 2026-09-10, when a receipt nobody ate was still swept.
+        meal.update_columns(reconciliation_id: reconciliation.id)
+      end
+    end
+    dinners.each do |meal|
+      MealCorrecting.save!(meal.reload, by: admin_user, reason: 'Typed $40 for $25, and Dana ate') do |edits|
+        edits.cost(casey, amount: BigDecimal('25'), no_cost: false)
+        edits.add_eater(dana)
+      end
+    end
+
+    get "/reconciliations/#{reconciliation.id}", params: { token: token }, headers: { 'Host' => 'admin.example.com' }
+
+    expect(response).to have_http_status(:ok)
+    # The factory's settlement sweeps a dinner of its own too.
+    expect(panel_rows('Meals')).to include(*dinners.map { |meal| [meal.date.to_s, 'Casey Cook', '$40.00'] })
+  end
 end

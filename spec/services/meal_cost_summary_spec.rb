@@ -430,4 +430,100 @@ RSpec.describe MealCostSummary do
       expect(described_class.for(meal.reload)).to be_nil
     end
   end
+
+  # A settled dinner nobody ate has no stored lines, so its numbers come
+  # from its receipts and its sign-ups. A correction (ADR 0011 rule 6)
+  # changes those rows later, and the record of each edit keeps the value
+  # before it. `for` is what the dinner was settled at (the settlement's
+  # page), so it reads the rows as they were when it settled (#177).
+  describe 'a settled dinner nobody ate, corrected later' do
+    let(:admin) { create(:admin_user, community: community) }
+    let(:cook) { create(:resident, community: community, unit: unit) }
+    let(:eater) { create(:resident, community: community, unit: unit) }
+    let(:latest) { Reconciliation.latest_cutoff(community.today) }
+    let(:dinner) { create(:meal, community: community, date: latest - 5) }
+    # A settlement made before the dinner, so the factory's sweep does not
+    # take the dinner, and the dinner is then marked settled by it, the
+    # way an old one is.
+    let!(:old_settlement) { create(:reconciliation, community: community) }
+
+    # A settlement must charge someone, so a second dinner with an eater
+    # goes in the same one.
+    def settle_with_another_dinner
+      other = create(:meal, community: community, date: latest - 6)
+      create(:bill, meal: other, resident: cook, community: community, amount: BigDecimal('8'))
+      create(:meal_resident, meal: other, resident: eater, community: community)
+      settle!(cutoff: latest - 5)
+    end
+
+    def correct(reason, &)
+      MealCorrecting.save!(dinner.reload, by: admin, reason: reason, &)
+      dinner.reload
+    end
+
+    it 'shows the cost it was settled at, not a cost a correction added' do
+      create(:bill, meal: dinner, resident: cook, community: community, amount: BigDecimal('0'))
+      settle_with_another_dinner
+      correct('The cook paid $20 after all') { |edits| edits.cost(cook, amount: BigDecimal('20'), no_cost: false) }
+
+      expect(described_class.for(dinner)).to have_attributes(total_cost: 0, effective_cost: 0, unit_cost: 0,
+                                                             subsidized: false)
+      expect(described_class.now(dinner).total_cost).to eq(BigDecimal('20'))
+    end
+
+    # Each cook's cost when it settled is the "from" of the first edit
+    # that names them. A later edit's "from" is a cost the first one set.
+    it 'shows the receipts of an old settlement after two corrections change a cook and then remove them' do
+      other_cook = create(:resident, community: community, unit: unit)
+      create(:bill, meal: dinner, resident: cook, community: community, amount: BigDecimal('10'))
+      create(:bill, meal: dinner, resident: other_cook, community: community, amount: BigDecimal('9'))
+      # Swept before 2026-09-10, when a receipt nobody ate was still swept.
+      dinner.update_columns(reconciliation_id: old_settlement.id)
+      correct('Typed $9 for $5') { |edits| edits.cost(other_cook, amount: BigDecimal('5'), no_cost: false) }
+      correct('The second cook did not cook') { |edits| edits.remove_cook(other_cook) }
+
+      expect(described_class.for(dinner)).to have_attributes(total_cost: BigDecimal('19'), subsidized: true)
+      expect(described_class.now(dinner).total_cost).to eq(BigDecimal('10'))
+    end
+
+    it 'shows the receipts of an old settlement, swept with money on them, after a correction changes one' do
+      create(:bill, meal: dinner, resident: cook, community: community, amount: BigDecimal('40'))
+      # Swept before 2026-09-10, when a receipt nobody ate was still swept.
+      dinner.update_columns(reconciliation_id: old_settlement.id)
+      correct('Typed $40 for $25') { |edits| edits.cost(cook, amount: BigDecimal('25'), no_cost: false) }
+
+      expect(described_class.for(dinner)).to have_attributes(total_cost: BigDecimal('40'), subsidized: true)
+    end
+
+    it 'still shows that nobody was charged after a correction adds an eater' do
+      create(:bill, meal: dinner, resident: cook, community: community, amount: BigDecimal('0'))
+      settle_with_another_dinner
+      correct('The eater forgot to sign up') { |edits| edits.add_eater(eater) }
+
+      expect(described_class.for(dinner)).to have_attributes(total_cost: 0, effective_cost: 0, unit_cost: 0)
+    end
+
+    it 'still shows that nobody was charged after a correction adds a guest and removes it again' do
+      create(:bill, meal: dinner, resident: cook, community: community, amount: BigDecimal('0'))
+      settle_with_another_dinner
+      correct('A guest came') { |edits| edits.add_guest(eater, multiplier: 2) }
+      correct('Two guests came, not one') { |edits| edits.add_guest(eater, multiplier: 2) }
+      correct('One guest did not come') { |edits| edits.remove_guest(dinner.guests.first) }
+
+      expect(described_class.for(dinner)).to have_attributes(total_cost: 0, effective_cost: 0)
+    end
+
+    it 'shows nothing for a dinner people ate on a settlement from before line items, after a correction ' \
+       'removes them' do
+      create(:bill, meal: dinner, resident: cook, community: community, amount: BigDecimal('16'))
+      create(:meal_resident, meal: dinner, resident: eater, community: community)
+      # Settled, and then its line items taken off with the repair bypass:
+      # the state of a settlement made before line items existed.
+      settled = settle!(cutoff: latest - 5)
+      with_repair_bypass { MealCharge.for_reconciliation(settled).delete_all }
+      correct('The eater was away') { |edits| edits.remove_eater(eater) }
+
+      expect(described_class.for(dinner)).to be_nil
+    end
+  end
 end
