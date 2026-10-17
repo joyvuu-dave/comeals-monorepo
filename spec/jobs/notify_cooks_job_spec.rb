@@ -218,8 +218,9 @@ RSpec.describe NotifyCooksJob do
       expect(cook_mail_rows.pluck(:resident_id)).to match_array(cooks.map(&:id) - [refused.call.id])
       expect(Rails.error).to have_received(:report)
         .with(an_instance_of(ActiveRecord::StatementInvalid),
-              hash_including(handled: true, context: { mailer: described_class::MAILER, resident_id: refused.call.id,
-                                                       reconciliation_id: reconciliation.id }))
+              hash_including(handled: true, severity: :error,
+                             context: { mailer: described_class::MAILER, resident_id: refused.call.id,
+                                        reconciliation_id: reconciliation.id }))
         .once
     end
 
