@@ -97,6 +97,15 @@ RSpec.describe MealCorrection do
     expect(correction.cost_edits_of(helper).pluck('resident_id')).to eq([helper.id])
   end
 
+  # The database only checks that the edits are a list, so a row written
+  # by hand can hold an edit with no kind or no person. Such an edit is
+  # skipped, as the cost_edits scope skips it in SQL.
+  it 'skips an edit with no kind, or a cost edit with no person' do
+    edits = [{ 'resident_id' => cook.id }, { 'what' => 'cost' }, { 'what' => 'cost', 'resident_id' => cook.id }]
+
+    expect(described_class.new(edits: edits).cost_edits_of(cook)).to eq([edits.last])
+  end
+
   describe MealCorrectionLine do
     it 'cannot be changed or destroyed, is never zero, and is one a person' do
       line = correct.lines.first

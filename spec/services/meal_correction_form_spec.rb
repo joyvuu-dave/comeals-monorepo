@@ -285,6 +285,46 @@ RSpec.describe MealCorrectionForm do
       expect(codes.uniq.size).to eq(writes.size + 1)
     end
 
+    # A column the page does not show changes nothing: a row's time
+    # stamps, and an eater's or a guest's late and vegetarian flags. Each
+    # write is a repair from psql, as above.
+    it 'stays the same when only what the page does not show changes', prosopite: false do
+      with_repair_bypass do
+        Guest.insert_all!([{ meal_id: meal.id, resident_id: eater.id, multiplier: Multiplier::FULL }])
+      end
+      code = described_class::Rows.of(meal).seen
+      writes = [
+        -> { Bill.where(meal: meal).update_all(updated_at: 1.day.ago) },
+        -> { MealResident.where(meal: meal).update_all(late: true, vegetarian: true) },
+        -> { Guest.where(meal: meal).update_all(late: true, vegetarian: true) }
+      ]
+      codes = writes.map do |write|
+        with_repair_bypass do
+          write.call
+          described_class::Rows.of(meal).seen
+        end
+      end
+
+      expect(codes).to eq([code] * writes.size)
+    end
+
+    # The same short code for any dinner, so the hidden field does not
+    # grow with the number of rows.
+    it 'is a SHA-256 code in hex' do
+      expect(described_class::Rows.of(meal).seen).to match(/\A\h{64}\z/)
+    end
+
+    it 'reads only the rows of its own dinner' do
+      dinner = create(:meal, community: community, date: latest - 2)
+      create(:bill, meal: dinner, resident: zed, community: community, amount: BigDecimal('10'))
+      create(:meal_resident, meal: dinner, resident: other, community: community)
+      create(:guest, meal: dinner, resident: other)
+      rows = described_class::Rows.of(meal)
+
+      expect([rows.bills, rows.eaters, rows.guests].map { |list| list.map(&:meal_id).uniq })
+        .to eq([[meal.id], [meal.id], []])
+    end
+
     it 'is the same for a form opened after the dinner changed, which reads as usual' do
       correct_zed_to('25')
 

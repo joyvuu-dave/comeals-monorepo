@@ -229,7 +229,7 @@ class AuditDescription
   # "Meal moved from Sun Aug 6, 2017 to Tue Aug 1, 2017". The row holds
   # each day as "YYYY-MM-DD".
   def date_words(change)
-    from, to = change.map { |day| Date.iso8601(day.to_s).strftime('%a %b %-d, %Y') }
+    from, to = change.map { |day| Date.iso8601(day).strftime('%a %b %-d, %Y') }
     "Meal moved from #{from} to #{to}"
   end
 
