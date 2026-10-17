@@ -999,6 +999,35 @@ RSpec.describe 'Events API' do
         end
       end
 
+      # Rails keeps a time column's value in the zone that was current
+      # when the column was first read. A request reads its record inside
+      # the community's zone, but the check must not depend on that: it
+      # reads the stored times in the zone current when it runs. Here the
+      # record is read in the app's zone (Los Angeles) and the check runs
+      # in New York, where 22:00 to 23:00 shows as 01:00 to 02:00 on the
+      # next day. The days are an ordinary one and both daylight saving
+      # days.
+      it 'compares the parts with the stored times as shown in the zone it runs in' do
+        [[2026, 4, 15], [2026, 3, 8], [2026, 11, 1]].each do |day|
+          start = Time.zone.local(*day, 22, 0)
+          event = Event.find(create(:event, community: community, start_date: start, end_date: start + 1.hour,
+                                            allday: false).id)
+          expect([event.start_date.time_zone.name, event.end_date.time_zone.name])
+            .to eq(%w[America/Los_Angeles America/Los_Angeles])
+
+          next_day = Date.new(*day) + 1
+          query = { start_year: next_day.year, start_month: next_day.month, start_day: next_day.day,
+                    start_hours: '01', start_minutes: '00', end_hours: '02', end_minutes: '00' }.to_query
+          controller = ApiController.new
+          controller.set_request!(ActionDispatch::Request.new(Rack::MockRequest.env_for("/?#{query}")))
+          times = { start_date: start, end_date: start + 1.hour }
+
+          Time.use_zone('America/New_York') do
+            expect(controller.send(:stored_times_if_shown, event, times)).to eq({})
+          end
+        end
+      end
+
       it 'still refuses a change of the times that ends before the start on that day' do
         start = Time.zone.local(2026, 4, 15, 20, 0)
         event = create(:event, community: community, start_date: start, end_date: start + 3.hours, allday: false)

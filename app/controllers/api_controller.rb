@@ -316,14 +316,12 @@ class ApiController < ActionController::API
 
   # Extract a token from "Authorization: Bearer <token>". Returns nil for any
   # other scheme (Basic, no header, malformed) so we fall through to the
-  # query-param fallback cleanly. Memoized because both resolve_current_session
-  # and set_community_timezone read it on every request.
+  # query-param fallback cleanly. The token, when there is one, is text with
+  # no spaces, so it is never blank.
   def bearer_token_from_header
-    return @bearer_token_from_header if defined?(@bearer_token_from_header)
-
     header = request.headers['Authorization'].to_s
     match = header.match(/\ABearer\s+(?<token>\S+)\z/i)
-    @bearer_token_from_header = match && match[:token]
+    match && match[:token]
   end
 
   # The ?token= query parameter, or nil. Only a String counts: Rack turns
@@ -335,7 +333,7 @@ class ApiController < ActionController::API
   end
 
   def set_community_timezone(&)
-    if bearer_token_from_header.present? || token_param
+    if bearer_token_from_header || token_param
       tz = current_resident_api&.community&.timezone.presence
       return Time.use_zone(tz, &) if tz && ActiveSupport::TimeZone[tz]
     end
