@@ -23,6 +23,7 @@ import {
   prefetchMonth,
   refetch,
 } from "../../../app/frontend/src/stores/month_fetch.js";
+import { DEVICE_READ_LIMIT_MS } from "../../../app/frontend/src/helpers/device_copy";
 
 const COMMUNITY = "test-community-id";
 
@@ -429,6 +430,21 @@ describe("month_fetch", () => {
       await vi.advanceTimersByTimeAsync(2000);
 
       expect(monthCache.get(keyFor(2026, 4))).toEqual(payload(2026, 4));
+    });
+
+    it("loadForNavigation draws the copy first when the read answers just inside the limit", async () => {
+      const read = deferred();
+      idbKeyval.get.mockImplementationOnce(() => read.promise);
+      const render = vi.fn();
+      const onDisk = { ...payload(2026, 4), events: [{ id: 9 }] };
+
+      loadForNavigation("2026-04-15", render);
+      await vi.advanceTimersByTimeAsync(DEVICE_READ_LIMIT_MS - 1);
+      expect(axios.get).not.toHaveBeenCalled();
+      read.resolve(onDisk);
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(render.mock.calls).toEqual([[onDisk], [payload(2026, 4)]]);
     });
 
     it("loadForNavigation keeps the server's month when the read answers after the server", async () => {

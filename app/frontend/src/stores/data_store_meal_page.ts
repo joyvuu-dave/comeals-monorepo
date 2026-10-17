@@ -10,7 +10,8 @@ import {
   SnapshotIn,
 } from "mobx-state-tree";
 import { newId } from "../helpers/new_id";
-import { get as kvGet, set as kvSet, del as kvDel } from "idb-keyval";
+import { set as kvSet, del as kvDel } from "idb-keyval";
+import { readDeviceCopy } from "../helpers/device_copy";
 
 import { api } from "../helpers/api";
 import { mealDayLabel, toCommunityDayjs } from "../helpers/helpers";
@@ -751,7 +752,9 @@ export function mealPageActions(self: MealPageStore) {
         return;
       }
 
-      kvGet(id.toString())
+      // A read that does not answer in time counts as no copy
+      // (readDeviceCopy, #132).
+      readDeviceCopy<MealForm>(id.toString())
         .then(function (value) {
           // Skip if user already navigated to a different meal
           if (!self.meal || self.meal.id !== id) return;
@@ -761,7 +764,7 @@ export function mealPageActions(self: MealPageStore) {
           if (value === null || typeof value === "undefined") {
             self.loadDataAsync();
           } else {
-            self.loadData(value as MealForm, "device");
+            self.loadData(value, "device");
             self.loadDataAsync();
           }
         })

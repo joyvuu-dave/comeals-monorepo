@@ -1448,7 +1448,9 @@ describe("DataStore", () => {
       store.switchMeals(2);
       expect(store.mealLoadFailed).toBe(false);
       // The retry timer itself is cleared, not only ignored when it fires.
-      expect(vi.getTimerCount()).toBe(timersBefore - 1);
+      // The switch starts one timer of its own: the time limit on the
+      // read of the new meal's copy on the device (readDeviceCopy).
+      expect(vi.getTimerCount()).toBe(timersBefore - 1 + 1);
 
       // The old meal's pending retry never fires.
       await vi.advanceTimersByTimeAsync(60000);

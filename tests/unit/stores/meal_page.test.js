@@ -17,6 +17,7 @@ stubRandomUUID();
 
 import axios from "axios";
 import * as idbKeyval from "idb-keyval";
+import { DEVICE_READ_LIMIT_MS } from "../../../app/frontend/src/helpers/device_copy";
 import { notifyError } from "../../../app/frontend/src/helpers/bugsnag.js";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
 import { MEAL_REFETCH_RETRY_MS } from "../../../app/frontend/src/stores/data_store_meal_page";
@@ -512,6 +513,22 @@ describe("meal page store", () => {
       expect(axios.get).toHaveBeenCalledWith("/api/v1/meals/2/cooks");
       expect(store.meal.description).toBe("Fetched");
       expect(store.mealLoading).toBe(false);
+    });
+
+    it("draws the copy first when the read answers just inside the limit", async () => {
+      const store = createStore();
+      const read = deferred();
+      idbKeyval.get.mockImplementationOnce(() => read.promise);
+      axios.get.mockImplementationOnce(() => new Promise(() => {}));
+
+      store.switchMeals(2);
+      await vi.advanceTimersByTimeAsync(DEVICE_READ_LIMIT_MS - 1);
+      expect(axios.get).not.toHaveBeenCalled();
+      read.resolve(mealPayload({ id: 2, description: "Saved copy" }));
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(store.meal.description).toBe("Saved copy");
+      expect(axios.get).toHaveBeenCalledTimes(1);
     });
 
     it("keeps the server's meal when the read answers after the server", async () => {

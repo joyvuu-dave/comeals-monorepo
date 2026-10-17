@@ -23,18 +23,14 @@
 import axios from "axios";
 import Cookie from "js-cookie";
 import dayjs from "dayjs";
-import {
-  get as kvGet,
-  set as kvSet,
-  del as kvDel,
-  clear as kvClear,
-} from "idb-keyval";
+import { set as kvSet, del as kvDel, clear as kvClear } from "idb-keyval";
 
 import * as monthCache from "./month_cache";
 import createVersionGuard from "../helpers/version_guard";
 import handleAxiosError from "../helpers/handle_axios_error";
 import { toCommunityDayjs } from "../helpers/helpers";
 import { communityApiPath } from "../helpers/session";
+import { readDeviceCopy } from "../helpers/device_copy";
 
 // Stale-response guard for month navigation. Bumped at the start of
 // every navigation and every revalidation; each async continuation
@@ -86,9 +82,10 @@ function logDiskError(error) {
 }
 
 // A copy that cannot be read counts as a miss (the log returns
-// undefined): the caller fetches, and the fetch writes a fresh copy.
+// undefined): the caller fetches, and the fetch writes a fresh copy. So
+// does a read that does not answer in time (readDeviceCopy, #132).
 function readFromDisk(key) {
-  return kvGet(key).catch(logDiskError);
+  return readDeviceCopy(key).catch(logDiskError);
 }
 
 function writeToDisk(key, value) {
