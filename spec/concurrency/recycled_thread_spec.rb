@@ -68,23 +68,19 @@ RSpec.describe 'thread-local state across requests and jobs on a reused thread',
   # Four threads writing at the same instant conflict at SERIALIZABLE
   # (the tables are small enough that every row shares a page, so the
   # predicate locks overlap), and a write whose three tries all conflict
-  # answers 409 by design. A client tries again; so does this. Any other
+  # answers 409 by design. A client tries again; so does this, for up to
+  # 30 seconds (Storm::Refusals, #218: a transaction in another database
+  # on the server can make every try fail for a few seconds). Any other
   # answer than 200 is raised, so a request that did not happen is
   # reported as that and not as a push that never came (2026-09-12: one
   # thread's first signup went missing under a loaded laptop, and the
   # spec could only say its socket id was not pushed).
   def request(method, path, resident, params = {})
-    tries = 0
-    loop do
-      status, text = request_once(method, path, resident, params)
-      return [status, text] if status == 200
-      raise "#{method.to_s.upcase} #{path} answered #{status}: #{text}" unless status == 409
+    label = "#{method.to_s.upcase} #{path}"
+    status, text = Storm::Refusals.retry(label) { request_once(method, path, resident, params) }
+    raise "#{label} answered #{status}: #{text}" unless status == 200
 
-      tries += 1
-      raise "#{method.to_s.upcase} #{path} answered 409 #{tries} times" if tries == 5
-
-      sleep(0.05 * tries)
-    end
+    [status, text]
   end
 
   # The probes: what Current holds at the start of a request or a job, on

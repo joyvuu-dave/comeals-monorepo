@@ -112,8 +112,9 @@ keeps a record of each SERIALIZABLE transaction that committed after
 that one started. When the space for those records is full, it keeps
 only a summary of the oldest, and then it refuses writes it can no
 longer prove safe ("Canceled on identification as a pivot, during
-write"). So `Storm::Baseline` sends a refused write again every 0.1
-seconds for up to 30 seconds, and when it gives up it lists the open
+write"). So `Storm::Baseline` and the reused-thread spec send a
+refused write again every 0.1 to 0.2 seconds for up to 30 seconds
+(`Storm::Refusals`), and when they give up they list the open
 transactions on the server that have written something.
 
 A settlement always has something to claim: the seed plants a meal 14
