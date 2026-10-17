@@ -105,6 +105,17 @@ one mutex, every meal write behind one database lock, a 50 ms sleep
 inside the meal lock, and a one-second wait before each retry after a
 conflict. The GVL already runs one request's Ruby at a time.
 
+One client alone still gets 409s while a SERIALIZABLE transaction that
+has written something stays open in another database on the same
+Postgres server, such as another worktree's test run (#218). PostgreSQL
+keeps a record of each SERIALIZABLE transaction that committed after
+that one started. When the space for those records is full, it keeps
+only a summary of the oldest, and then it refuses writes it can no
+longer prove safe ("Canceled on identification as a pivot, during
+write"). So `Storm::Baseline` sends a refused write again every 0.1
+seconds for up to 30 seconds, and when it gives up it lists the open
+transactions on the server that have written something.
+
 A settlement always has something to claim: the seed plants a meal 14
 days back, the newest a settlement may cover (ADR 0011 rule 2), with a
 cook who spent money and a guest who pays (#131). Before, the settler

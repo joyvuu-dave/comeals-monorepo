@@ -30,4 +30,17 @@ RSpec.describe Storm::Baseline do
 
     expect(result.conflicts).to eq(15)
   end
+
+  # It still gives up in the end, and says what else was open on the
+  # server, since nothing in this database is.
+  it 'gives up after give_up_after seconds of refused writes, and names the open transactions' do
+    baseline = described_class.new(plan: plan, transport: transport_with(1_000), network: '10.8.0', give_up_after: 0.25)
+
+    expect { baseline.call }.to raise_error(RuntimeError) do |error|
+      expect(error.message).to start_with(
+        'baseline post /api/v1/meals/3/residents/7 answered 409 for 0.25 seconds in a row. ' \
+        'Open transactions on this server that have written something: '
+      )
+    end
+  end
 end
