@@ -385,6 +385,25 @@ RSpec.describe Meal do
       expect(meal.neighbour_ids(Date.new(2026, 3, 19))).to eq([before.id])
       expect(meal.neighbour_ids(Date.new(2026, 3, 21))).to eq([before.id])
     end
+
+    # Without an ORDER BY, PostgreSQL returns the rows in the order they
+    # are stored, and a new row can fill a slot that an earlier example's
+    # row left free. So the order the meals were made in does not set the
+    # order they are stored in, and this example reads the statements.
+    it 'asks for the meal before by date, newest first, and the meal after by date, oldest first' do
+      meal = create(:meal, community: community, date: Date.new(2026, 3, 20))
+      statements = []
+      callback = ->(*, payload) { statements << payload[:sql] }
+      ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') do
+        meal.neighbour_ids(Date.new(2026, 3, 10))
+      end
+
+      expect(statements.grep(/\ASELECT "meals"\."id" FROM "meals"/))
+        .to contain_exactly(
+          / ORDER BY "meals"\."date" DESC LIMIT \$\d+\z/,
+          / ORDER BY "meals"\."date" ASC LIMIT \$\d+\z/
+        )
+    end
   end
 
   describe '#bills_count' do

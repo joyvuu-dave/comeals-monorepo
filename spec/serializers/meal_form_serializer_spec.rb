@@ -206,6 +206,22 @@ RSpec.describe MealFormSerializer do
       expect(described_class.new(may10).to_h).to include(prev_id: april30.id)
     end
 
+    # The example above passes on a laptop with no ORDER BY at all, and
+    # failed to tell on GitHub: without one, PostgreSQL returns the rows in
+    # the order they are stored, and a new row can fill a slot that an
+    # earlier example's row left free. So this reads the statements.
+    it 'asks for the meal before by date, newest first, and the meal after by date, oldest first' do
+      meal = create(:meal, community: community, date: Date.new(2026, 4, 10))
+      statements = []
+      callback = ->(*, payload) { statements << payload[:sql] }
+      ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') { described_class.new(meal).to_h }
+
+      expect(statements.grep(/\ASELECT "meals"\."id" FROM "meals" WHERE \(date > /))
+        .to contain_exactly(/ ORDER BY "meals"\."date" ASC LIMIT \$\d+\z/)
+      expect(statements.grep(/\ASELECT "meals"\."id" FROM "meals" WHERE "meals"\."date" < /))
+        .to contain_exactly(/ ORDER BY "meals"\."date" DESC LIMIT \$\d+\z/)
+    end
+
     it 'says a settled meal is reconciled with a plain true' do
       meal = create(:meal, community: community)
       meal.update!(reconciliation: create(:reconciliation, community: community))
