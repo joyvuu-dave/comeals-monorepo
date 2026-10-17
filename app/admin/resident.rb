@@ -134,7 +134,8 @@ ActiveAdmin.register Resident do
       row :email
       row(:phone) { |r| formatted_phone(r.phone) }
       row :vegetarian
-      table_for resident.meals.includes(:bills, :meal_residents, :guests, :meal_charges).order(:date) do
+      table_for resident.meals.includes(:bills, :meal_residents, :guests, :meal_charges, :meal_corrections)
+                        .order(:date) do
         column 'Meals Attended' do |meal|
           link_to meal.date, admin_meal_path(meal)
         end
@@ -152,7 +153,7 @@ ActiveAdmin.register Resident do
       end
       # Preloads are what MealCostSummary's header asks of callers that
       # show many meals — same list as the meals table above.
-      table_for resident.guests.includes(meal: %i[bills meal_residents guests meal_charges]) do
+      table_for resident.guests.includes(meal: %i[bills meal_residents guests meal_charges meal_corrections]) do
         column 'Meal' do |guest|
           link_to guest.meal.date, admin_meal_path(guest.meal)
         end

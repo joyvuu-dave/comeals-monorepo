@@ -243,7 +243,8 @@ ActiveAdmin.register Reconciliation do
       # Read-only record of the meals this settlement swept. Corrections are
       # never made by editing the set — they settle as new entries in the next
       # reconciliation.
-      settled_meals = reconciliation.meals.includes(:meal_charges, :bills).order(:date)
+      settled_meals = reconciliation.meals.includes(:meal_charges, :bills, :meal_residents, :guests, :meal_corrections)
+                                    .order(:date)
       # The cooks each dinner had when this settlement settled it, not its
       # bills now: a later correction can add or remove a cook (ADR 0011
       # rule 6). A cancelled dinner has none (rule 11).
@@ -256,6 +257,8 @@ ActiveAdmin.register Reconciliation do
           cooks.empty? ? '—' : safe_join(cooks.map { |c| link_to(c.name, admin_resident_path(c)) }, ', ')
         end
         # From the stored charges — what this settlement actually used.
+        # A dinner nobody ate has none, and reads its receipts as they
+        # were when it settled (MealCostSummary.chargeless).
         # Blank for zero or for a settlement from before line items
         # existed and never corrected since, like every other cost cell
         # (meal_cost_cell).

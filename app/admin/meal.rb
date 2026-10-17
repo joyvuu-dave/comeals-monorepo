@@ -107,7 +107,7 @@ ActiveAdmin.register Meal do
     def scoped_collection
       # Everything MealCostSummary reads, so the index computes each
       # row's numbers without per-row queries.
-      end_of_association_chain.includes(:bills, :meal_residents, :guests, :meal_charges)
+      end_of_association_chain.includes(:bills, :meal_residents, :guests, :meal_charges, :meal_corrections)
     end
 
     def block_if_reconciled

@@ -486,6 +486,47 @@ RSpec.describe MealCostSummary do
       expect(described_class.now(dinner).total_cost).to eq(BigDecimal('10'))
     end
 
+    it 'leaves out a cook a correction added, and keeps what another cook was settled at' do
+      other_cook = create(:resident, community: community, unit: unit)
+      create(:bill, meal: dinner, resident: cook, community: community, amount: BigDecimal('40'))
+      dinner.update_columns(reconciliation_id: old_settlement.id)
+      correct('Typed $40 for $20, and a second cook spent $15') do |edits|
+        edits.cost(cook, amount: BigDecimal('20'), no_cost: false)
+        edits.cost(other_cook, amount: BigDecimal('15'), no_cost: false)
+      end
+
+      expect(described_class.for(dinner).total_cost).to eq(BigDecimal('40'))
+      expect(described_class.now(dinner).total_cost).to eq(BigDecimal('35'))
+    end
+
+    # An eater edit names a resident too. It says nothing about their
+    # cost, even when they also cooked.
+    it 'reads a cook\'s settled cost past an edit that adds them as an eater' do
+      create(:bill, meal: dinner, resident: cook, community: community, amount: BigDecimal('40'))
+      dinner.update_columns(reconciliation_id: old_settlement.id)
+      correct('The cook ate too, and typed $40 for $25') do |edits|
+        edits.add_eater(cook)
+        edits.cost(cook, amount: BigDecimal('25'), no_cost: false)
+      end
+
+      expect(described_class.for(dinner).total_cost).to eq(BigDecimal('40'))
+    end
+
+    # Before 2026-10-10 a bill could be No cost and still hold an amount
+    # (no_cost_bill_with_an_amount). It spent nothing when it settled.
+    it 'leaves out a cost that was No cost when it settled, whatever amount it held' do
+      create(:bill, meal: dinner, resident: cook, community: community, amount: BigDecimal('10'))
+      other_cook = create(:resident, community: community, unit: unit)
+      no_cost_bill_with_an_amount(meal: dinner, resident: other_cook, amount: '12')
+      dinner.update_columns(reconciliation_id: old_settlement.id)
+      correct('The second cook did spend $12') do |edits|
+        edits.cost(other_cook, amount: BigDecimal('12'), no_cost: false)
+      end
+
+      expect(described_class.for(dinner).total_cost).to eq(BigDecimal('10'))
+      expect(described_class.now(dinner).total_cost).to eq(BigDecimal('22'))
+    end
+
     it 'shows the receipts of an old settlement, swept with money on them, after a correction changes one' do
       create(:bill, meal: dinner, resident: cook, community: community, amount: BigDecimal('40'))
       # Swept before 2026-09-10, when a receipt nobody ate was still swept.
@@ -522,6 +563,19 @@ RSpec.describe MealCostSummary do
       settled = settle!(cutoff: latest - 5)
       with_repair_bypass { MealCharge.for_reconciliation(settled).delete_all }
       correct('The eater was away') { |edits| edits.remove_eater(eater) }
+
+      expect(described_class.for(dinner)).to be_nil
+    end
+
+    # One eater when it settled and two now: a correction adds one, and
+    # takes one away from the count, never two.
+    it 'shows nothing for a dinner one person ate on a settlement from before line items, after a correction ' \
+       'adds a second' do
+      create(:bill, meal: dinner, resident: cook, community: community, amount: BigDecimal('16'))
+      create(:meal_resident, meal: dinner, resident: eater, community: community)
+      settled = settle!(cutoff: latest - 5)
+      with_repair_bypass { MealCharge.for_reconciliation(settled).delete_all }
+      correct('A second eater forgot to sign up') { |edits| edits.add_eater(cook) }
 
       expect(described_class.for(dinner)).to be_nil
     end
