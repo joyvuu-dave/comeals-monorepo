@@ -423,9 +423,9 @@ RSpec.describe Community do
     end
 
     # The dashboard reads every unsettled dinner, and there can be
-    # hundreds. Loading each sign-up and guest to count them gives the
-    # same number, so this example reads the statements.
-    it 'counts the sign-ups and guests in the database, without loading them' do
+    # hundreds. Loading each dinner, sign-up and guest to count them gives
+    # the same number, so this example reads the statements.
+    it 'counts the dinners, sign-ups and guests in the database, without loading them' do
       meal = meal_on(community.today - 1, bills: %w[16], eaters: [cook, diner])
       create(:guest, meal: meal, resident: cook)
       statements = []
@@ -434,8 +434,11 @@ RSpec.describe Community do
         community.unreconciled_ave_number_of_attendees
       end
 
-      expect(statements.grep(/\ASELECT \S+ FROM "(meal_residents|guests)"/))
-        .to contain_exactly(/\ASELECT COUNT\(\*\) FROM "meal_residents"/, /\ASELECT COUNT\(\*\) FROM "guests"/)
+      expect(statements.grep(/\ASELECT \S+ FROM "(meals|meal_residents|guests)"/)).to contain_exactly(
+        /\ASELECT COUNT\(\*\) FROM "meals"/,
+        /\ASELECT COUNT\(\*\) FROM "meal_residents"/,
+        /\ASELECT COUNT\(\*\) FROM "guests"/
+      )
     end
 
     # The same meals as the cost. Each one left out here has one
