@@ -3842,6 +3842,30 @@ describe("DataStore", () => {
       });
     });
 
+    // #174. The push for the change skips this screen, and the person
+    // may have left the meal by the time the answer comes, so the
+    // refetch is of another meal. The copy on the device goes.
+    it("deletes the meal's copy on the device when it settles, also after the person left it", async () => {
+      const store = createDataStore({ mealProps: { closed: false } });
+      let answer;
+      axios.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      );
+
+      store.toggleClosed();
+      stage(store, () => {
+        store.meals.push({ id: 2 });
+        store.meal = 2;
+      });
+      answer({ status: 200 });
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(idbKeyval.del).toHaveBeenCalledWith("1");
+    });
+
     it("sends closed: false to reopen a closed meal", () => {
       const store = createDataStore({
         mealProps: {

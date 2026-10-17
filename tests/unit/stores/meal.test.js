@@ -10,6 +10,7 @@ vi.mock("pusher-js", () => import("../mocks/pusher.js"));
 vi.mock("idb-keyval", () => import("../mocks/idb_keyval.js"));
 
 import axios from "axios";
+import * as idbKeyval from "idb-keyval";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
 import { isAlive } from "mobx-state-tree";
 import {
@@ -231,6 +232,27 @@ describe("Meal model", () => {
           data: { max: null, socket_id: "test" },
         }),
       );
+    });
+
+    // #174. The push for the change skips this screen, and the person
+    // may have left the meal by the time the answer comes, so the
+    // refetch would not replace the copy on the device.
+    it("deletes the meal's copy on the device when it settles, also after the person left it", async () => {
+      const store = createStore({ extras: 5 });
+      let answer;
+      axios.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      );
+
+      store.meal.setExtras(3);
+      store.switchMeals(2);
+      answer({ status: 200 });
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(idbKeyval.del).toHaveBeenCalledWith("1");
     });
 
     it("refetches after a successful save and clears the pending flag", async () => {
