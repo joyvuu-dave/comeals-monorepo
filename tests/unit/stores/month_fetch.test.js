@@ -398,6 +398,68 @@ describe("month_fetch", () => {
     });
   });
 
+  // The calendar reads a month's copy on the device before it asks the
+  // server. In WebKit an IndexedDB read can stop answering, neither
+  // value nor error, and then the month never showed. So the read has a
+  // time limit (#132). Fake timers here: the tests step past the limit
+  // instead of waiting for it.
+  describe("a copy on the device that is not read in time", () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("loadForNavigation asks the server when the read never answers", async () => {
+      idbKeyval.get.mockImplementationOnce(() => new Promise(() => {}));
+      const render = vi.fn();
+
+      loadForNavigation("2026-04-15", render);
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(render.mock.calls).toEqual([[payload(2026, 4)]]);
+    });
+
+    it("prefetchMonth asks the server when the read never answers", async () => {
+      idbKeyval.get.mockImplementationOnce(() => new Promise(() => {}));
+
+      prefetchMonth("2026-04-15");
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(monthCache.get(keyFor(2026, 4))).toEqual(payload(2026, 4));
+    });
+
+    it("loadForNavigation keeps the server's month when the read answers after the server", async () => {
+      const read = deferred();
+      idbKeyval.get.mockImplementationOnce(() => read.promise);
+      const render = vi.fn();
+      const oldCopy = { ...payload(2026, 4), events: [{ id: 9 }] };
+
+      loadForNavigation("2026-04-15", render);
+      await vi.advanceTimersByTimeAsync(2000);
+      read.resolve(oldCopy);
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(render.mock.calls).toEqual([[payload(2026, 4)]]);
+      expect(monthCache.get(keyFor(2026, 4))).toEqual(payload(2026, 4));
+    });
+
+    it("prefetchMonth keeps the server's month when the read answers after the server", async () => {
+      const read = deferred();
+      idbKeyval.get.mockImplementationOnce(() => read.promise);
+      const oldCopy = { ...payload(2026, 4), events: [{ id: 9 }] };
+
+      prefetchMonth("2026-04-15");
+      await vi.advanceTimersByTimeAsync(2000);
+      read.resolve(oldCopy);
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(monthCache.get(keyFor(2026, 4))).toEqual(payload(2026, 4));
+    });
+  });
+
   describe("loadForNavigation, overtaken by a second navigation", () => {
     it("during a disk read that misses: no render, no fetch for the old month", async () => {
       const read = deferred();

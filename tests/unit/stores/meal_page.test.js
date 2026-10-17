@@ -478,6 +478,57 @@ describe("meal page store", () => {
     });
   });
 
+  // The page reads the meal's copy on the device before it asks the
+  // server. In WebKit an IndexedDB read can stop answering, neither
+  // value nor error, and then the page said "loading..." forever. So
+  // the read has a time limit (#132). Fake timers here: the tests step
+  // past the limit instead of waiting for it.
+  describe("a copy on the device that is not read in time", () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      axios.get.mockImplementation(() =>
+        Promise.resolve({
+          status: 200,
+          data: mealPayload({ id: 2, description: "Fetched" }),
+        }),
+      );
+    });
+
+    // Back to the shared mock's default, so no answer is left for the
+    // next test.
+    afterEach(() => {
+      axios.get.mockImplementation(() =>
+        Promise.resolve({ status: 200, data: {} }),
+      );
+    });
+
+    it("asks the server when the read never answers", async () => {
+      const store = createStore();
+      idbKeyval.get.mockImplementationOnce(() => new Promise(() => {}));
+
+      store.switchMeals(2);
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(axios.get).toHaveBeenCalledWith("/api/v1/meals/2/cooks");
+      expect(store.meal.description).toBe("Fetched");
+      expect(store.mealLoading).toBe(false);
+    });
+
+    it("keeps the server's meal when the read answers after the server", async () => {
+      const store = createStore();
+      const read = deferred();
+      idbKeyval.get.mockImplementationOnce(() => read.promise);
+
+      store.switchMeals(2);
+      await vi.advanceTimersByTimeAsync(2000);
+      read.resolve(mealPayload({ id: 2, description: "Old copy" }));
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(store.meal.description).toBe("Fetched");
+      expect(axios.get).toHaveBeenCalledTimes(1);
+    });
+  });
+
   // The copy on disk only makes the next visit faster. When IndexedDB
   // fails (a tab open for weeks can lose it), the fetched meal must
   // still reach the screen, not leave it on "loading..." (#111).
