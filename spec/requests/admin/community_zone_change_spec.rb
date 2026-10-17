@@ -98,6 +98,12 @@ RSpec.describe 'Admin community form: a change of time zone' do
 
     expect(response).to have_http_status(:ok)
     expect(response.body).to include('1 all-day event would show on the day before or after.')
+
+    create(:event, community: community, title: 'Clean up', allday: true, start_date: Time.zone.local(2026, 4, 16),
+                   end_date: nil)
+    submit({ timezone: 'Pacific/Honolulu' })
+
+    expect(response.body).to include('2 all-day events would show on the day before or after.')
   end
 
   it 'still refuses a zone that is not on the list, without asking first' do
