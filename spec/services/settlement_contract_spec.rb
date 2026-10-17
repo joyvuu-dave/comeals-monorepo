@@ -269,12 +269,15 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
       expect(Settlement.preview(cutoff: latest - 2).meals).to eq([inside])
     end
 
-    # The later meal is entered first, so its row comes first in the table.
-    # Index scans are off, so the database reads the table in that order
-    # when nothing sorts the rows. With them on, PostgreSQL 17 read the
-    # meals through the index on their date, oldest first, and a preview
-    # without ORDER BY passed this example (mutant, 2026-10-17).
+    # The meals are read from a list sorted newest first, so they come back
+    # oldest first only if the preview sorts them. Entering the later meal
+    # first was not enough: in a mutant worker, after many examples, the
+    # table held the rows in date order anyway (2026-10-17).
     it 'lists the meals it would settle oldest first' do
+      newest_first = lambda do |original, *args, **options|
+        original.call(*args, **options).from(Meal.unscoped.order(date: :desc), :meals)
+      end
+      allow(Meal).to receive(:settleable_by).and_wrap_original(&newest_first)
       cook = resident
       later = meal_on(latest - 1)
       bill(later, cook, 20)
@@ -283,7 +286,6 @@ RSpec.describe 'Settlement contract' do # rubocop:disable RSpec/DescribeClass --
       bill(earlier, cook, 20)
       attend(earlier, cook)
 
-      ActiveRecord::Base.connection.execute('SET LOCAL enable_indexscan = off')
       expect(Settlement.preview(cutoff: latest).meals).to eq([earlier, later])
     end
 
