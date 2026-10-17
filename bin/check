@@ -656,6 +656,21 @@ check_annotations() {
   fi
 }
 
+# The first lines of each failed test in a Playwright run's output, so a
+# failure in bin/check can be read without running the suite again
+# (#132). The list reporter starts each failure with a numbered line,
+# "  1) [project] › file:line › name", then the error and the code
+# around it, then its attachments (screenshot, trace). This prints the
+# numbered line and up to 25 lines after it, and stops at the
+# attachments or at the next failure.
+print_playwright_failures() {
+  awk '
+    /^  [0-9]+\) / { inside = 1; lines = 0; print; next }
+    /^ +attachment #/ || /^  [0-9]+ (failed|flaky|passed|skipped)/ { inside = 0; next }
+    inside && NF && lines < 25 { print; lines++ }
+  ' | head -200
+}
+
 check_playwright() {
   step "Playwright"
 
@@ -681,7 +696,8 @@ check_playwright() {
     local failed
     failed=$(echo "$output" | grep -oE '[0-9]+ failed' || echo "failures")
     fail "$failed"
-    echo "$output" | grep -E '^\s+[0-9]+\)' | head -10
+    echo "$output" | print_playwright_failures
+    info "Traces and screenshots: test-results/"
     record "Playwright" "FAIL" "$failed"
   fi
 }
@@ -726,7 +742,8 @@ check_integration() {
     local failed
     failed=$(echo "$output" | grep -oE '[0-9]+ failed' || echo "failures")
     fail "$failed"
-    echo "$output" | grep -E '^\s+[0-9]+\)' | head -10
+    echo "$output" | print_playwright_failures
+    info "Traces and screenshots: test-results/integration/"
     record "Integration" "FAIL" "$failed"
   fi
 }
