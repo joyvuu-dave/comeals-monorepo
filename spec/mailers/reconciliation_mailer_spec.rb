@@ -47,9 +47,10 @@ RSpec.describe ReconciliationMailer do
       allow(ENV).to receive(:fetch).with('READ_ONLY_ADMIN_TOKEN', nil).and_return(token)
     end
 
-    def bills_url(reconciliation, cook)
-      'http://admin.lvh.me:3000/bills?order=meals.date_desc' \
-        "&q%5Bmeal_reconciliation_id_eq%5D=#{reconciliation.id}&q%5Bresident_id_eq%5D=#{cook.id}" \
+    # The cook's dinners in the settlement, at what each was settled at
+    # (#177).
+    def cook_url(reconciliation, cook)
+      "http://admin.lvh.me:3000/reconciliations/#{reconciliation.id}/cook?resident_id=#{cook.id}" \
         '&subdomain=admin&token=the-token&utf8=%E2%9C%93'
     end
 
@@ -84,11 +85,11 @@ RSpec.describe ReconciliationMailer do
         expect(mail.body.encoded).to include('Swan')
       end
 
-      # The link shows this cook's bills in this settlement, so the URL
+      # The link shows this cook's dinners in this settlement, so the URL
       # carries both ids. The cook is whichever of two residents does not
       # share its id with the reconciliation, so a link built from the
       # wrong id cannot pass by chance.
-      it "links to the cook's own bills in that settlement, in both parts" do
+      it "links to the cook's own dinners in that settlement, in both parts" do
         token_is('the-token')
         candidates = Array.new(2) { create(:resident, community: community, unit: unit) }
         candidates.each_with_index { |candidate, i| dinner(Date.new(2026, 9, 1) + i, cook: candidate) }
@@ -97,8 +98,8 @@ RSpec.describe ReconciliationMailer do
 
         cook_mail = described_class.reconciliation_notify_email(cook, settlement)
 
-        expect(cook_mail.text_part.body.to_s.split).to include(bills_url(settlement, cook))
-        expect(links_in(html_body(cook_mail))).to eq([['the meals you cooked', bills_url(settlement, cook)]])
+        expect(cook_mail.text_part.body.to_s.split).to include(cook_url(settlement, cook))
+        expect(links_in(html_body(cook_mail))).to eq([['the meals you cooked', cook_url(settlement, cook)]])
       end
 
       it 'writes the token so that the admin reads back the same token, in both parts' do
@@ -132,7 +133,7 @@ RSpec.describe ReconciliationMailer do
       # one part, so a change to the template cannot drop or change any.
       it 'says the meals through the cutoff are settled and final, in the text part' do
         token_is('the-token')
-        url = bills_url(reconciliation, resident)
+        url = cook_url(reconciliation, resident)
 
         expect(text_lines(mail)).to eq(
           [
