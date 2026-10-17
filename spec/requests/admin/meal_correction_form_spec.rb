@@ -69,6 +69,16 @@ RSpec.describe 'Admin correction form for a settled dinner' do
     untouched.deep_merge(reason: reason, cooks: { cook.id.to_s => { amount: amount } })
   end
 
+  def nobody_pays_refusal
+    'This leaves a $30.00 cost with nobody to charge. Keep someone who pays, or mark the cost No cost.'
+  end
+
+  # Everyone who pays taken off, and the $30 cost kept.
+  def nobody_pays
+    untouched.deep_merge(reason: 'Nobody ate', eaters: { eater.id.to_s => 'remove', child.id.to_s => 'remove' },
+                         guests: { meal.guests.sole.id.to_s => { remove: '1' } })
+  end
+
   def preview(correction)
     post path, params: { correction: correction, preview: 'Preview correction' }
   end
@@ -173,6 +183,16 @@ RSpec.describe 'Admin correction form for a settled dinner' do
       expect(panel('What this correction does')).to be_nil
     end
 
+    # Everyone who pays taken off, and the cost kept: the next settlement
+    # would credit the cook $0 for it (#172, Meal.receipt_and_nobody_to_charge).
+    it 'refuses a correction that leaves the cost with nobody to charge, and says what to do' do
+      expect { preview(nobody_pays) }.not_to change(MealCorrection, :count)
+
+      expect(alert).to eq(nobody_pays_refusal)
+      expect(panel('What this correction does')).to be_nil
+      expect(meal.meal_residents.count).to eq(2)
+    end
+
     it 'refuses a cost it cannot read, or a blank one, and names the cook' do
       preview(cost_to('20.005'))
       expect(alert).to eq('Cook One: "20.005" is not a cost. A cost is whole cents, 0 to 9999.99, like 25.50.')
@@ -249,6 +269,23 @@ RSpec.describe 'Admin correction form for a settled dinner' do
 
       expect(alert).to start_with('The dinner or the form changed after the preview')
       expect(page.at_css('input[name=fingerprint]')['value']).to eq(fingerprint_of(cost_to('21')))
+    end
+
+    # A Save that skips the preview (an old page, a hand-made request)
+    # is refused by the same rule.
+    it 'refuses a correction that leaves the cost with nobody to charge, and saves nothing' do
+      expect { save(nobody_pays, fingerprint: 'not-a-preview') }.not_to change(MealCorrection, :count)
+
+      expect(alert).to eq(nobody_pays_refusal)
+      expect(meal.meal_residents.count).to eq(2)
+      expect(meal.guests.count).to eq(1)
+    end
+
+    it 'saves a correction that takes everyone who pays off and marks the cost No cost' do
+      no_cost = nobody_pays.deep_merge(cooks: { cook.id.to_s => { amount: '', no_cost: '1' } })
+
+      expect { save(no_cost) }.to change(MealCorrection, :count).by(1)
+      expect(meal.bills.sole.reload).to have_attributes(amount: 0, no_cost: true)
     end
 
     it 'refuses a blank reason, and shows the preview again' do

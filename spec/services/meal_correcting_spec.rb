@@ -320,6 +320,86 @@ RSpec.describe MealCorrecting do
     end
   end
 
+  # A settlement holds back an open dinner with money on a cost and
+  # nobody to charge (Meal.receipt_and_nobody_to_charge, ADR 0011 rule 3):
+  # settling it would credit the cook $0. A correction must not leave a
+  # settled dinner that way either, or the next settlement carries a
+  # correction that credits the cook $0 for that money (#172).
+  describe 'a cost with nobody to charge' do
+    let(:baby) { create(:resident, community: community, unit: unit, multiplier: 0, name: 'Baby') }
+    let(:refusal) do
+      'This leaves a $30.00 cost with nobody to charge. Keep someone who pays, or mark the cost No cost.'
+    end
+
+    # Only a baby ate, and the cook marked No cost, so it settled with no money.
+    def free_dinner
+      create(:meal, community: community, date: latest - 1).tap do |dinner|
+        create(:bill, meal: dinner, resident: cook, community: community, amount: 0, no_cost: true)
+        create(:meal_resident, meal: dinner, resident: baby, community: community)
+        settle!(cutoff: latest)
+      end.reload
+    end
+
+    it 'refuses to remove the only person who pays and keep the cost, in the preview and the save' do
+      remove = ->(edits) { edits.remove_eater(eater) }
+
+      expect { described_class.preview(meal, &remove) }.to raise_error(described_class::NobodyToCharge, refusal)
+      expect { save!(&remove) }.to raise_error(described_class::NobodyToCharge, refusal)
+      expect(meal.meal_residents.pluck(:resident_id)).to eq([eater.id])
+      expect(MealCorrection.count).to eq(0)
+    end
+
+    it 'refuses to add a cost to a dinner only free eaters ate, in the preview and the save' do
+      dinner = free_dinner
+      add_cost = ->(edits) { edits.cost(cook, amount: BigDecimal('30'), no_cost: false) }
+
+      expect { described_class.preview(dinner, &add_cost) }.to raise_error(described_class::NobodyToCharge, refusal)
+      expect do
+        described_class.save!(dinner, by: admin, reason: 'Forgot the cost', &add_cost)
+      end.to raise_error(described_class::NobodyToCharge, refusal)
+      expect(dinner.bills.sole).to have_attributes(amount: 0, no_cost: true)
+      expect(MealCorrection.count).to eq(0)
+    end
+
+    it 'adds up every cost with money on it' do
+      remove = lambda do |edits|
+        edits.cost(other, amount: BigDecimal('12.5'), no_cost: false)
+        edits.remove_eater(eater)
+      end
+
+      expect { save!(&remove) }.to raise_error(described_class::NobodyToCharge, /a \$42\.50 cost/)
+    end
+
+    it 'saves a correction that removes the payer and keeps another one' do
+      correction = save! do |edits|
+        edits.add_eater(other)
+        edits.remove_eater(eater)
+      end
+
+      expect(lines_of(correction)).to eq(eater.id => BigDecimal('30'), other.id => BigDecimal('-30'))
+    end
+
+    it 'saves a correction that removes the payer and marks the cost No cost' do
+      correction = save! do |edits|
+        edits.cost(cook, amount: BigDecimal('0'), no_cost: true)
+        edits.remove_eater(eater)
+      end
+
+      expect(lines_of(correction)).to eq(cook.id => BigDecimal('-30'), eater.id => BigDecimal('30'))
+    end
+
+    it 'saves a correction that adds a guest to pay for a new cost on a dinner only free eaters ate' do
+      dinner = free_dinner
+      correction = described_class.save!(dinner, by: admin, reason: 'Forgot the cost and the guest') do |edits|
+        edits.cost(cook, amount: BigDecimal('30'), no_cost: false)
+        edits.add_guest(cook, multiplier: 2)
+      end
+
+      # The cook spent $30 and hosted the one guest who pays: no change.
+      expect(correction.lines).to be_empty
+    end
+  end
+
   describe 'the preview' do
     it 'says what the save would change, and saves nothing' do
       result = described_class.preview(meal) { |edits| edits.cost(cook, amount: BigDecimal('20'), no_cost: false) }
