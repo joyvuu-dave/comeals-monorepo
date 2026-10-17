@@ -54,6 +54,27 @@ RSpec.describe ZoneChange do
       expect(change_to('America/Phoenix').moved_count).to eq(1)
     end
 
+    # The day the clocks go forward in Los Angeles: 01:00 is still winter
+    # time (UTC-8, one hour from Phoenix) and 03:30 is summer time (UTC-7,
+    # the same as Phoenix).
+    it 'counts a row whose start moves even when its end does not' do
+      booking(Time.zone.local(2026, 3, 8, 1), Time.zone.local(2026, 3, 8, 3, 30))
+
+      expect(change_to('America/Phoenix').moved_count).to eq(1)
+    end
+
+    # A job or a task runs in the app's zone, not the community's. The
+    # rows read from the database come back in the app's zone, so the
+    # current zone must come from the community.
+    it 'reads the current zone from the community, not the app zone' do
+      timed_event(Time.zone.local(2026, 4, 15, 14), Time.zone.local(2026, 4, 15, 15))
+
+      Time.use_zone('UTC') do
+        expect(change_to('America/Los_Angeles').moved_count).to eq(0)
+        expect(change_to('America/New_York').moved_count).to eq(1)
+      end
+    end
+
     it 'leaves out all-day events' do
       create(:event, community: community, allday: true, start_date: Time.zone.local(2026, 4, 15), end_date: nil)
 
@@ -109,6 +130,28 @@ RSpec.describe ZoneChange do
       timed_event(Time.zone.local(2026, 4, 16, 20), Time.zone.local(2026, 4, 16, 22, 59))
 
       expect(change_to('America/Denver').crossing_count).to eq(1)
+    end
+
+    # Two rows that start at the same moment are listed by kind, then by
+    # title, so the list is the same on every read.
+    it 'lists rows that start together by kind, then by title' do
+      start = Time.zone.local(2026, 4, 15, 20)
+      timed_event(start, start + 3.hours, title: 'Bingo')
+      timed_event(start, start + 3.hours, title: 'Art')
+      booking(start, start + 3.hours, title: 'Zumba')
+
+      expect(change_to('America/New_York').crossing.map(&:title)).to eq(%w[Zumba Art Bingo])
+    end
+
+    # A booking can have no title. A notice is an empty range, so it can
+    # start at the same midnight as another booking, and the two are
+    # compared by title.
+    it 'sorts a booking with no title beside one with a title' do
+      midnight = Time.zone.local(2026, 4, 15)
+      booking(midnight, midnight, title: nil)
+      booking(midnight, midnight + 1.hour, title: 'Early')
+
+      expect(change_to('America/New_York').crossing_count).to eq(0)
     end
 
     it 'lists only the first ten, and counts them all' do

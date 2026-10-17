@@ -184,7 +184,7 @@ class ApiController < ActionController::API
   # in the community's zone (set_community_timezone).
   def stored_times_if_shown(record, times)
     stored_end = record.end_date
-    return times if stored_end.nil? || times[:end_date].nil?
+    return times if stored_end.nil? || times.fetch(:end_date).nil?
 
     start = record.start_date.in_time_zone
     finish = stored_end.in_time_zone
