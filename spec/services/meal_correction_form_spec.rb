@@ -253,6 +253,38 @@ RSpec.describe MealCorrectionForm do
       expect(codes.uniq.size).to eq(writes.size + 1)
     end
 
+    # The same for a guest the dinner already has: its price, its host,
+    # and a guest put in its place with the same host and price. And a
+    # cook put in another cook's place, in the same row, at the same cost.
+    it 'changes with each guest, and with who each cook is', prosopite: false do
+      other # made now: made inside a write below, it would be rolled back with it
+      guest = { meal_id: meal.id, resident_id: eater.id, multiplier: Multiplier::FULL }
+      with_repair_bypass { Guest.insert_all!([guest]) }
+      codes = [described_class::Rows.of(meal).seen]
+      writes = [
+        -> { Guest.where(meal: meal).update_all(multiplier: Multiplier::HALF) },
+        -> { Guest.where(meal: meal).update_all(resident_id: other.id) },
+        lambda do
+          Guest.where(meal: meal).delete_all
+          Guest.insert_all!([guest])
+        end,
+        lambda do
+          Bill.where(resident: zed).delete_all
+          Bill.insert_all!([{ meal_id: meal.id, resident_id: other.id, community_id: community.id,
+                              amount: BigDecimal('30'), no_cost: false }])
+        end
+      ]
+      writes.each do |write|
+        with_repair_bypass do
+          write.call
+          codes << described_class::Rows.of(meal).seen
+          raise ActiveRecord::Rollback
+        end
+      end
+
+      expect(codes.uniq.size).to eq(writes.size + 1)
+    end
+
     it 'is the same for a form opened after the dinner changed, which reads as usual' do
       correct_zed_to('25')
 
