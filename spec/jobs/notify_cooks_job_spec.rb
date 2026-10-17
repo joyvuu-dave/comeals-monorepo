@@ -222,6 +222,26 @@ RSpec.describe NotifyCooksJob do
                                                        reconciliation_id: reconciliation.id }))
         .once
     end
+
+    it 'has the nightly job mail that cook a second copy with the same words, and nobody else again' do
+      allow(ReconciliationMailer).to receive(:reconciliation_notify_email).and_call_original
+      ActionMailer::Base.deliveries.clear
+      refused = refuse_the_first_row
+
+      described_class.perform_now(reconciliation)
+      SendMissedSettlementMailJob.perform_now
+      perform_enqueued_jobs
+
+      # The nightly job also sends the common house mail, not counted here.
+      cook_mail = ActionMailer::Base.deliveries.reject { |mail| mail.to == [ReconciliationMailer::COMMON_HOUSE] }
+      to_refused = cook_mail.select { |mail| mail.to == [refused.call.email] }
+      expect(cook_mail.size).to eq(cooks.size + 1)
+      expect(to_refused.size).to eq(2)
+      first, second = to_refused
+      expect([second.subject, second.html_part.decoded, second.text_part.decoded])
+        .to eq([first.subject, first.html_part.decoded, first.text_part.decoded])
+      expect(cook_mail_rows.pluck(:resident_id)).to match_array(cooks.map(&:id))
+    end
   end
 
   it 'asks for another run when the per-run cap cut the list short' do

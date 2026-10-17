@@ -7,11 +7,19 @@
 # the cook mail (NotifyCooksJob), so a saved settlement always has it
 # queued and a rolled-back one never sends it.
 #
-# Sent once. The send writes a MailDelivery row with no resident, because
-# the address is the common house's, not a person's. A run that finds the
-# row sends nothing, so a retry, the nightly SendMissedSettlementMailJob
-# and the rake task can all queue it without sending a second copy. One
-# run per settlement at a time, so two workers cannot both send it.
+# Sent at least once, not exactly once (#171). The send writes a
+# MailDelivery row with no resident, because the address is the common
+# house's, not a person's. A run that finds the row sends nothing, so a
+# retry, the nightly SendMissedSettlementMailJob and the rake task can all
+# queue it without sending a second copy. One run per settlement at a
+# time, so two workers cannot both send it.
+#
+# A second copy can still go out in three cases: the row cannot be written
+# after the send, the worker stops between the send and the row, or the
+# mail server times out after it took the message. SMTP gives the sender
+# no way to know for sure that the server got a message, so a send and
+# its row cannot be one step. The second copy is built from the
+# settlement's stored numbers, so it says the same thing as the first.
 class CommonHouseMailJob < ApplicationJob
   MAILER = 'common_house_collection_email'
 

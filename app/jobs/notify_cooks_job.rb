@@ -11,6 +11,10 @@
 # again. One run per reconciliation at a time, so two workers cannot mail
 # the same cook at once. The reconciliations:send_cooking_slot_email task
 # queues this job instead of sending, so this limit covers it too.
+#
+# Each cook gets the mail at least once, not exactly once (#171), for the
+# reasons CommonHouseMailJob gives: a cook whose send went out but whose
+# row was not written is mailed again, with the same words and numbers.
 class NotifyCooksJob < ApplicationJob
   MAILER = 'reconciliation_notify_email'
 
@@ -97,7 +101,7 @@ class NotifyCooksJob < ApplicationJob
     cooks = MailDelivery.not_yet_sent(self.class.recipients(reconciliation), mailer: MAILER, about: reconciliation)
     result = PacedDelivery.deliver(
       cooks, mailer: MAILER,
-             after_send: ->(cook) { MailDelivery.record!(mailer: MAILER, about: reconciliation, resident: cook) }
+             after_send: ->(cook) { record_sent(cook, reconciliation) }
     ) { |cook| ReconciliationMailer.reconciliation_notify_email(cook, reconciliation) }
 
     # The new try after a failed send also mails anyone the cap left out,
@@ -113,6 +117,18 @@ class NotifyCooksJob < ApplicationJob
   end
 
   private
+
+  # Each cook's send and row stand alone. When the row cannot be written
+  # (the database went away), the error is reported and the run goes on to
+  # the next cook; until 2026-10-16 it ended the run, and every cook after
+  # this one waited for the nightly job. This cook has no row, so the
+  # nightly SendMissedSettlementMailJob mails them a second copy.
+  def record_sent(cook, reconciliation)
+    MailDelivery.record!(mailer: MAILER, about: reconciliation, resident: cook)
+  rescue ActiveRecord::ActiveRecordError => e
+    Rails.error.report(e, handled: true, severity: :error,
+                          context: { mailer: MAILER, resident_id: cook.id, reconciliation_id: reconciliation.id })
+  end
 
   # One line for each cook the mail cannot reach, so a cook who says "I
   # never got it" can be found in the log. Not a Bugsnag report: a cook

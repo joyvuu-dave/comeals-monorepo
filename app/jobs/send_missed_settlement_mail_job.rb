@@ -12,7 +12,9 @@
 # job compares what should be true (every cook with an email address has
 # a MailDelivery row, and so has the common house mail) with what is, and
 # queues the job again for each settlement that still owes a mail. Each
-# job sends only what has not gone out, so nobody gets it twice.
+# job sends only what has no MailDelivery row. A mail that went out but
+# whose row was not written goes out a second time, with the same words
+# and numbers (at least once, CommonHouseMailJob says why).
 #
 # Only settlements from the last WINDOW are tried. A settlement that
 # leaves the window with a mail still not sent is reported to Bugsnag,

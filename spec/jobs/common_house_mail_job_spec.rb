@@ -89,21 +89,21 @@ RSpec.describe CommonHouseMailJob do
   end
 
   # The send went out, and then the row that records it was refused by
-  # an error that is not a conflict (or the worker stopped between the
-  # two). The job fails, the nightly job finds no row, and queues the mail
-  # again (#171).
+  # an error that is not a conflict (a database that went away; a worker
+  # that stops between the two is the same case). The mail is promised at
+  # least once, not once (ADR 0011 rule 9, #171).
   context 'when the row for a send that went out cannot be written' do
+    # The nightly job also sends the cook mail, which is not counted here.
+    def house_mail
+      ActionMailer::Base.deliveries.select { |mail| mail.to == [ReconciliationMailer::COMMON_HOUSE] }
+    end
+
     before do
       allow(Rails.error).to receive(:report)
       allow(Healthcheck).to receive(:ping)
       # The nightly job has run before, so this settlement is one it looks at.
       JobRun.create!(name: SendMissedSettlementMailJob.run_name, started_at: 30.days.ago, finished_at: 30.days.ago,
                      outcome: 'ok')
-    end
-
-    it 'does not send the common house a second copy when the job runs again' do
-      sent = []
-      mail_server(sent, failing: -> { false })
       failed_once = false
       allow(MailDelivery).to receive(:record!).and_wrap_original do |original, **attributes|
         unless failed_once
@@ -112,12 +112,28 @@ RSpec.describe CommonHouseMailJob do
         end
         original.call(**attributes)
       end
+    end
 
+    it 'fails the job, and the nightly job sends a second copy with the same words, then records it' do
       expect { described_class.perform_now(reconciliation) }.to raise_error(ActiveRecord::StatementInvalid)
+      expect(rows).to be_empty
       SendMissedSettlementMailJob.perform_now
       perform_enqueued_jobs
 
-      expect(sent).to eq([reconciliation])
+      first, second = house_mail
+      expect(house_mail.size).to eq(2)
+      expect([second.to, second.subject, second.html_part.decoded, second.text_part.decoded])
+        .to eq([first.to, first.subject, first.html_part.decoded, first.text_part.decoded])
+      expect(rows.count).to eq(1)
+    end
+
+    it 'sends no third copy once the second one is recorded' do
+      expect { described_class.perform_now(reconciliation) }.to raise_error(ActiveRecord::StatementInvalid)
+      described_class.perform_now(reconciliation)
+      SendMissedSettlementMailJob.perform_now
+      perform_enqueued_jobs
+
+      expect(house_mail.size).to eq(2)
     end
   end
 

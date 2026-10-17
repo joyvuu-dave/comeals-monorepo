@@ -7,8 +7,8 @@ namespace :reconciliations do
     abort 'There is no reconciliation yet, so there are no balances to mail.' if reconciliation.nil?
 
     # Queued, not sent here, like the cook mail task: CommonHouseMailJob
-    # sends it once per settlement and records that it did, so this task
-    # cannot send a second copy of a mail the settlement already sent.
+    # records each send and sends nothing when it finds the record, so
+    # this task does not send a second copy of a mail already recorded.
     # The Solid Queue worker must be running to send it.
     CommonHouseMailJob.perform_later(reconciliation)
     Rails.logger.info("Common house mail: queued CommonHouseMailJob for reconciliation ##{reconciliation.id}. " \

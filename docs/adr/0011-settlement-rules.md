@@ -191,9 +191,19 @@ running balances, which leave out every meal the settlement settled
 The email goes out on its own after every settlement, like the cook
 mail (decided 2026-10-14): a step that only a server command does gets
 skipped. `CommonHouseMailJob` is queued in the settlement's own
-transaction and sends the email once. A failed send is tried again
-within hours, and `SendMissedSettlementMailJob` tries again each night
-for a week.
+transaction and sends the email at least once. A failed send is tried
+again within hours, and `SendMissedSettlementMailJob` tries again each
+night for a week.
+
+At least once, not exactly once (decided 2026-10-16, #171). The job
+writes a record after each send, and a run that finds the record sends
+nothing. But a send and its record cannot be one step: SMTP gives the
+sender no way to know for sure that the server got a message. So a
+second copy goes out when the record cannot be written after the send,
+when the worker stops between the two, or when the mail server times
+out after it took the message. The cook mail is the same. A second copy
+is built from the settlement's stored numbers, so it says the same thing
+as the first. A missed email would be worse than a second one.
 
 ### 10. The old history is fixed once, then closed
 
