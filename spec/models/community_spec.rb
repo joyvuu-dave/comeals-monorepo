@@ -422,6 +422,22 @@ RSpec.describe Community do
       expect(community.unreconciled_ave_number_of_attendees).to eq(2.0)
     end
 
+    # The dashboard reads every unsettled dinner, and there can be
+    # hundreds. Loading each sign-up and guest to count them gives the
+    # same number, so this example reads the statements.
+    it 'counts the sign-ups and guests in the database, without loading them' do
+      meal = meal_on(community.today - 1, bills: %w[16], eaters: [cook, diner])
+      create(:guest, meal: meal, resident: cook)
+      statements = []
+      callback = ->(*, payload) { statements << payload[:sql] }
+      ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') do
+        community.unreconciled_ave_number_of_attendees
+      end
+
+      expect(statements.grep(/\ASELECT \S+ FROM "(meal_residents|guests)"/))
+        .to contain_exactly(/\ASELECT COUNT\(\*\) FROM "meal_residents"/, /\ASELECT COUNT\(\*\) FROM "guests"/)
+    end
+
     # The same meals as the cost. Each one left out here has one
     # attendee, so counting any of them would bring the average below 2.
     it 'reads the same meals as the cost' do
