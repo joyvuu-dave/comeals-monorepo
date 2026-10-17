@@ -2,6 +2,8 @@ const { test, expect } = require("../helpers/test");
 const {
   loadAuthInfo,
   setupAuthenticatedPage,
+  gotoMeal,
+  reloadMeal,
 } = require("../helpers/integration_setup");
 
 // The date box's relative day: "Today", "Tomorrow", "2 days ago".
@@ -179,5 +181,28 @@ test.describe("Meal loading (real backend)", () => {
     // Description still populated
     const textarea = page.locator('[aria-label="Enter meal description"]');
     await expect(textarea).toHaveValue("Stir fry vegetables");
+  });
+
+  // Rails answers a GET whose ETag the browser already has with 304 Not
+  // Modified, and WebKit asks that way when it reloads a page whose
+  // data has not changed. The wait for the meal's data must take that
+  // answer too, or it waits until the test times out (#132).
+  test("a reload of a meal that did not change counts as loaded", async ({
+    page,
+  }) => {
+    const mealId = auth.meals.tomorrow.id;
+    const statuses = [];
+    page.on("response", (r) => {
+      if (r.url().includes(`/api/v1/meals/${mealId}/cooks`)) {
+        statuses.push(r.status());
+      }
+    });
+
+    await gotoMeal(page, mealId);
+    await reloadMeal(page, mealId);
+    await reloadMeal(page, mealId);
+
+    await expect(page.locator("h1", { hasText: "OPEN" })).toBeVisible();
+    expect(statuses.length).toBeGreaterThanOrEqual(3);
   });
 });
