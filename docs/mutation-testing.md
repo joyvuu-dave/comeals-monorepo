@@ -4221,3 +4221,62 @@ raise `TypeError` (`T.must(meal)` in
 refused by `belongs_to`. No page of the app builds such a row; the
 console can. The red spec is
 `spec/models/concerns/closed_meal_attendance_freeze_without_a_meal_spec.rb`.
+
+### 2026-10-17, the models and the name lists
+
+The full run 39014862807 (main at af232aff) left 15 survivors in nine
+methods that were new since the 2026-10-16 runs: `Community`'s
+dashboard averages and calendar version, `Meal#neighbour_ids`,
+`MealFormSerializer#next_id`, `Rotation#set_place_value`,
+`SuperuserAdapter#model_name`, `CollectionList#by_name` and
+`ResidentNameShortener#short`. Each run below is of those nine methods,
+in four pieces on GitHub.
+
+| Run                                     | Run id      | Subjects | Mutations | Killed | Alive | Timeouts |
+| --------------------------------------- | ----------- | -------- | --------- | ------ | ----- | -------- |
+| 1, after the first three examples       | 39034266247 | 9        | 714       | 699    | 15    | 0        |
+| 2, after the dinner count was added too | 39034769286 | 9        | 714       | 700    | 14    | 0        |
+
+Run 1 is not the same 15 as the full run. It killed four of them and
+showed four that the full run had killed: `size` and `length` for the
+count of dinners in `#unreconciled_ave_number_of_attendees`, the sum
+with no `BigDecimal('0')` start in `#unreconciled_ave_cost`, and
+`last.at(0)` in the name `#short` returns.
+
+A missing example, each with one now (5):
+
+- `Meal#neighbour_ids` and `MealFormSerializer#next_id` (2): `order(nil)`
+  for the date order of the meal after. Without an ORDER BY, PostgreSQL
+  returns the rows in the order they are stored. The serializer's
+  example with meals made out of date order failed for this on the
+  laptop and not on GitHub, because a new row can fill a slot that an
+  earlier example's row left free. So a new example in each reads the
+  two statements and their ORDER BY.
+- `#unreconciled_ave_number_of_attendees` (3): `length` for `count`, for
+  the dinners, the sign-ups and the guests. The number is the same, but
+  `length` loads every row of every unsettled dinner. A new example
+  checks that all three are a `SELECT COUNT(*)`. The `size` for
+  `count` mutations stay noise: on a relation that is not loaded,
+  `size` runs the same COUNT.
+
+No test can see it (all as on 2026-10-16, where these lines first
+survived):
+
+- `#calendar_cache_version` (3): `today` for `today.to_s`, a nil default
+  for the release, and the values not spread out. `join` writes a date
+  as the same text, writes nil as nothing, and flattens a nested list.
+- `#unreconciled_ave_cost` (2): `to_ary` for `to_a`, and the sum with no
+  `BigDecimal('0')` start. The first cost is a BigDecimal, and an empty
+  list returned "--" before the sum.
+- `#unreconciled_ave_number_of_attendees` (3): `size` for `count`, above.
+- `Rotation#set_place_value` (1): the order string without `Arel.sql`,
+  which Rails accepts as it is.
+- `SuperuserAdapter#model_name` (1): `instance_of?(Class)` for
+  `is_a?(Class)`. Ruby refuses a subclass of Class, so the two agree on
+  every value.
+- `CollectionList#by_name` (1): `person.name` for
+  `T.unsafe(person.name)`. `T.unsafe` returns its argument; it only
+  tells Sorbet not to check the call.
+- `ResidentNameShortener#short` (3): `!n.eql?(name)` for `n != name` on
+  two Strings, and `last.at(0)` for `last[0]` in two places.
+  ActiveSupport adds `String#at`, which is `[]`.
