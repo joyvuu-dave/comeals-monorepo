@@ -233,9 +233,13 @@ RSpec.describe ReconciliationMailer do
       end
 
       it 'lists only the changes to this cook\'s cost' do
+        # The eater edit is not a cost, so neither mail lists it. It adds
+        # an eater, not removes the only one: a correction that leaves the
+        # cost with nobody to charge is refused (#172).
+        second_eater = create(:resident, community: community, unit: unit, name: 'Second Eater')
         correct(corrected, 'Two cooks') do |edits|
           edits.cost(other_cook, amount: BigDecimal('5'), no_cost: false)
-          edits.remove_eater(eater)
+          edits.add_eater(second_eater)
         end
 
         expect(text_lines(mail).grep(/Aug 20/)).to eq(
