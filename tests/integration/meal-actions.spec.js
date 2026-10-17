@@ -454,14 +454,8 @@ test.describe("Meal actions (real backend)", () => {
       });
 
       // Nothing changed, so WebKit's reload of the meal can come back
-      // as 304 Not Modified, which mealLoaded and reloadMeal do not
-      // take.
-      const refetched = page.waitForResponse(
-        (r) =>
-          r.request().method() === "GET" &&
-          r.url().includes(`/api/v1/meals/${mealId}/cooks`) &&
-          [200, 304].includes(r.status()),
-      );
+      // as 304 Not Modified, which mealLoaded takes.
+      const refetched = mealLoaded(page, mealId);
       const refused = page.waitForResponse(
         (r) =>
           r.request().method() === "PATCH" &&

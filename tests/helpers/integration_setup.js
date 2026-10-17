@@ -117,12 +117,18 @@ async function setupAuthenticatedPage(page, context) {
 // clicks or types before that answer arrives races the load: the
 // arriving data overwrites what it did. So every goto and reload of a
 // meal page waits for that GET.
+//
+// The answer can be 304 Not Modified. Rails puts an ETag on every GET
+// answer, and when the browser asks again with that ETag and the meal
+// has not changed, Rails answers 304 and the page uses its HTTP cache.
+// WebKit asks this way when it reloads a page. Waiting only for a 2xx
+// answer then waited until the test timed out (#132).
 function mealLoaded(page, mealId) {
   return page.waitForResponse(
     (r) =>
       r.request().method() === "GET" &&
       r.url().includes(`/api/v1/meals/${mealId}/cooks`) &&
-      r.ok(),
+      (r.ok() || r.status() === 304),
   );
 }
 
