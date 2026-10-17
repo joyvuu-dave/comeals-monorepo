@@ -132,6 +132,16 @@ its dinners plus the corrections it carries. And for each dinner, what
 it was settled at plus its later corrections equals what its rows add up
 to now.
 
+A correction may not leave the dinner with money on a cost and nobody
+who pays: everyone who pays taken off with the cost kept, or a cost
+added to a dinner only free eaters ate. The next settlement would credit
+the cook $0 for that money, which is why rule 3 holds an open dinner
+like this back. The preview and the save refuse it, nothing is saved,
+and the page says what to do: "This leaves a $40.00 cost with nobody to
+charge. Keep someone who pays, or mark the cost No cost." Both rules
+read the dinner with the same scope,
+`Meal.receipt_and_nobody_to_charge` (decided 2026-10-16, #172).
+
 A correction charges everyone who ate, including people who have moved
 out. Whether anyone asks a person who moved out for money is a decision
 for people, not for the app (rule 8).

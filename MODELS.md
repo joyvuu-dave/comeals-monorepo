@@ -521,7 +521,9 @@ how the math once ended up in three places (#48).
   would credit the cook $0 for good. A settlement holds such a meal back
   (`settleable_by`), and the preview lists it as `bill_with_no_attendees`
   or `bill_with_only_free_eaters`. A meal with nobody to charge whose cook
-  slots are all $0 or no-cost settles with no effect. (Until 2026-09-10 a
+  slots are all $0 or no-cost settles with no effect. A correction to a
+  settled meal is refused when it would leave the meal in this scope
+  (`MealCorrecting::NobodyToCharge`, ADR 0011 rule 6). (Until 2026-09-10 a
   meal nobody signed up for was settled with no lines, and until
   2026-10-09 a meal only free eaters ate was settled with every line at
   $0, #94.)
@@ -862,7 +864,11 @@ for each person. `MealCorrecting.preview` does the same and rolls back;
 its `fingerprint` lets the save refuse (`Changed`) a correction that
 came out different from the preview. A correction that changes nothing
 is refused (`NothingChanged`); one that moves no money (a blank cost
-marked No cost) is recorded with no lines.
+marked No cost) is recorded with no lines. A correction that leaves the
+dinner with money on a cost and nobody who pays is refused
+(`NobodyToCharge`, #172), read with `Meal.receipt_and_nobody_to_charge`,
+the scope a settlement holds an open dinner back by: the next settlement
+would credit the cook $0 for that money.
 
 A settlement made before line items existed (2026-08-02) stored nothing
 its dinners were settled at, so for a dinner of such a settlement the

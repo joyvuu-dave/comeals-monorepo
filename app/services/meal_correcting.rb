@@ -54,6 +54,14 @@ class MealCorrecting
   # The edits changed nothing.
   class NothingChanged < StandardError; end
 
+  # The edits leave money on a cost and nobody who pays: everyone who
+  # pays taken off, or a cost added to a dinner only free eaters ate. The
+  # next settlement would credit the cook $0 for that money. A settlement
+  # holds back an open dinner like this for the same reason, and both read
+  # it with one scope, Meal.receipt_and_nobody_to_charge (ADR 0011 rules 3
+  # and 6, #172).
+  class NobodyToCharge < StandardError; end
+
   # The save was given the fingerprint of a preview, and the dinner or the
   # edits came out different: someone changed the dinner after the preview
   # was made.
@@ -138,6 +146,7 @@ class MealCorrecting
     yield edits
     raise NothingChanged, 'The correction changes nothing.' if edits.done.empty?
 
+    refuse_a_cost_nobody_pays!(meal)
     Result.new(edits: edits.done, changes: changes(before, per_person(meal)))
   end
 
@@ -189,6 +198,20 @@ class MealCorrecting
           'See docs/runbooks/settled-data-repair.md.'
   end
 
+  # The dinner's rows after the edits, read with the scope a settlement
+  # holds an open dinner back by, so the two rules cannot differ.
+  sig { params(meal: Meal).void }
+  def self.refuse_a_cost_nobody_pays!(meal)
+    return unless Meal.where(id: meal).receipt_and_nobody_to_charge.exists?
+
+    # A No cost bill has no amount (CHECK bills_no_cost_means_no_amount),
+    # so the sum of every bill is the money on the dinner.
+    cost = Bill.where(meal: meal).sum(:amount)
+    raise NobodyToCharge,
+          "This leaves a #{ActiveSupport::NumberHelper.number_to_currency(cost)} cost with nobody to charge. " \
+          'Keep someone who pays, or mark the cost No cost.'
+  end
+
   # What each person is credited or charged for the dinner, from its rows
   # as they are now.
   sig { params(meal: Meal).returns(T::Hash[Integer, BigDecimal]) }
@@ -221,7 +244,7 @@ class MealCorrecting
     Meal.connection.execute(Meal.sanitize_sql_array(['SELECT set_config(?, ?, true)', CORRECTING_SETTING, value]))
   end
   private_class_method :apply, :record!, :refuse_an_earlier_difference!, :refuse_a_settlement_that_differs!,
-                       :per_person, :loaded, :changes, :write_setting
+                       :refuse_a_cost_nobody_pays!, :per_person, :loaded, :changes, :write_setting
 
   # The edits a correction may make to the dinner it corrects. Each one
   # saves through the model, so the model's rules apply (a cost in whole

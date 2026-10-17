@@ -160,7 +160,8 @@ ActiveAdmin.register Meal do
       else
         preview_correction(form)
       end
-    rescue MealCorrectionForm::Invalid, MealCorrecting::NothingChanged, MealCorrecting::EarlierDifference => e
+    rescue MealCorrectionForm::Invalid, MealCorrecting::NothingChanged, MealCorrecting::EarlierDifference,
+           MealCorrecting::NobodyToCharge => e
       flash.now[:alert] = e.message
     rescue ActiveRecord::RecordNotFound
       # Another correction took a row off between this form's read and

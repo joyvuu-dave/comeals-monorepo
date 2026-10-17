@@ -115,7 +115,10 @@ class Meal < ApplicationRecord
   # charge, because nobody signed up or everyone who did eats free. The
   # preview lists these (ReconciliationWarnings, bill_with_no_attendees and
   # bill_with_only_free_eaters) so the reconciler can add someone who pays
-  # or remove the bill before settling.
+  # or remove the bill before settling. A correction to a settled meal is
+  # refused when it would leave the meal in this scope
+  # (MealCorrecting::NobodyToCharge, #172): the next settlement would
+  # credit the cook $0 for that money.
   scope :receipt_and_nobody_to_charge, -> { not_cancelled.where(someone_to_charge.not).where(a_receipt_with_money) }
 
   # Held back from a settlement until every cook has entered a cost or
