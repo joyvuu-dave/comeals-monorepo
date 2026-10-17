@@ -181,32 +181,46 @@ RSpec.describe NotifyCooksJob do
   end
 
   # The send to the first cook went out, and then the row that records it
-  # was refused by an error that is not a conflict (or the worker stopped
-  # between the two). The job fails, the nightly job finds no row for that
-  # cook, and queues the mail again (#171).
+  # was refused by an error that is not a conflict (a database that went
+  # away; a worker that stops between the two is the same case). The mail
+  # is promised at least once, not once (ADR 0011 rule 9, #171).
   context 'when the row for a send that went out cannot be written' do
-    it 'does not mail that cook a second time when the job runs again' do
-      mailed = []
-      mail_fails_for([], mailed)
+    before do
       allow(Rails.error).to receive(:report)
       allow(Healthcheck).to receive(:ping)
       # The nightly job has run before, so this settlement is one it looks at.
       JobRun.create!(name: SendMissedSettlementMailJob.run_name, started_at: 30.days.ago, finished_at: 30.days.ago,
                      outcome: 'ok')
-      failed_once = false
+    end
+
+    # The row for the first cook mailed fails once; returns a lambda that
+    # gives that cook.
+    def refuse_the_first_row
+      refused = nil
       allow(MailDelivery).to receive(:record!).and_wrap_original do |original, **attributes|
-        unless failed_once
-          failed_once = true
+        if refused.nil?
+          refused = attributes.fetch(:resident)
           raise ActiveRecord::StatementInvalid, 'PG::ConnectionBad: the database went away'
         end
         original.call(**attributes)
       end
+      -> { refused }
+    end
 
-      expect { described_class.perform_now(reconciliation) }.to raise_error(ActiveRecord::StatementInvalid)
-      SendMissedSettlementMailJob.perform_now
-      perform_enqueued_jobs
+    it 'still mails and records the cooks after that one, and reports the row it could not write' do
+      mailed = []
+      mail_fails_for([], mailed)
+      refused = refuse_the_first_row
+
+      expect { described_class.perform_now(reconciliation) }.not_to raise_error
 
       expect(mailed).to match_array(cooks)
+      expect(cook_mail_rows.pluck(:resident_id)).to match_array(cooks.map(&:id) - [refused.call.id])
+      expect(Rails.error).to have_received(:report)
+        .with(an_instance_of(ActiveRecord::StatementInvalid),
+              hash_including(handled: true, context: { mailer: described_class::MAILER, resident_id: refused.call.id,
+                                                       reconciliation_id: reconciliation.id }))
+        .once
     end
   end
 
