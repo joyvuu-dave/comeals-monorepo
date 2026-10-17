@@ -238,6 +238,17 @@ RSpec.describe Community do
 
       expect(community.averaged_meal_count).to eq(2)
     end
+
+    # Loading each dinner to count them gives the same number, so this
+    # example reads the statements.
+    it 'counts the meals in the database, without loading them' do
+      meal_on(community.today - 1, bills: %w[16], eaters: [cook, diner])
+      statements = []
+      callback = ->(*, payload) { statements << payload[:sql] }
+      ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') { community.averaged_meal_count }
+
+      expect(statements.grep(/\ASELECT \S+ FROM "meals"/)).to contain_exactly(/\ASELECT COUNT\(\*\) FROM "meals"/)
+    end
   end
 
   describe '#unreconciled_ave_cost' do
@@ -507,6 +518,20 @@ RSpec.describe Community do
     # A cancelled dinner and a dinner where only a child who eats free
     # ate both settle, the second with its cost still blank. Once
     # settled, neither is waiting for anything.
+    # Loading each dinner to count them gives the same numbers, so this
+    # example reads the statements.
+    it 'counts the meals in the database, without loading them' do
+      meal_on(community.today - 1, bills: %w[16], eaters: [cook, diner])
+      statements = []
+      callback = ->(*, payload) { statements << payload[:sql] }
+      ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') do
+        community.meals_left_out_of_averages
+      end
+
+      expect(statements.grep(/\ASELECT \S+ FROM "meals"/))
+        .to match_array(Array.new(4, /\ASELECT COUNT\(\*\) FROM "meals"/))
+    end
+
     it 'leaves settled meals out of every count' do
       child = create(:resident, community: community, unit: unit, multiplier: 0)
       meal_on(community.today - 15, bills: %w[0], eaters: [diner]).cancel!
