@@ -52,7 +52,7 @@ module Api
         return render_refused(flags) if flags.is_a?(String)
 
         allday = flags.fetch(:all_day, @event.allday)
-        times = updated_start_end(allday: allday, more_keys: %i[all_day])
+        times = updated_start_end(@event, allday: allday, more_keys: %i[all_day])
         return render_refused(times) if times.is_a?(String)
 
         render_retrying_on_conflict do

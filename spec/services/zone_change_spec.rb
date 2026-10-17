@@ -98,12 +98,22 @@ RSpec.describe ZoneChange do
         .to eq([['Common house booking', 'Dance', Date.new(2026, 3, 8)],
                 ['Event', 'Movie', Date.new(2026, 4, 15)],
                 ['Event', 'Late', Date.new(2026, 11, 1)]])
-      expect(change_to('America/Denver').crossing_count).to eq(0)
+      expect(change_to('America/Juneau').crossing_count).to eq(0)
+    end
+
+    # Denver is one hour ahead, so 23:00 in Los Angeles is midnight
+    # there. Midnight is the first moment of the next day, so an event
+    # that ends at midnight ends on the next day (#154).
+    it 'counts an end at the next midnight as the next day' do
+      timed_event(Time.zone.local(2026, 4, 15, 20), Time.zone.local(2026, 4, 15, 23))
+      timed_event(Time.zone.local(2026, 4, 16, 20), Time.zone.local(2026, 4, 16, 22, 59))
+
+      expect(change_to('America/Denver').crossing_count).to eq(1)
     end
 
     it 'lists only the first ten, and counts them all' do
       12.times do |n|
-        start = Time.zone.local(2026, 5, 1 + n, 21)
+        start = Time.zone.local(2026, 5, 1 + n, 20, 30)
         timed_event(start, start + 2.hours, title: "Night #{n + 1}")
       end
 
@@ -113,12 +123,13 @@ RSpec.describe ZoneChange do
       expect(change.crossing.map(&:title)).to eq((1..10).map { |n| "Night #{n}" })
     end
 
-    # The day shown is the day people see now, in the current zone. 23:30
-    # in Los Angeles is already the next day in New York.
+    # The day shown is the day people see now, in the current zone.
+    # Honolulu is three hours behind Los Angeles in summer, so 01:00 to
+    # 04:00 on April 15 there is 22:00 on April 14 to 01:00.
     it 'gives the day in the current zone' do
-      timed_event(Time.zone.local(2026, 4, 15, 21, 30), Time.zone.local(2026, 4, 15, 23, 30))
+      timed_event(Time.zone.local(2026, 4, 15, 1), Time.zone.local(2026, 4, 15, 4))
 
-      expect(change_to('America/New_York').crossing.map(&:day)).to eq([Date.new(2026, 4, 15)])
+      expect(change_to('Pacific/Honolulu').crossing.map(&:day)).to eq([Date.new(2026, 4, 15)])
     end
   end
 

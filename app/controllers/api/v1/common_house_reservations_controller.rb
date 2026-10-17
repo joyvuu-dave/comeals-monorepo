@@ -36,7 +36,7 @@ module Api
       # PATCH /api/v1/common-house-reservations/:id/update
       # A field left out of the body keeps its stored value.
       def update
-        times = updated_start_end
+        times = updated_start_end(@chr)
         return render_refused(times) if times.is_a?(String)
 
         render_retrying_on_conflict do

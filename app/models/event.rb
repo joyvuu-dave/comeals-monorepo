@@ -100,14 +100,18 @@ class Event < ApplicationRecord
   # counts. The database refuses a write of such times too, from any path
   # (events_one_day, a trigger that reads the day in the same zone).
   #
-  # The rule runs on every save: no event in production breaks it. If an
-  # admin changes the community's zone, an event can end on a later day
-  # in the new zone, and then each save of it is refused until its times
-  # are changed.
+  # The rule runs only when a save sets or changes the times, or turns
+  # all day off, the same writes the trigger checks. If an admin changes
+  # the community's zone, an event can end on a later day in the new
+  # zone: 20:00 to 23:00 in Los Angeles is 23:00 to 02:00 in New York.
+  # Nobody chose those times, so a save that leaves them as they are, a
+  # new title, is taken (#173). The community form says how many events
+  # a new zone would move before it saves one (ZoneChange).
   def starts_and_ends_on_one_day
     start_date = self.start_date
     end_date = self.end_date
     return if allday || start_date.nil? || end_date.nil?
+    return unless times_set_or_changed?
 
     community = T.must(self.community)
     errors.add(:base, SAME_DAY) unless community.date_of(start_date) == community.date_of(end_date)

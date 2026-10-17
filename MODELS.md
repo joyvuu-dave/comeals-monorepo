@@ -1170,8 +1170,16 @@ save sets or changes the times, or turns all day off (#141), so events
 saved before that rule that end when they start (three in a copy of
 production from September 2026) can still be saved with a new title. The one exception is midnight to midnight in
 the community's zone, which is how a notice is saved. A timed event must
-start and end on the same day in the community's zone, on every save
-(#154): an event that ends at the next midnight ends on the next day.
+start and end on the same day in the community's zone (#154): an event
+that ends at the next midnight ends on the next day. This is checked
+when a save sets or changes the times, or turns all day off, the same
+writes the trigger below checks. A change of the community's zone can
+leave an event that ends on the next day (20:00 to 23:00 in Los Angeles
+is 23:00 to 02:00 in New York), and it can still be saved with a new
+title (#173). The admin community form shows how many events and
+bookings a new zone would move, and which would cross midnight, before
+it saves the zone (`ZoneChange`). The API keeps the stored times when
+an edit form sends back the day and times the event shows.
 The database refuses an end before the start with a CHECK
 (`events_end_not_before_start`, #149). A trigger (`events_one_day`)
 refuses a write that gives a timed event an end on a later day in the
@@ -1199,7 +1207,9 @@ only when a save sets or changes the times (#141), so bookings
 saved before that rule that end when they start (one in a copy of
 production from September 2026) can still be saved with a new title. The one exception is midnight to midnight in the
 community's zone, which is how a notice is saved. A booking must start
-and end on the same day in the community's zone, on every save (#154).
+and end on the same day in the community's zone (#154), checked when a
+save sets or changes the times, so a booking that a change of zone left
+ending on the next day can still be saved with a new title (#173).
 
 The database has the same three rules about time. A CHECK refuses an
 end before the start (`common_house_reservations_end_not_before_start`,

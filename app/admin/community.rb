@@ -43,6 +43,30 @@ ActiveAdmin.register Community do
         redirect_to new_resource_path
       end
     end
+
+    # A new time zone moves every event and common house booking on the
+    # clock, and can leave some that end on the next day (#173). So when
+    # the zone changes and something on the calendar would move, the
+    # first submit saves nothing: it shows the form again, with the
+    # numbers (ZoneChange) and a hidden confirm_timezone field that names
+    # the new zone. A second submit with the same zone saves. A second
+    # submit that names another zone asks again. A zone that is not on
+    # the list is not asked about; the save refuses it as before.
+    def update
+      community = resource
+      zone = params.dig(:community, :timezone).to_s
+      if zone != community.timezone && Community::SUPPORTED_TIMEZONES.value?(zone) &&
+         params[:confirm_timezone] != zone
+        change = ZoneChange.new(community, zone)
+        if change.any?
+          @zone_change = change
+          community.assign_attributes(permitted_params[:community])
+          return render :edit
+        end
+      end
+
+      super
+    end
   end
 
   # The live preview under the schedule grid. The form's JS posts the draft
@@ -149,6 +173,33 @@ ActiveAdmin.register Community do
 
   # FORM
   form do |f|
+    # Set by the update action when a new zone would move the calendar.
+    if (change = assigns[:zone_change])
+      panel 'Check the time zone change', class: 'zone-change-warning' do
+        moved = change.moved_count
+        para "#{moved} #{moved == 1 ? 'event or common house booking' : 'events and common house bookings'} " \
+             "would show at #{moved == 1 ? 'a different clock time' : 'different clock times'}. " \
+             'Their stored times stay the same. The new zone changes the clock time people see.'
+        crossing = change.crossing_count
+        if crossing.positive?
+          para "#{crossing} would end on the day after #{crossing == 1 ? 'it starts' : 'they start'}. " \
+               'They can still be saved with a new title. A change of their times must put them on one day.'
+          ul do
+            change.crossing.each do |row|
+              li "#{row.day.strftime('%a %b %-d, %Y')}: #{row.kind}, #{row.title.presence || '(no title)'}"
+            end
+          end
+          para "The first #{change.crossing.size} of #{crossing}." if crossing > change.crossing.size
+        end
+        all_day = change.all_day_moved_count
+        if all_day.positive?
+          para "#{all_day} all-day #{all_day == 1 ? 'event' : 'events'} would show on the day before or after."
+        end
+        para 'Meals keep their dates and dinner start times. Save again to change the zone.'
+      end
+      text_node hidden_field_tag(:confirm_timezone, f.object.timezone)
+    end
+
     f.inputs do
       f.input :name
       # The column is DECIMAL(12,8), so the raw value renders as "4.5" —

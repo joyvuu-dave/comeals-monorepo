@@ -41,9 +41,9 @@ RSpec.describe 'Admin community form: a change of time zone' do
     expect(community.reload).to have_attributes(timezone: 'America/Los_Angeles', name: 'Old name')
     page = response.body
     expect(page).to include('2 events and common house bookings would show at different clock times.')
-    expect(page).to include('1 would end on the day after it starts')
+    expect(page).to include('1 would end on the day after it starts.')
     expect(page).to include('Sun Mar 8, 2026: Event, Late movie')
-    expect(page).to include('name="confirm_timezone" value="America/New_York"')
+    expect(page).to include('name="confirm_timezone" id="confirm_timezone" value="America/New_York"')
     expect(page).to include('value="New name"')
 
     submit({ timezone: 'America/New_York', name: 'New name' }, confirm: 'America/New_York')
@@ -59,7 +59,7 @@ RSpec.describe 'Admin community form: a change of time zone' do
 
     expect(response).to have_http_status(:ok)
     expect(community.reload.timezone).to eq('America/Los_Angeles')
-    expect(response.body).to include('name="confirm_timezone" value="America/Chicago"')
+    expect(response.body).to include('name="confirm_timezone" id="confirm_timezone" value="America/Chicago"')
   end
 
   it 'saves at once when nothing on the calendar would move, or the zone stays' do
@@ -71,6 +71,23 @@ RSpec.describe 'Admin community form: a change of time zone' do
     submit({ timezone: 'America/New_York' })
     expect(response).to redirect_to("/communities/#{community.id}")
     expect(community.reload.timezone).to eq('America/New_York')
+  end
+
+  it 'lists the first ten that would cross midnight, and counts them all' do
+    12.times do |n|
+      start = Time.zone.local(2026, 5, 1 + n, 20, 30)
+      create(:event, community: community, title: "Night #{n + 1}", start_date: start, end_date: start + 2.hours,
+                     allday: false)
+    end
+
+    submit({ timezone: 'America/New_York' })
+
+    page = response.body
+    expect(page).to include('12 events and common house bookings would show at different clock times.')
+    expect(page).to include('12 would end on the day after they start.')
+    expect(page).to include('Sun May 10, 2026: Event, Night 10')
+    expect(page).not_to include('Night 11')
+    expect(page).to include('The first 10 of 12.')
   end
 
   it 'counts the all-day events that would show on another day' do

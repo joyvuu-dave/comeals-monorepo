@@ -152,11 +152,44 @@ class ApiController < ActionController::API
   # body that sends none of their parts, and none of more_keys (an
   # event's all_day), gets {}, so the update keeps the stored start and
   # end. A body that sends any of them is read as a whole, the way
-  # create reads it.
-  def updated_start_end(allday: false, more_keys: [])
+  # create reads it, unless it sends back the day and times the entry
+  # has (stored_times_if_shown).
+  def updated_start_end(record, allday: false, more_keys: [])
     return {} if (START_END_KEYS + more_keys).none? { |key| params.key?(key) }
 
-    parse_start_end_params(allday: allday)
+    times = parse_start_end_params(allday: allday)
+    return times if times.is_a?(String)
+
+    stored_times_if_shown(record, times)
+  end
+
+  # The edit forms send the start day and the two times they show on
+  # every save, a save of a new title too. When those are the day and
+  # times the stored entry shows in the community's zone, the update keeps
+  # the stored start and end ({}), even where reading the parts again
+  # gives other instants. Three cases do:
+  #
+  # - The form sends one day, so it cannot send back an end on a later
+  #   day. A change of the community's zone can leave one: 20:00 to 23:00
+  #   in Los Angeles is 23:00 to 02:00 in New York, which read on the
+  #   start day ends before it starts (#173).
+  # - Such an end can be a time the clock skips on the start day: 02:00
+  #   on 2026-03-08 in New York, which is read as 03:00.
+  # - Of a time the clock shows twice the parts give the first. A new
+  #   title would move an entry at the second 01:30 an hour earlier.
+  #
+  # So the sent parts are compared, not the instants made from them. An
+  # empty time menu is not a number, so a notice sent with both menus
+  # empty is read as usual, and gives the times it has. The request runs
+  # in the community's zone (set_community_timezone).
+  def stored_times_if_shown(record, times)
+    stored_end = record.end_date
+    return times if stored_end.nil? || times[:end_date].nil?
+
+    start = record.start_date.in_time_zone
+    finish = stored_end.in_time_zone
+    shown = [start.year, start.month, start.day, start.hour, start.min, finish.hour, finish.min]
+    START_END_KEYS.map { |key| whole_number_param(key) } == shown ? {} : times
   end
 
   # An update's other fields, as column => value, for the keys the body

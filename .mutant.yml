@@ -76,6 +76,7 @@ matcher:
     - ThirdCookWarning*
     - TrueOrFalse*
     - YearMonthDay*
+    - ZoneChange*
     # jobs, mailers, helpers, lib
     - ApplicationJob*
     - EnsureRotationsJob*

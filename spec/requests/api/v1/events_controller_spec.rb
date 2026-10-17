@@ -1011,6 +1011,22 @@ RSpec.describe 'Events API' do
         expect(event.reload.title).not_to eq('Renamed')
       end
 
+      # All day has no end, so the parts are read as usual: the event
+      # starts at midnight, even when the body also sends its times.
+      it 'reads the parts as usual when the save turns the event all-day' do
+        start = Time.zone.local(2026, 3, 8, 20, 0)
+        event = create(:event, community: community, start_date: start, end_date: start + 2.hours, allday: false)
+
+        patch "/api/v1/events/#{event.id}/update",
+              params: { token: token, title: 'Work day', all_day: true,
+                        start_year: 2026, start_month: 3, start_day: 8,
+                        start_hours: '20', start_minutes: '00', end_hours: '22', end_minutes: '00' }.to_json,
+              headers: { 'CONTENT_TYPE' => 'application/json' }
+
+        expect(response).to have_http_status(:ok)
+        expect(event.reload).to have_attributes(allday: true, start_date: Time.zone.local(2026, 3, 8), end_date: nil)
+      end
+
       # 01:30 shows twice on the night the clocks go back: first in
       # daylight time, then in standard time. A new event at 01:30 gets the
       # first. An event an admin put at the second 01:30 shows 01:30 on the

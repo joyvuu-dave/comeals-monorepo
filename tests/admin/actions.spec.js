@@ -876,6 +876,14 @@ test.describe("Community settings", () => {
     });
     await page.click('input[type="submit"]');
 
+    // The seed has timed events and bookings, and a new zone moves them
+    // on the clock, so the first submit only shows what would move
+    // (#173). The second one saves.
+    await expect(page.locator(".zone-change-warning")).toContainText(
+      "would show at different clock times",
+    );
+    await page.click('input[type="submit"]');
+
     await expect(page.locator(".row-timezone td")).toHaveText(
       "America/Chicago",
     );
