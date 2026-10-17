@@ -4242,6 +4242,7 @@ in four pieces on GitHub. Run 3 adds `#averaged_meal_count` and
 | --------------------------------------- | ----------- | -------- | --------- | ------ | ----- | -------- |
 | 1, after the first three examples       | 39034266247 | 9        | 714       | 699    | 15    | 0        |
 | 2, after the dinner count was added too | 39034769286 | 9        | 714       | 700    | 14    | 0        |
+| 3, with the two count methods added     | 39035579819 | 11       | 802       | 783    | 19    | 0        |
 
 Run 1 is not the same 15 as the full run. It killed four of them and
 showed four that the full run had killed: `size` and `length` for the
