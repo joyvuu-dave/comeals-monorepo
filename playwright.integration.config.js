@@ -21,11 +21,18 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   reporter: [["list"]],
+  // Its own folder inside test-results/. bin/check runs the mocked
+  // suite first, and Playwright empties its output folder when a run
+  // starts, so with one shared folder this suite deleted the mocked
+  // suite's traces. CI uploads all of test-results/.
+  outputDir: "test-results/integration",
 
   use: {
     baseURL: `http://localhost:${ports.INTEGRATION_PORT}`,
     screenshot: "only-on-failure",
-    trace: "on-first-retry",
+    // There are no retries, so "on-first-retry" never kept a trace:
+    // a failure left only a screenshot (#132).
+    trace: "retain-on-failure",
     // The community's timezone. Rendering depends on the viewer's
     // zone (the November DST escape), so tests pin it rather than
     // inherit whatever machine runs the suite.
