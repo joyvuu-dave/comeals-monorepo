@@ -4374,3 +4374,91 @@ on the two parser answers in `EventsController#update` (2), and
 
 Run 2 is on the branch with `.in_time_zone` put back and the new
 example. Every mutation of `#stored_times_if_shown` is killed.
+
+### 2026-10-17, the correction form's rows and the settled cooks readers
+
+The 57 survivors of the full run 39014862807 (on af232aff) in 14
+subjects: `MealCorrectionForm::Rows` (#192), the settled cooks readers on
+`Reconciliation` (#177), `MealCorrection#cost_edits_of`,
+`Settlement.preview`, and a few older methods. Four pieces, four workers
+each, on GitHub.
+
+| Run                                     | Subjects | Mutations | Killed | Alive | Timeouts | Time   |
+| --------------------------------------- | -------- | --------- | ------ | ----- | -------- | ------ |
+| 1, 39034577841, after the answers       | 14       | 1,166     | 1,117  | 49    | 0        | 61 min |
+| 2, 39039308747, after the order example | 14       | 1,166     | 1,119  | 47    | 0        | 59 min |
+
+Run 1 also had 20 survivors that are not among the 57, because an
+earlier entry answers them or the full run killed them. They are not
+counted below. The preloads and `to_ary` of `Settlement.preview` (18)
+are the noise of 2026-09-12: goldiloader loads the same rows. `!eql?`
+and `!equal?` for `!=` in `SettlementLineMarking.mark!` (2) are noise
+too: `seen` is an Integer or nil (its `sig`), and for those the three
+give the same answer.
+
+Missing examples (28), each with one now:
+
+- `Rows#seen` (21). Mutant did select the examples of
+  `meal_correction_form_spec.rb` for it (57 in the full run, 60 now).
+  Each of these survivors put a whole record, or the list of records,
+  where the code had one column of it. A record's JSON holds that
+  column too, so the code still changed with every write the examples
+  made. A new example
+  changes only what the page does not show (a bill's time stamp, an
+  eater's and a guest's late and vegetarian flags) and expects the same
+  code. A second one expects a SHA-256 in hex, so the hidden field does
+  not grow with the rows (1, the `hexdigest` dropped).
+- `Rows.of` (3): the `where(meal_id:)` dropped for bills, eaters or
+  guests. No example had a second dinner with rows. One does now.
+- `MealCorrection#cost_edits_of` (2): `fetch` for `[]` on `what` and
+  `resident_id`. Every edit `MealCorrecting` writes has both, but the
+  database only checks that the edits are a list. The example gives an
+  edit with no kind and a cost edit with no person; both are skipped,
+  as the `cost_edits` scope skips them in SQL.
+- `Settlement.preview` (2): `order(:date)` dropped, or `order(nil)`. The
+  example that checks the order entered the later meal first. That
+  fails without the ORDER BY under plain `rspec`, on PostgreSQL 16 and
+  17, but in run 1 it passed in the mutant worker, where many examples
+  had already written and rolled back rows in the same tables. So the
+  example now reads the meals from a list sorted newest first (a wrap of
+  `Meal.settleable_by`, like `read_newest_first` in the form spec), and
+  only the preview's own ORDER BY puts them oldest first. Run 2 killed
+  both.
+
+Code that did nothing, removed (2): the `to_s` on each day in
+`AuditDescription#date_words` (`to_str` and the call dropped). The
+column is jsonb and the audited gem writes a date as text.
+
+Noise (27):
+
+- `Rows#seen` (3): the amount as a BigDecimal, or `to_s` or `to_s('')`
+  for `to_s('F')`. ActiveSupport writes a BigDecimal to JSON as the same
+  text as `to_s('F')`, and each of the other two gives one text for each
+  amount.
+- `Rows.of` (10): the `includes` dropped or emptied (6; goldiloader
+  loads the residents anyway), the meal for `meal.id` in the three
+  `where` hashes (3), and the guest for `guest.id` as the second sort
+  key (1; ActiveRecord compares two records of one class by id).
+- `Rows.name_of` (2) and `Reconciliation#settled_cooks_by_meal` (3):
+  `to_s` dropped or `to_str` on a NOT NULL name (4), and the two ways to
+  take a pair apart in a block (1).
+- `Reconciliation.settled_dinner_cooks` (3): the order as a plain
+  string, `Arel.sql` dropped in the select, and `self.from` for
+  `MealCorrection.from` on a subquery that names its columns: the same
+  SQL, as on 2026-10-16.
+- `AuditDescription#amount_change` (1): `fetch` for `[]` after the line
+  checked the value is not nil, so the key is there.
+- `MealStatusActions#update_cancelled` (1): `instance_of?(String)` for
+  `is_a?`. `TrueOrFalse.from_params` returns a String or a Hash, never a
+  subclass of String.
+- `Reconciliation#end_date_old_enough` (1): `end_date()` for
+  `self.end_date`. With the parentheses Ruby calls the method, not the
+  local variable.
+- `SettlementLineMarking.mark!` (1): the line for `line.id` in a `where`
+  hash. Rails reads the id.
+- `SettlementPreviewHelper#dinner_cancelling_words` and
+  `#no_cost_marking_words` (2): a date for `date.iso8601` in a string.
+  `Date#to_s` gives the same text; the app sets no default date format.
+
+Run 2's 47 are the 27 noise survivors above and the 20 that are not
+among the 57. No run had a timeout.
