@@ -36,7 +36,7 @@ MUTANT_SPEC_ROWS = {
   'spec/services/ledger_verification_spec.rb' => %w[LedgerVerification Settlement Reconciliation MealLedger],
   'spec/services/settle_and_notify_spec.rb' =>
     %w[SettleAndNotify Settlement Reconciliation BalanceRecalculation RetryOnConflict NotifyCooksJob],
-  'spec/services/meal_cost_summary_spec.rb' => %w[MealCostSummary MealLedger],
+  'spec/services/meal_cost_summary_spec.rb' => %w[MealCostSummary MealLedger SettledCosts],
   'spec/models/reconciliation_spec.rb' => %w[Reconciliation Settlement MealLedger AppendOnly BelongsToTheCommunity],
   'spec/models/reconciliation_awkward_bills_spec.rb' =>
     %w[Reconciliation Settlement MealLedger AppendOnly BelongsToTheCommunity],
@@ -106,6 +106,9 @@ MUTANT_SPEC_ROWS = {
   # The only spec of the cooks a settlement's page shows for each dinner,
   # and of the Total Cost it shows for a corrected dinner nobody ate.
   'spec/requests/admin/reconciliation_show_corrected_cooks_spec.rb' => %w[Reconciliation MealCostSummary],
+  # The only spec of the page the cook mail links to: a cook's dinners in
+  # one settlement, at what each was settled at (#177).
+  'spec/requests/admin/reconciliation_cook_spec.rb' => %w[Reconciliation SettledCosts],
   'spec/requests/admin/resident_statement_spec.rb' =>
     %w[Reconciliation BalanceDisplayHelper SettlementLinesTable MealCostSummary],
 

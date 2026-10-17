@@ -1,0 +1,30 @@
+# frozen_string_literal: true
+
+# One cook's dinners in one settlement: the page the cook mail links to
+# (#177). Each dinner shows the cook's cost as the settlement settled it
+# (Reconciliation#dinners_cooked_by), not the cost on the bill now. When
+# a correction changed the dinner later (ADR 0011 rule 6), the last
+# column links to the dinner's page, which shows the correction. A cost
+# is a receipt and never negative, so it is printed as it is. The member
+# action in app/admin/reconciliation.rb runs this.
+reconciliation = resource
+cook = assigns.fetch(:cook)
+dinners = assigns.fetch(:dinners)
+settled_through = reconciliation.end_date.strftime('%b %-d, %Y')
+
+panel 'Dinners' do
+  para "What #{cook.name} spent on each dinner, as this settlement, through #{settled_through}, settled it. " \
+       'A correction made later goes into a later settlement, and the dinner\'s page shows it.'
+  if dinners.empty?
+    para "#{cook.name} cooked no dinner in this settlement."
+  else
+    table_for dinners do
+      column('Date') { |dinner| link_to dinner.meal.date.to_s, admin_meal_path(dinner.meal) }
+      column('Cost') { |dinner| dinner.no_cost ? 'No cost' : number_to_currency(dinner.amount) }
+      column('Corrected later') do |dinner|
+        link_to('Corrected later', admin_meal_path(dinner.meal)) if dinner.corrected
+      end
+    end
+  end
+  para link_to('This settlement\'s page', admin_reconciliation_path(reconciliation))
+end

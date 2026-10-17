@@ -57,6 +57,9 @@ const SIGNED_IN_PAGES = [
   ["reconciliations-index", "/reconciliations"],
   ["reconciliations-show", "/reconciliations/1"],
   ["reconciliations-new", "/reconciliations/new"],
+  // Alice's dinners in the seeded settlement: the page the cook mail
+  // links to (#177).
+  ["reconciliations-cook", "/reconciliations/1/cook?resident_id=1"],
   // Meal 4 settles at this cutoff, meal 5 waits for Alice's cost, and
   // meal 6 waits for a cook.
   [

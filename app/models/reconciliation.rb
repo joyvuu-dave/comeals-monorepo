@@ -168,6 +168,33 @@ class Reconciliation < ApplicationRecord
     Resident.from(cooks).exists?(settled_cooks: { resident_id: resident.id })
   end
 
+  # A dinner this settlement settled with this resident as a cook: their
+  # cost when it settled, and whether a correction changed the dinner
+  # since (ADR 0011 rule 6).
+  class CookedDinner < T::Struct
+    const :meal, Meal
+    const :amount, BigDecimal
+    const :no_cost, T::Boolean
+    const :corrected, T::Boolean
+  end
+
+  # The dinners this resident cooked in this settlement, by date, each
+  # at the cost it was settled at (SettledCosts), not the cost on its
+  # bill now. A cancelled dinner has no cooks (ADR 0011 rule 11). The cook
+  # mail links to the page that shows these (#177). Three queries for any
+  # number of dinners: goldiloader loads the bills and the corrections of
+  # every dinner at the first read of one. A dinner's date is unique.
+  sig { params(resident: Resident).returns(T::Array[CookedDinner]) }
+  def dinners_cooked_by(resident)
+    meals.not_cancelled.order(:date).filter_map do |meal|
+      cost = SettledCosts.of(meal)[T.must(resident.id)]
+      next if cost.nil?
+
+      amount, no_cost = cost
+      CookedDinner.new(meal: meal, amount: amount, no_cost: no_cost, corrected: meal.meal_corrections.any?)
+    end
+  end
+
   # Compute final settlement balances for this reconciliation period.
   # Returns a hash of { resident_id => rounded_balance }.
   # Uses largest-remainder method (Hamilton's method) to round to cents,

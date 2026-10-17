@@ -93,7 +93,31 @@ ActiveAdmin.register Reconciliation do
     redirect_to new_resource_path, alert: 'Pick a cutoff date first.'
   end
 
+  # The page the cook mail links to (#177): one cook's dinners in this
+  # settlement, at what each was settled at, with a link to the dinner
+  # when a correction changed it later
+  # (app/views/admin/reconciliations/cook.html.arb). The read-only token
+  # in the mail opens it, and it only reads.
+  member_action :cook, method: :get do
+    # Hand-written action: ActiveAdmin authorizes :read inside resource,
+    # and not the cook this action loads itself (the meal_resident.rb
+    # trap, ADR 0004). So both are asked here.
+    authorize! :read, resource
+    @cook = Resident.find(params.require(:resident_id))
+    authorize! :read, @cook
+    @page_title = "#{@cook.name}'s Dinners in This Settlement"
+    @dinners = resource.dinners_cooked_by(@cook)
+  end
+
   controller do
+    # ActiveAdmin asks about each action before it runs, by a permission
+    # named after the action: :read for index and show, and the action's
+    # own name for a hand-written one. The cook page only reads, so it
+    # asks for :read, which the read-only token in the cook mail has.
+    def action_to_permission(action)
+      action.to_s == 'cook' ? ActiveAdmin::Auth::READ : super
+    end
+
     # The preview's Create button settles a period, the same way the
     # reconciliations:create task and the API do: SettleAndNotify claims the meals,
     # writes the ledger, queues the cook mail, and refreshes the running

@@ -68,6 +68,7 @@ matcher:
     - ResidentNameShortener*
     - RetryOnConflict*
     - SettleAndNotify*
+    - SettledCosts*
     - SettledDinnerDifference*
     - SettledMealHistory*
     - SettlementCorrecting*

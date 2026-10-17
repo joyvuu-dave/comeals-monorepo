@@ -22,8 +22,15 @@ RSpec.describe 'Admin Reconciliation cook page' do
   # Three dinners Casey cooked. A correction later changes the first
   # one's cost, and another moves the second one's cost to Robin. The
   # third is never corrected. The settlement credited Casey $30 + $12 + $8.
+  # They are made out of date order, so a list by id is not a list by
+  # date. A fourth dinner Casey signed up to cook was cancelled: nobody
+  # cooked it (ADR 0011 rule 11).
   let!(:dinners) do
-    [dinner(latest - 7, casey, '30'), dinner(latest - 6, casey, '12'), dinner(latest - 5, casey, '8')]
+    third = dinner(latest - 5, casey, '8')
+    [dinner(latest - 7, casey, '30'), dinner(latest - 6, casey, '12'), third]
+  end
+  let!(:cancelled) do
+    dinner(latest - 8, casey, '0').tap(&:cancel!)
   end
   let!(:settlement) { settle!(cutoff: latest - 5) }
 
@@ -63,6 +70,7 @@ RSpec.describe 'Admin Reconciliation cook page' do
     get "/reconciliations/#{settlement.id}/cook", params: { resident_id: casey.id, token: token }
 
     expect(response).to have_http_status(:ok)
+    expect(settlement.meals).to include(cancelled)
     expect(response.parsed_body.at_css('#page_title').text).to include('Casey Cook')
     expect(rows).to eq([[dinners[0].date.to_s, '$30.00', 'Corrected later'],
                         [dinners[1].date.to_s, '$12.00', 'Corrected later'],
@@ -83,14 +91,21 @@ RSpec.describe 'Admin Reconciliation cook page' do
       .to include('Robin Cook cooked no dinner in this settlement.')
   end
 
-  it 'writes nothing for the token: the page has no form, and a write to it is refused' do
+  # The page is a GET and has no form. The token's writes are refused
+  # in SuperuserAdapter whatever the page, and read_only_token_spec tries
+  # each kind; here the one write next to this page, a new settlement.
+  it 'writes nothing for the token: the page has no form, and a write next to it is refused' do
     get "/reconciliations/#{settlement.id}/cook", params: { resident_id: casey.id, token: token }
+    expect(response).to have_http_status(:ok)
     expect(response.parsed_body.css('#main_content form')).to be_empty
 
     expect do
       post "/reconciliations/#{settlement.id}/cook", params: { resident_id: casey.id, token: token }
-    end.not_to(change { [Bill.count, Reconciliation.count, MealCorrection.count] })
-    expect(response).to have_http_status(:not_found)
+    end.to raise_error(ActionController::RoutingError)
+    expect do
+      post '/reconciliations', params: { reconciliation: { end_date: latest }, token: token }
+    end.not_to(change { [Reconciliation.count, Bill.count, MealCorrection.count] })
+    expect(response).to redirect_to('http://admin.example.com/')
   end
 
   it 'sends a visitor with no token to the login page' do

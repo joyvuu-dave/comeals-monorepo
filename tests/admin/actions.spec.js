@@ -990,6 +990,17 @@ test.describe("Read-only token", () => {
     await expect(page.locator("#page_title")).toHaveText("Cooking Slots");
     await expect(page.locator("tbody tr")).toHaveCount(4);
 
+    // The cook mail links to the cook's dinners in the settlement, at
+    // what each was settled at (#177). Alice cooked meal 3, for $75.
+    await page.goto(
+      `/reconciliations/1/cook?resident_id=1&token=${READ_ONLY_TOKEN}`,
+    );
+    await expect(page.locator("#page_title")).toHaveText(
+      "Alice Cook's Dinners in This Settlement",
+    );
+    await expect(page.locator("tbody tr")).toHaveCount(1);
+    await expect(page.locator("tbody tr")).toContainText("$75.00");
+
     await page.goto(`/residents/1?token=${READ_ONLY_TOKEN}`);
     await expect(panel(page, "Settlement statement")).toBeVisible();
 

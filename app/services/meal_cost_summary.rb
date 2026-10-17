@@ -79,14 +79,12 @@ class MealCostSummary
   # add or remove an eater or a guest later, so the rows now are not
   # always the rows it settled (#177). The correction's record keeps each
   # value before it changed, and the summary works back from the rows now
-  # to the rows then. Every edit has every key (MealCorrecting::Edits),
-  # so the reads use fetch: a record without one is an error, not a nil.
+  # to the rows then (SettledCosts for the cooks).
   sig { params(meal: Meal).returns(T.nilable(MealLedger::Summary)) }
   def self.chargeless(meal)
-    edits = meal.meal_corrections.flat_map { |correction| T.let(correction.edits, T::Array[Edit]) }
-    return nil if eaters_when_settled(meal, edits).positive?
+    return nil if eaters_when_settled(meal).positive?
 
-    spent = costs_when_settled(meal, edits).reject(&:last).sum(BigDecimal('0'), &:first)
+    spent = SettledCosts.of(meal).values.reject(&:last).sum(BigDecimal('0'), &:first)
     MealLedger::Summary.new(
       total_cost: spent,
       effective_cost: BigDecimal('0'),
@@ -95,45 +93,19 @@ class MealCostSummary
     )
   end
 
-  # One edit in a correction's record (MealCorrecting::Edits::Done).
-  Edit = T.type_alias { T::Hash[String, T.untyped] }
-
   # The edits that add or remove a person who ate, or change their price.
   EATER_EDITS = T.let(%w[eater guest].freeze, T::Array[String])
 
   # How many eaters and guests the meal had when it settled: the ones it
   # has now, plus each one a correction removed, minus each one a
   # correction added. A change of price adds and removes no one.
-  sig { params(meal: Meal, edits: T::Array[Edit]).returns(Integer) }
-  def self.eaters_when_settled(meal, edits)
-    edits.select { |edit| EATER_EDITS.include?(edit.fetch('what')) }
-         .sum(meal.meal_residents.size + meal.guests.size) do |edit|
+  sig { params(meal: Meal).returns(Integer) }
+  def self.eaters_when_settled(meal)
+    SettledCosts.edits(meal).select { |edit| EATER_EDITS.include?(edit.fetch('what')) }
+                .sum(meal.meal_residents.size + meal.guests.size) do |edit|
       (edit.fetch('to').nil? ? 1 : 0) - (edit.fetch('from').nil? ? 1 : 0)
     end
   end
 
-  # Each cook's cost when the meal settled, as [amount, no_cost]. A cook
-  # no correction names has the cost on their bill now. For a cook a
-  # correction does name, the first edit that names them has their cost
-  # before it, or nothing when they were not a cook then. The same rule
-  # as Reconciliation.settled_dinner_cooks.
-  sig { params(meal: Meal, edits: T::Array[Edit]).returns(T::Array[[BigDecimal, T::Boolean]]) }
-  def self.costs_when_settled(meal, edits)
-    costs = meal.bills.to_h { |bill| [T.must(bill.resident_id), [T.must(bill.amount), T.must(bill.no_cost)]] }
-    named = Set.new
-    edits.each do |edit|
-      cook_id = edit.fetch('resident_id')
-      next unless edit.fetch('what') == 'cost' && named.add?(cook_id)
-
-      before = edit.fetch('from')
-      if before.nil?
-        costs.delete(cook_id)
-      else
-        costs[cook_id] = [BigDecimal(before.fetch('amount')), before.fetch('no_cost')]
-      end
-    end
-    costs.values
-  end
-
-  private_class_method :from_charges, :chargeless, :eaters_when_settled, :costs_when_settled
+  private_class_method :from_charges, :chargeless, :eaters_when_settled
 end

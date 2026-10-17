@@ -22,12 +22,10 @@ class ReconciliationMailer < ApplicationMailer
     @cooked = reconciliation.settled_cook?(resident)
     @corrections = corrections_of(resident, reconciliation)
     @corrections_heading = corrections_heading(@corrections.size)
-    @url = "#{root_admin_url}/bills?" \
-           'order=meals.date_desc' \
-           "&q%5Bmeal_reconciliation_id_eq%5D=#{reconciliation.id}" \
-           "&q%5Bresident_id_eq%5D=#{resident.id}" \
-           '&subdomain=admin' \
-           "&token=#{read_only_token}" \
+    # The cook's dinners in this settlement, at what each was settled at
+    # (#177). The bills page would show each cost as it is now.
+    @url = "#{root_admin_url}/reconciliations/#{reconciliation.id}/cook?resident_id=#{resident.id}" \
+           "&subdomain=admin&token=#{read_only_token}" \
            '&utf8=%E2%9C%93'
     mail(to: @resident.email, subject: "Common meals settled through #{@settled_through}")
   end
