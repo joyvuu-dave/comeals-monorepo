@@ -26,6 +26,18 @@ cd "$(dirname "$0")/.."
 
 . bin/lib/output.sh
 
+# The log lines the log check reads: those from this rehearsal, without
+# the boot loop's own H14 lines and the release phase's copy of each
+# migration's SQL. $1 is when the rehearsal started, $2 when staging
+# first answered.
+rehearsal_lines() {
+  awk -v since="$1" -v booted="$2" '
+    $1 < since { next }
+    $1 < booted && /code=H14/ { next }
+    /app\[release\.[0-9]+\]: -- execute\(/ { next }
+    { print }'
+}
+
 PROD_APP=comeals-monorepo
 STAGING_APP=comeals-staging
 
@@ -188,6 +200,10 @@ if [ "$booted" != "true" ]; then
   exit 1
 fi
 ok "Staging answers at $staging_url"
+# The loop above asks before the web dyno is up, and the router logs
+# each of those requests as an H14 503. Lines before this moment with
+# H14 are the loop's own requests, not a failure.
+BOOTED_AT=$(date -u +%Y-%m-%dT%H:%M:%S)
 
 running_sha=$(heroku config:get HEROKU_SLUG_COMMIT -a "$STAGING_APP")
 if [ "$running_sha" != "$sha" ]; then
@@ -202,8 +218,13 @@ step "Log check"
 # purpose — a deploy is the moment to hear them, not later. Only lines
 # from this rehearsal count: $1 is the line's timestamp, and comparing
 # against REHEARSAL_STARTED drops the buffered lines of earlier runs.
+# Two kinds of line are dropped before the search. The boot loop's own
+# H14 lines (see BOOTED_AT). And the release phase's copy of each
+# migration's SQL ("-- execute(...)"): the trigger functions contain
+# RAISE EXCEPTION. A migration that fails still prints its error on
+# lines of its own, which the search finds.
 log_hits=$(heroku logs -n 1500 -a "$STAGING_APP" \
-  | awk -v since="$REHEARSAL_STARTED" '$1 >= since' \
+  | rehearsal_lines "$REHEARSAL_STARTED" "$BOOTED_AT" \
   | grep -iE "FATAL|DEPRECAT|status=5[0-9][0-9]| ERROR |Exception" \
   | grep -v "pg_restore" || true)
 if [ -n "$log_hits" ]; then
