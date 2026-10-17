@@ -1401,7 +1401,8 @@ describe("DataStore", () => {
       }
     });
 
-    it("a background refetch failure shows no message and does not retry", async () => {
+    // One more try after a wait, and then no more (#174).
+    it("a background refetch failure shows no message and is tried once more", async () => {
       const store = createDataStore();
       store.loadData(mealPayload(), "server");
       expect(store.mealLoading).toBe(false);
@@ -1414,7 +1415,9 @@ describe("DataStore", () => {
       expect(toastStore.toasts).toEqual([]);
       expect(store.mealLoadFailed).toBe(false);
       await vi.advanceTimersByTimeAsync(60000);
-      expect(cooksCallsFor(1).length).toBe(1);
+      expect(cooksCallsFor(1).length).toBe(2);
+      expect(toastStore.toasts).toEqual([]);
+      expect(store.mealLoadFailed).toBe(false);
     });
 
     it("a 404 shows not-found and never retries", async () => {
@@ -3961,6 +3964,7 @@ describe("DataStore", () => {
         method: "patch",
         url: "/api/v1/meals/1/cancelled",
         withCredentials: true,
+        timeout: BILLS_SAVE_TIMEOUT_MS,
         data: { cancelled: true, socket_id: "socket-1" },
       });
       expect(store.meal.cancelled).toBe(false);

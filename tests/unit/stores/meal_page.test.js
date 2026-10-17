@@ -750,6 +750,23 @@ describe("meal page store", () => {
         expect(loadDataAsync).not.toHaveBeenCalled();
       });
 
+      it("is tried once for two failures that come during the same wait", async () => {
+        vi.useFakeTimers();
+        const store = storeWithDataOnScreen();
+        const loadDataAsync = stubAction(store, "loadDataAsync");
+
+        store.handleMealLoadError({ response: { status: 500 } }, 1);
+        await vi.advanceTimersByTimeAsync(MEAL_REFETCH_RETRY_MS - 1);
+        store.handleMealLoadError({ request: {} }, 1);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(loadDataAsync).toHaveBeenCalledExactlyOnceWith({
+          afterRefetchRetry: true,
+        });
+        await vi.advanceTimersByTimeAsync(MEAL_REFETCH_RETRY_MS);
+
+        expect(loadDataAsync).toHaveBeenCalledTimes(1);
+      });
+
       it("has its wait stopped when the meal on screen changes", async () => {
         vi.useFakeTimers();
         const store = storeWithDataOnScreen();

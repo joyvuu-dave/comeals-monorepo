@@ -13,9 +13,11 @@ import { newId } from "../helpers/new_id";
 import { get as kvGet, set as kvSet, del as kvDel } from "idb-keyval";
 
 import { api } from "../helpers/api";
-import { toCommunityDayjs } from "../helpers/helpers";
+import { mealDayLabel, toCommunityDayjs } from "../helpers/helpers";
+import { evictMealCache } from "../helpers/meal_cache";
 import { toDisplayAmountString } from "../helpers/money";
 import handleAxiosError from "../helpers/handle_axios_error";
+import toastStore, { ToastType } from "./toast_store";
 import { notifyError } from "../helpers/bugsnag";
 import createVersionGuard from "../helpers/version_guard";
 import { MealForm } from "../types/api";
@@ -57,9 +59,9 @@ export interface MealPageStore extends ReturnType<typeof mealPageVolatile> {
   dropFixedCookInTwoRows(): void;
   billsPendingFor(mealId: number): boolean;
   ensureResidentsChannel(): void;
-  settleClosed(): void;
-  settleCancelled(): void;
-  loadDataAsync(): void;
+  settleClosed(mealId: number): void;
+  settleCancelled(mealId: number): void;
+  loadDataAsync(options?: { afterRefetchRetry?: boolean }): void;
   loadMealAgain(): void;
   holdMealAnswer(
     mealId: number,
@@ -67,10 +69,15 @@ export interface MealPageStore extends ReturnType<typeof mealPageVolatile> {
     signupsAtFetch: number,
   ): boolean;
   afterBillsIdle(): void;
-  handleMealLoadError(error: unknown, mealId: number): void;
+  handleMealLoadError(
+    error: unknown,
+    mealId: number,
+    afterRefetchRetry?: boolean,
+  ): void;
   handleMealProcessingError(error: unknown, mealId: number): void;
   scheduleMealRetry(mealId: number): void;
   onMealRetryTimer(mealId: number): void;
+  onMealRefetchRetryTimer(mealId: number): void;
   cancelMealRetry(): void;
   preLoadData(): void;
   loadData(data: MealForm, source: MealFormSource): void;
@@ -94,6 +101,13 @@ function statusIn(error: unknown): number | undefined {
 const MEAL_RETRY_BASE_MS = 2000;
 const MEAL_RETRY_CAP_MS = 30000;
 
+// The wait before the one more try of a fetch that failed while the
+// meal's rows were on screen (#174): a fetch after a push, after a
+// Cancel, or after a reconnect. Long enough for a short server problem
+// to pass. If the try fails too, the next push or reconnect fetches
+// again; a lost connection comes back through those handlers.
+export const MEAL_REFETCH_RETRY_MS = 5000;
+
 export function mealPageVolatile() {
   return {
     // Pending timer for the next automatic meal-load retry, or null.
@@ -101,6 +115,9 @@ export function mealPageVolatile() {
     // The wait used for the last scheduled retry, or null when the
     // backoff is at its starting point.
     mealRetryDelayMs: null as number | null,
+    // Pending timer for the one more try of a fetch that failed while
+    // the meal's rows were on screen, or null.
+    mealRefetchRetryTimer: null as ReturnType<typeof setTimeout> | null,
     // The first load of the meal on screen got an answer the page could
     // not use. That is a bug, not a network state, so nothing retries;
     // LoadStatus says so and offers the way back (#110).
@@ -152,9 +169,11 @@ export function mealPageActions(self: MealPageStore) {
     // refetch lets loadData write the server's truth, including the
     // server's closed_at (the client clock is never used). There is no
     // rollback on purpose: the meal node is edited in place by refetches,
-    // so a blind flip could invert fresh data.
-    settleClosed() {
+    // so a blind flip could invert fresh data. The copy of the meal on
+    // the device goes, as after a Cancel (settleCancelled).
+    settleClosed(mealId: number) {
       self.closedPending = false;
+      evictMealCache(mealId);
       self.loadDataAsync();
     },
     // Closing no longer requires costs to be filled in. Forcing a
@@ -169,12 +188,13 @@ export function mealPageActions(self: MealPageStore) {
 
       const meal = self.meal;
       if (!meal) return;
+      const mealId = meal.id;
       const val = !meal.closed;
       meal.closed = val;
       self.closedPending = true;
 
       api.meals
-        .updateClosed(meal.id, {
+        .updateClosed(mealId, {
           closed: val,
           socketId: window.Comeals.socketId,
         })
@@ -182,13 +202,19 @@ export function mealPageActions(self: MealPageStore) {
           handleAxiosError(error);
         })
         .then(function () {
-          self.settleClosed();
+          self.settleClosed(mealId);
         });
     },
     // Runs when a Cancel or Restore settles, either way. Nothing on the
     // page changed at the tap, so the refetch is what shows the answer.
-    settleCancelled() {
+    // The person may have gone to another meal by now, and then the
+    // refetch is of that meal. So the copy of the meal the change was
+    // about is deleted from the device here: the push for the change
+    // skips this screen, and the next visit to the meal must not show
+    // it as it was before (#174).
+    settleCancelled(mealId: number) {
       self.cancelledPending = false;
+      evictMealCache(mealId);
       self.loadDataAsync();
     },
     // Cancel the dinner, or restore it (ADR 0011 rule 11). The page
@@ -204,20 +230,33 @@ export function mealPageActions(self: MealPageStore) {
       const meal = self.meal;
       if (!meal || meal.id !== mealId) return;
       self.cancelledPending = true;
+      // Read now: by the time the answer comes, the person may be on
+      // another meal, and then a refusal names this one (#174).
+      const mealDay = mealDayLabel(meal.date);
 
       api.meals
-        .updateCancelled(meal.id, {
+        .updateCancelled(mealId, {
           cancelled,
           socketId: window.Comeals.socketId,
         })
         .catch(function (error: unknown) {
-          handleAxiosError(error);
+          if (self.meal?.id === mealId) {
+            handleAxiosError(error);
+            return;
+          }
+          handleAxiosError(error, {
+            show: (message: string, type: ToastType) =>
+              toastStore.show(`${mealDay}: ${message}`, type),
+          });
         })
         .then(function () {
-          self.settleCancelled();
+          self.settleCancelled(mealId);
         });
     },
-    loadDataAsync() {
+    // `afterRefetchRetry` is true for the one more try of a fetch that
+    // failed while the meal's rows were on screen: if it fails too, it
+    // is not tried again (handleMealLoadError).
+    loadDataAsync(options: { afterRefetchRetry?: boolean } = {}) {
       // Leaving the meal page nulls the meal (issue #38). A settle
       // callback that lands after that has nothing to refetch.
       if (!self.meal) return;
@@ -281,7 +320,11 @@ export function mealPageActions(self: MealPageStore) {
           // not loop retries forever. The state change comes first:
           // the console logging must not be able to break it.
           function (error: unknown) {
-            self.handleMealLoadError(error, mealIdAtFetch);
+            self.handleMealLoadError(
+              error,
+              mealIdAtFetch,
+              options.afterRefetchRetry === true,
+            );
             handleAxiosError(error, { silent: true });
           },
         )
@@ -342,15 +385,27 @@ export function mealPageActions(self: MealPageStore) {
       if (self.billsPendingFor(meal.id)) return;
       self.loadDataAsync();
     },
-    // A meal fetch failed. Only the FIRST load of the meal on screen
-    // gets the retry treatment: with mealLoading false there is data
-    // on screen, and background refetch failures already heal through
-    // the reconnect and online handlers. A 404 means the meal does
-    // not exist — no retry can fix that.
-    handleMealLoadError(error: unknown, mealId: number) {
+    // A meal fetch failed. The FIRST load of the meal on screen is
+    // tried again and again (scheduleMealRetry), and the page says so.
+    // With mealLoading false the meal's rows are on screen, so the page
+    // shows no notice and the fetch is tried one more time after a wait
+    // (#174); the next push or reconnect fetches again after that. A 404
+    // means the meal does not exist — no retry can fix that.
+    handleMealLoadError(
+      error: unknown,
+      mealId: number,
+      afterRefetchRetry = false,
+    ) {
       if (!self.meal || self.meal.id !== mealId) return;
-      if (!self.mealLoading) return;
       const status = statusIn(error);
+      if (!self.mealLoading) {
+        if (status === 404 || afterRefetchRetry) return;
+        if (self.mealRefetchRetryTimer !== null) return;
+        self.mealRefetchRetryTimer = setTimeout(function () {
+          self.onMealRefetchRetryTimer(mealId);
+        }, MEAL_REFETCH_RETRY_MS);
+        return;
+      }
       if (status === 404) {
         self.cancelMealRetry();
         self.mealLoadNotFound = true;
@@ -390,6 +445,12 @@ export function mealPageActions(self: MealPageStore) {
       if (!self.mealLoading) return;
       self.loadDataAsync();
     },
+    onMealRefetchRetryTimer(mealId: number) {
+      self.mealRefetchRetryTimer = null;
+      // The screen may have moved on while the timer waited.
+      if (!self.meal || self.meal.id !== mealId) return;
+      self.loadDataAsync({ afterRefetchRetry: true });
+    },
     // The "Retry now" button. Resets the backoff: a person is watching
     // now, so if this try also fails the next automatic one should
     // come quickly again.
@@ -408,6 +469,10 @@ export function mealPageActions(self: MealPageStore) {
       if (self.mealRetryTimer !== null) {
         clearTimeout(self.mealRetryTimer);
         self.mealRetryTimer = null;
+      }
+      if (self.mealRefetchRetryTimer !== null) {
+        clearTimeout(self.mealRefetchRetryTimer);
+        self.mealRefetchRetryTimer = null;
       }
       self.mealRetryDelayMs = null;
       self.mealLoadFailed = false;

@@ -79,6 +79,8 @@ export const api = {
       });
     },
 
+    // The same time limit as a bills save, for the same reason. Until a
+    // Cancel or Restore is answered, its button stays disabled (#174).
     updateCancelled(
       mealId: number,
       { cancelled, socketId }: { cancelled: boolean } & SocketBound,
@@ -87,6 +89,7 @@ export const api = {
         method: "patch",
         url: `/api/v1/meals/${mealId}/cancelled`,
         withCredentials: true,
+        timeout: BILLS_SAVE_TIMEOUT_MS,
         data: { cancelled, socket_id: socketId },
       });
     },

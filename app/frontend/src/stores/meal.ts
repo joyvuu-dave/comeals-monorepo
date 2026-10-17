@@ -2,6 +2,7 @@ import { types, getRoot, isAlive } from "mobx-state-tree";
 import { api } from "../helpers/api";
 import createVersionGuard from "../helpers/version_guard";
 import handleAxiosError from "../helpers/handle_axios_error";
+import { evictMealCache } from "../helpers/meal_cache";
 
 // What a meal reads from the DataStore at the root of its tree (the store
 // is still JavaScript): the head count its cap is computed from, whether
@@ -214,6 +215,9 @@ const Meal = types
       // lets loadData write the server's truth over the optimistic value.
       // There is no rollback on purpose: this node is edited in place by
       // refetches, so restoring a captured value could overwrite fresh data.
+      // The copy of the meal on the device goes before this runs, as after
+      // a Cancel (settleCancelled), even when the person has left the meal
+      // and this node is gone.
       settleExtras() {
         self.extrasPending = false;
         self.root.loadDataAsync();
@@ -224,6 +228,8 @@ const Meal = types
         if (self.extrasLocked) {
           return;
         }
+        // Read now: a node that is gone has no id to read.
+        const mealId = self.id;
 
         // Scenario #1: explicit null (clear extras)
         // Note: empty string falls to Scenario #2 and resolves to 0
@@ -240,6 +246,7 @@ const Meal = types
               handleAxiosError(error);
             })
             .then(function () {
+              evictMealCache(mealId);
               if (!isAlive(self)) return;
               actor.settleExtras();
             });
@@ -262,6 +269,7 @@ const Meal = types
               handleAxiosError(error);
             })
             .then(function () {
+              evictMealCache(mealId);
               if (!isAlive(self)) return;
               actor.settleExtras();
             });

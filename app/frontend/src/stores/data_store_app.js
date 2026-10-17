@@ -299,6 +299,7 @@ export function appActions(self) {
     beforeDestroy() {
       clearTimeout(self.midnightTimer);
       clearTimeout(self.mealRetryTimer);
+      clearTimeout(self.mealRefetchRetryTimer);
     },
     setAuthExpired(value) {
       self.authExpired = value;
