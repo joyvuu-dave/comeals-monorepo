@@ -180,6 +180,36 @@ RSpec.describe NotifyCooksJob do
     end
   end
 
+  # The send to the first cook went out, and then the row that records it
+  # was refused by an error that is not a conflict (or the worker stopped
+  # between the two). The job fails, the nightly job finds no row for that
+  # cook, and queues the mail again (#171).
+  context 'when the row for a send that went out cannot be written' do
+    it 'does not mail that cook a second time when the job runs again' do
+      mailed = []
+      mail_fails_for([], mailed)
+      allow(Rails.error).to receive(:report)
+      allow(Healthcheck).to receive(:ping)
+      # The nightly job has run before, so this settlement is one it looks at.
+      JobRun.create!(name: SendMissedSettlementMailJob.run_name, started_at: 30.days.ago, finished_at: 30.days.ago,
+                     outcome: 'ok')
+      failed_once = false
+      allow(MailDelivery).to receive(:record!).and_wrap_original do |original, **attributes|
+        unless failed_once
+          failed_once = true
+          raise ActiveRecord::StatementInvalid, 'PG::ConnectionBad: the database went away'
+        end
+        original.call(**attributes)
+      end
+
+      expect { described_class.perform_now(reconciliation) }.to raise_error(ActiveRecord::StatementInvalid)
+      SendMissedSettlementMailJob.perform_now
+      perform_enqueued_jobs
+
+      expect(mailed).to match_array(cooks)
+    end
+  end
+
   it 'asks for another run when the per-run cap cut the list short' do
     stub_const('PacedDelivery::CAP', 2)
     allow(Rails.logger).to receive(:error)

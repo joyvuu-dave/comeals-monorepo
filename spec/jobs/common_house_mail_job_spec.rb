@@ -88,6 +88,39 @@ RSpec.describe CommonHouseMailJob do
     end.to raise_error(ActiveRecord::RecordNotUnique, /index_mail_deliveries_one_to_no_person/)
   end
 
+  # The send went out, and then the row that records it was refused by
+  # an error that is not a conflict (or the worker stopped between the
+  # two). The job fails, the nightly job finds no row, and queues the mail
+  # again (#171).
+  context 'when the row for a send that went out cannot be written' do
+    before do
+      allow(Rails.error).to receive(:report)
+      allow(Healthcheck).to receive(:ping)
+      # The nightly job has run before, so this settlement is one it looks at.
+      JobRun.create!(name: SendMissedSettlementMailJob.run_name, started_at: 30.days.ago, finished_at: 30.days.ago,
+                     outcome: 'ok')
+    end
+
+    it 'does not send the common house a second copy when the job runs again' do
+      sent = []
+      mail_server(sent, failing: -> { false })
+      failed_once = false
+      allow(MailDelivery).to receive(:record!).and_wrap_original do |original, **attributes|
+        unless failed_once
+          failed_once = true
+          raise ActiveRecord::StatementInvalid, 'PG::ConnectionBad: the database went away'
+        end
+        original.call(**attributes)
+      end
+
+      expect { described_class.perform_now(reconciliation) }.to raise_error(ActiveRecord::StatementInvalid)
+      SendMissedSettlementMailJob.perform_now
+      perform_enqueued_jobs
+
+      expect(sent).to eq([reconciliation])
+    end
+  end
+
   describe 'the quick tries after a failed send' do
     include ActiveSupport::Testing::TimeHelpers
 
