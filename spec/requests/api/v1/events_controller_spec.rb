@@ -961,6 +961,75 @@ RSpec.describe 'Events API' do
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body['message']).to eq('Error: Invalid date')
     end
+
+    # The edit form sends the start day and the two times it shows, on
+    # every save. It cannot send an end on a later day. After a change of
+    # the community's zone, an event can end on a later day: 20:00 to
+    # 23:00 in Los Angeles is 23:00 to 02:00 in New York. The form then
+    # shows 23:00 and 02:00 and sends them back with a new title. Read on
+    # the start day, 02:00 is before 23:00, and until #173 the save was
+    # refused. The day and times it sends are the ones the event has, so
+    # the stored times are kept. The days are an ordinary one and both
+    # daylight saving days.
+    describe 'a save that sends back the day and times the event has (#173)' do
+      def patch_shown(event, title:, end_hours: '02')
+        day = event.start_date.in_time_zone(community.timezone)
+        patch "/api/v1/events/#{event.id}/update",
+              params: { token: token, title: title, description: '', all_day: false,
+                        start_year: day.year, start_month: day.month, start_day: day.day,
+                        start_hours: '23', start_minutes: '00',
+                        end_hours: end_hours, end_minutes: '00' }.to_json,
+              headers: { 'CONTENT_TYPE' => 'application/json' }
+      end
+
+      it 'keeps the stored times of an event the zone change moved past midnight, and takes the new title' do
+        events = [[2026, 4, 15], [2026, 3, 8], [2026, 11, 1]].map do |day|
+          start = Time.zone.local(*day, 20, 0)
+          create(:event, community: community, start_date: start, end_date: start + 3.hours, allday: false)
+        end
+        community.update!(timezone: 'America/New_York')
+
+        events.each do |event|
+          before = [event.start_date, event.end_date]
+          patch_shown(event, title: 'Renamed')
+
+          expect(response).to have_http_status(:ok)
+          expect(event.reload).to have_attributes(title: 'Renamed')
+          expect([event.start_date, event.end_date]).to eq(before)
+        end
+      end
+
+      it 'still refuses a change of the times that ends before the start on that day' do
+        start = Time.zone.local(2026, 4, 15, 20, 0)
+        event = create(:event, community: community, start_date: start, end_date: start + 3.hours, allday: false)
+        community.update!(timezone: 'America/New_York')
+
+        patch_shown(event, title: 'Renamed', end_hours: '01')
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body).to eq('message' => 'Start time must occur before end time')
+        expect(event.reload.title).not_to eq('Renamed')
+      end
+
+      # 01:30 shows twice on the night the clocks go back: first in
+      # daylight time, then in standard time. A new event at 01:30 gets the
+      # first. An event an admin put at the second 01:30 shows 01:30 on the
+      # form, and a new title must not move it an hour earlier.
+      it 'keeps an event at the second 01:30 of the night the clocks go back' do
+        second = Time.utc(2026, 11, 1, 9, 30)
+        event = create(:event, community: community, start_date: second, end_date: second + 90.minutes, allday: false)
+        expect(second.in_time_zone.strftime('%R %Z')).to eq('01:30 PST')
+
+        patch "/api/v1/events/#{event.id}/update",
+              params: { token: token, title: 'Renamed', all_day: false,
+                        start_year: 2026, start_month: 11, start_day: 1,
+                        start_hours: '01', start_minutes: '30', end_hours: '03', end_minutes: '00' }.to_json,
+              headers: { 'CONTENT_TYPE' => 'application/json' }
+
+        expect(response).to have_http_status(:ok)
+        expect([event.reload.start_date, event.end_date]).to eq([second, second + 90.minutes])
+      end
+    end
   end
 
   describe 'DELETE /api/v1/events/:id/delete' do

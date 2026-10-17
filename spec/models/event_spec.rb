@@ -477,22 +477,31 @@ RSpec.describe Event do
       expect(build(:event, allday: true, start_date: start, end_date: start + 3.days)).to be_valid
     end
 
-    # The rule runs on every save, not only when the times change. No
-    # event in production starts and ends on different days, but a change
-    # of the community's zone can make one: 20:30 to 21:30 in Los Angeles
-    # is 23:30 to 00:30 in New York. Turning all day off makes the end
-    # count again.
-    it 'refuses any save of an event that ends on a later day, a new title too' do
-      start = Time.zone.local(2026, 4, 15, 20, 30)
-      event = create(:event, start_date: start, end_date: start + 1.hour, allday: false)
-      event.community.update_columns(timezone: 'America/New_York')
+    # The rule runs only when a save sets or changes the times, or turns
+    # all day off, the same writes the events_one_day trigger checks. A
+    # change of the community's zone can leave an event that ends on a
+    # later day: 20:00 to 23:00 in Los Angeles is 23:00 to 02:00 in New
+    # York. Nobody chose those times. Until #173 the rule ran on every
+    # save, so no save of such an event was taken, not even a new title,
+    # and nobody could edit it at all. A save that moves its times, or
+    # turns all day off, is still refused.
+    it 'takes a new title for an event that ends on a later day only because the zone changed' do
+      events = days.map do |day|
+        start = Time.zone.local(*day, 20, 0)
+        create(:event, start_date: start, end_date: start + 3.hours, allday: false)
+      end
+      Community.first!.update!(timezone: 'America/New_York')
 
-      expect(event.update(title: 'Renamed')).to be(false)
-      expect(event.errors[:base]).to eq(refused)
+      saved = events.map { |event| described_class.find(event.id).update(title: 'Renamed') }
+      expect(saved).to eq([true, true, true])
 
-      event.update_columns(allday: true)
-      expect(event.update(allday: false)).to be(false)
-      expect(event.errors[:base]).to eq(refused)
+      moved = described_class.find(events.first.id)
+      expect(moved.update(start_date: moved.start_date + 30.minutes)).to be(false)
+      expect(moved.errors[:base]).to eq(refused)
+
+      moved.reload.update_columns(allday: true)
+      expect(moved.update(allday: false)).to be(false)
+      expect(moved.errors[:base]).to eq(refused)
     end
 
     it 'gives both messages for an end on the day before the start' do

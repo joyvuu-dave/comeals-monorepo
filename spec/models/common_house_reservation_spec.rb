@@ -526,17 +526,26 @@ RSpec.describe CommonHouseReservation do
       expect(valid).to eq([false, true])
     end
 
-    # The rule runs on every save, not only when the times change. No
-    # booking in production starts and ends on different days, but a
-    # change of the community's zone can make one: 20:30 to 21:30 in Los
-    # Angeles is 23:30 to 00:30 in New York.
-    it 'refuses any save of a booking that ends on a later day, a new title too' do
-      start = Time.zone.local(2026, 4, 12, 20, 30)
-      reservation = create(:common_house_reservation, start_date: start, end_date: start + 1.hour)
-      reservation.community.update_columns(timezone: 'America/New_York')
+    # The rule runs only when a save sets or changes the times, the same
+    # writes the common_house_reservations_one_day trigger checks. A
+    # change of the community's zone can leave a booking that ends on a
+    # later day: 20:00 to 23:00 in Los Angeles is 23:00 to 02:00 in New
+    # York. Nobody chose those times. Until #173 the rule ran on every
+    # save, so no save of such a booking was taken, not even a new title.
+    # A save that moves its end is still refused.
+    it 'takes a new title for a booking that ends on a later day only because the zone changed' do
+      bookings = days.map do |day|
+        start = Time.zone.local(*day, 20, 0)
+        create(:common_house_reservation, start_date: start, end_date: start + 3.hours)
+      end
+      Community.first!.update!(timezone: 'America/New_York')
 
-      expect(reservation.update(title: 'Renamed')).to be(false)
-      expect(reservation.errors[:base]).to eq(refused)
+      saved = bookings.map { |booking| described_class.find(booking.id).update(title: 'Renamed') }
+      expect(saved).to eq([true, true, true])
+
+      moved = described_class.find(bookings.first.id)
+      expect(moved.update(end_date: moved.end_date + 30.minutes)).to be(false)
+      expect(moved.errors[:base]).to eq(refused)
     end
 
     it 'gives both messages for an end on the day before the start' do

@@ -644,6 +644,35 @@ RSpec.describe 'Common House Reservations API' do
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body['message']).to include('Invalid date')
     end
+
+    # The edit form sends the start day and the two times it shows, on
+    # every save, and cannot send an end on a later day. After a change of
+    # the community's zone, 20:00 to 23:00 in Los Angeles is 23:00 to
+    # 02:00 in New York. Until #173 a new title sent with those times was
+    # refused. They are the times the booking has, so they are kept. The
+    # days are an ordinary one and both daylight saving days.
+    it 'keeps the stored times of a booking the zone change moved past midnight, and takes the new title (#173)' do
+      bookings = [[2026, 4, 12], [2026, 3, 8], [2026, 11, 1]].map do |day|
+        start = Time.zone.local(*day, 20, 0)
+        create(:common_house_reservation, community: community, resident: resident,
+                                          start_date: start, end_date: start + 3.hours)
+      end
+      community.update!(timezone: 'America/New_York')
+
+      bookings.each do |chr|
+        before = [chr.start_date, chr.end_date]
+        day = chr.start_date.in_time_zone(community.timezone)
+        patch "/api/v1/common-house-reservations/#{chr.id}/update",
+              params: { token: token, resident_id: resident.id, title: 'Renamed',
+                        start_year: day.year, start_month: day.month, start_day: day.day,
+                        start_hours: '23', start_minutes: '00', end_hours: '02', end_minutes: '00' }.to_json,
+              headers: { 'CONTENT_TYPE' => 'application/json' }
+
+        expect(response).to have_http_status(:ok)
+        expect(chr.reload.title).to eq('Renamed')
+        expect([chr.start_date, chr.end_date]).to eq(before)
+      end
+    end
   end
 
   describe 'DELETE /api/v1/common-house-reservations/:id/delete' do
