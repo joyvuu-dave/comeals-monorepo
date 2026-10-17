@@ -91,14 +91,14 @@ landing could lose or hide work:
 - the branch is not a fast-forward of `main` — rebase it in its
   worktree, rerun `bin/check` there, and rerun the script.
 
-One thing to expect after a merge that ran a migration: `git status` in
-the main checkout may show a small diff in `db/structure.sql`. Look at
-it. If it is only whitespace inside function bodies, it is not a real
-change: the development database was built from squished SQL heredocs,
-so `pg_dump` prints its functions on one line, while the committed file
-comes from the test database. Restore it with
-`git checkout db/structure.sql`. If the diff is anything else, stop and
-report it.
+After a merge that ran a migration, the dump of the development database
+can differ from the merged `db/structure.sql`. The development database
+was built from squished SQL heredocs, so `pg_dump` prints its functions
+on one line, and it can print a CHECK rule in another form that means
+the same thing. The committed file comes from the test database. So the
+script prints the diff and then puts back the merged file (#213). Read
+the printed diff. If it is more than another form of the same SQL, stop
+and report it.
 
 The same migrate step runs annotaterb, which rewrites the schema comment
 at the top of each model, spec and factory. It finds nothing to write

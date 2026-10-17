@@ -98,6 +98,20 @@ git push
 if [ -n "$migrations" ]; then
   echo "==> branch added migrations; migrating the development database"
   bin/rails db:migrate
+  # The migrate also dumps the development database into
+  # db/structure.sql, and that database can print a function or a rule in
+  # another form that means the same thing. The merged file is the one the
+  # test databases were built from, so put it back, and print what the
+  # dump changed so a person can check it is only that kind of difference
+  # (docs/agents/worktrees.md). The checkout was clean before the merge
+  # (checked above), so this undoes only the dump.
+  if ! git diff --quiet -- db/structure.sql; then
+    echo "==> the development database's dump differs from the merged db/structure.sql:"
+    git --no-pager diff -- db/structure.sql
+    echo "==> put back the merged db/structure.sql. If the diff above is more than"
+    echo "    another form of the same SQL, report it."
+    git checkout -- db/structure.sql
+  fi
 fi
 
 # Remove the worktree before deleting the branch: git refuses to delete a
