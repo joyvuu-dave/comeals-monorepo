@@ -70,10 +70,15 @@ class Meal < ApplicationRecord
   # a price ate is held back (receipt_and_nobody_to_charge): settling it
   # would credit the cook $0 and freeze the meal, and the cook's money
   # would be gone for good, with no error. That covers a meal nobody
-  # signed up for, which settled with no lines until 2026-09-10 (three
-  # times since 2024, for $22.22), and a meal only people who eat free
-  # signed up for, which settled with every line at $0 until 2026-10-09
-  # (#94).
+  # signed up for, which would have settled with no lines until
+  # 2026-09-10, and a meal only people who eat free signed up for, which
+  # would have settled with every line at $0 until 2026-10-09 (#94). In
+  # production no meal nobody signed up for has ever settled with a cost
+  # on it; the last settlement is dated 2024-01-01. Two such dinners wait:
+  # 2024-11-24, a potluck with two $1.00 costs that were not real money
+  # (marked No cost by migration 20261016130000), and 2025-12-09, with a
+  # $20.22 receipt (moved to the dinner it was for by migration
+  # 20261012120000).
   #
   # A meal where someone is charged and a cook's cost is blank waits
   # (waiting_for_a_cost, ADR 0011 rule 3): the cook has not said what they
