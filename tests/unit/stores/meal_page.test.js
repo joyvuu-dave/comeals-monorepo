@@ -19,6 +19,7 @@ import axios from "axios";
 import * as idbKeyval from "idb-keyval";
 import { notifyError } from "../../../app/frontend/src/helpers/bugsnag.js";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
+import { MEAL_REFETCH_RETRY_MS } from "../../../app/frontend/src/stores/data_store_meal_page";
 import {
   createDataStore,
   stage,
@@ -666,6 +667,100 @@ describe("meal page store", () => {
 
       expect(loadDataAsync).toHaveBeenCalledTimes(1);
       expect(store.mealRetryDelayMs).toBeNull();
+    });
+
+    // #174. A fetch with data already on screen (a push, a Cancel that
+    // settled) gets one more try after a wait. Without it, the screen
+    // shows the old rows until the next push or reconnect.
+    describe("a fetch that fails with data on screen", () => {
+      function storeWithDataOnScreen() {
+        const store = createStore();
+        stage(store, () => {
+          store.mealLoading = false;
+        });
+        return store;
+      }
+
+      it("is tried once more after a wait, and the answer is shown", async () => {
+        vi.useFakeTimers();
+        const store = storeWithDataOnScreen();
+        axios.get
+          .mockRejectedValueOnce({ response: { status: 500 } })
+          .mockResolvedValueOnce({
+            status: 200,
+            data: mealPayload({ description: "Soup" }),
+          });
+
+        store.loadDataAsync();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(axios.get).toHaveBeenCalledTimes(1);
+
+        await vi.advanceTimersByTimeAsync(MEAL_REFETCH_RETRY_MS - 1);
+        expect(axios.get).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(axios.get).toHaveBeenCalledTimes(2);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(store.meal.description).toBe("Soup");
+        expect(store.mealLoadFailed).toBe(false);
+      });
+
+      it("is tried only once: when that try fails too, nothing fetches on its own", async () => {
+        vi.useFakeTimers();
+        const store = storeWithDataOnScreen();
+        axios.get.mockRejectedValue({ response: { status: 500 } });
+
+        store.loadDataAsync();
+        await vi.advanceTimersByTimeAsync(MEAL_REFETCH_RETRY_MS);
+        expect(axios.get).toHaveBeenCalledTimes(2);
+        await vi.advanceTimersByTimeAsync(MEAL_REFETCH_RETRY_MS * 10);
+
+        expect(axios.get).toHaveBeenCalledTimes(2);
+        // The rows on screen stay; no notice covers them.
+        expect(store.mealLoadFailed).toBe(false);
+        axios.get.mockReset();
+      });
+
+      it("is tried again after the next push, when that fetch fails too", async () => {
+        vi.useFakeTimers();
+        const store = storeWithDataOnScreen();
+        axios.get.mockRejectedValue({ response: { status: 500 } });
+
+        store.loadDataAsync();
+        await vi.advanceTimersByTimeAsync(MEAL_REFETCH_RETRY_MS);
+        store.loadDataAsync();
+        await vi.advanceTimersByTimeAsync(MEAL_REFETCH_RETRY_MS);
+
+        expect(axios.get).toHaveBeenCalledTimes(4);
+        axios.get.mockReset();
+      });
+
+      it("is not tried again for a 404, or once the person left the meal", async () => {
+        vi.useFakeTimers();
+        const store = storeWithDataOnScreen();
+        const loadDataAsync = stubAction(store, "loadDataAsync");
+
+        store.handleMealLoadError({ response: { status: 404 } }, 1);
+        store.handleMealLoadError({ response: { status: 500 } }, 1);
+        stage(store, () => {
+          store.meals.push({ id: 2 });
+          store.meal = 2;
+        });
+        await vi.advanceTimersByTimeAsync(MEAL_REFETCH_RETRY_MS);
+
+        expect(loadDataAsync).not.toHaveBeenCalled();
+      });
+
+      it("has its wait stopped when the meal on screen changes", async () => {
+        vi.useFakeTimers();
+        const store = storeWithDataOnScreen();
+        const loadDataAsync = stubAction(store, "loadDataAsync");
+
+        store.handleMealLoadError({ response: { status: 500 } }, 1);
+        store.cancelMealRetry();
+        await vi.advanceTimersByTimeAsync(MEAL_REFETCH_RETRY_MS);
+
+        expect(loadDataAsync).not.toHaveBeenCalled();
+      });
     });
 
     it("retry-now does nothing with data on screen or with no meal", () => {

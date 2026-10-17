@@ -76,6 +76,7 @@ import Cookie from "js-cookie";
 import { cookies } from "../mocks/js_cookie.js";
 import toastStore from "../../../app/frontend/src/stores/toast_store";
 import { BILL_ROW_SAVE_WAIT_MS } from "../../../app/frontend/src/stores/data_store_bills";
+import { BILLS_SAVE_TIMEOUT_MS } from "../../../app/frontend/src/helpers/api";
 // The server's real answer for GET /meals/42/cooks, written by
 // rake test:generate_fixtures from MealFormSerializer.
 import mealFixture from "../../fixtures/meal.json";
@@ -3981,6 +3982,82 @@ describe("DataStore", () => {
         ],
       ]);
       expect(axios.get).toHaveBeenCalledWith("/api/v1/meals/1/cooks");
+    });
+
+    // #174. Without a limit, a request that never gets an answer keeps
+    // the button disabled until the page reloads.
+    it("stops waiting for the answer after as long as a bills save waits", () => {
+      const store = createDataStore({ mealProps: { cancelled: false } });
+
+      store.setCancelled(1, true);
+
+      expect(axios.mock.calls[0][0].timeout).toBe(BILLS_SAVE_TIMEOUT_MS);
+    });
+
+    // #174. The answer can come after the person went on to another
+    // meal. The sentence says "this dinner", so the page names the
+    // dinner it was about, the way a failed sign-up does.
+    it("names the meal in a refusal that comes after the person left it", async () => {
+      const store = createDataStore({
+        mealProps: { cancelled: false, date: "2023-06-15" },
+      });
+      let refuse;
+      axios.mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            refuse = reject;
+          }),
+      );
+      toastStore.clearAll();
+
+      store.setCancelled(1, true);
+      stage(store, () => {
+        store.meals.push({ id: 2 });
+        store.meal = 2;
+      });
+      refuse({
+        response: {
+          data: {
+            message:
+              "A cook spent money on this dinner, so it can't be cancelled.",
+          },
+        },
+      });
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(
+        toastStore.toasts.map((toast) => [toast.type, toast.message]),
+      ).toEqual([
+        [
+          "error",
+          "Thu, Jun 15th: A cook spent money on this dinner, so it can't be cancelled.",
+        ],
+      ]);
+    });
+
+    // #174. The push for the change skips this screen (it carried this
+    // screen's socket id), and the person may have left the meal by the
+    // time the answer comes, so the fetch at the end is of another
+    // meal. The copy of the meal on the device goes either way.
+    it("deletes the meal's copy on the device when it settles, also after the person left it", async () => {
+      const store = createDataStore({ mealProps: { cancelled: false } });
+      let answer;
+      axios.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      );
+
+      store.setCancelled(1, true);
+      stage(store, () => {
+        store.meals.push({ id: 2 });
+        store.meal = 2;
+      });
+      answer({ status: 200 });
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(idbKeyval.del).toHaveBeenCalledWith("1");
     });
 
     it("sends nothing while one is on its way, for another meal, or with no meal", async () => {
