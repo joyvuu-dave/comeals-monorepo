@@ -100,4 +100,22 @@ RSpec.describe 'bin/dev' do
     expect(alive?(pid)).to be(true)
     expect(sandbox.calls_to('bundle')).to be_empty
   end
+
+  # "Ours" is a match on the folder's name anywhere in the process title.
+  # The main checkout is comeals-monorepo, so a worktree for a task named
+  # "mono" (comeals-mono) takes the main checkout's server for its own and
+  # stops it.
+  context 'when this folder is comeals-mono' do
+    let(:sandbox) { ScriptSandbox.new(root_name: 'comeals-mono') }
+
+    it 'leaves alone the server of comeals-monorepo' do
+      pid = leftover_server
+      sandbox.fake('ps', "echo 'puma 7.0 (tcp://localhost:3000) [comeals-monorepo]'")
+
+      result = sandbox.run(script)
+
+      expect(result.exitstatus).to eq(1)
+      expect(alive?(pid)).to be(true)
+    end
+  end
 end
