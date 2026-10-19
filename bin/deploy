@@ -452,7 +452,7 @@ check_logs() {
   if [ -n "$issues" ]; then
     warn "Issues found in logs:"
     echo "$issues" | head -30 | while IFS= read -r line; do
-      [ -n "$line" ] && echo "      $line"
+      if [ -n "$line" ]; then echo "      $line"; fi
     done
     local total
     total=$(echo "$issues" | grep -c . || true)

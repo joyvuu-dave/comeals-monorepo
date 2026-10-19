@@ -2,7 +2,6 @@
 
 require 'rails_helper'
 require 'shellwords'
-require_relative 'deploy_fakes/bash_coverage'
 require_relative 'deploy_fakes/deploy_harness'
 
 # bin/deploy, run for real against fake heroku, git remotes, gh, curl,
@@ -12,7 +11,7 @@ require_relative 'deploy_fakes/deploy_harness'
 #
 # Every run happens under bashcov, and the after(:context) hook holds
 # bin/deploy and bin/lib/output.sh at 100% of their lines.
-RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new do
+RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_spec.rb') do
   let(:deploy) { DeployHarness.new(self.class.metadata[:bash_coverage]) }
   let(:head) { deploy.commits[:head] }
   let(:recovery_banner) { 'DEPLOY FAILED — MANUAL RECOVERY REQUIRED' }
@@ -676,10 +675,10 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new do
                                        'DEPRECATION WARNING: old call')
       expect(result.output).not_to include('ERROR from before the deploy', 'Completed 200 OK', 'more (run:')
       # Issues in the log are a warning, not a failure: the health check,
-      # the Solid Queue check and the smoke test still run. Today the
-      # script stops here with exit 1 and no line of its own: the loop
-      # that prints the issues ends on the empty last line, so its status
-      # is 1, and set -e with pipefail ends the script (bin/deploy:454).
+      # the Solid Queue check and the smoke test still run. The text the
+      # print loop reads ends with an empty line; until the loop used an
+      # `if`, `[ -n "$line" ] && echo` made the loop's status 1 there, and
+      # set -e with pipefail ended the deploy with no message.
       expect(result.output).to include('Health check', 'Deploy complete!')
       expect(result.status).to eq(0)
     end
