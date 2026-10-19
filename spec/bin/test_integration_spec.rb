@@ -31,17 +31,23 @@ RSpec.describe 'bin/test-integration' do
     result = sandbox.run(script)
 
     expect(result).to be_success, result.output
-    expect(sandbox.call_lines).to eq([
-                                       'bundle exec rails db:prepare',
-                                       'bundle exec rails test:seed_integration',
-                                       'npm run build',
-                                       'lsof -tiTCP:3001 -sTCP:LISTEN',
-                                       'bundle exec rails server -p 3001',
-                                       'curl -sf http://localhost:3001/api/v1/version',
-                                       'npx playwright test --config playwright.integration.config.js',
-                                       'psql -q -d comeals_test -c TRUNCATE communities, ledger_check_runs, ' \
-                                       'audits CASCADE'
-                                     ])
+    # The fake curl is logged when it is called, and the server in the
+    # background when it starts, so those two can be logged in either order.
+    expect(sandbox.call_lines).to contain_exactly(
+      'bundle exec rails db:prepare',
+      'bundle exec rails test:seed_integration',
+      'npm run build',
+      'lsof -tiTCP:3001 -sTCP:LISTEN',
+      'bundle exec rails server -p 3001',
+      'curl -sf http://localhost:3001/api/v1/version',
+      'npx playwright test --config playwright.integration.config.js',
+      'psql -q -d comeals_test -c TRUNCATE communities, ledger_check_runs, ' \
+      'audits CASCADE'
+    )
+    expect(sandbox.call_lines.first(4))
+      .to eq(['bundle exec rails db:prepare', 'bundle exec rails test:seed_integration', 'npm run build',
+              'lsof -tiTCP:3001 -sTCP:LISTEN'])
+    expect(sandbox.call_lines.last(2).first).to eq('npx playwright test --config playwright.integration.config.js')
     bundle = sandbox.calls_to('bundle').map(&:env)
     expect(bundle).to eq([{ 'RAILS_ENV' => 'test' },
                           { 'RAILS_ENV' => 'test', 'INTEGRATION_FAKE_TODAY' => '2026-01-15' },

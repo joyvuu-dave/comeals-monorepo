@@ -29,15 +29,19 @@ RSpec.describe 'bin/storm' do
     result = sandbox.run(script)
 
     expect(result).to be_success, result.output
-    expect(sandbox.call_lines).to eq([
-                                       'bundle exec rails db:prepare',
-                                       'lsof -tiTCP:3001 -sTCP:LISTEN',
-                                       'bundle exec rails server -p 3001',
-                                       'curl -sf http://localhost:3001/api/v1/version',
-                                       'bundle exec rake test:storm',
-                                       'psql -q -d comeals_test -c TRUNCATE communities, ledger_check_runs, ' \
-                                       'job_runs CASCADE'
-                                     ])
+    # The fake curl is logged when it is called, and the server in the
+    # background when it starts, so those two can be logged in either order.
+    expect(sandbox.call_lines).to contain_exactly(
+      'bundle exec rails db:prepare',
+      'lsof -tiTCP:3001 -sTCP:LISTEN',
+      'bundle exec rails server -p 3001',
+      'curl -sf http://localhost:3001/api/v1/version',
+      'bundle exec rake test:storm',
+      'psql -q -d comeals_test -c TRUNCATE communities, ledger_check_runs, ' \
+      'job_runs CASCADE'
+    )
+    expect(sandbox.call_lines.first(2)).to eq(['bundle exec rails db:prepare', 'lsof -tiTCP:3001 -sTCP:LISTEN'])
+    expect(sandbox.call_lines.last(2).first).to eq('bundle exec rake test:storm')
     server, storm = sandbox.calls_to('bundle').drop(1)
     expect(server.env).to eq('RAILS_ENV' => 'test', 'INTEGRATION_SERVER' => '1', 'INTEGRATION_SERVER_CACHE' => 'solid',
                              'RAILS_MAX_THREADS' => '16', 'WEB_CONCURRENCY' => '2', 'RAILS_DB_POOL' => '18')
@@ -136,10 +140,8 @@ RSpec.describe 'bin/storm' do
     expect(sandbox.calls_to('psql').size).to eq(1)
   end
 
-  # The script saves rake's exit code, prints the server log and its error
-  # lines, and then exits with the code. But it runs under set -e, so a
-  # failed storm ends the script at the rake line, and the server log is
-  # printed only when the storm passed.
+  # The script runs under set -e, so a failed storm must not end it at
+  # the rake line, before the server log is printed.
   it "prints the server log's error lines after a storm that failed" do
     sandbox.fake('bundle', sandbox.answers({ 'exec rails server *' => "echo 'ActiveRecord::Deadlocked error'; " \
                                                                       "#{server_up}",

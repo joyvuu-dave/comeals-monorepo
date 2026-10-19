@@ -101,8 +101,10 @@ for i in $(seq 1 60); do
 done
 
 echo ""
-STORM_URL="http://localhost:$PORT" RAILS_ENV=test bundle exec rake test:storm
-STATUS=$?
+# `|| STATUS=$?` keeps a failed storm from ending the script here under
+# set -e, so the server log below is printed after a failure too.
+STATUS=0
+STORM_URL="http://localhost:$PORT" RAILS_ENV=test bundle exec rake test:storm || STATUS=$?
 
 echo ""
 echo "==> Server log: $SERVER_LOG"
