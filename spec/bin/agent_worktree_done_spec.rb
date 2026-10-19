@@ -97,7 +97,7 @@ RSpec.describe 'bin/agent-worktree-done' do
   end
 
   # See the same example in agent_worktree_spec.rb: from a folder inside
-  # the main checkout, the script takes the main checkout for a worktree.
+  # the main checkout, git prints the two folders in different forms.
   it 'works from a folder inside the main checkout' do
     FileUtils.mkdir_p(File.join(repo, 'app'))
 

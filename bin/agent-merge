@@ -33,7 +33,9 @@ name="$1"
 
 branch="agent/$name"
 
-if [ "$(git rev-parse --git-dir)" != "$(git rev-parse --git-common-dir)" ]; then
+# Full paths: from a folder inside the main checkout, git prints
+# --git-dir as a full path and --git-common-dir as a relative one.
+if [ "$(git rev-parse --path-format=absolute --git-dir)" != "$(git rev-parse --path-format=absolute --git-common-dir)" ]; then
   echo "Run this from the main checkout, not from inside a worktree." >&2
   exit 1
 fi

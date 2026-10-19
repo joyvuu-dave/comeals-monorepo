@@ -40,7 +40,9 @@ name="$1"
 # Run from the main checkout only. A worktree made from inside another
 # worktree still works at the git level, but the ../comeals-<name> paths
 # here assume one flat layout next to the main checkout.
-if [ "$(git rev-parse --git-dir)" != "$(git rev-parse --git-common-dir)" ]; then
+# Full paths: from a folder inside the main checkout, git prints
+# --git-dir as a full path and --git-common-dir as a relative one.
+if [ "$(git rev-parse --path-format=absolute --git-dir)" != "$(git rev-parse --path-format=absolute --git-common-dir)" ]; then
   echo "Run this from the main checkout, not from inside a worktree." >&2
   exit 1
 fi
@@ -50,10 +52,6 @@ path="../comeals-$name"
 branch="agent/$name"
 suffix="_${name//-/_}"
 
-# git refuses on its own if the directory or branch already exists,
-# with a clear message — no need to pre-check.
-git worktree add -b "$branch" "$path" main
-
 # Test-server ports (#65): one block of three per worktree, so the
 # browser suites (integration, e2e, admin e2e) can run here while other
 # sessions run theirs. The block starts at a hash of the task name; if
@@ -61,7 +59,10 @@ git worktree add -b "$branch" "$path" main
 # next block. 100 blocks of 10 ports starting at 21000 — far from the
 # fixed 3000-range ports the main checkout keeps. The runtime guards
 # (bin/test-integration's port check, reuseExistingServer: false) stay
-# as the last defense against a collision with anything else.
+# as the last defense against a collision with anything else. This runs
+# before the worktree is made, so a refusal here leaves nothing behind:
+# a worktree with no .env would run its tests against the shared
+# comeals_test database.
 hash=$(printf '%s' "$name" | cksum | cut -d' ' -f1)
 base=$((21000 + (hash % 100) * 10))
 tries=0
@@ -73,6 +74,10 @@ while grep -qs "^TEST_PORT_INTEGRATION=$base$" ../comeals-*/.env; do
     exit 1
   fi
 done
+
+# git refuses on its own if the directory or branch already exists,
+# with a clear message — no need to pre-check.
+git worktree add -b "$branch" "$path" main
 
 # .env: copy the main checkout's (Pusher keys and such), then add this
 # worktree's test-database suffix and port block. dotenv-rails loads

@@ -144,8 +144,8 @@ RSpec.describe 'bin/agent-worktree' do
 
   # From a folder inside the main checkout, git prints the repository
   # folder as a full path for --git-dir and as a relative one for
-  # --git-common-dir. The two texts differ, so the script takes the main
-  # checkout for a worktree and refuses.
+  # --git-common-dir. Compared as text, the two differ, and the script
+  # would take the main checkout for a worktree and refuse.
   it 'works from a folder inside the main checkout' do
     FileUtils.mkdir_p(File.join(repo, 'app'))
 

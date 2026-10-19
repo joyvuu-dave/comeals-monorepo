@@ -214,7 +214,7 @@ RSpec.describe 'bin/agent-merge' do
   end
 
   # See the same example in agent_worktree_spec.rb: from a folder inside
-  # the main checkout, the script takes the main checkout for a worktree.
+  # the main checkout, git prints the two folders in different forms.
   it 'works from a folder inside the main checkout' do
     work = commit({ 'app.rb' => "1\n" }, chdir: worktree)
 
