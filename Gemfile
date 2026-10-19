@@ -101,6 +101,9 @@ group :development, :test do
 end
 
 group :test do
+  # Measures which lines of bin/deploy run under spec/bin/deploy_spec.rb,
+  # which holds them at 100% on its own, apart from the SimpleCov result.
+  gem 'bashcov', require: false
   gem 'simplecov', require: false
 end
 
