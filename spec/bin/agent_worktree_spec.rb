@@ -94,6 +94,20 @@ RSpec.describe 'bin/agent-worktree' do
     expect(sandbox.calls).to be_empty
   end
 
+  # A worktree with no .env would run its tests against the shared
+  # comeals_test database.
+  it 'leaves no worktree and no branch behind when every block is taken' do
+    100.times do |n|
+      sandbox.write(File.join(worktree_path("other-#{n}"), '.env'), "TEST_PORT_INTEGRATION=#{21_000 + (n * 10)}\n")
+    end
+
+    run('fix-it')
+
+    expect(File).not_to exist(worktree_path('fix-it'))
+    expect(git('worktree', 'list')).not_to include('comeals-fix-it')
+    expect(branches).to eq(['main'])
+  end
+
   it 'stops when git cannot make the worktree, for example when the branch is there already' do
     git('branch', 'agent/fix-it')
 
