@@ -115,11 +115,11 @@ RSpec.describe 'test:storm', prosopite: false, type: :task do
     output = printed.string
     expect(output).to include('==> 2 clients for 2s against http://storm.test:3001 (seed 1)', 'No problems.')
     expect(output).to match(/settlements: [1-9]/)
-    # One connection per client, closed when the clients are done. The
-    # checks after that run on this thread and open one more.
+    # One connection per client, and one for the checks, which run on this
+    # thread after the clients are done. The task closes all of them.
     expect(connections.map(&:last)).to all(eq(['storm.test', 3001, { read_timeout: 60 }]))
-    expect(connections.first(2).map(&:first)).to all(have_attributes(finished: true))
     expect(connections.size).to eq(3)
+    expect(connections.map(&:first)).to all(have_attributes(finished: true))
     expect(JSON.parse(File.read(latency_file.path)).keys).to eq(['2 clients, 2s'])
   end
 
