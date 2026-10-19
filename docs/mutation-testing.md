@@ -4462,3 +4462,15 @@ Noise (27):
 
 Run 2's 47 are the 27 noise survivors above and the 20 that are not
 among the 57. No run had a timeout.
+
+### 2026-10-19, full run
+
+The full run 39318800394 (on 560c2960): 35,970 mutations, 35,384
+killed, 586 alive, 98.37%. Each of the other 585 survivors is one that
+an earlier round here already answered.
+
+Redundant code, removed (1): `|(_, resident_id)|` in
+`Reconciliation#settled_cooks_by_meal`. Mutant put `|_, resident_id|`
+in its place, and for a pair the two mean the same thing: Ruby takes the
+pair apart either way. The round of 2026-10-17 counted this as noise.
+The code now has no parentheses, so there is no mutation to answer.

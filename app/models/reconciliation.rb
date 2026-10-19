@@ -156,7 +156,7 @@ class Reconciliation < ApplicationRecord
                   T::Array[[Integer, Integer]])
     residents = Resident.where(id: pairs.map(&:last)).index_by { |resident| T.must(resident.id) }
     pairs.group_by(&:first).transform_values do |list|
-      list.map { |(_, resident_id)| residents.fetch(resident_id) }.sort_by { |resident| resident.name.to_s }
+      list.map { |_, resident_id| residents.fetch(resident_id) }.sort_by { |resident| resident.name.to_s }
     end
   end
 
