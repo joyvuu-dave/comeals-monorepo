@@ -13,6 +13,14 @@ paths = ARGV.each_with_index.reject do |arg, index|
 end.map(&:first)
 whole_suite = paths.none? { |arg| arg.match?(%r{\A(spec/|\./spec/|/)}) || arg.end_with?('_spec.rb') }
 
+# The version of the newest migration that has run in production. Every
+# migration after it has not run there yet, so this suite must run all of
+# its lines and branches before the deploy that runs it; the ones up to it
+# already ran and are left out of the coverage count. Move this after each
+# deploy that runs migrations, to the newest file in db/migrate/ at the
+# commit that was deployed.
+PRODUCTION_SCHEMA_VERSION = 20_260_816_160_000
+
 # Mutant (bin/mutant) runs a few examples at a time in forked workers,
 # thousands of times. Coverage would slow every run and its threshold
 # would fail every one, so it is off there.
@@ -20,14 +28,25 @@ unless ENV['MUTANT']
   require 'simplecov'
   SimpleCov.start 'rails' do
     enable_coverage :branch
+    # The rails profile leaves out all of config/ and db/. This suite counts
+    # config/initializers/ and the migrations production has not run, so
+    # those two rules come out and narrower ones go in below.
+    remove_filter(%r{\Aconfig/})
+    remove_filter(%r{\Adb/})
     skip '/spec/'
-    skip '/config/'
-    skip '/db/'
     skip '/vendor/'
-    # Test scaffolding that runs in its own process (bin/check runs
-    # test:generate_fixtures, bin/test-integration runs test:seed_integration),
-    # so this suite never executes it. It is left out the same way spec/ is.
-    skip '/lib/tasks/test/'
+    skip %r{\Aconfig/(?!initializers/)}
+    skip %r{\Adb/(?!migrate/)}
+    skip do |file|
+      version = file.project_filename[%r{\Adb/migrate/(\d+)_}, 1]
+      version && Integer(version, 10) <= PRODUCTION_SCHEMA_VERSION
+    end
+
+    # The files this suite answers for. A file here that no spec loads is
+    # counted at 0%, not left out: a spec loads a migration only when it
+    # tests that migration, so a new migration with no spec would otherwise
+    # be missing from the report.
+    cover 'app/**/*.rb', 'lib/**/*.{rb,rake}', 'config/initializers/*.rb', 'db/migrate/*.rb'
     # Loads the annotate_rb gem's own tasks, in development only.
     skip '/lib/tasks/annotate_rb.rake'
 
