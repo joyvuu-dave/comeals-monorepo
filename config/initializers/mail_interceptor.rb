@@ -18,12 +18,19 @@ class MailInterceptor
     message.cc = nil
     message.bcc = nil
   end
-end
 
-if ENV['MAIL_INTERCEPT_TO'].present?
-  if Rails.env.production?
-    Rails.logger.warn('MAIL_INTERCEPT_TO is set in production — ignoring. Remove this env var.')
-  else
-    ActionMailer::Base.register_interceptor(MailInterceptor)
+  # Called once at boot, below. A method, so a spec can call it as
+  # production would (spec/mailers/mail_interceptor_spec.rb).
+  def self.install(mailer, env:, intercept_to:, logger:)
+    return if intercept_to.blank?
+
+    if env.production?
+      logger.warn('MAIL_INTERCEPT_TO is set in production — ignoring. Remove this env var.')
+    else
+      mailer.register_interceptor(self)
+    end
   end
 end
+
+MailInterceptor.install(ActionMailer::Base, env: Rails.env, intercept_to: ENV.fetch('MAIL_INTERCEPT_TO', nil),
+                                            logger: Rails.logger)

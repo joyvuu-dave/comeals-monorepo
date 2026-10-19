@@ -1,6 +1,16 @@
 # typed: false
 # frozen_string_literal: true
 
+# The bcrypt cost for a password: 1 in the test environment, so the suite
+# runs fast, and 11 (bcrypt's default) everywhere else. A method, so a spec
+# can ask for the value of another environment (spec/config/initializers/
+# devise_spec.rb).
+module DevisePasswordStretches
+  def self.for(env)
+    env.test? ? 1 : 11
+  end
+end
+
 # Use this hook to configure devise mailer, warden hooks and so forth.
 # Many of these configuration options can be set straight in your model.
 Devise.setup do |config|
@@ -110,7 +120,7 @@ Devise.setup do |config|
   # a value less than 10 in other environments. Note that, for bcrypt (the default
   # algorithm), the cost increases exponentially with the number of stretches (e.g.
   # a value of 20 is already extremely slow: approx. 60 seconds for 1 calculation).
-  config.stretches = Rails.env.test? ? 1 : 11
+  config.stretches = DevisePasswordStretches.for(Rails.env)
 
   # Set up a pepper to generate the hashed password.
   # rubocop:disable Layout/LineLength

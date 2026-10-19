@@ -12,10 +12,21 @@
 #
 # Test-only by construction: the guard requires the test environment,
 # so a stray env var cannot freeze development or production.
-if Rails.env.test? && ENV['INTEGRATION_FAKE_TODAY'].present?
-  require 'active_support/testing/time_helpers'
+#
+# A method, called once at boot below, so a spec can call it with other
+# values (spec/config/initializers/integration_fake_time_spec.rb). It
+# returns the object that holds the frozen clock, or nil when it froze
+# nothing; travel_back on that object starts the clock again.
+module IntegrationFakeTime
+  def self.freeze_clock(env:, today:)
+    return unless env.test? && today.present?
 
-  Object.new.extend(ActiveSupport::Testing::TimeHelpers).travel_to(
-    Time.zone.parse("#{ENV.fetch('INTEGRATION_FAKE_TODAY', nil)} 12:00:00")
-  )
+    require 'active_support/testing/time_helpers'
+
+    clock = Object.new.extend(ActiveSupport::Testing::TimeHelpers)
+    clock.travel_to(Time.zone.parse("#{today} 12:00:00"))
+    clock
+  end
 end
+
+IntegrationFakeTime.freeze_clock(env: Rails.env, today: ENV.fetch('INTEGRATION_FAKE_TODAY', nil))

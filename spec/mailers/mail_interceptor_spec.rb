@@ -62,4 +62,36 @@ RSpec.describe MailInterceptor do
       expect(message.to).to eq(['intercepted@example.com'])
     end
   end
+
+  # The initializer calls this once at boot, with no MAIL_INTERCEPT_TO in
+  # the test environment. These call it as the other environments would.
+  describe '.install' do
+    let(:mailer) { class_double(ActionMailer::Base, register_interceptor: nil) }
+    let(:logger) { instance_double(Logger, warn: nil) }
+
+    def install(env, intercept_to)
+      described_class.install(mailer, env: ActiveSupport::EnvironmentInquirer.new(env),
+                                      intercept_to: intercept_to, logger: logger)
+    end
+
+    it 'sends every mail to the one address in development' do
+      install('development', 'me@example.com')
+
+      expect(mailer).to have_received(:register_interceptor).with(described_class)
+    end
+
+    it 'refuses in production, and says so in the log' do
+      install('production', 'me@example.com')
+
+      expect(mailer).not_to have_received(:register_interceptor)
+      expect(logger).to have_received(:warn).with(/MAIL_INTERCEPT_TO is set in production/)
+    end
+
+    it 'does nothing when MAIL_INTERCEPT_TO is not set' do
+      install('development', nil)
+
+      expect(mailer).not_to have_received(:register_interceptor)
+      expect(logger).not_to have_received(:warn)
+    end
+  end
 end

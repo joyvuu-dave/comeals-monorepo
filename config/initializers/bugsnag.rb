@@ -17,19 +17,37 @@ require Rails.root.join('lib/bugsnag_error_subscriber')
 # to see. The discard list below is what has proved itself so far. Add to
 # it only after seeing the error in production and confirming the app
 # already handles it.
-api_key = ENV.fetch('BUGSNAG_API_KEY', nil)
+# The rules are methods, and the last line calls them once at boot, so a
+# spec can call them as production would (spec/config/initializers/
+# bugsnag_spec.rb). Code that runs only at boot runs in one environment only.
+module BugsnagSetup
+  def self.configure(bugsnag, errors:, api_key:, env:, release:)
+    if api_key.present?
+      bugsnag.configure { |config| report_to(config, api_key:, env:, release:) }
 
-if api_key.present?
-  Bugsnag.configure do |config|
+      # Handled errors reported through Rails.error. See the subscriber for why
+      # this is separate from the Rack middleware and why the money code needs it.
+      errors.subscribe(BugsnagErrorSubscriber.new)
+    else
+      # Session tracking is the one thing the gem turns on by itself: the Rails
+      # railtie sets auto_capture_sessions, so every request starts a session and
+      # a timer thread wakes every 10 seconds. With no api_key it can only log
+      # "Not delivering sessions due to an invalid api_key" and give up. Turn it
+      # off so development and test really do run nothing.
+      bugsnag.configure(&:disable_sessions)
+    end
+  end
+
+  def self.report_to(config, api_key:, env:, release:)
     config.api_key = api_key
-    config.release_stage = Rails.env
+    config.release_stage = env
     config.enabled_release_stages = ['production']
 
     # Group errors by Heroku release, so the dashboard can say "this started
     # at v612". HEROKU_RELEASE_VERSION comes from Dyno Metadata and is fixed
     # for the life of the dyno — the same source Api::V1::SiteController#version
     # reads. Left nil outside production, where it means nothing.
-    config.app_version = ENV.fetch('HEROKU_RELEASE_VERSION', nil) if Rails.env.production?
+    config.app_version = release if env.production?
 
     # Requests the app already refuses with a 400 Bad Request. These are
     # the client's fault — scanners sending malformed paths, bad
@@ -56,15 +74,12 @@ if api_key.present?
     # from drifting apart, so a parameter added there is filtered here too.
     config.meta_data_filters += Rails.application.config.filter_parameters.map(&:to_s)
   end
-
-  # Handled errors reported through Rails.error. See the subscriber for why
-  # this is separate from the Rack middleware and why the money code needs it.
-  Rails.error.subscribe(BugsnagErrorSubscriber.new)
-else
-  # Session tracking is the one thing the gem turns on by itself: the Rails
-  # railtie sets auto_capture_sessions, so every request starts a session and
-  # a timer thread wakes every 10 seconds. With no api_key it can only log
-  # "Not delivering sessions due to an invalid api_key" and give up. Turn it
-  # off so development and test really do run nothing.
-  Bugsnag.configure(&:disable_sessions)
 end
+
+BugsnagSetup.configure(
+  Bugsnag,
+  errors: Rails.error,
+  api_key: ENV.fetch('BUGSNAG_API_KEY', nil),
+  env: Rails.env,
+  release: ENV.fetch('HEROKU_RELEASE_VERSION', nil)
+)

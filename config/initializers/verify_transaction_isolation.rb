@@ -17,15 +17,23 @@
 # database is unreachable — `rake assets:precompile` on a Heroku build has
 # no database — the check skips, because there is no session to verify and
 # the process is not going to serve traffic from that state anyway.
-Rails.application.config.after_initialize do
-  isolation = ActiveRecord::Base.connection.select_value('SHOW default_transaction_isolation')
+#
+# A method, so a spec can call it with a session at another level
+# (spec/config/initializers/verify_transaction_isolation_spec.rb).
+module TransactionIsolationCheck
+  def self.verify!(connection)
+    isolation = connection.select_value('SHOW default_transaction_isolation')
+    return if isolation == 'serializable'
 
-  unless isolation == 'serializable'
     raise "Database sessions run at #{isolation.inspect}, not serializable. " \
           'The variables: block in config/database.yml has lost ' \
           'default_transaction_isolation — see ADR 0005 and the CAUTION ' \
           'comment on the production block.'
   end
+end
+
+Rails.application.config.after_initialize do
+  TransactionIsolationCheck.verify!(ActiveRecord::Base.connection)
 rescue ActiveRecord::ConnectionNotEstablished, ActiveRecord::NoDatabaseError, PG::ConnectionBad
   # No database to check (asset precompile, db:create). Skip.
 end

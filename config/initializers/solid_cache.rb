@@ -24,5 +24,7 @@
 # spec/lib/solid_cache/store_spec.rb pins both facts.
 #
 # See docs/adr/0005-serializable-by-default.md.
+# uniq! keeps one copy if something has already added it.
 errors = SolidCache::Store::Failsafe::TRANSIENT_ACTIVE_RECORD_ERRORS
-errors << ActiveRecord::SerializationFailure unless errors.include?(ActiveRecord::SerializationFailure)
+errors << ActiveRecord::SerializationFailure
+errors.uniq!
