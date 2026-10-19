@@ -58,7 +58,7 @@ end
 # on the money path. Seeding one of each makes both sides of that boundary
 # something you can log in and look at. One US phone and one UK phone, so
 # both admin forms show a normalized number.
-AdminUser.create!(email: 'joslyn@email.com', password: 'password', password_confirmation: 'password', superuser: true,
+AdminUser.create!(email: 'super@email.com', password: 'password', password_confirmation: 'password', superuser: true,
                   phone: '(510) 555-0199')
 AdminUser.create!(email: 'reader@email.com', password: 'password', password_confirmation: 'password',
                   phone: '+44 20 7946 0999')
@@ -99,7 +99,7 @@ Resident.where(id: Resident.adult.pluck(:id).shuffle.take(3)).find_each do |resi
 end
 
 # Make 1 (adult) Resident have a simple email address and matching name
-Resident.adult.first.update!(email: 'bowen@email.com', name: 'Bowen Riddle')
+Resident.adult.first.update!(email: 'robin@email.com', name: 'Robin Baker')
 
 Rails.logger.debug { "#{community.residents.count} Residents created" }
 

@@ -33,7 +33,7 @@ via foreman.
 
 The resident app is at `http://localhost:3036`. ActiveAdmin is on its own
 subdomain, served by Rails directly: log in at `http://admin.lvh.me:3000/login`
-as `joslyn@email.com` / `password` (the superuser), or `reader@email.com` /
+as `super@email.com` / `password` (the superuser), or `reader@email.com` /
 `password` (the plain admin).
 
 ### Fresh deployment (real community, no fake data)
