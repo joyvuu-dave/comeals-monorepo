@@ -58,6 +58,16 @@ RSpec.describe 'bin/update-snapshots' do
     expect(sandbox.calls_to('npx')).to be_empty
   end
 
+  # The script checks each name just before it deletes that name's
+  # goldens. So a typo in the second name stops the run after the first
+  # name's goldens are deleted, and they are not recorded again.
+  it 'checks every name before it deletes any' do
+    result = sandbox.run(script, 'meal-edit', 'no-such')
+
+    expect(result.exitstatus).to eq(1)
+    expect(left.size).to eq(13)
+  end
+
   it 'stops when the macOS recording fails, before Linux' do
     sandbox.fake('npx', 'exit 1')
 
