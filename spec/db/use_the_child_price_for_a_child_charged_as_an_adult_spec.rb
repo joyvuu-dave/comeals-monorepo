@@ -14,7 +14,7 @@ RSpec.describe UseTheChildPriceForAChildChargedAsAnAdult do
   let(:unit) { create(:unit, community: community) }
   let(:cook) { person('Cora Cook') }
   let(:adult) { person('Abe Adult') }
-  let(:child) { person('Kit Small', birthday: Date.new(2015, 1, 15)) }
+  let(:child) { person('Kit Small', birthday: Date.new(2015, 2, 10)) }
   let(:earlier) { dinner(Date.new(2018, 3, 1), child_price: Multiplier::HALF) }
   let(:wrong) { [dinner(Date.new(2018, 3, 22)), dinner(Date.new(2018, 4, 29))] }
 

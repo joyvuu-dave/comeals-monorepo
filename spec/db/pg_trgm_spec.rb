@@ -11,13 +11,13 @@ RSpec.describe 'pg_trgm fuzzy name search' do
   end
 
   it 'finds a name with a typo inside the word' do
-    create(:resident, name: 'Steve Safru')
-    create(:resident, name: 'Bonnie Fergusson')
+    create(:resident, name: 'Steve Harmon')
+    create(:resident, name: 'Linda Okafor')
 
     names = Resident.where('word_similarity(?, name) > 0.4', 'steev')
                     .order(Arel.sql("word_similarity('steev', name) DESC"))
                     .pluck(:name)
 
-    expect(names).to eq(['Steve Safru'])
+    expect(names).to eq(['Steve Harmon'])
   end
 end
