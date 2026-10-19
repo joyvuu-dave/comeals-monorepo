@@ -234,7 +234,11 @@ step "Log check"
 # migration's SQL ("-- execute(...)"): the trigger functions contain
 # RAISE EXCEPTION. A migration that fails still prints its error on
 # lines of its own, which the search finds.
-log_hits=$(heroku logs -n 1500 -a "$STAGING_APP" | rehearsal_lines "$REHEARSAL_STARTED" "$BOOTED_AT" | worrying_lines || true)
+if ! logs=$(heroku logs -n 1500 -a "$STAGING_APP"); then
+  fail "Could not read the staging logs, so the log check cannot pass"
+  exit 1
+fi
+log_hits=$(rehearsal_lines "$REHEARSAL_STARTED" "$BOOTED_AT" <<< "$logs" | worrying_lines || true)
 if [ -n "$log_hits" ]; then
   fail "Worrying lines in the staging logs:"
   echo "$log_hits" | head -20

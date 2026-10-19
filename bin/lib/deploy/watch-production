@@ -75,7 +75,14 @@ sleep 180
 # Only lines logged after the promote began — the last 1500
 # lines would include pre-deploy noise, and a stale error must
 # not trigger a rollback of a healthy release.
-hits=$(heroku logs -n 1500 -a "$PROD_APP" | lines_since "$STARTED" | worrying_lines || true)
+# Logs that cannot be read fail the run, but do not roll back: the
+# release passed the smoke test and the Solid Queue check, and a person
+# decides.
+if ! logs=$(heroku logs -n 1500 -a "$PROD_APP"); then
+  echo "Could not read the production logs, so the soak cannot pass. Not rolling back."
+  exit 1
+fi
+hits=$(lines_since "$STARTED" <<< "$logs" | worrying_lines || true)
 if [ -n "$hits" ]; then
   echo "Worrying production log lines after the deploy:"
   echo "$hits" | head -20
