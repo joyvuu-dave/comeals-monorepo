@@ -89,4 +89,6 @@ RSpec.describe ClearRotationMarksSetByHand do
   it 'refuses to run down: the release log names the rotations' do
     expect { migrate(:down) }.to raise_error(ActiveRecord::IrreversibleMigration, /release log/)
   end
+
+  it_behaves_like 'a data migration that tries a conflict again', described_class
 end

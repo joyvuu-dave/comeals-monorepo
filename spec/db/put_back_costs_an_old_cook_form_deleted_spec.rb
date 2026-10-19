@@ -164,6 +164,61 @@ RSpec.describe PutBackCostsAnOldCookFormDeleted do
       expect(costs(pasta)).to eq([[pasta_cook.id, 0, false], [second_cook.id, described_class::NOTHING, false]])
     end
 
+    it 'does nothing, and says so, on a database with no meal on the BBQ day' do
+      SettledWrites.with_repair_bypass { bbq.update_columns(date: described_class::BBQ - 7) }
+
+      expect(migrate(:up)).to include('No meal on 2019-09-02: nothing to put back.')
+      expect(fix_rows).to be_empty
+    end
+
+    def create_audit_of(bill)
+      Audited::Audit.where(auditable_type: 'Bill', auditable_id: bill.id, action: 'create')
+    end
+
+    # More states it does not expect. Each stops the deploy and changes
+    # nothing. Two dinner states are hard to make on settled rows, so for
+    # those the two rows the lock reads are changed as they are read.
+    {
+      'there is no meal on the pasta day' => lambda {
+        SettledWrites.with_repair_bypass { pasta.update_columns(date: described_class::PASTA + 7) }
+      },
+      'the BBQ dinner is not settled' => lambda {
+        allow(migration).to receive(:lock_meals).and_wrap_original do |original|
+          found_bbq, found_pasta = original.call
+          [found_bbq.dup.tap { |row| row.reconciliation_id = nil }, found_pasta]
+        end
+      },
+      'the two dinners are in different settlements' => lambda {
+        allow(migration).to receive(:lock_meals).and_wrap_original do |original|
+          found_bbq, found_pasta = original.call
+          [found_bbq, found_pasta.dup.tap { |row| row.reconciliation_id = found_bbq.reconciliation_id.to_i + 1 }]
+        end
+      },
+      'the BBQ dinner has a third cost' => lambda {
+        SettledWrites.with_repair_bypass do
+          Bill.insert!({ meal_id: bbq.id, resident_id: helper.id, community_id: community.id, amount: 0,
+                         no_cost: false, created_at: Time.current, updated_at: Time.current })
+        end
+      },
+      'the pasta dinner does not have the two costs it had' => lambda {
+        SettledWrites.with_repair_bypass { Bill.where(meal: pasta, resident: second_cook).update_all(amount: 40) }
+      },
+      'only two deleted costs are found' => -> { create_audit_of(deleted.first).delete_all },
+      'two deleted costs are of one cook' => lambda {
+        create_audit_of(deleted.first)
+          .update_all("audited_changes = jsonb_set(audited_changes, '{resident_id}', '#{helper.id}')")
+      }
+    }.each do |state, arrange|
+      it "refuses and changes nothing when #{state}" do
+        instance_exec(&arrange)
+        before = Bill.order(:id).pluck(:id, :meal_id, :amount, :no_cost)
+
+        expect { migrate(:up) }.to raise_error(RuntimeError, /Nothing was changed/)
+        expect(Bill.order(:id).pluck(:id, :meal_id, :amount, :no_cost)).to eq(before)
+        expect(fix_rows).to be_empty
+      end
+    end
+
     it 'takes back the correction and every cost change when a later step fails' do
       allow(migration).to receive(:touch_meals).and_raise(RuntimeError, 'a later step failed')
 
@@ -179,6 +234,39 @@ RSpec.describe PutBackCostsAnOldCookFormDeleted do
       expect { migrate(:up) }.to raise_error(Settlement::EarlierDifference)
       expect(bbq.bills.count).to eq(2)
       expect(fix_rows).to be_empty
+    end
+  end
+
+  # Three helpers handle a case the checks before them rule out in a real
+  # run: own gets a cost only after check_costs found both, set_cost is
+  # called only with amounts that change, and restore only with rows that
+  # hold an amount. These examples show what each does in that case, on a
+  # dinner that is not settled.
+  describe 'the helpers, in cases a real run does not reach' do
+    let(:open_meal) { create(:meal, community: community, date: described_class::PASTA + 30) }
+    let(:open_bill) { create(:bill, meal: open_meal, resident: helper, community: community, amount: 0) }
+    let(:cost_row) do
+      described_class::CostRow.new(open_bill.id, helper.id, BigDecimal('0'), false, community.id, Time.current)
+    end
+    let(:stamp) { described_class::Stamp.new(Time.current.utc, SecureRandom.uuid) }
+
+    it 'own finds nothing for no cost' do
+      expect(migration.send(:own, [cost_row], nil)).to be_nil
+    end
+
+    it 'set_cost writes only the column that changed when the amount stays' do
+      migration.send(:set_cost, cost_row, BigDecimal('0'), true, open_meal.id, stamp)
+
+      expect(open_bill.reload).to have_attributes(amount: 0, no_cost: true)
+      expect(fix_rows.sole.audited_changes).to eq('no_cost' => [false, true])
+    end
+
+    it 'restore puts back only No cost when the row holds no amount' do
+      open_bill.update_columns(no_cost: true)
+
+      migration.send(:restore, open_bill.id, { 'no_cost' => [false, true] }, Time.current.utc)
+
+      expect(open_bill.reload).to have_attributes(amount: 0, no_cost: false)
     end
   end
 
@@ -198,6 +286,11 @@ RSpec.describe PutBackCostsAnOldCookFormDeleted do
       expect(fix_rows).to be_empty
     end
 
+    it 'does nothing, and says so, when up changed no cost' do
+      expect(migrate(:down)).to include('This migration changed no cost: nothing to put back.')
+      expect(bbq.bills.count).to eq(2)
+    end
+
     it 'refuses when a cost it changed changed again since' do
       migrate(:up)
       SettledWrites.with_repair_bypass do
@@ -207,4 +300,6 @@ RSpec.describe PutBackCostsAnOldCookFormDeleted do
       expect { migrate(:down) }.to raise_error(RuntimeError, /changed after migration 20261013120100/)
     end
   end
+
+  it_behaves_like 'a data migration that tries a conflict again', described_class
 end

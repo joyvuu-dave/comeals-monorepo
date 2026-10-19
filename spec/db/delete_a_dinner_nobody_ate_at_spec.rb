@@ -83,6 +83,16 @@ RSpec.describe DeleteADinnerNobodyAteAt do
       expect(fix_rows.count).to eq(3)
     end
 
+    it 'leaves a settled meal as it is, and says so' do
+      create(:bill, meal: meal, resident: person('Cal'), community: community, amount: 10)
+      settle!(cutoff: described_class::DATE)
+      raise 'setup failed: the meal was not settled' unless meal.reload.reconciled?
+
+      expect(migrate(:up)).to include('Left the meal of 2026-04-06 as it is: it is settled.')
+      expect(meal.reload).to be_present
+      expect(fix_rows).to be_empty
+    end
+
     # Not money: a meal that does not fit is left as it is and named in the
     # release log, and the deploy goes on.
     {
@@ -111,4 +121,6 @@ RSpec.describe DeleteADinnerNobodyAteAt do
       expect { migrate(:down) }.to raise_error(ActiveRecord::IrreversibleMigration, /audit rows/)
     end
   end
+
+  it_behaves_like 'a data migration that tries a conflict again', described_class
 end

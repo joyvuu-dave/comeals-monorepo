@@ -96,9 +96,40 @@ RSpec.describe DeleteDoubledEvents do
     end
   end
 
+  # The two guards below cannot be reached in a real run. Both reads of
+  # the copies run in one SERIALIZABLE transaction, so the second finds
+  # what the first found (a change in between makes PostgreSQL refuse the
+  # lock instead), and the lock gets ids only when the first read found
+  # copies. These examples show what each guard does if it is reached.
+  describe 'the guards for an empty second read' do
+    let!(:first) { event('Work day') }
+    let!(:copy) { event('Work day') }
+
+    it 'deletes nothing when the second read finds no copy' do
+      reads = 0
+      allow(migration).to receive(:copies).and_wrap_original do |original|
+        reads += 1
+        reads == 1 ? original.call : []
+      end
+
+      expect(migrate(:up)).to include('No event is doubled.')
+      expect(Event.where(id: [first.id, copy.id]).count).to eq(2)
+    end
+
+    it 'locks nothing when given no ids' do
+      statements = []
+      callback = ->(*, payload) { statements << payload[:sql] }
+      ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') { migration.send(:lock, []) }
+
+      expect(statements).to be_empty
+    end
+  end
+
   describe 'down' do
     it 'refuses: deleted events cannot come back from here' do
       expect { migrate(:down) }.to raise_error(ActiveRecord::IrreversibleMigration, /release log/)
     end
   end
+
+  it_behaves_like 'a data migration that tries a conflict again', described_class
 end

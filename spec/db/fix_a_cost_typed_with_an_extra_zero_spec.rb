@@ -95,6 +95,19 @@ RSpec.describe FixACostTypedWithAnExtraZero do
       expect(fix_rows).to be_empty
     end
 
+    it 'does nothing, and says so, when up changed no cost' do
+      expect(migrate(:down)).to include('This migration changed no cost: nothing to put back.')
+      expect(typed.reload.amount).to eq(170)
+    end
+
+    it 'refuses when the dinner was settled since the fix' do
+      migrate(:up)
+      settle!(cutoff: described_class::DINNER + 1)
+
+      expect { migrate(:down) }.to raise_error(RuntimeError, /is gone or settled/)
+      expect(typed.reload.amount).to eq(17)
+    end
+
     it 'refuses when the cost changed again since' do
       migrate(:up)
       typed.reload.update!(amount: 18)
@@ -103,4 +116,6 @@ RSpec.describe FixACostTypedWithAnExtraZero do
       expect(typed.reload.amount).to eq(18)
     end
   end
+
+  it_behaves_like 'a data migration that tries a conflict again', described_class
 end

@@ -135,9 +135,19 @@ RSpec.describe KeepDinnersToSundaysAndThursdays do
     end
   end
 
+  describe 'up on a database with no community' do
+    it 'does nothing, and says so' do
+      expect(migrate(:up)).to include('No community: nothing to do.')
+      expect(Community.count).to eq(0)
+      expect(fix_rows).to be_empty
+    end
+  end
+
   describe 'down' do
     it 'refuses: deleted meals cannot come back from here' do
       expect { migrate(:down) }.to raise_error(ActiveRecord::IrreversibleMigration, /community form/)
     end
   end
+
+  it_behaves_like 'a data migration that tries a conflict again', described_class
 end

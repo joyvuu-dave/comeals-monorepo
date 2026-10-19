@@ -136,6 +136,15 @@ RSpec.describe UseThePriceOfTheAgeOnEverySignUp do
 
     # The age the way Resident#age_on counts it: a year is added on the
     # birthday itself.
+    # correct gets no rows only when no settled sign-up changes. Up refuses
+    # unless exactly one settlement holds the settled ones, and down puts
+    # back what up changed, so a real run always passes it some. This
+    # shows what it does with none.
+    it 'works out no settlement again when given no settled sign-up' do
+      expect(migration.send(:correct, [], migration.method(:reason))).to eq([])
+      expect(SettlementCorrection.count).to eq(0)
+    end
+
     it 'counts a birthday on the meal day itself as the new age' do
       day_before = dinner(Date.new(2025, 5, 31))
       birthday = dinner(Date.new(2025, 6, 1), child_price: Multiplier::FREE)
@@ -209,6 +218,13 @@ RSpec.describe UseThePriceOfTheAgeOnEverySignUp do
       expect(fix_rows).to be_empty
     end
 
+    it 'does nothing, and says so, when up changed no sign-up' do
+      before = child_prices
+
+      expect(migrate(:down)).to include('This migration changed no sign-up: nothing to put back.')
+      expect(child_prices).to eq(before)
+    end
+
     it 'refuses when a sign-up it changed changed again since' do
       migrate(:up)
       row = MealResident.find_by!(meal: open_meals.first, resident: child)
@@ -218,4 +234,6 @@ RSpec.describe UseThePriceOfTheAgeOnEverySignUp do
       expect(child_prices).to eq([Multiplier::FREE, Multiplier::HALF, Multiplier::HALF])
     end
   end
+
+  it_behaves_like 'a data migration that tries a conflict again', described_class
 end

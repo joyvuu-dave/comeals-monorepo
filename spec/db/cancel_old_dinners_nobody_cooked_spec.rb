@@ -150,6 +150,11 @@ RSpec.describe CancelOldDinnersNobodyCooked do
       expect(cancelled_ids).to eq([signed_up.id, guest_only.id])
     end
 
+    it 'does nothing, and says so, when up cancelled no dinner' do
+      expect(migrate(:down)).to include('This migration cancelled no dinner: nothing to restore.')
+      expect(cancelled_ids).to be_empty
+    end
+
     it 'refuses when a dinner it cancelled was settled since' do
       migrate(:up)
       settle!(cutoff: before - 1)
@@ -157,4 +162,6 @@ RSpec.describe CancelOldDinnersNobodyCooked do
       expect { migrate(:down) }.to raise_error(RuntimeError, /changed, or was settled/)
     end
   end
+
+  it_behaves_like 'a data migration that tries a conflict again', described_class
 end

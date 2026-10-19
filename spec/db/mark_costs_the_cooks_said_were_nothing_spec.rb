@@ -113,6 +113,16 @@ RSpec.describe MarkCostsTheCooksSaidWereNothing do
       expect(no_cost(shared, partner)).to be(false)
     end
 
+    it 'marks nothing when every dinner is skipped' do
+      settle_as_before_rule_3!(cutoff: [shared.date, helped.date].max + 1)
+
+      out = migrate(:up)
+
+      expect(out).to include("#{shared.date}  skipped: the dinner is settled",
+                             "#{helped.date}  skipped: the dinner is settled")
+      expect(fix_rows).to be_empty
+    end
+
     it 'does nothing, and says so, when it ran already' do
       migrate(:up)
 
@@ -141,6 +151,11 @@ RSpec.describe MarkCostsTheCooksSaidWereNothing do
       expect(fix_rows).to be_empty
     end
 
+    it 'does nothing, and says so, when up marked no cost' do
+      expect(migrate(:down)).to include('This migration marked no cost: nothing to take back.')
+      expect(no_cost(shared, partner)).to be(false)
+    end
+
     it 'refuses when a cost it marked changed since' do
       migrate(:up)
       Bill.find_by!(meal: shared, resident: partner).update!(no_cost: false, amount: 3)
@@ -148,4 +163,6 @@ RSpec.describe MarkCostsTheCooksSaidWereNothing do
       expect { migrate(:down) }.to raise_error(RuntimeError, /changed, or its dinner was settled/)
     end
   end
+
+  it_behaves_like 'a data migration that tries a conflict again', described_class
 end

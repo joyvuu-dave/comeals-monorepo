@@ -150,6 +150,20 @@ RSpec.describe MoveAReceiptSavedOnTheWrongDay do
         create(:bill, meal: dinner, resident: baker, community: community, amount: 5)
       },
       'nobody ate at the dinner' => -> { MealResident.where(meal: dinner).delete_all },
+      'there is no meal on 2025-12-07' => lambda {
+        MealResident.where(meal: dinner).delete_all
+        Bill.where(meal: dinner).delete_all
+        Meal.where(id: dinner.id).delete_all
+      },
+      # The CHECK bills_no_cost_means_no_amount, validated by migration
+      # 20261010130200 before this one runs, refuses a bill with both No
+      # cost and an amount. So this refusal cannot happen in a real run;
+      # the CHECK is dropped here (the example's transaction puts it back)
+      # to show the guard still holds without it.
+      'the receipt has its amount and is marked No cost' => lambda {
+        ActiveRecord::Base.connection.remove_check_constraint(:bills, name: 'bills_no_cost_means_no_amount')
+        receipt.update_columns(no_cost: true)
+      },
       'the receipt is gone, and not on the dinner either' => -> { receipt.delete }
     }.each do |state, arrange|
       it "refuses and changes nothing when #{state}" do
@@ -160,6 +174,16 @@ RSpec.describe MoveAReceiptSavedOnTheWrongDay do
         expect(Bill.order(:id).pluck(:id, :meal_id, :resident_id, :amount)).to eq(before)
         expect(fix_rows).to be_empty
       end
+    end
+
+    it 'refuses and changes nothing when the meal it was typed on is settled' do
+      wrong_day.update_columns(closed: false, closed_at: nil)
+      create(:meal_resident, meal: wrong_day, resident: person('Gil Late'), community: community)
+      settle!(cutoff: described_class::FROM)
+      before = Bill.order(:id).pluck(:id, :meal_id, :amount)
+
+      expect { migrate(:up) }.to raise_error(RuntimeError, /the meal of 2025-12-09 is settled/)
+      expect(Bill.order(:id).pluck(:id, :meal_id, :amount)).to eq(before)
     end
 
     it 'refuses and changes nothing when the dinner is settled' do
@@ -191,8 +215,18 @@ RSpec.describe MoveAReceiptSavedOnTheWrongDay do
       expect { migrate(:down) }.to raise_error(RuntimeError, /changed after/)
     end
 
+    it 'refuses when the dinner was settled since the move' do
+      migrate(:up)
+      settle!(cutoff: described_class::TO)
+
+      expect { migrate(:down) }.to raise_error(RuntimeError, /settled since the move/)
+      expect(moved).to have_attributes(amount: BigDecimal('20.22'))
+    end
+
     it 'does nothing when up never moved anything' do
       expect(migrate(:down)).to include('nothing to put back')
     end
   end
+
+  it_behaves_like 'a data migration that tries a conflict again', described_class
 end

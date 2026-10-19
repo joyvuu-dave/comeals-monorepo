@@ -285,6 +285,22 @@ RSpec.describe TurnOffNoCostOnBillsWithAnAmount do
         expect(connection.select_value("SELECT current_setting('comeals.allow_settled_writes', true)")).to eq('off')
       end
 
+      # The second read runs in the same transaction and snapshot as the
+      # first, so at SERIALIZABLE it finds the same bills. The stub stands
+      # for a second read that finds none, which only a weaker isolation
+      # could give.
+      it 'writes nothing when the bills it locked meals for are gone by the second read' do
+        allow(connection).to receive(:select_rows).and_wrap_original do |original, *args, **options|
+          args.first.to_s.start_with?('SELECT bills.id, meals.id') ? [] : original.call(*args, **options)
+        end
+
+        out = migrate(:up)
+
+        expect(out).to include('No bill has both No cost and an amount.')
+        expect([fixed, also_fixed, settled].map { |bill| bill.reload.no_cost }).to eq([true, true, true])
+        expect(fix_rows).to be_empty
+      end
+
       it 'says so and writes nothing when no bill needs it' do
         SettledWrites.with_repair_bypass { settled.update_columns(amount: 0) }
         [fixed, also_fixed].each { |bill| bill.update_columns(amount: 0) }
@@ -374,6 +390,18 @@ RSpec.describe TurnOffNoCostOnBillsWithAnAmount do
         expect(out).to include("Left as it is, because it changed after the fix: bill #{also_fixed.id} (2025-01-08)")
       end
 
+      # Someone may drop the CHECK by hand before the rollback. Then down
+      # has no CHECK to drop while it puts No cost back, and adds none.
+      it 'puts the bills back without adding a CHECK when there is none' do
+        migrate(:up)
+        connection.remove_check_constraint(:bills, name: check_name)
+
+        migrate(:down)
+
+        expect([fixed, also_fixed, settled].map { |bill| bill.reload.no_cost }).to eq([true, true, true])
+        expect(check_validated).to be_nil
+      end
+
       # A rollback runs migration 20261010130200's down first, which makes
       # the CHECK NOT VALID again. Run alone, this down would leave the
       # CHECK NOT VALID while that migration still counts as run.
@@ -392,21 +420,54 @@ RSpec.describe TurnOffNoCostOnBillsWithAnAmount do
   # Two fixed bills on one settlement's meals: the settlement is worked out
   # once, and its correction says 2.
   context 'with two fixed bills on one settled meal' do
-    it 'works the settlement out once, for both' do
+    let(:bills) do
       community = create(:community)
       unit = create(:unit, community: community)
       meal = create(:meal, community: community, date: Date.new(2023, 3, 5))
       person = ->(name) { create(:resident, community: community, unit: unit, name: name) }
       create(:meal_resident, meal: meal, resident: person.call('Ann Fox'), community: community)
-      no_cost_bill_with_an_amount(meal: meal, resident: person.call('Eve Ray'), amount: '10')
-      no_cost_bill_with_an_amount(meal: meal, resident: person.call('Hal Ito'), amount: '8')
+      made = [no_cost_bill_with_an_amount(meal: meal, resident: person.call('Eve Ray'), amount: '10'),
+              no_cost_bill_with_an_amount(meal: meal, resident: person.call('Hal Ito'), amount: '8')]
       create(:reconciliation, community: community)
+      made
+    end
+
+    it 'works the settlement out once, for both' do
+      bills
 
       out = migrate(:up)
 
       expect(SettlementCorrection.sole.reason).to start_with('2 costs on these meals were marked No cost')
       expect(out).to include('again for its 2 bill(s): 3 balance(s) changed.')
       expect(LedgerVerification.call).to be_passed
+    end
+
+    # No fixed bill is on an open meal here, so down puts back only the
+    # settled ones, inside the correction.
+    it 'puts both back on rollback, and says so in the plural' do
+      bills
+      migrate(:up)
+
+      migrate(:down)
+
+      expect(bills.map { |bill| bill.reload.no_cost }).to eq([true, true])
+      expect(SettlementCorrection.order(:id).last.reason).to eq(
+        'Migration 20261010130000 was rolled back, so 2 costs on these meals are marked No cost again. ' \
+        'These numbers leave them out again.'
+      )
+      expect(LedgerVerification.call).to be_passed
+    end
+  end
+
+  context 'with nothing this migration fixed' do
+    # The test schema has the CHECK validated, as after the next
+    # migration; down refuses that, so the CHECK goes NOT VALID first.
+    it 'puts nothing back on rollback, and says so' do
+      connection.remove_check_constraint(:bills, name: check_name)
+      connection.add_check_constraint(:bills, 'NOT no_cost OR amount = 0', name: check_name, validate: false)
+
+      expect(migrate(:down)).to include('Put No cost back on 0 bill(s).')
+      expect(check_validated).to be(false)
     end
   end
 
@@ -514,4 +575,6 @@ RSpec.describe TurnOffNoCostOnBillsWithAnAmount do
       expect { migrate(:up) }.to raise_error(ActiveRecord::SerializationFailure)
     end
   end
+
+  it_behaves_like 'a data migration that tries a conflict again', described_class
 end

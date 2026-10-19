@@ -183,6 +183,13 @@ RSpec.describe UseTheChildPriceForAChildChargedAsAnAdult do
       expect(fix_rows).to be_empty
     end
 
+    it 'does nothing, and says so, when up changed no sign-up' do
+      before = child_rows.pluck(:multiplier)
+
+      expect(migrate(:down)).to include('This migration changed no sign-up: nothing to put back.')
+      expect(child_rows.pluck(:multiplier)).to eq(before)
+    end
+
     it 'refuses when a sign-up it changed changed again since' do
       migrate(:up)
       row = MealResident.find_by!(meal: wrong.first, resident: child)
@@ -191,4 +198,6 @@ RSpec.describe UseTheChildPriceForAChildChargedAsAnAdult do
       expect { migrate(:down) }.to raise_error(RuntimeError, /changed since/)
     end
   end
+
+  it_behaves_like 'a data migration that tries a conflict again', described_class
 end

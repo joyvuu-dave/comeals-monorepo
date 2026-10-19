@@ -111,6 +111,17 @@ RSpec.describe MarkThePotluckCostsNoCost do
       expect(costs).to eq([[1, false], [12, false]])
     end
 
+    it 'skips a cancelled dinner' do
+      # A dinner with a cost of money cannot be cancelled, so both cooks
+      # set their cost to $0 first.
+      Bill.where(meal: potluck).find_each { |bill| bill.update!(amount: 0) }
+      potluck.reload.cancel!
+
+      expect(migrate(:up)).to include('skipped: the dinner is cancelled')
+      expect(costs).to eq([[0, false], [0, false]])
+      expect(fix_rows).to be_empty
+    end
+
     it 'skips a settled dinner' do
       create(:meal_resident, meal: potluck, resident: first_cook, community: community)
       settle!(cutoff: described_class::DINNER + 1)
@@ -144,6 +155,19 @@ RSpec.describe MarkThePotluckCostsNoCost do
       expect(fix_rows).to be_empty
     end
 
+    it 'does nothing, and says so, when up marked no cost' do
+      expect(migrate(:down)).to include('This migration marked no cost: nothing to put back.')
+      expect(costs).to eq([[1, false], [1, false]])
+    end
+
+    it 'refuses when the dinner was settled since' do
+      migrate(:up)
+      settle!(cutoff: described_class::DINNER + 1)
+
+      expect { migrate(:down) }.to raise_error(RuntimeError, /is gone or settled/)
+      expect(costs).to eq([[0, true], [0, true]])
+    end
+
     it 'refuses when a cost it marked changed since' do
       migrate(:up)
       Bill.find_by!(meal: potluck, resident: first_cook).update!(no_cost: false, amount: 3)
@@ -151,4 +175,6 @@ RSpec.describe MarkThePotluckCostsNoCost do
       expect { migrate(:down) }.to raise_error(RuntimeError, /changed after migration 20261016130000/)
     end
   end
+
+  it_behaves_like 'a data migration that tries a conflict again', described_class
 end
