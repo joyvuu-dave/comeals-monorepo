@@ -714,9 +714,9 @@ RSpec.describe 'bin/check' do
   end
 
   # grep exits 1 when it finds nothing and 2 when it cannot read a path,
-  # even if it found matches in the other paths. These two steps pass on
-  # any exit that is not 0, so once a folder they read is moved or
-  # renamed, they pass whatever the code holds.
+  # even if it found matches in the other paths. If these two steps passed
+  # on any exit that is not 0, then once a folder they read was moved or
+  # renamed, they would pass whatever the code holds.
   describe 'a grep step when one of the paths it reads is gone' do
     it 'still fails on a TODO marker' do
       FileUtils.remove_entry(File.join(sandbox.root, 'app/controllers/api'))
@@ -724,7 +724,9 @@ RSpec.describe 'bin/check' do
 
       result = run_check
 
-      expect(summary_line(result.output, 'TODO markers')).to eq('✗  TODO markers         markers in money-path code')
+      expect(summary_line(result.output, 'TODO markers')).to eq('✗  TODO markers         grep failed (exit 2)')
+      expect(step_output(result.output, 'TODO markers'))
+        .to include('grep could not read every path it checks (exit 2)', 'app/services/settlement.rb:1:# TODO')
     end
 
     it 'still fails on a date read from the app zone' do
@@ -733,7 +735,7 @@ RSpec.describe 'bin/check' do
 
       result = run_check
 
-      expect(summary_line(result.output, 'App-zone dates')).to eq('✗  App-zone dates       app-zone date reads')
+      expect(summary_line(result.output, 'App-zone dates')).to eq('✗  App-zone dates       grep failed (exit 2)')
     end
   end
 end
