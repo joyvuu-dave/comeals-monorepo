@@ -14,15 +14,6 @@ export default defineConfig({
       // and Vitest empties its report directory on every run.
       reportsDirectory: "coverage/vitest",
       include: ["app/frontend/src/**/*.{js,jsx,ts,tsx}"],
-      // Left out of the count, the way spec/ is on the Ruby side:
-      // index.jsx boots the app (the router, the providers, the
-      // boot-time prefetch) and only runs in a browser, and nav_trace
-      // is development-only timing that production builds shim away.
-      // The browser suites (tests/e2e, tests/integration) run both.
-      exclude: [
-        "app/frontend/src/index.jsx",
-        "app/frontend/src/helpers/nav_trace.js",
-      ],
       // Every line, branch and function, the same rule SimpleCov holds
       // the Ruby side to. A branch the app cannot reach is not a reason
       // to lower these: change the code so the branch is gone. bin/check

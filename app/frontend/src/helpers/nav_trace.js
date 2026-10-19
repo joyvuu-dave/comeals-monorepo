@@ -1,9 +1,10 @@
 // Dev-only navigation timing. Sprinkle `mark("label")` calls at key
-// waypoints along the click → paint pipeline; call `report(label)` once
+// waypoints along the click → paint pipeline; call `reportAfterPaint(label)` once
 // the sequence has completed to log a breakdown to the console.
 //
-// Prod builds shim these to no-ops so there's zero overhead outside dev.
-// See calendar/show.jsx and data_store.js for the current marks.
+// In a production build import.meta.env.DEV is false, so each exported
+// function returns at once and does nothing.
+// See calendar/show.jsx and data_store_calendar.js for the current marks.
 //
 // In dev, each breakdown and Profiler commit is also POSTed to the Vite
 // middleware at /__perf/log, which appends it as JSONL to log/perf.log.
@@ -79,9 +80,9 @@ function printBreakdown(label, entries) {
 
 // Fire-and-forget POST to the Vite dev middleware. `keepalive` lets the
 // request survive a rapid navigation. Errors are swallowed so the logger
-// can never break the app.
+// can never break the app. Only the exported functions call it, and
+// each of them has already returned when ENABLED is false.
 function postLog(payload) {
-  if (!ENABLED) return;
   try {
     fetch("/__perf/log", {
       method: "POST",
