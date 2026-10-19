@@ -13,6 +13,10 @@ set -euo pipefail
 case "$APP" in
   comeals-monorepo) echo "url=https://comeals.com" >> "$GITHUB_OUTPUT" ;;
   comeals-staging) echo "url=https://comeals-staging-ad51b8a1eb64.herokuapp.com" >> "$GITHUB_OUTPUT" ;;
+  *)
+    echo "Refusing to roll back $APP: this workflow rolls back only comeals-monorepo or comeals-staging."
+    exit 1
+    ;;
 esac
 api() { curl -sf -H "Accept: application/vnd.heroku+json; version=3" -H "Authorization: Bearer $HEROKU_API_KEY" "$@"; }
 releases=$(api -H "Range: version ..; order=desc, max=2" "https://api.heroku.com/apps/$APP/releases")

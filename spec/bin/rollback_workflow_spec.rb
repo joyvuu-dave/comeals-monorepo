@@ -66,12 +66,14 @@ RSpec.describe 'the Rollback workflow scripts' do
     end
 
     # The workflow's app input is a choice of the two apps, and GitHub
-    # checks a choice input. The script itself does not: given another
-    # app, it gives no address and goes on to look the app up.
+    # checks a choice input. The script checks too, so another app can
+    # never be rolled back and then smoked at an empty address.
     it 'refuses an app it does not know, before it reads anything' do
       result = find(app: 'some-other-app')
 
-      expect(result.exitstatus).not_to eq(0)
+      expect(result.exitstatus).to eq(1)
+      expect(result.out).to include('Refusing to roll back some-other-app')
+      expect(result.outputs).to be_empty
       expect(sandbox.calls).to be_empty
     end
 
