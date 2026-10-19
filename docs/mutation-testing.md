@@ -4466,8 +4466,13 @@ among the 57. No run had a timeout.
 ### 2026-10-19, full run
 
 The full run 39318800394 (on 560c2960): 35,970 mutations, 35,384
-killed, 586 alive, 98.37%. Each of the other 585 survivors is one that
-an earlier round here already answered.
+killed, 586 alive, 98.37%. Compared with the full run 39014862807 (on
+af232aff): no subject has more survivors, except the one below. The
+report shows one example diff for each subject, and each of those is a
+kind an earlier round here answered: `.length` or `.size` for `.count`,
+`.to_int` for `.to_i`, `eql?` for `!=`, a dropped `to_s('F')` on a
+BigDecimal, a dropped `.presence` on the zone, and a dropped `joins`
+that `includes` makes anyway.
 
 Redundant code, removed (1): `|(_, resident_id)|` in
 `Reconciliation#settled_cooks_by_meal`. Mutant put `|_, resident_id|`
