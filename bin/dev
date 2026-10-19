@@ -17,16 +17,20 @@ echo ""
 # If the listener is ours, stop it. If it belongs to something else,
 # say so and print the command to stop it.
 #
-# "Ours" means started from THIS directory — matched by its basename,
-# which puma puts in its process title and vite carries in its path.
-# A server from a sibling worktree (bin/agent-worktree) is NOT ours:
-# it is another live session, and killing it would destroy someone
-# else's running work. Those get the message below instead.
+# "Ours" means started from THIS directory: the process's working
+# directory is exactly this one. foreman starts puma and vite here. (A
+# match on the folder's name in the process title was not enough: the
+# main checkout, comeals-monorepo, contains the name of a worktree for
+# a task named "mono".) A server from a sibling worktree
+# (bin/agent-worktree) is NOT ours: it is another live session, and
+# killing it would destroy someone else's running work. Those get the
+# message below instead.
 free_port() {
-  local port="$1" name="$2" pid
+  local port="$1" name="$2" pid cwd
   pid="$(lsof -nP -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null | head -n 1 || true)"
   [ -n "$pid" ] || return 0
-  if ps -p "$pid" -o command= | grep -qF "$(basename "$PWD")"; then
+  cwd="$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' || true)"
+  if [ "$cwd" = "$(pwd -P)" ]; then
     echo "  Stopping leftover $name (pid $pid) on port $port..."
     # If it was started by foreman, foreman sees the child die and
     # stops the rest of that session too.

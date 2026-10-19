@@ -29,8 +29,9 @@ RSpec.describe 'bin/dev' do
   end
 
   # A process that holds port 3000 for this spec, and a fake lsof that
-  # names it on that port only while it is alive.
-  def leftover_server(ignore_term: false)
+  # names it on that port only while it is alive, and gives the folder it
+  # runs in as `folder` (the sandbox's repository, unless given).
+  def leftover_server(ignore_term: false, folder: sandbox.root)
     command = ignore_term ? 'trap "" TERM; while :; do /bin/sleep 1; done' : 'exec /bin/sleep 30'
     # Without bashcov's trace settings: this loop is not a script measured.
     pid = Process.spawn({ 'SHELLOPTS' => nil, 'BASH_XTRACEFD' => nil }, 'bash', '-c', command,
@@ -40,6 +41,7 @@ RSpec.describe 'bin/dev' do
     sandbox.fake('lsof', <<~BASH)
       case "$*" in
         *TCP:3000*) kill -0 #{pid} 2>/dev/null && echo #{pid} ;;
+        "-a -p #{pid} -d cwd -Fn") printf 'p#{pid}\nfcwd\nn%s\n' #{folder.shellescape} ;;
       esac
       exit 0
     BASH
@@ -89,7 +91,7 @@ RSpec.describe 'bin/dev' do
 
   # A server from a sibling worktree is someone else's running session.
   it 'leaves alone a server that was not started from this folder, and says how to stop it' do
-    pid = leftover_server
+    pid = leftover_server(folder: File.join(sandbox.dir, 'comeals-other-task'))
     sandbox.fake('ps', "echo '#{pid} puma 7.0 (tcp://localhost:3000) [comeals-other-task]'")
 
     result = sandbox.run(script)
@@ -101,15 +103,15 @@ RSpec.describe 'bin/dev' do
     expect(sandbox.calls_to('bundle')).to be_empty
   end
 
-  # "Ours" is a match on the folder's name anywhere in the process title.
-  # The main checkout is comeals-monorepo, so a worktree for a task named
-  # "mono" (comeals-mono) takes the main checkout's server for its own and
-  # stops it.
+  # The main checkout is comeals-monorepo. Its name contains the name of
+  # a worktree for a task named "mono" (comeals-mono), so a match on the
+  # folder's name in the process title would take the main checkout's
+  # server for the worktree's own.
   context 'when this folder is comeals-mono' do
     let(:sandbox) { ScriptSandbox.new(root_name: 'comeals-mono') }
 
     it 'leaves alone the server of comeals-monorepo' do
-      pid = leftover_server
+      pid = leftover_server(folder: File.join(sandbox.dir, 'comeals-monorepo'))
       sandbox.fake('ps', "echo 'puma 7.0 (tcp://localhost:3000) [comeals-monorepo]'")
 
       result = sandbox.run(script)
