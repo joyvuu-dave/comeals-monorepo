@@ -397,6 +397,20 @@ RSpec.describe 'the Deploy workflow scripts' do
       expect(rollbacks).to eq(["heroku rollback #{prod}"])
     end
 
+    # With no logs to read the soak cannot know whether the release logged
+    # an error, so the run fails and a person looks. It does not roll back:
+    # the release passed the smoke test and the Solid Queue check.
+    it 'fails, without rolling back, when the logs cannot be read' do
+      sandbox.fake('heroku', "logs -n 1500 #{prod}", err: 'Internal server error', exit: 1)
+
+      result = watch
+
+      expect(result.exitstatus).to eq(1)
+      expect(result.out).to include('Could not read the production logs')
+      expect(result.out).not_to include('No worrying lines')
+      expect(rollbacks).to be_empty
+    end
+
     it 'keeps a release whose only worrying lines are from before the promote' do
       sandbox.fake('heroku', "logs -n 1500 #{prod}", out: "2026-10-19T12:29:59.9+00:00 app[web.1]: FATAL old\n")
 

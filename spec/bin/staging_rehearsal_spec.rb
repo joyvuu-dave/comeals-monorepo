@@ -403,6 +403,19 @@ RSpec.describe 'bin/staging-rehearsal' do
       expect(result.out).to include('code=H14')
     end
 
+    # With no logs to read the check cannot know whether the release or the
+    # boot logged an error, so it must not pass.
+    it 'fails when the logs cannot be read' do
+      sandbox.fake('heroku', "logs -n 1500 #{staging}", err: 'Internal server error', exit: 1)
+
+      result = rehearse
+
+      expect(result.exitstatus).to eq(1)
+      expect(result.out).to include('Could not read the staging logs')
+      expect(result.out).not_to include('No worrying lines')
+      expect(sandbox.calls_to('node')).to be_empty
+    end
+
     it 'counts a release line that is not migration SQL' do
       result = with_logs('2026-10-19T12:03:00.1+00:00 app[release.7]: PG::Error ERROR Exception in migration')
 
