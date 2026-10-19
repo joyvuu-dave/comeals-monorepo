@@ -65,6 +65,16 @@ RSpec.describe 'the Rollback workflow scripts' do
                                         'target' => 'v8')
     end
 
+    # The workflow's app input is a choice of the two apps, and GitHub
+    # checks a choice input. The script itself does not: given another
+    # app, it gives no address and goes on to look the app up.
+    it 'refuses an app it does not know, before it reads anything' do
+      result = find(app: 'some-other-app')
+
+      expect(result.exitstatus).not_to eq(0)
+      expect(sandbox.calls).to be_empty
+    end
+
     it 'stops, changing nothing, when the release is not found' do
       sandbox.fake('curl', "* #{api}/releases/999", err: 'curl: (22) The requested URL returned error: 404', exit: 22)
 
