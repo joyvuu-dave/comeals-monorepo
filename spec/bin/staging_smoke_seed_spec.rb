@@ -16,7 +16,7 @@ RSpec.describe 'bin/lib/staging_smoke_seed.rb' do
   let(:env) do
     { 'COMEALS_STAGING' => '1', 'SMOKE_EMAIL' => 'smoke@staging.invalid', 'SMOKE_PASSWORD' => 'made-up-password' }
   end
-  let(:today) { Date.current }
+  let(:today) { Community.instance.today }
   let!(:unit) { create(:unit, name: 'A1') }
   let!(:earlier_meal) { create(:meal, date: today + 100) }
 

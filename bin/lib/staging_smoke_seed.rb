@@ -10,14 +10,13 @@
 # The restore wipes these rows every run, so nothing accumulates.
 abort 'Refusing: COMEALS_STAGING is not set — this is not the staging app' if ENV['COMEALS_STAGING'].blank?
 
-community = Community.instance
+today = Community.instance.today
 unit = Unit.order(:name).first
 abort 'Refusing: no units in the restored database' if unit.nil?
 
 resident = Resident.find_or_initialize_by(email: ENV.fetch('SMOKE_EMAIL'))
 resident.assign_attributes(
   name: 'Smoke Test',
-  community: community,
   unit: unit,
   can_cook: true,
   vegetarian: false,
@@ -29,7 +28,7 @@ resident.save!
 # An open meal the smoke can write to, far enough out to never collide
 # with the community's real planning horizon. Dates are unique, so scan
 # forward from +120 days for a free one.
-date = ((Date.current + 120)..(Date.current + 150)).find { |d| !Meal.exists?(date: d) }
+date = ((today + 120)..(today + 150)).find { |d| !Meal.exists?(date: d) }
 abort 'Refusing: no free meal date between +120 and +150 days' if date.nil?
 
 # Every meal belongs to a rotation. The smoke does not read it, so the
@@ -37,6 +36,6 @@ abort 'Refusing: no free meal date between +120 and +150 days' if date.nil?
 rotation = Meal.where(date: ...date).order(date: :desc).first&.rotation
 abort "Refusing: no meal before #{date} to take a rotation from" if rotation.nil?
 
-meal = Meal.create!(date: date, community: community, rotation: rotation)
+meal = Meal.create!(date: date, rotation: rotation)
 
 puts "SMOKE_MEAL_ID=#{meal.id}"
