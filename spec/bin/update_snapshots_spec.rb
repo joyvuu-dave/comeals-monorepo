@@ -58,9 +58,8 @@ RSpec.describe 'bin/update-snapshots' do
     expect(sandbox.calls_to('npx')).to be_empty
   end
 
-  # The script checks each name just before it deletes that name's
-  # goldens. So a typo in the second name stops the run after the first
-  # name's goldens are deleted, and they are not recorded again.
+  # A typo in the second name must not leave the first name's goldens
+  # deleted and not recorded again.
   it 'checks every name before it deletes any' do
     result = sandbox.run(script, 'meal-edit', 'no-such')
 
@@ -68,10 +67,10 @@ RSpec.describe 'bin/update-snapshots' do
     expect(left.size).to eq(13)
   end
 
-  # A name that is only the start of other goldens' names passes the
-  # check, deletes nothing, and is reported as deleted. The golden then
-  # keeps its old image whenever the change is inside the diff tolerance,
-  # which is the case the script exists for.
+  # A name that is only the start of other goldens' names would delete
+  # nothing and be reported as deleted. The golden would then keep its old
+  # image whenever the change is inside the diff tolerance, which is the
+  # case the script exists for.
   it 'refuses a name that is only the start of the names of other goldens' do
     result = sandbox.run(script, 'event')
 
