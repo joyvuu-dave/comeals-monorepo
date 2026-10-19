@@ -189,6 +189,14 @@ RSpec.describe 'bin/staging-rehearsal' do
 
       it_behaves_like 'a refusal before any write', nil
     end
+
+    # When the addon list cannot be read, the check cannot know whether a
+    # scheduler exists, but it reports "No scheduler addon" and goes on.
+    context 'when the addons cannot be listed' do
+      before { sandbox.fake('heroku', "addons #{staging}", err: 'Internal server error', exit: 1) }
+
+      it_behaves_like 'a refusal before any write', nil
+    end
   end
 
   # Staging state: untouched. Nothing on staging changed yet.
