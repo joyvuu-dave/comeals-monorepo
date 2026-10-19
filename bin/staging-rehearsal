@@ -68,8 +68,11 @@ step "Neuter check on $STAGING_APP"
 
 config_keys=$(heroku config -a "$STAGING_APP" --json | json "'\n'.join(d.keys())")
 
-if ! grep -qx "COMEALS_STAGING" <<< "$config_keys"; then
-  fail "COMEALS_STAGING is not set — the mail and Pusher guards are off"
+# The app reads COMEALS_STAGING with present?, so a value that is empty
+# or only spaces turns the guards off, the same as no value.
+staging_flag=$(heroku config:get COMEALS_STAGING -a "$STAGING_APP")
+if [ -z "${staging_flag//[[:space:]]/}" ]; then
+  fail "COMEALS_STAGING is not set or is blank — the mail and Pusher guards are off"
   exit 1
 fi
 ok "COMEALS_STAGING is set (mail collects in memory, Pusher is a no-op)"
@@ -82,7 +85,11 @@ for var in "${FORBIDDEN_VARS[@]}"; do
 done
 ok "No mail, healthchecks, Bugsnag, or Skylight credentials present"
 
-if heroku addons -a "$STAGING_APP" 2>/dev/null | grep -q scheduler; then
+if ! addons=$(heroku addons -a "$STAGING_APP"); then
+  fail "Could not list the addons on $STAGING_APP, so the scheduler check cannot pass"
+  exit 1
+fi
+if grep -q scheduler <<< "$addons"; then
   fail "A scheduler addon exists on $STAGING_APP — staging must not run jobs"
   exit 1
 fi

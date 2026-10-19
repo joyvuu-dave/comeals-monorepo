@@ -18,6 +18,7 @@ RSpec.describe 'bin/staging-rehearsal' do
   before do
     sandbox.record_env('SMOKE_URL', 'SMOKE_EMAIL', 'SMOKE_PASSWORD', 'SMOKE_MEAL_ID')
     sandbox.fake('heroku', "config #{staging} --json", out: config_json(config_keys))
+    sandbox.fake('heroku', "config:get COMEALS_STAGING #{staging}", out: "1\n")
     sandbox.fake('heroku', "addons #{staging}", out: "heroku-postgresql (postgresql-round-123)  essential-0\n")
     sandbox.fake('heroku', "ps #{staging} --json", out: '[{"type":"web","state":"down"}]')
     sandbox.fake('heroku', 'pg:backups:capture -a comeals-monorepo', out: "Backing up DATABASE to b101... done\n")
@@ -76,6 +77,7 @@ RSpec.describe 'bin/staging-rehearsal' do
       [
         'date -u +%Y-%m-%dT%H:%M:%S',
         "heroku config #{staging} --json",
+        "heroku config:get COMEALS_STAGING #{staging}",
         "heroku addons #{staging}",
         "heroku ps #{staging} --json",
         'heroku pg:backups:capture -a comeals-monorepo',
@@ -138,17 +140,18 @@ RSpec.describe 'bin/staging-rehearsal' do
     context 'when COMEALS_STAGING is not set' do
       let(:config_keys) { %w[DATABASE_URL] }
 
+      before { sandbox.fake('heroku', "config:get COMEALS_STAGING #{staging}", out: "\n") }
+
       it_behaves_like 'a refusal before any write', 'COMEALS_STAGING is not set'
     end
 
     # The app reads COMEALS_STAGING with present?, so a blank value turns
     # the mail and Pusher guards off (config/environments/production.rb,
-    # config/initializers/pusher.rb). The check only asks whether the
-    # name is there.
+    # config/initializers/pusher.rb).
     context 'when COMEALS_STAGING is set but blank' do
-      before { sandbox.fake('heroku', "config #{staging} --json", out: '{"COMEALS_STAGING": "", "DATABASE_URL": "x"}') }
+      before { sandbox.fake('heroku', "config:get COMEALS_STAGING #{staging}", out: "  \n") }
 
-      it_behaves_like 'a refusal before any write', 'COMEALS_STAGING'
+      it_behaves_like 'a refusal before any write', 'COMEALS_STAGING is not set or is blank'
     end
 
     %w[GMAIL_USERNAME GMAIL_APP_PASSWORD HEALTHCHECKS_PING_KEY BUGSNAG_API_KEY VITE_BUGSNAG_API_KEY
@@ -191,11 +194,11 @@ RSpec.describe 'bin/staging-rehearsal' do
     end
 
     # When the addon list cannot be read, the check cannot know whether a
-    # scheduler exists, but it reports "No scheduler addon" and goes on.
+    # scheduler exists.
     context 'when the addons cannot be listed' do
       before { sandbox.fake('heroku', "addons #{staging}", err: 'Internal server error', exit: 1) }
 
-      it_behaves_like 'a refusal before any write', nil
+      it_behaves_like 'a refusal before any write', 'Could not list the addons on comeals-staging'
     end
   end
 
