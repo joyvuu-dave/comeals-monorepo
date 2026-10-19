@@ -55,6 +55,21 @@ what runs today.
 > choice, below — not with the trigger bypass. The stored balances are what
 > residents already paid; you correct forward, you do not rewrite them.
 
+## Where a fix to particular records goes
+
+Try these in order:
+
+1. Through the app. On a settled dinner, a superuser saves a correction
+   in admin (**Correct this dinner**, `MealCorrection`, the next section).
+   On an open dinner, an ordinary admin edit does it.
+2. If no screen can make the change, write a script in a private
+   repository, have it reviewed and tested, and run it with `heroku run`.
+   Never put it in this repository.
+
+This repository is public. Code, comments, specs and docs here may
+describe the kind of problem, but never the people or dinners it was
+about.
+
 ## First choice: a correction
 
 You don't edit the settled ledger. You add to it (CLAUDE.md money rule 7).

@@ -376,9 +376,9 @@ Bill ----> Community
   a new one; the meal history then says who was removed and who was
   added. The trigger's name sorts after `bills_reject_settled_write`, so
   on a settled meal that trigger answers first. Until 2026-10-10 the
-  admin form could change the cook in place. Production holds three
-  rows that changed a bill's cook (bill 1995, 2023-03-05); the history
-  reads them as "Bill moved from Sandra to Sarah" (`AuditDescription`).
+  admin form could change the cook in place. Production holds a few rows
+  that changed one old bill's cook; the history reads them as "Bill moved
+  from X to Y", with two names (`AuditDescription`).
 - A bill marked No cost has no amount, because "No cost" means the cook
   spent nothing. The model refuses both at once in words
   (`Bill::NO_COST_MEANS_NO_AMOUNT`: "A bill marked No cost can't have an
@@ -396,13 +396,13 @@ Bill ----> Community
      bill with both after step 2 has looked.
   2. `20261010130000` turns No cost off, and keeps the amount, on every
      bill that has both. In the production copies of September and of
-     2026-10-11 that is 27 bills: 16 on 13 meals not settled yet
-     ($676.30), whose amounts now count at the next settlement, and 11 on
-     9 settled meals (2020 to 2024, $342.77, 9 cooks, settlements 3, 7
-     and 9). It writes one audit row for each, so the meal history says
-     "Bill for Jane no longer marked as no cost, so the $86.00 now counts
-     in the meal's cost". On a settled meal it uses the repair bypass for
-     that one write. Then, in the same transaction, it works out again
+     2026-10-11 that is 27 bills: some on meals not settled yet, whose
+     amounts now count at the next settlement, and the rest on 9 settled
+     meals (2020 to 2024, settlements 3, 7 and 9). It writes one audit row
+     for each, so the meal history says "Bill for (the cook) no longer
+     marked as no cost, so the (amount) now counts in the meal's cost".
+     On a settled meal it uses the repair bypass for that one write. Then,
+     in the same transaction, it works out again
      each settlement that claimed one of the fixed bills
      (`Settlement#correct!`, under Reconciliation below), so those
      settlements count the amounts too.
@@ -601,9 +601,9 @@ single-column `meal_id` index was dropped; the composite covers it.
   on an attendance row) on a closed meal only if it could be removed: it
   moves a whole share from one person to another. Nothing in the app
   changes the person on an attendance row (the model and the database
-  still allow it; three production rows did it, attendance row 8756 on
-  2023-03-05, and the history reads them as "Sign-up moved from Sandra
-  to Arlen"); the admin meal form offers a host for every guest. To fix a wrong host on a closed meal, reopen the
+  still allow it; a few production rows on one old meal did it, and the
+  history reads them as "Sign-up moved from X to Y", with two names);
+  the admin meal form offers a host for every guest. To fix a wrong host on a closed meal, reopen the
   meal, change the host, and close it again. Reopening clears `max` and
   the close time, so extras added after the first close can no longer
   leave

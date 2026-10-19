@@ -3,11 +3,11 @@
 require 'rails_helper'
 require Rails.root.join('db/migrate/20261013120100_put_back_costs_an_old_cook_form_deleted.rb')
 
-# The data migration that puts back the three costs of the BBQ dinner of
-# 2019-09-02, which an old cook form (issue #7) deleted with no record,
-# takes off the two costs the form saved there instead, puts the $49.50
-# receipt on the pasta dinner of 2019-09-05 it was typed for, makes that
-# dinner's other cook No cost, and works the settlement out again.
+# The data migration that puts back the costs of the BBQ dinner, which an
+# old cook form (issue #7) deleted with no record, takes off the two costs
+# the form saved there instead, puts the receipt on the pasta dinner it
+# was typed for, makes that dinner's other cook No cost, and works the
+# settlement out again.
 RSpec.describe PutBackCostsAnOldCookFormDeleted do
   let(:migration) { described_class.new }
   let(:community) { create(:community) }
@@ -20,7 +20,7 @@ RSpec.describe PutBackCostsAnOldCookFormDeleted do
   let(:pasta_cook) { person('Pat Pasta') }
   let(:second_cook) { person('Sam Second') }
   let(:eaters) { [person('Eli Eater'), person('Fay Eater')] }
-  # The three costs as they were saved, then deleted with no audit row.
+  # The costs as they were saved, then deleted with no audit row.
   let!(:deleted) do
     [[ribs_cook, 70], [helper, 0], [dessert_cook, 15]].map do |cook, amount|
       create(:bill, meal: bbq, resident: cook, community: community, amount: 0).tap do |bill|
@@ -69,7 +69,7 @@ RSpec.describe PutBackCostsAnOldCookFormDeleted do
   end
 
   describe 'up' do
-    it 'puts the three costs back with their old ids, and moves the receipt to the pasta dinner' do
+    it 'puts the deleted costs back with their old ids, and moves the receipt to the pasta dinner' do
       migrate(:up)
 
       expect(costs(bbq)).to eq([[ribs_cook.id, 70, false], [helper.id, 0, true], [dessert_cook.id, 15, false]])

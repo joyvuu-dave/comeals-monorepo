@@ -11,16 +11,16 @@
 # for what they spent. Before April 2026 the meal page let a cost be typed
 # into a row marked No cost without turning No cost off. The audit trail
 # of every such bill in the production copy of September 2026 shows the
-# amount typed, or typed again, after No cost was on. That copy has 27
-# such bills: 16 on 13 meals not settled yet ($676.30), and 11 on 9
-# settled meals (2020 to 2024, $342.77, 9 cooks, in settlements 3, 7 and
-# 9). The production copy of 2026-10-11 has the same 27. The owner
-# decided on 2026-10-10 that No cost and an amount together never happen
-# on purpose, that this migration fixes all of them during the deploy,
-# with no person doing anything, and that every settled number must be
-# right too: "What's important now is that the app is in a perfect
-# state." Nobody recorded what was paid or collected for those
-# settlements, so their balances are worked out again rather than kept.
+# amount typed, or typed again, after No cost was on. Some of those bills
+# are on meals not settled yet, and some are on settled meals, in
+# settlements 3, 7 and 9. The production copy of 2026-10-11 has the same
+# bills. The owner decided on 2026-10-10 that No cost and an amount
+# together never happen on purpose, that this migration fixes all of them
+# during the deploy, with no person doing anything, and that every
+# settled number must be right too: "What's important now is that the
+# app is in a perfect state." Nobody recorded what was paid or collected
+# for those settlements, so their balances are worked out again rather
+# than kept.
 #
 # On a meal not settled yet, the amount then counts in the meal's cost,
 # and the next settlement credits the cook. A settlement that already
@@ -64,8 +64,8 @@
 #      meal history shows "Automatic fix" as who made the change
 #      (AuditSerializer). The comment also says whether the meal was
 #      already settled; down reads it. The meal history then says "Bill
-#      for Jane no longer marked as no cost, so the $86.00 now counts in
-#      the meal's cost" (AuditDescription), on a settled meal too, since
+#      for <cook> no longer marked as no cost, so the <amount> now counts
+#      in the meal's cost" (AuditDescription), on a settled meal too, since
 #      step 5 counts it.
 #   5. Works out again each settlement that claimed one of the fixed
 #      bills, found from the bills, not by id (Settlement#correct!), with

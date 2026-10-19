@@ -11,10 +11,10 @@
 # of the resident's age on the meal's date (Resident#multiplier_on). The
 # release before saved the resident's price setting instead, and a person
 # with no birthday on file kept the adult setting. On 2026-10-12 the owner
-# gave the real birthdays of four children who had no birthday or a
+# gave the real birthdays of some children who had no birthday or a
 # placeholder one, and they were entered in production by hand. With them
-# in, the production copy of 2026-10-13 has 191 sign-ups whose price is
-# not the price of the age: 26 in settlement 9 and 165 on meals not
+# in, the production copy of 2026-10-13 has sign-ups whose price is not
+# the price of the age: some in settlement 9, and more on meals not
 # settled. The owner decided each one gets the price of the age: "All
 # meals should be updated so this is fixed."
 #
@@ -34,13 +34,14 @@
 # docs/runbooks/settled-data-repair.md reads.
 #
 # This moves money, so it first checks, under the meals' row locks, the
-# facts of the production copy of 2026-10-13: the sign-ups of 4 people
-# change, and 26 of them are settled, all in one settlement. A birthday
-# typed wrong before the deploy would change those facts, and would move
-# old money if this went on. So any other state stops the deploy and
-# changes nothing: a person looks first. So does a settlement that already
-# disagrees with its rows (correct! refuses it). No sign-up matching (a
-# database built from structure.sql, or after this ran) is not an error.
+# facts of the production copy of 2026-10-13: how many people's sign-ups
+# change (PEOPLE), and how many of those sign-ups are settled, all in one
+# settlement (SETTLED_SIGN_UPS). A birthday typed wrong before the deploy
+# would change those facts, and would move old money if this went on. So
+# any other state stops the deploy and changes nothing: a person looks
+# first. So does a settlement that already disagrees with its rows
+# (correct! refuses it). No sign-up matching (a database built from
+# structure.sql, or after this ran) is not an error.
 #
 # Each sign-up gets the audit row a save would write ({"multiplier":
 # [2, 0]}, so the meal history says "Adult to Child (free)"), with no

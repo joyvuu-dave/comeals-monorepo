@@ -6,8 +6,8 @@ require Rails.root.join('db/migrate/20261013120000_use_the_price_of_the_age_on_e
 # The data migration that gives each sign-up the price of the resident's
 # age on the meal's date, where the resident has a birthday and the saved
 # price is a different one, and works out again each settlement that
-# holds one. In production: 191 sign-ups of four children whose birthdays
-# were entered on 2026-10-12, 26 of them in one settlement.
+# holds one. In production: sign-ups of some children whose birthdays
+# were entered by hand, some of them in one settlement.
 RSpec.describe UseThePriceOfTheAgeOnEverySignUp do
   let(:migration) { described_class.new }
   let(:community) { create(:community) }

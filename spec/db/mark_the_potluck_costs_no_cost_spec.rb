@@ -3,9 +3,9 @@
 require 'rails_helper'
 require Rails.root.join('db/migrate/20261016130000_mark_the_potluck_costs_no_cost.rb')
 
-# The data migration that marks No cost on the two $1.00 cook costs of the
-# potluck of 2024-11-24, whose sign-up was on paper, so the dinner can
-# settle with no money moving.
+# The data migration that marks No cost on the placeholder cook costs of a
+# potluck whose sign-up was on paper, so the dinner can settle with no
+# money moving.
 RSpec.describe MarkThePotluckCostsNoCost do
   let(:migration) { described_class.new }
   let(:community) { create(:community) }
@@ -41,7 +41,7 @@ RSpec.describe MarkThePotluckCostsNoCost do
   end
 
   describe 'up' do
-    it 'marks both $1.00 costs No cost, with amount 0' do
+    it 'marks the placeholder costs No cost, with amount 0' do
       migrate(:up)
 
       expect(costs).to eq([[0, true], [0, true]])
@@ -97,14 +97,14 @@ RSpec.describe MarkThePotluckCostsNoCost do
       expect(costs).to eq([[1, false], [1, false]])
     end
 
-    it 'skips a dinner with a third cook' do
+    it 'skips a dinner with an extra cook' do
       cost(create(:resident, community: community, unit: unit, name: 'Tia Third'))
 
       expect(migrate(:up)).to include('skipped: it has 3 cooks, not 2')
       expect(costs).to all(eq([1, false]))
     end
 
-    it 'skips a dinner where a cost is not $1.00' do
+    it 'skips a dinner where a cost is not the placeholder amount' do
       Bill.find_by!(meal: potluck, resident: second_cook).update!(amount: 12)
 
       expect(migrate(:up)).to include('skipped: a cost is not $1.00')
@@ -135,7 +135,7 @@ RSpec.describe MarkThePotluckCostsNoCost do
   end
 
   describe 'down' do
-    it 'puts both $1.00 costs back, and removes its rows' do
+    it 'puts the placeholder costs back, and removes its rows' do
       migrate(:up)
 
       migrate(:down)

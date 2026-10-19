@@ -1,41 +1,40 @@
 # frozen_string_literal: true
 
-# Puts back the three cook costs of the BBQ dinner of 2019-09-02, which an
-# old version of the cook form deleted, and puts the receipt it saved
-# there instead on the dinner it was for, the pasta dinner of 2019-09-05.
-# Then works out settlement 6, which holds both dinners, again. One of the
-# history fixes the owner decided on 2026-10-12, run during the deploy so
-# no person has to do it by hand.
+# Puts back the cook costs of one dinner (BBQ), which an old version of
+# the cook form deleted, and puts the receipt it saved there instead on
+# the dinner it was for, a dinner a few days later (PASTA). Then works out
+# settlement 6, which holds both dinners, again. One of the history fixes
+# the owner decided on 2026-10-12, run during the deploy so no person has
+# to do it by hand.
 #
-# On the evening of 2019-09-05 a cook of the pasta dinner saved the cook
-# form of the BBQ dinner instead. The cook form of that time replaced the
-# whole list of cooks (issue #7), so the BBQ dinner's three costs, $70.00,
-# $15.00 and $0.00, were deleted with no audit row, and the pasta
-# dinner's two cooks were saved there, one of them with the $49.50
-# receipt typed for the pasta. The next evening the pasta dinner's other
-# cook typed $47.58 on the pasta dinner. The owner asked the cooks
-# (2026-10-12): the BBQ dinner's three cooks spent what they typed, and
-# the pasta dinner cost $49.50, which its first cook spent; the other cook
-# spent nothing. So the BBQ dinner gets its three costs back, with the
-# $0.00 one as No cost, and loses the two the form saved there; on the
-# pasta dinner the first cook gets the $49.50 and the other cook is No
-# cost. The same form also deleted two empty cook slots from the pasta
-# dinner. They stay deleted: the owner confirmed its cooks were the two
-# who have costs on it now.
+# A cook of the PASTA dinner saved the cook form of the BBQ dinner by
+# mistake. The cook form of that time replaced the whole list of cooks
+# (issue #7), so the BBQ dinner's costs were deleted with no audit row,
+# and the PASTA dinner's two cooks were saved there, one of them with the
+# receipt typed for the PASTA dinner (RECEIPT). Later the PASTA dinner's
+# other cook typed a cost on the PASTA dinner (NOTHING). The owner asked
+# the cooks (2026-10-12): the BBQ dinner's cooks spent what they typed,
+# and the PASTA dinner cost RECEIPT, which its first cook spent; the other
+# cook spent nothing. So the BBQ dinner gets its costs back, with a zero
+# one as No cost, and loses the two the form saved there; on the PASTA
+# dinner the first cook gets RECEIPT and the other cook is No cost. The
+# same form also deleted some empty cook slots from the PASTA dinner.
+# They stay deleted: the owner confirmed its cooks were the two who have
+# costs on it now.
 #
 # The rows are found by what is true of them, and every fact is checked
 # under the meals' row locks before anything is written: both dinners
-# are in the same settlement; the BBQ dinner has exactly two costs, $49.50
-# and $0.00, of the two cooks who have $0.00 and $47.58 on the pasta
-# dinner, and nothing else; the deleted costs are the bills whose create
-# row names the BBQ dinner and that have no row and no delete row, three
-# of them, for three other cooks, whose last saved amounts are $0.00,
-# $15.00 and $70.00. Each deleted cost comes back with its old id, so its
-# old audit rows name it again, and with the time of its create row. This moves
-# money, so any other state stops the deploy and changes nothing: a
-# person looks first. Two states are not errors. With no meal on
-# 2019-09-02 (any database but production) there is nothing to do. With
-# this migration's audit rows there, it ran already: nobody else can
+# are in the same settlement; the BBQ dinner has exactly two costs,
+# RECEIPT and zero, of the two cooks who have zero and NOTHING on the
+# PASTA dinner, and nothing else; the deleted costs are the bills whose
+# create row names the BBQ dinner and that have no row and no delete row,
+# one for each amount in DELETED, for other cooks, whose last saved
+# amounts are those in DELETED. Each deleted cost comes back with its old
+# id, so its old audit rows name it again, and with the time of its
+# create row. This moves money, so any other state stops the deploy and
+# changes nothing: a person looks first. Two states are not errors. With
+# no meal on BBQ (any database but production) there is nothing to do.
+# With this migration's audit rows there, it ran already: nobody else can
 # change a settled dinner's costs.
 #
 # The settlement is worked out again with Settlement#correct!, exactly as
@@ -47,9 +46,9 @@
 # cache version moves.
 #
 # Runs in its own transaction and tries again on a conflict, like
-# 20261010130000. down puts the five costs back as they were, unless one
-# changed since, and works the settlement out again with a correction of
-# its own that says why.
+# 20261010130000. down puts every cost it changed back as it was, unless
+# one changed since, and works the settlement out again with a correction
+# of its own that says why.
 class PutBackCostsAnOldCookFormDeleted < ActiveRecord::Migration[8.1]
   disable_ddl_transaction!
 
@@ -65,7 +64,7 @@ class PutBackCostsAnOldCookFormDeleted < ActiveRecord::Migration[8.1]
 
   MealRow = Struct.new(:id, :date, :reconciliation_id)
   CostRow = Struct.new(:id, :resident_id, :amount, :no_cost, :community_id, :created_at)
-  # Who is who: the cook whose $49.50 is on the BBQ dinner and the other
+  # Who is who: the cook whose RECEIPT is on the BBQ dinner and the other
   # cook the form saved there, each with their cost on both dinners.
   Cooks = Struct.new(:receipt_on_bbq, :receipt_on_pasta, :other_on_bbq, :other_on_pasta)
   # One audit row: to write (no id or time yet), or written and read back.

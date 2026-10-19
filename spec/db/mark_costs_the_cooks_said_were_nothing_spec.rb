@@ -3,10 +3,10 @@
 require 'rails_helper'
 require Rails.root.join('db/migrate/20261013120300_mark_costs_the_cooks_said_were_nothing.rb')
 
-# The data migration that marks No cost on nine blank cook costs whose
-# cooks said they spent nothing: on eight dinners the blank cost of a cook
-# whose household's other cook entered the receipt, and on one dinner the
-# only blank cost.
+# The data migration that marks No cost on blank cook costs whose cooks
+# said they spent nothing: on some dinners the blank cost of a cook whose
+# household's other cook entered the receipt, and on one dinner the only
+# blank cost.
 RSpec.describe MarkCostsTheCooksSaidWereNothing do
   let(:migration) { described_class.new }
   let(:community) { create(:community) }

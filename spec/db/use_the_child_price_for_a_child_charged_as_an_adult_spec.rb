@@ -6,8 +6,8 @@ require Rails.root.join('db/migrate/20261012120400_use_the_child_price_for_a_chi
 # The data migration that changes sign-ups of a child under 5 from the
 # adult price to the child price, on meals before free meals for small
 # children began (2018-05-03), and works their settlement out again. In
-# production: 13 meals in spring 2018, between 57 at the child price and
-# the first free ones, all in one settlement.
+# production: a few meals just before free meals began, between many at
+# the child price and the first free ones, all in one settlement.
 RSpec.describe UseTheChildPriceForAChildChargedAsAnAdult do
   let(:migration) { described_class.new }
   let(:community) { create(:community) }

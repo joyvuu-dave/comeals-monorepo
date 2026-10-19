@@ -240,12 +240,11 @@ RSpec.describe AuditDescription do
   end
 
   # Until 2026-10-10 the admin bill form could change a bill's cook in
-  # place. Production holds three such rows, all on bill 1995 (meal 1356,
-  # 2023-03-05): Sandra to Sarah, back to Sandra, and to Sarah again,
-  # after which the bill was deleted. The history said "unknown bill
-  # changed" for each. Nothing can write such a row now
-  # (Bill::COOK_AND_MEAL_FIXED), so these are written by hand, the way
-  # they are stored.
+  # place. Production holds a few such rows, all on one bill of an old
+  # meal, moving it from one cook to another and back, after which the
+  # bill was deleted. The history said "unknown bill changed" for each.
+  # Nothing can write such a row now (Bill::COOK_AND_MEAL_FIXED), so these
+  # are written by hand, the way they are stored.
   describe 'bills whose cook was changed in place' do # -- a group of cases, not a method
     let(:ann) { create(:resident, community: community, unit: unit) }
     let(:bob) { create(:resident, community: community, unit: unit) }
@@ -308,10 +307,9 @@ RSpec.describe AuditDescription do
 
   # No path in the app changes the person on an attendance row: the API
   # changes only late and vegetarian, and admin only adds and removes
-  # rows. The model does not refuse it, though, and three production
-  # rows did it (attendance row 8756, meal 1356, 2023-03-05: Sandra to
-  # Arlen, back to Sandra, and to Arlen again). The history said
-  # "MealResident, update" for each.
+  # rows. The model does not refuse it, though, and a few production rows
+  # on one old meal did it, moving the row from one person to another and
+  # back. The history said "MealResident, update" for each.
   describe 'attendance rows whose person was changed' do # -- a group of cases, not a method
     let(:ann) { create(:resident, community: community, unit: unit) }
     let(:bob) { create(:resident, community: community, unit: unit) }
@@ -677,7 +675,7 @@ RSpec.describe AuditDescription do
                            'Meal taken out of settlement 6'])
     end
 
-    # One row in production: a hand edit of the closed time, 2023-03-06.
+    # One row in production: a hand edit of the closed time.
     # Shown in the community's zone, whatever zone the request runs in.
     it 'says the close time was changed, set or cleared, in the community zone' do
       community.update!(timezone: 'America/New_York')

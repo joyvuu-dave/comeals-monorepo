@@ -7,7 +7,7 @@
 #
 # The schedule repeated every two weeks: Sunday, Monday and Thursday, then
 # Sunday, Tuesday and Thursday. Nobody has eaten a Monday or Tuesday dinner
-# since 2021-12-28. Of the 157 that passed since then, 155 had no cook and
+# since the end of 2021. Of the 157 that passed since then, 155 had no cook and
 # nobody signed up, and admins closed 148 of them by hand. The production
 # copy of 2026-10-11 has 27 more on the calendar, through April 2027, with
 # no sign-ups and no cooks, in 7 rotations that each keep 8 meals or more.

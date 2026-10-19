@@ -71,8 +71,8 @@ class AddCommonHouseReservationsNoOverlap < ActiveRecord::Migration[8.1]
           'Move or delete one booking of each pair, then run this migration again.'
   end
 
-  # A booking's id and times as SQL, for example "1151 (2026-04-12 10:00
-  # to 2026-04-12 12:00)".
+  # A booking's id and times as SQL, for example "12 (2026-01-05 10:00
+  # to 2026-01-05 12:00)".
   def words(booking)
     "#{booking}.id || ' (' " \
       "|| to_char(#{booking}.start_date AT TIME ZONE 'UTC' AT TIME ZONE zone.timezone, 'YYYY-MM-DD HH24:MI') " \

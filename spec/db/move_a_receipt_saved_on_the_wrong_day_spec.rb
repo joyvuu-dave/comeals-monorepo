@@ -3,12 +3,11 @@
 require 'rails_helper'
 require Rails.root.join('db/migrate/20261012120000_move_a_receipt_saved_on_the_wrong_day.rb')
 
-# The data migration that moves one cook's receipt from the empty meal of
-# 2025-12-09, where it was typed, to the dinner of 2025-12-07 it was for.
-# Nobody signed up for 2025-12-09, so the receipt could never be charged
-# to anyone, and a settlement holds such a meal back for good. On the
-# dinner of 2025-12-07 the people who ate pay for it, and the cook is paid
-# back.
+# The data migration that moves one cook's receipt from the empty meal
+# where it was typed to the dinner it was for. Nobody signed up for the
+# meal where it was typed, so the receipt could never be charged to
+# anyone, and a settlement holds such a meal back for good. On the dinner
+# it was for, the people who ate pay for it, and the cook is paid back.
 RSpec.describe MoveAReceiptSavedOnTheWrongDay do
   let(:migration) { described_class.new }
   let(:community) { create(:community) }
@@ -126,7 +125,7 @@ RSpec.describe MoveAReceiptSavedOnTheWrongDay do
       expect(fix_rows.count).to eq(2)
     end
 
-    it 'does nothing on a database that has no meal on 2025-12-09' do
+    it 'does nothing on a database that has no meal on the day it was typed on' do
       Bill.where(meal: wrong_day).delete_all
       Meal.where(id: wrong_day.id).delete_all
 
@@ -173,7 +172,7 @@ RSpec.describe MoveAReceiptSavedOnTheWrongDay do
   end
 
   describe 'down' do
-    it 'puts the receipt back on 2025-12-09 with its old id, and removes its rows' do
+    it 'puts the receipt back on the meal it was typed on, with its old id, and removes its rows' do
       old_id = receipt.id
       migrate(:up)
 

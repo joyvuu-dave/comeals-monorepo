@@ -9,10 +9,10 @@
 #
 # Before this, the admin bill form changed the cook in place. The meal
 # history then said "unknown bill changed", and the cook's older lines
-# named the new cook. Production has three such rows, all on bill 1995
-# (meal 1356, 2023-03-05). This migration does not touch them: a trigger
-# reads only the write in front of it, and AuditDescription describes
-# those rows ("Bill moved from Sandra to Sarah").
+# named the new cook. Production has a few such rows, all on one bill of
+# an old meal. This migration does not touch them: a trigger reads only
+# the write in front of it, and AuditDescription describes those rows
+# ("Bill moved from <one cook> to <another>").
 #
 # ERRCODE check_violation, so Rails raises ActiveRecord::CheckViolation,
 # the error a CHECK constraint gives. No repair bypass

@@ -8,15 +8,15 @@
 #
 # A sign-up keeps the price it was saved with (meal_residents.multiplier:
 # 2 adult, 1 child, 0 free; Multiplier). In the production copy of
-# 2026-10-11, one child, 3 years old, was saved at the child price on 57
-# meals from August 2017 to 2018-03-21, at the adult price on the 13 meals
-# from 2018-03-22 to 2018-04-29, and at the free price from May 2018. The
-# first free sign-up of anyone is on 2018-05-03, so free meals for small
-# children seem to have begun then. The 13 adult ones sit between the two
-# and look like a mistake made while the price setting was being changed.
-# The owner chose the child price, the price that child paid on every meal
-# before (option A, 2026-10-12): applying the free price would use a rule
-# from after those meals.
+# 2026-10-11, a young child was saved at the child price for many months,
+# then at the adult price on a few meals, then at the free price once free
+# meals for small children began. The first free sign-up of anyone is on
+# 2018-05-03, so free meals for small children seem to have begun then.
+# The adult ones sit between the other two and look like a mistake made
+# while the price setting was being changed. The owner chose the child
+# price, the price that child paid on every meal before (option A,
+# 2026-10-12): applying the free price would use a rule from after those
+# meals.
 #
 # The rule, which names no one: a sign-up at the adult price, for a
 # resident with a birthday who was under 5 on the meal's date, on a meal

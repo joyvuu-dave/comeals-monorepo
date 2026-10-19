@@ -4,32 +4,31 @@
 # was for. One of the history fixes the owner decided on 2026-10-12, run
 # during the deploy so no person has to do it by hand.
 #
-# A cook made a dessert for the progressive dinner of 2025-12-07 and typed
-# its $20.22 receipt on the meal of 2025-12-09, with the note "dessert for
-# progressive dinner 12/7". The dinner already had three cooks, and the
-# meal page shows three cook rows, so there was no row for a fourth.
-# Nobody signed up for 2025-12-09, so the receipt could never be charged
-# to anyone, and a settlement holds a meal like that back for good
-# (Meal.settleable_by): the cook would never be paid back. On the dinner
-# of 2025-12-07 the people who ate pay for it, the way they pay for the
-# other three cooks' receipts. Neither meal is settled, so this is an
+# A cook made part of a dinner and typed the receipt on a meal a few days
+# later, with a note that names the dinner. The dinner already had three
+# cooks, and the meal page shows three cook rows, so there was no row for
+# a fourth. Nobody signed up for the later meal, so the receipt could
+# never be charged to anyone, and a settlement holds a meal like that back
+# for good (Meal.settleable_by): the cook would never be paid back. On the
+# dinner it was for, the people who ate pay for it, the way they pay for
+# the other cooks' receipts. Neither meal is settled, so this is an
 # ordinary change of two open meals, not a correction.
 #
 # A bill cannot change its meal (Bill::COOK_AND_MEAL_FIXED and the trigger
-# bills_same_cook_and_meal), so the receipt is deleted from 2025-12-09 and
-# made again on 2025-12-07, for the same cook (read from the bill, never
-# named here) and the same amount.
+# bills_same_cook_and_meal), so the receipt is deleted from the meal of
+# FROM and made again on the dinner of TO, for the same cook (read from
+# the bill, never named here) and the same amount.
 #
 # The rows are found by what is true of them, and every fact is checked
-# under the meals' row locks before anything is written: the meal of
-# 2025-12-09 has exactly one bill, of $20.22, not No cost, nobody signed
-# up and no guest, and a note that names 12/7; the dinner of 2025-12-07 is
-# not settled, someone ate at it, and the cook has no cost on it yet. This
-# moves money, so any other state stops the deploy and changes nothing: a
-# person looks first. Two states are not errors. With no meal on
-# 2025-12-09 (any database but production) there is nothing to move. With
-# the receipt already on 2025-12-07 and none left on 2025-12-09, the move
-# was made already, by this migration or by hand.
+# under the meals' row locks before anything is written: the meal of FROM
+# has exactly one bill, of AMOUNT, not No cost, nobody signed up and no
+# guest, and a note that names NOTE; the dinner of TO is not settled,
+# someone ate at it, and the cook has no cost on it yet. This moves money,
+# so any other state stops the deploy and changes nothing: a person looks
+# first. Two states are not errors. With no meal on FROM (any database but
+# production) there is nothing to move. With the receipt already on TO and
+# none left on FROM, the move was made already, by this migration or by
+# hand.
 #
 # Plain SQL, like migration 20261010130000 and for the same reasons: a
 # migration must do the same thing on every database it ever runs on, and
@@ -44,9 +43,9 @@
 # updated_at moves on both meals, so the calendar's cache version moves.
 #
 # Runs in its own transaction and tries again on a conflict, like
-# 20261010130000. down puts the receipt back on 2025-12-09, with its old
-# id, so its old audit rows name it again, unless the moved receipt
-# changed since or the dinner was settled since.
+# 20261010130000. down puts the receipt back on FROM, with its old id, so
+# its old audit rows name it again, unless the moved receipt changed since
+# or the dinner was settled since.
 class MoveAReceiptSavedOnTheWrongDay < ActiveRecord::Migration[8.1]
   disable_ddl_transaction!
 

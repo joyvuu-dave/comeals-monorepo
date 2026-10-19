@@ -3,9 +3,9 @@
 require 'rails_helper'
 require Rails.root.join('db/migrate/20261012120100_delete_a_dinner_nobody_ate_at.rb')
 
-# The data migration that deletes the meal of 2026-04-06. Two people signed
-# up for it, nobody cooked, and the owner says nobody ate. It charges nobody
-# and can never settle, so it would wait in every settlement preview.
+# The data migration that deletes one meal. A few people signed up for it,
+# nobody cooked, and the owner says nobody ate. It charges nobody and can
+# never settle, so it would wait in every settlement preview.
 RSpec.describe DeleteADinnerNobodyAteAt do
   let(:migration) { described_class.new }
   let(:community) { create(:community) }
@@ -37,7 +37,7 @@ RSpec.describe DeleteADinnerNobodyAteAt do
   end
 
   describe 'up' do
-    it 'deletes the meal and its two sign-ups, and nothing else' do
+    it 'deletes the meal and its sign-ups, and nothing else' do
       migrate(:up)
 
       expect(Meal.where(date: described_class::DATE)).to be_empty

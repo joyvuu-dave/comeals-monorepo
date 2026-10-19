@@ -1,35 +1,37 @@
 # frozen_string_literal: true
 
-# Marks No cost on the two $1.00 cook costs of the dinner of 2024-11-24.
-# One of the history fixes the owner decided on 2026-10-16, run during the
-# deploy so no person has to do it by hand.
+# Marks No cost on the placeholder cook costs (PLACEHOLDER each) of one
+# dinner (DINNER). One of the history fixes the owner decided on
+# 2026-10-16, run during the deploy so no person has to do it by hand.
 #
-# The dinner was set up on 2024-06-10 for the community's Thanksgiving
-# potluck. People signed up for it on paper in the common house, not in
-# the app. Two cooks were added with a cost of $1.00 each, and nobody
-# signed up in the app, and there are no guests. The $1.00 costs are not
-# real money. With them, a settlement holds the dinner back forever: a
-# receipt with money on it and nobody to charge (ADR 0011 rule 3). With
-# No cost, it settles and no money moves.
+# The dinner was set up months ahead for a community potluck. People
+# signed up for it on paper in the common house, not in the app. Cooks
+# were added with a small placeholder cost each, and nobody signed up in
+# the app, and there are no guests. The placeholder costs are not real
+# money. With them, a settlement holds the dinner back forever: a receipt
+# with money on it and nobody to charge (ADR 0011 rule 3). With No cost,
+# it settles and no money moves.
 #
 # No cost needs amount 0 (the CHECK bills_no_cost_means_no_amount), so
-# each cost changes from $1.00 to $0.00 and No cost. Nobody is charged for
-# this dinner, so this moves no money. So a dinner that is not exactly as
-# expected is skipped and printed, and the deploy goes on: a settled or
-# cancelled dinner, a sign-up or a guest, a cook added or removed, or a
-# cost that is not $1.00. With no meal on 2024-11-24 (any database but
-# production) there is nothing to change, which is not an error. With
-# this migration's audit rows there, it ran already, and it says so.
+# each cost changes from PLACEHOLDER to zero and No cost. Nobody is
+# charged for this dinner, so this moves no money. So a dinner that is
+# not exactly as expected is skipped and printed, and the deploy goes on:
+# a settled or cancelled dinner, a sign-up or a guest, a cook added or
+# removed (COOKS), or a cost that is not PLACEHOLDER. With no meal on
+# DINNER (any database but production) there is nothing to change, which
+# is not an error. With this migration's audit rows there, it ran
+# already, and it says so.
 #
 # The costs are found by the dinner and their amount, not by id. Plain
 # SQL, like migration 20261012120000 and for the same reasons. Each change
-# gets the audit row a save would write ({"amount": ["1.0", "0.0"],
-# "no_cost": [false, true]}), with no person and no username and this
-# migration in the comment, so the meal history says "Automatic fix".
-# updated_at moves on the meal, so the calendar's cache version moves.
+# gets the audit row a save would write ({"amount": [PLACEHOLDER, zero],
+# as text, and "no_cost": [false, true]}), with no person and no username
+# and this migration in the comment, so the meal history says "Automatic
+# fix". updated_at moves on the meal, so the calendar's cache version
+# moves.
 #
 # Runs in its own transaction and tries again on a conflict, like
-# 20261010130000. down puts the two $1.00 costs back, unless one changed
+# 20261010130000. down puts the PLACEHOLDER costs back, unless one changed
 # since or the dinner was settled since.
 class MarkThePotluckCostsNoCost < ActiveRecord::Migration[8.1]
   disable_ddl_transaction!
@@ -166,7 +168,7 @@ class MarkThePotluckCostsNoCost < ActiveRecord::Migration[8.1]
     "Put the #{rows.size} #{money(PLACEHOLDER)} cost(s) back on #{DINNER}."
   end
 
-  # Putting $1.00 back over a later change would undo that change.
+  # Putting PLACEHOLDER back over a later change would undo that change.
   def unchanged!(row)
     same = connection.select_value(<<~SQL.squish).to_i.positive?
       SELECT COUNT(*) FROM bills

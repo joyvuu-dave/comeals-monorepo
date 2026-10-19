@@ -3,9 +3,8 @@
 require 'rails_helper'
 require Rails.root.join('db/migrate/20261013120200_fix_a_cost_typed_with_an_extra_zero.rb')
 
-# The data migration that changes one cook's cost on the dinner of
-# 2024-11-14 from $170.00, typed with an extra zero, to the $17.00 the
-# cook spent.
+# The data migration that changes one cook's cost on one dinner from the
+# cost typed with an extra zero to the cost the cook spent.
 RSpec.describe FixACostTypedWithAnExtraZero do
   let(:migration) { described_class.new }
   let(:community) { create(:community) }
@@ -34,7 +33,7 @@ RSpec.describe FixACostTypedWithAnExtraZero do
   end
 
   describe 'up' do
-    it 'changes the $170.00 cost to $17.00, and no other cost' do
+    it 'changes the cost typed ten times too high to the cost spent, and no other cost' do
       migrate(:up)
 
       expect(typed.reload).to have_attributes(amount: 17, no_cost: false)
@@ -54,7 +53,7 @@ RSpec.describe FixACostTypedWithAnExtraZero do
       expect(migrate(:up)).to include('Changed the $170.00 cost on 2024-11-14 to $17.00.')
     end
 
-    it 'does nothing, and says so, when the cook changed it to $17.00 already' do
+    it 'does nothing, and says so, when the cook changed it to the right cost already' do
       typed.update!(amount: 17)
 
       expect(migrate(:up)).to include('The cost on 2024-11-14 is $17.00 already')
@@ -87,7 +86,7 @@ RSpec.describe FixACostTypedWithAnExtraZero do
   end
 
   describe 'down' do
-    it 'puts $170.00 back and removes its row' do
+    it 'puts the typed cost back and removes its row' do
       migrate(:up)
 
       migrate(:down)

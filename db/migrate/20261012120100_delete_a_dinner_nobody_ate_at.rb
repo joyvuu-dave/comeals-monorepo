@@ -1,20 +1,20 @@
 # frozen_string_literal: true
 
-# Deletes the meal of 2026-04-06 and its two sign-ups. One of the history
-# fixes the owner decided on 2026-10-12, run during the deploy so no
-# person has to do it by hand.
+# Deletes one meal that nobody cooked and nobody ate at, and its sign-ups.
+# One of the history fixes the owner decided on 2026-10-12, run during the
+# deploy so no person has to do it by hand.
 #
-# Two people signed up for that Monday, one second apart, and nobody
-# cooked. The owner says nobody ate. A settlement never claims a meal with
-# no cook, so the meal charges nobody and can never settle, and every
-# settlement preview would list it as waiting. Nothing about money
-# changes: the two sign-ups were never charged.
+# A few people signed up for a Monday dinner, and nobody cooked. The owner
+# says nobody ate. A settlement never claims a meal with no cook, so the
+# meal charges nobody and can never settle, and every settlement preview
+# would list it as waiting. Nothing about money changes: the sign-ups were
+# never charged.
 #
-# The meal is found by its date, and checked under its row lock: not
-# settled, no cook, no guest, and exactly the two sign-ups. This moves no
-# money, so a meal that does not fit is left as it is, the release log
-# says why, and the deploy goes on. With no meal that day (any database
-# but production, or after this ran) there is nothing to do.
+# The meal is found by its date (DATE), and checked under its row lock:
+# not settled, no cook, no guest, and exactly SIGN_UPS sign-ups. This
+# moves no money, so a meal that does not fit is left as it is, the
+# release log says why, and the deploy goes on. With no meal that day (any
+# database but production, or after this ran) there is nothing to do.
 #
 # Plain SQL, like migration 20261010130000, for the reasons given there.
 # A save through the models would refuse nothing here, but would push a

@@ -1,26 +1,28 @@
 # frozen_string_literal: true
 
-# Marks No cost on nine blank cook costs whose cooks spent nothing. One
-# of the history fixes the owner decided on 2026-10-12 and 2026-10-13, run
-# during the deploy so no person has to do it by hand.
+# Marks No cost on blank cook costs whose cooks spent nothing, one on each
+# dinner in SAME_HOUSEHOLD and ONLY_BLANK. One of the history fixes the
+# owner decided on 2026-10-12 and 2026-10-13, run during the deploy so no
+# person has to do it by hand.
 #
 # A blank cost (amount 0, not No cost) means the cook has not said what
 # they spent, and under ADR 0011 rule 3 a dinner waits until every cook
-# has. The audit of 2026-10-11 found 17 dinners with a blank cost, and the
-# owner asked the cooks. On these nine the cooks said they spent nothing:
+# has. The audit of 2026-10-11 found dinners with a blank cost, and the
+# owner asked the cooks. On these dinners the cooks said they spent
+# nothing:
 #
-# - On eight dinners another cook of the same household entered the
-#   receipt for both, and the blank cost is the other's. These are two
-#   households. In each, the two often cook together, and usually one
-#   enters the receipt and the other marks No cost.
-# - On the dinner of 2024-11-03 the blank cost belongs to a cook who
-#   helped, added two days after the dinner. It is the only blank cost on
+# - On the dinners in SAME_HOUSEHOLD another cook of the same household
+#   entered the receipt for both, and the blank cost is the other's. Two
+#   cooks of one household often cook together, and one enters the
+#   receipt.
+# - On the dinner in ONLY_BLANK the blank cost belongs to a cook who
+#   helped and was added after the dinner. It is the only blank cost on
 #   that dinner.
 #
 # The answers for the other dinners are not in yet, and those dinners
-# keep their blank costs. One of them is the dinner of 2025-07-06: it has a
-# second blank cost, of a cook from another household, so it still waits
-# after this.
+# keep their blank costs. One dinner in SAME_HOUSEHOLD also has a second
+# blank cost, of a cook from another household, so it still waits after
+# this.
 #
 # A blank cost and a No cost both add $0.00, so this moves no money; it
 # changes what the meal page shows ("No cost" instead of a cost still to

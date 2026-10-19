@@ -75,9 +75,9 @@ class Meal < ApplicationRecord
   # would have settled with every line at $0 until 2026-10-09 (#94). In
   # production no meal nobody signed up for has ever settled with a cost
   # on it; the last settlement is dated 2024-01-01. Two such dinners wait:
-  # 2024-11-24, a potluck with two $1.00 costs that were not real money
-  # (marked No cost by migration 20261016130000), and 2025-12-09, with a
-  # $20.22 receipt (moved to the dinner it was for by migration
+  # a potluck with placeholder costs that were not real money (marked No
+  # cost by migration 20261016130000), and an empty meal with a receipt
+  # typed on the wrong day (moved to the dinner it was for by migration
   # 20261012120000).
   #
   # A meal where someone is charged and a cook's cost is blank waits

@@ -331,7 +331,7 @@ class AuditDescription
   def describe_meal_resident_update(audit) # rubocop:disable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity --audit change parsing with many attribute branches
     changes = audit.audited_changes
     price = price_change(changes)
-    # Nothing in the app changes the person on an attendance row, but
+    # a few old rows in production did, all on one meal.
     # three old rows in production did (attendance row 8756, 2023-03-05).
     move = moved(changes)
     return ["Sign-up moved #{move}", price].compact.join(': ') if move

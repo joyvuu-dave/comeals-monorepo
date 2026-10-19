@@ -1,33 +1,33 @@
 # frozen_string_literal: true
 
-# Changes one cook's cost on the dinner of 2024-11-14 from $170.00 to the
-# $17.00 the cook spent. One of the history fixes the owner decided on
-# 2026-10-12, run during the deploy so no person has to do it by hand.
+# Changes one cook's cost on one dinner (DINNER) from the amount typed
+# (TYPED) to the amount the cook spent (SPENT), which is ten times less.
+# One of the history fixes the owner decided on 2026-10-12, run during the
+# deploy so no person has to do it by hand.
 #
-# A month after the dinner the cook cleared a box that held $1.00 and
-# typed the cost. The history shows 1 saved, then 17 two seconds later,
-# then 170 a quarter of a second after that: the last key added a zero. $170.00 makes the dinner
-# $15.19 for each adult, the highest of any dinner. The owner asked the
-# cook (2026-10-12): it was $17.00. The dinner is not settled, so this is
-# an ordinary change of an open meal, not a correction.
+# Some time after the dinner the cook typed the cost, and the history
+# shows the last key added a zero. The typed cost made that dinner's price
+# for each adult the highest of any dinner. The owner asked the cook
+# (2026-10-12) and got the real amount. The dinner is not settled, so
+# this is an ordinary change of an open meal, not a correction.
 #
 # The row is found by what is true of it, and checked under the meal's
-# row lock before anything is written: the dinner of 2024-11-14 is not
-# settled and has exactly one cost of $170.00, not No cost. This moves
+# row lock before anything is written: the dinner of DINNER is not
+# settled and has exactly one cost of TYPED, not No cost. This moves
 # money, so any other state stops the deploy and changes nothing: a
-# person looks first. Two states are not errors. With no meal on
-# 2024-11-14 (any database but production) there is nothing to change.
-# With a cost of $17.00 there and none of $170.00, it was changed already,
-# by this migration or by the cook.
+# person looks first. Two states are not errors. With no meal on DINNER
+# (any database but production) there is nothing to change. With a cost
+# of SPENT there and none of TYPED, it was changed already, by this
+# migration or by the cook.
 #
 # Plain SQL, like migration 20261012120000 and for the same reasons. The
-# change gets the audit row a save would write ({"amount": ["170.0",
-# "17.0"]}), with no person and no username and this migration in the
-# comment, so the meal history says "Automatic fix". updated_at moves on
-# the meal, so the calendar's cache version moves.
+# change gets the audit row a save would write ({"amount": [TYPED,
+# SPENT]}, as text), with no person and no username and this migration in
+# the comment, so the meal history says "Automatic fix". updated_at moves
+# on the meal, so the calendar's cache version moves.
 #
 # Runs in its own transaction and tries again on a conflict, like
-# 20261010130000. down puts $170.00 back, unless the cost changed since or
+# 20261010130000. down puts TYPED back, unless the cost changed since or
 # the dinner was settled since.
 class FixACostTypedWithAnExtraZero < ActiveRecord::Migration[8.1]
   disable_ddl_transaction!
@@ -135,7 +135,7 @@ class FixACostTypedWithAnExtraZero < ActiveRecord::Migration[8.1]
     "Put the #{money(TYPED)} cost back on #{DINNER}."
   end
 
-  # Putting $170.00 back over a later change would undo that change.
+  # Putting TYPED back over a later change would undo that change.
   def unchanged!(audit)
     same = connection.select_value(<<~SQL.squish).to_i.positive?
       SELECT COUNT(*) FROM bills

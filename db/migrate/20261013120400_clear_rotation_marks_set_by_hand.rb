@@ -20,8 +20,8 @@
 # Both marks come off. A rotation with only new_rotation_notified_at set
 # is left alone: the app sets that one on purpose when a rotation is made
 # without email (Rotation#suppress_notification_if_no_email). In the
-# production copy of 2026-10-13 that is rotations 820, 853 and 886; 820
-# starts on 2026-10-29, so a deploy after that day leaves it alone.
+# production copy of 2026-10-13 a few rotations match. A deploy after the
+# first meal of one of them leaves that one alone.
 # rotations:notify_new only announces rotations made in the last 7 days,
 # so clearing new_rotation_notified_at sends no announcement for these;
 # the column then says what happened: nobody was told.
