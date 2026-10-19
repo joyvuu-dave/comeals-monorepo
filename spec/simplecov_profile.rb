@@ -43,6 +43,11 @@ SimpleCov.profiles.define 'comeals' do
   # tests that migration, so a new migration with no spec would otherwise
   # be missing from the report.
   cover 'app/**/*.rb', 'lib/**/*.{rb,rake}', 'config/initializers/*.rb', 'db/migrate/*.rb'
+  # The Ruby scripts in bin/. Each runs in a process of its own under
+  # spec/bin, and its counts are added to this run's result
+  # (spec/child_coverage.rb). Named here, a script whose specs are gone is
+  # counted at 0% instead of left out.
+  cover 'bin/{mutant-report,tapioca,setup,rails,rake,jobs,bundle}'
   # Loads the annotate_rb gem's own tasks, in development only. The gem is
   # in the development group of the Gemfile, so the test bundle cannot
   # load it, and no spec can run the file's one branch.
