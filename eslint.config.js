@@ -82,7 +82,7 @@ module.exports = [
   // Config files -- Node CommonJS (playwright.config.js)
   // -----------------------------------------------------------
   {
-    files: ["playwright.config.js"],
+    files: ["playwright.config.js", "tests/bin/**/*.js"],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "commonjs",

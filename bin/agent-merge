@@ -115,9 +115,10 @@ if [ -n "$migrations" ]; then
 fi
 
 # Remove the worktree before deleting the branch: git refuses to delete a
-# branch that a worktree still has checked out. agent-worktree-done has its
-# own refusal for uncommitted changes, but after a fast-forward merge the
-# worktree is clean by definition.
+# branch that a worktree still has checked out. agent-worktree-done refuses
+# while the worktree has uncommitted changes. The merge does not touch
+# those, so then this script stops here, after the push, and keeps both
+# the changes and the branch.
 if [ -d "../comeals-$name" ]; then
   bin/agent-worktree-done "$name"
 else

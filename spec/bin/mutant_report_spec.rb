@@ -59,7 +59,7 @@ RSpec.describe 'bin/mutant-report' do
   end
 
   def run_report
-    out, status = Open3.capture2e(script, File.join(dir, 'pieces'), File.join(dir, 'report.md'))
+    out, status = run_ruby_script(script, File.join(dir, 'pieces'), File.join(dir, 'report.md'))
     expect(status.exitstatus).to eq(0), out
     expect(File.read(File.join(dir, 'report.md'))).to eq(out)
     out
@@ -106,7 +106,7 @@ RSpec.describe 'bin/mutant-report' do
     piece('mutant-piece-0', subjects: %w[ResidentNameShortener#same?], log: log)
     piece('mutant-piece-2', subjects: %w[Settlement#settle!], log: log)
 
-    out, status = Open3.capture2e(script, File.join(dir, 'pieces'), File.join(dir, 'report.md'), '4')
+    out, status = run_ruby_script(script, File.join(dir, 'pieces'), File.join(dir, 'report.md'), '4')
 
     expect(status.exitstatus).to eq(0), out
     expect(out).to include('Left nothing, so their subjects have no result: mutant-piece-1, mutant-piece-3.')
@@ -115,16 +115,38 @@ RSpec.describe 'bin/mutant-report' do
   end
 
   it 'refuses a number of pieces that is not a whole number' do
-    out, status = Open3.capture2e(script, 'pieces', 'report.md', 'four')
+    out, status = run_ruby_script(script, 'pieces', 'report.md', 'four')
 
     expect(status.exitstatus).to eq(2)
     expect(out).to include('Usage: bin/mutant-report')
   end
 
   it 'refuses to run without a directory and a report file' do
-    out, status = Open3.capture2e(script, 'only-one')
+    out, status = run_ruby_script(script, 'only-one')
 
     expect(status.exitstatus).to eq(2)
     expect(out).to include('Usage: bin/mutant-report')
+  end
+
+  it 'counts 0% killed, and no subjects, when no piece ran' do
+    FileUtils.mkdir_p(File.join(dir, 'pieces', 'mutant-piece-0'))
+
+    out = run_report
+
+    expect(out).to include('0 mutations, 0 killed, 0 alive, 0 timed out: 0.00% killed.')
+    expect(out).to include('| mutant-piece-0 | 0 | stopped |  |  |')
+    expect(out).to include('## Survivors (0 subjects)')
+  end
+
+  # A log cut off just after a survivor's evil: line, as when the machine
+  # running the piece was stopped.
+  it 'lists a survivor whose change the log does not show' do
+    cut = log[0...log.index('-----------------------')]
+    piece('mutant-piece-0', subjects: %w[ResidentNameShortener#same?], log: cut)
+
+    out = run_report
+
+    expect(out).to include("### ResidentNameShortener#same? (1 alive), app/services/resident_name_shortener.rb:76\n")
+    expect(out).not_to include('```diff')
   end
 end

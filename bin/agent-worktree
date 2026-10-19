@@ -83,16 +83,16 @@ done
 if [ -f .env ]; then
   cp .env "$path/.env"
 fi
-{
-  echo ""
-  echo "# Added by bin/agent-worktree: this worktree's own test database"
-  echo "# and test-server ports. The admin e2e suite also uses its own"
-  echo "# database, comeals_admin_e2e$suffix (tests/admin/server.sh)."
-  echo "TEST_DB_SUFFIX=$suffix"
-  echo "TEST_PORT_INTEGRATION=$base"
-  echo "TEST_PORT_E2E=$((base + 1))"
-  echo "TEST_PORT_ADMIN_E2E=$((base + 2))"
-} >>"$path/.env"
+cat >>"$path/.env" <<EOF
+
+# Added by bin/agent-worktree: this worktree's own test database
+# and test-server ports. The admin e2e suite also uses its own
+# database, comeals_admin_e2e$suffix (tests/admin/server.sh).
+TEST_DB_SUFFIX=$suffix
+TEST_PORT_INTEGRATION=$base
+TEST_PORT_E2E=$((base + 1))
+TEST_PORT_ADMIN_E2E=$((base + 2))
+EOF
 
 cd "$path"
 echo "==> bundle install"

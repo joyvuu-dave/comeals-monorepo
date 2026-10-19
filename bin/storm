@@ -69,9 +69,15 @@ if lsof -tiTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
 fi
 
 echo "==> Starting Puma on port $PORT: $THREADS threads x $WORKERS workers, pool $POOL"
-RAILS_ENV=test INTEGRATION_SERVER=1 INTEGRATION_SERVER_CACHE=solid \
-  RAILS_MAX_THREADS="$THREADS" WEB_CONCURRENCY="$WORKERS" RAILS_DB_POOL="$POOL" \
-  bundle exec rails server -p "$PORT" &>"$SERVER_LOG" &
+# The variables are in a list so that the command fits on one line:
+# bashcov cannot tell that the lines of a command split with backslashes
+# ran when its last line has a & in it. env replaces itself with the
+# server, so $! is still the server's process id.
+server_env=(
+  RAILS_ENV=test INTEGRATION_SERVER=1 INTEGRATION_SERVER_CACHE=solid
+  RAILS_MAX_THREADS="$THREADS" WEB_CONCURRENCY="$WORKERS" RAILS_DB_POOL="$POOL"
+)
+env "${server_env[@]}" bundle exec rails server -p "$PORT" &>"$SERVER_LOG" &
 RAILS_PID=$!
 
 echo -n "    Waiting for server"

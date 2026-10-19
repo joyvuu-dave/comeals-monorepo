@@ -285,6 +285,8 @@ jobs:
       - run: npm ci
       # test:coverage, so the thresholds in vitest.config.mjs are enforced.
       - run: npm run test:coverage
+      # bin/bundle-budget's tests, with Node's coverage of it held at 100%.
+      - run: npm run test:bin
 
   node-e2e-tests:
     runs-on: ubuntu-24.04

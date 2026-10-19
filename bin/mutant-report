@@ -29,7 +29,8 @@ RULE = '-----------------------'
 
 Piece = Struct.new(:name, :subjects, :summary, :survivors, :missing) do
   def ran? = !summary.nil?
-  def number(key) = summary ? summary.fetch(key, '0').to_f : 0
+  # Only asked of a piece that ran.
+  def number(key) = summary.fetch(key, '0').to_f
 end
 
 Survivor = Struct.new(:subject, :place, :alive, :first_change)

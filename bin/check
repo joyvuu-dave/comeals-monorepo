@@ -235,9 +235,8 @@ check_debride() {
   cp .debride_whitelist "$whitelist"
   bundle exec rails routes 2>/dev/null | grep -oE '[a-z_/]+#[a-z_]+' | cut -d'#' -f2 | sort -u >> "$whitelist"
 
-  local output
-  output=$(bundle exec debride --rails --whitelist "$whitelist" app lib db/seeds.rb config/initializers config/routes.rb 2>&1 \
-    | grep -v '^NOTE: RubyParser')
+  local paths=(app lib db/seeds.rb config/initializers config/routes.rb) output
+  output=$(bundle exec debride --rails --whitelist "$whitelist" "${paths[@]}" 2>&1 | grep -v '^NOTE: RubyParser')
   rm -f "$whitelist"
 
   local suspects
@@ -593,6 +592,28 @@ check_vitest() {
   fi
 }
 
+# bin/bundle-budget is a Node script, outside the Vitest count. Its tests
+# (tests/bin) run under Node's own test runner, which measures the script
+# and fails below 100% of its lines, branches and functions.
+check_node_scripts() {
+  step "Node scripts"
+
+  local output exit_code=0
+  output=$(npm run test:bin 2>&1) || exit_code=$?
+
+  local tests
+  tests=$(echo "$output" | sed -n 's/^ℹ pass \([0-9]*\)$/\1/p')
+
+  if [ "$exit_code" -eq 0 ]; then
+    pass "${tests:-?} tests passed, every line and branch of bin/bundle-budget ran"
+    record "Node scripts" "PASS" "${tests:-?} tests passed"
+  else
+    fail "Failures, or bin/bundle-budget below 100% coverage"
+    echo "$output" | grep -E '^(✖|ℹ Error)' | head -20
+    record "Node scripts" "FAIL" "failures or coverage"
+  fi
+}
+
 # The mocked E2E fixtures are generated from the real API
 # (rake test:generate_fixtures). Regenerate them and fail when the
 # result differs from what is committed — that means a Rails change
@@ -867,6 +888,7 @@ main() {
   # Tests
   check_rspec
   check_vitest
+  check_node_scripts
   check_fixture_freshness
   check_annotations
   check_playwright

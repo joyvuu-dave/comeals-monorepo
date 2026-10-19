@@ -14,7 +14,9 @@ const fs = require("fs");
 const path = require("path");
 const zlib = require("zlib");
 
-const root = path.resolve(__dirname, "..");
+// BUNDLE_BUDGET_ROOT is for its test (tests/bin/bundle_budget.test.js),
+// which runs it on a build of its own. It is never set otherwise.
+const root = process.env.BUNDLE_BUDGET_ROOT || path.resolve(__dirname, "..");
 const budgets = JSON.parse(
   fs.readFileSync(path.join(root, "config", "bundle_budgets.json"), "utf8"),
 );

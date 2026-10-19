@@ -84,6 +84,11 @@ echo "Running the visual suite in ${IMAGE}..."
 # Desktop defines it, and --add-host defines it on Linux (CI). The
 # container starts no Rails of its own (PLAYWRIGHT_SKIP_ADMIN) and
 # points admin.lvh.me at the host instead (PLAYWRIGHT_ADMIN_HOST).
+#
+# The command for the container is a variable so that no line of the
+# docker command has a & in it: bashcov cannot tell that the lines of a
+# command split with backslashes ran when one of them does.
+IN_CONTAINER="npm install --no-audit --no-fund && npx playwright test ${SPECS} ${EXTRA_ARGS}"
 docker run --rm \
   --ipc=host \
   --add-host=host.docker.internal:host-gateway \
@@ -95,4 +100,4 @@ docker run --rm \
   -v comeals-playwright-modules:/work/node_modules \
   -w /work \
   "$IMAGE" \
-  bash -c "npm install --no-audit --no-fund && npx playwright test ${SPECS} ${EXTRA_ARGS}"
+  bash -c "$IN_CONTAINER"
