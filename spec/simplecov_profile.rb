@@ -7,13 +7,16 @@
 
 require 'simplecov'
 
-# The version of the newest migration that has run in production. Every
-# migration after it has not run there yet, so this suite must run all of
-# its lines and branches before the deploy that runs it; the ones up to it
-# already ran and are left out of the coverage count. Move this after each
-# deploy that runs migrations, to the newest file in db/migrate/ at the
-# commit that was deployed.
-PRODUCTION_SCHEMA_VERSION = 20_260_816_160_000
+# The migrations production has run, from db/production_migrations.txt
+# (its comment says when and how to update it), and the newest of them.
+# Every migration after that one has not run there yet, so this suite must
+# run all of its lines and branches before the deploy that runs it; the
+# ones up to it already ran and are left out of the coverage count.
+PRODUCTION_MIGRATIONS = File.readlines(File.expand_path('../db/production_migrations.txt', __dir__), chomp: true)
+                            .reject { |line| line.start_with?('#') || line.strip.empty? }
+                            .map { |line| Integer(line, 10) }
+                            .freeze
+PRODUCTION_SCHEMA_VERSION = PRODUCTION_MIGRATIONS.max
 
 # The minimum for a run of the whole suite.
 SIMPLECOV_MINIMUM = { line: 100, branch: 100 }.freeze

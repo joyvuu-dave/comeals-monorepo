@@ -3,7 +3,7 @@
 require 'rails_helper'
 
 # Every schema migration that production has not run yet (newer than
-# PRODUCTION_SCHEMA_VERSION, spec/spec_helper.rb) runs down, newest first,
+# PRODUCTION_SCHEMA_VERSION, spec/simplecov_profile.rb) runs down, newest first,
 # and then up again, oldest first, inside the example's transaction. The
 # schema after that must be the schema before it, object for object. So
 # each down undoes exactly what its up does, and each up still runs on
