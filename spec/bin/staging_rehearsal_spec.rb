@@ -305,6 +305,19 @@ RSpec.describe 'bin/staging-rehearsal' do
     expect(last_web_scale).to eq('0')
   end
 
+  # The script reads the id with grep under set -e and pipefail. When
+  # grep finds no id it exits 1, which stops the script on that line, so
+  # the message below it never prints.
+  it 'stops and says so when the smoke seed prints no meal id' do
+    sandbox.fake('heroku', "run --exit-code #{staging} --env * -- bin/rails runner *", out: "Smoke resident ready\n")
+
+    result = rehearse
+
+    expect(result.exitstatus).to eq(1)
+    expect(result.out).to include('Smoke seed printed no SMOKE_MEAL_ID')
+    expect(last_web_scale).to eq('0')
+  end
+
   # Staging state from here on, for every failure: web at 1 (not parked),
   # running the new code on the copy of production. In the Deploy
   # workflow its "Park staging" step scales it to 0 after a failure; run
