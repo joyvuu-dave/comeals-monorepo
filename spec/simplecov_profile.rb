@@ -41,8 +41,9 @@ SimpleCov.profiles.define 'comeals' do
   # The files this suite answers for. A file here that no spec loads is
   # counted at 0%, not left out: a spec loads a migration only when it
   # tests that migration, so a new migration with no spec would otherwise
-  # be missing from the report.
-  cover 'app/**/*.rb', 'lib/**/*.{rb,rake}', 'config/initializers/*.rb', 'db/migrate/*.rb'
+  # be missing from the report. bin/lib holds Ruby that bin/rails runner
+  # runs (the staging smoke seed).
+  cover 'app/**/*.rb', 'lib/**/*.{rb,rake}', 'config/initializers/*.rb', 'db/migrate/*.rb', 'bin/lib/**/*.rb'
   # The Ruby scripts in bin/. Each runs in a process of its own under
   # spec/bin, and its counts are added to this run's result
   # (spec/child_coverage.rb). Named here, a script whose specs are gone is
