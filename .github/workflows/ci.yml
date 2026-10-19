@@ -10,8 +10,9 @@ jobs:
   # Every job has a timeout of about 2-3x its normal duration. Without
   # one, GitHub's default is 6 hours: a hung step (a stalled browser
   # download did this on 2026-08-15) holds the run open all that time.
-  # Normal durations: node-e2e ~6 min, ruby-test and integration-tests
-  # ~4.5 min, visual-tests ~2.5 min, everything else under a minute.
+  # Normal durations: each ruby-test part ~13 min, node-e2e ~14 min,
+  # visual-tests ~8 min, integration-tests ~6 min, everything else under
+  # two minutes.
   # The two Playwright jobs get 25 instead of 2-3x: on a Playwright
   # version bump they download browsers, and on 2026-08-19 a slow CDN
   # stretched that download to 12 minutes.
@@ -33,9 +34,21 @@ jobs:
           bundler-cache: true
       - run: bundle exec rubocop
 
+  # The RSpec suite in two parts that run at the same time. In one job it
+  # took about 24 minutes, close to the limit. bin/rspec-shard puts each
+  # spec file in one part, split by how long the files took in CI
+  # (spec/rspec_file_times.json), so a file always runs whole: the bashcov
+  # check in spec/bin/deploy_spec.rb needs every example of its file. A
+  # part does not check the coverage minimum; ruby-coverage below does,
+  # for the whole suite.
   ruby-test:
+    name: ruby-test (${{ matrix.part }}/2)
     runs-on: ubuntu-24.04
     timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [1, 2]
     services:
       postgres:
         image: postgres:17
@@ -63,9 +76,47 @@ jobs:
       # (spec/support/spa_page.rb, asset_cache_control_spec.rb), and
       # this job is what checks that they still do (#142).
       - run: bin/rails db:schema:load
-      - run: bundle exec rake
-      # The 100% minimum is enforced here too (spec/spec_helper.rb). A
-      # miss on Linux that a laptop does not show needs the report to
+      - run: bin/rspec-shard ${{ matrix.part }} 2
+      # This part's coverage, for ruby-coverage. Uploaded even when a spec
+      # failed, so the report still names what this part covered.
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ruby-coverage-part-${{ matrix.part }}
+          path: coverage/.resultset.json
+          retention-days: 7
+          if-no-files-found: ignore
+          # The default skips dotfiles.
+          include-hidden-files: true
+      # How long each spec file took, to refresh the split:
+      # bin/rspec-shard --times <both rspec-part-*.json files>
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: rspec-times-part-${{ matrix.part }}
+          path: tmp/rspec-part-${{ matrix.part }}.json
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # Joins the coverage of both parts and checks the 100% line and branch
+  # minimum for the whole suite (bin/coverage-collate, with the profile in
+  # spec/simplecov_profile.rb). Runs only when both parts passed: a part
+  # that failed may have stopped early, and its coverage would be short.
+  ruby-coverage:
+    needs: ruby-test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: ruby-coverage-part-*
+          path: coverage-parts
+      - run: bin/coverage-collate 2 coverage-parts/*/.resultset.json
+      # A miss on Linux that a laptop does not show needs the report to
       # name the branch; the summary only names the file.
       - uses: actions/upload-artifact@v7
         if: failure()

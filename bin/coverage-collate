@@ -1,0 +1,30 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Joins the Ruby coverage of the CI parts of the RSpec suite
+# (bin/rspec-shard) and checks the minimum for the whole suite, with the
+# same profile spec/spec_helper.rb uses (spec/simplecov_profile.rb).
+#
+#   bin/coverage-collate <parts> <.resultset.json>...
+#
+# Fails unless the files hold exactly the results "RSpec shard 1" to
+# "RSpec shard <parts>": a missing part would leave its code out of the
+# count. Writes the joined report to coverage/.
+
+require 'bundler/setup'
+require 'json'
+
+ROOT = File.expand_path('..', __dir__)
+Dir.chdir(ROOT)
+require_relative '../spec/simplecov_profile'
+
+count = ARGV.shift.to_s
+abort 'Usage: bin/coverage-collate <parts> <.resultset.json>...' unless count.match?(/\A[1-9][0-9]*\z/) && ARGV.any?
+
+expected = (1..count.to_i).map { "RSpec shard #{it}" }
+found = ARGV.flat_map { JSON.parse(File.read(it)).keys }.sort
+abort "Expected the results #{expected.join(', ')}; found #{found.join(', ')}" unless found == expected
+
+SimpleCov.collate(ARGV, 'comeals') do
+  minimum_coverage(**SIMPLECOV_MINIMUM)
+end

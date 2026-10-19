@@ -1,0 +1,85 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Runs one part of the RSpec suite. CI runs the parts in parallel jobs
+# (.github/workflows/ci.yml), because the whole suite in one job came close
+# to the job's time limit.
+#
+#   bin/rspec-shard <part> <parts>          run part <part> of <parts>
+#   bin/rspec-shard --list <part> <parts>   print that part's spec files
+#   bin/rspec-shard --times <report.json>...
+#       write spec/rspec_file_times.json from the JSON reports the parts
+#       leave in tmp/ (CI uploads them as the rspec-times-* artifacts)
+#
+# Every spec file goes to exactly one part, so a file always runs whole.
+# That keeps a check that needs every example of its file, like the
+# bashcov check in spec/bin/deploy_spec.rb, working. The files are split
+# by how long each took in CI (spec/rspec_file_times.json): the longest
+# file goes first, each to the part with the least time so far. A file
+# that is not in the times file counts as its number of lines times the
+# average seconds per line of the files that are. Refresh the times when
+# the parts drift apart.
+#
+# Each part sets COVERAGE_SHARD, so spec/spec_helper.rb stores its
+# coverage as "RSpec shard <part>" and does not check the minimum, which
+# only holds for the whole suite. bin/coverage-collate joins the parts and
+# checks it.
+
+require 'json'
+
+ROOT = File.expand_path('..', __dir__)
+# RSPEC_FILE_TIMES names another times file (spec/bin/rspec_shard_spec.rb).
+TIMES = ENV.fetch('RSPEC_FILE_TIMES') { File.join(ROOT, 'spec/rspec_file_times.json') }
+USAGE = 'Usage: bin/rspec-shard [--list] <part> <parts> | bin/rspec-shard --times <report.json>...'
+
+def spec_files = Dir.glob('spec/**/*_spec.rb', base: ROOT).sort
+
+def parts(count)
+  times = File.exist?(TIMES) ? JSON.parse(File.read(TIMES)) : {}
+  lines = spec_files.to_h { [it, File.foreach(File.join(ROOT, it)).count] }
+  known = lines.keys.select { times.key?(it) }
+  per_line = known.empty? ? 0.01 : known.sum { times[it] } / known.sum { lines[it] }
+  weight = lines.to_h { |file, count| [file, times.fetch(file) { count * per_line }] }
+
+  totals = Array.new(count, 0.0)
+  files = Array.new(count) { [] }
+  weight.keys.sort_by { [-weight[it], it] }.each do |file|
+    lightest = totals.each_with_index.min.last
+    totals[lightest] += weight[file]
+    files[lightest] << file
+  end
+  files.map(&:sort).zip(totals)
+end
+
+def write_times(reports)
+  abort USAGE if reports.empty?
+  seconds = Hash.new(0.0)
+  reports.each do |report|
+    JSON.parse(File.read(report)).fetch('examples').each do |example|
+      seconds[example.fetch('file_path').delete_prefix('./')] += example.fetch('run_time')
+    end
+  end
+  File.write(TIMES, "#{JSON.pretty_generate(seconds.sort.to_h { |file, time| [file, time.round(2)] })}\n")
+  puts "Wrote #{seconds.size} files to #{TIMES.delete_prefix("#{ROOT}/")}"
+end
+
+list = ARGV.delete('--list')
+if ARGV.first == '--times'
+  write_times(ARGV.drop(1))
+  exit
+end
+
+abort USAGE unless ARGV.size == 2 && ARGV.all?(/\A[1-9][0-9]*\z/)
+part, count = ARGV.map(&:to_i)
+abort USAGE unless part <= count
+
+files, seconds = parts(count)[part - 1]
+if list
+  puts files
+  exit
+end
+
+puts "Part #{part} of #{count}: #{files.size} spec files, about #{seconds.round}s in CI"
+Dir.chdir(ROOT)
+exec({ 'COVERAGE_SHARD' => part.to_s }, 'bundle', 'exec', 'rspec',
+     '--format', 'progress', '--format', 'json', '--out', "tmp/rspec-part-#{part}.json", *files)
