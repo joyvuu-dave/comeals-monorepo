@@ -157,6 +157,9 @@ module GeneratedUrlHelpersModule
   def cancel_admin_meal_url(*args); end
 
   sig { params(args: T.untyped).returns(String) }
+  def cook_admin_reconciliation_url(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
   def correct_admin_meal_url(*args); end
 
   sig { params(args: T.untyped).returns(String) }

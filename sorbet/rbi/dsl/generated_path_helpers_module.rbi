@@ -157,6 +157,9 @@ module GeneratedPathHelpersModule
   def cancel_admin_meal_path(*args); end
 
   sig { params(args: T.untyped).returns(String) }
+  def cook_admin_reconciliation_path(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
   def correct_admin_meal_path(*args); end
 
   sig { params(args: T.untyped).returns(String) }
