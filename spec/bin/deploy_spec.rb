@@ -675,6 +675,13 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new do
       expect(result.output).to include('Issues found in logs:', 'NoMethodError: undefined method',
                                        'DEPRECATION WARNING: old call')
       expect(result.output).not_to include('ERROR from before the deploy', 'Completed 200 OK', 'more (run:')
+      # Issues in the log are a warning, not a failure: the health check,
+      # the Solid Queue check and the smoke test still run. Today the
+      # script stops here with exit 1 and no line of its own: the loop
+      # that prints the issues ends on the empty last line, so its status
+      # is 1, and set -e with pipefail ends the script (bin/deploy:454).
+      expect(result.output).to include('Health check', 'Deploy complete!')
+      expect(result.status).to eq(0)
     end
 
     it 'shows 30 lines and counts the rest' do
