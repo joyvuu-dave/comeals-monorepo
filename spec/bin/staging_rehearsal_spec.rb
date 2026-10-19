@@ -308,9 +308,6 @@ RSpec.describe 'bin/staging-rehearsal' do
     expect(last_web_scale).to eq('0')
   end
 
-  # The script reads the id with grep under set -e and pipefail. When
-  # grep finds no id it exits 1, which stops the script on that line, so
-  # the message below it never prints.
   it 'stops and says so when the smoke seed prints no meal id' do
     sandbox.fake('heroku', "run --exit-code #{staging} --env * -- bin/rails runner *", out: "Smoke resident ready\n")
 

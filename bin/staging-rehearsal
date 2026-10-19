@@ -182,7 +182,9 @@ if ! heroku run --exit-code -a "$STAGING_APP" --env "$seed_env" \
   fail "Smoke seed failed"
   exit 1
 fi
-SMOKE_MEAL_ID=$(grep -o 'SMOKE_MEAL_ID=[0-9]*' "$seed_log" | cut -d= -f2)
+# || true: grep exits 1 when it finds no id, and under set -e that would
+# stop the script here, before the message below.
+SMOKE_MEAL_ID=$(grep -o 'SMOKE_MEAL_ID=[0-9]*' "$seed_log" | cut -d= -f2 || true)
 if [ -z "$SMOKE_MEAL_ID" ]; then
   fail "Smoke seed printed no SMOKE_MEAL_ID"
   exit 1
