@@ -135,4 +135,19 @@ RSpec.describe 'bin/storm' do
     expect(result.exitstatus).to eq(3)
     expect(sandbox.calls_to('psql').size).to eq(1)
   end
+
+  # The script saves rake's exit code, prints the server log and its error
+  # lines, and then exits with the code. But it runs under set -e, so a
+  # failed storm ends the script at the rake line, and the server log is
+  # printed only when the storm passed.
+  it "prints the server log's error lines after a storm that failed" do
+    sandbox.fake('bundle', sandbox.answers({ 'exec rails server *' => "echo 'ActiveRecord::Deadlocked error'; " \
+                                                                      "#{server_up}",
+                                             'exec rake test:storm' => 'exit 3' }))
+
+    result = sandbox.run(script)
+
+    expect(result.exitstatus).to eq(3)
+    expect(result.output).to include("lines with 'error' in the server log:", '1:ActiveRecord::Deadlocked error')
+  end
 end
