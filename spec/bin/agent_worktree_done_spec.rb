@@ -95,4 +95,15 @@ RSpec.describe 'bin/agent-worktree-done' do
       expect(result.output).to eq("usage: bin/agent-worktree-done <task-name>\n")
     end
   end
+
+  # See the same example in agent_worktree_spec.rb: from a folder inside
+  # the main checkout, the script takes the main checkout for a worktree.
+  it 'works from a folder inside the main checkout' do
+    FileUtils.mkdir_p(File.join(repo, 'app'))
+
+    result = run('fix-it', chdir: File.join(repo, 'app'))
+
+    expect(result).to be_success, result.output
+    expect(File).not_to exist(worktree)
+  end
 end

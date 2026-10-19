@@ -127,4 +127,17 @@ RSpec.describe 'bin/agent-worktree' do
   it 'takes a name of 40 characters' do
     expect(run('a' * 40)).to be_success
   end
+
+  # From a folder inside the main checkout, git prints the repository
+  # folder as a full path for --git-dir and as a relative one for
+  # --git-common-dir. The two texts differ, so the script takes the main
+  # checkout for a worktree and refuses.
+  it 'works from a folder inside the main checkout' do
+    FileUtils.mkdir_p(File.join(repo, 'app'))
+
+    result = run('fix-it', chdir: File.join(repo, 'app'))
+
+    expect(result).to be_success, result.output
+    expect(File).to exist(File.join(worktree_path('fix-it'), '.env'))
+  end
 end

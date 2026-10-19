@@ -212,4 +212,15 @@ RSpec.describe 'bin/agent-merge' do
       expect(result.output).to eq("usage: bin/agent-merge <task-name>\n")
     end
   end
+
+  # See the same example in agent_worktree_spec.rb: from a folder inside
+  # the main checkout, the script takes the main checkout for a worktree.
+  it 'works from a folder inside the main checkout' do
+    work = commit({ 'app.rb' => "1\n" }, chdir: worktree)
+
+    result = run('fix-it', chdir: File.join(repo, 'db'))
+
+    expect(result).to be_success, result.output
+    expect(origin_main).to eq(work)
+  end
 end
