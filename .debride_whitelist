@@ -35,6 +35,10 @@ number_of_meals
 # ActiveAdmin calls it by name (column 'Number of Bills', :bills_count in
 # app/admin/meal.rb):
 bills_count
+# ActiveAdmin's authorization calls it by name before each action, to
+# turn the action into a permission (the cook page in
+# app/admin/reconciliation.rb overrides it):
+action_to_permission
 # ActiveRecord::Persistence#save and #save! call it (ConstraintMessages
 # wraps it):
 create_or_update

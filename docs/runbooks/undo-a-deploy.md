@@ -123,9 +123,18 @@ starts web again by itself.
 
 ## Practise it on staging
 
-The staging rehearsal runs the undo before the real deploy: staging gets
-the production backup and v613's code, then the new release, then the
-Rollback workflow with `app: comeals-staging`, the release staging ran
-before, and the backup taken before staging's deploy. The smoke test
-must pass on v613 afterwards. On staging the workflow only rolls back and
-smokes; it leaves `DEPLOY_HOLD`, the release notes and the issues alone.
+`bin/staging-rehearsal` does not practise the undo. It only deploys the
+new code to staging on a copy of production. Practise the undo by hand,
+before the real deploy:
+
+1. Restore a fresh production backup into staging, and push the code
+   production runs now to staging. Staging then looks like production.
+2. Capture a staging backup. This is "the backup before the deploy".
+3. Push the new code to staging. Its release phase runs the migrations.
+4. Run the Rollback workflow with `app: comeals-staging`, the staging
+   release that ran the old code, and the backup from step 2.
+5. Check that the smoke test passed on the old code, then scale staging
+   to 0.
+
+On staging the workflow only rolls back and smokes; it leaves
+`DEPLOY_HOLD`, the release notes and the issues alone.
