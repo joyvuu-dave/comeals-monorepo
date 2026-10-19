@@ -141,6 +141,16 @@ RSpec.describe 'bin/staging-rehearsal' do
       it_behaves_like 'a refusal before any write', 'COMEALS_STAGING is not set'
     end
 
+    # The app reads COMEALS_STAGING with present?, so a blank value turns
+    # the mail and Pusher guards off (config/environments/production.rb,
+    # config/initializers/pusher.rb). The check only asks whether the
+    # name is there.
+    context 'when COMEALS_STAGING is set but blank' do
+      before { sandbox.fake('heroku', "config #{staging} --json", out: '{"COMEALS_STAGING": "", "DATABASE_URL": "x"}') }
+
+      it_behaves_like 'a refusal before any write', 'COMEALS_STAGING'
+    end
+
     %w[GMAIL_USERNAME GMAIL_APP_PASSWORD HEALTHCHECKS_PING_KEY BUGSNAG_API_KEY VITE_BUGSNAG_API_KEY
        SKYLIGHT_AUTHENTICATION].each do |var|
       context "when #{var} is set" do
