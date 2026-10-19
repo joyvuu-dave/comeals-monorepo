@@ -25,6 +25,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 . bin/lib/output.sh
+. bin/lib/json.sh
 
 # The log lines the log check reads: those from this rehearsal, without
 # the boot loop's own H14 lines and the release phase's copy of each
@@ -36,6 +37,11 @@ rehearsal_lines() {
     $1 < booted && /code=H14/ { next }
     /app\[release\.[0-9]+\]: -- execute\(/ { next }
     { print }'
+}
+
+# The lines the log check fails on.
+worrying_lines() {
+  grep -iE "FATAL|DEPRECAT|status=5[0-9][0-9]| ERROR |Exception" | grep -v "pg_restore"
 }
 
 PROD_APP=comeals-monorepo
@@ -60,8 +66,7 @@ FORBIDDEN_VARS=(
 
 step "Neuter check on $STAGING_APP"
 
-config_keys=$(heroku config -a "$STAGING_APP" --json | python3 -c \
-  "import json,sys; print('\n'.join(json.load(sys.stdin).keys()))")
+config_keys=$(heroku config -a "$STAGING_APP" --json | json "'\n'.join(d.keys())")
 
 if ! grep -qx "COMEALS_STAGING" <<< "$config_keys"; then
   fail "COMEALS_STAGING is not set — the mail and Pusher guards are off"
@@ -86,8 +91,7 @@ ok "No scheduler addon"
 # The clock process sends reminder emails and pings healthchecks. It
 # must never run here. (Before the first deploy the formation is empty,
 # which also passes.)
-clock_count=$(heroku ps -a "$STAGING_APP" --json | python3 -c \
-  "import json,sys; d=json.load(sys.stdin); print(sum(1 for p in d if p.get('type')=='clock'))")
+clock_count=$(heroku ps -a "$STAGING_APP" --json | json "sum(1 for p in d if p.get('type')=='clock')")
 if [ "$clock_count" != "0" ]; then
   fail "A clock dyno is running on $STAGING_APP"
   exit 1
@@ -119,8 +123,7 @@ git push --force "https://git.heroku.com/$STAGING_APP.git" "HEAD:refs/heads/main
 # fails — it only tells us the build worked. Ask Heroku what the
 # release did. (Learned on 2026-08-17: a failed migration sailed past
 # this point and surfaced three steps later as a wrong-slug error.)
-release_status=$(heroku releases -a "$STAGING_APP" --json | python3 -c \
-  "import json,sys; print(json.load(sys.stdin)[0]['status'])")
+release_status=$(heroku releases -a "$STAGING_APP" --json | json "d[0]['status']")
 if [ "$release_status" != "succeeded" ]; then
   fail "The release phase failed (status: $release_status). Its output:"
   heroku releases:output -a "$STAGING_APP" | tail -30
@@ -166,8 +169,8 @@ step "Seed the smoke resident and smoke meal"
 SMOKE_EMAIL="smoke@staging.invalid"
 SMOKE_PASSWORD=$(openssl rand -hex 16)
 seed_log=$(mktemp)
-if ! heroku run --exit-code -a "$STAGING_APP" \
-  --env "SMOKE_EMAIL=$SMOKE_EMAIL;SMOKE_PASSWORD=$SMOKE_PASSWORD" \
+seed_env="SMOKE_EMAIL=$SMOKE_EMAIL;SMOKE_PASSWORD=$SMOKE_PASSWORD"
+if ! heroku run --exit-code -a "$STAGING_APP" --env "$seed_env" \
   -- bin/rails runner bin/lib/staging_smoke_seed.rb 2>&1 | tee "$seed_log"; then
   fail "Smoke seed failed"
   exit 1
@@ -183,8 +186,7 @@ step "Boot"
 
 heroku ps:scale web=1 -a "$STAGING_APP"
 
-staging_url=$(heroku apps:info -a "$STAGING_APP" --json | python3 -c \
-  "import json,sys; print(json.load(sys.stdin)['app']['web_url'].rstrip('/'))")
+staging_url=$(heroku apps:info -a "$STAGING_APP" --json | json "d['app']['web_url'].rstrip('/')")
 
 booted=false
 for _ in $(seq 1 30); do
@@ -223,10 +225,7 @@ step "Log check"
 # migration's SQL ("-- execute(...)"): the trigger functions contain
 # RAISE EXCEPTION. A migration that fails still prints its error on
 # lines of its own, which the search finds.
-log_hits=$(heroku logs -n 1500 -a "$STAGING_APP" \
-  | rehearsal_lines "$REHEARSAL_STARTED" "$BOOTED_AT" \
-  | grep -iE "FATAL|DEPRECAT|status=5[0-9][0-9]| ERROR |Exception" \
-  | grep -v "pg_restore" || true)
+log_hits=$(heroku logs -n 1500 -a "$STAGING_APP" | rehearsal_lines "$REHEARSAL_STARTED" "$BOOTED_AT" | worrying_lines || true)
 if [ -n "$log_hits" ]; then
   fail "Worrying lines in the staging logs:"
   echo "$log_hits" | head -20
