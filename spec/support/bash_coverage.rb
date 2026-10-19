@@ -1,11 +1,27 @@
 # frozen_string_literal: true
 
-# The lines of bin/deploy and bin/lib/output.sh that ran, summed over the
-# bashcov runs of spec/bin/deploy_spec.rb, and the check that holds them at
-# 100%. It never touches the SimpleCov result of the Ruby code.
+require 'stringio'
+
+# Line coverage for the bash scripts this repository holds at 100%. Each
+# script is run under bashcov by one spec file, and an after(:context) hook
+# in that file calls #check!. The counts stay in this object: nothing here
+# touches the SimpleCov result of the Ruby code.
+#
+# To hold another script at 100%:
+#   1. add it to FILES below, with the spec file that runs it;
+#   2. in that spec file, make one BashCoverage.new(<that spec file>), run
+#      the script through its #run, and call its #check! in after(:context)
+#      when every example of the file ran (spec/bin/deploy_spec.rb shows how).
+# CI splits the suite by spec file (bin/rspec-shard), so a spec file always
+# runs whole on one shard and its check sees every run.
 class BashCoverage
-  ROOT = File.expand_path('../../..', __dir__)
-  FILES = %w[bin/deploy bin/lib/output.sh].map { File.join(ROOT, it) }.freeze
+  ROOT = File.expand_path('../..', __dir__)
+
+  # Every bash file held at 100%, and the spec file that must run all of it.
+  FILES = {
+    'bin/deploy' => 'spec/bin/deploy_spec.rb',
+    'bin/lib/output.sh' => 'spec/bin/deploy_spec.rb'
+  }.freeze
 
   # bashcov marks a line that holds a whole function, `red() { ...; }`, as
   # relevant only once the function runs. So it never reports one that did
@@ -14,27 +30,49 @@ class BashCoverage
   LOOP_START = /;\s*do\s*\z/
   LOOP_END = /\A\s*done\b/
 
-  def initialize
-    # { path => [count, or nil for a line bashcov does not count] }
-    @counts = FILES.index_with { [] }
+  def initialize(spec_file)
+    files = FILES.select { |_, spec| spec == spec_file }.keys
+    raise "BashCoverage::FILES names no script for #{spec_file}" if files.empty?
+
+    # { absolute path => [count, or nil for a line bashcov does not count] }
+    @counts = files.to_h { [File.join(ROOT, it), []] }
   end
 
-  # Adds one Bashcov::Runner#result.
-  def add(result)
-    result.each do |file, data|
-      totals = @counts[File.realpath(file)] or next
-
-      data['lines'].each_with_index do |count, line|
-        totals[line] = totals[line].to_i + count unless count.nil?
+  # bashcov needs bash 4.1 or newer (BASH_XTRACEFD), and these specs use
+  # bash 5. macOS ships 3.2 as /bin/bash, so look on the PATH first.
+  def bash
+    @bash ||= begin
+      candidates = ENV.fetch('PATH').split(File::PATH_SEPARATOR).map { File.join(it, 'bash') } + ['/bin/bash']
+      found = candidates.find do |path|
+        File.executable?(path) && IO.popen([path, '-c', 'echo ${BASH_VERSINFO[0]}'], &:read).to_i >= 5
       end
+      found || raise('The bash coverage specs need bash 5 or newer on the PATH (macOS: brew install bash)')
     end
+  end
+
+  # Runs `bash *args` under bashcov, adds the lines that ran, and returns
+  # the Process::Status. Any warning from bashcov fails the run: "Aborting
+  # early" means the counts are incomplete, and a script it drops for bad
+  # syntax would never be counted.
+  def run(*args)
+    require 'bashcov'
+    require 'bashcov/runner'
+    # skip_uncovered: without it bashcov walks the whole repository
+    # (node_modules too) for scripts that did not run.
+    Bashcov.skip_uncovered = true
+    Bashcov.bash_path = bash
+    runner = Bashcov::Runner.new([bash, *args])
+    status, result, warnings = with_warnings_captured { [runner.run, runner.result] }
+    raise "bashcov warned, so its counts cannot be trusted:\n#{warnings}" unless warnings.empty?
+
+    add(result)
+    status
   end
 
   # Raises unless every line bashcov counts, and every one-line function,
   # ran at least once.
   def check!
-    missed = FILES.flat_map do |file|
-      counts = @counts.fetch(file)
+    missed = @counts.flat_map do |file, counts|
       raise "#{file} never ran under bashcov" if counts.empty?
 
       lines = File.readlines(file)
@@ -46,11 +84,30 @@ class BashCoverage
     end
     return if missed.empty?
 
-    raise 'bin/deploy and bin/lib/output.sh must run every line under spec/bin/deploy_spec.rb. ' \
+    raise "#{@counts.keys.map { it.delete_prefix("#{ROOT}/") }.join(' and ')} must run every line. " \
           "These did not:\n#{missed.join("\n")}"
   end
 
   private
+
+  def add(result)
+    result.each do |file, data|
+      totals = @counts[File.realpath(file)] or next
+
+      data['lines'].each_with_index do |count, line|
+        totals[line] = totals[line].to_i + count unless count.nil?
+      end
+    end
+  end
+
+  # bashcov writes its warnings with Kernel#warn, to $stderr.
+  def with_warnings_captured
+    original = $stderr
+    $stderr = StringIO.new
+    [*yield, $stderr.string]
+  ensure
+    $stderr = original
+  end
 
   # bash's trace names one line for a command that spans several, so
   # bashcov can mark a line relevant that the trace never names:

@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require 'bashcov'
-require 'bashcov/runner'
 require 'fileutils'
 require 'pty'
 require 'tmpdir'
@@ -29,7 +27,8 @@ class DeployHarness
 
   attr_reader :dir, :repo, :commits
 
-  # `coverage` (a BashCoverage) collects the lines each run covers.
+  # `coverage` (a BashCoverage, spec/support/bash_coverage.rb) runs each
+  # run under bashcov and collects the lines it covers.
   def initialize(coverage)
     @coverage = coverage
     @dir = File.realpath(Dir.mktmpdir('deploy-spec'))
@@ -101,35 +100,19 @@ class DeployHarness
 
   def real_git = @real_git ||= which('git')
 
-  # bashcov needs bash 4.1 or newer (BASH_XTRACEFD). macOS ships 3.2 as
-  # /bin/bash, so look on the PATH first.
-  def bash
-    @bash ||= begin
-      candidates = ENV.fetch('PATH').split(File::PATH_SEPARATOR).map { File.join(it, 'bash') } + ['/bin/bash']
-      found = candidates.find do |path|
-        File.executable?(path) && IO.popen([path, '-c', 'echo ${BASH_VERSINFO[0]}'], &:read).to_i >= 4
-      end
-      found || raise('spec/bin/deploy_spec.rb needs bash 4 or newer on the PATH (macOS: brew install bash)')
-    end
-  end
+  delegate :bash, to: :@coverage
 
   # --- Running ------------------------------------------------------------
 
   # Runs bin/deploy with `args`. `input` is what the person types; with
   # `tty: true` it is typed on a terminal, so `[ -t 0 ]` is true.
-  def run(*args, input: '', tty: false, env: {})
+  def run(*, input: '', tty: false, env: {})
     write_fake_home
     output_path = File.join(@dir, 'output')
 
     with_stdin(input, tty) do |stdin_path|
       wrapper = write_wrapper(stdin_path, output_path, env)
-      # skip_uncovered: without it bashcov walks the whole repository
-      # (node_modules too) for scripts that did not run.
-      Bashcov.skip_uncovered = true
-      Bashcov.bash_path = bash
-      runner = Bashcov::Runner.new([bash, wrapper, *args])
-      status = runner.run
-      @coverage.add(runner.result)
+      status = @coverage.run(wrapper, *)
       output = File.read(output_path).gsub(/\e\[[0-9;]*m/, '')
       refuse_outside_commands(output)
       Result.new(output, status.exitstatus)
