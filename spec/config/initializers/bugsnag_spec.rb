@@ -13,6 +13,10 @@ RSpec.describe 'config/initializers/bugsnag.rb' do
   end
   let(:errors) { instance_double(ActiveSupport::ErrorReporter, subscribe: nil) }
 
+  # The list as it is at boot. After the first request, Rails has put its
+  # own compiled form in its place, and that depends on which specs ran.
+  before { allow(Rails.application.config).to receive(:filter_parameters).and_return(%i[password token]) }
+
   def configure(api_key:, env:, release: 'v700')
     BugsnagSetup.configure(bugsnag, errors: errors, api_key: api_key, env: ActiveSupport::EnvironmentInquirer.new(env),
                                     release: release)
