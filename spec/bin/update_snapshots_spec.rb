@@ -68,6 +68,17 @@ RSpec.describe 'bin/update-snapshots' do
     expect(left.size).to eq(13)
   end
 
+  # A name that is only the start of other goldens' names passes the
+  # check, deletes nothing, and is reported as deleted. The golden then
+  # keeps its old image whenever the change is inside the diff tolerance,
+  # which is the case the script exists for.
+  it 'refuses a name that is only the start of the names of other goldens' do
+    result = sandbox.run(script, 'event')
+
+    expect(result.exitstatus).to eq(1)
+    expect(result.output).not_to include('Deleted goldens for: event')
+  end
+
   it 'stops when the macOS recording fails, before Linux' do
     sandbox.fake('npx', 'exit 1')
 
