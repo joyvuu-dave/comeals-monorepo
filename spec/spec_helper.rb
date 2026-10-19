@@ -47,7 +47,9 @@ unless ENV['MUTANT']
     # tests that migration, so a new migration with no spec would otherwise
     # be missing from the report.
     cover 'app/**/*.rb', 'lib/**/*.{rb,rake}', 'config/initializers/*.rb', 'db/migrate/*.rb'
-    # Loads the annotate_rb gem's own tasks, in development only.
+    # Loads the annotate_rb gem's own tasks, in development only. The gem is
+    # in the development group of the Gemfile, so the test bundle cannot
+    # load it, and no spec can run the file's one branch.
     skip '/lib/tasks/annotate_rb.rake'
 
     # Every line and every branch of app code runs under this suite. The
