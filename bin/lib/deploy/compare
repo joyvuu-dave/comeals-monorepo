@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# The Deploy workflow's "Compare candidate with production" step
+# (.github/workflows/deploy.yml). Anything to deploy? The live sha comes
+# from Heroku dyno metadata, not from the app, so this works whatever
+# version production runs.
+#
+# Reads PROD_APP. Writes candidate, live and proceed to $GITHUB_OUTPUT.
+set -euo pipefail
+
+candidate=$(git rev-parse HEAD)
+live=$(heroku config:get HEROKU_SLUG_COMMIT -a "$PROD_APP")
+echo "candidate=$candidate" >> "$GITHUB_OUTPUT"
+echo "live=$live" >> "$GITHUB_OUTPUT"
+if [ "$candidate" = "$live" ]; then
+  echo "Production already runs $candidate — nothing to deploy."
+  echo "proceed=false" >> "$GITHUB_OUTPUT"
+else
+  echo "Candidate $candidate; production runs $live."
+  echo "proceed=true" >> "$GITHUB_OUTPUT"
+fi

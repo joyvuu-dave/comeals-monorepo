@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# The Rollback workflow's "Check the migrations" step
+# (.github/workflows/rollback.yml). Refuses to roll back only the code
+# when a migration ran since the release it goes back to (#133), unless
+# the run restores a backup first or is told that the old code runs
+# beside every such migration.
+#
+# Reads TARGET_SHA, BAD_SHA, BACKUP, CODE_ONLY_IS_SAFE ("true" or not)
+# and APP. Run from the repository root.
+set -euo pipefail
+
+if bin/rollback-check "$TARGET_SHA" "$BAD_SHA"; then
+  exit 0
+fi
+if [ -n "$BACKUP" ]; then
+  echo "Backup $BACKUP is restored first, so the old code gets the database it was written for."
+elif [ "$CODE_ONLY_IS_SAFE" = "true" ]; then
+  echo "Told that the old code runs beside every migration above: rolling back only the code."
+else
+  echo "Refusing to roll back only the code. Run this again with the backup taken before"
+  echo "the deploy (heroku pg:backups -a $APP), or with code_only_is_safe once every"
+  echo "migration above is checked. See docs/runbooks/undo-a-deploy.md."
+  exit 1
+fi

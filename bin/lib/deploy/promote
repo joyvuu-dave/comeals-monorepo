@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# The Deploy workflow's "Promote to production" step
+# (.github/workflows/deploy.yml). Promotes the slug staging just ran, so
+# production never gets a second build. It refuses when staging runs
+# another commit.
+#
+# Reads CANDIDATE, STAGING_APP and PROD_APP. Writes started (when the
+# promote began, UTC) and previous (the commit production ran before,
+# for bin/rollback-check) to $GITHUB_OUTPUT.
+set -euo pipefail
+
+staging_sha=$(heroku config:get HEROKU_SLUG_COMMIT -a "$STAGING_APP")
+if [ "$staging_sha" != "$CANDIDATE" ]; then
+  echo "Staging runs $staging_sha, not the candidate — refusing to promote."
+  exit 1
+fi
+echo "started=$(date -u +%Y-%m-%dT%H:%M:%S)" >> "$GITHUB_OUTPUT"
+echo "previous=$(heroku config:get HEROKU_SLUG_COMMIT -a "$PROD_APP")" >> "$GITHUB_OUTPUT"
+heroku pipelines:promote -a "$STAGING_APP"

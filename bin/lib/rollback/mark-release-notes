@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# The Rollback workflow's "Mark the release notes" step
+# (.github/workflows/rollback.yml). Makes the GitHub Releases tell the
+# truth: it marks the release that pointed at the rolled-back commit.
+# Deploys older than the release process have no release to mark; it
+# says so and moves on.
+#
+# Reads BAD_SHA and REASON. Writes body.md and new_body.md in the
+# current folder.
+set -euo pipefail
+
+bad_sha="$BAD_SHA"
+tag=""
+for t in $(gh release list --limit 20 --json tagName --jq '.[].tagName'); do
+  # The commits API resolves a tag name to its commit whether
+  # the tag is lightweight or annotated.
+  sha=$(gh api "repos/{owner}/{repo}/commits/$t" --jq '.sha' 2>/dev/null || true)
+  if [ "$sha" = "$bad_sha" ]; then tag="$t"; break; fi
+done
+if [ -z "$tag" ]; then
+  echo "No GitHub release points at $bad_sha — nothing to mark."
+  exit 0
+fi
+# The release's notes with the reason on top.
+marked_body() {
+  echo "> **Rolled back on $(date -u +%Y-%m-%d)** — $REASON"
+  echo
+  cat body.md
+}
+
+gh release view "$tag" --json body --jq '.body' > body.md
+marked_body > new_body.md
+gh release edit "$tag" --notes-file new_body.md
+echo "Marked release $tag as rolled back."

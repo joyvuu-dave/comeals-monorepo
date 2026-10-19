@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# The Deploy workflow's "Hold check" step (.github/workflows/deploy.yml).
+# A hold means a person decided production should not follow main (set
+# by rollback.yml with the reason). Fail the run with the reason; never
+# skip the deploy and report success.
+#
+# Reads DEPLOY_HOLD (the repository variable; empty when there is no
+# hold).
+set -eo pipefail
+
+if [ -z "$DEPLOY_HOLD" ]; then
+  exit 0
+fi
+echo "DEPLOY_HOLD is set: $DEPLOY_HOLD"
+echo "Fix main (usually git revert), then clear the variable."
+exit 1

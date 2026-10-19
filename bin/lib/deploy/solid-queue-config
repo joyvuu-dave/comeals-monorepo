@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# The Deploy workflow's "Solid Queue config vars" step
+# (.github/workflows/deploy.yml). Production's release phase refuses the
+# promote without RAILS_DB_POOL >= 4 and SOLID_QUEUE_IN_PUMA
+# (lib/deploy_config_check.rb), so this sets them first, the way
+# bin/deploy does. When both are already right, nothing is written and
+# no dyno restarts.
+#
+# Reads PROD_APP.
+set -euo pipefail
+
+pool=$(heroku config:get RAILS_DB_POOL -a "$PROD_APP")
+in_puma=$(heroku config:get SOLID_QUEUE_IN_PUMA -a "$PROD_APP")
+if [ "${pool:-0}" -ge 4 ] 2>/dev/null && [ -n "$in_puma" ]; then
+  echo "RAILS_DB_POOL=$pool and SOLID_QUEUE_IN_PUMA=$in_puma are set."
+else
+  echo "Setting RAILS_DB_POOL=4 and SOLID_QUEUE_IN_PUMA=true (were '$pool' and '$in_puma')."
+  heroku config:set RAILS_DB_POOL=4 SOLID_QUEUE_IN_PUMA=true -a "$PROD_APP"
+fi

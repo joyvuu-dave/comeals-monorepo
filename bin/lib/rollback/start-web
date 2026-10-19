@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# The Rollback workflow's "Start the web dyno" step
+# (.github/workflows/rollback.yml). Scales web back to what it was and
+# waits until that many web dynos are up.
+#
+# Reads APP and WEB_COUNT.
+set -euo pipefail
+. "$(dirname "$0")/../json.sh"
+
+heroku ps:scale "web=$WEB_COUNT" -a "$APP"
+# Turn maintenance off only when the web dynos are up, so the
+# smoke test does not meet a dyno that is still booting.
+tries=0
+while :; do
+  up=$(heroku ps -a "$APP" --json | json "sum(1 for p in d if p['type'] == 'web' and p['state'] == 'up')")
+  if [ "$up" -ge "$WEB_COUNT" ]; then
+    break
+  fi
+  tries=$((tries + 1))
+  if [ "$tries" -ge 36 ]; then
+    echo "Web was scaled to $WEB_COUNT, but only $up web dyno(s) are up after 3 minutes."
+    exit 1
+  fi
+  sleep 5
+done
+echo "$WEB_COUNT web dyno(s) up."

@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# The Deploy workflow's "Ping healthchecks" step
+# (.github/workflows/deploy.yml). Success pings the healthchecks.io URL
+# and anything else pings /fail. A failed ping does not fail the run.
+#
+# Reads HC_URL (empty: no ping) and JOB_STATUS (the job's status).
+set -eo pipefail
+
+[ -z "$HC_URL" ] && exit 0
+if [ "$JOB_STATUS" = "success" ]; then
+  curl -fsS -m 10 --retry 3 "$HC_URL" >/dev/null || true
+else
+  curl -fsS -m 10 --retry 3 "$HC_URL/fail" >/dev/null || true
+fi

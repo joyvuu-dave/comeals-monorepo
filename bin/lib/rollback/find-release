@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# The Rollback workflow's "Find the release to go back to" step
+# (.github/workflows/rollback.yml). It finds the release to go back to
+# and the commits of that release and of the running one, and changes
+# nothing.
+#
+# Reads APP, RELEASE (empty = the release before the current one) and
+# HEROKU_API_KEY. Writes url, target, target_sha and bad_sha to
+# $GITHUB_OUTPUT.
+set -euo pipefail
+. "$(dirname "$0")/../json.sh"
+
+case "$APP" in
+  comeals-monorepo) echo "url=https://comeals.com" >> "$GITHUB_OUTPUT" ;;
+  comeals-staging) echo "url=https://comeals-staging-ad51b8a1eb64.herokuapp.com" >> "$GITHUB_OUTPUT" ;;
+esac
+api() { curl -sf -H "Accept: application/vnd.heroku+json; version=3" -H "Authorization: Bearer $HEROKU_API_KEY" "$@"; }
+releases=$(api -H "Range: version ..; order=desc, max=2" "https://api.heroku.com/apps/$APP/releases")
+if [ -n "$RELEASE" ]; then
+  target="${RELEASE#v}"
+else
+  # What `heroku rollback` with no release goes back to.
+  target=$(echo "$releases" | json "d[1]['version']")
+fi
+slug=$(api "https://api.heroku.com/apps/$APP/releases/$target" | json "d['slug']['id']")
+target_sha=$(api "https://api.heroku.com/apps/$APP/slugs/$slug" | json "d['commit']")
+bad_sha=$(heroku config:get HEROKU_SLUG_COMMIT -a "$APP")
+echo "$APP runs ${bad_sha:-an unknown commit}; v$target runs $target_sha."
+# Checked here, before any step changes production. The Roll back
+# step checks again that the running commit changed, but by then
+# a backup may already be restored, and a wrong target would leave
+# the restored database under the new code.
+if [ -z "$bad_sha" ] || [ -z "$target_sha" ] || [ "$target_sha" = "None" ]; then
+  echo "Could not read the commit of the running release or of v$target, so nothing was changed."
+  exit 1
+fi
+if [ "$target_sha" = "$bad_sha" ]; then
+  echo "v$target runs the same commit as $APP runs now, so rolling back to it would change"
+  echo "nothing. Nothing was changed. Run this again with the release $APP ran before the"
+  echo "deploy (heroku releases -a $APP)."
+  exit 1
+fi
+echo "target=v$target" >> "$GITHUB_OUTPUT"
+echo "target_sha=$target_sha" >> "$GITHUB_OUTPUT"
+echo "bad_sha=$bad_sha" >> "$GITHUB_OUTPUT"

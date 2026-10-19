@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+# The Deploy workflow's "Write the release note" step
+# (.github/workflows/deploy.yml). The release note: commit messages
+# between the live sha and the candidate, turned into plain language by
+# Claude. If the call fails, fall back to the raw commit list: the note
+# is packaging, not verification, and must not cost a deploy day.
+#
+# Reads LIVE, CANDIDATE, PROD_APP, STAGING_APP and ANTHROPIC_API_KEY
+# (read by claude). Writes commits.txt, prompt.txt and note.md in the
+# current folder, and tag to $GITHUB_OUTPUT.
+set -euo pipefail
+. "$(dirname "$0")/../json.sh"
+
+# What Claude is asked, with the commits at the end.
+prompt() {
+  echo "Below are the commit messages going into today's deploy of Comeals,"
+  echo "a meal signup app for a co-housing community. Write a short release"
+  echo "note for community members and the developer. Plain, simple language;"
+  echo "short sentences; no idioms. Three sections: What changed (grouped,"
+  echo "user-visible things first), What you will see (only if anything is"
+  echo "visible; say 'Nothing looks different.' if not), How to undo (one"
+  echo "line: to undo this release, run the Rollback workflow on the"
+  echo "repo's GitHub Actions page with a one-line reason; it rolls"
+  echo "production back and pauses future deploys; if a commit adds a file"
+  echo "under db/migrate, add that it also needs the backup taken before"
+  echo "the deploy, as docs/runbooks/undo-a-deploy.md says). Do not invent"
+  echo "anything not in the commits. Output only the note, in Markdown,"
+  echo "with no code fences around it."
+  echo "Some fixes are described across several commits: one commit names a"
+  echo "bug people saw, another commit fixes it without naming it. Connect"
+  echo "those and report the fix once, in user terms, under What changed."
+  if [ -n "$platform_facts" ]; then
+    echo "One more known fact that is not in the commits: $platform_facts"
+    echo "Report it under What changed, in one sentence."
+  fi
+  echo
+  cat commits.txt
+}
+
+# The note when Claude cannot write one: the commit list.
+commit_list_note() {
+  echo "Automatically generated commit list (note generator was unavailable):"
+  echo
+  if [ -n "$platform_facts" ]; then
+    echo "$platform_facts"
+    echo
+  fi
+  cat commits.txt
+}
+
+# Said at the end of a note that was cut.
+cut_notice() {
+  echo
+  echo
+  echo "(The note was longer than GitHub allows in a release body, so it"
+  echo "ends here. The full commit list: git log $live..$candidate)"
+}
+
+live="$LIVE"
+candidate="$CANDIDATE"
+git log --reverse --format='- %s%n%w(0,2,2)%b' "$live..$candidate" > commits.txt
+# Platform fact: a stack change lives in Heroku, not in git,
+# so no commit describes it. stack = what production runs
+# now; build_stack = what the next build will use. Staging
+# builds the slug that gets promoted, so staging's
+# build_stack is what this release will run on. A difference
+# means this deploy also moves the app to a new base image.
+# The probes tolerate failure ("|| true") for the same reason
+# the Claude call does: the note is packaging, and a broken
+# probe must not cost a deploy day.
+prod_stack=$(heroku apps:info -a "$PROD_APP" --json | json "d['app']['stack']['name']" || true)
+next_stack=$(heroku apps:info -a "$STAGING_APP" --json | json "d['app']['build_stack']['name']" || true)
+platform_facts=""
+if [ -n "$prod_stack" ] && [ -n "$next_stack" ] && [ "$prod_stack" != "$next_stack" ]; then
+  platform_facts="This deploy also moves the app from the $prod_stack base image to $next_stack (the operating system image Heroku runs the app on)."
+  echo "Stack change detected: $prod_stack -> $next_stack"
+fi
+npm install -g @anthropic-ai/claude-code >/dev/null 2>&1
+prompt > prompt.txt
+# The prompt goes in on stdin. Passing it as an argument broke
+# on 2026-08-17: 217 commits made the prompt bigger than the
+# 128 KiB Linux allows for one argument.
+if claude -p < prompt.txt > note.md 2>claude.err && [ -s note.md ]; then
+  # Despite the prompt, the model sometimes wraps the whole note
+  # in a ```markdown fence; GitHub then shows the markdown as
+  # literal text. Strip a wrapping fence if there is one.
+  if head -1 note.md | grep -q '^```'; then
+    tail -n +2 note.md > note.unfenced
+    if [ "$(tail -1 note.unfenced)" = '```' ]; then
+      sed '$d' note.unfenced > note.md
+    else
+      mv note.unfenced note.md
+    fi
+  fi
+  echo "Note written by Claude."
+else
+  echo "Claude call failed — falling back to the commit list." >&2
+  cat claude.err >&2 || true
+  commit_list_note > note.md
+fi
+# GitHub refuses a release body over 125,000 characters. A long
+# fallback commit list can pass that, so cut the note and say so.
+if [ "$(wc -c < note.md)" -gt 120000 ]; then
+  head -c 120000 note.md > note.cut
+  cut_notice >> note.cut
+  mv note.cut note.md
+fi
+tag="deploy-$(date -u +%Y%m%d-%H%M)"
+echo "tag=$tag" >> "$GITHUB_OUTPUT"

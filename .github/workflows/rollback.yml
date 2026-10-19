@@ -84,63 +84,14 @@ jobs:
 
       - name: Find the release to go back to
         id: find
-        run: |
-          set -euo pipefail
-          case "$APP" in
-            comeals-monorepo) echo "url=https://comeals.com" >> "$GITHUB_OUTPUT" ;;
-            comeals-staging) echo "url=https://comeals-staging-ad51b8a1eb64.herokuapp.com" >> "$GITHUB_OUTPUT" ;;
-          esac
-          api() {
-            curl -sf -H "Accept: application/vnd.heroku+json; version=3" \
-              -H "Authorization: Bearer $HEROKU_API_KEY" "$@"
-          }
-          releases=$(api -H "Range: version ..; order=desc, max=2" "https://api.heroku.com/apps/$APP/releases")
-          if [ -n "$RELEASE" ]; then
-            target="${RELEASE#v}"
-          else
-            # What `heroku rollback` with no release goes back to.
-            target=$(echo "$releases" | python3 -c "import json,sys; print(json.load(sys.stdin)[1]['version'])")
-          fi
-          slug=$(api "https://api.heroku.com/apps/$APP/releases/$target" \
-            | python3 -c "import json,sys; print(json.load(sys.stdin)['slug']['id'])")
-          target_sha=$(api "https://api.heroku.com/apps/$APP/slugs/$slug" \
-            | python3 -c "import json,sys; print(json.load(sys.stdin)['commit'])")
-          bad_sha=$(heroku config:get HEROKU_SLUG_COMMIT -a "$APP")
-          echo "$APP runs ${bad_sha:-an unknown commit}; v$target runs $target_sha."
-          # Checked here, before any step changes production. The Roll back
-          # step checks again that the running commit changed, but by then
-          # a backup may already be restored, and a wrong target would leave
-          # the restored database under the new code.
-          if [ -z "$bad_sha" ] || [ -z "$target_sha" ] || [ "$target_sha" = "None" ]; then
-            echo "Could not read the commit of the running release or of v$target, so nothing was changed."
-            exit 1
-          fi
-          if [ "$target_sha" = "$bad_sha" ]; then
-            echo "v$target runs the same commit as $APP runs now, so rolling back to it would change"
-            echo "nothing. Nothing was changed. Run this again with the release $APP ran before the"
-            echo "deploy (heroku releases -a $APP)."
-            exit 1
-          fi
-          echo "target=v$target" >> "$GITHUB_OUTPUT"
-          echo "target_sha=$target_sha" >> "$GITHUB_OUTPUT"
-          echo "bad_sha=$bad_sha" >> "$GITHUB_OUTPUT"
+        run: bin/lib/rollback/find-release
 
       - name: Check the migrations
-        run: |
-          set -euo pipefail
-          if bin/rollback-check "${{ steps.find.outputs.target_sha }}" "${{ steps.find.outputs.bad_sha }}"; then
-            exit 0
-          fi
-          if [ -n "$BACKUP" ]; then
-            echo "Backup $BACKUP is restored first, so the old code gets the database it was written for."
-          elif [ "${{ inputs.code_only_is_safe }}" = "true" ]; then
-            echo "Told that the old code runs beside every migration above: rolling back only the code."
-          else
-            echo "Refusing to roll back only the code. Run this again with the backup taken before"
-            echo "the deploy (heroku pg:backups -a $APP), or with code_only_is_safe once every"
-            echo "migration above is checked. See docs/runbooks/undo-a-deploy.md."
-            exit 1
-          fi
+        env:
+          TARGET_SHA: ${{ steps.find.outputs.target_sha }}
+          BAD_SHA: ${{ steps.find.outputs.bad_sha }}
+          CODE_ONLY_IS_SAFE: ${{ inputs.code_only_is_safe }}
+        run: bin/lib/rollback/check-migrations
 
       # Maintenance from before the restore until the old code serves, so
       # nobody writes to the restored database through the new code.
@@ -152,104 +103,21 @@ jobs:
       - name: Stop the web dyno and restore the backup
         id: restore
         if: inputs.backup != ''
-        run: |
-          set -euo pipefail
-          api() {
-            curl -sf -H "Accept: application/vnd.heroku+json; version=3" \
-              -H "Authorization: Bearer $HEROKU_API_KEY" "$@"
-          }
-          heroku maintenance:on -a "$APP"
-          # The database as the new code left it, so the writes the restore
-          # takes away can still be read afterwards.
-          heroku pg:backups:capture -a "$APP"
-          # How many web dynos to start again after the rollback.
-          web_count=$(api "https://api.heroku.com/apps/$APP/formation/web" \
-            | python3 -c "import json,sys; print(json.load(sys.stdin)['quantity'])")
-          echo "web_count=$web_count" >> "$GITHUB_OUTPUT"
-          echo "$APP runs $web_count web dyno(s). Scaling web to 0."
-          heroku ps:scale web=0 -a "$APP"
-          # A dyno takes up to 30 seconds to stop after ps:scale returns.
-          # Restore only when no web dyno runs, so no job is still running.
-          tries=0
-          while :; do
-            running=$(heroku ps -a "$APP" --json \
-              | python3 -c "import json,sys; print(sum(1 for d in json.load(sys.stdin) if d['type'] == 'web'))")
-            if [ "$running" = "0" ]; then
-              break
-            fi
-            tries=$((tries + 1))
-            if [ "$tries" -ge 36 ]; then
-              echo "A web dyno still runs 3 minutes after web was scaled to 0, so the backup was not restored."
-              exit 1
-            fi
-            sleep 5
-          done
-          echo "No web dyno runs. Restoring $BACKUP."
-          heroku pg:backups:restore "$BACKUP" DATABASE_URL -a "$APP" --confirm "$APP"
+        run: bin/lib/rollback/restore-backup
 
       - name: Roll back
         id: roll
-        run: |
-          set -euo pipefail
-          bad_sha="${{ steps.find.outputs.bad_sha }}"
-          heroku rollback "${{ steps.find.outputs.target }}" -a "$APP"
-          # A rollback makes a new release, and Heroku runs the release
-          # phase for it (rake deploy:verify_config db:migrate of the old
-          # code) in a one-off dyno, whatever the web formation is. If it
-          # fails, the release fails and the app keeps the new code. Wait
-          # for it, and stop before web is started again.
-          tries=0
-          while :; do
-            status=$(heroku releases -a "$APP" --json \
-              | python3 -c "import json,sys; print(json.load(sys.stdin)[0]['status'])")
-            if [ "$status" != "pending" ]; then
-              break
-            fi
-            tries=$((tries + 1))
-            if [ "$tries" -ge 36 ]; then
-              break
-            fi
-            sleep 5
-          done
-          if [ "$status" != "succeeded" ]; then
-            echo "The release phase of the rollback did not succeed (status: $status). Its output:"
-            heroku releases:output -a "$APP" | tail -30 || true
-            exit 1
-          fi
-          live_sha=$(heroku config:get HEROKU_SLUG_COMMIT -a "$APP")
-          echo "bad_sha=$bad_sha" >> "$GITHUB_OUTPUT"
-          echo "live_sha=$live_sha" >> "$GITHUB_OUTPUT"
-          if [ "$live_sha" = "$bad_sha" ]; then
-            echo "Rollback did not change the running slug."
-            exit 1
-          fi
-          echo "$APP now runs $live_sha."
+        env:
+          TARGET: ${{ steps.find.outputs.target }}
+          BAD_SHA: ${{ steps.find.outputs.bad_sha }}
+        run: bin/lib/rollback/roll-back
 
       - name: Start the web dyno
         id: start
         if: inputs.backup != ''
         env:
           WEB_COUNT: ${{ steps.restore.outputs.web_count }}
-        run: |
-          set -euo pipefail
-          heroku ps:scale "web=$WEB_COUNT" -a "$APP"
-          # Turn maintenance off only when the web dynos are up, so the
-          # smoke test does not meet a dyno that is still booting.
-          tries=0
-          while :; do
-            up=$(heroku ps -a "$APP" --json \
-              | python3 -c "import json,sys; print(sum(1 for d in json.load(sys.stdin) if d['type'] == 'web' and d['state'] == 'up'))")
-            if [ "$up" -ge "$WEB_COUNT" ]; then
-              break
-            fi
-            tries=$((tries + 1))
-            if [ "$tries" -ge 36 ]; then
-              echo "Web was scaled to $WEB_COUNT, but only $up web dyno(s) are up after 3 minutes."
-              exit 1
-            fi
-            sleep 5
-          done
-          echo "$WEB_COUNT web dyno(s) up."
+        run: bin/lib/rollback/start-web
 
       - name: End maintenance
         if: inputs.backup != ''
@@ -268,36 +136,7 @@ jobs:
           WEB_COUNT: ${{ steps.restore.outputs.web_count }}
           TARGET: ${{ steps.find.outputs.target }}
           URL: ${{ steps.find.outputs.url }}
-        run: |
-          count="${WEB_COUNT:-1}"
-          echo "The undo stopped part way (see docs/runbooks/undo-a-deploy.md, \"If it stops half way\")."
-          if [ "$START" = "success" ]; then
-            echo "The backup is restored, the old code runs, and web is up. Only maintenance mode"
-            echo "may still be on. Run:"
-            echo "  heroku maintenance:off -a $APP"
-            echo "  bin/smoke $URL"
-            exit 0
-          fi
-          echo "Maintenance mode is on. Web may be at 0: then no dyno runs and no job runs."
-          echo "That is safe; nobody can write. This step did not start web again."
-          echo "Do not start web until the old code runs: the new code's jobs would run on the"
-          echo "restored database. Check with: heroku ps -a $APP; heroku releases -a $APP"
-          if [ "$RESTORE" != "success" ]; then
-            echo "The step that stops web and restores the backup failed, so the database may or"
-            echo "may not be restored. Check that a backup of the database as it was got captured"
-            echo "(heroku pg:backups -a $APP), capture one if not, then run:"
-            echo "  heroku ps:scale web=0 -a $APP"
-            echo "  heroku pg:backups:restore $BACKUP DATABASE_URL -a $APP --confirm $APP"
-            echo "  heroku rollback $TARGET -a $APP"
-          elif [ "$ROLL" != "success" ]; then
-            echo "The backup is restored, but the old code may not run yet. If heroku releases"
-            echo "shows the rollback to $TARGET as failed or missing, run:"
-            echo "  heroku rollback $TARGET -a $APP"
-          fi
-          echo "Then, once heroku releases shows the rollback to $TARGET succeeded:"
-          echo "  heroku ps:scale web=$count -a $APP"
-          echo "  heroku maintenance:off -a $APP"
-          echo "  bin/smoke $URL"
+        run: bin/lib/rollback/say-what-to-do
 
       - name: Set up Node and browsers for the smoke test
         uses: actions/setup-node@v6
@@ -327,43 +166,13 @@ jobs:
         if: inputs.app == 'comeals-monorepo'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          bad_sha="${{ steps.roll.outputs.bad_sha }}"
-          tag=""
-          for t in $(gh release list --limit 20 --json tagName --jq '.[].tagName'); do
-            # The commits API resolves a tag name to its commit whether
-            # the tag is lightweight or annotated.
-            sha=$(gh api "repos/{owner}/{repo}/commits/$t" --jq '.sha' 2>/dev/null || true)
-            if [ "$sha" = "$bad_sha" ]; then tag="$t"; break; fi
-          done
-          if [ -z "$tag" ]; then
-            echo "No GitHub release points at $bad_sha — nothing to mark."
-            exit 0
-          fi
-          gh release view "$tag" --json body --jq '.body' > body.md
-          {
-            echo "> **Rolled back on $(date -u +%Y-%m-%d)** — $REASON"
-            echo
-            cat body.md
-          } > new_body.md
-          gh release edit "$tag" --notes-file new_body.md
-          echo "Marked release $tag as rolled back."
+          BAD_SHA: ${{ steps.roll.outputs.bad_sha }}
+        run: bin/lib/rollback/mark-release-notes
 
       - name: File the follow-up issue
         if: inputs.app == 'comeals-monorepo'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          gh issue create \
-            --title "Production rolled back: $REASON" \
-            --body "Production was rolled back from \`${{ steps.roll.outputs.bad_sha }}\` to \`${{ steps.roll.outputs.live_sha }}\` on $(date -u +%Y-%m-%d).
-
-          Reason: $REASON
-
-          The Heroku rollback is only the mitigation — main still contains the change. Until it is fixed, the \`DEPLOY_HOLD\` repository variable blocks the daily deploy.
-
-          - [ ] Fix main (usually \`git revert\` of the offending change)
-          - [ ] Wait for CI to go green on the fix
-          - [ ] Clear the hold: \`gh variable delete DEPLOY_HOLD\`
-          - [ ] Check whether the bad version wrote data that needs correcting entries"
+          BAD_SHA: ${{ steps.roll.outputs.bad_sha }}
+          LIVE_SHA: ${{ steps.roll.outputs.live_sha }}
+        run: bin/lib/rollback/file-issue

@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# The Rollback workflow's "Roll back" step (.github/workflows/rollback.yml).
+# Runs heroku rollback, waits for the release phase of the new release,
+# and checks that the running commit changed.
+#
+# Reads APP, TARGET (a release, e.g. v612) and BAD_SHA (the commit that
+# ran before). Writes bad_sha and live_sha to $GITHUB_OUTPUT.
+set -euo pipefail
+. "$(dirname "$0")/../json.sh"
+
+bad_sha="$BAD_SHA"
+heroku rollback "$TARGET" -a "$APP"
+# A rollback makes a new release, and Heroku runs the release
+# phase for it (rake deploy:verify_config db:migrate of the old
+# code) in a one-off dyno, whatever the web formation is. If it
+# fails, the release fails and the app keeps the new code. Wait
+# for it, and stop before web is started again.
+tries=0
+while :; do
+  status=$(heroku releases -a "$APP" --json | json "d[0]['status']")
+  if [ "$status" != "pending" ]; then
+    break
+  fi
+  tries=$((tries + 1))
+  if [ "$tries" -ge 36 ]; then
+    break
+  fi
+  sleep 5
+done
+if [ "$status" != "succeeded" ]; then
+  echo "The release phase of the rollback did not succeed (status: $status). Its output:"
+  heroku releases:output -a "$APP" | tail -30 || true
+  exit 1
+fi
+live_sha=$(heroku config:get HEROKU_SLUG_COMMIT -a "$APP")
+echo "bad_sha=$bad_sha" >> "$GITHUB_OUTPUT"
+echo "live_sha=$live_sha" >> "$GITHUB_OUTPUT"
+if [ "$live_sha" = "$bad_sha" ]; then
+  echo "Rollback did not change the running slug."
+  exit 1
+fi
+echo "$APP now runs $live_sha."

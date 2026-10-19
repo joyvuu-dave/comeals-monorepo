@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# The Rollback workflow's "File the follow-up issue" step
+# (.github/workflows/rollback.yml). Files the issue that holds the
+# reason and the steps that clear DEPLOY_HOLD.
+#
+# Reads REASON, BAD_SHA and LIVE_SHA.
+set -eo pipefail
+
+gh issue create \
+  --title "Production rolled back: $REASON" \
+  --body "Production was rolled back from \`$BAD_SHA\` to \`$LIVE_SHA\` on $(date -u +%Y-%m-%d).
+
+Reason: $REASON
+
+The Heroku rollback is only the mitigation — main still contains the change. Until it is fixed, the \`DEPLOY_HOLD\` repository variable blocks the daily deploy.
+
+- [ ] Fix main (usually \`git revert\` of the offending change)
+- [ ] Wait for CI to go green on the fix
+- [ ] Clear the hold: \`gh variable delete DEPLOY_HOLD\`
+- [ ] Check whether the bad version wrote data that needs correcting entries"

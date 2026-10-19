@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# The Deploy workflow's "Watch production" step
+# (.github/workflows/deploy.yml). Waits until production serves the
+# candidate, smokes it, asks whether Solid Queue came up, and watches
+# the logs for three minutes. On a failure it rolls back only the code,
+# and only when the release ran no migration.
+#
+# Reads CANDIDATE, PREVIOUS and STARTED (from the promote step),
+# PROD_APP and PROD_URL. Run from the repository root.
+set -euo pipefail
+. "$(dirname "$0")/../json.sh"
+
+# The log lines logged at or after $1 (UTC, as 2026-10-19T12:00:00).
+# Heroku log lines start with a UTC timestamp; compare as strings.
+lines_since() { awk -v since="$1" '$1 >= since'; }
+
+# The lines that fail the soak.
+worrying_lines() { grep -iE "FATAL|status=5[0-9][0-9]| ERROR |Exception"; }
+
+candidate="$CANDIDATE"
+# Rolls back only the code, and only when the release ran no
+# migration: the old code may not run on what a migration made
+# (#133). Otherwise production stays as it is, the run fails,
+# and a person follows docs/runbooks/undo-a-deploy.md.
+roll_back() {
+  if bin/rollback-check "$PREVIOUS" "$candidate"; then
+    heroku rollback -a "$PROD_APP"
+  else
+    echo "Not rolling back only the code. Follow docs/runbooks/undo-a-deploy.md."
+  fi
+}
+# Wait for the release (including its migration) to finish.
+live=""
+for _ in $(seq 1 60); do
+  live=$(curl -sf "$PROD_URL/api/v1/version" | json "d.get('commit') or ''" || true)
+  [ "$live" = "$candidate" ] && break
+  sleep 5
+done
+if [ "$live" != "$candidate" ]; then
+  echo "Production never started serving $candidate (still $live)."
+  # A release phase that failed (a refused deploy:verify_config,
+  # a migration error) shows here as a failed release.
+  heroku releases -a "$PROD_APP" -n 3 || true
+  # Only roll back if the new release actually became current.
+  # If the promote's release phase failed, production never
+  # moved, and a rollback would undo the previous GOOD release.
+  current=$(heroku config:get HEROKU_SLUG_COMMIT -a "$PROD_APP")
+  if [ "$current" = "$candidate" ]; then
+    echo "The slug is current but not serving — rolling back."
+    roll_back
+  else
+    echo "Production still runs the old release — nothing to roll back."
+  fi
+  exit 1
+fi
+echo "Production serves the candidate."
+if ! bin/smoke "$PROD_URL"; then
+  echo "Smoke failed on production. Rolling back."
+  roll_back
+  exit 1
+fi
+# Live updates and the nightly jobs run in Solid Queue, whose
+# supervisor starts with the dyno. The release phase already
+# refused a deploy without its config vars
+# (deploy:verify_config); this asks the app whether every
+# process kind then really came up. The old release does not
+# need the supervisor, so rolling back restores live updates.
+if ! heroku run --exit-code bin/rake deploy:verify_solid_queue -a "$PROD_APP"; then
+  echo "Solid Queue is not running on production. Rolling back."
+  roll_back
+  exit 1
+fi
+# The soak: watch the logs for a few minutes of real traffic.
+sleep 180
+# Only lines logged after the promote began — the last 1500
+# lines would include pre-deploy noise, and a stale error must
+# not trigger a rollback of a healthy release.
+hits=$(heroku logs -n 1500 -a "$PROD_APP" | lines_since "$STARTED" | worrying_lines || true)
+if [ -n "$hits" ]; then
+  echo "Worrying production log lines after the deploy:"
+  echo "$hits" | head -20
+  echo "Rolling back."
+  roll_back
+  exit 1
+fi
+echo "No worrying lines in the production logs."

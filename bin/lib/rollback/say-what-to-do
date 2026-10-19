@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# The Rollback workflow's "Say what to do by hand" step
+# (.github/workflows/rollback.yml). It runs when an undo with a backup
+# stopped part way, says which state production is in, and prints the
+# commands to run by hand. It changes nothing.
+#
+# Reads RESTORE, ROLL and START (the outcomes of those steps), WEB_COUNT,
+# TARGET, URL, APP and BACKUP.
+# -eo pipefail, not -euo: a step's own shell on GitHub has no -u, and
+# WEB_COUNT is empty when the restore step stopped before it set it.
+set -eo pipefail
+
+count="${WEB_COUNT:-1}"
+echo "The undo stopped part way (see docs/runbooks/undo-a-deploy.md, \"If it stops half way\")."
+if [ "$START" = "success" ]; then
+  echo "The backup is restored, the old code runs, and web is up. Only maintenance mode"
+  echo "may still be on. Run:"
+  echo "  heroku maintenance:off -a $APP"
+  echo "  bin/smoke $URL"
+  exit 0
+fi
+echo "Maintenance mode is on. Web may be at 0: then no dyno runs and no job runs."
+echo "That is safe; nobody can write. This step did not start web again."
+echo "Do not start web until the old code runs: the new code's jobs would run on the"
+echo "restored database. Check with: heroku ps -a $APP; heroku releases -a $APP"
+if [ "$RESTORE" != "success" ]; then
+  echo "The step that stops web and restores the backup failed, so the database may or"
+  echo "may not be restored. Check that a backup of the database as it was got captured"
+  echo "(heroku pg:backups -a $APP), capture one if not, then run:"
+  echo "  heroku ps:scale web=0 -a $APP"
+  echo "  heroku pg:backups:restore $BACKUP DATABASE_URL -a $APP --confirm $APP"
+  echo "  heroku rollback $TARGET -a $APP"
+elif [ "$ROLL" != "success" ]; then
+  echo "The backup is restored, but the old code may not run yet. If heroku releases"
+  echo "shows the rollback to $TARGET as failed or missing, run:"
+  echo "  heroku rollback $TARGET -a $APP"
+fi
+echo "Then, once heroku releases shows the rollback to $TARGET succeeded:"
+echo "  heroku ps:scale web=$count -a $APP"
+echo "  heroku maintenance:off -a $APP"
+echo "  bin/smoke $URL"
