@@ -67,11 +67,12 @@ namespace :test do
 
     puts "==> #{clients} clients for #{seconds}s against #{url} (seed #{seed})"
     result = Storm::Run.call(plan: plan, transport: transport, clients: clients, seconds: seconds, seed: seed)
-    connections.each_value(&:finish)
 
     problems = result.requests.filter_map { |e| e.problem && "client #{e.client} ##{e.n} #{e.action}: #{e.problem}" }
     problems += result.problems
     problems += Storm::Checks.call(plan: plan, transport: transport)
+    # After the checks: they send requests too, on a connection of their own.
+    connections.each_value(&:finish)
 
     puts "requests: #{result.requests.size}, meal writes: #{result.meal_write_attempts} " \
          "from #{result.clients_that_wrote} clients, ok writes: #{result.ok_writes} " \
