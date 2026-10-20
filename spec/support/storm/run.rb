@@ -72,6 +72,11 @@ module Storm
     end
 
     JOBS = [RefreshBalancesJob, VerifyLedgerJob, EnsureRotationsJob].freeze
+    # With a real Solid Queue (bin/storm, STORM_SOLID_QUEUE=1) the job
+    # loop also queues these, so a run waits on the job's
+    # limits_concurrency semaphore and the worker runs it beside the
+    # scheduler's run of the same job.
+    QUEUED_JOBS = (JOBS + [SendMissedSettlementMailJob]).freeze
 
     # What an unlocked admin write may end in, besides success: a rule, a
     # unique index, a guard, the settled-meal trigger, a conflict, or a
@@ -88,8 +93,9 @@ module Storm
       new(**).call
     end
 
-    def initialize(plan:, transport:, clients:, seconds:, seed:)
+    def initialize(plan:, transport:, clients:, seconds:, seed:, queue_jobs: false) # rubocop:disable Metrics/ParameterLists -- all keywords, each one a storm setting
       @plan = plan
+      @queue_jobs = queue_jobs
       @transport = transport
       @clients = clients
       @seconds = seconds
@@ -153,13 +159,34 @@ module Storm
       :error
     end
 
+    # Both runs every job here and, with a real Solid Queue, queues it.
+    # They press on different things. A run here does not take the
+    # job's semaphore, so it overlaps the worker's run of the same job,
+    # as a person running a job by hand while the worker runs it would.
+    # The queued one goes through the semaphore, the blocked list and the
+    # worker, beside the scheduler queueing the same job.
     def job_loop
       while running?
         JOBS.each do |job|
           @log << [:job, run_job(job), job.name]
           sleep(0.2)
         end
+        QUEUED_JOBS.each { |job| @log << [:queued_job, queue_job(job), job.name] } if @queue_jobs
       end
+    end
+
+    # A queue refused for a conflict is tried again, the way LiveUpdate
+    # queues a push. One that is still refused after the tries is a
+    # problem: in the app, that is a push or a mail that never goes out.
+    def queue_job(job)
+      queued = Rails.application.executor.wrap { RetryOnConflict.call { job.perform_later } }
+      return :ok if queued
+
+      @problems << "queueing #{job.name}: the adapter refused it"
+      :error
+    rescue StandardError => e
+      @problems << "queueing #{job.name}: #{e.class}: #{e.message[0, 300]}"
+      :error
     end
 
     # The way Solid Queue runs a job: through execute, which wraps the

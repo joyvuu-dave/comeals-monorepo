@@ -27,6 +27,25 @@ set -euo pipefail
 # tmp/storm_latency.json under the run's shape, and prints the change
 # since the last run of that shape.
 #
+# STORM_SOLID_QUEUE=1 runs the jobs the way production does: the server
+# and the storm task queue them in Solid Queue in the test database, and
+# the storm task starts a real `bin/jobs --mode async` with a pool of 12
+# beside the server (its log: tmp/storm_jobs.log). Its own job loop
+# queues the nightly jobs as well as running them, the schedule runs
+# every task every few seconds (spec/support/storm/recurring.yml), and the
+# checks after the storm look at the queue too: drained, no failed job,
+# no job claimed by a process that is gone, no late heartbeat, no error
+# in the jobs log, the jobs process still alive. More knobs:
+#
+#   STORM_SOLID_QUEUE=1 STORM_SQ_HEARTBEAT=1 bin/storm   # beat every second (production: 60)
+#   STORM_SQ_EVERY=7       every recurring task every 7 s (the least)
+#   STORM_JOBS_PROCESSES=2 two bin/jobs, as during a deploy's overlap
+#   STORM_SQ_POLL=0.1      the dispatcher's and the worker's poll (production: 5)
+#
+# Every process writes what it reports through Rails.error to
+# tmp/storm_errors.log, and the storm fails on a report that is not a
+# conflict, or on a job that could not be queued after its retries.
+#
 # Every server thread needs a database connection, plus one for
 # solid_cache's trim thread; STORM_POOL defaults to threads + 2. Setting it
 # below threads + 1 no longer starves the server, it stops it booting:
@@ -45,7 +64,15 @@ PORT="${STORM_PORT:-${TEST_PORT_INTEGRATION:-$(sed -n 's/^TEST_PORT_INTEGRATION=
 PORT="${PORT:-3001}"
 TEST_DB="comeals_test$(sed -n 's/^TEST_DB_SUFFIX=//p' .env 2>/dev/null || true)"
 SERVER_LOG="tmp/storm_server.log"
+ERROR_LOG="tmp/storm_errors.log"
+JOBS_LOG="tmp/storm_jobs.log"
 RAILS_PID=""
+QUEUE_NOTE=""
+QUEUE_ENV=()
+if [ -n "${STORM_SOLID_QUEUE:-}" ]; then
+  QUEUE_NOTE=", jobs in Solid Queue"
+  QUEUE_ENV=(INTEGRATION_SERVER_QUEUE=solid_queue)
+fi
 
 cleanup() {
   if [ -n "$RAILS_PID" ]; then
@@ -54,8 +81,16 @@ cleanup() {
     kill "$RAILS_PID" 2>/dev/null || true
     wait "$RAILS_PID" 2>/dev/null || true
   fi
+  # The storm task stops the jobs processes it started. This is for a
+  # task that was killed before it could.
+  if [ -f tmp/storm_jobs.pid ]; then
+    for pid in $(cat tmp/storm_jobs.pid); do
+      if ps -o command= -p "$pid" 2>/dev/null | grep -q 'bin/jobs'; then kill "$pid" 2>/dev/null || true; fi
+    done
+  fi
   echo "Resetting test database..."
-  psql -q -d "$TEST_DB" -c "TRUNCATE communities, ledger_check_runs, job_runs CASCADE" 2>/dev/null || true
+  psql -q -d "$TEST_DB" -c "TRUNCATE communities, ledger_check_runs, job_runs, solid_queue_jobs, \
+solid_queue_processes, solid_queue_semaphores, solid_queue_recurring_tasks CASCADE" 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -68,7 +103,9 @@ if lsof -tiTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "==> Starting Puma on port $PORT: $THREADS threads x $WORKERS workers, pool $POOL"
+mkdir -p tmp
+: >"$ERROR_LOG"
+echo "==> Starting Puma on port $PORT: $THREADS threads x $WORKERS workers, pool $POOL$QUEUE_NOTE"
 # The variables are in a list so that the command fits on one line:
 # bashcov cannot tell that the lines of a command split with backslashes
 # ran when its last line has a & in it. env replaces itself with the
@@ -76,6 +113,7 @@ echo "==> Starting Puma on port $PORT: $THREADS threads x $WORKERS workers, pool
 server_env=(
   RAILS_ENV=test INTEGRATION_SERVER=1 INTEGRATION_SERVER_CACHE=solid
   RAILS_MAX_THREADS="$THREADS" WEB_CONCURRENCY="$WORKERS" RAILS_DB_POOL="$POOL"
+  STORM_ERROR_LOG="$ERROR_LOG" "${QUEUE_ENV[@]}"
 )
 env "${server_env[@]}" bundle exec rails server -p "$PORT" &>"$SERVER_LOG" &
 RAILS_PID=$!
@@ -104,12 +142,20 @@ echo ""
 # `|| STATUS=$?` keeps a failed storm from ending the script here under
 # set -e, so the server log below is printed after a failure too.
 STATUS=0
-STORM_URL="http://localhost:$PORT" RAILS_ENV=test bundle exec rake test:storm || STATUS=$?
+storm_env=(STORM_URL="http://localhost:$PORT" RAILS_ENV=test STORM_ERROR_LOG="$ERROR_LOG" "${QUEUE_ENV[@]}")
+env "${storm_env[@]}" bundle exec rake test:storm || STATUS=$?
 
 echo ""
 echo "==> Server log: $SERVER_LOG"
 if grep -qE 'Error|error' "$SERVER_LOG"; then
   echo "    lines with 'error' in the server log:"
-  grep -nE 'Error|error' "$SERVER_LOG" | head -20
+  grep -m 20 -nE 'Error|error' "$SERVER_LOG"
+fi
+if [ -n "${STORM_SOLID_QUEUE:-}" ]; then
+  echo "==> Jobs log: $JOBS_LOG"
+  if grep -qE 'Error|error|serialize|deadlock' "$JOBS_LOG" 2>/dev/null; then
+    echo "    lines with 'error' in the jobs log:"
+    grep -m 20 -nE 'Error|error|serialize|deadlock' "$JOBS_LOG"
+  fi
 fi
 exit "$STATUS"

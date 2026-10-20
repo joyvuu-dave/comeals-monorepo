@@ -1,0 +1,18 @@
+# Solid Queue for bin/storm with STORM_SOLID_QUEUE=1 (Storm::JobsProcess
+# passes it as SOLID_QUEUE_CONFIG). The processes and threads are
+# production's (config/queue.yml): one dispatcher, one worker with one
+# thread, in async mode with a pool of 12. The intervals are not. The
+# dispatcher and the worker poll every 0.1 s instead of every 5 s, and
+# the dispatcher's concurrency maintenance (expired semaphores, blocked
+# jobs) runs every second instead of every 10 minutes, so their
+# bookkeeping meets the app's writes as often as the laptop allows.
+test:
+  dispatchers:
+    - polling_interval: <%= ENV.fetch('STORM_SQ_POLL', '0.1') %>
+      batch_size: 100
+      concurrency_maintenance_interval: <%= ENV.fetch('STORM_SQ_MAINTENANCE', '1') %>
+  workers:
+    - queues: "*"
+      threads: 1
+      processes: 1
+      polling_interval: <%= ENV.fetch('STORM_SQ_POLL', '0.1') %>

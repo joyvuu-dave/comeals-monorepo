@@ -111,9 +111,10 @@ RSpec.describe Storm::QueueChecks do
     expect(problems).to eq(['jobs reported and swallowed: ArgumentError: no email'])
   end
 
-  it 'names an error a job or a jobs thread raised, and leaves the server to its answers' do
+  it 'names an error a job or a jobs thread raised, and leaves the server and the storm task to their own' do
     report(process: 'jobs', error: RuntimeError.new('thread died'), handled: false, context: {})
     report(process: 'server', error: RuntimeError.new('a 500'), handled: false, context: {})
+    report(process: 'driver', error: ActiveRecord::RecordInvalid.new, handled: false, context: {})
 
     expect(problems).to eq(['jobs raised: RuntimeError: thread died'])
   end

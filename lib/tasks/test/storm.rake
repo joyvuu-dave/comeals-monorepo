@@ -15,6 +15,13 @@
 #   STORM_CLIENTS  how many phones (default 64)
 #   STORM_SEED     the random seed (default 1)
 #   STORM_MAX_P95  fail when the p95 round trip, in ms, is above this (off by default)
+#   STORM_SOLID_QUEUE     1 to queue and run the jobs through a real Solid Queue:
+#                         this task starts bin/jobs after the seed and checks the
+#                         queue after the storm (Storm::JobsProcess, Storm::QueueChecks)
+#   STORM_JOBS_PROCESSES  how many bin/jobs processes (default 1; 2 is a deploy's overlap)
+#   STORM_SQ_DRAIN        how long to wait for the queue to drain after the storm (default 300 s)
+#   STORM_ERROR_LOG       the file every process writes its Rails.error reports to
+#                         (Storm::ErrorLog); checked after the storm when set
 #
 # Every run prints the round-trip times it saw, per action and overall,
 # and saves them under tmp/storm_latency.json keyed by the run's shape
@@ -44,9 +51,29 @@ namespace :test do
     Rails.cache = SolidCache::Store.new(namespace: Rails.env, expiry_method: :job)
     Pusher.define_singleton_method(:trigger) { |*_args| true }
 
-    ActiveRecord::Base.connection.execute('TRUNCATE communities, ledger_check_runs, job_runs CASCADE')
+    queue = ENV['STORM_SOLID_QUEUE'].present?
+    tables = %w[communities ledger_check_runs job_runs]
+    tables += %w[solid_queue_jobs solid_queue_processes solid_queue_semaphores solid_queue_recurring_tasks] if queue
+    ActiveRecord::Base.connection.execute("TRUNCATE #{tables.join(', ')} CASCADE")
     Current.reset
     plan = Storm::Seed.plant(clients: clients)
+
+    jobs = []
+    if queue
+      count = Integer(ENV.fetch('STORM_JOBS_PROCESSES', 1))
+      jobs = Array.new(count) do |i|
+        Storm::JobsProcess.new(log: Rails.root.join(i.zero? ? 'tmp/storm_jobs.log' : "tmp/storm_jobs_#{i + 1}.log"))
+      end
+      jobs.each(&:start)
+      # Stopped after the checks, and here too when the task stops
+      # early (abort, an error): a stop that already ran does nothing.
+      at_exit { jobs.each(&:stop) }
+      Rails.root.join('tmp/storm_jobs.pid').write(jobs.map(&:pid).join("\n"))
+      jobs.each(&:wait_until_registered)
+      puts "==> #{count} bin/jobs process(es) running: pid #{jobs.map(&:pid).join(', ')}, " \
+           "heartbeat #{SolidQueue.process_heartbeat_interval.inspect}, " \
+           "alive threshold #{SolidQueue.process_alive_threshold.inspect}"
+    end
 
     # One connection per client thread, kept open; the client's IP rides
     # in X-Forwarded-For, which Rack trusts from the loopback proxy.
@@ -66,10 +93,22 @@ namespace :test do
     end
 
     puts "==> #{clients} clients for #{seconds}s against #{url} (seed #{seed})"
-    result = Storm::Run.call(plan: plan, transport: transport, clients: clients, seconds: seconds, seed: seed)
+    result = Storm::Run.call(plan: plan, transport: transport, clients: clients, seconds: seconds, seed: seed,
+                             queue_jobs: queue)
 
     problems = result.requests.filter_map { |e| e.problem && "client #{e.client} ##{e.n} #{e.action}: #{e.problem}" }
     problems += result.problems
+    # Before the checks below, which write too: the queue is checked
+    # with the jobs process still running, and again after it stopped.
+    queue_summary = nil
+    if queue
+      error_log = ENV.fetch('STORM_ERROR_LOG', '')
+      problems += Storm::QueueChecks.after_storm(jobs: jobs, error_log: error_log, say: method(:puts),
+                                                 drain_timeout: Float(ENV.fetch('STORM_SQ_DRAIN', 300)))
+      queue_summary = Storm::QueueChecks.summary(jobs_log: jobs.first.log, error_log: error_log)
+    elsif ENV['STORM_ERROR_LOG'].present?
+      problems += Storm::ErrorLog.read(ENV.fetch('STORM_ERROR_LOG')).filter_map { |e| Storm::ErrorLog.problem(e) }
+    end
     problems += Storm::Checks.call(plan: plan, transport: transport)
     # After the checks: they send requests too, on a connection of their own.
     connections.each_value(&:finish)
@@ -79,6 +118,7 @@ namespace :test do
          "(#{result.ok_row_writes} rows), settlements: #{result.settlements}"
     result.tally.sort.each { |action, statuses| puts "  #{action}: #{statuses.sort_by { |s, _| s.to_s }.to_h}" }
     puts "background: #{result.background_tally}"
+    puts "queue: #{queue_summary}" if queue_summary
 
     latency = result.latency
     puts latency.report

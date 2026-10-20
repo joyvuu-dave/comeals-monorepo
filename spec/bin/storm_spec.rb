@@ -80,6 +80,24 @@ RSpec.describe 'bin/storm', bash_coverage: BashCoverage.new('spec/bin/storm_spec
     expect(result.output).not_to include('Jobs log')
   end
 
+  # The storm task stops the jobs processes it starts. A task killed
+  # before it could leaves them running, and the script stops them, but
+  # only a pid that is still a bin/jobs: a pid can be reused.
+  it 'stops a jobs process a killed storm task left behind, and nothing else' do
+    jobs = Process.spawn(sandbox.real('sleep'), '30')
+    other = Process.spawn(sandbox.real('sleep'), '30')
+    sandbox.write('tmp/storm_jobs.pid', "#{jobs}\n#{other}\n")
+    sandbox.fake('ps', "[ \"$4\" = #{jobs} ] && echo 'ruby bin/jobs --mode async' || echo 'sleep 30'")
+
+    sandbox.run(script)
+
+    expect(Process.wait2(jobs).last.termsig).to eq(Signal.list['TERM'])
+    expect(Process.wait2(other, Process::WNOHANG)).to be_nil
+  ensure
+    Process.kill('KILL', other)
+    Process.wait(other)
+  end
+
   it 'takes its shape from the STORM_ variables' do
     result = sandbox.run(script, env: { 'STORM_THREADS' => '4', 'STORM_WORKERS' => '3', 'STORM_POOL' => '9',
                                         'STORM_PORT' => '4000' })
@@ -158,6 +176,22 @@ RSpec.describe 'bin/storm', bash_coverage: BashCoverage.new('spec/bin/storm_spec
 
     expect(result).to be_success, result.output
     expect(result.output).to include("lines with 'error' in the server log:", '1:ActiveRecord::Deadlocked error')
+  end
+
+  # The script runs under pipefail. It used to pipe the error lines to
+  # head -20, and with more than 20 of them grep was stopped by SIGPIPE
+  # and the script exited 141, whatever the storm's own status was.
+  it 'prints only the first 20 error lines, and keeps the exit code of the storm' do
+    lines = Array.new(5000) { |i| "ActiveRecord::Deadlocked error #{i}" }.join("\n")
+    errors = sandbox.write('server-errors.txt', lines)
+    sandbox.fake('bundle', sandbox.answers({ 'exec rails server *' => "cat #{errors}; " \
+                                                                      "#{server_up}" }))
+
+    result = sandbox.run(script)
+
+    expect(result).to be_success, result.output
+    expect(result.output).to include('20:ActiveRecord::Deadlocked error 19')
+    expect(result.output).not_to include('21:ActiveRecord::Deadlocked error 20')
   end
 
   it 'fails with the exit code of a failed storm, and still resets the database' do

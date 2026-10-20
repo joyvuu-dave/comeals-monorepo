@@ -75,6 +75,39 @@ Rails.application.configure do
   # spec/support/solid_cache.rb for the version of that fight that hung CI.
   config.active_job.queue_adapter = :test
 
+  # bin/storm with STORM_SOLID_QUEUE=1: the storm server, the storm task
+  # and the bin/jobs process it starts queue and run jobs through Solid
+  # Queue in the test database, as production does. The storm can make
+  # the processes beat more often than production's 60 seconds, so that
+  # heartbeats meet the other writes far more often. The alive threshold
+  # follows at production's ratio, five beats, unless set too.
+  if ENV['INTEGRATION_SERVER_QUEUE'] == 'solid_queue'
+    config.active_job.queue_adapter = :solid_queue
+    heartbeat = Float(ENV.fetch('STORM_SQ_HEARTBEAT', 60))
+    config.solid_queue.process_heartbeat_interval = heartbeat.seconds
+    config.solid_queue.process_alive_threshold = Float(ENV.fetch('STORM_SQ_ALIVE', heartbeat * 5)).seconds
+  end
+
+  # The bin/jobs process the storm starts writes its log to its output,
+  # which the storm saves to tmp/storm_jobs.log. Info, not debug: the
+  # storm reads it for errors, not for every query.
+  if ENV['STORM_LOG_TO_STDOUT'].present?
+    config.logger = ActiveSupport::Logger.new($stdout)
+    config.log_level = :info
+  end
+
+  # Every process of a real-server storm writes what the app reports
+  # through Rails.error to one file, and the storm task checks it after
+  # the storm (spec/support/storm/error_log.rb). The storm task itself is
+  # rake.
+  if ENV['STORM_ERROR_LOG'].present?
+    config.after_initialize do
+      require Rails.root.join('spec/support/storm/error_log').to_s
+      process = ENV.fetch('STORM_PROCESS') { File.basename($PROGRAM_NAME) == 'rake' ? 'driver' : 'server' }
+      Rails.error.subscribe(Storm::ErrorLog.new(ENV.fetch('STORM_ERROR_LOG'), process: process))
+    end
+  end
+
   # Tell Action Mailer not to deliver emails to the real world.
   # The :test delivery method accumulates sent emails in the
   # ActionMailer::Base.deliveries array.
