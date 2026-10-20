@@ -17,7 +17,7 @@ RSpec.describe 'bin/staging-rehearsal', bash_coverage: BashCoverage.new('spec/bi
   # The files the rehearsal runs or sources besides itself, and every
   # call answered the way a good rehearsal sees it.
   before do
-    %w[bin/lib/output.sh bin/lib/json.sh bin/smoke].each { sandbox.link(it) }
+    %w[bin/lib/output.sh bin/lib/json.sh bin/lib/staging_forbidden_vars.sh bin/smoke].each { sandbox.link(it) }
     sandbox.note_env('SMOKE_URL', 'SMOKE_EMAIL', 'SMOKE_PASSWORD', 'SMOKE_MEAL_ID')
     sandbox.rule('heroku', "config #{staging} --json", out: config_json(config_keys))
     sandbox.rule('heroku', "config:get COMEALS_STAGING #{staging}", out: "1\n")

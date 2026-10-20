@@ -20,6 +20,7 @@ class BashCoverage
   FILES = {
     'bin/deploy' => 'spec/bin/deploy_spec.rb',
     'bin/lib/output.sh' => 'spec/bin/deploy_spec.rb',
+    'bin/lib/staging_forbidden_vars.sh' => 'spec/bin/deploy_spec.rb',
     'bin/agent-merge' => 'spec/bin/agent_merge_spec.rb',
     'bin/agent-worktree' => 'spec/bin/agent_worktree_spec.rb',
     'bin/agent-worktree-done' => 'spec/bin/agent_worktree_done_spec.rb',

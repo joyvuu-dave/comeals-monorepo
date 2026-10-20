@@ -15,10 +15,21 @@ set -euo pipefail
 #      - If no migrations    → push deploy (brief downtime during restart).
 #
 # Heroku buildpack order: Node (Vite build) → Ruby (bundle + Sprockets).
+#
+# Which app: production (comeals-monorepo) unless DEPLOY_APP says
+# otherwise. DEPLOY_APP=comeals-staging runs the same steps, in the same
+# order, on the staging app, so a deploy can be tried there first:
+#
+#   DEPLOY_APP=comeals-staging bin/deploy
+#
+# On staging the script pushes to staging's own git address, not to the
+# heroku remote (which points at production), checks only staging's
+# address, files no GitHub issue, and first refuses a staging app that
+# could send mail (COMEALS_STAGING, bin/lib/staging_forbidden_vars.sh).
+# Any other value of DEPLOY_APP, an empty one included, is refused before
+# anything runs.
 # ==============================================================================
 
-APP="comeals-monorepo"
-APP_URL="https://comeals.com"
 MAINTENANCE_ENABLED=false
 DEPLOY_TIMESTAMP=""
 NEEDS_MAINTENANCE=false
@@ -34,6 +45,48 @@ fi
 # --- Output helpers (shared with bin/check) -----------------------------------
 
 . "$(dirname "$0")/lib/output.sh"
+. "$(dirname "$0")/lib/json.sh"
+. "$(dirname "$0")/lib/staging_forbidden_vars.sh"
+
+# --- The target app -----------------------------------------------------------
+
+# Only unset means production. An empty DEPLOY_APP is refused like any
+# other unknown value, so a variable that was meant to say staging and is
+# empty by mistake does not deploy to production.
+APP="${DEPLOY_APP-comeals-monorepo}"
+case "$APP" in
+  comeals-monorepo)
+    APP_URL="https://comeals.com"
+    # Where git pushes and fetches: the heroku remote, checked in
+    # preflight_environment.
+    GIT_TARGET="heroku"
+    # Every public hostname, not just the apex: config.hosts in
+    # production.rb serves only a fixed list, so a hostname missing from
+    # that list is an outage for that hostname — and the health check is
+    # what catches it during the deploy instead of days later. Keep the
+    # two lists in step.
+    HEALTH_URLS=(
+      "$APP_URL"
+      "$APP_URL/api/v1/version"
+      "https://www.comeals.com"
+      "https://admin.comeals.com"
+      "https://api.comeals.com"
+      "https://comeals-monorepo-b68ce4e5c3d4.herokuapp.com"
+    )
+    ;;
+  comeals-staging)
+    APP_URL="https://comeals-staging-ad51b8a1eb64.herokuapp.com"
+    # Staging's own git address. Never the heroku remote: that one points
+    # at production.
+    GIT_TARGET="https://git.heroku.com/comeals-staging.git"
+    # Staging has only its herokuapp hostname (EXTRA_HOSTS on the app).
+    HEALTH_URLS=("$APP_URL" "$APP_URL/api/v1/version")
+    ;;
+  *)
+    fail "DEPLOY_APP is \"$APP\". It must be comeals-monorepo or comeals-staging. Nothing was changed."
+    exit 1
+    ;;
+esac
 
 # --- Cleanup trap -------------------------------------------------------------
 
@@ -76,6 +129,12 @@ preflight_environment() {
   user=$(heroku auth:whoami 2>/dev/null)
   ok "Logged into Heroku as $user"
 
+  if [ "$APP" = comeals-staging ]; then
+    ok "Pushes go to $GIT_TARGET"
+    check_staging_cannot_reach_people
+    return
+  fi
+
   local remote_url
   remote_url=$(git remote get-url heroku 2>/dev/null || true)
   if [ -z "$remote_url" ]; then
@@ -84,6 +143,30 @@ preflight_environment() {
     exit 1
   fi
   ok "heroku remote -> $remote_url"
+}
+
+# Staging holds a copy of the production database, with real residents'
+# email addresses, and the deploy starts the worker dyno, whose jobs send
+# mail. So refuse unless the app says it is staging (COMEALS_STAGING
+# turns mail and Pusher off) and has none of the forbidden config vars.
+# bin/staging-rehearsal runs the same check first.
+check_staging_cannot_reach_people() {
+  local flag config_keys var
+  flag=$(heroku config:get COMEALS_STAGING -a "$APP")
+  # The app reads COMEALS_STAGING with present?, so a blank value turns
+  # the guards off, the same as no value.
+  if [ -z "${flag//[[:space:]]/}" ]; then
+    fail "COMEALS_STAGING is not set or is blank on $APP — its mail and Pusher guards are off"
+    exit 1
+  fi
+  config_keys=$(heroku config -a "$APP" --json | json "'\n'.join(d.keys())")
+  for var in "${STAGING_FORBIDDEN_VARS[@]}"; do
+    if grep -qx "$var" <<< "$config_keys"; then
+      fail "$var is set on $APP — staging must not have it"
+      exit 1
+    fi
+  done
+  ok "$APP cannot send mail or push (COMEALS_STAGING set, no forbidden config vars)"
 }
 
 preflight_repo() {
@@ -153,6 +236,12 @@ preflight_ci() {
     if [ "$phrase" != "break glass" ]; then
       info "Aborted."
       exit 1
+    fi
+    # An issue on GitHub is for the people who look after production. A
+    # deploy to staging is a rehearsal and needs none.
+    if [ "$APP" = comeals-staging ]; then
+      info "No follow-up issue for a deploy to $APP"
+      return
     fi
     local issue_body="bin/deploy ran with DEPLOY_WITHOUT_CI=1 on $(date -u +%Y-%m-%d) at commit $(git rev-parse HEAD).
 
@@ -264,7 +353,7 @@ detect_pending_migrations() {
 
   if ! git cat-file -e "$HEROKU_SHA" 2>/dev/null; then
     info "Heroku SHA not in local history — fetching from Heroku..."
-    if git fetch heroku main --quiet 2>/dev/null; then
+    if git fetch "$GIT_TARGET" main --quiet 2>/dev/null; then
       ok "Fetched Heroku main branch"
     else
       warn "Cannot fetch from Heroku — assuming migrations needed"
@@ -371,7 +460,7 @@ deploy_push() {
   step "Deploying ($APP)"
 
   info "Pushing main to Heroku..."
-  git push heroku main --force
+  git push "$GIT_TARGET" main --force
   ok "Code pushed"
   check_release_status
 
@@ -404,7 +493,7 @@ deploy_maintenance() {
   fi
 
   info "Pushing main to Heroku (release phase runs migrations)..."
-  git push heroku main --force
+  git push "$GIT_TARGET" main --force
   ok "Code pushed"
   check_release_status
 
@@ -505,19 +594,8 @@ run_smoke() {
 check_health() {
   step "Health check"
 
-  # Every public hostname, not just the apex: config.hosts in production.rb
-  # serves only a fixed list, so a hostname missing from that list is an
-  # outage for that hostname — and this check is what catches it during the
-  # deploy instead of days later. Keep the two lists in step.
-  local urls=(
-    "$APP_URL"
-    "$APP_URL/api/v1/version"
-    "https://www.comeals.com"
-    "https://admin.comeals.com"
-    "https://api.comeals.com"
-    "https://comeals-monorepo-b68ce4e5c3d4.herokuapp.com"
-  )
-  for url in "${urls[@]}"; do
+  # HEALTH_URLS is set with the target app, at the top.
+  for url in "${HEALTH_URLS[@]}"; do
     info "Curling $url ..."
 
     local attempts=0
@@ -592,6 +670,7 @@ main() {
   bold "============================================"
   bold "  Comeals Deploy"
   bold "============================================"
+  info "Target: $APP ($APP_URL)"
 
   preflight_environment
   preflight_repo

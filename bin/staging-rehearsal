@@ -57,16 +57,8 @@ STAGING_APP=comeals-staging
 # Heroku log lines start with a UTC timestamp; compare as strings.
 REHEARSAL_STARTED=$(date -u +%Y-%m-%dT%H:%M:%S)
 
-# Config vars that must NOT exist on staging. Each one is an outbound
-# channel to the real world.
-FORBIDDEN_VARS=(
-  GMAIL_USERNAME
-  GMAIL_APP_PASSWORD
-  HEALTHCHECKS_PING_KEY
-  BUGSNAG_API_KEY
-  VITE_BUGSNAG_API_KEY
-  SKYLIGHT_AUTHENTICATION
-)
+# Config vars that must NOT exist on staging (STAGING_FORBIDDEN_VARS).
+. bin/lib/staging_forbidden_vars.sh
 
 step "Neuter check on $STAGING_APP"
 
@@ -81,7 +73,7 @@ if [ -z "${staging_flag//[[:space:]]/}" ]; then
 fi
 ok "COMEALS_STAGING is set (mail collects in memory, Pusher is a no-op)"
 
-for var in "${FORBIDDEN_VARS[@]}"; do
+for var in "${STAGING_FORBIDDEN_VARS[@]}"; do
   if grep -qx "$var" <<< "$config_keys"; then
     fail "$var is set on $STAGING_APP — staging must not have it"
     exit 1

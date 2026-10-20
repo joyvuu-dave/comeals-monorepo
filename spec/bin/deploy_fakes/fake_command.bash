@@ -110,6 +110,14 @@ ps_scale() {
   echo "Scaling dynos... done"
 }
 
+# The app a heroku call names with -a, for the fake's own messages.
+app_of() {
+  while [ "$#" -gt 0 ]; do
+    [ "$1" = -a ] && { echo "${2:-}"; return; }
+    shift
+  done
+}
+
 heroku_default() {
   case "${1:-}" in
     auth:whoami) echo "deployer@example.com" ;;
@@ -134,15 +142,15 @@ heroku_default() {
       for pair in "${@:2}"; do
         [[ $pair =~ ^([A-Z_]+)=(.*)$ ]] && printf '%s' "${BASH_REMATCH[2]}" >"$state/config/${BASH_REMATCH[1]}"
       done
-      echo "Setting config vars and restarting comeals-monorepo... done"
+      echo "Setting config vars and restarting $(app_of "$@")... done"
       ;;
     maintenance:on)
       echo on >"$state/maintenance"
-      echo "Enabling maintenance mode for comeals-monorepo... done"
+      echo "Enabling maintenance mode for $(app_of "$@")... done"
       ;;
     maintenance:off)
       echo off >"$state/maintenance"
-      echo "Disabling maintenance mode for comeals-monorepo... done"
+      echo "Disabling maintenance mode for $(app_of "$@")... done"
       ;;
     ps:scale) ps_scale "${@:2}" ;;
     pg:backups:capture)
