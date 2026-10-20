@@ -142,6 +142,18 @@ preflight_environment() {
     info "Run: heroku git:remote -a $APP"
     exit 1
   fi
+  # `heroku git:remote -a <another app>` changes where the remote points.
+  # Every heroku command below names $APP, but the push goes to the
+  # remote, so the two must be the same app. The https address, or the
+  # older ssh one.
+  case "$remote_url" in
+    "https://git.heroku.com/$APP.git" | "git@heroku.com:$APP.git") ;;
+    *)
+      fail "The heroku remote points at $remote_url, not at https://git.heroku.com/$APP.git"
+      info "Run: heroku git:remote -a $APP"
+      exit 1
+      ;;
+  esac
   ok "heroku remote -> $remote_url"
 }
 
