@@ -97,4 +97,37 @@ RSpec.describe 'config/initializers/solid_queue_isolation.rb, on steps that open
     expect(SolidQueue::ScheduledExecution.count).to eq(0)
     expect(SolidQueue::ReadyExecution.joins(:job).where(job: { class_name: 'NotifyCooksJob' }).count).to eq(1)
   end
+
+  # Found by bin/storm with STORM_SOLID_QUEUE=1 at 256 clients,
+  # 2026-10-20. After a job with a concurrency limit finishes, the worker
+  # gives its semaphore back with a single UPDATE outside any
+  # transaction (ClaimedExecution#finalize, Semaphore.signal). The
+  # wrapper sets the level only for transactions Rails opens, so that
+  # UPDATE runs at the session's SERIALIZABLE, and PostgreSQL refused it
+  # ("Canceled on identification as a pivot, during write"). The worker
+  # thread reported "Error in thread"; the job was already finished, but
+  # its semaphore was not given back, so the next run of that job waits
+  # until the semaphore expires: an hour for every RecurringJob and for
+  # NotifyCooksJob. The initializer's header lists this statement as a
+  # limit; this example asks for it to run at READ COMMITTED.
+  it 'gives back a finished job\'s semaphore at READ COMMITTED' do
+    RefreshBalancesJob.perform_later
+    stub_const('RefreshBalancesJob', Class.new(RecurringJob) do
+      def self.name = 'RefreshBalancesJob'
+      def perform = nil
+    end)
+    levels = []
+    record = lambda do |*, payload|
+      next unless payload[:sql].start_with?('UPDATE "solid_queue_semaphores"')
+
+      levels << ActiveRecord::Base.connection.select_value('SHOW transaction_isolation')
+    end
+    worker = SolidQueue::Worker.new(queues: '*', threads: 1, polling_interval: 0.01)
+    worker.mode = :inline
+
+    ActiveSupport::Notifications.subscribed(record, 'sql.active_record') { worker.start }
+
+    expect(SolidQueue::Job.sole.finished_at).to be_present
+    expect(levels).to eq(['read committed'])
+  end
 end
