@@ -151,6 +151,56 @@ that runs real sockets, real Puma threads, and a forking server.
 Read `tmp/storm_server.log` after a run; the script prints its error
 lines.
 
+Every process of the storm (the server, the storm task, and the jobs
+process below) writes what it reports through `Rails.error` to
+`tmp/storm_errors.log` (`Storm::ErrorLog`). The run fails on a report
+that is not a conflict, on a job that could not be queued after its
+retries, and on an error the jobs process raised. The in-process storm
+checks the same thing with a subscriber in the spec.
+
+#### The jobs through a real Solid Queue — `STORM_SOLID_QUEUE=1`
+
+By default the server uses the test queue adapter and the storm task
+runs the nightly jobs in its own process, so no job is ever a
+`solid_queue_*` row. With `STORM_SOLID_QUEUE=1` the server and the
+storm task queue every job in Solid Queue in the test database, and
+the storm task starts a real `bin/jobs --mode async` with a pool of 12
+once the seed is in (`Storm::JobsProcess`; log in `tmp/storm_jobs.log`).
+It starts after the seed because Solid Queue's start hook
+(`RecurringCatchUp`) queues every nightly job, and those need the
+community. Every push, every settlement mail and every recurring job is
+then a row that a real worker claims, under semaphores and heartbeats,
+beside the app's SERIALIZABLE writes. Pusher is a no-op and mail goes to
+the test delivery method.
+
+The processes and threads are production's (one dispatcher, one worker
+with one thread, the scheduler). The intervals are made short so their
+bookkeeping meets the app's writes as often as possible:
+`spec/support/storm/queue.yml` polls every 0.1 s and runs concurrency
+maintenance every second, and `spec/support/storm/recurring.yml.erb` runs
+every recurring task every 7 s, each at its own second, so the pool of
+12 still holds. The storm task's job loop still runs the nightly jobs
+in its own process and now also queues them: a run here takes no
+semaphore, so it overlaps the worker's run of the same job, while the
+queued one goes through the semaphore and the blocked list.
+
+After the storm, `Storm::QueueChecks` waits for every job queued before
+the end to finish (`STORM_SQ_DRAIN`, 300 s), checks the queue with the
+jobs process running, stops it with TERM the way Heroku does, and
+checks again. The run fails on a failed job, a job claimed by a process
+that is gone, a heartbeat older than the alive threshold, an error line
+in the jobs log (a conflict, a deadlock, "Error in thread", "Error
+performing"), a jobs process that died or exited with an error, or a
+process row left after the stop.
+
+    STORM_SOLID_QUEUE=1 bin/storm
+    STORM_SOLID_QUEUE=1 STORM_SQ_HEARTBEAT=1 bin/storm      # beat every second (production: 60)
+    STORM_SOLID_QUEUE=1 STORM_JOBS_PROCESSES=2 bin/storm    # two supervisors, as during a deploy
+
+Count the connections before turning the dial: the server takes
+workers x pool, each jobs process 12, the storm task 12, and psql one.
+Postgres allows 100 by default and keeps 3 of them for superusers.
+
 Every run also reports how long the requests took, from the client's
 side: p50, p95, p99 and the slowest, per action and overall, and the
 requests per second the run sustained. Percentiles rather than an
@@ -279,3 +329,37 @@ cost of $12 on it. Now the trigger updates the meal row
 transaction fails as a conflict and is tried again with a fresh
 snapshot (`settlement_after_a_raw_write_race_spec.rb`,
 `cancel_against_a_cost_race_spec.rb`; ADR 0003, "The other order").
+
+## What the Solid Queue storm found (2026-10-20)
+
+The first runs of `STORM_SOLID_QUEUE=1`, on the jobs-dyno branch, on
+PostgreSQL 16 and 18. Each one has a failing spec and is not fixed yet.
+
+- Four steps that `config/initializers/solid_queue_isolation.rb` wraps
+  at READ COMMITTED raise `TransactionIsolationError` whenever they open
+  a savepoint, because the level is given to every transaction opened
+  inside the wrapper, savepoints too: the scheduler queueing a
+  recurring task (on every tick), a worker deregistering with a job
+  claimed, the worker recording a job that raised (the job stays
+  claimed and holds its semaphore), and the dispatcher moving a due job
+  with a concurrency limit to ready
+  (`spec/config/initializers/solid_queue_isolation_savepoint_spec.rb`).
+- The UPDATE that gives a finished job's semaphore back runs outside
+  any transaction, so at the session's SERIALIZABLE, and PostgreSQL
+  refuses it under load. The job is finished, but the semaphore is not
+  given back, so the next run of that job waits up to an hour. At 128
+  clients on PostgreSQL 18 this left 350 to 430 recurring jobs blocked
+  (same spec file).
+- `RecurringCatchUp` does not try a conflict again. Two supervisors
+  starting at once conflict on each job's semaphore row, and neither
+  queues the job (`spec/services/recurring_catch_up_spec.rb`).
+
+Two things the storm shows that are limits, not failing specs: a push
+whose enqueue conflicts three times in a row is lost (0 to 4 in a
+20 to 60 second run, 7 to 28 at 128 clients), and `EnsureRotationsJob`
+uses up its five tries in most runs and ends as a failed job. At 256
+clients for 300 seconds, and on PostgreSQL 16 at 128 clients for 120
+seconds, the server runs out of shared memory for its SSI locks
+(`max_pred_locks_per_transaction`); without Solid Queue the same 256
+clients do not, but the laptop is already past its limit there (p95
+5.6 s).

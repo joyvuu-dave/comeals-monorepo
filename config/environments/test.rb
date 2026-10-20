@@ -104,7 +104,8 @@ Rails.application.configure do
     config.after_initialize do
       require Rails.root.join('spec/support/storm/error_log').to_s
       process = ENV.fetch('STORM_PROCESS') { File.basename($PROGRAM_NAME) == 'rake' ? 'driver' : 'server' }
-      Rails.error.subscribe(Storm::ErrorLog.new(ENV.fetch('STORM_ERROR_LOG'), process: process))
+      # By name: Sorbet does not see spec/support.
+      Rails.error.subscribe('Storm::ErrorLog'.constantize.new(ENV.fetch('STORM_ERROR_LOG'), process: process))
     end
   end
 

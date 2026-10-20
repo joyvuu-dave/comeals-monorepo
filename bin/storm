@@ -32,7 +32,7 @@ set -euo pipefail
 # the storm task starts a real `bin/jobs --mode async` with a pool of 12
 # beside the server (its log: tmp/storm_jobs.log). Its own job loop
 # queues the nightly jobs as well as running them, the schedule runs
-# every task every few seconds (spec/support/storm/recurring.yml), and the
+# every task every few seconds (spec/support/storm/recurring.yml.erb), and the
 # checks after the storm look at the queue too: drained, no failed job,
 # no job claimed by a process that is gone, no late heartbeat, no error
 # in the jobs log, the jobs process still alive. More knobs:

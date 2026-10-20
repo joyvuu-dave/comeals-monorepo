@@ -10,7 +10,7 @@ module Storm
   #
   # What differs from production is in the files it is given: the
   # intervals (spec/support/storm/queue.yml), the schedule
-  # (spec/support/storm/recurring.yml), and the heartbeat
+  # (spec/support/storm/recurring.yml.erb), and the heartbeat
   # (STORM_SQ_HEARTBEAT, read by config/environments/test.rb). Pusher is
   # a no-op (INTEGRATION_SERVER) and mail goes to the test delivery
   # method, as in every test process.
@@ -30,7 +30,7 @@ module Storm
       { 'RAILS_ENV' => 'test', 'INTEGRATION_SERVER' => '1', 'INTEGRATION_SERVER_CACHE' => 'solid',
         'INTEGRATION_SERVER_QUEUE' => 'solid_queue', 'RAILS_DB_POOL' => POOL.to_s,
         'SOLID_QUEUE_CONFIG' => 'spec/support/storm/queue.yml',
-        'SOLID_QUEUE_RECURRING_SCHEDULE' => 'spec/support/storm/recurring.yml',
+        'SOLID_QUEUE_RECURRING_SCHEDULE' => 'spec/support/storm/recurring.yml.erb',
         'STORM_PROCESS' => 'jobs', 'STORM_LOG_TO_STDOUT' => '1',
         # Never ping healthchecks.io or Bugsnag from a storm.
         'HEALTHCHECKS_PING_KEY' => nil, 'BUGSNAG_API_KEY' => nil }
