@@ -365,9 +365,14 @@ message when the page reloaded or closed.)
 - When two pages change the same cook's bill, the second gets a message
   instead of replacing the first page's value without one.
 - A page loaded before this change gets the out-of-date answer on every
-  bills save until it is reloaded. Sign-ups, guests, the menu and closing
-  are not affected. The version banner offers "Refresh" within about 5
-  minutes of a deploy.
+  bills save until it is reloaded. Sign-ups, the menu and closing are not
+  affected. Guest adds are: a guest add now needs an Idempotency-Key
+  header (`GuestAdd`), and a page loaded before that change sends none,
+  so its guest add is refused with "This page is out of date. Nothing was
+  saved. Reload the page and add the guest again." The release before
+  this one, a build of the old code with fixes added (deploy 1 of 2),
+  sends the key, so pages loaded from it keep adding guests. The version
+  banner offers "Refresh" within about 5 minutes of a deploy.
 - A rollback to v613 (2146821) answers a new page's `edits` body with a
   500 and writes nothing. v613's `update_bills` starts with
   `params[:bills].pluck`, which raises on a body with no `bills` key

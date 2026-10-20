@@ -116,7 +116,7 @@ starts web again by itself.
   the new code, with web at 0. Run the rollback by hand, wait until its
   release succeeded, then scale web to 1 and turn maintenance off. A
   rollback runs the release phase of the old code
-  (`rake deploy:verify_config db:migrate`); if that is what failed,
+  (`bin/rake db:migrate`); if that is what failed,
   `heroku releases:output -a comeals-monorepo` shows why.
 - Web is up but maintenance is still on: the old code runs on the
   restored database. Turn maintenance off and run the smoke test.

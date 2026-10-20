@@ -72,7 +72,8 @@ until healthchecks.io's grace period (1 hour) ends and it emails you.
    limit, but confirm before raising the pool further.
 3. Set the config var that starts the supervisor inside Puma:
    `heroku config:set SOLID_QUEUE_IN_PUMA=true -a comeals-monorepo`.
-   The dyno restarts; the log shows `SolidQueue-…: Started Supervisor`.
+   The dyno restarts; the log shows `SolidQueue-1.7.0 Started Supervisor(fork)`
+   (the number is the solid_queue version).
 4. Confirm the catch-up ran: `heroku run rails runner 'puts JobRun.order(:id).last(4).map { |r| [r.name, r.outcome, r.finished_at] }'`.
    Every job that had never recorded a run is due at boot, so all four
    should have a row within a minute of the restart.
