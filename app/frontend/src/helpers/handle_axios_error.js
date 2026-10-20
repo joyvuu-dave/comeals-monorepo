@@ -13,8 +13,22 @@ export default function handleAxiosError(error, options) {
       }
       return toastType;
     } else {
+      // An answer with no sentence is a page the app did not write. During
+      // a deploy Heroku answers 503 with its maintenance page, whose title
+      // is "Offline for maintenance".
       console.error("Bad response from server", error);
-      return "error";
+      var maintenance =
+        error.response.status === 503 &&
+        typeof data === "string" &&
+        /maintenance/i.test(data);
+      var sentence = maintenance
+        ? "Comeals is being updated. Please try again in a minute."
+        : "Comeals could not do that just now. Please try again in a minute.";
+      var type = maintenance ? "warning" : "error";
+      if (!silent) {
+        toastStore.replaceAll(sentence, type);
+      }
+      return type;
     }
   } else if (error.request) {
     if (silent) {
