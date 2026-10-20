@@ -82,6 +82,43 @@ describe("handleAxiosError", () => {
       );
     });
 
+    // During a deploy Heroku answers every request with its maintenance
+    // page, a 503 whose title is "Offline for maintenance". Nothing went
+    // wrong, so the words say what is going on and what to do. The old
+    // code says the same sentence, so a person sees one sentence before
+    // and after the deploy.
+    it("says Comeals is being updated for Heroku's maintenance page, and logs it", () => {
+      const error = {
+        response: {
+          status: 503,
+          data: "<!DOCTYPE html><html><head><title>Offline for maintenance</title></head></html>",
+        },
+      };
+
+      const id = handleAxiosError(error);
+
+      expect(toastsOnScreen()).toEqual([
+        ["Comeals is being updated. Please try again in a minute.", "error"],
+      ]);
+      expect(toastStore.toasts.map((t) => t.id)).toEqual([id]);
+      expect(console.error).toHaveBeenCalledWith(
+        "Bad response from server",
+        error,
+      );
+    });
+
+    it.each([
+      ["a 503 with other text", 503, "<html>Application Error</html>"],
+      ["a 503 with JSON", 503, { error: "maintenance" }],
+      ["a 500 that says maintenance", 500, "<html>maintenance</html>"],
+    ])("keeps the plain error for %s", (_label, status, data) => {
+      handleAxiosError({ response: { status, data } });
+
+      expect(toastsOnScreen()).toEqual([
+        ["The server had a problem. Please try again.", "error"],
+      ]);
+    });
+
     it("only logs when silent", () => {
       const error = { response: { status: 500, data: "<html>500</html>" } };
 
