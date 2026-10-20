@@ -311,10 +311,17 @@ describe("BackToToday", () => {
       ({ location, restore: restoreLocation } = fakeLocation({
         assign: vi.fn(),
       }));
+      // The server answers, so the load goes ahead at once (see "waits
+      // for the server" below).
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(() => Promise.resolve({ ok: true, status: 200 })),
+      );
     });
 
     afterEach(() => {
       restoreLocation();
+      vi.unstubAllGlobals();
     });
 
     // A store as the timer reads it. The test changes the two flags.
@@ -387,6 +394,38 @@ describe("BackToToday", () => {
       expect(location.assign).toHaveBeenCalledWith(HOME);
       // A load, not a move as well.
       expect(where()).toBe(MEAL);
+    });
+
+    // A deploy can be what crashed the page (a chunk that is gone). While
+    // it runs, Heroku answers every page with its maintenance page, which
+    // never reloads itself. So the load waits until the server answers
+    // ok, asking again every 30 seconds.
+    it("waits for the server to answer ok before it loads today's calendar", async () => {
+      const fetch = vi
+        .fn()
+        .mockResolvedValueOnce({ ok: false, status: 503 })
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValueOnce({ ok: true, status: 200 });
+      vi.stubGlobal("fetch", fetch);
+      const store = renderAt(MEAL, screenStore());
+      note(store, "pageCrashed");
+
+      await waitAndSettle(IDLE_MS);
+      expect(store.finishBillsSaves).toHaveBeenCalledTimes(1);
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(fetch).toHaveBeenCalledWith("/api/v1/version", {
+        cache: "no-store",
+      });
+      expect(location.assign).not.toHaveBeenCalled();
+
+      await waitAndSettle(30 * 1000);
+      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(location.assign).not.toHaveBeenCalled();
+
+      await waitAndSettle(30 * 1000);
+      expect(fetch).toHaveBeenCalledTimes(3);
+      expect(location.assign).toHaveBeenCalledTimes(1);
+      expect(location.assign).toHaveBeenCalledWith(HOME);
     });
 
     // The timer runs out once and then waits for the next touch. A
