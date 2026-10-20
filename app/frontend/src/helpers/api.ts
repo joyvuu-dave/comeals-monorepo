@@ -11,6 +11,7 @@
 //     behavior; GETs do not set it.
 
 import axios, { AxiosResponse } from "axios";
+import { v4 } from "uuid";
 
 import { Ack, BillsAck, Guest, MealForm, MealResident } from "../types/api";
 
@@ -134,10 +135,15 @@ export const api = {
           residentId: number,
           { vegetarian, socketId }: { vegetarian: boolean } & SocketBound,
         ): Promise<AxiosResponse<Guest>> {
+          // A new Idempotency-Key for each add, a quoted string (RFC
+          // 9651). This build's server ignores it. The next release's
+          // server refuses a guest add without one, so a page loaded
+          // from this build keeps adding guests after that deploy.
           return axios({
             method: "post",
             url: `/api/v1/meals/${mealId}/residents/${residentId}/guests`,
             withCredentials: true,
+            headers: { "Idempotency-Key": `"${v4()}"` },
             data: { vegetarian, socket_id: socketId },
           });
         },

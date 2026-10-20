@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("axios", () => import("../mocks/axios.js"));
 vi.mock("uuid", () => import("../mocks/uuid.js"));
 
-import axios from "axios";
+import axios, { AxiosRequestConfig } from "axios";
 
 import { api } from "../../../app/frontend/src/helpers/api";
 
@@ -23,7 +23,9 @@ describe("api.meals.residents.guests.add", () => {
       socketId: "s1",
     });
 
-    const calls = vi.mocked(axios).mock.calls.map((call) => call[0]);
+    const calls = vi
+      .mocked(axios)
+      .mock.calls.map((call) => call[0] as AxiosRequestConfig);
     expect(calls.map((config) => config.headers)).toEqual([
       { "Idempotency-Key": '"test-uuid-1"' },
       { "Idempotency-Key": '"test-uuid-2"' },
