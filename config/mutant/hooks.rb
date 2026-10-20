@@ -7,7 +7,7 @@
 #    environment autoloads, so `Settlement*` would match nothing until
 #    something had called Settlement. eager_load! loads only what Rails
 #    autoloads. The tables in app/admin/components load when ActiveAdmin
-#    loads its pages, and DeployConfigCheck in lib/ is required only by
+#    loads its pages, and SolidQueueCheck in lib/ is required only by
 #    its rake task, so both are loaded here too. Mutant loads the spec
 #    files only after it has picked its subjects, so a spec that requires
 #    a file does not count. spec/config/mutant_subjects_spec.rb fails

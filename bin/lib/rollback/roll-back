@@ -26,8 +26,9 @@ fi
 heroku rollback "$TARGET" -a "$APP"
 # A rollback makes a new release, and Heroku runs the release
 # phase for it (the old code's Procfile release line: rake
-# db:migrate in v613, rake deploy:verify_config db:migrate after
-# it) in a one-off dyno, whatever the web formation is. If it
+# db:migrate, or rake deploy:verify_config db:migrate in releases
+# built from main between 2026-09-16 and 2026-10-20) in a one-off
+# dyno, whatever the web formation is. If it
 # fails, the release fails and the app keeps the new code. Wait
 # for it, and stop before web is started again.
 tries=0

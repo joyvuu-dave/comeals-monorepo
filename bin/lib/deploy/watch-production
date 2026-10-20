@@ -54,8 +54,8 @@ for _ in $(seq 1 60); do
 done
 if [ "$live" != "$candidate" ]; then
   echo "Production never started serving $candidate (still $live)."
-  # A release phase that failed (a refused deploy:verify_config,
-  # a migration error) shows here as a failed release.
+  # A release phase that failed (a migration error) shows here as
+  # a failed release.
   heroku releases -a "$PROD_APP" -n 3 || true
   # Only roll back if the new release actually became current.
   # If the promote's release phase failed, production never
@@ -85,9 +85,8 @@ if ! bin/smoke "$PROD_URL"; then
   exit 1
 fi
 # Live updates and the nightly jobs run in Solid Queue, whose
-# supervisor starts with the worker dyno. The release phase already
-# refused a deploy without its config var (deploy:verify_config);
-# this asks the app whether every process kind then really came up.
+# supervisor starts with the worker dyno. This asks the app whether
+# every process kind really came up.
 # Twice, 30 seconds apart: the worker dyno can take longer to boot
 # than the smoke test takes.
 solid_queue_up=false
