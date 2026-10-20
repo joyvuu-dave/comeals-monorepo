@@ -118,16 +118,6 @@ heroku pg:backups:restore "$backup_url" DATABASE_URL \
   -a "$STAGING_APP" --confirm "$STAGING_APP"
 ok "Production backup restored into staging"
 
-# The jobs dyno's processes each need more than one database connection
-# (lib/deploy_config_check.rb). Staging is not held to the release
-# check, so set the pool here, while nothing runs, the way bin/deploy
-# does for production.
-pool=$(heroku config:get RAILS_DB_POOL -a "$STAGING_APP")
-if ! [ "${pool:-0}" -ge 4 ] 2>/dev/null; then
-  info "Setting RAILS_DB_POOL=4 on $STAGING_APP (was '$pool')"
-  heroku config:set RAILS_DB_POOL=4 -a "$STAGING_APP"
-fi
-
 step "Deploy HEAD to staging"
 
 sha=$(git rev-parse HEAD)
