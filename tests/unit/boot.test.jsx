@@ -236,7 +236,7 @@ describe("a page whose code fails to load", () => {
       await vi.waitFor(() =>
         expect(order).toEqual(["sendBillsAgainBeforeClose", "reload"]),
       );
-      expect(sessionStorage.getItem("chunk_retry")).toBe("1");
+      expect(sessionStorage.getItem("chunk_retry")).toBe("test-build");
     },
   );
 });

@@ -50,13 +50,13 @@ describe("lazyRetry", () => {
     expect(beforeReload.mock.invocationCallOrder[0]).toBeLessThan(
       fake.location.reload.mock.invocationCallOrder[0],
     );
-    expect(sessionStorage.getItem("chunk_retry")).toBe("1");
+    expect(sessionStorage.getItem("chunk_retry")).toBe("build-2");
   });
 
-  // The reload already happened once. A second failure is a real error,
-  // and it goes to the error page.
+  // The reload already happened once in this build. A second failure is
+  // a real error, and it goes to the error page.
   it("fails, with no reload, when the chunk fails again after the reload", async () => {
-    sessionStorage.setItem("chunk_retry", "1");
+    sessionStorage.setItem("chunk_retry", "build-2");
     const beforeReload = vi.fn();
     const failure = new Error("no chunk");
 
@@ -98,5 +98,28 @@ describe("lazyRetry", () => {
 
     expect(beforeReload).toHaveBeenCalledTimes(1);
     expect(fake.location.reload).toHaveBeenCalledTimes(2);
+  });
+
+  // After the reload one chunk loads and another is still missing (a
+  // build with a chunk missing). That is the second failure in this
+  // build, so it goes to the error page. If the chunk that loaded had
+  // removed the flag, the page would reload again and again.
+  it("fails, with no reload, when a chunk loads and another fails after the reload", async () => {
+    const chunk = { default: () => null };
+    const failure = new Error("no chunk");
+    sessionStorage.setItem("chunk_retry", "build-2");
+
+    await expect(
+      lazyRetry(() => Promise.resolve(chunk), vi.fn())(),
+    ).resolves.toBe(chunk);
+    expect(sessionStorage.getItem("chunk_retry")).toBe("build-2");
+
+    const beforeReload = vi.fn();
+    await expect(
+      lazyRetry(() => Promise.reject(failure), beforeReload)(),
+    ).rejects.toBe(failure);
+
+    expect(beforeReload).not.toHaveBeenCalled();
+    expect(fake.location.reload).not.toHaveBeenCalled();
   });
 });

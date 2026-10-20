@@ -60,11 +60,13 @@ describe("DateBox, when the History page's code fails to load", () => {
   beforeEach(() => {
     sessionStorage.clear();
     fake = fakeLocation();
+    vi.stubGlobal("__BUILD_ID__", "test-build");
   });
 
   afterEach(() => {
     fake.restore();
     sessionStorage.clear();
+    vi.unstubAllGlobals();
   });
 
   // The same as the Calendar and the meal page (index.jsx): the page
