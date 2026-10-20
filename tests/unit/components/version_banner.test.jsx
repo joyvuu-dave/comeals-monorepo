@@ -62,6 +62,48 @@ describe("VersionBanner", () => {
     expect(screen.getByRole("button", { name: "Refresh" })).toBeInTheDocument();
   });
 
+  // A page nobody touches never starts the idle timer on its own, so it
+  // would keep the old build. The banner starts it (index.html).
+  it("starts the idle timer when it sees a newer build", async () => {
+    const kick = vi.fn();
+    window.idleTimerKick = kick;
+    mockManifest("vite-assets/index-NEW.js");
+    render(<VersionBanner />);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL + 1000);
+    });
+
+    expect(kick).toHaveBeenCalledTimes(1);
+    delete window.idleTimerKick;
+  });
+
+  it("shows the banner when the idle timer is turned off", async () => {
+    delete window.idleTimerKick;
+    mockManifest("vite-assets/index-NEW.js");
+    render(<VersionBanner />);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL + 1000);
+    });
+
+    expect(screen.getByText("A new version is available.")).toBeInTheDocument();
+  });
+
+  it("does not start the idle timer while the build is the same", async () => {
+    const kick = vi.fn();
+    window.idleTimerKick = kick;
+    mockManifest("vite-assets/index-OLD.js");
+    render(<VersionBanner />);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL + 1000);
+    });
+
+    expect(kick).not.toHaveBeenCalled();
+    delete window.idleTimerKick;
+  });
+
   it("stays hidden while the manifest matches the running build", async () => {
     mockManifest("vite-assets/index-OLD.js");
     const { container } = render(<VersionBanner />);
