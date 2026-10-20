@@ -7,6 +7,20 @@ import toastStore from "../stores/toast_store";
 // response.data is HTML or has no `message`.
 var SERVER_PROBLEM = "The server had a problem. Please try again.";
 
+// What a person sees when the answer is Heroku's maintenance page: a 503
+// whose HTML says "Offline for maintenance". It shows during a deploy.
+// The old code says the same sentence, so a person sees one sentence
+// before and after the deploy.
+var BEING_UPDATED = "Comeals is being updated. Please try again in a minute.";
+
+function maintenancePage(response) {
+  return (
+    response.status === 503 &&
+    typeof response.data === "string" &&
+    /maintenance/i.test(response.data)
+  );
+}
+
 // Where a message goes when the caller names no other place: the stack
 // of messages. Hands back the message's id.
 function showInStack(message, type) {
@@ -33,6 +47,9 @@ export default function handleAxiosError(error, options) {
     } else {
       console.error("Bad response from server", error);
       if (silent) return null;
+      if (maintenancePage(error.response)) {
+        return show(BEING_UPDATED, "error");
+      }
       return show(SERVER_PROBLEM, "error");
     }
   } else if (error.request) {
