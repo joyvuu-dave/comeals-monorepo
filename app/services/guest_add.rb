@@ -17,10 +17,9 @@ class GuestAdd
   # The words for an add with no Idempotency-Key header. A meal page
   # loaded before guest adds took a key sends none, and shows these words
   # to the person. A resident does not know what a header is, so the
-  # sentences for them come first, and the last one is for other API
-  # clients.
-  KEY_MISSING = T.let('This page is out of date. Nothing was saved. Reload the page and add the guest again. ' \
-                      'A guest add needs an Idempotency-Key header, with a new key for each guest.',
+  # words say only what to do. (An API client needs a new key in the
+  # header for each guest.)
+  KEY_MISSING = T.let('This page is out of date. Nothing was saved. Reload the page and add the guest again.',
                       String)
   # The answer to a key the meal has a row for, with another host or flag
   # (Api::V1::MealsController#seen_guest_key_answer). The answer for the
