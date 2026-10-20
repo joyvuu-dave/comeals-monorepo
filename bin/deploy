@@ -263,7 +263,10 @@ detect_deploy_needs() {
 
   local local_sha heroku_sha
   local_sha=$(git rev-parse HEAD)
-  heroku_sha=$(git ls-remote heroku refs/heads/main 2>/dev/null | awk '{print $1}')
+  # The commit the running release was built from. Not Heroku's git main:
+  # after a rollback that is the commit that was rolled back, and a
+  # migration between the two would be missed.
+  heroku_sha=$(heroku config:get HEROKU_SLUG_COMMIT -a "$APP" 2>/dev/null || true)
 
   if [ -z "$heroku_sha" ]; then
     warn "Cannot read Heroku SHA (first deploy or endpoint unreachable)"
