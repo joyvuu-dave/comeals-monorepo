@@ -4,7 +4,7 @@ require 'rails_helper'
 
 # bin/visual-coverage, the screen-state measure (bin/check's "Screen
 # states" step). Playwright and node are fakes here.
-RSpec.describe 'bin/visual-coverage' do
+RSpec.describe 'bin/visual-coverage', bash_coverage: BashCoverage.new('spec/bin/visual_coverage_spec.rb') do
   include_context 'with a script sandbox'
 
   let(:script) { sandbox.link('bin/visual-coverage') }

@@ -19,7 +19,20 @@ class BashCoverage
   # Every bash file held at 100%, and the spec file that must run all of it.
   FILES = {
     'bin/deploy' => 'spec/bin/deploy_spec.rb',
-    'bin/lib/output.sh' => 'spec/bin/deploy_spec.rb'
+    'bin/lib/output.sh' => 'spec/bin/deploy_spec.rb',
+    'bin/agent-merge' => 'spec/bin/agent_merge_spec.rb',
+    'bin/agent-worktree' => 'spec/bin/agent_worktree_spec.rb',
+    'bin/agent-worktree-done' => 'spec/bin/agent_worktree_done_spec.rb',
+    'bin/check' => 'spec/bin/check_spec.rb',
+    'bin/dev' => 'spec/bin/dev_spec.rb',
+    'bin/mutant' => 'spec/bin/mutant_spec.rb',
+    'bin/prod' => 'spec/bin/prod_spec.rb',
+    'bin/storm' => 'spec/bin/storm_spec.rb',
+    'bin/test-integration' => 'spec/bin/test_integration_spec.rb',
+    'bin/update-linux-snapshots' => 'spec/bin/update_linux_snapshots_spec.rb',
+    'bin/update-snapshots' => 'spec/bin/update_snapshots_spec.rb',
+    'bin/visual-coverage' => 'spec/bin/visual_coverage_spec.rb',
+    'bin/visual-linux' => 'spec/bin/visual_linux_spec.rb'
   }.freeze
 
   # bashcov marks a line that holds a whole function, `red() { ...; }`, as

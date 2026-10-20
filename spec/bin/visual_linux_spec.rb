@@ -7,7 +7,7 @@ require 'rails_helper'
 # admin server are fakes here. The script's first line names /bin/bash,
 # which is bash 3.2 on a Mac, so the spec runs it with the bash on the
 # PATH, the way CI's Linux runner does.
-RSpec.describe 'bin/visual-linux' do
+RSpec.describe 'bin/visual-linux', bash_coverage: BashCoverage.new('spec/bin/visual_linux_spec.rb') do
   include_context 'with a script sandbox'
 
   let(:script) { sandbox.link('bin/visual-linux') }

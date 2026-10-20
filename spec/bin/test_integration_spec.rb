@@ -6,7 +6,7 @@ require 'rails_helper'
 # Rails test server and runs the Playwright integration suite against it.
 # Bundler, npm, npx, lsof, curl, psql and sleep are fakes here. The fake
 # server stays up until the script stops it.
-RSpec.describe 'bin/test-integration' do
+RSpec.describe 'bin/test-integration', bash_coverage: BashCoverage.new('spec/bin/test_integration_spec.rb') do
   include_context 'with a script sandbox'
 
   let(:script) { sandbox.link('bin/test-integration') }

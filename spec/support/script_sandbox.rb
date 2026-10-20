@@ -12,8 +12,8 @@ require 'tmpdir'
 #   root/     a stand-in for the repository. A script that does
 #             `cd "$(dirname "$0")/.."` is run through a symlink at
 #             root/bin/<name>, so it works on the files here, never on the
-#             real checkout. bashcov resolves the symlink, so the lines it
-#             counts are the real script's.
+#             real checkout. The bash coverage check resolves the symlink,
+#             so the lines it counts are the real script's.
 #   fakebin/  the fakes, first on the PATH. Each one writes its name, the
 #             folder it ran in, the environment variables it was asked to
 #             note, and its arguments to a log, then does what its body
@@ -31,6 +31,9 @@ require 'tmpdir'
 # #unknown_commands reads it, and every spec that uses a sandbox checks it is
 # empty. So a script cannot run a real outside command, and a spec fails if
 # it tries.
+#
+# When the sandbox is given a BashCoverage (spec/support/bash_coverage.rb),
+# every run goes through it, so the script's lines are counted.
 class ScriptSandbox
   REPO = File.expand_path('../..', __dir__)
 
@@ -55,13 +58,10 @@ class ScriptSandbox
 
   # real: programs to add to safebin besides SAFE, such as git for a spec
   # that works on a throwaway repository. root_name: the name of the
-  # stand-in repository's folder.
-  def initialize(real: [], root_name: 'root')
-    # Under /tmp, not the longer TMPDIR of a Mac: bashcov's trace names the
-    # script and two folders on every line, and a line longer than the
-    # pipe's atomic write size (512 bytes on a Mac) can be mixed with a line
-    # written at the same time by the other side of a pipeline.
-    @dir = File.realpath(Dir.mktmpdir(['sb', ''], '/tmp'))
+  # stand-in repository's folder. coverage: the spec file's BashCoverage.
+  def initialize(real: [], root_name: 'root', coverage: nil)
+    @coverage = coverage
+    @dir = File.realpath(Dir.mktmpdir('script-sandbox'))
     @root = File.join(@dir, root_name)
     @fakebin = File.join(@dir, 'fakebin')
     @safebin = File.join(@dir, 'safebin')
@@ -147,7 +147,11 @@ class ScriptSandbox
     "case \"$*\" in\n#{arms.join("\n")}\n  *) #{otherwise} ;;\nesac"
   end
 
+  # Runs the command in chdir with only the sandbox's environment (and
+  # env), and returns its output, standard and error together.
   def run(command, *, env: {}, chdir: root, input: nil)
+    return run_measured(command, *, env: env, chdir: chdir, input: input) if @coverage
+
     output, status = Open3.capture2e(base_env.merge(env), command, *,
                                      chdir: chdir, unsetenv_others: true, stdin_data: input.to_s)
     Result.new(output, status)
@@ -172,14 +176,29 @@ class ScriptSandbox
     File.exist?(log) ? File.read(log).lines.map(&:chomp) : []
   end
 
-  # Under bashcov the trace of a script is read after the script ends, and
-  # a symlink in a folder that is already gone cannot be resolved to the
-  # real script any more. So the folder stays while bashcov is watching.
   def cleanup
-    FileUtils.remove_entry(dir) unless ENV.key?('BASH_XTRACEFD')
+    FileUtils.remove_entry(dir)
   end
 
   private
+
+  # BashCoverage#run starts bash with the trace settings and the suite's
+  # environment. This wrapper, run by that bash, moves to chdir, clears
+  # the environment but for the sandbox's and the trace settings, and
+  # sends the output to a file.
+  def run_measured(command, *args, env:, chdir:, input:)
+    @measured_runs = (@measured_runs || 0) + 1
+    base = File.join(dir, 'measured', @measured_runs.to_s)
+    write("#{base}.in", input.to_s)
+    pairs = base_env.merge(env).compact.map { |name, value| "#{name}=#{value}".shellescape }
+    write("#{base}.sh", <<~BASH)
+      cd #{chdir.shellescape} || exit 99
+      exec env -i #{pairs.join(' ')} SHELLOPTS="$SHELLOPTS" PS4="$PS4" BASH_XTRACEFD="$BASH_XTRACEFD" \
+        #{[command, *args].map(&:shellescape).join(' ')} <#{"#{base}.in".shellescape} >#{"#{base}.out".shellescape} 2>&1
+    BASH
+    status = @coverage.run("#{base}.sh")
+    Result.new(File.read("#{base}.out"), status)
+  end
 
   def which(program)
     ENV.fetch('PATH').split(File::PATH_SEPARATOR).map { |d| File.join(d, program) }
@@ -244,10 +263,8 @@ class ScriptSandbox
       #!#{bash}
       # The one fake command of ScriptSandbox (spec/support/script_sandbox.rb).
       # Every fake is a link to this file. It logs the call, then runs the
-      # body the sandbox wrote for the name it was run by. It is not traced
-      # under bashcov: it is not one of the scripts measured, and a fake
-      # that runs at the same time as the script (a server) would write its
-      # trace lines in among the script's.
+      # body the sandbox wrote for the name it was run by. It is not traced:
+      # it is not one of the scripts measured.
       set +x
       name=$0
       name=${name#"$SANDBOX_FAKEBIN"/}
@@ -274,7 +291,7 @@ class ScriptSandbox
   end
 
   def base_env
-    env = {
+    {
       'PATH' => "#{fakebin}:#{@safebin}",
       'HOME' => File.join(dir, 'home'),
       'TMPDIR' => File.join(dir, 'tmp'),
@@ -286,21 +303,33 @@ class ScriptSandbox
       'BASH_FUNC_command_not_found_handle%%' =>
         '() { printf "%s\n" "$*" >> "$SANDBOX_UNKNOWN"; echo "sandbox: no fake for $1" >&2; return 127; }'
     }
-    # bashcov's trace settings, so the scripts are measured when it runs
-    # the suite.
-    %w[SHELLOPTS PS4 BASH_XTRACEFD].each { |name| env[name] = ENV[name] if ENV.key?(name) }
-    env
   end
 end
 
 # A sandbox for each example, removed after it, and a check that the
 # script ran no command that has no fake.
+#
+# A spec file that names a BashCoverage in its metadata
+# (RSpec.describe 'bin/x', bash_coverage: BashCoverage.new(<this file>))
+# runs every script through it, and after its last example checks that the
+# scripts BashCoverage::FILES gives it ran every line. The check runs only
+# when every example of the file ran, so one example on its own can pass.
 RSpec.shared_context 'with a script sandbox' do
-  let(:sandbox) { ScriptSandbox.new }
+  let(:sandbox) { new_sandbox }
+
+  def new_sandbox(**)
+    ScriptSandbox.new(coverage: self.class.metadata[:bash_coverage], **)
+  end
 
   after do
     raise "commands with no fake: #{sandbox.unknown_commands}" unless sandbox.unknown_commands.empty?
 
     sandbox.cleanup
+  end
+
+  after(:context) do
+    coverage = self.class.metadata[:bash_coverage]
+    ran_all = self.class.descendant_filtered_examples.size == self.class.descendants.sum { it.examples.size }
+    coverage.check! if coverage && ran_all
   end
 end

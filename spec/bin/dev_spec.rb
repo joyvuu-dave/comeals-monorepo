@@ -6,7 +6,7 @@ require 'rails_helper'
 # holds them, then starts foreman. lsof, ps, sleep and bundle are fakes.
 # kill is a bash builtin, so the "leftover server" is a real process this
 # spec starts and owns, and fake lsof reports it while it is alive.
-RSpec.describe 'bin/dev' do
+RSpec.describe 'bin/dev', bash_coverage: BashCoverage.new('spec/bin/dev_spec.rb') do
   include_context 'with a script sandbox'
 
   let(:script) { sandbox.link('bin/dev') }
@@ -108,7 +108,7 @@ RSpec.describe 'bin/dev' do
   # folder's name in the process title would take the main checkout's
   # server for the worktree's own.
   context 'when this folder is comeals-mono' do
-    let(:sandbox) { ScriptSandbox.new(root_name: 'comeals-mono') }
+    let(:sandbox) { new_sandbox(root_name: 'comeals-mono') }
 
     it 'leaves alone the server of comeals-monorepo' do
       pid = leftover_server(folder: File.join(sandbox.dir, 'comeals-monorepo'))

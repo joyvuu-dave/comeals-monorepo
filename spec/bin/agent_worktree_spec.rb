@@ -5,7 +5,7 @@ require 'rails_helper'
 # bin/agent-worktree makes a worktree for one agent task, with its own test
 # database and test ports. It runs here against a throwaway repository
 # (spec/support/throwaway_repository.rb); bundle and npm are fakes.
-RSpec.describe 'bin/agent-worktree' do
+RSpec.describe 'bin/agent-worktree', bash_coverage: BashCoverage.new('spec/bin/agent_worktree_spec.rb') do
   include ThrowawayRepository
 
   let(:script) { File.join(ScriptSandbox::REPO, 'bin/agent-worktree') }

@@ -8,7 +8,7 @@ require 'rails_helper'
 # (spec/support/throwaway_repository.rb). The repository's
 # bin/agent-worktree-done is the real script; its bin/rails and dropdb
 # are fakes.
-RSpec.describe 'bin/agent-merge' do
+RSpec.describe 'bin/agent-merge', bash_coverage: BashCoverage.new('spec/bin/agent_merge_spec.rb') do
   include ThrowawayRepository
 
   let(:script) { File.join(ScriptSandbox::REPO, 'bin/agent-merge') }

@@ -5,7 +5,7 @@ require 'rails_helper'
 # bin/update-snapshots deletes the visual goldens and records them again
 # on both platforms. Playwright, git and bin/update-linux-snapshots are
 # fakes here; the goldens are empty files in the sandbox.
-RSpec.describe 'bin/update-snapshots' do
+RSpec.describe 'bin/update-snapshots', bash_coverage: BashCoverage.new('spec/bin/update_snapshots_spec.rb') do
   include_context 'with a script sandbox'
 
   let(:script) { sandbox.link('bin/update-snapshots') }

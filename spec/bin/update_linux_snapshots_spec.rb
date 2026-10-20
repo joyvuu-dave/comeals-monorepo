@@ -6,7 +6,8 @@ require 'rails_helper'
 # bin/visual-linux, which is a fake here (it has its own spec). The
 # script's first line names /bin/bash, which is bash 3.2 on a Mac, so the
 # spec runs it with the bash on the PATH.
-RSpec.describe 'bin/update-linux-snapshots' do
+RSpec.describe 'bin/update-linux-snapshots',
+               bash_coverage: BashCoverage.new('spec/bin/update_linux_snapshots_spec.rb') do
   include_context 'with a script sandbox'
 
   let(:script) { sandbox.link('bin/update-linux-snapshots') }

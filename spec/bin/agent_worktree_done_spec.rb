@@ -5,7 +5,7 @@ require 'rails_helper'
 # bin/agent-worktree-done removes a task's worktree and drops its two
 # databases, and keeps the branch. It runs here against a throwaway
 # repository (spec/support/throwaway_repository.rb); dropdb is a fake.
-RSpec.describe 'bin/agent-worktree-done' do
+RSpec.describe 'bin/agent-worktree-done', bash_coverage: BashCoverage.new('spec/bin/agent_worktree_done_spec.rb') do
   include ThrowawayRepository
 
   let(:script) { File.join(ScriptSandbox::REPO, 'bin/agent-worktree-done') }

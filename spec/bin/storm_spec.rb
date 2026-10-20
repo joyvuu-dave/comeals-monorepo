@@ -5,7 +5,7 @@ require 'rails_helper'
 # bin/storm starts a many-threaded Puma and runs rake test:storm against
 # it. Bundler, lsof, curl, psql and sleep are fakes here. The fake server
 # stays up until the script stops it.
-RSpec.describe 'bin/storm' do
+RSpec.describe 'bin/storm', bash_coverage: BashCoverage.new('spec/bin/storm_spec.rb') do
   include_context 'with a script sandbox'
 
   let(:script) { sandbox.link('bin/storm') }

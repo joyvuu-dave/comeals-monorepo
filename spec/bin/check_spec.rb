@@ -8,10 +8,10 @@ require 'rails_helper'
 # warning or a failure, what it prints, the summary, and the exit code.
 # The sandbox holds the few files the script reads itself (the Gemfile,
 # .env, the JS file list, app code for the grep steps).
-RSpec.describe 'bin/check' do
+RSpec.describe 'bin/check', bash_coverage: BashCoverage.new('spec/bin/check_spec.rb') do
   include_context 'with a script sandbox'
 
-  let(:sandbox) { ScriptSandbox.new(real: %w[python3]) }
+  let(:sandbox) { new_sandbox(real: %w[python3]) }
   let(:script) { sandbox.link('bin/check') }
   let(:esc) { "\e" }
 

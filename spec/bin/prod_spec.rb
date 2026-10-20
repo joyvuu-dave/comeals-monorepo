@@ -4,7 +4,7 @@ require 'rails_helper'
 
 # bin/prod builds the production bundle and serves it from Rails in the
 # production environment. lsof, npm and bundle are fakes here.
-RSpec.describe 'bin/prod' do
+RSpec.describe 'bin/prod', bash_coverage: BashCoverage.new('spec/bin/prod_spec.rb') do
   include_context 'with a script sandbox'
 
   let(:script) { sandbox.link('bin/prod') }

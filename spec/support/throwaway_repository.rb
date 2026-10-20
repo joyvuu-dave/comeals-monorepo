@@ -12,7 +12,7 @@ module ThrowawayRepository
 
   def self.included(base)
     base.include_context 'with a script sandbox'
-    base.let(:sandbox) { ScriptSandbox.new(real: %w[git], root_name: 'comeals-monorepo') }
+    base.let(:sandbox) { new_sandbox(real: %w[git], root_name: 'comeals-monorepo') }
     base.let(:repo) { sandbox.root }
     base.let(:origin) { File.join(sandbox.dir, 'origin.git') }
   end

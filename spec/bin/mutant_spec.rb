@@ -4,7 +4,7 @@ require 'rails_helper'
 
 # bin/mutant copies the test database once per worker, runs mutant, and
 # drops the copies. Bundler, createdb and dropdb are fakes here.
-RSpec.describe 'bin/mutant' do
+RSpec.describe 'bin/mutant', bash_coverage: BashCoverage.new('spec/bin/mutant_spec.rb') do
   include_context 'with a script sandbox'
 
   let(:script) { sandbox.link('bin/mutant') }
