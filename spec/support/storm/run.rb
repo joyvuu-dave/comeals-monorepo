@@ -225,9 +225,14 @@ module Storm
     rescue *ADMIN_REFUSALS
       :refused
     rescue ActiveRecord::StatementInvalid => e
-      raise unless e.message.match?(TRIGGER_REFUSAL)
+      return :refused_by_trigger if e.message.match?(TRIGGER_REFUSAL)
 
-      :refused_by_trigger
+      # Recorded, not raised: a raise here left the rescue below
+      # unreached, ended the admin thread, and stopped the whole storm
+      # task before its checks and its report (bin/storm at 256
+      # clients, PostgreSQL out of shared memory for its SSI locks).
+      @problems << "admin: #{e.class}: #{e.message}"
+      :error
     rescue StandardError => e
       @problems << "admin: #{e.class}: #{e.message}"
       :error
