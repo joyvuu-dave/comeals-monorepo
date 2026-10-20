@@ -20,11 +20,11 @@ RSpec.describe 'deploy:verify_config and deploy:verify_solid_queue' do
       .to output(/config vars this release needs are set/).to_stdout
   end
 
-  it 'verify_config raises the missing vars in production' do
+  it 'verify_config raises the missing pool in production' do
     allow(Rails.env).to receive(:production?).and_return(true)
     allow(ENV).to receive(:to_h).and_return({})
 
-    expect { Rake::Task['deploy:verify_config'].invoke }.to raise_error(/SOLID_QUEUE_IN_PUMA=true/)
+    expect { Rake::Task['deploy:verify_config'].invoke }.to raise_error(/RAILS_DB_POOL=4\./)
   end
 
   it 'verify_solid_queue raises when no process has a heartbeat' do

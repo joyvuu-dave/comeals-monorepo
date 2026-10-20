@@ -4,48 +4,43 @@ require 'rails_helper'
 require Rails.root.join('lib/deploy_config_check')
 
 # The release-phase check that keeps a production deploy from going live
-# without the config vars Solid Queue needs, and the heartbeat check that
-# runs after the deploy. Both live updates and the nightly jobs depend on
-# the supervisor those vars start.
+# without the database pool the jobs dyno needs, and the heartbeat check
+# that runs after the deploy. Both live updates and the nightly jobs depend
+# on the Solid Queue supervisor on the worker dyno.
 RSpec.describe DeployConfigCheck do
   describe '.config_problem' do
-    let(:good) { { 'RAILS_DB_POOL' => '4', 'SOLID_QUEUE_IN_PUMA' => 'true' } }
+    let(:good) { { 'RAILS_DB_POOL' => '4' } }
 
-    it 'is satisfied by a pool of four and the supervisor var' do
+    # The jobs run on the worker dyno now (Procfile), so the var that
+    # started them inside Puma is not needed and not asked for.
+    it 'is satisfied by a pool of four alone' do
       expect(described_class.config_problem(good, production: true)).to be_nil
     end
 
-    it 'names both vars, with the values to set, when neither is there' do
+    it 'names the pool, with the value to set, when it is not there' do
       problem = described_class.config_problem({}, production: true)
 
-      expect(problem).to include('RAILS_DB_POOL=4, SOLID_QUEUE_IN_PUMA=true')
-      expect(problem).to include('heroku config:set RAILS_DB_POOL=4 SOLID_QUEUE_IN_PUMA=true -a comeals-monorepo')
-      expect(problem).to include('previous release is still serving')
+      expect(problem).to eq(
+        'This release needs a config var the app does not have: RAILS_DB_POOL=4. ' \
+        'Without it the jobs on the worker dyno run out of database connections ' \
+        '(lib/deploy_config_check.rb). Run: heroku config:set RAILS_DB_POOL=4 -a comeals-monorepo  ' \
+        'and deploy again. The previous release is still serving.'
+      )
     end
 
-    it 'names only the pool when it is too small' do
-      problem = described_class.config_problem(good.merge('RAILS_DB_POOL' => '2'), production: true)
-
-      expect(problem).to include('RAILS_DB_POOL=4')
-      expect(problem).not_to include('SOLID_QUEUE_IN_PUMA=true')
-    end
-
-    it 'names only the supervisor var when it is blank' do
-      problem = described_class.config_problem(good.merge('SOLID_QUEUE_IN_PUMA' => ' '), production: true)
-
-      expect(problem).to include('SOLID_QUEUE_IN_PUMA=true')
-      expect(problem).not_to include('RAILS_DB_POOL')
+    it 'names the pool when it is too small' do
+      expect(described_class.config_problem({ 'RAILS_DB_POOL' => '2' }, production: true)).to include('RAILS_DB_POOL=4')
     end
 
     it 'accepts a pool larger than four' do
-      expect(described_class.config_problem(good.merge('RAILS_DB_POOL' => '8'), production: true)).to be_nil
+      expect(described_class.config_problem({ 'RAILS_DB_POOL' => '8' }, production: true)).to be_nil
     end
 
     it 'holds nothing against a non-production environment' do
       expect(described_class.config_problem({}, production: false)).to be_nil
     end
 
-    it 'holds nothing against staging, which must not run jobs' do
+    it 'holds nothing against staging, where bin/staging-rehearsal sets the pool itself' do
       expect(described_class.config_problem({ 'COMEALS_STAGING' => '1' }, production: true)).to be_nil
     end
 
@@ -59,7 +54,7 @@ RSpec.describe DeployConfigCheck do
     it 'holds a release to the rule when COMEALS_STAGING or LOCAL_PRODUCTION is blank' do
       %w[COMEALS_STAGING LOCAL_PRODUCTION].product(['', ' ']).each do |name, blank|
         expect(described_class.config_problem({ name => blank }, production: true))
-          .to include('RAILS_DB_POOL=4, SOLID_QUEUE_IN_PUMA=true'), "#{name}=#{blank.inspect}"
+          .to include('RAILS_DB_POOL=4'), "#{name}=#{blank.inspect}"
       end
     end
   end
@@ -76,8 +71,13 @@ RSpec.describe DeployConfigCheck do
       expect(problem).not_to include('Supervisor,')
     end
 
-    it 'names every kind when nothing is running' do
-      expect(described_class.process_problem([])).to include('Supervisor, Dispatcher, Worker, Scheduler')
+    it 'names every kind when nothing is running, and says to look at the worker dyno' do
+      expect(described_class.process_problem([])).to eq(
+        'Solid Queue is not fully running: no heartbeat in the last 2 minutes from ' \
+        'Supervisor, Dispatcher, Worker, Scheduler. Live updates and the nightly jobs depend on it. ' \
+        'Check that the worker dyno runs (heroku ps -a comeals-monorepo) and read its log ' \
+        '(heroku logs -a comeals-monorepo --dyno worker | grep SolidQueue).'
+      )
     end
   end
 
@@ -88,7 +88,7 @@ RSpec.describe DeployConfigCheck do
     end
 
     # The kinds as Solid Queue itself saves them. The supervisor's kind
-    # names its mode, "Supervisor(fork)" under the Puma plugin, so a list
+    # names its mode, "Supervisor(fork)" on the worker dyno, so a list
     # typed by hand ("Supervisor") passes here and fails on Heroku.
     def real_kinds
       supervisor = SolidQueue::ForkSupervisor.new(SolidQueue::Configuration.new(mode: :fork))
@@ -128,12 +128,12 @@ RSpec.describe DeployConfigCheck do
       allow(Rails.env).to receive(:production?).and_return(true)
       allow(ENV).to receive(:to_h).and_return({})
 
-      expect { described_class.verify_config! }.to raise_error(/RAILS_DB_POOL=4, SOLID_QUEUE_IN_PUMA=true/)
+      expect { described_class.verify_config! }.to raise_error(/does not have: RAILS_DB_POOL=4\./)
     end
 
-    it 'passes a production release that has both vars' do
+    it 'passes a production release that has the pool' do
       allow(Rails.env).to receive(:production?).and_return(true)
-      allow(ENV).to receive(:to_h).and_return({ 'RAILS_DB_POOL' => '4', 'SOLID_QUEUE_IN_PUMA' => 'true' })
+      allow(ENV).to receive(:to_h).and_return({ 'RAILS_DB_POOL' => '4' })
 
       expect { described_class.verify_config! }.not_to raise_error
     end
