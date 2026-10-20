@@ -35,10 +35,10 @@ RSpec.describe SolidQueueCheck do
     end
 
     # The kinds as Solid Queue itself saves them. The supervisor's kind
-    # names its mode, "Supervisor(fork)" on the worker dyno, so a list
+    # names its mode, "Supervisor(async)" on the worker dyno, so a list
     # typed by hand ("Supervisor") passes here and fails on Heroku.
     def real_kinds
-      supervisor = SolidQueue::ForkSupervisor.new(SolidQueue::Configuration.new(mode: :fork))
+      supervisor = SolidQueue::AsyncSupervisor.new(SolidQueue::Configuration.new(mode: :async))
       [supervisor.kind, 'Dispatcher', 'Worker', 'Scheduler']
     end
 
