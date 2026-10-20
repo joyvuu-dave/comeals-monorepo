@@ -92,4 +92,33 @@ RSpec.describe RecurringCatchUp do
       expect(described_class.call).to eq([RefreshBalancesJob])
     end
   end
+
+  # config/puma.rb runs it after boot, outside any rescue, so an error
+  # that left it would end the web process. A missed run waits for its
+  # next tick instead, and the error goes to Bugsnag.
+  describe 'when something fails' do
+    before { allow(Rails.error).to receive(:report) }
+
+    it 'queues the other jobs and reports the one that could not be queued' do
+      error = StandardError.new('queue refused')
+      allow(VerifyLedgerJob).to receive(:perform_later).and_raise(error)
+
+      returned = nil
+      expect { returned = described_class.call(now: now) }.not_to raise_error
+      expect(returned).to contain_exactly(RefreshBalancesJob, EnsureRotationsJob, SendMissedSettlementMailJob)
+      expect(Rails.error).to have_received(:report)
+        .with(error, handled: true, severity: :error, context: { job: 'VerifyLedgerJob' })
+    end
+
+    it 'queues nothing and reports when the last runs cannot be read' do
+      error = ActiveRecord::SerializationFailure.new('could not serialize access')
+      allow(JobRun).to receive(:last_success_at).and_raise(error)
+
+      returned = nil
+      expect { returned = described_class.call(now: now) }.not_to raise_error
+      expect(returned).to eq([])
+      expect(Rails.error).to have_received(:report)
+        .with(error, handled: true, severity: :error, context: { job: 'all' })
+    end
+  end
 end
