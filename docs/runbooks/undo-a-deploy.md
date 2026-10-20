@@ -138,17 +138,66 @@ starts web or the worker again by itself.
 ## Practise it on staging
 
 `bin/staging-rehearsal` does not practise the undo. It only deploys the
-new code to staging on a copy of production. Practise the undo by hand,
-before the real deploy:
+new code to staging on a copy of production. Practise the deploy and the
+undo together, before the real deploy, with the real `bin/deploy` and
+the real Rollback workflow:
 
-1. Restore a fresh production backup into staging, and push the code
-   production runs now to staging. Staging then looks like production.
-2. Capture a staging backup. This is "the backup before the deploy".
-3. Push the new code to staging. Its release phase runs the migrations.
-4. Run the Rollback workflow with `app: comeals-staging`, the staging
-   release that ran the old code, and the backup from step 2.
-5. Check that the smoke test passed on the old code, then scale staging
+First check that staging cannot email anyone, because step 1 puts real
+residents' email addresses on it. This must print a value:
+`heroku config:get COMEALS_STAGING -a comeals-staging`. And this must
+list none of the vars in `bin/lib/staging_forbidden_vars.sh`:
+`heroku config -a comeals-staging`. (`bin/deploy` checks both again in
+step 2.)
+
+1. Make staging look like production: scale staging's web and worker to
+   0, restore a fresh production backup into it, and push the commit
+   production runs to it.
+
+   ```bash
+   heroku pg:backups:capture -a comeals-monorepo
+   heroku ps:scale web=0 -a comeals-staging
+   heroku ps:scale worker=0 -a comeals-staging  # fails, harmless, when staging has no worker
+   heroku pg:backups:restore "$(heroku pg:backups:url -a comeals-monorepo)" \
+     DATABASE_URL -a comeals-staging --confirm comeals-staging
+   git push --force https://git.heroku.com/comeals-staging.git \
+     "$(heroku config:get HEROKU_SLUG_COMMIT -a comeals-monorepo):refs/heads/main"
+   heroku ps:scale web=1 -a comeals-staging
+   ```
+
+   Start only web. A release from before the worker dyno has no worker
+   process type, and Heroku refuses to scale one.
+
+   Write down the staging release this push made. It is the release to
+   go back to. To list the releases: `heroku releases -a comeals-staging`.
+
+2. Deploy the new code to staging, from `main`, the same way production
+   will get it:
+
+   ```bash
+   DEPLOY_APP=comeals-staging bin/deploy
+   ```
+
+   It runs every step of a production deploy, in the same order, on
+   staging: the CI check, the local checks, a staging backup (it prints
+   the id: this is "the backup before the deploy"), maintenance mode when
+   a migration changed, the push, the release phase, the cache clear and
+   the balance refresh, the worker, the health check, the Solid Queue
+   check and the smoke test. It pushes to staging's own git address,
+   never to the `heroku` remote. It first refuses a staging app that
+   could send mail: staging holds real residents' email addresses, and
+   the deploy starts the worker.
+
+3. Run the Rollback workflow with `app: comeals-staging`, the release
+   from step 1, and the backup from step 2:
+
+   ```bash
+   gh workflow run rollback.yml --ref main -f app=comeals-staging \
+     -f reason="Rehearsal of the undo" -f release=vNN -f backup=bNNN
+   ```
+
+4. Check that the smoke test passed on the old code, then scale staging
    to 0.
 
 On staging the workflow only rolls back and smokes; it leaves
-`DEPLOY_HOLD`, the release notes and the issues alone.
+`DEPLOY_HOLD`, the release notes and the issues alone
+(`spec/bin/rollback_workflow_spec.rb` checks this).
