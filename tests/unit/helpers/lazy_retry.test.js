@@ -6,13 +6,20 @@ import lazyRetry from "../../../app/frontend/src/helpers/lazy_retry.js";
 
 let reload;
 
+let fetchMock;
+
 beforeEach(function () {
   sessionStorage.clear();
   reload = vi.fn();
   vi.stubGlobal("location", { reload: reload });
+  fetchMock = vi.fn(function () {
+    return Promise.resolve({ ok: true });
+  });
+  vi.stubGlobal("fetch", fetchMock);
 });
 
 afterEach(function () {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -33,6 +40,33 @@ describe("lazyRetry", () => {
       expect(reload).toHaveBeenCalledTimes(1);
       expect(sessionStorage.getItem("chunk_retry")).toBe("1");
     });
+  });
+
+  // An import fails for every page during a deploy too: Heroku answers
+  // every file with its maintenance page. A reload then would land on
+  // that page, which never reloads, so the reload waits for the server.
+  it("waits until the server answers before it reloads", async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementationOnce(function () {
+      return Promise.resolve({ ok: false });
+    });
+    fetchMock.mockImplementationOnce(function () {
+      return Promise.reject(new TypeError("Failed to fetch"));
+    });
+
+    lazyRetry(() => Promise.reject(new Error("gone")))();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledWith("/api/v1/version", {
+      cache: "no-store",
+    });
+    expect(reload).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(30 * 1000);
+    expect(reload).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(30 * 1000);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(reload).toHaveBeenCalledTimes(1);
   });
 
   it("sends a second failure in a row to the error page, and clears the mark", async () => {
