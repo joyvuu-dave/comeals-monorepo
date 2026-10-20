@@ -21,12 +21,13 @@ RSpec.describe 'bin/staging-rehearsal', bash_coverage: BashCoverage.new('spec/bi
     sandbox.note_env('SMOKE_URL', 'SMOKE_EMAIL', 'SMOKE_PASSWORD', 'SMOKE_MEAL_ID')
     sandbox.rule('heroku', "config #{staging} --json", out: config_json(config_keys))
     sandbox.rule('heroku', "config:get COMEALS_STAGING #{staging}", out: "1\n")
-    sandbox.rule('heroku', "addons #{staging}", out: "heroku-postgresql (postgresql-round-123)  essential-0\n")
     sandbox.rule('heroku', "ps #{staging} --json", out: '[{"type":"web","state":"down"}]')
     sandbox.rule('heroku', 'pg:backups:capture -a comeals-monorepo',
                  out: "Backing up DATABASE to b101... done\n")
     sandbox.rule('heroku', 'pg:backups:url -a comeals-monorepo', out: "https://backups.example.com/b101\n")
-    sandbox.rule('heroku', "ps:scale web=? #{staging}")
+    sandbox.rule('heroku', "ps:scale * #{staging}")
+    sandbox.rule('heroku', "config:get RAILS_DB_POOL #{staging}", out: "4\n")
+    sandbox.rule('heroku', "config:set RAILS_DB_POOL=4 #{staging}")
     sandbox.rule('heroku', "pg:backups:restore https://backups.example.com/b101 DATABASE_URL #{staging} " \
                            '--confirm comeals-staging')
     sandbox.rule('heroku', "releases #{staging} --json", out: '[{"status":"succeeded"},{"status":"failed"}]')
@@ -70,6 +71,11 @@ RSpec.describe 'bin/staging-rehearsal', bash_coverage: BashCoverage.new('spec/bi
     heroku_calls.grep(/ps:scale web=/).last&.[](/web=(\d)/, 1)
   end
 
+  # The same for the worker, which runs Solid Queue.
+  def last_worker_scale
+    heroku_calls.grep(/ps:scale.* worker=|ps:scale worker=/).last&.[](/worker=(\d)/, 1)
+  end
+
   it 'rehearses the commit and parks staging when every step passes' do
     result = rehearse
 
@@ -81,12 +87,13 @@ RSpec.describe 'bin/staging-rehearsal', bash_coverage: BashCoverage.new('spec/bi
         'date -u +%Y-%m-%dT%H:%M:%S',
         "heroku config #{staging} --json",
         "heroku config:get COMEALS_STAGING #{staging}",
-        "heroku addons #{staging}",
         "heroku ps #{staging} --json",
         'heroku pg:backups:capture -a comeals-monorepo',
         'heroku pg:backups:url -a comeals-monorepo',
         "heroku ps:scale web=0 #{staging}",
+        "heroku ps:scale worker=0 #{staging}",
         "heroku pg:backups:restore https://backups.example.com/b101 DATABASE_URL #{staging} --confirm comeals-staging",
+        "heroku config:get RAILS_DB_POOL #{staging}",
         'git rev-parse HEAD',
         'git rev-parse --short HEAD',
         'git push --force https://git.heroku.com/comeals-staging.git HEAD:refs/heads/main',
@@ -99,17 +106,70 @@ RSpec.describe 'bin/staging-rehearsal', bash_coverage: BashCoverage.new('spec/bi
         'mktemp',
         "heroku run --exit-code #{staging} --env SMOKE_EMAIL=smoke@staging.invalid;" \
         'SMOKE_PASSWORD=made-up-password -- bin/rails runner bin/lib/staging_smoke_seed.rb',
-        "heroku ps:scale web=1 #{staging}",
+        "heroku ps:scale web=1 worker=1 #{staging}",
         "heroku apps:info #{staging} --json",
         "curl -sf #{url}/api/v1/version",
         'date -u +%Y-%m-%dT%H:%M:%S',
         "heroku config:get HEROKU_SLUG_COMMIT #{staging}",
+        "heroku run --exit-code #{staging} -- bin/rake deploy:verify_solid_queue",
         "heroku logs -n 1500 #{staging}",
         'node tests/smoke/smoke.js',
         'node tests/smoke/aggressive.js',
-        "heroku ps:scale web=0 #{staging}"
+        "heroku ps:scale web=0 worker=0 #{staging}"
       ]
     )
+  end
+
+  # Staging is neutered (the neuter check below), so its jobs can run:
+  # mail is collected in memory, Pusher is a no-op, and there is no
+  # healthchecks key. Running the worker there is how the rehearsal
+  # proves the jobs dyno of this commit starts.
+  it 'runs the worker beside web and checks that every Solid Queue process came up' do
+    result = rehearse
+
+    expect(result.exitstatus).to eq(0)
+    expect(result.out).to include('Solid Queue runs on staging (supervisor, dispatcher, worker, scheduler)')
+  end
+
+  # The jobs dyno's processes each need more than one connection
+  # (lib/deploy_config_check.rb). Staging is not held to the release
+  # check, so the rehearsal sets the pool itself, while web and the worker
+  # are at 0.
+  it 'sets RAILS_DB_POOL=4 on staging before the push when it is below 4' do
+    sandbox.rule('heroku', "config:get RAILS_DB_POOL #{staging}", out: "\n")
+
+    result = rehearse
+
+    expect(result.exitstatus).to eq(0)
+    expect(result.out).to include("Setting RAILS_DB_POOL=4 on comeals-staging (was '')")
+    lines = sandbox.call_lines
+    expect(lines.index("heroku config:set RAILS_DB_POOL=4 #{staging}"))
+      .to be < lines.index('git push --force https://git.heroku.com/comeals-staging.git HEAD:refs/heads/main')
+  end
+
+  it 'asks again after 30 seconds when Solid Queue is not up yet' do
+    sandbox.rule('heroku', "run --exit-code #{staging} -- bin/rake deploy:verify_solid_queue", exit: 1, once: true)
+
+    result = rehearse
+
+    expect(result.exitstatus).to eq(0)
+    expect(result.out).to include('Solid Queue is not up yet — asking again in 30s')
+    expect(sandbox.calls_to('sleep').map(&:args)).to eq([['30']])
+  end
+
+  # Staging state: web and the worker at 1, the new code on the copy of
+  # production. The Deploy workflow's "Park staging" step stops both.
+  it 'stops when Solid Queue does not come up on staging' do
+    sandbox.rule('heroku', "run --exit-code #{staging} -- bin/rake deploy:verify_solid_queue", exit: 1)
+
+    result = rehearse
+
+    expect(result.exitstatus).to eq(1)
+    expect(result.out).to include('Solid Queue did not come up on staging. Read: heroku logs -a comeals-staging ' \
+                                  '--dyno worker')
+    expect(heroku_calls.grep(/verify_solid_queue/).size).to eq(2)
+    expect(sandbox.calls_to('node')).to be_empty
+    expect(last_worker_scale).to eq('1')
   end
 
   it 'passes the smoke resident and the smoke meal to both smoke tests' do
@@ -121,12 +181,13 @@ RSpec.describe 'bin/staging-rehearsal', bash_coverage: BashCoverage.new('spec/bi
     expect(aggressive.env).to eq(login.merge('SMOKE_URL' => url, 'SMOKE_MEAL_ID' => '42'))
   end
 
-  it 'leaves web running when STAGING_KEEP_UP is 1' do
+  it 'leaves web and the worker running when STAGING_KEEP_UP is 1' do
     result = rehearse('STAGING_KEEP_UP' => '1')
 
     expect(result.exitstatus).to eq(0)
     expect(result.out).not_to include('Park')
     expect(last_web_scale).to eq('1')
+    expect(last_worker_scale).to eq('1')
   end
 
   describe 'the neuter check' do
@@ -174,12 +235,6 @@ RSpec.describe 'bin/staging-rehearsal', bash_coverage: BashCoverage.new('spec/bi
       expect(rehearse.exitstatus).to eq(0)
     end
 
-    context 'when a scheduler addon exists' do
-      before { sandbox.rule('heroku', "addons #{staging}", out: "scheduler (scheduler-round-1)  standard\n") }
-
-      it_behaves_like 'a refusal before any write', 'A scheduler addon exists'
-    end
-
     context 'when a clock dyno runs' do
       before { sandbox.rule('heroku', "ps #{staging} --json", out: '[{"type":"web"},{"type":"clock"}]') }
 
@@ -197,14 +252,6 @@ RSpec.describe 'bin/staging-rehearsal', bash_coverage: BashCoverage.new('spec/bi
 
       it_behaves_like 'a refusal before any write', nil
     end
-
-    # When the addon list cannot be read, the check cannot know whether a
-    # scheduler exists.
-    context 'when the addons cannot be listed' do
-      before { sandbox.rule('heroku', "addons #{staging}", err: 'Internal server error', exit: 1) }
-
-      it_behaves_like 'a refusal before any write', 'Could not list the addons on comeals-staging'
-    end
   end
 
   # Staging state: untouched. Nothing on staging changed yet.
@@ -219,14 +266,24 @@ RSpec.describe 'bin/staging-rehearsal', bash_coverage: BashCoverage.new('spec/bi
 
   # Staging state: web at 0, the database whatever the failed restore
   # left. A new rehearsal restores it again.
-  it 'stops with web at 0 when the restore fails' do
+  it 'stops with web and the worker at 0 when the restore fails' do
     sandbox.rule('heroku', 'pg:backups:restore *', err: 'restore failed', exit: 1)
 
     result = rehearse
 
     expect(result.exitstatus).not_to eq(0)
     expect(last_web_scale).to eq('0')
+    expect(last_worker_scale).to eq('0')
     expect(sandbox.calls_to('git').map(&:args)).to be_empty
+  end
+
+  # A staging release from before the worker dyno has no worker process
+  # type, and Heroku refuses to scale one.
+  it 'goes on when the worker cannot be scaled to 0 before the first deploy with one' do
+    sandbox.rule('heroku', "ps:scale worker=0 #{staging}", err: "Couldn't find that process type (worker).", exit: 1)
+
+    expect(rehearse.exitstatus).to eq(0)
+    expect(heroku_calls).to include("heroku ps:scale web=1 worker=1 #{staging}")
   end
 
   it 'goes on when web cannot be scaled to 0 before the first deploy' do
