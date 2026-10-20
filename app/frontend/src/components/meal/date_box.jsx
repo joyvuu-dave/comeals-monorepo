@@ -8,6 +8,7 @@ import {
   useParams,
 } from "react-router";
 import { useStore } from "../../helpers/store_context";
+import lazyRetry from "../../helpers/lazy_retry";
 import { MEAL_HISTORY_PATH } from "../../routes";
 import dayjs from "dayjs";
 import Modal from "react-modal";
@@ -37,7 +38,7 @@ const styles = {
   },
 };
 
-const MealHistoryShow = React.lazy(() => import("../history/show"));
+const MealHistoryShow = React.lazy(lazyRetry(() => import("../history/show")));
 
 Modal.setAppElement("#root");
 
