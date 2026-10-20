@@ -6,11 +6,19 @@ require 'open3'
 # bin/rollback-check, which the Rollback and Deploy workflows run before
 # they roll back only the code (#133). It runs in a repository of its own
 # here: CI checks out only the newest commit of this one.
-RSpec.describe 'bin/rollback-check' do
+RSpec.describe 'bin/rollback-check', bash_coverage: BashCoverage.new('spec/bin/rollback_check_spec.rb') do
   let(:script) { Rails.root.join('bin/rollback-check').to_s }
   let(:repo) { Dir.mktmpdir }
 
   after { FileUtils.remove_entry(repo) }
+
+  # Holds bin/rollback-check at 100% of its lines (BashCoverage::FILES).
+  # It runs only when every example in the file ran, so one example on its
+  # own can still pass.
+  after(:context) do
+    ran_all = self.class.descendant_filtered_examples.size == self.class.descendants.sum { it.examples.size }
+    self.class.metadata[:bash_coverage].check! if ran_all
+  end
 
   def git(*)
     out, status = Open3.capture2e('git', '-C', repo, '-c', 'user.name=Test', '-c', 'user.email=test@example.com',
@@ -31,8 +39,15 @@ RSpec.describe 'bin/rollback-check' do
     git('rev-parse', 'HEAD')
   end
 
+  # Runs the script in the repository through BashCoverage, which counts
+  # its lines, and returns its output (stdout and stderr) and status.
   def check(*)
-    Open3.capture2e(script, *, chdir: repo)
+    Tempfile.create('rollback-check-output') do |output|
+      status = self.class.metadata[:bash_coverage].run(
+        '-c', 'cd "$1" && out=$2 && shift 2 && exec "$@" > "$out" 2>&1', 'rollback-check', repo, output.path, script, *
+      )
+      [File.read(output.path), status]
+    end
   end
 
   before { git('init', '-q') }

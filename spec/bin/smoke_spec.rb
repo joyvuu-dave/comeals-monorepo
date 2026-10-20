@@ -4,10 +4,18 @@ require 'rails_helper'
 
 # bin/smoke hands the site's address to the browser smoke test
 # (tests/smoke/smoke.js), run here with a fake node.
-RSpec.describe 'bin/smoke' do
-  let(:sandbox) { ScriptSandbox.new(fakes: %w[node]) }
+RSpec.describe 'bin/smoke', bash_coverage: BashCoverage.new('spec/bin/smoke_spec.rb') do
+  let(:sandbox) { ScriptSandbox.new(fakes: %w[node], coverage: self.class.metadata[:bash_coverage]) }
 
   after { sandbox.cleanup }
+
+  # Holds the scripts BashCoverage::FILES names for this file at 100% of
+  # their lines. It runs only when every example in the file ran, so one
+  # example on its own can still pass (spec/bin/deploy_spec.rb).
+  after(:context) do
+    ran_all = self.class.descendant_filtered_examples.size == self.class.descendants.sum { it.examples.size }
+    self.class.metadata[:bash_coverage].check! if ran_all
+  end
 
   before do
     sandbox.record_env('SMOKE_URL')

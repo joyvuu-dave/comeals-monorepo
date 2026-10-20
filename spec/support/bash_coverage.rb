@@ -32,7 +32,27 @@ class BashCoverage
     'bin/update-linux-snapshots' => 'spec/bin/update_linux_snapshots_spec.rb',
     'bin/update-snapshots' => 'spec/bin/update_snapshots_spec.rb',
     'bin/visual-coverage' => 'spec/bin/visual_coverage_spec.rb',
-    'bin/visual-linux' => 'spec/bin/visual_linux_spec.rb'
+    'bin/visual-linux' => 'spec/bin/visual_linux_spec.rb',
+    'bin/staging-rehearsal' => 'spec/bin/staging_rehearsal_spec.rb',
+    'bin/smoke' => 'spec/bin/smoke_spec.rb',
+    'bin/rollback-check' => 'spec/bin/rollback_check_spec.rb',
+    'bin/lib/json.sh' => 'spec/bin/deploy_workflow_spec.rb',
+    'bin/lib/deploy/compare' => 'spec/bin/deploy_workflow_spec.rb',
+    'bin/lib/deploy/green-gate' => 'spec/bin/deploy_workflow_spec.rb',
+    'bin/lib/deploy/hold-check' => 'spec/bin/deploy_workflow_spec.rb',
+    'bin/lib/deploy/ping-healthchecks' => 'spec/bin/deploy_workflow_spec.rb',
+    'bin/lib/deploy/promote' => 'spec/bin/deploy_workflow_spec.rb',
+    'bin/lib/deploy/solid-queue-config' => 'spec/bin/deploy_workflow_spec.rb',
+    'bin/lib/deploy/watch-production' => 'spec/bin/deploy_workflow_spec.rb',
+    'bin/lib/deploy/write-release-note' => 'spec/bin/deploy_workflow_spec.rb',
+    'bin/lib/rollback/check-migrations' => 'spec/bin/rollback_workflow_spec.rb',
+    'bin/lib/rollback/file-issue' => 'spec/bin/rollback_workflow_spec.rb',
+    'bin/lib/rollback/find-release' => 'spec/bin/rollback_workflow_spec.rb',
+    'bin/lib/rollback/mark-release-notes' => 'spec/bin/rollback_workflow_spec.rb',
+    'bin/lib/rollback/restore-backup' => 'spec/bin/rollback_workflow_spec.rb',
+    'bin/lib/rollback/roll-back' => 'spec/bin/rollback_workflow_spec.rb',
+    'bin/lib/rollback/say-what-to-do' => 'spec/bin/rollback_workflow_spec.rb',
+    'bin/lib/rollback/start-web' => 'spec/bin/rollback_workflow_spec.rb'
   }.freeze
 
   # bashcov marks a line that holds a whole function, `red() { ...; }`, as

@@ -6,13 +6,23 @@ require 'rails_helper'
 # one per step, with fake heroku, curl, gh and git
 # (spec/support/script_sandbox.rb). The workflow passes each step's
 # inputs as variables; the examples pass the same ones.
-RSpec.describe 'the Rollback workflow scripts' do
-  let(:sandbox) { ScriptSandbox.new(fakes: %w[heroku curl gh git date sleep]) }
+RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new('spec/bin/rollback_workflow_spec.rb') do
+  let(:sandbox) do
+    ScriptSandbox.new(fakes: %w[heroku curl gh git date sleep], coverage: self.class.metadata[:bash_coverage])
+  end
   let(:bad) { 'b' * 40 }
   let(:good) { 'a' * 40 }
   let(:prod) { '-a comeals-monorepo' }
 
   after { sandbox.cleanup }
+
+  # Holds the scripts BashCoverage::FILES names for this file at 100% of
+  # their lines. It runs only when every example in the file ran, so one
+  # example on its own can still pass (spec/bin/deploy_spec.rb).
+  after(:context) do
+    ran_all = self.class.descendant_filtered_examples.size == self.class.descendants.sum { it.examples.size }
+    self.class.metadata[:bash_coverage].check! if ran_all
+  end
 
   def heroku_calls = sandbox.call_lines('heroku')
 

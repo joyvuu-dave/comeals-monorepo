@@ -5,14 +5,24 @@ require 'rails_helper'
 # bin/staging-rehearsal, run with fake heroku, git, curl, node and the
 # rest (spec/support/script_sandbox.rb). Each failure test also says
 # which state the script leaves staging in.
-RSpec.describe 'bin/staging-rehearsal' do
-  let(:sandbox) { ScriptSandbox.new(fakes: %w[heroku git curl node openssl date sleep]) }
+RSpec.describe 'bin/staging-rehearsal', bash_coverage: BashCoverage.new('spec/bin/staging_rehearsal_spec.rb') do
+  let(:sandbox) do
+    ScriptSandbox.new(fakes: %w[heroku git curl node openssl date sleep], coverage: self.class.metadata[:bash_coverage])
+  end
   let(:sha) { 'a' * 40 }
   let(:staging) { '-a comeals-staging' }
   let(:url) { 'https://staging.example.com' }
   let(:config_keys) { %w[COMEALS_STAGING DATABASE_URL PUSHER_KEY] }
 
   after { sandbox.cleanup }
+
+  # Holds the scripts BashCoverage::FILES names for this file at 100% of
+  # their lines. It runs only when every example in the file ran, so one
+  # example on its own can still pass (spec/bin/deploy_spec.rb).
+  after(:context) do
+    ran_all = self.class.descendant_filtered_examples.size == self.class.descendants.sum { it.examples.size }
+    self.class.metadata[:bash_coverage].check! if ran_all
+  end
 
   # Every call answered the way a good rehearsal sees it.
   before do
