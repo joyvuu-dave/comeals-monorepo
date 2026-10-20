@@ -122,4 +122,53 @@ describe("lazyRetry", () => {
     expect(beforeReload).not.toHaveBeenCalled();
     expect(fake.location.reload).not.toHaveBeenCalled();
   });
+
+  // During a deploy Heroku answers every file with its maintenance page
+  // (an HTML 503), so the chunk fails to load. A reload then would land
+  // on that page, which never reloads itself. So the page asks the server
+  // for its version every 30 seconds, and reloads only once the server
+  // answers. Meanwhile the page keeps showing its "Loading..." words.
+  describe("while the server is down", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("waits for the server to answer ok, asking every 30 seconds, then reloads", async () => {
+      const fetch = vi
+        .fn()
+        .mockResolvedValueOnce({ ok: false, status: 503 })
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValueOnce({ ok: true, status: 200 });
+      vi.stubGlobal("fetch", fetch);
+      const beforeReload = vi.fn();
+
+      lazyRetry(() => Promise.reject(new Error("no chunk")), beforeReload)();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(fetch).toHaveBeenCalledWith("/api/v1/version", {
+        cache: "no-store",
+      });
+      expect(beforeReload).not.toHaveBeenCalled();
+      expect(fake.location.reload).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(29999);
+      expect(fetch).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(fake.location.reload).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(30000);
+      expect(fetch).toHaveBeenCalledTimes(3);
+      expect(beforeReload).toHaveBeenCalledTimes(1);
+      expect(fake.location.reload).toHaveBeenCalledTimes(1);
+      expect(beforeReload.mock.invocationCallOrder[0]).toBeLessThan(
+        fake.location.reload.mock.invocationCallOrder[0],
+      );
+    });
+  });
 });
