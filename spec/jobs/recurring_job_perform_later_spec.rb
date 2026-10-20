@@ -3,7 +3,8 @@
 require 'rails_helper'
 
 # Every recurring job can be queued on Solid Queue itself, as production
-# and the boot catch-up (RecurringCatchUp, config/puma.rb) queue it.
+# and the boot catch-up (RecurringCatchUp, config/initializers/solid_queue.rb)
+# queue it.
 #
 # The rest of the suite queues jobs on the test adapter, which never
 # computes a limits_concurrency key. Solid Queue computes it when the job

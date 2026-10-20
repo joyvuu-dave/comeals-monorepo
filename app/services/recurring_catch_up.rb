@@ -12,7 +12,8 @@ require 'fugit'
 # when the process comes up, each job in config/recurring.yml is compared
 # with job_runs, and any that missed its last tick is enqueued now. Because
 # every RecurringJob is "make it so", running late is the same as running
-# on time. Called from config/puma.rb when SOLID_QUEUE_IN_PUMA is set.
+# on time. Runs once each time the jobs dyno's Solid Queue supervisor
+# starts (config/initializers/solid_queue.rb).
 class RecurringCatchUp
   def self.call(now: Time.current)
     new(now).call
@@ -24,10 +25,11 @@ class RecurringCatchUp
 
   # Returns the job classes it enqueued.
   #
-  # config/puma.rb runs this after boot with no rescue around it, so an
-  # error that left here would end the web process and take the site
-  # down. A job that is not queued here runs at its next tick, so each
-  # error is reported to Bugsnag instead and the rest go on.
+  # Solid Queue would catch an error that left here, but it only
+  # records it in its own instrumentation, which nothing here reads, and
+  # one failed job would stop the rest from being queued. A job that is
+  # not queued here runs at its next tick, so each error is reported to
+  # Bugsnag instead and the rest go on.
   def call
     due.select { |job_class| enqueue(job_class) }
   rescue StandardError => e
