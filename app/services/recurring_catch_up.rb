@@ -23,8 +23,16 @@ class RecurringCatchUp
   end
 
   # Returns the job classes it enqueued.
+  #
+  # config/puma.rb runs this after boot with no rescue around it, so an
+  # error that left here would end the web process and take the site
+  # down. A job that is not queued here runs at its next tick, so each
+  # error is reported to Bugsnag instead and the rest go on.
   def call
-    due.each(&:perform_later)
+    due.select { |job_class| enqueue(job_class) }
+  rescue StandardError => e
+    report(e, 'all')
+    []
   end
 
   # The recurring jobs whose last success predates their last scheduled tick.
@@ -43,6 +51,22 @@ class RecurringCatchUp
   end
 
   private
+
+  # Active Job answers false, with no error, when the adapter refuses a
+  # job (ActiveJob::Enqueuing#enqueue), so that is reported too.
+  def enqueue(job_class)
+    return true if job_class.perform_later
+
+    report(RuntimeError.new("#{job_class.name} was not queued"), job_class.name)
+    false
+  rescue StandardError => e
+    report(e, job_class.name)
+    false
+  end
+
+  def report(error, job)
+    Rails.error.report(error, handled: true, severity: :error, context: { job: job })
+  end
 
   def tasks
     config = Rails.application.config_for(:recurring)

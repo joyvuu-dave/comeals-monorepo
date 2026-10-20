@@ -110,6 +110,18 @@ RSpec.describe RecurringCatchUp do
         .with(error, handled: true, severity: :error, context: { job: 'VerifyLedgerJob' })
     end
 
+    # Active Job answers false, with no error, when the adapter refuses a
+    # job (ActiveJob::Enqueuing#enqueue).
+    it 'does not count a job that perform_later refused, and reports it' do
+      allow(VerifyLedgerJob).to receive(:perform_later).and_return(false)
+
+      expect(described_class.call(now: now))
+        .to contain_exactly(RefreshBalancesJob, EnsureRotationsJob, SendMissedSettlementMailJob)
+      expect(Rails.error).to have_received(:report)
+        .with(an_instance_of(RuntimeError).and(having_attributes(message: 'VerifyLedgerJob was not queued')),
+              handled: true, severity: :error, context: { job: 'VerifyLedgerJob' })
+    end
+
     it 'queues nothing and reports when the last runs cannot be read' do
       error = ActiveRecord::SerializationFailure.new('could not serialize access')
       allow(JobRun).to receive(:last_success_at).and_raise(error)
