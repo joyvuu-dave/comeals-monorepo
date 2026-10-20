@@ -70,6 +70,7 @@ module NonTransactionalCleanup
     solid_queue_jobs
     solid_queue_processes
     solid_queue_semaphores
+    solid_queue_recurring_tasks
   ].freeze
 
   # RetryOnConflict for the same reason the old after hooks used it: the app
