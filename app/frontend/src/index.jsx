@@ -54,6 +54,7 @@ import PrivateRoute from "./components/app/private_route";
 
 import ScrollToTop from "./components/app/scroll_to_top";
 import ErrorBoundary from "./components/app/error_boundary";
+import lazyRetry from "./helpers/lazy_retry";
 import { CALENDAR_PATH, MEAL_EDIT_PATH, LOGIN_PATH } from "./routes";
 
 function TrailingSlash() {
@@ -62,20 +63,6 @@ function TrailingSlash() {
     return <Navigate to={location.pathname + "/" + location.search} replace />;
   }
   return null;
-}
-
-function lazyRetry(importFn) {
-  return function () {
-    return importFn().catch(function (err) {
-      if (!sessionStorage.getItem("chunk_retry")) {
-        sessionStorage.setItem("chunk_retry", "1");
-        window.location.reload();
-        return new Promise(function () {});
-      }
-      sessionStorage.removeItem("chunk_retry");
-      throw err;
-    });
-  };
 }
 
 const Calendar = React.lazy(
