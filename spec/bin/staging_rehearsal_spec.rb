@@ -26,8 +26,6 @@ RSpec.describe 'bin/staging-rehearsal', bash_coverage: BashCoverage.new('spec/bi
                  out: "Backing up DATABASE to b101... done\n")
     sandbox.rule('heroku', 'pg:backups:url -a comeals-monorepo', out: "https://backups.example.com/b101\n")
     sandbox.rule('heroku', "ps:scale * #{staging}")
-    sandbox.rule('heroku', "config:get RAILS_DB_POOL #{staging}", out: "4\n")
-    sandbox.rule('heroku', "config:set RAILS_DB_POOL=4 #{staging}")
     sandbox.rule('heroku', "pg:backups:restore https://backups.example.com/b101 DATABASE_URL #{staging} " \
                            '--confirm comeals-staging')
     sandbox.rule('heroku', "releases #{staging} --json", out: '[{"status":"succeeded"},{"status":"failed"}]')
@@ -93,7 +91,6 @@ RSpec.describe 'bin/staging-rehearsal', bash_coverage: BashCoverage.new('spec/bi
         "heroku ps:scale web=0 #{staging}",
         "heroku ps:scale worker=0 #{staging}",
         "heroku pg:backups:restore https://backups.example.com/b101 DATABASE_URL #{staging} --confirm comeals-staging",
-        "heroku config:get RAILS_DB_POOL #{staging}",
         'git rev-parse HEAD',
         'git rev-parse --short HEAD',
         'git push --force https://git.heroku.com/comeals-staging.git HEAD:refs/heads/main',
@@ -131,20 +128,13 @@ RSpec.describe 'bin/staging-rehearsal', bash_coverage: BashCoverage.new('spec/bi
     expect(result.out).to include('Solid Queue runs on staging (supervisor, dispatcher, worker, scheduler)')
   end
 
-  # The jobs dyno's processes each need more than one connection
-  # (lib/deploy_config_check.rb). Staging is not held to the release
-  # check, so the rehearsal sets the pool itself, while web and the worker
-  # are at 0.
-  it 'sets RAILS_DB_POOL=4 on staging before the push when it is below 4' do
-    sandbox.rule('heroku', "config:get RAILS_DB_POOL #{staging}", out: "\n")
-
+  # The worker line in the Procfile sets the jobs dyno's pool, so staging
+  # needs no RAILS_DB_POOL config var either, the same as production.
+  it 'reads and sets no RAILS_DB_POOL on staging' do
     result = rehearse
 
     expect(result.exitstatus).to eq(0)
-    expect(result.out).to include("Setting RAILS_DB_POOL=4 on comeals-staging (was '')")
-    lines = sandbox.call_lines
-    expect(lines.index("heroku config:set RAILS_DB_POOL=4 #{staging}"))
-      .to be < lines.index('git push --force https://git.heroku.com/comeals-staging.git HEAD:refs/heads/main')
+    expect(heroku_calls.grep(/RAILS_DB_POOL|config:set/)).to be_empty
   end
 
   it 'asks again after 30 seconds when Solid Queue is not up yet' do
