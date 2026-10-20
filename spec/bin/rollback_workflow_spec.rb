@@ -535,4 +535,28 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
                                   '- [ ] Check whether the bad version wrote data that needs correcting entries')
     end
   end
+
+  # The Rollback workflow can run on staging, as a rehearsal. A step that
+  # gets a GitHub token writes to GitHub (DEPLOY_HOLD, the release notes,
+  # the follow-up issue), and the repository is public, so each one runs
+  # only for production.
+  describe '.github/workflows/rollback.yml' do
+    let(:steps) do
+      YAML.safe_load_file(Rails.root.join('.github/workflows/rollback.yml').to_s)['jobs']['rollback']['steps']
+    end
+
+    it 'runs every step that has a GitHub token only for production' do
+      with_token = steps.select { it.dig('env', 'GH_TOKEN') }
+
+      expect(with_token.pluck('name')).to eq(['Hold the daily deploy', 'Mark the release notes',
+                                              'File the follow-up issue'])
+      expect(with_token.pluck('if')).to all(eq("inputs.app == 'comeals-monorepo'"))
+    end
+
+    it 'gives no other step a way to write to GitHub' do
+      others = steps.reject { it.dig('env', 'GH_TOKEN') }
+
+      expect(others.map { "#{it['run']}#{it['with']}" }.grep(/\bgh |github\.token/)).to eq([])
+    end
+  end
 end
