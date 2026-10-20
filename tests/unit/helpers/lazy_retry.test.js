@@ -11,11 +11,13 @@ describe("lazyRetry", () => {
   beforeEach(() => {
     sessionStorage.clear();
     fake = fakeLocation();
+    vi.stubGlobal("__BUILD_ID__", "build-2");
   });
 
   afterEach(() => {
     fake.restore();
     sessionStorage.clear();
+    vi.unstubAllGlobals();
   });
 
   it("hands back the chunk when it loads", async () => {
@@ -65,5 +67,36 @@ describe("lazyRetry", () => {
     expect(beforeReload).not.toHaveBeenCalled();
     expect(fake.location.reload).not.toHaveBeenCalled();
     expect(sessionStorage.getItem("chunk_retry")).toBeNull();
+  });
+
+  // A tab reloaded once for a missing chunk at one deploy, and the
+  // reload worked. At the next deploy a chunk is missing again. That is
+  // a new first failure, so the page reloads again; it does not go
+  // straight to the error page.
+  it("reloads again at a later deploy, after a reload that worked", async () => {
+    const chunk = { default: () => null };
+    const missing = () => Promise.reject(new Error("no chunk"));
+
+    // The tab runs build 1, and a deploy removes its chunk.
+    vi.stubGlobal("__BUILD_ID__", "build-1");
+    lazyRetry(missing, vi.fn())();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(fake.location.reload).toHaveBeenCalledTimes(1);
+
+    // The reload brings build 2, and its chunk loads.
+    vi.stubGlobal("__BUILD_ID__", "build-2");
+    await expect(
+      lazyRetry(() => Promise.resolve(chunk), vi.fn())(),
+    ).resolves.toBe(chunk);
+
+    // The next deploy removes build 2's chunk.
+    const beforeReload = vi.fn();
+    lazyRetry(missing, beforeReload)();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(beforeReload).toHaveBeenCalledTimes(1);
+    expect(fake.location.reload).toHaveBeenCalledTimes(2);
   });
 });
