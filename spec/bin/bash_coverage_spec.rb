@@ -54,8 +54,10 @@ RSpec.describe BashCoverage do
   end
 
   it 'fails when a line it holds did not run, and names the line' do
-    deploy = Rails.root.join('bin/deploy').to_s
-    coverage.instance_variable_get(:@counts)[deploy] = Array.new(File.readlines(deploy).size, 1)
+    # Every other file of the spec ran all its lines, so output.sh is the
+    # only one that fails.
+    counts = coverage.instance_variable_get(:@counts)
+    (counts.keys - [output_sh]).each { counts[it] = Array.new(File.readlines(it).size, 1) }
     coverage.run('-c', ". #{output_sh.shellescape}; red x >/dev/null")
 
     expect { coverage.check! }.to raise_error(RuntimeError, %r{bin/lib/output.sh:10: green\(\)})
