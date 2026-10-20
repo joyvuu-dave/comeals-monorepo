@@ -28,9 +28,12 @@ RSpec.describe 'config/puma.rb' do
     RUBY
   end
 
-  def load_config(solid_queue_in_puma)
+  # SOLID_QUEUE_IN_PUMA is set in the environment on purpose: it used to
+  # start Solid Queue inside Puma, and the jobs run on the worker dyno now
+  # (Procfile), so nothing in this file may read it.
+  def load_config
     output, status = Open3.capture2e(
-      { 'SOLID_QUEUE_IN_PUMA' => solid_queue_in_puma, 'RUBYOPT' => nil },
+      { 'SOLID_QUEUE_IN_PUMA' => 'true', 'RUBYOPT' => nil },
       'bundle', 'exec', 'ruby', '-e', probe,
       chdir: Rails.root.to_s
     )
@@ -38,22 +41,10 @@ RSpec.describe 'config/puma.rb' do
     JSON.parse(output.lines.last)
   end
 
-  it 'loads without Rails when SOLID_QUEUE_IN_PUMA is not set, and runs no Solid Queue' do
-    result = load_config(nil)
+  it 'loads without Rails and starts no Solid Queue' do
+    result = load_config
 
     expect(result['rails_loaded']).to be(false)
     expect(result['plugins']).to eq(['tmp_restart'])
-  end
-
-  it 'treats an empty SOLID_QUEUE_IN_PUMA as not set' do
-    expect(load_config('')['plugins']).to eq(['tmp_restart'])
-    expect(load_config(' ')['plugins']).to eq(['tmp_restart'])
-  end
-
-  it 'loads without Rails when SOLID_QUEUE_IN_PUMA is set, and starts the Solid Queue plugin' do
-    result = load_config('true')
-
-    expect(result['rails_loaded']).to be(false)
-    expect(result['plugins']).to eq(%w[solid_queue tmp_restart])
   end
 end
