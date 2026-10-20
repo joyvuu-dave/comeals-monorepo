@@ -73,7 +73,11 @@ module DeployConfigCheck
 
   sig { void }
   def self.verify_processes!
+    # The supervisor saves its kind with its mode, "Supervisor(fork)" or
+    # "Supervisor(async)" (SolidQueue::Supervisor#kind), so the mode is
+    # cut off before the kinds are compared.
     alive = SolidQueue::Process.where(last_heartbeat_at: HEARTBEAT_WITHIN.ago..).pluck(:kind)
+                               .map { |kind| kind.to_s.sub(/\(\w+\)\z/, '') }
     problem = process_problem(alive)
     raise problem if problem
   end
