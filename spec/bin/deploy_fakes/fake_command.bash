@@ -8,8 +8,10 @@
 # Files under $FAKE_HOME:
 #   rules/NNN/   answers the spec set up (cmd, match, and stdout, stderr,
 #                exit, times or exec), tried in order
-#   state/       the fake production app: maintenance, web, config/<VAR>,
-#                backups, releases (one status per line), pushed, heroku_sha
+#   state/       the fake production app: maintenance, web, worker (a count,
+#                or none when the release has no worker process type),
+#                config/<VAR>, backups, releases (one status per line),
+#                pushed, heroku_sha
 #   calls/       one file per call: the name and the arguments, NUL-separated
 #   unexpected   every call no rule and no default answered
 #   logs, check_runs, real_git
@@ -78,6 +80,36 @@ fi
 
 # --- Defaults, when no rule answered ------------------------------------------
 
+# heroku ps:scale. With no type=count, it prints the formation, like the
+# real one ("web=1:Basic worker=1:Basic"). With some, it refuses them all
+# when one names a process type the release does not have, as Heroku does,
+# and otherwise sets them all.
+ps_scale() {
+  local worker pair types=() counts=()
+  worker=$(<"$state/worker")
+  for pair in "$@"; do
+    [ "$pair" = -a ] && break
+    [[ $pair =~ ^(web|worker)=([0-9]+)$ ]] || unexpected ps:scale "$@"
+    if [ "${BASH_REMATCH[1]}" = worker ] && [ "$worker" = none ]; then
+      echo " !    Couldn't find that process type (worker)." >&2
+      exit 1
+    fi
+    types+=("${BASH_REMATCH[1]}")
+    counts+=("${BASH_REMATCH[2]}")
+  done
+  if [ "${#types[@]}" -eq 0 ]; then
+    printf 'web=%s:Basic' "$(<"$state/web")"
+    [ "$worker" = none ] || printf ' worker=%s:Basic' "$worker"
+    echo
+    return
+  fi
+  local i
+  for i in "${!types[@]}"; do
+    echo "${counts[$i]}" >"$state/${types[$i]}"
+  done
+  echo "Scaling dynos... done"
+}
+
 heroku_default() {
   case "${1:-}" in
     auth:whoami) echo "deployer@example.com" ;;
@@ -100,11 +132,7 @@ heroku_default() {
       echo off >"$state/maintenance"
       echo "Disabling maintenance mode for comeals-monorepo... done"
       ;;
-    ps:scale)
-      [[ ${2:-} =~ ^web=([0-9]+)$ ]] || unexpected "$@"
-      echo "${BASH_REMATCH[1]}" >"$state/web"
-      echo "Scaling dynos... done, now running web at ${BASH_REMATCH[1]}:Basic"
-      ;;
+    ps:scale) ps_scale "${@:2}" ;;
     pg:backups:capture)
       echo $(($(<"$state/backups") + 1)) >"$state/backups"
       printf 'Backing up DATABASE to b%03d... done\n' "$(<"$state/backups")"
@@ -136,6 +164,8 @@ git_default() {
       ;;
     "push heroku")
       "$real_git" rev-parse HEAD >"$state/pushed"
+      # The new release has a worker process type, at 0 when it is new.
+      [ "$(<"$state/worker")" = none ] && echo 0 >"$state/worker"
       echo "remote: Verifying deploy... done."
       ;;
     "remote get-url") exec "$real_git" "$@" ;;

@@ -36,8 +36,8 @@ class DeployHarness
     @rules = []
     @scenario = { check_runs: "test|completed|success\nlint|completed|skipped\n", logs: '' }
     @state = {
-      maintenance: 'off', web: 1, backups: 0, releases: [], pushed: '', heroku_sha: '',
-      config: { 'RAILS_DB_POOL' => '4', 'SOLID_QUEUE_IN_PUMA' => 'true' }
+      maintenance: 'off', web: 1, worker: 1, backups: 0, releases: [], pushed: '', heroku_sha: '',
+      config: { 'RAILS_DB_POOL' => '4' }
     }
     build_path
     build_repo
@@ -61,8 +61,10 @@ class DeployHarness
   def set(**values) = @scenario.merge!(values)
 
   # The fake production app before the run: maintenance ('on' or 'off'),
-  # web, backups, releases (the statuses `heroku releases` answers, one per
-  # call, then 'succeeded'), heroku_sha (the commit production runs, which
+  # web, worker (a count, or 'none' when the running release has no worker
+  # process type, as before the first deploy with one), backups, releases
+  # (the statuses `heroku releases` answers, one per call, then
+  # 'succeeded'), heroku_sha (the commit production runs, which
   # `heroku config:get HEROKU_SLUG_COMMIT` answers, and the main branch of
   # Heroku's git repository, which `git ls-remote heroku` answers; '' for
   # nothing), git_sha (Heroku's git main when it is not the commit that
@@ -127,7 +129,8 @@ class DeployHarness
     dir = File.join(fake_home, 'state')
     read = ->(name) { File.read(File.join(dir, name)).strip }
     {
-      maintenance: read['maintenance'] == 'on', web: Integer(read['web']), backups: Integer(read['backups']),
+      maintenance: read['maintenance'] == 'on', web: Integer(read['web']),
+      worker: read['worker'].then { it == 'none' ? nil : Integer(it) }, backups: Integer(read['backups']),
       pushed: read['pushed'].then { it.empty? ? nil : it },
       config: (Dir.children(File.join(dir, 'config')) - ['HEROKU_SLUG_COMMIT']).sort.index_with { read["config/#{it}"] }
     }
@@ -158,6 +161,7 @@ class DeployHarness
     files = rule_files.merge(
       'count' => '0', 'real_git' => real_git, 'logs' => @scenario[:logs], 'check_runs' => @scenario[:check_runs],
       'state/maintenance' => @state[:maintenance], 'state/web' => @state[:web].to_s,
+      'state/worker' => @state[:worker].to_s,
       'state/backups' => @state[:backups].to_s, 'state/releases' => @state[:releases].map { "#{it}\n" }.join,
       'state/pushed' => @state[:pushed], 'state/heroku_sha' => @state.fetch(:git_sha, @state[:heroku_sha])
     )

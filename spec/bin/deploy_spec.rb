@@ -27,9 +27,10 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
   end
 
   # Production as the run left it. `pushed` is true when the new code
-  # reached Heroku.
-  def expect_production(maintenance:, web:, pushed:)
-    expect(deploy.state).to include(maintenance:, web:, pushed: pushed ? head : nil)
+  # reached Heroku. `worker` is the worker dyno count, nil when the
+  # release has no worker process type.
+  def expect_production(maintenance:, web:, pushed:, worker: 1)
+    expect(deploy.state).to include(maintenance:, web:, worker:, pushed: pushed ? head : nil)
   end
 
   def expect_nothing_changed_in_production
@@ -49,7 +50,8 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
                                        'Deploy complete!')
       expect_production(maintenance: false, web: 1, pushed: true)
       expect(deploy.state[:backups]).to eq(1)
-      expect(deploy.calls_to('heroku').grep(/maintenance|ps:scale/)).to eq([])
+      expect(deploy.calls_to('heroku').grep(/maintenance|ps:scale/))
+        .to eq(['heroku ps:scale worker=1 -a comeals-monorepo'])
       expect(deploy.calls).to include(
         'heroku run --exit-code bin/rails runner Rails.cache.clear -a comeals-monorepo',
         'heroku run --exit-code bin/rake billing:recalculate -a comeals-monorepo',
@@ -94,6 +96,30 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       expect_production(maintenance: false, web: 1, pushed: true)
     end
 
+    # The push restarts a worker dyno that runs. One that is at 0 stays at
+    # 0: the first deploy whose release has a worker process type, or the
+    # first after a rollback to a release without one.
+    it 'starts the worker dyno when it is at 0, after the recalculation' do
+      deploy.production(worker: 0)
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(0)
+      expect_production(maintenance: false, web: 1, pushed: true, worker: 1)
+      order = deploy.calls
+      expect(order.index('heroku ps:scale worker=1 -a comeals-monorepo'))
+        .to be > order.index('heroku run --exit-code bin/rake billing:recalculate -a comeals-monorepo')
+    end
+
+    it 'starts the worker dyno when the release before had no worker process type' do
+      deploy.production(worker: 'none')
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(0)
+      expect_production(maintenance: false, web: 1, pushed: true, worker: 1)
+    end
+
     it 'takes the backup before it pushes' do
       deploy.run('--yes')
 
@@ -105,7 +131,11 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
   describe 'a maintenance deploy (a migration changed)' do
     before { deploy.production(heroku_sha: deploy.commits[:first_migration]) }
 
-    it 'lists the migration, turns maintenance on, scales web to 0, pushes, and brings everything back' do
+    # No job runs while the migrations run: the worker goes to 0 with web.
+    # After the release, the worker starts before web and after the cache
+    # clear and the recalculation, so its boot catch-up sees the fresh
+    # balance run and does not run it a second time.
+    it 'lists the migration, turns maintenance on, stops web and the worker, pushes, and brings everything back' do
       result = deploy.run('--yes')
 
       expect(result.status).to eq(0)
@@ -113,18 +143,36 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
                                        'db/migrate/20260201000000_second.rb',
                                        'MAINTENANCE deploy (has migrations)', 'Deploy complete!')
       expect(result.output).not_to include(recovery_banner)
-      expect_production(maintenance: false, web: 1, pushed: true)
+      expect_production(maintenance: false, web: 1, pushed: true, worker: 1)
       steps = deploy.calls_to('heroku').grep(/maintenance|ps:scale|releases|cache\.clear|billing/)
                     .map { it.delete_suffix(' -a comeals-monorepo').delete_suffix(' --json') }
       expect(steps).to eq([
-                            'heroku maintenance:on', 'heroku ps:scale web=0', 'heroku releases -a comeals-monorepo',
-                            'heroku releases:output',
+                            'heroku maintenance:on', 'heroku ps:scale', 'heroku ps:scale web=0 worker=0',
+                            'heroku releases -a comeals-monorepo', 'heroku releases:output',
                             'heroku run --exit-code bin/rails runner Rails.cache.clear',
                             'heroku run --exit-code bin/rake billing:recalculate',
-                            'heroku ps:scale web=1', 'heroku maintenance:off'
+                            'heroku ps:scale worker=1', 'heroku ps:scale web=1', 'heroku maintenance:off'
                           ])
       push = deploy.calls.index('git push heroku main --force')
-      expect(push).to be > deploy.calls.index('heroku ps:scale web=0 -a comeals-monorepo')
+      expect(push).to be > deploy.calls.index('heroku ps:scale web=0 worker=0 -a comeals-monorepo')
+    end
+
+    # Production before its first deploy with a worker runs a release with
+    # no worker process type, and Heroku refuses to scale one. The push
+    # makes the type, so the worker can start after it.
+    it 'stops only web when the running release has no worker process type, and starts the worker after' do
+      deploy.production(worker: 'none')
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(0)
+      expect_production(maintenance: false, web: 1, pushed: true, worker: 1)
+      expect(deploy.calls_to('heroku').grep(/ps:scale/)).to eq([
+                                                                 'heroku ps:scale -a comeals-monorepo',
+                                                                 'heroku ps:scale web=0 -a comeals-monorepo',
+                                                                 'heroku ps:scale worker=1 -a comeals-monorepo',
+                                                                 'heroku ps:scale web=1 -a comeals-monorepo'
+                                                               ])
     end
 
     # After a rollback, the main branch of Heroku's git repository is the
@@ -411,59 +459,70 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
     end
   end
 
-  describe 'the Solid Queue config vars' do
-    it 'sets RAILS_DB_POOL=4 and SOLID_QUEUE_IN_PUMA=true when they are missing, after the question' do
+  describe 'the database pool' do
+    it 'sets RAILS_DB_POOL=4 when it is missing, after the question' do
       deploy.production(config: {})
 
       result = deploy.run('--yes')
 
       expect(result.output).to include(
-        "RAILS_DB_POOL='' and SOLID_QUEUE_IN_PUMA='' — the deploy will set RAILS_DB_POOL=4 and " \
-        'SOLID_QUEUE_IN_PUMA=true first',
-        'first: heroku config:set RAILS_DB_POOL=4 SOLID_QUEUE_IN_PUMA=true',
-        'RAILS_DB_POOL=4 and SOLID_QUEUE_IN_PUMA=true set (one dyno restart)'
+        "RAILS_DB_POOL='' — the deploy will set RAILS_DB_POOL=4 first",
+        'The jobs dyno needs it (lib/deploy_config_check.rb, docs/runbooks/scheduler-cutover.md)',
+        'first: heroku config:set RAILS_DB_POOL=4',
+        'RAILS_DB_POOL=4 set (one dyno restart)'
       )
-      expect(deploy.state[:config]).to eq('RAILS_DB_POOL' => '4', 'SOLID_QUEUE_IN_PUMA' => 'true')
+      expect(deploy.state[:config]).to eq('RAILS_DB_POOL' => '4')
       order = deploy.calls.map { it.split.first(2).join(' ') }
       expect(order.index('heroku config:set')).to be < order.index('heroku pg:backups:capture')
       expect(result.status).to eq(0)
     end
 
-    it 'sets them when the pool is below 4' do
-      deploy.production(config: { 'RAILS_DB_POOL' => '2', 'SOLID_QUEUE_IN_PUMA' => 'true' })
+    # The var that started the jobs inside Puma is not set, and not needed.
+    it 'sets only the pool' do
+      deploy.production(config: {})
+
+      deploy.run('--yes')
+
+      expect(deploy.calls_to('heroku').grep(/config:set/))
+        .to eq(['heroku config:set RAILS_DB_POOL=4 -a comeals-monorepo'])
+      expect(deploy.calls_to('heroku').grep(/SOLID_QUEUE_IN_PUMA/)).to eq([])
+    end
+
+    it 'sets it when the pool is below 4' do
+      deploy.production(config: { 'RAILS_DB_POOL' => '2' })
 
       result = deploy.run('--yes')
 
-      expect(result.output).to include("RAILS_DB_POOL='2' and SOLID_QUEUE_IN_PUMA='true'")
+      expect(result.output).to include("RAILS_DB_POOL='2'")
       expect(deploy.state[:config]['RAILS_DB_POOL']).to eq('4')
     end
 
-    it 'sets them when the pool is not a number' do
-      deploy.production(config: { 'RAILS_DB_POOL' => 'four', 'SOLID_QUEUE_IN_PUMA' => 'true' })
+    it 'sets it when the pool is not a number' do
+      deploy.production(config: { 'RAILS_DB_POOL' => 'four' })
 
       deploy.run('--yes')
 
       expect(deploy.state[:config]['RAILS_DB_POOL']).to eq('4')
     end
 
-    it 'sets them when Heroku cannot be asked' do
+    it 'sets it when Heroku cannot be asked' do
       deploy.rule('heroku', '^config:get', exit: 1)
 
       deploy.run('--yes')
 
-      expect(deploy.calls).to include('heroku config:set RAILS_DB_POOL=4 SOLID_QUEUE_IN_PUMA=true -a comeals-monorepo')
+      expect(deploy.calls).to include('heroku config:set RAILS_DB_POOL=4 -a comeals-monorepo')
     end
 
-    it 'does not set them when they are there' do
+    it 'does not set it when it is there' do
       result = deploy.run('--yes')
 
-      expect(result.output).to include('RAILS_DB_POOL=4, SOLID_QUEUE_IN_PUMA=true')
+      expect(result.output).to include('RAILS_DB_POOL=4')
       expect(deploy.calls_to('heroku').grep(/config:set/)).to eq([])
     end
 
     # State left: no maintenance, web at 1, old code, no backup. Next step:
     # read the heroku error and run the deploy again.
-    it 'stops before the backup when setting them fails' do
+    it 'stops before the backup when setting it fails' do
       deploy.production(config: {})
       deploy.rule('heroku', '^config:set', exit: 1, stderr: "config:set failed\n")
 
@@ -621,7 +680,8 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
 
     def expect_recovery_banner(result)
       expect(result.output).to include(recovery_banner, 'App may still be in maintenance mode.',
-                                       'Web dynos may be scaled to 0.',
+                                       'The web and worker dynos may be scaled to 0.',
+                                       'heroku ps:scale worker=1 -a comeals-monorepo',
                                        'heroku ps:scale web=1 -a comeals-monorepo',
                                        'heroku maintenance:off -a comeals-monorepo')
     end
@@ -639,7 +699,19 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       expect_production(maintenance: false, web: 1, pushed: false)
     end
 
-    # State left: maintenance on, web at 1, old code. Next step: the two
+    # State left: maintenance on, web and worker at 1, old code. Next step:
+    # the commands the banner prints.
+    it 'stops with the recovery banner when the formation cannot be read' do
+      deploy.rule('heroku', '^ps:scale -a', exit: 1)
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect_recovery_banner(result)
+      expect_production(maintenance: true, web: 1, pushed: false, worker: 1)
+    end
+
+    # State left: maintenance on, web at 1, old code. Next step: the
     # commands the banner prints.
     it 'stops with the recovery banner when web cannot be scaled to 0' do
       deploy.rule('heroku', '^ps:scale web=0', exit: 1)
@@ -660,7 +732,7 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
 
       expect(result.status).to eq(1)
       expect_recovery_banner(result)
-      expect_production(maintenance: true, web: 0, pushed: false)
+      expect_production(maintenance: true, web: 0, pushed: false, worker: 0)
     end
 
     # State left: maintenance on, web at 0, new code pushed, migrations
@@ -674,16 +746,28 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       expect(result.status).to eq(1)
       expect(result.output).to include(
         'The release phase did not succeed (status: failed). Its output:',
-        'Maintenance stays on and web stays at 0. Do not scale web up until you know which migrations ran: ' \
-        'the old code may not work on the new schema.'
+        'Maintenance stays on and web and the worker stay at 0. Do not scale them up until you know which ' \
+        'migrations ran: the old code may not work on the new schema.'
       )
       expect_recovery_banner(result)
       expect(deploy.calls_to('heroku').grep(/run --exit-code/)).to eq([])
-      expect_production(maintenance: true, web: 0, pushed: true)
+      expect_production(maintenance: true, web: 0, pushed: true, worker: 0)
     end
 
-    # State left: maintenance on, web at 0, new code and migrations in.
-    # Next step: the two commands the banner prints.
+    # State left: maintenance on, web and worker at 0, new code and
+    # migrations in. Next step: the commands the banner prints.
+    it 'stops with the recovery banner when the worker cannot be scaled back up' do
+      deploy.rule('heroku', '^ps:scale worker=1', exit: 1)
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect_recovery_banner(result)
+      expect_production(maintenance: true, web: 0, pushed: true, worker: 0)
+    end
+
+    # State left: maintenance on, web at 0, worker at 1, new code and
+    # migrations in. Next step: the commands the banner prints.
     it 'stops with the recovery banner when web cannot be scaled back up' do
       deploy.rule('heroku', '^ps:scale web=1', exit: 1)
 
@@ -691,7 +775,7 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
 
       expect(result.status).to eq(1)
       expect_recovery_banner(result)
-      expect_production(maintenance: true, web: 0, pushed: true)
+      expect_production(maintenance: true, web: 0, pushed: true, worker: 1)
     end
 
     # State left: maintenance on, web at 1, new code. Next step: heroku
@@ -817,7 +901,8 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       expect(result.status).to eq(1)
       expect(result.output).to include(
         'Solid Queue is not running. Live updates and the nightly jobs are off until it is.',
-        'Check: heroku logs -a comeals-monorepo | grep SolidQueue ; and docs/runbooks/scheduler-cutover.md'
+        'Check: heroku ps -a comeals-monorepo ; heroku logs -a comeals-monorepo --dyno worker | grep SolidQueue ; ' \
+        'and docs/runbooks/scheduler-cutover.md'
       )
       expect(deploy.calls_to('heroku').grep(/verify_solid_queue/).size).to eq(2)
       expect(deploy.calls_to('smoke')).to eq([])
