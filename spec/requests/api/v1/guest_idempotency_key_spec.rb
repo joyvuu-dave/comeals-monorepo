@@ -44,15 +44,13 @@ RSpec.describe 'the Idempotency-Key header on POST /api/v1/meals/:meal_id/reside
   describe 'a guest add without a key' do
     # A meal page loaded before guest adds took a key sends none, and
     # shows the answer's words to the person. A resident does not know
-    # what a header is, so the words for them come first, and the
-    # sentence for other API clients comes last.
+    # what a header is, so the answer says only what to do.
     it 'is refused with 400 and adds no guest' do
       add_guest(key: nil)
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body).to eq(
-        'message' => 'This page is out of date. Nothing was saved. Reload the page and add the guest again. ' \
-                     'A guest add needs an Idempotency-Key header, with a new key for each guest.'
+        'message' => 'This page is out of date. Nothing was saved. Reload the page and add the guest again.'
       )
       expect(meal.guests.count).to eq(0)
     end
