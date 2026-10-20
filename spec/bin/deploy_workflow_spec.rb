@@ -7,29 +7,21 @@ require 'rails_helper'
 # rest (spec/support/script_sandbox.rb). The workflow passes each step's
 # inputs as variables; the examples pass the same ones.
 RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('spec/bin/deploy_workflow_spec.rb') do
-  let(:sandbox) do
-    ScriptSandbox.new(fakes: %w[heroku gh git curl claude npm node date sleep],
-                      coverage: self.class.metadata[:bash_coverage])
-  end
+  include_context 'with a script sandbox'
+
+  let(:sandbox) { new_sandbox(real: %w[python3]) }
   let(:candidate) { 'c' * 40 }
   let(:live) { 'l' * 40 }
   let(:prod) { '-a comeals-monorepo' }
   let(:apps) { { 'PROD_APP' => 'comeals-monorepo', 'STAGING_APP' => 'comeals-staging' } }
 
-  after { sandbox.cleanup }
-
-  # Holds the scripts BashCoverage::FILES names for this file at 100% of
-  # their lines. It runs only when every example in the file ran, so one
-  # example on its own can still pass (spec/bin/deploy_spec.rb).
-  after(:context) do
-    ran_all = self.class.descendant_filtered_examples.size == self.class.descendants.sum { it.examples.size }
-    self.class.metadata[:bash_coverage].check! if ran_all
-  end
+  # The files the scripts source or run besides themselves.
+  before { %w[bin/lib/json.sh bin/rollback-check bin/smoke].each { sandbox.link(it) } }
 
   def heroku_calls = sandbox.call_lines('heroku')
 
   describe 'bin/lib/deploy/hold-check' do
-    def hold(value) = sandbox.run('bin/lib/deploy/hold-check', env: { 'DEPLOY_HOLD' => value })
+    def hold(value) = sandbox.run_script('bin/lib/deploy/hold-check', env: { 'DEPLOY_HOLD' => value })
 
     it 'passes when there is no hold' do
       result = hold('')
@@ -59,12 +51,12 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
   end
 
   describe 'bin/lib/deploy/compare' do
-    before { sandbox.fake('git', 'rev-parse HEAD', out: "#{candidate}\n") }
+    before { sandbox.rule('git', 'rev-parse HEAD', out: "#{candidate}\n") }
 
-    def compare = sandbox.run('bin/lib/deploy/compare', env: apps)
+    def compare = sandbox.run_script('bin/lib/deploy/compare', env: apps)
 
     it 'goes on when production runs another commit' do
-      sandbox.fake('heroku', "config:get HEROKU_SLUG_COMMIT #{prod}", out: "#{live}\n")
+      sandbox.rule('heroku', "config:get HEROKU_SLUG_COMMIT #{prod}", out: "#{live}\n")
 
       result = compare
 
@@ -74,7 +66,7 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
     end
 
     it 'stops the deploy when production already runs the candidate' do
-      sandbox.fake('heroku', "config:get HEROKU_SLUG_COMMIT #{prod}", out: "#{candidate}\n")
+      sandbox.rule('heroku', "config:get HEROKU_SLUG_COMMIT #{prod}", out: "#{candidate}\n")
 
       result = compare
 
@@ -86,9 +78,9 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
 
   describe 'bin/lib/deploy/green-gate' do
     def gate(runs)
-      sandbox.fake('gh', "api repos/{owner}/{repo}/commits/#{candidate}/check-runs --paginate --jq *",
+      sandbox.rule('gh', "api repos/{owner}/{repo}/commits/#{candidate}/check-runs --paginate --jq *",
                    out: runs.map { "#{it}\n" }.join)
-      sandbox.run('bin/lib/deploy/green-gate', env: { 'CANDIDATE' => candidate })
+      sandbox.run_script('bin/lib/deploy/green-gate', env: { 'CANDIDATE' => candidate })
     end
 
     it 'passes when every check succeeded, was neutral or was skipped' do
@@ -96,7 +88,7 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
 
       expect(result.exitstatus).to eq(0)
       expect(result.out).to eq("All CI checks green.\n")
-      expect(sandbox.calls_to('gh').first.last).to include('select(.name != "daily-deploy")')
+      expect(sandbox.calls_to('gh').map(&:args).first.last).to include('select(.name != "daily-deploy")')
     end
 
     it 'refuses when no check ran' do
@@ -120,21 +112,21 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
     let(:commits) { "- Fix the bills page\n  It was blank.\n" }
 
     before do
-      sandbox.fake('git', "log --reverse --format=- %s%n%w(0,2,2)%b #{live}..#{candidate}", out: commits)
-      sandbox.fake('heroku', "apps:info #{prod} --json", out: '{"app":{"stack":{"name":"heroku-24"}}}')
-      sandbox.fake('heroku', 'apps:info -a comeals-staging --json', out: '{"app":{"build_stack":{"name":"heroku-24"}}}')
-      sandbox.fake('npm', 'install -g @anthropic-ai/claude-code')
-      sandbox.fake('claude', '-p', out: "## What changed\n- The bills page shows again.\n", capture_stdin: true)
-      sandbox.fake('date', '-u +%Y%m%d-%H%M', out: "20261019-1200\n")
+      sandbox.rule('git', "log --reverse --format=- %s%n%w(0,2,2)%b #{live}..#{candidate}", out: commits)
+      sandbox.rule('heroku', "apps:info #{prod} --json", out: '{"app":{"stack":{"name":"heroku-24"}}}')
+      sandbox.rule('heroku', 'apps:info -a comeals-staging --json', out: '{"app":{"build_stack":{"name":"heroku-24"}}}')
+      sandbox.rule('npm', 'install -g @anthropic-ai/claude-code')
+      sandbox.rule('claude', '-p', out: "## What changed\n- The bills page shows again.\n", capture_stdin: true)
+      sandbox.rule('date', '-u +%Y%m%d-%H%M', out: "20261019-1200\n")
     end
 
     def write_note
-      sandbox.run('bin/lib/deploy/write-release-note',
-                  env: apps.merge('LIVE' => live, 'CANDIDATE' => candidate, 'ANTHROPIC_API_KEY' => 'test-key'))
+      sandbox.run_script('bin/lib/deploy/write-release-note',
+                         env: apps.merge('LIVE' => live, 'CANDIDATE' => candidate, 'ANTHROPIC_API_KEY' => 'test-key'))
     end
 
-    def note = File.read(File.join(sandbox.work, 'note.md'))
-    def prompt = sandbox.calls.find { it[:command] == 'claude' }[:stdin]
+    def note = File.read(File.join(sandbox.root, 'note.md'))
+    def prompt = sandbox.stdin_of('claude').first
 
     it 'asks Claude for the note with the commits on stdin, and names the tag' do
       result = write_note
@@ -149,7 +141,7 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
     end
 
     it 'takes away a code fence around the whole note' do
-      sandbox.fake('claude', '-p', out: "```markdown\n## What changed\n- A fix.\n```\n")
+      sandbox.rule('claude', '-p', out: "```markdown\n## What changed\n- A fix.\n```\n")
 
       write_note
 
@@ -157,7 +149,7 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
     end
 
     it 'takes away only the first line when the fence is not closed' do
-      sandbox.fake('claude', '-p', out: "```markdown\n## What changed\n- A fix.\n")
+      sandbox.rule('claude', '-p', out: "```markdown\n## What changed\n- A fix.\n")
 
       write_note
 
@@ -165,7 +157,7 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
     end
 
     it 'falls back to the commit list when Claude fails' do
-      sandbox.fake('claude', '-p', err: 'API error', exit: 1)
+      sandbox.rule('claude', '-p', err: 'API error', exit: 1)
 
       result = write_note
 
@@ -176,7 +168,7 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
     end
 
     it 'falls back to the commit list when Claude writes nothing' do
-      sandbox.fake('claude', '-p')
+      sandbox.rule('claude', '-p')
 
       write_note
 
@@ -185,7 +177,7 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
 
     context 'when the next release moves to a new stack' do
       before do
-        sandbox.fake('heroku', 'apps:info -a comeals-staging --json',
+        sandbox.rule('heroku', 'apps:info -a comeals-staging --json',
                      out: '{"app":{"build_stack":{"name":"heroku-26"}}}')
       end
 
@@ -203,7 +195,7 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
       end
 
       it 'puts it above the commit list when Claude fails' do
-        sandbox.fake('claude', '-p', exit: 1)
+        sandbox.rule('claude', '-p', exit: 1)
 
         write_note
 
@@ -213,7 +205,7 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
     end
 
     it 'leaves the stack out when a probe fails' do
-      sandbox.fake('heroku', 'apps:info -a comeals-staging --json', exit: 1)
+      sandbox.rule('heroku', 'apps:info -a comeals-staging --json', exit: 1)
 
       result = write_note
 
@@ -222,7 +214,7 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
     end
 
     it 'cuts a note longer than GitHub allows and says so' do
-      sandbox.fake('claude', '-p', out: "#{'x' * 99}\n" * 1300)
+      sandbox.rule('claude', '-p', out: "#{'x' * 99}\n" * 1300)
 
       write_note
 
@@ -236,10 +228,10 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
 
   describe 'bin/lib/deploy/solid-queue-config' do
     def configure(pool:, in_puma:)
-      sandbox.fake('heroku', "config:get RAILS_DB_POOL #{prod}", out: "#{pool}\n")
-      sandbox.fake('heroku', "config:get SOLID_QUEUE_IN_PUMA #{prod}", out: "#{in_puma}\n")
-      sandbox.fake('heroku', "config:set RAILS_DB_POOL=4 SOLID_QUEUE_IN_PUMA=true #{prod}")
-      sandbox.run('bin/lib/deploy/solid-queue-config', env: apps)
+      sandbox.rule('heroku', "config:get RAILS_DB_POOL #{prod}", out: "#{pool}\n")
+      sandbox.rule('heroku', "config:get SOLID_QUEUE_IN_PUMA #{prod}", out: "#{in_puma}\n")
+      sandbox.rule('heroku', "config:set RAILS_DB_POOL=4 SOLID_QUEUE_IN_PUMA=true #{prod}")
+      sandbox.run_script('bin/lib/deploy/solid-queue-config', env: apps)
     end
 
     def sets = heroku_calls.grep(/config:set/)
@@ -265,15 +257,15 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
 
   describe 'bin/lib/deploy/promote' do
     before do
-      sandbox.fake('heroku', "config:get HEROKU_SLUG_COMMIT #{prod}", out: "#{live}\n")
-      sandbox.fake('heroku', 'pipelines:promote -a comeals-staging')
-      sandbox.fake('date', '-u +%Y-%m-%dT%H:%M:%S', out: "2026-10-19T12:30:00\n")
+      sandbox.rule('heroku', "config:get HEROKU_SLUG_COMMIT #{prod}", out: "#{live}\n")
+      sandbox.rule('heroku', 'pipelines:promote -a comeals-staging')
+      sandbox.rule('date', '-u +%Y-%m-%dT%H:%M:%S', out: "2026-10-19T12:30:00\n")
     end
 
-    def promote = sandbox.run('bin/lib/deploy/promote', env: apps.merge('CANDIDATE' => candidate))
+    def promote = sandbox.run_script('bin/lib/deploy/promote', env: apps.merge('CANDIDATE' => candidate))
 
     it 'promotes the slug staging runs and notes when, and what ran before' do
-      sandbox.fake('heroku', 'config:get HEROKU_SLUG_COMMIT -a comeals-staging', out: "#{candidate}\n")
+      sandbox.rule('heroku', 'config:get HEROKU_SLUG_COMMIT -a comeals-staging', out: "#{candidate}\n")
 
       result = promote
 
@@ -283,7 +275,7 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
     end
 
     it 'refuses when staging runs another commit' do
-      sandbox.fake('heroku', 'config:get HEROKU_SLUG_COMMIT -a comeals-staging', out: "#{live}\n")
+      sandbox.rule('heroku', 'config:get HEROKU_SLUG_COMMIT -a comeals-staging', out: "#{live}\n")
 
       result = promote
 
@@ -299,43 +291,43 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
     let(:diff) { "diff --name-only --diff-filter=A #{live} #{candidate} -- db/migrate" }
 
     before do
-      sandbox.fake('curl', "-sf #{version_url}", out: %({"version":"614","commit":"#{candidate}"}))
-      sandbox.fake('node', 'tests/smoke/smoke.js')
-      sandbox.fake('heroku', "run --exit-code bin/rake deploy:verify_solid_queue #{prod}")
-      sandbox.fake('heroku', "logs -n 1500 #{prod}", out: "2026-10-19T12:35:00.1+00:00 app[web.1]: Started GET /\n")
-      sandbox.fake('heroku', "rollback #{prod}")
-      sandbox.fake('heroku', "releases #{prod} -n 3", out: "v614 Deploy failed\n")
-      sandbox.fake('git', diff)
-      sandbox.fake('sleep')
+      sandbox.rule('curl', "-sf #{version_url}", out: %({"version":"614","commit":"#{candidate}"}))
+      sandbox.rule('node', 'tests/smoke/smoke.js')
+      sandbox.rule('heroku', "run --exit-code bin/rake deploy:verify_solid_queue #{prod}")
+      sandbox.rule('heroku', "logs -n 1500 #{prod}", out: "2026-10-19T12:35:00.1+00:00 app[web.1]: Started GET /\n")
+      sandbox.rule('heroku', "rollback #{prod}")
+      sandbox.rule('heroku', "releases #{prod} -n 3", out: "v614 Deploy failed\n")
+      sandbox.rule('git', diff)
+      sandbox.rule('sleep')
     end
 
     def watch
-      sandbox.run('bin/lib/deploy/watch-production', chdir: ScriptSandbox::REPO,
-                                                     env: apps.merge('CANDIDATE' => candidate, 'PREVIOUS' => live,
-                                                                     'STARTED' => '2026-10-19T12:30:00',
-                                                                     'PROD_URL' => 'https://comeals.com'))
+      sandbox.run_script('bin/lib/deploy/watch-production',
+                         env: apps.merge('CANDIDATE' => candidate, 'PREVIOUS' => live,
+                                         'STARTED' => '2026-10-19T12:30:00',
+                                         'PROD_URL' => 'https://comeals.com'))
     end
 
     def rollbacks = heroku_calls.grep(/heroku rollback/)
 
     it 'waits for the candidate, smokes it, checks Solid Queue, watches the logs, and keeps it' do
-      sandbox.fake('curl', "-sf #{version_url}", out: %({"version":"613","commit":"#{live}"}), once: true)
+      sandbox.rule('curl', "-sf #{version_url}", out: %({"version":"613","commit":"#{live}"}), once: true)
 
       result = watch
 
       expect(result.exitstatus).to eq(0), result.out + result.err
       expect(result.out).to include("Production serves the candidate.\n")
       expect(result.out).to end_with("No worrying lines in the production logs.\n")
-      expect(sandbox.calls_to('sleep')).to eq([['5'], ['180']])
-      expect(sandbox.calls.find { it[:command] == 'node' }).to be_truthy
+      expect(sandbox.calls_to('sleep').map(&:args)).to eq([['5'], ['180']])
+      expect(sandbox.calls_to('node')).not_to be_empty
       expect(rollbacks).to be_empty
     end
 
     context 'when production never serves the candidate' do
-      before { sandbox.fake('curl', "-sf #{version_url}", exit: 7) }
+      before { sandbox.rule('curl', "-sf #{version_url}", exit: 7) }
 
       it 'rolls back when the new slug is current' do
-        sandbox.fake('heroku', "config:get HEROKU_SLUG_COMMIT #{prod}", out: "#{candidate}\n")
+        sandbox.rule('heroku', "config:get HEROKU_SLUG_COMMIT #{prod}", out: "#{candidate}\n")
 
         result = watch
 
@@ -344,12 +336,12 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
         expect(result.out).to include('v614 Deploy failed')
         expect(result.out).to include('The slug is current but not serving — rolling back.')
         expect(rollbacks).to eq(["heroku rollback #{prod}"])
-        expect(sandbox.calls_to('sleep')).to eq([['5']] * 60)
+        expect(sandbox.calls_to('sleep').map(&:args)).to eq([['5']] * 60)
       end
 
       it 'does not roll back when production still runs the old release' do
-        sandbox.fake('heroku', "config:get HEROKU_SLUG_COMMIT #{prod}", out: "#{live}\n")
-        sandbox.fake('heroku', "releases #{prod} -n 3", exit: 1)
+        sandbox.rule('heroku', "config:get HEROKU_SLUG_COMMIT #{prod}", out: "#{live}\n")
+        sandbox.rule('heroku', "releases #{prod} -n 3", exit: 1)
 
         result = watch
 
@@ -360,7 +352,7 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
     end
 
     it 'rolls back when the smoke test fails' do
-      sandbox.fake('node', 'tests/smoke/smoke.js', exit: 1)
+      sandbox.rule('node', 'tests/smoke/smoke.js', exit: 1)
 
       result = watch
 
@@ -370,8 +362,8 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
     end
 
     it 'does not roll back only the code when the release added a migration' do
-      sandbox.fake('node', 'tests/smoke/smoke.js', exit: 1)
-      sandbox.fake('git', diff, out: "db/migrate/20261015000000_add_thing.rb\n")
+      sandbox.rule('node', 'tests/smoke/smoke.js', exit: 1)
+      sandbox.rule('git', diff, out: "db/migrate/20261015000000_add_thing.rb\n")
 
       result = watch
 
@@ -381,7 +373,7 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
     end
 
     it 'rolls back when Solid Queue did not come up' do
-      sandbox.fake('heroku', "run --exit-code bin/rake deploy:verify_solid_queue #{prod}", exit: 1)
+      sandbox.rule('heroku', "run --exit-code bin/rake deploy:verify_solid_queue #{prod}", exit: 1)
 
       result = watch
 
@@ -391,7 +383,7 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
     end
 
     it 'rolls back on a worrying log line after the promote, and only on those' do
-      sandbox.fake('heroku', "logs -n 1500 #{prod}", out: <<~LOGS)
+      sandbox.rule('heroku', "logs -n 1500 #{prod}", out: <<~LOGS)
         2026-10-19T12:29:59.9+00:00 app[web.1]: FATAL from before the deploy
         2026-10-19T12:30:00.1+00:00 app[web.1]: ok
         2026-10-19T12:31:00.1+00:00 heroku[router]: at=info status=500 path=/api/v1/meals
@@ -412,7 +404,7 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
     # an error, so the run fails and a person looks. It does not roll back:
     # the release passed the smoke test and the Solid Queue check.
     it 'fails, without rolling back, when the logs cannot be read' do
-      sandbox.fake('heroku', "logs -n 1500 #{prod}", err: 'Internal server error', exit: 1)
+      sandbox.rule('heroku', "logs -n 1500 #{prod}", err: 'Internal server error', exit: 1)
 
       result = watch
 
@@ -423,7 +415,7 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
     end
 
     it 'keeps a release whose only worrying lines are from before the promote' do
-      sandbox.fake('heroku', "logs -n 1500 #{prod}", out: "2026-10-19T12:29:59.9+00:00 app[web.1]: FATAL old\n")
+      sandbox.rule('heroku', "logs -n 1500 #{prod}", out: "2026-10-19T12:29:59.9+00:00 app[web.1]: FATAL old\n")
 
       expect(watch.exitstatus).to eq(0)
       expect(rollbacks).to be_empty
@@ -432,8 +424,8 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
 
   describe 'bin/lib/deploy/ping-healthchecks' do
     def ping(url, status)
-      sandbox.fake('curl')
-      sandbox.run('bin/lib/deploy/ping-healthchecks', env: { 'HC_URL' => url, 'JOB_STATUS' => status })
+      sandbox.rule('curl')
+      sandbox.run_script('bin/lib/deploy/ping-healthchecks', env: { 'HC_URL' => url, 'JOB_STATUS' => status })
     end
 
     it 'pings nothing when there is no URL' do
@@ -454,10 +446,10 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
     end
 
     it 'does not fail the run when the ping fails' do
-      sandbox.fake('curl', '*', exit: 28)
+      sandbox.rule('curl', '*', exit: 28)
 
-      result = sandbox.run('bin/lib/deploy/ping-healthchecks',
-                           env: { 'HC_URL' => 'https://hc.example.com/abc', 'JOB_STATUS' => 'success' })
+      result = sandbox.run_script('bin/lib/deploy/ping-healthchecks',
+                                  env: { 'HC_URL' => 'https://hc.example.com/abc', 'JOB_STATUS' => 'success' })
 
       expect(result.exitstatus).to eq(0)
     end

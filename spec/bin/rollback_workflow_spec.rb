@@ -7,22 +7,15 @@ require 'rails_helper'
 # (spec/support/script_sandbox.rb). The workflow passes each step's
 # inputs as variables; the examples pass the same ones.
 RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new('spec/bin/rollback_workflow_spec.rb') do
-  let(:sandbox) do
-    ScriptSandbox.new(fakes: %w[heroku curl gh git date sleep], coverage: self.class.metadata[:bash_coverage])
-  end
+  include_context 'with a script sandbox'
+
+  let(:sandbox) { new_sandbox(real: %w[python3]) }
   let(:bad) { 'b' * 40 }
   let(:good) { 'a' * 40 }
   let(:prod) { '-a comeals-monorepo' }
 
-  after { sandbox.cleanup }
-
-  # Holds the scripts BashCoverage::FILES names for this file at 100% of
-  # their lines. It runs only when every example in the file ran, so one
-  # example on its own can still pass (spec/bin/deploy_spec.rb).
-  after(:context) do
-    ran_all = self.class.descendant_filtered_examples.size == self.class.descendants.sum { it.examples.size }
-    self.class.metadata[:bash_coverage].check! if ran_all
-  end
+  # The files the scripts source or run besides themselves.
+  before { %w[bin/lib/json.sh bin/rollback-check bin/smoke].each { sandbox.link(it) } }
 
   def heroku_calls = sandbox.call_lines('heroku')
 
@@ -30,17 +23,17 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
     let(:api) { 'https://api.heroku.com/apps/comeals-monorepo' }
 
     before do
-      sandbox.fake('curl', "* #{api}/releases", out: '[{"version":613},{"version":612}]')
-      sandbox.fake('curl', "* #{api}/releases/612", out: '{"slug":{"id":"slug-612"}}')
-      sandbox.fake('curl', "* #{api}/releases/610", out: '{"slug":{"id":"slug-610"}}')
-      sandbox.fake('curl', "* #{api}/slugs/slug-612", out: %({"commit":"#{good}"}))
-      sandbox.fake('curl', "* #{api}/slugs/slug-610", out: %({"commit":"#{'c' * 40}"}))
-      sandbox.fake('heroku', "config:get HEROKU_SLUG_COMMIT #{prod}", out: "#{bad}\n")
+      sandbox.rule('curl', "* #{api}/releases", out: '[{"version":613},{"version":612}]')
+      sandbox.rule('curl', "* #{api}/releases/612", out: '{"slug":{"id":"slug-612"}}')
+      sandbox.rule('curl', "* #{api}/releases/610", out: '{"slug":{"id":"slug-610"}}')
+      sandbox.rule('curl', "* #{api}/slugs/slug-612", out: %({"commit":"#{good}"}))
+      sandbox.rule('curl', "* #{api}/slugs/slug-610", out: %({"commit":"#{'c' * 40}"}))
+      sandbox.rule('heroku', "config:get HEROKU_SLUG_COMMIT #{prod}", out: "#{bad}\n")
     end
 
     def find(app: 'comeals-monorepo', release: '')
-      sandbox.run('bin/lib/rollback/find-release',
-                  env: { 'APP' => app, 'RELEASE' => release, 'HEROKU_API_KEY' => 'test-key' })
+      sandbox.run_script('bin/lib/rollback/find-release',
+                         env: { 'APP' => app, 'RELEASE' => release, 'HEROKU_API_KEY' => 'test-key' })
     end
 
     it 'goes back to the release before the current one when given none' do
@@ -50,10 +43,10 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
       expect(result.outputs).to eq('url' => 'https://comeals.com', 'target' => 'v612',
                                    'target_sha' => good, 'bad_sha' => bad)
       expect(result.out).to include("comeals-monorepo runs #{bad}; v612 runs #{good}.")
-      expect(sandbox.calls_to('curl')).to all(
+      expect(sandbox.calls_to('curl').map(&:args)).to all(
         include('-sf', 'Accept: application/vnd.heroku+json; version=3', 'Authorization: Bearer test-key')
       )
-      expect(sandbox.calls_to('curl').first).to include('Range: version ..; order=desc, max=2')
+      expect(sandbox.calls_to('curl').map(&:args).first).to include('Range: version ..; order=desc, max=2')
     end
 
     it 'goes back to the release it is given, with or without the v' do
@@ -63,10 +56,10 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
 
     it 'gives the staging address for the staging app' do
       staging_api = 'https://api.heroku.com/apps/comeals-staging'
-      sandbox.fake('curl', "* #{staging_api}/releases", out: '[{"version":9},{"version":8}]')
-      sandbox.fake('curl', "* #{staging_api}/releases/8", out: '{"slug":{"id":"s8"}}')
-      sandbox.fake('curl', "* #{staging_api}/slugs/s8", out: %({"commit":"#{good}"}))
-      sandbox.fake('heroku', 'config:get HEROKU_SLUG_COMMIT -a comeals-staging', out: "#{bad}\n")
+      sandbox.rule('curl', "* #{staging_api}/releases", out: '[{"version":9},{"version":8}]')
+      sandbox.rule('curl', "* #{staging_api}/releases/8", out: '{"slug":{"id":"s8"}}')
+      sandbox.rule('curl', "* #{staging_api}/slugs/s8", out: %({"commit":"#{good}"}))
+      sandbox.rule('heroku', 'config:get HEROKU_SLUG_COMMIT -a comeals-staging', out: "#{bad}\n")
 
       result = find(app: 'comeals-staging')
 
@@ -88,7 +81,7 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
     end
 
     it 'stops, changing nothing, when the release is not found' do
-      sandbox.fake('curl', "* #{api}/releases/999", err: 'curl: (22) The requested URL returned error: 404', exit: 22)
+      sandbox.rule('curl', "* #{api}/releases/999", err: 'curl: (22) The requested URL returned error: 404', exit: 22)
 
       result = find(release: 'v999')
 
@@ -98,7 +91,7 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
     end
 
     it 'stops when the release has no commit' do
-      sandbox.fake('curl', "* #{api}/slugs/slug-612", out: '{"commit":null}')
+      sandbox.rule('curl', "* #{api}/slugs/slug-612", out: '{"commit":null}')
 
       result = find
 
@@ -109,7 +102,7 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
     end
 
     it 'stops when it cannot read the running commit' do
-      sandbox.fake('heroku', "config:get HEROKU_SLUG_COMMIT #{prod}", out: "\n")
+      sandbox.rule('heroku', "config:get HEROKU_SLUG_COMMIT #{prod}", out: "\n")
 
       result = find
 
@@ -119,7 +112,7 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
     end
 
     it 'stops when the release runs the commit that runs now' do
-      sandbox.fake('heroku', "config:get HEROKU_SLUG_COMMIT #{prod}", out: "#{good}\n")
+      sandbox.rule('heroku', "config:get HEROKU_SLUG_COMMIT #{prod}", out: "#{good}\n")
 
       result = find
 
@@ -135,21 +128,21 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
     def check(backup: '', code_only: 'false')
       env = { 'TARGET_SHA' => good, 'BAD_SHA' => bad, 'BACKUP' => backup, 'CODE_ONLY_IS_SAFE' => code_only,
               'APP' => 'comeals-monorepo' }
-      sandbox.run('bin/lib/rollback/check-migrations', chdir: ScriptSandbox::REPO, env:)
+      sandbox.run_script('bin/lib/rollback/check-migrations', env:)
     end
 
     it 'passes when no migration was added since the release it goes back to' do
-      sandbox.fake('git', diff)
+      sandbox.rule('git', diff)
 
       result = check
 
       expect(result.exitstatus).to eq(0)
       expect(result.out).to include("No migration was added after #{good}")
-      expect(sandbox.calls_to('git')).to eq([diff.split])
+      expect(sandbox.calls_to('git').map(&:args)).to eq([diff.split])
     end
 
     context 'when a migration was added' do
-      before { sandbox.fake('git', diff, out: "db/migrate/20261001000000_add_thing.rb\n") }
+      before { sandbox.rule('git', diff, out: "db/migrate/20261001000000_add_thing.rb\n") }
 
       it 'refuses to roll back only the code' do
         result = check
@@ -178,19 +171,19 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
 
   describe 'bin/lib/rollback/restore-backup' do
     before do
-      sandbox.fake('heroku', "maintenance:on #{prod}")
-      sandbox.fake('heroku', "pg:backups:capture #{prod}")
-      sandbox.fake('curl', '* https://api.heroku.com/apps/comeals-monorepo/formation/web', out: '{"quantity":2}')
-      sandbox.fake('heroku', "ps:scale web=0 #{prod}")
-      sandbox.fake('heroku', "ps #{prod} --json", out: '[{"type":"run"}]')
-      sandbox.fake('heroku', "ps #{prod} --json", out: '[{"type":"web"},{"type":"run"}]', once: true)
-      sandbox.fake('heroku', "pg:backups:restore b245 DATABASE_URL #{prod} --confirm comeals-monorepo")
-      sandbox.fake('sleep')
+      sandbox.rule('heroku', "maintenance:on #{prod}")
+      sandbox.rule('heroku', "pg:backups:capture #{prod}")
+      sandbox.rule('curl', '* https://api.heroku.com/apps/comeals-monorepo/formation/web', out: '{"quantity":2}')
+      sandbox.rule('heroku', "ps:scale web=0 #{prod}")
+      sandbox.rule('heroku', "ps #{prod} --json", out: '[{"type":"run"}]')
+      sandbox.rule('heroku', "ps #{prod} --json", out: '[{"type":"web"},{"type":"run"}]', once: true)
+      sandbox.rule('heroku', "pg:backups:restore b245 DATABASE_URL #{prod} --confirm comeals-monorepo")
+      sandbox.rule('sleep')
     end
 
     def restore
-      sandbox.run('bin/lib/rollback/restore-backup',
-                  env: { 'APP' => 'comeals-monorepo', 'BACKUP' => 'b245', 'HEROKU_API_KEY' => 'test-key' })
+      sandbox.run_script('bin/lib/rollback/restore-backup',
+                         env: { 'APP' => 'comeals-monorepo', 'BACKUP' => 'b245', 'HEROKU_API_KEY' => 'test-key' })
     end
 
     it 'turns maintenance on, captures, stops web, waits for it, then restores' do
@@ -203,27 +196,27 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
          "heroku ps #{prod} --json", "heroku ps #{prod} --json",
          "heroku pg:backups:restore b245 DATABASE_URL #{prod} --confirm comeals-monorepo"]
       )
-      expect(sandbox.calls_to('sleep')).to eq([['5']])
+      expect(sandbox.calls_to('sleep').map(&:args)).to eq([['5']])
       expect(result.out).to include('comeals-monorepo runs 2 web dyno(s). Scaling web to 0.')
     end
 
     # Production state: maintenance on, web at 0, the database as the new
     # code left it. The step that says what to do by hand runs next.
     it 'does not restore when a web dyno still runs after 3 minutes' do
-      sandbox.fake('heroku', "ps #{prod} --json", out: '[{"type":"web"}]')
+      sandbox.rule('heroku', "ps #{prod} --json", out: '[{"type":"web"}]')
 
       result = restore
 
       expect(result.exitstatus).to eq(1)
       expect(result.out).to include('A web dyno still runs 3 minutes after web was scaled to 0')
       expect(heroku_calls.grep(/restore/)).to be_empty
-      expect(sandbox.calls_to('sleep').size).to eq(35)
+      expect(sandbox.calls_to('sleep').map(&:args).size).to eq(35)
     end
 
     # Production state: maintenance on, web still up on the new code, the
     # database unchanged.
     it 'stops before web is scaled when the formation cannot be read' do
-      sandbox.fake('curl', '* https://api.heroku.com/apps/comeals-monorepo/formation/web', exit: 22)
+      sandbox.rule('curl', '* https://api.heroku.com/apps/comeals-monorepo/formation/web', exit: 22)
 
       result = restore
 
@@ -232,7 +225,7 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
     end
 
     it 'fails when the restore fails' do
-      sandbox.fake('heroku', 'pg:backups:restore *', err: 'restore failed', exit: 1)
+      sandbox.rule('heroku', 'pg:backups:restore *', err: 'restore failed', exit: 1)
 
       expect(restore.exitstatus).to eq(1)
     end
@@ -240,19 +233,19 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
 
   describe 'bin/lib/rollback/roll-back' do
     before do
-      sandbox.fake('heroku', "rollback v612 #{prod}")
-      sandbox.fake('heroku', "releases #{prod} --json", out: '[{"status":"succeeded"}]')
-      sandbox.fake('heroku', "config:get HEROKU_SLUG_COMMIT #{prod}", out: "#{good}\n")
-      sandbox.fake('sleep')
+      sandbox.rule('heroku', "rollback v612 #{prod}")
+      sandbox.rule('heroku', "releases #{prod} --json", out: '[{"status":"succeeded"}]')
+      sandbox.rule('heroku', "config:get HEROKU_SLUG_COMMIT #{prod}", out: "#{good}\n")
+      sandbox.rule('sleep')
     end
 
     def roll
-      sandbox.run('bin/lib/rollback/roll-back',
-                  env: { 'APP' => 'comeals-monorepo', 'TARGET' => 'v612', 'BAD_SHA' => bad })
+      sandbox.run_script('bin/lib/rollback/roll-back',
+                         env: { 'APP' => 'comeals-monorepo', 'TARGET' => 'v612', 'BAD_SHA' => bad })
     end
 
     it 'rolls back, waits for the release phase, and checks the commit changed' do
-      sandbox.fake('heroku', "releases #{prod} --json", out: '[{"status":"pending"}]', once: true)
+      sandbox.rule('heroku', "releases #{prod} --json", out: '[{"status":"pending"}]', once: true)
 
       result = roll
 
@@ -260,12 +253,12 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
       expect(result.outputs).to eq('bad_sha' => bad, 'live_sha' => good)
       expect(result.out).to include("comeals-monorepo now runs #{good}.")
       expect(heroku_calls.first).to eq("heroku rollback v612 #{prod}")
-      expect(sandbox.calls_to('sleep')).to eq([['5']])
+      expect(sandbox.calls_to('sleep').map(&:args)).to eq([['5']])
     end
 
     it 'stops and shows the output when the release phase fails' do
-      sandbox.fake('heroku', "releases #{prod} --json", out: '[{"status":"failed"}]')
-      sandbox.fake('heroku', "releases:output #{prod}", out: "line\n" * 40)
+      sandbox.rule('heroku', "releases #{prod} --json", out: '[{"status":"failed"}]')
+      sandbox.rule('heroku', "releases:output #{prod}", out: "line\n" * 40)
 
       result = roll
 
@@ -276,8 +269,8 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
     end
 
     it 'still fails with its message when the release output cannot be read' do
-      sandbox.fake('heroku', "releases #{prod} --json", out: '[{"status":"failed"}]')
-      sandbox.fake('heroku', "releases:output #{prod}", exit: 1)
+      sandbox.rule('heroku', "releases #{prod} --json", out: '[{"status":"failed"}]')
+      sandbox.rule('heroku', "releases:output #{prod}", exit: 1)
 
       result = roll
 
@@ -286,19 +279,19 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
     end
 
     it 'stops waiting after 36 tries' do
-      sandbox.fake('heroku', "releases #{prod} --json", out: '[{"status":"pending"}]')
-      sandbox.fake('heroku', "releases:output #{prod}")
+      sandbox.rule('heroku', "releases #{prod} --json", out: '[{"status":"pending"}]')
+      sandbox.rule('heroku', "releases:output #{prod}")
 
       result = roll
 
       expect(result.exitstatus).to eq(1)
       expect(result.out).to include('(status: pending)')
       expect(heroku_calls.grep(/releases -a/).size).to eq(36)
-      expect(sandbox.calls_to('sleep').size).to eq(35)
+      expect(sandbox.calls_to('sleep').map(&:args).size).to eq(35)
     end
 
     it 'fails when the running commit did not change' do
-      sandbox.fake('heroku', "config:get HEROKU_SLUG_COMMIT #{prod}", out: "#{bad}\n")
+      sandbox.rule('heroku', "config:get HEROKU_SLUG_COMMIT #{prod}", out: "#{bad}\n")
 
       result = roll
 
@@ -308,7 +301,7 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
     end
 
     it 'fails when heroku rollback fails' do
-      sandbox.fake('heroku', "rollback v612 #{prod}", exit: 1)
+      sandbox.rule('heroku', "rollback v612 #{prod}", exit: 1)
 
       expect(roll.exitstatus).to eq(1)
       expect(heroku_calls).to eq(["heroku rollback v612 #{prod}"])
@@ -317,15 +310,17 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
 
   describe 'bin/lib/rollback/start-web' do
     before do
-      sandbox.fake('heroku', "ps:scale web=2 #{prod}")
-      sandbox.fake('heroku', "ps #{prod} --json", out: '[{"type":"web","state":"up"},{"type":"web","state":"up"}]')
-      sandbox.fake('heroku', "ps #{prod} --json",
+      sandbox.rule('heroku', "ps:scale web=2 #{prod}")
+      sandbox.rule('heroku', "ps #{prod} --json", out: '[{"type":"web","state":"up"},{"type":"web","state":"up"}]')
+      sandbox.rule('heroku', "ps #{prod} --json",
                    out: '[{"type":"web","state":"up"},{"type":"web","state":"starting"},{"type":"run","state":"up"}]',
                    once: true)
-      sandbox.fake('sleep')
+      sandbox.rule('sleep')
     end
 
-    def start = sandbox.run('bin/lib/rollback/start-web', env: { 'APP' => 'comeals-monorepo', 'WEB_COUNT' => '2' })
+    def start
+      sandbox.run_script('bin/lib/rollback/start-web', env: { 'APP' => 'comeals-monorepo', 'WEB_COUNT' => '2' })
+    end
 
     it 'scales web back and waits until every web dyno is up' do
       result = start
@@ -333,26 +328,26 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
       expect(result.exitstatus).to eq(0)
       expect(result.out).to include('2 web dyno(s) up.')
       expect(heroku_calls.first).to eq("heroku ps:scale web=2 #{prod}")
-      expect(sandbox.calls_to('sleep')).to eq([['5']])
+      expect(sandbox.calls_to('sleep').map(&:args)).to eq([['5']])
     end
 
     it 'fails when the web dynos are not up after 3 minutes' do
-      sandbox.fake('heroku', "ps #{prod} --json", out: '[{"type":"web","state":"up"},{"type":"web","state":"crashed"}]')
+      sandbox.rule('heroku', "ps #{prod} --json", out: '[{"type":"web","state":"up"},{"type":"web","state":"crashed"}]')
 
       result = start
 
       expect(result.exitstatus).to eq(1)
       expect(result.out).to include('Web was scaled to 2, but only 1 web dyno(s) are up after 3 minutes.')
-      expect(sandbox.calls_to('sleep').size).to eq(35)
+      expect(sandbox.calls_to('sleep').map(&:args).size).to eq(35)
     end
   end
 
   describe 'bin/lib/rollback/say-what-to-do' do
     def say(restore: 'success', roll: 'success', start: 'skipped', web_count: '2')
-      sandbox.run('bin/lib/rollback/say-what-to-do',
-                  env: { 'RESTORE' => restore, 'ROLL' => roll, 'START' => start, 'WEB_COUNT' => web_count,
-                         'TARGET' => 'v612', 'URL' => 'https://comeals.com', 'APP' => 'comeals-monorepo',
-                         'BACKUP' => 'b245' })
+      sandbox.run_script('bin/lib/rollback/say-what-to-do',
+                         env: { 'RESTORE' => restore, 'ROLL' => roll, 'START' => start, 'WEB_COUNT' => web_count,
+                                'TARGET' => 'v612', 'URL' => 'https://comeals.com', 'APP' => 'comeals-monorepo',
+                                'BACKUP' => 'b245' })
     end
 
     it 'says only maintenance may be on when web was started' do
@@ -400,19 +395,19 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
 
   describe 'bin/lib/rollback/mark-release-notes' do
     before do
-      sandbox.fake('gh', 'release list --limit 20 --json tagName --jq *',
+      sandbox.rule('gh', 'release list --limit 20 --json tagName --jq *',
                    out: "deploy-20261012-1200\ndeploy-20261005-1200\nold-tag\n")
-      sandbox.fake('gh', 'api repos/{owner}/{repo}/commits/deploy-20261012-1200 --jq .sha', out: "#{good}\n")
-      sandbox.fake('gh', 'api repos/{owner}/{repo}/commits/deploy-20261005-1200 --jq .sha', out: "#{bad}\n")
-      sandbox.fake('gh', 'api repos/{owner}/{repo}/commits/old-tag --jq .sha', exit: 1)
-      sandbox.fake('gh', 'release view deploy-20261005-1200 --json body --jq .body', out: "## What changed\n- A fix\n")
-      sandbox.fake('gh', 'release edit deploy-20261005-1200 --notes-file new_body.md')
-      sandbox.fake('date', '-u +%Y-%m-%d', out: "2026-10-19\n")
+      sandbox.rule('gh', 'api repos/{owner}/{repo}/commits/deploy-20261012-1200 --jq .sha', out: "#{good}\n")
+      sandbox.rule('gh', 'api repos/{owner}/{repo}/commits/deploy-20261005-1200 --jq .sha', out: "#{bad}\n")
+      sandbox.rule('gh', 'api repos/{owner}/{repo}/commits/old-tag --jq .sha', exit: 1)
+      sandbox.rule('gh', 'release view deploy-20261005-1200 --json body --jq .body', out: "## What changed\n- A fix\n")
+      sandbox.rule('gh', 'release edit deploy-20261005-1200 --notes-file new_body.md')
+      sandbox.rule('date', '-u +%Y-%m-%d', out: "2026-10-19\n")
     end
 
     def mark(sha = bad)
-      sandbox.run('bin/lib/rollback/mark-release-notes',
-                  env: { 'BAD_SHA' => sha, 'REASON' => 'The bills page is blank' })
+      sandbox.run_script('bin/lib/rollback/mark-release-notes',
+                         env: { 'BAD_SHA' => sha, 'REASON' => 'The bills page is blank' })
     end
 
     it 'puts the reason at the top of the release that pointed at the rolled-back commit' do
@@ -421,7 +416,7 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
       expect(result.exitstatus).to eq(0)
       expect(result.out).to include('Marked release deploy-20261005-1200 as rolled back.')
       expect(sandbox.call_lines('gh').last).to eq('gh release edit deploy-20261005-1200 --notes-file new_body.md')
-      expect(File.read(File.join(sandbox.work, 'new_body.md'))).to eq(
+      expect(File.read(File.join(sandbox.root, 'new_body.md'))).to eq(
         "> **Rolled back on 2026-10-19** — The bills page is blank\n\n## What changed\n- A fix\n"
       )
     end
@@ -437,15 +432,15 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
 
   describe 'bin/lib/rollback/file-issue' do
     it 'files the follow-up issue with both commits and the reason' do
-      sandbox.fake('gh', 'issue create *')
-      sandbox.fake('date', '-u +%Y-%m-%d', out: "2026-10-19\n")
+      sandbox.rule('gh', 'issue create *')
+      sandbox.rule('date', '-u +%Y-%m-%d', out: "2026-10-19\n")
 
-      result = sandbox.run('bin/lib/rollback/file-issue',
-                           env: { 'REASON' => 'The bills page is blank', 'BAD_SHA' => bad, 'LIVE_SHA' => good })
+      result = sandbox.run_script('bin/lib/rollback/file-issue',
+                                  env: { 'REASON' => 'The bills page is blank', 'BAD_SHA' => bad, 'LIVE_SHA' => good })
 
       expect(result.exitstatus).to eq(0)
-      expect(sandbox.calls_to('gh').size).to eq(1)
-      args = sandbox.calls_to('gh').first
+      expect(sandbox.calls_to('gh').map(&:args).size).to eq(1)
+      args = sandbox.calls_to('gh').map(&:args).first
       expect(args[0..3]).to eq(['issue', 'create', '--title', 'Production rolled back: The bills page is blank'])
       expect(args[4]).to eq('--body')
       expect(args[5]).to start_with("Production was rolled back from `#{bad}` to `#{good}` on 2026-10-19.\n\n" \

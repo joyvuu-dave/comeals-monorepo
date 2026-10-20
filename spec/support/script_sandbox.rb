@@ -54,6 +54,16 @@ class ScriptSandbox
     delegate :success?, to: :status
   end
 
+  # What #run_script returns: standard output and error apart, and the
+  # name=value lines the script wrote to $GITHUB_OUTPUT, as a hash.
+  ScriptResult = Struct.new(:out, :err, :status, :outputs) do
+    delegate :exitstatus, to: :status
+    delegate :success?, to: :status
+  end
+
+  # What a #rule answers when the rule does not say.
+  RULE_ANSWER = { out: '', err: '', exit: 0, once: false, capture_stdin: false }.freeze
+
   attr_reader :dir, :root, :fakebin
 
   # real: programs to add to safebin besides SAFE, such as git for a spec
@@ -169,7 +179,9 @@ class ScriptSandbox
 
   def calls_to(name) = calls.select { |call| call.name == name }
 
-  def call_lines = calls.map(&:line)
+  # Each call as one line, "heroku ps:scale web=0 -a comeals-staging".
+  # name: only the calls to that command.
+  def call_lines(name = nil) = calls.select { |call| name.nil? || call.name == name }.map(&:line)
 
   def unknown_commands
     log = File.join(dir, 'unknown.log')
@@ -178,6 +190,72 @@ class ScriptSandbox
 
   def cleanup
     FileUtils.remove_entry(dir)
+  end
+
+  # --- Fakes that answer by rules -------------------------------------------
+  #
+  # The specs of bin/staging-rehearsal and of the Deploy and Rollback
+  # workflow scripts script each outside command call by call, with #rule,
+  # and run the script with #run_script.
+
+  # Makes name a fake that answers by rules, and adds one. A call is
+  # matched against pattern, a bash glob on its arguments joined by
+  # spaces. The rule added last is tried first, so an example can change
+  # an answer that a before block set up. The answer prints out and err and
+  # exits with exit (RULE_ANSWER has the defaults). A rule with once: true
+  # answers one call, then steps aside. With capture_stdin: true the call's
+  # input is kept for #stdin_of. A call that no rule answers is kept for
+  # #unexpected_calls, and the fake exits 97.
+  def rule(name, pattern = '*', **answer)
+    unknown = answer.keys - RULE_ANSWER.keys
+    raise ArgumentError, "unknown answer keys: #{unknown}" unless unknown.empty?
+
+    answer = RULE_ANSWER.merge(answer)
+    @rule_count = (@rule_count || 0) + 1
+    rule_dir = File.join(dir, 'rules', name.tr('/', '%'), format('%05d', @rule_count))
+    write(File.join(rule_dir, 'match'), pattern)
+    write(File.join(rule_dir, 'out'), answer[:out])
+    write(File.join(rule_dir, 'err'), answer[:err])
+    write(File.join(rule_dir, 'code'), answer[:exit].to_s)
+    write(File.join(rule_dir, 'once')) if answer[:once]
+    write(File.join(rule_dir, 'capture_stdin')) if answer[:capture_stdin]
+    (@rule_fakes ||= []) << name unless (@rule_fakes ||= []).include?(name)
+    fake(name, rule_body(name), notes: noted_env)
+  end
+
+  # Environment variables that every rule fake writes to the log with each
+  # call (Call#env).
+  def note_env(*names)
+    @noted_env = noted_env + names
+    @rule_fakes&.each { |name| fake(name, rule_body(name), notes: noted_env) }
+  end
+
+  # What each call to name read on its input, oldest first, for a rule with
+  # capture_stdin: true.
+  def stdin_of(name)
+    Dir.glob(File.join(dir, 'stdin', name.tr('/', '%'), '*')).map { |path| File.read(path) }
+  end
+
+  # The calls to a rule fake that no rule answered, as "name arguments".
+  def unexpected_calls
+    log = File.join(dir, 'unexpected.log')
+    File.exist?(log) ? File.read(log).lines.map(&:chomp) : []
+  end
+
+  # Runs the script at path (relative to the repository, linked into root
+  # if it is not there yet) in chdir, with only the sandbox's environment
+  # (and env) and no input. Returns a ScriptResult: the script's output and
+  # error output apart, and what it wrote to $GITHUB_OUTPUT.
+  def run_script(path, *args, env: {}, chdir: root)
+    script = File.join(root, path)
+    link(path) unless File.exist?(script)
+    @script_runs = (@script_runs || 0) + 1
+    base = File.join(dir, 'scripts', @script_runs.to_s)
+    github_output = write("#{base}.github_output")
+    full_env = base_env.merge(env).merge('GITHUB_OUTPUT' => github_output)
+    status = run_script_process(full_env, [script, *args], chdir, base)
+    outputs = File.read(github_output).lines.to_h { |line| line.chomp.split('=', 2) }
+    ScriptResult.new(File.read("#{base}.out"), File.read("#{base}.err"), status, outputs)
   end
 
   private
@@ -198,6 +276,58 @@ class ScriptSandbox
     BASH
     status = @coverage.run("#{base}.sh")
     Result.new(File.read("#{base}.out"), status)
+  end
+
+  # Runs command with only env, from no input, with its output in
+  # base.out and base.err; through BashCoverage when there is one (see
+  # #run_measured).
+  def run_script_process(env, command, chdir, base)
+    unless @coverage
+      out, err, status = Open3.capture3(env, *command, chdir:, unsetenv_others: true, stdin_data: '')
+      write("#{base}.out", out)
+      write("#{base}.err", err)
+      return status
+    end
+
+    pairs = env.compact.map { |name, value| "#{name}=#{value}".shellescape }
+    write("#{base}.sh", <<~BASH)
+      cd #{chdir.shellescape} || exit 99
+      exec env -i #{pairs.join(' ')} SHELLOPTS="$SHELLOPTS" PS4="$PS4" BASH_XTRACEFD="$BASH_XTRACEFD" \
+        #{command.map(&:shellescape).join(' ')} </dev/null >#{"#{base}.out".shellescape} 2>#{"#{base}.err".shellescape}
+    BASH
+    @coverage.run("#{base}.sh")
+  end
+
+  def noted_env = @noted_env || []
+
+  # The body of a rule fake (see #rule). The dispatcher sources it, so
+  # "$@" are the call's arguments.
+  def rule_body(name)
+    key = name.tr('/', '%')
+    <<~BASH
+      rules=("$SANDBOX_DIR/rules/#{key}"/*)
+      for ((i = ${#rules[@]} - 1; i >= 0; i--)); do
+        rule=${rules[i]}
+        IFS= read -r -d '' pattern < "$rule/match" || true
+        # shellcheck disable=SC2053
+        [[ "$*" == $pattern ]] || continue
+        if [ -f "$rule/once" ]; then
+          mkdir "$rule/used" 2>/dev/null || continue
+        fi
+        if [ -f "$rule/capture_stdin" ]; then
+          mkdir -p "$SANDBOX_DIR/stdin/#{key}"
+          count=0
+          for kept in "$SANDBOX_DIR/stdin/#{key}"/*; do [ -e "$kept" ] && count=$((count + 1)); done
+          cat > "$SANDBOX_DIR/stdin/#{key}/$(printf '%05d' "$count")"
+        fi
+        cat "$rule/out"
+        cat "$rule/err" >&2
+        exit "$(< "$rule/code")"
+      done
+      printf '%s\n' #{name.shellescape}" $*" >> "$SANDBOX_DIR/unexpected.log"
+      echo "sandbox: no rule of #{name} answers: $*" >&2
+      exit 97
+    BASH
   end
 
   def which(program)
