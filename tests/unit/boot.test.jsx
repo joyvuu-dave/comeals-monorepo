@@ -217,6 +217,11 @@ describe("a page whose code fails to load", () => {
     "on %s sends the bills saves, then loads the page again",
     async (_name, path, page) => {
       const order = [];
+      // The page reloads only once the server answers (lazy_retry.ts).
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(() => Promise.resolve({ ok: true, status: 200 })),
+      );
       // The page's code is only asked for after the page renders, so
       // the store is made by then.
       failingPageLoad = function () {

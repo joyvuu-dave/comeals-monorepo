@@ -5,6 +5,11 @@ import { fakeLocation } from "../helpers/fake_location.js";
 // A page's code is a separate file (a chunk). After a deploy, a page
 // loaded before it can ask for a chunk the server no longer has. The
 // page then reloads once, to get the new build.
+// Lets the import's failure and the server's answer go through.
+function flush() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 describe("lazyRetry", () => {
   let fake;
 
@@ -12,6 +17,12 @@ describe("lazyRetry", () => {
     sessionStorage.clear();
     fake = fakeLocation();
     vi.stubGlobal("__BUILD_ID__", "build-2");
+    // The server answers, so a reload goes ahead at once (see "while the
+    // server is down" below for the wait).
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve({ ok: true, status: 200 })),
+    );
   });
 
   afterEach(() => {
@@ -42,8 +53,7 @@ describe("lazyRetry", () => {
     );
 
     load();
-    await Promise.resolve();
-    await Promise.resolve();
+    await flush();
 
     expect(beforeReload).toHaveBeenCalledTimes(1);
     expect(fake.location.reload).toHaveBeenCalledTimes(1);
@@ -80,8 +90,7 @@ describe("lazyRetry", () => {
     // The tab runs build 1, and a deploy removes its chunk.
     vi.stubGlobal("__BUILD_ID__", "build-1");
     lazyRetry(missing, vi.fn())();
-    await Promise.resolve();
-    await Promise.resolve();
+    await flush();
     expect(fake.location.reload).toHaveBeenCalledTimes(1);
 
     // The reload brings build 2, and its chunk loads.
@@ -93,8 +102,7 @@ describe("lazyRetry", () => {
     // The next deploy removes build 2's chunk.
     const beforeReload = vi.fn();
     lazyRetry(missing, beforeReload)();
-    await Promise.resolve();
-    await Promise.resolve();
+    await flush();
 
     expect(beforeReload).toHaveBeenCalledTimes(1);
     expect(fake.location.reload).toHaveBeenCalledTimes(2);

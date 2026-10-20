@@ -12,6 +12,13 @@
 // is still missing, and removing it there would reload the page again
 // and again.
 //
+// During a deploy Heroku answers every file with its maintenance page
+// (an HTML 503), so a reload at once would land on that page, which
+// never reloads itself. So the page first asks the server for its
+// version, again every RETRY_MS while the answer is not ok or does not
+// come, and reloads once it is ok. Meanwhile the page keeps showing its
+// "Loading..." words (the Suspense fallback).
+//
 // `beforeReload` runs just before the reload. The reload ends every
 // request on its way, and WebKit ends them as soon as it starts, before
 // the page fires pagehide. index.jsx hands the bills saves on their way
@@ -19,6 +26,24 @@
 
 // One id per production build (vite.config.mjs).
 declare const __BUILD_ID__: string;
+
+const RETRY_MS = 30 * 1000;
+
+function reloadWhenServerAnswers(beforeReload: () => void): void {
+  function tryAgainLater(): void {
+    setTimeout(function () {
+      reloadWhenServerAnswers(beforeReload);
+    }, RETRY_MS);
+  }
+  fetch("/api/v1/version", { cache: "no-store" }).then(function (response) {
+    if (response.ok) {
+      beforeReload();
+      window.location.reload();
+    } else {
+      tryAgainLater();
+    }
+  }, tryAgainLater);
+}
 
 export function lazyRetry<T>(
   importFn: () => Promise<T>,
@@ -28,8 +53,7 @@ export function lazyRetry<T>(
     return importFn().catch(function (err: unknown) {
       if (sessionStorage.getItem("chunk_retry") !== __BUILD_ID__) {
         sessionStorage.setItem("chunk_retry", __BUILD_ID__);
-        beforeReload();
-        window.location.reload();
+        reloadWhenServerAnswers(beforeReload);
         return new Promise<T>(function () {});
       }
       sessionStorage.removeItem("chunk_retry");

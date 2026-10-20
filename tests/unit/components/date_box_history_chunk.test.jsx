@@ -61,6 +61,11 @@ describe("DateBox, when the History page's code fails to load", () => {
     sessionStorage.clear();
     fake = fakeLocation();
     vi.stubGlobal("__BUILD_ID__", "test-build");
+    // The page reloads only once the server answers (lazy_retry.ts).
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve({ ok: true, status: 200 })),
+    );
   });
 
   afterEach(() => {
