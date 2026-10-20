@@ -42,15 +42,19 @@ RSpec.describe 'two Solid Queue processes writing their own rows at the same mom
   end
 
   # Runs the block for each process on a thread and a connection of its
-  # own. A thread stops right after it runs a statement that matches
-  # `pause_after`, and goes on once the other thread has run one too. The
-  # result is each thread's value: :ok, or the error's class and first line.
+  # own. A thread stops right after the first statement it runs that
+  # matches `pause_after`, and goes on once the other thread has run one
+  # too. Only the first: a fix that retries runs the statement again, and
+  # the other thread may have finished by then. The result is each thread's
+  # value: :ok, or the error's class and first line.
   def at_the_same_moment(processes, pause_after:)
     barrier = Concurrent::CyclicBarrier.new(processes.size)
     started = Concurrent::CountDownLatch.new(1)
     threads = []
+    paused = Concurrent::Set.new
     pause = lambda do |*, payload|
       next unless threads.include?(Thread.current) && payload[:sql].match?(pause_after)
+      next unless paused.add?(Thread.current)
       raise 'the other thread never ran its statement' unless barrier.wait(10)
     end
 
