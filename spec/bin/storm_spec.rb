@@ -14,11 +14,16 @@ RSpec.describe 'bin/storm', bash_coverage: BashCoverage.new('spec/bin/storm_spec
   let(:started) { File.join(sandbox.dir, 'server-started') }
   let(:server_up) { "echo 'Puma starting'; touch #{started}; exec #{sandbox.real('sleep')} 30" }
   let(:answer_once_started) { "until [ -f #{started} ]; do #{sandbox.real('sleep')} 0.01; done" }
+  # What the script empties after every run.
+  let(:truncate) do
+    'TRUNCATE communities, ledger_check_runs, job_runs, solid_queue_jobs, solid_queue_processes, ' \
+      'solid_queue_semaphores, solid_queue_recurring_tasks CASCADE'
+  end
 
   before do
     sandbox.fake('bundle', sandbox.answers({ 'exec rails server *' => server_up }),
-                 notes: %w[RAILS_ENV INTEGRATION_SERVER INTEGRATION_SERVER_CACHE RAILS_MAX_THREADS WEB_CONCURRENCY
-                           RAILS_DB_POOL STORM_URL])
+                 notes: %w[RAILS_ENV INTEGRATION_SERVER INTEGRATION_SERVER_CACHE INTEGRATION_SERVER_QUEUE
+                           RAILS_MAX_THREADS WEB_CONCURRENCY RAILS_DB_POOL STORM_URL STORM_ERROR_LOG])
     sandbox.fake('lsof', 'exit 1')
     sandbox.fake('curl', answer_once_started)
     sandbox.fake('psql')
@@ -37,17 +42,42 @@ RSpec.describe 'bin/storm', bash_coverage: BashCoverage.new('spec/bin/storm_spec
       'bundle exec rails server -p 3001',
       'curl -sf http://localhost:3001/api/v1/version',
       'bundle exec rake test:storm',
-      'psql -q -d comeals_test -c TRUNCATE communities, ledger_check_runs, ' \
-      'job_runs CASCADE'
+      "psql -q -d comeals_test -c #{truncate}"
     )
     expect(sandbox.call_lines.first(2)).to eq(['bundle exec rails db:prepare', 'lsof -tiTCP:3001 -sTCP:LISTEN'])
     expect(sandbox.call_lines.last(2).first).to eq('bundle exec rake test:storm')
     server, storm = sandbox.calls_to('bundle').drop(1)
     expect(server.env).to eq('RAILS_ENV' => 'test', 'INTEGRATION_SERVER' => '1', 'INTEGRATION_SERVER_CACHE' => 'solid',
-                             'RAILS_MAX_THREADS' => '16', 'WEB_CONCURRENCY' => '2', 'RAILS_DB_POOL' => '18')
-    expect(storm.env).to eq('RAILS_ENV' => 'test', 'STORM_URL' => 'http://localhost:3001')
+                             'RAILS_MAX_THREADS' => '16', 'WEB_CONCURRENCY' => '2', 'RAILS_DB_POOL' => '18',
+                             'STORM_ERROR_LOG' => 'tmp/storm_errors.log')
+    expect(storm.env).to eq('RAILS_ENV' => 'test', 'STORM_URL' => 'http://localhost:3001',
+                            'STORM_ERROR_LOG' => 'tmp/storm_errors.log')
     expect(result.output).to include('16 threads x 2 workers, pool 18', 'Server log: tmp/storm_server.log')
     expect(result.output).not_to include("lines with 'error'")
+  end
+
+  # With STORM_SOLID_QUEUE=1 the server and the storm queue their jobs
+  # in Solid Queue, and the storm task starts bin/jobs beside them.
+  it 'with STORM_SOLID_QUEUE=1, queues the jobs in Solid Queue and prints the error lines of the jobs log' do
+    sandbox.write('tmp/storm_jobs.log', "Performed LivePushJob\nError in thread boom\n")
+
+    result = sandbox.run(script, env: { 'STORM_SOLID_QUEUE' => '1' })
+
+    expect(result).to be_success, result.output
+    server, storm = sandbox.calls_to('bundle').drop(1)
+    expect(server.env).to include('INTEGRATION_SERVER_QUEUE' => 'solid_queue')
+    expect(storm.env).to include('INTEGRATION_SERVER_QUEUE' => 'solid_queue')
+    expect(result.output).to include('16 threads x 2 workers, pool 18, jobs in Solid Queue',
+                                     'Jobs log: tmp/storm_jobs.log', '2:Error in thread boom')
+  end
+
+  it 'leaves the jobs in the test adapter without STORM_SOLID_QUEUE' do
+    result = sandbox.run(script)
+
+    server, storm = sandbox.calls_to('bundle').drop(1)
+    expect(server.env).not_to have_key('INTEGRATION_SERVER_QUEUE')
+    expect(storm.env).not_to have_key('INTEGRATION_SERVER_QUEUE')
+    expect(result.output).not_to include('Jobs log')
   end
 
   it 'takes its shape from the STORM_ variables' do
@@ -66,8 +96,7 @@ RSpec.describe 'bin/storm', bash_coverage: BashCoverage.new('spec/bin/storm_spec
     sandbox.run(script)
 
     expect(sandbox.call_lines).to include('bundle exec rails server -p 21060',
-                                          'psql -q -d comeals_test_task -c TRUNCATE communities, ' \
-                                          'ledger_check_runs, job_runs CASCADE')
+                                          "psql -q -d comeals_test_task -c #{truncate}")
   end
 
   it 'takes the port from TEST_PORT_INTEGRATION before .env' do
