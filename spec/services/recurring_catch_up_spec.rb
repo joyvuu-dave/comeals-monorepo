@@ -122,6 +122,36 @@ RSpec.describe RecurringCatchUp do
               handled: true, severity: :error, context: { job: 'VerifyLedgerJob' })
     end
 
+    # Found by bin/storm with STORM_SOLID_QUEUE=1 STORM_JOBS_PROCESSES=2,
+    # 2026-10-20. Two supervisors started at once, each ran the catch-up,
+    # and the two enqueues of each job conflicted on the job's
+    # limits_concurrency semaphore row. Neither tried again, so neither
+    # queued the job, and a job whose tick was missed waits a day for the
+    # next one. Every other enqueue in the app tries a conflict again
+    # (RetryOnConflict; LiveUpdate.push since 2026-10-09). RetryOnConflict
+    # does not retry inside an open transaction, so this example has none.
+    context 'when the queue refuses a job once for a conflict' do
+      include_context 'with no test transaction'
+
+      it 'tries again and queues it' do
+        tries = 0
+        allow(VerifyLedgerJob).to receive(:perform_later).and_wrap_original do |original|
+          tries += 1
+          if tries == 1
+            begin
+              raise ActiveRecord::SerializationFailure, 'could not serialize access due to concurrent update'
+            rescue ActiveRecord::SerializationFailure
+              raise SolidQueue::Job::EnqueueError, 'could not serialize access due to concurrent update'
+            end
+          end
+          original.call
+        end
+
+        expect(described_class.call(now: now)).to include(VerifyLedgerJob)
+        expect(tries).to eq(2)
+      end
+    end
+
     it 'queues nothing and reports when the last runs cannot be read' do
       error = ActiveRecord::SerializationFailure.new('could not serialize access')
       allow(JobRun).to receive(:last_success_at).and_raise(error)
