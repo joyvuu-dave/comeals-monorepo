@@ -117,6 +117,18 @@ heroku_default() {
       [ -f "$state/config/$2" ] && cat "$state/config/$2"
       echo
       ;;
+    # heroku config --json: every config var of the fake app.
+    config)
+      [[ " $* " == *" --json "* ]] || unexpected "$@"
+      local file sep=""
+      printf '{'
+      for file in "$state"/config/*; do
+        [ -f "$file" ] || continue
+        printf '%s"%s":"%s"' "$sep" "${file##*/}" "$(<"$file")"
+        sep=","
+      done
+      printf '}\n'
+      ;;
     config:set)
       local pair
       for pair in "${@:2}"; do
@@ -162,7 +174,9 @@ git_default() {
     "ls-remote heroku")
       [ -s "$state/heroku_sha" ] && printf '%s\trefs/heads/main\n' "$(<"$state/heroku_sha")"
       ;;
-    "push heroku")
+    # The production remote, or the staging app's git address
+    # (DEPLOY_APP=comeals-staging). Any other target is unexpected.
+    "push heroku" | "push https://git.heroku.com/comeals-staging.git")
       "$real_git" rev-parse HEAD >"$state/pushed"
       # The new release has a worker process type, at 0 when it is new.
       [ "$(<"$state/worker")" = none ] && echo 0 >"$state/worker"

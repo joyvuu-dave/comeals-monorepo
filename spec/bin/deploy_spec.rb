@@ -885,4 +885,147 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
     expect(result.output).not_to include('Deploy complete!', recovery_banner)
     expect_production(maintenance: false, web: 1, pushed: true)
   end
+
+  # DEPLOY_APP=comeals-staging runs the same deploy on the staging app, so
+  # a deploy can be tried there first, the whole way through. The fake
+  # heroku keeps one app's state whatever -a names, so these examples
+  # check the app in every call instead.
+  describe 'DEPLOY_APP' do
+    let(:staging) { { 'DEPLOY_APP' => 'comeals-staging' } }
+    let(:staging_url) { 'https://comeals-staging-ad51b8a1eb64.herokuapp.com' }
+    let(:staging_git) { 'https://git.heroku.com/comeals-staging.git' }
+
+    # Staging holds a copy of the production database. COMEALS_STAGING
+    # turns its mail and Pusher off.
+    before { deploy.production(config: { 'COMEALS_STAGING' => '1' }) }
+
+    # No call to any fake names the production app, and no git command
+    # uses the heroku remote, which points at production.
+    def expect_production_untouched(result)
+      expect(deploy.calls.grep(/comeals-monorepo/)).to eq([])
+      expect(result.output).not_to include('comeals-monorepo', 'https://comeals.com')
+      expect(deploy.calls_to('git').grep(/\Agit \S+ heroku\b/)).to eq([])
+      expect(deploy.calls_to('heroku').grep(/ -a /)).to all(match(/ -a comeals-staging( |\z)/))
+    end
+
+    it 'deploys to production when it is not set' do
+      result = deploy.run('--yes')
+
+      expect(result.output).to include('Target: comeals-monorepo (https://comeals.com)')
+      expect(deploy.calls).to include('git push heroku main --force')
+    end
+
+    ['comeals-prod', 'comeals-staging ', ''].each do |app|
+      it "refuses #{app.inspect} before it runs anything" do
+        result = deploy.run('--yes', env: { 'DEPLOY_APP' => app })
+
+        expect(result.status).to eq(1)
+        expect(result.output).to include("DEPLOY_APP is #{app.inspect}. It must be comeals-monorepo or " \
+                                         'comeals-staging. Nothing was changed.')
+        expect(deploy.calls).to eq([])
+      end
+    end
+
+    it 'runs a push deploy on staging, end to end, and never names production' do
+      result = deploy.run('--yes', env: staging)
+
+      expect(result.status).to eq(0)
+      expect(result.output).to include("Target: comeals-staging (#{staging_url})", 'Deploy complete!',
+                                       'PUSH deploy (no migrations)')
+      expect(deploy.calls).to include("git push #{staging_git} main --force",
+                                      'heroku pg:backups:capture -a comeals-staging',
+                                      'heroku ps:scale worker=1 -a comeals-staging',
+                                      "smoke #{staging_url}")
+      expect(deploy.calls_to('curl').map { it.split.last }).to eq([staging_url, "#{staging_url}/api/v1/version"])
+      expect(deploy.state[:pushed]).to eq(head)
+      expect_production_untouched(result)
+    end
+
+    # The commit staging runs is not here, so the deploy fetches it from
+    # staging; that fails, so it deploys with maintenance on.
+    it 'runs a maintenance deploy on staging, fetching from staging, and never names production' do
+      deploy.production(heroku_sha: 'a' * 40)
+      deploy.rule('git', "^fetch #{Regexp.escape(staging_git)} main", exit: 128)
+
+      result = deploy.run('--yes', env: staging)
+
+      expect(result.status).to eq(0)
+      expect(result.output).to include('Cannot fetch from Heroku — assuming migrations needed',
+                                       'MAINTENANCE deploy (has migrations)', 'Deploy complete!')
+      expect(deploy.calls).to include("git fetch #{staging_git} main --quiet",
+                                      'heroku maintenance:on -a comeals-staging',
+                                      'heroku ps:scale web=0 worker=0 -a comeals-staging',
+                                      'heroku maintenance:off -a comeals-staging')
+      expect_production_untouched(result)
+    end
+
+    it 'names staging in the recovery banner when a maintenance deploy fails' do
+      deploy.production(heroku_sha: deploy.commits[:first_migration])
+      deploy.rule('git', '^push', exit: 1)
+
+      result = deploy.run('--yes', env: staging)
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include(recovery_banner, 'heroku maintenance:off -a comeals-staging')
+      expect_production_untouched(result)
+    end
+
+    it 'needs no heroku git remote' do
+      deploy.git('remote', 'remove', 'heroku')
+
+      result = deploy.run('--yes', env: staging)
+
+      expect(result.status).to eq(0)
+      expect(result.output).to include("Pushes go to #{staging_git}")
+    end
+
+    it 'files no GitHub issue for the break-glass, and says so' do
+      result = deploy.run('--yes', env: staging.merge('DEPLOY_WITHOUT_CI' => '1'), input: "break glass\n", tty: true)
+
+      expect(result.status).to eq(0)
+      expect(result.output).to include('No follow-up issue for a deploy to comeals-staging')
+      expect(deploy.calls_to('gh')).to eq([])
+    end
+
+    # The deploy starts the worker dyno, and its jobs send mail. Staging's
+    # database holds real residents' email addresses.
+    describe 'refusing a staging app that can send mail or push' do
+      it 'refuses when COMEALS_STAGING is not set' do
+        deploy.production(config: {})
+
+        result = deploy.run('--yes', env: staging)
+
+        expect(result.status).to eq(1)
+        expect(result.output).to include('COMEALS_STAGING is not set or is blank on comeals-staging')
+        expect_nothing_changed_in_production
+      end
+
+      it 'refuses when COMEALS_STAGING is blank' do
+        deploy.production(config: { 'COMEALS_STAGING' => ' ' })
+
+        result = deploy.run('--yes', env: staging)
+
+        expect(result.status).to eq(1)
+        expect(result.output).to include('COMEALS_STAGING is not set or is blank on comeals-staging')
+      end
+
+      it 'refuses when a mail credential is set' do
+        deploy.production(config: { 'COMEALS_STAGING' => '1', 'GMAIL_APP_PASSWORD' => 'x' })
+
+        result = deploy.run('--yes', env: staging)
+
+        expect(result.status).to eq(1)
+        expect(result.output).to include('GMAIL_APP_PASSWORD is set on comeals-staging — staging must not have it')
+        expect_nothing_changed_in_production
+      end
+
+      it 'does not run the check on production' do
+        deploy.production(config: {})
+
+        deploy.run('--yes')
+
+        expect(deploy.calls_to('heroku').grep(/COMEALS_STAGING|config -a/)).to eq([])
+      end
+    end
+  end
 end
