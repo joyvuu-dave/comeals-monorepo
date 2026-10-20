@@ -1,4 +1,4 @@
-import React, { Suspense, useEffect, useRef } from "react";
+import React, { Suspense, useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react-lite";
 import {
   Routes,
@@ -9,6 +9,7 @@ import {
 } from "react-router";
 import { useStore } from "../../helpers/store_context";
 import { mealDayLabel } from "../../helpers/helpers";
+import { lazyRetry } from "../../helpers/lazy_retry";
 import { MEAL_HISTORY_PATH } from "../../routes";
 import dayjs from "dayjs";
 import Modal from "react-modal";
@@ -39,8 +40,6 @@ const styles = {
   },
 };
 
-const MealHistoryShow = React.lazy(() => import("../history/show"));
-
 Modal.setAppElement("#root");
 
 const DateBox = observer(() => {
@@ -48,6 +47,25 @@ const DateBox = observer(() => {
   const location = useLocation();
   const navigate = useNavigate();
   const params = useParams();
+
+  // The History page's code is its own file (a chunk). After a deploy
+  // the old chunk is gone, so the page reloads once to get the new
+  // build, the same as the Calendar and the meal page (index.jsx). The
+  // reload ends every bills save on its way, so each one is sent again
+  // with keepalive first (#150). Made once per DateBox, because it
+  // needs the store.
+  const [MealHistoryShow] = useState(function () {
+    return React.lazy(
+      lazyRetry(
+        function () {
+          return import("../history/show");
+        },
+        function () {
+          store.sendBillsAgainBeforeClose();
+        },
+      ),
+    );
+  });
 
   // No dependency array: run after every render, splitting on a
   // first-run flag — the exact componentDidMount/componentDidUpdate
