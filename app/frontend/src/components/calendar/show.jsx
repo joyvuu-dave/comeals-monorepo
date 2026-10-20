@@ -34,12 +34,20 @@ import { enUS } from "date-fns/locale";
 
 import Icon from "../icon";
 
+// Whether a form in the modal holds unsaved changes, for the idle timer
+// in index.html, which cannot read React state.
+function noteModalDirty(value) {
+  window.Comeals = window.Comeals || {};
+  window.Comeals.modalDirty = value;
+}
+
 // Chip text color: white on dark backgrounds, black on light ones.
 // Picks whichever passes WCAG AA (4.5:1) for the given background —
 // 0.179 is the relative luminance where white and black text tie, and
 // every server-issued chip color passes with one or the other. Without
 // this, every chip used white text, which fails on the lighter colors
 // (event green, rotation blue and yellow, guest room orange).
+
 function eventTextColor(hex) {
   // Some events carry no color; react-big-calendar then uses its own
   // dark blue background, where white text is fine.
@@ -264,13 +272,18 @@ const MainCalendar = observer(() => {
   const modalDirtyRef = useRef(false);
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
 
+  // The idle timer in index.html reads the same flag from
+  // window.Comeals.modalDirty, so it does not send a screen with a
+  // half-filled form to the calendar.
   const setModalDirty = useCallback(function (value) {
     modalDirtyRef.current = value;
+    noteModalDirty(value);
   }, []);
 
   const closeModal = useCallback(function () {
     toastStore.clearAll();
     modalDirtyRef.current = false;
+    noteModalDirty(false);
     setDiscardConfirmOpen(false);
     navigateRef.current(
       `/calendar/${paramsRef.current.type}/${paramsRef.current.date}`,

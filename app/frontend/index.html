@@ -59,8 +59,24 @@
     </div>
     <script type="module" src="/src/index.jsx"></script>
     <script>
+      // After 5 minutes with no touch, go back to the calendar. Before it
+      // goes, two checks, and if either fails it tries again in 30 seconds:
+      //   1. Nothing on the page can be lost: no calendar form holds
+      //      unsaved changes (window.Comeals.modalDirty, set by
+      //      calendar/show.jsx) and no text field with text in it has the
+      //      focus.
+      //   2. The server answers. During a deploy Heroku shows its
+      //      maintenance page, which never reloads, so a screen sent there
+      //      would stay on it.
+      // The timer starts at the first touch. The version banner starts it
+      // too when a new build is out (window.idleTimerKick), so a page that
+      // nobody touches moves to the new build 5 minutes after a deploy.
       function idleTimer() {
+        var IDLE_MS = 1000 * 60 * 5;
+        var RETRY_MS = 1000 * 30;
         var t;
+        // A touch while the server check is on its way cancels it.
+        var generation = 0;
         window.onmousemove = resetTimer;
         window.onmousedown = resetTimer;
         window.onclick = resetTimer;
@@ -70,14 +86,63 @@
           resetTimer();
         };
         window.addEventListener("touchstart", resetTimer, { passive: true });
+        window.idleTimerKick = resetTimer;
+
+        function typedTextHasFocus() {
+          var el = document.activeElement;
+          if (!el) return false;
+          if (el.isContentEditable) return true;
+          if (el.tagName === "TEXTAREA") return el.value !== "";
+          if (el.tagName !== "INPUT") return false;
+          var textTypes = [
+            "text",
+            "email",
+            "password",
+            "number",
+            "search",
+            "tel",
+            "url",
+          ];
+          return textTypes.indexOf(el.type) !== -1 && el.value !== "";
+        }
+
+        function nothingToLose() {
+          var app = window.Comeals;
+          if (app && app.modalDirty) return false;
+          return !typedTextHasFocus();
+        }
+
+        function tryAgainLater() {
+          clearTimeout(t);
+          t = setTimeout(navHome, RETRY_MS);
+        }
 
         function navHome() {
-          window.location.href = "/";
+          if (!nothingToLose()) {
+            tryAgainLater();
+            return;
+          }
+          var asked = generation;
+          fetch("/api/v1/version", { cache: "no-store" }).then(
+            function (response) {
+              if (asked !== generation) return;
+              if (response.ok) {
+                window.location.href = "/";
+              } else {
+                tryAgainLater();
+              }
+            },
+            function () {
+              if (asked !== generation) return;
+              tryAgainLater();
+            },
+          );
         }
 
         function resetTimer() {
+          generation += 1;
           clearTimeout(t);
-          t = setTimeout(navHome, 1000 * 60 * 5);
+          t = setTimeout(navHome, IDLE_MS);
         }
       }
 
