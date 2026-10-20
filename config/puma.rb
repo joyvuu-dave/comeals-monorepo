@@ -51,19 +51,12 @@ workers ENV.fetch('WEB_CONCURRENCY', 0).to_i
 # Allow puma to be restarted by `bin/rails restart` command.
 plugin :tmp_restart
 
-# Solid Queue's supervisor runs inside this process when SOLID_QUEUE_IN_PUMA
-# is set (the production config var). This is Rails 8's own layout for a
-# single-server deployment, and it is what lets the schedule in
-# config/recurring.yml run without a worker dyno. After boot, any job that
-# missed its last tick while the dyno was down is enqueued (RecurringCatchUp).
+# No Solid Queue here. The jobs run on their own dyno, the worker in the
+# Procfile (bin/jobs). Inside Puma, the supervisor and its three forks
+# needed more memory than a Basic dyno has.
 #
 # Plain Ruby only in this file: Heroku runs `bundle exec puma -C
 # config/puma.rb`, which reads it before Rails is loaded, so a Rails
 # method such as `present?` crashes every boot there (while `rails
-# server` on the laptop works). "Set" means the same as in the release
-# phase's check (DeployConfigCheck.present?). spec/config/puma_config_spec.rb
-# loads this file the way Heroku does.
-unless ENV['SOLID_QUEUE_IN_PUMA'].to_s.strip.empty?
-  plugin :solid_queue
-  after_booted { RecurringCatchUp.call }
-end
+# server` on the laptop works). spec/config/puma_config_spec.rb loads
+# this file the way Heroku does.

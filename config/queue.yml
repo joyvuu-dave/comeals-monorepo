@@ -6,10 +6,10 @@
 # the number of queries low, but it means a change can reach other open
 # screens up to about 5 seconds late.
 #
-# In production the supervisor runs inside Puma (config/puma.rb,
-# SOLID_QUEUE_IN_PUMA), so there is no worker dyno. To move the jobs to
-# their own dyno later: add `worker: bin/jobs` to the Procfile and unset
-# SOLID_QUEUE_IN_PUMA. Nothing else changes.
+# In production the supervisor runs on its own dyno: `worker: bin/jobs` in
+# the Procfile. It runs in fork mode, so the dispatcher, the worker and the
+# scheduler are three processes beside it, each with its own database pool
+# of RAILS_DB_POOL connections.
 default: &default
   dispatchers:
     - polling_interval: 5
