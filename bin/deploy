@@ -10,7 +10,8 @@ set -euo pipefail
 #   1. Compares local HEAD vs Heroku's deployed SHA.
 #      Skips if already up to date.
 #   2. Diffs db/migrate/ between the deployed and local SHAs.
-#      - If migrations changed → maintenance deploy (scale to 0, push, scale up).
+#      - If migrations changed → maintenance deploy (scale web and the
+#        worker to 0, push, scale up).
 #      - If no migrations    → push deploy (brief downtime during restart).
 #
 # Heroku buildpack order: Node (Vite build) → Ruby (bundle + Sprockets).
@@ -45,9 +46,10 @@ cleanup() {
     red "============================================"
     echo
     yellow "App may still be in maintenance mode."
-    yellow "Web dynos may be scaled to 0."
+    yellow "The web and worker dynos may be scaled to 0."
     yellow "Investigate the failure, then manually run:"
     echo
+    echo "  heroku ps:scale worker=1 -a $APP"
     echo "  heroku ps:scale web=1 -a $APP"
     echo "  heroku maintenance:off -a $APP"
     echo
@@ -84,34 +86,32 @@ preflight_environment() {
   ok "heroku remote -> $remote_url"
 }
 
-# The two config vars Solid Queue needs (lib/deploy_config_check.rb).
-# Without them the release phase refuses the deploy, so set them here,
-# after the confirmation, before the push. Setting them early is safe:
-# the running code ignores SOLID_QUEUE_IN_PUMA, and a pool of 4 is fine
-# for one thread.
-NEEDS_SOLID_QUEUE_VARS=false
+# The database pool the jobs dyno needs (lib/deploy_config_check.rb).
+# Without it the release phase refuses the deploy, so set it here, after
+# the confirmation, before the push. Setting it early is safe: a pool of 4
+# is fine for the running code too.
+NEEDS_DB_POOL=false
 
-preflight_solid_queue_vars() {
-  step "Pre-flight: Solid Queue config vars"
+preflight_db_pool() {
+  step "Pre-flight: database pool"
 
-  local pool in_puma
+  local pool
   pool=$(heroku config:get RAILS_DB_POOL -a "$APP" 2>/dev/null || true)
-  in_puma=$(heroku config:get SOLID_QUEUE_IN_PUMA -a "$APP" 2>/dev/null || true)
 
-  if [ "${pool:-0}" -ge 4 ] 2>/dev/null && [ -n "$in_puma" ]; then
-    ok "RAILS_DB_POOL=$pool, SOLID_QUEUE_IN_PUMA=$in_puma"
+  if [ "${pool:-0}" -ge 4 ] 2>/dev/null; then
+    ok "RAILS_DB_POOL=$pool"
   else
-    NEEDS_SOLID_QUEUE_VARS=true
-    warn "RAILS_DB_POOL='${pool}' and SOLID_QUEUE_IN_PUMA='${in_puma}' — the deploy will set RAILS_DB_POOL=4 and SOLID_QUEUE_IN_PUMA=true first"
-    info "Live updates and the nightly jobs run in Solid Queue (docs/runbooks/scheduler-cutover.md)"
+    NEEDS_DB_POOL=true
+    warn "RAILS_DB_POOL='${pool}' — the deploy will set RAILS_DB_POOL=4 first"
+    info "The jobs dyno needs it (lib/deploy_config_check.rb, docs/runbooks/scheduler-cutover.md)"
   fi
 }
 
-set_solid_queue_vars() {
-  [ "$NEEDS_SOLID_QUEUE_VARS" = true ] || return 0
-  step "Setting Solid Queue config vars"
-  heroku config:set RAILS_DB_POOL=4 SOLID_QUEUE_IN_PUMA=true -a "$APP"
-  ok "RAILS_DB_POOL=4 and SOLID_QUEUE_IN_PUMA=true set (one dyno restart)"
+set_db_pool() {
+  [ "$NEEDS_DB_POOL" = true ] || return 0
+  step "Setting the database pool"
+  heroku config:set RAILS_DB_POOL=4 -a "$APP"
+  ok "RAILS_DB_POOL=4 set (one dyno restart)"
 }
 
 preflight_repo() {
@@ -378,11 +378,21 @@ check_release_status() {
     fail "The release phase did not succeed (status: $status). Its output:"
     tail -30 "$RELEASE_OUTPUT_FILE"
     if [ "$MAINTENANCE_ENABLED" = true ]; then
-      info "Maintenance stays on and web stays at 0. Do not scale web up until you know which migrations ran: the old code may not work on the new schema."
+      info "Maintenance stays on and web and the worker stay at 0. Do not scale them up until you know which migrations ran: the old code may not work on the new schema."
     fi
     exit 1
   fi
   ok "Release phase succeeded"
+}
+
+# The push restarts a worker dyno that runs, but one at 0 stays at 0: on
+# the first deploy whose release has a worker process type, and on the
+# first after a rollback to a release without one. So scale it to 1 after
+# every push. When it already runs, this asks for the count it has.
+start_worker() {
+  info "Starting the worker dyno (Solid Queue)..."
+  heroku ps:scale worker=1 -a "$APP"
+  ok "Worker dyno running"
 }
 
 deploy_push() {
@@ -394,14 +404,32 @@ deploy_push() {
   check_release_status
 
   post_deploy_tasks
+  start_worker
 }
 
+# No job may run while the migrations run, so the worker stops with web.
+# A release from before the worker dyno has no worker process type, and
+# Heroku refuses to scale one, so ask Heroku first ("web=1:Basic
+# worker=1:Basic").
+#
+# After the release, the worker starts after the cache clear and the
+# balance recalculation: its boot catch-up (RecurringCatchUp) then finds
+# the fresh balance run and does not queue a second one beside it. Web
+# starts last, still behind maintenance mode.
 deploy_maintenance() {
   step "Deploying — maintenance ($APP)"
 
-  info "Scaling web dynos to 0..."
-  heroku ps:scale web=0 -a "$APP"
-  ok "Web dynos scaled to 0"
+  local formation
+  formation=$(heroku ps:scale -a "$APP")
+  if [[ " $formation" == *" worker="* ]]; then
+    info "Scaling web and worker dynos to 0..."
+    heroku ps:scale web=0 worker=0 -a "$APP"
+    ok "Web and worker dynos scaled to 0"
+  else
+    info "Scaling web dynos to 0 (the running release has no worker dyno)..."
+    heroku ps:scale web=0 -a "$APP"
+    ok "Web dynos scaled to 0"
+  fi
 
   info "Pushing main to Heroku (release phase runs migrations)..."
   git push heroku main --force
@@ -409,6 +437,7 @@ deploy_maintenance() {
   check_release_status
 
   post_deploy_tasks
+  start_worker
 
   info "Scaling web dyno back up..."
   heroku ps:scale web=1 -a "$APP"
@@ -545,11 +574,11 @@ check_health() {
   done
 }
 
-# Solid Queue's supervisor starts with the dyno. A var can be set and the
-# supervisor can still fail to start, so ask the app: every process kind
-# must have a fresh heartbeat (rake deploy:verify_solid_queue). Two tries,
-# because the one-off dyno itself takes a while to boot and the first
-# heartbeats may land after the health check passed.
+# Solid Queue's supervisor starts with the worker dyno, and it can still
+# fail to start, so ask the app: every process kind must have a fresh
+# heartbeat (rake deploy:verify_solid_queue). Two tries, because the
+# one-off dyno itself takes a while to boot and the first heartbeats may
+# land after the health check passed.
 check_solid_queue() {
   step "Solid Queue check"
 
@@ -563,7 +592,7 @@ check_solid_queue() {
   done
 
   fail "Solid Queue is not running. Live updates and the nightly jobs are off until it is."
-  info "Check: heroku logs -a $APP | grep SolidQueue ; and docs/runbooks/scheduler-cutover.md"
+  info "Check: heroku ps -a $APP ; heroku logs -a $APP --dyno worker | grep SolidQueue ; and docs/runbooks/scheduler-cutover.md"
   exit 1
 }
 
@@ -575,7 +604,7 @@ main() {
   bold "============================================"
 
   preflight_environment
-  preflight_solid_queue_vars
+  preflight_db_pool
   preflight_repo
   preflight_ci
 
@@ -603,8 +632,8 @@ main() {
   else
     green "    $APP ($sha):  PUSH deploy (no migrations)"
   fi
-  if [ "$NEEDS_SOLID_QUEUE_VARS" = true ]; then
-    yellow "    first: heroku config:set RAILS_DB_POOL=4 SOLID_QUEUE_IN_PUMA=true"
+  if [ "$NEEDS_DB_POOL" = true ]; then
+    yellow "    first: heroku config:set RAILS_DB_POOL=4"
   fi
   git log --oneline -5 | while IFS= read -r line; do
     info "  $line"
@@ -624,7 +653,7 @@ main() {
 
   DEPLOY_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S")
 
-  set_solid_queue_vars
+  set_db_pool
   capture_backup
 
   if [ "$NEEDS_MAINTENANCE" = true ]; then
