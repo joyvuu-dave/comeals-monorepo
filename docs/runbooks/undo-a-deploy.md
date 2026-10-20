@@ -89,7 +89,7 @@ day of sign-ups and costs that nobody can type in again from memory.
 3. If the deploy deleted Heroku Scheduler entries, add them back. The
    schedule moves to Solid Queue at the deploy after v613
    (`docs/runbooks/scheduler-cutover.md`); its entries are deleted a day
-   later (step 6 there), so inside the watch window they are still
+   later (step 5 there), so inside the watch window they are still
    there. The one that goes at the deploy itself is
    `rake residents:set_multiplier`: add it back (daily), and run it one
    time right away, as that runbook says.

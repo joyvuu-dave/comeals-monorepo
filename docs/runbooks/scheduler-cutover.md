@@ -27,7 +27,7 @@ no jobs and can be removed; the schedule lives in git.
   sent it. It reports to Bugsnag a settlement that reaches 7 days with a
   mail still not sent. It leaves alone every settlement
   made before its own first run, which happens when the supervisor first
-  starts (step 4): those
+  starts (step 3): those
   were mailed before the app kept a record of each mail.
 - Every run writes a `job_runs` row and pings the same healthchecks.io
   checks as before, so the "late" alerts keep working unchanged.
@@ -35,59 +35,41 @@ no jobs and can be removed; the schedule lives in git.
   hook, `config/initializers/solid_queue.rb`) and enqueues any job that
   missed its last tick while the worker dyno was down.
 
-## The deploy does steps 1 to 3 itself
+## The deploy does steps 1 and 2 itself
 
-The Procfile's release phase runs `rake deploy:verify_config` before the
-migration. On production it refuses the release when `RAILS_DB_POOL` is
-under 4, so Heroku keeps the previous release serving; the message names
-the exact `heroku config:set` to run. `bin/deploy` and the weekly
-workflow both set the pool before they push or promote when production
-lacks it. Both scale the worker dyno to 1 after the release, and then
-run `rake deploy:verify_solid_queue`, which fails unless the supervisor,
-dispatcher, worker and scheduler all have a heartbeat from the last two
-minutes. `bin/deploy` stops on that; the workflow rolls back. Staging is
-exempt from the config check (`COMEALS_STAGING`): `bin/staging-rehearsal`
-sets the pool there itself, runs the worker dyno during the rehearsal
-(staging is neutered, so its jobs send nothing out), checks the same
-heartbeats, and parks both dynos at the end. The steps below are still
-the record of what happens and why.
+`bin/deploy` and the weekly workflow both scale the worker dyno to 1
+after the release, and then run `rake deploy:verify_solid_queue`, which
+fails unless the supervisor, dispatcher, worker and scheduler all have a
+heartbeat from the last two minutes. `bin/deploy` stops on that; the
+workflow rolls back. `bin/staging-rehearsal` runs the worker dyno during
+the rehearsal too (staging is neutered, so its jobs send nothing out),
+checks the same heartbeats, and parks both dynos at the end. The steps
+below are still the record of what happens and why.
 
 ## Steps
 
-Do not delete anything on the Scheduler dashboard until step 6. If Solid
+Do not delete anything on the Scheduler dashboard until step 5. If Solid
 Queue fails to start, the jobs still run from Scheduler while you fix it;
 deleting first would mean the jobs do not run, and nothing tells you,
 until healthchecks.io's grace period (1 hour) ends and it emails you.
 
-1. Raise the database pool before the deploy:
-   `heroku config:set RAILS_DB_POOL=4 -a comeals-monorepo`. (`bin/deploy`
-   sets it too when it is missing, after its question and before the
-   backup.) The pool of 2 was sized for one web request thread plus
-   solid_cache's background trim thread (`config/database.yml` says so).
-   The worker dyno runs Solid Queue's supervisor, which forks the
-   dispatcher, the scheduler and the worker as separate processes. Each
-   of the four processes has its own pool of `RAILS_DB_POOL` connections
-   and uses more than one at once: the poll or the main loop, the
-   heartbeat thread, a running job, and the trim thread when a job
-   writes to the cache. The connection count is in "Database
-   connections" below.
-2. Deploy (`bin/deploy`). The migration creates Solid Queue's tables and
+1. Deploy (`bin/deploy`). The migration creates Solid Queue's tables and
    `job_runs` in the primary database. The release adds the `worker`
    process type, and `bin/deploy` scales it to 1 after the cache clear
    and the balance recalculation. Scheduler is still running the jobs
-   too; that is step 5.
-3. Check the worker dyno: `heroku ps -a comeals-monorepo` lists
+   too; that is step 4.
+2. Check the worker dyno: `heroku ps -a comeals-monorepo` lists
    `worker.1` as up, and `heroku logs -a comeals-monorepo --dyno worker`
    shows `SolidQueue-1.7.0 Started Supervisor(fork)` (the number is the
    solid_queue version). `bin/deploy` has already run
    `rake deploy:verify_solid_queue`.
-4. Confirm the catch-up ran: `heroku run rails runner 'puts JobRun.order(:id).last(4).map { |r| [r.name, r.outcome, r.finished_at] }'`.
+3. Confirm the catch-up ran: `heroku run rails runner 'puts JobRun.order(:id).last(4).map { |r| [r.name, r.outcome, r.finished_at] }'`.
    Every job that had never recorded a run is due when the supervisor
    starts, so all four should have a row within a minute of it.
    `RefreshBalancesJob` may already have one from the deploy's own
    `billing:recalculate`, which runs the same job before the worker
    starts.
-5. Leave both schedules running for one full day. Each healthchecks.io
+4. Leave both schedules running for one full day. Each healthchecks.io
    check should receive two pings per day (Scheduler's and Solid Queue's),
    except `send-missed-settlement-mail`, which only Solid Queue runs.
    The two can fire within seconds of each other at the shared UTC times;
@@ -95,11 +77,11 @@ until healthchecks.io's grace period (1 hour) ends and it emails you.
    correctness — RefreshBalancesJob and VerifyLedgerJob recompute from
    source either way, and EnsureRotationsJob's own guard makes a second
    run a no-op once the calendar reaches six months out.
-6. Delete the jobs on the Heroku Scheduler dashboard
+5. Delete the jobs on the Heroku Scheduler dashboard
    (`https://dashboard.heroku.com/apps/comeals-monorepo/scheduler`).
-7. The next day, confirm each check received exactly one ping, and that
+6. The next day, confirm each check received exactly one ping, and that
    `job_runs` has one `ok` row per job.
-8. Remove the add-on: `heroku addons:destroy scheduler -a comeals-monorepo`.
+7. Remove the add-on: `heroku addons:destroy scheduler -a comeals-monorepo`.
 
 ## Live updates depend on the supervisor too
 
@@ -128,29 +110,33 @@ description in admin and watch an open calendar tab refresh.
 ## Database connections
 
 Heroku Postgres essential-1 allows 20 connections. A process opens a
-connection only when one of its threads needs one, so the pool size
-(`RAILS_DB_POOL=4`) is a limit for each process, not a count.
+connection only when one of its threads needs one, so a pool is a limit
+for each process, not a count. Production sets no `RAILS_DB_POOL`
+config var:
 
-| Process                                           | Usual | Threads allow | Pools allow |
-| ------------------------------------------------- | ----- | ------------- | ----------- |
-| Web dyno: one Puma thread, the trim thread        | 1–2   | 2             | 4           |
-| Worker dyno: supervisor and three forks           | 5–7   | about 13      | 16          |
-| One-off `heroku run` (a rake task, a console)     | 1–2   | 2             | 4           |
-| Release phase (`deploy:verify_config db:migrate`) | 1–2   | 2             | 4           |
-| All at once                                       | ~13   | ~19           | 28          |
+- Web, one-off dynos and the release phase use `config/database.yml`'s
+  default of 2: the request thread (or the task) and solid_cache's trim
+  thread. `DatabasePoolCheck` refuses to boot a process whose pool is
+  smaller than its threads plus that one.
+- The worker dyno's line in the Procfile is `env RAILS_DB_POOL=3
+bin/jobs`. Each of its four processes (the supervisor, the dispatcher,
+  the worker and the scheduler) gets a pool of 3. That is Solid Queue's
+  own estimate for `config/queue.yml`: one connection per worker thread
+  (`threads: 1`), plus the polling thread and the heartbeat.
+  `spec/config/procfile_spec.rb` fails if `config/queue.yml` ever needs
+  more than the Procfile gives.
 
-The worker dyno's 5 is measured: `bin/jobs` with this `config/queue.yml`
-held 5 idle connections for its 4 processes. A running job adds one,
-and one more when it writes to the cache. Each Solid Queue process has
-three or four threads that can use the database at once (the main loop,
-the heartbeat, a job, a timer), which gives the 13.
+| Process                                       | Usual | Pools full |
+| --------------------------------------------- | ----- | ---------- |
+| Web dyno                                      | 1–2   | 2          |
+| Worker dyno: four processes, 3 each           | 5–6   | 12         |
+| One-off `heroku run` (a rake task, a console) | 1–2   | 2          |
+| Release phase (`bin/rake db:migrate`)         | 1–2   | 2          |
+| All at once                                   | ~6–10 | 18         |
 
-The closest a real moment comes to 20 is a push deploy. Heroku restarts
-both dynos, and an old dyno can take up to 30 seconds to stop while the
-new one boots, so for that time there can be two worker dynos (about 7
-each) and two web dynos (about 2 each), and `bin/deploy` starts its
-cache clear in a one-off dyno right then: about 20. A maintenance deploy
-does not have this, because web and the worker are at 0 while the
-release and the one-off dynos run. If the logs ever show `too many
-connections`, the choices are a plan with more connections, PgBouncer,
-or a smaller pool for the worker dyno alone, set in its Procfile line.
+The worker dyno held 5 idle connections when run locally, and staging
+peaked at 6 in all. A restart does not add to this: Heroku stops the old
+web and worker dynos before it starts the new ones (no preboot; checked
+on staging). Each further one-off dyno running at the same time (a
+second console, say) adds up to 2, so two of them with everything else
+full would make 20.
