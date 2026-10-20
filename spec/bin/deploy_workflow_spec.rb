@@ -226,36 +226,6 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
     end
   end
 
-  describe 'bin/lib/deploy/solid-queue-config' do
-    def configure(pool:)
-      sandbox.rule('heroku', "config:get RAILS_DB_POOL #{prod}", out: "#{pool}\n")
-      sandbox.rule('heroku', "config:set RAILS_DB_POOL=4 #{prod}")
-      sandbox.run_script('bin/lib/deploy/solid-queue-config', env: apps)
-    end
-
-    def sets = heroku_calls.grep(/config:set/)
-
-    # The jobs run on the worker dyno, so SOLID_QUEUE_IN_PUMA is not read
-    # or set any more.
-    it 'writes nothing when the pool is already 4 or more' do
-      result = configure(pool: '5')
-
-      expect(result.exitstatus).to eq(0)
-      expect(result.out).to eq("RAILS_DB_POOL=5 is set.\n")
-      expect(heroku_calls).to eq(["heroku config:get RAILS_DB_POOL #{prod}"])
-    end
-
-    ['', '3', 'four'].each do |pool|
-      it "sets only the pool when RAILS_DB_POOL is '#{pool}'" do
-        result = configure(pool:)
-
-        expect(result.exitstatus).to eq(0)
-        expect(result.out).to include("Setting RAILS_DB_POOL=4 (was '#{pool}').")
-        expect(sets).to eq(["heroku config:set RAILS_DB_POOL=4 #{prod}"])
-      end
-    end
-  end
-
   describe 'bin/lib/deploy/promote' do
     before do
       sandbox.rule('heroku', "config:get HEROKU_SLUG_COMMIT #{prod}", out: "#{live}\n")

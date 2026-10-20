@@ -136,15 +136,6 @@ jobs:
         if: steps.compare.outputs.proceed == 'true'
         run: STAGING_KEEP_UP=1 bin/staging-rehearsal
 
-      # The database pool the jobs dyno needs (lib/deploy_config_check.rb).
-      # Production's release phase refuses the promote without it, so set
-      # it first, the way bin/deploy does. Setting it before the promote
-      # is safe: a pool of 4 is fine for the running code too. When it is
-      # already right, nothing is written and no dyno restarts.
-      - name: Solid Queue config vars
-        if: steps.compare.outputs.proceed == 'true'
-        run: bin/lib/deploy/solid-queue-config
-
       # Promote the slug staging just ran — production never gets a
       # second build. The Procfile release phase migrates production
       # during the promote, with no maintenance mode: the old code serves
