@@ -68,6 +68,7 @@ module NonTransactionalCleanup
     units
     communities
     solid_queue_jobs
+    solid_queue_processes
     solid_queue_semaphores
   ].freeze
 
