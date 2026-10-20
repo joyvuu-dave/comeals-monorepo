@@ -86,34 +86,6 @@ preflight_environment() {
   ok "heroku remote -> $remote_url"
 }
 
-# The database pool the jobs dyno needs (lib/deploy_config_check.rb).
-# Without it the release phase refuses the deploy, so set it here, after
-# the confirmation, before the push. Setting it early is safe: a pool of 4
-# is fine for the running code too.
-NEEDS_DB_POOL=false
-
-preflight_db_pool() {
-  step "Pre-flight: database pool"
-
-  local pool
-  pool=$(heroku config:get RAILS_DB_POOL -a "$APP" 2>/dev/null || true)
-
-  if [ "${pool:-0}" -ge 4 ] 2>/dev/null; then
-    ok "RAILS_DB_POOL=$pool"
-  else
-    NEEDS_DB_POOL=true
-    warn "RAILS_DB_POOL='${pool}' — the deploy will set RAILS_DB_POOL=4 first"
-    info "The jobs dyno needs it (lib/deploy_config_check.rb, docs/runbooks/scheduler-cutover.md)"
-  fi
-}
-
-set_db_pool() {
-  [ "$NEEDS_DB_POOL" = true ] || return 0
-  step "Setting the database pool"
-  heroku config:set RAILS_DB_POOL=4 -a "$APP"
-  ok "RAILS_DB_POOL=4 set (one dyno restart)"
-}
-
 preflight_repo() {
   step "Pre-flight: repository"
 
@@ -604,7 +576,6 @@ main() {
   bold "============================================"
 
   preflight_environment
-  preflight_db_pool
   preflight_repo
   preflight_ci
 
@@ -632,9 +603,6 @@ main() {
   else
     green "    $APP ($sha):  PUSH deploy (no migrations)"
   fi
-  if [ "$NEEDS_DB_POOL" = true ]; then
-    yellow "    first: heroku config:set RAILS_DB_POOL=4"
-  fi
   git log --oneline -5 | while IFS= read -r line; do
     info "  $line"
   done
@@ -653,7 +621,6 @@ main() {
 
   DEPLOY_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S")
 
-  set_db_pool
   capture_backup
 
   if [ "$NEEDS_MAINTENANCE" = true ]; then
