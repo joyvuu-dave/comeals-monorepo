@@ -227,30 +227,31 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
   end
 
   describe 'bin/lib/deploy/solid-queue-config' do
-    def configure(pool:, in_puma:)
+    def configure(pool:)
       sandbox.rule('heroku', "config:get RAILS_DB_POOL #{prod}", out: "#{pool}\n")
-      sandbox.rule('heroku', "config:get SOLID_QUEUE_IN_PUMA #{prod}", out: "#{in_puma}\n")
-      sandbox.rule('heroku', "config:set RAILS_DB_POOL=4 SOLID_QUEUE_IN_PUMA=true #{prod}")
+      sandbox.rule('heroku', "config:set RAILS_DB_POOL=4 #{prod}")
       sandbox.run_script('bin/lib/deploy/solid-queue-config', env: apps)
     end
 
     def sets = heroku_calls.grep(/config:set/)
 
-    it 'writes nothing when both are already right' do
-      result = configure(pool: '5', in_puma: 'true')
+    # The jobs run on the worker dyno, so SOLID_QUEUE_IN_PUMA is not read
+    # or set any more.
+    it 'writes nothing when the pool is already 4 or more' do
+      result = configure(pool: '5')
 
       expect(result.exitstatus).to eq(0)
-      expect(result.out).to eq("RAILS_DB_POOL=5 and SOLID_QUEUE_IN_PUMA=true are set.\n")
-      expect(sets).to be_empty
+      expect(result.out).to eq("RAILS_DB_POOL=5 is set.\n")
+      expect(heroku_calls).to eq(["heroku config:get RAILS_DB_POOL #{prod}"])
     end
 
-    [['', ''], %w[3 true], ['4', ''], %w[four true]].each do |pool, in_puma|
-      it "sets both when RAILS_DB_POOL is '#{pool}' and SOLID_QUEUE_IN_PUMA is '#{in_puma}'" do
-        result = configure(pool:, in_puma:)
+    ['', '3', 'four'].each do |pool|
+      it "sets only the pool when RAILS_DB_POOL is '#{pool}'" do
+        result = configure(pool:)
 
         expect(result.exitstatus).to eq(0)
-        expect(result.out).to include("(were '#{pool}' and '#{in_puma}')")
-        expect(sets).to eq(["heroku config:set RAILS_DB_POOL=4 SOLID_QUEUE_IN_PUMA=true #{prod}"])
+        expect(result.out).to include("Setting RAILS_DB_POOL=4 (was '#{pool}').")
+        expect(sets).to eq(["heroku config:set RAILS_DB_POOL=4 #{prod}"])
       end
     end
   end
@@ -293,6 +294,9 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
     before do
       sandbox.rule('curl', "-sf #{version_url}", out: %({"version":"614","commit":"#{candidate}"}))
       sandbox.rule('node', 'tests/smoke/smoke.js')
+      sandbox.rule('heroku', "ps:scale worker=1 #{prod}")
+      sandbox.rule('heroku', "ps:scale worker=0 #{prod}")
+      sandbox.rule('git', "show #{live}:Procfile", out: "web: puma\nworker: bin/jobs\n")
       sandbox.rule('heroku', "run --exit-code bin/rake deploy:verify_solid_queue #{prod}")
       sandbox.rule('heroku', "logs -n 1500 #{prod}", out: "2026-10-19T12:35:00.1+00:00 app[web.1]: Started GET /\n")
       sandbox.rule('heroku', "rollback #{prod}")
@@ -321,6 +325,86 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
       expect(sandbox.calls_to('sleep').map(&:args)).to eq([['5'], ['180']])
       expect(sandbox.calls_to('node')).not_to be_empty
       expect(rollbacks).to be_empty
+    end
+
+    # A promote starts no dyno of a process type that is new or at 0. The
+    # first promote whose release has a worker process type makes one at
+    # 0, so the step starts it before it asks whether Solid Queue came up.
+    it 'starts the worker dyno once production serves the candidate, before the Solid Queue check' do
+      result = watch
+
+      expect(result.exitstatus).to eq(0)
+      scale = heroku_calls.index("heroku ps:scale worker=1 #{prod}")
+      expect(scale).not_to be_nil
+      expect(scale).to be < heroku_calls.index("heroku run --exit-code bin/rake deploy:verify_solid_queue #{prod}")
+    end
+
+    it 'rolls back when the worker dyno cannot be started' do
+      sandbox.rule('heroku', "ps:scale worker=1 #{prod}", exit: 1)
+
+      result = watch
+
+      expect(result.exitstatus).to eq(1)
+      expect(result.out).to include('Could not start the worker dyno on production. Rolling back.')
+      expect(rollbacks).to eq(["heroku rollback #{prod}"])
+    end
+
+    # The worker dyno can take longer to boot than the smoke test takes.
+    it 'asks again after 30 seconds when Solid Queue is not up yet' do
+      sandbox.rule('heroku', "run --exit-code bin/rake deploy:verify_solid_queue #{prod}", exit: 1, once: true)
+
+      result = watch
+
+      expect(result.exitstatus).to eq(0)
+      expect(result.out).to include('Solid Queue is not up yet. Asking again in 30 seconds.')
+      expect(sandbox.calls_to('sleep').map(&:args)).to eq([['30'], ['180']])
+      expect(rollbacks).to be_empty
+    end
+
+    # The release before the worker dyno runs no Solid Queue. The new
+    # code's jobs must not go on running beside the old code, and after
+    # the rollback Heroku would refuse to scale a process type the release
+    # does not have, so the worker goes to 0 first.
+    it 'stops the worker dyno before rolling back to a release without one, and says so' do
+      sandbox.rule('node', 'tests/smoke/smoke.js', exit: 1)
+      sandbox.rule('git', "show #{live}:Procfile", out: "web: puma\nrelease: bin/rake db:migrate\n")
+
+      result = watch
+
+      expect(result.exitstatus).to eq(1)
+      expect(result.out).to include("The release before has no worker dyno, so the worker goes to 0 and stays there.\n")
+      expect(heroku_calls.last(2)).to eq(["heroku ps:scale worker=0 #{prod}", "heroku rollback #{prod}"])
+    end
+
+    it 'treats a release whose Procfile cannot be read as one without a worker dyno' do
+      sandbox.rule('node', 'tests/smoke/smoke.js', exit: 1)
+      sandbox.rule('git', "show #{live}:Procfile", exit: 128, err: 'fatal: bad object')
+
+      result = watch
+
+      expect(result.exitstatus).to eq(1)
+      expect(heroku_calls.last(2)).to eq(["heroku ps:scale worker=0 #{prod}", "heroku rollback #{prod}"])
+    end
+
+    it 'rolls back anyway, and says what to run, when the worker cannot be stopped' do
+      sandbox.rule('node', 'tests/smoke/smoke.js', exit: 1)
+      sandbox.rule('git', "show #{live}:Procfile", out: "web: puma\n")
+      sandbox.rule('heroku', "ps:scale worker=0 #{prod}", exit: 1)
+
+      result = watch
+
+      expect(result.exitstatus).to eq(1)
+      expect(result.out).to include("Could not stop the worker dyno. Run: heroku ps:scale worker=0 #{prod}")
+      expect(rollbacks).to eq(["heroku rollback #{prod}"])
+    end
+
+    it 'leaves the worker to Heroku when the release before has one' do
+      sandbox.rule('node', 'tests/smoke/smoke.js', exit: 1)
+
+      watch
+
+      expect(heroku_calls.grep(/worker=0/)).to be_empty
+      expect(rollbacks).to eq(["heroku rollback #{prod}"])
     end
 
     context 'when production never serves the candidate' do
@@ -372,13 +456,14 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
       expect(rollbacks).to be_empty
     end
 
-    it 'rolls back when Solid Queue did not come up' do
+    it 'rolls back when Solid Queue did not come up after two tries' do
       sandbox.rule('heroku', "run --exit-code bin/rake deploy:verify_solid_queue #{prod}", exit: 1)
 
       result = watch
 
       expect(result.exitstatus).to eq(1)
       expect(result.out).to include('Solid Queue is not running on production. Rolling back.')
+      expect(heroku_calls.grep(/verify_solid_queue/).size).to eq(2)
       expect(rollbacks).to eq(["heroku rollback #{prod}"])
     end
 
