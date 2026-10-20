@@ -95,21 +95,26 @@ jobs:
 
       # Maintenance from before the restore until the old code serves, so
       # nobody writes to the restored database through the new code.
-      # Maintenance stops web requests only. The jobs run inside the web
-      # dyno (SOLID_QUEUE_IN_PUMA), so web goes to 0 before the restore and
-      # comes back after the rollback: no job of the new code runs on the
-      # restored database (#179). The maintenance page shows with no web
-      # dyno too.
-      - name: Stop the web dyno and restore the backup
+      # Maintenance stops web requests only. The jobs run on the worker
+      # dyno, so web and the worker go to 0 before the restore: no job of
+      # the new code runs on the restored database (#179). Web comes back
+      # in "Start the web dyno"; the worker comes back in "Roll back", and
+      # only when the release it goes back to has a worker process type.
+      # The maintenance page shows with no web dyno too.
+      - name: Stop the web and worker dynos and restore the backup
         id: restore
         if: inputs.backup != ''
         run: bin/lib/rollback/restore-backup
 
+      # A release from before the worker dyno has no worker process type:
+      # the worker goes to 0 before the rollback and stays there.
+      # Otherwise it is scaled to 1 after it.
       - name: Roll back
         id: roll
         env:
           TARGET: ${{ steps.find.outputs.target }}
           BAD_SHA: ${{ steps.find.outputs.bad_sha }}
+          TARGET_HAS_WORKER: ${{ steps.find.outputs.target_has_worker }}
         run: bin/lib/rollback/roll-back
 
       - name: Start the web dyno
@@ -124,9 +129,10 @@ jobs:
         run: heroku maintenance:off -a "$APP"
 
       # Says which state a stopped undo left production in, and what to run
-      # by hand. It does not start web again: after the restore and before
-      # the rollback, web would run the new code's jobs on the restored
-      # database. Maintenance on with web at 0 is safe; nobody can write.
+      # by hand. It does not start web or the worker again: after the
+      # restore and before the rollback, they would run the new code on
+      # the restored database. Maintenance on with both at 0 is safe;
+      # nobody can write.
       - name: Say what to do by hand
         if: (failure() || cancelled()) && inputs.backup != '' && steps.restore.outcome != 'skipped'
         env:
@@ -135,6 +141,7 @@ jobs:
           START: ${{ steps.start.outcome }}
           WEB_COUNT: ${{ steps.restore.outputs.web_count }}
           TARGET: ${{ steps.find.outputs.target }}
+          TARGET_HAS_WORKER: ${{ steps.find.outputs.target_has_worker }}
           URL: ${{ steps.find.outputs.url }}
         run: bin/lib/rollback/say-what-to-do
 

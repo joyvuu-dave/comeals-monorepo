@@ -5,8 +5,8 @@
 # nothing.
 #
 # Reads APP, RELEASE (empty = the release before the current one) and
-# HEROKU_API_KEY. Writes url, target, target_sha and bad_sha to
-# $GITHUB_OUTPUT.
+# HEROKU_API_KEY. Writes url, target, target_sha, bad_sha and
+# target_has_worker to $GITHUB_OUTPUT.
 set -euo pipefail
 . "$(dirname "$0")/../json.sh"
 
@@ -27,7 +27,11 @@ else
   target=$(echo "$releases" | json "d[1]['version']")
 fi
 slug=$(api "https://api.heroku.com/apps/$APP/releases/$target" | json "d['slug']['id']")
-target_sha=$(api "https://api.heroku.com/apps/$APP/slugs/$slug" | json "d['commit']")
+slug_info=$(api "https://api.heroku.com/apps/$APP/slugs/$slug")
+target_sha=$(json "d['commit']" <<< "$slug_info")
+# The process types Heroku runs for that release, from the Procfile it
+# was built from. A release from before the worker dyno has no worker.
+target_has_worker=$(json "str('worker' in (d.get('process_types') or {})).lower()" <<< "$slug_info")
 bad_sha=$(heroku config:get HEROKU_SLUG_COMMIT -a "$APP")
 echo "$APP runs ${bad_sha:-an unknown commit}; v$target runs $target_sha."
 # Checked here, before any step changes production. The Roll back
@@ -44,6 +48,12 @@ if [ "$target_sha" = "$bad_sha" ]; then
   echo "deploy (heroku releases -a $APP)."
   exit 1
 fi
+if [ "$target_has_worker" = true ]; then
+  echo "v$target has a worker dyno, so the worker runs again after the rollback."
+else
+  echo "v$target has no worker dyno, so the worker goes to 0 and stays there."
+fi
 echo "target=v$target" >> "$GITHUB_OUTPUT"
 echo "target_sha=$target_sha" >> "$GITHUB_OUTPUT"
 echo "bad_sha=$bad_sha" >> "$GITHUB_OUTPUT"
+echo "target_has_worker=$target_has_worker" >> "$GITHUB_OUTPUT"

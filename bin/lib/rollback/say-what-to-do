@@ -5,7 +5,7 @@
 # commands to run by hand. It changes nothing.
 #
 # Reads RESTORE, ROLL and START (the outcomes of those steps), WEB_COUNT,
-# TARGET, URL, APP and BACKUP.
+# TARGET, TARGET_HAS_WORKER, URL, APP and BACKUP.
 # -eo pipefail, not -euo: a step's own shell on GitHub has no -u, and
 # WEB_COUNT is empty when the restore step stopped before it set it.
 set -eo pipefail
@@ -19,15 +19,16 @@ if [ "$START" = "success" ]; then
   echo "  bin/smoke $URL"
   exit 0
 fi
-echo "Maintenance mode is on. Web may be at 0: then no dyno runs and no job runs."
-echo "That is safe; nobody can write. This step did not start web again."
-echo "Do not start web until the old code runs: the new code's jobs would run on the"
+echo "Maintenance mode is on. Web and the worker may be at 0: then no dyno runs and no"
+echo "job runs. That is safe; nobody can write. This step did not start them again."
+echo "Do not start them until the old code runs: the new code's jobs would run on the"
 echo "restored database. Check with: heroku ps -a $APP; heroku releases -a $APP"
 if [ "$RESTORE" != "success" ]; then
   echo "The step that stops web and restores the backup failed, so the database may or"
   echo "may not be restored. Check that a backup of the database as it was got captured"
   echo "(heroku pg:backups -a $APP), capture one if not, then run:"
   echo "  heroku ps:scale web=0 -a $APP"
+  echo "  heroku ps:scale worker=0 -a $APP   (when heroku ps lists a worker)"
   echo "  heroku pg:backups:restore $BACKUP DATABASE_URL -a $APP --confirm $APP"
   echo "  heroku rollback $TARGET -a $APP"
 elif [ "$ROLL" != "success" ]; then
@@ -36,6 +37,11 @@ elif [ "$ROLL" != "success" ]; then
   echo "  heroku rollback $TARGET -a $APP"
 fi
 echo "Then, once heroku releases shows the rollback to $TARGET succeeded:"
+if [ "$TARGET_HAS_WORKER" = true ]; then
+  echo "  heroku ps:scale worker=1 -a $APP"
+else
+  echo "  ($TARGET has no worker dyno: leave the worker at 0)"
+fi
 echo "  heroku ps:scale web=$count -a $APP"
 echo "  heroku maintenance:off -a $APP"
 echo "  bin/smoke $URL"

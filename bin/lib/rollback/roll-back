@@ -1,14 +1,28 @@
 #!/usr/bin/env bash
 # The Rollback workflow's "Roll back" step (.github/workflows/rollback.yml).
 # Runs heroku rollback, waits for the release phase of the new release,
-# and checks that the running commit changed.
+# checks that the running commit changed, and starts the worker dyno
+# when that release has one.
 #
-# Reads APP, TARGET (a release, e.g. v612) and BAD_SHA (the commit that
-# ran before). Writes bad_sha and live_sha to $GITHUB_OUTPUT.
+# Reads APP, TARGET (a release, e.g. v612), BAD_SHA (the commit that
+# ran before) and TARGET_HAS_WORKER ("true" when the release it goes
+# back to has a worker process type). Writes bad_sha and live_sha to
+# $GITHUB_OUTPUT.
 set -euo pipefail
 . "$(dirname "$0")/../json.sh"
 
 bad_sha="$BAD_SHA"
+# A release from before the worker dyno runs no Solid Queue. The new
+# code's jobs must not go on running beside the old code, and after the
+# rollback Heroku would refuse to scale a process type the release does
+# not have, so the worker goes to 0 first. Heroku lists the formation
+# as "web=1:Basic worker=1:Basic".
+if [ "$TARGET_HAS_WORKER" != true ]; then
+  echo "$TARGET has no worker dyno, so the worker stays at 0."
+  if [[ " $(heroku ps:scale -a "$APP")" == *" worker="* ]]; then
+    heroku ps:scale worker=0 -a "$APP"
+  fi
+fi
 heroku rollback "$TARGET" -a "$APP"
 # A rollback makes a new release, and Heroku runs the release
 # phase for it (the old code's Procfile release line: rake
@@ -41,3 +55,9 @@ if [ "$live_sha" = "$bad_sha" ]; then
   exit 1
 fi
 echo "$APP now runs $live_sha."
+# After a restore the worker is at 0, and a worker at 0 stays at 0
+# through a rollback. When it already runs, this asks for the count it
+# has.
+if [ "$TARGET_HAS_WORKER" = true ]; then
+  heroku ps:scale worker=1 -a "$APP"
+fi

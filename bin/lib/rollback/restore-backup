@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# The Rollback workflow's "Stop the web dyno and restore the backup"
-# step (.github/workflows/rollback.yml). It turns maintenance on,
-# captures the database as the new code left it, scales web to 0, waits
-# until no web dyno runs, and restores the backup.
+# The Rollback workflow's "Stop the dynos and restore the backup" step
+# (.github/workflows/rollback.yml). It turns maintenance on, captures
+# the database as the new code left it, scales web and the worker to 0,
+# waits until neither runs, and restores the backup.
 #
 # Reads APP, BACKUP and HEROKU_API_KEY. Writes web_count (how many web
 # dynos ran before) to $GITHUB_OUTPUT.
@@ -14,25 +14,38 @@ heroku maintenance:on -a "$APP"
 # The database as the new code left it, so the writes the restore
 # takes away can still be read afterwards.
 heroku pg:backups:capture -a "$APP"
-# How many web dynos to start again after the rollback.
-web_count=$(api "https://api.heroku.com/apps/$APP/formation/web" | json "d['quantity']")
+formation=$(api "https://api.heroku.com/apps/$APP/formation")
+# How many web dynos to start again after the rollback. The worker goes
+# back to 1 in the Roll back step, when the release it goes back to has
+# one.
+web_count=$(json "sum(f['quantity'] for f in d if f['type'] == 'web')" <<< "$formation")
+has_worker=$(json "str(any(f['type'] == 'worker' for f in d)).lower()" <<< "$formation")
 echo "web_count=$web_count" >> "$GITHUB_OUTPUT"
-echo "$APP runs $web_count web dyno(s). Scaling web to 0."
-heroku ps:scale web=0 -a "$APP"
+# No job of the new code may run on the restored database, so the worker
+# stops too. A release from before the worker dyno has no worker
+# process type, and Heroku refuses to scale one.
+if [ "$has_worker" = true ]; then
+  echo "$APP runs $web_count web dyno(s) and a worker dyno. Scaling both to 0."
+  heroku ps:scale web=0 worker=0 -a "$APP"
+else
+  echo "$APP runs $web_count web dyno(s) and no worker dyno. Scaling web to 0."
+  heroku ps:scale web=0 -a "$APP"
+fi
 # A dyno takes up to 30 seconds to stop after ps:scale returns.
-# Restore only when no web dyno runs, so no job is still running.
+# Restore only when no web or worker dyno runs, so no job is still
+# running.
 tries=0
 while :; do
-  running=$(heroku ps -a "$APP" --json | json "sum(1 for p in d if p['type'] == 'web')")
+  running=$(heroku ps -a "$APP" --json | json "sum(1 for p in d if p['type'] in ('web', 'worker'))")
   if [ "$running" = "0" ]; then
     break
   fi
   tries=$((tries + 1))
   if [ "$tries" -ge 36 ]; then
-    echo "A web dyno still runs 3 minutes after web was scaled to 0, so the backup was not restored."
+    echo "A web or worker dyno still runs 3 minutes after they were scaled to 0, so the backup was not restored."
     exit 1
   fi
   sleep 5
 done
-echo "No web dyno runs. Restoring $BACKUP."
+echo "No web or worker dyno runs. Restoring $BACKUP."
 heroku pg:backups:restore "$BACKUP" DATABASE_URL -a "$APP" --confirm "$APP"
