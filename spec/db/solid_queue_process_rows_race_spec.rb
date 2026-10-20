@@ -36,8 +36,7 @@ require 'rails_helper'
 # off.
 #
 # Each example makes both transactions read before either one writes,
-# which is the order that fails. Nothing waits on the clock: each thread
-# stops after its read until the other one has read too.
+# which is the order that fails (spec/support/at_the_same_moment.rb).
 RSpec.describe 'two Solid Queue processes writing their own rows at the same moment' do
   include_context 'with no test transaction'
 
@@ -45,71 +44,19 @@ RSpec.describe 'two Solid Queue processes writing their own rows at the same mom
   let!(:dispatcher) { register('Dispatcher', 'dispatcher-test', supervisor: supervisor) }
   let!(:worker) { register('Worker', 'worker-test', supervisor: supervisor) }
 
+  def reload(process) = SolidQueue::Process.find(process.id)
+
   def register(kind, name, supervisor: nil)
     SolidQueue::Process.register(kind: kind, name: name, pid: 1, hostname: 'test', supervisor: supervisor,
                                  metadata: {})
-  end
-
-  # Runs the block for each process on a thread and a connection of its
-  # own, and returns each thread's value: :ok, or the error's class and
-  # first line.
-  def at_the_same_moment(processes, pause_after:, sequential_scans: false, &)
-    started = Concurrent::CountDownLatch.new(1)
-    threads = []
-    pause = pause_once(pause_after, threads, processes.size)
-
-    ActiveRecord::Base.connection_pool.release_connection
-    ActiveSupport::Notifications.subscribed(pause, 'sql.active_record') do
-      processes.each do |process|
-        threads << Thread.new do
-          Thread.current.report_on_exception = false
-          started.wait(10)
-          on_its_own_connection(process, sequential_scans, &)
-        end
-      end
-      started.count_down
-      threads.map(&:value)
-    end
-  end
-
-  # A thread stops right after the first statement it runs that matches
-  # `pattern`, and goes on once every other thread has run one too. Only
-  # the first: a fix that retries runs the statement again, and the other
-  # thread may have finished by then.
-  def pause_once(pattern, threads, count)
-    barrier = Concurrent::CyclicBarrier.new(count)
-    paused = Concurrent::Set.new
-    lambda do |*, payload|
-      next unless threads.include?(Thread.current) && payload[:sql].match?(pattern)
-      next unless paused.add?(Thread.current)
-      raise 'the other thread never ran its statement' unless barrier.wait(10)
-    end
-  end
-
-  def on_its_own_connection(process, sequential_scans)
-    ActiveRecord::Base.connection_pool.with_connection do |connection|
-      index_scans(connection, :off) if sequential_scans
-      yield SolidQueue::Process.find(process.id)
-    ensure
-      index_scans(connection, :on) if sequential_scans
-    end
-    :ok
-  rescue StandardError => e
-    "#{e.class}: #{e.message.lines.first&.strip}"
-  end
-
-  # Turns index scans off or on for one connection. Not RESET ALL,
-  # which would also undo the connection's SERIALIZABLE setting.
-  def index_scans(connection, value)
-    connection.execute("SET enable_indexscan = #{value}")
-    connection.execute("SET enable_bitmapscan = #{value}")
   end
 
   it 'records both heartbeats, with no error' do
     an_hour_ago = 1.hour.ago
     SolidQueue::Process.where(id: [dispatcher.id, worker.id]).update_all(last_heartbeat_at: an_hour_ago)
 
-    outcomes = at_the_same_moment([dispatcher, worker], pause_after: /\ASELECT .* FOR UPDATE\z/, &:heartbeat)
+    outcomes = at_the_same_moment([/\ASELECT .* FOR UPDATE\z/, -> { reload(dispatcher).heartbeat }],
+                                  [/\ASELECT .* FOR UPDATE\z/, -> { reload(worker).heartbeat }])
 
     expect(outcomes).to eq(%i[ok ok])
     expect(SolidQueue::Process.where(id: [dispatcher.id, worker.id]).pluck(:last_heartbeat_at))
@@ -117,8 +64,9 @@ RSpec.describe 'two Solid Queue processes writing their own rows at the same mom
   end
 
   it 'removes both rows when the two processes shut down at the same moment, with no error' do
-    outcomes = at_the_same_moment([dispatcher, worker], pause_after: /\ADELETE FROM "solid_queue_processes"/,
-                                                        sequential_scans: true, &:deregister)
+    outcomes = at_the_same_moment([/\ADELETE FROM "solid_queue_processes"/, -> { reload(dispatcher).deregister }],
+                                  [/\ADELETE FROM "solid_queue_processes"/, -> { reload(worker).deregister }],
+                                  sequential_scans: true)
 
     expect(outcomes).to eq(%i[ok ok])
     expect(SolidQueue::Process.where(id: [dispatcher.id, worker.id])).to be_empty
