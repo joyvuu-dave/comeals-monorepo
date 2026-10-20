@@ -42,6 +42,13 @@ function VersionBanner() {
             if (entry.isEntry && entry.file !== currentEntryFile) {
               setUpdateAvailable(true);
               clearInterval(intervalId);
+              // Start the idle timer (index.html), so a page nobody
+              // touches moves to the new build 5 minutes from now. A
+              // page in use moves 5 minutes after its last touch, as
+              // before.
+              if (typeof window.idleTimerKick === "function") {
+                window.idleTimerKick();
+              }
               return;
             }
           }
