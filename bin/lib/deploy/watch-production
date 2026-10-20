@@ -18,12 +18,28 @@ lines_since() { awk -v since="$1" '$1 >= since'; }
 worrying_lines() { grep -iE "FATAL|status=5[0-9][0-9]| ERROR |Exception"; }
 
 candidate="$CANDIDATE"
+# The release before the worker dyno runs no Solid Queue. The new
+# code's jobs must not go on running beside the old code, and after the
+# rollback Heroku would refuse to scale a process type the release does
+# not have, so the worker goes to 0 first. A Procfile that cannot be
+# read counts as one without a worker: stopping the jobs is the safe
+# side, and the next deploy starts them again.
+stop_worker_unless_previous_has_one() {
+  if git show "$PREVIOUS:Procfile" 2>/dev/null | grep -q '^worker:'; then
+    return 0
+  fi
+  echo "The release before has no worker dyno, so the worker goes to 0 and stays there."
+  heroku ps:scale worker=0 -a "$PROD_APP" \
+    || echo "Could not stop the worker dyno. Run: heroku ps:scale worker=0 -a $PROD_APP"
+}
+
 # Rolls back only the code, and only when the release ran no
 # migration: the old code may not run on what a migration made
 # (#133). Otherwise production stays as it is, the run fails,
 # and a person follows docs/runbooks/undo-a-deploy.md.
 roll_back() {
   if bin/rollback-check "$PREVIOUS" "$candidate"; then
+    stop_worker_unless_previous_has_one
     heroku rollback -a "$PROD_APP"
   else
     echo "Not rolling back only the code. Follow docs/runbooks/undo-a-deploy.md."
@@ -54,18 +70,38 @@ if [ "$live" != "$candidate" ]; then
   exit 1
 fi
 echo "Production serves the candidate."
+# A promote starts no dyno of a process type that is new or at 0, so
+# the first promote whose release has a worker process type leaves the
+# jobs off. When the worker already runs, this asks for the count it
+# has.
+if ! heroku ps:scale worker=1 -a "$PROD_APP"; then
+  echo "Could not start the worker dyno on production. Rolling back."
+  roll_back
+  exit 1
+fi
 if ! bin/smoke "$PROD_URL"; then
   echo "Smoke failed on production. Rolling back."
   roll_back
   exit 1
 fi
 # Live updates and the nightly jobs run in Solid Queue, whose
-# supervisor starts with the dyno. The release phase already
-# refused a deploy without its config vars
-# (deploy:verify_config); this asks the app whether every
-# process kind then really came up. The old release does not
-# need the supervisor, so rolling back restores live updates.
-if ! heroku run --exit-code bin/rake deploy:verify_solid_queue -a "$PROD_APP"; then
+# supervisor starts with the worker dyno. The release phase already
+# refused a deploy without its config var (deploy:verify_config);
+# this asks the app whether every process kind then really came up.
+# Twice, 30 seconds apart: the worker dyno can take longer to boot
+# than the smoke test takes.
+solid_queue_up=false
+for attempt in 1 2; do
+  if heroku run --exit-code bin/rake deploy:verify_solid_queue -a "$PROD_APP"; then
+    solid_queue_up=true
+    break
+  fi
+  if [ "$attempt" -eq 1 ]; then
+    echo "Solid Queue is not up yet. Asking again in 30 seconds."
+    sleep 30
+  fi
+done
+if [ "$solid_queue_up" != true ]; then
   echo "Solid Queue is not running on production. Rolling back."
   roll_back
   exit 1

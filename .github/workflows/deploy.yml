@@ -128,18 +128,18 @@ jobs:
           echo "Draft release ${{ steps.note.outputs.tag }} created."
 
       # Restore a fresh production backup into staging, deploy the
-      # candidate, migrate on today's real data, smoke it — the whole
+      # candidate, migrate on today's real data, start web and the
+      # worker, check Solid Queue, smoke it — the whole
       # bin/staging-rehearsal sequence, including the neuter check.
       # The backup it captures doubles as the pre-deploy backup.
       - name: Staging rehearsal
         if: steps.compare.outputs.proceed == 'true'
         run: STAGING_KEEP_UP=1 bin/staging-rehearsal
 
-      # The two config vars Solid Queue needs (lib/deploy_config_check.rb).
-      # Production's release phase refuses the promote without them, so
-      # set them first, the way bin/deploy does. Setting them before the
-      # promote is safe: the running code ignores SOLID_QUEUE_IN_PUMA, and
-      # a pool of 4 is fine for one thread. Idempotent: when both are
+      # The database pool the jobs dyno needs (lib/deploy_config_check.rb).
+      # Production's release phase refuses the promote without it, so set
+      # it first, the way bin/deploy does. Setting it before the promote
+      # is safe: a pool of 4 is fine for the running code too. When it is
       # already right, nothing is written and no dyno restarts.
       - name: Solid Queue config vars
         if: steps.compare.outputs.proceed == 'true'
@@ -178,9 +178,14 @@ jobs:
           gh release edit "${{ steps.note.outputs.tag }}" --draft=false
           echo "Release ${{ steps.note.outputs.tag }} is live."
 
+      # Two commands, not one: a staging release from before the worker
+      # dyno has no worker process type, and Heroku refuses the whole
+      # ps:scale when one type in it is missing.
       - name: Park staging
         if: always() && steps.compare.outputs.proceed == 'true'
-        run: heroku ps:scale web=0 -a "$STAGING_APP" || true
+        run: |
+          heroku ps:scale web=0 -a "$STAGING_APP" || true
+          heroku ps:scale worker=0 -a "$STAGING_APP" || true
 
       - name: Ping healthchecks
         if: always()
