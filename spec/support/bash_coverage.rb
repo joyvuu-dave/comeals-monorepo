@@ -1,9 +1,8 @@
 # frozen_string_literal: true
 
-require 'stringio'
-
-# Line coverage for the bash scripts this repository holds at 100%. Each
-# script is run under bashcov by one spec file, and an after(:context) hook
+# Line coverage for the bash scripts this repository holds at 100%,
+# measured with bashcov's trace format, parser and lexer (#run says why it
+# does not use bashcov's runner). Each script is run by one spec file, and an after(:context) hook
 # in that file calls #check!. The counts stay in this object: nothing here
 # touches the SimpleCov result of the Ruby code.
 #
@@ -29,6 +28,8 @@ class BashCoverage
   ONE_LINE_FUNCTION = /\A\s*\w+\(\)\s*\{.*\}\s*\z/
   LOOP_START = /;\s*do\s*\z/
   LOOP_END = /\A\s*done\b/
+  # LINENO, BASH_SOURCE, PWD and OLDPWD (Bashcov::Xtrace::FIELDS).
+  FIELD_COUNT = 4
 
   def initialize(spec_file)
     files = FILES.select { |_, spec| spec == spec_file }.keys
@@ -50,23 +51,32 @@ class BashCoverage
     end
   end
 
-  # Runs `bash *args` under bashcov, adds the lines that ran, and returns
-  # the Process::Status. Any warning from bashcov fails the run: "Aborting
-  # early" means the counts are incomplete, and a script it drops for bad
-  # syntax would never be counted.
+  # Runs `bash *args` with bash's trace on, the way bashcov does, and adds
+  # the lines that ran. Returns the Process::Status.
+  #
+  # bashcov's own runner reads the trace from a pipe in a thread while the
+  # script runs. In CI that once lost a line with no warning (a run of
+  # spec/bin/deploy_spec.rb on 2026-10-19 never counted bin/deploy:449,
+  # though the example that runs it passed). So the trace goes to a file
+  # instead, and is read with bashcov's own parser only after the script
+  # has ended. Then the run fails, loudly, unless every trace record the
+  # file holds was read whole: TraceLost says the counts cannot be trusted.
   def run(*args)
-    require 'bashcov'
-    require 'bashcov/runner'
-    # skip_uncovered: without it bashcov walks the whole repository
-    # (node_modules too) for scripts that did not run.
-    Bashcov.skip_uncovered = true
-    Bashcov.bash_path = bash
-    runner = Bashcov::Runner.new([bash, *args])
-    status, result, warnings = with_warnings_captured { [runner.run, runner.result] }
-    raise "bashcov warned, so its counts cannot be trusted:\n#{warnings}" unless warnings.empty?
+    load_bashcov
+    Dir.mktmpdir('bash-trace') do |dir|
+      trace_path = File.join(dir, 'trace')
+      status = trace_to(trace_path, args)
+      add(read_trace(trace_path))
+      status
+    end
+  end
 
-    add(result)
-    status
+  class TraceLost < StandardError; end
+
+  def load_bashcov
+    require 'bashcov'
+    require 'bashcov/lexer'
+    require 'bashcov/xtrace'
   end
 
   # Raises unless every line bashcov counts, and every one-line function,
@@ -90,23 +100,78 @@ class BashCoverage
 
   private
 
-  def add(result)
-    result.each do |file, data|
-      totals = @counts[File.realpath(file)] or next
+  # Each process appends whole records to the file (O_APPEND), so records
+  # from a pipeline's processes cannot land inside each other the way they
+  # can in a pipe that a reader drains while they write.
+  def trace_to(trace_path, args)
+    File.open(trace_path, File::WRONLY | File::CREAT | File::APPEND) do |trace|
+      fd = trace.fileno
+      env = { 'PS4' => Bashcov::Xtrace.ps4, 'BASH_XTRACEFD' => fd.to_s, 'SHELLOPTS' => 'xtrace' }
+      Process.wait2(Process.spawn(env, bash, *args, fd => fd)).last
+    end
+  end
 
-      data['lines'].each_with_index do |count, line|
-        totals[line] = totals[line].to_i + count unless count.nil?
+  # { absolute path => [count, or nil for a line that did not run] } for
+  # the files this object holds, with bashcov's Lexer marking the lines
+  # that count.
+  def read_trace(trace_path)
+    hits = @counts.keys.index_with { [] }
+    trace_records(trace_path).each do |lineno, source|
+      counts = hits[File.realpath(source)] or next
+      counts[lineno - 1] = counts[lineno - 1].to_i + 1
+    end
+    hits.reject { |_, counts| counts.empty? }.each { |file, counts| Bashcov::Lexer.new(file, counts).complete_coverage }
+  end
+
+  # [[line number, script], ...], one per trace record. A record is
+  # bashcov's PS4: a start field ending in "+BASHCOV>", then line number,
+  # script, PWD and OLDPWD, each ended by bashcov's delimiter; the command
+  # text that follows ends up in the next record's start field. Raises
+  # TraceLost unless every record bash wrote has exactly those four fields,
+  # a line number, and a script that exists.
+  def trace_records(trace_path)
+    delimiter = Bashcov::Xtrace.delimiter
+    text = File.binread(trace_path)
+    records = split_records(text, delimiter)
+    # The last record also holds the command text that follows it.
+    records.last&.pop if records.last&.size == FIELD_COUNT + 1
+    check_whole(records, text.scan("#{Bashcov::Xtrace::PREFIX}#{delimiter}").size)
+    # bash sometimes prints PS4 without expanding it, and `bash -c` code has
+    # no script; bashcov skips both.
+    records.filter_map do |lineno, source, pwd, _|
+      [lineno.to_i, File.expand_path(source, pwd)] unless lineno == '${LINENO-}' || source.empty?
+    end
+  end
+
+  def split_records(text, delimiter)
+    text.split(delimiter, -1).each_with_object([]) do |field, records|
+      if field.match?(Bashcov::Xtrace::PS4_START_REGEXP) then records << []
+      elsif records.any? then records.last << field
       end
     end
   end
 
-  # bashcov writes its warnings with Kernel#warn, to $stderr.
-  def with_warnings_captured
-    original = $stderr
-    $stderr = StringIO.new
-    [*yield, $stderr.string]
-  ensure
-    $stderr = original
+  def whole_record?(lineno = nil, source = nil, pwd = nil, *rest)
+    return false unless rest.size == 1 && pwd
+    return true if lineno == '${LINENO-}'
+
+    lineno.match?(/\A\d+\z/) && (source.empty? || File.file?(File.expand_path(source, pwd)))
+  end
+
+  def check_whole(records, written)
+    raise TraceLost, "bash wrote #{written} trace records and #{records.size} were read" unless records.size == written
+
+    broken = records.find { |record| !whole_record?(*record) }
+    raise TraceLost, "a bash trace record is broken: #{broken.inspect}" if broken
+  end
+
+  def add(result)
+    result.each do |file, lines|
+      totals = @counts.fetch(file)
+      lines.each_with_index do |count, line|
+        totals[line] = totals[line].to_i + count unless count.nil?
+      end
+    end
   end
 
   # bash's trace names one line for a command that spans several, so

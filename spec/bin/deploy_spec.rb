@@ -683,6 +683,14 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       expect(result.status).to eq(0)
     end
 
+    it 'shows warnings when there is no error' do
+      deploy.set(logs: "2999-01-01T00:00:00.000000+00:00 app[web.1]: WARN slow query\n")
+
+      result = deploy.run('--yes')
+
+      expect(result.output).to include('Issues found in logs:', 'WARN slow query', 'Deploy complete!')
+    end
+
     it 'shows 30 lines and counts the rest' do
       deploy.set(logs: (1..35).map { "2999-01-01T00:00:00.000000+00:00 app[web.1]: ERROR number #{it}\n" }.join)
 
