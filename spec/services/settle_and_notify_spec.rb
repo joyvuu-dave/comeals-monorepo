@@ -336,6 +336,29 @@ RSpec.describe SettleAndNotify do
       expect(Reconciliation.pluck(:id)).to eq([settlement.reconciliation.id])
       expect(queued_cook_mail).to eq([[{ '_aj_globalid' => settlement.reconciliation.to_global_id.to_s }]])
     end
+
+    # Solid Queue's own bookkeeping runs at READ COMMITTED
+    # (config/initializers/solid_queue_isolation.rb). Queueing these two
+    # jobs is not bookkeeping: they are written in the settlement's own
+    # SERIALIZABLE transaction, and a refused commit takes both with it.
+    it 'queues both jobs in the settlement transaction, at SERIALIZABLE, and loses both when its commit is refused' do
+      settleable_meal(latest)
+      levels = []
+      allow(CommonHouseMailJob).to receive(:perform_later).and_wrap_original do |original, *args|
+        original.call(*args)
+        levels << ActiveRecord::Base.connection.select_value('SHOW transaction_isolation')
+        raise ActiveRecord::SerializationFailure, 'could not serialize access'
+      end
+      one_try = SettleAndNotify::Retries.new(attempts: 1, base_delay: 0.0)
+
+      expect { described_class.call(cutoff: latest, community: community, retries: one_try) }
+        .to raise_error(ActiveRecord::SerializationFailure)
+
+      expect(levels).to eq(['serializable'])
+      expect(Reconciliation.count).to eq(0)
+      expect(queued_cook_mail).to eq([])
+      expect(queued(CommonHouseMailJob)).to eq([])
+    end
   end
 
   # The admin form's Create button sends the fingerprint of the preview
