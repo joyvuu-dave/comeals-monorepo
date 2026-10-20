@@ -5,19 +5,23 @@
 # Sequence: prove the staging app cannot email or broadcast -> capture
 # a fresh production backup -> restore it into staging -> deploy HEAD
 # -> run migrations and the two money tasks against today's real data
-# -> boot -> check the logs -> smoke test. Any failure stops the script
-# with exit 1.
+# -> boot web and the worker -> check that Solid Queue came up -> check
+# the logs -> smoke test. Any failure stops the script with exit 1.
 #
 # The neuter check runs first and is absolute: staging holds a copy of
 # the production database, which contains real residents' email
 # addresses. If the app could send mail or push events, this script
-# must not put data on it.
+# must not put data on it. Because of it, staging can run its jobs: mail
+# is collected in memory, Pusher is a no-op, and there is no healthchecks
+# key. So the worker dyno runs here too, and the rehearsal proves this
+# commit's jobs dyno starts.
 #
 # Usage:
 #   bin/staging-rehearsal                  # rehearse HEAD, park after
-#   STAGING_KEEP_UP=1 bin/staging-rehearsal  # leave web running
-#                                            # (the pipeline promotes
-#                                            # right after, then parks)
+#   STAGING_KEEP_UP=1 bin/staging-rehearsal  # leave web and the worker
+#                                            # running (the pipeline
+#                                            # promotes right after,
+#                                            # then parks)
 #
 # SMOKE_EMAIL / SMOKE_PASSWORD pass through to bin/smoke for the
 # logged-in flows; without them the smoke checks the public surface.
@@ -85,16 +89,6 @@ for var in "${FORBIDDEN_VARS[@]}"; do
 done
 ok "No mail, healthchecks, Bugsnag, or Skylight credentials present"
 
-if ! addons=$(heroku addons -a "$STAGING_APP"); then
-  fail "Could not list the addons on $STAGING_APP, so the scheduler check cannot pass"
-  exit 1
-fi
-if grep -q scheduler <<< "$addons"; then
-  fail "A scheduler addon exists on $STAGING_APP — staging must not run jobs"
-  exit 1
-fi
-ok "No scheduler addon"
-
 # The clock process sends reminder emails and pings healthchecks. It
 # must never run here. (Before the first deploy the formation is empty,
 # which also passes.)
@@ -113,12 +107,26 @@ ok "Captured and fetched signed backup URL"
 
 step "Restore into staging"
 
-# Stop web while the database is replaced. Before the first deploy the
-# formation has no web entry; that is fine.
+# Stop web and the worker while the database is replaced. Before the
+# first deploy the formation has no web entry, and before the first
+# deploy with a worker dyno it has no worker entry; that is fine. Two
+# commands, because Heroku refuses the whole ps:scale when one type in
+# it is missing.
 heroku ps:scale web=0 -a "$STAGING_APP" 2>/dev/null || true
+heroku ps:scale worker=0 -a "$STAGING_APP" 2>/dev/null || true
 heroku pg:backups:restore "$backup_url" DATABASE_URL \
   -a "$STAGING_APP" --confirm "$STAGING_APP"
 ok "Production backup restored into staging"
+
+# The jobs dyno's processes each need more than one database connection
+# (lib/deploy_config_check.rb). Staging is not held to the release
+# check, so set the pool here, while nothing runs, the way bin/deploy
+# does for production.
+pool=$(heroku config:get RAILS_DB_POOL -a "$STAGING_APP")
+if ! [ "${pool:-0}" -ge 4 ] 2>/dev/null; then
+  info "Setting RAILS_DB_POOL=4 on $STAGING_APP (was '$pool')"
+  heroku config:set RAILS_DB_POOL=4 -a "$STAGING_APP"
+fi
 
 step "Deploy HEAD to staging"
 
@@ -193,7 +201,7 @@ ok "Smoke resident ready; smoke meal $SMOKE_MEAL_ID created"
 
 step "Boot"
 
-heroku ps:scale web=1 -a "$STAGING_APP"
+heroku ps:scale web=1 worker=1 -a "$STAGING_APP"
 
 staging_url=$(heroku apps:info -a "$STAGING_APP" --json | json "d['app']['web_url'].rstrip('/')")
 
@@ -222,6 +230,28 @@ if [ "$running_sha" != "$sha" ]; then
   exit 1
 fi
 ok "Running slug is the candidate commit"
+
+step "Solid Queue check"
+
+# Every process kind must have a fresh heartbeat. Two tries, because the
+# worker dyno can take longer to boot than web. Before the log check, so
+# the worker's boot lines are in it.
+solid_queue_up=false
+for attempt in 1 2; do
+  if heroku run --exit-code -a "$STAGING_APP" -- bin/rake deploy:verify_solid_queue; then
+    solid_queue_up=true
+    break
+  fi
+  if [ "$attempt" -eq 1 ]; then
+    info "Solid Queue is not up yet — asking again in 30s"
+    sleep 30
+  fi
+done
+if [ "$solid_queue_up" != true ]; then
+  fail "Solid Queue did not come up on staging. Read: heroku logs -a $STAGING_APP --dyno worker"
+  exit 1
+fi
+ok "Solid Queue runs on staging (supervisor, dispatcher, worker, scheduler)"
 
 step "Log check"
 
@@ -261,8 +291,8 @@ ok "Aggressive smoke passed"
 
 if [ "${STAGING_KEEP_UP:-}" != "1" ]; then
   step "Park"
-  heroku ps:scale web=0 -a "$STAGING_APP"
-  ok "Staging scaled back to zero"
+  heroku ps:scale web=0 worker=0 -a "$STAGING_APP"
+  ok "Staging web and worker scaled back to zero"
 fi
 
 echo
