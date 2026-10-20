@@ -87,10 +87,32 @@ RSpec.describe DeployConfigCheck do
                                   hostname: 'dyno')
     end
 
+    # The kinds as Solid Queue itself saves them. The supervisor's kind
+    # names its mode, "Supervisor(fork)" under the Puma plugin, so a list
+    # typed by hand ("Supervisor") passes here and fails on Heroku.
+    def real_kinds
+      supervisor = SolidQueue::ForkSupervisor.new(SolidQueue::Configuration.new(mode: :fork))
+      [supervisor.kind, 'Dispatcher', 'Worker', 'Scheduler']
+    end
+
     it 'passes when every kind has a heartbeat in the last two minutes' do
-      described_class::PROCESS_KINDS.each { |kind| register(kind, at: 1.minute.ago) }
+      real_kinds.each { |kind| register(kind, at: 1.minute.ago) }
 
       expect { described_class.verify_processes! }.not_to raise_error
+    end
+
+    it 'passes an async supervisor too' do
+      supervisor = SolidQueue::AsyncSupervisor.new(SolidQueue::Configuration.new(mode: :async))
+      [supervisor.kind, 'Dispatcher', 'Worker', 'Scheduler'].each { |kind| register(kind, at: 1.minute.ago) }
+
+      expect { described_class.verify_processes! }.not_to raise_error
+    end
+
+    it 'fails when only the supervisor has no fresh heartbeat' do
+      register(real_kinds.first, at: 3.minutes.ago)
+      real_kinds.drop(1).each { |kind| register(kind, at: 1.minute.ago) }
+
+      expect { described_class.verify_processes! }.to raise_error(/no heartbeat.*from Supervisor\./)
     end
 
     it 'fails on a kind whose last heartbeat is older than two minutes' do
