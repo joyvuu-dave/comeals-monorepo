@@ -40,7 +40,7 @@ require 'rails_helper'
 RSpec.describe 'two Solid Queue processes writing their own rows at the same moment' do
   include_context 'with no test transaction'
 
-  let(:supervisor) { register('Supervisor(fork)', 'supervisor-test') }
+  let(:supervisor) { register('Supervisor(async)', 'supervisor-test') }
   let!(:dispatcher) { register('Dispatcher', 'dispatcher-test', supervisor: supervisor) }
   let!(:worker) { register('Worker', 'worker-test', supervisor: supervisor) }
 

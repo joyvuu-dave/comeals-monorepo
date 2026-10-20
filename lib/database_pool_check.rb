@@ -14,8 +14,8 @@
 # The rule is the one already written in prose in config/database.yml: one
 # connection per Puma thread, plus one for the thread solid_cache uses to
 # trim old entries. Nothing else in the web dyno needs one — Solid Queue
-# runs on its own dyno (the worker in the Procfile), in processes with
-# pools of their own, so its jobs never compete here.
+# runs on its own dyno (the worker in the Procfile), in a process with a
+# pool of its own, so its jobs never compete here.
 #
 # Boot-time, in every environment, like
 # config/initializers/verify_transaction_isolation.rb: a deploy with the

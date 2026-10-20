@@ -53,7 +53,8 @@ plugin :tmp_restart
 
 # No Solid Queue here. The jobs run on their own dyno, the worker in the
 # Procfile (bin/jobs). Inside Puma, the supervisor and its three forks
-# needed more memory than a Basic dyno has.
+# needed more memory than a Basic dyno has. (The worker dyno now runs
+# Solid Queue in async mode, as threads of one process.)
 #
 # Plain Ruby only in this file: Heroku runs `bundle exec puma -C
 # config/puma.rb`, which reads it before Rails is loaded, so a Rails

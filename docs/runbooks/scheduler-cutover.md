@@ -9,7 +9,7 @@ no jobs and can be removed; the schedule lives in git.
 - The three daily jobs (`RefreshBalancesJob` 03:00 UTC, `VerifyLedgerJob`
   05:00, `EnsureRotationsJob` 22:30) run from `config/recurring.yml`, by
   Solid Queue's supervisor on its own dyno, the worker in the `Procfile`
-  (`worker: bin/jobs`). (`SetMultipliersJob` is
+  (`worker: env RAILS_DB_POOL=12 bin/jobs --mode async`). (`SetMultipliersJob` is
   gone since 2026-09-26: a resident's price band is computed from the
   birthday. Its Heroku Scheduler entry, `rake residents:set_multiplier`,
   and its healthchecks.io check, `residents-set-multiplier`, must be
@@ -60,7 +60,7 @@ until healthchecks.io's grace period (1 hour) ends and it emails you.
    too; that is step 4.
 2. Check the worker dyno: `heroku ps -a comeals-monorepo` lists
    `worker.1` as up, and `heroku logs -a comeals-monorepo --dyno worker`
-   shows `SolidQueue-1.7.0 Started Supervisor(fork)` (the number is the
+   shows `SolidQueue-1.7.0 Started Supervisor(async)` (the number is the
    solid_queue version). `bin/deploy` has already run
    `rake deploy:verify_solid_queue`.
 3. Confirm the catch-up ran: `heroku run rails runner 'puts JobRun.order(:id).last(4).map { |r| [r.name, r.outcome, r.finished_at] }'`.
@@ -118,18 +118,20 @@ config var:
   default of 2: the request thread (or the task) and solid_cache's trim
   thread. `DatabasePoolCheck` refuses to boot a process whose pool is
   smaller than its threads plus that one.
-- The worker dyno's line in the Procfile is `env RAILS_DB_POOL=3
-bin/jobs`. Each of its four processes (the supervisor, the dispatcher,
-  the worker and the scheduler) gets a pool of 3. That is Solid Queue's
-  own estimate for `config/queue.yml`: one connection per worker thread
-  (`threads: 1`), plus the polling thread and the heartbeat.
-  `spec/config/procfile_spec.rb` fails if `config/queue.yml` ever needs
-  more than the Procfile gives.
+- The worker dyno's line in the Procfile is `env RAILS_DB_POOL=12
+bin/jobs --mode async`. In async mode the supervisor runs the
+  dispatcher, the worker and the scheduler as threads of its one
+  process, so they share one pool of 12: one for each thread that can
+  hold a connection at the same moment (the supervisor 3, the dispatcher
+  3, the worker 3 for `threads: 1`, the scheduler 2, solid_cache's trim
+  thread 1). `spec/config/procfile_spec.rb` counts them from the gem's
+  code and the two config files, and fails if they ever need more than
+  the Procfile gives.
 
 | Process                                       | Usual | Pools full |
 | --------------------------------------------- | ----- | ---------- |
 | Web dyno                                      | 1–2   | 2          |
-| Worker dyno: four processes, 3 each           | 5–6   | 12         |
+| Worker dyno: one process, pool of 12          | 5–6   | 12         |
 | One-off `heroku run` (a rake task, a console) | 1–2   | 2          |
 | Release phase (`bin/rake db:migrate`)         | 1–2   | 2          |
 | All at once                                   | ~6–10 | 18         |

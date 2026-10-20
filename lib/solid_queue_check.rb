@@ -5,9 +5,10 @@
 #
 # Since 2026-09-15 every live update is a Solid Queue job (ADR 0007), and
 # the nightly jobs run from config/recurring.yml. Both need Solid Queue's
-# supervisor, which runs on its own dyno (`worker: env RAILS_DB_POOL=3
-# bin/jobs` in the Procfile) and forks a dispatcher, a worker and a
-# scheduler. A release can be fine and the worker dyno still be at 0 or
+# supervisor, which runs on its own dyno (`worker: env RAILS_DB_POOL=12
+# bin/jobs --mode async` in the Procfile) with a dispatcher, a worker and
+# a scheduler as threads of its process. Each of the four still writes
+# its own heartbeat row. A release can be fine and the worker dyno still be at 0 or
 # fail to start, so bin/deploy, the weekly workflow and the staging
 # rehearsal run `deploy:verify_solid_queue` afterwards: every process kind
 # must have a fresh heartbeat.

@@ -7,11 +7,14 @@
 # screens up to about 5 seconds late.
 #
 # In production the supervisor runs on its own dyno: `worker: env
-# RAILS_DB_POOL=3 bin/jobs` in the Procfile. It runs in fork mode, so the
-# dispatcher, the worker and the scheduler are three processes beside it,
-# each with its own database pool of 3: one connection per worker thread,
-# plus polling and heartbeat. Raising `threads` needs a larger pool there;
-# spec/config/procfile_spec.rb fails until it has one.
+# RAILS_DB_POOL=12 bin/jobs --mode async` in the Procfile. In async mode
+# the dispatcher, the worker and the scheduler are threads of the
+# supervisor's one process, and every thread draws from its one pool of
+# 12. spec/config/procfile_spec.rb counts the threads that can hold a
+# connection at the same moment, and fails if raising `threads` (or
+# adding a recurring task due at the same minute as another) needs a
+# larger pool than the Procfile gives. Solid Queue's own bookkeeping runs
+# at READ COMMITTED (config/initializers/solid_queue_isolation.rb).
 default: &default
   dispatchers:
     - polling_interval: 5

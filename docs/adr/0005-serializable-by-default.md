@@ -327,6 +327,61 @@ and it has to be fixed before anything else moves — otherwise every later
 measurement is read through a poisoned database. It also means the retry helper
 is needed by the specs before it is needed by the application.
 
+### 10. One exception: Solid Queue's own bookkeeping runs at READ COMMITTED
+
+Added 2026-10-20. Solid Queue keeps its records in the solid_queue\_\*
+tables of this database: which processes are alive, which jobs are
+ready, which a worker has claimed, which wait for a later time or for a
+`limits_concurrency` slot. The transactions it opens on its own threads
+to keep those records run at READ COMMITTED. Nothing else does: no app
+table is ever written at READ COMMITTED, every job's `perform` runs at
+SERIALIZABLE, and every job the app queues is written in the app's own
+SERIALIZABLE transaction. So the settlement's two mail jobs still commit
+or roll back with the settlement.
+
+Why. At SERIALIZABLE these transactions cancel each other. Each process
+writes its own row every 60 seconds, the processes start together, and
+each write reads the whole small table, so two at the same moment cancel
+one. On staging that was about 6 errors an hour; locally, 24 in 25
+minutes, and 2 of 3 processes on every shutdown. The dispatcher moving a
+due job to ready cancels against a worker's poll, and so does a job's
+finish. Worse, a worker's poll reads the ready table, so it can make an
+app transaction that queues a job fail when that transaction read a row
+another request then changed; without the poll it would have committed.
+Solid Queue does not retry its own steps. Each failure is a lost step
+and an unhandled error in Bugsnag. And Solid Queue's next release stops
+a process whose heartbeats keep failing past 5 minutes, and stops a
+worker when it cannot mark a job finished
+(rails/solid_queue#778 and commit e48f29b, both after 1.7.0), so these
+failures would start stopping processes.
+
+What it gives up. PostgreSQL checks for conflicts only among
+SERIALIZABLE transactions, so these writes are outside that check. They
+touch only Solid Queue's own tables, which no app transaction reads to
+make a decision, and Solid Queue is written for READ COMMITTED (its
+README says it runs that way itself). Two parts stay at SERIALIZABLE
+anyway: a call made inside a transaction that is already open joins it,
+and a statement Solid Queue runs outside a transaction (giving back a
+semaphore, deleting expired ones) runs at the session's level, because
+Rails sets the level only for transactions it opens. Neither failed in
+the runs above. One conflict this does not remove: an app transaction
+that queues a `limits_concurrency` job can still fail if a job with the
+same key finished after it started, because it locks that key's
+semaphore row. `RetryOnConflict` retries that, as it retries any
+conflict.
+
+How. `config/initializers/solid_queue_isolation.rb` wraps the ten gem
+methods that open those transactions in
+`ActiveRecord.with_transaction_isolation_level(:read_committed)`. Boot
+fails if one of them is gone after an upgrade. The specs:
+`spec/db/solid_queue_process_rows_race_spec.rb` and
+`spec/db/solid_queue_bookkeeping_race_spec.rb` (the conflicts),
+`spec/config/initializers/solid_queue_isolation_spec.rb` (every method
+wrapped; a real worker runs a job's `perform` at SERIALIZABLE and its
+own steps at READ COMMITTED; an app enqueue stays SERIALIZABLE and rolls
+back), and `spec/services/settle_and_notify_spec.rb` (both mail jobs
+roll back with a refused settlement).
+
 ## Consequences
 
 - `spec/db/settlement_race_spec.rb` needs one example rewritten, not the file.
@@ -474,6 +529,11 @@ is needed by the specs before it is needed by the application.
   order"). The 2026-09-11 entry above still holds for the order of the
   locks: `LocksItsMealFirst` locks the meal `FOR KEY SHARE` before the
   row, and the trigger's update comes after the row.
+- **2026-10-20** — Solid Queue's own bookkeeping runs at READ COMMITTED,
+  the one exception to this ADR (decision 10). Its heartbeats, its
+  shutdown, its poll, its dispatch and its job finish cancelled each
+  other at SERIALIZABLE, and the poll could cancel an app transaction
+  that queued a job.
 
 The full record of the rollout, step by step, is in
 [docs/serializable-rollout.md](../serializable-rollout.md).
