@@ -8,7 +8,8 @@ no jobs and can be removed; the schedule lives in git.
 
 - The three daily jobs (`RefreshBalancesJob` 03:00 UTC, `VerifyLedgerJob`
   05:00, `EnsureRotationsJob` 22:30) run from `config/recurring.yml`, by
-  Solid Queue's supervisor inside the web dyno. (`SetMultipliersJob` is
+  Solid Queue's supervisor on its own dyno, the worker in the `Procfile`
+  (`worker: bin/jobs`). (`SetMultipliersJob` is
   gone since 2026-09-26: a resident's price band is computed from the
   birthday. Its Heroku Scheduler entry, `rake residents:set_multiplier`,
   and its healthchecks.io check, `residents-set-multiplier`, must be
@@ -25,26 +26,31 @@ no jobs and can be removed; the schedule lives in git.
   has a cook without it, and the common house mail for each that has not
   sent it. It reports to Bugsnag a settlement that reaches 7 days with a
   mail still not sent. It leaves alone every settlement
-  made before its own first run, which happens at boot (step 4): those
+  made before its own first run, which happens when the supervisor first
+  starts (step 4): those
   were mailed before the app kept a record of each mail.
 - Every run writes a `job_runs` row and pings the same healthchecks.io
   checks as before, so the "late" alerts keep working unchanged.
-- `RecurringCatchUp` runs at Puma boot and enqueues any job that missed
-  its last tick while the dyno was down.
+- `RecurringCatchUp` runs once each time the supervisor starts (its start
+  hook, `config/initializers/solid_queue.rb`) and enqueues any job that
+  missed its last tick while the worker dyno was down.
 
-## Since 2026-09-16 the deploy enforces steps 2 and 3
+## The deploy does steps 1 to 3 itself
 
 The Procfile's release phase runs `rake deploy:verify_config` before the
 migration. On production it refuses the release when `RAILS_DB_POOL` is
-under 4 or `SOLID_QUEUE_IN_PUMA` is unset, so Heroku keeps the previous
-release serving; the message names the exact `heroku config:set` to
-run. `bin/deploy` and the weekly workflow both set the two vars before
-they push or promote when production lacks them, and afterwards run
-`rake deploy:verify_solid_queue`, which fails unless the supervisor,
+under 4, so Heroku keeps the previous release serving; the message names
+the exact `heroku config:set` to run. `bin/deploy` and the weekly
+workflow both set the pool before they push or promote when production
+lacks it. Both scale the worker dyno to 1 after the release, and then
+run `rake deploy:verify_solid_queue`, which fails unless the supervisor,
 dispatcher, worker and scheduler all have a heartbeat from the last two
-minutes. `bin/deploy` stops on that; the workflow rolls back. Staging is exempt from the
-config check (`COMEALS_STAGING`), because staging must not run jobs. The
-steps below are still the record of what happens and why.
+minutes. `bin/deploy` stops on that; the workflow rolls back. Staging is
+exempt from the config check (`COMEALS_STAGING`): `bin/staging-rehearsal`
+sets the pool there itself, runs the worker dyno during the rehearsal
+(staging is neutered, so its jobs send nothing out), checks the same
+heartbeats, and parks both dynos at the end. The steps below are still
+the record of what happens and why.
 
 ## Steps
 
@@ -53,30 +59,34 @@ Queue fails to start, the jobs still run from Scheduler while you fix it;
 deleting first would mean the jobs do not run, and nothing tells you,
 until healthchecks.io's grace period (1 hour) ends and it emails you.
 
-1. Deploy (`bin/deploy`). The migration creates Solid Queue's tables and
-   `job_runs` in the primary database. Scheduler is still running the
-   jobs; nothing about them changes yet.
-2. Raise the database pool before starting the supervisor, not after:
-   `heroku config:set RAILS_DB_POOL=4 -a comeals-monorepo`. Today's pool
-   of 2 is sized for one web request thread plus solid_cache's background
-   trim thread (`config/database.yml` says so). The Puma plugin starts
-   Solid Queue's supervisor, which forks the dispatcher, the scheduler,
-   and the worker as separate processes. Each process gets its own pool
-   of `RAILS_DB_POOL` connections, and each holds one open while it polls
-   or runs a job. So the dyno goes from about 2 Postgres sessions to
-   about 6 (web, trim thread, and one per Solid Queue process). A job
-   that runs the solid_cache trim thread as well wants a second
-   connection in its process; the pool of 4 leaves room for that. Check
-   the Postgres plan's connection ceiling first (`heroku pg:info`) and
-   count a one-off dyno on top; 6 is far under any Heroku Postgres plan's
-   limit, but confirm before raising the pool further.
-3. Set the config var that starts the supervisor inside Puma:
-   `heroku config:set SOLID_QUEUE_IN_PUMA=true -a comeals-monorepo`.
-   The dyno restarts; the log shows `SolidQueue-1.7.0 Started Supervisor(fork)`
-   (the number is the solid_queue version).
+1. Raise the database pool before the deploy:
+   `heroku config:set RAILS_DB_POOL=4 -a comeals-monorepo`. (`bin/deploy`
+   sets it too when it is missing, after its question and before the
+   backup.) The pool of 2 was sized for one web request thread plus
+   solid_cache's background trim thread (`config/database.yml` says so).
+   The worker dyno runs Solid Queue's supervisor, which forks the
+   dispatcher, the scheduler and the worker as separate processes. Each
+   of the four processes has its own pool of `RAILS_DB_POOL` connections
+   and uses more than one at once: the poll or the main loop, the
+   heartbeat thread, a running job, and the trim thread when a job
+   writes to the cache. The connection count is in "Database
+   connections" below.
+2. Deploy (`bin/deploy`). The migration creates Solid Queue's tables and
+   `job_runs` in the primary database. The release adds the `worker`
+   process type, and `bin/deploy` scales it to 1 after the cache clear
+   and the balance recalculation. Scheduler is still running the jobs
+   too; that is step 5.
+3. Check the worker dyno: `heroku ps -a comeals-monorepo` lists
+   `worker.1` as up, and `heroku logs -a comeals-monorepo --dyno worker`
+   shows `SolidQueue-1.7.0 Started Supervisor(fork)` (the number is the
+   solid_queue version). `bin/deploy` has already run
+   `rake deploy:verify_solid_queue`.
 4. Confirm the catch-up ran: `heroku run rails runner 'puts JobRun.order(:id).last(4).map { |r| [r.name, r.outcome, r.finished_at] }'`.
-   Every job that had never recorded a run is due at boot, so all four
-   should have a row within a minute of the restart.
+   Every job that had never recorded a run is due when the supervisor
+   starts, so all four should have a row within a minute of it.
+   `RefreshBalancesJob` may already have one from the deploy's own
+   `billing:recalculate`, which runs the same job before the worker
+   starts.
 5. Leave both schedules running for one full day. Each healthchecks.io
    check should receive two pings per day (Scheduler's and Solid Queue's),
    except `send-missed-settlement-mail`, which only Solid Queue runs.
@@ -96,10 +106,9 @@ until healthchecks.io's grace period (1 hour) ends and it emails you.
 Since 2026-09-15 every push to Pusher is a `LivePushJob` (ADR 0007). If
 the supervisor is not running, writes still commit and the calendar
 cache still clears, but no open screen is told to refetch until it
-reconnects. So `SOLID_QUEUE_IN_PUMA` must be set on the same deploy
-that carries this change, and step 3 above is not optional. A quick
-check after a deploy: change a meal's description in admin and watch
-an open calendar tab refresh.
+reconnects. So the worker dyno must run from the deploy that carries
+this change on. A quick check after a deploy: change a meal's
+description in admin and watch an open calendar tab refresh.
 
 ## If a job stops running
 
@@ -107,13 +116,41 @@ an open calendar tab refresh.
   and its outcome or error.
 - `SolidQueue::FailedExecution.count` — jobs Solid Queue gave up on;
   each row holds the error.
-- `SolidQueue::Process.all` — the supervisor, dispatcher, and worker
-  should each have a recent `last_heartbeat_at`. None means the
-  supervisor is not running: check `SOLID_QUEUE_IN_PUMA` is set.
+- `SolidQueue::Process.all` — the supervisor, dispatcher, worker and
+  scheduler should each have a recent `last_heartbeat_at`. None means
+  the supervisor is not running: check that the worker dyno runs
+  (`heroku ps -a comeals-monorepo`; start it with
+  `heroku ps:scale worker=1 -a comeals-monorepo`) and read its log
+  (`heroku logs -a comeals-monorepo --dyno worker`).
 - To run a job by hand: `heroku run rails runner 'RefreshBalancesJob.perform_now'`
   (or the old rake task, which is now the same thing).
 
-## Moving to a worker dyno later
+## Database connections
 
-Add `worker: bin/jobs` to the `Procfile`, unset `SOLID_QUEUE_IN_PUMA`, and
-scale the worker to one dyno. Nothing else changes.
+Heroku Postgres essential-1 allows 20 connections. A process opens a
+connection only when one of its threads needs one, so the pool size
+(`RAILS_DB_POOL=4`) is a limit for each process, not a count.
+
+| Process                                           | Usual | Threads allow | Pools allow |
+| ------------------------------------------------- | ----- | ------------- | ----------- |
+| Web dyno: one Puma thread, the trim thread        | 1–2   | 2             | 4           |
+| Worker dyno: supervisor and three forks           | 5–7   | about 13      | 16          |
+| One-off `heroku run` (a rake task, a console)     | 1–2   | 2             | 4           |
+| Release phase (`deploy:verify_config db:migrate`) | 1–2   | 2             | 4           |
+| All at once                                       | ~13   | ~19           | 28          |
+
+The worker dyno's 5 is measured: `bin/jobs` with this `config/queue.yml`
+held 5 idle connections for its 4 processes. A running job adds one,
+and one more when it writes to the cache. Each Solid Queue process has
+three or four threads that can use the database at once (the main loop,
+the heartbeat, a job, a timer), which gives the 13.
+
+The closest a real moment comes to 20 is a push deploy. Heroku restarts
+both dynos, and an old dyno can take up to 30 seconds to stop while the
+new one boots, so for that time there can be two worker dynos (about 7
+each) and two web dynos (about 2 each), and `bin/deploy` starts its
+cache clear in a one-off dyno right then: about 20. A maintenance deploy
+does not have this, because web and the worker are at 0 while the
+release and the one-off dynos run. If the logs ever show `too many
+connections`, the choices are a plan with more connections, PgBouncer,
+or a smaller pool for the worker dyno alone, set in its Procfile line.

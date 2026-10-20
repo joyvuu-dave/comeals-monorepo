@@ -9,8 +9,9 @@ with many requests at the same time and check every answer.
 
 Production runs Puma with one thread (`config/puma.rb`). These tests run
 many on purpose: one thread hides every bug of this kind, and the other
-processes production does have (a rake task in its own dyno, an admin in
-a browser) are enough to trigger some of them (ADR 0003).
+processes production does have (a rake task in its own dyno, the jobs on
+the worker dyno, an admin in a browser) are enough to trigger some of them
+(ADR 0003).
 
 ## The four layers
 

@@ -30,6 +30,13 @@ with a one-line reason. Leave `release` empty for the release before the
 current one. It rolls back, runs the smoke test, pauses the daily deploy
 (`DEPLOY_HOLD`), marks the release note, and files an issue to fix main.
 
+The worker dyno follows the release it goes back to. When that release
+has a worker process type, the worker runs its code after the rollback.
+When it has none (a release from before the worker dyno), the workflow
+scales the worker to 0 before the rollback and says so: that code runs
+no Solid Queue, and the new code's jobs must not run beside it. The
+Deploy workflow's automatic rollback does the same.
+
 ## A migration ran: restore the backup, or fix forward
 
 Two choices. Pick one before touching anything.
@@ -60,21 +67,24 @@ day of sign-ups and costs that nobody can type in again from memory.
    - `backup`: the id from step 1.
 
    It turns maintenance mode on, captures a backup of the database as it
-   is, scales web to 0, waits until no web dyno runs, restores the backup
-   from step 1, and rolls back the code. It waits for the rollback's
-   release phase to succeed, scales web back to the number of web dynos
-   it had, waits until they are up, turns maintenance off, and runs the
-   smoke test. Then it does the same bookkeeping as a code-only rollback.
+   is, scales web and the worker to 0, waits until neither runs, restores
+   the backup from step 1, and rolls back the code. It waits for the
+   rollback's release phase to succeed, scales the worker to 1 when the
+   release it went back to has a worker process type, scales web back to
+   the number of web dynos it had, waits until they are up, turns
+   maintenance off, and runs the smoke test. Then it does the same bookkeeping as a code-only rollback.
    While maintenance is on, Heroku answers every web request with the
    maintenance page, so nobody can write through a page or the API.
 
-   Web goes to 0 because maintenance mode does not stop the background
-   jobs. Solid Queue runs inside the web dyno (`SOLID_QUEUE_IN_PUMA`),
-   and the web dyno keeps running under maintenance mode. With web at 0,
-   no job of the new code runs on the restored database (#179). The
+   The worker goes to 0 because maintenance mode does not stop the
+   background jobs: Solid Queue runs on the worker dyno, which keeps
+   running under maintenance mode. With it at 0, no job of the new code
+   runs on the restored database (#179). A release from before the
+   worker dyno has no worker process type; the workflow then stops the
+   worker before the rollback, leaves it at 0, and says so. The
    maintenance page still shows with no web dyno. Heroku Scheduler jobs
-   run in one-off dynos, not in the web dyno, so web at 0 does not stop
-   them; if one is due in the next few minutes, wait until it ends.
+   run in one-off dynos, so neither scale stops them; if one is due in
+   the next few minutes, wait until it ends.
 
 3. If the deploy deleted Heroku Scheduler entries, add them back. The
    schedule moves to Solid Queue at the deploy after v613
@@ -93,19 +103,23 @@ day of sign-ups and costs that nobody can type in again from memory.
 
 The workflow's last step before the smoke test, "Say what to do by
 hand", prints which state it left and the commands to run. It never
-starts web again by itself.
+starts web or the worker again by itself.
 
 - Maintenance is still on: production shows the maintenance page. That
   is the safe state; nobody can write.
-- Web is at 0 (`heroku ps -a comeals-monorepo` lists no web dyno): no
-  job runs. Leave it at 0 until the old code runs, because the new
-  code's jobs would run on the restored database. Start it with
-  `heroku ps:scale web=1 -a comeals-monorepo` as the last step before
-  maintenance goes off.
+- Web and the worker are at 0 (`heroku ps -a comeals-monorepo` lists no
+  web or worker dyno): no job runs. Leave them at 0 until the old code
+  runs, because the new code's jobs would run on the restored database.
+  Then start the worker with `heroku ps:scale worker=1 -a comeals-monorepo`
+  only when that release has a worker process type (the step prints
+  which), and start web with `heroku ps:scale web=1 -a comeals-monorepo`
+  as the last step before maintenance goes off.
 - The restore failed: check that a backup of the database as it was got
   captured (`heroku pg:backups -a comeals-monorepo`), capture one if not,
   then run by hand, in this order:
-  `heroku ps:scale web=0 -a comeals-monorepo`,
+  `heroku ps:scale web=0 -a comeals-monorepo`, and
+  `heroku ps:scale worker=0 -a comeals-monorepo` when `heroku ps` lists a
+  worker,
   `heroku pg:backups:restore <id> DATABASE_URL -a comeals-monorepo --confirm comeals-monorepo`,
   `heroku rollback <release> -a comeals-monorepo`, wait until
   `heroku releases -a comeals-monorepo` shows that release as succeeded,

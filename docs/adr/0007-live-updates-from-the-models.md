@@ -110,7 +110,9 @@ inside it: a step that runs after the commit does not belong in a block
 whose retry would settle the period again.
 
 This means live updates need the Solid Queue supervisor running, the
-same as the nightly jobs (`docs/runbooks/scheduler-cutover.md`). In the
+same as the nightly jobs (`docs/runbooks/scheduler-cutover.md`). Since
+2026-10-20 the supervisor runs on its own dyno, the worker in the
+Procfile; before that it ran inside Puma. In the
 test suite the test adapter runs `LivePushJob` inline, so a spec sees
 the Pusher call right after the write (`spec/rails_helper.rb`).
 

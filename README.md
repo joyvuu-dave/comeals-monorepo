@@ -6,8 +6,9 @@ sign up for shared dinners, volunteer to cook, and the cost is split
 proportionally among the people who attended.
 
 One repository holds both parts: a Rails 8.1 API and a React 19 single-page
-app. In production, one Heroku dyno runs Rails, which serves the app from
-`public/` and the API from `/api/v1/`.
+app. In production, one Heroku web dyno runs Rails, which serves the app
+from `public/` and the API from `/api/v1/`. A second dyno, the worker, runs
+the background jobs (Solid Queue, `bin/jobs`).
 
 ## Getting Started
 
