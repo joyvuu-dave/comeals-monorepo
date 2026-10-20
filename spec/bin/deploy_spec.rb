@@ -15,6 +15,7 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
   let(:deploy) { DeployHarness.new(self.class.metadata[:bash_coverage]) }
   let(:head) { deploy.commits[:head] }
   let(:recovery_banner) { 'DEPLOY FAILED — MANUAL RECOVERY REQUIRED' }
+  let(:production_git) { 'https://git.heroku.com/comeals-monorepo.git' }
 
   after { deploy.cleanup }
 
@@ -293,6 +294,33 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       expect(result.status).to eq(1)
       expect(result.output).to include("No 'heroku' git remote", 'Run: heroku git:remote -a comeals-monorepo')
       expect_nothing_changed_in_production
+    end
+
+    # `heroku git:remote -a comeals-staging` points the heroku remote at
+    # staging. The deploy would then back up and stop production, push the
+    # new code to staging, and start production again on the old code.
+    it 'refuses when the heroku remote points at another app' do
+      deploy.git('remote', 'set-url', 'heroku', 'https://git.heroku.com/comeals-staging.git')
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include(
+        "The heroku remote points at https://git.heroku.com/comeals-staging.git, not at #{production_git}",
+        'Run: heroku git:remote -a comeals-monorepo'
+      )
+      expect(deploy.calls_to('git').grep(/push|fetch heroku/)).to eq([])
+      expect_nothing_changed_in_production
+    end
+
+    # The ssh address is the older form of the same remote.
+    it 'accepts the ssh address of the production app' do
+      deploy.git('remote', 'set-url', 'heroku', 'git@heroku.com:comeals-monorepo.git')
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(0)
+      expect(result.output).to include('heroku remote -> git@heroku.com:comeals-monorepo.git')
     end
 
     it 'refuses on a branch other than main' do
