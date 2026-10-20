@@ -6,6 +6,26 @@
 //
 // The mark is cleared when an import works, so a tab that reloaded at one
 // deploy can reload again at the next.
+//
+// During a deploy Heroku answers every file with its maintenance page,
+// which never reloads. So the reload waits until /api/v1/version
+// answers, asking every 30 seconds. The page shows "Loading..." until
+// then.
+const RETRY_MS = 30 * 1000;
+
+function reloadWhenServerAnswers() {
+  function tryAgainLater() {
+    setTimeout(reloadWhenServerAnswers, RETRY_MS);
+  }
+  fetch("/api/v1/version", { cache: "no-store" }).then(function (response) {
+    if (response.ok) {
+      window.location.reload();
+    } else {
+      tryAgainLater();
+    }
+  }, tryAgainLater);
+}
+
 export default function lazyRetry(importFn) {
   return function () {
     return importFn().then(
@@ -16,7 +36,7 @@ export default function lazyRetry(importFn) {
       function (err) {
         if (!sessionStorage.getItem("chunk_retry")) {
           sessionStorage.setItem("chunk_retry", "1");
-          window.location.reload();
+          reloadWhenServerAnswers();
           return new Promise(function () {});
         }
         sessionStorage.removeItem("chunk_retry");
