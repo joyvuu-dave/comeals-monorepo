@@ -19,7 +19,9 @@
 # Subclasses set HEALTHCHECK to their healthchecks.io slug and implement
 # `run`, which may return a hash of details to store on the run record.
 class RecurringJob < ApplicationJob
-  limits_concurrency key: ->(*) { name }, duration: 1.hour
+  # Solid Queue runs this block on the job, not on its class
+  # (spec/jobs/recurring_job_perform_later_spec.rb).
+  limits_concurrency key: ->(*) { self.class.name }, duration: 1.hour
 
   # A run that reads rows and writes rows can be refused by PostgreSQL for
   # a conflict with another transaction (ADR 0005): the balance refresh
