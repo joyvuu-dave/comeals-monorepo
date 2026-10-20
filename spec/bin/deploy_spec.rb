@@ -62,6 +62,38 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       )
     end
 
+    # Some data-fix migrations write what they deleted only to the release
+    # phase output. The person running the deploy keeps this file.
+    it 'saves the release phase output to a file under tmp/deploy and prints its path' do
+      result = deploy.run('--yes')
+
+      files = Dir[File.join(deploy.repo, 'tmp/deploy/release-output-*.txt')]
+      expect(files.size).to eq(1)
+      expect(File.basename(files.first)).to match(/\Arelease-output-\d{8}T\d{6}Z\.txt\z/)
+      expect(File.read(files.first)).to eq("Running release command... migrating\n")
+      path = files.first.delete_prefix("#{deploy.repo}/")
+      expect(result.output).to include("Release phase output saved to #{path} (keep this file)")
+      expect(deploy.calls).to include('heroku releases:output -a comeals-monorepo')
+    end
+
+    # The release already ran, so the deploy goes on. The warning says how
+    # to save the output by hand.
+    it 'warns and goes on when it cannot read the release phase output' do
+      deploy.rule('heroku', '^releases:output', exit: 1, stderr: "releases:output failed\n")
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(0)
+      path = Dir[File.join(deploy.repo, 'tmp/deploy/release-output-*.txt')].first.delete_prefix("#{deploy.repo}/")
+      expect(result.output).to include(
+        'Could not read the release phase output. Save it by hand now:',
+        "heroku releases:output -a comeals-monorepo > #{path}",
+        'Release phase succeeded', 'Deploy complete!'
+      )
+      expect(result.output).not_to include('Release phase output saved')
+      expect_production(maintenance: false, web: 1, pushed: true)
+    end
+
     it 'takes the backup before it pushes' do
       deploy.run('--yes')
 
@@ -86,6 +118,7 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
                     .map { it.delete_suffix(' -a comeals-monorepo').delete_suffix(' --json') }
       expect(steps).to eq([
                             'heroku maintenance:on', 'heroku ps:scale web=0', 'heroku releases -a comeals-monorepo',
+                            'heroku releases:output',
                             'heroku run --exit-code bin/rails runner Rails.cache.clear',
                             'heroku run --exit-code bin/rake billing:recalculate',
                             'heroku ps:scale web=1', 'heroku maintenance:off'
@@ -524,7 +557,7 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       result = deploy.run('--yes')
 
       expect(result.output).to include('Release phase succeeded', 'Deploy complete!')
-      expect(deploy.calls_to('heroku').grep(/releases/).size).to eq(3)
+      expect(deploy.calls_to('heroku').grep(/releases -a/).size).to eq(3)
       expect(deploy.calls_to('sleep').first(2)).to eq(['sleep 5', 'sleep 5'])
     end
 

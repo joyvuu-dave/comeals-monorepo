@@ -20,7 +20,7 @@ class DeployHarness
   FAKE_NAMES = %w[heroku git gh curl bundle npm sleep].freeze
   # The local tools bin/deploy (and the fakes) run. None talks to another
   # machine.
-  LOCAL_TOOLS = %w[awk cat date dirname grep head python3 tail].freeze
+  LOCAL_TOOLS = %w[awk cat date dirname grep head mkdir python3 tail].freeze
   RULE_OPTIONS = %i[stdout stderr exit times].freeze
 
   Result = Struct.new(:output, :status)

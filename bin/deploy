@@ -338,6 +338,24 @@ disable_maintenance() {
   MAINTENANCE_ENABLED=false
 }
 
+# Some data-fix migrations write what they deleted only to the release
+# phase output, which only Heroku holds. So save it to a file under
+# tmp/deploy/ that the person running the deploy keeps. The release has
+# already run by now, so a failure here does not stop the deploy: it says
+# how to save the output by hand.
+RELEASE_OUTPUT_FILE=""
+
+save_release_output() {
+  RELEASE_OUTPUT_FILE="tmp/deploy/release-output-$(date -u +%Y%m%dT%H%M%SZ).txt"
+  mkdir -p tmp/deploy
+  if heroku releases:output -a "$APP" >"$RELEASE_OUTPUT_FILE" 2>&1; then
+    ok "Release phase output saved to $RELEASE_OUTPUT_FILE (keep this file)"
+  else
+    warn "Could not read the release phase output. Save it by hand now:"
+    warn "  heroku releases:output -a $APP > $RELEASE_OUTPUT_FILE"
+  fi
+}
+
 # git push exits 0 even when the release phase fails (bin/staging-rehearsal
 # saw this on 2026-08-17). Ask Heroku what the newest release did, and stop
 # before the web dyno comes back up. Wait while the release is still pending.
@@ -352,9 +370,10 @@ check_release_status() {
     tries=$((tries + 1))
     sleep 5
   done
+  save_release_output
   if [ "$status" != "succeeded" ]; then
     fail "The release phase did not succeed (status: $status). Its output:"
-    heroku releases:output -a "$APP" | tail -30
+    tail -30 "$RELEASE_OUTPUT_FILE"
     if [ "$MAINTENANCE_ENABLED" = true ]; then
       info "Maintenance stays on and web stays at 0. Do not scale web up until you know which migrations ran: the old code may not work on the new schema."
     fi
