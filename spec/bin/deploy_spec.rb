@@ -127,6 +127,20 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       expect(push).to be > deploy.calls.index('heroku ps:scale web=0 -a comeals-monorepo')
     end
 
+    # After a rollback, the main branch of Heroku's git repository is the
+    # commit that was rolled back, not the one that runs. A migration
+    # between the two must still turn maintenance on.
+    it 'compares migrations with the commit production runs, not with Heroku git main' do
+      deploy.production(heroku_sha: deploy.commits[:first_migration], git_sha: deploy.commits[:second_migration])
+
+      result = deploy.run('--yes')
+
+      expect(result.output).to include('Migration changes detected — maintenance deploy required:',
+                                       'db/migrate/20260201000000_second.rb', 'MAINTENANCE deploy (has migrations)')
+      expect(deploy.calls).to include('heroku maintenance:on -a comeals-monorepo')
+      expect_production(maintenance: false, web: 1, pushed: true)
+    end
+
     it 'uses maintenance when it cannot read the commit Heroku runs' do
       deploy.production(heroku_sha: '')
 

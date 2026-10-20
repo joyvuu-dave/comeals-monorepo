@@ -62,8 +62,11 @@ class DeployHarness
 
   # The fake production app before the run: maintenance ('on' or 'off'),
   # web, backups, releases (the statuses `heroku releases` answers, one per
-  # call, then 'succeeded'), heroku_sha (what `git ls-remote heroku`
-  # answers; '' for nothing) and config.
+  # call, then 'succeeded'), heroku_sha (the commit production runs, which
+  # `heroku config:get HEROKU_SLUG_COMMIT` answers, and the main branch of
+  # Heroku's git repository, which `git ls-remote heroku` answers; '' for
+  # nothing), git_sha (Heroku's git main when it is not the commit that
+  # runs, as after a rollback) and config.
   def production(**values) = @state.merge!(values)
 
   def git(*)
@@ -126,7 +129,7 @@ class DeployHarness
     {
       maintenance: read['maintenance'] == 'on', web: Integer(read['web']), backups: Integer(read['backups']),
       pushed: read['pushed'].then { it.empty? ? nil : it },
-      config: Dir.children(File.join(dir, 'config')).sort.index_with { read["config/#{it}"] }
+      config: (Dir.children(File.join(dir, 'config')) - ['HEROKU_SLUG_COMMIT']).sort.index_with { read["config/#{it}"] }
     }
   end
 
@@ -156,9 +159,10 @@ class DeployHarness
       'count' => '0', 'real_git' => real_git, 'logs' => @scenario[:logs], 'check_runs' => @scenario[:check_runs],
       'state/maintenance' => @state[:maintenance], 'state/web' => @state[:web].to_s,
       'state/backups' => @state[:backups].to_s, 'state/releases' => @state[:releases].map { "#{it}\n" }.join,
-      'state/pushed' => @state[:pushed], 'state/heroku_sha' => @state[:heroku_sha]
+      'state/pushed' => @state[:pushed], 'state/heroku_sha' => @state.fetch(:git_sha, @state[:heroku_sha])
     )
     @state[:config].each { |var, value| files["state/config/#{var}"] = value }
+    files['state/config/HEROKU_SLUG_COMMIT'] = @state[:heroku_sha]
     files.each do |path, body|
       FileUtils.mkdir_p(File.dirname(File.join(fake_home, path)))
       File.write(File.join(fake_home, path), body)
