@@ -12,6 +12,7 @@ import {
 } from "../../helpers/screen_home";
 import type { OpenForm } from "../../helpers/screen_home";
 import { signedIn } from "../../helpers/session";
+import { whenServerAnswers } from "../../helpers/when_server_answers";
 import toastStore from "../../stores/toast_store";
 
 // What this uses in the DataStore.
@@ -126,8 +127,12 @@ export default function BackToToday({ store }: { store: ScreenStore }) {
           form: openForm(store),
         });
         if (load !== null) {
+          // During a deploy the server answers with its maintenance page,
+          // which never reloads itself, so the load waits for the server.
           loadAfterBillsSaves(store, function () {
-            window.location.assign(load);
+            whenServerAnswers(function () {
+              window.location.assign(load);
+            });
           });
           return;
         }
