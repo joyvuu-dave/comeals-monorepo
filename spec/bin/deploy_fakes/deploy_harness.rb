@@ -37,7 +37,7 @@ class DeployHarness
     @scenario = { check_runs: "test|completed|success\nlint|completed|skipped\n", logs: '' }
     @state = {
       maintenance: 'off', web: 1, worker: 1, backups: 0, releases: [], pushed: '', heroku_sha: '',
-      config: { 'RAILS_DB_POOL' => '4' }
+      config: {}
     }
     build_path
     build_repo

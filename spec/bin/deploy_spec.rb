@@ -459,80 +459,17 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
     end
   end
 
-  describe 'the database pool' do
-    it 'sets RAILS_DB_POOL=4 when it is missing, after the question' do
-      deploy.production(config: {})
+  # The jobs dyno sets its own pool in the Procfile, and web, one-off
+  # dynos and the release phase keep database.yml's default. So the
+  # deploy reads and writes no config var.
+  it 'reads and sets no config var, even with no RAILS_DB_POOL' do
+    deploy.production(config: {})
 
-      result = deploy.run('--yes')
+    result = deploy.run('--yes')
 
-      expect(result.output).to include(
-        "RAILS_DB_POOL='' — the deploy will set RAILS_DB_POOL=4 first",
-        'The jobs dyno needs it (lib/deploy_config_check.rb, docs/runbooks/scheduler-cutover.md)',
-        'first: heroku config:set RAILS_DB_POOL=4',
-        'RAILS_DB_POOL=4 set (one dyno restart)'
-      )
-      expect(deploy.state[:config]).to eq('RAILS_DB_POOL' => '4')
-      order = deploy.calls.map { it.split.first(2).join(' ') }
-      expect(order.index('heroku config:set')).to be < order.index('heroku pg:backups:capture')
-      expect(result.status).to eq(0)
-    end
-
-    # The var that started the jobs inside Puma is not set, and not needed.
-    it 'sets only the pool' do
-      deploy.production(config: {})
-
-      deploy.run('--yes')
-
-      expect(deploy.calls_to('heroku').grep(/config:set/))
-        .to eq(['heroku config:set RAILS_DB_POOL=4 -a comeals-monorepo'])
-      expect(deploy.calls_to('heroku').grep(/SOLID_QUEUE_IN_PUMA/)).to eq([])
-    end
-
-    it 'sets it when the pool is below 4' do
-      deploy.production(config: { 'RAILS_DB_POOL' => '2' })
-
-      result = deploy.run('--yes')
-
-      expect(result.output).to include("RAILS_DB_POOL='2'")
-      expect(deploy.state[:config]['RAILS_DB_POOL']).to eq('4')
-    end
-
-    it 'sets it when the pool is not a number' do
-      deploy.production(config: { 'RAILS_DB_POOL' => 'four' })
-
-      deploy.run('--yes')
-
-      expect(deploy.state[:config]['RAILS_DB_POOL']).to eq('4')
-    end
-
-    it 'sets it when Heroku cannot be asked' do
-      deploy.rule('heroku', '^config:get', exit: 1)
-
-      deploy.run('--yes')
-
-      expect(deploy.calls).to include('heroku config:set RAILS_DB_POOL=4 -a comeals-monorepo')
-    end
-
-    it 'does not set it when it is there' do
-      result = deploy.run('--yes')
-
-      expect(result.output).to include('RAILS_DB_POOL=4')
-      expect(deploy.calls_to('heroku').grep(/config:set/)).to eq([])
-    end
-
-    # State left: no maintenance, web at 1, old code, no backup. Next step:
-    # read the heroku error and run the deploy again.
-    it 'stops before the backup when setting it fails' do
-      deploy.production(config: {})
-      deploy.rule('heroku', '^config:set', exit: 1, stderr: "config:set failed\n")
-
-      result = deploy.run('--yes')
-
-      expect(result.status).to eq(1)
-      expect(result.output).to include('config:set failed')
-      expect(result.output).not_to include(recovery_banner)
-      expect_nothing_changed_in_production
-    end
+    expect(result.status).to eq(0)
+    expect(result.output).not_to include('RAILS_DB_POOL', 'database pool')
+    expect(deploy.calls_to('heroku').grep(/config:set|config:get RAILS_DB_POOL/)).to eq([])
   end
 
   describe 'the question before the deploy' do
