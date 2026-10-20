@@ -226,6 +226,26 @@ describe("MainCalendar", () => {
       );
     });
 
+    // The idle timer in index.html reads window.Comeals.modalDirty, so a
+    // screen left with a half-filled form is not sent to the calendar.
+    it("tells the idle timer the form holds unsaved changes", () => {
+      dirtyEventForm();
+
+      expect(window.Comeals.modalDirty).toBe(true);
+    });
+
+    it("tells the idle timer when a dirty form is discarded", () => {
+      dirtyEventForm();
+      fireEvent.click(screen.getByLabelText("Close"));
+      const nowSpy = vi
+        .spyOn(performance, "now")
+        .mockReturnValue(performance.now() + 1000);
+      fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+      nowSpy.mockRestore();
+
+      expect(window.Comeals.modalDirty).toBe(false);
+    });
+
     // The overlay closes on its own mousedown, not react-modal's
     // click detection — a day-picker click never bubbles to the
     // overlay (react-day-picker stops it), which stranded react-modal's
