@@ -2,7 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # release/** holds a build made from an older main (a hardened copy
+    # of the code production runs), so CI checks it before it ships.
+    branches: [main, "release/**"]
   pull_request:
     branches: [main]
 
@@ -13,7 +15,7 @@ jobs:
   # Normal durations: node-e2e ~6 min, ruby-test and integration-tests
   # ~4.5 min, visual-tests ~2.5 min, everything else under a minute.
   ruby-lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -23,7 +25,7 @@ jobs:
       - run: bundle exec rubocop
 
   ruby-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
       postgres:
@@ -56,7 +58,7 @@ jobs:
       - run: bundle exec rake
 
   node-lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -73,7 +75,7 @@ jobs:
   # bites here. Without this job, a type-level drift at the API
   # boundary merges green.
   node-typecheck:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -85,7 +87,7 @@ jobs:
       - run: npm run typecheck
 
   node-audit:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -96,7 +98,7 @@ jobs:
       - run: npm audit
 
   ruby-security:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -109,7 +111,7 @@ jobs:
   # The same quality gate bin/check runs: complexity, duplication, and
   # smells averaged over app and lib, minimum score 80.
   ruby-quality:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -119,7 +121,7 @@ jobs:
       - run: bundle exec rubycritic app lib --no-browser --format console --minimum-score 80
 
   bundle-budget:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
       VITE_PUSHER_KEY: "test-key-for-ci"
@@ -138,7 +140,7 @@ jobs:
   # (rake test:generate_fixtures). Regenerate and fail on any diff: a
   # commit that changes an API response must carry its fixture change.
   api-fixtures:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     services:
       postgres:
@@ -186,7 +188,7 @@ jobs:
           fi
 
   node-unit-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -198,7 +200,7 @@ jobs:
       - run: npm test
 
   node-e2e-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     # The admin Playwright project boots a real Rails server
     # (tests/admin/server.sh), so this job needs Ruby and Postgres in
@@ -245,7 +247,7 @@ jobs:
           retention-days: 7
 
   visual-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       # Placeholders, like the other jobs: the build throws on a missing
@@ -270,7 +272,7 @@ jobs:
           retention-days: 7
 
   integration-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
       postgres:
