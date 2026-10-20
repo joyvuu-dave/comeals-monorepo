@@ -26,8 +26,9 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
       sandbox.rule('curl', "* #{api}/releases", out: '[{"version":613},{"version":612}]')
       sandbox.rule('curl', "* #{api}/releases/612", out: '{"slug":{"id":"slug-612"}}')
       sandbox.rule('curl', "* #{api}/releases/610", out: '{"slug":{"id":"slug-610"}}')
-      sandbox.rule('curl', "* #{api}/slugs/slug-612", out: %({"commit":"#{good}"}))
-      sandbox.rule('curl', "* #{api}/slugs/slug-610", out: %({"commit":"#{'c' * 40}"}))
+      sandbox.rule('curl', "* #{api}/slugs/slug-612",
+                   out: %({"commit":"#{good}","process_types":{"web":"puma","worker":"bin/jobs"}}))
+      sandbox.rule('curl', "* #{api}/slugs/slug-610", out: %({"commit":"#{'c' * 40}","process_types":{"web":"puma"}}))
       sandbox.rule('heroku', "config:get HEROKU_SLUG_COMMIT #{prod}", out: "#{bad}\n")
     end
 
@@ -41,8 +42,9 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
 
       expect(result.exitstatus).to eq(0)
       expect(result.outputs).to eq('url' => 'https://comeals.com', 'target' => 'v612',
-                                   'target_sha' => good, 'bad_sha' => bad)
+                                   'target_sha' => good, 'bad_sha' => bad, 'target_has_worker' => 'true')
       expect(result.out).to include("comeals-monorepo runs #{bad}; v612 runs #{good}.")
+      expect(result.out).to include("v612 has a worker dyno, so the worker runs again after the rollback.\n")
       expect(sandbox.calls_to('curl').map(&:args)).to all(
         include('-sf', 'Accept: application/vnd.heroku+json; version=3', 'Authorization: Bearer test-key')
       )
@@ -52,6 +54,23 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
     it 'goes back to the release it is given, with or without the v' do
       expect(find(release: 'v610').outputs['target']).to eq('v610')
       expect(find(release: '610').outputs).to include('target' => 'v610', 'target_sha' => 'c' * 40)
+    end
+
+    # The slug's process types are what Heroku runs for that release, read
+    # from the Procfile it was built from. Production before the worker
+    # dyno has none.
+    it 'says so when the release it goes back to has no worker process type' do
+      result = find(release: 'v610')
+
+      expect(result.exitstatus).to eq(0)
+      expect(result.outputs['target_has_worker']).to eq('false')
+      expect(result.out).to include("v610 has no worker dyno, so the worker goes to 0 and stays there.\n")
+    end
+
+    it 'counts a slug that names no process types as one without a worker' do
+      sandbox.rule('curl', "* #{api}/slugs/slug-612", out: %({"commit":"#{good}"}))
+
+      expect(find.outputs['target_has_worker']).to eq('false')
     end
 
     it 'gives the staging address for the staging app' do
@@ -173,10 +192,12 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
     before do
       sandbox.rule('heroku', "maintenance:on #{prod}")
       sandbox.rule('heroku', "pg:backups:capture #{prod}")
-      sandbox.rule('curl', '* https://api.heroku.com/apps/comeals-monorepo/formation/web', out: '{"quantity":2}')
+      sandbox.rule('curl', '* https://api.heroku.com/apps/comeals-monorepo/formation',
+                   out: '[{"type":"web","quantity":2},{"type":"worker","quantity":1}]')
+      sandbox.rule('heroku', "ps:scale web=0 worker=0 #{prod}")
       sandbox.rule('heroku', "ps:scale web=0 #{prod}")
       sandbox.rule('heroku', "ps #{prod} --json", out: '[{"type":"run"}]')
-      sandbox.rule('heroku', "ps #{prod} --json", out: '[{"type":"web"},{"type":"run"}]', once: true)
+      sandbox.rule('heroku', "ps #{prod} --json", out: '[{"type":"worker"},{"type":"run"}]', once: true)
       sandbox.rule('heroku', "pg:backups:restore b245 DATABASE_URL #{prod} --confirm comeals-monorepo")
       sandbox.rule('sleep')
     end
@@ -186,29 +207,44 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
                          env: { 'APP' => 'comeals-monorepo', 'BACKUP' => 'b245', 'HEROKU_API_KEY' => 'test-key' })
     end
 
-    it 'turns maintenance on, captures, stops web, waits for it, then restores' do
+    # No job of the new code may run on the restored database, so the
+    # worker stops with web, and the restore waits for both.
+    it 'turns maintenance on, captures, stops web and the worker, waits for them, then restores' do
       result = restore
 
       expect(result.exitstatus).to eq(0)
       expect(result.outputs).to eq('web_count' => '2')
       expect(heroku_calls).to eq(
-        ["heroku maintenance:on #{prod}", "heroku pg:backups:capture #{prod}", "heroku ps:scale web=0 #{prod}",
-         "heroku ps #{prod} --json", "heroku ps #{prod} --json",
+        ["heroku maintenance:on #{prod}", "heroku pg:backups:capture #{prod}",
+         "heroku ps:scale web=0 worker=0 #{prod}", "heroku ps #{prod} --json", "heroku ps #{prod} --json",
          "heroku pg:backups:restore b245 DATABASE_URL #{prod} --confirm comeals-monorepo"]
       )
       expect(sandbox.calls_to('sleep').map(&:args)).to eq([['5']])
-      expect(result.out).to include('comeals-monorepo runs 2 web dyno(s). Scaling web to 0.')
+      expect(result.out).to include('comeals-monorepo runs 2 web dyno(s) and a worker dyno. Scaling both to 0.')
+    end
+
+    # A release from before the worker dyno has no worker process type,
+    # and Heroku refuses to scale one.
+    it 'stops only web when the running release has no worker process type' do
+      sandbox.rule('curl', '* https://api.heroku.com/apps/comeals-monorepo/formation',
+                   out: '[{"type":"web","quantity":2}]')
+
+      result = restore
+
+      expect(result.exitstatus).to eq(0)
+      expect(heroku_calls.grep(/ps:scale/)).to eq(["heroku ps:scale web=0 #{prod}"])
+      expect(result.out).to include('comeals-monorepo runs 2 web dyno(s) and no worker dyno. Scaling web to 0.')
     end
 
     # Production state: maintenance on, web at 0, the database as the new
     # code left it. The step that says what to do by hand runs next.
-    it 'does not restore when a web dyno still runs after 3 minutes' do
-      sandbox.rule('heroku', "ps #{prod} --json", out: '[{"type":"web"}]')
+    it 'does not restore when a web or worker dyno still runs after 3 minutes' do
+      sandbox.rule('heroku', "ps #{prod} --json", out: '[{"type":"worker"}]')
 
       result = restore
 
       expect(result.exitstatus).to eq(1)
-      expect(result.out).to include('A web dyno still runs 3 minutes after web was scaled to 0')
+      expect(result.out).to include('A web or worker dyno still runs 3 minutes after they were scaled to 0')
       expect(heroku_calls.grep(/restore/)).to be_empty
       expect(sandbox.calls_to('sleep').map(&:args).size).to eq(35)
     end
@@ -216,7 +252,7 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
     # Production state: maintenance on, web still up on the new code, the
     # database unchanged.
     it 'stops before web is scaled when the formation cannot be read' do
-      sandbox.rule('curl', '* https://api.heroku.com/apps/comeals-monorepo/formation/web', exit: 22)
+      sandbox.rule('curl', '* https://api.heroku.com/apps/comeals-monorepo/formation', exit: 22)
 
       result = restore
 
@@ -234,14 +270,18 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
   describe 'bin/lib/rollback/roll-back' do
     before do
       sandbox.rule('heroku', "rollback v612 #{prod}")
+      sandbox.rule('heroku', "ps:scale worker=1 #{prod}")
+      sandbox.rule('heroku', "ps:scale worker=0 #{prod}")
+      sandbox.rule('heroku', "ps:scale #{prod}", out: "web=1:Basic worker=1:Basic\n")
       sandbox.rule('heroku', "releases #{prod} --json", out: '[{"status":"succeeded"}]')
       sandbox.rule('heroku', "config:get HEROKU_SLUG_COMMIT #{prod}", out: "#{good}\n")
       sandbox.rule('sleep')
     end
 
-    def roll
+    def roll(target_has_worker: 'true')
       sandbox.run_script('bin/lib/rollback/roll-back',
-                         env: { 'APP' => 'comeals-monorepo', 'TARGET' => 'v612', 'BAD_SHA' => bad })
+                         env: { 'APP' => 'comeals-monorepo', 'TARGET' => 'v612', 'BAD_SHA' => bad,
+                                'TARGET_HAS_WORKER' => target_has_worker })
     end
 
     it 'rolls back, waits for the release phase, and checks the commit changed' do
@@ -256,6 +296,39 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
       expect(sandbox.calls_to('sleep').map(&:args)).to eq([['5']])
     end
 
+    # After a restore the worker is at 0, and a release that was at 0
+    # stays at 0 through a rollback. The release it goes back to runs its
+    # jobs on the worker dyno, so the worker starts once its code runs.
+    it 'starts the worker once the old code runs, when that release has a worker dyno' do
+      result = roll
+
+      expect(result.exitstatus).to eq(0)
+      expect(heroku_calls.last).to eq("heroku ps:scale worker=1 #{prod}")
+      expect(heroku_calls.grep(/worker=0/)).to be_empty
+    end
+
+    # The old code runs no Solid Queue. The new code's jobs must not go on
+    # running beside it, and after the rollback Heroku would refuse to
+    # scale a process type the release does not have.
+    it 'stops the worker before the rollback when the release it goes back to has none' do
+      result = roll(target_has_worker: 'false')
+
+      expect(result.exitstatus).to eq(0)
+      expect(heroku_calls.first(3))
+        .to eq(["heroku ps:scale #{prod}", "heroku ps:scale worker=0 #{prod}", "heroku rollback v612 #{prod}"])
+      expect(heroku_calls.grep(/worker=1/)).to be_empty
+      expect(result.out).to include("v612 has no worker dyno, so the worker stays at 0.\n")
+    end
+
+    it 'scales no worker when neither release has one' do
+      sandbox.rule('heroku', "ps:scale #{prod}", out: "web=1:Basic\n")
+
+      result = roll(target_has_worker: 'false')
+
+      expect(result.exitstatus).to eq(0)
+      expect(heroku_calls.grep(/ps:scale/)).to eq(["heroku ps:scale #{prod}"])
+    end
+
     it 'stops and shows the output when the release phase fails' do
       sandbox.rule('heroku', "releases #{prod} --json", out: '[{"status":"failed"}]')
       sandbox.rule('heroku', "releases:output #{prod}", out: "line\n" * 40)
@@ -266,6 +339,7 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
       expect(result.out).to include('The release phase of the rollback did not succeed (status: failed)')
       expect(result.out.lines.count("line\n")).to eq(30)
       expect(result.outputs).to be_empty
+      expect(heroku_calls.grep(/ps:scale/)).to be_empty
     end
 
     it 'still fails with its message when the release output cannot be read' do
@@ -298,6 +372,7 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
       expect(result.exitstatus).to eq(1)
       expect(result.out).to include('Rollback did not change the running slug.')
       expect(result.outputs).to eq('bad_sha' => bad, 'live_sha' => bad)
+      expect(heroku_calls.grep(/ps:scale/)).to be_empty
     end
 
     it 'fails when heroku rollback fails' do
@@ -343,11 +418,11 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
   end
 
   describe 'bin/lib/rollback/say-what-to-do' do
-    def say(restore: 'success', roll: 'success', start: 'skipped', web_count: '2')
+    def say(restore: 'success', roll: 'success', start: 'skipped', web_count: '2', target_has_worker: 'true')
       sandbox.run_script('bin/lib/rollback/say-what-to-do',
                          env: { 'RESTORE' => restore, 'ROLL' => roll, 'START' => start, 'WEB_COUNT' => web_count,
                                 'TARGET' => 'v612', 'URL' => 'https://comeals.com', 'APP' => 'comeals-monorepo',
-                                'BACKUP' => 'b245' })
+                                'BACKUP' => 'b245', 'TARGET_HAS_WORKER' => target_has_worker })
     end
 
     it 'says only maintenance may be on when web was started' do
@@ -363,10 +438,21 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
       result = say(restore: 'failure', roll: 'skipped')
 
       expect(result.exitstatus).to eq(0)
+      expect(result.out).to include('Maintenance mode is on. Web and the worker may be at 0')
+      expect(result.out).to include("  heroku ps:scale web=0 -a comeals-monorepo\n  " \
+                                    "heroku ps:scale worker=0 -a comeals-monorepo   (when heroku ps lists a worker)\n")
       expect(result.out)
         .to include('  heroku pg:backups:restore b245 DATABASE_URL -a comeals-monorepo --confirm comeals-monorepo')
       expect(result.out).to include('  heroku rollback v612 -a comeals-monorepo')
-      expect(result.out).to include('  heroku ps:scale web=2 -a comeals-monorepo')
+      expect(result.out).to include("  heroku ps:scale worker=1 -a comeals-monorepo\n  " \
+                                    'heroku ps:scale web=2 -a comeals-monorepo')
+    end
+
+    it 'says to leave the worker at 0 when the release it goes back to has none' do
+      result = say(roll: 'failure', target_has_worker: 'false')
+
+      expect(result.out).to include('  (v612 has no worker dyno: leave the worker at 0)')
+      expect(result.out).not_to include('worker=1')
     end
 
     it 'gives the rollback and the restart when the rollback failed' do
