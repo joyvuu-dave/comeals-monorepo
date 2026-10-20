@@ -5,7 +5,7 @@ require 'rails_helper'
 # The binstubs that Rails, Bundler and Solid Queue generate and replace on
 # upgrade: bin/rails, bin/rake, bin/jobs and bin/bundle. These specs run
 # them unchanged, with harmless arguments, so their lines are measured
-# (spec/bin/preload/simplecov_child.rb) and a broken one fails here.
+# (spec/bin/preload/child_coverage.rb) and a broken one fails here.
 RSpec.describe 'the generated binstubs' do
   def run(*command, **)
     out, status = run_ruby_script(*command, **)
