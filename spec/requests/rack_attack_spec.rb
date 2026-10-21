@@ -40,6 +40,12 @@ RSpec.describe 'Rack::Attack throttles' do
 
       expect(Rack::Attack.throttles['api/ip'].limit).to eq(600)
       expect(Rack::Attack.throttles['api/ip'].period).to eq(1.minute)
+
+      expect(Rack::Attack.throttles['browser-reports/ip'].limit).to eq(60)
+      expect(Rack::Attack.throttles['browser-reports/ip'].period).to eq(10.minutes)
+
+      expect(Rack::Attack.throttles['browser-report-alerts/ip'].limit).to eq(10)
+      expect(Rack::Attack.throttles['browser-report-alerts/ip'].period).to eq(1.hour)
     end
   end
 
@@ -90,6 +96,49 @@ RSpec.describe 'Rack::Attack throttles' do
            env: { 'REMOTE_ADDR' => '10.0.0.3' }
 
       expect(response).to have_http_status(:too_many_requests)
+    end
+  end
+
+  # The browser check sends one report per page load, with no login. A
+  # failed or broken check alerts the owner, so those have a much
+  # smaller limit: a script cannot fill the owner's inbox from one
+  # address.
+  describe 'POST /api/v1/browser-reports' do
+    let(:iphone) do
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 ' \
+        '(KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1'
+    end
+
+    def send_report(query, ip)
+      post "/api/v1/browser-reports?#{query}", headers: { 'User-Agent' => iphone }, env: { 'REMOTE_ADDR' => ip }
+    end
+
+    it 'takes 60 page loads from one IP in 10 minutes and throttles the 61st' do
+      60.times do
+        send_report('result=passed&touch=0', '10.0.0.4')
+        expect(response).to have_http_status(:no_content)
+      end
+
+      send_report('result=passed&touch=0', '10.0.0.4')
+      expect(response).to have_http_status(:too_many_requests)
+
+      send_report('result=passed&touch=0', '10.0.0.5')
+      expect(response).to have_http_status(:no_content)
+    end
+
+    it 'takes 10 alerts from one IP in an hour and throttles the 11th' do
+      10.times do
+        send_report('result=failed&tests=lookbehind&touch=0', '10.0.0.6')
+        expect(response).to have_http_status(:no_content)
+      end
+
+      send_report('result=error&error=boom&touch=0', '10.0.0.6')
+      expect(response).to have_http_status(:too_many_requests)
+
+      # A passing report still gets through: the alert limit does not stop
+      # the count.
+      send_report('result=passed&touch=0', '10.0.0.6')
+      expect(response).to have_http_status(:no_content)
     end
   end
 end

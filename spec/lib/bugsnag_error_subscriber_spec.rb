@@ -6,7 +6,7 @@ RSpec.describe BugsnagErrorSubscriber do
   # A stand-in for Bugsnag::Report. The real class needs a configuration
   # object to build, and none of what this subscriber does to it depends on
   # that — it sets a severity and adds one tab.
-  let(:report) { instance_double(Bugsnag::Report, :severity= => nil, add_tab: nil) }
+  let(:report) { instance_double(Bugsnag::Report, :severity= => nil, add_tab: nil, :grouping_hash= => nil) }
   let(:error) { RuntimeError.new('boom') }
 
   def report_error(handled: true, severity: :error, context: {}, **)
@@ -58,6 +58,22 @@ RSpec.describe BugsnagErrorSubscriber do
       report_error(context: { attempt: 3 })
 
       expect(report).to have_received(:add_tab).with(:rails_error, hash_including(attempt: 3))
+    end
+
+    # Bugsnag groups events into errors by class and stack, and emails
+    # once per new error. A reporter that knows a better grouping
+    # (BrowserReportJob: one error per browser and failed tests) passes
+    # it in the context.
+    it 'groups by the grouping_hash in the context' do
+      report_error(context: { grouping_hash: 'UnsupportedBrowserSeen Safari lookbehind' })
+
+      expect(report).to have_received(:grouping_hash=).with('UnsupportedBrowserSeen Safari lookbehind')
+    end
+
+    it 'leaves the grouping to Bugsnag when the context names none' do
+      report_error(context: { attempt: 3 })
+
+      expect(report).not_to have_received(:grouping_hash=)
     end
 
     it 'survives a nil context' do
